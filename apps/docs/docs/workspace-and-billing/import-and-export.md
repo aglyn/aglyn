@@ -51,7 +51,7 @@ contacts and leads works on every plan, here and in
 
 The same goes for every other kind of data: it moves on the plans that
 include its page. Datasets, bookings and redirects are included from
-Starter, org automations from Pro, and importing gift cards from Business
+Starter, and org automations and importing gift cards from Pro
 (the gift cards you already have can be exported on any plan). Events need
 the Event Calendar add-on and sequences the Sequences add-on. Data from a
 plugin that is switched off for the workspace or the site isn't listed.

@@ -15,13 +15,12 @@ closely is [what each field actually replaces](#fields) — a few of them change
 a surface you never look at yourself.
 
 :::info Plan availability
-White-labeling is the `whiteLabel` entitlement. Exactly two plans carry it by
-default: **Agency** and **Enterprise**. No lower tier does, and no add-on
-buys it.
+White-labeling is the `whiteLabel` entitlement. One plan carries it by
+default: **Custom**, the plan once labeled Enterprise. No self-serve plan
+does, Pro included, and no add-on buys it.
 
 Entitlements can also be granted per organization on top of a plan's
-defaults, which is how an Enterprise agreement enables it for one organization
-— the card's own upgrade notice says so.
+defaults, which is how a Custom agreement enables it for one organization.
 
 An organization that white-labels and then downgrades reverts cleanly: the
 stored brand is ignored, not deleted, and the Aglyn brand comes back
@@ -40,9 +39,8 @@ below it, so a teammate who cannot find it is looking at a shorter tab strip
 than you are, not at a hidden card.
 
 While your plan is still being read the card says **"Checking your plan…"**.
-On a plan without the entitlement it shows an information notice instead of
-the editor: *"White-labeling the platform is included on the **Agency** plan —
-see Billing to upgrade. Enterprise plans can enable it per organization."*
+On a plan without the entitlement it shows an information notice pointing you
+to Billing instead of the editor.
 
 ## The fields {#fields}
 
@@ -112,7 +110,7 @@ Anything else is refused with "Primary color must be a hex color like
 
 One counter-intuitive rule governs all of it: **the branded chrome activates
 only once you have actually set a product name or a logo**, not the moment
-your plan grants the entitlement. An Agency organization that has never opened
+your plan grants the entitlement. A Custom organization that has never opened
 this card keeps the plain Aglyn wordmark — there is no half-branded state and
 no flash of one brand turning into the other.
 

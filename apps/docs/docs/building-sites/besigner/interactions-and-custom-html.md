@@ -58,7 +58,7 @@ configures in one dialog without leaving the besigner:
   see [Plan availability](#plan-availability)):
   - **Open an overlay**, **show custom HTML**, or **track an analytics
     event** in the page.
-  - **Run custom JavaScript** (Business tier).
+  - **Run custom JavaScript**.
   - **Server steps** — run a workflow, send an email, notify admins,
     enroll a contact in a list, update a dataset, or assign a campaign.
     Workflows, overlays, lists, and datasets are picked from lists — never
@@ -108,7 +108,7 @@ need a higher plan:
   **no server cost**. They run everywhere and are **never metered** — a
   hover-to-open menu is not a paid feature.
 - **The automations engine — Pro+, metered.** Steps that reach the server
-  or a data pipeline — overlays, analytics events, custom JS (Business),
+  or a data pipeline — overlays, analytics events, custom JS,
   and the server steps (workflows, email, datasets, campaigns) — require
   the `actions` entitlement and count against your monthly action runs.
 

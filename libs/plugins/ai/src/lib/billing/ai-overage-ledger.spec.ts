@@ -466,8 +466,9 @@ describe('Starter WITH the AI add-on is charged at the rate its card quotes (AGL
   /**
    * Starter used to list no band and no rate, and the add-on brought both —
    * which is the split AGL-3014 was made of. Since AGL-3203 the plan's own
-   * row carries 750 credits and $3.00 per 1,000, and the add-on only widens
-   * the band to 4,750. From the cutover month this claim is the invoice for
+   * row carries 750 credits and $3.00 per 1,000, and a block of Aglyn AI
+   * credits only widens the band to 5,750 (AGL-4144). From the cutover month
+   * this claim is the invoice for
    * that overage, so it has to price the month exactly as the overage card,
    * the ceiling, the 100% alert and the gate do — with the add-on and
    * without it.
@@ -477,8 +478,8 @@ describe('Starter WITH the AI add-on is charged at the rate its card quotes (AGL
     subscription: { status: 'active' },
     seatAddons: { aiAddon: 1 },
   }
-  /** Starter's 750 plus the add-on's 4,000 — one pool, one meter. */
-  const ADDON_BAND = 4_750
+  /** Starter's 750 plus one block's 5,000 — one pool, one meter. */
+  const ADDON_BAND = 5_750
 
   beforeAll(() => {
     // The band arrives with the plugin's declaration of the add-on, which a
@@ -488,7 +489,7 @@ describe('Starter WITH the AI add-on is charged at the rate its card quotes (AGL
   })
 
   it('claims the overage past the add-on band at $3.00 per 1,000', async () => {
-    // 14,750 credits drawn: 10,000 past the 4,750 band, $30.00. FORCED RED
+    // 15,750 credits drawn: 10,000 past the 5,750 band, $30.00. FORCED RED
     // by deciding `not-sold` off the plan table: the claim was refused and
     // nothing was invoiced.
     docs.set(USAGE, { month: MONTH, estCostUsd: spendPricingTo(30, 3, ADDON_BAND) })
@@ -506,9 +507,9 @@ describe('Starter WITH the AI add-on is charged at the rate its card quotes (AGL
   it('THE CONTROL: without the add-on the same month is claimed at the same rate, from the plan’s own band', async () => {
     // The AGL-3014 bug was the two halves disagreeing about Starter. They
     // cannot now: the rate is one figure on the plan's row (AGL-3203), so
-    // the same 14,750 credits are claimed either way — only the band the
+    // the same 15,750 credits are claimed either way — only the band the
     // overage is measured from moves. Bare Starter bands at 750, so all but
-    // 750 of the month is overage: 14,000 credits, $42.00.
+    // 750 of the month is overage: 15,000 credits, $45.00.
     docs.set(USAGE, { month: MONTH, estCostUsd: spendPricingTo(30, 3, ADDON_BAND) })
     const result = await claimAiOverageCharge(makeFirestore(), {
       orgId: 'org-1',
@@ -517,8 +518,8 @@ describe('Starter WITH the AI add-on is charged at the rate its card quotes (AGL
       kind: 'threshold',
     })
     expect(result.refused).toBeNull()
-    expect(result.claimed).toMatchObject({ amountUsd: 42, credits: 14_000, rateUsdPer1k: 3 })
-    expect(readAiOverageMonthLedger(docs.get(USAGE)).invoicedUsd).toBe(42)
+    expect(result.claimed).toMatchObject({ amountUsd: 45, credits: 15_000, rateUsdPer1k: 3 })
+    expect(readAiOverageMonthLedger(docs.get(USAGE)).invoicedUsd).toBe(45)
   })
 
   it('THE COUNTER-CASE: a plan that quotes no rate claims nothing from the same month', async () => {

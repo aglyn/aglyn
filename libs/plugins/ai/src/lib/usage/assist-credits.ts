@@ -191,10 +191,11 @@ export function assistCreditsFromUsd(usd: number): number {
  * So the zero case is now reached only by a per-org override that writes
  * one, and the reading above is what keeps that org's assistant running.
  *
- * The Aglyn AI tier (AGL-2896, AGL-3965) needs no knowledge here either
- * way: the resolver has already added the purchased tier's credits
- * (`AI_TIERS[tier].credits`) to the band, because a tier widens the one pool
- * rather than opening a second.
+ * Aglyn AI credit blocks (AGL-2896, AGL-4144) need no knowledge here
+ * either way: the resolver has already added the blocks' credits (blocks ×
+ * 5,000, `includedAiCreditsPerMonth` in `ai-credit-blocks.ts`) to the band,
+ * because a block widens the one pool rather than opening a second. So the
+ * reservation gate counts blocks through this budget and nowhere else.
  *
  * The same reading is what makes the guard survive a stubbed entitlements
  * module. A test double that answers 0 for every quota produces `null` here,

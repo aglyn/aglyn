@@ -20,14 +20,14 @@
 // `usage-metering.ts` states at its own head. The specific modules underneath
 // are safe in both.
 import type { AglynOrgBilling, OrgPlan } from '../foundation'
+import { aiCreditBlocksMonthlyUsd } from './ai-credit-blocks'
 import {
-  AI_TIERS,
   INFRA_COGS_PER_SITE_USD,
   MARGIN_SCOPE_NOTE,
   netMarginRating,
   orgListPriceMonthlyUsd,
   orgMonthlyCogsUsd,
-  resolveAiTier,
+  resolveAiCreditBlocks,
   orgMonthlyRevenueUsd,
   orgNetMonthlyRevenueUsd,
   orgSiteCount,
@@ -352,17 +352,17 @@ export function orgMarginRow(input: OrgMarginInput): OrgMarginRow {
   const netRevenueUsd = orgNetMonthlyRevenueUsd(org)
   // Only when the org bills something at all — `listPriceUsd` is 0 for a
   // comped or lapsed org whatever its `seatAddons` say, and the add-on's
-  // share of nothing is nothing. `resolveAiTier` already drops a dead
+  // share of nothing is nothing. `resolveAiCreditBlocks` already drops a dead
   // subscription's add-on; the list-price check catches the comped one.
   const plan = resolveEffectivePlan(org)
   const customPriced =
     typeof org?.subscription?.customMonthlyUsd === 'number' &&
     org.subscription.customMonthlyUsd > 0
-  // The tier's own price (AGL-3965); `resolveAiTier` drops a dead one.
-  const aiTier = resolveAiTier(org)
+  // $10 a credit block (AGL-4144); `resolveAiCreditBlocks` drops a dead one.
+  const aiBlocks = resolveAiCreditBlocks(org)
   const aiAddonRevenueUsd =
-    listPriceUsd > 0 && !customPriced && aiTier
-      ? finite(AI_TIERS[aiTier].monthlyUsd)
+    listPriceUsd > 0 && !customPriced && aiBlocks > 0
+      ? finite(aiCreditBlocksMonthlyUsd(aiBlocks))
       : 0
   // A margin needs revenue to be a fraction OF. Free and comped orgs have
   // none, and inventing one for them fills the top of a worst-first list with

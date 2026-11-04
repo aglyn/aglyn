@@ -176,10 +176,12 @@ import {
   runOverageSold,
 } from '@aglyn/aglyn/app-utils/plan-entitlements'
 import {
-  AI_TIER_IDS,
-  AI_TIERS,
+  AI_CREDIT_BLOCK_MONTHLY_USD,
+  AI_CREDIT_BLOCK_USD_PER_1K,
+  AI_CREDIT_BLOCK_YEARLY_USD,
+  AI_CREDIT_BLOCKS_MAX,
+  AI_CREDITS_PER_BLOCK,
   BANDWIDTH_ABUSE_CEILING_FLOOR,
-  LEGACY_AI_ADDON_TIER_BY_PLAN,
   BANDWIDTH_ABUSE_CEILING_MULTIPLE,
   ESTIMATED_PAGE_TRANSFER_BYTES,
   INFRA_COGS_PER_SITE_USD,
@@ -199,7 +201,7 @@ import {
   netOfProcessorFee,
   orgMonthlyCogsUsd,
 } from '@aglyn/aglyn'
-import type { AiTierId, OrgPlan } from '@aglyn/aglyn'
+import type { OrgPlan } from '@aglyn/aglyn'
 import { pluginUsageBands } from '@aglyn/aglyn/plugin-manager/plugin-usage-axes'
 
 /**
@@ -2535,138 +2537,96 @@ describe('the infra pass-through is priced by a different rule', () => {
 })
 
 // ---------------------------------------------------------------------------
-// THE AGLYN AI TIERS (AGL-2896, AGL-3965). A tier widens the assist band on
-// the plan an org already has, so every figure above is the plan WITHOUT one.
-// Since AGL-3965 a tier is chosen on its own, on ANY paid plan, so this block
-// holds the rule for every plan x tier pair: the tier's band at 100% and its
-// own revenue counted, on top of the plan's own bands at 100% (the plan's
-// included credits already pay for generation as well as assist — one pool —
-// and `tierCostUsd` already prices that band at full burn). The customer who
-// buys a tier and spends all of it must still pay for themselves, at the
-// annual price, net of Stripe.
+// THE AGLYN AI CREDIT BLOCK (AGL-2896, AGL-4144). Blocks widen the assist band
+// on the plan an org already has, so every figure above is the plan WITHOUT
+// them. A block is sold on its own, on ANY paid plan, in any quantity up to
+// 30, so this holds the rule for every plan at every quantity: the blocks'
+// credits at 100% and their own revenue counted, on top of the plan's own
+// bands at 100% (the plan's included credits already pay for generation as
+// well as assist — one pool — and `tierCostUsd` already prices that band at
+// full burn). The customer who buys blocks and spends all of them must still
+// pay for themselves, at the annual price, net of Stripe. The six tiers this
+// replaced (Spark through Studio) sold the same credits at $2.01–$2.25 per
+// 1,000; the block sells them at $2, Studio's rate.
 // ---------------------------------------------------------------------------
-describe('every Aglyn AI tier clears the same invariant with its revenue counted, on every paid plan', () => {
-  /** What a tier's band costs at 100%, on the rate the meter uses. */
-  const tierBandCostUsd = (tier: AiTierId) => AI_TIERS[tier].credits * ASSIST_CREDIT_COST_USD
+describe('the Aglyn AI credit block clears the same invariant with its revenue counted, on every paid plan', () => {
+  /** What `blocks` blocks cost at 100%, on the rate the meter uses. */
+  const blocksCostUsd = (blocks: number) => blocks * AI_CREDITS_PER_BLOCK * ASSIST_CREDIT_COST_USD
 
   /**
-   * The plan's margin with a tier: the plan at `interval` plus the tier's
-   * flat monthly price (x12 on annual, no discount — the one charge for the
-   * year is what the fee amortizes over), net of Stripe, less the plan's
-   * full-utilization cost plus the tier band's.
+   * The plan's margin with `blocks` blocks: the plan at `interval` plus the
+   * blocks' flat monthly price (x12 on annual, no discount — the one charge
+   * for the year is what the fee amortizes over), net of Stripe, less the
+   * plan's full-utilization cost plus the blocks' credits at full burn.
    */
-  const marginWithTier = (plan: OrgPlan, tier: AiTierId, interval: Interval) => {
-    const price = listPriceUsd(plan, interval) + AI_TIERS[tier].monthlyUsd
+  const marginWithBlocks = (plan: OrgPlan, blocks: number, interval: Interval) => {
+    const price = listPriceUsd(plan, interval) + blocks * AI_CREDIT_BLOCK_MONTHLY_USD
     const net = netOfProcessorFee(price, interval === 'year')
-    const cost = tierCostUsd(plan, 1) + tierBandCostUsd(tier)
+    const cost = tierCostUsd(plan, 1) + blocksCostUsd(blocks)
     return (net - cost) / price
   }
 
-  it('is non-negative on every plan x tier, at 100% of every band and the tier band', () => {
-    // FORCED RED by pricing Studio's band at Spark's price: $149 of spend
-    // against $9.
-    const offenders = PAID.flatMap((plan) =>
-      AI_TIER_IDS.filter((tier) => !(marginWithTier(plan, tier, 'year') >= 0)).map(
-        (tier) =>
-          `${plan}+${tier}: $${listPriceUsd(plan, 'year') + AI_TIERS[tier].monthlyUsd} ` +
-          `annual price, vs $${(tierCostUsd(plan, 1) + tierBandCostUsd(tier)).toFixed(2)} cost`,
-      ),
-    )
-    expect(offenders).toEqual([])
-    expect(
-      PAID.flatMap((plan) =>
-        AI_TIER_IDS.filter((tier) => !(marginWithTier(plan, tier, 'month') >= 0)).map(
-          (tier) => `${plan}+${tier}`,
-        ),
-      ),
-    ).toEqual([])
-    // Pinned, both intervals, for each plan with the tier its old per-plan
-    // add-on became (the migration's pairing), so a band widened or a price
-    // cut has to come here and say what it did. Unchanged by AGL-3965: the
-    // tier IS the old add-on's price and band.
-    expect(
-      Object.fromEntries(
-        PAID.map((plan) => {
-          const tier = LEGACY_AI_ADDON_TIER_BY_PLAN[plan] as AiTierId
-          return [
-            plan,
-            [Number((marginWithTier(plan, tier, 'year') * 100).toFixed(1)),
-              Number((marginWithTier(plan, tier, 'month') * 100).toFixed(1))],
-          ]
-        }),
-      ),
-    ).toEqual({
-      starter: [33.6, 49.6],
-      pro: [41.3, 53.6],
-    })
-    // And the extremes the decoupling opens: the biggest tier on the
-    // smallest plan, and the smallest tier on the biggest.
-    expect(Number((marginWithTier('starter', 'studio', 'year') * 100).toFixed(1))).toBeGreaterThan(0)
-    expect(Number((marginWithTier('agency', 'spark', 'year') * 100).toFixed(1))).toBeGreaterThan(0)
+  const QUANTITIES = Array.from({ length: AI_CREDIT_BLOCKS_MAX }, (_, i) => i + 1)
+
+  it('costs at most 50% of the block price in provider spend, the retail line floor', () => {
+    // The `ASSIST_CREDIT_MIN_MARGIN_PCT` floor, held on the block the way
+    // `assist-credits.spec.ts` holds it on the overage ladder: 5,000 credits
+    // at $0.001 is $5 of spend against $10, exactly half. Pinned as the
+    // share, so a band or price move has to come here and say what it did.
+    expect(AI_CREDITS_PER_BLOCK).toBe(5_000)
+    expect(AI_CREDIT_BLOCK_MONTHLY_USD).toBe(10)
+    expect(blocksCostUsd(1)).toBeCloseTo(5, 10)
+    expect(Number(((blocksCostUsd(1) / AI_CREDIT_BLOCK_MONTHLY_USD) * 100).toFixed(1))).toBe(50)
+    expect(blocksCostUsd(1) / AI_CREDIT_BLOCK_MONTHLY_USD).toBeLessThanOrEqual(0.5)
+    // The provider-cost ceiling, as a rate: $2 per 1,000 sold against $1 per
+    // 1,000 spent is 2x cost.
+    expect(AI_CREDIT_BLOCK_USD_PER_1K).toBe(2)
+    expect(AI_CREDIT_BLOCK_USD_PER_1K / (1_000 * ASSIST_CREDIT_COST_USD)).toBeCloseTo(2, 10)
+    // Yearly is x12 with no discount, as every add-on is.
+    expect(AI_CREDIT_BLOCK_YEARLY_USD).toBe(AI_CREDIT_BLOCK_MONTHLY_USD * 12)
+    // CONTROL: the detector can fail. One more credit in the block, or a
+    // dollar off its price, crosses the floor.
+    expect(((AI_CREDITS_PER_BLOCK + 1) * ASSIST_CREDIT_COST_USD) / AI_CREDIT_BLOCK_MONTHLY_USD).toBeGreaterThan(0.5)
+    expect(blocksCostUsd(1) / (AI_CREDIT_BLOCK_MONTHLY_USD - 1)).toBeGreaterThan(0.5)
   })
 
-  it('IMPROVES every plan’s annual margin: a tier earns more than its band costs', () => {
-    // A tier line clears the retail floor on its own, so stacking it on a
-    // plan at 100% cannot pull the plan under — asserted per pair rather
-    // than argued, because "sold above cost" and "improves the bundle" are
-    // two claims and only the second is what a customer buying it exercises.
+  it('is non-negative on every plan at every quantity from 1 to 30, at 100% of every band and every block', () => {
+    // FORCED RED by pricing a block at $4: $5 of spend against $4 a block
+    // sinks the plan as the quantity rises.
+    for (const interval of ['year', 'month'] as const) {
+      const offenders = PAID.flatMap((plan) =>
+        QUANTITIES.filter((blocks) => !(marginWithBlocks(plan, blocks, interval) >= 0)).map(
+          (blocks) =>
+            `${plan}+${blocks} blocks (${interval}): $${listPriceUsd(plan, interval) + blocks * AI_CREDIT_BLOCK_MONTHLY_USD} ` +
+            `vs $${(tierCostUsd(plan, 1) + blocksCostUsd(blocks)).toFixed(2)} cost`,
+        ),
+      )
+      expect(offenders).toEqual([])
+    }
+  })
+
+  it('IMPROVES every plan’s annual margin: a block earns more than its credits cost', () => {
+    // A block clears the retail floor on its own, so stacking blocks on a
+    // plan at 100% cannot pull the plan under — asserted per plan and
+    // quantity rather than argued, because "sold above cost" and "improves
+    // the bundle" are two claims and only the second is what a customer
+    // buying them exercises.
     const worse = PAID.flatMap((plan) =>
-      AI_TIER_IDS.filter(
-        (tier) => !(marginWithTier(plan, tier, 'year') > tierMargin(plan, 1, 'year')),
-      ).map((tier) => `${plan}+${tier}`),
+      QUANTITIES.filter(
+        (blocks) => !(marginWithBlocks(plan, blocks, 'year') > tierMargin(plan, 1, 'year')),
+      ).map((blocks) => `${plan}+${blocks}`),
     )
     expect(worse).toEqual([])
   })
 
-  it('costs at most 50% of the tier price on every tier, in provider spend', () => {
-    // The `ASSIST_CREDIT_MIN_MARGIN_PCT` floor, held on each tier line the
-    // way `assist-credits.spec.ts` holds it on the overage ladder — and
-    // pinned as the share, to one decimal, so the next band move is visible.
-    expect(
-      Object.fromEntries(
-        AI_TIER_IDS.map((tier) => [
-          tier,
-          Number(((tierBandCostUsd(tier) / AI_TIERS[tier].monthlyUsd) * 100).toFixed(1)),
-        ]),
-      ),
-    ).toEqual({
-      spark: 44.4,
-      boost: 47.4,
-      plus: 48.7,
-      max: 49.3,
-      ultra: 49.5,
-      studio: 49.8,
-    })
-    for (const tier of AI_TIER_IDS) {
-      expect(tierBandCostUsd(tier) / AI_TIERS[tier].monthlyUsd).toBeLessThanOrEqual(0.5)
-      // Yearly is x12 with no discount, as every add-on is.
-      expect(AI_TIERS[tier].yearlyUsd).toBe(AI_TIERS[tier].monthlyUsd * 12)
-    }
-    // CONTROL: the detector can fail. One more thousand credits on Studio
-    // crosses the floor.
-    expect((tierBandCostUsd('studio') + 1) / AI_TIERS.studio.monthlyUsd).toBeGreaterThan(0.5)
-  })
-
-  it('reads every tier band on the SAME rate the meter does, and each is finite', () => {
-    // `tierBandCostUsd` prices a tier's credits at the AI meter's declared
-    // unit, the one every band above is priced at.
+  it('reads the block on the SAME rate the meter does, and its band is finite', () => {
+    // `blocksCostUsd` prices the credits at the AI meter's declared unit,
+    // the one every band above is priced at. Thirty blocks is the top; more
+    // is a Custom agreement, never `UNLIMITED`.
     expect(ASSIST_CREDIT_COST_USD).toBe(0.001)
-    // None is `UNLIMITED`, for the reason the `UNLIMITED` block above
-    // gives; Studio is the top, and more is an Enterprise contract.
-    for (const tier of AI_TIER_IDS) {
-      expect(Number.isFinite(AI_TIERS[tier].credits)).toBe(true)
-      expect(AI_TIERS[tier].credits).toBeGreaterThan(0)
-    }
-    expect(AI_TIER_IDS[AI_TIER_IDS.length - 1]).toBe('studio')
-    // Smallest first, strictly rising in price and in credits.
-    for (let i = 1; i < AI_TIER_IDS.length; i += 1) {
-      expect(AI_TIERS[AI_TIER_IDS[i]].monthlyUsd).toBeGreaterThan(
-        AI_TIERS[AI_TIER_IDS[i - 1]].monthlyUsd,
-      )
-      expect(AI_TIERS[AI_TIER_IDS[i]].credits).toBeGreaterThan(
-        AI_TIERS[AI_TIER_IDS[i - 1]].credits,
-      )
-    }
+    expect(AI_CREDIT_BLOCKS_MAX).toBe(30)
+    expect(Number.isFinite(AI_CREDITS_PER_BLOCK * AI_CREDIT_BLOCKS_MAX)).toBe(true)
+    expect(blocksCostUsd(AI_CREDIT_BLOCKS_MAX)).toBeCloseTo(150, 10)
   })
 })
 

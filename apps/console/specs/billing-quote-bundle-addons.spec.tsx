@@ -26,7 +26,7 @@
  * the code is never blamed on it.
  */
 
-import { fireEvent, render, screen, waitFor, within } from '@testing-library/react'
+import { fireEvent, render, screen, waitFor } from '@testing-library/react'
 import { useState } from 'react'
 import {
   addonUnitUsd,
@@ -34,8 +34,7 @@ import {
   type AddonKind,
   type BundleAddons,
 } from '@aglyn/aglyn/app-utils/bundle-intent'
-import { AI_TIERS, defaultAiTierForPlan } from '@aglyn/aglyn/app-utils/plan-entitlements'
-import type { AiTierId } from '@aglyn/aglyn'
+import { AI_CREDIT_BLOCKS_MAX } from '@aglyn/aglyn/app-utils/ai-credit-blocks'
 
 jest.mock('@aglyn/shared-ui-jsx', () => ({
   useLoading: () => ({ queueLoading: () => () => undefined }),
@@ -102,7 +101,6 @@ function mount(props: {
   offered?: readonly AddonKind[]
   onIntervalChange?: (interval: 'month' | 'year') => void
   onAddonsChange?: (next: BundleAddons) => void
-  aiTier?: AiTierId
   initialCoupon?: string
   linkNotice?: string
   onAppliedCodeChange?: (code: string) => void
@@ -120,7 +118,6 @@ function mount(props: {
       offered={props.offered}
       onIntervalChange={props.onIntervalChange}
       onAddonsChange={props.onAddonsChange}
-      aiTier={props.aiTier}
       initialCoupon={props.initialCoupon}
       linkNotice={props.linkNotice}
       onQuoted={props.onQuoted}
@@ -169,20 +166,19 @@ describe('the bundle’s add-ons on the quote (AGL-3955)', () => {
     expect(screen.queryByLabelText(/POS register/)).toBeNull()
   })
 
-  it('preselects the Aglyn AI tier the link named, worded, priced and quoted as that tier (AGL-3965)', async () => {
-    // `addons=siteCare,ai:studio` on a Starter link: Studio, not Starter's Spark.
-    mount({ addons: { siteCare: 1, aiAddon: 1 }, aiTier: 'studio', onAddonsChange: () => undefined })
+  it('preselects the link’s Aglyn AI credit blocks as a count, quoted at $10 a block (AGL-4144)', async () => {
+    // `addons=siteCare,ai:3` on a Starter link: three blocks of credits.
+    mount({ addons: { siteCare: 1, aiAddon: 3 }, onAddonsChange: () => undefined })
     await waitFor(() => expect(screen.getByText('Subtotal')).toBeTruthy())
-    expect(posted[0]).toMatchObject({ addons: { siteCare: 1, aiAddon: 1 }, aiTier: 'studio' })
-    const ai = screen.getByLabelText(/AI Studio/) as HTMLInputElement
-    expect(ai.checked).toBe(true)
-    expect(screen.getByText(/\$299\/mo/)).toBeTruthy()
-  })
-
-  it('CONTROL: the tier rides only with the AI add-on', async () => {
-    mount({ addons: { siteCare: 1 }, aiTier: 'studio', onAddonsChange: () => undefined })
-    await waitFor(() => expect(screen.getByText('Subtotal')).toBeTruthy())
+    expect(posted[0]).toMatchObject({ addons: { siteCare: 1, aiAddon: 3 } })
+    // No tier rides with it any more: the checkout refuses one.
     expect(posted[0]['aiTier']).toBeUndefined()
+    const blocks = screen.getByLabelText('Aglyn AI credit blocks') as HTMLInputElement
+    expect(blocks.value).toBe('3')
+    expect(blocks.getAttribute('max')).toBe(String(AI_CREDIT_BLOCKS_MAX))
+    expect(screen.getByText('5,000 credits a block · $10/mo each')).toBeTruthy()
+    // A count, not a switch: Site Care is the only switch.
+    expect(screen.queryByRole('switch', { name: /Aglyn AI/ })).toBeNull()
   })
 
   it('shows the page’s one-line notice for what the link left off', async () => {
@@ -192,11 +188,10 @@ describe('the bundle’s add-ons on the quote (AGL-3955)', () => {
   })
 })
 
-describe('the owner can change the Aglyn AI tier the link chose (AGL-4025)', () => {
-  /** The page's part: it holds the add-ons and the tier, as Billing does. */
-  function Billing(props: { addons: BundleAddons; aiTier?: AiTierId; interval?: 'month' | 'year' }) {
+describe('the owner can change the Aglyn AI credit blocks the link chose (AGL-4144)', () => {
+  /** The page's part: it holds the add-ons, as Billing does. */
+  function Billing(props: { addons: BundleAddons; interval?: 'month' | 'year' }) {
     const [addons, setAddons] = useState<BundleAddons>(props.addons)
-    const [aiTier, setAiTier] = useState<AiTierId | null>(props.aiTier ?? null)
     return (
       <BillingPlanQuoteComponent
         orgId="org-1"
@@ -207,48 +202,42 @@ describe('the owner can change the Aglyn AI tier the link chose (AGL-4025)', () 
         onAppliedCodeChange={() => undefined}
         addons={addons}
         onAddonsChange={setAddons}
-        aiTier={aiTier}
-        onAiTierChange={setAiTier}
+        offered={['siteCare', 'aiAddon']}
       />
     )
   }
-  const tierField = () => screen.queryByRole('combobox', { name: 'Aglyn AI tier' })
+  const blocksField = () => screen.getByLabelText('Aglyn AI credit blocks') as HTMLInputElement
 
-  it('opens on the link’s tier beside the switch, and a new tier re-quotes as that tier', async () => {
-    render(<Billing addons={{ siteCare: 1, aiAddon: 1 }} aiTier="boost" />)
+  it('a new count re-quotes as that many blocks', async () => {
+    render(<Billing addons={{ siteCare: 1, aiAddon: 1 }} />)
     await waitFor(() => expect(screen.getByText('Subtotal')).toBeTruthy())
-    expect(tierField()!.textContent).toBe(`Boost — $${AI_TIERS.boost.monthlyUsd}/mo`)
-    expect(posted[0]).toMatchObject({ addons: { siteCare: 1, aiAddon: 1 }, aiTier: 'boost' })
-    fireEvent.mouseDown(tierField()!)
-    fireEvent.click(
-      within(await screen.findByRole('listbox')).getByRole('option', { name: /^Max — / }),
-    )
-    await waitFor(() => expect(posted.at(-1)).toMatchObject({ aiTier: 'max' }))
-    expect(posted.at(-1)).toMatchObject({ addons: { siteCare: 1, aiAddon: 1 } })
-    expect(tierField()!.textContent).toBe(`Max — $${AI_TIERS.max.monthlyUsd}/mo`)
+    expect(posted[0]).toMatchObject({ addons: { siteCare: 1, aiAddon: 1 } })
+    fireEvent.change(blocksField(), { target: { value: '5' } })
+    await waitFor(() => expect(posted.at(-1)?.['addons']).toEqual({ siteCare: 1, aiAddon: 5 }))
+    expect(blocksField().value).toBe('5')
+    expect(posted.some((body) => 'aiTier' in body)).toBe(false)
   })
 
-  it('a link with no tier opens on the plan’s default, and yearly billing prices it yearly', async () => {
+  it('a count past 30 is held to 30, the most the plan sells', async () => {
+    render(<Billing addons={{ aiAddon: 2 }} />)
+    await waitFor(() => expect(screen.getByText('Subtotal')).toBeTruthy())
+    fireEvent.change(blocksField(), { target: { value: '45' } })
+    await waitFor(() => expect(posted.at(-1)?.['addons']).toEqual({ aiAddon: AI_CREDIT_BLOCKS_MAX }))
+    expect(blocksField().value).toBe(String(AI_CREDIT_BLOCKS_MAX))
+  })
+
+  it('counting down to zero removes the blocks from the quote and keeps the row', async () => {
+    render(<Billing addons={{ siteCare: 1, aiAddon: 2 }} />)
+    await waitFor(() => expect(screen.getByText('Subtotal')).toBeTruthy())
+    fireEvent.change(blocksField(), { target: { value: '0' } })
+    await waitFor(() => expect(posted.at(-1)?.['addons']).toEqual({ siteCare: 1 }))
+    expect(blocksField().value).toBe('0')
+  })
+
+  it('yearly billing prices a block yearly', async () => {
     render(<Billing addons={{ aiAddon: 1 }} interval="year" />)
     await waitFor(() => expect(screen.getByText('Subtotal')).toBeTruthy())
-    const tier = AI_TIERS[defaultAiTierForPlan('starter')!]
-    expect(tierField()!.textContent).toBe(`${tier.label} — $${tier.yearlyUsd}/yr`)
-  })
-
-  it('turning Aglyn AI off removes it and its tier from the quote', async () => {
-    render(<Billing addons={{ siteCare: 1, aiAddon: 1 }} aiTier="plus" />)
-    await waitFor(() => expect(screen.getByText('Subtotal')).toBeTruthy())
-    fireEvent.click(screen.getByRole('switch', { name: /^Aglyn AI/ }))
-    await waitFor(() => expect(posted.at(-1)?.['addons']).toEqual({ siteCare: 1 }))
-    expect(posted.at(-1)?.['aiTier']).toBeUndefined()
-    expect(tierField()).toBeNull()
-  })
-
-  it('CONTROL: without onAiTierChange the switch names the tier and no picker shows', async () => {
-    mount({ addons: { aiAddon: 1 }, aiTier: 'studio', onAddonsChange: () => undefined })
-    await waitFor(() => expect(screen.getByText('Subtotal')).toBeTruthy())
-    expect(tierField()).toBeNull()
-    expect(screen.getByText(/Aglyn AI Studio/)).toBeTruthy()
+    expect(screen.getByText('5,000 credits a block · $120/yr each')).toBeTruthy()
   })
 })
 
@@ -300,18 +289,23 @@ describe('the card offers what the link named, with counts, a cadence and a tota
   it('with no billing address, shows the total before tax and moves it with every change', async () => {
     answer(NO_ADDRESS)
     const bundle = { siteCare: 1, aiAddon: 1, managers: 2 }
-    const view = mount({ interval: 'year', addons: bundle, offered: ['siteCare', 'aiAddon', 'managers'], aiTier: 'plus', onAddonsChange: () => undefined })
+    const view = mount({ interval: 'year', addons: bundle, offered: ['siteCare', 'aiAddon', 'managers'], onAddonsChange: () => undefined })
     await waitFor(() => expect(posted).toHaveLength(1))
     const usd = (cents: number) => `$${(cents / 100).toLocaleString('en-US', { minimumFractionDigits: 2 })}/yr`
-    const before = bundleListPriceCents({ plan: 'starter', interval: 'year', addons: bundle, aiTier: 'plus' })
+    const before = bundleListPriceCents({ plan: 'starter', interval: 'year', addons: bundle })
     expect(screen.getByText('Total before tax')).toBeTruthy()
     expect(screen.getByText(usd(before))).toBeTruthy()
     expect(screen.getByText(/Add your billing address to see the total with tax/)).toBeTruthy()
     expect(screen.queryByText(/Select a plan/)).toBeNull()
     view.rerenderWith({ ...bundle, managers: 3 })
-    const after = bundleListPriceCents({ plan: 'starter', interval: 'year', addons: { ...bundle, managers: 3 }, aiTier: 'plus' })
+    const after = bundleListPriceCents({ plan: 'starter', interval: 'year', addons: { ...bundle, managers: 3 } })
     expect(after).toBeGreaterThan(before)
     expect(screen.getByText(usd(after))).toBeTruthy()
+    // Four blocks instead of one: three more blocks at $120 a year each.
+    view.rerenderWith({ ...bundle, managers: 3, aiAddon: 4 })
+    const more = bundleListPriceCents({ plan: 'starter', interval: 'year', addons: { ...bundle, managers: 3, aiAddon: 4 } })
+    expect(more - after).toBe(3 * 120 * 100)
+    expect(screen.getByText(usd(more))).toBeTruthy()
   })
 
   it('a quote that fails still shows the bundle and its total before tax', async () => {

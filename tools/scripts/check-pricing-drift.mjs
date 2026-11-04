@@ -50,8 +50,8 @@ import {
   parseUnitRates,
   indexStripePrices,
   comparePlansToStripe,
-  compareAiTiersToStripe,
-  AI_TIER_IDS,
+  compareAiCreditBlockToStripe,
+  parseAiCreditBlock,
   compareFeeLadder,
   compareUnitRateTables,
   publishedMeteredRates,
@@ -60,6 +60,7 @@ import {
 
 const PLAN_ENTITLEMENTS_TS = 'libs/aglyn/src/lib/app-utils/plan-entitlements.ts'
 const USAGE_METERING_TS = 'apps/console/utils/usage-metering.ts'
+const AI_CREDIT_BLOCKS_TS = 'libs/aglyn/src/lib/app-utils/ai-credit-blocks.ts'
 
 /**
  * The price set LOCKED for the Sept 1 public beta.
@@ -311,9 +312,12 @@ if (args.stripe) {
   else {
     const prices = indexStripePrices(stripe.payload)
     verdicts.push(...comparePlansToStripe(planPricing, prices))
-    // The Aglyn AI tiers (AGL-3965), and the per-plan prices they replace.
+    // The Aglyn AI credit block (AGL-4144).
     verdicts.push(
-      ...compareAiTiersToStripe(parsePlanRecord(entitlementsSrc, 'AI_TIERS', AI_TIER_IDS), prices),
+      ...compareAiCreditBlockToStripe(
+        parseAiCreditBlock(existsSync(AI_CREDIT_BLOCKS_TS) ? readFileSync(AI_CREDIT_BLOCKS_TS, 'utf8') : ''),
+        prices,
+      ),
     )
   }
 } else {

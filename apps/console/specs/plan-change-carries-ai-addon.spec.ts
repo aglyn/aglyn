@@ -17,87 +17,93 @@
 
 /**
  * A plan change never silently drops — or silently re-prices — the Aglyn AI
- * tier (AGL-2899, AGL-3965).
+ * credit blocks (AGL-2899, AGL-4144).
  *
  * `/api/billing/subscription` moves every add-on item to the target in the
- * same update and reports the kinds it deleted as `droppedAddons`. Since
- * AGL-3965 a tier is chosen on its own, at one price on every paid plan, so
- * a plan change KEEPS the tier and its price; only a target that sells no
- * tier (Free), or one the server could not carry it to, drops it. This is the
- * sentence the switch confirm appends, and the answers it has to give:
- * carries at the tier's own price, is removed (and why), or is not mentioned
- * because the org never had it.
+ * same update and reports the kinds it deleted as `droppedAddons`. A block is
+ * one price on every paid plan, so a plan change KEEPS the blocks, their count
+ * and their price; only a target that sells none (Free, or a plan pricing v4
+ * retired), or one the server
+ * could not carry them to, drops them. This is the sentence the switch confirm
+ * appends, and the answers it has to give: carries at the blocks' own price,
+ * is removed (and why), or is not mentioned because the org never had any.
  */
 
-import { AI_TIERS } from '@aglyn/aglyn'
+import { AI_CREDIT_BLOCK_MONTHLY_USD } from '@aglyn/aglyn'
 import { carriedAiAddonSentence } from '../utils/proration-quote'
 
-const PRO_WITH_AI = {
-  plan: 'pro',
-  subscription: { status: 'active' },
-  seatAddons: { aiAddon: 1 },
-} as any
+const proWithBlocks = (blocks: number) =>
+  ({
+    plan: 'pro',
+    subscription: { status: 'active' },
+    seatAddons: { aiAddon: blocks },
+  }) as any
 
-/** Starter with the add-on and no `aiTier` written: Starter's old add-on, Spark. */
-const STARTER_WITH_AI = { ...PRO_WITH_AI, plan: 'starter' } as any
-
-// Pricing v4 (AGL-4126): the plans sold are Free, Starter and Pro, so the
-// moves below are between Starter and Pro; a retired plan sells no tier.
-
-describe('carriedAiAddonSentence (AGL-2899, AGL-3965)', () => {
-  it('says nothing for an org without the add-on', () => {
+describe('carriedAiAddonSentence (AGL-2899, AGL-4144)', () => {
+  it('says nothing for an org without blocks', () => {
     expect(carriedAiAddonSentence({ plan: 'pro' } as any, 'starter', [])).toBe('')
-    // A dead subscription's add-on is not carried, because it is not held.
+    expect(carriedAiAddonSentence(proWithBlocks(0), 'starter', [])).toBe('')
+    // A dead subscription's blocks are not carried, because they are not held.
     expect(
       carriedAiAddonSentence(
-        { ...PRO_WITH_AI, subscription: { status: 'canceled' } },
+        { ...proWithBlocks(2), subscription: { status: 'canceled' } },
         'starter',
         [],
       ),
     ).toBe('')
   })
 
-  it('names the tier at ITS OWN price on the target, which the plan change does not move', () => {
-    // No `aiTier` written: Starter's old add-on, which is Spark at $9. Moving
-    // to Pro keeps it at $9 — not Pro's old $19 add-on.
-    const sentence = carriedAiAddonSentence(STARTER_WITH_AI, 'pro', [])
-    expect(sentence).toBe(
-      ' Your Aglyn AI Spark tier carries over at $9/mo on Pro, billed with the plan.',
+  it('names the blocks at THEIR OWN price on the target, which the plan change does not move', () => {
+    expect(AI_CREDIT_BLOCK_MONTHLY_USD).toBe(10)
+    expect(carriedAiAddonSentence(proWithBlocks(1), 'starter', [])).toBe(
+      ' Your 1 block of Aglyn AI credits carries over at $10/mo on Starter, billed with the plan.',
     )
-    expect(AI_TIERS.spark.monthlyUsd).toBe(9)
-    // Down the ladder too: the same tier, the same price.
-    expect(carriedAiAddonSentence(PRO_WITH_AI, 'starter', [])).toContain('$19/mo on Starter')
-    // And the tier written, whatever the plan.
-    expect(
-      carriedAiAddonSentence({ ...STARTER_WITH_AI, aiTier: 'studio' }, 'pro', []),
-    ).toBe(' Your Aglyn AI Studio tier carries over at $299/mo on Pro, billed with the plan.')
+    // The count is the price: three blocks are $30 on any paid plan.
+    expect(carriedAiAddonSentence(proWithBlocks(3), 'starter', [])).toBe(
+      ' Your 3 blocks of Aglyn AI credits carry over at $30/mo on Starter, billed with the plan.',
+    )
+    // A stored count past the ceiling is the ceiling, never more.
+    expect(carriedAiAddonSentence(proWithBlocks(45), 'pro', [])).toContain(
+      'Your 30 blocks of Aglyn AI credits carry over at $300/mo on Pro',
+    )
   })
 
-  it('says it is removed when the target sells no tier', () => {
-    expect(carriedAiAddonSentence(PRO_WITH_AI, 'free', [])).toContain(
-      'not sold on Free, so it is removed',
+  it('says they are removed when the target sells no blocks', () => {
+    expect(carriedAiAddonSentence(proWithBlocks(1), 'free', [])).toContain(
+      'Your 1 block of Aglyn AI credits is not sold on Free, so it is removed',
     )
-    // The credits go with it — the sentence says so, because the meter
+    const many = carriedAiAddonSentence(proWithBlocks(4), 'free', [])
+    expect(many).toContain('Your 4 blocks of Aglyn AI credits are not sold on Free, so they are removed')
+    // The credits go with them — the sentence says so, because the meter
     // will.
-    expect(carriedAiAddonSentence(PRO_WITH_AI, 'free', [])).toContain(
-      'its AI credits go with it',
-    )
+    expect(many).toContain('the credits go with them')
     // …and a plan pricing v4 retired, which sells nothing (AGL-4126).
-    expect(carriedAiAddonSentence(PRO_WITH_AI, 'business', [])).toContain(
-      'not sold on Business, so it is removed',
+    expect(carriedAiAddonSentence(proWithBlocks(2), 'business', [])).toContain(
+      'not sold on Business, so they are removed',
     )
   })
 
-  it('says it is removed when the server reports the drop, without claiming the plan sells none', () => {
-    const sentence = carriedAiAddonSentence(PRO_WITH_AI, 'starter', ['aiAddon'])
-    expect(sentence).toContain('cannot move to Starter with this change, so it is removed')
-    expect(sentence).toContain('its AI credits go with it')
+  it('says they are removed when the server reports the drop, without claiming the plan sells none', () => {
+    const sentence = carriedAiAddonSentence(proWithBlocks(2), 'starter', ['aiAddon'])
+    expect(sentence).toContain('cannot move to Starter with this change, so they are removed')
+    expect(sentence).toContain('the credits go with them')
+    expect(sentence).toContain('You can add blocks again under Plan add-ons afterwards.')
     expect(sentence).not.toContain('not sold')
   })
 
   it('tolerates a preview without the field', () => {
-    expect(carriedAiAddonSentence(PRO_WITH_AI, 'starter', undefined)).toContain(
-      '$19/mo on Starter',
+    expect(carriedAiAddonSentence(proWithBlocks(2), 'starter', undefined)).toContain(
+      '$20/mo on Starter',
     )
+  })
+
+  it('names no tier: the retired tier names are gone from the sentence', () => {
+    const sentence = carriedAiAddonSentence(
+      { ...proWithBlocks(1), aiTier: 'studio' } as any,
+      'starter',
+      [],
+    )
+    expect(sentence).not.toMatch(/Spark|Boost|Plus|Max|Ultra|Studio|tier/)
+    expect(sentence).toContain('$10/mo')
   })
 })

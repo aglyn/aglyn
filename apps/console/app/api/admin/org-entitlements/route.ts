@@ -17,15 +17,15 @@
 
 import {
   aiAddonName,
-  aiTierName,
   hasAiAddon,
   PLAN_ENTITLEMENTS,
-  resolveAiTier,
+  resolveAiCreditBlocks,
   resolveEffectivePlan,
   resolveOrgEntitlements,
   UNLIMITED,
 } from '@aglyn/aglyn/app-utils/plan-entitlements'
 import { countManagerSeats } from '@aglyn/aglyn/app-utils/organizations'
+import { aiCreditBlocksLabel } from '@aglyn/aglyn/app-utils/ai-credit-blocks'
 import { pluginOrgCapacities } from '@aglyn/aglyn/plugin-manager/plugin-org-capacity'
 import { pluginRequestFromWeb } from '@aglyn/aglyn/server'
 import {
@@ -103,9 +103,11 @@ async function handler(request: Request): Promise<Response> {
     })
 
     const aiAddon = hasAiAddon(org as never)
-    // The tier it is (AGL-3965), so staff read which band widened the pool.
-    const aiTier = resolveAiTier(org as never)
-    const aiAddonLabel = aiTier ? aiTierName(aiTier) : `${aiAddonName()} add-on`
+    // How many credit blocks (AGL-4144), so staff read what widened the pool.
+    const aiBlocks = resolveAiCreditBlocks(org as never)
+    const aiAddonLabel = aiBlocks
+      ? `${aiAddonName()} credits, ${aiCreditBlocksLabel(aiBlocks)}`
+      : `${aiAddonName()} add-on`
     const rows = Object.entries(resolved)
       .filter(([key, value]) => key !== 'features' && typeof value === 'number')
       .map(([key, value]) => {

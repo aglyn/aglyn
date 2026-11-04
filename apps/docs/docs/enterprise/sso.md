@@ -6,9 +6,9 @@ description: How to set up SAML SSO yourself, how domain verification works, wha
 
 # Single sign-on (SAML)
 
-SSO signs your team in against your own identity provider. It is an
-**Enterprise** feature, and once your organization is on Enterprise you set it
-up yourself in **Organization → Settings → Single sign-on**. There is no
+SSO signs your team in against your own identity provider. It is a feature of
+the **Custom** plan (once labeled Enterprise), and once your organization is on
+Custom you set it up yourself in **Organization → Settings → Single sign-on**. There is no
 provisioning step on our side and nothing to wait for.
 
 ## Setting it up

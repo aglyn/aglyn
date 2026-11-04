@@ -56,14 +56,18 @@ import {
   resolveAssistOverageCapUsd,
 } from './assist-credits'
 import {
-  AI_TIER_IDS,
-  AI_TIERS,
+  AI_CREDIT_BLOCK_MONTHLY_USD,
+  AI_CREDIT_BLOCKS_MAX,
+  AI_CREDITS_PER_BLOCK,
+} from '@aglyn/aglyn/app-utils/ai-credit-blocks'
+import {
   ENTERPRISE_AI_ADDON_CREDITS_PER_MONTH,
   hasAiAddon,
   PLAN_ENTITLEMENTS,
   PLAN_LABELS,
   PLAN_PRICING,
   resolveEffectivePlan,
+  RETIRED_PLANS,
   SELF_SERVE_PLANS,
 } from '@aglyn/aglyn/app-utils/plan-entitlements'
 import { registerPluginEntitlements } from '@aglyn/aglyn/plugin-manager/plugin-entitlements'
@@ -606,83 +610,84 @@ describe('the overage is SOLD past the band at the plan rate, unless the org ask
   })
 })
 
-describe('an Aglyn AI tier widens the ONE pool and sells past it (AGL-2896, AGL-3965)', () => {
+describe('Aglyn AI credit blocks widen the ONE pool and sell past it (AGL-2896, AGL-4144)', () => {
+  const STARTER_BAND = PLAN_ENTITLEMENTS.starter.assistCreditsPerMonth
   const starterWithAddon = { plan: 'starter' as const, seatAddons: { aiAddon: 1 } }
 
-  it('ADDS to the band Starter already has, and leaves the rate where it is', () => {
+  it('ADDS 5,000 a block to the band Starter already has, and leaves the rate where it is', () => {
     // Before AGL-3203 the add-on was the whole of Starter's assist: the plan
     // banded at 0 and the rate lived off-row in a constant. Now the plan
     // carries both, so the add-on does here exactly what it does on every
-    // other tier — it widens the one pool and changes no rate.
-    expect(resolveAssistCreditBudget({ plan: 'starter' })).toBe(750)
-    // No `aiTier` written: Starter's old add-on, which is Spark.
-    expect(resolveAssistCreditBudget(starterWithAddon)).toBe(
-      PLAN_ENTITLEMENTS.starter.assistCreditsPerMonth + AI_TIERS.spark.credits,
+    // other plan — it widens the one pool and changes no rate.
+    expect(resolveAssistCreditBudget({ plan: 'starter' })).toBe(STARTER_BAND)
+    expect(resolveAssistCreditBudget(starterWithAddon)).toBe(STARTER_BAND + AI_CREDITS_PER_BLOCK)
+    expect(resolveAssistBudgetUsd(starterWithAddon)).toBe(
+      assistUsdFromCredits(STARTER_BAND + AI_CREDITS_PER_BLOCK),
     )
-    expect(resolveAssistCreditBudget(starterWithAddon)).toBe(4_750)
-    expect(resolveAssistBudgetUsd(starterWithAddon)).toBe(4.75)
     // The rate is the PLAN's, with or without the add-on — one number in one
     // place, which is what the collapsed constant bought.
     expect(resolveAssistOverageRateUsdPer1k({ plan: 'starter' })).toBe(3)
     expect(resolveAssistOverageRateUsdPer1k(starterWithAddon)).toBe(3)
     expect(PLAN_PRICING.starter.extraAssistCreditsUsdPer1k).toBe(3)
     // …and it is Pro's figure, joined rather than stepped above: the ladder
-    // descends with the tier, so the rung below Pro cannot cost more.
+    // descends with the plan, so the rung below Pro cannot cost more.
     expect(PLAN_PRICING.starter.extraAssistCreditsUsdPer1k).toBe(
       PLAN_PRICING.pro.extraAssistCreditsUsdPer1k,
     )
   })
 
-  it('ADDS to a plan that already has a band, at the plan rate it already had', () => {
+  it('ADDS blocks × 5,000 on every paid plan, whatever the plan, at the plan rate it already had', () => {
     // FORCED RED by replacing the band rather than adding to it.
-    expect(resolveAssistCreditBudget({ plan: 'pro', seatAddons: { aiAddon: 1 } })).toBe(
-      2_750 + 9_000,
-    )
-    expect(resolveAssistOverageRateUsdPer1k({ plan: 'pro', seatAddons: { aiAddon: 1 } })).toBe(3)
-    // Pricing v4 (AGL-4126): Pro is the top plan a tier is sold on, so the
-    // second example is Pro's biggest tier rather than Agency's old add-on.
-    expect(
-      resolveAssistCreditBudget({ plan: 'pro', seatAddons: { aiAddon: 1 }, aiTier: 'studio' }),
-    ).toBe(2_750 + 149_000)
-    expect(
-      resolveAssistOverageRateUsdPer1k({ plan: 'pro', seatAddons: { aiAddon: 1 }, aiTier: 'studio' }),
-    ).toBe(3)
-  })
-
-  it('adds the TIER bought, whatever the plan, at the plan rate (AGL-3965)', () => {
-    // Studio on Starter and Spark on Pro: the decoupling. (Pro, the top plan
-    // sold since pricing v4, AGL-4126, where Agency stood.)
-    expect(
-      resolveAssistCreditBudget({ plan: 'starter', seatAddons: { aiAddon: 1 }, aiTier: 'studio' }),
-    ).toBe(750 + 149_000)
-    expect(
-      resolveAssistOverageRateUsdPer1k({ plan: 'starter', seatAddons: { aiAddon: 1 }, aiTier: 'studio' }),
-    ).toBe(3)
-    expect(
-      resolveAssistCreditBudget({ plan: 'pro', seatAddons: { aiAddon: 1 }, aiTier: 'spark' }),
-    ).toBe(2_750 + 4_000)
-    // Every tier on every paid plan SOLD is the plan's band plus the tier's.
-    for (const plan of ['starter', 'pro'] as const) {
-      for (const tier of AI_TIER_IDS) {
-        expect(
-          resolveAssistCreditBudget({ plan, seatAddons: { aiAddon: 1 }, aiTier: tier }),
-        ).toBe(PLAN_ENTITLEMENTS[plan].assistCreditsPerMonth + AI_TIERS[tier].credits)
+    // The plans SOLD since pricing v4 (AGL-4126): Starter and Pro.
+    const sold = SELF_SERVE_PLANS.filter((plan) => plan !== 'free')
+    expect(sold).toEqual(['starter', 'pro'])
+    for (const plan of sold) {
+      for (const blocks of [1, 3, AI_CREDIT_BLOCKS_MAX]) {
+        const org = { plan, seatAddons: { aiAddon: blocks } }
+        expect(`${plan}/${blocks}: ${resolveAssistCreditBudget(org)}`).toBe(
+          `${plan}/${blocks}: ${PLAN_ENTITLEMENTS[plan].assistCreditsPerMonth + blocks * AI_CREDITS_PER_BLOCK}`,
+        )
+        expect(resolveAssistOverageRateUsdPer1k(org)).toBe(
+          resolveAssistOverageRateUsdPer1k({ plan }),
+        )
       }
     }
-    // A tier written with no add-on held adds nothing.
-    expect(resolveAssistCreditBudget({ plan: 'pro', aiTier: 'studio' })).toBe(2_750)
+    // A retired plan sells no blocks, so a quantity on one widens nothing.
+    for (const plan of RETIRED_PLANS) {
+      expect(resolveAssistCreditBudget({ plan, seatAddons: { aiAddon: 3 } })).toBe(
+        PLAN_ENTITLEMENTS[plan].assistCreditsPerMonth,
+      )
+    }
+  })
+
+  it('counts the blocks the reservation gate is held to: 0–30, never a tier', () => {
+    // A quantity above the ceiling is the ceiling; junk is none.
+    expect(resolveAssistCreditBudget({ plan: 'starter', seatAddons: { aiAddon: 45 } })).toBe(
+      STARTER_BAND + AI_CREDIT_BLOCKS_MAX * AI_CREDITS_PER_BLOCK,
+    )
+    expect(resolveAssistCreditBudget({ plan: 'starter', seatAddons: { aiAddon: 2.7 } })).toBe(
+      STARTER_BAND + 2 * AI_CREDITS_PER_BLOCK,
+    )
+    // A retired tier written on the document adds nothing, with or without
+    // the add-on: only the block count is read.
+    expect(resolveAssistCreditBudget({ plan: 'pro', aiTier: 'studio' } as never)).toBe(
+      PLAN_ENTITLEMENTS.pro.assistCreditsPerMonth,
+    )
+    expect(
+      resolveAssistCreditBudget({ plan: 'starter', seatAddons: { aiAddon: 1 }, aiTier: 'studio' } as never),
+    ).toBe(STARTER_BAND + AI_CREDITS_PER_BLOCK)
   })
 
   it('leaves Free and Enterprise with no rate, add-on or not', () => {
     // Free sells no add-on: a quantity written onto it adds free's zero, so
     // the budget stays the taste and nothing widens it.
-    expect(resolveAssistCreditBudget({ plan: 'free', seatAddons: { aiAddon: 1 } })).toBe(
+    expect(resolveAssistCreditBudget({ plan: 'free', seatAddons: { aiAddon: 3 } })).toBe(
       FREE_AI_TASTE_CREDITS_PER_MONTH,
     )
-    expect(resolveAssistOverageRateUsdPer1k({ plan: 'free', seatAddons: { aiAddon: 1 } })).toBeNull()
-    // Enterprise: the band widens by the fallback figure, and the usage is
-    // still in the contract — no rate, so the band stays a wall.
-    // Enterprise buys no tier; the contract figure is kept (AGL-3965).
+    expect(resolveAssistOverageRateUsdPer1k({ plan: 'free', seatAddons: { aiAddon: 3 } })).toBeNull()
+    // Enterprise: the band widens by the contract figure, and the usage is
+    // still in the contract — no rate, so the band stays a wall. Enterprise
+    // buys no blocks; the contract figure is kept (AGL-4144).
     expect(resolveAssistCreditBudget({ plan: 'enterprise', seatAddons: { aiAddon: 1 } })).toBe(
       ENTERPRISE_ASSIST_CREDITS_PER_MONTH + ENTERPRISE_AI_ADDON_CREDITS_PER_MONTH,
     )
@@ -694,8 +699,9 @@ describe('an Aglyn AI tier widens the ONE pool and sells past it (AGL-2896, AGL-
   })
 
   it('every reader of the rate reads the SAME one', () => {
-    // The gate, the invoice and the refusal sentence, on the org whose rate
-    // comes from the add-on and not from the plan table.
+    // The gate, the invoice and the refusal sentence, on the org whose band
+    // comes partly from a block and not only from the plan table.
+    const edge = STARTER_BAND + AI_CREDITS_PER_BLOCK
     expect(assistBandRefuses(starterWithAddon)).toBe(false)
     expect(assistBandRefuses({ ...starterWithAddon, assistOverage: { hardCap: true } })).toBe(true)
     expect(
@@ -707,20 +713,22 @@ describe('an Aglyn AI tier widens the ONE pool and sells past it (AGL-2896, AGL-
       overageMonthlyUsd: 6,
       overageRateUsd: 3,
     })
-    // The month's derivation, end to end: the band edge is the plan's 750
-    // plus the add-on's 4,000.
-    expect(assistMonthOverage(starterWithAddon, assistUsdFromCredits(4_750 + 2_500))).toEqual({
-      usedCredits: 7_250,
-      bandCredits: 4_750,
+    // The month's derivation, end to end: the band edge is the plan's band
+    // plus the block's 5,000.
+    expect(assistMonthOverage(starterWithAddon, assistUsdFromCredits(edge + 2_500))).toEqual({
+      usedCredits: edge + 2_500,
+      bandCredits: edge,
       overageCredits: 2_500,
       overageMonthlyUsd: 7.5,
       overageRateUsd: 3,
     })
     // And WITHOUT the add-on the same org still sells, at the same rate,
     // from the plan's own narrower band — the shape AGL-3203 introduced.
-    expect(assistMonthOverage({ plan: 'starter' }, assistUsdFromCredits(750 + 2_500))).toEqual({
-      usedCredits: 3_250,
-      bandCredits: 750,
+    expect(
+      assistMonthOverage({ plan: 'starter' }, assistUsdFromCredits(STARTER_BAND + 2_500)),
+    ).toEqual({
+      usedCredits: STARTER_BAND + 2_500,
+      bandCredits: STARTER_BAND,
       overageCredits: 2_500,
       overageMonthlyUsd: 7.5,
       overageRateUsd: 3,
@@ -728,13 +736,14 @@ describe('an Aglyn AI tier widens the ONE pool and sells past it (AGL-2896, AGL-
     expect(assistBandRefuses({ plan: 'starter' })).toBe(false)
   })
 
-  it('is a toggle: any quantity from one up is one purchase, anything else is none', () => {
-    for (const quantity of [1, 2, 7, 1e6]) {
+  it('is a count: any whole quantity from one up is that many blocks, anything else is none', () => {
+    for (const quantity of [1, 2, 7]) {
       expect(hasAiAddon({ plan: 'starter', seatAddons: { aiAddon: quantity } })).toBe(true)
       expect(
         resolveAssistCreditBudget({ plan: 'starter', seatAddons: { aiAddon: quantity } }),
-      ).toBe(4_750)
+      ).toBe(STARTER_BAND + quantity * AI_CREDITS_PER_BLOCK)
     }
+    expect(hasAiAddon({ plan: 'starter', seatAddons: { aiAddon: 1e6 } })).toBe(true)
     for (const quantity of [0, -1, 0.5, Number.NaN, undefined] as unknown[]) {
       expect(
         hasAiAddon({ plan: 'starter', seatAddons: { aiAddon: quantity as number } }),
@@ -750,29 +759,24 @@ describe('an Aglyn AI tier widens the ONE pool and sells past it (AGL-2896, AGL-
     const dead = {
       plan: 'starter' as const,
       subscription: { status: 'canceled' },
-      seatAddons: { aiAddon: 1 },
+      seatAddons: { aiAddon: 3 },
     } as never
     expect(hasAiAddon(dead)).toBe(false)
-    // Dead is Free, and Free is the taste: the add-on's four thousand are
-    // gone, three hundred remain, and they are a wall.
+    // Dead is Free, and Free is the taste: the blocks' credits are gone, the
+    // taste remains, and it is a wall.
     expect(resolveAssistCreditBudget(dead)).toBe(FREE_AI_TASTE_CREDITS_PER_MONTH)
     expect(resolveAssistOverageRateUsdPer1k(dead)).toBeNull()
     expect(assistBandRefuses(dead)).toBe(true)
   })
 
-  it('every tier band costs at most 50% of the tier price in provider spend', () => {
-    // The `ASSIST_CREDIT_MIN_MARGIN_PCT` floor, applied to each tier line
-    // itself: what the band costs at 100% against what the tier charges.
-    for (const tier of AI_TIER_IDS) {
-      const price = AI_TIERS[tier].monthlyUsd
-      const cost = assistUsdFromCredits(AI_TIERS[tier].credits)
-      expect(`${tier}: ${cost / price <= 1 - ASSIST_CREDIT_MIN_MARGIN_PCT}`).toBe(`${tier}: true`)
-      // …and it is a real band, not a token one hiding under the floor.
-      expect(cost / price).toBeGreaterThan(0.4)
-      expect(Number.isFinite(AI_TIERS[tier].credits)).toBe(true)
-    }
-    // Enterprise's contract figure follows the x 2 rule and is finite.
-    expect(ENTERPRISE_AI_ADDON_CREDITS_PER_MONTH).toBe(AI_TIERS.studio.credits * 2)
+  it('a block costs at most 50% of its price in provider spend', () => {
+    // The `ASSIST_CREDIT_MIN_MARGIN_PCT` floor, applied to the block line
+    // itself: what its credits cost at 100% against what the block charges.
+    const cost = assistUsdFromCredits(AI_CREDITS_PER_BLOCK)
+    expect(cost / AI_CREDIT_BLOCK_MONTHLY_USD).toBeLessThanOrEqual(1 - ASSIST_CREDIT_MIN_MARGIN_PCT)
+    // …and it is a real band, not a token one hiding under the floor.
+    expect(cost / AI_CREDIT_BLOCK_MONTHLY_USD).toBeGreaterThan(0.4)
+    // Enterprise's contract figure is finite.
     expect(Number.isFinite(ENTERPRISE_AI_ADDON_CREDITS_PER_MONTH)).toBe(true)
   })
 })

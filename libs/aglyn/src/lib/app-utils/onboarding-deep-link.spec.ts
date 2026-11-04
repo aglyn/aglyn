@@ -278,6 +278,27 @@ describe('the Aglyn AI add-on rides the same link (AGL-2897)', () => {
     }
   })
 
+  it('reads ai=<n> as that many credit blocks, held to 30 (AGL-4144)', () => {
+    expect(parseOnboardingPlanIntent(query('plan=pro&ai=3'))).toMatchObject({
+      ai: true,
+      addons: { aiAddon: 3 },
+    })
+    expect(parseOnboardingPlanIntent(query('plan=pro&ai=99'))?.addons).toEqual({ aiAddon: 30 })
+    // One block is the bare flag, as every published CTA writes it.
+    expect(parseOnboardingPlanIntent(query('plan=pro&ai=1'))?.addons).toBeUndefined()
+    const three = parseOnboardingPlanIntent(query('plan=pro&interval=year&ai=3'))!
+    expect(onboardingPlanQuery(three)).toBe('plan=pro&interval=year&ai=3')
+  })
+
+  it('reads a retired tier name on ai= as no add-on at all (AGL-4144)', () => {
+    for (const tier of ['spark', 'boost', 'plus', 'max', 'ultra', 'studio']) {
+      const intent = parseOnboardingPlanIntent(query(`plan=pro&ai=${tier}`))
+      expect(intent).not.toBeNull()
+      expect('ai' in (intent ?? {})).toBe(false)
+      expect(intent).not.toHaveProperty('aiTier')
+    }
+  })
+
   it('never rides an enterprise link — the add-on is quoted with the deal', () => {
     const intent = parseOnboardingPlanIntent(query('plan=enterprise&ai=1'))
     expect(intent?.contactSales).toBe(true)
@@ -306,6 +327,16 @@ describe('the Aglyn AI add-on rides the same link (AGL-2897)', () => {
     )
     expect(onboardingSignupHref(SIGNUP, 'pro', 'year')).toBe(
       `${SIGNUP}?plan=pro&interval=year`,
+    )
+    // A count of credit blocks (AGL-4144), held to the ceiling.
+    expect(onboardingSignupHref(SIGNUP, 'pro', 'year', { aiBlocks: 3 })).toBe(
+      `${SIGNUP}?plan=pro&interval=year&ai=3`,
+    )
+    expect(onboardingSignupHref(SIGNUP, 'pro', 'month', { aiBlocks: 50 })).toBe(
+      `${SIGNUP}?plan=pro&interval=month&ai=30`,
+    )
+    expect(onboardingSignupHref(SIGNUP, 'enterprise', 'year', { aiBlocks: 3 })).toBe(
+      `${SIGNUP}?plan=enterprise`,
     )
     expect(onboardingSignupHref(SIGNUP, 'enterprise', 'year', { ai: true })).toBe(
       `${SIGNUP}?plan=enterprise`,

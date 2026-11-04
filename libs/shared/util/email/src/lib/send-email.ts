@@ -55,6 +55,14 @@ import {
 } from './email-deliverability'
 import { bareSenderAddress } from './email-delivery-events'
 import { screenTenantMessage } from './outbound-screen-gate'
+import {
+  askTransactionalSendCeiling,
+  releaseTransactionalSendCeilingClaim,
+  reportTransactionalSendCeilingRefusal,
+  transactionalCeilingResetMs,
+  transactionalCeilingSubject,
+  type TransactionalSendCeilingClaim,
+} from './transactional-send-ceiling'
 import { providerRetryAtMs, type MailProviderSendResult } from './mail-provider'
 import { mailProvider, mailProviderProblem } from './mail-providers'
 
@@ -1107,6 +1115,30 @@ export async function sendEmail(
   ]
 
   const priority = resolveSendPriority(options.context, options.priority)
+
+  /*
+   * THE DAILY TRANSACTIONAL CEILING (AGL-4145).
+   *
+   * A site's non-campaign mail, counted per organization per UTC day and
+   * refused past a ceiling no real store reaches. Asked AFTER every gate that
+   * may refuse the message for its own reasons, so a message that was never
+   * going to leave is not counted, and BEFORE the governor, so a workspace
+   * that is past its ceiling cannot spend the platform's hourly budget on
+   * messages this refuses. Security mail is decided exempt here, before the
+   * gate is asked, so no installed gate can refuse a password reset.
+   *
+   * The claim is handed back on every path below where the message does not
+   * leave. See `transactional-send-ceiling.ts`.
+   */
+  const ceiling = await claimTransactionalCeiling(
+    options,
+    priority,
+    to.length + bcc.length,
+    label,
+  )
+  if (ceiling.refusal) return ceiling.refusal
+  const ceilingClaim = ceiling.claim
+
   const governor = getEmailSendGovernor()
   if (governor) {
     let verdict: Awaited<ReturnType<typeof governor>> | null
@@ -1127,6 +1159,7 @@ export async function sendEmail(
         `${label} deferred — platform send rate reached ` +
           `(${verdict.used ?? '?'}/${verdict.ceiling ?? '?'} this hour)`,
       )
+      await releaseTransactionalSendCeilingClaim(ceilingClaim, label)
       return {
         sent: false,
         reason: 'rate-limited',
@@ -1209,6 +1242,8 @@ export async function sendEmail(
       // its boolean discriminant; the cast says what the branch already knows.
       const refusal = outcome as Extract<MailProviderSendResult, { accepted: false }>
       const detail = String(refusal.detail ?? '')
+      // Nothing left, so nothing is counted against the organization's day.
+      await releaseTransactionalSendCeilingClaim(ceilingClaim, label)
       /*
        * A REQUEST TO SLOW DOWN IS NOT A STATEMENT ABOUT THIS RECIPIENT, so it
        * does not report as one. See the `rate-limited` member of
@@ -1250,11 +1285,74 @@ export async function sendEmail(
     }
   } catch (error) {
     console.error(`${label} failed`, error)
+    await releaseTransactionalSendCeilingClaim(ceilingClaim, label)
     return {
       sent: false,
       reason: 'network',
       detail: String((error as Error)?.message ?? error).slice(0, 500),
     }
+  }
+}
+
+/**
+ * The send seam's half of the daily transactional ceiling (AGL-4145): which
+ * messages it governs is {@link transactionalCeilingSubject}'s decision, the
+ * count is the installed gate's. A refusal comes back as `rate-limited` with
+ * the next UTC midnight as `retryAtMs`, because the ceiling is a rate: the
+ * message is intact and tomorrow it sends. Fails open, as the gate's ask
+ * documents.
+ */
+async function claimTransactionalCeiling(
+  options: SendEmailOptions,
+  priority: EmailSendPriority,
+  count: number,
+  label: string,
+): Promise<{
+  refusal: SendEmailResult | null
+  claim: TransactionalSendCeilingClaim | null
+}> {
+  const subject = transactionalCeilingSubject({
+    audience: options.audience ?? null,
+    workspace: options.sendingIdentity?.workspace ?? null,
+    priority,
+    context: options.context ?? null,
+    // A marketing message is never owed, whatever it declares — the same
+    // reading the phishing screen takes of `owedFor`.
+    owedFor: isMarketingMessage(options) ? null : (options.owedFor ?? null),
+    accountBanExempt: options.accountBanExempt ?? null,
+  })
+  if (!subject) return { refusal: null, claim: null }
+  const nowMs = Date.now()
+  const request = {
+    orgId: subject.orgId,
+    hostId: subject.hostId,
+    count,
+    ceiling: subject.ceiling,
+    context: options.context ?? null,
+    nowMs,
+  }
+  const verdict = await askTransactionalSendCeiling(request, label)
+  if (!verdict || verdict.allowed !== false) {
+    return { refusal: null, claim: verdict?.claim ?? null }
+  }
+  // Recorded where staff see it before the refusal is returned: never a
+  // silent drop. Outside the claim's time budget, so it cannot undo it.
+  await reportTransactionalSendCeilingRefusal(request, verdict, label)
+  const limit = verdict.ceiling ?? subject.ceiling
+  console.warn(
+    `${label} not sent — the workspace ${subject.orgId} reached its daily ` +
+      `transactional ceiling (${verdict.used ?? '?'}/${limit} today)`,
+  )
+  return {
+    refusal: {
+      sent: false,
+      reason: 'rate-limited',
+      retryAtMs: verdict.retryAtMs ?? transactionalCeilingResetMs(nowMs),
+      detail:
+        `Daily transactional email ceiling reached (${limit}/day). ` +
+        'Sends again after 00:00 UTC.',
+    },
+    claim: null,
   }
 }
 

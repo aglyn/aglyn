@@ -177,7 +177,7 @@ No contact, lead, deal, form submission or list member is read for either.
 
 ## Who can use it {#who-can-use-it}
 
-A/B testing is a plan feature of its own: it starts at the **Business** plan and is not
+A/B testing is a plan feature of its own: it starts at the **Pro** plan and is not
 included below it. Where a workspace does not have it, the Experiments card offers an
 upgrade note in place of the editor and the list — so there is no experiment to open, and
 neither AI card has anywhere to appear.

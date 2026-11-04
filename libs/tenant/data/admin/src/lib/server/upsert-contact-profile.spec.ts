@@ -25,8 +25,9 @@
  *     country code is upper-cased, a title is trimmed — and a merge writes
  *     the keys given and no others, so a door that knows only the phone
  *     number leaves the title another door wrote. The other holder's facet
- *     is never touched. The phone is echoed to the top of the document for
- *     the console's search, and nothing else is.
+ *     is never touched. The phone — or the mobile of a person who gave no
+ *     other number — is echoed to the top of the document for the console's
+ *     search, and nothing else is.
  *  2. THE ORDER DOOR MAKES A CUSTOMER, and never un-makes one. A purchase
  *     sets `customer` on a person with no stage or an earlier one, and leaves
  *     an `evangelist` alone. A form capture sets no stage at all.
@@ -37,6 +38,7 @@
  * NO STRIPE PATH IS EXERCISED and no production data is read.
  */
 
+import { crmContactListFields } from '@aglyn/aglyn/app-utils/crm'
 import { upsertHostContact } from './upsert-contact'
 
 jest.mock('firebase-admin/firestore', () => ({
@@ -662,9 +664,11 @@ describe("Salesforce's standard contact fields", () => {
     expect(written.facets.h1).not.toHaveProperty('homePhone')
     // The canonical name is the parts' for a door that gave only them.
     expect(written.name).toBe('Ada Lovelace')
-    // None of them is echoed to the shared top of the document.
+    // None of them is echoed to the shared top of the document, but for the
+    // mobile standing in as the number searched by, there being no Phone.
     expect(written.mobilePhone).toBeUndefined()
     expect(written.birthdate).toBeUndefined()
+    expect(written.phone).toBe('+15125550101')
   })
 
   it('never clobbers them on a capture that does not carry them', async () => {
@@ -712,5 +716,96 @@ describe("Salesforce's standard contact fields", () => {
     )
     // The other holder's facet carries none of it.
     expect(facet('c1', 'h2')).not.toHaveProperty('lastName')
+  })
+})
+
+/**
+ * A person who gave only a mobile is found by it (AGL-4122). New contact
+ * makes the mobile the search echo when there is no other number, and every
+ * door that writes a person through this one does the same: a capture, a row
+ * of an import filed under a site, and a lead converted into a contact. Each
+ * case below hands this function what that door hands it.
+ */
+describe('a person with only a mobile', () => {
+  const MOBILE = '+15125550123'
+  /** The search tokens the list fields hold for a record as stored. */
+  const tokensOf = (record: Record<string, unknown>) =>
+    crmContactListFields(record).searchTokens
+
+  it('is found by the mobile a capture carried', async () => {
+    await upsertHostContact({
+      hostId: 'h1',
+      email: 'jordan@example.com',
+      name: 'Jordan Lee',
+      source: 'form',
+      interaction: { summary: 'Submitted the contact form' },
+      facet: { mobilePhone: '(512) 555-0123' },
+    })
+    const written = added[0].data
+    expect(written.facets.h1).not.toHaveProperty('phone')
+    expect(written.facets.h1.mobilePhone).toBe(MOBILE)
+    expect(written.phone).toBe(MOBILE)
+    expect(written.searchTokens).toEqual(expect.arrayContaining(['5125550123', '0123']))
+    expect(tokensOf(written)).toEqual(expect.arrayContaining(['5125550123', '0123']))
+  })
+
+  it('is found by the mobile an import row carried', async () => {
+    // The facet the import's `createContact` builds for a row with a name,
+    // an email and a Mobile, filed under a site.
+    await upsertHostContact({
+      hostId: 'h1',
+      email: 'jordan@example.com',
+      source: 'import',
+      interaction: { summary: 'Imported' },
+      tags: [],
+      campaignIds: [],
+      facet: { firstName: 'Jordan', lastName: 'Lee', mobilePhone: MOBILE },
+    })
+    const written = added[0].data
+    expect(written.name).toBe('Jordan Lee')
+    expect(written.phone).toBe(MOBILE)
+    expect(tokensOf(written)).toEqual(expect.arrayContaining(['5125550123', 'jordan']))
+  })
+
+  it('is found by the mobile a converted lead carried, onto a person already held', async () => {
+    // Lead conversion's capture: the stage, and the lead's mobile with no Phone.
+    seedSharedContact()
+    const result = await upsertHostContact({
+      hostId: 'h1',
+      email: 'jo@example.com',
+      source: 'manual',
+      interaction: { summary: 'Converted from a lead', refId: 'lead-1' },
+      facet: { lifecycleStage: 'sales-qualified', mobilePhone: MOBILE },
+    })
+    expect(result).toEqual({ contactId: 'c1', created: false })
+    expect(facet('c1').mobilePhone).toBe(MOBILE)
+    expect(facet('c1')).not.toHaveProperty('phone')
+    expect(contacts['c1'].phone).toBe(MOBILE)
+    expect(tokensOf(contacts['c1'])).toEqual(expect.arrayContaining(['5125550123', '0123']))
+  })
+
+  it('is found by the Phone once there is one, as New contact is', async () => {
+    await upsertHostContact({
+      hostId: 'h1',
+      email: 'jordan@example.com',
+      source: 'manual',
+      interaction: { summary: 'Added by hand' },
+      facet: { phone: '+15125550100', mobilePhone: MOBILE },
+    })
+    expect(added[0].data.phone).toBe('+15125550100')
+
+    // A door that carries only a mobile leaves the holder's Phone the number.
+    seedSharedContact()
+    contacts['c1'].facets.h1.phone = '+15125550100'
+    contacts['c1'].phone = '+15125550100'
+    await upsertHostContact({
+      hostId: 'h1',
+      email: 'jo@example.com',
+      source: 'import',
+      interaction: { summary: 'Imported' },
+      facet: { mobilePhone: MOBILE },
+    })
+    expect(facet('c1').mobilePhone).toBe(MOBILE)
+    expect(contacts['c1'].phone).toBe('+15125550100')
   })
 })

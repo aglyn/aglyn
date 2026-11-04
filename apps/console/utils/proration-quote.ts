@@ -17,27 +17,28 @@
 
 import {
   type AglynOrgBilling,
-  AI_TIERS,
   aiAddonName,
-  aiTierName,
-  aiTierOfPurchase,
+  aiAddonUnits,
+  aiCreditBlocksLabel,
+  aiCreditBlocksMonthlyUsd,
   hasAiAddon,
   PLAN_LABELS,
-  planSellsAiTiers,
+  planSellsAiCredits,
   type OrgPlan,
 } from '@aglyn/aglyn'
 import { taxExplanation } from './tax-explanation'
 
 /**
- * What happens to the org's Aglyn AI tier on a plan change (AGL-2899,
- * AGL-3965), as the sentence the switch confirm appends — or '' for an org
- * that does not carry it.
+ * What happens to the org's Aglyn AI credit blocks on a plan change
+ * (AGL-2899, AGL-4144), as the sentence the switch confirm appends — or ''
+ * for an org that does not carry them.
  *
- * A tier is chosen on its own, so `/api/billing/subscription` keeps it at
- * the same price on any paid plan and only moves it to the target interval
- * (`addonTargetPriceId`); a target that sells no tier (Free) DROPS it and
+ * A block is the same price on any paid plan, so `/api/billing/subscription`
+ * keeps the blocks and only moves them to the target interval
+ * (`addonTargetPriceId`); a target that sells none (Free) DROPS them and
  * reports it as `droppedAddons`. The proration figure above this sentence
- * cannot say which, so the tier is named with the price it keeps billing at.
+ * cannot say which, so the blocks are named with the price they keep billing
+ * at.
  *
  * The drop is stated from the server's own list, never inferred from the
  * price table: the server decides what it deleted.
@@ -49,26 +50,27 @@ export function carriedAiAddonSentence(
 ): string {
   if (!hasAiAddon(org)) return ''
   const label = PLAN_LABELS[targetPlan] ?? targetPlan
-  const tier = aiTierOfPurchase(org)
-  const name = tier ? aiTierName(tier) : aiAddonName()
-  if (!tier || !planSellsAiTiers(targetPlan)) {
+  const blocks = aiAddonUnits(org?.seatAddons)
+  const held = `${aiCreditBlocksLabel(blocks)} of ${aiAddonName()} credits`
+  const one = blocks === 1
+  if (!planSellsAiCredits(targetPlan)) {
     return (
-      ` Your ${name} tier is not sold on ${label}, so it is ` +
-      'removed with this change and its AI credits go with it.'
+      ` Your ${held} ${one ? 'is' : 'are'} not sold on ${label}, so ${one ? 'it is' : 'they are'} ` +
+      `removed with this change and the credits go with ${one ? 'it' : 'them'}.`
     )
   }
-  // The target sells tiers, but the server could not carry this one (its
-  // price is not configured at the target interval): say what happens
-  // without claiming the plan does not sell it.
+  // The target sells blocks, but the server could not carry them (the price
+  // is not configured at the target interval): say what happens without
+  // claiming the plan does not sell them.
   if ((droppedAddons ?? []).includes('aiAddon')) {
     return (
-      ` Your ${name} tier cannot move to ${label} with this change, so it is ` +
-      'removed and its AI credits go with it. You can choose a tier again ' +
-      'under Plan add-ons afterwards.'
+      ` Your ${held} cannot move to ${label} with this change, so ${one ? 'it is' : 'they are'} ` +
+      `removed and the credits go with ${one ? 'it' : 'them'}. You can add blocks again under ` +
+      'Plan add-ons afterwards.'
     )
   }
   return (
-    ` Your ${aiTierName(tier)} tier carries over at $${AI_TIERS[tier].monthlyUsd}/mo on ` +
+    ` Your ${held} ${one ? 'carries' : 'carry'} over at $${aiCreditBlocksMonthlyUsd(blocks)}/mo on ` +
     `${label}, billed with the plan.`
   )
 }

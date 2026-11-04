@@ -67,9 +67,9 @@ declare module '@aglyn/aglyn/plugin-manager/plugin-entitlement-keys' {
      * the resulting figures.
      *
      * ONE POOL FOR EVERYTHING (AGL-3965): this band pays for every Aglyn AI
-     * action, generation included, on every plan. An Aglyn AI tier adds its
-     * credits (`AI_TIERS[tier].credits`) to it in `resolveOrgEntitlements`
-     * — one pool, widened, rather than a second meter.
+     * action, generation included, on every plan. Aglyn AI credit blocks add
+     * 5,000 credits each (AGL-4144, `ai-credit-blocks.ts`) to it in
+     * `resolveOrgEntitlements` — one pool, widened, rather than a second meter.
      */
     assistCreditsPerMonth?: number
   }
@@ -190,7 +190,7 @@ export const AI_CREDITS_BY_PLAN: Readonly<Record<OrgPlan, number>> = {
   //
   // Since AGL-3965 it opens `aiGenerative` too, as every paid rung does: the
   // included band pays for generation and assist alike (one pool), and an
-  // Aglyn AI tier adds credits on top rather than opening a door.
+  // Aglyn AI credit block adds credits on top rather than opening a door.
   //
   // No cost moves: `tier-margin-floor.spec.ts` already prices this tier's
   // assist term at 100% burn of the 750 credits, 75¢/mo. A door does not

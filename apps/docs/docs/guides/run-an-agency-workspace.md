@@ -32,7 +32,7 @@ touch which one.
 :::tip One organization or one per client?
 Use **one organization** when the sites are yours to run: you hold the domains, you
 bill the client for a service, you're the one on call. That's the normal agency shape,
-and it's what the Agency plan is priced for.
+and it's what Pro, with an extra site per client, is priced for.
 
 Use **a separate organization per client** when the client ultimately owns the
 account and you're only building it — they hold the card, the domain, and the risk.
@@ -57,16 +57,17 @@ and pick from there.
 Two things that change the arithmetic:
 
 - **Extra sites are an [add-on](/workspace-and-billing/billing-and-plans/add-ons)**, so
-  you don't have to jump a whole tier for one more client. They're cheaper per site on
-  higher plans.
-- **The platform fee on client storefront sales falls to 0% on higher plans.** If your
-  clients sell, that fee can dominate the subscription price — do that sum before
-  choosing.
+  you don't change plan for one more client. Pro includes three sites, and each one
+  past that is the same flat price.
+- **The platform fee on client storefront sales is lower on Pro and none on Custom.**
+  If your clients sell, that fee can dominate the subscription price — do that sum
+  before choosing. White-label, if you resell the platform under your own name, is on
+  [Custom](/enterprise/overview).
 
 :::warning Upgrades are instant, downgrades are not
 An upgrade applies immediately and prorates. A **downgrade waits until the end of the
 period you already paid for**, and $0 is due on the day you choose it. Plan seasonal
-capacity accordingly: dropping a tier in January doesn't reduce a January invoice.
+capacity accordingly: dropping a plan in January doesn't reduce a January invoice.
 [When each change takes effect](/workspace-and-billing/billing-and-plans/downgrading-and-canceling#when-changes-take-effect).
 :::
 

@@ -29,14 +29,9 @@
  */
 
 import type { ClientBuildIntent } from '@aglyn/aglyn/app-utils/client-build'
-import type { AiTierId } from '@aglyn/aglyn'
 import { planSellsAddon } from '@aglyn/aglyn/app-utils/bundle-intent'
-import {
-  AI_TIER_IDS,
-  AI_TIERS,
-  defaultAiTierForPlan,
-  POS_REGISTER_ADDON_MONTHLY_USD,
-} from '@aglyn/aglyn/app-utils/plan-entitlements'
+import { AI_CREDIT_BLOCKS_MAX } from '@aglyn/aglyn/app-utils/ai-credit-blocks'
+import { POS_REGISTER_ADDON_MONTHLY_USD } from '@aglyn/aglyn/app-utils/plan-entitlements'
 import { act, fireEvent, render, renderHook, screen, waitFor, within } from '@testing-library/react'
 
 const mockSnackbar = jest.fn()
@@ -186,7 +181,8 @@ describe('the staff hand-off dialog (AGL-3995)', () => {
     expect(combobox(dialog, 'Plan')).toBe('Pro')
     expect(pressed(dialog, 'Monthly')).toBe('true')
     expect(checked(dialog, /^Site Care/)).toBe(true)
-    expect(checked(dialog, /^Aglyn AI/)).toBe(true)
+    // Aglyn AI credits are a count of blocks (AGL-4144): the build's one.
+    expect(value(dialog, 'Aglyn AI credit blocks')).toBe('1')
     expect(value(dialog, 'Coupon code (optional)')).toBe('BOOTH25')
     expect(value(dialog, 'Domain name')).toBe('harborplumbing.com')
     expect(value(dialog, 'First year')).toBe('11.25')
@@ -253,7 +249,7 @@ describe('the staff org page’s bundle link card (AGL-3995)', () => {
     expect(combobox(scope, 'Plan')).toBe('Pro')
     expect(pressed(scope, 'Monthly')).toBe('true')
     expect(checked(scope, /^Site Care/)).toBe(true)
-    expect(checked(scope, /^Aglyn AI/)).toBe(true)
+    expect(value(scope, 'Aglyn AI credit blocks')).toBe('1')
     expect(value(scope, 'Coupon code (optional)')).toBe('BOOTH25')
     expect(value(scope, 'Domain name')).toBe('harborplumbing.com')
     expect(value(scope, 'First year')).toBe('11.25')
@@ -278,8 +274,7 @@ describe('the staff org page’s bundle link card (AGL-3995)', () => {
       addons: { siteCare: 1, aiAddon: 1 },
       interval: 'month',
       coupon: 'BOOTH25',
-      // The tier the picker shows: the plan's default until staff pick one (AGL-4025).
-      aiTier: defaultAiTierForPlan('pro'),
+      // No AI tier rides with the link any more (AGL-4144): the blocks are the count.
       domain: { name: 'harborplumbing.com', firstYearCents: 1125, renewalCents: 1899, hostId: 'host-1' },
     })
   })
@@ -315,80 +310,63 @@ describe('the staff org page’s bundle link card (AGL-3995)', () => {
   })
 })
 
-describe('the Aglyn AI tier beside the staff bundle’s AI switch (AGL-4025)', () => {
+describe('Aglyn AI credit blocks on the staff bundle (AGL-4144)', () => {
   const card = () => screen.getByRole('button', { name: 'Copy bundle link' }).closest('.MuiCard-root') as HTMLElement
-  const tierField = (scope: HTMLElement) => within(scope).queryByRole('combobox', { name: 'Aglyn AI tier' })
-  const pickTier = async (scope: HTMLElement, tier: AiTierId) => {
-    fireEvent.mouseDown(tierField(scope)!)
-    const listbox = await screen.findByRole('listbox')
-    const { label, monthlyUsd } = AI_TIERS[tier]
-    fireEvent.click(within(listbox).getByRole('option', { name: new RegExp(`^${label} — \\$${monthlyUsd}/mo`) }))
-  }
+  const blocks = (scope: HTMLElement) => within(scope).getByLabelText('Aglyn AI credit blocks') as HTMLInputElement
 
-  it('shows no tier until Aglyn AI is on, then every tier with its price, on the plan’s default', async () => {
+  it('is a count from none, priced by the block, with no tier picker', async () => {
     render(<StaffBundleLinkCard orgId="org-1" sites={SITES} build={null} />)
     await act(async () => undefined)
-    expect(checked(card(), /^Aglyn AI/)).toBe(false)
-    expect(tierField(card())).toBeNull()
-    fireEvent.click(within(card()).getByRole('switch', { name: /^Aglyn AI/ }))
-    const field = tierField(card())!
-    const starter = AI_TIERS[defaultAiTierForPlan('starter')!]
-    expect(field.textContent).toBe(`${starter.label} — $${starter.monthlyUsd}/mo`)
-    fireEvent.mouseDown(field)
-    const options = within(await screen.findByRole('listbox')).getAllByRole('option')
-    expect(options.map((option) => option.textContent)).toEqual(
-      AI_TIER_IDS.map(
-        (tier) =>
-          `${AI_TIERS[tier].label} — $${AI_TIERS[tier].monthlyUsd}/mo` +
-          `+${AI_TIERS[tier].credits.toLocaleString()} credits a month`,
-      ),
-    )
+    expect(blocks(card()).value).toBe('0')
+    expect(blocks(card()).getAttribute('max')).toBe(String(AI_CREDIT_BLOCKS_MAX))
+    expect(within(card()).getByText('5,000 credits a block · $10/mo each')).toBeTruthy()
+    expect(within(card()).queryByRole('switch', { name: /^Aglyn AI/ })).toBeNull()
+    expect(within(card()).queryByRole('combobox', { name: 'Aglyn AI tier' })).toBeNull()
   })
 
-  it('the tier staff pick is the one the link is minted with', async () => {
+  it('the count staff enter is the one the link is minted with, and the QR names it', async () => {
     render(<StaffBundleLinkCard orgId="org-1" sites={SITES} build={null} />)
     await act(async () => undefined)
-    fireEvent.click(within(card()).getByRole('switch', { name: /^Aglyn AI/ }))
-    await pickTier(card(), 'plus')
-    expect(tierField(card())!.textContent).toBe(`Plus — $${AI_TIERS.plus.monthlyUsd}/mo`)
-    expect(await mintedBy(card())).toMatchObject({
+    fireEvent.change(blocks(card()), { target: { value: '3' } })
+    const body = await mintedBy(card())
+    expect(body).toMatchObject({
       plan: 'starter',
-      addons: { siteCare: 1, aiAddon: 1 },
+      addons: { siteCare: 1, aiAddon: 3 },
       interval: 'year',
-      aiTier: 'plus',
     })
-    // The QR's summary names the tier the link carries.
+    expect(body).not.toHaveProperty('aiTier')
     await act(async () => {
       fireEvent.click(within(card()).getByRole('button', { name: 'QR' }))
     })
-    expect(screen.getByText('Starter with Aglyn AI Plus and Site Care, billed yearly')).toBeTruthy()
+    expect(
+      screen.getByText('Starter with 3 × Aglyn AI credit block and Site Care, billed yearly'),
+    ).toBeTruthy()
   })
 
-  it('a tier with Aglyn AI switched off again goes nowhere', async () => {
+  it('a count past 30 is held to 30, and none leaves Aglyn AI off the link', async () => {
     render(<StaffBundleLinkCard orgId="org-1" sites={SITES} build={null} />)
     await act(async () => undefined)
-    fireEvent.click(within(card()).getByRole('switch', { name: /^Aglyn AI/ }))
-    await pickTier(card(), 'max')
-    fireEvent.click(within(card()).getByRole('switch', { name: /^Aglyn AI/ }))
-    expect(tierField(card())).toBeNull()
-    const body = await mintedBy(card())
-    expect(body).not.toHaveProperty('aiTier')
-    expect(body['addons']).toEqual({ siteCare: 1 })
+    fireEvent.change(blocks(card()), { target: { value: '45' } })
+    expect(blocks(card()).value).toBe(String(AI_CREDIT_BLOCKS_MAX))
+    expect((await mintedBy(card()))['addons']).toEqual({ siteCare: 1, aiAddon: AI_CREDIT_BLOCKS_MAX })
+    fireEvent.change(blocks(card()), { target: { value: '0' } })
+    expect((await mintedBy(card()))['addons']).toEqual({ siteCare: 1 })
   })
 
-  it('the hand-off proposes the tier staff pick', async () => {
+  it('the hand-off proposes the count staff enter', async () => {
     render(<StaffOrgOwnerHandoff orgId="org-1" sites={SITES} build={{ intent: REGISTER, hostId: 'host-1' }} />)
     await act(async () => {
       fireEvent.click(screen.getByRole('button', { name: 'Hand off' }))
     })
     const dialog = screen.getByRole('dialog')
-    await pickTier(dialog, 'ultra')
-    expect(await mintedBy(dialog)).toMatchObject({ plan: 'pro', aiTier: 'ultra' })
-    expect(bundleDraftBody({ ...DEFAULT_BUNDLE_DRAFT, addons: { aiAddon: 1 }, aiTier: 'ultra' })).toEqual({
+    fireEvent.change(blocks(dialog), { target: { value: '4' } })
+    const body = await mintedBy(dialog)
+    expect(body).toMatchObject({ plan: 'pro', addons: { siteCare: 1, aiAddon: 4 } })
+    expect(body).not.toHaveProperty('aiTier')
+    expect(bundleDraftBody({ ...DEFAULT_BUNDLE_DRAFT, addons: { aiAddon: 4 } })).toEqual({
       plan: 'starter',
-      addons: { aiAddon: 1 },
+      addons: { aiAddon: 4 },
       interval: 'year',
-      aiTier: 'ultra',
     })
   })
 })

@@ -136,26 +136,35 @@ describe('upgrade proposals (AGL-3466)', () => {
       )
     })
 
-    it('keeps the Aglyn AI tier an `ai:<tier>` entry names, only with the AI add-on (AGL-3965)', () => {
-      const stored = normalizeUpgradeProposalBundle('starter', { addons: 'siteCare,ai:studio' })
-      expect(stored).toEqual({ addons: { siteCare: 1, aiAddon: 1 }, aiTier: 'studio' })
-      const tiered = { ...proposal, ...stored }
-      expect(readUpgradeProposal({ upgradeProposal: tiered } as never)).toEqual(tiered)
-      expect(upgradeProposalDestination('acme', tiered as never)).toBe(
-        '/acme/billing?plan=starter&addons=ai:studio,siteCare',
+    it('stores Aglyn AI credits as a number of blocks, held to 30 (AGL-4144)', () => {
+      const stored = normalizeUpgradeProposalBundle('starter', { addons: 'siteCare,ai:3' })
+      expect(stored).toEqual({ addons: { siteCare: 1, aiAddon: 3 } })
+      const blocks = { ...proposal, ...stored }
+      expect(readUpgradeProposal({ upgradeProposal: blocks } as never)).toEqual(blocks)
+      expect(upgradeProposalDestination('acme', blocks as never)).toBe(
+        '/acme/billing?plan=starter&addons=ai:3,siteCare',
       )
-      expect(upgradeProposalSummary(tiered as never, { brand: 'Aglyn' })).toBe(
-        'Starter with Aglyn AI Studio and Site Care',
+      expect(upgradeProposalSummary(blocks as never, { brand: 'Aglyn' })).toBe(
+        'Starter with 3 × Aglyn AI credit block and Site Care',
       )
-      // A stored tier with no AI add-on, or one no tier answers to, is dropped.
+      expect(normalizeUpgradeProposalBundle('starter', { addons: { aiAddon: 45 } })).toEqual({
+        addons: { aiAddon: 30 },
+      })
+    })
+
+    it('stores no retired Aglyn AI tier, as an entry or as a field (AGL-4144)', () => {
+      // An `ai:<tier>` entry is no number of blocks: left off.
+      expect(normalizeUpgradeProposalBundle('starter', { addons: 'siteCare,ai:studio' })).toEqual({
+        addons: { siteCare: 1 },
+      })
+      // A tier field beside the add-on is not read, and never stored.
+      expect(
+        normalizeUpgradeProposalBundle('starter', { addons: { aiAddon: 1 }, aiTier: 'studio' } as never),
+      ).toEqual({ addons: { aiAddon: 1 } })
+      // A proposal stored with one before AGL-4144 reads without it.
       expect(
         readUpgradeProposal({
-          upgradeProposal: { ...proposal, addons: { siteCare: 1 }, aiTier: 'studio' },
-        } as never),
-      ).toEqual({ ...proposal, addons: { siteCare: 1 } })
-      expect(
-        readUpgradeProposal({
-          upgradeProposal: { ...proposal, addons: { aiAddon: 1 }, aiTier: 'mega' },
+          upgradeProposal: { ...proposal, addons: { aiAddon: 1 }, aiTier: 'studio' },
         } as never),
       ).toEqual({ ...proposal, addons: { aiAddon: 1 } })
     })

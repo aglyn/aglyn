@@ -195,9 +195,9 @@ Steps run in order and mix **in-page effects** with **server-side work**:
   show a site alert. These are pure DOM choreography — they run everywhere and are never
   metered.
 - **Advanced in-page effects (Pro+)**: show a popup or bar from your Marketing overlays,
-  show custom HTML, track an analytics event, and run custom JS (Business).
-- **On the server (Pro+)**: run a workflow, write to or update a dataset, send a webhook
-  (Business), send an email, notify site admins, enroll the contact in a list, assign a
+  show custom HTML, track an analytics event, and run custom JS.
+- **On the server (Pro+)**: run a workflow, write to or update a dataset, send a webhook,
+  send an email, notify site admins, enroll the contact in a list, assign a
   campaign, fire a custom event to chain more actions. A dataset step holds its record to
   the dataset's model like every other write: each value is stored as its field's type,
   and a value that doesn't fit fails the step, naming the field, with nothing written.

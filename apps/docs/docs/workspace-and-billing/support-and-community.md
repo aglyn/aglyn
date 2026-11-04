@@ -37,11 +37,10 @@ page itself:
 | --- | --- | --- |
 | Free · Starter | Community | Forum only — no ticket channel |
 | Pro | Standard | 7–14 business days |
-| Business · Scale · Advanced | Business | 4–6 business days |
-| Agency | Priority | 1–3 business days |
-| Enterprise | Dedicated | 24–48 hours, plus a named success manager |
+| Custom | Dedicated | 24–48 hours, plus a named success manager |
 
-Enterprise is measured in clock hours rather than business days, so a ticket opened
+Custom, the plan once labeled Enterprise, is measured in clock hours rather than
+business days, so a ticket opened
 on Friday is still answered over the weekend. The target is the upper bound of the
 range, measured to our **first reply** — not to resolution. See
 [Billing & plans](billing-and-plans/overview.md#tiers--entitlements).
@@ -71,7 +70,7 @@ sent it, so a staff reply is always distinguishable from your own.
 The **Your tickets** card lists every ticket your organization has opened, each marked
 **open** or **closed**, under the first-response target your plan carries. Choose
 **New ticket** to start one, or **Open** on a ticket to read the thread and reply. On
-Enterprise the card also names your success manager, who is copied on every ticket, once
+Custom the card also names your success manager, who is copied on every ticket, once
 one is appointed. On Free and Starter it says where ticket support starts instead.
 
 ### Ticket status

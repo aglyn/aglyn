@@ -45,7 +45,7 @@
  * dashboard) could be re-priced as if it were the plan.
  */
 
-import { AI_TIER_IDS, AI_TIERS, SELF_SERVE_PLANS, type OrgPlan } from '@aglyn/aglyn/server'
+import { RETIRED_PLANS, SELF_SERVE_PLANS, type OrgPlan } from '@aglyn/aglyn/server'
 import {
   ADDON_KINDS,
   addonKindFromPriceId,
@@ -54,8 +54,6 @@ import {
   addonQuantitiesFromItems,
   addonTargetPriceId,
   addonUnitUsd,
-  aiTierFromItems,
-  aiTierFromPriceId,
   findPlanItem,
   isMeteredPriceId,
   meteredPriceId,
@@ -79,13 +77,12 @@ for (const plan of ['STARTER', 'PRO', 'BUSINESS', 'SCALE', 'ADVANCED', 'AGENCY']
     PRICE_ENV[`STRIPE_PRICE_${plan}_${suffix}_YEARLY`] = `${base}_yearly`
   }
 }
-// The Aglyn AI tiers (AGL-3965), one price per tier on every plan. The
-// per-plan `_AI_ADDON` envs above are the prices sold before tiers, still
-// read so an item on one is recognised until the migration moves it.
-for (const tier of ['SPARK', 'BOOST', 'PLUS', 'MAX', 'ULTRA', 'STUDIO']) {
-  PRICE_ENV[`STRIPE_PRICE_AI_${tier}`] = `price_ai_${tier.toLowerCase()}`
-  PRICE_ENV[`STRIPE_PRICE_AI_${tier}_YEARLY`] = `price_ai_${tier.toLowerCase()}_yearly`
-}
+// Aglyn AI credits by the block (AGL-4144), one price per interval on every
+// plan. The per-plan `_AI_ADDON` envs above and a retired tier's env are
+// still set, to prove nothing reads them as blocks any more.
+PRICE_ENV['STRIPE_PRICE_AI_CREDITS'] = 'price_ai_credits'
+PRICE_ENV['STRIPE_PRICE_AI_CREDITS_YEARLY'] = 'price_ai_credits_yearly'
+PRICE_ENV['STRIPE_PRICE_AI_BOOST'] = 'price_ai_boost'
 PRICE_ENV['STRIPE_PRICE_POS_REGISTER'] = 'price_pos_register'
 PRICE_ENV['STRIPE_PRICE_POS_REGISTER_YEARLY'] = 'price_pos_register_yearly'
 PRICE_ENV['STRIPE_PRICE_EVENT_CALENDAR'] = 'price_event_calendar'
@@ -145,7 +142,7 @@ describe('PAID_PLANS covers every plan that is actually sold (AGL-1340)', () => 
         item(`${prefix}_extra_host`, 2),
         item('price_pos_register', 5),
         item('price_event_calendar', 1),
-        item(`${prefix}_ai_addon`, 1),
+        item('price_ai_credits', 3),
         item('price_site_care', 1),
       ]
       // The bug, precisely: every one of these was 0 before the fix, and the
@@ -157,7 +154,7 @@ describe('PAID_PLANS covers every plan that is actually sold (AGL-1340)', () => 
         hosts: 2,
         posRegisters: 5,
         eventCalendar: 1,
-        aiAddon: 1,
+        aiAddon: 3,
         siteCare: 1,
       })
     },
@@ -299,106 +296,76 @@ describe('the metered price is chosen by billing interval (AGL-1280)', () => {
   })
 })
 
-describe('the Aglyn AI add-on is a 0/1 kind priced per TIER, on any paid plan (AGL-2896, AGL-3965)', () => {
-  it('is a kind the catalog enumerates, priced from AI_TIERS on every paid plan', () => {
+describe('Aglyn AI credits are a quantity kind, one flat block price on any paid plan (AGL-2896, AGL-4144)', () => {
+  it('is a kind the catalog enumerates, at $10 a block on every paid plan', () => {
     expect(ADDON_KINDS).toContain('aiAddon')
-    // Any tier on any paid plan, at the tier's price.
     for (const plan of PAID_PLANS) {
-      for (const tier of AI_TIER_IDS) {
-        expect(`${plan}+${tier}: ${addonUnitUsd('aiAddon', plan, tier)}`).toBe(
-          `${plan}+${tier}: ${AI_TIERS[tier].monthlyUsd}`,
-        )
-      }
+      expect(`${plan}: ${addonUnitUsd('aiAddon', plan)}`).toBe(`${plan}: 10`)
     }
-    // No tier named: the tier with the plan's old price and band, so a link
-    // published before tiers still sells what it quoted.
-    expect(addonUnitUsd('aiAddon', 'starter')).toBe(9)
-    expect(addonUnitUsd('aiAddon', 'pro')).toBe(19)
-    // …and the decoupling itself: Studio on Starter, Spark on Pro.
-    expect(addonUnitUsd('aiAddon', 'starter', 'studio')).toBe(299)
-    expect(addonUnitUsd('aiAddon', 'pro', 'spark')).toBe(9)
     // Neither end of the ladder sells one, nor a plan pricing v4 retired.
-    for (const plan of ['free', 'enterprise', 'agency'] as const) {
-      expect(addonUnitUsd('aiAddon', plan)).toBeNull()
-      expect(addonUnitUsd('aiAddon', plan, 'boost')).toBeNull()
+    expect(addonUnitUsd('aiAddon', 'free')).toBeNull()
+    expect(addonUnitUsd('aiAddon', 'enterprise')).toBeNull()
+    for (const plan of RETIRED_PLANS) {
+      expect(`${plan}: ${addonUnitUsd('aiAddon', plan)}`).toBe(`${plan}: null`)
     }
     expect(SELF_SERVE_PLANS).toContain('free')
   })
 
-  it('names its Stripe price per tier and per interval, the same on every plan, and round-trips it', () => {
-    // `STRIPE_PRICE_AI_{TIER}[_YEARLY]`, flat across plans.
-    expect(addonPriceId('aiAddon', 'pro', 'month', 'boost')).toBe('price_ai_boost')
-    expect(addonPriceId('aiAddon', 'starter', 'year', 'studio')).toBe('price_ai_studio_yearly')
-    expect(addonPriceId('aiAddon', 'pro', 'month', 'spark')).toBe('price_ai_spark')
-    // A retired plan (pricing v4) sells no tier.
-    expect(addonPriceId('aiAddon', 'agency', 'month', 'spark')).toBeNull()
-    // No tier: the plan's default tier, never the legacy per-plan price.
-    expect(addonPriceId('aiAddon', 'pro', 'month')).toBe('price_ai_boost')
-    expect(addonPriceId('aiAddon', 'free', 'month')).toBeNull()
-    expect(addonPriceId('aiAddon', 'free', 'month', 'spark')).toBeNull()
-    expect(addonPriceId('aiAddon', 'enterprise', 'month', 'spark')).toBeNull()
-    for (const tier of AI_TIER_IDS) {
-      for (const interval of ['month', 'year'] as const) {
-        const id = addonPriceId('aiAddon', 'pro', interval, tier)
-        expect(addonKindFromPriceId(id)).toBe('aiAddon')
-        expect(aiTierFromPriceId(id)).toBe(tier)
-      }
+  it('names one Stripe price per interval, the same on every plan, and round-trips its quantity', () => {
+    // `STRIPE_PRICE_AI_CREDITS[_YEARLY]`, flat across plans.
+    for (const plan of PAID_PLANS) {
+      expect(addonPriceId('aiAddon', plan, 'month')).toBe('price_ai_credits')
+      expect(addonPriceId('aiAddon', plan, 'year')).toBe('price_ai_credits_yearly')
     }
-    // …and the webhook's read-back sees it, so the purchase lands on the org
-    // with its tier.
-    const items = [item('price_starter'), item('price_ai_max_yearly', 1, 'year')]
-    expect(addonQuantitiesFromItems(items)).toMatchObject({ aiAddon: 1 })
-    expect(aiTierFromItems(items)).toBe('max')
-    expect(aiTierFromItems([item('price_starter')])).toBeNull()
+    // A retired plan (pricing v4) sells no blocks.
+    for (const plan of RETIRED_PLANS) {
+      expect(addonPriceId('aiAddon', plan, 'month')).toBeNull()
+    }
+    expect(addonPriceId('aiAddon', 'free', 'month')).toBeNull()
+    expect(addonPriceId('aiAddon', 'enterprise', 'year')).toBeNull()
+    for (const interval of ['month', 'year'] as const) {
+      expect(addonKindFromPriceId(addonPriceId('aiAddon', 'pro', interval))).toBe('aiAddon')
+    }
+    // …and the webhook's read-back sees the count, so the purchase lands on
+    // the org as the number of blocks bought.
+    expect(
+      addonQuantitiesFromItems([item('price_starter'), item('price_ai_credits_yearly', 7, 'year')]),
+    ).toMatchObject({ aiAddon: 7 })
   })
 
-  it('still recognises a legacy per-plan price as the tier with its price and band', () => {
-    // Sold before AGL-3965 and still on subscriptions until
-    // `migrate-ai-addon-tiers.mjs --commit` moves them.
-    const expected: Record<string, string> = {
-      starter: 'spark',
-      pro: 'boost',
-      business: 'plus',
-      scale: 'max',
-      advanced: 'ultra',
-      agency: 'studio',
-    }
-    for (const plan of PAID_PLANS) {
-      for (const suffix of ['', '_yearly']) {
-        const id = `price_${plan}_ai_addon${suffix}`
-        expect(addonKindFromPriceId(id)).toBe('aiAddon')
-        expect(`${plan}${suffix}: ${aiTierFromPriceId(id)}`).toBe(`${plan}${suffix}: ${expected[plan]}`)
-        // Same price, same band: what the plan sold it at.
-        expect(AI_TIERS[aiTierFromPriceId(id) as keyof typeof AI_TIERS].monthlyUsd).toBe(
-          addonUnitUsd('aiAddon', plan),
-        )
-      }
+  it('reads no retired price as blocks: not a tier price, not a per-plan add-on price', () => {
+    for (const id of ['price_ai_boost', 'price_pro_ai_addon', 'price_agency_ai_addon_yearly']) {
+      expect(addonKindFromPriceId(id)).toBeNull()
     }
     expect(
-      addonQuantitiesFromItems([item('price_starter'), item('price_starter_ai_addon_yearly', 1)]),
-    ).toMatchObject({ aiAddon: 1 })
+      addonQuantitiesFromItems([
+        item('price_starter'),
+        item('price_ai_boost', 1),
+        item('price_starter_ai_addon', 1),
+      ]),
+    ).toMatchObject({ aiAddon: 0 })
   })
 
-  it('keeps its tier across a plan change and only follows the interval', () => {
-    // A tier is chosen on its own: switching Starter -> Pro keeps Boost.
-    expect(addonTargetPriceId('aiAddon', 'pro', 'year', 'price_ai_boost')).toBe(
-      'price_ai_boost_yearly',
+  it('keeps its count across a plan change and only follows the interval', () => {
+    // Pricing v4 (AGL-4126): Pro is the top plan sold, where Agency stood.
+    expect(addonTargetPriceId('aiAddon', 'pro', 'year', 'price_ai_credits')).toBe(
+      'price_ai_credits_yearly',
     )
-    // A legacy item becomes the tier with its price and band on the move.
-    expect(addonTargetPriceId('aiAddon', 'starter', 'month', 'price_pro_ai_addon')).toBe(
-      'price_ai_boost',
+    expect(addonTargetPriceId('aiAddon', 'starter', 'month', 'price_ai_credits_yearly')).toBe(
+      'price_ai_credits',
     )
     // Every other kind re-prices to the target plan as before.
     expect(addonTargetPriceId('hosts', 'pro', 'month', 'price_starter_extra_host')).toBe(
       'price_pro_extra_host',
     )
-    // A target that sells no tier drops it.
-    expect(addonTargetPriceId('aiAddon', 'free', 'month', 'price_ai_boost')).toBeNull()
+    // A target that sells no blocks drops them: Free, and a retired plan.
+    expect(addonTargetPriceId('aiAddon', 'free', 'month', 'price_ai_credits')).toBeNull()
+    expect(addonTargetPriceId('aiAddon', 'agency', 'year', 'price_ai_credits')).toBeNull()
   })
 
-  it('caps at one on every paid plan and at zero on Free and Enterprise: it is an org-wide toggle', () => {
+  it('caps at 30 on every paid plan and at zero on Free and Enterprise', () => {
     for (const plan of PAID_PLANS) {
-      expect(`${plan}: ${addonMaxForPlan('aiAddon', plan)}`).toBe(`${plan}: 1`)
+      expect(`${plan}: ${addonMaxForPlan('aiAddon', plan)}`).toBe(`${plan}: 30`)
     }
     expect(addonMaxForPlan('aiAddon', 'free')).toBe(0)
     expect(addonMaxForPlan('aiAddon', 'enterprise')).toBe(0)

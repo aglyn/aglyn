@@ -42,7 +42,6 @@ import {
   addonKindFromPriceId,
   addonTargetPriceId,
   addonQuantitiesFromItems,
-  aiTierFromItems,
   findPlanItem,
   isMeteredPriceId,
   meteredPriceId,
@@ -647,8 +646,8 @@ async function handler(request: Request): Promise<Response> {
     for (const item of items) {
       const kind = addonKindFromPriceId(item?.price?.id)
       if (!kind) continue
-      // The AI add-on keeps its tier and only follows the interval
-      // (AGL-3965); every other kind re-prices to the target plan.
+      // Flat add-ons (Aglyn AI credit blocks among them, AGL-4144) only follow
+      // the interval; per-plan kinds re-price to the target plan.
       const target = addonTargetPriceId(kind, targetPlan as OrgPlan, targetInterval, item?.price?.id)
       if (target === item?.price?.id) continue
       if (target) {
@@ -1029,7 +1028,6 @@ async function handler(request: Request): Promise<Response> {
       await org.ref.set({ plan: targetPlan }, { merge: true })
       await writeOrgBilling(org.ref.id, {
         seatAddons: addonQuantitiesFromItems(updated?.items?.data ?? []),
-        aiTier: aiTierFromItems(updated?.items?.data ?? []),
         subscription: {
           status: updated.status ?? subscription.status,
           priceId: targetPrice,

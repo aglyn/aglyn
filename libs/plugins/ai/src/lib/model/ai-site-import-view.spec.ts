@@ -261,6 +261,9 @@ describe('each row says what came through', () => {
     const rows = aiSiteImportWaveRows(summary({ status: 'running', items: aiSiteImportLedger(state), siteImport: state }), state.waves[0])
     expect(rows[0]).toMatchObject({ slot: 'frame', oldPage: 'https://harbor-dental.com/', words: null, build: null })
     expect(rows[1]).toMatchObject({ oldPage: 'https://harbor-dental.com/', words: '96 of 100 words', build: 'Arranged by Aglyn AI' })
+    // Once the wave has read it, beside the words of its own main region, not its menu's and footer's too (AGL-4084).
+    const read = { ...state, pages: state.pages.map((page) => (page.slot === 'p0' ? { ...page, words: 156, read: { words: 96 } as never } : page)) }
+    expect(aiSiteImportWaveRows(summary({ status: 'running', items: aiSiteImportLedger(read), siteImport: read }), read.waves[0])[1]).toMatchObject({ words: '96 of 96 words' })
     expect(rows[2]).toMatchObject({
       oldPage: 'https://harbor-dental.com/about',
       words: null,

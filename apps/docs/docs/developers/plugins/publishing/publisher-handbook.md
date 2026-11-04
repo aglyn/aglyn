@@ -569,7 +569,7 @@ are what overcomes it.
 Your listing renders **inside Aglyn's own console**, on the page a
 customer is reading while they decide whether to upgrade. That is why
 this one has a rule attached: a plugin sold as "the cheap way out of
-Business" is doing its selling with our pricing page, not with your
+Pro" is doing its selling with our pricing page, not with your
 plugin.
 
 **Fine — say all of this:**
@@ -584,14 +584,14 @@ plugin.
 
 - Disparaging Aglyn or the platform ("Aglyn's built-in analytics are
   useless").
-- Stating or implying what an Aglyn plan costs or contains ("Business is
+- Stating or implying what an Aglyn plan costs or contains ("Pro is
   $X for features you won't use", "the Pro plan caps you at 5 sites").
   Plans and prices change; a listing that quotes them goes stale and
   misinforms buyers who trust it.
 - Comparing your price against ours ("half the price of an upgrade").
 - Naming, framing or marketing the plugin around avoiding, replacing or
-  discouraging an Aglyn plan or upgrade — "Skip the upgrade", "Business
-  features without the Business plan", "don't pay for Pro".
+  discouraging an Aglyn plan or upgrade — "Skip the upgrade", "Pro
+  features without the Pro plan", "don't pay for Pro".
 
 The line is simple: **describe your plugin, not our pricing.** If you
 need a customer to know they must be on Pro for your plugin to work, say
