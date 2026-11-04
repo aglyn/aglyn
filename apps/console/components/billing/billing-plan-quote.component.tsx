@@ -70,6 +70,15 @@ interface QuoteState {
   customerTaxExempt?: string | null
   hasTaxId?: boolean
   promotionCodeApplied?: string | null
+  /** Stripe's `coupon.duration` for the applied code: `once`, `repeating` or `forever`. */
+  promotionCodeDuration?: string | null
+  promotionCodeDurationInMonths?: number | null
+  /**
+   * What the code takes off, sent with the two answers that carry no price
+   * (AGL-4157) so the card can show the list total after it.
+   */
+  promotionCodePercentOff?: number | null
+  promotionCodeAmountOffUsd?: number | null
   needsBillingDetails?: boolean
   needsBillingAddress?: boolean
 }
@@ -93,9 +102,11 @@ export interface BillingPlanQuoteProps {
   /**
    * Report what the SERVER applied — never what was typed.
    *
-   * The value handed back is `promotionCodeApplied` off the priced preview, so
-   * a code Stripe declined to resolve leaves the page's copy empty and cannot
-   * be carried into a purchase as though it had worked.
+   * The value handed back is `promotionCodeApplied` off the preview, so a
+   * code Stripe declined to resolve leaves the page's copy empty and cannot
+   * be carried into a purchase as though it had worked. It comes back on the
+   * answers with no price too (AGL-4157): a workspace with no card or address
+   * yet keeps its link's code for the quote and the purchase that follow.
    */
   onAppliedCodeChange: (code: string) => void
   /**
@@ -157,6 +168,46 @@ function money(cents: number, currency: string): string {
     style: 'currency',
     currency: currency.toUpperCase(),
   }).format(cents / 100)
+}
+
+/**
+ * What a resolved code takes off the list total (AGL-4157), for a card with
+ * no Stripe figures yet: a percentage of the whole bundle, or an amount off
+ * the charge, never more than the total. Labeled before tax like the total
+ * it adjusts.
+ */
+export function listDiscountCents(
+  listCents: number,
+  terms: { percentOff?: number | null; amountOffUsd?: number | null },
+): number {
+  if (terms.percentOff) {
+    return Math.min(listCents, Math.round((listCents * terms.percentOff) / 100))
+  }
+  if (terms.amountOffUsd) {
+    return Math.min(listCents, Math.round(terms.amountOffUsd * 100))
+  }
+  return 0
+}
+
+/**
+ * How long the code's discount lasts, in the sentence under the total, or
+ * null when Stripe did not say. A discount that ends is stated with the price
+ * it ends at, as the purchase confirm does.
+ */
+function codeDurationSentence(
+  code: string,
+  duration: string | null | undefined,
+  months: number | null | undefined,
+  renewal: string,
+): string | null {
+  if (duration === 'forever') return `Code ${code} applies for as long as you subscribe.`
+  if (duration === 'once') {
+    return `Code ${code} applies to the first charge only; after it, ${renewal}.`
+  }
+  if (duration === 'repeating' && months) {
+    return `Code ${code} applies for the first ${months} months; after that, ${renewal}.`
+  }
+  return null
 }
 
 /**
@@ -468,6 +519,34 @@ export default function BillingPlanQuoteComponent({
     // says what the bundle costs, at list price and labeled before tax
     // (AGL-4026), and the figure moves with every change.
     const needsDetails = !!(quote?.needsBillingDetails || quote?.needsBillingAddress)
+    const per = interval === 'year' ? '/yr' : '/mo'
+    const listCents = knownPlan
+      ? bundleListPriceCents({ plan: knownPlan, interval, addons: quotedAddons })
+      : 0
+    // The code the server resolved on an answer with no price (AGL-4157): a
+    // workspace with no Stripe customer or no address yet. Shown with what it
+    // takes off, so the owner a proposal sent here sees the price they were
+    // offered before they add a card.
+    const listCode = !failed ? (quote?.promotionCodeApplied ?? '') : ''
+    const listDiscount = listCode
+      ? listDiscountCents(listCents, {
+          percentOff: quote?.promotionCodePercentOff,
+          amountOffUsd: quote?.promotionCodeAmountOffUsd,
+        })
+      : 0
+    // A discount that ends makes the total the first charge, not the price
+    // per period, so it carries no "/yr".
+    const totalPer =
+      listDiscount > 0 && quote?.promotionCodeDuration !== 'forever' ? '' : per
+    const codeSentence =
+      listDiscount > 0
+        ? codeDurationSentence(
+            listCode,
+            quote?.promotionCodeDuration,
+            quote?.promotionCodeDurationInMonths,
+            money(listCents, 'usd') + per,
+          )
+        : null
     return (
       <Stack spacing={1.5}>
         {notices}
@@ -475,21 +554,33 @@ export default function BillingPlanQuoteComponent({
         {addonRows}
         {knownPlan ? (
           <Stack spacing={0.5}>
+            {listDiscount > 0 ? (
+              <>
+                <Stack direction="row" sx={{ justifyContent: 'space-between' }}>
+                  <Typography variant="body2">{'Subtotal'}</Typography>
+                  <Typography variant="body2">{money(listCents, 'usd') + per}</Typography>
+                </Stack>
+                <Stack direction="row" sx={{ justifyContent: 'space-between' }}>
+                  <Typography variant="body2">{`Discount (${listCode})`}</Typography>
+                  <Typography variant="body2" color="success.main">
+                    {`−${money(listDiscount, 'usd')}`}
+                  </Typography>
+                </Stack>
+              </>
+            ) : null}
             <Stack direction="row" sx={{ justifyContent: 'space-between' }}>
               <Typography variant="body2" sx={{ fontWeight: 'bold' }}>
                 {'Total before tax'}
               </Typography>
               <Typography variant="body2" sx={{ fontWeight: 'bold' }}>
-                {money(
-                  bundleListPriceCents({
-                    plan: knownPlan,
-                    interval,
-                    addons: quotedAddons,
-                  }),
-                  'usd',
-                ) + (interval === 'year' ? '/yr' : '/mo')}
+                {money(listCents - listDiscount, 'usd') + totalPer}
               </Typography>
             </Stack>
+            {codeSentence ? (
+              <Typography variant="caption" color="success.main">
+                {codeSentence}
+              </Typography>
+            ) : null}
             <Typography variant="caption" color={failed ? 'warning.main' : 'text.secondary'}>
               {failed
                 ? 'We could not get the total with tax from Stripe just now. Nothing has been charged.'

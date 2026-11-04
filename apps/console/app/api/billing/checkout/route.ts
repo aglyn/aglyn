@@ -648,8 +648,35 @@ async function handler(request: Request): Promise<Response> {
     // inside a payment form, because the address is already known rather than
     // being typed as the number recalculates.
     if (String(body?.action ?? '') === 'preview') {
+      // The code is resolved FIRST (AGL-4157), above both answers that carry
+      // no price. A workspace staff built for a client has no Stripe customer
+      // until its owner adds a card, so a proposal's code reached this route
+      // on the one quote that returned before reading it: the card showed the
+      // list price, reported no code, and the purchase went through without
+      // the discount the link promised. A code Stripe refuses is still the
+      // 400 it always was, which the link path turns into a one-line notice.
+      const promo = await resolvePromotionCode(
+        secretKey,
+        String(body?.promotionCode ?? ''),
+      )
+      if (promo.error) return Response.json({ error: promo.error }, { status: 400 })
+      // What the code is, for a card with no Stripe figures yet: it shows the
+      // code and the list total after it, and the page carries the code into
+      // the purchase.
+      const promotionTerms = promo.id
+        ? {
+            promotionCodeApplied: promo.code,
+            promotionCodeDuration: promo.duration ?? null,
+            promotionCodeDurationInMonths: promo.durationInMonths ?? null,
+            promotionCodePercentOff: promo.percentOff ?? null,
+            promotionCodeAmountOffUsd: promo.amountOffUsd ?? null,
+          }
+        : {}
       if (!existingCustomerId) {
-        return Response.json({ needsBillingDetails: true }, { status: 200 })
+        return Response.json(
+          { needsBillingDetails: true, ...promotionTerms },
+          { status: 200 },
+        )
       }
       // The ADDRESS is a prerequisite of the QUOTE, not only of the purchase.
       //
@@ -669,7 +696,10 @@ async function handler(request: Request): Promise<Response> {
       )
       const quoteCustomerRecord = await quoteCustomer.json()
       if (!quoteCustomerRecord?.address?.country) {
-        return Response.json({ needsBillingAddress: true }, { status: 200 })
+        return Response.json(
+          { needsBillingAddress: true, ...promotionTerms },
+          { status: 200 },
+        )
       }
       const preview = new URLSearchParams({
         customer: existingCustomerId,
@@ -693,11 +723,6 @@ async function handler(request: Request): Promise<Response> {
         preview.set(`subscription_details[items][${at}][price]`, line.priceId)
         preview.set(`subscription_details[items][${at}][quantity]`, String(line.quantity))
       }
-      const promo = await resolvePromotionCode(
-        secretKey,
-        String(body?.promotionCode ?? ''),
-      )
-      if (promo.error) return Response.json({ error: promo.error }, { status: 400 })
       if (promo.id) preview.set('discounts[0][promotion_code]', promo.id)
       const upcoming = await fetch(
         `https://api.stripe.com/v1/invoices/upcoming?${preview.toString()}`,

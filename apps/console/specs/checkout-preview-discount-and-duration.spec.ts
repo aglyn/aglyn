@@ -134,6 +134,12 @@ let discounted: boolean
 let discountField: 'total_discount_amounts' | 'total_discounts'
 /** Bodies POSTed to `/v1/subscriptions`, as parsed form data. */
 let subscriptionBodies: URLSearchParams[]
+/** The customer's address as Stripe holds it; null for one never entered. */
+let customerAddress: Record<string, unknown> | null
+/** Whether the promotion-code lookup finds the code at all. */
+let promoFound: boolean
+/** Every Stripe URL the route asked for, in order. */
+let stripeCalls: string[]
 
 /**
  * The route snapshots `PRICE_ENV` at module load, so env has to be in place
@@ -173,6 +179,9 @@ beforeEach(() => {
   discounted = true
   discountField = 'total_discount_amounts'
   subscriptionBodies = []
+  customerAddress = { country: 'US' }
+  promoFound = true
+  stripeCalls = []
   mockVerifyIdToken.mockResolvedValue({
     uid: 'u-1',
     email: 'owner@example.com',
@@ -182,11 +191,12 @@ beforeEach(() => {
   mockReadOrgBilling.mockResolvedValue({ stripeCustomerId: 'cus_test_1' })
   global.fetch = jest.fn(async (url: unknown, init: any) => {
     const href = String(url)
+    stripeCalls.push(href)
     if (/\/promotion_codes\?/.test(href)) {
       return {
         ok: true,
         json: async () => ({
-          data: [{ id: 'promo_1', code: 'LAUNCH97', coupon }],
+          data: promoFound ? [{ id: 'promo_1', code: 'LAUNCH97', coupon }] : [],
         }),
       }
     }
@@ -195,7 +205,7 @@ beforeEach(() => {
         ok: true,
         json: async () => ({
           invoice_settings: { default_payment_method: 'pm_saved_1' },
-          address: { country: 'US' },
+          address: customerAddress,
           tax_exempt: 'none',
           tax_ids: { data: [] },
         }),
@@ -401,5 +411,74 @@ describe('a code under full-use cost is applied, and its verdict recorded (AGL-3
   it('records nothing when no code was applied', async () => {
     await post(loadCheckout(), {})
     expect(subscriptionBodies[0].get('metadata[full_use_ok]')).toBeNull()
+  })
+})
+
+/**
+ * A WORKSPACE THAT HAS NEVER BEEN BILLED KEEPS ITS CODE (AGL-4157). Staff
+ * build a client's workspace and propose a plan with a code; the workspace
+ * has no Stripe customer until its owner adds a card. The preview used to
+ * answer `needsBillingDetails` before it read the code, so the card showed the
+ * list price, reported no code, and the purchase was made without it.
+ */
+describe('the preview resolves the code before it asks for billing details (AGL-4157)', () => {
+  it('carries the code and its terms when there is no Stripe customer yet', async () => {
+    mockReadOrgBilling.mockResolvedValue({ stripeCustomerId: null })
+    coupon = { duration: 'forever', percent_off: 40 }
+    const response = await post(loadCheckout(), {
+      action: 'preview',
+      promotionCode: 'LAUNCH97',
+    })
+    expect(response.status).toBe(200)
+    expect(await response.json()).toEqual({
+      needsBillingDetails: true,
+      promotionCodeApplied: 'LAUNCH97',
+      promotionCodeDuration: 'forever',
+      promotionCodeDurationInMonths: null,
+      promotionCodePercentOff: 40,
+      promotionCodeAmountOffUsd: null,
+    })
+    // Read-only: no invoice was previewed and nothing was subscribed.
+    expect(stripeCalls.some((href) => /invoices\/upcoming/.test(href))).toBe(false)
+    expect(subscriptionBodies).toHaveLength(0)
+  })
+
+  it('carries the code when the customer has no billing address yet', async () => {
+    customerAddress = null
+    coupon = { duration: 'repeating', duration_in_months: 3, amount_off: 1000 }
+    const response = await post(loadCheckout(), {
+      action: 'preview',
+      promotionCode: 'LAUNCH97',
+    })
+    expect(response.status).toBe(200)
+    expect(await response.json()).toMatchObject({
+      needsBillingAddress: true,
+      promotionCodeApplied: 'LAUNCH97',
+      promotionCodeDuration: 'repeating',
+      promotionCodeDurationInMonths: 3,
+      promotionCodeAmountOffUsd: 10,
+    })
+  })
+
+  it('still refuses a code Stripe does not know, before asking for anything', async () => {
+    mockReadOrgBilling.mockResolvedValue({ stripeCustomerId: null })
+    promoFound = false
+    const response = await post(loadCheckout(), {
+      action: 'preview',
+      promotionCode: 'NOPE',
+    })
+    // The 400 the link path turns into a one-line notice, and no `code`, so
+    // it is read as the code's own refusal.
+    expect(response.status).toBe(400)
+    const payload = await response.json()
+    expect(payload.error).toMatch(/NOPE/)
+    expect(payload.code).toBeUndefined()
+  })
+
+  it('makes no lookup and carries nothing when no code was sent', async () => {
+    mockReadOrgBilling.mockResolvedValue({ stripeCustomerId: null })
+    const response = await post(loadCheckout(), { action: 'preview' })
+    expect(await response.json()).toEqual({ needsBillingDetails: true })
+    expect(stripeCalls).toHaveLength(0)
   })
 })
