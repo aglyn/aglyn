@@ -1,6 +1,6 @@
 {
   "name": "@aglyn/plugins-mui",
-  "version": "1.9.0",
+  "version": "1.9.1",
   "license": "Apache-2.0",
   "homepage": "https://aglyn.com",
   "repository": {
@@ -25,12 +25,12 @@
     "./package.json": "./package.json"
   },
   "dependencies": {
-    "@aglyn/aglyn": "1.9.0",
-    "@aglyn/shared-data-enums": "1.9.0",
-    "@aglyn/shared-data-mdi": "1.9.0",
-    "@aglyn/shared-ui-jsx": "1.9.0",
-    "@aglyn/shared-ui-theme": "1.9.0",
-    "@aglyn/shared-util-vendor": "1.9.0",
+    "@aglyn/aglyn": "1.9.1",
+    "@aglyn/shared-data-enums": "1.9.1",
+    "@aglyn/shared-data-mdi": "1.9.1",
+    "@aglyn/shared-ui-jsx": "1.9.1",
+    "@aglyn/shared-ui-theme": "1.9.1",
+    "@aglyn/shared-util-vendor": "1.9.1",
     "@swc/helpers": "0.5.23",
     "dayjs": "^1.11.23",
     "mobx": "^7.0.5",
