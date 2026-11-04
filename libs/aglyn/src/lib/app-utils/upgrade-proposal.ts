@@ -169,6 +169,23 @@ export function upgradeProposalIntent(proposal: ProposalBundle): OnboardingPlanI
   }
 }
 
+/**
+ * The bundle Billing prices (AGL-4154): the link's, else the standing
+ * proposal's.
+ *
+ * A link says what the visitor came to buy, so it wins. Without one, an owner
+ * who opened Billing from the menu still meets the plan, cadence, add-ons and
+ * code staff proposed, and the code is tried on the first quote as the link
+ * would try it, so a coupon on a hand-off never has to be typed.
+ */
+export function billingPlanIntent(
+  linkIntent: OnboardingPlanIntent | null,
+  proposal: ProposalBundle | null | undefined,
+): OnboardingPlanIntent | null {
+  if (linkIntent) return linkIntent
+  return proposal ? upgradeProposalIntent(proposal) : null
+}
+
 /** Where the proposal's button goes: Billing, with the bundle preselected. */
 export function upgradeProposalDestination(
   orgSlug: string,

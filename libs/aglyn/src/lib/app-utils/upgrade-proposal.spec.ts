@@ -15,7 +15,9 @@
  * limitations under the License.
  */
 
+import { parseOnboardingPlanIntent } from './onboarding-deep-link'
 import {
+  billingPlanIntent,
   isUpgradeProposalPlan,
   normalizeUpgradeProposalNote,
   readUpgradeProposal,
@@ -128,6 +130,26 @@ describe('upgrade proposals (AGL-3466)', () => {
       expect(upgradeProposalDestination('acme', bundled as never)).toBe(
         '/acme/billing?plan=starter&interval=year&addons=extraHost:2,siteCare&coupon=BOOTH25',
       )
+    })
+
+    it('prices on Billing without its link, the code included (AGL-4154)', () => {
+      expect(billingPlanIntent(null, bundled as never)).toMatchObject({
+        plan: 'starter',
+        interval: 'year',
+        intervalStated: true,
+        addons: { siteCare: 1, hosts: 2 },
+        coupon: 'BOOTH25',
+      })
+    })
+
+    it('gives way to a link, which says what the visitor came to buy', () => {
+      const link = parseOnboardingPlanIntent(new URLSearchParams('plan=pro&interval=month'))
+      expect(billingPlanIntent(link, bundled as never)).toBe(link)
+      expect(billingPlanIntent(link, bundled as never)?.coupon).toBeUndefined()
+    })
+
+    it('prices nothing with neither a link nor a proposal', () => {
+      expect(billingPlanIntent(null, null)).toBeNull()
     })
 
     it('summarizes it in one line', () => {

@@ -78,7 +78,10 @@ import BillingAddonsCardComponent, {
   ADDON_LABELS,
   TOGGLE_ADDON_KINDS,
 } from '../../../../../components/billing/billing-addons-card.component'
-import { standingUpgradeProposal } from '@aglyn/aglyn/app-utils/upgrade-proposal'
+import {
+  billingPlanIntent,
+  standingUpgradeProposal,
+} from '@aglyn/aglyn/app-utils/upgrade-proposal'
 import { intentAddons } from '@aglyn/aglyn/app-utils/onboarding-deep-link'
 import {
   bundleAddonLabel,
@@ -286,13 +289,34 @@ const BillingContent: NextPageWithLayout<Record<string, never>> = () => {
    * declined cannot be carried into a purchase as though it had worked.
    */
   const [appliedPromotionCode, setAppliedPromotionCode] = useState('')
+  const subscriptionStatus = org?.subscription?.status
+  // One list, in `org-billing-doc.ts` (AGL-1715). This decides whether Upgrade
+  // opens a Checkout or a proration preview, and `/api/billing/checkout`
+  // decides whether to allow the session — if the two ever disagree in that
+  // direction the page sends a subscribed org to checkout and the route lets
+  // it through, which is the duplicate subscription AGL-1697 closed.
+  const subscriptionActive = isLiveSubscriptionStatus(subscriptionStatus)
+  // The plan staff proposed (AGL-3466), while no subscription is live. Held
+  // on both reads for the reason `planWithoutSubscription` gives below: before
+  // the billing doc lands every paying org looks unsubscribed.
+  const upgradeProposal =
+    orgReady && orgBillingReady && !subscriptionActive
+      ? standingUpgradeProposal(org)
+      : null
   // The plan the visitor picked on the marketing site, if they arrived by a
-  // pricing CTA (AGL-1117). Read once off the URL: it preselects the toggle
-  // and emphasizes the matching card, and nothing here submits on its own.
+  // pricing CTA (AGL-1117), else the bundle staff proposed (AGL-4154), so an
+  // owner who opens Billing from the menu meets the proposed plan, cadence,
+  // add-ons and code just as the proposal's link would show them. It
+  // preselects the toggle and emphasizes the matching card, and nothing here
+  // submits on its own.
   const searchParams = useSearchParams()
+  // `standingUpgradeProposal` builds a fresh object on every render, so the
+  // intent is keyed by the proposal as stored.
+  const upgradeProposalKey = upgradeProposal ? JSON.stringify(upgradeProposal) : ''
   const planIntent = useMemo(
-    () => parseOnboardingPlanIntent(searchParams),
-    [searchParams],
+    () => billingPlanIntent(parseOnboardingPlanIntent(searchParams), upgradeProposal),
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+    [searchParams, upgradeProposalKey],
   )
   /**
    * The add-ons the purchase carries (AGL-3955): preselected from the link
@@ -355,9 +379,10 @@ const BillingContent: NextPageWithLayout<Record<string, never>> = () => {
   /**
    * The plan the quote prices.
    *
-   * The one the visitor arrived intending, which is also the one the grid
-   * emphasizes — so the total on screen belongs to the card they are looking
-   * at. Null when nothing is being considered, and the quote renders nothing
+   * The one the visitor arrived intending, or the one staff proposed, which
+   * is also the one the grid emphasizes — so the total on screen belongs to
+   * the card they are looking at. Null when nothing is being considered, and
+   * the quote renders nothing
    * rather than pricing a plan nobody asked about: the preview is a Stripe
    * call, and making it on every billing page view would be a read nobody
    * requested.
@@ -477,13 +502,6 @@ const BillingContent: NextPageWithLayout<Record<string, never>> = () => {
   const resolved = resolveOrgEntitlements(org)
   const fmtLimit = (n: number) =>
     n === UNLIMITED ? 'Unlimited' : n.toLocaleString()
-  const subscriptionStatus = org?.subscription?.status
-  // One list, in `org-billing-doc.ts` (AGL-1715). This decides whether Upgrade
-  // opens a Checkout or a proration preview, and `/api/billing/checkout`
-  // decides whether to allow the session — if the two ever disagree in that
-  // direction the page sends a subscribed org to checkout and the route lets
-  // it through, which is the duplicate subscription AGL-1697 closed.
-  const subscriptionActive = isLiveSubscriptionStatus(subscriptionStatus)
   /**
    * A PAID PLAN WITH NOTHING BEHIND IT — the state the grid had no word for.
    *
@@ -513,13 +531,6 @@ const BillingContent: NextPageWithLayout<Record<string, never>> = () => {
    */
   const planWithoutSubscription =
     orgReady && orgBillingReady && plan !== 'free' && !subscriptionActive
-  // The plan staff proposed (AGL-3466), while no subscription is live. Held
-  // on both reads for the reason above: before the billing doc lands every
-  // paying org looks unsubscribed.
-  const upgradeProposal =
-    orgReady && orgBillingReady && !subscriptionActive
-      ? standingUpgradeProposal(org)
-      : null
   const showUpgradeProposal =
     !!upgradeProposal && permissionsLoaded && can('billing.manage')
   /**
@@ -1557,8 +1568,9 @@ const BillingContent: NextPageWithLayout<Record<string, never>> = () => {
               ? [{ size: { xs: 12 }, children: <OrgUpgradeProposalCard /> }]
               : []),
             // The quote, only when there is a plan to quote: `quotedPlan` is
-            // null on an ordinary visit — no `?plan=` — and an empty "What
-            // you will pay" box reads as a thing that failed to load.
+            // null on an ordinary visit — no `?plan=` and no standing
+            // proposal — and an empty "What you will pay" box reads as a
+            // thing that failed to load.
             //
             // FIRST, under the proposal (AGL-3955): a bundle link is opened on
             // a phone, at a booth, and the bundle with its total and its Pay
