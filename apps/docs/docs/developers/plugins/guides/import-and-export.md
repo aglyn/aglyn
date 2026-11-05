@@ -92,7 +92,14 @@ flickering away.
   half when who may import depends on the instance, as a dataset's does on where
   it is shared. It answers in place of **Manage data** on the workspace, every
   transfer route asks it, and your surface passes the same answer to `can` as
-  `importAllowed` on the target.
+  `importAllowed` on the target. Register `instanceImportAccess` with your
+  resource's UI as well, and the **Import & export** page asks it for each
+  instance it lists from `instancesFrom`.
+- **Switched off, not hidden.** `transfer.refusedPermission('import' | 'export',
+  target)` names the permission refusing the person, for a control you show
+  switched off with `permissionRefusalText`. It reads `null` when `can` says yes,
+  until the answer is in, and for what no permission decides: the plan, or a site
+  they don't reach.
 - **The plan** comes before either, when your resource declares a
   `"featureFlag"` (the flag your console surfaces are gated by): on a plan
   without it, `can` answers `false` for every intent your resource doesn't

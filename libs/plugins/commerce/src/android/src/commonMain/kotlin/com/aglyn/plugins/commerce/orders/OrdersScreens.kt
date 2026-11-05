@@ -73,6 +73,7 @@ import com.aglyn.contracts.describeRestockCheck
 import com.aglyn.contracts.OrderStatus
 import com.aglyn.contracts.OrderStatusColorValue
 import com.aglyn.contracts.formatOrderMoney
+import com.aglyn.contracts.deviceTimeZone
 import com.aglyn.contracts.formatReceiptTime
 import com.aglyn.contracts.orderChannelLabel
 import com.aglyn.contracts.orderRefundSummary
@@ -591,7 +592,7 @@ private fun OrderDetailContent(
       listOfNotNull(
         order.customerName?.takeIf { it.isNotBlank() } ?: order.customerEmail?.takeIf { it.isNotBlank() } ?: "Guest",
         orderChannelLabel(order.channel?.raw),
-        order.createdAtMs?.let { formatReceiptTime(it.toLong()) },
+        order.createdAtMs?.let { formatReceiptTime(it.toLong(), deviceTimeZone()) },
       ).joinToString(" · "),
       style = MaterialTheme.typography.bodyLarge,
       color = MaterialTheme.colorScheme.onSurfaceVariant,
@@ -725,7 +726,7 @@ private fun OrderDetailContent(
               AglynListItem(
                 title = shipment.summary,
                 supporting = listOf(
-                  formatReceiptTime(shipment.atMs),
+                  formatReceiptTime(shipment.atMs, deviceTimeZone()),
                   shipment.trackingNumber.takeIf { it.isNotBlank() }?.let { "${shipment.carrier.ifBlank { "Tracking" }} $it" }.orEmpty(),
                   shipment.trackingStatus,
                 ).filter { it.isNotBlank() }.joinToString(" · "),

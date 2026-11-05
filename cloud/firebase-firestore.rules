@@ -1584,8 +1584,10 @@ service cloud.firestore {
        *   - On every site or on several, `oneSiteOf` answers nothing: no one
        *     site can be asked, so "Manage data" alone decides.
        *
-       * `visibleTo` is the placement the document holds. It costs one read of
-       * the site, and none for a member the first arm admitted.
+       * `visibleTo` is the placement the document holds, through `scopePlacement`:
+       * shared with all sites except some, it asks no site however few it reaches
+       * today. It costs one read of the site, and none for a member the first arm
+       * admitted.
        */
       function canWriteDatasetOn(visibleTo) {
         return isOrgMember() && isVerified() && orgNotSuspended() &&
@@ -1621,7 +1623,8 @@ service cloud.firestore {
       // CRM sharing (AGL-3336, `model/crm-sharing.ts`): a share widens
       // `visibleTo`, never write access. A shared record carries `writeTo`
       // (its own scope + edit grants); its holders are `visibleTo` less
-      // `sharing.added`. Both fields are server-only.
+      // `sharing.added`. Both fields are server-only, as is the all-sites-except
+      // marker (`scopeMarkerUnchanged`, below), which these two also hold.
       function crmWriteScope() {
         return resource.data.get('writeTo', resource.data.visibleTo);
       }
@@ -1639,10 +1642,11 @@ service cloud.firestore {
       }
       function crmSharingUnchanged() {
         return !request.resource.data.diff(resource.data).affectedKeys()
-          .hasAny(['sharing', 'writeTo']);
+          .hasAny(['sharing', 'writeTo', 'scopeMode', 'scopeExcept']);
       }
       function crmSharingAbsent() {
-        return !request.resource.data.keys().hasAny(['sharing', 'writeTo']);
+        return !request.resource.data.keys()
+          .hasAny(['sharing', 'writeTo', 'scopeMode', 'scopeExcept']);
       }
       /**
        * Only an org-wide member may change who a resource is shared with.
@@ -1653,6 +1657,41 @@ service cloud.firestore {
       function scopeUnchanged() {
         return !request.resource.data.diff(resource.data)
           .affectedKeys().hasAny(['visibleTo']);
+      }
+      /**
+       * Shared with "all sites except some" (AGL-4047). Such a document keeps
+       * the sites it reaches today in `visibleTo`, the only field a reader
+       * enforces, and carries `scopeMode` and `scopeExcept` beside it. Both are
+       * the server's: whatever sets them, and the sweep that keeps them true as
+       * sites come and go (`scope-sharing-sweep.ts`), runs on the admin SDK. So
+       * no client creates a document with either, or adds, changes or removes
+       * either on one. Removing a marker is a field delete, never a stored null,
+       * so the keys being present is what marked means here, and a stored null
+       * or half a marker reads as marked: it fails closed.
+       *
+       * None of this reads a document, and readers ask nothing new: `visibleTo`
+       * answers `canReadScoped`, its list queries included.
+       */
+      function scopeMarkerUnchanged() {
+        return !request.resource.data.diff(resource.data).affectedKeys()
+          .hasAny(['scopeMode', 'scopeExcept']);
+      }
+      function scopeMarkerAbsent() {
+        return !request.resource.data.keys().hasAny(['scopeMode', 'scopeExcept']);
+      }
+      function scopeUnmarked(data) {
+        return !data.keys().hasAny(['scopeMode', 'scopeExcept']);
+      }
+      /**
+       * The placement a one-site verdict may look at: `visibleTo`, or nothing
+       * for a marked document. Its list can shrink to one site while the document
+       * still belongs to the whole workspace, and the next new site joins it, so
+       * that one site's Admins never come to answer for it. `oneSitePlacement` in
+       * the platform core, the routes' and the console's twin, takes `visibleTo`
+       * alone: whatever first writes a marker owes it the same answer.
+       */
+      function scopePlacement(data) {
+        return scopeUnmarked(data) ? data.get('visibleTo', null) : null;
       }
       /**
        * Create-time twin of `canReadScoped` — it reads `request.resource`
@@ -1707,11 +1746,15 @@ service cloud.firestore {
         // Re-scoping stays with an org-wide member who holds "Manage data": a
         // site's verdict writes the dataset and never moves it, and a site that
         // narrows that member takes the schema and leaves the sharing alone.
+        // The cheap questions come first on purpose: `canWriteDatasetOn` is the
+        // costly one, and a member a site decides can otherwise pay for it twice
+        // and reach the limit of 1000 expressions a request, which refuses them.
         allow update: if isStaff() ||
-          (canReadScoped() && canWriteDatasetOn(resource.data.get('visibleTo', null)) && scopeUnchanged()) ||
-          (canWriteOrgDatasets() && isOrgWideMember() &&
-           (canWriteDatasetOn(resource.data.get('visibleTo', null)) ||
-            request.resource.data.diff(resource.data).affectedKeys().hasOnly(['visibleTo'])));
+          (scopeMarkerUnchanged() &&
+           ((canReadScoped() && scopeUnchanged() && canWriteDatasetOn(scopePlacement(resource.data))) ||
+            (canWriteOrgDatasets() && isOrgWideMember() &&
+             (request.resource.data.diff(resource.data).affectedKeys().hasOnly(['visibleTo']) ||
+              canWriteDatasetOn(scopePlacement(resource.data))))));
         allow delete: if isStaff();
         match /records/{recordId} {
           // A record has no `visibleTo` of its own; it inherits the
@@ -1741,7 +1784,7 @@ service cloud.firestore {
           allow update, delete: if isStaff() ||
             (parentDatasetVisible() &&
              ((canWriteOrgDatasets() && orgMember().get('hostAccess', {}).size() == 0) ||
-              canWriteDatasetOn(get(/databases/$(database)/documents/orgs/$(orgId)/datasets/$(datasetId)).data.get('visibleTo', null))));
+              canWriteDatasetOn(scopePlacement(get(/databases/$(database)/documents/orgs/$(orgId)/datasets/$(datasetId)).data))));
         }
       }
       /**
@@ -1819,7 +1862,8 @@ service cloud.firestore {
        * one brand removing a lead must not destroy the sibling brand's
        * record. Every other case is an update that drops this site's token.
        * An org-wide member already holds every brand, so they may delete any
-       * lead in the org.
+       * lead in the org. A lead shared with all sites except some has no sole
+       * holder, however few sites it reaches today.
        */
       match /leads/{leadId} {
         allow read: if isStaff() || canReadScopedPeople();
@@ -1832,8 +1876,9 @@ service cloud.firestore {
         allow delete: if isStaff() ||
           (canWriteScopedCrm() &&
            (isOrgWideMember() ||
-            crmHeldScope().hasOnly(
-              orgMember().get('scopeTokens', ['org']))));
+            (scopeUnmarked(resource.data) &&
+             crmHeldScope().hasOnly(
+               orgMember().get('scopeTokens', ['org'])))));
       }
       // Segments are saved filters over the contacts above and are stamped
       // org-wide at creation, so they follow the same predicate: a segment
@@ -1969,10 +2014,10 @@ service cloud.firestore {
       match /crmTasks/{taskId} {
         allow read: if isStaff() || canReadScopedPeople();
         allow create: if isStaff() ||
-          (canWriteOrgData() && canCreateScoped() && orgCarriesCrmSuite(orgId));
+          (canWriteOrgData() && canCreateScoped() && scopeMarkerAbsent() && orgCarriesCrmSuite(orgId));
         allow update: if isStaff() ||
           (canWriteScopedOrgData() && (isOrgWideMember() || scopeUnchanged()) &&
-            orgCarriesCrmSuite(orgId));
+            scopeMarkerUnchanged() && orgCarriesCrmSuite(orgId));
         allow delete: if isStaff() || canWriteScopedOrgData();
       }
       // What a person LOGGED against a contact, company or deal — as against
@@ -1980,10 +2025,10 @@ service cloud.firestore {
       match /crmActivities/{activityId} {
         allow read: if isStaff() || canReadScopedPeople();
         allow create: if isStaff() ||
-          (canWriteOrgData() && canCreateScoped() && orgCarriesCrmSuite(orgId));
+          (canWriteOrgData() && canCreateScoped() && scopeMarkerAbsent() && orgCarriesCrmSuite(orgId));
         allow update: if isStaff() ||
           (canWriteScopedOrgData() && (isOrgWideMember() || scopeUnchanged()) &&
-            orgCarriesCrmSuite(orgId));
+            scopeMarkerUnchanged() && orgCarriesCrmSuite(orgId));
         allow delete: if isStaff() || canWriteScopedOrgData();
       }
       // The custom fields a holder keeps on a person, a company or a deal
@@ -2148,7 +2193,8 @@ service cloud.firestore {
        *     admits stays on that one site.
        *
        * A campaign on every site or on several answers to the workspace's
-       * verdict alone.
+       * verdict alone, and so does one shared with all sites except some, however
+       * few sites it reaches today (`scopePlacement`).
        */
       function canWriteCampaignContainers() {
         return isOrgMember() && isVerified() &&
@@ -2179,13 +2225,15 @@ service cloud.firestore {
       match /emailCampaigns/{campaignId} {
         allow read: if isStaff() || canReadScoped();
         allow create: if isStaff() ||
-          (canWriteCampaignContainers() && canCreateScoped()) ||
-          (canWriteOneSiteCampaign(request.resource.data.get('visibleTo', null)) && canCreateScoped());
+          (scopeMarkerAbsent() &&
+           ((canWriteCampaignContainers() && canCreateScoped()) ||
+            (canWriteOneSiteCampaign(request.resource.data.get('visibleTo', null)) && canCreateScoped())));
         allow update: if isStaff() ||
-          (canWriteCampaignContainers() && canReadScoped() &&
-           (isOrgWideMember() || scopeUnchanged())) ||
-          (canWriteOneSiteCampaign(resource.data.get('visibleTo', null)) && canReadScoped() &&
-           scopeUnchanged());
+          (scopeMarkerUnchanged() &&
+           ((canWriteCampaignContainers() && canReadScoped() &&
+             (isOrgWideMember() || scopeUnchanged())) ||
+            (canWriteOneSiteCampaign(scopePlacement(resource.data)) && canReadScoped() &&
+             scopeUnchanged())));
         allow delete: if false;
       }
       /**
@@ -2420,10 +2468,10 @@ service cloud.firestore {
       match /media/{mediaId} {
         allow read: if isStaff() || canReadScoped();
         allow create: if isStaff() ||
-          (canWriteOrgMedia() && canCreateScoped() && mediaObjectFieldsUnset());
+          (canWriteOrgMedia() && canCreateScoped() && scopeMarkerAbsent() && mediaObjectFieldsUnset());
         allow update: if isStaff() ||
           (canWriteOrgMedia() && canReadScoped() && (isOrgWideMember() || scopeUnchanged()) &&
-           mediaObjectFieldsUnchanged());
+           scopeMarkerUnchanged() && mediaObjectFieldsUnchanged());
         allow delete: if isStaff() || (canWriteOrgMedia() && canReadScoped());
       }
       // Folders hold a name and a parent; they address no Storage object, so
@@ -2431,9 +2479,10 @@ service cloud.firestore {
       // rather than copied for symmetry.
       match /mediaFolders/{folderId} {
         allow read: if isStaff() || canReadScoped();
-        allow create: if isStaff() || (canWriteOrgMedia() && canCreateScoped());
+        allow create: if isStaff() || (canWriteOrgMedia() && canCreateScoped() && scopeMarkerAbsent());
         allow update: if isStaff() ||
-          (canWriteOrgMedia() && canReadScoped() && (isOrgWideMember() || scopeUnchanged()));
+          (canWriteOrgMedia() && canReadScoped() && (isOrgWideMember() || scopeUnchanged()) &&
+           scopeMarkerUnchanged());
         allow delete: if isStaff() || (canWriteOrgMedia() && canReadScoped());
       }
       // Storage quota meter for the org library.

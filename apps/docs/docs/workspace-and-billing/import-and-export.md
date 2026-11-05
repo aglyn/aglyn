@@ -15,8 +15,10 @@ The page is open to anyone who can export something. Importing, packages
 and the list of past imports need the **Manage data** permission. Owners,
 admins and editors have it by default, and a custom role can grant or
 withhold it. Without it you see **Export** only for data your role lets you
-read, such as a dataset's records, and a dataset's **Import** is switched off
-and names the permission. Every page with its own **Import** and
+read, such as a dataset's records, and **Import** is switched off and names the
+permission. A dataset placed on one site answers to that site: **Manage this
+site's data**, which the site's admins and editors hold by default, decides its
+**Import** here, as it does on the Data page. Every page with its own **Import** and
 **Export** buttons, such as a list of products or an email list, shows each
 button only when you can use it.
 

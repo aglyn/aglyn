@@ -20,6 +20,7 @@ import {
   transferAccessAllowed,
   transferAccessPermissions,
   transferImportPermission,
+  transferMissingPermission,
   transferRouteIntent,
 } from './access'
 import { transferResourceProblems } from './resource'
@@ -40,6 +41,18 @@ describe('transfer access (AGL-3546)', () => {
     expect(transferAccessPermissions('import', { readPermission: 'books.read' })).toEqual([TRANSFER_MANAGE_PERMISSION])
     expect(transferAccessAllowed('import', null, holding())).toBe(false)
     expect(transferAccessAllowed('import', null, holding('data.manage'))).toBe(true)
+  })
+
+  it('names what refuses a member, in the gate’s order, and nothing no key decides (AGL-4047)', () => {
+    const gift = { importPermission: 'gift.import' }
+    expect(transferMissingPermission('import', null, holding())).toBe('data.manage')
+    expect(transferMissingPermission('import', null, holding('data.manage'))).toBeNull()
+    expect(transferMissingPermission('import', gift, holding())).toBe('data.manage')
+    expect(transferMissingPermission('import', gift, holding('gift.import'))).toBe('data.manage')
+    expect(transferMissingPermission('import', gift, holding('data.manage'))).toBe('gift.import')
+    expect(transferMissingPermission('import', gift, holding('data.manage', 'gift.import'))).toBeNull()
+    expect(transferMissingPermission('export', { readableByMembers: true }, holding())).toBeNull()
+    expect(transferMissingPermission('import', null, { holds: () => false, reachesSite: false })).toBeNull()
   })
 
   it('exports with Manage data unless the resource says who else may read it', () => {

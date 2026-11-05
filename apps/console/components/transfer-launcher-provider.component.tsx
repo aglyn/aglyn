@@ -32,7 +32,9 @@ import {
 import {
   parseTransferResourceKey,
   TRANSFER_API_ROUTES,
+  TRANSFER_MANAGE_PERMISSION,
   transferAccessAllowed,
+  transferMissingPermission,
   transferPlanFeature,
   type TransferMemberAxis,
   type TransferUnfinishedImportSummary,
@@ -114,22 +116,54 @@ export function transferAccessVerdict(
   if (feature && !inputs.entitled(feature)) return false
   // The resource's own answer on this instance (AGL-4047), as its `importAccess` gives the gate.
   if (action === 'import' && typeof target.importAllowed === 'boolean') return target.importAllowed
-  const hostId = target.hostId?.trim() || null
-  let axis: TransferMemberAxis
-  if (inputs.orgWide || !hostId) {
-    axis = { holds: (permission) => inputs.can(permission), reachesSite: true }
-  } else if (inputs.member === undefined) {
-    return false
-  } else {
-    const onSite = resolveCollaboratorHostPermissions(inputs.member, hostId as never) as Record<string, boolean> | null
-    axis = {
-      // A key that alone decides an export is a workspace key, as the gate asks it.
-      holds: (permission) =>
-        action === 'export' && declared?.readPermissionOnly === true ? inputs.can(permission) : onSite?.[permission] === true,
-      reachesSite: Boolean(inputs.member && hostRoleFor(inputs.member, hostId as never)),
-    }
+  const axis = transferMemberAxis(inputs, action, target, declared)
+  return axis ? transferAccessAllowed(action, declared, axis) : false
+}
+
+/**
+ * The permission refusing the person, as {@link TransferLauncher.refusedPermission}
+ * says it: `null` until every read is in, and for what no permission decides.
+ */
+export function transferRefusedPermission(
+  inputs: TransferAccessInputs,
+  action: TransferAction,
+  target: TransferAccessTarget,
+): string | null {
+  if (!inputs.permissionsLoaded) return null
+  const resourceKey = parseTransferResourceKey(target.resource).key
+  const declared = PLUGIN_TRANSFER_RESOURCES_DECLARED.find((one) => one.key === resourceKey) ?? null
+  const feature = transferPlanFeature(action, declared)
+  if (feature && !inputs.entitled(feature)) return null
+  if (action === 'import' && typeof target.importAllowed === 'boolean') {
+    return target.importAllowed ? null : TRANSFER_MANAGE_PERMISSION
   }
-  return transferAccessAllowed(action, declared, axis)
+  const axis = transferMemberAxis(inputs, action, target, declared)
+  return axis ? transferMissingPermission(action, declared, axis) : null
+}
+
+/**
+ * Who the person is to the target: the workspace, or the named site, where a
+ * collaborator is decided by what they hold there. `null` while their member
+ * document is read.
+ */
+function transferMemberAxis(
+  inputs: TransferAccessInputs,
+  action: TransferAction,
+  target: TransferAccessTarget,
+  declared: (typeof PLUGIN_TRANSFER_RESOURCES_DECLARED)[number] | null,
+): TransferMemberAxis | null {
+  const hostId = target.hostId?.trim() || null
+  if (inputs.orgWide || !hostId) {
+    return { holds: (permission) => inputs.can(permission), reachesSite: true }
+  }
+  if (inputs.member === undefined) return null
+  const onSite = resolveCollaboratorHostPermissions(inputs.member, hostId as never) as Record<string, boolean> | null
+  return {
+    // A key that alone decides an export is a workspace key, as the gate asks it.
+    holds: (permission) =>
+      action === 'export' && declared?.readPermissionOnly === true ? inputs.can(permission) : onSite?.[permission] === true,
+    reachesSite: Boolean(inputs.member && hostRoleFor(inputs.member, hostId as never)),
+  }
 }
 
 /**
@@ -282,6 +316,7 @@ export function TransferLauncherProvider({ children }: { children?: JSX.Children
         }
         return answer
       },
+      refusedPermission: (action, target) => transferRefusedPermission(inputs, action, target),
     }
   }, [permissionsLoaded, granted, orgWide, member, entitledFeatures, unfinishedJobs, discard, close])
 
