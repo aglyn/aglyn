@@ -38,6 +38,7 @@ import androidx.compose.ui.semantics.heading
 import androidx.compose.ui.semantics.semantics
 import androidx.compose.ui.unit.dp
 import com.aglyn.contracts.Contracts
+import com.aglyn.contracts.deviceTimeZone
 import com.aglyn.contracts.formatReceiptTime
 import com.aglyn.core.Live
 import com.aglyn.core.nowMillis
@@ -278,7 +279,7 @@ fun SubmissionDetail(context: NativePluginContext, hostId: String, submissionId:
           Text(row.sender.label, Modifier.semantics { heading() }, style = MaterialTheme.typography.headlineSmall)
           row.sender.email?.takeIf { it != row.sender.label }?.let { Text(it, style = MaterialTheme.typography.bodyLarge) }
           Text(
-            listOfNotNull(row.formName, row.receivedAtMs?.let { formatReceiptTime(it) }).joinToString(" · "),
+            listOfNotNull(row.formName, row.receivedAtMs?.let { formatReceiptTime(it, deviceTimeZone()) }).joinToString(" · "),
             style = MaterialTheme.typography.bodyMedium,
             color = MaterialTheme.colorScheme.onSurfaceVariant,
           )
@@ -457,7 +458,7 @@ private fun ReplyCard(
       sent.forEach { reply ->
         AglynListItem(
           title = reply.subject.ifBlank { "Reply" },
-          supporting = listOfNotNull(reply.to.ifBlank { null }, reply.sentAtMs?.let { formatReceiptTime(it) }, reply.message.take(140).ifBlank { null }).joinToString(" · "),
+          supporting = listOfNotNull(reply.to.ifBlank { null }, reply.sentAtMs?.let { formatReceiptTime(it, deviceTimeZone()) }, reply.message.take(140).ifBlank { null }).joinToString(" · "),
           icon = AglynIcons.named("reply"),
         )
       }

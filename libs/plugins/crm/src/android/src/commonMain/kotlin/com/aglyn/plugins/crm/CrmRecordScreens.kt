@@ -49,6 +49,7 @@ import androidx.compose.ui.unit.dp
 import androidx.compose.ui.window.Dialog
 import androidx.compose.ui.window.DialogProperties
 import com.aglyn.contracts.Contracts
+import com.aglyn.contracts.deviceTimeZone
 import com.aglyn.contracts.formatReceiptTime
 import com.aglyn.core.FilterOp
 import com.aglyn.core.FirestoreFilter
@@ -284,7 +285,7 @@ fun RecordDetail(context: NativePluginContext, kind: CrmKind, id: String, listSc
             if (shown.size < fields.size) {
               Text("${fields.size - shown.size} more fields are empty. Edit to fill them in.", style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurfaceVariant)
             }
-            (row.data["createdAt"]?.let(::millisOf))?.let { PropertyRow("Created", formatReceiptTime(it)) }
+            (row.data["createdAt"]?.let(::millisOf))?.let { PropertyRow("Created", formatReceiptTime(it, deviceTimeZone())) }
           }
           RelatedCard(context, kind, id, row, scope, reference)
           if (kind == CrmKind.DEAL || kind == CrmKind.COMPANY) ContactRolesCard(context, kind, id, doc.data, scope, api, reference) { notice = it }
