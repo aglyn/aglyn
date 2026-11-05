@@ -51,7 +51,9 @@ interface Screen {
   blocks: Block[]
   load?: Record<string, unknown>
 }
-const screens = (JSON.parse(read('libs/native/screens/workspace.screens.json')) as { screens: Screen[] }).screens
+const screens = ['workspace', 'transfer'].flatMap(
+  (file) => (JSON.parse(read(`libs/native/screens/${file}.screens.json`)) as { screens: Screen[] }).screens,
+)
 const screen = (id: string): Screen => {
   const found = screens.find((one) => one.id === id)
   if (!found) throw new Error(`no screen ${id}`)
@@ -309,7 +311,8 @@ describe('native workspace settings', () => {
         'This organization is scheduled for deletion. After a 7-day hold, all of its sites, files, and data are permanently erased. Cancel now to keep it.',
         'Deletion canceled — your organization is safe.',
       ])
-      sentences(exportCard, native, [
+      const transfer = nativeText('core.settings.data')
+      sentences(exportCard, transfer, [
         'A machine-readable JSON copy of everything this workspace holds — its sites and their content, datasets, contacts, orders, form submissions, members, support threads and billing identifiers.',
         'Your data is downloading.',
       ])

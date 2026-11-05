@@ -688,8 +688,7 @@ enum CreateSiteBlock: Equatable {
   var message: String {
     switch self {
     case .role:
-      "Your role in this workspace does not allow creating sites. Ask a workspace owner or admin to create it, or to "
-        + "change your role."
+      permissionRefusalText(ContractValues.shared.orgRoleGrants, key: "hosts.create")
     case .limit(let limit):
       "Your plan includes \(limit == 1 ? "one site" : "\(limit) sites"), and this workspace is using all of them. "
         + "Upgrade or add extra sites from Billing."

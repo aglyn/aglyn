@@ -224,6 +224,9 @@ struct FlowLayout: Layout {
 // MARK: - Every site's own
 
 /// "Workflows / Actions / Webhooks on every site": each site's own, side by side; a row opens that site's Automation.
+/// "See orders and webhooks": what the rules ask of a site's webhooks.
+private let webhooksPermission = "site.sensitive"
+
 struct OrgSiteListSection: View {
   let context: NativePluginContext
   let kind: OrgSiteKind
@@ -232,22 +235,42 @@ struct OrgSiteListSection: View {
   @State private var showAll = false
   @State private var loaders: [String: LiveRows] = [:]
 
-  private var canRead: Bool { kind != .webhooks || sites.canEdit }
+  /// The site documents the webhooks list asks, nil until each has answered.
+  @State private var siteDocs: [String: [String: Any]]?
+
+  private var webhooks: Bool { kind == .webhooks }
+
+  /// The sites this member reads: for webhooks, those holding the key the rule `canReadHostSensitive` asks, per site.
+  private var readable: [WorkspaceSite] {
+    guard webhooks else { return sites.sites }
+    let workspace = [webhooksPermission: context.canInWorkspace(webhooksPermission)]
+    return sites.sites.prefix(AutomationCeilings.orgSitesMax).filter { site in
+      guard let doc = siteDocs?[site.id] else { return false }
+      return sitePermissions(ContractValues.shared.orgRoleGrants, workspace: workspace, site: doc, uid: context.uid)[webhooksPermission] == true
+    }
+  }
+
+  private var canRead: Bool { !webhooks || !readable.isEmpty }
 
   var body: some View {
-    let reachable = Array(sites.sites.prefix(AutomationCeilings.orgSitesMax))
+    let reachable = Array(readable.prefix(AutomationCeilings.orgSitesMax))
     let shown = showAll ? reachable : Array(reachable.prefix(AutomationCeilings.orgSitesOpen))
     let folded = reachable.count - shown.count
     // A plain list on the content surface on the Mac and iPad: no cards on grey, rows on E.
     AglynGroupedForm(plain: true) {
       Section {
         Text(kind.intro).font(AglynFont.subheadline).foregroundStyle(.secondary)
-        if !canRead {
-          AglynNotice("Each site’s \(kind.rawValue) are listed for its admins and editors.", tone: .info)
-        } else if !sites.ready {
+        if !sites.ready || (webhooks && !sites.sites.isEmpty && siteDocs == nil) {
           SkeletonRows(count: 2)
         } else if sites.sites.isEmpty {
           Text("This organization has no sites yet.").foregroundStyle(.secondary)
+        } else if !canRead {
+          AglynNotice(context.refusal(webhooksPermission), tone: .info)
+        } else if webhooks, readable.count < min(sites.sites.count, AutomationCeilings.orgSitesMax) {
+          AglynNotice(
+            "The \(kind.rawValue) of sites where your role does not include "
+              + "\"\(orgPermissionLabel(ContractValues.shared.orgRoleGrants, key: webhooksPermission))\" are not listed.",
+            tone: .info)
         }
       } header: {
         HubSectionHeader(title: kind.header) {
@@ -262,15 +285,15 @@ struct OrgSiteListSection: View {
         ForEach(shown) { site in
           OrgSiteRowsSection(context: context, site: site, kind: kind, live: loaders[site.id])
         }
-        if folded > 0 || sites.sites.count > AutomationCeilings.orgSitesMax || !sites.sites.isEmpty {
+        if folded > 0 || sites.sites.count > AutomationCeilings.orgSitesMax || !readable.isEmpty {
           Section {
             if folded > 0 {
               Button("Show \(folded) more \(folded == 1 ? "site" : "sites")") { showAll = true }
                 .accessibilityIdentifier("org-sites-more")
             }
-            if !sites.sites.isEmpty {
+            if !readable.isEmpty {
               Menu {
-                ForEach(sites.sites) { site in
+                ForEach(readable) { site in
                   Button(siteName(site.id, sites.sites)) { open(site.id) }
                 }
               } label: {
@@ -289,6 +312,14 @@ struct OrgSiteListSection: View {
       }
     }
     .accessibilityIdentifier("org-\(kind.rawValue)-list")
+    .task(id: webhooks ? sites.sites.map(\.id) : []) {
+      guard webhooks, sites.ready else { return }
+      var docs: [String: [String: Any]] = [:]
+      for site in sites.sites.prefix(AutomationCeilings.orgSitesMax) {
+        docs[site.id] = (try? await context.firestore.readOnce(["hosts", site.id]))?.data
+      }
+      siteDocs = docs
+    }
     .task(id: canRead ? shown.map(\.id) : []) {
       guard canRead else { return }
       for site in shown where loaders[site.id] == nil {

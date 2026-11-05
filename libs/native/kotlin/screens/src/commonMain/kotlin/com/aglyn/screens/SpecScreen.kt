@@ -171,7 +171,7 @@ fun SpecScreen(
   if (!ScreenValues.condition(spec.requires, base)) {
     EmptyState(
       if (spec.scope == "staff") "Staff only" else "Not available to your role",
-      body = if (spec.scope == "staff") "This page is for Aglyn staff." else ScreenValues.requiredKey(spec.requires)?.let { com.aglyn.contracts.permissionRefusalText(it) } ?: "Ask an owner or admin of this workspace for access.",
+      body = if (spec.scope == "staff") "This page is for Aglyn staff." else ScreenValues.requiredKey(spec.requires)?.let { com.aglyn.contracts.permissionRefusalText(it) } ?: "Your role does not include this permission — ask an organization admin.",
       icon = AglynIcons.named("lock"),
     )
     return
