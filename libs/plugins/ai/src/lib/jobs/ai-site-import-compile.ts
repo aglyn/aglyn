@@ -418,6 +418,17 @@ const HERO_FOR: Readonly<Record<SiteImportHeroPicture, AiLayoutImportHero>> = {
   above: 'column',
 }
 
+/**
+ * The source's own opening as a hero (AGL-4152): its picture's place, refined
+ * by how it sets its words. Over or under a picture, a centered column or a
+ * start-aligned editorial; behind them, a poster or a cover; beside them, a split.
+ */
+function ownHeroOf(section: Pick<SiteImportLayoutSection, 'align'>, place: SiteImportHeroPicture): AiLayoutImportHero {
+  if (place === 'beside') return 'split'
+  if (place === 'behind') return section.align === 'center' ? 'poster' : 'cover'
+  return section.align === 'center' ? 'column' : 'editorial'
+}
+
 interface MapScope {
   doc: AiSiteImportDocument
   layout: SiteImportLayout
@@ -1074,25 +1085,15 @@ function mergeLists(blocks: readonly AiLayoutBlock[]): AiLayoutBlock[] {
 const DIMMED_HEROES: ReadonlySet<AiLayoutImportHero> = new Set(['cover', 'poster'])
 
 /**
- * The heroes that keep the source's picture where it lays it (AGL-4138): under
- * or over its words in a column, beside them, or behind them. An answer may
- * choose among these alone.
- */
-const HEROES_AT: Readonly<Record<SiteImportHeroPicture, ReadonlySet<AiLayoutImportHero>>> = {
-  below: new Set(['column', 'editorial']),
-  above: new Set(['column', 'editorial']),
-  beside: new Set(['split', 'bleed', 'panel']),
-  behind: new Set(['cover', 'poster', 'panel']),
-}
-
-/**
  * The hero a section's opening takes: the first section's, around its picture
  * beside, behind or under its words. Words dimmed over the picture draw the
  * section dark, so a section that keeps a lighter ground of its own, with its
  * picture anywhere but behind it, opens as its source does (AGL-4083): an
  * answer never repaints a section's own band. Nor does it move the picture
  * (AGL-4138): a picture under centered words stays under them, as a picture
- * beside the words stays beside them.
+ * beside the words stays beside them. Kept as it is (AGL-4152), the opening is
+ * the source's own whatever the answer says: a hero that moved its words is
+ * set aside with what it asked.
  */
 function heroOf(
   section: SiteImportLayoutSection,
@@ -1102,18 +1103,18 @@ function heroOf(
   drawn: { band: SiteImportLayoutSection['band']; finish: AiSiteImportFinish },
 ): AiLayoutImportHero | undefined {
   if (index !== 0 || !section.hero?.picture) return undefined
+  const place = section.hero.picture
+  if (drawn.finish !== 'improve') {
+    const own = ownHeroOf(section, place)
+    if (answer?.hero && answer.hero !== 'none' && answer.hero !== own) settled.push({ at: 'sections[0]', what: `the ${answer.hero} hero set aside: the page keeps its source's own opening, a ${own} hero` })
+    return own
+  }
   // An answer of "none" keeps the opening as the source lays it out.
   if (answer?.hero === 'none') return undefined
-  const place = section.hero.picture
   const own = HERO_FOR[place]
   // Dimmed words need a dark ground: the section's own, or on a page its owner asked improved, the answer's (AGL-4152).
   if (answer?.hero && DIMMED_HEROES.has(answer.hero) && drawn.band !== 'dark' && place !== 'behind') {
     settled.push({ at: 'sections[0]', what: `the ${answer.hero} hero set aside: the section keeps its own lighter ground` })
-    return own
-  }
-  // The picture stays where the source lays it, unless the owner asked the page improved (AGL-4152).
-  if (answer?.hero && drawn.finish !== 'improve' && !HEROES_AT[place].has(answer.hero)) {
-    settled.push({ at: 'sections[0]', what: `the ${answer.hero} hero set aside: the source lays its picture ${place} its words` })
     return own
   }
   return answer?.hero ?? own
@@ -1199,7 +1200,9 @@ export function aiSiteImportDesignedSections(
       blocks.push(...lineBlocks(scope, { kind: 'line', line: ref }))
     }
     // A band only where the source gave the section none of its own; any section's, on a page its owner asked improved (AGL-4152).
-    const band = given?.band && (improve || (section.background === null && !section.backdrop)) ? given.band : section.band
+    // Kept, its band against its page's ground (AGL-4152); improved, as its color alone reads.
+    const own = improve ? (section.absoluteBand ?? section.band) : section.band
+    const band = given?.band && (improve || (section.background === null && !section.backdrop)) ? given.band : own
     const hero = heroOf(section, index, given, scope.settled, { band: improve ? band : section.band, finish })
     // A long read is set at the start, as text is read, whatever its source centers.
     const reading = blocks.filter((block) => block.kind === 'text').length > READING_PARAGRAPHS
@@ -1409,7 +1412,7 @@ export function aiSiteImportDesignText(doc: Pick<AiSiteImportDocument, 'blocks' 
     .map((section, index) => {
       const groups = { count: 0 }
       const shows = describeNodes(doc, section.nodes, groups)
-      const band = section.background === null && !section.backdrop ? 'no band of its own' : `${section.band} band${section.backdrop?.kind === 'gradient' ? ' with a gradient' : ''}`
+      const band = section.background === null && !section.backdrop ? 'no band of its own' : `${section.absoluteBand ?? section.band} band${section.backdrop?.kind === 'gradient' ? ' with a gradient' : ''}`
       const hero = index === 0 && section.hero?.picture ? `; opens the page, its picture ${section.hero.picture} its words` : index === 0 ? '; opens the page, with no picture' : ''
       return `Section ${index + 1} "${names[index]}": ${band}, ${section.align === 'center' ? 'centered' : 'aligned to the start'}${hero}. Groups: ${groups.count}. Shows: ${counted(shows)}.`
     })

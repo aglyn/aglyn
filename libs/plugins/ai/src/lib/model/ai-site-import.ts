@@ -459,9 +459,22 @@ export interface SiteImportLayoutSection {
   name: string
   /** How its edges were found: a landmark (`<section>`), a container of its own, or its headings. */
   from: 'landmark' | 'container' | 'heading'
+  /**
+   * Its band against the page's own ground (AGL-4152): a light fill within
+   * OKLab ΔE 0.02 of the page's, or none, is `plain`, any other light one
+   * `soft`; `brand` and `dark` as its color says.
+   */
   band: SiteImportBand
+  /**
+   * Its band by its color's own lightness, near white `plain` and any other
+   * light fill `soft`, where that differs from {@link SiteImportLayoutSection.band}:
+   * what Improve it and the design answer's text read. Absent, the two agree.
+   */
+  absoluteBand?: SiteImportBand
   /** Its background color as `#rrggbb`, when it has one. */
   background: string | null
+  /** Its background in the page's dark scheme (AGL-4152), where its stylesheets change it. */
+  darkBackground?: string
   /** A gradient, a photo, or a film playing on its own behind it (AGL-4140), its poster an image line. */
   backdrop?: { kind: 'gradient' } | { kind: 'picture'; url: string } | { kind: 'video'; video: number; poster?: SiteImportLineRef }
   align: 'start' | 'center'
@@ -530,10 +543,26 @@ export interface SiteImportLookFacts {
   link: string | null
   /** Its header bar's background. */
   header: string | null
-  /** The fill of its dark bands, the most used first (AGL-4152): the dark ground Keep my site keeps. Absent on a read made before. */
+  /**
+   * The dark ground Keep my site keeps (AGL-4152): its page's fill in its dark
+   * scheme where its stylesheets say one, else the fill of its dark bands, the
+   * most used first. Absent on a read made before.
+   */
   darkBackground?: string | null
+  /** The fill of its `soft` bands, the most used first (AGL-4152): what Keep my site's paper is. Absent on a read made before. */
+  paperBackground?: string | null
+  /** The fill of its `soft` bands in its dark scheme (AGL-4152), where its stylesheets say one. */
+  darkPaper?: string | null
   /** Whether its filled buttons are set in capitals (AGL-4152). Absent on a read made before. */
   buttonCase?: 'upper' | 'none' | null
+  /** Whether its outlined buttons are set in capitals (AGL-4152); `null` for a page with none. */
+  outlinedCase?: 'upper' | 'none' | null
+  /** Whether its text buttons and the links a page draws as them are set in capitals (AGL-4152); `null` for a page with none. */
+  textCase?: 'upper' | 'none' | null
+  /** The words' color on its outlined buttons (AGL-4152), the most used first. */
+  buttonOutline?: string | null
+  /** The fill an outlined button of its own sets (AGL-4152); `null` where they leave the ground showing. */
+  outlinedFill?: string | null
   /**
    * The color most of its eyebrows are drawn in, where that is a color of its
    * own: none of its text's, its buttons' or white (AGL-4138). The look pass

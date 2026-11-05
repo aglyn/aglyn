@@ -378,6 +378,9 @@ You choose the rest: turn off **Offer on the kiosk** on a product, or clear
 one of its variants, to keep it off the kiosk (see
 [Offer on the kiosk](catalog.md#offer-on-the-kiosk)).
 
+When you have more products than the menu lists at once, it also shows
+**Search the menu**, so a customer can find any of them by name.
+
 To pair one:
 
 1. Tap **Pair display** on the register, or beside the register under

@@ -226,3 +226,43 @@ describe('a screen wider than the page is read at (AGL-4083)', () => {
     expect(at(SITE_IMPORT_CSS_WIDE_WIDTH).get('max-width')).toBe('1536px')
   })
 })
+
+describe('a page’s dark scheme (AGL-4152)', () => {
+  const color = (css: string, tag = 'p', cls = '', scheme: 'light' | 'dark' = 'dark') => {
+    const parsed = siteImportCssOf([css], undefined, { scheme })
+    const structure = { root: { attrs: {} }, elements: [{ id: 0, tag: 'body', parent: -1, children: [1], region: 'main', nav: false, attrs: {} }, { id: 1, tag, parent: 0, children: [], region: 'main', nav: false, attrs: cls ? { class: cls } : {} }] } as never
+    return { rules: parsed.darkRules, color: siteImportStylesOf(structure, parsed).of(1).get('color') }
+  }
+
+  it('reads a prefers-color-scheme: dark rule only on a dark read', () => {
+    const css = 'p { color: #111111; } @media (prefers-color-scheme: dark) { p { color: #eeeeee; } }'
+    expect(color(css)).toEqual({ rules: 1, color: '#eeeeee' })
+    expect(color(css, 'p', '', 'light')).toEqual({ rules: 0, color: '#111111' })
+    expect(color('p { color: #111111; } @media (prefers-color-scheme: light) { p { color: #222222; } }')).toEqual({ rules: 0, color: '#111111' })
+  })
+
+  it('lifts a dark mark off a selector, as a class or a data attribute on the root', () => {
+    for (const mark of ['.dark', 'html.dark', '.dark-mode', ':root.dark', 'html[data-theme="dark"]', '[data-theme*=dark]', '[data-mui-color-scheme="dark"]', 'body.dark']) {
+      expect([mark, color(`.card { color: #111111; } ${mark} .card { color: #eeeeee; }`, 'div', 'card')]).toEqual([mark, { rules: 1, color: '#eeeeee' }])
+      // A light read leaves the rule to the mark no element has.
+      expect([mark, color(`.card { color: #111111; } ${mark} .card { color: #eeeeee; }`, 'div', 'card', 'light').color]).toEqual([mark, '#111111'])
+    }
+  })
+
+  it('outranks the same rule of the light scheme, wherever the sheet sets it', () => {
+    expect(color('.dark .card { color: #eeeeee; } .card { color: #111111; }', 'div', 'card').color).toBe('#eeeeee')
+  })
+
+  it('takes a mark standing alone as the root’s, so its custom properties reach every rule', () => {
+    expect(color(':root { --ink: #111111; } .dark { --ink: #eeeeee; } p { color: var(--ink); }').color).toBe('#eeeeee')
+  })
+
+  it('never reads a class that only sounds dark', () => {
+    expect(color('.darker .card { color: #eeeeee; } .card { color: #111111; }', 'div', 'card')).toEqual({ rules: 0, color: '#111111' })
+  })
+
+  it('finds none in aglyn.com’s Home: its dark palette is in its script', () => {
+    const page = extractSiteImportPage(siteLayoutRecording('home'), SITE_LAYOUT_PAGES.home.url, siteLayoutSameSite('home'), { structure: true })
+    expect(siteImportCssOf(page.structure?.styles ?? [], undefined, { scheme: 'dark' }).darkRules).toBe(0)
+  })
+})

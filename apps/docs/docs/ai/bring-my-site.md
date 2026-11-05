@@ -173,7 +173,9 @@ An import started before this choice existed is built as **Keep my site**.
   your links' color beside it, the color of the small labels above your headings as its
   third color, your pages' background color, the rounding of your buttons, and your own
   font when Google Fonts has it, or a font in the same style when it does not.
-  Colors are kept readable, so a color too light for white words is used a shade deeper. If
+  Colors are kept readable. With **Improve it**, a color too light for white words is used a
+  shade deeper. With **Keep my site**, your buttons keep their color and take dark words on a
+  color too light for white ones, while links and outlined buttons use a shade that reads. If
   you already chose a theme for the new site, it is kept.
 - **Your header and footer** come in with the first wave, as your current site shows them:
   your logo, your name, or both; your menu, each dropdown as a **Dropdown Menu** or a

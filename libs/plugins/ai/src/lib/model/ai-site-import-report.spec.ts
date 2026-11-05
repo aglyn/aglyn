@@ -133,8 +133,19 @@ describe('what Keep my site pins of the source’s look, source → theme (AGL-4
     expect(line).toMatch(/buttonFill #00b0ff → #0970a4 \(ΔE 0\.\d{3}, moved\)/)
     expect(line).toContain('buttonText #0b1f2a → #ffffff')
     expect(line).toContain('buttonCase upper → none (moved)')
+    expect(line).toContain('paper not read → #ffffff')
+    expect(line).toContain('darkPaper not read → #161b22')
+    expect(line).toContain('buttonOutline not read → #0970a4')
+    expect(line).toContain('textCase not read → none')
     expect(siteImportLookReport(live, read).pins).toBeDefined()
     expect(siteImportLookReport(live, { look: { theme: 'applied' } })).not.toHaveProperty('pins')
+  })
+
+  it('sets the paper, the outlined buttons’ color and the text buttons’ case beside the theme’s', () => {
+    const pins = siteImportLookPins(live, { home: { look: { paperBackground: '#ffffff', buttonOutline: '#0077ad', textCase: 'none' } } })
+    expect(pins?.paper).toEqual({ source: '#ffffff', theme: '#ffffff', delta: 0 })
+    expect(pins?.buttonOutline).toMatchObject({ source: '#0077ad', theme: '#0970a4' })
+    expect(pins?.textCase).toEqual({ source: 'none', theme: 'none', delta: null })
   })
 
   it('names a pin the reader did not read, rather than guessing it', () => {
