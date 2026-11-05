@@ -1250,6 +1250,7 @@ private fun rememberScreenSession(
     orgPermissions = held.workspace,
     sitePermissions = held.site,
     permissionsSiteId = workspace.site?.id,
+    enabledPlugins = workspace.orgLogo?.let { com.aglyn.contracts.resolveEnabledPlugins(it.enabledPlugins) },
     siteName = workspace.site?.name,
     claims = claims,
     origin = services.config.consoleOrigin,

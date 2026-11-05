@@ -73,6 +73,8 @@ public struct ScreenSession: Sendable {
   /// The same on the site in `permissionsSiteID`, with that site's own stamp applied; a screen asks `site.can[<key>]`.
   public var sitePermissions: [String: Bool]
   public var permissionsSiteID: String?
+  /// The plugins on for this workspace, which decide the keys a permission editor offers; nil offers them all.
+  public var enabledPlugins: [String]?
 
   public init(
     email: String? = nil, displayName: String? = nil, orgName: String? = nil, orgRole: String? = nil,
@@ -82,8 +84,9 @@ public struct ScreenSession: Sendable {
     impersonate: @escaping @Sendable (String, String?) async throws -> Void = { _, _ in },
     account: AccountOperations = AccountOperations(), googleConfigured: Bool = false,
     passkeyRelyingParty: String? = nil, orgPermissions: [String: Bool] = [:], sitePermissions: [String: Bool] = [:],
-    permissionsSiteID: String? = nil
+    permissionsSiteID: String? = nil, enabledPlugins: [String]? = nil
   ) {
+    self.enabledPlugins = enabledPlugins
     self.orgPermissions = orgPermissions
     self.sitePermissions = sitePermissions
     self.permissionsSiteID = permissionsSiteID
@@ -114,6 +117,15 @@ public struct ScreenSession: Sendable {
     let onSite = hostID != nil && hostID == permissionsSiteID ? sitePermissions : orgPermissions
     func can(_ verdicts: [String: Bool]) -> JSONValue {
       .object(verdicts.mapValues { .bool($0 || claims.isStaff) })
+    }
+    func rows(narrowable: Bool) -> JSONValue {
+      .array(
+        permissionEditorRows(ContractValues.shared.orgRoleGrants, enabledPlugins: enabledPlugins, narrowable: narrowable).map { row in
+          [
+            "key": .string(row.key), "label": .string(row.label), "description": .string(row.description),
+            "group": .string(row.group), "groupLabel": .string(row.groupLabel), "first": .bool(row.first),
+          ]
+        })
     }
     return [
       "org": [
@@ -151,7 +163,10 @@ public struct ScreenSession: Sendable {
         "role": claims.staffRole.map(JSONValue.string) ?? .null,
         "super": .bool(claims.isSuper),
       ],
-      "app": ["origin": .string(origin), "passkeyRp": passkeyRelyingParty.map(JSONValue.string) ?? .null],
+      "app": [
+        "origin": .string(origin), "passkeyRp": passkeyRelyingParty.map(JSONValue.string) ?? .null,
+        "permissionCatalog": rows(narrowable: false), "narrowablePermissions": rows(narrowable: true),
+      ],
       "now": ScreenSession.now(),
       "params": .object(paramRecord),
       "data": [:],

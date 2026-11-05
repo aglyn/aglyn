@@ -616,13 +616,19 @@ const CatchAllPage = observer(function CatchAllPage(props: Props) {
       // the map EVERY reference kind (`screen:`, `collection:`, `entry:`,
       // `feed:`) had nothing to resolve against, so every one of those links
       // rendered dead. Only a typed external URL survived.
-      <ScreenLinkContext.Provider value={screenLinks}>
-        <EnabledPluginsContext.Provider value={renderedPlugins}>
-          <RealmElementsContext.Provider value={realmLoadFor}>
-            <AglynNodeRenderer node={canvas.getNode(NODE_ROOT_ID)} />
-          </RealmElementsContext.Provider>
-        </EnabledPluginsContext.Provider>
-      </ScreenLinkContext.Provider>
+      //
+      // The site belongs here for the same reason (AGL-4182): this page wears
+      // the site's header, and without it every plugin element in that header
+      // believed it had no site and drew its editor stub, "🛒 Cart" for a Cart.
+      <SiteContext.Provider value={site}>
+        <ScreenLinkContext.Provider value={screenLinks}>
+          <EnabledPluginsContext.Provider value={renderedPlugins}>
+            <RealmElementsContext.Provider value={realmLoadFor}>
+              <AglynNodeRenderer node={canvas.getNode(NODE_ROOT_ID)} />
+            </RealmElementsContext.Provider>
+          </EnabledPluginsContext.Provider>
+        </ScreenLinkContext.Provider>
+      </SiteContext.Provider>
     )
   }
 

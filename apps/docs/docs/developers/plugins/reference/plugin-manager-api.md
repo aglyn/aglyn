@@ -1633,6 +1633,37 @@ registerClosureNoticeSource({
 
 A notice is information, never a gate: nothing it answers holds a closure back.
 
+## Before a person erasure — `plugin-person-erasure-notes`
+
+A plugin decides through `plugin-person-erasure` what it deletes and what it keeps
+when a person is erased. If it keeps a record with the person still on it, say so
+BEFORE anyone files: register a note source, and the console's **Erase a person**
+card prints your sentence.
+
+```ts
+import { registerPersonErasureNoteSource } from '@aglyn/aglyn/plugin-manager/plugin-person-erasure-notes'
+
+// from your serverDeclarations or consoleServerDeclarations, the import lazy
+registerPersonErasureNoteSource({
+  notes: async ({ orgId }) => {
+    if (!(await workspaceHoldsTickets(orgId))) return []
+    return [{ id: 'tickets-kept', text: 'Any ticket issued to this address stays as issued for two years' }]
+  },
+}, { pluginId: 'tickets' })
+```
+
+A source answers for the workspace, because the card opens before an address is
+typed: answer nothing when the workspace holds nothing of the kind, and word the
+sentence so it's true of someone with no such record.
+
+| API | Semantics |
+| --- | --- |
+| `registerPersonErasureNoteSource(source, { pluginId? })` | One source per plugin; registering again replaces it. |
+| `readPersonErasureNotes({ orgId })` | Every source's notes, each with its `pluginId`. **Never throws**: a source that threw, or answered a note with no words, is listed in `unavailable`, and the card says some details could not be checked. With nothing registered, it runs the app's boot step once and asks again. |
+| `GET /api/person-erasure-notes?orgId=…` | The console's route the card calls: asks "Privacy requests" (`org.privacy`) over the whole workspace, as filing does. |
+
+A note is information, never a gate: nothing it answers holds an erasure back.
+
 ## Earnings on the operator's revenue report — `plugin-revenue-sources`
 
 The staff revenue report states what the deployment actually kept. If your

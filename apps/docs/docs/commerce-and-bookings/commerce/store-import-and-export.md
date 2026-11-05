@@ -136,6 +136,61 @@ What a file does not change:
   the price, or more than 100 variants. The dry run fails those rows and gives
   the reason.
 
+### Add-ons, check-in and quick keys
+
+Three columns carry what a product does at the register and the window. Like
+the other product fields, they go on a product's first row, and **Variant
+check-in** goes on the variant's own row. A file without these columns leaves
+them as they are. So does a blank cell, unless you set **A blank cell** to clear
+the field in the Conflicts step.
+
+| Column | What to write |
+| --- | --- |
+| **Quick key** | `Yes` shows the product under Quick keys on the register's first screen. `No` doesn't. |
+| **Check-in** | `No`, `Yes`, or `Yes` followed by how many people one item admits and whether to ask the buyer the day: `Yes, 4 people, ask which day`. |
+| **Variant check-in** | The same words, for one variant. Blank follows the product. |
+| **Add-ons** | The product's [add-ons](catalog.md#add-ons), written as below. |
+
+An **Add-ons** cell lists the groups, split by semicolons. Each group is its
+name, a colon, and its choices split by commas. A choice's price comes after
+its name; a choice with no price is free.
+
+```text
+Milk: Whole, Oat +$0.75, Almond +$0.75; Extras (at most 3): Extra shot +$1.00, Syrup +$0.50
+```
+
+Parentheses after a group's name hold its settings, and you can leave out any
+of them:
+
+- `at least 1` makes the group required. Left out, the group is optional.
+- `at most 3` is how many choices a customer can pick. Left out, it's 1, or the
+  **at least** number if that's higher.
+- `register only` turns off **Show on the website**. Left out, the group is
+  shown on the website.
+
+Parentheses after a choice hold what it adds on a particular variant, by the
+variant's name as the product editor shows it. A variant you don't list pays the
+choice's own price:
+
+```text
+Walls (at most 2): Back wall +$50.00 (10x20 +$75.00, 20x20 +$90.00), Side wall +$40.00
+```
+
+Put double quotes around a name with a comma, semicolon, colon or parenthesis,
+such as `"Salt, pepper" +$0.50`. Write prices without a comma: `+$1000.00`.
+
+A group or choice the product already has, by name, stays the same one, so a
+shopper's cart keeps working. To change add-ons a product already has, choose
+**Overwrite** for the field in the Conflicts step. The cell then replaces all of
+the product's add-ons: a group or choice you leave out of it is removed.
+
+The dry run checks each cell. A cell it can't read is dropped, and the dry run
+gives the row and the reason. Add-ons the store would refuse fail the
+product's rows, as the product editor would refuse them: more than 10 groups
+or 20 choices in a group, a choice over $1,000, an **at most** above the number
+of choices, a price for a variant the product doesn't have, or options that
+make more than 100 combinations.
+
 With Aglyn AI on, the wizard's **After import** step offers **Write
 descriptions, search listings and tags with AI as they land**. The copy waits
 on the Products page for your review; nothing is saved until you apply it.

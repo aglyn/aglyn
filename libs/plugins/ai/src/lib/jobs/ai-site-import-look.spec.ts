@@ -298,10 +298,15 @@ describe('Keep my site keeps aglyn.com’s look closer (AGL-4152)', () => {
     expect(theme.typography?.variants?.button).toMatchObject({ textTransform: 'uppercase', letterSpacing: '0.06em' })
     // Its dark bands carry the cyan itself, so its outlined buttons there are cyan.
     expect(dark?.primary?.main).toBe('#00b0ff')
-    // Its recorded white words read on the light cyan at 2.4:1 and have no lighter shade, so its
-    // light page's buttons stay the brand's deeper shade under white, as the look drew them before.
-    expect(aiSiteOwnButton(style)).toBeNull()
+    // Its recorded white words read on the light cyan at 2.4:1 and have no lighter shade: the cyan stays, under black.
+    expect(aiSiteOwnButton(style)).toEqual({ label: 'common.black', outlined: false })
+    expect(theme.colorSchemes?.light?.primary?.light).toBe('#00b0ff')
+    // Links and outlined buttons keep the deeper shade white reads on.
     expect(contrastRatio('#ffffff', theme.colorSchemes?.light?.primary?.main)).toBeGreaterThanOrEqual(4.5)
+    // Its white bands are the paper, its grey page the page, so the dark scheme orders them the same.
+    expect(style).toMatchObject({ paper: '#ffffff', textCase: 'none', outlinedCase: 'upper', buttonOutline: '#0077ad' })
+    expect(theme.colorSchemes?.light?.background).toEqual({ default: '#f5f5f5', paper: '#ffffff' })
+    expect(aiHexOklch(dark?.background?.paper as string).L).toBeGreaterThan(aiHexOklch(dark?.background?.default as string).L)
   })
 })
 

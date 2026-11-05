@@ -141,6 +141,14 @@ export interface SiteImportCss {
   index: Map<string, CssRule[]>
   /** Families its `@font-face` rules name, in order. */
   fontFaces: string[]
+  /** Read for its dark scheme (AGL-4152): the rules that scheme alone selects, by a media query or a class on the page. */
+  darkRules: number
+}
+
+/** Which of a page's color schemes a read of its stylesheets answers for. */
+export interface SiteImportCssOptions {
+  /** Absent is `light`, as a page is first read. */
+  scheme?: 'light' | 'dark'
 }
 
 /*------------------------------------------
@@ -243,8 +251,8 @@ export function siteImportLengthPx(value: string): number | null {
   return match[2] && match[2].toLowerCase() !== 'px' ? amount * 16 : amount
 }
 
-/** Whether one media query holds for a light-mode screen of this width. */
-function mediaQueryHolds(query: string, viewport: number): boolean {
+/** Whether one media query holds for a screen of this width in this color scheme. */
+function mediaQueryHolds(query: string, viewport: number, scheme: 'light' | 'dark'): boolean {
   let text = query.trim().toLowerCase()
   let negate = false
   if (text.startsWith('not ')) {
@@ -271,7 +279,7 @@ function mediaQueryHolds(query: string, viewport: number): boolean {
       else if (name === 'max-width') holds &&= px !== null && width <= px
       else if (name === 'min-height') holds &&= px !== null && height >= px
       else if (name === 'max-height') holds &&= px !== null && height <= px
-      else if (name === 'prefers-color-scheme') holds &&= value.trim() === 'light'
+      else if (name === 'prefers-color-scheme') holds &&= value.trim() === scheme
       else if (name === 'prefers-reduced-motion') holds &&= value.trim() === 'no-preference'
       else if (name === 'orientation') holds &&= value.trim() === 'landscape'
       else if (name === 'hover' || name === 'any-hover') holds &&= value.trim() === 'hover'
@@ -297,9 +305,24 @@ function mediaQueryHolds(query: string, viewport: number): boolean {
   return negate ? !holds : holds
 }
 
-function mediaHolds(prelude: string, viewport: number): boolean {
+function mediaHolds(prelude: string, viewport: number, scheme: 'light' | 'dark'): boolean {
   const list = splitList(prelude.replace(/^@media\s*/i, ''))
-  return !list.length || list.some((query) => mediaQueryHolds(query, viewport))
+  return !list.length || list.some((query) => mediaQueryHolds(query, viewport, scheme))
+}
+
+/**
+ * A selector's leading mark of the dark scheme (AGL-4152): `.dark`, `.dark-mode`
+ * or a `data-theme` that says dark, on the page's root or body. Nothing a read
+ * sees carries it, so a dark read lifts it off and the rest applies as written.
+ */
+const DARK_SCOPE = /^(?:(html|body|:root))?(?:\.dark(?:-mode|-theme)?|\[\s*data-(?:theme|mode|color-scheme|color-mode|bs-theme|mui-color-scheme)\s*[*~|^]?=\s*["']?[^"'\]]*dark[^"'\]]*["']?\s*(?:i\s*)?\])(?=$|[\s>+~.:#[])/i
+
+/** What a selector asks of a page in its dark scheme, its mark lifted off: what remains, else the element that held the mark. `null` for a selector with no such mark. */
+function withoutDarkScope(text: string): string | null {
+  const match = DARK_SCOPE.exec(text.trim())
+  if (!match) return null
+  const rest = text.trim().slice(match[0].length).replace(/^[\s>+~]+/, '')
+  return rest || match[1] || ':root'
 }
 
 function declarationsOf(body: string): CssRule['decls'] {
@@ -334,15 +357,22 @@ function keyOf(selector: ComplexSelector): string {
  * The page's sheets parsed for a wide screen. Malformed CSS is read as far as
  * it makes sense, as a browser would; nothing throws.
  */
-export function siteImportCssOf(sheets: readonly string[], viewport: number = SITE_IMPORT_CSS_VIEWPORT.width): SiteImportCss {
-  const css: SiteImportCss = { rules: [], index: new Map(), fontFaces: [] }
+export function siteImportCssOf(sheets: readonly string[], viewport: number = SITE_IMPORT_CSS_VIEWPORT.width, options: SiteImportCssOptions = {}): SiteImportCss {
+  const css: SiteImportCss = { rules: [], index: new Map(), fontFaces: [], darkRules: 0 }
+  const scheme = options.scheme ?? 'light'
   let order = 0
+  /** For each open group: whether only a dark scheme's media query opens it. */
+  const darkGroups: boolean[] = []
   const addRule = (prelude: string, body: string) => {
     const decls = declarationsOf(body)
     if (!decls.length) return
     for (const text of splitList(prelude)) {
-      const selector = parseSelector(text)
+      const lifted = scheme === 'dark' ? withoutDarkScope(text) : null
+      const selector = parseSelector(lifted ?? text)
       if (!selector) continue
+      if (scheme === 'dark' && (lifted !== null || darkGroups.includes(true))) css.darkRules += 1
+      // The mark it lost still counts: a dark rule outranks the same rule of the light scheme.
+      if (lifted !== null) selector.specificity += 1_000
       const rule: CssRule = { selector, order: order++, decls }
       css.rules.push(rule)
       const key = keyOf(selector)
@@ -372,6 +402,7 @@ export function siteImportCssOf(sheets: readonly string[], viewport: number = SI
       }
       if (char === '}') {
         groups.pop()
+        darkGroups.pop()
         start = at + 1
         at += 1
         continue
@@ -383,12 +414,14 @@ export function siteImportCssOf(sheets: readonly string[], viewport: number = SI
       const prelude = text.slice(start, at).trim()
       const applies = groups.every(Boolean)
       if (/^@(?:media)\b/i.test(prelude)) {
-        groups.push(applies && mediaHolds(prelude, viewport))
+        groups.push(applies && mediaHolds(prelude, viewport, scheme))
+        darkGroups.push(/prefers-color-scheme\s*:\s*dark/i.test(prelude))
         start = at = at + 1
         continue
       }
       if (/^@(?:supports|layer|container|document|scope|starting-style)\b/i.test(prelude)) {
         groups.push(applies && !/^@starting-style/i.test(prelude))
+        darkGroups.push(false)
         start = at = at + 1
         continue
       }

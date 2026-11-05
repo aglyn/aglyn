@@ -149,7 +149,9 @@ describe('aglyn.com home', () => {
       'Frequently asked questions',
       'Get started',
     ])
-    expect(layout.sections.map((section) => section.band)).toEqual(['plain', 'soft', 'plain', 'soft', 'plain', 'soft', 'plain', 'soft', 'soft', 'soft', 'dark'])
+    // Its grey page is the page: its white bands are the ones set apart (AGL-4152).
+    expect(layout.sections.map((section) => section.band)).toEqual(['soft', 'plain', 'soft', 'plain', 'soft', 'plain', 'soft', 'plain', 'plain', 'plain', 'dark'])
+    expect(layout.sections.map((section) => section.absoluteBand)).toEqual(['plain', 'soft', 'plain', 'soft', 'plain', 'soft', 'plain', 'soft', 'soft', 'soft', undefined])
     expect(layout.sections.every((section) => section.from === 'landmark')).toBe(true)
     expect(layout.sections[10]?.backdrop).toEqual({ kind: 'gradient' })
   })
@@ -259,8 +261,16 @@ describe('aglyn.com home', () => {
       header: '#f5f5f5',
       // Its one dark band, the closing call, sits on #161c21 under its gradient (AGL-4152).
       darkBackground: '#161c21',
-      // MUI's buttons, set in capitals by their own text-transform.
+      // Its white bands, set apart from its grey page; its dark scheme is in its script, not its stylesheets.
+      paperBackground: '#ffffff',
+      darkPaper: null,
+      // MUI's buttons, set in capitals by their own text-transform; its links, and the text buttons it draws them as, in sentence case.
       buttonCase: 'upper',
+      outlinedCase: 'upper',
+      textCase: 'none',
+      // Its outlined buttons are its links' deep blue, and leave the ground showing.
+      buttonOutline: '#0077ad',
+      outlinedFill: null,
       // Five of its nine eyebrows are magenta, a color none of its words, buttons or links are (AGL-4138).
       eyebrow: '#e040fb',
     })
@@ -681,7 +691,7 @@ describe('the look facts Keep my site keeps (AGL-4152)', () => {
 
   it('reads aglyn.com’s dark ground, its buttons’ capitals and its hero heading’s 920 px measure', () => {
     const { layout } = read('home')
-    expect(layout.look).toMatchObject({ darkBackground: '#161c21', buttonCase: 'upper' })
+    expect(layout.look).toMatchObject({ darkBackground: '#161c21', paperBackground: '#ffffff', darkPaper: null, buttonCase: 'upper', outlinedCase: 'upper', textCase: 'none', buttonOutline: '#0077ad', outlinedFill: null })
     // The section runs 1536 px; its heading is held to 920.
     expect(layout.sections[0]).toMatchObject({ width: 1536, hero: { picture: 'below', measure: 920 } })
   })
@@ -690,7 +700,7 @@ describe('the look facts Keep my site keeps (AGL-4152)', () => {
     const layout = slate()
     expect(layout.sections.map((section) => [section.band, section.background])).toEqual([
       ['dark', '#2b2f36'],
-      ['soft', '#f5f5f5'],
+      ['plain', '#f5f5f5'],
       ['dark', '#2b2f36'],
       ['dark', '#1b1e23'],
     ])
@@ -700,6 +710,47 @@ describe('the look facts Keep my site keeps (AGL-4152)', () => {
     expect(siteImportLookOfHtml(SITE_LOOK_SLATE_HTML, SITE_LOOK_SLATE_URL)).toEqual(layout.look)
   })
 
+  it('reads a light band against the page’s ground, not by its own lightness', () => {
+    const html = SITE_LOOK_SLATE_HTML.replace('.band { padding: 64px 24px; }', '.band { padding: 64px 24px; } .white { background-color: #ffffff; } .near { background-color: #f6f6f6; } .tint { background-color: #ece4d6; }')
+      .replace('<section class="band slate"><div class="column"><h2>How it works', '<section class="band white"><div class="column"><h2>How it works')
+      .replace('<section class="band night">', '<section class="band near">')
+    const page = extractSiteImportPage(html, SITE_LOOK_SLATE_URL, () => true, { structure: true })
+    const layout = siteImportLayout(page as Parameters<typeof siteImportLayout>[0])
+    // On a #f5f5f5 page: the page's own and its near twin are `plain`, white is set apart.
+    expect(layout?.sections.map((section) => [section.band, section.absoluteBand])).toEqual([
+      ['dark', undefined],
+      ['plain', 'soft'],
+      ['soft', 'plain'],
+      ['plain', 'soft'],
+    ])
+    expect(layout?.look.paperBackground).toBe('#ffffff')
+    // On a page that sets no fill the page is white: a grey is set apart, as it always read.
+    const white = extractSiteImportPage(html.replace('background-color: #f5f5f5; color: #111111;', 'color: #111111;'), SITE_LOOK_SLATE_URL, () => true, { structure: true })
+    const on = siteImportLayout(white as Parameters<typeof siteImportLayout>[0])
+    expect(on?.sections.slice(2).map((section) => [section.band, section.absoluteBand])).toEqual([
+      ['plain', undefined],
+      ['soft', undefined],
+    ])
+  })
+
+  it('reads each section’s fill in the page’s dark scheme, where its stylesheets say one', () => {
+    const layout = slate()
+    // The page's own fill under a media query reaches the band that sits on it; a band's under a class on the root; a slate band it does not change has none.
+    expect(layout.sections.map((section) => section.darkBackground)).toEqual([undefined, '#2b2f36', undefined, '#14171b'])
+    expect(layout.look.darkBackground).toBe('#2b2f36')
+    // A page that says nothing of one has none: its dark scheme, if any, is its script's.
+    expect(read('home').layout.sections.every((section) => section.darkBackground === undefined)).toBe(true)
+    expect(read('home').layout.look.darkPaper).toBeNull()
+  })
+
+  it('reads each button style’s case and an outlined button’s color', () => {
+    const outlined = SITE_LOOK_SLATE_HTML.replace('.cta {', '.ghost { display: inline-block; padding: 12px 24px; border: 1px solid #0077ad; color: #0077ad; text-transform: uppercase; } .cta {').replace('<a class="cta" href="/start">See the plans', '<a class="ghost" href="/start">See the plans')
+    expect(siteImportLookOfHtml(outlined, SITE_LOOK_SLATE_URL)).toMatchObject({ outlinedCase: 'upper', buttonOutline: '#0077ad', outlinedFill: null })
+    expect(siteImportLookOfHtml(SITE_LOOK_SLATE_HTML, SITE_LOOK_SLATE_URL)).toMatchObject({ outlinedCase: null, buttonOutline: null })
+    // A link standing on its own is drawn as a text button, so its case is theirs.
+    expect(siteImportLookOfHtml(SITE_LOOK_SLATE_HTML.replace('<a class="cta" href="/start">See the plans', '<a href="/start">See the plans'), SITE_LOOK_SLATE_URL)).toMatchObject({ textCase: 'none' })
+  })
+
   it('holds the hero’s heading to its own 12 em, narrower than its 1200 px column', () => {
     const [hero] = slate().sections
     expect(hero?.width).toBe(1200)
@@ -707,7 +758,7 @@ describe('the look facts Keep my site keeps (AGL-4152)', () => {
   })
 
   it('keeps no measure for a heading that runs its section’s width, and no dark ground for a page with no dark band', () => {
-    const html = SITE_LOOK_SLATE_HTML.replace('h1 { font-size: 64px; max-width: 12em; }', 'h1 { font-size: 64px; }').replace(/ (?:slate|night)"/g, '"')
+    const html = SITE_LOOK_SLATE_HTML.replace('h1 { font-size: 64px; max-width: 12em; }', 'h1 { font-size: 64px; }').replace(/@media \(prefers-color-scheme: dark\)[^\n]*\n/, '').replace(/ (?:slate|night)"/g, '"')
     const page = extractSiteImportPage(html, SITE_LOOK_SLATE_URL, () => true, { structure: true })
     const layout = siteImportLayout(page as Parameters<typeof siteImportLayout>[0])
     expect(layout?.sections[0]?.hero).toEqual({ picture: null })

@@ -348,6 +348,7 @@ to confirm, and choose **Erase permanently**. It cannot be undone.
 | --- | --- |
 | **Removed across the workspace** | The contact record on every site — profile, notes, tags, timeline and custom fields; every lead for the address, on every site; the tasks and logged activities filed against the person; the person on any email audience list; the campaign delivery log for the address, with its opens and clicks. |
 | **Kept, with the person taken off** | Orders and bookings stay as financial records with the name, email, phone and addresses removed. Deals stay on the pipeline, unlinked from the person. Companies stay, with their contact count reduced. |
+| **Kept as they are, with the person still on them** | Listed only when your workspace holds such records. Signed waivers stay as signed for your [waiver retention period](../commerce-and-bookings/commerce/waivers.md#keeping-signed-waivers), then are deleted. |
 | **Not reached — finish these by hand** | Form submissions — delete them from the Inbox. A site member account — close it from the site's Members page. |
 
 Filing the same address again does no harm: a request already waiting is answered, not

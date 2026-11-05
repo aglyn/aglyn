@@ -33,6 +33,7 @@ import type { ReactNode } from 'react'
 const mockAuthorizedFetch = jest.fn()
 const mockEnqueueSnackbar = jest.fn()
 const mockOpenExport = jest.fn()
+const mockUsePersonErasureNotes = jest.fn()
 /** The launcher the shell hands down; `null` outside the shell. */
 let mockLauncher: { openExport: jest.Mock; can: (action: string, target: { resource: string }) => boolean } | null
 
@@ -47,6 +48,9 @@ jest.mock('@aglyn/shared-ui-snackstack', () => ({
 }))
 jest.mock('@aglyn/tenant-feature-instance', () => ({
   useUser: () => ({ data: { uid: 'owner-1' } }),
+}))
+jest.mock('@aglyn/tenant-feature-instance/hooks/use-person-erasure-notes', () => ({
+  usePersonErasureNotes: (...args: unknown[]) => mockUsePersonErasureNotes(...args),
 }))
 jest.mock('../hooks/use-org-scope', () => ({
   useOrgScope: () => ({ currentOrg: { $id: 'org-1' } }),
@@ -80,6 +84,7 @@ beforeEach(() => {
   mockAuthorizedFetch.mockReset()
   mockEnqueueSnackbar.mockReset()
   mockOpenExport.mockReset()
+  mockUsePersonErasureNotes.mockReset().mockReturnValue({ lines: [], unavailable: false })
   mockExportable = new Set(['crm.contacts', 'crm.leads'])
   mockLauncher = {
     openExport: mockOpenExport,
@@ -180,6 +185,35 @@ describe('erasing a person', () => {
     expect(eraseButton().disabled).toBe(true)
     fireEvent.click(eraseButton())
     expect(mockAuthorizedFetch).not.toHaveBeenCalled()
+  })
+
+  describe('what a plugin says it keeps', () => {
+    const HEADING = 'Kept as they are, with the person still on them'
+    const UNAVAILABLE = /could not be checked right now/
+
+    it('asks about this workspace, and prints each sentence under its own heading', () => {
+      mockUsePersonErasureNotes.mockReturnValue({ lines: ['Tickets stay as issued.'], unavailable: false })
+      render(<OrgPrivacyCard />)
+      expect(mockUsePersonErasureNotes).toHaveBeenCalledWith({ uid: 'owner-1' }, 'org-1')
+      expect(screen.getByText(HEADING)).toBeTruthy()
+      expect(screen.getByText('Tickets stay as issued.')).toBeTruthy()
+      expect(screen.queryByText(UNAVAILABLE)).toBeNull()
+    })
+
+    it('prints no heading when no plugin has anything to say', () => {
+      render(<OrgPrivacyCard />)
+      expect(screen.queryByText(HEADING)).toBeNull()
+      expect(screen.queryByText(UNAVAILABLE)).toBeNull()
+    })
+
+    it('says so when a note could not be read, and never holds the button back', () => {
+      mockUsePersonErasureNotes.mockReturnValue({ lines: [], unavailable: true })
+      render(<OrgPrivacyCard />)
+      expect(screen.getByText(UNAVAILABLE)).toBeTruthy()
+      type('Email address', 'jane@example.com')
+      type('Type the email address again', 'jane@example.com')
+      expect(eraseButton().disabled).toBe(false)
+    })
   })
 
   it('shows the route’s refusal in its own words', async () => {

@@ -147,6 +147,12 @@ export function modifierGroupsProblem(groups: unknown): string | null {
   return null
 }
 
+/** How a variant is named in a choice's price list, in the editor and in an import file. */
+export function variantPriceLabel(variant: { options?: Record<string, string> }): string {
+  const values = Object.values(variant.options ?? {}).filter(Boolean)
+  return values.length ? values.join(' / ') : 'Default'
+}
+
 /** The product's groups, or none when they are missing or malformed. */
 export function productModifierGroups(product: {
   modifierGroups?: unknown

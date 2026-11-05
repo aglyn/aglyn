@@ -28,9 +28,11 @@
  */
 
 import { compress } from '@aglyn/aglyn/app-utils/compress'
+import { DEFAULT_SITE_THEME } from '@aglyn/aglyn/app-utils/default-site'
 import { decodeStoredNodes } from '@aglyn/aglyn/app-utils/stored-nodes'
 import {
   SITE_IMPORT_REPLAY_HOME_ANSWER,
+  SITE_IMPORT_REPLAY_HOME_ANSWER_1105,
   siteImportReplayDocument,
   siteImportReplayFrame,
   siteImportReplayPage,
@@ -39,7 +41,9 @@ import {
 } from '../site-import/fixtures/site-import-fidelity-replay'
 import { SITE_LAYOUT_PAGES, type SiteLayoutPageName } from '../site-import/fixtures/site-layout-recordings'
 import { AI_LAYOUT_ALIGNS, AI_LAYOUT_DESIGN_BANDS, AI_LAYOUT_DESIGN_GROUP_KINDS, AI_LAYOUT_DESIGN_SOURCE, AI_LAYOUT_GROUP_STYLES, AI_LAYOUT_IMPORT_HEROES } from '../layout-language/ai-layout-language'
+import { aiSiteImportStyle } from '../jobs/ai-site-import-look'
 import type { SiteImportGroupKind, SiteImportLayoutNode } from './ai-site-import'
+import { aiSiteTheme, type AiSiteStyle } from './ai-site-look'
 import {
   SITE_IMPORT_FIDELITY_THRESHOLD,
   SITE_IMPORT_IMPROVE_FREE,
@@ -97,7 +101,7 @@ const WHOLE: Record<
 > = {
   // Home's and /product's film are the Video element (AGL-4140): its play mark is its own, no lone icon,
   // and Home's "Watch the 40-second film" is a button that plays it.
-  home: { sections: 11, rows: 2, groups: { cards: 28, steps: 3, list: 12, faq: 11 }, tables: 0, tabs: 0, pictures: 2, framing: 2, icons: 47, lone: 0, buttons: 3, unlinked: 0, headings: 10, forms: 0, videos: 1, words: 1581 },
+  home: { sections: 11, rows: 2, groups: { cards: 28, steps: 3, list: 12, faq: 11 }, tables: 0, tabs: 0, pictures: 2, framing: 2, icons: 47, lone: 0, buttons: 3, unlinked: 0, headings: 10, forms: 0, videos: 1, words: 1579 },
   product: { sections: 11, rows: 1, groups: { logos: 8, cards: 19, steps: 3, stats: 4, pricing: 3, faq: 7 }, tables: 0, tabs: 0, pictures: 3, framing: 3, icons: 44, lone: 0, buttons: 6, unlinked: 0, headings: 10, forms: 0, videos: 1, words: 1012 },
   pricing: { sections: 7, rows: 1, groups: { pricing: 11, cards: 69, faq: 11 }, tables: 3, tabs: 3, pictures: 0, framing: 0, icons: 24, lone: 0, buttons: 4, unlinked: 0, headings: 9, forms: 0, videos: 0, words: 2292 },
   livePricing: { sections: 7, rows: 1, groups: { pricing: 11, cards: 69, faq: 11 }, tables: 3, tabs: 3, pictures: 0, framing: 0, icons: 24, lone: 0, buttons: 4, unlinked: 0, headings: 9, forms: 0, videos: 0, words: 2292 },
@@ -166,7 +170,7 @@ describe.each(Object.keys(SITE_LAYOUT_PAGES) as SiteLayoutPageName[])('%s: score
 
 describe('aglyn.com Home, the rows §2.5 of the plan holds it to', () => {
   it('draws its bands as the source does, its closer dark', () => {
-    expect(scored('home').bands.drawn).toEqual(['plain', 'soft', 'plain', 'soft', 'plain', 'soft', 'plain', 'soft', 'soft', 'soft', 'dark'])
+    expect(scored('home').bands.drawn).toEqual(['soft', 'plain', 'soft', 'plain', 'soft', 'plain', 'soft', 'plain', 'plain', 'plain', 'dark'])
     expect(scored('home').bands.drawn).toEqual(scored('home').bands.read)
   })
 
@@ -844,9 +848,9 @@ describe('Keep my site sees each of the 11/4 Home gaps (AGL-4152)', () => {
   /** A theme that keeps all of it, as lane D's Keep my site draws one. */
   const KEPT: SiteImportFidelityTheme = {
     from: 'theme',
-    light: { ground: '#ffffff', paper: '#f5f5f5', brand: '#00b0ff', onBrand: '#0b1f2a', ink: '#000000' },
+    light: { ground: '#f5f5f5', paper: '#ffffff', brand: '#0077ad', onBrand: '#ffffff', ink: '#000000' },
     dark: { ground: '#2b2f36', paper: '#353a42', brand: '#00b0ff', onBrand: '#0b1f2a', ink: '#ffffff' },
-    button: { fill: '#00b0ff', label: '#0b1f2a', case: 'upper' },
+    button: { fill: '#00b0ff', label: '#0b1f2a', case: 'upper', outlined: { text: 'primary.main', border: 'primary.main', fill: 'transparent', case: 'upper' }, text: { case: 'none' } },
   }
   /** The built Home with its hero words held to a share of their section, as the compile sets them. */
   const heldTo = (share: string) =>
@@ -861,7 +865,9 @@ describe('Keep my site sees each of the 11/4 Home gaps (AGL-4152)', () => {
     const report = keep(heldTo('50%'), KEPT)
     expect(report.ground).toMatchObject({ source: 11, built: 11, ratio: 1, theme: 'theme' })
     expect(report.measure).toEqual({ source: 1, built: 1, ratio: 1, shares: { source: 0.5, built: 0.5 } })
-    expect(report.buttons).toMatchObject({ source: 3, built: 3, ratio: 1, case: { source: 3, built: 3, ratio: 1 }, fill: { ratio: 1 } })
+    // Its filled and outlined buttons, and the link it draws as a text button.
+    expect(report.buttons).toMatchObject({ source: 4, built: 4, ratio: 1, case: { source: 4, built: 4, ratio: 1 }, fill: { ratio: 1 }, outline: { source: 1, built: 1, ratio: 1 } })
+    expect(report.darkGround?.ratio).toBe(1)
     expect(report.readable?.ratio).toBe(1)
     expect(report.score).toBe(1)
     expect(siteImportFidelityHolds(report)).toBe(true)
@@ -877,9 +883,11 @@ describe('Keep my site sees each of the 11/4 Home gaps (AGL-4152)', () => {
   })
 
   it('sentence-case buttons where the source sets them in capitals', () => {
-    const report = keep(heldTo('50%'), { ...KEPT, button: { ...KEPT.button, case: 'none' } })
-    expect(report.buttons.case).toEqual({ source: 3, built: 0, ratio: 0 })
-    expect(report.buttons.built).toBe(0)
+    const sentence = { ...KEPT, button: { ...KEPT.button, case: 'none' as const, outlined: { ...KEPT.button.outlined, text: 'primary.main', border: 'primary.main', fill: 'transparent', case: 'none' as const } } }
+    const report = keep(heldTo('50%'), sentence)
+    // Its link's text button is in sentence case in the source too.
+    expect(report.buttons.case).toEqual({ source: 4, built: 1, ratio: 0.25 })
+    expect(report.buttons.built).toBe(1)
     expect(report.lowest).toBe('buttons')
     expect(siteImportFidelityHolds(report)).toBe(false)
     // A button that sets its own case is read by its own.
@@ -888,13 +896,14 @@ describe('Keep my site sees each of the 11/4 Home gaps (AGL-4152)', () => {
       changed(heldTo('50%'), (nodes) => {
         for (const id of idsOf(nodes, (node) => node.componentId === 'muiButton')) (nodes[id] as Nodes[string]).sx = { ...(nodes[id] as Nodes[string]).sx, textTransform: 'uppercase' }
       }),
-      { finish: 'keep', theme: { ...KEPT, button: { ...KEPT.button, case: 'none' } } },
+      { finish: 'keep', theme: sentence },
     )
-    expect(own.buttons.case?.ratio).toBe(1)
+    // All four now in capitals: its link's text button is the one out.
+    expect(own.buttons.case).toEqual({ source: 4, built: 3, ratio: 0.75 })
   })
 
   it('a deepened button fill: the cyan drawn as #0970a4', () => {
-    const report = keep(heldTo('50%'), { ...KEPT, light: { ...KEPT.light, brand: '#0970a4', onBrand: '#ffffff' }, button: { fill: null, label: null, case: 'upper' } })
+    const report = keep(heldTo('50%'), { ...KEPT, light: { ...KEPT.light, brand: '#0970a4', onBrand: '#ffffff' }, button: { ...KEPT.button, fill: null, label: null } })
     expect(report.buttons.fill?.built).toBeLessThan(report.buttons.fill?.source as number)
     expect(report.buttons.ratio).toBeLessThan(1)
     expect(report.lowest).toBe('buttons')
@@ -911,12 +920,14 @@ describe('Keep my site sees each of the 11/4 Home gaps (AGL-4152)', () => {
   })
 
   it('holds the recorded page’s own ground and fill on the theme the look pass now draws', () => {
-    // Keep's look keeps its dark band's own ground. Its 10/29 white label cannot be read on its cyan, so the
-    // reading rule deepens that fill, and a fill the source's own label cannot be read on is not a loss.
+    // Keep's look keeps its dark band's own ground and its bands' order against the page. Its white label cannot be
+    // read on its cyan, so the cyan stays and the label takes the side that reads.
     const theme = siteImportReplayTheme('home')
     const report = siteImportFidelity(page('home').source, page('home').tree, { finish: 'keep', theme })
     expect(report.ground?.ratio).toBe(1)
+    expect(report.darkGround?.ratio).toBe(1)
     expect(report.buttons.fill?.ratio).toBe(1)
+    expect(report.buttons.fill?.source).toBeGreaterThan(0)
   })
 
   it('leaves all four free under Improve it', () => {
@@ -926,6 +937,121 @@ describe('Keep my site sees each of the 11/4 Home gaps (AGL-4152)', () => {
     expect(report.ground?.ratio).toBeLessThan(1)
     expect(report.measure?.ratio).toBe(0)
     expect(siteImportFidelityHolds(report)).toBe(true)
+  })
+})
+
+describe('Keep my site sees each of the 11/5 Home gaps it scored 1.00 past (AGL-4152)', () => {
+  /** The base the 11/5 import drew on, in the shape its preset draws an outlined and a text button: on the paper, a hairline border, the page's words. */
+  const HAIRLINE_BASE = {
+    ...DEFAULT_SITE_THEME,
+    components: {
+      MuiButton: {
+        variants: [
+          { props: { variant: 'outlined', color: 'primary' }, sx: { bgcolor: 'background.paper', borderColor: 'divider', color: 'text.primary' } },
+          { props: { variant: 'text', color: 'primary' }, sx: { color: 'text.primary' } },
+        ],
+      },
+    },
+  } as typeof DEFAULT_SITE_THEME
+  /** The stored 11/5 theme, recorded: the page's grey and its dark kept, the brand deepened, every button style the base's. */
+  const STORED = siteImportFidelityThemeOf({
+    colorSchemes: {
+      light: { background: { default: '#f5f5f5', paper: '#fdfefe' }, primary: { main: '#0970a4', contrastText: '#ffffff', light: '#5fa4d4' }, text: { primary: '#121c23' }, divider: '#d7dfe5' },
+      dark: { background: { default: '#161c21', paper: '#20272c' }, primary: { main: '#00b0ff', contrastText: '#031826', light: '#66c8ff' }, text: { primary: '#eaeff3' }, divider: '#394248' },
+    },
+    components: HAIRLINE_BASE.components,
+    typography: { variants: { button: { textTransform: 'uppercase' } } },
+  }) as SiteImportFidelityTheme
+  const answer = SITE_IMPORT_REPLAY_HOME_ANSWER_1105 as Record<string, unknown>
+  /** What the live page was: the answer's opening, its bands read by their color alone. */
+  const asDrawn = () => page('home', { answer, finish: 'improve' })
+  const kept = () => page('home', { answer, finish: 'keep' })
+  const score = (tree: SiteImportFidelityTree, theme: SiteImportFidelityTheme | null) => siteImportFidelity(page('home').source, tree, { finish: 'keep', theme })
+  const theme = () => siteImportFidelityThemeOf(aiSiteTheme(aiSiteImportStyle(null, { seed: 7, description: 'Aglyn', facts: page('home').source.layout.look, finish: 'keep' }) as AiSiteStyle, HAIRLINE_BASE), 'style') as SiteImportFidelityTheme
+
+  it('the opening moved: centered words drawn at the start, the heading across its section', () => {
+    const red = score(asDrawn().tree, STORED)
+    expect(red.align?.built).toBe((red.align?.source as number) - 1)
+    expect(red.measure).toMatchObject({ built: 0, shares: { source: 0.719, built: 1 } })
+    expect(siteImportFidelityHolds(red)).toBe(false)
+    const green = score(kept().tree, theme())
+    expect(green.align?.ratio).toBe(1)
+    expect(green.measure?.ratio).toBe(1)
+  })
+
+  it('two near whites swapped: every ground within ΔE 0.05, every band on the wrong side of its page', () => {
+    const red = score(asDrawn().tree, STORED)
+    expect(red.ground?.worst).toBeLessThanOrEqual(0.05)
+    expect(red.ground?.built).toBeLessThan(red.ground?.source as number)
+    expect(red.lowest).not.toBeNull()
+    const green = score(kept().tree, theme())
+    expect(green.ground).toMatchObject({ source: 11, built: 11 })
+  })
+
+  it('the dark scheme: the hero on the page and the page’s sections on the paper, where the source has them the other way', () => {
+    const red = score(asDrawn().tree, STORED)
+    expect(red.darkGround?.built).toBeLessThan(red.darkGround?.source as number)
+    const green = score(kept().tree, theme())
+    expect(green.darkGround).toMatchObject({ source: 11, built: 11, ratio: 1 })
+    // Its own dark fill, where its stylesheets say one, is held by ΔE.
+    const { source, tree } = kept()
+    const read = { ...source, layout: { ...source.layout, sections: source.layout.sections.map((section, index) => (index === 0 ? { ...section, darkBackground: '#6a7680' } : section)) } }
+    const off = siteImportFidelity(read, tree, { finish: 'keep', theme: theme() })
+    expect(off.darkGround?.built).toBe(10)
+    expect(off.darkGround?.worst).toBeGreaterThan(0.05)
+    expect(siteImportFidelityHolds(off)).toBe(false)
+  })
+
+  it('a deepened fill, whatever the source’s own label could read on it', () => {
+    expect(page('home').source.layout.look.buttonText).toBe('#ffffff')
+    const red = score(kept().tree, STORED)
+    expect(red.buttons.fill?.source).toBeGreaterThan(0)
+    expect(red.buttons.fill?.built).toBeLessThan(red.buttons.fill?.source as number)
+    expect(score(kept().tree, theme()).buttons.fill?.ratio).toBe(1)
+  })
+
+  it('a text button in capitals where the source’s link is not: each style its own case, and a link drawn as a button joins the count', () => {
+    const red = score(kept().tree, STORED)
+    expect(red.buttons.case?.built).toBeLessThan(red.buttons.case?.source as number)
+    expect(red.buttons.source).toBeGreaterThan(page('home').source.layout.sections.flatMap((section) => section.nodes).filter((node) => node.kind === 'line' && node.button && node.button === 'quiet').length)
+    expect(score(kept().tree, theme()).buttons.case?.ratio).toBe(1)
+  })
+
+  it('an outlined button filled, in grey and the page’s words: measured on the base’s own style, held by the look over it', () => {
+    const red = score(kept().tree, STORED)
+    expect(red.buttons.outline).toEqual({ source: 1, built: 0, ratio: 0 })
+    expect(red.buttons.ratio).toBeLessThan(1)
+    const green = score(kept().tree, theme())
+    expect(green.buttons.outline).toEqual({ source: 1, built: 1, ratio: 1 })
+    expect(siteImportFidelityHolds(green)).toBe(true)
+    // Grey on the paper with its words the page's, at last the same as what the eye sees: each part alone reds it.
+    const only = (outlined: Partial<NonNullable<SiteImportFidelityTheme['button']['outlined']>>) => {
+      const base = theme()
+      return score(kept().tree, { ...base, button: { ...base.button, outlined: { ...(base.button.outlined as NonNullable<SiteImportFidelityTheme['button']['outlined']>), ...outlined } } }).buttons.outline?.ratio
+    }
+    expect(only({ fill: 'background.paper' })).toBe(0)
+    expect(only({ border: 'divider' })).toBe(0)
+    expect(only({ text: 'text.primary' })).toBe(0)
+  })
+
+  it('holds every recorded page, and the 11/5 answer’s Home, on the theme the look draws', () => {
+    const names = ['home', 'product', 'pricing', 'livePricing', 'contact', 'post', 'blog', 'pottery', 'bakery'] as const
+    for (const name of names) {
+      const built = page(name, { finish: 'keep', ...(name === 'contact' ? { forms: [{ id: 'form-contact', name: 'Contact' }] } : {}) })
+      const report = siteImportFidelity(built.source, built.tree, { finish: 'keep', theme: siteImportReplayTheme(name, 'keep') })
+      expect([name, report.score, report.lowest]).toEqual([name, 1, null])
+      expect([name, siteImportFidelityHolds(report)]).toEqual([name, true])
+    }
+    const home = kept()
+    expect(siteImportFidelityHolds(siteImportFidelity(home.source, home.tree, { finish: 'keep', theme: siteImportReplayTheme('home', 'keep') }))).toBe(true)
+  })
+
+  it('leaves Improve it’s score as it was: the answer’s opening, its bands by their color, no measure added', () => {
+    const report = siteImportFidelity(asDrawn().source, asDrawn().tree, { finish: 'improve', theme: STORED })
+    expect(report).not.toHaveProperty('darkGround')
+    expect(report.buttons).not.toHaveProperty('outline')
+    expect(report.score).toBe(1)
+    expect(report.free).toEqual([...SITE_IMPORT_IMPROVE_FREE])
   })
 })
 
@@ -1139,10 +1265,18 @@ describe('the theme a page is drawn in (AGL-4152)', () => {
   it('reads each scheme’s grounds, brand and ink, and a filled button’s own fill, label and case', () => {
     expect(siteImportFidelityThemeOf(theme)).toEqual({
       from: 'theme',
-      light: { ground: '#ffffff', paper: '#f5f5f5', brand: '#0970a4', onBrand: '#ffffff', ink: '#111111' },
-      dark: { ground: '#2b2f36', paper: '#353a42', brand: '#7fd3ff', onBrand: '#0b1f2a', ink: '#f5f5f5' },
+      light: { ground: '#ffffff', paper: '#f5f5f5', brand: '#0970a4', onBrand: '#ffffff', ink: '#111111', brandLight: null, divider: null },
+      dark: { ground: '#2b2f36', paper: '#353a42', brand: '#7fd3ff', onBrand: '#0b1f2a', ink: '#f5f5f5', brandLight: null, divider: null },
       // The component's case over the Text Style's.
-      button: { fill: '#00b0ff', label: '#ffffff', case: 'upper' },
+      button: {
+        fill: '#00b0ff',
+        label: '#ffffff',
+        fillDark: '#00b0ff',
+        labelDark: '#0b1f2a',
+        case: 'upper',
+        outlined: { text: null, border: null, fill: null, case: 'upper' },
+        text: { case: 'upper' },
+      },
     })
   })
 
