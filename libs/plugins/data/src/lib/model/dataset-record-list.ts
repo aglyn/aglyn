@@ -32,6 +32,25 @@ import { BUNDLE_ID } from '../constants/bundle-common'
 import { datasetIndexedRecord } from './dataset-record'
 
 /**
+ * The `visibleTo` tokens a list of datasets asks for, or `null` for no filter.
+ *
+ * Narrowed to a site, the site decides, whoever is looking: an owner who
+ * reaches every dataset still sees only that site's and the workspace-wide
+ * ones on that site's pages. With no site, the member's own reach decides:
+ * their scope tokens, or `null` for an organization-wide member, who reads
+ * everything.
+ *
+ * A site's tokens are a subset of those of anyone who can open the site, so
+ * the query also satisfies the `canReadScoped` rule for a site collaborator.
+ */
+export function datasetListScope(request: {
+  hostId?: string | null
+  memberScope?: readonly string[] | null
+}): readonly string[] | null {
+  return request.hostId ? scopeTokensForHost(request.hostId) : (request.memberScope ?? null)
+}
+
+/**
  * The workspace's datasets, listed in the console for another plugin's picker
  * or check (AGL-3080) — an automation step choosing the dataset it writes to,
  * a reference check confirming one still exists.
@@ -54,7 +73,7 @@ import { datasetIndexedRecord } from './dataset-record'
 export const datasetRecordListSource: PluginRecordListSource = {
   query(firestore, request) {
     if (!request.orgId) return null
-    const scope = request.hostId ? scopeTokensForHost(request.hostId) : (request.memberScope ?? null)
+    const scope = datasetListScope(request)
     return query(
       collection(firestore, 'orgs', request.orgId, 'datasets'),
       ...(request.installedFrom ? [where('source.listingId', '==', request.installedFrom)] : []),
