@@ -36,6 +36,13 @@ struct SellScreen: View {
   var initialSection: String?
   @State private var section = SellSection.profile
   @State private var profile = LiveDocument()
+  // Held here, on the Form: a `.task` or `.sheet` inside a Form's Group applies to each row, so a tap on a row would read
+  // the list again and take the row, and its menu, away.
+  @State private var listings = LiveQuery()
+  @State private var listingsRunner = ActionRunner()
+  @State private var editing: SellerListing?
+  /// Making a plugin private or public, or unpublishing or republishing a listing: asked first, with the agreement (AGL-4105).
+  @State private var change: SellerListingChange?
 
   var body: some View {
     Group {
@@ -53,16 +60,26 @@ struct SellScreen: View {
             // Each section asks its own permission, and says which when it is missing.
             switch section {
             case .profile: ProfileSection(context: context, orgID: orgID, profile: profile, canManage: context.can(publisherProfileKey))
-            case .listings: ListingsSection(context: context, orgID: orgID, canManage: context.can(manageListingsKey), canPublish: context.can(publishKey))
+            case .listings:
+              ListingsSection(
+                context: context, live: listings, runner: listingsRunner, editing: $editing, change: $change,
+                canManage: context.can(manageListingsKey), canPublish: context.can(publishKey))
             case .payouts: PayoutsSection(context: context, orgID: orgID, profile: profile, canManage: context.can(payoutsKey)) { profile.start(context.firestore, publisherProfilePath(orgID: orgID)) }
             case .sales: SalesSection(context: context, orgID: orgID, profile: profile)
             }
           }
           .formStyle(.aglynGrouped)
           .accessibilityIdentifier("sell-\(section.rawValue)")
+          .sheet(item: $editing) { listing in
+            EditListingSheet(context: context, listing: listing, runner: listingsRunner, api: SellerAPI(api: context.api, orgID: orgID)) { editing = nil }
+          }
+          .sheet(item: $change) { change in
+            ListingChangeSheet(change: change, runner: listingsRunner, api: SellerAPI(api: context.api, orgID: orgID)) { self.change = nil }
+          }
         }
         .background(AglynGround())
         .task(id: orgID) { await profile.bind(context.firestore, publisherProfilePath(orgID: orgID)) }
+        .task(id: orgID) { await listings.bind(context.firestore, sellerListingsQuery(orgID: orgID)) }
         .onAppear { if let initialSection, let start = SellSection(rawValue: initialSection) { section = start } }
       } else {
         AglynEmptyState("Pick a workspace to sell from", systemImage: "storefront")
@@ -151,18 +168,15 @@ private struct ProfileSection: View {
 
 private struct ListingsSection: View {
   let context: NativePluginContext
-  let orgID: String
+  let live: LiveQuery
+  let runner: ActionRunner
+  @Binding var editing: SellerListing?
+  @Binding var change: SellerListingChange?
   let canManage: Bool
   let canPublish: Bool
-  @State private var live = LiveQuery()
-  @State private var runner = ActionRunner()
-  @State private var editing: SellerListing?
-  /// Making a plugin private or public, or unpublishing or republishing a listing: asked first, with the agreement (AGL-4105).
-  @State private var change: SellerListingChange?
 
   var body: some View {
     let listings = live.state.value.map { $0.map(SellerListing.init).sorted { $0.displayName.lowercased() < $1.displayName.lowercased() } }
-    let api = SellerAPI(api: context.api, orgID: orgID)
     Group {
       if let notice = runner.notice { Section { AglynNotice(notice, tone: .success) } }
       if editing == nil, change == nil, let error = runner.error { Section { AglynNotice(error, tone: .error) } }
@@ -223,13 +237,6 @@ private struct ListingsSection: View {
       } else {
         Section { ProgressView() }
       }
-    }
-    .task(id: orgID) { await live.bind(context.firestore, sellerListingsQuery(orgID: orgID)) }
-    .sheet(item: $editing) { listing in
-      EditListingSheet(context: context, listing: listing, runner: runner, api: api) { editing = nil }
-    }
-    .sheet(item: $change) { change in
-      ListingChangeSheet(change: change, runner: runner, api: api) { self.change = nil }
     }
   }
 }

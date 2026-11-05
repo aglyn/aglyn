@@ -441,7 +441,11 @@ private struct ListingBody: View {
         }
         actions(state, targets, offered)
         if plugin, offered == nil { AglynNotice("No reviewed version yet: it can be installed once one passes review.", tone: .warning) }
-        if !installable { AglynNotice(context.refusal(context.can(installPluginsKey) ? siteInstallKey : installPluginsKey), tone: .neutral) }
+        if !installable { AglynNotice(
+            canInstall(context)
+              ? "Open one of your sites to install this."
+              : context.refusal(context.can(installPluginsKey) ? siteInstallKey : installPluginsKey),
+            tone: .neutral) }
       }
       Section {
         HStack(spacing: AglynSpace.one) {

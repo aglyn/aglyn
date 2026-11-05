@@ -351,7 +351,10 @@ private fun ListingBody(
         }
       }
       if (plugin && offered == null) NoticeBanner("No reviewed version yet: it can be installed once one passes review.", StatusTone.WARNING)
-      if (!installable) NoticeBanner(permissionRefusalText(if (held.can(INSTALL_PLUGINS_KEY)) SITE_INSTALL_KEY else INSTALL_PLUGINS_KEY), StatusTone.NEUTRAL)
+      if (!installable) NoticeBanner(
+        if (canInstall(held)) "Open one of your sites to install this." else permissionRefusalText(if (held.can(INSTALL_PLUGINS_KEY)) SITE_INSTALL_KEY else INSTALL_PLUGINS_KEY),
+        StatusTone.NEUTRAL,
+      )
     }
     StatRow {
       StatTile("Rating", if (listing.ratingCount > 0 && listing.ratingAverage != null) com.aglyn.pluginhost.jsNumber(listing.ratingAverage) + " ★" else "—", Modifier.weight(1f), if (listing.ratingCount > 0) "${listing.ratingCount} ratings" else "Not yet rated")
