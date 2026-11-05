@@ -395,6 +395,9 @@ What happens next:
 - One request at a time. You can **withdraw** it while it is waiting.
 - Asking and withdrawing are saves like any other: tick the
   [publisher agreement](#the-publisher-agreement) box above the button first.
+- Asking and withdrawing need the **Edit the publisher profile** permission, which the
+  workspace's owners and admins hold by default. Without it the buttons stay off and
+  the card names the permission to ask an organization admin for.
 - If it is **granted**, the Verified publisher badge appears on your listing.
 - If it is **declined**, you are told why, and you can ask again 30 days after
   the decision. A decline is a refusal of the badge, not a verdict on your
@@ -445,6 +448,10 @@ you — answers what an email cannot:
 - **What you confirmed** on the pre-publish checklist for those exact
   bytes, so you can see the claims you already made before making them
   again.
+
+Reading the card needs the **Manage published listings** permission, which the
+workspace's owners and admins hold by default. Without it the card names the
+permission to ask an organization admin for.
 
 Two things it states that you would otherwise have to infer:
 
@@ -774,6 +781,12 @@ account so paid listings can pay you: select **Set up payouts** and finish Strip
 onboarding. The card then says where you stand — payouts enabled, setup still to
 finish in Stripe, or an account to reconnect — and links to your payouts in Stripe. The
 platform fee is 20% per sale, 30% on the Free plan.
+
+Setting up payouts needs the **Manage marketplace payouts** permission, which the
+workspace's owners and admins hold by default. Without it the card still says where
+payouts stand, its button stays off, and it names the permission to ask an organization
+admin for. See
+[Marketplace publisher permissions](../../../workspace-and-billing/teams-and-roles/custom-roles.md#marketplace-publisher-permissions).
 
 ### Purchases and the platform fee {#purchases-and-fees}
 
