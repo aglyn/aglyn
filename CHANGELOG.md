@@ -110,6 +110,11 @@ content on the marketing site and is written separately.
 - fix(native): the Orders lists leave out unpaid quotes under every sort ([AGL-4162](https://linear.app/aglyn/issue/AGL-4162))
 - fix(native): the transfer screens' generator asks data.manage, as #2343 meant ([AGL-4047](https://linear.app/aglyn/issue/AGL-4047))
 
+- fix(besigner): a stale cached page no longer reads as someone else saving ([AGL-4183](https://linear.app/aglyn/issue/AGL-4183))
+- fix(native): a site's Data lists only what that site can use ([AGL-4047](https://linear.app/aglyn/issue/AGL-4047))
+- test(besigner): the cached-copy spec reads what reached the canvas ([AGL-4183](https://linear.app/aglyn/issue/AGL-4183))
+- test(tenant): declare the crawl fixture's three new image markers ([AGL-4152](https://linear.app/aglyn/issue/AGL-4152))
+
 ## v1.11.0 — 2026-11-04
 
 [Compare with the previous release](https://github.com/aglyn/aglyn/compare/v1.10.0...v1.11.0)
