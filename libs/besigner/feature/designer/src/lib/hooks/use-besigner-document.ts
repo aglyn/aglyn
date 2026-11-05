@@ -342,9 +342,15 @@ export interface UseBesignerDocumentResult {
    *
    * Only while the offer is ON SCREEN and can be opened: the refusal points
    * at the banner's Open draft and Discard, and must never point at buttons
-   * that are not there.
+   * that are not there. It also refuses while the draft is still loading
+   * (AGL-4174), when nobody can yet say what a save would run over.
    */
   refuseOverUnopenedDraft: (action: 'save' | 'publish') => boolean
+  /**
+   * Why saving is closed for now, for the toolbar to show (AGL-4174); undefined
+   * when it is open.
+   */
+  saveBlockedReason?: string
   /**
    * Announce a write this editor is about to make to the SAME document
    * outside `handleSave` — component properties are the first (AGL-1247).
@@ -721,6 +727,15 @@ export function useBesignerDocument<TData = unknown>(
     ;(options.notify ?? noopNotify)(BESIGNER_DRAFT_OPEN_WITHHELD_COPY, { variant: 'info' })
   }, [draft.openWithheld, options.notify])
 
+  /**
+   * Why saving is closed for now (AGL-4174). Until the saved draft's read has
+   * answered, the canvas may not hold what the author came to publish, and a
+   * save from it is how a draft gets replaced by an empty page.
+   */
+  const saveBlockedReason = draft.sharedDraftLoading
+    ? `Loading this ${noun}'s saved draft`
+    : undefined
+
   const unopenedDraftOnOffer =
     draft.available &&
     draft.origin === 'shared' &&
@@ -729,6 +744,15 @@ export function useBesignerDocument<TData = unknown>(
   // See `UseBesignerDocumentResult.refuseOverUnopenedDraft`.
   const refuseOverUnopenedDraft = useCallback(
     (action: 'save' | 'publish'): boolean => {
+      // Every way in, not just the toolbar: the File menu and the keyboard
+      // reach these handlers without passing the disabled button.
+      if (saveBlockedReason) {
+        notify(`${saveBlockedReason}. Try again in a moment.`, {
+          variant: 'info',
+          allowDuplicate: true,
+        })
+        return true
+      }
       if (!unopenedDraftOnOffer) return false
       notify(
         action === 'publish'
@@ -740,7 +764,7 @@ export function useBesignerDocument<TData = unknown>(
       )
       return true
     },
-    [unopenedDraftOnOffer, noun, notify],
+    [saveBlockedReason, unopenedDraftOnOffer, noun, notify],
   )
 
   const handleSave = useCallback(async () => {
@@ -1016,6 +1040,7 @@ export function useBesignerDocument<TData = unknown>(
     discardChanges,
     canDiscard: saveAvailable || draft.available || draft.sharedDraftUnopened,
     refuseOverUnopenedDraft,
+    saveBlockedReason,
     markOwnWrite,
     draft,
     jsonOpen,
