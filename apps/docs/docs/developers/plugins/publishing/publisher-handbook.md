@@ -705,6 +705,25 @@ counts the organizations and sites that currently hold a pin — it goes
 down when someone uninstalls. A big gap between the two is churn worth
 investigating.
 
+### Your own listings {#your-own-listings}
+
+Everyone in the workspace that publishes a listing installs it free on that
+workspace's own sites, whatever the listing is: a plugin, component, theme, site
+template, layout, dataset schema, email template or email starter. A site starter
+works the same way: a new site in your workspace starts from it free. That includes
+a private listing, and for plugins and site starters a version still in review, so
+you can try your work before anyone else can.
+
+Free covers your own sites only. Installing your listing on a site in another
+workspace, a client's for example, works as it does for any buyer: that workspace
+needs a license for it, and a paid listing asks for the purchase first. Nobody in the
+publishing workspace can buy its own listings, for any workspace, so someone in the
+other workspace who isn't part of yours makes that purchase. A private listing
+can't be installed outside your workspace at all.
+
+The same holds for taking a new version of a paid listing that is already installed:
+free on your own sites, and covered by that workspace's license anywhere else.
+
 ### The Install card {#install-card}
 
 The **Install** card on a listing's detail page is where an install happens: choose

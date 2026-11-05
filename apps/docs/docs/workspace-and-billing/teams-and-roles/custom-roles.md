@@ -227,8 +227,11 @@ override can grant or deny each one, so an editor can be trusted with the listin
 without the profile or the payouts, or any one of them alone.
 
 Belonging to the publishing workspace is not a permission, so no role grants it or takes
-it away: everyone in the workspace installs its own listings on its sites without buying
-them, and nobody in it can buy or review them.
+it away: everyone in the workspace installs its own listings on the workspace's own sites
+without buying them, and nobody in it can buy or review them. On another workspace's
+sites the same people are buyers like anyone else, so that workspace needs its own
+license. See
+[Your own listings](../../developers/plugins/publishing/publisher-handbook.md#your-own-listings).
 
 ### Automation and domain permissions {#automation-and-domain-permissions}
 
