@@ -127,6 +127,16 @@ data class OrderRow(
   val disputeOpen: Boolean,
 )
 
+/**
+ * An unpaid quote is not an order (`isUnpaidQuote`): it carries no `createdAtMs`, so the default list and every filter leave it
+ * out, and the Order, Channel and Status sorts are the only queries that can reach one. Read from the stored fields, not the
+ * decoded order: a quote with a field this build cannot decode would otherwise come back as a pending order.
+ */
+fun isUnpaidQuote(doc: FirestoreDoc): Boolean = doc.string("channel") == OrderChannel.QUOTE.raw && doc.string("status") == OrderStatus.PENDING.raw
+
+/** A page's rows, less the unpaid quotes. */
+fun orderRows(docs: List<FirestoreDoc>): List<OrderRow> = docs.filterNot(::isUnpaidQuote).map(::orderRow)
+
 fun orderRow(doc: FirestoreDoc): OrderRow {
   val order = hostOrderFrom(doc)
   return OrderRow(

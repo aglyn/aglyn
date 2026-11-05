@@ -115,6 +115,13 @@ enum OrderFilter: String, CaseIterable, Identifiable {
 }
 
 /// The orders page's plan: a chip's clauses, the filters added, a typed word, and the sort asked (newest first by default).
+/// An unpaid quote is not an order (`isUnpaidQuote`): it carries no `createdAtMs`, so the default list and every filter leave
+/// it out, and the Order, Channel and Status sorts are the only queries that can reach one. Read from the stored fields, not
+/// the decoded order: a quote with a field this build cannot decode would otherwise come back as a pending order.
+func isUnpaidQuote(_ doc: FirestoreDocument) -> Bool {
+  doc.string("channel") == OrderChannel.quote.rawValue && doc.string("status") == OrderStatus.pending.rawValue
+}
+
 func ordersPlan(_ filter: OrderFilter, search: String, clauses: [ListFilterRequest] = [], sort: ListQuerySort? = nil) -> ListQueryPlan {
   let words = search.trimmingCharacters(in: .whitespacesAndNewlines)
   return planListQuery(
@@ -182,7 +189,7 @@ final class OrdersModel {
       switch result {
       case .success(let docs):
         self.hasMore = docs.count > window
-        self.rows = docs.prefix(window).map { OrderRow(id: $0.id, order: decodeOrder($0)) }
+        self.rows = docs.prefix(window).filter { !isUnpaidQuote($0) }.map { OrderRow(id: $0.id, order: decodeOrder($0)) }
       case .failure:
         self.failed = true
       }
