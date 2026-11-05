@@ -59,7 +59,7 @@ export function pluginSettingsScreen({ schema, label }) {
     subtitle: `How ${label} behaves for this workspace`,
     icon: 'gearshape|settings',
     scope: 'org',
-    requires: 'org.manager',
+    requires: 'org.can[org.settings]',
     constants: { defaults: schema.defaults },
     load: { settings: { doc: `orgs/{org.id}/pluginSettings/${id}`, optional: true } },
     blocks: [
@@ -117,7 +117,7 @@ export function sitePluginSettingsScreen({ schema, label }) {
     icon: 'gearshape|settings',
     scope: 'site',
     zones: ['sitePluginSettings'],
-    requires: `org.manager && params.pluginId == ${id}`,
+    requires: `site.can[site.manage] && params.pluginId == ${id}`,
     constants: { defaults: schema.defaults },
     load: {
       org: { doc: `orgs/{org.id}/pluginSettings/${id}`, optional: true },

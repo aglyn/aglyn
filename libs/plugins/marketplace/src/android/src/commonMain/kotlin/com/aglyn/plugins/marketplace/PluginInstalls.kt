@@ -465,7 +465,7 @@ fun manifestSettingsScreen(pluginId: String, label: String, manifest: kotlinx.se
       "subtitle" to text("How $label behaves for this workspace"),
       "icon" to text("gearshape|settings"),
       "scope" to text("org"),
-      "requires" to text("org.manager"),
+      "requires" to text("org.can[org.settings]"),
       "constants" to kotlinx.serialization.json.JsonObject(mapOf("defaults" to kotlinx.serialization.json.JsonObject(defaults))),
       "load" to kotlinx.serialization.json.JsonObject(mapOf("settings" to kotlinx.serialization.json.JsonObject(mapOf("doc" to text(doc), "optional" to kotlinx.serialization.json.JsonPrimitive(true))))),
       "blocks" to kotlinx.serialization.json.JsonArray(

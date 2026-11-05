@@ -558,7 +558,7 @@ func manifestSettingsScreen(pluginID: String, label: String, manifest: JSONValue
     "subtitle": .string("How \(label) behaves for this workspace"),
     "icon": "gearshape|settings",
     "scope": "org",
-    "requires": "org.manager",
+    "requires": "org.can[org.settings]",
     "constants": .object(["defaults": .object(schema.defaults)]),
     "load": .object(["settings": .object(["doc": .string(doc), "optional": .bool(true)])]),
     "blocks": .array([

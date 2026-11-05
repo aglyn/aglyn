@@ -1103,11 +1103,18 @@ final class ScreenSpecTests: XCTestCase {
     XCTAssertTrue(sources["audience"] is FirestoreSentinel)  // no source: the key is removed
   }
 
+  func testARefusalInASpecNamesThePermission() {
+    let context: JSONValue = ["app": ["permissionRefusal": ["org.settings": "Your role does not include \"Organization settings\" — ask an organization admin"]]]
+    XCTAssertEqual(
+      ScreenValues.render("{app.permissionRefusal[org.settings]}. You can see what this workspace runs.", in: context),
+      "Your role does not include \"Organization settings\" — ask an organization admin. You can see what this workspace runs.")
+  }
+
   @MainActor
   func testASitePluginScreenWritesOnlyTheFieldsTheSiteOverrides() throws {
     let spec = try XCTUnwrap(CoreScreens.specs.first { $0.id == "core.sitePluginSettings.ai" })
     XCTAssertEqual(spec.zones, ["sitePluginSettings"])
-    XCTAssertEqual(spec.requires, "org.manager && params.pluginId == ai")
+    XCTAssertEqual(spec.requires, "site.can[site.manage] && params.pluginId == ai")
     let form = try XCTUnwrap(spec.blocks.first { $0.type == "form" })
     let submit = try XCTUnwrap(form["submit"].flatMap(ActionSpec.init))
     let fields = try XCTUnwrap(submit.write?["fields"])
@@ -1181,7 +1188,7 @@ final class ScreenSpecTests: XCTestCase {
     let set = try XCTUnwrap(actions.first { $0.id == "set" })
     let turnOn = try XCTUnwrap(actions.first { $0.id == "on" })
     let base: JSONValue = [
-      "org": ["id": "o1", "manager": true],
+      "org": ["id": "o1", "manager": true, "can": ["billing.manage": true]],
       "const": spec.raw["constants"] ?? .null,
       "data": ["addons": [
         "hasSubscription": true, "plan": "pro", "interval": "month", "quantities": ["aiAddon": 3],
@@ -1616,7 +1623,7 @@ final class ScreenSpecTests: XCTestCase {
     let consts = try XCTUnwrap(records.raw["constants"])
     func context(crm: Bool, running: [String]) -> JSONValue {
       [
-        "org": ["id": "o1", "manager": true], "const": consts,
+        "org": ["id": "o1", "manager": true, "can": ["billing.manage": true]], "const": consts,
         "data": [
           "sw": ["rows": .array(running.map { ["id": .string($0), "on": true] })],
           "ent": ["features": ["crm": .bool(crm)]],
@@ -1871,5 +1878,5 @@ final class RoutedTransport: HTTPTransport, @unchecked Sendable {
 
 extension JSONValue {
   /// A copy whose org is a manager, as `org.manager` reads.
-  fileprivate func withManager() -> JSONValue { ScreenContext.with(self, "org", ["manager": true]) }
+  fileprivate func withManager() -> JSONValue { ScreenContext.with(self, "org", ["manager": true, "can": ["billing.manage": true]]) }
 }

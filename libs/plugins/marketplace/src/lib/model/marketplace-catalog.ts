@@ -825,7 +825,7 @@ export function manifestSettingsScreen(pluginId: string, label: string, manifest
     subtitle: `How ${label} behaves for this workspace`,
     icon: 'gearshape|settings',
     scope: 'org',
-    requires: 'org.manager',
+    requires: 'org.can[org.settings]',
     constants: { defaults: schema.defaults },
     load: { settings: { doc: `orgs/{org.id}/pluginSettings/${pluginId}`, optional: true } },
     blocks: [

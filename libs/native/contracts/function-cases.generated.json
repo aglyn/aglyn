@@ -20009,7 +20009,7 @@
                 "optional": true
               }
             },
-            "requires": "org.manager",
+            "requires": "org.can[org.settings]",
             "scope": "org",
             "subtitle": "How Counter behaves for this workspace",
             "title": "Counter settings"
@@ -20209,7 +20209,7 @@
                 "optional": true
               }
             },
-            "requires": "org.manager",
+            "requires": "org.can[org.settings]",
             "scope": "org",
             "subtitle": "How Counter behaves for this workspace",
             "title": "Counter settings"
@@ -21012,7 +21012,7 @@
                 "optional": true
               }
             },
-            "requires": "org.manager",
+            "requires": "org.can[org.settings]",
             "scope": "org",
             "subtitle": "How Counter behaves for this workspace",
             "title": "Counter settings"
@@ -21086,7 +21086,7 @@
                 "optional": true
               }
             },
-            "requires": "org.manager",
+            "requires": "org.can[org.settings]",
             "scope": "org",
             "subtitle": "How X behaves for this workspace",
             "title": "X settings"

@@ -145,20 +145,21 @@
             "subtitle": "Download, export and import this site's items",
             "icon": "externaldrive|backup",
             "screen": "core.site.backup",
-            "when": "org.manager"
+            "when": "site.can[site.manage]"
           },
             {
               "title": "Delete site",
               "subtitle": "Take it offline for good",
               "icon": "trash|delete_forever",
               "screen": "core.site.delete",
-              "when": "org.manager"
+              "when": "site.can[site.manage] && org.can[hosts.delete]"
             }
           ]
         }
       ]
     },
     {
+
       "id": "core.site.domain",
       "title": "Domain",
       "subtitle": "Connect, check DNS, verify",
@@ -322,6 +323,7 @@
       ]
     },
     {
+
       "id": "core.site.users",
       "title": "Team on this site",
       "subtitle": "Collaborators and site accounts",
@@ -353,7 +355,7 @@
           "id": "add",
           "label": "Add a collaborator",
           "icon": "person.badge.plus|person_add",
-          "when": "org.manager",
+          "when": "site.can[site.manage] || org.can[members.manage]",
           "url": "/api/hosts/members",
           "prompt": [
             {
@@ -424,7 +426,7 @@
               "id": "role",
               "label": "Change role",
               "icon": "person.badge.key|manage_accounts",
-              "when": "org.manager && !item.owner",
+              "when": "site.can[site.manage] && !item.owner || org.can[members.manage] && !item.owner",
               "method": "PATCH",
               "url": "/api/hosts/members",
               "prompt": [
@@ -465,7 +467,7 @@
               "label": "Remove from site",
               "icon": "person.badge.minus|person_remove",
               "destructive": true,
-              "when": "org.manager && !item.owner",
+              "when": "site.can[site.manage] && !item.owner || org.can[members.manage] && !item.owner",
               "confirm": "Remove {item.displayName|item.email} from this site?",
               "method": "DELETE",
               "url": "/api/hosts/members",
@@ -500,6 +502,7 @@
       ]
     },
     {
+
       "id": "core.site.member",
       "title": "{data.member.displayName|data.member.email|'Collaborator'}",
       "label": "Collaborator",
@@ -519,7 +522,7 @@
         },
         {
           "type": "actions",
-          "when": "org.manager && data.member.role != owner",
+          "when": "site.can[site.manage] && data.member.role != owner || org.can[members.manage] && data.member.role != owner",
           "items": [
             {
               "id": "role", "label": "Change role", "icon": "person.badge.key|manage_accounts",
@@ -544,6 +547,7 @@
       ]
     },
     {
+
       "id": "core.site.security",
       "title": "Security",
       "subtitle": "Approved hosts for media, fonts, forms and embeds",
@@ -577,7 +581,7 @@
               "label": "Remove",
               "icon": "trash|delete",
               "destructive": true,
-              "when": "org.manager",
+              "when": "site.can[site.manage]",
               "confirm": "Remove {item}?",
               "write": {
                 "doc": "hosts/{site.id}",
@@ -608,7 +612,7 @@
               "label": "Remove",
               "icon": "trash|delete",
               "destructive": true,
-              "when": "org.manager",
+              "when": "site.can[site.manage]",
               "confirm": "Remove {item}?",
               "write": {
                 "doc": "hosts/{site.id}",
@@ -639,7 +643,7 @@
               "label": "Remove",
               "icon": "trash|delete",
               "destructive": true,
-              "when": "org.manager",
+              "when": "site.can[site.manage]",
               "confirm": "Remove {item}?",
               "write": {
                 "doc": "hosts/{site.id}",
@@ -670,7 +674,7 @@
               "label": "Remove",
               "icon": "trash|delete",
               "destructive": true,
-              "when": "org.manager",
+              "when": "site.can[site.manage]",
               "confirm": "Remove {item}?",
               "write": {
                 "doc": "hosts/{site.id}",
@@ -701,7 +705,7 @@
               "label": "Remove",
               "icon": "trash|delete",
               "destructive": true,
-              "when": "org.manager",
+              "when": "site.can[site.manage]",
               "confirm": "Remove {item}?",
               "write": {
                 "doc": "hosts/{site.id}",
@@ -722,7 +726,7 @@
         },
         {
           "type": "actions",
-          "when": "org.manager",
+          "when": "site.can[site.manage]",
           "items": [
             {
               "id": "addMedia",
@@ -860,6 +864,7 @@
       ]
     },
     {
+
       "id": "core.site.errorPages",
       "title": "Error pages",
       "subtitle": "404, members-only, maintenance and preview",
@@ -887,7 +892,7 @@
           "id": "notFound",
           "title": "404 · Not found",
           "footer": "Shown for missing addresses.",
-          "when": "org.manager",
+          "when": "site.can[site.publish]",
           "fields": [
             {
               "key": "id",
@@ -924,7 +929,7 @@
           "id": "unauthorized",
           "title": "401 · Members only",
           "footer": "Shown on members-only pages when signed out.",
-          "when": "org.manager",
+          "when": "site.can[site.publish]",
           "fields": [
             {
               "key": "id",
@@ -961,7 +966,7 @@
           "id": "forbidden",
           "title": "403 · Forbidden",
           "footer": "Reserved for future access rules.",
-          "when": "org.manager",
+          "when": "site.can[site.publish]",
           "fields": [
             {
               "key": "id",
@@ -998,7 +1003,7 @@
           "id": "unavailable",
           "title": "503 · Maintenance",
           "footer": "Shown everywhere while maintenance mode is on, and to visitors while the site is in preview.",
-          "when": "org.manager",
+          "when": "site.can[site.publish]",
           "fields": [
             {
               "key": "id",
@@ -1035,7 +1040,7 @@
           "id": "preview",
           "title": "Preview",
           "footer": "Only you, your team and Aglyn support can see the site. Visitors see your 503 page, or \"Coming soon\", until you make it public.",
-          "when": "org.manager",
+          "when": "site.can[site.manage]",
           "fields": [
             {
               "key": "preview",
@@ -1057,6 +1062,7 @@
       ]
     },
     {
+
       "id": "core.site.activity",
       "title": "Site activity",
       "label": "Activity",
@@ -1089,6 +1095,7 @@
       ]
     },
     {
+
       "id": "core.site.backup",
       "title": "Backup & restore",
       "subtitle": "Download everything designable, or just what you pick",
@@ -1191,11 +1198,12 @@
       ]
     },
     {
+
       "id": "core.site.delete",
       "title": "Delete site",
       "icon": "trash|delete_forever",
       "scope": "site",
-      "requires": "org.manager",
+      "requires": "site.can[site.manage] && org.can[hosts.delete]",
       "links": [
         "/admin/danger"
       ],
@@ -1342,6 +1350,7 @@
       ]
     },
     {
+
       "id": "core.site.plugins",
       "title": "Plugins",
       "subtitle": "What runs on this site",
@@ -1355,8 +1364,8 @@
         {
           "type": "notice",
           "tone": "info",
-          "when": "!org.manager",
-          "text": "Only site admins can switch plugins for this site. You can see what runs here."
+          "when": "!site.can[site.manage]",
+          "text": "{app.permissionRefusal[site.manage]}. You can see what runs here."
         },
         {
           "type": "list",
@@ -1373,7 +1382,7 @@
           "open": { "screen": "core.site.plugin", "params": { "pluginId": "{item.id}" } },
           "toggle": {
             "value": "{item.on}",
-            "disabled": "item.locked || !item.workspaceOn || !org.manager",
+            "disabled": "item.locked || !item.workspaceOn || !site.can[site.manage]",
             "label": "{item.label} on this site",
             "on": {
               "id": "on",
@@ -1434,6 +1443,7 @@
       }
     },
     {
+
       "id": "core.site.plugin",
       "title": "{data.plugins.rows[id=params.pluginId].label|params.pluginId}",
       "label": "Plugin",
@@ -1449,8 +1459,8 @@
         {
           "type": "notice",
           "tone": "info",
-          "when": "!org.manager",
-          "text": "Only site admins can change a plugin for this site. You can read what is set here."
+          "when": "!site.can[site.manage]",
+          "text": "{app.permissionRefusal[site.manage]}. You can read what is set here."
         },
         {
           "type": "notice",
@@ -1509,12 +1519,12 @@
         {
           "type": "notice",
           "tone": "warning",
-          "when": "org.manager && data.plugins.rows[id=params.pluginId].on && data.plugins.rows[id=params.pluginId].cascade",
+          "when": "site.can[site.manage] && data.plugins.rows[id=params.pluginId].on && data.plugins.rows[id=params.pluginId].cascade",
           "text": "Turning it off here also turns off {data.plugins.rows[id=params.pluginId].cascade}, which need it."
         },
         {
           "type": "actions",
-          "when": "org.manager && !data.plugins.rows[id=params.pluginId].locked && data.plugins.rows[id=params.pluginId].workspaceOn",
+          "when": "site.can[site.manage] && !data.plugins.rows[id=params.pluginId].locked && data.plugins.rows[id=params.pluginId].workspaceOn",
           "items": [
             {
               "id": "on",
@@ -1581,7 +1591,7 @@
         },
         {
           "type": "actions",
-          "when": "params.pluginId == accounts && data.host && org.manager",
+          "when": "params.pluginId == accounts && data.host && site.can[site.manage]",
           "items": [
             {
               "id": "set-signinScreenId", "label": "Choose the sign-in page", "icon": "doc.badge.gearshape|description",
