@@ -418,6 +418,17 @@ const HERO_FOR: Readonly<Record<SiteImportHeroPicture, AiLayoutImportHero>> = {
   above: 'column',
 }
 
+/**
+ * The source's own opening as a hero (AGL-4152): its picture's place, refined
+ * by how it sets its words. Over or under a picture, a centered column or a
+ * start-aligned editorial; behind them, a poster or a cover; beside them, a split.
+ */
+function ownHeroOf(section: Pick<SiteImportLayoutSection, 'align'>, place: SiteImportHeroPicture): AiLayoutImportHero {
+  if (place === 'beside') return 'split'
+  if (place === 'behind') return section.align === 'center' ? 'poster' : 'cover'
+  return section.align === 'center' ? 'column' : 'editorial'
+}
+
 interface MapScope {
   doc: AiSiteImportDocument
   layout: SiteImportLayout
@@ -1092,7 +1103,9 @@ const HEROES_AT: Readonly<Record<SiteImportHeroPicture, ReadonlySet<AiLayoutImpo
  * picture anywhere but behind it, opens as its source does (AGL-4083): an
  * answer never repaints a section's own band. Nor does it move the picture
  * (AGL-4138): a picture under centered words stays under them, as a picture
- * beside the words stays beside them.
+ * beside the words stays beside them. Kept as it is (AGL-4152), the opening is
+ * the source's own whatever the answer says: a hero that moved its words is
+ * set aside with what it asked.
  */
 function heroOf(
   section: SiteImportLayoutSection,
@@ -1105,15 +1118,15 @@ function heroOf(
   // An answer of "none" keeps the opening as the source lays it out.
   if (answer?.hero === 'none') return undefined
   const place = section.hero.picture
+  if (drawn.finish !== 'improve') {
+    const own = ownHeroOf(section, place)
+    if (answer?.hero && answer.hero !== own) settled.push({ at: 'sections[0]', what: `the ${answer.hero} hero set aside: the page keeps its source's own opening, a ${own} hero` })
+    return own
+  }
   const own = HERO_FOR[place]
   // Dimmed words need a dark ground: the section's own, or on a page its owner asked improved, the answer's (AGL-4152).
   if (answer?.hero && DIMMED_HEROES.has(answer.hero) && drawn.band !== 'dark' && place !== 'behind') {
     settled.push({ at: 'sections[0]', what: `the ${answer.hero} hero set aside: the section keeps its own lighter ground` })
-    return own
-  }
-  // The picture stays where the source lays it, unless the owner asked the page improved (AGL-4152).
-  if (answer?.hero && drawn.finish !== 'improve' && !HEROES_AT[place].has(answer.hero)) {
-    settled.push({ at: 'sections[0]', what: `the ${answer.hero} hero set aside: the source lays its picture ${place} its words` })
     return own
   }
   return answer?.hero ?? own
