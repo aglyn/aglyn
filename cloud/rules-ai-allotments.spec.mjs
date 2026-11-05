@@ -62,6 +62,10 @@ const OUTSIDER = 'uid-allot-outsider'
 const SITE_ADMIN_REFUSED = 'uid-allot-site-admin-refused'
 /** Site A's editor, whose toggle on the site grants them "Manage site settings". */
 const SITE_EDITOR_GRANTED = 'uid-allot-site-editor-granted'
+/** An editor of the whole workspace with Admin on site A: not a collaborator, as the route reads them. */
+const ORG_WIDE_SITE_ADMIN = 'uid-allot-org-wide-site-admin'
+/** An admin refused both billing keys, an old site entry still on their membership. */
+const STALE_ENTRY_ADMIN = 'uid-allot-stale-entry-admin'
 
 /**
  * The rest of the billing readers (AGL-4047), each as the projection writes
@@ -200,6 +204,17 @@ await env.withSecurityRulesDisabled(async (context) => {
     hostAccess: { [HOST_A]: 'editor' },
     hostPermissions: { [HOST_A]: { 'site.manage': true } },
   })
+  await setDoc(doc(db, 'orgs', ORG, 'members', ORG_WIDE_SITE_ADMIN), {
+    role: 'editor',
+    allHosts: true,
+    hostAccess: { [HOST_A]: 'admin' },
+  })
+  await setDoc(doc(db, 'orgs', ORG, 'members', STALE_ENTRY_ADMIN), {
+    role: 'admin',
+    allHosts: true,
+    hostAccess: { [HOST_A]: 'editor' },
+    permissions: { 'billing.view': false, 'billing.manage': false },
+  })
   // The sites as the projection writes them: each member's role there, and
   // the site's stamp where a toggle decided "Manage site settings".
   await setDoc(doc(db, 'hosts', HOST_A), {
@@ -214,11 +229,15 @@ await env.withSecurityRulesDisabled(async (context) => {
       [COLLABORATOR]: 'editor',
       [SITE_ADMIN_REFUSED]: 'admin',
       [SITE_EDITOR_GRANTED]: 'editor',
+      [ORG_WIDE_SITE_ADMIN]: 'admin',
+      [STALE_ENTRY_ADMIN]: 'admin',
     },
     memberPermissions: {
       [SITE_ADMIN]: { 'site.manage': true },
       [SITE_ADMIN_REFUSED]: { 'site.manage': false },
       [SITE_EDITOR_GRANTED]: { 'site.manage': true },
+      [ORG_WIDE_SITE_ADMIN]: { 'site.manage': true },
+      [STALE_ENTRY_ADMIN]: { 'site.manage': true },
     },
   })
   await setDoc(doc(db, 'hosts', HOST_B), {
@@ -310,6 +329,15 @@ await check('an ADMIN refused both billing keys reads no site’s allotment thro
   await assertFails(getDoc(allotmentOf(as(REVOKED_ADMIN), SUBJECTS.siteA)))
   await assertFails(getDoc(allotmentOf(as(REVOKED_ADMIN), SUBJECTS.collabA)))
 })
+// The route's `isSiteAdminCollaborator` asks for a collaborator, and so does this.
+await check('an ADMIN with an old site entry, refused both billing keys, reads nothing through it', async () => {
+  await assertFails(getDoc(allotmentOf(as(STALE_ENTRY_ADMIN), SUBJECTS.siteA)))
+  await assertFails(getDoc(allotmentOf(as(STALE_ENTRY_ADMIN), SUBJECTS.collabA)))
+})
+await check('an org-wide EDITOR with Admin on the site reads nothing through it: the billing keys decide', async () => {
+  await assertFails(getDoc(allotmentOf(as(ORG_WIDE_SITE_ADMIN), SUBJECTS.siteA)))
+  await assertFails(getDoc(allotmentOf(as(ORG_WIDE_SITE_ADMIN), SUBJECTS.collabA)))
+})
 
 // ── The org-wide restriction, and outsiders ────────────────────────────────
 await check('any member reads the org-wide model restriction', async () => {
@@ -378,7 +406,7 @@ await env.withSecurityRulesDisabled(async (context) => {
   for (const subject of Object.values(SUBJECTS)) await deleteDoc(allotmentOf(db, subject))
   for (const uid of [
     OWNER, ADMIN, REVOKED_ADMIN, BARE_ADMIN, BILLING_VIEWER, EDITOR, SITE_ADMIN, COLLABORATOR,
-    SITE_ADMIN_REFUSED, SITE_EDITOR_GRANTED,
+    SITE_ADMIN_REFUSED, SITE_EDITOR_GRANTED, ORG_WIDE_SITE_ADMIN, STALE_ENTRY_ADMIN,
   ]) {
     await deleteDoc(doc(db, 'orgs', ORG, 'members', uid))
   }

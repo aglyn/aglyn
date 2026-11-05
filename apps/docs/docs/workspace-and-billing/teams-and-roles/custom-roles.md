@@ -233,6 +233,17 @@ sites the same people are buyers like anyone else, so that workspace needs its o
 license. See
 [Your own listings](../../developers/plugins/publishing/publisher-handbook.md#your-own-listings).
 
+### CRM settings permission {#crm-settings-permission}
+
+| Permission | What it opens | Owner | Admin | Editor | Viewer |
+|---|---|---|---|---|---|
+| **Change CRM settings** (`crm.settings`) | Change what the CRM does for every site on **CRM → Settings**: default sharing for new records, companies from email domains, default owners, assignment rules and the round-robin pool, sharing rules, and rotating the email capture address; and share records across sites by hand | Yes | Yes | No | No |
+
+A custom role or a per-member override can grant or deny it. A site collaborator never
+holds it, because it acts on the whole workspace. Everyone who can open the CRM can still
+read the settings, and a member without the permission sees each control switched off with
+the permission named beside it.
+
 ### Automation and domain permissions {#automation-and-domain-permissions}
 
 | Permission | What it opens | Owner | Admin | Editor | Viewer |

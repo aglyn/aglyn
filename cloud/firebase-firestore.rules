@@ -1187,14 +1187,15 @@ service cloud.firestore {
        *  - an org-wide member holding `billing.view` or `billing.manage`,
        *    asked the way the per-user usage months ask theirs
        *    (`memberKeyOrOverride`, the owner and admins by default, AGL-4047);
-       *  - a member given access to the site the subject names by name
-       *    (`hostAccess`), holding "Manage site settings" there (`site.manage`,
-       *    AGL-4047: the site's stamp, else their site role in Admin, as
-       *    `isSiteAdminCollaborator` in `ai-allotments.ts` asks it), reads
-       *    that site's collaborator and site allotments — the collaborators
-       *    card is theirs. It asked their `hostAccess` role to be Admin; the
-       *    key's preset is that role, so nobody's access moved. Nothing about
-       *    another site, and nobody's `member:` allotment.
+       *  - a site collaborator (not org-wide) given the site the subject names
+       *    by name (`hostAccess`), holding "Manage site settings" there
+       *    (`site.manage`, AGL-4047: the site's stamp, else their site role in
+       *    Admin, as `isSiteAdminCollaborator` in `ai-allotments.ts` asks it),
+       *    reads that site's collaborator and site allotments — the
+       *    collaborators card is theirs. It asked their `hostAccess` role to be
+       *    Admin; the key's preset is that role, so no collaborator's access
+       *    moved. Org-wide members answer by the billing keys alone, as at the
+       *    route. Nothing about another site, and nobody's `member:` allotment.
        *
        * The subject is matched with a full-string regex BEFORE it is split,
        * so a malformed id never reaches an index that does not exist.
@@ -1212,7 +1213,7 @@ service cloud.firestore {
           (isOrgWideMember() &&
             (memberKeyOrOverride('billing.view', ['owner', 'admin']) ||
              memberKeyOrOverride('billing.manage', ['owner', 'admin']))) ||
-          (isOrgMember() &&
+          (isOrgMember() && !isOrgWideMember() &&
             subject.matches('(collab|host):[A-Za-z0-9_-]+(:[A-Za-z0-9_-]+)?') &&
             orgMember().get('hostAccess', {}).get(subject.split(':')[1], null) is string &&
             hostSiteRoleKey(subject.split(':')[1], 'site.manage', ['admin']));

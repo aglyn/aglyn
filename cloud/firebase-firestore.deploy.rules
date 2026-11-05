@@ -1202,6 +1202,7 @@ allow write: if false;
 
 
 
+
 match /aiAllotments/{subject} {
 allow read: if isStaff() ||
 (subject == 'org' && isOrgMember()) ||
@@ -1212,7 +1213,7 @@ subject.split(':')[2] == request.auth.uid))) ||
 (isOrgWideMember() &&
 (memberKeyOrOverride('billing.view', ['owner', 'admin']) ||
 memberKeyOrOverride('billing.manage', ['owner', 'admin']))) ||
-(isOrgMember() &&
+(isOrgMember() && !isOrgWideMember() &&
 subject.matches('(collab|host):[A-Za-z0-9_-]+(:[A-Za-z0-9_-]+)?') &&
 orgMember().get('hostAccess', {}).get(subject.split(':')[1], null) is string &&
 hostSiteRoleKey(subject.split(':')[1], 'site.manage', ['admin']));

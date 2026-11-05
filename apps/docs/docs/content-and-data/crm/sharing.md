@@ -11,8 +11,9 @@ contacts, companies, deals and tasks, whichever site they came in on. The site
 a record came from is kept as its **source**, so you can still tell which
 brand met the person.
 
-An agency that keeps each client's records apart can change that. A workspace
-owner or admin sets **Default sharing for new records** in the CRM's
+An agency that keeps each client's records apart can change that. A member
+holding [**Change CRM settings**](../../workspace-and-billing/teams-and-roles/custom-roles.md#crm-settings-permission)
+(owners and admins by default) sets **Default sharing for new records** in the CRM's
 **Settings** to **Only the site they came in on**. Each site then sees the
 people it captured, a site in a [consent group](./overview.md) also sees the
 records of the group's other sites, and every other record is hidden from it,
@@ -24,7 +25,7 @@ files, which are set on the organization **Data** and **Media** pages.
 The rest of this page is for a workspace that keeps its sites apart.
 
 When you run several brands and want one brand's team to work records
-another brand captured, a workspace **owner or admin** can share them. You
+another brand captured, a member holding **Change CRM settings** can share them. You
 can share a **lead**, a **contact**, a **company** or a **deal**:
 
 - **By hand**: one record from its page, or a selection from the Leads or
@@ -44,14 +45,14 @@ or the rule that did.
 ### The Sharing card {#sharing-card}
 
 The **Sharing** card on a lead's, contact's, company's or deal's page lists
-every site that can see the record and why; an owner or admin shares it with
-more sites from **Share with sites…** in the card's header. The card shows once
-the record is shared, and to an owner or admin before then:
+every site that can see the record and why; a member holding **Change CRM settings**
+shares it with more sites from **Share with sites…** in the card's header. For
+anyone else that button is switched off, with the permission named:
 
 - **Held by**: the sites that captured the record. Their visibility comes
   from the record itself, and sharing never removes it.
-- **Shared by hand**: the site, who shared it and when. An owner or admin
-  can stop sharing it in one click.
+- **Shared by hand**: the site, who shared it and when. A member holding
+  **Change CRM settings** can stop sharing it in one click.
 - **Shared by a rule**: the rule's name. To stop it, edit or delete the rule
   in [Settings](#sharing-rules).
 
