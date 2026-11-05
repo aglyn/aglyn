@@ -30,6 +30,10 @@ import { ReviewPlatformsSettingsCards } from './review-platforms-settings-card.c
 const request = jest.fn()
 const enqueueSnackbar = jest.fn()
 
+jest.mock('@aglyn/tenant-feature-instance/hooks/use-site-keys', () => ({
+  useSiteKeys: () => ({ blocked: (key: string) => mockBlockedKeys.has(key) }),
+}))
+const mockBlockedKeys = new Set<string>()
 jest.mock('./review-platforms-api', () => ({
   useReviewPlatformsFetch: () => request,
 }))
@@ -109,5 +113,20 @@ describe('ReviewPlatformsOrderWidget', () => {
     expect((await screen.findByTestId('review-platforms-trustpilot-invitation')).textContent).toBe('Invited')
     expect(screen.getByTestId('review-platforms-yotpo-invitation').textContent).toBe('Not invited')
     expect(screen.getByText('The customer has not agreed to marketing email from this store')).toBeTruthy()
+  })
+})
+
+describe('the card follows the keys its routes ask (AGL-4047)', () => {
+  afterEach(() => mockBlockedKeys.clear())
+
+  it('switches Save off with the permission named', async () => {
+    mockBlockedKeys.add('reviewPlatforms.manage')
+    request.mockResolvedValue({ settings: EMPTY_REVIEW_PLATFORMS_SETTINGS })
+    render(<ReviewPlatformsSettingsCards hostId="host-1" />)
+    const saves = (await screen.findAllByRole('button', { name: 'Save' })) as HTMLButtonElement[]
+    for (const save of saves) {
+      expect(save.disabled).toBe(true)
+      expect(save.parentElement?.getAttribute('aria-label')).toContain('does not include')
+    }
   })
 })

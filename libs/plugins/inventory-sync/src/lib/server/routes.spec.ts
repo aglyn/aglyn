@@ -18,6 +18,7 @@
  * limitations under the License.
  */
 
+import { INVENTORY_SYNC_SITE_PRESETS, type InventorySyncSitePermission } from '../model/inventory-sync-permissions'
 import { randomBytes } from 'node:crypto'
 import { INVENTORY_SYNC_API_ROUTES } from '../constants'
 import { inventoryOrderId, type InventoryProviderId } from '../model/inventory-sync'
@@ -28,7 +29,7 @@ import { mockHttp } from '../testing/mock-http'
 import { openCredential, readInventorySyncConfig } from './config'
 import { createEngine } from './engine'
 import { sha256 } from './oauth'
-import { createInventoryRoutes, fail, readPastedKeys, type InventoryRole } from './routes'
+import { createInventoryRoutes, fail, readPastedKeys, } from './routes'
 import { emptyConnection, type StoredOrder } from './store'
 
 const HOST = 'host-1'
@@ -80,10 +81,9 @@ function setup(options: { env?: Record<string, string>; provider?: InventorySyst
     engine,
     credential,
     // The member's role rides in a header, so each spec says who is asking.
-    gate: async (request: Request, role: InventoryRole) => {
-      const rank: Record<string, number> = { viewer: 1, editor: 2, admin: 3 }
-      const asking = request.headers.get('x-role') ?? 'admin'
-      if (rank[asking] < rank[role]) return fail(403, 'Not permitted')
+    gate: async (request: Request, permission: InventorySyncSitePermission | null) => {
+      const asking = (request.headers.get('x-role') ?? 'admin') as 'admin' | 'editor' | 'viewer'
+      if (permission && !INVENTORY_SYNC_SITE_PRESETS[permission][asking]) return fail(403, 'Not permitted')
       const body = request.method === 'GET' ? {} : ((await request.json().catch(() => ({}))) as Record<string, unknown>)
       return { orgId: 'org-1', hostId: HOST, uid: 'user-1', body }
     },

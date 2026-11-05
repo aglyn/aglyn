@@ -47,7 +47,7 @@ function offered(config: Parameters<typeof offersVendor>[0]): PostPurchaseVendor
 /** `GET ?hostId` — which services this deployment offers the site. */
 export async function availabilityRoute(request: Request): Promise<Response> {
   if (request.method !== 'GET') return refuse(405, 'Method not allowed')
-  const gate = await postPurchaseGate(request, { role: 'viewer' })
+  const gate = await postPurchaseGate(request, { permission: null })
   if (gate instanceof Response) return gate
   return json({ available: true, vendors: offered(gate.config) })
 }
@@ -55,7 +55,7 @@ export async function availabilityRoute(request: Request): Promise<Response> {
 /** `GET ?hostId` — the site's services; `POST {hostId, change}` — change one. */
 export async function settingsRoute(request: Request): Promise<Response> {
   if (request.method !== 'GET' && request.method !== 'POST') return refuse(405, 'Method not allowed')
-  const gate = await postPurchaseGate(request, { role: request.method === 'GET' ? 'viewer' : 'admin' })
+  const gate = await postPurchaseGate(request, { permission: request.method === 'GET' ? null : 'postPurchase.manage' })
   if (gate instanceof Response) return gate
   const stored = await readStoredSettings(gate.orgId, gate.hostId)
   if (request.method === 'GET') {
@@ -92,7 +92,7 @@ export async function settingsRoute(request: Request): Promise<Response> {
 /** `GET ?hostId&recordId` — what each service was told about one order. */
 export async function orderRoute(request: Request): Promise<Response> {
   if (request.method !== 'GET') return refuse(405, 'Method not allowed')
-  const gate = await postPurchaseGate(request, { role: 'viewer' })
+  const gate = await postPurchaseGate(request, { permission: null })
   if (gate instanceof Response) return gate
   const recordId = new URL(request.url).searchParams.get('recordId') ?? ''
   if (!isDocumentId(recordId)) return refuse(400, 'Missing recordId')

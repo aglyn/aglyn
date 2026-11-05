@@ -30,8 +30,8 @@ card offers only the networks you can connect. Aglyn then:
 3. Sign in to that account and allow Aglyn access. You come back to the store
    settings with the network connected.
 
-You need to be an admin of the site to connect, change or disconnect a
-network. Aglyn never sees your ShipBob or Amazon password; it keeps only the
+Connecting, changing or disconnecting a network takes **Manage fulfillment network
+connections**, which a site's admins hold by default ([custom roles](../../workspace-and-billing/teams-and-roles/custom-roles.md#integration-permissions)). Aglyn never sees your ShipBob or Amazon password; it keeps only the
 access the network grants, encrypted.
 
 ### ShipMonk: connect with your API key

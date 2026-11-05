@@ -15,6 +15,9 @@
  * limitations under the License.
  */
 
+import { holdsStampedSiteKey } from '@aglyn/aglyn/app-utils/host-permissions'
+import { permissionRefusalText } from '@aglyn/aglyn/app-utils/org-permissions'
+import { INVENTORY_SYNC_SITE_PRESETS, type InventorySyncSitePermission } from '../model/inventory-sync-permissions'
 import { checkEntitlement } from '@aglyn/aglyn/app-utils/plan-entitlements'
 import { resolveHostEnabledPlugins } from '@aglyn/aglyn/plugin-manager/enabled-plugins'
 import { pluginProductCatalog } from '@aglyn/aglyn/plugin-manager/plugin-product-catalog'
@@ -46,7 +49,6 @@ import {
   createInventoryRoutes,
   fail,
   type InventoryGateResult,
-  type InventoryRole,
   type InventoryRouteDeps,
 } from './routes'
 import { createFirestoreInventoryStore, type InventoryStore } from './store'
@@ -90,8 +92,6 @@ export function platformProductWriter(): SourcedProductWriterLike | undefined {
   return pluginProductWriter()
 }
 
-const ROLE_RANK: Record<string, number> = { viewer: 1, author: 1, editor: 2, admin: 3 }
-
 const HOST_ID = /^[A-Za-z0-9_-]{1,128}$/
 
 /** A site's org, and whether it may run this plugin: a plan that sells, commerce and this plugin on. */
@@ -126,10 +126,10 @@ async function readBody(request: Request): Promise<Record<string, unknown>> {
 }
 
 /**
- * Who may use a route: a verified member of the site at `role`, the site
+ * Who may use a route: a verified member of the site holding the key named, the site
  * entitled and not locked, on a deployment that offers a system.
  */
-export async function inventorySyncGate(request: Request, role: InventoryRole): Promise<InventoryGateResult | Response> {
+export async function inventorySyncGate(request: Request, permission: InventorySyncSitePermission | null): Promise<InventoryGateResult | Response> {
   if (!offeredProviders(readInventorySyncConfig()).length) return fail(404, 'Not found')
   const authorization = request.headers.get('authorization') ?? ''
   if (!authorization.startsWith('Bearer ')) return fail(401, 'Unauthenticated')
@@ -149,8 +149,11 @@ export async function inventorySyncGate(request: Request, role: InventoryRole): 
   const site = await siteContext(hostId)
   if (!site) return fail(404, 'That site was not found')
   const staff = decoded['staff'] === true
-  const memberRole = String((site.host['memberRoles'] as Record<string, unknown> | undefined)?.[decoded.uid] ?? '')
-  if (!staff && (ROLE_RANK[memberRole] ?? 0) < ROLE_RANK[role]) return fail(403, 'Not permitted')
+  // No key named: anyone on the site's roster reads it.
+  if (!staff && !((site.host['memberRoles'] ?? {}) as Record<string, unknown>)[decoded.uid]) return fail(403, 'Not permitted')
+  if (!staff && permission && !holdsStampedSiteKey(site.host, decoded.uid, permission, INVENTORY_SYNC_SITE_PRESETS[permission])) {
+    return fail(403, permissionRefusalText(permission))
+  }
   if (!site.entitled) return fail(404, 'Inventory sync is not available for this site')
   const locked = await lockdownRefusal({
     request,

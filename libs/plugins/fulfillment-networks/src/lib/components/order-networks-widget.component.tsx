@@ -17,6 +17,10 @@
  * limitations under the License.
  */
 
+import { permissionRefusalText } from '@aglyn/aglyn/app-utils/org-permissions'
+import { BlockedControl } from '@aglyn/shared-ui-jsx/components/blocked-control.component'
+import { useSiteKeys } from '@aglyn/tenant-feature-instance/hooks/use-site-keys'
+import { FULFILLMENT_NETWORKS_SITE_PRESETS } from '../model/fulfillment-networks-permissions'
 import { useConfirmationContext } from '@aglyn/shared-ui-jsx'
 import { StatusChip, type StatusTone } from '@aglyn/shared-ui-jsx/components/status-chip.component'
 import { useSnackbar } from '@aglyn/shared-ui-snackstack'
@@ -86,6 +90,8 @@ const OPEN_ORDER = new Set(['paid', 'partially_fulfilled'])
  */
 export function OrderNetworksWidget(props: OrderNetworksWidgetProps) {
   const { hostId, order } = props
+  const refused = useSiteKeys(hostId).blocked('fulfillmentNetworks.orders', FULFILLMENT_NETWORKS_SITE_PRESETS['fulfillmentNetworks.orders'])
+  const refusal = permissionRefusalText('fulfillmentNetworks.orders')
   const routesApi = useFulfillmentNetworksApi(hostId)
   const api = props.api ?? routesApi
   const { enqueueSnackbar } = useSnackbar()
@@ -153,7 +159,8 @@ export function OrderNetworksWidget(props: OrderNetworksWidgetProps) {
           Fulfillment networks
         </Typography>
         {sendable.map((connection) => (
-          <Button
+          <BlockedControl blocked={refused} reason={refusal}>
+            <Button
             key={connection.provider}
             variant="outlined"
             disabled={busy}
@@ -166,6 +173,7 @@ export function OrderNetworksWidget(props: OrderNetworksWidgetProps) {
           >
             {`Send to ${NETWORK_PROVIDERS[connection.provider].shortLabel}`}
           </Button>
+          </BlockedControl>
         ))}
       </Stack>
       {error ? (
@@ -176,7 +184,7 @@ export function OrderNetworksWidget(props: OrderNetworksWidgetProps) {
       <Stack spacing={1.5} sx={{ mt: 1 }}>
         {answer.routings.length ? (
           answer.routings.map((routing) => (
-            <RoutingRow key={routing.provider} routing={routing} busy={busy} onCancel={() => void cancel(routing.provider)} />
+            <RoutingRow refused={refused} key={routing.provider} routing={routing} busy={busy} onCancel={() => void cancel(routing.provider)} />
           ))
         ) : (
           <Typography variant="body2" color="text.secondary">
@@ -189,8 +197,8 @@ export function OrderNetworksWidget(props: OrderNetworksWidgetProps) {
 }
 OrderNetworksWidget.displayName = 'OrderNetworksWidget'
 
-function RoutingRow(props: { routing: NetworkOrderView; busy: boolean; onCancel: () => void }) {
-  const { routing, busy, onCancel } = props
+function RoutingRow(props: { routing: NetworkOrderView; busy: boolean; refused: boolean; onCancel: () => void }) {
+  const { routing, busy, refused, onCancel } = props
   const info = NETWORK_PROVIDERS[routing.provider]
   const status = STATUS[routing.status]
   return (
@@ -201,9 +209,11 @@ function RoutingRow(props: { routing: NetworkOrderView; busy: boolean; onCancel:
           {[info.label, routing.reference ? `ref. ${routing.reference}` : null].filter(Boolean).join(' · ')}
         </Typography>
         {CANCELABLE.has(routing.status) && !routing.cancelRequested ? (
-          <Button size="small" color="error" disabled={busy} onClick={onCancel}>
+          <BlockedControl blocked={refused} reason={permissionRefusalText('fulfillmentNetworks.orders')}>
+            <Button size="small" color="error" disabled={busy} onClick={onCancel}>
             {`Cancel at ${info.shortLabel}`}
           </Button>
+          </BlockedControl>
         ) : null}
         {routing.cancelRequested ? <StatusChip label="Cancel requested" tone="warning" variant="outlined" /> : null}
       </Stack>

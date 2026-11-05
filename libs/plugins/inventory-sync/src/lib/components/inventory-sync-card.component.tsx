@@ -15,6 +15,10 @@
  * limitations under the License.
  */
 
+import { permissionRefusalText } from '@aglyn/aglyn/app-utils/org-permissions'
+import { BlockedControl } from '@aglyn/shared-ui-jsx/components/blocked-control.component'
+import { useSiteKeys } from '@aglyn/tenant-feature-instance/hooks/use-site-keys'
+import { INVENTORY_SYNC_SITE_PRESETS } from '../model/inventory-sync-permissions'
 import { pluginDocsHelp } from '@aglyn/aglyn/app-utils/docs-help'
 import { PLATFORM_BRAND_NAME } from '@aglyn/aglyn/app-utils/platform-brand'
 import { CardDisplay, useConfirmationContext } from '@aglyn/shared-ui-jsx'
@@ -98,6 +102,12 @@ const help = (excerpt: string, anchor: HelpAnchor) => pluginDocsHelp('inventoryS
 export function InventorySyncCard(props: InventorySyncCardProps) {
   const routesApi = useInventorySyncApi(props.hostId)
   const api = props.api ?? routesApi
+  // What the routes ask, read as they read it (AGL-4047): a member who can't
+  // sees the card with the permission named, and its controls switched off.
+  const { blocked } = useSiteKeys(props.hostId)
+  const viewRefused = blocked('inventorySync.view', INVENTORY_SYNC_SITE_PRESETS['inventorySync.view'])
+  const manageRefused = blocked('inventorySync.manage', INVENTORY_SYNC_SITE_PRESETS['inventorySync.manage'])
+  const ordersRefused = blocked('inventorySync.orders', INVENTORY_SYNC_SITE_PRESETS['inventorySync.orders'])
   const { enqueueSnackbar } = useSnackbar()
   const [state, setState] = useState<{ loading: boolean; answer: InventoryConnectionAnswer | null }>({
     loading: true,
@@ -128,6 +138,15 @@ export function InventorySyncCard(props: InventorySyncCardProps) {
     window.history.replaceState(window.history.state, '', `${url.pathname}${url.search}${url.hash}`)
   }, [enqueueSnackbar])
 
+  if (viewRefused) {
+    return (
+      <CardDisplay header="Inventory sync" contentGutterX contentGutterY>
+        <Typography variant="body2" color="text.secondary">
+          {permissionRefusalText('inventorySync.view')}
+        </Typography>
+      </CardDisplay>
+    )
+  }
   const answer = state.answer
   if (state.loading || !answer) return null
   const connection = answer.connection
@@ -138,6 +157,8 @@ export function InventorySyncCard(props: InventorySyncCardProps) {
   if (connection) {
     return (
       <ConnectedCard
+        locked={manageRefused}
+        ordersLocked={ordersRefused}
         api={api}
         connection={connection}
         offered={answer.offered.some((offer) => offer.id === connection.provider)}
@@ -149,8 +170,13 @@ export function InventorySyncCard(props: InventorySyncCardProps) {
   }
   return (
     <Stack spacing={2}>
+      {manageRefused ? (
+        <Typography variant="body2" color="text.secondary">
+          {permissionRefusalText('inventorySync.manage')}
+        </Typography>
+      ) : null}
       {answer.offered.map((offer) => (
-        <ConnectCard key={offer.id} api={api} provider={offer.id} onConnected={(next) => setState({ loading: false, answer: next })} />
+        <ConnectCard key={offer.id} locked={manageRefused} api={api} provider={offer.id} onConnected={(next) => setState({ loading: false, answer: next })} />
       ))}
     </Stack>
   )
@@ -158,9 +184,11 @@ export function InventorySyncCard(props: InventorySyncCardProps) {
 InventorySyncCard.displayName = 'InventorySyncCard'
 
 /** Hook for one card's busy flag, error and snackbar. */
-function useRun() {
+function useRun(locked: boolean) {
   const { enqueueSnackbar } = useSnackbar()
-  const [busy, setBusy] = useState(false)
+  const [working, setBusy] = useState(false)
+  // Off for a member without the key, the same way as while a change runs.
+  const busy = working || locked
   const [error, setError] = useState<string | null>(null)
   const run = async (work: () => Promise<string | null>) => {
     setBusy(true)
@@ -179,13 +207,14 @@ function useRun() {
 
 /** A system not yet connected: its keys, or Brightpearl's account code, and Connect. */
 function ConnectCard(props: {
+  locked: boolean
   api: InventorySyncApi
   provider: InventoryProviderId
   onConnected: (answer: InventoryConnectionAnswer) => void
 }) {
   const { api, provider, onConnected } = props
   const info = INVENTORY_PROVIDERS[provider]
-  const { busy, error, setError, run } = useRun()
+  const { busy, error, setError, run } = useRun(props.locked)
   const [fields, setFields] = useState<Record<string, string>>({})
   const ready =
     info.auth === 'oauth'
@@ -264,6 +293,8 @@ function ConnectCard(props: {
 }
 
 function ConnectedCard(props: {
+  locked: boolean
+  ordersLocked: boolean
   api: InventorySyncApi
   connection: InventoryConnectionView
   offered: boolean
@@ -274,7 +305,7 @@ function ConnectedCard(props: {
   const { api, connection, offered, canImport, onChange } = props
   const info = INVENTORY_PROVIDERS[connection.provider]
   const { confirm } = useConfirmationContext()
-  const { busy, error, setError, run } = useRun()
+  const { busy, error, setError, run } = useRun(props.locked)
   const [refreshKey, setRefreshKey] = useState(0)
 
   const update = (settings: InventoryConnectionSettings, done: string | null = 'Saved.') =>
@@ -337,7 +368,7 @@ function ConnectedCard(props: {
   return (
     <Stack spacing={2}>
       {connection.status === 'reconnect' && offered ? (
-        <ConnectCard api={props.api} provider={connection.provider} onConnected={props.onReplace} />
+        <ConnectCard locked={props.locked} api={props.api} provider={connection.provider} onConnected={props.onReplace} />
       ) : null}
       <CardDisplay
         variant="outlined"
@@ -360,7 +391,7 @@ function ConnectedCard(props: {
           <SyncSettings api={api} connection={connection} canImport={canImport} busy={busy} onUpdate={update} />
         </Stack>
       </CardDisplay>
-      <AttentionOrders key={`attention-${refreshKey}`} api={api} provider={connection.provider} />
+      <AttentionOrders locked={props.ordersLocked} key={`attention-${refreshKey}`} api={api} provider={connection.provider} />
       <InventoryActivity key={`log-${refreshKey}`} api={api} provider={connection.provider} />
     </Stack>
   )
@@ -557,7 +588,7 @@ function SyncSettings(props: {
 }
 
 /** Orders that could not be sent, each with its reason and Send again. */
-function AttentionOrders(props: { api: InventorySyncApi; provider: InventoryProviderId }) {
+function AttentionOrders(props: { api: InventorySyncApi; provider: InventoryProviderId; locked: boolean }) {
   const { api, provider } = props
   const { enqueueSnackbar } = useSnackbar()
   const [rows, setRows] = useState<InventoryOrderView[] | null>(null)
@@ -618,9 +649,11 @@ function AttentionOrders(props: { api: InventorySyncApi; provider: InventoryProv
               disableGutters
               sx={{ alignItems: 'flex-start' }}
               secondaryAction={
-                <Button size="small" disabled={busy !== null} onClick={() => void send(row)}>
+                <BlockedControl blocked={props.locked} reason={permissionRefusalText('inventorySync.orders')}>
+                  <Button size="small" disabled={busy !== null} onClick={() => void send(row)}>
                   Send again
                 </Button>
+                </BlockedControl>
               }
             >
               <ListItemText primary={row.displayRef} secondary={row.note ?? 'Not sent.'} sx={{ pr: 12 }} />

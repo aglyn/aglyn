@@ -91,7 +91,7 @@ export function podWebhookUrl(provider: PodProviderId, connection: string, token
 /** GET: whether the deployment can hold a connection, and the site's connections. */
 export async function connectionsRoute(request: Request): Promise<Response> {
   if (request.method !== 'GET') return methodNotAllowed()
-  const gate = await podGate(request, { role: 'viewer' })
+  const gate = await podGate(request, { permission: null })
   if (gate instanceof Response) return gate
   const connections = await readConnections(gate.hostId)
   const store = await pluginProductCatalog()?.store(gate.hostId).catch(() => null)
@@ -106,7 +106,7 @@ export async function connectionsRoute(request: Request): Promise<Response> {
 /** POST: the stores a token reaches, to choose one before connecting. */
 export async function storesRoute(request: Request): Promise<Response> {
   if (request.method !== 'POST') return methodNotAllowed()
-  const gate = await podGate(request, { role: 'admin' })
+  const gate = await podGate(request, { permission: 'printOnDemand.manage' })
   if (gate instanceof Response) return gate
   const provider = providerOf(gate.body['provider'])
   if (!provider) return podError(400, 'Choose Printful or Printify.')
@@ -135,7 +135,7 @@ async function forgetWebhooks(connection: StoredPodConnection, keyring: Paramete
 /** POST: test a token with the service, and store it only if it works. */
 export async function connectRoute(request: Request): Promise<Response> {
   if (request.method !== 'POST') return methodNotAllowed()
-  const gate = await podGate(request, { role: 'admin' })
+  const gate = await podGate(request, { permission: 'printOnDemand.manage' })
   if (gate instanceof Response) return gate
   const { body, hostId, keyring } = gate
   const provider = providerOf(body['provider'])
@@ -211,7 +211,7 @@ export async function connectRoute(request: Request): Promise<Response> {
 /** POST: how paid orders are sent, and whether re-syncs rewrite prices. */
 export async function settingsRoute(request: Request): Promise<Response> {
   if (request.method !== 'POST') return methodNotAllowed()
-  const gate = await podGate(request, { role: 'admin' })
+  const gate = await podGate(request, { permission: 'printOnDemand.manage' })
   if (gate instanceof Response) return gate
   const provider = providerOf(gate.body['provider'])
   if (!provider) return podError(400, 'Choose Printful or Printify.')
@@ -228,7 +228,7 @@ export async function settingsRoute(request: Request): Promise<Response> {
 /** POST: forget a connection's token. Imported products and sent orders are kept. */
 export async function disconnectRoute(request: Request): Promise<Response> {
   if (request.method !== 'POST') return methodNotAllowed()
-  const gate = await podGate(request, { role: 'admin' })
+  const gate = await podGate(request, { permission: 'printOnDemand.manage' })
   if (gate instanceof Response) return gate
   const provider = providerOf(gate.body['provider'])
   if (!provider) return podError(400, 'Choose Printful or Printify.')
@@ -248,7 +248,7 @@ async function connected(gate: { hostId: string }, value: unknown): Promise<Stor
 /** GET: one page of the service's products, marked with what is already imported. */
 export async function catalogRoute(request: Request): Promise<Response> {
   if (request.method !== 'GET') return methodNotAllowed()
-  const gate = await podGate(request, { role: 'editor' })
+  const gate = await podGate(request, { permission: 'printOnDemand.products' })
   if (gate instanceof Response) return gate
   const params = new URL(request.url).searchParams
   const connection = await connected(gate, params.get('provider'))
@@ -272,7 +272,7 @@ export async function catalogRoute(request: Request): Promise<Response> {
 /** POST: import or re-sync up to {@link POD_IMPORT_BATCH} products. */
 export async function importRoute(request: Request): Promise<Response> {
   if (request.method !== 'POST') return methodNotAllowed()
-  const gate = await podGate(request, { role: 'editor' })
+  const gate = await podGate(request, { permission: 'printOnDemand.products' })
   if (gate instanceof Response) return gate
   const connection = await connected(gate, gate.body['provider'])
   if (connection instanceof Response) return connection
@@ -312,7 +312,7 @@ export async function importRoute(request: Request): Promise<Response> {
 /** GET: one page of the site's imported products, newest first. */
 export async function importedRoute(request: Request): Promise<Response> {
   if (request.method !== 'GET') return methodNotAllowed()
-  const gate = await podGate(request, { role: 'viewer' })
+  const gate = await podGate(request, { permission: null })
   if (gate instanceof Response) return gate
   const params = new URL(request.url).searchParams
   const size = Math.min(PAGE_MAX, Math.max(1, Number(params.get('pageSize')) || 25))
@@ -339,7 +339,7 @@ export async function importedRoute(request: Request): Promise<Response> {
 /** POST: stop filling a product through the service; the store's product stays. */
 export async function unlinkRoute(request: Request): Promise<Response> {
   if (request.method !== 'POST') return methodNotAllowed()
-  const gate = await podGate(request, { role: 'editor' })
+  const gate = await podGate(request, { permission: 'printOnDemand.products' })
   if (gate instanceof Response) return gate
   const id = String(gate.body['linkId'] ?? '')
   // The id names the site, so a member of one site cannot touch another's.
@@ -351,7 +351,7 @@ export async function unlinkRoute(request: Request): Promise<Response> {
 /** GET: the service behind one product, and each variant's cost. */
 export async function productLinkRoute(request: Request): Promise<Response> {
   if (request.method !== 'GET') return methodNotAllowed()
-  const gate = await podGate(request, { role: 'viewer' })
+  const gate = await podGate(request, { permission: null })
   if (gate instanceof Response) return gate
   const productId = String(new URL(request.url).searchParams.get('productId') ?? '')
   if (!isDocumentId(productId)) return podError(400, 'Missing productId')
@@ -362,7 +362,7 @@ export async function productLinkRoute(request: Request): Promise<Response> {
 /** GET: the parts of one order the services fill. */
 export async function orderRoute(request: Request): Promise<Response> {
   if (request.method !== 'GET') return methodNotAllowed()
-  const gate = await podGate(request, { role: 'viewer' })
+  const gate = await podGate(request, { permission: null })
   if (gate instanceof Response) return gate
   const orderId = String(new URL(request.url).searchParams.get('orderId') ?? '')
   if (!isDocumentId(orderId)) return podError(400, 'Missing orderId')
@@ -377,7 +377,7 @@ export async function orderRoute(request: Request): Promise<Response> {
 /** GET: one page of the site's service orders, newest first. */
 export async function ordersRoute(request: Request): Promise<Response> {
   if (request.method !== 'GET') return methodNotAllowed()
-  const gate = await podGate(request, { role: 'editor' })
+  const gate = await podGate(request, { permission: 'printOnDemand.orders' })
   if (gate instanceof Response) return gate
   const params = new URL(request.url).searchParams
   const size = Math.min(PAGE_MAX, Math.max(1, Number(params.get('pageSize')) || 25))
@@ -404,7 +404,7 @@ export async function ordersRoute(request: Request): Promise<Response> {
 /** POST: send, confirm, refresh or cancel one order's part at a service. */
 export async function orderActionRoute(request: Request): Promise<Response> {
   if (request.method !== 'POST') return methodNotAllowed()
-  const gate = await podGate(request, { role: 'editor' })
+  const gate = await podGate(request, { permission: 'printOnDemand.orders' })
   if (gate instanceof Response) return gate
   const orderId = String(gate.body['orderId'] ?? '')
   const provider = providerOf(gate.body['provider'])

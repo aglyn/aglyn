@@ -15,6 +15,9 @@
  * limitations under the License.
  */
 
+import { holdsStampedSiteKey } from '@aglyn/aglyn/app-utils/host-permissions'
+import { permissionRefusalText } from '@aglyn/aglyn/app-utils/org-permissions'
+import { PRINT_ON_DEMAND_SITE_PRESETS, type PrintOnDemandSitePermission } from '../model/print-on-demand-permissions'
 import { firebaseAdmin } from '@aglyn/tenant-data-admin'
 import { isEmailVerified, isImpersonationSession } from '@aglyn/tenant-data-admin/server/firebase-admin'
 import { isRefusedIdToken } from '@aglyn/tenant-data-admin/server/id-token-refusal'
@@ -34,11 +37,12 @@ import { isDocumentId } from './store'
  *   403  unverified address (impersonation exempt)
  *   400  no site named
  *   404  the site does not sell, or has print on demand switched off
- *   403  not a collaborator with the role the route needs
+ *   403  not on the site, or without the key the route asks (AGL-4047)
  *
- * A connection and its settings are an ADMIN's: the token spends the
- * merchant's money at the service. Importing products and working an order
- * are an EDITOR's, the role that edits products and works orders; reading a
+ * A connection and its settings ask "Manage print-on-demand connections": the
+ * token spends the merchant's money at the service. Importing products asks
+ * "Import print-on-demand products" and working an order "Work print-on-demand
+ * orders" (AGL-4047), whose presets are the site's Admin and Editor; reading a
  * connection's public half, a product's source and an order's part any
  * collaborator's.
  */
@@ -59,10 +63,6 @@ export async function readJsonBody(request: Request): Promise<Record<string, unk
   return body && typeof body === 'object' && !Array.isArray(body) ? (body as Record<string, unknown>) : {}
 }
 
-export type PodRole = 'viewer' | 'editor' | 'admin'
-
-const ROLE_RANK: Record<string, number> = { viewer: 1, author: 1, editor: 2, admin: 3 }
-
 export interface PodGateResult {
   orgId: string
   hostId: string
@@ -73,7 +73,7 @@ export interface PodGateResult {
   authorization: string
 }
 
-export async function podGate(request: Request, options: { role: PodRole }): Promise<PodGateResult | Response> {
+export async function podGate(request: Request, options: { permission: PrintOnDemandSitePermission | null }): Promise<PodGateResult | Response> {
   const keyring = readPodKeyring()
   if (!keyring) return podError(404, POD_NOT_CONFIGURED_MESSAGE)
   const authorization = request.headers.get('authorization') ?? ''
@@ -93,10 +93,14 @@ export async function podGate(request: Request, options: { role: PodRole }): Pro
   if (!isDocumentId(hostId)) return podError(400, 'Missing hostId')
   const site = await resolvePodSite(hostId)
   if (!site) return podError(404, 'Print on demand is not available for this site')
-  const memberRole = String((site.host['memberRoles'] as Record<string, unknown> | undefined)?.[decoded.uid] ?? '')
   const staff = decoded['staff'] === true
-  if (!staff && (ROLE_RANK[memberRole] ?? 0) < ROLE_RANK[options.role]) {
+  // No key named: anyone on the site's roster reads it.
+  if (!staff && !(site.host['memberRoles'] as Record<string, unknown> | undefined)?.[decoded.uid]) {
     return podError(403, 'Not permitted')
+  }
+  const { permission } = options
+  if (!staff && permission && !holdsStampedSiteKey(site.host, decoded.uid, permission, PRINT_ON_DEMAND_SITE_PRESETS[permission])) {
+    return podError(403, permissionRefusalText(permission))
   }
   return { orgId: site.orgId, hostId, uid: decoded.uid, keyring, body, authorization }
 }

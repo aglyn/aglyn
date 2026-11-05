@@ -34,8 +34,8 @@ store and sell everywhere from **one stock count**:
 3. Sign in to your own seller account there and allow Aglyn access. You come
    back to **Sales channels** with the marketplace connected.
 
-You need to be an admin of the site to connect, change or disconnect a
-marketplace. Aglyn never sees your marketplace password; it keeps only the
+Connecting, changing or disconnecting a marketplace takes **Manage online marketplace
+connections**, which a site's admins hold by default ([custom roles](../../workspace-and-billing/teams-and-roles/custom-roles.md#integration-permissions)). Aglyn never sees your marketplace password; it keeps only the
 access the marketplace grants, encrypted. Disconnecting deletes that access.
 Orders already imported stay in your store, and your listings stay on the
 marketplace with the stock they last showed.

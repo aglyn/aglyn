@@ -15,6 +15,9 @@
  * limitations under the License.
  */
 
+import { permissionRefusalText } from '@aglyn/aglyn/app-utils/org-permissions'
+import { useSiteKeys } from '@aglyn/tenant-feature-instance/hooks/use-site-keys'
+import { MARKETPLACES_SITE_PRESETS } from '../model/marketplaces-permissions'
 import { pluginDocsHelp } from '@aglyn/aglyn/app-utils/docs-help'
 import { PLATFORM_BRAND_NAME } from '@aglyn/aglyn/app-utils/platform-brand'
 import { CardDisplay, useConfirmationContext } from '@aglyn/shared-ui-jsx'
@@ -113,6 +116,11 @@ const help = (excerpt: string, anchor: HelpAnchor) => pluginDocsHelp('marketplac
 export function MarketplacesCard(props: MarketplacesCardProps) {
   const routesApi = useMarketplacesApi(props.hostId)
   const api = props.api ?? routesApi
+  // What the routes ask, read as they read it (AGL-4047): a member who can't
+  // sees the card with the permission named, and its controls switched off.
+  const { blocked } = useSiteKeys(props.hostId)
+  const viewRefused = blocked('marketplaces.view', MARKETPLACES_SITE_PRESETS['marketplaces.view'])
+  const manageRefused = blocked('marketplaces.manage', MARKETPLACES_SITE_PRESETS['marketplaces.manage'])
   const { enqueueSnackbar } = useSnackbar()
   const [state, setState] = useState<{ loading: boolean; offered: MarketplaceOffer[]; connections: MarketplaceConnectionView[] }>({
     loading: true,
@@ -155,6 +163,15 @@ export function MarketplacesCard(props: MarketplacesCardProps) {
     }))
   }, [])
 
+  if (viewRefused) {
+    return (
+      <CardDisplay header="Online marketplaces" contentGutterX contentGutterY>
+        <Typography variant="body2" color="text.secondary">
+          {permissionRefusalText('marketplaces.view')}
+        </Typography>
+      </CardDisplay>
+    )
+  }
   if (state.loading) return null
   // A connection whose marketplace is no longer offered is still shown, so it can be disconnected.
   const shown = [...new Set([...state.offered.map((offer) => offer.id), ...state.connections.map((entry) => entry.marketplace)])]
@@ -162,9 +179,15 @@ export function MarketplacesCard(props: MarketplacesCardProps) {
 
   return (
     <Stack spacing={2}>
+      {manageRefused ? (
+        <Typography variant="body2" color="text.secondary">
+          {permissionRefusalText('marketplaces.manage')}
+        </Typography>
+      ) : null}
       {shown.map((marketplace) => (
         <MarketplaceCard
           key={marketplace}
+          locked={manageRefused}
           api={api}
           marketplace={marketplace}
           offer={state.offered.find((offer) => offer.id === marketplace) ?? null}
@@ -178,6 +201,7 @@ export function MarketplacesCard(props: MarketplacesCardProps) {
 MarketplacesCard.displayName = 'MarketplacesCard'
 
 function MarketplaceCard(props: {
+  locked: boolean
   api: MarketplacesApi
   marketplace: MarketplaceId
   offer: MarketplaceOffer | null
@@ -188,7 +212,9 @@ function MarketplaceCard(props: {
   const info = MARKETPLACES[marketplace]
   const { enqueueSnackbar } = useSnackbar()
   const { confirm } = useConfirmationContext()
-  const [busy, setBusy] = useState(false)
+  const [working, setBusy] = useState(false)
+  // Off for a member without the key, the same way as while a change runs.
+  const busy = working || props.locked
   const [error, setError] = useState<string | null>(null)
   const [activityKey, setActivityKey] = useState(0)
 
