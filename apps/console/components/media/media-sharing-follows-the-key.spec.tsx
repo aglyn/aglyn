@@ -16,13 +16,18 @@
  */
 
 /**
- * MEDIA SHARING FOLLOWS "Edit the workspace media library" (AGL-4047).
+ * MEDIA SHARING AND WRITES FOLLOW "Edit the workspace media library" (AGL-4047).
  *
  * The rules' `canWriteOrgMedia` and the folders route's `resolveMediaScope` both
  * refuse a sharing write without `org.media`. The controls used to show on
  * `viewerOrgWide` alone, so a member of the whole workspace without the key
  * chose a site and the save failed. They are switched off with the permission
  * named, on the real library, in each of the three places sharing is changed.
+ *
+ * So are the library's other writes the same doors refuse: Make private, Rename,
+ * Move, tags and Delete, on the file, the folder, a selection and the drawer.
+ * Copy temporary link stays on, because `/api/media/sign` does not ask the key,
+ * and a site's own library answers to the site's key and is left alone.
  */
 
 import { act, fireEvent, render, screen, within } from '@testing-library/react'
@@ -380,15 +385,13 @@ describe('the org library’s sharing controls', () => {
     it('finds a folder’s Shared with… switched off, naming the permission', async () => {
       await mountLibrary()
       const item = await folderItem('Covers')
-      expect(item.getAttribute('aria-disabled')).toBe('true')
-      expect(screen.getByLabelText(REFUSAL).contains(item)).toBe(true)
+      expect(standing(item)).toBe('refused')
     }, 240_000)
 
     it('finds a selection’s Shared with… switched off, naming the permission', async () => {
       await mountLibrary()
       const button = await bulkButton('logo.webp')
-      expect(button.disabled).toBe(true)
-      expect(screen.getByLabelText(REFUSAL).contains(button)).toBe(true)
+      expect(standing(button)).toBe('refused')
     }, 240_000)
   })
 
@@ -424,6 +427,135 @@ describe('the org library’s sharing controls', () => {
       await mountLibrary()
       const select = await drawerSelect('logo.webp')
       expect(select.getAttribute('aria-disabled')).toBe('true')
+      expect(screen.queryByLabelText(REFUSAL)).toBeNull()
+    }, 240_000)
+  })
+})
+
+/** A file's overflow menu, opened on its card. */
+async function fileMenu(fileName: string) {
+  const card = (await screen.findByText(fileName)).closest('.MuiCard-root') as HTMLElement
+  fireEvent.click(within(card).getByRole('button', { name: 'File actions' }))
+  await screen.findByRole('menuitem', { name: 'Details' })
+}
+
+/** A menu entry's standing: on, held with no reason, or off with the permission named. */
+function standing(element: HTMLElement) {
+  const off = element.getAttribute('aria-disabled') === 'true' || (element as HTMLButtonElement).disabled === true
+  if (!off) return 'on'
+  return screen.queryAllByLabelText(REFUSAL).some((wrapper) => wrapper.contains(element)) ? 'refused' : 'held'
+}
+
+describe('the org library’s other writes', () => {
+  beforeEach(() => {
+    mockDb.collections.clear()
+    mockDb.docs.clear()
+    seedLibrary('orgs/org-1', true)
+    mockDb.docs.set('orgs/org-1/members/user-1', { role: 'editor', allHosts: true })
+    global.fetch = jest.fn(async (input: RequestInfo | URL) => ({
+      ok: true,
+      status: 200,
+      json: async () => (String(input).includes('/api/media/quarantine') ? { quarantined: {} } : {}),
+    })) as unknown as typeof fetch
+  })
+
+  describe('a member of the whole workspace without the key', () => {
+    beforeEach(() => {
+      mockPermissions = REFUSED
+    })
+
+    it('finds a file’s Make private and Delete off, and its download and details on', async () => {
+      await mountLibrary()
+      await fileMenu('logo.webp')
+      expect(standing(screen.getByRole('menuitem', { name: 'Make private' }))).toBe('refused')
+      expect(standing(screen.getByRole('menuitem', { name: 'Delete' }))).toBe('refused')
+      expect(standing(screen.getByRole('menuitem', { name: 'Download file' }))).toBe('on')
+      expect(standing(screen.getByRole('menuitem', { name: 'Details' }))).toBe('on')
+    }, 240_000)
+
+    it('keeps Copy temporary link on, which its route does not ask the key for', async () => {
+      const library = mockDb.collections.get('orgs/org-1/media') as { id: string; data: Record<string, unknown> }[]
+      const logo = library.find((row) => row.data.fileName === 'logo.webp') as { data: Record<string, unknown> }
+      logo.data.private = true
+      await mountLibrary()
+      await fileMenu('logo.webp')
+      expect(standing(screen.getByRole('menuitem', { name: 'Copy temporary link' }))).toBe('on')
+      expect(standing(screen.getByRole('menuitem', { name: 'Publish file' }))).toBe('refused')
+    }, 240_000)
+
+    it('finds a folder’s Rename and Delete off', async () => {
+      await mountLibrary()
+      await folderItem('Covers')
+      expect(standing(screen.getByRole('menuitem', { name: 'Rename' }))).toBe('refused')
+      expect(standing(screen.getByRole('menuitem', { name: 'Delete' }))).toBe('refused')
+    }, 240_000)
+
+    it('finds a selection’s Move, tags and Delete off', async () => {
+      await mountLibrary()
+      await bulkButton('logo.webp')
+      for (const name of ['Move to folder…', 'Add tag…', 'Remove tag…', 'Delete…']) {
+        expect([name, standing(screen.getByRole('button', { name }))]).toEqual([name, 'refused'])
+      }
+    }, 240_000)
+
+    it('finds the drawer’s fields, Save and Delete off, and the permission said once', async () => {
+      await mountLibrary()
+      await drawerSelect('logo.webp')
+      const drawer = document.querySelector('.MuiDrawer-paper') as HTMLElement
+      for (const name of ['File name', 'Add a tag', 'Alt text', 'Description']) {
+        expect([name, (within(drawer).getByRole('textbox', { name }) as HTMLInputElement).disabled]).toEqual([name, true])
+      }
+      expect(within(drawer).getByRole('alert').textContent).toBe(REFUSAL)
+      expect(standing(within(drawer).getByRole('button', { name: 'Save' }))).toBe('refused')
+      expect(standing(within(drawer).getByRole('button', { name: 'Delete file' }))).toBe('refused')
+      expect(standing(within(drawer).getByRole('button', { name: 'Download file' }))).toBe('on')
+    }, 240_000)
+  })
+
+  describe('a holder (negative control)', () => {
+    beforeEach(() => {
+      mockPermissions = HOLDER
+    })
+
+    it('has every write on, and no reason anywhere', async () => {
+      await mountLibrary()
+      await fileMenu('logo.webp')
+      expect(standing(screen.getByRole('menuitem', { name: 'Make private' }))).toBe('on')
+      expect(standing(screen.getByRole('menuitem', { name: 'Delete' }))).toBe('on')
+      fireEvent.keyDown(screen.getByRole('menuitem', { name: 'Delete' }), { key: 'Escape' })
+      await bulkButton('logo.webp')
+      for (const name of ['Move to folder…', 'Add tag…', 'Remove tag…', 'Delete…']) {
+        expect([name, standing(screen.getByRole('button', { name }))]).toEqual([name, 'on'])
+      }
+      expect(screen.queryByLabelText(REFUSAL)).toBeNull()
+    }, 240_000)
+  })
+
+  describe('while permissions load', () => {
+    beforeEach(() => {
+      mockPermissions = LOADING
+    })
+
+    it('holds the writes with no refusal said', async () => {
+      await mountLibrary()
+      await fileMenu('logo.webp')
+      expect(standing(screen.getByRole('menuitem', { name: 'Delete' }))).toBe('held')
+      expect(screen.queryByLabelText(REFUSAL)).toBeNull()
+    }, 240_000)
+  })
+
+  describe('a site’s own library, which answers to the site’s key', () => {
+    beforeEach(() => {
+      mockPermissions = REFUSED
+      mockDb.collections.clear()
+      seedLibrary('hosts/host-1', false)
+    })
+
+    it('leaves its controls on for a member without the workspace’s key', async () => {
+      render(<MediaLibraryComponent hostId="host-1" />)
+      await screen.findAllByRole('button', { name: 'File actions' }, { timeout: 120_000 })
+      await fileMenu('logo.webp')
+      expect(standing(screen.getByRole('menuitem', { name: 'Delete' }))).toBe('on')
       expect(screen.queryByLabelText(REFUSAL)).toBeNull()
     }, 240_000)
   })
