@@ -844,7 +844,8 @@ export function siteImportFidelity(source: SiteImportFidelitySource, tree: SiteI
   const look = new LookOf(built, source.layout.look, theme)
 
   const words = wordsScore(source, built)
-  const read = sections.map((section) => section.band)
+  // Improved, a page's bands are read as its colors alone say; kept, against its page's ground (AGL-4152).
+  const read = sections.map((section) => (finished && finish === 'improve' ? (section.absoluteBand ?? section.band) : section.band))
   const drawn = drawnSections.map((id) => siteImportFidelityBandOf(built.node(id)))
   const bandsKept = read.filter((band, index) => drawn[index] === band).length
 
@@ -1764,7 +1765,7 @@ function designScore(source: SiteImportFidelitySource, built: Built, placement: 
   const ruled = (id: string | undefined) => !!id && (!!built.node(id)?.sx?.['borderTop'] || !!built.node(id)?.sx?.['borderBottom'])
   const drawnBand = (id: string | undefined) => siteImportFidelityBandOf(id ? built.node(id) : undefined)
   const rhythm = designLine(
-    apart(Math.max(0, sections.length - 1), (index) => sections[index]?.band !== sections[index + 1]?.band),
+    apart(Math.max(0, sections.length - 1), (index) => bandAsItsColor(sections[index]) !== bandAsItsColor(sections[index + 1])),
     apart(Math.max(0, drawnSections.length - 1), (index) => drawnBand(drawnSections[index]) !== drawnBand(drawnSections[index + 1]) || ruled(drawnSections[index]) || ruled(drawnSections[index + 1])),
   )
   // Measure: words that run no wider than `lg`, a long read no wider than `md`, each section as its Container runs it.
@@ -1777,6 +1778,9 @@ function designScore(source: SiteImportFidelitySource, built: Built, placement: 
   // Opening: a first section holding a picture opens as the hero, its heading and its picture together.
   const first = sections[0]
   const pictured = !!first && (first.lines.some((ref) => source.blocks[ref]?.kind === 'image') || first.backdrop?.kind === 'picture' || first.backdrop?.kind === 'video')
+/** A section's band as Improve it reads it: by its color alone. */
+const bandAsItsColor = (section: SiteImportLayoutSection | undefined) => section?.absoluteBand ?? section?.band
+
   const title = sections.flatMap((section) => section.lines).find((ref) => {
     const block = source.blocks[ref]
     return block?.kind === 'heading' && block.level === 1
@@ -1809,7 +1813,7 @@ function designScore(source: SiteImportFidelitySource, built: Built, placement: 
   const ink = hexOf(facts?.text)
   for (const section of sections) {
     const ground = hexOf(section.background)
-    if (ink && ground && (section.band === 'plain' || section.band === 'soft')) sourcePairs.push([ink, ground])
+    if (ink && ground && (bandAsItsColor(section) === 'plain' || bandAsItsColor(section) === 'soft')) sourcePairs.push([ink, ground])
   }
   const buttonFill = hexOf(facts?.buttonFill)
   const buttonText = hexOf(facts?.buttonText)

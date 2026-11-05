@@ -215,9 +215,10 @@ function siteImportDarkStylesOf(structure: SiteImportStructure, sheets: readonly
   return css.darkRules ? siteImportStylesOf(structure, css) : null
 }
 
-/** A section's fill as the reader finds it: its band and the fill. */
+/** A section's fill as the reader finds it: its band, what its color alone would call it, and the fill. */
 interface ReadBand {
   band: SiteImportBand
+  absolute?: SiteImportBand
   background: string | null
   backdrop?: SiteImportLayoutSection['backdrop']
 }
@@ -235,6 +236,8 @@ class LayoutReader {
   private bodySize = 16
   private wideStyles: SiteImportStyles | null = null
   private tabletStyles: SiteImportStyles | null = null
+  /** The page's own ground, which a light band is read against (AGL-4152). */
+  private readonly pageGround: SiteImportRgba | null
 
   constructor(
     private readonly structure: SiteImportStructure,
@@ -264,6 +267,8 @@ class LayoutReader {
     }
     const body = structure.body >= 0 ? structure.body : -2
     this.bodySize = siteImportFontSizePx(styles.of(body)) ?? 16
+    const ground = siteImportBackgroundOf(styles.of(body)).color ?? siteImportBackgroundOf(styles.of(-2)).color
+    this.pageGround = ground && ground.a >= 0.5 ? ground : null
   }
 
   /*---------------- leaves and parts ----------------*/
@@ -447,7 +452,7 @@ class LayoutReader {
       nodes = withoutVideo(nodes, behind.video)
       band = { band: 'dark', background: band.background, backdrop: { kind: 'video', video: behind.video, ...(behind.poster !== undefined ? { poster: behind.poster } : {}) } }
     }
-    // Its fill in the page's dark scheme, read as its fill is.
+    // Its fill in the page's dark scheme, read as its fill is, where that scheme changes it.
     const dark = this.darkStyles ? (cut.anchor !== null ? this.bandOf(cut.anchor, false, this.darkStyles) : this.bandOf(container, true, this.darkStyles)) : null
     const lines = behind?.poster !== undefined ? [behind.poster, ...this.linesOf(nodes)] : this.linesOf(nodes)
     if (!lines.length && !behind && !nodes.some((node) => node.kind === 'icon' || node.kind === 'form' || node.kind === 'video')) return null
@@ -458,8 +463,9 @@ class LayoutReader {
       name,
       from,
       band: band.band,
+      ...(band.absolute && band.absolute !== band.band ? { absoluteBand: band.absolute } : {}),
       background: band.background,
-      ...(dark?.background ? { darkBackground: dark.background } : {}),
+      ...(dark?.background && dark.background !== band.background ? { darkBackground: dark.background } : {}),
       ...(band.backdrop ? { backdrop: band.backdrop } : {}),
       align,
       ...(width !== null ? { width } : {}),
@@ -537,7 +543,7 @@ class LayoutReader {
       const light = stops.length ? stops.reduce((sum, stop) => sum + siteImportLuminance(stop), 0) / stops.length : 1
       return { band: light < 0.55 ? 'dark' : 'soft', background: hex, backdrop: { kind: 'gradient' } }
     }
-    if (background.color && background.color.a >= 0.5) return { band: siteImportBandOfColor(background.color), background: hex }
+    if (background.color && background.color.a >= 0.5) return { band: siteImportBandOn(background.color, this.pageGround), absolute: siteImportBandOfColor(background.color), background: hex }
     const theme = this.elements[element]?.attrs.theme
     if (theme) {
       if (/^(?:dark|black)/.test(theme)) return { band: 'dark', background: null }
@@ -1746,6 +1752,21 @@ function mode(values: readonly number[]): number {
   return [...counts.entries()].sort((a, b) => b[1] - a[1] || b[0] - a[0])[0]?.[0] ?? 0
 }
 
+/** How far a light fill may sit from the page's ground and still be that ground (AGL-4152), in OKLab. */
+const SAME_GROUND = 0.02
+
+/**
+ * A section's fill as a band of its page (AGL-4152): a light fill is `plain`
+ * on the page's own ground (white, where the page sets none) and `soft`
+ * anywhere else, so a page on light grey with white bands draws those bands
+ * apart from it in both color schemes. A strong color or a dark one is what it is.
+ */
+export function siteImportBandOn(color: SiteImportRgba, page: SiteImportRgba | null): SiteImportBand {
+  const band = siteImportBandOfColor(color)
+  if (band !== 'plain' && band !== 'soft') return band
+  return siteImportColorDistance(color, page ?? { r: 255, g: 255, b: 255, a: 1 }) <= SAME_GROUND ? 'plain' : 'soft'
+}
+
 /** A solid background's band: near white is the page, light or tinted is soft, a strong color is the brand's, dark is dark. */
 export function siteImportBandOfColor(color: { r: number; g: number; b: number; a: number }): SiteImportBand {
   const light = siteImportLuminance(color)
@@ -2012,9 +2033,9 @@ export function siteImportLookFacts(
     const children: number[] = elements[at]?.children ?? []
     at = children.length === 1 ? (children[0] as number) : -1
   }
-  // The page's own fill in its dark scheme, where its stylesheets say one.
+  // The page's own fill in its dark scheme, where its stylesheets change it.
   const darkFill = darkStyles ? (siteImportBackgroundOf(darkStyles.of(body)).color ?? siteImportBackgroundOf(darkStyles.of(-2)).color) : null
-  const darkGround = darkFill && darkFill.a >= 0.5 ? siteImportHex(darkFill) : null
+  const darkGround = darkFill && darkFill.a >= 0.5 && (!background || siteImportHex(darkFill) !== siteImportHex(background)) ? siteImportHex(darkFill) : null
   return {
     fonts: { body: known(bodyFamily), headings: known(headingFamily), google },
     background: background ? siteImportHex(background) : null,

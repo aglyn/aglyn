@@ -440,10 +440,21 @@ export interface SiteImportLayoutSection {
   name: string
   /** How its edges were found: a landmark (`<section>`), a container of its own, or its headings. */
   from: 'landmark' | 'container' | 'heading'
+  /**
+   * Its band against the page's own ground (AGL-4152): a light fill within
+   * OKLab ΔE 0.02 of the page's, or none, is `plain`, any other light one
+   * `soft`; `brand` and `dark` as its color says.
+   */
   band: SiteImportBand
+  /**
+   * Its band by its color's own lightness, near white `plain` and any other
+   * light fill `soft`, where that differs from {@link SiteImportLayoutSection.band}:
+   * what Improve it and the design answer's text read. Absent, the two agree.
+   */
+  absoluteBand?: SiteImportBand
   /** Its background color as `#rrggbb`, when it has one. */
   background: string | null
-  /** Its background in the page's dark scheme (AGL-4152), where its stylesheets say one. */
+  /** Its background in the page's dark scheme (AGL-4152), where its stylesheets change it. */
   darkBackground?: string
   /** A gradient, a photo, or a film playing on its own behind it (AGL-4140), its poster an image line. */
   backdrop?: { kind: 'gradient' } | { kind: 'picture'; url: string } | { kind: 'video'; video: number; poster?: SiteImportLineRef }

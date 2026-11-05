@@ -1199,7 +1199,9 @@ export function aiSiteImportDesignedSections(
       blocks.push(...lineBlocks(scope, { kind: 'line', line: ref }))
     }
     // A band only where the source gave the section none of its own; any section's, on a page its owner asked improved (AGL-4152).
-    const band = given?.band && (improve || (section.background === null && !section.backdrop)) ? given.band : section.band
+    // Kept, its band against its page's ground (AGL-4152); improved, as its color alone reads.
+    const own = improve ? (section.absoluteBand ?? section.band) : section.band
+    const band = given?.band && (improve || (section.background === null && !section.backdrop)) ? given.band : own
     const hero = heroOf(section, index, given, scope.settled, { band: improve ? band : section.band, finish })
     // A long read is set at the start, as text is read, whatever its source centers.
     const reading = blocks.filter((block) => block.kind === 'text').length > READING_PARAGRAPHS
@@ -1409,7 +1411,7 @@ export function aiSiteImportDesignText(doc: Pick<AiSiteImportDocument, 'blocks' 
     .map((section, index) => {
       const groups = { count: 0 }
       const shows = describeNodes(doc, section.nodes, groups)
-      const band = section.background === null && !section.backdrop ? 'no band of its own' : `${section.band} band${section.backdrop?.kind === 'gradient' ? ' with a gradient' : ''}`
+      const band = section.background === null && !section.backdrop ? 'no band of its own' : `${section.absoluteBand ?? section.band} band${section.backdrop?.kind === 'gradient' ? ' with a gradient' : ''}`
       const hero = index === 0 && section.hero?.picture ? `; opens the page, its picture ${section.hero.picture} its words` : index === 0 ? '; opens the page, with no picture' : ''
       return `Section ${index + 1} "${names[index]}": ${band}, ${section.align === 'center' ? 'centered' : 'aligned to the start'}${hero}. Groups: ${groups.count}. Shows: ${counted(shows)}.`
     })
