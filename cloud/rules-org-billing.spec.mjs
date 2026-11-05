@@ -1,6 +1,10 @@
 /**
  * AGL-1028. The commercial keys moved off `orgs/{orgId}` into
- * `orgs/{orgId}/billing/stripe`, gated on `canManageOrg()`.
+ * `orgs/{orgId}/billing/stripe`, gated on the owner or admin role
+ * (`canManageOrg()`), and since AGL-4047 on "View billing" (`billing.view`)
+ * alone, through `memberKeyOrOverride` with the key's default, the owner and
+ * admins: with nothing decided every member reads as before, and a custom
+ * role granting or refusing the key now counts here as it does at the routes.
  *
  * The point of the move is one specific reader: a SCOPED SITE COLLABORATOR.
  * Adding one writes a real org membership (that is what lets them into the
@@ -41,11 +45,52 @@ const OTHER_OVERRIDE_ADMIN = 'uid-admin-other-override'
 const BARE_ADMIN = 'uid-admin-no-permissions-field'
 const CUSTOMER_ID = 'cus_TestCustomer'
 
+/**
+ * The custom-role layer (AGL-4047), as the projection stamps it on
+ * `resolvedPermissions`: each with the verdict the billing doc now gives.
+ */
+const STAMPED = {
+  'uid-billing-viewer-granted': {
+    member: { role: 'viewer', allHosts: true, roleId: 'bookkeeper', resolvedPermissions: { 'billing.view': true } },
+    reads: true,
+    why: 'an org-wide VIEWER a custom role grants billing.view',
+  },
+  'uid-billing-admin-role-revoked': {
+    member: { role: 'admin', allHosts: true, roleId: 'no-billing', resolvedPermissions: { 'billing.view': false } },
+    reads: false,
+    why: 'an ADMIN a custom role refuses billing.view',
+  },
+  'uid-billing-admin-stamped-without': {
+    member: { role: 'admin', allHosts: true, resolvedPermissions: { 'data.manage': true } },
+    reads: true,
+    why: 'CONTROL — an ADMIN stamped without the key: the default',
+  },
+  'uid-billing-editor-stamped-default': {
+    member: { role: 'editor', allHosts: true, resolvedPermissions: { 'billing.view': false, 'data.manage': true } },
+    reads: false,
+    why: 'an org-wide EDITOR stamped with the default',
+  },
+  'uid-billing-collab-granted': {
+    member: {
+      role: 'editor',
+      allHosts: false,
+      hostAccess: { 'host-abc': 'admin' },
+      resolvedPermissions: { 'billing.view': true },
+    },
+    reads: false,
+    why: 'a scoped COLLABORATOR stamped with billing.view: the reach refuses',
+  },
+}
+
+// `emulators:exec` names the emulator it started; the fixed port is the
+// fallback for one started by hand.
+const [emulatorHost, emulatorPort] = (process.env.FIRESTORE_EMULATOR_HOST || '127.0.0.1:8082').split(':')
+
 const env = await initializeTestEnvironment({
   projectId: 'aglyn-main',
   firestore: {
-    host: '127.0.0.1',
-    port: 8082,
+    host: emulatorHost,
+    port: Number(emulatorPort),
     // The comment-stripped artifact is what deploys (AGL-3544).
     rules: readFileSync('cloud/firebase-firestore.deploy.rules', 'utf8'),
   },
@@ -134,6 +179,9 @@ await env.withSecurityRulesDisabled(async (context) => {
     allHosts: false,
     hostAccess: { 'host-abc': 'editor' },
   })
+  for (const [uid, { member }] of Object.entries(STAMPED)) {
+    await setDoc(doc(db, 'orgs', ORG, 'members', uid), member)
+  }
 })
 
 const as = (uid) =>
@@ -169,6 +217,13 @@ await check('an OUTSIDER cannot read the billing doc', () =>
 await check('an ADMIN whose billing.view is REVOKED cannot read the billing doc', () =>
   assertFails(getDoc(billingDoc(as(REVOKED_ADMIN)))),
 )
+
+// ── AGL-4047: the custom-role layer counts, as it does at the routes ────────
+for (const [uid, { reads, why }] of Object.entries(STAMPED)) {
+  await check(`${why} ${reads ? 'reads' : 'cannot read'} the billing doc`, () =>
+    (reads ? assertSucceeds : assertFails)(getDoc(billingDoc(as(uid)))),
+  )
+}
 
 // ── The controls that stop this becoming a lockout ──────────────────────────
 // ⚠️ Read these as the load-bearing half. "The revoked admin is denied" also
@@ -252,6 +307,7 @@ await env.withSecurityRulesDisabled(async (context) => {
     doc(db, 'orgs', ORG, 'members', BARE_ADMIN),
     doc(db, 'orgs', ORG, 'members', ORG_VIEWER),
     doc(db, 'orgs', ORG, 'members', COLLABORATOR),
+    ...Object.keys(STAMPED).map((uid) => doc(db, 'orgs', ORG, 'members', uid)),
     doc(db, 'orgs', ORG),
     doc(db, 'stripeCustomers', CUSTOMER_ID),
   ]) {

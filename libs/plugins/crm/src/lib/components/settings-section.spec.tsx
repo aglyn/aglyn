@@ -17,8 +17,8 @@
 
 /**
  * `/crm/settings` (AGL-2613): one switch, written to the org document by the
- * dotted path the capture door reads, and movable only by the roles the org
- * document's client rule admits. And the assignment cards (AGL-2618): a
+ * dotted path the capture door reads, and movable only by a member holding
+ * "Change CRM settings", the key the org document's client rule asks. And the assignment cards (AGL-2618): a
  * site's default owner by field-path segments, the rules as one array by
  * its dotted path — added through a drawer, reordered, deleted — and the
  * pool as one array, with the server's pointer read back as "next up".
@@ -28,11 +28,20 @@ import type { OrgCrmAssignmentRule } from '@aglyn/aglyn'
 import { fireEvent, render, screen, waitFor, within } from '@testing-library/react'
 import { updateDoc } from 'firebase/firestore'
 import type { ReactNode } from 'react'
+import { registerPluginPermissions } from '@aglyn/aglyn/plugin-manager/plugin-permissions'
 import { CrmOrgMountProvider } from '../hooks/use-crm-org-mount'
+import { CRM_PERMISSIONS } from '../model/crm-permissions'
 import { CrmSettingsSection } from './settings-section'
+
+// The CRM's key, as the declarations register it in every process.
+registerPluginPermissions(CRM_PERMISSIONS)
+
+const REFUSAL = 'Your role does not include "Change CRM settings" — ask an organization admin'
 
 /** The caller's org role, as their own membership document answers. */
 let memberRole: string | null = 'owner'
+/** The rest of their membership document: their reach and their own permissions. */
+let memberExtra: Record<string, unknown> = {}
 
 jest.mock('firebase/firestore', () => ({
   doc: (_db: unknown, ...segments: string[]) => ({ path: segments.join('/') }),
@@ -93,7 +102,7 @@ jest.mock('@aglyn/tenant-feature-instance', () => ({
   useOrgDataScope: () => ({ scope: ['orgs', 'org-1'], orgId: 'org-1', ready: true }),
   useUser: () => ({ data: { uid: 'uid-1' } }),
   useFirestoreDoc: () => ({
-    data: memberRole ? { role: memberRole } : undefined,
+    data: memberRole ? { role: memberRole, ...memberExtra } : undefined,
     status: 'success',
     fromCache: false,
   }),
@@ -151,6 +160,7 @@ const LABEL = 'Create companies from work email domains'
 beforeEach(() => {
   jest.clearAllMocks()
   memberRole = 'owner'
+  memberExtra = {}
 })
 
 describe('the auto-create switch', () => {
@@ -177,13 +187,36 @@ describe('the auto-create switch', () => {
     )
   })
 
-  it('is disabled, with the reason, for a member who is not an owner or admin', () => {
+  it('is disabled, naming the permission, for a member without "Change CRM settings"', () => {
     memberRole = 'editor'
     render(<CrmSettingsSection hostId="host-1" org={{}} />)
     expect((screen.getByLabelText(LABEL) as HTMLInputElement).disabled).toBe(true)
-    expect(screen.getAllByText('Only a workspace owner or admin can change this.').length).toBeGreaterThan(0)
+    expect(screen.getAllByText(REFUSAL).length).toBeGreaterThan(0)
     fireEvent.click(screen.getByLabelText(LABEL))
     expect(updateDoc).not.toHaveBeenCalled()
+  })
+
+  it('moves for an org-wide editor whose own permissions grant the key', () => {
+    memberRole = 'editor'
+    memberExtra = { allHosts: true, permissions: { 'crm.settings': true } }
+    render(<CrmSettingsSection hostId="host-1" org={{}} />)
+    expect((screen.getByLabelText(LABEL) as HTMLInputElement).disabled).toBe(false)
+    expect(screen.queryAllByText(REFUSAL)).toEqual([])
+  })
+
+  it('is disabled for an admin whose own permissions refuse the key', () => {
+    memberRole = 'admin'
+    memberExtra = { allHosts: true, permissions: { 'crm.settings': false } }
+    render(<CrmSettingsSection hostId="host-1" org={{}} />)
+    expect((screen.getByLabelText(LABEL) as HTMLInputElement).disabled).toBe(true)
+    expect(screen.getAllByText(REFUSAL).length).toBeGreaterThan(0)
+  })
+
+  it('is disabled for a site collaborator granted the key: it is the whole workspace’s', () => {
+    memberRole = 'editor'
+    memberExtra = { allHosts: false, hostAccess: { 'host-1': 'admin' }, permissions: { 'crm.settings': true } }
+    render(<CrmSettingsSection hostId="host-1" org={{}} />)
+    expect((screen.getByLabelText(LABEL) as HTMLInputElement).disabled).toBe(true)
   })
 
   it('admits an admin as it admits an owner', () => {
@@ -363,14 +396,14 @@ describe('the round-robin pool (AGL-2618)', () => {
     expect(updateDoc).toHaveBeenLastCalledWith(ORG_REF, { 'crm.roundRobin.memberUids': [] })
   })
 
-  it('is read-only, with the reason, for a member who is not an owner or admin', () => {
+  it('is read-only, naming the permission, for a member without "Change CRM settings"', () => {
     memberRole = 'editor'
     render(<CrmSettingsSection hostId="host-1" org={{ crm: { assignmentRules: [{ id: 'r', when: {}, assign: { roundRobin: true } }] } }} />)
     const pool = screen.getByRole('region', { name: 'Round robin' })
     expect((within(pool).getByLabelText('Kim (kim@example.com)') as HTMLInputElement).disabled).toBe(true)
     expect((screen.getByRole('button', { name: 'Add rule' }) as HTMLButtonElement).disabled).toBe(true)
     expect((screen.getByText('Move rule 1 down').closest('button') as HTMLButtonElement).disabled).toBe(true)
-    expect(screen.getAllByText('Only a workspace owner or admin can change this.').length).toBeGreaterThanOrEqual(3)
+    expect(screen.getAllByText(REFUSAL).length).toBeGreaterThanOrEqual(3)
   })
 })
 

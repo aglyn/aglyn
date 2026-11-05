@@ -324,7 +324,7 @@ export const PLUGIN_DOCS_SECTION_EXCERPTS: {
   },
   crmSharing: {
     '#access-read-only-or-read-and-edit': 'Read-only is the default. A site with read-only access can see the record, open its page, and add its own tasks, notes and activity to it.',
-    '#sharing-card': 'The Sharing card on a lead\'s, contact\'s, company\'s or deal\'s page lists every site that can see the record and why; an owner or admin shares it with more sites from Share with sites… in the card\'s header.',
+    '#sharing-card': 'The Sharing card on a lead\'s, contact\'s, company\'s or deal\'s page lists every site that can see the record and why; a member holding Change CRM settings shares it with more sites from Share with sites… in the card\'s…',
     '#sharing-rules': 'CRM → Settings → Sharing rules, at the organization level, lists your rules.',
   },
   crmTasks: {
