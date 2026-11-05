@@ -112,7 +112,9 @@ private struct SchemaEditor: View {
     _visibleTo = State(initialValue: dataset.visibleTo ?? [])
   }
 
-  private var canWrite: Bool { context.can("data.manage") }
+  @State private var placement = DatasetPlacement()
+  private var verdict: DatasetAccess { placement.access(context, visibleTo: dataset.visibleTo) }
+  private var canWrite: Bool { verdict.canWrite }
   private var orgWide: Bool { if case .ready(let wide, _) = access { wide } else { false } }
   private var accessKnown: Bool { if case .ready = access { true } else { false } }
   private var previousScope: [String] { dataset.visibleTo ?? [] }
@@ -122,7 +124,7 @@ private struct SchemaEditor: View {
   var body: some View {
     Form {
       if sheet == nil, let error = runner.error { Section { AglynNotice(error, tone: .error) } }
-      if !canWrite { Section { AglynNotice("Changing a schema needs the editor role.", tone: .warning) } }
+      if !canWrite { Section { AglynNotice(verdict.writeRefusal, tone: .warning) } }
       Section("Names") {
         TextField("Singular name (e.g. Product)", text: $singular).accessibilityIdentifier("schema-singular")
         TextField("Plural name (e.g. Products, shown as the title)", text: $plural).accessibilityIdentifier("schema-plural")
@@ -152,10 +154,11 @@ private struct SchemaEditor: View {
         } label: {
           if runner.busy { ProgressView() } else { Text("Save schema") }
         }
-        .disabled(!canWrite || runner.busy)
+        .disabled(!(canWrite || (verdict.sharingOnly && scopeChanged)) || runner.busy)
         .accessibilityIdentifier("schema-save")
       }
     }
+    .task(id: dataset.visibleTo) { placement.start(context, visibleTo: dataset.visibleTo) }
     .formStyle(.aglynGrouped)
     .accessibilityIdentifier("schema-editor")
     .sheet(item: $sheet) { sheetView($0) }
@@ -269,6 +272,14 @@ private struct SchemaEditor: View {
       scopeWrite = stored.scope
     }
     let model = model, singular = singular, plural = plural
+    // A site's narrowing takes the schema, not the sharing, and one write carrying both would be refused whole.
+    guard canWrite else {
+      let sharing = scopeWrite ?? []
+      runner.run(success: "Sharing saved.", onDone: { context.back() }) {
+        try await api.saveSharing(dataset, visibleTo: sharing)
+      }
+      return
+    }
     runner.run(success: "Schema saved.", onDone: { context.back() }) {
       try await api.saveSchema(dataset, model: model, singular: singular, plural: plural, visibleTo: scopeWrite)
     }

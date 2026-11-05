@@ -355,6 +355,11 @@ struct DataAPI {
   }
 
   /// The Schema dialog's save: the model, its names and (for an org-wide member) the sharing scope.
+  /// Who a dataset is shared with, alone: what a member a site narrows can still change.
+  func saveSharing(_ dataset: DatasetRow, visibleTo: [String]) async throws {
+    try await writer.update(datasetsPath(orgID) + [dataset.id], ["visibleTo": visibleTo])
+  }
+
   func saveSchema(_ dataset: DatasetRow, model: DatasetModel, singular: String, plural: String, visibleTo: [String]?) async throws {
     var data: [String: Any] = [
       "model": schemaModelJSON(model, rawFields: dataset.rawFields),
