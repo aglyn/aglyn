@@ -108,17 +108,25 @@ export const HostDisabledPluginsContext = createContext<readonly string[]>([])
  */
 export const HostEnabledPluginsContext = createContext<readonly string[]>([])
 /**
- * Whether the signed-in user is an ADMIN of the current host (AGL-1014):
- * `memberRoles[uid] === 'admin'`, false off host routes or while loading.
- * Gates the host Admin tab and page; the rules enforce the same boundary.
+ * Whether the signed-in user holds "Manage site settings" (`site.manage`,
+ * AGL-4047) on the current host, false off host routes or while loading. Gates
+ * the host Admin tab and page; the rules ask the same key of the same document.
  */
 export const HostAdminContext = createContext<boolean>(false)
+/**
+ * Whether the answer above is an answer yet (AGL-4047): the host document has
+ * been read and the session is known. False while it loads and after a failed
+ * read, when `false` above means "not yet" rather than a refusal, so a surface
+ * that tells someone they lack the key asks this first.
+ */
+export const HostAdminKnownContext = createContext<boolean>(false)
 
 export const useHostId = () => useContext(HostIdContext)
 export const useHostEnabledPlugins = () => useContext(HostEnabledPluginsContext)
 export const useHostDisabledPlugins = () =>
   useContext(HostDisabledPluginsContext)
 export const useIsHostAdmin = () => useContext(HostAdminContext)
+export const useHostAdminKnown = () => useContext(HostAdminKnownContext)
 export const useHostSubdomain = () => useContext(HostSubdomainContext)
 export const useHostReady = () => useContext(HostReadyContext)
 /** Whether host resolution gave up after retries (AGL-813). */
@@ -187,6 +195,7 @@ function HostPluginPolicyBridge({
   const isAdmin = Boolean(
     uid && hostStampedSitePermission(host, uid, 'site.manage', CORE_SITE_ROLE_PRESETS['site.manage']),
   )
+  const adminKnown = status === 'success' && !serverDenied && Boolean(uid && host)
   /**
    * Which site every themed surface below is showing (AGL-3068).
    *
@@ -202,9 +211,11 @@ function HostPluginPolicyBridge({
     <HostDisabledPluginsContext.Provider value={disabledPlugins}>
       <HostEnabledPluginsContext.Provider value={optedInPlugins}>
         <HostAdminContext.Provider value={isAdmin}>
-          <HostSiteKeyContext.Provider value={siteKey}>
-            {children}
-          </HostSiteKeyContext.Provider>
+          <HostAdminKnownContext.Provider value={adminKnown}>
+            <HostSiteKeyContext.Provider value={siteKey}>
+              {children}
+            </HostSiteKeyContext.Provider>
+          </HostAdminKnownContext.Provider>
         </HostAdminContext.Provider>
       </HostEnabledPluginsContext.Provider>
     </HostDisabledPluginsContext.Provider>
