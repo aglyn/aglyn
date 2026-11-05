@@ -22,6 +22,7 @@
 
 import assert from 'node:assert/strict'
 import { describe, it } from 'node:test'
+import { isHandBuiltDemoHost, prunesHandBuiltPages, withoutHandBuiltPages } from './hand-built-demo-sites.mjs'
 
 import {
   aiMemoryFixtures,
@@ -396,5 +397,48 @@ describe('docs fixture builders', () => {
       aiMemoryFixtures({ nowMs: NOW, idFor: (id) => `x-${id}` }).map((row) => row.id),
       ['x-copy-short', 'x-removes-testimonials', 'x-no-emoji'],
     )
+  })
+})
+
+describe('the hand-built demo sites keep their pages (AGL-4166)', () => {
+  const docs = [
+    { path: 'hosts/review-bakery', data: { screens: { 'seed-review-page-about': 'about' }, business: { name: 'x' } } },
+    { path: 'hosts/review-bakery/screens/seed-review-page-about', data: { slug: 'about' } },
+    { path: 'hosts/review-bakery/screens/seed-review-page-about/versions/seed-review-page-about-v1', data: { nodes: {} } },
+    { path: 'hosts/review-bakery/screens/seed-review-email-newsletter', data: { kind: 'email' } },
+    { path: 'hosts/review-bakery/screens/seed-review-email-newsletter/versions/v1', data: { nodes: {} } },
+    { path: 'hosts/review-bakery/products/seed-review-latte', data: { name: 'Latte' } },
+    { path: 'hosts/review-juniper-cafe', data: { screens: { 'seed-review-home': '/' } } },
+    { path: 'hosts/some-other-site/screens/seed-home', data: { slug: '/' } },
+  ]
+
+  it('drops page screens, their versions and the routing map, and keeps emails and data', () => {
+    const { docs: kept, dropped } = withoutHandBuiltPages(docs)
+    assert.deepEqual(
+      kept.map((doc) => doc.path),
+      [
+        'hosts/review-bakery',
+        'hosts/review-bakery/screens/seed-review-email-newsletter',
+        'hosts/review-bakery/screens/seed-review-email-newsletter/versions/v1',
+        'hosts/review-bakery/products/seed-review-latte',
+        'hosts/some-other-site/screens/seed-home',
+      ],
+    )
+    assert.deepEqual(kept[0].data, { business: { name: 'x' } })
+    assert.deepEqual(dropped, [
+      'hosts/review-bakery#screens',
+      'hosts/review-bakery/screens/seed-review-page-about',
+      'hosts/review-bakery/screens/seed-review-page-about/versions/seed-review-page-about-v1',
+      'hosts/review-juniper-cafe#screens',
+    ])
+  })
+
+  it('never prunes their pages, layouts or components', () => {
+    assert.equal(prunesHandBuiltPages('hosts/review-bakery/screens'), true)
+    assert.equal(prunesHandBuiltPages('hosts/review-cantina/layouts'), true)
+    assert.equal(prunesHandBuiltPages('hosts/review-bakery/products'), false)
+    assert.equal(prunesHandBuiltPages('hosts/other/screens'), false)
+    assert.equal(isHandBuiltDemoHost('review-ironleaf'), true)
+    assert.equal(isHandBuiltDemoHost('demo'), false)
   })
 })
