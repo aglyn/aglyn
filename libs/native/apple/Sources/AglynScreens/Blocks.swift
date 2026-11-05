@@ -557,6 +557,8 @@ struct FieldInput: View {
     let label = ScreenValues.render(field.label, in: context)
     VStack(alignment: .leading, spacing: 4) {
       switch field.kind {
+      case "heading":
+        Text(label).font(.headline).padding(.top, 8).accessibilityAddTraits(.isHeader)
       case "toggle":
         Toggle(label, isOn: flag)
       case "select", "country":

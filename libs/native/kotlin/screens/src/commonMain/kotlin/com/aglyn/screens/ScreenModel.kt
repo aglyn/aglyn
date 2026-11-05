@@ -89,6 +89,8 @@ data class ScreenSession(
   /** The same on the site in [permissionsSiteId], with that site's own stamp applied; a screen asks `site.can[<key>]`. */
   val sitePermissions: Map<String, Boolean> = emptyMap(),
   val permissionsSiteId: String? = null,
+  /** The plugins on for this workspace, which decide the keys a permission editor offers; null offers them all. */
+  val enabledPlugins: List<String>? = null,
 ) {
   fun context(plugin: NativePluginContext?, params: NativeParams): JsonElement {
     val role = orgRole.orEmpty()
@@ -97,6 +99,18 @@ data class ScreenSession(
     // site than the one the stamp was read for, reads the workspace's verdict.
     val onSite = if (plugin?.hostId != null && plugin.hostId == permissionsSiteId) sitePermissions else orgPermissions
     fun can(verdicts: Map<String, Boolean>) = JsonObject(verdicts.mapValues { JsonPrimitive(it.value || claims.isStaff) })
+    fun rows(narrowable: Boolean) = kotlinx.serialization.json.JsonArray(
+      com.aglyn.contracts.permissionEditorRows(com.aglyn.contracts.Contracts.orgRoleGrants, enabledPlugins, narrowable).map { row ->
+        buildJsonObject {
+          put("key", row.key)
+          put("label", row.label)
+          put("description", row.description)
+          put("group", row.group)
+          put("groupLabel", row.groupLabel)
+          put("first", row.first)
+        }
+      },
+    )
     return buildJsonObject {
       put("org", buildJsonObject {
         put("id", plugin?.orgId)
@@ -132,6 +146,8 @@ data class ScreenSession(
       put("app", buildJsonObject {
         put("origin", origin)
         put("passkeyRp", passkeyRelyingParty)
+        put("permissionCatalog", rows(false))
+        put("narrowablePermissions", rows(true))
       })
       // Today, for routes that take a period, in UTC as the routes keep them (`ScreenValues.nowObject`).
       put("now", ScreenValues.nowObject())

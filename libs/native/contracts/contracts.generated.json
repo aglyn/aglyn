@@ -7912,6 +7912,7 @@
         "group": "commerce",
         "key": "managePos",
         "label": "Use the point of sale",
+        "narrowable": true,
         "pluginId": "commerce",
         "scope": "org"
       },
@@ -7920,6 +7921,7 @@
         "group": "commerce",
         "key": "posSell",
         "label": "Sell at the register",
+        "narrowable": true,
         "pluginId": "commerce",
         "refines": "managePos",
         "scope": "org"
@@ -7929,6 +7931,7 @@
         "group": "commerce",
         "key": "posRefund",
         "label": "Refunds and returns",
+        "narrowable": true,
         "pluginId": "commerce",
         "refines": "managePos",
         "scope": "org"
@@ -7938,6 +7941,7 @@
         "group": "commerce",
         "key": "posDiscount",
         "label": "Give discounts at the register",
+        "narrowable": true,
         "pluginId": "commerce",
         "refines": "managePos",
         "scope": "org"
@@ -7947,6 +7951,7 @@
         "group": "commerce",
         "key": "posCashDrawer",
         "label": "Cash drawer and shifts",
+        "narrowable": true,
         "pluginId": "commerce",
         "refines": "managePos",
         "scope": "org"
@@ -7956,6 +7961,7 @@
         "group": "commerce",
         "key": "posDevices",
         "label": "Registers and devices",
+        "narrowable": true,
         "pluginId": "commerce",
         "refines": "managePos",
         "scope": "org"
@@ -8093,6 +8099,7 @@
         "group": "waivers",
         "key": "manageWaivers",
         "label": "Manage waivers",
+        "narrowable": true,
         "pluginId": "waivers",
         "scope": "org"
       },
@@ -8101,6 +8108,7 @@
         "group": "waivers",
         "key": "collectWaivers",
         "label": "Collect waivers",
+        "narrowable": true,
         "pluginId": "waivers",
         "scope": "org"
       },

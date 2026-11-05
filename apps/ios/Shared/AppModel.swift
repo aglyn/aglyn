@@ -203,7 +203,8 @@ final class AppModel {
         message: { passwordChangeMessage($0) }),
       googleConfigured: config?.google != nil, passkeyRelyingParty: config?.passkeyRelyingParty,
       orgPermissions: orgAccess.workspacePermissions, sitePermissions: orgAccess.pickedSitePermissions,
-      permissionsSiteID: orgAccess.pickedSiteID)
+      permissionsSiteID: orgAccess.pickedSiteID,
+      enabledPlugins: workspace?.orgLogo.map { resolveEnabledPlugins($0.enabledPlugins) })
   }
 
   func signOut() async {
