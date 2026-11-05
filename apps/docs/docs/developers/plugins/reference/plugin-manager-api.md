@@ -1044,6 +1044,24 @@ declares `products`, `collections` (catalog collections only) and
 `categories`, Forms declares `forms`, and Data declares `datasets` with
 their fields.
 
+## Shared with all sites except some — `plugin-scope-sharing` (`/server`)
+
+A document in an org collection can be shared with every site but a few. It keeps the sites it reaches in `visibleTo`, so that list has to change when a site joins or leaves the workspace. One sweep does that for every collection, and it walks what plugins declare in the `scopeSharingCollections` block of `plugins.config.json`, compiled with no runtime door.
+
+| Declaration field | Semantics |
+| -- | -- |
+| `name` | The subcollection under `orgs/{orgId}`. One collection has one owner. |
+| `patch` | `true` when stored fields follow `visibleTo`, such as scoped search tokens. The sweep writes nothing to the collection until the patch is registered. |
+| `maxIncluded` | The most sites one document may reach. Past it the document stops gaining sites, still loses sites that left, and shows in the weekly drift report. |
+| `keepSiteFields` | Fields naming sites that stay included though they are excluded, such as the site that captured a person. |
+
+| API | Semantics |
+| -- | -- |
+| `listScopeSharingCollections()` | Every collection the sweep walks, with its owner, in a stable order. |
+| `registerPluginScopeSharingPatch(collections, patch, { pluginId? })` | Registers the function that recomputes those fields. It receives the collection and the whole document as it will be stored, and its answer is merged into the write. Refuses a collection the plugin did not declare with `patch: true`. |
+
+Register a patch from `serverDeclarations`, deferring what it needs behind an `await import`: it registers in every server process, and only a sweep that finds a marked document calls it.
+
 ## Container kinds — `plugin-containers`
 
 A container is a document other records are FILED UNDER: a form, a screen, a

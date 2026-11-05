@@ -17,6 +17,7 @@
 
 import {
   addPlan,
+  addAllExceptDrift,
   describeScopeDrift,
   emptyTotals,
   needsScopeStamp,
@@ -159,6 +160,7 @@ describe('scopeDrift (AGL-1478)', () => {
     expect(scopeDrift(emptyTotals())).toEqual({
       byCollection: {},
       members: 0,
+      allExcept: { stale: 0, invalid: 0, capped: 0 },
       total: 0,
     })
   })
@@ -182,6 +184,25 @@ describe('scopeDrift (AGL-1478)', () => {
     expect(drift.byCollection).toEqual({ mediaFolders: 2, datasets: 1 })
     expect(drift.members).toBe(0)
     expect(drift.total).toBe(3)
+  })
+
+  it('alarms on all-except documents behind or unreadable, and only reports the capped', () => {
+    const totals = emptyTotals()
+    addAllExceptDrift(totals, { marked: 9, stale: 2, capped: 4, invalid: 1 })
+    addAllExceptDrift(totals, { marked: 1, stale: 1, capped: 0, invalid: 0 })
+    expect(totals.allExcept).toEqual({ marked: 10, stale: 3, capped: 4, invalid: 1 })
+    const drift = scopeDrift(totals)
+    expect(drift.allExcept).toEqual({ stale: 3, invalid: 1, capped: 4 })
+    expect(drift.total).toBe(4)
+    expect(describeScopeDrift(drift)).toContain('3 all-except behind')
+    expect(describeScopeDrift(drift)).toContain('1 all-except unreadable')
+  })
+
+  it('says nothing about documents at their limit, which are not drift', () => {
+    const totals = emptyTotals()
+    addAllExceptDrift(totals, { marked: 4, stale: 0, capped: 4, invalid: 0 })
+    expect(scopeDrift(totals).total).toBe(0)
+    expect(describeScopeDrift(scopeDrift(totals))).toBe('')
   })
 
   it('counts a stale member projection separately', () => {

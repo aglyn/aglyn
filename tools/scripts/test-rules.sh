@@ -60,6 +60,7 @@ npx firebase emulators:exec --only firestore,database --project demo-rules-check
         cloud/rules-workspace-manage-org.spec.mjs \
         cloud/rules-crm-audience-writes.spec.mjs \
         cloud/rules-campaign-site-gain.spec.mjs \
+        cloud/rules-scope-sweeps.spec.mjs \
         cloud/marketplace-rules.spec.mjs \
         cloud/hosts-list-constraint.spec.mjs \
         cloud/override-merge.spec.mjs; do \

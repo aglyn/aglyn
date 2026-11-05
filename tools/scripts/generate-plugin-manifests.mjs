@@ -1586,6 +1586,66 @@ function containerKindRows() {
   return rows
 }
 
+/**
+ * The collections each plugin keeps documents shared with all sites except
+ * some (AGL-4047), which the one sweep walks. Checked here: one owner per
+ * name, not a name the platform holds itself, and the options written right.
+ */
+const SCOPE_SHARING_FILE = 'libs/aglyn/src/lib/plugin-manager/plugin-scope-sharing.generated.ts'
+const CORE_SCOPE_SHARING_NAMES = ['media', 'mediaFolders']
+
+function scopeSharingRows() {
+  const rows = []
+  const owners = new Map()
+  for (const plugin of config.plugins) {
+    const declared = plugin.scopeSharingCollections
+    if (!declared) continue
+    const where = `plugins.config.json: "${plugin.id}" scopeSharingCollections`
+    if (!Array.isArray(declared) || !declared.length) {
+      throw new Error(`${where} is present and declares nothing — drop it, or name what the plugin shares`)
+    }
+    for (const declaration of declared) {
+      const { name, patch, maxIncluded, keepSiteFields, ...rest } = declaration
+      const what = `${where} "${name ?? ''}"`
+      if (typeof name !== 'string' || !/^[A-Za-z][A-Za-z0-9]*$/.test(name)) {
+        throw new Error(`${where}: a collection needs a plain "name"`)
+      }
+      if (CORE_SCOPE_SHARING_NAMES.includes(name)) throw new Error(`${what} is held by the platform itself`)
+      const held = owners.get(name)
+      if (held) throw new Error(`${what} is already declared by "${held}" — one collection has one owner`)
+      owners.set(name, plugin.id)
+      if (Object.keys(rest).length) throw new Error(`${what}: unknown keys ${Object.keys(rest).join(', ')}`)
+      if (patch !== undefined && patch !== true) throw new Error(`${what}: "patch" is true, or left out`)
+      if (maxIncluded !== undefined && (!Number.isInteger(maxIncluded) || maxIncluded < 1)) {
+        throw new Error(`${what}: "maxIncluded" is a whole number of sites`)
+      }
+      if (
+        keepSiteFields !== undefined &&
+        (!Array.isArray(keepSiteFields) ||
+          !keepSiteFields.length ||
+          keepSiteFields.some((field) => typeof field !== 'string' || !/^[A-Za-z][A-Za-z0-9]*$/.test(field)))
+      ) {
+        throw new Error(`${what}: "keepSiteFields" names one or more plain fields`)
+      }
+      rows.push({ pluginId: plugin.id, ...declaration })
+    }
+  }
+  return rows
+}
+
+function scopeSharingContent(rows) {
+  return (
+    `/**\n * GENERATED FILE — do not edit. Regenerate with:\n` +
+    ` *   node tools/scripts/generate-plugin-manifests.mjs\n *\n` +
+    ` * The collections plugins keep documents shared with all sites except some\n` +
+    ` * (AGL-4047): each plugin's \`scopeSharingCollections\` block in\n` +
+    ` * plugins.config.json. Core's \`plugin-scope-sharing.ts\` reads them.\n */\n\n` +
+    `import type { ResolvedScopeSharingCollection } from './plugin-scope-sharing'\n\n` +
+    `export const PLUGIN_SCOPE_SHARING_COLLECTIONS_DECLARED: readonly ResolvedScopeSharingCollection[] = ` +
+    `${JSON.stringify(rows, null, 2)}\n`
+  )
+}
+
 function containersContent(rows) {
   return (
     `/**\n * GENERATED FILE — do not edit. Regenerate with:\n` +
@@ -3882,6 +3942,7 @@ const ALL = [
     content: starterTemplatesContent(await pluginStarterTemplates()),
   },
   { file: CONTAINERS_FILE, content: containersContent(containerKindRows()) },
+  { file: SCOPE_SHARING_FILE, content: scopeSharingContent(scopeSharingRows()) },
   ...ANALYTICS_MANIFESTS.map((file) => ({ file, content: analyticsManifestContent() })),
   { file: SUBSCRIPTION_TOPICS_FILE, content: subscriptionTopicsContent(subscriptionTopicRows()) },
   { file: TITLES_MANIFEST, content: titlesContent(await pluginSurfaceTitles()) },

@@ -61,11 +61,20 @@ scan being read by a person is the entire feature.
 | `drift.byCollection.contacts` | `upsert-contact` dedupes through `scopedToHost`, so these are invisible to their own dedupe query — a repeat form submission creates a duplicate instead of merging |
 | `drift.byCollection.contactSegments` | inert today (no scoped reader, rules gate on `isOrgWideMember()`), live the moment anyone adds one |
 | `drift.members` | a member's `scopeTokens` projection is stale — the same mismatch from the reader's end |
+| `drift.allExcept.stale` | documents shared with all sites except some whose `visibleTo` no longer matches the workspace's sites: a sweep was lost, or gave up after its attempts |
+| `drift.allExcept.invalid` | a `scopeMode` marker the helper cannot act on. The sweep leaves these alone, since either guess moves who can see the document. Repaired by hand |
+| `drift.allExcept.capped` | at their collection's site limit, so they stopped widening. A known state: reported, and not part of `drift.total` |
 
 An **empty** `visibleTo: []` is never counted. That is a stored "visible to
 nobody", and widening it to `['org']` is the one direction nothing may move a
 resource unasked. It is equally invisible, so the CDN names it separately —
 see below.
+
+`totals.allExcept.marked` counts every document carrying the marker. The check
+is the sweep's own helper (`reconcileAllExcept`), so it reports exactly what a
+sweep would write, and the repair for `stale` is that sweep:
+`dryRun: false` runs it for any workspace with something behind. See
+`libs/tenant/data/admin/src/lib/server/scope-sharing-sweep.ts`.
 
 ## Between Mondays: the media CDN says it out loud
 
