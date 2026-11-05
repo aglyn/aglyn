@@ -293,11 +293,16 @@ export function siteImportNavTree(page: SiteImportFrameSource, stylesheets: read
       return false
     }
   }
+  /** A link to a place on this page that says it skips there (AGL-4152): a way past the menu, never a menu item or a call to action. */
+  const skip = (anchor: SiteImportAnchor) => {
+    const attrs = reader.elements[anchor.element]?.attrs
+    return /^#/.test(attrs?.href ?? '') && (/skip/i.test(attrs?.class ?? '') || /skip/i.test(anchor.label))
+  }
   const items: SiteImportNavGroup[] = []
   const ctas: SiteImportNavCta[] = []
   const inRow = new Set<SiteImportAnchor>()
   for (const child of reader.elements[row]?.children ?? []) {
-    const anchors = reader.anchors(child).filter((anchor) => !brand(anchor) && (anchor.label || anchor.href))
+    const anchors = reader.anchors(child).filter((anchor) => !brand(anchor) && !skip(anchor) && (anchor.label || anchor.href))
     const texts = reader.texts(child)
     if (!anchors.length && !texts.length) continue
     anchors.forEach((anchor) => inRow.add(anchor))
@@ -334,10 +339,13 @@ export function siteImportNavTree(page: SiteImportFrameSource, stylesheets: read
   }
   // The header's buttons outside the menu row.
   for (const anchor of reader.anchors(header.id)) {
-    if (inRow.has(anchor) || brand(anchor) || !anchor.label || reader.contains(row, anchor.element)) continue
+    if (inRow.has(anchor) || brand(anchor) || skip(anchor) || !anchor.label || reader.contains(row, anchor.element)) continue
     const style = reader.buttonStyle(anchor.element)
     if (!style) continue
-    if (!ctas.some((cta) => cta.label === anchor.label && cta.href === anchor.href)) ctas.push({ label: clean(anchor.label, AI_SITE_IMPORT_LABEL_MAX_CHARS * 2), href: anchor.href, style })
+    // A header can hold one button twice, a wide screen's and a phone's: the strongest drawing of it stands.
+    const held = ctas.find((cta) => cta.label === anchor.label && cta.href === anchor.href)
+    if (!held) ctas.push({ label: clean(anchor.label, AI_SITE_IMPORT_LABEL_MAX_CHARS * 2), href: anchor.href, style })
+    else if (CTA_STRENGTH[style] > CTA_STRENGTH[held.style]) held.style = style
   }
   const phoneMenu = reader.elements.some((node) => {
     if (node.region !== 'header' && !reader.contains(header.id, node.id)) return false
@@ -348,6 +356,9 @@ export function siteImportNavTree(page: SiteImportFrameSource, stylesheets: read
   if (!items.length && !ctas.length) return null
   return { items, ctas, phoneMenu, background: reader.background(header.id) }
 }
+
+/** How strongly a header's button is drawn. */
+const CTA_STRENGTH: Record<SiteImportNavCta['style'], number> = { quiet: 0, secondary: 1, primary: 2 }
 
 /** One entry of a menu, with the heading of the column it sits in. */
 function navEntry(reader: FrameReader, anchor: SiteImportAnchor, item: number): SiteImportNavEntry {

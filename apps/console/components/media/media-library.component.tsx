@@ -49,6 +49,7 @@ import {
   pluginHostCollectionRouteSlug,
 } from '@aglyn/aglyn/plugin-manager/plugin-host-collections'
 import { hostDisplayDomain } from '../../constants/tenant-links'
+import { holdsSiteKey } from '@aglyn/aglyn/app-utils/host-permissions'
 import { permissionRefusalText } from '@aglyn/aglyn/app-utils/org-permissions'
 import { AppLink, useConfirmationContext } from '@aglyn/shared-ui-jsx'
 import { BlockedControl } from '@aglyn/shared-ui-jsx/components/blocked-control.component'
@@ -313,8 +314,10 @@ const PICKER_KIND_COPY: Readonly<
 /** Page size for cursor pagination (AGL-174). */
 const MEDIA_PAGE_SIZE = 60
 
-/** What a member without the media key is told beside a control the key opens. */
-const MEDIA_WRITE_REFUSAL = permissionRefusalText('org.media')
+/** What a member is told beside a control the workspace library's key opens. */
+const ORG_MEDIA_REFUSAL = permissionRefusalText('org.media')
+/** The same in a site's own library, which answers to the site's key. */
+const SITE_MEDIA_REFUSAL = permissionRefusalText('site.edit')
 
 /**
  * Docs per request in the folder sharing cascade (AGL-1045). Small enough
@@ -593,26 +596,6 @@ export function MediaLibraryComponent(props: MediaLibraryComponentProps) {
    * org-scope-less library (a host library) has nothing to wait for.
    */
   const scopeReady = !orgId || scopeLoaded
-  /*
-   * Who may change the workspace library (AGL-4047). "Edit the workspace media
-   * library" is what its doors ask: the rules' `canWriteOrgMedia` for what this
-   * file writes from the browser (the details drawer's Save, bulk tags, a
-   * folder dragged into another), and `resolveMediaScope` for the folders and
-   * upload routes (rename, delete, move, private, sharing). So a member without
-   * it sees those controls switched off with the permission named, instead of
-   * a save that fails. Held while permissions load; the reason is said only
-   * once they have answered.
-   *
-   * The workspace library only: a site's own library answers to the site's
-   * "Edit site content". Not Copy temporary link either: `/api/media/sign` is
-   * read-level and asks only that the member can see the file.
-   */
-  const orgPermissions = useOrgPermissions()
-  const mediaWriteHeld = Boolean(orgId) && !orgPermissions.loaded
-  const mediaWriteRefused =
-    Boolean(orgId) && orgPermissions.loaded && !orgPermissions.can('org.media')
-  /** Off for either reason: a field or a drag that has no reason of its own. */
-  const mediaWriteOff = mediaWriteHeld || mediaWriteRefused
   // Picking for a site narrows to THAT site's read set; otherwise a scoped
   // member narrows to their own. An org-wide member browsing the library
   // outright needs no filter.
@@ -1069,10 +1052,42 @@ export function MediaLibraryComponent(props: MediaLibraryComponentProps) {
   // Nothing is lost by holding: `assetOrigin` below already discards this
   // document unless `hostId` is truthy, so the read could only ever have been
   // waste even had it been allowed.
-  const { data: hostDoc } = useFirestoreDoc<any>(
+  const { data: hostDoc, status: hostDocStatus } = useFirestoreDoc<any>(
     () => (hostId ? doc(firestore, 'hosts', hostId) : null),
     [firestore, hostId],
   )
+  /*
+   * Who may change this library (AGL-4047). Every door that writes or scans it
+   * goes through `resolveMediaScope`, or asks the same key at the rules, so the
+   * library's controls answer to one key:
+   *
+   *   - the workspace library: "Edit the workspace media library" (`org.media`,
+   *     the rules' `canWriteOrgMedia`);
+   *   - a site's own library: "Edit site content" on that site (`site.edit`, the
+   *     rules' `canWriteHostContent`), read as the door reads it: the site's
+   *     stamp, else the preset of the member's role there. A reader not on the
+   *     site's roster is staff, whom the server answers.
+   *
+   * That covers Upload, New folder, Replace file, Edit image, File info,
+   * "Find where this is used" and every write the drawer, the menus and a
+   * selection offer. A member without the key sees them switched off with the
+   * permission named, instead of a request that fails. Held while the answer
+   * loads; the reason is said only once it is in.
+   *
+   * Not Copy temporary link: `/api/media/sign` is read-level and asks only that
+   * the member can see the file. Not Download or Copy URL either.
+   */
+  const orgPermissions = useOrgPermissions()
+  const hostDocKnown = hostDocStatus === 'success'
+  const mediaWriteHeld = orgId ? !orgPermissions.loaded : !hostDocKnown
+  const mediaWriteRefused = orgId
+    ? orgPermissions.loaded && !orgPermissions.can('org.media')
+    : hostDocKnown &&
+      Boolean(user?.uid && hostDoc?.memberRoles?.[user.uid]) &&
+      !holdsSiteKey(hostDoc, user?.uid as string, 'site.edit')
+  const mediaWriteReason = orgId ? ORG_MEDIA_REFUSAL : SITE_MEDIA_REFUSAL
+  /** Off for either reason: a field or a drag that has no reason of its own. */
+  const mediaWriteOff = mediaWriteHeld || mediaWriteRefused
   const assetOrigin = useMemo(() => {
     if (hostId && hostDoc) {
       // hostDisplayDomain covers both branches and reads the configured apex
@@ -3574,17 +3589,23 @@ export function MediaLibraryComponent(props: MediaLibraryComponentProps) {
   const dropDepthRef = useRef(0)
   const isFileDrag = (event: React.DragEvent) =>
     Array.from(event.dataTransfer?.types ?? []).includes('Files')
-  const handleFileDragEnter = useCallback((event: React.DragEvent) => {
-    if (!isFileDrag(event)) return
-    event.preventDefault()
-    dropDepthRef.current += 1
-    setIsFileDropActive(true)
-  }, [])
-  const handleFileDragOver = useCallback((event: React.DragEvent) => {
-    if (!isFileDrag(event)) return
-    event.preventDefault()
-    event.dataTransfer.dropEffect = 'copy'
-  }, [])
+  const handleFileDragEnter = useCallback(
+    (event: React.DragEvent) => {
+      if (!isFileDrag(event)) return
+      event.preventDefault()
+      dropDepthRef.current += 1
+      if (!mediaWriteOff) setIsFileDropActive(true)
+    },
+    [mediaWriteOff],
+  )
+  const handleFileDragOver = useCallback(
+    (event: React.DragEvent) => {
+      if (!isFileDrag(event)) return
+      event.preventDefault()
+      event.dataTransfer.dropEffect = mediaWriteOff ? 'none' : 'copy'
+    },
+    [mediaWriteOff],
+  )
   const handleFileDragLeave = useCallback((event: React.DragEvent) => {
     if (!isFileDrag(event)) return
     dropDepthRef.current -= 1
@@ -3599,10 +3620,17 @@ export function MediaLibraryComponent(props: MediaLibraryComponentProps) {
       event.preventDefault()
       dropDepthRef.current = 0
       setIsFileDropActive(false)
+      // The drop takes the Upload button's door, so it answers as the button does.
+      if (mediaWriteOff) {
+        if (mediaWriteRefused) {
+          enqueueSnackbar(mediaWriteReason, { variant: 'warning', persist: false })
+        }
+        return
+      }
       const files = Array.from(event.dataTransfer?.files ?? [])
       void handleFiles(files)
     },
-    [handleFiles],
+    [handleFiles, mediaWriteOff, mediaWriteRefused, mediaWriteReason, enqueueSnackbar],
   )
 
   const handleCopyUrl = useCallback(
@@ -3964,10 +3992,10 @@ export function MediaLibraryComponent(props: MediaLibraryComponentProps) {
                 const run = () => rowActionsRef.current
                 return {
                   onCopyUrl: () => run().handleCopyUrl(media)(),
-                  onCopySignedLink:
-                    orgId && viewerOrgWide
-                      ? () => void run().handleCopySignedLink(media)()
-                      : undefined,
+                  // Whoever can see the file: its route asks no more (AGL-4047).
+                  onCopySignedLink: orgId
+                    ? () => void run().handleCopySignedLink(media)()
+                    : undefined,
                   onSetPrivate:
                     orgId && viewerOrgWide
                       ? (makePrivate) =>
@@ -3981,7 +4009,7 @@ export function MediaLibraryComponent(props: MediaLibraryComponentProps) {
                   onDetails: () => run().openDetails(media),
                   onDelete: () => void run().handleDelete(media)(),
                   writeHeld: mediaWriteHeld,
-                  writeRefusal: mediaWriteRefused ? MEDIA_WRITE_REFUSAL : undefined,
+                  writeRefusal: mediaWriteRefused ? mediaWriteReason : undefined,
                 }
               },
         }),
@@ -4004,6 +4032,7 @@ export function MediaLibraryComponent(props: MediaLibraryComponentProps) {
       viewerOrgWide,
       mediaWriteHeld,
       mediaWriteRefused,
+      mediaWriteReason,
       mediaWriteOff,
       panelFields,
       filterOptions,
@@ -4281,7 +4310,7 @@ export function MediaLibraryComponent(props: MediaLibraryComponentProps) {
           onDelete={handleFolderDelete}
           readOnly={Boolean(onSelect)}
           writeHeld={mediaWriteHeld}
-          writeRefusal={mediaWriteRefused ? MEDIA_WRITE_REFUSAL : undefined}
+          writeRefusal={mediaWriteRefused ? mediaWriteReason : undefined}
         />
         <Stack spacing={2} sx={{ flex: 1, minWidth: 0 }}>
       <Stack
@@ -4290,33 +4319,38 @@ export function MediaLibraryComponent(props: MediaLibraryComponentProps) {
         useFlexGap
         sx={{ alignItems: 'center', flexWrap: 'wrap', rowGap: 1 }}
       >
-        <Button
-          variant="contained"
-          color="primary"
-          disabled={busy}
-          onClick={() => inputRef.current?.click()}
-          sx={{ whiteSpace: 'nowrap' }}
-        >
-          {'Upload media'}
-        </Button>
-        {onSelect ? null : (
+        <BlockedControl blocked={mediaWriteRefused} reason={mediaWriteReason}>
           <Button
-            variant="outlined"
+            variant="contained"
             color="primary"
+            disabled={busy || mediaWriteHeld}
+            onClick={() => inputRef.current?.click()}
             sx={{ whiteSpace: 'nowrap' }}
-            onClick={() =>
-              setFolderPrompt({
-                title: folderParentContext
-                  ? `New folder in "${folderNameById[folderParentContext] ?? ''}"`
-                  : 'New folder',
-                value: '',
-                action: async (name) =>
-                  Boolean(await handleFolderCreate(name, folderParentContext)),
-              })
-            }
           >
-            {'New folder'}
+            {'Upload media'}
           </Button>
+        </BlockedControl>
+        {onSelect ? null : (
+          <BlockedControl blocked={mediaWriteRefused} reason={mediaWriteReason}>
+            <Button
+              variant="outlined"
+              color="primary"
+              disabled={mediaWriteHeld}
+              sx={{ whiteSpace: 'nowrap' }}
+              onClick={() =>
+                setFolderPrompt({
+                  title: folderParentContext
+                    ? `New folder in "${folderNameById[folderParentContext] ?? ''}"`
+                    : 'New folder',
+                  value: '',
+                  action: async (name) =>
+                    Boolean(await handleFolderCreate(name, folderParentContext)),
+                })
+              }
+            >
+              {'New folder'}
+            </Button>
+          </BlockedControl>
         )}
         {/* Other ways to add a file, from plugins (AGL-3602). */}
         {mediaLibraryZone}
@@ -4551,7 +4585,7 @@ export function MediaLibraryComponent(props: MediaLibraryComponentProps) {
           <Typography variant="body2">
             {`${selected.size} selected`}
           </Typography>
-          <BlockedControl blocked={mediaWriteRefused} reason={MEDIA_WRITE_REFUSAL}>
+          <BlockedControl blocked={mediaWriteRefused} reason={mediaWriteReason}>
             <Button
               size="small"
               disabled={mediaWriteHeld}
@@ -4560,7 +4594,7 @@ export function MediaLibraryComponent(props: MediaLibraryComponentProps) {
               {'Move to folder…'}
             </Button>
           </BlockedControl>
-          <BlockedControl blocked={mediaWriteRefused} reason={MEDIA_WRITE_REFUSAL}>
+          <BlockedControl blocked={mediaWriteRefused} reason={mediaWriteReason}>
             <Button
               size="small"
               disabled={mediaWriteHeld}
@@ -4569,7 +4603,7 @@ export function MediaLibraryComponent(props: MediaLibraryComponentProps) {
               {'Add tag…'}
             </Button>
           </BlockedControl>
-          <BlockedControl blocked={mediaWriteRefused} reason={MEDIA_WRITE_REFUSAL}>
+          <BlockedControl blocked={mediaWriteRefused} reason={mediaWriteReason}>
             <Button
               size="small"
               disabled={mediaWriteHeld}
@@ -4579,7 +4613,7 @@ export function MediaLibraryComponent(props: MediaLibraryComponentProps) {
             </Button>
           </BlockedControl>
           {canShareScope ? (
-            <BlockedControl blocked={mediaWriteRefused} reason={MEDIA_WRITE_REFUSAL}>
+            <BlockedControl blocked={mediaWriteRefused} reason={mediaWriteReason}>
               <Button
                 size="small"
                 disabled={mediaWriteHeld}
@@ -4589,7 +4623,7 @@ export function MediaLibraryComponent(props: MediaLibraryComponentProps) {
               </Button>
             </BlockedControl>
           ) : null}
-          <BlockedControl blocked={mediaWriteRefused} reason={MEDIA_WRITE_REFUSAL}>
+          <BlockedControl blocked={mediaWriteRefused} reason={mediaWriteReason}>
             <Button
               size="small"
               color="error"
@@ -4711,13 +4745,16 @@ export function MediaLibraryComponent(props: MediaLibraryComponentProps) {
               </Button>
             ) : (
               <Stack direction="row" spacing={1} sx={{ justifyContent: 'center' }}>
-                <Button
-                  size="small"
-                  variant="contained"
-                  onClick={() => inputRef.current?.click()}
-                >
-                  {'Upload media'}
-                </Button>
+                <BlockedControl blocked={mediaWriteRefused} reason={mediaWriteReason}>
+                  <Button
+                    size="small"
+                    variant="contained"
+                    disabled={mediaWriteHeld}
+                    onClick={() => inputRef.current?.click()}
+                  >
+                    {'Upload media'}
+                  </Button>
+                </BlockedControl>
                 {mediaLibraryZone}
               </Stack>
             )
@@ -4787,7 +4824,7 @@ export function MediaLibraryComponent(props: MediaLibraryComponentProps) {
                   canShareScope ? () => openFolderScope(folder) : undefined
                 }
                 writeHeld={mediaWriteHeld}
-                writeRefusal={mediaWriteRefused ? MEDIA_WRITE_REFUSAL : undefined}
+                writeRefusal={mediaWriteRefused ? mediaWriteReason : undefined}
                 scopeLabel={
                   orgId &&
                   Array.isArray((folder as any).visibleTo) &&
@@ -4832,19 +4869,17 @@ export function MediaLibraryComponent(props: MediaLibraryComponentProps) {
                     )
                   }
                   onCopyUrl={handleCopyUrl(media)}
-                  // AGL-2143. Not gated on `viewerOrgWide` like the signed
-                  // link is: a public asset needs no route at all, and the
-                  // private branch inside the handler carries the same orgId
-                  // guard the sign route enforces anyway.
+                  // AGL-2143. Not gated at all: a public asset needs no route,
+                  // and the private branch inside the handler carries the same
+                  // orgId guard the sign route enforces anyway.
                   onDownload={onSelect ? undefined : handleDownload(media)}
-                  // Offered where `onSetPrivate` below is — the route signs an
-                  // `org:` scope only, and the card hides the item unless
-                  // the asset is actually private (AGL-2055). It stays on
-                  // without the media key, which that route does not ask.
+                  // The route signs an `org:` scope only, and the card hides
+                  // the item unless the asset is actually private (AGL-2055).
+                  // For whoever can see the file, which is all that route asks
+                  // (AGL-4047): a site's collaborator too, and without the
+                  // media key.
                   onCopySignedLink={
-                    orgId && viewerOrgWide && !onSelect
-                      ? handleCopySignedLink(media)
-                      : undefined
+                    orgId && !onSelect ? handleCopySignedLink(media) : undefined
                   }
                   // Every family, not only images (AGL-2732). This prop was
                   // gated on `image/`, which is why an audit run against a
@@ -4866,7 +4901,7 @@ export function MediaLibraryComponent(props: MediaLibraryComponentProps) {
                       : undefined
                   }
                   writeHeld={mediaWriteHeld}
-                  writeRefusal={mediaWriteRefused ? MEDIA_WRITE_REFUSAL : undefined}
+                  writeRefusal={mediaWriteRefused ? mediaWriteReason : undefined}
                 />
               </DraggableCard>
             </Box>
@@ -4889,10 +4924,10 @@ export function MediaLibraryComponent(props: MediaLibraryComponentProps) {
         onClose={() => setEditor(null)}
       >
         <Stack spacing={2} sx={{ width: 340, maxWidth: '100vw', p: 2 }}>
-          {/* Every field below reaches the file through Save, which the rules
-              refuse without the key: one sentence for all of them. */}
+          {/* Every field below reaches the file through a door that refuses
+              without the key: one sentence for all of them. */}
           {mediaWriteRefused ? (
-            <Alert severity="info">{MEDIA_WRITE_REFUSAL}</Alert>
+            <Alert severity="info">{mediaWriteReason}</Alert>
           ) : null}
           <TextField
             size="small"
@@ -4977,26 +5012,36 @@ export function MediaLibraryComponent(props: MediaLibraryComponentProps) {
                 rotate about a PDF — so the two split here rather than
                 sharing one `image/` test. */}
             {editor?.media ? (
-              <Button
-                size="small"
-                onClick={() => {
-                  if (replaceIsPaused(editor.media)) {
-                    enqueueSnackbar(VIDEO_UPLOADS_PAUSED_MESSAGE, {
-                      variant: 'warning',
-                      persist: false,
-                    })
-                    return
-                  }
-                  replaceInputRef.current?.click()
-                }}
-              >
-                {'Replace file'}
-              </Button>
+              <BlockedControl blocked={mediaWriteRefused} reason={mediaWriteReason}>
+                <Button
+                  size="small"
+                  disabled={mediaWriteHeld}
+                  onClick={() => {
+                    if (replaceIsPaused(editor.media)) {
+                      enqueueSnackbar(VIDEO_UPLOADS_PAUSED_MESSAGE, {
+                        variant: 'warning',
+                        persist: false,
+                      })
+                      return
+                    }
+                    replaceInputRef.current?.click()
+                  }}
+                >
+                  {'Replace file'}
+                </Button>
+              </BlockedControl>
             ) : null}
+            {/* Either of its saves is a write: the replace door, or a new file. */}
             {String(editor?.media?.contentType ?? '').startsWith('image/') ? (
-              <Button size="small" onClick={() => setImageEditorOpen(true)}>
-                {'Edit image'}
-              </Button>
+              <BlockedControl blocked={mediaWriteRefused} reason={mediaWriteReason}>
+                <Button
+                  size="small"
+                  disabled={mediaWriteHeld}
+                  onClick={() => setImageEditorOpen(true)}
+                >
+                  {'Edit image'}
+                </Button>
+              </BlockedControl>
             ) : null}
           </Stack>
           <Box
@@ -5230,7 +5275,7 @@ export function MediaLibraryComponent(props: MediaLibraryComponentProps) {
                   ) : null}
                   <BlockedControl
                     blocked={mediaWriteRefused}
-                    reason={MEDIA_WRITE_REFUSAL}
+                    reason={mediaWriteReason}
                     fullWidth
                   >
                     <Select
@@ -5454,6 +5499,8 @@ export function MediaLibraryComponent(props: MediaLibraryComponentProps) {
               media={editor.media}
               scopeBody={scopeBody}
               user={user}
+              writeHeld={mediaWriteHeld}
+              writeRefusal={mediaWriteRefused ? mediaWriteReason : undefined}
               onFileChanged={(update) => {
                 setEditor((prev) =>
                   prev ? { ...prev, media: { ...prev.media, ...update } } : prev,
@@ -5488,20 +5535,24 @@ export function MediaLibraryComponent(props: MediaLibraryComponentProps) {
                 {'Used on'}
               </Typography>
               {refsAudit.status === 'done' ? (
-                <Button size="small" onClick={runReferenceAudit}>
+                <Button size="small" disabled={mediaWriteOff} onClick={runReferenceAudit}>
                   {'Rescan'}
                 </Button>
               ) : null}
             </Stack>
             {refsAudit.status === 'idle' ? (
-              <Button
-                size="small"
-                variant="outlined"
-                onClick={runReferenceAudit}
-                sx={{ alignSelf: 'flex-start' }}
-              >
-                {'Find where this is used'}
-              </Button>
+              // The scan's door is the library's own (`/api/media/references`).
+              <BlockedControl blocked={mediaWriteRefused} reason={mediaWriteReason}>
+                <Button
+                  size="small"
+                  variant="outlined"
+                  disabled={mediaWriteHeld}
+                  onClick={runReferenceAudit}
+                  sx={{ alignSelf: 'flex-start' }}
+                >
+                  {'Find where this is used'}
+                </Button>
+              </BlockedControl>
             ) : refsAudit.status === 'loading' ? (
               <Typography variant="body2" color="text.secondary">
                 {'Scanning pages, layouts, and content…'}
@@ -5512,7 +5563,7 @@ export function MediaLibraryComponent(props: MediaLibraryComponentProps) {
                   {'Could not scan for usage — this is not the same as ' +
                     'nothing using it. Try again before deleting.'}
                 </Typography>
-                <Button size="small" onClick={runReferenceAudit}>
+                <Button size="small" disabled={mediaWriteOff} onClick={runReferenceAudit}>
                   {'Try again'}
                 </Button>
               </Stack>
@@ -5607,7 +5658,7 @@ export function MediaLibraryComponent(props: MediaLibraryComponentProps) {
             sx={{ justifyContent: 'space-between', alignItems: 'center' }}
           >
             {editor?.media ? (
-              <BlockedControl blocked={mediaWriteRefused} reason={MEDIA_WRITE_REFUSAL}>
+              <BlockedControl blocked={mediaWriteRefused} reason={mediaWriteReason}>
                 <Button
                   size="small"
                   color="error"
@@ -5630,7 +5681,7 @@ export function MediaLibraryComponent(props: MediaLibraryComponentProps) {
             )}
             <Stack direction="row" spacing={1}>
               <Button onClick={() => setEditor(null)}>{'Cancel'}</Button>
-              <BlockedControl blocked={mediaWriteRefused} reason={MEDIA_WRITE_REFUSAL}>
+              <BlockedControl blocked={mediaWriteRefused} reason={mediaWriteReason}>
                 <Button
                   variant="contained"
                   color="primary"

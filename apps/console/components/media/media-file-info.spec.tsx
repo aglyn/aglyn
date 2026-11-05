@@ -110,6 +110,14 @@ const renderInfo = (mediaDoc: Record<string, unknown>, onFileChanged = jest.fn()
     />,
   )
 
+const propsFor = (mediaDoc: Record<string, unknown>) => ({
+  mediaId: 'm1',
+  media: mediaDoc,
+  scopeBody: { orgId: 'org-1' },
+  user: { uid: 'u1' },
+  onFileChanged: jest.fn(),
+})
+
 beforeEach(() => {
   mockAuthorizedFetch.mockReset()
   mockEnqueueSnackbar.mockReset()
@@ -251,6 +259,49 @@ describe('MediaFileInfo', () => {
     expect(
       screen.getByText('Details inside a video file can be read here but not changed.'),
     ).toBeTruthy()
+  })
+
+  describe('for a reader the library’s key refuses (AGL-4047)', () => {
+    const REASON = 'Your role does not include "Edit site content" — ask an organization admin'
+
+    it('switches Edit off naming the permission, and shows what it holds', () => {
+      render(
+        <MediaFileInfo
+          {...propsFor({
+            contentType: 'image/jpeg',
+            contentSha256: 'sha-1',
+            embeddedMetadata: record(),
+          })}
+          writeRefusal={REASON}
+        />,
+      )
+      const edit = screen.getByRole('button', { name: 'Edit' }) as HTMLButtonElement
+      expect(edit.disabled).toBe(true)
+      expect(screen.getAllByLabelText(REASON).some((wrapper) => wrapper.contains(edit))).toBe(true)
+      expect(mockAuthorizedFetch).not.toHaveBeenCalled()
+    })
+
+    it('asks nothing of a door that would refuse the read', () => {
+      render(
+        <MediaFileInfo
+          {...propsFor({ contentType: 'image/jpeg', contentSha256: 'sha-1' })}
+          writeRefusal={REASON}
+        />,
+      )
+      expect(mockAuthorizedFetch).not.toHaveBeenCalled()
+      expect(screen.queryByText(/Reading the details/)).toBeNull()
+    })
+
+    it('waits to read until the answer is in, and holds Edit with no reason', async () => {
+      const held = { contentType: 'image/jpeg', contentSha256: 'sha-1' }
+      const view = render(<MediaFileInfo {...propsFor(held)} writeHeld />)
+      expect(mockAuthorizedFetch).not.toHaveBeenCalled()
+      expect(screen.queryByLabelText(REASON)).toBeNull()
+      mockAuthorizedFetch.mockImplementation(() => respond(200, { embeddedMetadata: record() }))
+      view.rerender(<MediaFileInfo {...propsFor(held)} />)
+      await screen.findByRole('button', { name: 'Edit' })
+      expect(mockAuthorizedFetch).toHaveBeenCalledTimes(1)
+    })
   })
 
   it('surfaces a refused write without leaving edit mode', async () => {

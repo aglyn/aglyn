@@ -50,9 +50,9 @@ export interface MediaFolderCardProps {
    * org-wide member, who is the only principal the rules let write a scope.
    */
   onSetScope?: () => void
-  /** Rename, Shared with… and Delete stay off while permissions load. */
+  /** New subfolder, Rename, Shared with… and Delete stay off while permissions load. */
   writeHeld?: boolean
-  /** Why Rename, Shared with… and Delete are switched off for this reader. */
+  /** Why New subfolder, Rename, Shared with… and Delete are switched off for this reader. */
   writeRefusal?: string
   /** Current sharing, rendered under the name when it is restricted. */
   scopeLabel?: string
@@ -218,9 +218,15 @@ export function MediaFolderCard(props: MediaFolderCardProps) {
 
       <Menu anchorEl={menuAnchor} open={Boolean(menuAnchor)} onClose={closeMenu}>
         {onNewSubfolder ? (
-          <MenuItem onClick={runAction(onNewSubfolder)}>
-            {'New subfolder'}
-          </MenuItem>
+          <BlockedControl
+            blocked={Boolean(writeRefusal)}
+            reason={writeRefusal ?? ''}
+            fullWidth
+          >
+            <MenuItem disabled={writeHeld} onClick={runAction(onNewSubfolder)}>
+              {'New subfolder'}
+            </MenuItem>
+          </BlockedControl>
         ) : null}
         {onRename ? (
           <BlockedControl

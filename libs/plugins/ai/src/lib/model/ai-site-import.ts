@@ -541,6 +541,12 @@ export interface SiteImportLookFacts {
   buttonRadius: number | null
   /** The color its text links are drawn in. */
   link: string | null
+  /**
+   * The brand colors its root's custom properties declare (AGL-4152), the most
+   * read first: what it says its brand is, whether or not this page draws it.
+   * Absent with none, and on a read made before.
+   */
+  palette?: string[]
   /** Its header bar's background. */
   header: string | null
   /**
@@ -1168,6 +1174,12 @@ export interface AiSiteImportHome {
   footer?: SiteImportFooter | null
   /** What the source's look is made of (AGL-4108): its colors, its button fill and corners, its fonts. */
   look?: SiteImportLookFacts | null
+  /**
+   * The first picture its home page's main content shows that is not its logo
+   * (AGL-4152): what a look with no color of its own, and a logo with none,
+   * takes its brand from. Absent on a read made before, or with none.
+   */
+  hero?: { url: string; alt: string } | null
 }
 
 /**
@@ -1180,11 +1192,25 @@ export function aiSiteImportFrameIsRead(state: Pick<AiSiteImportState, 'home'> |
   return !!nav && (nav.items.length > 0 || nav.ctas.length > 0)
 }
 
+/** Where an imported look's brand came from (AGL-4152). */
+export type AiSiteImportLookFrom = 'source' | 'logo' | 'photo' | 'seed'
+
 /** What the look pass did (AGL-4084): no model is asked. */
 export interface AiSiteImportLook {
   at: string
-  /** The theme: drawn from the source (`applied`), the owner's kept (`kept`), or the source's look could not be read. */
+  /**
+   * The theme: drawn for the site (`applied`), or the owner's kept (`kept`).
+   * `unread` is a pass from before AGL-4152, which left a source with no color
+   * to read in the stock theme; a pass no longer does.
+   */
   theme: 'applied' | 'kept' | 'unread'
+  /**
+   * Where the applied theme's brand came from (AGL-4152): what the source draws
+   * or declares (`source`), its logo's colors (`logo`), its hero or share
+   * picture's (`photo`), or, with none of those, the seed's draw for the kind of
+   * site (`seed`). Absent on a pass from before.
+   */
+  from?: AiSiteImportLookFrom
   /** The source's colors it was drawn from, the strongest first. */
   colors: string[]
   /** The source's logo, as the library holds it, for the header's brand. */

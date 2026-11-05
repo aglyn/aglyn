@@ -756,7 +756,7 @@ describe('the UI offers it for every family too (AGL-2732)', () => {
     // would be the opposite mistake.
     expect(component).toContain('setImageEditorOpen(true)')
     expect(component).toMatch(
-      /startsWith\('image\/'\)[\s\S]{0,200}setImageEditorOpen/,
+      /startsWith\('image\/'\)[\s\S]{0,300}setImageEditorOpen/,
     )
   })
 

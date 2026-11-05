@@ -85,9 +85,9 @@ export interface MediaAssetCardProps {
   onDelete?: () => void
   /** Toggle the AGL-1051 private flag; omitted where the caller can't. */
   onSetPrivate?: (makePrivate: boolean) => void
-  /** Make private and Delete stay off while the reader's permissions load. */
+  /** Make private, Replace file and Delete stay off while permissions load. */
   writeHeld?: boolean
-  /** Why Make private and Delete are switched off for this reader, when they are. */
+  /** Why Make private, Replace file and Delete are switched off for this reader. */
   writeRefusal?: string
   /**
    * The owner-facing notice when this file has been DISABLED by staff
@@ -444,7 +444,15 @@ export function MediaAssetCard(props: MediaAssetCardProps) {
           </MenuItem>
         ) : null}
         {onReplace ? (
-          <MenuItem onClick={runAction(onReplace)}>{'Replace file'}</MenuItem>
+          <BlockedControl
+            blocked={Boolean(writeRefusal)}
+            reason={writeRefusal ?? ''}
+            fullWidth
+          >
+            <MenuItem disabled={writeHeld} onClick={runAction(onReplace)}>
+              {'Replace file'}
+            </MenuItem>
+          </BlockedControl>
         ) : null}
         {onDetails ? (
           <MenuItem onClick={runAction(onDetails)}>{'Details'}</MenuItem>

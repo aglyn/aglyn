@@ -337,6 +337,37 @@ describe('where an asset is read from, and what the read answers', () => {
       mediaAssetFactsFromDocument(restricted, { scope: 'org:acme' }, 'site9'),
     ).toEqual(REPLACED)
   })
+
+  it('answers an all-except asset for an included site and not the excluded one', () => {
+    const marked = {
+      ...REPLACED,
+      visibleTo: [hostScopeToken('site1')],
+      scopeMode: 'allExcept',
+    }
+    expect(
+      mediaAssetFactsFromDocument(marked, { scope: 'org:acme' }, 'site1'),
+    ).toEqual(REPLACED)
+    expect(
+      mediaAssetFactsFromDocument(marked, { scope: 'org:acme' }, 'site9'),
+    ).toBeUndefined()
+    expect(
+      mediaAssetFactsFromDocument(marked, { scope: 'org:acme' }, 'site1'),
+    ).not.toHaveProperty('scopeMode')
+  })
+
+  it('reads the marker the verdict needs when no site can be named', () => {
+    const restricted = { ...REPLACED, visibleTo: [hostScopeToken('site1')] }
+    expect(
+      mediaAssetFactsFromDocument(restricted, { scope: 'org:acme' }, 'not a segment'),
+    ).toBeUndefined()
+    expect(
+      mediaAssetFactsFromDocument(
+        { ...restricted, scopeMode: 'allExcept' },
+        { scope: 'org:acme' },
+        'not a segment',
+      ),
+    ).toEqual(REPLACED)
+  })
 })
 
 /**

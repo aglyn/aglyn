@@ -423,7 +423,7 @@ struct OrderDetailView: View {
       AglynRow(
         described.isEmpty ? "Fulfilled" : described,
         subtitle: [
-          formatReceiptTime(Int64(shipment.atMs)),
+          formatReceiptTime(Int64(shipment.atMs), timeZone: TimeZone.current.identifier),
           shipment.trackingNumber.map { "\(carrier.isEmpty ? "Tracking" : carrier) \($0)" },
           status.isEmpty ? nil : status,
         ].compactMap { $0 }.joined(separator: " · "),

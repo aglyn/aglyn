@@ -121,6 +121,9 @@ const ROLE_FILTER_OPTIONS: Readonly<Record<string, readonly ListFilterOption[]>>
   role: ROLE_OPTIONS.map(({ value, label }) => ({ value, label })),
 }
 
+/** What a member who may not change this site's collaborators is told. */
+const COLLABORATORS_REFUSAL = permissionRefusalText('site.manage')
+
 /** The owner's row, drawn above the roster; no roster document has this id. */
 const OWNER_ROW_ID = '__owner__'
 
@@ -149,13 +152,14 @@ export function HostMembersCard(props: HostMembersCardProps) {
   const { org, ready: orgReady } = useCurrentOrg()
   const { permissions } = useOrgPermissions()
   const canManage = permissions.manageMembers
-  // The Permissions dialog's door admits "Manage site settings" on this site
-  // as well as the workspace's "Manage members" (AGL-4047).
+  // The doors behind this card, `/api/hosts/members` and its permissions route,
+  // admit "Manage site settings" on this site as well as the workspace's
+  // "Manage members" (AGL-4047).
   const canManageSite = useCanManageSite()
   const canManageSiteKnown = useCanManageSiteKnown()
-  const canSetSitePermissions = canManage || canManageSite
+  const canManageCollaborators = canManage || canManageSite
   // Refused only once the site has answered: until then it is "not yet".
-  const sitePermissionsRefused = canManageSiteKnown && !canSetSitePermissions
+  const collaboratorsRefused = canManageSiteKnown && !canManageCollaborators
   // Columns a plugin contributes to this table (AGL-2940), between the site
   // access and the actions; cards a plugin adds render under the table.
   const { columns: pluginColumns } = usePluginListColumns('hostMembers')
@@ -642,20 +646,25 @@ export function HostMembersCard(props: HostMembersCardProps) {
                   onKeyDown={stopGridKeys}
                   sx={{ display: 'flex', alignItems: 'center', height: '100%' }}
                 >
-                  <TextField
-                    select
-                    size="small"
-                    variant="standard"
-                    value={member.role ?? 'editor'}
-                    onChange={handleRoleChange(member)}
-                    disabled={busy || !canManage}
+                  <BlockedControl
+                    blocked={collaboratorsRefused}
+                    reason={COLLABORATORS_REFUSAL}
                   >
-                    {ROLE_OPTIONS.map((option) => (
-                      <MenuItem key={option.value} value={option.value}>
-                        {option.label}
-                      </MenuItem>
-                    ))}
-                  </TextField>
+                    <TextField
+                      select
+                      size="small"
+                      variant="standard"
+                      value={member.role ?? 'editor'}
+                      onChange={handleRoleChange(member)}
+                      disabled={busy || !canManageCollaborators}
+                    >
+                      {ROLE_OPTIONS.map((option) => (
+                        <MenuItem key={option.value} value={option.value}>
+                          {option.label}
+                        </MenuItem>
+                      ))}
+                    </TextField>
+                  </BlockedControl>
                 </Box>
               ),
           },
@@ -671,29 +680,34 @@ export function HostMembersCard(props: HostMembersCardProps) {
                     who manage this site or the workspace's members, and
                     refuses in the words of its own key. */}
                 <BlockedControl
-                  blocked={member.status === 'invited' || sitePermissionsRefused}
+                  blocked={member.status === 'invited' || collaboratorsRefused}
                   reason={
                     member.status === 'invited'
                       ? 'Permissions can be set once the invite is accepted'
-                      : permissionRefusalText('site.manage')
+                      : COLLABORATORS_REFUSAL
                   }
                 >
                   <Button
                     size="small"
-                    disabled={!canSetSitePermissions}
+                    disabled={!canManageCollaborators}
                     onClick={() => setPermissionsFor(member)}
                   >
                     {'Permissions'}
                   </Button>
                 </BlockedControl>
-                <Button
-                  size="small"
-                  color="error"
-                  disabled={busy || !canManage}
-                  onClick={handleRemove(member)}
+                <BlockedControl
+                  blocked={collaboratorsRefused}
+                  reason={COLLABORATORS_REFUSAL}
                 >
-                  {'Remove'}
-                </Button>
+                  <Button
+                    size="small"
+                    color="error"
+                    disabled={busy || !canManageCollaborators}
+                    onClick={handleRemove(member)}
+                  >
+                    {'Remove'}
+                  </Button>
+                </BlockedControl>
               </>
             ),
             { width: 200 },
@@ -713,9 +727,8 @@ export function HostMembersCard(props: HostMembersCardProps) {
       handleRoleChange,
       handleRemove,
       busy,
-      canManage,
-      canSetSitePermissions,
-      sitePermissionsRefused,
+      canManageCollaborators,
+      collaboratorsRefused,
       pluginMemberColumns,
     ],
   )
@@ -768,15 +781,17 @@ export function HostMembersCard(props: HostMembersCardProps) {
               </MenuItem>
             ))}
           </TextField>
-          <Button
-            size="small"
-            variant="contained"
-            color="primary"
-            disabled={busy || !email.trim() || !canManage}
-            onClick={handleAdd}
-          >
-            {'Add'}
-          </Button>
+          <BlockedControl blocked={collaboratorsRefused} reason={COLLABORATORS_REFUSAL}>
+            <Button
+              size="small"
+              variant="contained"
+              color="primary"
+              disabled={busy || !email.trim() || !canManageCollaborators}
+              onClick={handleAdd}
+            >
+              {'Add'}
+            </Button>
+          </BlockedControl>
         </Stack>
         {/* AGL-1422, the per-site twin of the org roster's seat line:
             `checkOrgSeatQuota(undefined, …)` resolves the FREE tier, so the
@@ -911,7 +926,7 @@ export function HostMembersCard(props: HostMembersCardProps) {
         <SitePermissionsDialog
           hostId={hostId}
           member={permissionsFor}
-          canManage={canSetSitePermissions}
+          canManage={canManageCollaborators}
           onClose={() => setPermissionsFor(null)}
         />
       </Stack>

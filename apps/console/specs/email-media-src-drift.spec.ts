@@ -104,6 +104,18 @@ describe('email media resolution does not drift from @aglyn/aglyn', () => {
     'https://firebasestorage.googleapis.com/v0/b/x/o/hosts%2Fh1%2Fmedia%2Fmed123/extra',
     `https://firebasestorage.googleapis.com/v0/b/x/o/hosts%2F${'h'.repeat(65)}%2Fmedia%2Fmed123`,
     'https://cdn.other.test/v0/b/x/o/hosts%2Fh1%2Fmedia%2Fmed123',
+    // A legacy stored CDN path: a bare org scope names the sending site, and
+    // every other form, near-misses included, comes back as itself.
+    '/api/media/cdn/org:o1/med123',
+    '/api/media/cdn/org:o1:h2/med123',
+    '/api/media/cdn/org:o1/med123/abc123',
+    '/api/media/cdn/org:o1/med123?exp=1&sig=s',
+    '/api/media/cdn/org:o1/med123?v=abc.2',
+    '/api/media/cdn/org:o1:h2:extra/med123',
+    '/api/media/cdn/org:/med123',
+    '/api/media/cdn/org:o1/',
+    '/api/media/cdn/org:o1',
+    'https://x.aglyn.app/api/media/cdn/org:o1/med123',
     // Everything else passes through untouched.
     '/api/media/cdn/h1/med123',
     'https://firebasestorage.googleapis.com/v0/b/x/o/y.png?alt=media',
@@ -158,6 +170,12 @@ describe('email media resolution does not drift from @aglyn/aglyn', () => {
     )
     expect(resolveEmailMediaSrc('media:h1/med123')).toBe(
       '/api/media/cdn/h1/med123',
+    )
+    expect(resolveEmailMediaSrc('/api/media/cdn/org:o1/med123', 'h2')).toBe(
+      '/api/media/cdn/org:o1:h2/med123',
+    )
+    expect(resolveEmailMediaSrc('/api/media/cdn/org:o1:h9/med123', 'h2')).toBe(
+      '/api/media/cdn/org:o1:h9/med123',
     )
     expect(resolveEmailMediaSrc('media:h1/bad id')).toBeUndefined()
     expect(

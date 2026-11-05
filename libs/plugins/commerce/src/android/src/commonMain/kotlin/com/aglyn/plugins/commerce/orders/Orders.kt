@@ -20,6 +20,7 @@ import com.aglyn.contracts.OrderStatus
 import com.aglyn.contracts.OrderTimelineEvent
 import com.aglyn.contracts.canTransitionOrder
 import com.aglyn.contracts.formatOrderNumber
+import com.aglyn.contracts.deviceTimeZone
 import com.aglyn.contracts.formatReceiptTime
 import com.aglyn.contracts.fulfillmentIsActive
 import com.aglyn.contracts.liftLegacyOrder
@@ -256,8 +257,8 @@ fun orderDetail(doc: FirestoreDoc): OrderDetail {
 }
 
 /** One timeline line as the console's dialog prints it: `time — event: detail`. */
-fun timelineLine(event: OrderTimelineEvent): String =
-  "${formatReceiptTime(event.atMs.toLong())} — ${event.event}" + (event.detail?.takeIf { it.isNotEmpty() }?.let { ": $it" } ?: "")
+fun timelineLine(event: OrderTimelineEvent, timeZone: String = deviceTimeZone()): String =
+  "${formatReceiptTime(event.atMs.toLong(), timeZone)} — ${event.event}" + (event.detail?.takeIf { it.isNotEmpty() }?.let { ": $it" } ?: "")
 
 /** Why a note cannot be sent, or null. The route checks again. */
 fun checkOrderNote(text: String): String? = if (text.isBlank()) "Write a note first" else null

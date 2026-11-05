@@ -440,8 +440,9 @@ export function isMediaCdnPath(value: unknown): value is string {
  * Rewrites an org scope so it names the site doing the rendering — the
  * scope-segment twin of `hostQualifiedCdnPath` (AGL-1043).
  *
- * `org:{orgId}` serves ORG-WIDE assets only; an asset restricted to
- * particular sites has to be asked for through `org:{orgId}:{hostId}`,
+ * `org:{orgId}` serves org-wide assets, and assets shared with all sites
+ * except some; an asset shared with chosen sites has to be asked for through
+ * `org:{orgId}:{hostId}`,
  * because the CDN is unauthenticated and the URL is the only thing it can
  * decide from. The qualified form is a superset — it also serves org-wide
  * assets, since `visibleToHost` is true for `['org']` — so qualifying
@@ -463,6 +464,31 @@ export function hostQualifiedScope(
   const orgId = scope.slice(ORG_SCOPE_PREFIX.length).split(':')[0]
   if (!orgId || !SEGMENT.test(orgId)) return scope
   return `${ORG_SCOPE_PREFIX}${orgId}:${hostId}`
+}
+
+/**
+ * A legacy stored CDN path, naming `hostId` when its org scope names no site.
+ *
+ * A bare `org:{orgId}` path renders the same on every site today, so an asset
+ * excluded from one site would keep loading there. Naming the site lets the CDN
+ * refuse it there, and it is safe for every asset: the qualified form serves
+ * whatever the bare form serves (see {@link hostQualifiedScope}).
+ *
+ * A path that already names a site keeps it, unlike a reference. Its URL serves
+ * on any page today because it asks about the site it names, so an asset
+ * restricted to that site renders on another site's page that places it, and
+ * rewriting the path to the rendering site would break that page.
+ */
+function hostQualifiedLegacyPath(
+  path: string,
+  hostId: string | undefined | null,
+): string {
+  const rest = path.slice(MEDIA_CDN_ROUTE.length + 1)
+  const slash = rest.indexOf('/')
+  const scope = rest.slice(0, slash)
+  if (!scope.startsWith(ORG_SCOPE_PREFIX)) return path
+  if (scope.includes(':', ORG_SCOPE_PREFIX.length)) return path
+  return `${MEDIA_CDN_ROUTE}/${hostQualifiedScope(scope, hostId)}${rest.slice(slash)}`
 }
 
 export interface ResolveMediaSrcOptions {
@@ -491,10 +517,13 @@ export interface ResolveMediaSrcOptions {
  * 2. a **Storage download URL for a library object** → the same CDN URL,
  *    exactly as if the reference had been stored (AGL-3506). See
  *    {@link mediaRefFromStorageUrl};
- * 3. any other non-empty string → **itself, untouched**. Nodes holding an
- *    `/api/media/cdn/…` path written by the first pass and an author-typed
- *    external URL for a hotlinked image are passed through;
- * 4. empty/absent → undefined, so the caller shows its placeholder.
+ * 3. a **legacy stored CDN path** written by the first pass → itself, naming
+ *    the site doing the rendering if its org scope names none yet. See
+ *    {@link hostQualifiedLegacyPath};
+ * 4. any other non-empty string → **itself, untouched**. An author-typed
+ *    external URL for a hotlinked image is passed through, and so is a signed
+ *    CDN URL, which {@link isMediaCdnPath} does not answer for;
+ * 5. empty/absent → undefined, so the caller shows its placeholder.
  *
  * Branch 2 is what routes every library byte through the CDN. A download
  * URL goes from Google's edge straight to the visitor, so no code of ours
@@ -517,12 +546,12 @@ export function resolveMediaSrc(
   if (!value) return undefined
   const stored = isMediaRef(value) ? value : mediaRefFromStorageUrl(value)
   if (!stored) {
+    if (!isMediaCdnPath(value)) return value
     // A legacy stored CDN path names the same asset on the same route, so it
     // takes the version as a reference does (AGL-3485).
-    const token = isMediaCdnPath(value)
-      ? mediaCdnVersionToken(options?.version)
-      : undefined
-    return token ? `${value}?${MEDIA_CDN_VERSION_PARAM}=${token}` : value
+    const path = hostQualifiedLegacyPath(value, options?.hostId)
+    const token = mediaCdnVersionToken(options?.version)
+    return token ? `${path}?${MEDIA_CDN_VERSION_PARAM}=${token}` : path
   }
   const ref = parseMediaRef(stored)
   if (!ref) return undefined

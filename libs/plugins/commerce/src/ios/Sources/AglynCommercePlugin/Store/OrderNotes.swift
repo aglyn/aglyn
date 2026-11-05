@@ -31,8 +31,8 @@ func orderTimeline(_ order: HostOrder) -> [OrderTimelineEvent] {
 }
 
 /// One timeline line as the console's dialog prints it: `time — event: detail`.
-func timelineLine(_ event: OrderTimelineEvent) -> String {
-  "\(formatReceiptTime(Int64(event.atMs))) — \(event.event)" + (event.detail.flatMap { $0.isEmpty ? nil : ": \($0)" } ?? "")
+func timelineLine(_ event: OrderTimelineEvent, timeZone: String = TimeZone.current.identifier) -> String {
+  "\(formatReceiptTime(Int64(event.atMs), timeZone: timeZone)) — \(event.event)" + (event.detail.flatMap { $0.isEmpty ? nil : ": \($0)" } ?? "")
 }
 
 /// The restock question still waiting for an answer, if any.
@@ -126,7 +126,7 @@ struct OrderAnnotationSections: View {
       ForEach(Array(events.enumerated()), id: \.offset) { _, event in
         AglynRow(
           event.event.replacingOccurrences(of: "_", with: " ").capitalized,
-          subtitle: [event.detail, formatReceiptTime(Int64(event.atMs))].compactMap { $0 }.filter { !$0.isEmpty }
+          subtitle: [event.detail, formatReceiptTime(Int64(event.atMs), timeZone: TimeZone.current.identifier)].compactMap { $0 }.filter { !$0.isEmpty }
             .joined(separator: " · "),
           systemImage: event.event == "note" ? "note.text" : "clock")
       }

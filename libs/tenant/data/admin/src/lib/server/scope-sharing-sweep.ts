@@ -49,6 +49,7 @@
  * document again, reads `current` and writes nothing.
  */
 
+import { createResourceUid } from '@aglyn/aglyn/app-utils/create-resource-uid'
 import {
   reconcileAllExcept,
   SCOPE_MODE_ALL_EXCEPT,
@@ -339,7 +340,7 @@ export async function sweepScopeSharingAfterSiteChange(input: {
   let sweepRef: DocumentReference | null = null
   const leaveForTheJob = async (cursor: ScopeSweepCursor | null, attempts: number) => {
     const db = input.firestore ?? platformFirestore()
-    sweepRef ??= db.collection('orgs').doc(orgId).collection(SCOPE_SWEEPS_COLLECTION).doc()
+    sweepRef ??= db.collection('orgs').doc(orgId).collection(SCOPE_SWEEPS_COLLECTION).doc(createResourceUid())
     await sweepRef.set({
       reason,
       ...(hostId ? { hostId } : {}),

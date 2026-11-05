@@ -36,6 +36,13 @@
  *   columns, a flex row, a grid framework's row and cells, a table row) is a
  *   row; its columns' widths come from the grid template, the cells' sizes
  *   or equal shares, in twelfths.
+ * - **Placement (AGL-4152).** A grid whose children name where they go is read
+ *   in the rows and columns a visitor sees, whatever order its markup writes
+ *   them in: each child's box from its `grid-area`, `grid-row` or
+ *   `grid-column`, cells by row overlap and then column overlap, and rows
+ *   built to the same columns stacked into those columns, so a card's words
+ *   stay under its own heading. What comes out is rows, cells and groups like
+ *   any others. `order` on a flex or grid child is read the same way.
  * - **Groups.** Three or more siblings built alike (the same elements in the
  *   same order) are a group, and what they hold says its kind: icon or
  *   picture with a title and words are `cards`, a leading number `steps`, a
@@ -89,8 +96,10 @@ import {
   siteImportColorDistance,
   siteImportColorOf,
   siteImportCssOf,
+  siteImportPaletteOf,
   siteImportFontFamilies,
   siteImportFontSizePx,
+  siteImportGridBoxes,
   siteImportGridColumns,
   siteImportHasBorder,
   siteImportHasShadow,
@@ -98,11 +107,13 @@ import {
   siteImportLengthPx,
   siteImportLuminance,
   siteImportOpaque,
+  siteImportOrderOf,
   siteImportRadiusPx,
   siteImportSaturation,
   siteImportStylesOf,
   siteImportTwelfths,
   type SiteImportComputedStyle,
+  type SiteImportGridBox,
   type SiteImportRgba,
   type SiteImportStyles,
 } from './site-import-css'
@@ -114,7 +125,10 @@ export type SiteImportLayoutSource = Pick<SiteImportExtract, 'blocks' | 'videos'
 
 /** One thing in the page's order: a line (by its main-region index) or an icon. */
 interface Leaf {
+  /** Its place in the order a visitor reads the page: the markup's, but for what a grid or `order` moves (AGL-4152). */
   order: number
+  /** Its place in the markup: the block's index, for a line. */
+  written: number
   kind: 'line' | 'icon' | 'form' | 'video'
   /** The line's index among the main-region blocks; the icon's, the form's or the video's index. */
   ref: number
@@ -135,8 +149,9 @@ function isLine(block: SiteImportBlock): boolean {
 
 const BUTTON_CLASS = /(?:^|[\s_-])(?:btn|button)(?:$|[\s_-])|Button-root|wp-block-button__link|sqs-block-button-element|elementor-button|w-button/i
 const TEXT_BUTTON_CLASS = /MuiButton-text\b|btn-link\b|is-style-text/i
-const OUTLINED_CLASS = /MuiButton-outlined\b|btn-outline|is-style-outline|--outline|button--secondary|btn-secondary/i
-const FILLED_CLASS = /MuiButton-contained\b|btn-primary|button--primary|--solid|is-style-fill/i
+/** An element's own `--primary` or `--secondary` (AGL-4152), whatever it is called, never a longer name that starts so (`--primary-inverse`). */
+const OUTLINED_CLASS = /MuiButton-outlined\b|btn-outline|is-style-outline|--outline|--secondary(?=\s|$)|btn-secondary/i
+const FILLED_CLASS = /MuiButton-contained\b|btn-primary|--primary(?=\s|$)|--solid|is-style-fill/i
 const LANDMARK_TAGS = new Set(['section', 'article', 'aside'])
 const SECTION_CLASS = /(?:^|[\s_-])(?:section|page-section|wp-block-group|elementor-section|e-con|shopify-section|block-section)(?:$|[\s_-])/i
 const MUI_GRID_SIZE = /\bMuiGrid-grid-(xs|sm|md|lg|xl)-(\d+)\b/g
@@ -185,7 +200,7 @@ export function siteImportLayout(page: SiteImportLayoutSource, stylesheets: read
     v: 1,
     sections,
     icons: structure.icons.map((icon) => ({ ...icon })),
-    look: siteImportLookFacts(structure, styles, css.fontFaces, blocks, sections, darkStyles),
+    look: siteImportLookFacts(structure, styles, css.fontFaces, blocks, sections, darkStyles, css.variableUses),
   }
 }
 
@@ -224,7 +239,14 @@ interface ReadBand {
 }
 
 class LayoutReader {
-  private readonly elements: readonly SiteImportElement[]
+  /** The page's elements; a grid placed by its children's rules holds the rows and cells a visitor sees (AGL-4152). */
+  private readonly elements: SiteImportElement[]
+  /** A grid read by its children's places: `stack` when its children now run down the page, `row` for a row of cells it draws. */
+  private readonly placed = new Map<number, 'stack' | 'row'>()
+  /** A cell's width on its grid, in tracks. */
+  private readonly placedWidth = new Map<number, number>()
+  /** A placed child that holds no words and has words laid over it. */
+  private readonly placedBehind = new Set<number>()
   /** Block index → its index among the main-region blocks; -1 for every other block. */
   private readonly mainIndex: number[]
   /** Each element's leaves, its subtree's, in order (memoized). */
@@ -248,7 +270,7 @@ class LayoutReader {
     private readonly videos: NonNullable<SiteImportExtract['videos']> = [],
     private readonly darkStyles: SiteImportStyles | null = null,
   ) {
-    this.elements = structure.elements
+    this.elements = [...structure.elements]
     this.mainIndex = []
     let main = 0
     for (const block of blocks) this.mainIndex.push(block.region === 'main' ? main++ : -1)
@@ -257,18 +279,120 @@ class LayoutReader {
       const block = blocks[index]
       const ref = this.mainIndex[index] ?? -1
       if (!block || ref < 0 || !isLine(block)) return
-      this.own[element]?.push({ order: index, kind: 'line', ref, element })
+      this.own[element]?.push({ order: index, written: index, kind: 'line', ref, element })
     })
     for (const element of this.elements) {
       if (element.region !== 'main' || element.nav) continue
-      if (element.icon !== undefined) this.own[element.id]?.push({ order: element.order ?? 0, kind: 'icon', ref: element.icon, element: element.id })
-      if (element.form !== undefined) this.own[element.id]?.push({ order: element.order ?? 0, kind: 'form', ref: element.form, element: element.id })
-      if (element.video !== undefined) this.own[element.id]?.push({ order: element.order ?? 0, kind: 'video', ref: element.video, element: element.id })
+      const order = element.order ?? 0
+      if (element.icon !== undefined) this.own[element.id]?.push({ order, written: order, kind: 'icon', ref: element.icon, element: element.id })
+      if (element.form !== undefined) this.own[element.id]?.push({ order, written: order, kind: 'form', ref: element.form, element: element.id })
+      if (element.video !== undefined) this.own[element.id]?.push({ order, written: order, kind: 'video', ref: element.video, element: element.id })
     }
     const body = structure.body >= 0 ? structure.body : -2
     this.bodySize = siteImportFontSizePx(styles.of(body)) ?? 16
     const ground = siteImportBackgroundOf(styles.of(body)).color ?? siteImportBackgroundOf(styles.of(-2)).color
     this.pageGround = ground && ground.a >= 0.5 ? ground : null
+    this.readPlacement()
+  }
+
+  /*---------------- what a grid or `order` moves (AGL-4152) ----------------*/
+
+  /**
+   * The page as a visitor reads it: each flex or grid container whose children
+   * say where they go, inner ones first, has its children set in that order.
+   * Every container that says nothing is untouched, its order the markup's.
+   */
+  private readPlacement(): void {
+    for (let id = this.elements.length - 1; id >= 0; id -= 1) {
+      const node = this.elements[id] as SiteImportElement
+      if (node.region !== 'main' || node.nav || node.children.length < 2) continue
+      const style = this.style(id)
+      const display = style.get('display') ?? ''
+      if (!/\b(?:grid|flex)\b/.test(display)) continue
+      if (/\bgrid\b/.test(display) && this.readGrid(id, style)) continue
+      this.readOrder(id)
+    }
+  }
+
+  /** A row's or a grid's children in their `order`, where any sets one. */
+  private readOrder(element: number): void {
+    const node = this.elements[element] as SiteImportElement
+    const orderOf = (child: number) => siteImportOrderOf(this.style(child))
+    const content = node.children.filter((child) => this.leaves(child).length)
+    if (!content.some((child) => orderOf(child) !== 0)) return
+    const sorted = content.map((child, at) => ({ child, at })).sort((a, b) => orderOf(a.child) - orderOf(b.child) || a.at - b.at).map((entry) => entry.child)
+    this.setChildren(element, [...sorted, ...node.children.filter((child) => !content.includes(child))])
+    this.moveLeaves(sorted)
+  }
+
+  /** A grid read by its children's boxes; `false`, and nothing changed, where they do not say where they go. */
+  private readGrid(grid: number, style: SiteImportComputedStyle): boolean {
+    const node = this.elements[grid] as SiteImportElement
+    // What is not drawn takes no cell: it stays where it is read, after what is.
+    const content = node.children.filter((child) => this.leaves(child).length && this.style(child).get('display') !== 'none')
+    if (content.length < 2) return false
+    const boxes = siteImportGridBoxes(style, content.map((child) => this.style(child)))
+    if (!boxes) return false
+    const items = content.map((element, at): PlacedItem => {
+      const lines = this.leaves(element).filter((leaf) => leaf.kind === 'line').map((leaf) => this.block(leaf)?.kind)
+      return {
+        element,
+        box: boxes[at] as SiteImportGridBox,
+        words: lines.some((kind) => kind !== 'image'),
+        heading: lines.includes('heading'),
+        picture: lines.includes('image') || this.leaves(element).some((leaf) => leaf.kind === 'video'),
+      }
+    })
+    for (const item of items) if (!item.words && items.some((other) => other.words && overLaid(other.box, item.box))) this.placedBehind.add(item.element)
+    const bands = siteImportGridBands(items, (item) => this.placedBehind.has(item.element))
+    const children = bands.flatMap((band) => (band.length === 1 ? (band[0] as DrawnCell).items.map((item) => item.element) : [this.drawnRow(grid, band)]))
+    const rest = node.children.filter((child) => !content.includes(child))
+    this.setChildren(grid, [...children, ...rest])
+    this.placed.set(grid, 'stack')
+    this.moveLeaves([...bands.flat().flatMap((cell) => cell.items.map((item) => item.element)), ...rest])
+    return true
+  }
+
+  /** A row a placed grid draws: its cells side by side, each one child or the children stacked in it. */
+  private drawnRow(grid: number, cells: readonly DrawnCell[]): number {
+    const row = this.drawnElement(grid)
+    this.placed.set(row, 'row')
+    this.setChildren(
+      row,
+      cells.map((cell) => {
+        const only = cell.items.length === 1 ? (cell.items[0] as PlacedItem).element : null
+        const held = only ?? this.drawnElement(row)
+        if (only === null) this.setChildren(held, cell.items.map((item) => item.element))
+        this.placedWidth.set(held, cell.end - cell.start)
+        return held
+      }),
+    )
+    return row
+  }
+
+  /** A box the page does not write but draws, styled by nothing: its id is past every written element's. */
+  private drawnElement(parent: number): number {
+    const { region, nav } = this.elements[parent] as SiteImportElement
+    const id = this.elements.length
+    this.elements.push({ id, tag: 'div', parent, children: [], region, nav, attrs: {}, blocks: [] })
+    this.own.push([])
+    return id
+  }
+
+  private setChildren(element: number, children: number[]): void {
+    this.elements[element] = { ...(this.elements[element] as SiteImportElement), children }
+    for (const child of children) this.elements[child] = { ...(this.elements[child] as SiteImportElement), parent: element }
+    this.leafMemo.clear()
+  }
+
+  /** These elements' leaves, in the order given, take the places they hold among themselves, so nothing around them moves. */
+  private moveLeaves(elements: readonly number[]): void {
+    const moved = elements.flatMap((element) => this.leaves(element))
+    const places = moved.map((leaf) => leaf.order).sort((a, b) => a - b)
+    moved.forEach((leaf, at) => {
+      leaf.order = places[at] as number
+    })
+    this.leafMemo.clear()
   }
 
   /*---------------- leaves and parts ----------------*/
@@ -317,7 +441,7 @@ class LayoutReader {
   }
 
   private block(leaf: Leaf): SiteImportBlock | undefined {
-    return this.blocks[leaf.order]
+    return this.blocks[leaf.written]
   }
 
   /*---------------- sections ----------------*/
@@ -611,8 +735,13 @@ class LayoutReader {
     const runs = this.groupRuns(element, parts, range)
     const elementParts = parts.filter(isElementPart)
     // Items built alike are a group, a heading over them included; only a container of unlike parts is a row of columns.
-    if (!runs.length && elementParts.length >= 2 && this.isRow(element) && this.rowWorthy(parts, range)) {
-      return [this.row(element, parts, range)]
+    if (!runs.length && elementParts.length >= 2 && this.isRow(element)) {
+      // A child laid out of the flow takes no cell of the row (AGL-4152): a section's picture laid behind its words.
+      const inFlow = parts.filter((part) => !isElementPart(part) || !this.outOfFlow(part.element))
+      if (this.rowWorthy(inFlow, range)) {
+        const laid = elementParts.filter((part) => this.outOfFlow(part.element)).flatMap((part) => this.read(part.element, range))
+        return [...laid, this.row(element, inFlow, range)]
+      }
     }
     const out: SiteImportLayoutNode[] = []
     for (let index = 0; index < parts.length; ) {
@@ -834,6 +963,8 @@ class LayoutReader {
   private isRow(element: number): boolean {
     const node = this.elements[element]
     if (!node) return false
+    const placed = this.placed.get(element)
+    if (placed) return placed === 'row'
     if (node.tag === 'tr') return true
     const classes = node.attrs.class ?? ''
     if (/\bMuiGrid-container\b|(?:^|\s)row(?:\s|$)|\bcolumns\b|wp-block-columns|elementor-row|e-con-inner|sqs-row/.test(classes)) return true
@@ -845,6 +976,10 @@ class LayoutReader {
     }
     if (/\bflex\b/.test(display)) return !/column/.test(style.get('flex-direction') ?? 'row')
     return false
+  }
+
+  private outOfFlow(element: number): boolean {
+    return /^(?:absolute|fixed)$/.test(this.style(element).get('position') ?? '')
   }
 
   /** A row is columns of content, not a line of buttons or links. */
@@ -889,6 +1024,8 @@ class LayoutReader {
 
   /** A cell's size: a framework's column class, its width share or its flex grow. */
   private cellSize(element: number): number | null {
+    const placed = this.placedWidth.get(element)
+    if (placed !== undefined) return placed
     const classes = this.elements[element]?.attrs.class ?? ''
     let best: { rank: number; size: number } | null = null
     for (const match of classes.matchAll(MUI_GRID_SIZE)) {
@@ -968,6 +1105,8 @@ class LayoutReader {
   private couldBeItem(element: number, range: readonly [number, number]): boolean {
     const node = this.elements[element]
     if (!node) return false
+    // A row of a placed grid holds items; it is never one.
+    if (this.placed.get(element) === 'row') return false
     if (/^(?:li|dt|dd|details|figure|article)$/.test(node.tag)) return true
     const leaves = this.leaves(element).filter((leaf) => this.inRange(leaf, range))
     if (leaves.length && leaves.every((leaf) => leaf.kind === 'line' && this.block(leaf)?.kind === 'image')) return true
@@ -1349,6 +1488,8 @@ class LayoutReader {
   /** How many columns a group's items sit in on a wide screen. */
   private columnsOf(container: number, parts: Array<{ element: number }>): number {
     const count = parts.length
+    const placed = this.placed.get(container)
+    if (placed) return placed === 'row' ? count : 1
     const style = this.style(container)
     const display = style.get('display') ?? ''
     if (/\bgrid\b/.test(display)) {
@@ -1583,7 +1724,14 @@ class LayoutReader {
             return node.cells.some((cell) => beside(cell.nodes))
           })
         if (beside(hero.nodes)) picture = 'beside'
-        else if (this.pictureBehind(image)) picture = 'behind'
+        else if (this.pictureBehind(image)) {
+          picture = 'behind'
+          // A picture its grid lays behind the words is the section's ground, as a background picture is: a photo is `dark`.
+          if (this.placedUnderWords(image) && hero === sections[0]) {
+            hero.band = 'dark'
+            delete hero.absoluteBand
+          }
+        }
         else picture = hero.lines.indexOf(image) > hero.lines.indexOf(h1) ? 'below' : 'above'
       }
     }
@@ -1616,6 +1764,7 @@ class LayoutReader {
 
   /** A picture laid over its section's whole area, behind the words. */
   private pictureBehind(ref: number): boolean {
+    if (this.placedUnderWords(ref)) return true
     const element = this.elements.find((node) => node.blocks.some((index) => this.mainIndex[index] === ref))
     for (let at = element?.id ?? -1, depth = 0; at >= 0 && depth < 3; at = this.elements[at]?.parent ?? -1, depth += 1) {
       const position = this.style(at).get('position')
@@ -1624,9 +1773,107 @@ class LayoutReader {
     return false
   }
 
+  /** A picture its grid places in the same cells as words (AGL-4152). */
+  private placedUnderWords(ref: number): boolean {
+    const element = this.elements.find((node) => node.blocks.some((index) => this.mainIndex[index] === ref))
+    for (let at = element?.id ?? -1; at >= 0; at = this.elements[at]?.parent ?? -1) if (this.placedBehind.has(at)) return true
+    return false
+  }
+
   linesOf(nodes: readonly SiteImportLayoutNode[]): SiteImportLineRef[] {
     return siteImportLayoutLines(nodes)
   }
+}
+
+/** One child of a placed grid (AGL-4152): its box, and what it holds that says whether a row below it is more of the same card. */
+interface PlacedItem {
+  element: number
+  box: SiteImportGridBox
+  words: boolean
+  heading: boolean
+  picture: boolean
+}
+
+/** A cell a placed grid draws: the columns it covers and what sits in it, top to bottom. */
+interface DrawnCell {
+  start: number
+  end: number
+  items: PlacedItem[]
+}
+
+/** How much of two stretches of a grid's lines coincide. */
+const overlapOf = (aStart: number, aEnd: number, bStart: number, bEnd: number) => Math.max(0, Math.min(aEnd, bEnd) - Math.max(aStart, bStart))
+
+/** Whether words are laid over a box: at least half their cells are its cells. */
+function overLaid(words: SiteImportGridBox, under: SiteImportGridBox): boolean {
+  const cells = overlapOf(words.rowStart, words.rowEnd, under.rowStart, under.rowEnd) * overlapOf(words.columnStart, words.columnEnd, under.columnStart, under.columnEnd)
+  return cells * 2 >= (words.rowEnd - words.rowStart) * (words.columnEnd - words.columnStart) && cells > 0
+}
+
+/**
+ * A placed grid's children as a visitor reads them (AGL-4152): sorted by row
+ * then column, clustered into visual rows where their rows overlap, split into
+ * cells where their columns do, each cell top to bottom with what is laid
+ * under words first. A row then joins the columns above it where it is built
+ * to them and those columns have something it belongs to: words under a
+ * heading or a picture. A row with a heading or a picture where its column
+ * already holds one starts anew, so rows of whole cards stay rows, and words
+ * with nothing above them to belong to stay rows too. One band is one row of
+ * the page; a band of one cell is simply stacked.
+ */
+function siteImportGridBands(items: readonly PlacedItem[], behind: (item: PlacedItem) => boolean): DrawnCell[][] {
+  const sorted = [...items].sort((a, b) => a.box.rowStart - b.box.rowStart || a.box.columnStart - b.box.columnStart)
+  const rows: PlacedItem[][] = []
+  let rowEnd = Number.NEGATIVE_INFINITY
+  for (const item of sorted) {
+    const joins = item.box.rowStart < rowEnd
+    if (joins) (rows[rows.length - 1] as PlacedItem[]).push(item)
+    else rows.push([item])
+    rowEnd = joins ? Math.max(rowEnd, item.box.rowEnd) : item.box.rowEnd
+  }
+  const bands: DrawnCell[][] = []
+  for (const row of rows) {
+    const cells: DrawnCell[] = []
+    for (const item of [...row].sort((a, b) => a.box.columnStart - b.box.columnStart)) {
+      const { columnStart: start, columnEnd: end } = item.box
+      const last = cells[cells.length - 1]
+      // The same cell where half the narrower of the two is shared; a block nudged over its neighbor's edge is still beside it.
+      if (last && overlapOf(last.start, last.end, start, end) * 2 >= Math.min(last.end - last.start, end - start)) {
+        last.items.push(item)
+        last.end = Math.max(last.end, end)
+      } else cells.push({ start, end, items: [item] })
+    }
+    const band = bands[bands.length - 1]
+    const columns = band ? columnsFor(band, cells) : null
+    if (band && columns) {
+      cells.forEach((cell, at) => {
+        const column = band[columns[at] as number] as DrawnCell
+        column.items.push(...cell.items)
+        column.start = Math.min(column.start, cell.start)
+        column.end = Math.max(column.end, cell.end)
+      })
+    } else bands.push(cells)
+  }
+  for (const band of bands) {
+    for (const cell of band) cell.items.sort((a, b) => Number(behind(b)) - Number(behind(a)) || a.box.rowStart - b.box.rowStart || a.box.columnStart - b.box.columnStart)
+  }
+  return bands
+}
+
+/** The column of a band each cell of the row under it belongs in, or `null` where that row is a row of its own. */
+function columnsFor(band: readonly DrawnCell[], cells: readonly DrawnCell[]): number[] | null {
+  if (band.length < 2 || !band.some((column) => column.items.some((item) => item.heading || item.picture))) return null
+  const taken: number[] = []
+  for (const cell of cells) {
+    const overlaps = band.map((column) => overlapOf(column.start, column.end, cell.start, cell.end))
+    const best = overlaps.indexOf(Math.max(...overlaps))
+    const column = band[best] as DrawnCell
+    if ((overlaps[best] as number) * 2 < cell.end - cell.start || taken.includes(best)) return null
+    const has = (test: (item: PlacedItem) => boolean) => cell.items.some(test) && column.items.some(test)
+    if (has((item) => item.heading) || has((item) => item.picture)) return null
+    taken.push(best)
+  }
+  return taken
 }
 
 /** Drops a group's own alignment where its section reads the same (AGL-4138): only an item set apart from its section says how. */
@@ -1836,10 +2083,10 @@ export function siteImportLookOf(
   if (!page.structure) return null
   if (page.blocks?.length) {
     const { css, styles, darkStyles, sections } = readSections({ structure: page.structure, blocks: [...page.blocks], ...(page.videos ? { videos: page.videos } : {}) }, stylesheets)
-    return siteImportLookFacts(page.structure, styles, css.fontFaces, page.blocks, sections, darkStyles)
+    return siteImportLookFacts(page.structure, styles, css.fontFaces, page.blocks, sections, darkStyles, css.variableUses)
   }
   const css = siteImportCssOf([...page.structure.styles, ...stylesheets])
-  return siteImportLookFacts(page.structure, siteImportStylesOf(page.structure, css), css.fontFaces, [])
+  return siteImportLookFacts(page.structure, siteImportStylesOf(page.structure, css), css.fontFaces, [], [], null, css.variableUses)
 }
 
 /**
@@ -1937,6 +2184,7 @@ export function siteImportLookFacts(
   blocks: readonly SiteImportBlock[] = [],
   sections: readonly SiteImportLayoutSection[] = [],
   darkStyles: SiteImportStyles | null = null,
+  variableUses: ReadonlyMap<string, number> | null = null,
 ): SiteImportLookFacts {
   const { elements } = structure
   const body = structure.body >= 0 ? structure.body : -2
@@ -1947,7 +2195,9 @@ export function siteImportLookFacts(
   }
   const imports = structure.styles.flatMap((css) => [...css.matchAll(/@import\s+(?:url\()?\s*["']?(https:\/\/fonts\.googleapis\.com\/[^"')\s;]+)/gi)].map((match) => match[1] as string))
   const google = siteImportGoogleFamilies([...structure.stylesheets, ...imports])
-  const bodyFamily = siteImportFontFamilies(bodyStyle.get('font-family'))[0] ?? siteImportFontFamilies(styles.of(-2).get('font-family'))[0] ?? null
+  // Its body's family; where neither the body nor the root names one, the family its words are set in (AGL-4152).
+  const paragraph = elements.find((element) => element.tag === 'p' && element.region === 'main') ?? elements.find((element) => element.tag === 'p')
+  const bodyFamily = siteImportFontFamilies(bodyStyle.get('font-family'))[0] ?? siteImportFontFamilies(styles.of(-2).get('font-family'))[0] ?? (paragraph ? siteImportFontFamilies(styles.of(paragraph.id).get('font-family'))[0] : undefined) ?? null
   const heading = elements.find((element) => /^h[12]$/.test(element.tag) && element.region === 'main') ?? elements.find((element) => /^h[1-3]$/.test(element.tag))
   const headingFamily = heading ? (siteImportFontFamilies(styles.of(heading.id).get('font-family'))[0] ?? bodyFamily) : bodyFamily
   const known = (family: string | null) => (family && (google.includes(family) || fontFaces.includes(family) || !/^(?:arial|helvetica|helvetica neue|segoe ui|roboto fallback|times new roman|georgia|verdana)$/i.test(family)) ? family : null)
@@ -2036,6 +2286,7 @@ export function siteImportLookFacts(
   // The page's own fill in its dark scheme, where its stylesheets change it.
   const darkFill = darkStyles ? (siteImportBackgroundOf(darkStyles.of(body)).color ?? siteImportBackgroundOf(darkStyles.of(-2)).color) : null
   const darkGround = darkFill && darkFill.a >= 0.5 && (!background || siteImportHex(darkFill) !== siteImportHex(background)) ? siteImportHex(darkFill) : null
+  const palette = variableUses ? siteImportPaletteOf(styles, variableUses) : []
   return {
     fonts: { body: known(bodyFamily), headings: known(headingFamily), google },
     background: background ? siteImportHex(background) : null,
@@ -2056,6 +2307,7 @@ export function siteImportLookFacts(
     outlinedFill: mostUsedFill(outlinedFills),
     // Its eyebrows' own color: none of its words', its buttons' or its links', which the theme draws already.
     eyebrow: blocks.length ? eyebrowColorOf(structure, styles, blocks, [text, topFill?.[0] ?? null, link]) : null,
+    ...(palette.length ? { palette } : {}),
   }
 }
 

@@ -115,6 +115,10 @@ const WHOLE: Record<
   // band and is not framed; the YouTube frame, the lite-youtube facade, the card's Vimeo film and the head's
   // og:video are each the Video element, their posters framed as the source frames them.
   bakery: { sections: 5, rows: 0, groups: { cards: 3 }, tables: 0, tabs: 0, pictures: 7, framing: 6, icons: 0, lone: 0, buttons: 2, unlinked: 0, headings: 8, forms: 0, videos: 4, words: 137 },
+  // Placed on a grid by rules of their own (AGL-4152): three cards in three columns and a row of pictures, not one row of ten blocks.
+  gridServices: { sections: 3, rows: 1, groups: { cards: 3 }, tables: 0, tabs: 0, pictures: 5, framing: 5, icons: 0, lone: 0, buttons: 0, unlinked: 0, headings: 5, forms: 0, videos: 0, words: 88 },
+  // Its opening's picture lies behind its words and is not framed; its two rows are a picture beside words and a row its `order` swaps.
+  swappedGrid: { sections: 5, rows: 2, groups: { cards: 6 }, tables: 0, tabs: 0, pictures: 2, framing: 1, icons: 0, lone: 0, buttons: 0, unlinked: 0, headings: 12, forms: 0, videos: 0, words: 159 },
 }
 
 describe.each(Object.keys(SITE_LAYOUT_PAGES) as SiteLayoutPageName[])('%s: scored against its source', (name) => {
@@ -1290,5 +1294,66 @@ describe('the theme a page is drawn in (AGL-4152)', () => {
     expect(siteImportOklabDelta('#ffffff', '#ffffff')).toBe(0)
     expect(siteImportOklabDelta('#ffffff', '#f5f5f5')).toBeLessThan(0.05)
     expect(siteImportOklabDelta('#00b0ff', '#0970a4')).toBeGreaterThan(0.05)
+  })
+})
+
+describe.each(['keep', 'improve'] as const)('a grid placed by its children’s rules, built as %s (AGL-4152)', (finish) => {
+  /** The words a node and everything under it hold, as stored. */
+  const held = (nodes: SiteImportFidelityTree['nodes'], id: string): string => {
+    const node = nodes[id]
+    return node ? [JSON.stringify(node.props ?? {}), ...(node.nodes ?? []).map((child) => held(nodes, child))].join(' ') : ''
+  }
+
+  /** The node nearest a heading's that holds its heading and these words too: the card, as built. */
+  function cardOf(name: SiteLayoutPageName, heading: string, words: string): string {
+    const { nodes } = page(name, { finish }).tree
+    const leaves = Object.keys(nodes).filter((id) => !nodes[id]?.nodes?.length && held(nodes, id).includes(heading))
+    let at = leaves[0] as string | undefined
+    while (at && !held(nodes, at).includes(words)) at = nodes[at]?.parentId ?? undefined
+    if (!at) throw new Error(`${heading} sits with no ${words}`)
+    return held(nodes, at)
+  }
+
+  const CARDS: Array<[SiteLayoutPageName, Array<[heading: string, words: string, picture?: string]>]> = [
+    [
+      'gridServices',
+      [
+        ['Garden design', 'A plan drawn for your light', 'A sketched garden plan'],
+        ['Planting', 'Native shrubs and perennials', 'Young plants in a raised bed'],
+        ['Seasonal care', 'Pruning, feeding and clean-up', 'Pruning shears on a stone wall'],
+      ],
+    ],
+    [
+      'swappedGrid',
+      [
+        ['One-time plan', 'A drawn plan you can plant yourself'],
+        ['Planted garden', 'We draw it, plant it and hand it over'],
+        ['Year-round care', 'We visit four times a year'],
+      ],
+    ],
+  ]
+
+  it.each(CARDS)('%s: each heading sits with the words under it on screen, and no other card’s', (name, cards) => {
+    for (const [heading, words, picture] of cards) {
+      const card = cardOf(name, heading, words)
+      for (const [other, otherWords] of cards) {
+        if (other === heading) continue
+        expect(card).not.toContain(other)
+        expect(card).not.toContain(otherWords)
+      }
+      if (picture) expect(cardOf(name, heading, picture)).toContain(words)
+    }
+  })
+
+  it.each(['gridServices', 'swappedGrid'] as const)('%s: its cards are one group in the source’s three columns, and every word is still there once', (name) => {
+    const report = siteImportFidelity(page(name, { finish }).source, page(name, { finish }).tree)
+    expect(report.groups['cards']?.groups.ratio).toBe(1)
+    expect(report.groups['cards']?.items.ratio).toBe(1)
+    expect(report.words.missing).toBe(0)
+    expect(report.words.extra).toBe(0)
+    expect(report.rows.ratio).toBe(1)
+    const cards = page(name, { finish }).source.layout.sections.flatMap((section) => section.nodes).find((node) => node.kind === 'group')
+    expect(cards?.kind === 'group' && cards.columns).toBe(3)
+    expect(cards?.kind === 'group' && cards.items.length).toBe(3)
   })
 })
