@@ -217,6 +217,7 @@ export function quoteMailer(deps: QuoteMailerDeps = defaultQuoteMailerDeps()): Q
         linkReplaced: input.linkReplaced,
         colors: proofColors(theme),
         radius: theme?.buttonRadius,
+        store: CommerceModel.payLinkStoreOf(input.store),
       })
 
       // The PDF is what the email says is attached; without it nothing goes.

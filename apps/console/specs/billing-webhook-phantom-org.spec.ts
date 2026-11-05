@@ -711,3 +711,93 @@ describe('a completed downgrade stops being pending (AGL-2144)', () => {
     expect('pendingDowngrade' in (mirroredSubscription() ?? {})).toBe(false)
   })
 })
+
+/**
+ * What a mirrored coupon REACHES (AGL-4161). A coupon limited to a plan's
+ * base price (AGL-4159) leaves add-ons and usage billing in full, and staff
+ * net MRR now reads that off `org.discount`. Stripe answers `applies_to`
+ * only when expanded, and an event never expands it, so the webhook reads
+ * the coupon back once — and not again while the mirror holds the answer.
+ */
+describe('the discount mirror records what the coupon reaches (AGL-4161)', () => {
+  const KEYED = { STRIPE_SECRET_KEY: 'sk_test_fake', STRIPE_PRICE_PRO: 'price_pro_monthly' }
+  /** What the coupon read answers with, by coupon id. */
+  let coupons: Record<string, Record<string, unknown>>
+
+  beforeEach(() => {
+    coupons = {}
+    global.fetch = jest.fn(async (url: unknown) => {
+      const href = String(url)
+      fetched.push(href)
+      const coupon = href.match(/\/v1\/coupons\/([^/?]+)\?expand\[\]=applies_to$/)
+      if (coupon) {
+        const body = coupons[decodeURIComponent(coupon[1])]
+        return { ok: Boolean(body), status: body ? 200 : 404, json: async () => body ?? {} }
+      }
+      const price = href.match(/\/v1\/prices\/([^/?]+)$/)
+      if (price) {
+        const product = price[1] === 'price_starter_monthly' ? 'prod_starter' : 'prod_pro'
+        return { ok: true, status: 200, json: async () => ({ id: price[1], product }) }
+      }
+      return { ok: true, status: 200, json: async () => ({}) }
+    }) as never
+  })
+
+  const discountOf = () =>
+    (docs.get('orgs/org-real') as Record<string, any>)['discount'] as Record<string, unknown>
+  const event = (id: string) =>
+    signed(subscriptionEvent({ discount: { coupon: { id, percent_off: 100 } } }))
+
+  it('mirrors a base-price coupon as base price only, with the plans it reaches', async () => {
+    coupons.STARTERFREE = { id: 'STARTERFREE', applies_to: { products: ['prod_starter'] } }
+    const post = loadWebhook(KEYED)
+    seedOrg()
+    expect((await post(event('STARTERFREE'))).status).toBe(200)
+    expect(discountOf()).toMatchObject({
+      couponId: 'STARTERFREE',
+      percentOff: 100,
+      basePriceOnly: true,
+      appliesToPlans: ['starter'],
+    })
+    expect(fetched).toContain('https://api.stripe.com/v1/coupons/STARTERFREE?expand[]=applies_to')
+  })
+
+  it('mirrors a whole-subscription coupon as such, reading no plan price', async () => {
+    coupons.SAVE20 = { id: 'SAVE20', applies_to: null }
+    const post = loadWebhook(KEYED)
+    seedOrg()
+    await post(event('SAVE20'))
+    expect(discountOf()['basePriceOnly']).toBe(false)
+    expect('appliesToPlans' in discountOf()).toBe(false)
+    expect(fetched.some((href) => href.includes('/v1/prices/'))).toBe(false)
+  })
+
+  it('does not read the coupon again once its reach is mirrored', async () => {
+    const post = loadWebhook(KEYED)
+    seedOrg('org-real', {
+      discount: {
+        couponId: 'STARTERFREE',
+        basePriceOnly: true,
+        appliesToPlans: ['starter'],
+        appliedBy: 'system',
+        appliedAt: '__seeded__',
+      },
+    })
+    await post(event('STARTERFREE'))
+    expect(fetched.some((href) => href.includes('/v1/coupons/'))).toBe(false)
+    expect(discountOf()).toMatchObject({ basePriceOnly: true, appliesToPlans: ['starter'] })
+  })
+
+  it('never carries a base-price flag over to a coupon it cannot read', async () => {
+    // No Stripe key: the reach of the NEW coupon cannot be told, so it reads
+    // as the whole-subscription discount every older mirror is.
+    const post = loadWebhook()
+    seedOrg('org-real', {
+      discount: { couponId: 'OLD', basePriceOnly: true, appliesToPlans: ['starter'] },
+    })
+    await post(event('NEW'))
+    expect(discountOf()['couponId']).toBe('NEW')
+    expect('basePriceOnly' in discountOf()).toBe(false)
+    expect('appliesToPlans' in discountOf()).toBe(false)
+  })
+})

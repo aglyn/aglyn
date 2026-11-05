@@ -156,6 +156,12 @@ it selected. Nothing is charged until you start the subscription yourself. The c
 goes away once a subscription is live, or when the team withdraws the proposal. Other
 members never see it.
 
+If your workspace already subscribes, the team can propose a **change** instead: another
+plan, or yearly instead of monthly billing, usually with a promotion code for it. The card
+stays until your subscription is on the proposed plan and billing, and **Review the plan**
+opens Billing with the change selected. See [Changing plans with a promotion
+code](#switch-with-a-code).
+
 If the team built your site and handed the workspace to you, the plan comes with the
 invitation: the email's button opens Billing, and once you accept the invitation you
 land there with the plan and add-ons already chosen.
@@ -663,6 +669,25 @@ and pressing it pays with the card on file. If you have no card or billing addre
 it asks for them first. An add-on your plan does not include, or a code that has
 expired, is left off with a one-line note instead of an error.
 
+#### Changing plans with a promotion code {#switch-with-a-code}
+
+If your workspace already subscribes and a link or a proposal from the Aglyn team names
+another plan with a promotion code, the **What you will pay** card shows the change and
+its code, and its header button reads **Switch to *plan***. Before anything is charged,
+the confirmation shows what the switch costs today with the code applied, what the code
+takes off and for how long, and, if your subscription has a discount now, that the code
+takes its place. Confirming switches the plan and applies the code together; on an
+upgrade that charges you now, both apply once the payment goes through.
+
+- **The code replaces your current discount.** A subscription carries one discount at a
+  time from a switch, so the discount you had on the old plan ends with it.
+- **A code is for a move up**, or for moving from monthly to yearly billing. A move down
+  takes effect at the end of the billing period, keeps the discount you have, and is
+  made without a code.
+- **A code for another plan is refused**, with the plan it is for, and you are offered
+  the switch without it at the price shown.
+- Add-ons are not changed by the switch; add them from **Plan add-ons** afterwards.
+
 If the link also chose a domain name for your site, the card shows it with its
 first-year and renewal price. After you pay, you go to your site's **Custom Domain**
 page with the name filled in, and you buy it there yourself: you enter your contact
@@ -829,6 +854,8 @@ its card and room-charge parts, and tips carry no platform fee. See
   payment goes through. **Downgrades** take effect at the
   **end of the current period** and preview **$0 due today** plus the effective date —
   see [when each change takes effect](./downgrading-and-canceling.md#when-changes-take-effect).
+  A move up can carry a promotion code; see [Changing plans with a promotion
+  code](#switch-with-a-code).
 - **Cancel any time** — the subscription runs to the end of the paid period; a warning
   chip shows the end date and you can resume before it hits. Cancel opens a short
   dialog that may offer you a smaller plan or a time-boxed discount first;

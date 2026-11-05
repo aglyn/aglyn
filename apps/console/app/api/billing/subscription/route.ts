@@ -66,6 +66,11 @@ import {
 import { RETENTION_COLLECTION, RETENTION_KINDS } from '../../_lib/retention'
 import { invalidIdTokenResponse } from '../../_lib/invalid-id-token-response'
 import { PAYMENT_METHOD_UPDATE_FLOW } from '../../../../utils/update-payment-method-link'
+// The resolver checkout uses (AGL-4160): one set of rules for a typed code.
+import {
+  resolvePromotionCode,
+  type ResolvedPromotionCode,
+} from '../../../../utils/server/promotion-code'
 
 // lockdown-423: exempt — managing/reactivating the subscription IS the recovery path out of a
 // billing lock; part of the surface AGL-1501 keeps sessions alive for.
@@ -255,6 +260,14 @@ async function activeSubscription(
  *   proration credit — and mirrors `subscription.pendingDowngrade`.
  *   Switching to the current plan releases a pending downgrade ("keep my
  *   plan"). 501 without Stripe env.
+ *   `preview` and `switch` take an optional `promotionCode` (AGL-4160),
+ *   resolved and refused by checkout's own resolver. On a move UP it
+ *   REPLACES the subscription's discounts (`discounts[0][promotion_code]`)
+ *   and the preview prices with it. A move down is refused with a code: it
+ *   lands at the period end on a schedule, and a code offered for it would
+ *   either wait unseen for weeks or reach the plan being left. So is a
+ *   "switch" to the plan and cadence already held, which changes nothing a
+ *   code could ride on.
  * - `portal`   → a Stripe Billing Portal session URL (AGL-275) for
  *   payment-method management; works even without an active
  *   subscription so past-due orgs can fix their card. With
@@ -515,6 +528,75 @@ async function handler(request: Request): Promise<Response> {
     const periodEndIso = subscription.current_period_end
       ? new Date(subscription.current_period_end * 1000).toISOString()
       : null
+
+    // THE OFFER'S CODE, ON A LIVE SUBSCRIPTION (AGL-4160). A workspace that
+    // already subscribes and is offered another plan with a code — a staff
+    // proposal, a Billing link — used to be switched with its old discount
+    // kept and the offered code ignored, so the new plan billed at list.
+    // Resolved by checkout's own resolver, so an unknown code, an expired
+    // one and one limited to another plan's base price (AGL-4159) are
+    // refused here exactly as they are there, before anything is priced.
+    const typedCode = String(body?.promotionCode ?? '').trim()
+    let promo: ResolvedPromotionCode = {}
+    if (typedCode) {
+      const targetLabel = PLAN_LABELS[targetPlan as OrgPlan] ?? targetPlan
+      if (targetPlan === currentPlan && targetInterval === currentInterval) {
+        return Response.json(
+          {
+            error:
+              `You are already on ${targetLabel}, billed ` +
+              `${targetInterval === 'year' ? 'yearly' : 'monthly'}. A code applies ` +
+              'when you change plan or billing cadence.',
+            code: 'promotion_code_needs_change',
+          },
+          { status: 400 },
+        )
+      }
+      if (downgrade) {
+        return Response.json(
+          {
+            error:
+              `A code applies to a move up. The move down to ${targetLabel} ` +
+              'happens at the end of your billing period and keeps the ' +
+              'discount you have now, so it is made without a code.',
+            code: 'promotion_code_on_downgrade',
+          },
+          { status: 400 },
+        )
+      }
+      promo = await resolvePromotionCode(secretKey, typedCode, {
+        plan: targetPlan as OrgPlan,
+        priceId: targetPrice,
+      })
+      if (promo.error) {
+        // The code's own refusal carries no `code`, as checkout's does.
+        return Response.json(
+          {
+            error: promo.error,
+            ...(promo.refusal === 'plan' ? { promotionCodeRefusal: 'plan' } : {}),
+          },
+          { status: promo.refusal === 'unavailable' ? 502 : 400 },
+        )
+      }
+    }
+    // What the code is, for the confirm: the terms it brings, and whether it
+    // takes the place of a discount the subscription carries now.
+    const existingDiscounts = Array.isArray(subscription?.discounts)
+      ? subscription.discounts.filter(Boolean).length
+      : subscription?.discount
+        ? 1
+        : 0
+    const promotionTerms = promo.id
+      ? {
+          promotionCodeApplied: promo.code,
+          promotionCodeDuration: promo.duration ?? null,
+          promotionCodeDurationInMonths: promo.durationInMonths ?? null,
+          promotionCodePercentOff: promo.percentOff ?? null,
+          promotionCodeAmountOffUsd: promo.amountOffUsd ?? null,
+          promotionCodeBasePriceOnly: Boolean(promo.limitedToProducts),
+          promotionCodeReplacesDiscount: existingDiscounts > 0,
+        }
+      : {}
 
     // Switching to the plan you are already on is only meaningful as "keep my
     // plan" — the undo for a pending downgrade. Release the schedule and
@@ -888,7 +970,13 @@ async function handler(request: Request): Promise<Response> {
           // Preview under the same tax setting the switch will apply
           // (AGL-1537) — otherwise a taxed customer is quoted one number and
           // charged another.
-          `&automatic_tax[enabled]=true`,
+          `&automatic_tax[enabled]=true` +
+          // The offer's code (AGL-4160), in place of the discounts the
+          // subscription carries — the preview's `discounts` replaces what it
+          // would otherwise inherit, as the switch below replaces them.
+          (promo.id
+            ? `&discounts[0][promotion_code]=${encodeURIComponent(promo.id)}`
+            : ''),
       )
       // What the switch COSTS: the proration lines alone, positive when the
       // move bills the difference, negative when it issues a credit. Derived
@@ -961,6 +1049,11 @@ async function handler(request: Request): Promise<Response> {
           params.set(`items[${index}][${key}]`, value)
         }
       })
+      // The offer's code (AGL-4160) REPLACES the subscription's discounts:
+      // `discounts` is an absolute list. On a charged upgrade it rides the
+      // pending update with the items, so the discount changes only when the
+      // plan does — once the invoice is paid.
+      if (promo.id) params.set('discounts[0][promotion_code]', promo.id)
       // The invoice the charge raised, on the same call that raises it.
       if (chargesNow) params.set('expand[]', 'latest_invoice.payment_intent')
       let updated: any
@@ -1015,6 +1108,7 @@ async function handler(request: Request): Promise<Response> {
           ok: false,
           plan: currentPlan,
           pendingPlan: targetPlan,
+          ...promotionTerms,
           ...pendingChargeResponse(charge),
           droppedAddons: dropped,
           clampedAddons: clamped,
@@ -1039,6 +1133,7 @@ async function handler(request: Request): Promise<Response> {
       return Response.json({
         ok: true,
         plan: targetPlan,
+        ...promotionTerms,
         ...(charge
           ? {
               chargedNowCents: charge.amountDueCents,
@@ -1130,6 +1225,7 @@ async function handler(request: Request): Promise<Response> {
       droppedAddons: dropped,
       clampedAddons: clamped,
       unrecognizedItems,
+      ...promotionTerms,
     }, { status: 200 })
   } catch (error) {
     // A refused credential is a 401, not a fault of ours (AGL-1993). Null

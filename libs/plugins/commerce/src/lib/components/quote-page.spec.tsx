@@ -108,7 +108,14 @@ describe('the quote page', () => {
     expect(await screen.findByRole('button', { name: 'Opening…' })).toBeTruthy()
     const [url, init] = mockSiteFetch.mock.calls[1] as [string, RequestInit]
     expect(url).toBe('/api/commerce/quote-pay')
-    expect(JSON.parse(String(init.body))).toEqual({ hostId: 'host-1', q: 'q-1', t: '1.tok', v: Date.UTC(2026, 9, 21) })
+    // The tax the page priced it under goes back with it (AGL-4162).
+    expect(JSON.parse(String(init.body))).toEqual({
+      hostId: 'host-1',
+      q: 'q-1',
+      t: '1.tok',
+      v: Date.UTC(2026, 9, 21),
+      tax: '{"kind":"rate","pct":8.25,"label":"Texas sales tax"}',
+    })
     expect((init.headers as Record<string, string>)['Idempotency-Key']).toBeTruthy()
   })
 
@@ -119,6 +126,24 @@ describe('the quote page', () => {
     render(<QuotePage />)
     fireEvent.click(await screen.findByRole('button', { name: 'Pay $2,675.48' }))
     expect(await screen.findByText('Acme Tents can’t take payments online right now.')).toBeTruthy()
+  })
+
+  it('says what Pay would in place of Pay when the business can’t take payments (AGL-4162)', async () => {
+    mockSiteFetch.mockResolvedValue(
+      json(buildQuotePageView({ order: ORDER as never, orderId: 'q-1', storeName: 'Acme Tents', currency: 'USD', paymentsReady: false })),
+    )
+    render(<QuotePage />)
+    expect(await screen.findByText('Acme Tents can’t take payments online right now. Contact them to pay this quote.')).toBeTruthy()
+    expect(screen.queryByRole('button', { name: /^Pay/ })).toBeNull()
+  })
+
+  it('asks the customer to contact the business when Pay waits on anything else', async () => {
+    mockSiteFetch.mockResolvedValue(
+      json(buildQuotePageView({ order: ORDER as never, orderId: 'q-1', storeName: 'Acme Tents', currency: 'USD', store: { tax: null } })),
+    )
+    render(<QuotePage />)
+    expect(await screen.findByText('Contact Acme Tents to pay this quote.')).toBeTruthy()
+    expect(screen.queryByRole('button', { name: /^Pay/ })).toBeNull()
   })
 
   it('asks for the proof’s approval in place of Pay when the business requires it', async () => {

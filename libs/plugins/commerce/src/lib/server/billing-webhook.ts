@@ -4495,6 +4495,9 @@ export const commerceBillingWebhookHandler: BillingWebhookHandler = async ({
               taxCents: stripeTaxCents,
               feeCents: Number(object?.metadata?.feeCents ?? 0) || 0,
               taxMode: storefrontTaxModeOf(object, Number(object?.metadata?.taxCents ?? 0)),
+              // The basis Pay charged a quote saved before the store chose its
+              // sales tax under (AGL-4162); absent, the quote's own stands.
+              taxBasis: CommerceModel.quoteTaxBasisFromKey(object?.metadata?.quoteTax),
               shippingAddress: shipTo?.address
                 ? Object.fromEntries(
                     Object.entries({

@@ -26,12 +26,16 @@ import {
 import {
   QUOTE_MIN_CHARGE_CENTS,
   payLinkCheckoutCharge,
+  payLinkPaymentsUnavailableMessage,
+  payLinkRefusalWithPayments,
   quoteCheckoutCharge,
   quotePageAddress,
   quotePageLines,
   quotePageStatus,
   quotePayRefusal,
   quotePayRefusalMessage,
+  quotePayTax,
+  type PayLinkStore,
   type QuoteCheckoutCharge,
   type QuotePageView,
   type QuotePayRefusal,
@@ -44,6 +48,7 @@ import {
   type QuoteTaxBasis,
 } from './commerce-quotes'
 import type { ResolvedShippingRate } from './commerce-shipping'
+import { storefrontTaxDecision } from './commerce-tax-decision'
 import { lineRequiresShipping } from './order-fulfillment'
 
 /*==========================================
@@ -186,8 +191,10 @@ export function invoiceCheckoutCharge(
   order: Pick<HostOrder, 'number' | 'lineItems' | 'quote' | 'totals' | 'taxMode'> &
     Partial<Pick<HostOrder, 'draftShipping'>>,
   orderId: string,
+  /** The store's sales tax choice, which a quote saved before it was made takes (`quotePayTax`). */
+  store?: PayLinkStore | null,
 ): InvoiceCheckoutCharge {
-  if (order.quote) return { ...quoteCheckoutCharge(order, orderId), shippingOptions: [], shippingCountries: [] }
+  if (order.quote) return { ...quoteCheckoutCharge(order, orderId, store), shippingOptions: [], shippingCountries: [] }
   const discountCents = Math.max(0, cents(order.totals?.discountCents))
   const charge = payLinkCheckoutCharge({
     lineItems: order.lineItems ?? [],
@@ -222,12 +229,15 @@ export function invoicePayRefusal(
   order: Pick<HostOrder, 'number' | 'status' | 'lineItems' | 'quote' | 'totals' | 'taxMode' | 'channel'> &
     Partial<Pick<HostOrder, 'draftShipping'>>,
   orderId: string,
+  /** The store's sales tax choice; with it, a store that has not chosen refuses (AGL-1999). */
+  store?: PayLinkStore | null,
 ): InvoicePayRefusal | null {
   const kind = orderPayLinkKind(order)
-  if (kind === 'quote') return quotePayRefusal(order, orderId)
+  if (kind === 'quote') return quotePayRefusal(order, orderId, store)
   if (order.status === 'cancelled' || order.status === 'refunded') return 'closed'
   if (order.status !== 'pending') return 'paid'
   if (kind !== 'invoice') return 'not-payable'
+  if (store && storefrontTaxDecision({ settings: store.tax }).kind === 'undecided') return 'tax-undecided'
   const ships = (order.lineItems ?? []).some((line) => line && !line.included && lineRequiresShipping(line))
   if (ships && !order.draftShipping) return 'shipping-unknown'
   if (invoiceCheckoutCharge(order, orderId).totalCents < QUOTE_MIN_CHARGE_CENTS) return 'nothing-to-pay'
@@ -262,6 +272,51 @@ export function invoicePayRefusalMessage(
 }
 
 /*==========================================
+ * WHAT THE CONSOLE TELLS THE BUSINESS
+ *=========================================*/
+
+/**
+ * What stands between a pay link and a payment that the business fixes in
+ * the console (AGL-4162):
+ *
+ * - `payments`: the workspace can't take card payments yet.
+ * - `tax-undecided`: the store has not chosen how it handles sales tax.
+ * - `tax-save`: the quote was saved before the store chose, and the store's
+ *   choice now prices it only on a save (`quotePayTax`'s `save`).
+ */
+export type PayLinkGap = 'payments' | 'tax-undecided' | 'tax-save'
+
+/**
+ * What the console's "Customers can't pay this … online yet" notice names,
+ * for an unpaid quote or a draft order's invoice, or a quote not saved yet
+ * (`order: null`), which will be saved under the store's choice as it stands.
+ * The same answers Pay refuses on: `invoicePayRefusal` with the store, and
+ * the payment account check the page and Pay share.
+ *
+ * Null while either answer is unknown, so the notice waits rather than tell a
+ * store that is set up to set up. Empty for anything the pay link does not
+ * charge (a paid, closed or unlinked order) or that nothing stands in front of.
+ * A refusal that is not the business's setup (approval, an amount too small)
+ * is said where it is decided, not here.
+ */
+export function payLinkGaps(input: {
+  order: (Pick<HostOrder, 'status' | 'channel'> & Partial<Pick<HostOrder, 'quote'>>) | null
+  /** The workspace can take card payments; null while that is unknown. */
+  paymentsReady: boolean | null
+  /** The store's sales tax choice; undefined while it is being read. */
+  store: PayLinkStore | undefined
+}): PayLinkGap[] | null {
+  const { order, store } = input
+  if (input.paymentsReady === null || store === undefined) return null
+  if (order && (order.status !== 'pending' || orderPayLinkKind(order) === null)) return []
+  const gaps: PayLinkGap[] = []
+  if (!input.paymentsReady) gaps.push('payments')
+  if (storefrontTaxDecision({ settings: store.tax }).kind === 'undecided') gaps.push('tax-undecided')
+  else if (order?.quote && quotePayTax(order.quote, store).source === 'save') gaps.push('tax-save')
+  return gaps
+}
+
+/*==========================================
  * THE CUSTOMER'S PAGE FOR AN INVOICE
  *=========================================*/
 
@@ -293,11 +348,18 @@ export function buildInvoicePageView(input: {
   currency: string
   /** The order's status page, once paid. */
   receiptUrl?: string | null
+  /** The store's sales tax choice; with it, a store that has not chosen refuses Pay (AGL-1999). */
+  store?: PayLinkStore | null
+  /** Whether the business can take a card payment now; absent, it is not judged here. */
+  paymentsReady?: boolean
 }): QuotePageView {
   const { order } = input
   const status = quotePageStatus(order.status)
   const unpaid = status.status === 'unpaid'
-  const charge = invoiceCheckoutCharge(order, input.orderId)
+  const charge = invoiceCheckoutCharge(order, input.orderId, input.store)
+  const refused = unpaid
+    ? payLinkRefusalWithPayments(invoicePayRefusal(order, input.orderId, input.store), input.paymentsReady)
+    : null
   const stored = order.totals
   const totals =
     unpaid || !stored
@@ -343,7 +405,9 @@ export function buildInvoicePageView(input: {
     paidAtMs: orderPaidAtMs(order),
     receiptUrl: unpaid ? null : (input.receiptUrl ?? null),
     approvalRequired: false,
-    payable: unpaid && invoicePayRefusal(order, input.orderId) === null,
+    payable: unpaid && refused === null,
+    notPayableMessage: refused === 'payments-unavailable' ? payLinkPaymentsUnavailableMessage(input.storeName, 'invoice') : null,
+    taxKey: null,
     revision: 1,
     proofs: [],
     response: null,
@@ -430,6 +494,7 @@ export type InvoiceSendRefusal =
   | 'not-payable'
   | 'approval-required'
   | 'tax-undecided'
+  | 'tax-save'
   | 'nothing-to-pay'
   | 'shipping-unknown'
   | 'no-address'
@@ -448,14 +513,20 @@ export function invoiceSendRefusal(
     | undefined,
   orderId: string,
   to: string,
+  /** The store's sales tax choice, as the pay link reads it (`invoicePayRefusal`). */
+  store?: PayLinkStore | null,
 ): InvoiceSendRefusal | null {
   if (!order) return 'unknown'
   if (order.status === 'cancelled' || order.status === 'refunded') return 'closed'
   const lines = (order.lineItems ?? []).filter(Boolean)
   if (!lines.length && cents(order.totals?.totalCents) <= 0) return 'empty'
   if (!invoiceIsPaid(order)) {
-    const refused = invoicePayRefusal(order, orderId)
+    const refused = invoicePayRefusal(order, orderId, store)
     if (refused === 'closed') return 'closed'
+    // A quote saved before the store chose: the store has chosen, and a save prices it.
+    if (refused === 'tax-undecided' && order.quote && quotePayTax(order.quote, store).source === 'save') {
+      return 'tax-save'
+    }
     if (refused && refused !== 'paid') return refused
   }
   if (!to) return 'no-address'
@@ -478,6 +549,8 @@ export function invoiceSendRefusalMessage(reason: InvoiceSendRefusal): string {
       return 'This quote asks your customer to approve the proof before they pay, and they haven’t yet. Send the quote so they can approve it, then send the invoice.'
     case 'tax-undecided':
       return 'Sales tax isn’t set up for this store yet, so the invoice can’t be paid online. Finish the tax settings, then send it.'
+    case 'tax-save':
+      return 'This quote was saved before your store chose how it handles sales tax. Save the quote again, then send the invoice.'
     case 'nothing-to-pay':
       return 'This invoice totals less than $0.50, so it can’t be paid by card.'
     case 'shipping-unknown':

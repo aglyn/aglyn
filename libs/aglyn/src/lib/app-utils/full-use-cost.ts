@@ -30,10 +30,12 @@ import {
   SELF_SERVE_PLANS,
   applyDiscountUsd,
   checkSeatQuota,
+  discountReachMonthlyUsd,
   netOfProcessorFee,
   orgListPriceMonthlyUsd,
   resolveCollaboratorSeatPool,
   resolveOrgEntitlements,
+  type OrgDiscountTerms,
   type ResolvedOrgEntitlements,
 } from './plan-entitlements'
 import { planQuotaOf } from '../plugin-manager/plugin-plan-entitlements'
@@ -315,9 +317,23 @@ export function rateAgainstFullUse(input: {
   cogs: FullUseCogsResult
   multiple: number
   discount?: Pick<OrgDiscount, 'percentOff' | 'amountOffUsd'> | null
+  /**
+   * The part of the monthly list price the discount reaches (AGL-4161): the
+   * base plan line for a base-price coupon, the rest billing in full.
+   * Absent, all of it.
+   */
+  reachMonthlyUsd?: number
 }): FullUseFloorResult {
   const listUsd = Math.max(0, Number(input.listMonthlyUsd) || 0)
-  const discountedUsd = applyDiscountUsd(listUsd, monthlyDiscount(input.discount, input.annual))
+  const reachUsd =
+    typeof input.reachMonthlyUsd === 'number'
+      ? Math.min(listUsd, Math.max(0, input.reachMonthlyUsd))
+      : listUsd
+  const monthly = monthlyDiscount(input.discount, input.annual)
+  const discountedUsd =
+    reachUsd >= listUsd
+      ? applyDiscountUsd(listUsd, monthly)
+      : Math.round((listUsd - reachUsd + applyDiscountUsd(reachUsd, monthly)) * 100) / 100
   const netUsd = netOfProcessorFee(discountedUsd, input.annual)
   const fullUseCogsUsd = input.cogs.cogsUsd
   const requiredNetUsd = input.multiple * fullUseCogsUsd
@@ -449,6 +465,8 @@ export function assessDiscountAgainstFullUse(input: {
   cogs: FullUseCogsResult
   discount: Pick<OrgDiscount, 'percentOff' | 'amountOffUsd'> | null | undefined
   duration: CouponDuration | null | undefined
+  /** What the discount reaches of the list price (AGL-4161); absent, all of it. */
+  reachMonthlyUsd?: number
 }): DiscountFullUseAssessment {
   const charge = rateAgainstFullUse({ ...input, multiple: FULL_USE_DISCOUNT_MULTIPLE })
   const undiscounted = rateAgainstFullUse({
@@ -486,19 +504,23 @@ export function assessDiscountAgainstFullUse(input: {
  * A discount on an org as it bills — its plan, overrides, add-ons, interval
  * and the price it pays — against its full-use cost: the warning behind
  * applying a coupon to an org and behind the winback. A list price of 0 (no
- * subscription on record) is reported as such, never as covered.
+ * subscription on record) is reported as such, never as covered. A
+ * base-price discount (AGL-4161) comes off the base plan line alone, so the
+ * add-ons are judged at the price they bill.
  */
 export function orgDiscountFullUse(
   org: Partial<AglynOrgBilling> | null | undefined,
-  discount: Pick<OrgDiscount, 'percentOff' | 'amountOffUsd'> | null | undefined,
+  discount: OrgDiscountTerms | null | undefined,
   duration: CouponDuration | null | undefined,
 ): DiscountFullUseAssessment {
+  const listMonthlyUsd = orgListPriceMonthlyUsd(org)
   return assessDiscountAgainstFullUse({
-    listMonthlyUsd: orgListPriceMonthlyUsd(org),
+    listMonthlyUsd,
     annual: org?.subscription?.interval === 'year',
     cogs: orgFullUseCogs(org),
     discount,
     duration,
+    reachMonthlyUsd: discountReachMonthlyUsd(org, discount, listMonthlyUsd),
   })
 }
 
@@ -511,7 +533,7 @@ export interface CouponFullUseCase extends DiscountFullUseAssessment {
 export interface CouponFullUseVerdict {
   /** Every case clears: no discounted charge, on any plan, falls under its full-use cost. */
   ok: boolean
-  /** Every paid self-serve plan, monthly and annual, judged. */
+  /** Every paid self-serve plan the coupon reaches, monthly and annual, judged. */
   cases: CouponFullUseCase[]
   /** The case with the least cover — the one the warning leads with. */
   worst: CouponFullUseCase
@@ -525,20 +547,29 @@ export interface CouponFullUseVerdict {
  * Judge a coupon or promotion code against full-use cost before it is minted
  * (AGL-3473) — a WARNING for staff, never a refusal.
  *
- * A coupon here carries no plan restriction, so its code can be redeemed on
- * any paid self-serve plan, on either interval, by a customer using
- * everything the plan includes; each case is that plan's list price against
- * its own bands at 100%, on the charges `duration` reaches. Enterprise is
- * quoted per deal and never takes a code at checkout; a coupon applied to one
- * is judged on that org.
+ * A coupon with no plan restriction can be redeemed on any paid self-serve
+ * plan, on either interval, by a customer using everything the plan
+ * includes; each case is that plan's list price against its own bands at
+ * 100%, on the charges `duration` reaches. Enterprise is quoted per deal and
+ * never takes a code at checkout; a coupon applied to one is judged on that
+ * org.
+ *
+ * `plans` narrows the cases to the plans a coupon is limited to (AGL-4159): a
+ * coupon that takes its discount off one plan's base price is redeemed on
+ * that plan only, so the others are not its risk. Each case still prices the
+ * plan's own list price, which is exactly the line such a coupon reaches —
+ * add-ons and usage past the bands bill in full. A restriction that names no
+ * paid self-serve plan is judged on all of them, the cautious reading.
  */
 export function rateCouponAgainstFullUse(
   discount: Pick<OrgDiscount, 'percentOff' | 'amountOffUsd'>,
   duration?: CouponDuration | null,
+  plans?: readonly OrgPlan[] | null,
 ): CouponFullUseVerdict {
+  const paid = SELF_SERVE_PLANS.filter((plan) => PLAN_PRICING[plan]?.basePriceMonthlyUsd > 0)
+  const limited = plans?.length ? paid.filter((plan) => plans.includes(plan)) : []
   const cases: CouponFullUseCase[] = []
-  for (const plan of SELF_SERVE_PLANS) {
-    if (!(PLAN_PRICING[plan]?.basePriceMonthlyUsd > 0)) continue
+  for (const plan of limited.length ? limited : paid) {
     for (const interval of ['month', 'year'] as const) {
       const org = { plan, subscription: { status: 'active', interval } } as never
       cases.push({ plan, interval, ...orgDiscountFullUse(org, discount, duration) })

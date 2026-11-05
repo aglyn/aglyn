@@ -355,8 +355,10 @@ describe('the billing sections pair their narrow cards (AGL-2486)', () => {
     }
     expect(plan).toContain("size: { xs: 12, md: 4 }")
     // And the quote no longer renders at all when there is no plan to quote —
-    // an empty card with a header reads as a thing that failed to load.
-    expect(plan).toMatch(/\.\.\.\(quotedPlan\n?\s*\?/)
+    // an empty card with a header reads as a thing that failed to load. Since
+    // AGL-4160 the same guard also skips a subscriber's own plan and cadence,
+    // so the spread opens `...(quotedPlan &&` as well as `...(quotedPlan ?`.
+    expect(plan).toMatch(/\.\.\.\(quotedPlan\n?\s*(\?|&&)/)
   })
 
   it('every sized item is full width at xs, so narrow can only stack', () => {

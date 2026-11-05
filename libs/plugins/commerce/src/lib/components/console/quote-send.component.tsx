@@ -37,6 +37,7 @@ import {
 import { doc } from 'firebase/firestore'
 import { useCallback, useEffect, useRef, useState } from 'react'
 import { InvoiceSendDialog, invoiceSentLine } from './invoice-send.component'
+import { PayLinkReadinessNoticeFor } from './pay-link-readiness-notice.component'
 
 const SEND_REFUSAL = commerceSitePermissionRefusal('commerce.quotes.send')
 
@@ -64,6 +65,9 @@ const sentAt = (atMs: number) =>
  * Send invoice (AGL-4099) sits beside it: for an unpaid quote, an invoice for
  * a customer who needs one to pay (with the same pay link); for a paid one,
  * the invoice as their record. Both reply into the quote's conversation.
+ *
+ * The form says what the customer's Pay waits on, if anything (AGL-4162),
+ * and sends all the same.
  */
 export function QuoteSendSection(props: QuoteSendSectionProps) {
   const { hostId, quoteId, quote, canSend, edited } = props
@@ -199,6 +203,7 @@ export function QuoteSendSection(props: QuoteSendSectionProps) {
         <DialogTitle id="quote-send-title">{`${label}: ${CommerceModel.formatQuoteNumber(quote, quoteId)}`}</DialogTitle>
         <DialogContent>
           <Stack spacing={2} sx={{ pt: 1 }}>
+            <PayLinkReadinessNoticeFor hostId={hostId} order={quote} noun="quote" />
             <TextField
               label="To"
               type="email"

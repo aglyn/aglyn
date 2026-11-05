@@ -210,8 +210,10 @@ describe('POST /api/admin/coupons — promotion code activate/deactivate', () =>
 
     await post({ action: 'activate', promotionCodeId: CODE_ID })
 
+    // Its coupon's `applies_to` expanded (AGL-4159), so a code limited to
+    // one plan is rated on that plan when it is turned back on.
     expect(stripeCalls[0]).toMatchObject({
-      path: `promotion_codes/${CODE_ID}`,
+      path: `promotion_codes/${CODE_ID}?expand[]=coupon.applies_to`,
       method: 'GET',
     })
     expect(mockAuditAdd).toHaveBeenCalledTimes(1)

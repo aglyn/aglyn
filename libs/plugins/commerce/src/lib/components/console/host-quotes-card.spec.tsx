@@ -37,9 +37,21 @@ let mockQuotes: Array<Record<string, unknown>> = []
 let mockStore: Record<string, unknown> = {}
 /** The page's query string, as the router reads it (a manager notice's `?quote=`). */
 let mockSearch = ''
+/** Whether the workspace owner's payment account takes charges, as `useMerchantPayments` answers. */
+const PAYMENTS_READY = { state: 'ready', settled: true, ready: true, blocked: false, reason: null, href: '/acme/hosts/shop/products/payments' }
+const PAYMENTS_MISSING = {
+  state: 'not-connected',
+  settled: true,
+  ready: false,
+  blocked: true,
+  reason: 'Connect Stripe to take card payments.',
+  href: '/acme/hosts/shop/products/payments',
+}
+let mockPayments: Record<string, unknown> = PAYMENTS_READY
 
 jest.mock('next/navigation', () => ({
   useSearchParams: () => new URLSearchParams(mockSearch),
+  usePathname: () => '/acme/hosts/shop/products/orders',
 }))
 
 jest.mock('@aglyn/shared-util-http/authorized-token', () => ({
@@ -67,6 +79,10 @@ jest.mock('@aglyn/tenant-feature-instance', () => ({
     truncated: (read ?? []).length > ceiling,
   }),
   useFirestoreDoc: () => ({ data: mockStore, status: 'success', fromCache: false }),
+  firestoreDocPhase: (read: { data?: unknown; status: string }) =>
+    read.data ? 'ready' : read.status === 'loading' ? 'loading' : 'missing',
+  useMerchantPayments: (hostId: string | undefined) =>
+    hostId ? mockPayments : { state: 'pending', settled: false, ready: false, blocked: false, reason: null, href: null },
   useFirestoreCollection: (build: () => { __path: string }) => {
     const path = build().__path
     if (path.endsWith('/orders')) return { data: mockQuotes, status: 'success' }
@@ -128,6 +144,7 @@ beforeEach(() => {
   mockFetch.mockClear()
   mockQuotes = []
   mockSearch = ''
+  mockPayments = PAYMENTS_READY
   mockStore = { tax: { mode: 'manual', origin: { country: 'US', state: 'TX' }, rates: [{ country: 'US', state: 'TX', pct: 10 }] } }
 })
 
@@ -649,5 +666,124 @@ describe('a quote’s proofs and revisions (AGL-4096)', () => {
     // The same address read again (any re-render) does not reopen it.
     view.rerender(<HostQuotesCard hostId="site1" canEdit canSend />)
     expect(screen.queryByRole('dialog')).toBeNull()
+  })
+})
+
+/*
+ * "Customers can't pay this quote online yet" (AGL-4162): what the customer's
+ * Pay waits on, with a button to each fix, in the editor, its pay link, the
+ * Send quote form and the Send invoice form. Shown only once both answers
+ * are in, and sending stays open.
+ */
+describe('telling the business what customers’ Pay waits on (AGL-4162)', () => {
+  const UNDECIDED = { ...QUOTE, quote: { ...QUOTE.quote, tax: { kind: 'none', reason: 'undecided' } } }
+
+  async function openQuote(quote: Record<string, unknown> = QUOTE) {
+    mockQuotes = [quote]
+    render(<HostQuotesCard hostId="site1" canEdit canSend />)
+    fireEvent.click(screen.getByText('Quote #1042'))
+    return screen.findByRole('dialog')
+  }
+
+  it('names a missing payment account and an undecided sales tax, each with its own fix, in a new quote', async () => {
+    mockPayments = PAYMENTS_MISSING
+    mockStore = {}
+    render(<HostQuotesCard hostId="site1" canEdit canSend />)
+    fireEvent.click(screen.getByRole('button', { name: 'New quote' }))
+    const dialog = await screen.findByRole('dialog')
+    const notice = within(dialog).getByRole('alert')
+    expect(within(notice).getByText('Customers can’t pay this quote online yet.')).toBeTruthy()
+    expect(within(notice).getByText('Connect Stripe to take card payments.')).toBeTruthy()
+    expect(within(notice).getByRole('button', { name: 'Open Payments' }).getAttribute('href')).toBe('/acme/hosts/shop/products/payments')
+    expect(within(notice).getByText('Choose how this store handles sales tax.')).toBeTruthy()
+    expect(within(notice).getByRole('button', { name: 'Open Taxes' }).getAttribute('href')).toBe('/acme/hosts/shop/products/taxes')
+    // The tax-only notice it replaces is gone.
+    expect(within(dialog).queryByText(/so this quote shows no tax/)).toBeNull()
+  })
+
+  it('says nothing while the payment account is still being read', async () => {
+    mockPayments = { state: 'pending', settled: false, ready: false, blocked: false, reason: null, href: null }
+    mockStore = {}
+    render(<HostQuotesCard hostId="site1" canEdit canSend />)
+    fireEvent.click(screen.getByRole('button', { name: 'New quote' }))
+    const dialog = await screen.findByRole('dialog')
+    expect(within(dialog).queryByText('Customers can’t pay this quote online yet.')).toBeNull()
+  })
+
+  it('says nothing for a quote customers can pay', async () => {
+    const dialog = await openQuote()
+    expect(within(dialog).queryByText('Customers can’t pay this quote online yet.')).toBeNull()
+  })
+
+  it('shows a saved quote’s notice once, with its pay link, which can still be copied', async () => {
+    mockPayments = PAYMENTS_MISSING
+    const dialog = await openQuote()
+    expect(within(dialog).getAllByText('Customers can’t pay this quote online yet.')).toHaveLength(1)
+    expect(within(dialog).getByRole('button', { name: 'Open Payments' })).toBeTruthy()
+    expect((within(dialog).getByRole('button', { name: 'Copy pay link' }) as HTMLButtonElement).disabled).toBe(false)
+  })
+
+  it('names no tax step for a quote saved before the store chose “Don’t collect sales tax”', async () => {
+    mockStore = { tax: { mode: 'none' } }
+    const dialog = await openQuote(UNDECIDED)
+    expect(within(dialog).queryByText('Customers can’t pay this quote online yet.')).toBeNull()
+  })
+
+  it('asks for a save where only a save prices the store’s own rates', async () => {
+    const dialog = await openQuote(UNDECIDED)
+    expect(within(dialog).getByText('Customers can’t pay this quote online yet.')).toBeTruthy()
+    expect(within(dialog).getByText('Save this quote again to apply the store’s sales tax setting.')).toBeTruthy()
+    expect(within(dialog).queryByRole('button', { name: 'Open Taxes' })).toBeNull()
+  })
+
+  it('says it in the Send quote form, and sends all the same', async () => {
+    mockPayments = PAYMENTS_MISSING
+    mockFetch.mockImplementation(async () => ({
+      ok: true,
+      json: async () => ({ sent: true, to: 'jordan@example.com', atMs: 5, revision: 1, linkVersion: 1, linkReplaced: false }),
+    }))
+    const dialog = await openQuote()
+    fireEvent.click(within(dialog).getByRole('button', { name: 'Send quote' }))
+    const form = await screen.findByRole('dialog', { name: 'Send quote: Quote #1042' })
+    expect(within(form).getByText('Customers can’t pay this quote online yet.')).toBeTruthy()
+    expect(within(form).getByRole('button', { name: 'Open Payments' })).toBeTruthy()
+    fireEvent.click(within(form).getByRole('button', { name: 'Send' }))
+    await waitFor(() => expect(mockFetch).toHaveBeenCalledTimes(1))
+    expect((mockFetch.mock.calls[0] as [unknown, string])[1]).toBe('/api/commerce/quote')
+  })
+
+  it('says it in the Send invoice form as “this invoice”, and sends all the same', async () => {
+    mockPayments = PAYMENTS_MISSING
+    mockFetch.mockImplementation(async () => ({ ok: true, json: async () => ({ sent: true, to: 'jordan@example.com', paid: false, linkVersion: 1 }) }))
+    const dialog = await openQuote()
+    fireEvent.click(within(dialog).getByRole('button', { name: 'Send invoice' }))
+    const form = await screen.findByRole('dialog', { name: 'Send invoice: Invoice #1042' })
+    expect(within(form).getByText('Customers can’t pay this invoice online yet.')).toBeTruthy()
+    expect(within(form).getByText('Connect Stripe to take card payments.')).toBeTruthy()
+    const send = within(form).getByRole('button', { name: 'Send' }) as HTMLButtonElement
+    expect(send.disabled).toBe(false)
+    fireEvent.click(send)
+    await waitFor(() => expect(mockFetch).toHaveBeenCalledTimes(1))
+    expect((mockFetch.mock.calls[0] as [unknown, string])[1]).toBe('/api/commerce/order-invoice-send')
+  })
+
+  it('sends an invoice for a quote saved before the store chose, once it has', async () => {
+    mockStore = { tax: { mode: 'none' } }
+    const dialog = await openQuote(UNDECIDED)
+    fireEvent.click(within(dialog).getByRole('button', { name: 'Send invoice' }))
+    const form = await screen.findByRole('dialog', { name: 'Send invoice: Invoice #1042' })
+    expect(within(form).queryByText(/Sales tax isn’t set up/)).toBeNull()
+    expect((within(form).getByRole('button', { name: 'Send' }) as HTMLButtonElement).disabled).toBe(false)
+  })
+
+  it('names the tax step once in the Send invoice form, where it holds the send', async () => {
+    mockStore = {}
+    const dialog = await openQuote(UNDECIDED)
+    fireEvent.click(within(dialog).getByRole('button', { name: 'Send invoice' }))
+    const form = await screen.findByRole('dialog', { name: 'Send invoice: Invoice #1042' })
+    expect(within(form).getByText('Choose how this store handles sales tax.')).toBeTruthy()
+    expect(within(form).queryByText(/Sales tax isn’t set up/)).toBeNull()
+    expect((within(form).getByRole('button', { name: 'Send' }) as HTMLButtonElement).disabled).toBe(true)
+    expect(within(form).getByLabelText(/Sales tax isn’t set up for this store yet/)).toBeTruthy()
   })
 })

@@ -143,6 +143,14 @@ import {
   placePaymentFraudHold,
   workspaceFraudSignalResponder,
 } from '../../../../utils/server/payment-fraud-hold'
+// What a mirrored coupon reaches (AGL-4161): a base price, or the whole bill.
+import type { OrgPlan } from '@aglyn/aglyn/foundation'
+import { COUPON_PLAN_CHOICES } from '../../../../utils/coupon-list-query'
+import {
+  couponLimitedProducts,
+  plansForProducts,
+  readPlanProducts,
+} from '../../../../utils/server/coupon-plan-products'
 
 // lockdown-423: exempt — Stripe server callback, no user caller — and the very path a lapsed
 // org PAYS through; a 423 here would block the recovery it needs.
@@ -182,6 +190,57 @@ function subscriptionCoupon(object: any): {
     coupon,
     promotionCodeId:
       typeof promo === 'string' ? promo : (promo?.id ?? null),
+  }
+}
+
+/**
+ * What a subscription's coupon reaches, for the `org.discount` mirror
+ * (AGL-4161): the base price of these plans (`basePriceOnly`), or the whole
+ * bill. Staff net MRR reads it, so a base-price coupon is taken off the base
+ * plan line and the add-ons count in full.
+ *
+ * Stripe answers `applies_to` only when it is EXPANDED, and an event never
+ * expands anything, so the coupon is read back once with it — and not again
+ * while the mirror already holds the answer for the same coupon. Null when
+ * it cannot be told (no Stripe key here, or Stripe did not answer): the caller
+ * then leaves the mirror as it was for the same coupon, and as a
+ * whole-subscription discount, the reading every older mirror has, for a new
+ * one.
+ */
+async function mirroredCouponReach(
+  coupon: any,
+  existing: any,
+): Promise<{ basePriceOnly: boolean; appliesToPlans?: OrgPlan[] } | null> {
+  if (existing?.couponId === coupon?.id && typeof existing?.basePriceOnly === 'boolean') {
+    return {
+      basePriceOnly: existing.basePriceOnly,
+      ...(Array.isArray(existing.appliesToPlans) ? { appliesToPlans: existing.appliesToPlans } : {}),
+    }
+  }
+  const secretKey = process.env.STRIPE_SECRET_KEY
+  let products = couponLimitedProducts(coupon)
+  if (!products && !(coupon && 'applies_to' in coupon)) {
+    if (!secretKey) return null
+    try {
+      const response = await fetch(
+        `https://api.stripe.com/v1/coupons/${encodeURIComponent(String(coupon.id))}?expand[]=applies_to`,
+        { headers: { Authorization: `Bearer ${secretKey}` } },
+      )
+      if (!response.ok) return null
+      products = couponLimitedProducts(await response.json())
+    } catch (error) {
+      console.warn('[billing/webhook] coupon applies_to unreadable; mirrored as before', error)
+      return null
+    }
+  }
+  if (!products) return { basePriceOnly: false }
+  if (!secretKey) return { basePriceOnly: true }
+  const { products: planProducts, faults } = await readPlanProducts(secretKey, COUPON_PLAN_CHOICES)
+  return {
+    basePriceOnly: true,
+    ...(faults.length
+      ? {}
+      : { appliesToPlans: plansForProducts(products, planProducts, COUPON_PLAN_CHOICES) }),
   }
 }
 
@@ -775,7 +834,20 @@ async function handler(request: Request): Promise<Response> {
         if (found) {
           const existing = (orgSnapshot.get('discount') as any) ?? {}
           const { coupon, promotionCodeId } = found
+          // What the coupon reaches (AGL-4161). Unknown for the coupon
+          // already mirrored leaves its fields alone; unknown for a new one
+          // clears them, so a base-price flag never outlives its coupon.
+          const reach = await mirroredCouponReach(coupon, existing)
+          const reachUpdate = reach
+            ? {
+                'discount.basePriceOnly': reach.basePriceOnly,
+                'discount.appliesToPlans': reach.appliesToPlans ?? del,
+              }
+            : existing.couponId === coupon.id
+              ? {}
+              : { 'discount.basePriceOnly': del, 'discount.appliesToPlans': del }
           discountUpdate = {
+            ...reachUpdate,
             'discount.couponId': String(coupon.id),
             'discount.percentOff':
               coupon.percent_off != null ? Number(coupon.percent_off) : del,
@@ -999,6 +1071,10 @@ async function handler(request: Request): Promise<Response> {
               const settled = await settleSubscriptionStart(String(orgId), {
                 status: mirroredStatus,
                 subscriptionId: object?.id ? String(object.id) : null,
+                // A plan change proposed to a subscriber (AGL-4160) settles
+                // only once the subscription is on its plan and cadence.
+                plan: String(plan),
+                interval: isYearly ? 'year' : 'month',
               })
               if (settled.proposalCleared || settled.trialCompRemoved) {
                 ledger.effect('subscription-start-settled')

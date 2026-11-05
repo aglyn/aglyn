@@ -828,6 +828,8 @@ const AdminOrgDetail: NextPageWithLayout<Record<string, never>> = () => {
       amountOffUsd: number | null
       duration: string | null
       durationInMonths: number | null
+      /** What it reaches (AGL-4159): null for the whole subscription. */
+      appliesTo?: { products: string[]; plans: OrgPlan[] } | null
     }>
   >([])
   const [selectedCoupon, setSelectedCoupon] = useState('')
@@ -856,6 +858,11 @@ const AdminOrgDetail: NextPageWithLayout<Record<string, never>> = () => {
     () => coupons.find((coupon) => coupon.id === selectedCoupon) ?? null,
     [coupons, selectedCoupon],
   )
+  // A base-price coupon (AGL-4159) is rated on the base line it reaches, as
+  // the apply route rates it and net MRR counts it (AGL-4161).
+  const selectedCouponReach = selectedCouponObj?.appliesTo
+    ? { basePriceOnly: true, appliesToPlans: selectedCouponObj.appliesTo.plans }
+    : {}
   /**
    * What the Apply button will be told, computed here (AGL-1134).
    *
@@ -877,9 +884,11 @@ const AdminOrgDetail: NextPageWithLayout<Record<string, never>> = () => {
       {
         percentOff: selectedCouponObj.percentOff ?? undefined,
         amountOffUsd: selectedCouponObj.amountOffUsd ?? undefined,
+        ...selectedCouponReach,
       },
       { measuredCogsUsd: usageLatest?.measuredCogsUsd ?? null },
     )
+    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [org, selectedCouponObj, cogsReady, usageLatest])
   /**
    * The same coupon against this org's full-use cost (AGL-3473) — the org
@@ -894,12 +903,14 @@ const AdminOrgDetail: NextPageWithLayout<Record<string, never>> = () => {
       {
         percentOff: selectedCouponObj.percentOff ?? undefined,
         amountOffUsd: selectedCouponObj.amountOffUsd ?? undefined,
+        ...selectedCouponReach,
       },
       {
         duration: selectedCouponObj.duration,
         durationInMonths: selectedCouponObj.durationInMonths,
       },
     )
+    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [org, selectedCouponObj])
 
   const handleApplyDiscount = async () => {
@@ -1953,6 +1964,8 @@ const AdminOrgDetail: NextPageWithLayout<Record<string, never>> = () => {
                                 {org.discount.code
                                   ? ` · ${org.discount.code}`
                                   : ''}
+                                {/* AGL-4161: off the base plan line only. */}
+                                {org.discount.basePriceOnly ? ' · base price only' : ''}
                               </Typography>
                               {org.discount.reason ? (
                                 <Typography

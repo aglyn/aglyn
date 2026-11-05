@@ -63,7 +63,9 @@ export interface StaffOrgUpgradeProposalProps {
  * front of the workspace's billing managers until a subscription is live.
  * A comp granted for the evaluation can stay on: the client can still start
  * the subscription for the very tier they are comped on, and the trial comp
- * clears itself when they do.
+ * clears itself when they do. A workspace that already subscribes can be
+ * asked to change plan or cadence (AGL-4160); its card stands until the
+ * subscription moves to it, and the coupon is applied to the switch.
  */
 export function StaffOrgUpgradeProposal(props: StaffOrgUpgradeProposalProps) {
   const { orgId, org, onChanged } = props
@@ -156,7 +158,11 @@ export function StaffOrgUpgradeProposal(props: StaffOrgUpgradeProposalProps) {
               {"The owner is emailed, and the workspace's billing managers see " +
                 'the plan, with its add-ons, cadence and coupon, on the org ' +
                 'home and on Billing, preselected, until a subscription is ' +
-                'live. A sales-trial comp clears itself when they subscribe.'}
+                'live. A sales-trial comp clears itself when they subscribe. ' +
+                'For a workspace that already subscribes, propose another plan ' +
+                'or cadence: it stands until they switch to it, its coupon ' +
+                'replaces their current discount on the switch, and add-ons ' +
+                'are bought from Billing’s add-ons card as usual.'}
             </DialogContentText>
             <StaffBundleFields value={draft} onChange={setDraft} disabled={busy} />
             <TextField

@@ -437,6 +437,8 @@ describe('the preview resolves the code before it asks for billing details (AGL-
       promotionCodeDurationInMonths: null,
       promotionCodePercentOff: 40,
       promotionCodeAmountOffUsd: null,
+      // A whole-subscription code (AGL-4159): not limited to the base price.
+      promotionCodeBasePriceOnly: false,
     })
     // Read-only: no invoice was previewed and nothing was subscribed.
     expect(stripeCalls.some((href) => /invoices\/upcoming/.test(href))).toBe(false)

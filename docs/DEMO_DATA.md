@@ -98,12 +98,29 @@ node --env-file=.env tools/scripts/seed-review-org.mjs \
   --org 9A5fJ_zEoH --host review-bakery --create-sibling-sites --verify
 ```
 
+To add one new area to the live workspace without re-writing every record
+an earlier run made (the CRM's records have moved on since, so a full re-run
+is a production change of its own), name its paths with `--only`. It prints,
+writes or verifies only those planned documents, and skips the sibling sites,
+the prune and the booking pass:
+
+```bash
+node --env-file=.env tools/scripts/seed-review-org.mjs \
+  --org 9A5fJ_zEoH --host review-bakery \
+  --only hosts/review-bakery/orders/seed-review-quote-,hosts/review-bakery/orders/seed-review-invoice-
+```
+
 It accepts that org and that host only. It replays the native apps' emulator
 areas (`tools/scripts/seed-native/*`, or another checkout's with `--fixtures`),
 the e2e bakery's CRM book, and the docs bakery's builders
 (`tools/scripts/lib/docs-fixture-builders.mjs`: API keys, a chargeback, sixty
 days of traffic, the business profile, AI memory), then adds About, Contact
-and Order pages and a product template. The policy in
+and Order pages, a product template, and the bakery's quotes and invoices
+(`tools/scripts/lib/review-org-quotes.mjs`): a quote in every stage (draft,
+sent with a second revision, changes requested, approved, and one paid that
+became an order) and two invoices, one unpaid and one paid, each for one of
+the CRM's own contacts, with the Cedar & Oak deal's products matching its
+holiday quote. The policy in
 `tools/scripts/lib/review-org-seed.mjs` decides what may reach a live org:
 
 - **Never written:** Auth users, member rows, invites, the org's plan,

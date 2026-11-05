@@ -227,6 +227,14 @@ describe('the quote email says what it is and what to do next (AGL-4097)', () =>
     expect(content.tokens['quote.buttonLabel']).toBe('View and pay $1,250.00 plus tax')
   })
 
+  it('says it for a quote saved before the store chose Stripe Tax, as the page and Pay will (AGL-4162)', () => {
+    const undecided = order({ tax: { kind: 'none', reason: 'undecided' } })
+    expect(quoteEmailContent(input({ order: undecided })).tokens['quote.total']).toBe('$1,250.00')
+    const content = quoteEmailContent({ ...input({ order: undecided }), store: { tax: { mode: 'stripe' } } })
+    expect(content.tokens['quote.total']).toBe('$1,250.00 before tax')
+    expect(content.tokens['quote.buttonLabel']).toBe('View and pay $1,250.00 plus tax')
+  })
+
   it('escapes what the business named, and carries no price in the composed markup', () => {
     const content = quoteEmailContent(
       input({ order: order({ proofs: [proof('p1', '<script>x</script>.png', 'image/png')] }) }),

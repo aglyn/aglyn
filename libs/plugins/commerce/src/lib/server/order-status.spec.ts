@@ -44,8 +44,12 @@ function ref(path: string): any {
   }
 }
 
+/** The site's workspace, whose plan sells; its owner's payment account takes charges unless a case says not. */
+let mockOrg: Record<string, unknown> | null = null
+
 jest.mock('@aglyn/tenant-data-admin', () => ({
   consumeRateLimit: (key: string, options: any) => mockConsume(key, options),
+  getOrgForHost: async () => (mockOrg ? { orgId: 'org-1', org: mockOrg } : null),
   firebaseAdmin: {
     app: () => ({ firestore: () => ({ collection: (name: string) => ({ doc: (id: string) => ref(`${name}/${id}`) }) }) }),
   },
@@ -90,7 +94,9 @@ beforeEach(() => {
   mockConsume.mockClear()
   clearOrderStatusActions()
   docs.set(`hosts/${HOST}`, { displayName: 'Northwind Coffee', subdomain: 'northwind' })
-  docs.set(`hosts/${HOST}/settings/store`, { currency: 'USD' })
+  docs.set(`hosts/${HOST}/settings/store`, { currency: 'USD', tax: { mode: 'none' } })
+  mockOrg = { plan: 'business', billingStatus: 'active', ownerUid: 'owner-1' }
+  docs.set('profiles/owner-1', { stripeAccountId: 'acct_merchant', stripeChargesEnabled: true, stripeAccountLivemode: false })
   docs.set(`hosts/${HOST}/orders/${ORDER}`, {
     number: 1042,
     status: 'partially_fulfilled',
@@ -203,6 +209,26 @@ describe('orderStatusHandler (AGL-3610)', () => {
       url: expect.stringMatching(new RegExp(`^/pay-quote\\?q=${ORDER}&t=1\\.[0-9a-f]{32}$`)),
     })
     expect(result.body.actions[1].id).toBe('return')
+  })
+
+  it('offers no Pay where the pay link’s page would offer none (AGL-4162)', async () => {
+    const unpaidDraft = {
+      number: 1042,
+      status: 'pending',
+      channel: 'draft',
+      lineItems: [{ productId: 'p1', name: 'House Blend', quantity: 2, unitAmountCents: 1200, productType: 'service' }],
+      totals: { itemsCents: 2400, shippingCents: 0, taxCents: 0, discountCents: 0, totalCents: 2400, feeCents: 0 },
+      createdAtMs: 1_000,
+    }
+    docs.set(`hosts/${HOST}/orders/${ORDER}`, unpaidDraft)
+    expect((await call({ hostId: HOST, o: ORDER, t: token() })).body.actions[0]?.id).toBe('pay')
+    // The owner's payment account can't take charges yet.
+    docs.set('profiles/owner-1', { stripeAccountId: 'acct_merchant', stripeChargesEnabled: false })
+    expect((await call({ hostId: HOST, o: ORDER, t: token() })).body.actions).toEqual([])
+    // The store has not chosen how it handles sales tax.
+    docs.set('profiles/owner-1', { stripeAccountId: 'acct_merchant', stripeChargesEnabled: true, stripeAccountLivemode: false })
+    docs.set(`hosts/${HOST}/settings/store`, { currency: 'USD' })
+    expect((await call({ hostId: HOST, o: ORDER, t: token() })).body.actions).toEqual([])
   })
 
   it('offers no Pay on a paid order, or on an unpaid one its link cannot take', async () => {

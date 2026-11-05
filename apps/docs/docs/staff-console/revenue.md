@@ -81,8 +81,13 @@ comp.
 
 The same applies to an org on a 100%-off coupon (bills $0), an enterprise org on a
 negotiated rate (bills that rate, not the plan's list price), and an org carrying add-ons
-the plan price does not include. Every figure on this page is derived from the Stripe
-subscription mirror.
+the plan price does not include. A coupon limited to a plan's base price (see
+[What a coupon applies to](./overview.md#coupon-applies-to)) comes off the plan's own
+price only, so an org on a 100% base-price coupon counts its add-ons in full rather than
+$0; a coupon for another plan's base price takes nothing off. Every figure on this page
+is derived from the Stripe subscription mirror. A discount mirrored before the mirror
+recorded what a coupon applies to counts as a whole-subscription discount until its
+next subscription event updates it.
 
 ## The gap
 

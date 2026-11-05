@@ -21,15 +21,9 @@ import * as CommerceModel from '../../model'
 import { posMoney } from '../../model/commerce-pos-ops'
 import { commerceSitePermissionRefusal } from '../../model/plugin-permissions'
 import { BlockedControl } from '@aglyn/shared-ui-jsx/components/blocked-control.component'
-import { PrerequisiteNotice } from '@aglyn/shared-ui-jsx/components/prerequisite-notice.component'
 import { useSnackbar } from '@aglyn/shared-ui-snackstack'
 import { authorizedFetch } from '@aglyn/shared-util-http/authorized-token'
-import {
-  useFirestore,
-  useFirestoreDoc,
-  useStoreSettingsHref,
-  useUser,
-} from '@aglyn/tenant-feature-instance'
+import { useFirestore, useFirestoreDoc, useUser } from '@aglyn/tenant-feature-instance'
 import {
   Alert,
   Box,
@@ -56,6 +50,7 @@ import {
 import { doc } from 'firebase/firestore'
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react'
 import { downloadCommercePdf } from './commerce-pdf-download'
+import { PayLinkReadinessNoticeFor } from './pay-link-readiness-notice.component'
 import { QuotePayLinkSection } from './quote-pay-link.component'
 import { QuoteProofsSection, QuoteRequestFilesSection } from './quote-proofs.component'
 import { QuoteSendSection } from './quote-send.component'
@@ -323,7 +318,6 @@ export function QuoteEditorDialog(props: QuoteEditorDialogProps) {
   const firestore = useFirestore()
   const { data: user } = useUser()
   const { enqueueSnackbar } = useSnackbar()
-  const taxesHref = useStoreSettingsHref(hostId, 'taxes')
   const { data: store } = useFirestoreDoc<any>(
     () => doc(firestore, 'hosts', hostId, 'settings', 'store'),
     [firestore, hostId],
@@ -538,11 +532,8 @@ export function QuoteEditorDialog(props: QuoteEditorDialogProps) {
           {quote?.quote?.request ? (
             <QuoteRequestFilesSection hostId={hostId} quoteId={quote.$id} quote={quote} />
           ) : null}
-          {taxBasis.kind === 'none' && taxBasis.reason === 'undecided' ? (
-            <PrerequisiteNotice href={taxesHref ?? undefined} actionLabel="Open Taxes">
-              {'This store has not chosen how it handles sales tax, so this quote shows no tax. Choose it in Taxes.'}
-            </PrerequisiteNotice>
-          ) : null}
+          {/* A saved quote's notice sits with its pay link, above; a new one's here. */}
+          {quote ? null : <PayLinkReadinessNoticeFor hostId={hostId} order={null} noun="quote" />}
 
           <QuoteCustomerSection
             hostId={hostId}

@@ -34,9 +34,20 @@ jest.mock('firebase/firestore', () => ({
   doc: (_db: unknown, ...path: string[]) => ({ __path: path.join('/') }),
   getDoc: async () => ({ data: () => ({ businessName: 'Juniper Street Co.', displayName: 'Juniper Street Co.', currency: 'USD' }) }),
 }))
+/** What `useMerchantPayments` answers: the owner's payment account, settled. */
+let mockPayments: Record<string, unknown> = { state: 'ready', settled: true, ready: true, blocked: false, reason: null, href: null }
+/** The store's settings document, as the Send invoice form reads it. */
+let mockStore: Record<string, unknown> | undefined = { currency: 'USD', tax: { mode: 'manual' } }
+
 jest.mock('@aglyn/tenant-feature-instance', () => ({
   useFirestore: () => ({}),
   useUser: () => ({ data: { uid: 'u1' } }),
+  useFirestoreDoc: () => ({ data: mockStore, status: 'success', fromCache: false }),
+  firestoreDocPhase: (read: { data?: unknown; status: string }) =>
+    read.data ? 'ready' : read.status === 'loading' ? 'loading' : 'missing',
+  useMerchantPayments: (hostId: string | undefined) =>
+    hostId ? mockPayments : { state: 'pending', settled: false, ready: false, blocked: false, reason: null, href: null },
+  useStoreSettingsHref: (_hostId: string | undefined, page: string) => `/acme/hosts/shop/products/${page}`,
 }))
 jest.mock('@aglyn/shared-ui-snackstack', () => ({
   useSnackbar: () => ({ enqueueSnackbar: (...args: unknown[]) => mockSnack(...args) }),
@@ -54,6 +65,8 @@ const click = jest.spyOn(HTMLAnchorElement.prototype, 'click').mockImplementatio
 beforeEach(() => {
   mockFetch.mockReset()
   mockSnack.mockReset()
+  mockPayments = { state: 'ready', settled: true, ready: true, blocked: false, reason: null, href: null }
+  mockStore = { currency: 'USD', tax: { mode: 'manual' } }
   click.mockClear()
   Object.assign(URL, { createObjectURL: jest.fn(() => 'blob:invoice'), revokeObjectURL: jest.fn() })
 })
@@ -135,6 +148,52 @@ describe('Send invoice (AGL-4099)', () => {
   it('says up front why a canceled order has no invoice, and sends nothing', async () => {
     await openForm({ ...(PAID as object), status: 'cancelled' } as never)
     expect(screen.getByText('This order was canceled or refunded, so it has no invoice to send.')).toBeTruthy()
+    expect((screen.getByRole('button', { name: 'Send' }) as HTMLButtonElement).disabled).toBe(true)
+  })
+
+  /** An unpaid draft order whose invoice carries its lasting pay link (AGL-4099). */
+  const DRAFT = {
+    number: 1042,
+    status: 'pending',
+    channel: 'draft',
+    customerEmail: 'jordan@example.com',
+    taxMode: 'manual',
+    lineItems: [{ productId: 'p1', name: 'Design', productType: 'service', quantity: 1, unitAmountCents: 9_000 }],
+    totals: { itemsCents: 9_000, discountCents: 0, shippingCents: 0, taxCents: 0, totalCents: 9_000, feeCents: 0 },
+  } as never
+
+  it('says customers can’t pay this invoice online yet, with the fix, and sends all the same (AGL-4162)', async () => {
+    mockPayments = {
+      state: 'not-connected',
+      settled: true,
+      ready: false,
+      blocked: true,
+      reason: 'Connect Stripe to take card payments.',
+      href: '/acme/hosts/shop/products/payments',
+    }
+    mockFetch.mockResolvedValue({ ok: true, json: async () => ({ sent: true, to: 'jordan@example.com', paid: false }) })
+    await openForm(DRAFT)
+    expect(screen.getByText('Customers can’t pay this invoice online yet.')).toBeTruthy()
+    expect(screen.getByText('Connect Stripe to take card payments.')).toBeTruthy()
+    expect(screen.getByRole('button', { name: 'Open Payments' }).getAttribute('href')).toBe('/acme/hosts/shop/products/payments')
+    const send = screen.getByRole('button', { name: 'Send' }) as HTMLButtonElement
+    expect(send.disabled).toBe(false)
+    fireEvent.click(send)
+    await waitFor(() => expect(mockSnack).toHaveBeenCalledWith('Invoice #1042 sent to jordan@example.com', expect.anything()))
+  })
+
+  it('says nothing of payments for a paid order’s invoice, which is the record', async () => {
+    mockPayments = { state: 'not-connected', settled: true, ready: false, blocked: true, reason: 'Connect Stripe to take card payments.', href: null }
+    await openForm()
+    expect(screen.queryByText(/online yet/)).toBeNull()
+  })
+
+  it('names an undecided sales tax once, with Open Taxes, and holds the send with its reason', async () => {
+    mockStore = { currency: 'USD' }
+    await openForm(DRAFT)
+    expect(screen.getByText('Choose how this store handles sales tax.')).toBeTruthy()
+    expect(screen.getByRole('button', { name: 'Open Taxes' }).getAttribute('href')).toBe('/acme/hosts/shop/products/taxes')
+    expect(screen.queryByText(/^Sales tax isn’t set up/)).toBeNull()
     expect((screen.getByRole('button', { name: 'Send' }) as HTMLButtonElement).disabled).toBe(true)
   })
 

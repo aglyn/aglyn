@@ -2347,6 +2347,67 @@ export function applyDiscountUsd(
   return listPriceUsd
 }
 
+/** A discount as the net-of-discount readers take it (AGL-1105, AGL-4161). */
+export type OrgDiscountTerms = Pick<
+  OrgDiscount,
+  'percentOff' | 'amountOffUsd' | 'basePriceOnly' | 'appliesToPlans'
+>
+
+/**
+ * The org's BASE PLAN line, monthly (annual billing as its monthly
+ * equivalent), and 0 for anyone not billing: the one line a base-price coupon
+ * reaches (AGL-4161). A negotiated custom price is the whole deal, so it is
+ * its own base line.
+ */
+export function orgBasePriceMonthlyUsd(
+  org: Partial<AglynOrgBilling> | null | undefined,
+): number {
+  if (!isBillingSubscription(org)) return 0
+  const custom = org?.subscription?.customMonthlyUsd
+  if (typeof custom === 'number' && custom > 0) return Math.round(custom * 100) / 100
+  const pricing = PLAN_PRICING[org?.plan as OrgPlan]
+  if (!pricing) return 0
+  return org?.subscription?.interval === 'year'
+    ? pricing.basePriceAnnualMonthlyUsd
+    : pricing.basePriceMonthlyUsd
+}
+
+/**
+ * How much of the org's monthly list price a discount reaches (AGL-4161):
+ * all of it for a whole-subscription discount; for a base-price one, the base
+ * plan line, or nothing when the plans it is limited to do not include the
+ * org's plan (Stripe applies it to no line then). An old mirror without the
+ * fields is a whole-subscription discount.
+ */
+export function discountReachMonthlyUsd(
+  org: Partial<AglynOrgBilling> | null | undefined,
+  discount: OrgDiscountTerms | null | undefined,
+  listPriceUsd: number = orgListPriceMonthlyUsd(org),
+): number {
+  const list = Math.max(0, listPriceUsd)
+  if (!discount?.basePriceOnly) return list
+  if (Array.isArray(discount.appliesToPlans) && !discount.appliesToPlans.includes(org?.plan as OrgPlan)) {
+    return 0
+  }
+  return Math.min(list, orgBasePriceMonthlyUsd(org))
+}
+
+/**
+ * A monthly list price net of an ORG's discount (AGL-4161): `applyDiscountUsd`
+ * on the part the discount reaches, the rest at list. For a whole-subscription
+ * discount that is `applyDiscountUsd` exactly; a base-price one leaves the
+ * add-ons in full.
+ */
+export function applyOrgDiscountUsd(
+  org: Partial<AglynOrgBilling> | null | undefined,
+  listPriceUsd: number,
+  discount: OrgDiscountTerms | null | undefined,
+): number {
+  const reach = discountReachMonthlyUsd(org, discount, listPriceUsd)
+  if (!discount || reach >= listPriceUsd) return applyDiscountUsd(listPriceUsd, discount)
+  return Math.round((listPriceUsd - reach + applyDiscountUsd(reach, discount)) * 100) / 100
+}
+
 /**
  * Whether an org should read as **"Enterprise"** everywhere the plan is shown.
  * Three ways to qualify:
@@ -2412,13 +2473,15 @@ export const ENTERPRISE_PLAN_LABEL = PLAN_LABELS.enterprise
  * (`org.discount`, AGL-1105), and 0 for anyone who is not actually billing. A
  * comped enterprise deal genuinely collects less, so the discount belongs in
  * MRR; the pre-discount sticker stays available as `orgListPriceMonthlyUsd`.
+ * A base-price discount (AGL-4161) comes off the base plan line only, so the
+ * add-ons an org buys count in full.
  */
 export function orgMonthlyRevenueUsd(
   org: Partial<AglynOrgBilling> | null | undefined,
 ): number {
   const listPrice = orgListPriceMonthlyUsd(org)
   if (listPrice <= 0) return 0
-  return applyDiscountUsd(listPrice, org?.discount)
+  return applyOrgDiscountUsd(org, listPrice, org?.discount)
 }
 
 /**
@@ -3214,7 +3277,8 @@ export interface DiscountMarginOptions {
  */
 export function checkDiscountMargin(
   org: Partial<AglynOrgBilling> | null | undefined,
-  discount: Pick<OrgDiscount, 'percentOff' | 'amountOffUsd'>,
+  // A base-price coupon (AGL-4161) is rated on the base line it reaches.
+  discount: OrgDiscountTerms,
   options: DiscountMarginOptions = {},
 ): DiscountMarginResult {
   const floorPct = NET_MARGIN_FLOOR_PCT
@@ -3244,7 +3308,7 @@ export function checkDiscountMargin(
       floorPct,
     }
   }
-  const discountedUsd = applyDiscountUsd(grossUsd, discount)
+  const discountedUsd = applyOrgDiscountUsd(org, grossUsd, discount)
   const annual = org?.subscription?.interval === 'year'
   const netUsd = netOfProcessorFee(discountedUsd, annual)
   const depthPct =

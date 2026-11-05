@@ -970,6 +970,20 @@ export interface OrgDiscount {
   /** Free-text why (the enterprise deal, the promotion) — staff-only. */
   reason?: string
   appliedAt: ITimestamp
+  /**
+   * The coupon takes its discount off the plan's BASE PRICE only (AGL-4161):
+   * Stripe `applies_to.products` names plan products (AGL-4159), so add-ons
+   * and usage past the plan's limits bill in full. Absent or false is a
+   * whole-subscription discount — every mirror written before this field
+   * reads that way, which is what those coupons were.
+   */
+  basePriceOnly?: boolean
+  /**
+   * The plans whose base price a `basePriceOnly` coupon reaches, read from
+   * the deployment's plan prices when the mirror was written. Absent when
+   * they could not be read; empty when the coupon names no plan sold now.
+   */
+  appliesToPlans?: OrgPlan[]
 }
 
 export interface OrgSubscription {
@@ -1329,6 +1343,14 @@ export interface OrgUpgradeProposal {
   interval?: 'month' | 'year'
   /** A promotion code minted on the staff Coupons page, applied at checkout. */
   coupon?: string
+  /**
+   * Proposed to a workspace that already subscribes (AGL-4160): a change of
+   * plan or billing cadence, with its code applied to the switch. It stands
+   * until the subscription moves to the proposed plan and cadence, rather
+   * than being settled by a subscription being live, which is what settles
+   * a proposal made before the workspace bought anything.
+   */
+  forSubscriber?: boolean
 }
 
 /**

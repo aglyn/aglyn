@@ -36,6 +36,14 @@ import {
   orgDiscountFullUse,
 } from '@aglyn/aglyn/app-utils/full-use-cost'
 import { addAdminAudit } from '@aglyn/tenant-data-admin/server/admin-audit-write'
+import { PLAN_LABELS } from '@aglyn/aglyn/app-utils/plan-entitlements'
+import type { OrgPlan } from '@aglyn/aglyn/foundation'
+import { COUPON_PLAN_CHOICES, couponPlanList } from '../../../../utils/coupon-list-query'
+import {
+  couponLimitedProducts,
+  plansForProducts,
+  readPlanProducts,
+} from '../../../../utils/server/coupon-plan-products'
 
 /**
  * Apply or remove a per-org subscription discount (AGL-1105). Staff attaches
@@ -51,7 +59,9 @@ import { addAdminAudit } from '@aglyn/tenant-data-admin/server/admin-audit-write
  * refused unless the caller passes `confirmBelowFloor`. Beside it, the
  * discount is judged against the org's full-use cost on the charges the
  * coupon reaches (AGL-3473) and the verdict returned as `fullUse` — a
- * warning, never a refusal. StaffGuard-gated;
+ * warning, never a refusal. A coupon limited to another plan's base price
+ * (AGL-4159) is refused: Stripe would attach it and discount nothing, while
+ * `org.discount` recorded a discount the org never gets. StaffGuard-gated;
  * audited to `adminAudit`; 501 without Stripe env. Uses Stripe's REST API
  * directly (no SDK).
  */
@@ -176,10 +186,11 @@ async function handler(request: Request): Promise<Response> {
     }
 
     // Fetch the coupon to learn its shape (percent vs fixed) — the same shape
-    // we store on org.discount and rate the margin against.
+    // we store on org.discount and rate the margin against — and, expanded,
+    // whether it is limited to a plan's base price (AGL-4159).
     const couponRes = await stripe(
       secretKey,
-      `coupons/${encodeURIComponent(couponId)}`,
+      `coupons/${encodeURIComponent(couponId)}?expand[]=applies_to`,
     )
     if (!couponRes.ok) {
       return Response.json(
@@ -204,9 +215,44 @@ async function handler(request: Request): Promise<Response> {
     // read the org doc alone priced most orgs at $0 and rated every
     // discount ok.
     const billedOrg = { ...orgData, ...billing }
+
+    // A coupon for one plan's base price, offered to an org on another plan
+    // (AGL-4159), is refused the way checkout refuses its code: the products
+    // it names are not on this org's subscription, so it would take nothing
+    // off while the org doc said it did.
+    const limitedProducts = couponLimitedProducts(coupon)
+    const appliesToPlans = limitedProducts
+      ? plansForProducts(
+          limitedProducts,
+          (await readPlanProducts(secretKey, COUPON_PLAN_CHOICES)).products,
+          COUPON_PLAN_CHOICES,
+        )
+      : null
+    const orgPlan = String(billedOrg?.plan ?? '') as OrgPlan
+    if (appliesToPlans && !appliesToPlans.includes(orgPlan)) {
+      return Response.json(
+        {
+          error:
+            (appliesToPlans.length
+              ? `This coupon takes its discount off the ${couponPlanList(appliesToPlans)} ` +
+                'base price'
+              : 'This coupon is limited to products no plan sold today uses') +
+            `, and this organization is on ${PLAN_LABELS[orgPlan] ?? (orgPlan || 'no plan')}, ` +
+            'so it would discount nothing.',
+          code: 'coupon_plan_mismatch',
+        },
+        { status: 400 },
+      )
+    }
+    // A base-price coupon (AGL-4159) reaches the plan's base line alone, so
+    // the add-ons are judged — and mirrored for net MRR (AGL-4161) — at the
+    // price they bill.
+    const reachTerms = limitedProducts
+      ? { basePriceOnly: true, appliesToPlans: appliesToPlans ?? undefined }
+      : {}
     const fullUseAssessment = orgDiscountFullUse(
       billedOrg as never,
-      { percentOff, amountOffUsd },
+      { percentOff, amountOffUsd, ...reachTerms },
       {
         duration: typeof coupon.duration === 'string' ? coupon.duration : null,
         durationInMonths:
@@ -230,7 +276,7 @@ async function handler(request: Request): Promise<Response> {
     const measuredCogsUsd = await latestMeasuredCogsUsd(orgId)
     const rating = checkDiscountMargin(
       billedOrg,
-      { percentOff, amountOffUsd },
+      { percentOff, amountOffUsd, ...reachTerms },
       { measuredCogsUsd },
     )
     if (rating.rating === 'block' && body?.confirmBelowFloor !== true) {
@@ -279,6 +325,10 @@ async function handler(request: Request): Promise<Response> {
     if (percentOff != null) discount.percentOff = percentOff
     if (amountOffUsd != null) discount.amountOffUsd = amountOffUsd
     if (coupon.name) discount.code = String(coupon.name)
+    // What it reaches (AGL-4161), as the webhook mirrors it: net MRR takes a
+    // base-price coupon off the base plan line only.
+    discount.basePriceOnly = Boolean(limitedProducts)
+    if (appliesToPlans) discount.appliesToPlans = appliesToPlans
     const reason = String(body?.reason ?? '').trim()
     if (reason) discount.reason = reason.slice(0, 500)
 
@@ -296,6 +346,8 @@ async function handler(request: Request): Promise<Response> {
         marginPct: rating.marginPct,
         fullUseOk: fullUse.ok,
         fullUseCoverage: fullUse.coverage,
+        // The base price it is limited to, or null for the whole subscription.
+        appliesToPlans,
         reason: reason || null,
       },
       at: firebaseAdmin.firestore.FieldValue.serverTimestamp(),
