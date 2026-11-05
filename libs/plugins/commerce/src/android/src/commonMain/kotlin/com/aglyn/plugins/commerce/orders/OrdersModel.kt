@@ -102,7 +102,7 @@ class OrdersListModel(
         val page = firestore.page(ordersQuery(hostId, askedFilter, askedSearch, clauses = askedClauses, sort = askedSort))
         cursor = page.nextCursor
         hasMore = page.nextCursor != null
-        Load.Ready(page.docs.map(::orderRow))
+        Load.Ready(orderRows(page.docs))
       } catch (error: Throwable) {
         if (error is CancellationException) throw error
         hasMore = false
@@ -125,7 +125,7 @@ class OrdersListModel(
         val page = firestore.page(ordersQuery(hostId, askedFilter, askedSearch, startAfter = after, clauses = askedClauses, sort = askedSort))
         cursor = page.nextCursor
         hasMore = page.nextCursor != null
-        rows = Load.Ready(shown + page.docs.map(::orderRow).filter { row -> shown.none { it.id == row.id } })
+        rows = Load.Ready(shown + orderRows(page.docs).filter { row -> shown.none { it.id == row.id } })
       } catch (error: Throwable) {
         if (error is CancellationException) throw error
       } finally {

@@ -373,4 +373,11 @@ class OrdersTest {
     assertEquals("Not permitted", model.error)
     assertNull(model.done)
   }
+
+  @Test
+  fun anUnpaidQuoteIsNotAnOrder() {
+    fun doc(id: String, channel: String, status: String) = FirestoreDoc(id, "hosts/h1/orders/$id", mapOf("channel" to channel, "status" to status))
+    val rows = orderRows(listOf(doc("q1", "quote", "pending"), doc("q2", "quote", "paid"), doc("o1", "online", "pending")))
+    kotlin.test.assertEquals(listOf("q2", "o1"), rows.map { it.id })
+  }
 }

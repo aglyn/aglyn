@@ -115,6 +115,10 @@ enum OrderFilter: String, CaseIterable, Identifiable {
 }
 
 /// The orders page's plan: a chip's clauses, the filters added, a typed word, and the sort asked (newest first by default).
+/// An unpaid quote is not an order (`isUnpaidQuote`): it carries no `createdAtMs`, so the default list and every filter leave
+/// it out, and the Order, Channel and Status sorts are the only queries that can reach one.
+func isUnpaidQuote(_ order: HostOrder) -> Bool { order.channel == .quote && order.status == .pending }
+
 func ordersPlan(_ filter: OrderFilter, search: String, clauses: [ListFilterRequest] = [], sort: ListQuerySort? = nil) -> ListQueryPlan {
   let words = search.trimmingCharacters(in: .whitespacesAndNewlines)
   return planListQuery(
@@ -182,7 +186,7 @@ final class OrdersModel {
       switch result {
       case .success(let docs):
         self.hasMore = docs.count > window
-        self.rows = docs.prefix(window).map { OrderRow(id: $0.id, order: decodeOrder($0)) }
+        self.rows = docs.prefix(window).map { OrderRow(id: $0.id, order: decodeOrder($0)) }.filter { !isUnpaidQuote($0.order) }
       case .failure:
         self.failed = true
       }

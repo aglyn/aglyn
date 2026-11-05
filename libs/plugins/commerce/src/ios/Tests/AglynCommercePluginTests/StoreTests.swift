@@ -66,6 +66,12 @@ final class StoreOrdersTests: XCTestCase {
     XCTAssertEqual(OrderAction.available(for: .refunded), [])
   }
 
+  func testAnUnpaidQuoteIsNotAnOrder() {
+    XCTAssertTrue(isUnpaidQuote(HostOrder(channel: .quote, status: .pending)))
+    XCTAssertFalse(isUnpaidQuote(HostOrder(channel: .quote, status: .paid)))
+    XCTAssertFalse(isUnpaidQuote(HostOrder(channel: .online, status: .pending)))
+  }
+
   func testARefundIsOfferedOnlyWhileSomethingIsLeftToRefund() {
     XCTAssertTrue(orderCanRefund(HostOrder(status: .paid, totals: OrderTotals(totalCents: 2500))))
     XCTAssertFalse(orderCanRefund(HostOrder(status: .pending, totals: OrderTotals(totalCents: 2500))))
