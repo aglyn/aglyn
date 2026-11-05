@@ -116,7 +116,7 @@
             {
               "id": "send",
               "label": "Send now",
-              "when": "item.actions[=const.actions.send]",
+              "when": "site.can[printOnDemand.orders] && item.actions[=const.actions.send]",
               "url": "/api/print-on-demand/order/action",
               "body": {
                 "hostId": "{site.id}",
@@ -129,7 +129,7 @@
             {
               "id": "retry",
               "label": "Send again",
-              "when": "item.actions[=const.actions.retry]",
+              "when": "site.can[printOnDemand.orders] && item.actions[=const.actions.retry]",
               "url": "/api/print-on-demand/order/action",
               "body": {
                 "hostId": "{site.id}",
@@ -142,7 +142,7 @@
             {
               "id": "confirm",
               "label": "Confirm for production",
-              "when": "item.actions[=const.actions.confirm]",
+              "when": "site.can[printOnDemand.orders] && item.actions[=const.actions.confirm]",
               "url": "/api/print-on-demand/order/action",
               "body": {
                 "hostId": "{site.id}",
@@ -155,7 +155,7 @@
             {
               "id": "refresh",
               "label": "Check for updates",
-              "when": "item.actions[=const.actions.refresh]",
+              "when": "site.can[printOnDemand.orders] && item.actions[=const.actions.refresh]",
               "url": "/api/print-on-demand/order/action",
               "body": {
                 "hostId": "{site.id}",
@@ -168,7 +168,7 @@
             {
               "id": "cancel",
               "label": "Cancel at the service",
-              "when": "item.actions[=const.actions.cancel]",
+              "when": "site.can[printOnDemand.orders] && item.actions[=const.actions.cancel]",
               "url": "/api/print-on-demand/order/action",
               "body": {
                 "hostId": "{site.id}",

@@ -18,6 +18,13 @@
       },
       "blocks": [
         {
+          "type": "notice",
+          "id": "keyRefusal",
+          "tone": "info",
+          "when": "!site.can[reviewPlatforms.manage]",
+          "text": "{app.permissionRefusal[reviewPlatforms.manage]}. You can read what is set here."
+        },
+        {
           "type": "fields",
           "id": "trustpilotStatus",
           "title": "Trustpilot",
@@ -186,7 +193,8 @@
                 "templateId": "{form.templateId}"
               }
             },
-            "success": "Trustpilot saved"
+            "success": "Trustpilot saved",
+            "disabledWhen": "!site.can[reviewPlatforms.manage]"
           }
         },
         {
@@ -208,7 +216,8 @@
                   "disconnect": true
                 }
               },
-              "success": "Trustpilot API key removed"
+              "success": "Trustpilot API key removed",
+              "when": "site.can[reviewPlatforms.manage]"
             }
           ]
         },
@@ -294,7 +303,8 @@
                 "enabled": "{form.enabled}"
               }
             },
-            "success": "Yotpo saved"
+            "success": "Yotpo saved",
+            "disabledWhen": "!site.can[reviewPlatforms.manage]"
           }
         },
         {
@@ -316,7 +326,8 @@
                   "disconnect": true
                 }
               },
-              "success": "Yotpo disconnected"
+              "success": "Yotpo disconnected",
+              "when": "site.can[reviewPlatforms.manage]"
             }
           ]
         }

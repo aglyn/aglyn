@@ -32,6 +32,13 @@
       "blocks": [
         {
           "type": "notice",
+          "id": "keyRefusal",
+          "tone": "info",
+          "when": "!site.can[commerce.giftCards.import]",
+          "text": "{app.permissionRefusal[commerce.giftCards.import]}."
+        },
+        {
+          "type": "notice",
           "tone": "info",
           "when": "!data.cards.rows.rows",
           "text": "No card in this file can be issued. The review lists every row with the reason."
@@ -153,7 +160,8 @@
             },
             "back": true,
             "reload": false,
-            "success": "Confirmed"
+            "success": "Confirmed",
+            "disabledWhen": "!site.can[commerce.giftCards.import]"
           }
         }
       ]
