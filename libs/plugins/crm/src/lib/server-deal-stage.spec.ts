@@ -227,7 +227,6 @@ beforeEach(() => {
   state.orgPermissions = {
     orgId: 'org-1',
     role: 'editor',
-    isOwner: false,
     permissions: { 'data.manage': true },
     orgWide: true,
     hostRole: 'editor',

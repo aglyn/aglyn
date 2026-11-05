@@ -320,7 +320,6 @@ beforeEach(() => {
   resolveOrgPermissions.mockResolvedValue({
     orgId: ORG_ID,
     role: 'editor',
-    isOwner: false,
     permissions: { 'data.manage': true },
     orgWide: true,
     hostRole: 'editor',
@@ -1141,7 +1140,6 @@ describe('at the organization level', () => {
     resolveOrgPermissions.mockResolvedValue({
       orgId: ORG_ID,
       role: 'admin',
-      isOwner: true,
       permissions: { 'data.manage': true },
       orgWide: false,
       hostRole: 'admin',

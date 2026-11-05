@@ -56,7 +56,6 @@ export interface OutreachGateDeps {
     orgId: string | null
     /** `null` when the account is not on the organization's roster. */
     role: string | null
-    isOwner: boolean
     orgWide: boolean
     permissions: Partial<Record<string, boolean | undefined>>
   }>
@@ -154,7 +153,7 @@ export async function outreachMemberGate(
     orgId,
     org,
     // "Manage everyone's Sequences" (AGL-4047), whose default is the owner
-    // and admin `isOwner` named.
+    // and admin.
     isOrgAdmin: membership.permissions[OUTREACH_MANAGE_ALL_PERMISSION] === true,
   }
 }

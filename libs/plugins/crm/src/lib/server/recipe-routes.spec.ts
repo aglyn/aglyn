@@ -207,7 +207,6 @@ const actionsOf = (hostId: string) =>
 const orgWideManager = () => ({
   orgId: ORG,
   role: 'editor',
-  isOwner: false,
   permissions: { 'data.manage': true },
   orgWide: true,
   hostRole: 'editor',

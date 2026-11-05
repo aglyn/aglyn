@@ -73,7 +73,6 @@ import {
 const mockResolveOrgPermissions = jest.fn(async () => ({
   orgId: 'org-1',
   role: 'admin',
-  isOwner: true,
   permissions: { managePos: true } as Record<string, boolean>,
   orgWide: true,
   hostRole: 'admin',

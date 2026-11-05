@@ -31,7 +31,6 @@ let mockDecoded: Record<string, unknown> = { uid: 'u-1', email: 'ada@acme.test' 
 let mockPermissions: Record<string, unknown> = {
   orgId: ORG,
   role: 'editor',
-  isOwner: false,
   permissions: { 'data.manage': true },
   orgWide: true,
   hostRole: 'editor',
@@ -106,7 +105,6 @@ beforeEach(() => {
   mockPermissions = {
     orgId: ORG,
     role: 'editor',
-    isOwner: false,
     permissions: { 'data.manage': true },
     orgWide: true,
     hostRole: 'editor',

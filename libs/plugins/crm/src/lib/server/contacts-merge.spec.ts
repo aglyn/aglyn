@@ -33,7 +33,6 @@ let mockDecoded: Record<string, unknown> = {
 let mockPermissions: Record<string, unknown> = {
   orgId: ORG,
   role: 'admin',
-  isOwner: false,
   permissions: { 'data.manage': true },
   orgWide: true,
   hostRole: 'admin',
@@ -125,7 +124,6 @@ beforeEach(() => {
   mockPermissions = {
     orgId: ORG,
     role: 'admin',
-    isOwner: false,
     permissions: { 'data.manage': true },
     orgWide: true,
     hostRole: 'admin',
