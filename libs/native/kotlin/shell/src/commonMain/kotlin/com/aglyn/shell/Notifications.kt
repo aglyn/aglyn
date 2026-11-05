@@ -130,6 +130,8 @@ fun feedNotificationOf(doc: FirestoreDoc): FeedNotification = FeedNotification(
   read = doc.bool("read") == true || doc.data["readAt"] != null,
   level = doc.string("level"),
   type = doc.string("type"),
+  label = doc.string("label")?.trim()?.ifEmpty { null },
+  actionLabel = doc.string("actionLabel")?.trim()?.ifEmpty { null },
   createdAt = doc.data["createdAt"] as? FirestoreTimestamp,
   orgId = doc.string("orgId"),
   hostId = doc.string("hostId"),
@@ -342,7 +344,7 @@ private fun NotificationDetail(row: FeedNotification, catalog: NotificationCatal
       SectionCard(null, Modifier.fillMaxWidth()) {
         FlowRow(horizontalArrangement = Arrangement.spacedBy(space(1f))) {
           StatusChip(catalog.levels.firstOrNull { it.id == level }?.label ?: "Info", levelTone(level))
-          catalog.entry(row.type)?.let { StatusChip(it.label) }
+          (row.label ?: catalog.entry(row.type)?.label)?.let { StatusChip(it) }
           if (!row.read) StatusChip("New", StatusTone.INFO)
         }
         Text(row.title, style = MaterialTheme.typography.titleLarge, modifier = Modifier.semantics { heading() })
@@ -353,7 +355,7 @@ private fun NotificationDetail(row: FeedNotification, catalog: NotificationCatal
         row.body?.let { Text(it, style = MaterialTheme.typography.bodyLarge) }
         HorizontalDivider()
         when {
-          row.inviteId != null && row.orgId != null -> Button(shape = com.aglyn.ui.controlShape(), onClick = onOpen, modifier = Modifier.testTag("notification-open")) { Text("Open") }
+          row.inviteId != null && row.orgId != null -> Button(shape = com.aglyn.ui.controlShape(), onClick = onOpen, modifier = Modifier.testTag("notification-open")) { Text(row.actionLabel ?: "Open") }
           row.link != null -> Button(shape = com.aglyn.ui.controlShape(), onClick = onOpen, modifier = Modifier.testTag("notification-open")) { Text("Open") }
           else -> Text("Nothing to open for this one.", style = MaterialTheme.typography.bodyMedium, color = MaterialTheme.colorScheme.onSurfaceVariant)
         }

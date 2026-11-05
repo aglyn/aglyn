@@ -83,4 +83,17 @@ class InboxCasesTest {
     assertEquals(InboxPermissions(canWrite = false, canReply = false, canAssign = true), InboxPermissions.of { it == "inbox.assign" })
     assertEquals(InboxPermissions(canWrite = false, canReply = false, canAssign = false), InboxPermissions.of { false })
   }
+
+  @Test
+  fun aSubmissionsFilesAndRequestReadDefensively() {
+    val files = submissionFiles(listOf(mapOf("id" to "f_1", "name" to "brief.pdf", "size" to 2048), mapOf("id" to "bad id", "name" to "x"), mapOf("id" to "f2"), "nope"))
+    assertEquals(listOf(SubmissionFile("f_1", "brief.pdf", "", 2048.0)), files)
+    assertEquals(emptyList(), submissionFiles(null))
+    assertEquals("Quote request", submissionRequestLabel(mapOf("kind" to "quote")))
+    assertEquals(null, submissionRequestLabel(mapOf("kind" to "other")))
+    assertEquals("0 KB", submissionFileSize(0.0))
+    assertEquals("1 KB", submissionFileSize(100.0))
+    assertEquals("3.4 MB", submissionFileSize(3.4 * 1024 * 1024))
+    assertEquals("12 MB", submissionFileSize(12.4 * 1024 * 1024))
+  }
 }

@@ -43,6 +43,9 @@ const val INBOX_REPLY_ROUTE = "/api/inbox/reply"
 const val INBOX_LIST_OPTIONS_ROUTE = "/api/inbox/list-options"
 const val INBOX_ASSIGN_LIST_ROUTE = "/api/inbox/assign-list"
 const val FORM_STATS_ROUTE = "/api/forms/stats"
+/** The forms plugin's route for a submission's files. */
+const val SUBMISSION_FILE_ROUTE = "/api/forms/submission-file"
+
 const val MEMBER_REMOVE_ROUTE = "/api/membership/admin-remove"
 
 fun submissionsPath(hostId: String) = "hosts/$hostId/formSubmissions"
@@ -234,6 +237,33 @@ fun timestampMillis(value: Any?): Long? = when (value) {
 }
 
 /** One submission as the list and the reader show it. */
+/** A file a submission carries (`submissionFiles`). */
+data class SubmissionFile(val id: String, val name: String, val contentType: String, val size: Double)
+
+private val SUBMISSION_FILE_ID = Regex("^[A-Za-z0-9_-]{1,128}$")
+
+/** The files a stored submission names, in order; none for a row without any. */
+fun submissionFiles(raw: Any?): List<SubmissionFile> = (raw as? List<*>).orEmpty().take(10).mapNotNull { entry ->
+  val file = entry as? Map<*, *> ?: return@mapNotNull null
+  val id = file["id"] as? String
+  val name = file["name"] as? String
+  if (id == null || name.isNullOrEmpty() || !SUBMISSION_FILE_ID.matches(id)) return@mapNotNull null
+  SubmissionFile(id, name, file["contentType"] as? String ?: "", (file["size"] as? Number)?.toDouble() ?: 0.0)
+}
+
+/** `12 KB`, `3.4 MB`: a file's size as the Inbox shows it (`submissionFileSize`). */
+fun submissionFileSize(bytes: Double): String {
+  if (!(bytes > 0)) return "0 KB"
+  if (bytes < 1024 * 1024) return "${maxOf(1, kotlin.math.round(bytes / 1024).toInt())} KB"
+  val mb = bytes / (1024 * 1024)
+  if (mb >= 10) return "${kotlin.math.round(mb).toInt()} MB"
+  val tenths = kotlin.math.round(mb * 10) / 10
+  return if (tenths == kotlin.math.round(tenths)) "${tenths.toInt()} MB" else "$tenths MB"
+}
+
+/** What a submission asks for, as a chip says it (`submissionRequestLabel`). */
+fun submissionRequestLabel(raw: Any?): String? = if ((raw as? Map<*, *>)?.get("kind") == "quote") "Quote request" else null
+
 data class Submission(
   val id: String,
   val formId: String?,
@@ -250,6 +280,10 @@ data class Submission(
   val capturedId: String?,
   /** The site it came in on, from where it is filed (`hosts/{hostId}/formSubmissions/…`). */
   val hostId: String? = null,
+  /** What it asks for, as a chip says it: "Quote request" from a form marked as asking for a quote. */
+  val requestLabel: String? = null,
+  /** The files it carries, which live in private storage and download through the forms plugin's route. */
+  val files: List<SubmissionFile> = emptyList(),
 ) {
   /** The row's second line: each field as `key: value`. */
   val preview: String get() = fields.joinToString(" · ") { (key, value) -> "$key: $value" }
@@ -271,6 +305,8 @@ fun submissionOf(doc: FirestoreDoc): Submission {
     repliedAtMs = timestampMillis(doc.data["repliedAtMs"]),
     path = doc.data["path"] as? String,
     chips = routingChips(doc.data["routing"] as? Map<String, Any?>),
+    requestLabel = submissionRequestLabel(doc.data["request"]),
+    files = submissionFiles(doc.data["files"]),
     capturedKind = captured?.get("kind") as? String,
     capturedId = captured?.get("id") as? String,
     hostId = doc.path.split('/').takeIf { it.size >= 2 && it[0] == "hosts" }?.get(1),
@@ -337,6 +373,8 @@ interface InboxActions {
   suspend fun listOptions(submissionId: String): ListOptions
   suspend fun assignList(submissionId: String, listId: String, attestConsent: Boolean): String?
   suspend fun removeMember(memberId: String)
+  /** One file's bytes, through the forms plugin's route. */
+  suspend fun downloadFile(submissionId: String, fileId: String): com.aglyn.core.DownloadedFile
 }
 
 class ConsoleInboxActions(
@@ -347,12 +385,20 @@ class ConsoleInboxActions(
   private fun body(vararg pairs: Pair<String, Any?>): JsonElement =
     firestoreJson((listOf("hostId" to hostId) + pairs).filter { it.second != null }.toMap())
 
+  override suspend fun downloadFile(submissionId: String, fileId: String): com.aglyn.core.DownloadedFile =
+    api.download(SUBMISSION_FILE_ROUTE, body("action" to "download", "submissionId" to submissionId, "fileId" to fileId))
+
   override suspend fun setRead(submissionId: String, read: Boolean) {
     writer.merge("${submissionsPath(hostId)}/$submissionId", mapOf("read" to read))
   }
 
   override suspend fun delete(submission: Submission) {
     writer.delete("${submissionsPath(hostId)}/${submission.id}")
+    // Its files go with it, as on the web Inbox: they sit in private storage, which only the forms plugin can delete, and
+    // they count against the workspace's storage until it does. Best effort: the delete has happened either way.
+    if (submission.files.isNotEmpty()) {
+      runCatching { api.request(SUBMISSION_FILE_ROUTE, ApiMethod.POST, body("action" to "release", "submissionId" to submission.id)) }
+    }
     // The console's best-effort refresh of the form's counts.
     submission.formId?.let { formId ->
       runCatching { api.request(FORM_STATS_ROUTE, ApiMethod.POST, body("formIds" to listOf(formId))) }
