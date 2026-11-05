@@ -21,6 +21,8 @@
  * list reads back, as the filter the list already speaks.
  */
 
+import { registerPluginContactSource } from '@aglyn/aglyn/plugin-manager/plugin-contact-capture'
+import { unregisterPluginServices } from '@aglyn/aglyn/plugin-manager/plugin-services'
 import { contactsListSeed } from './contacts-list-seed'
 import { crmRoutes } from './crm-routes'
 
@@ -49,6 +51,16 @@ describe('contactsListSeed', () => {
       formId: null,
       openEmail: 'ada@example.com',
     })
+  })
+
+  it('accepts a source a plugin declared, as the list\'s own filter does', () => {
+    expect(contactsListSeed(paramsOf('/x?source=kiosk')).source).toBe('')
+    registerPluginContactSource({ source: 'kiosk', label: 'Guest book' }, { pluginId: 'kiosk' })
+    try {
+      expect(contactsListSeed(paramsOf('/x?source=kiosk')).source).toBe('kiosk')
+    } finally {
+      unregisterPluginServices('kiosk')
+    }
   })
 
   it('seeds nothing for a bad link rather than a filter that matches nothing', () => {

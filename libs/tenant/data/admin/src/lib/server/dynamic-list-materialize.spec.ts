@@ -171,6 +171,12 @@ const firestore: any = {
   },
 }
 
+import { registerPluginContactSource } from '@aglyn/aglyn/plugin-manager/plugin-contact-capture'
+import {
+  registerPluginDeclarationsRepair,
+  resetPluginDeclarationsRepairForTests,
+} from '@aglyn/aglyn/plugin-manager/plugin-declarations-repair'
+import { unregisterPluginServices } from '@aglyn/aglyn/plugin-manager/plugin-services'
 import { personKey } from '@aglyn/aglyn/server'
 import { materializeDynamicList } from './dynamic-list-materialize'
 import { listMemberDocIds } from './list-members'
@@ -572,6 +578,94 @@ describe('a saved contacts view is an audience', () => {
     // names nothing the facet holds.
     expect(groupLookups).toEqual(['host-1'])
     expect(memberEmails()).toEqual(['mine@example.com'])
+  })
+
+  /*
+   * A VIEW FILTERED BY A PLUGIN'S SOURCE (AGL-4042). The rows are the shape the
+   * capture writes: the word in the holder's facet and nowhere on the top of the
+   * row, so this fails on a sweep that reads the row alone.
+   */
+  describe('a view filtered by a source a plugin declared', () => {
+    const KIOSK_VIEW = 'orgs/org-1/crmViews/kiosk'
+    const seedHolders = () => {
+      store['orgs/org-1/contacts/c-guest'] = {
+        email: 'guest@example.com',
+        facets: { [GROUP_ID]: { sources: { kiosk: true } } },
+      }
+      store['orgs/org-1/contacts/c-other'] = {
+        email: 'other@example.com',
+        facets: { [GROUP_ID]: { sources: { form: true } } },
+      }
+      store['orgs/org-1/contacts/c-elsewhere'] = {
+        email: 'elsewhere@example.com',
+        facets: { 'group-another': { sources: { kiosk: true } } },
+      }
+      store[KIOSK_VIEW] = {
+        section: 'contacts',
+        filters: [{ field: 'source', op: 'equals', value: 'kiosk' }],
+      }
+    }
+    const sweep = () =>
+      materializeDynamicList({
+        listRef: listRef(),
+        hostId: 'host-1',
+        rule: { sources: ['contacts'], viewId: 'kiosk' },
+      })
+
+    afterEach(() => {
+      unregisterPluginServices('kiosk')
+      resetPluginDeclarationsRepairForTests()
+    })
+
+    it('selects this holder\'s people who came through that door, and no other holder\'s', async () => {
+      registerPluginContactSource({ source: 'kiosk', label: 'Guest book' }, { pluginId: 'kiosk' })
+      seedHolders()
+      const result = await sweep()
+      expect(result.empty).toBe(false)
+      expect(memberEmails()).toEqual(['guest@example.com'])
+    })
+
+    it('without the declaration selects nobody and removes nobody', async () => {
+      seedHolders()
+      const result = await sweep()
+      expect(result.empty).toBe(true)
+      expect(result.removed).toBe(0)
+      expect(memberRows()).toHaveLength(0)
+    })
+
+    it('runs the boot step when a process lost the declaration, then answers', async () => {
+      seedHolders()
+      const repair = jest.fn(async () => {
+        registerPluginContactSource({ source: 'kiosk', label: 'Guest book' }, { pluginId: 'kiosk' })
+      })
+      registerPluginDeclarationsRepair(repair)
+      await sweep()
+      expect(repair).toHaveBeenCalledTimes(1)
+      expect(memberEmails()).toEqual(['guest@example.com'])
+    })
+
+    it('leaves who a core source selects where it was, and pays no facet read for one', async () => {
+      seedHolders()
+      store['orgs/org-1/contacts/c-row'] = { email: 'row@example.com', sources: { form: true } }
+      store[KIOSK_VIEW] = {
+        section: 'contacts',
+        filters: [{ field: 'source', op: 'equals', value: 'form' }],
+      }
+      await sweep()
+      expect(memberEmails()).toEqual(['row@example.com'])
+    })
+
+    it('reads the same word through a saved segment', async () => {
+      registerPluginContactSource({ source: 'kiosk', label: 'Guest book' }, { pluginId: 'kiosk' })
+      seedHolders()
+      store['orgs/org-1/contactSegments/seg-kiosk'] = { tags: [], sources: ['kiosk'] }
+      await materializeDynamicList({
+        listRef: listRef(),
+        hostId: 'host-1',
+        rule: { sources: ['contacts'], segmentId: 'seg-kiosk' },
+      })
+      expect(memberEmails()).toEqual(['guest@example.com'])
+    })
   })
 
   it('narrows to nothing when the view is gone, is not of contacts, or says what this language cannot', async () => {

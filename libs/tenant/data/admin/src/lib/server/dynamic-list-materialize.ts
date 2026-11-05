@@ -65,6 +65,7 @@ import {
   dynamicListRuleListIds,
   dynamicListRuleWithoutListReference,
   dynamicListRuleNeedsContactFacet,
+  contactSourceIsPluginWord,
   dynamicListDimensionsForCrmView,
   dynamicListPlanningRule,
   CRM_COLLECTIONS,
@@ -84,9 +85,11 @@ import {
   type DynamicListCandidate,
   type DynamicListRule,
   type DynamicListSource,
+  type DynamicListViewTranslation,
   type ResolvedSegmentFilters,
 } from '@aglyn/aglyn/server'
 import { consentGroupHoldersInMotion } from '@aglyn/aglyn/app-utils/consent-group-change'
+import { runPluginDeclarationsRepair } from '@aglyn/aglyn/plugin-manager/plugin-declarations-repair'
 import { firebaseAdmin } from './firebase-admin'
 import { readPersonEngagementByKeys } from './email-delivery-log'
 import { enrollListMember } from './list-members'
@@ -268,6 +271,40 @@ function crmFieldsFromFacet(
 }
 
 /**
+ * A view's translation, asked again after the boot step when it first comes back
+ * with a clause it cannot carry.
+ *
+ * Whether a view's source can be carried depends on the plugins' declarations, and
+ * a boot that failed to register them would read a plugin's source as a clause
+ * nothing answers. That costs a list nothing (an empty scan removes nobody), but it
+ * would stop the list growing until the process is replaced. The step runs once per
+ * process.
+ */
+async function crmViewDimensionsWithDeclarations(
+  filters: ReturnType<typeof normalizeCrmViewFilters>,
+): Promise<DynamicListViewTranslation> {
+  const first = dynamicListDimensionsForCrmView(filters)
+  if (!first.unsupported.length) return first
+  const repaired = await runPluginDeclarationsRepair().catch(() => false)
+  return repaired ? dynamicListDimensionsForCrmView(filters) : first
+}
+
+/**
+ * The plugin-declared capture sources in a facet, for the sweep's source match:
+ * see `contactSourceIsPluginWord` for why the core's words are left out.
+ */
+function pluginSourcesFromFacet(
+  data: Record<string, unknown>,
+  groupId: string,
+): NonNullable<DynamicListCandidate['sources']> {
+  return Object.fromEntries(
+    Object.entries(readContactFacet(data, groupId).sources).filter(
+      ([source, held]) => held && contactSourceIsPluginWord(source),
+    ),
+  )
+}
+
+/**
  * Reads one silo document into the shape the rule matcher understands.
  *
  * @param groupId the consent group whose contact facet the campaign membership
@@ -305,7 +342,10 @@ function toCandidate(
     ...(source === 'contacts'
       ? {
           tags: (data['tags'] as string[]) ?? [],
-          sources: (data['sources'] as DynamicListCandidate['sources']) ?? {},
+          sources: {
+            ...((data['sources'] as DynamicListCandidate['sources']) ?? {}),
+            ...(groupId ? pluginSourcesFromFacet(data, groupId) : {}),
+          },
           ordersCount: Number(data['ordersCount'] ?? 0),
           ltvCents: Number(data['ltvCents'] ?? 0),
           lastPurchaseAtMs: millis(data['lastPurchaseAtMs']),
@@ -545,7 +585,7 @@ export async function collectDynamicListCandidates(options: {
     const snapshot = await views.doc(rule.viewId).get()
     const translation =
       snapshot.exists && snapshot.get('section') === 'contacts'
-        ? dynamicListDimensionsForCrmView(
+        ? await crmViewDimensionsWithDeclarations(
             normalizeCrmViewFilters(snapshot.get('filters')),
           )
         : null
@@ -577,12 +617,16 @@ export async function collectDynamicListCandidates(options: {
    * this site alone — because a facet written under one group id and read
    * under another is a membership that silently matches nobody. Resolved once,
    * and only for a rule that names something the facet holds: a campaign, an
-   * owner, a stage, a company or a custom field. A rule naming none of them
+   * owner, a stage, a company, a custom field or a plugin's capture source, the
+   * last of which a saved segment can name too. A rule naming none of them
    * pays no org read at all, which is the shape the engagement and list
    * lookups already take.
    */
   let facetGroupId: string | null = null
-  if (dynamicListRuleNeedsContactFacet(planning)) {
+  if (
+    dynamicListRuleNeedsContactFacet(planning) ||
+    (segment?.sources ?? []).some(contactSourceIsPluginWord)
+  ) {
     const found = await getOrgForHost(options.hostId).catch(() => null)
     const org = (found?.org as Record<string, unknown> | undefined) ?? null
     /*

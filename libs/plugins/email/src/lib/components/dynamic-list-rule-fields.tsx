@@ -61,7 +61,6 @@
 import {
   CONTACT_LIFECYCLE_STAGES,
   CONTACT_LIFECYCLE_STAGE_LABELS,
-  CONTACT_SOURCE_LABELS,
   customFieldCurrency,
   currencyMinorToMajor,
   DYNAMIC_LIST_CUSTOM_OPS,
@@ -75,6 +74,10 @@ import {
   type DynamicListRule,
   type DynamicListSource,
 } from '@aglyn/aglyn'
+import {
+  labelContactSource,
+  listContactSourceOptions,
+} from '@aglyn/aglyn/plugin-manager/plugin-contact-capture'
 import {
   Autocomplete,
   Box,
@@ -210,7 +213,7 @@ function describeDimensions(
   if (rule.captureSources?.length) {
     clauses.push(
       `Captured by: ${rule.captureSources
-        .map((source) => CONTACT_SOURCE_LABELS[source] ?? source)
+        .map((source) => labelContactSource(source))
         .join(', ')}.`,
     )
   }
@@ -876,13 +879,6 @@ const MATCH_MENU = [
     {'Nobody matching all of them'}
   </MenuItem>,
 ]
-const CAPTURE_MENU = Object.entries(CONTACT_SOURCE_LABELS).map(
-  ([value, label]) => (
-    <MenuItem key={value} value={value}>
-      {label}
-    </MenuItem>
-  ),
-)
 const STAGE_MENU = CONTACT_LIFECYCLE_STAGES.map((stage) => (
   <MenuItem key={stage} value={stage}>
     {CONTACT_LIFECYCLE_STAGE_LABELS[stage]}
@@ -1277,6 +1273,17 @@ export const DynamicListRuleFields = memo(function DynamicListRuleFields(
   )
 
   /* The menus that come from data, rebuilt only when their data changes. */
+  // Built here, not at import: a plugin's source is registered by then only once
+  // the console's plugins gate has opened, which is before this draws.
+  const captureMenu = useMemo(
+    () =>
+      listContactSourceOptions().map(({ value, label }) => (
+        <MenuItem key={value} value={value}>
+          {label}
+        </MenuItem>
+      )),
+    [],
+  )
   const segmentMenu = useMemo(
     () => [NONE_ITEM, ...menuOf(segments)],
     [segments],
@@ -1591,7 +1598,7 @@ export const DynamicListRuleFields = memo(function DynamicListRuleFields(
           helperText="How the contact reached you"
           sx={atLeast(200)}
         >
-          {CAPTURE_MENU}
+          {captureMenu}
         </MemoTextField>
       </Stack>
       {/*

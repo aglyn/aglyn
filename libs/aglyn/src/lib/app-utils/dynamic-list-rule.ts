@@ -46,6 +46,7 @@
  * basis are separate joins and `marketing-consent.ts` owns the second one.
  */
 
+import { isKnownContactSource } from '../plugin-manager/plugin-contact-capture'
 import { normalizeContainerIds } from './container-membership'
 import {
   CONTACT_SOURCE_LABELS,
@@ -1038,6 +1039,19 @@ function allDimensions(rule: DynamicListRule): DynamicListDimensions[] {
 }
 
 /**
+ * Whether a capture source is a plugin's word rather than one of the core's.
+ *
+ * A capture writes its source into the holder's facet, and that is the only place
+ * a plugin's word has ever been. The core's words are still read off the top of
+ * the row (`sources`, `toCandidate`), so reading them from the facet too would
+ * change who an existing source-filtered list selects. The sweep asks this to read
+ * the facet for the words no existing list could have named.
+ */
+export function contactSourceIsPluginWord(source: string): boolean {
+  return !Object.hasOwn(CONTACT_SOURCE_LABELS, source)
+}
+
+/**
  * Does evaluating this rule need the sweeping holder's contact FACET?
  *
  * The campaign membership and the four CRM fields all live inside the facet,
@@ -1050,6 +1064,7 @@ function allDimensions(rule: DynamicListRule): DynamicListDimensions[] {
 export function dynamicListRuleNeedsContactFacet(rule: DynamicListRule): boolean {
   return allDimensions(rule).some(
     (dimensions) =>
+      (dimensions.captureSources ?? []).some(contactSourceIsPluginWord) ||
       (dimensions.campaignIds?.length ?? 0) > 0 ||
       (dimensions.ownerUids?.length ?? 0) > 0 ||
       (dimensions.lifecycleStages?.length ?? 0) > 0 ||
@@ -1262,8 +1277,11 @@ export function dynamicListDimensionsForCrmView(
         break
       case fields.source:
         if (values?.length) {
+          // A source a plugin declared is a source here as it is on the list. A
+          // word nothing declares stays unsupported, so the audience is never
+          // wider than the view.
           const sources = values.filter(
-            (source): source is ContactSource => source in CONTACT_SOURCE_LABELS,
+            (source): source is ContactSource => isKnownContactSource(source),
           )
           if (sources.length === values.length) {
             dimensions.captureSources = [

@@ -17,13 +17,12 @@
 'use client'
 
 import {
-  CONTACT_SOURCE_LABELS,
-  type ContactSource,
   type CrmAssignmentRule,
   newAssignmentRuleId,
   readCrmAssignmentRule,
   crmMemberPickerLabel,
 } from '@aglyn/aglyn'
+import { listContactSourceOptions } from '@aglyn/aglyn/plugin-manager/plugin-contact-capture'
 import {
   Button,
   Drawer,
@@ -166,9 +165,9 @@ export function AssignmentRuleDrawer(props: AssignmentRuleDrawerProps) {
           fullWidth
         >
           <MenuItem value={ANY_SOURCE}>{'Any source'}</MenuItem>
-          {(Object.keys(CONTACT_SOURCE_LABELS) as ContactSource[]).map((option) => (
-            <MenuItem key={option} value={option}>
-              {CONTACT_SOURCE_LABELS[option]}
+          {listContactSourceOptions().map((option) => (
+            <MenuItem key={option.value} value={option.value}>
+              {option.label}
             </MenuItem>
           ))}
         </TextField>
