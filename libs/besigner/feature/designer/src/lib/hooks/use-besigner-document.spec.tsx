@@ -1396,6 +1396,44 @@ describe('useBesignerDocument', () => {
           return rendered
         }
 
+        it('refuses a save and says why until the draft has loaded (AGL-4174)', async () => {
+          // The read has not answered: `available` is false for want of an
+          // answer, and a publish here is what used to replace the draft with
+          // the stored page.
+          mockReadServerDraft.mockReturnValue(new Promise(() => undefined))
+          const { result, notify } = setup({
+            draft: DRAFT,
+            firestore,
+            updatedAt: stamp(7),
+          })
+          expect(result.current.draft.available).toBe(false)
+          expect(result.current.saveBlockedReason).toMatch(/saved draft/)
+
+          let refused = false
+          act(() => {
+            refused = result.current.refuseOverUnopenedDraft('publish')
+          })
+
+          expect(refused).toBe(true)
+          expect(notify).toHaveBeenCalledWith(
+            expect.stringMatching(/saved draft.*Try again in a moment/),
+            expect.objectContaining({ variant: 'info' }),
+          )
+        })
+
+        it('opens saving again once the read has answered (AGL-4174)', async () => {
+          mockReadServerDraft.mockResolvedValue(null)
+          const { result } = setup({
+            draft: DRAFT,
+            firestore,
+            updatedAt: stamp(7),
+          })
+          await act(async () => {
+            await Promise.resolve()
+          })
+          expect(result.current.saveBlockedReason).toBeUndefined()
+        })
+
         it('refuses a publish, and points at the draft', async () => {
           const { result, notify } = await offered()
           expect(result.current.draft.available).toBe(true)
@@ -1488,6 +1526,10 @@ describe('useBesignerDocument', () => {
         // document now carries what the draft was for.
         setCanvasDirty(true)
         const { result, save } = setup({ draft: DRAFT, firestore, updatedAt: stamp(7) })
+        // The read answers first: a save refuses until it has (AGL-4174).
+        await act(async () => {
+          await Promise.resolve()
+        })
 
         await act(async () => {
           await result.current.handleSave()

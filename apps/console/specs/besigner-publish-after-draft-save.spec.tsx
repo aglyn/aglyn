@@ -56,6 +56,7 @@ const onSave = jest.fn()
 const onSaveAndPublish = jest.fn()
 
 function renderBar(props: {
+  saveBlockedReason?: string
   saveAvailable?: boolean
   draftSaved?: boolean
   livePublished?: boolean
@@ -82,6 +83,23 @@ describe('the besigner toolbar after a draft save', () => {
   beforeEach(() => {
     onSave.mockClear()
     onSaveAndPublish.mockClear()
+  })
+
+  it('closes every save control, with the reason, while a draft loads (AGL-4174)', () => {
+    renderBar({
+      saveAvailable: false,
+      livePublished: false,
+      saveBlockedReason: "Loading this page's saved draft",
+    })
+    const primary = screen.getByRole('button', { name: 'Loading draft' })
+    expect((primary as HTMLButtonElement).disabled).toBe(true)
+    expect(primary.getAttribute('title')).toBe("Loading this page's saved draft")
+    fireEvent.click(screen.getByRole('button', { name: 'Save options' }))
+    const items = screen.getAllByRole('menuitem')
+    expect(items.map((item) => item.getAttribute('aria-disabled'))).toEqual(['true', 'true'])
+    expect(items[1].textContent).toContain("Loading this page's saved draft")
+    fireEvent.click(items[1])
+    expect(onSaveAndPublish).not.toHaveBeenCalled()
   })
 
   it('says Publish once the canvas is in the working draft', () => {

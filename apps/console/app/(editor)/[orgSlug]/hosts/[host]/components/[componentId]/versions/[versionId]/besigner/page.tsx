@@ -375,6 +375,7 @@ function ComponentBesignerPage(props) {
     saveWorkingDraft,
     workingDraftSaved,
     refuseOverUnopenedDraft,
+    saveBlockedReason,
     markOwnWrite,
     jsonOpen,
     openJsonEditor,
@@ -1104,6 +1105,7 @@ function ComponentBesignerPage(props) {
                           publishBlockedReason={
                             canPublish ? undefined : publishBlock
                           }
+                          saveBlockedReason={saveBlockedReason}
                           saveAvailable={saveAvailable}
                           // Save draft writes the draft document, not
                           // this version, so the canvas never reads

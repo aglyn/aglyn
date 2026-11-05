@@ -355,6 +355,7 @@ function PluginDocumentBesignerPage() {
     saveWorkingDraft,
     workingDraftSaved,
     refuseOverUnopenedDraft,
+    saveBlockedReason,
     hasError,
     notFound,
     awaitingServer,
@@ -872,6 +873,7 @@ function PluginDocumentBesignerPage() {
                           publishBlockedReason={
                             canPublish ? undefined : publishBlock
                           }
+                          saveBlockedReason={saveBlockedReason}
                           saveAvailable={saveAvailable}
                           // Save draft writes the draft document, not
                           // this version, so the canvas never reads

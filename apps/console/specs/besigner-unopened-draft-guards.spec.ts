@@ -82,6 +82,11 @@ describe.each(Object.entries(PAGES))('the %s editor', (_kind, page) => {
     expect(guard).toBeLessThan(body.indexOf('handleSave()'))
   })
 
+  it('tells the toolbar why saving is closed while a draft is loading (AGL-4174)', () => {
+    expect(source).toMatch(/\bsaveBlockedReason,\n/)
+    expect(source).toContain('saveBlockedReason={saveBlockedReason}')
+  })
+
   it('refuses Save draft over an unopened draft before it writes one', () => {
     const body = handler(source, 'handleSaveDraft')
     const guard = body.indexOf("refuseOverUnopenedDraft('save')")
