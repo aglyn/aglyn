@@ -582,8 +582,8 @@ carries a `resource`. `listPluginHostResources()` / `pluginHostResource(kind)`
 
 ### In the site backup — `siteExport`, and `plugin-site-export`
 
-A site admin on a plan with site export downloads the site as one site
-package (`aglyn-package` v2) and imports it later, into the same site or
+A member holding **Manage site settings**, on a plan with site export, downloads the
+site as one site package (`aglyn-package` v2) and imports it later, into the same site or
 another. The platform's own documents are always in it. A plugin collection
 is in it only when the collection says so, beside its `resource`:
 
@@ -1633,6 +1633,37 @@ registerClosureNoticeSource({
 
 A notice is information, never a gate: nothing it answers holds a closure back.
 
+## Before a person erasure — `plugin-person-erasure-notes`
+
+A plugin decides through `plugin-person-erasure` what it deletes and what it keeps
+when a person is erased. If it keeps a record with the person still on it, say so
+BEFORE anyone files: register a note source, and the console's **Erase a person**
+card prints your sentence.
+
+```ts
+import { registerPersonErasureNoteSource } from '@aglyn/aglyn/plugin-manager/plugin-person-erasure-notes'
+
+// from your serverDeclarations or consoleServerDeclarations, the import lazy
+registerPersonErasureNoteSource({
+  notes: async ({ orgId }) => {
+    if (!(await workspaceHoldsTickets(orgId))) return []
+    return [{ id: 'tickets-kept', text: 'Any ticket issued to this address stays as issued for two years' }]
+  },
+}, { pluginId: 'tickets' })
+```
+
+A source answers for the workspace, because the card opens before an address is
+typed: answer nothing when the workspace holds nothing of the kind, and word the
+sentence so it's true of someone with no such record.
+
+| API | Semantics |
+| --- | --- |
+| `registerPersonErasureNoteSource(source, { pluginId? })` | One source per plugin; registering again replaces it. |
+| `readPersonErasureNotes({ orgId })` | Every source's notes, each with its `pluginId`. **Never throws**: a source that threw, or answered a note with no words, is listed in `unavailable`, and the card says some details could not be checked. With nothing registered, it runs the app's boot step once and asks again. |
+| `GET /api/person-erasure-notes?orgId=…` | The console's route the card calls: asks "Privacy requests" (`org.privacy`) over the whole workspace, as filing does. |
+
+A note is information, never a gate: nothing it answers holds an erasure back.
+
 ## Earnings on the operator's revenue report — `plugin-revenue-sources`
 
 The staff revenue report states what the deployment actually kept. If your
@@ -1819,6 +1850,7 @@ if (captured?.ok === false) log.warn(captured.reason, captured.error)
 | `registerPluginContactSource({ source, label, openLabel?, recordKind? }, { pluginId? })` | One source word has one owner. `openLabel` is what a link from a timeline entry says, and a door with nothing to open declares none. `recordKind` is the kind `plugin-record-routes` addresses the silo's own document by. |
 | `pluginContactCaptureWriter()` / `listPluginContactSources()` / `pluginContactSource(source)` | The writer with its owner, every declared door, and one by its word. |
 | `labelContactSource(source, fallback?)` | How a contact's source word reads on screen: the core's own label, else the `label` its plugin declared, else `fallback` (or the word itself). A plugin cannot relabel a core source. It answers from what this process registered, so declare a door from your `declarations` entry when the console's browser should label it. |
+| `listContactSourceOptions()` / `isKnownContactSource(source)` | Every source a filter can offer, as `{ value, label }`: the core's, then each declared door, labeled as `labelContactSource` labels it. A declared door is a choice in the CRM's contact **Source** filter with no other work. `isKnownContactSource` is whether a word is one of those. |
 
 **A refusal is returned, never thrown.** Each of these silos has already
 accepted the submission or taken the money, so a throw would cost it the thing

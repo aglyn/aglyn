@@ -409,6 +409,8 @@ const SECTION_COLLECTIONS = {
  *                          holds the query and its cap.
  *   50   `lists`           so the Lists column names what a campaign is aimed
  *                          at rather than printing document ids
+ *    1   `members/{uid}`   the reader's own membership, which switches Create
+ *                          campaign off with the permission named (AGL-4047)
  *
  * The org's TOPIC CATALOG is deliberately not among them, and it is the
  * biggest single read this section could make at 200 documents. It fills one
@@ -422,7 +424,7 @@ const SECTION_COLLECTIONS = {
  * Firestore is asked to RETURN, and a card that listens with `limit(200)` to
  * render twenty rows is buying two hundred.
  */
-const CAMPAIGNS_DOCUMENT_CEILING = 112
+const CAMPAIGNS_DOCUMENT_CEILING = 113
 
 function listenedCollections(): Set<string> {
   return new Set(mockListens.map((listen) => listen.path.split('/').pop() ?? ''))
@@ -600,12 +602,14 @@ describe('marketing console read cost (AGL-2501)', () => {
    * summed into one document, so the report pays for one listen and not for
    * one order.
    *=========================================*/
-  it('the campaign report reads five documents, and no collection', async () => {
+  it('the campaign report reads six documents, and no collection', async () => {
     await renderConsole('campaigns', ['camp_1'])
     summarize('campaign report', mockListens)
 
     /*
-     * FIVE, and the first of them is what keeps this URL working at all.
+     * SIX. One is the reader's own membership, which switches Edit campaign
+     * off with the permission named (AGL-4047). The first of the rest is what
+     * keeps this URL working at all.
      *
      * `/marketing/campaigns/{id}` names either a campaign CONTAINER or a
      * single SEND — a message that belongs to no container carries only its
@@ -626,13 +630,14 @@ describe('marketing console read cost (AGL-2501)', () => {
      * for one listen and not for one conversion.
      */
     expect(mockListens.every((listen) => listen.limit === 1)).toBe(true)
-    expect(documentCeiling(mockListens)).toBeLessThanOrEqual(5)
-    expect(mockListens.map((listen) => listen.path)).toEqual([
-      'orgs/org1/emailCampaigns/camp_1',
+    expect(documentCeiling(mockListens)).toBeLessThanOrEqual(6)
+    expect(mockListens.map((listen) => listen.path).sort()).toEqual([
       'orgs/org1/campaigns/camp_1',
+      'orgs/org1/campaigns/camp_1/reports/conversions',
       'orgs/org1/campaigns/camp_1/reports/links',
       'orgs/org1/campaigns/camp_1/reports/revenue',
-      'orgs/org1/campaigns/camp_1/reports/conversions',
+      'orgs/org1/emailCampaigns/camp_1',
+      'orgs/org1/members/u1',
     ])
   })
 
@@ -718,7 +723,10 @@ describe('marketing console read cost (AGL-2501)', () => {
       await renderConsole('campaigns')
       summarize('campaigns section', mockListens)
       // An empty page: the page's emails are read only for campaigns on it.
+      // The reader's membership is what switches Create campaign off with the
+      // permission named (AGL-4047): one document, whatever the page holds.
       expect(mockListens).toEqual([
+        { path: 'orgs/org1/members/u1', limit: 1 },
         { path: 'orgs/org1/emailCampaigns', limit: 11 },
         { path: 'orgs/org1/lists', limit: 50 },
       ])
@@ -732,9 +740,11 @@ describe('marketing console read cost (AGL-2501)', () => {
       // Each has a column that needs it: the containers are the rows, the
       // lists are the Lists column. No single sends are read while the
       // table shows campaigns — that kind is its own query, behind its toggle.
+      // `u1` is the reader's own membership document (AGL-4047), not a list.
       expect([...listenedCollections()].sort()).toEqual([
         'emailCampaigns',
         'lists',
+        'u1',
       ])
     })
 

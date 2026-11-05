@@ -442,10 +442,10 @@ the day you start, in your site's time zone, and a day or time you gave in your 
 is kept as you gave it. The page about your events, or else your home page, lists them with
 the **Event List**, in one of its planned sections.
 
-The events are published, so they show on your site straight away, when you have the
-admin or editor role on the site. With the author role they are saved as drafts, and the
-job says so; someone with the editor role publishes them on the **Events** page. Without
-the add-on the start adds no events. Change or delete them on the **Events** page like any
+The events are published, so they show on your site straight away, when you hold the
+**Publish site content** permission on the site, which its admins and editors hold by
+default. Without it, as with the author role, they are saved as drafts, and the job says
+so; someone who holds it publishes them on the **Events** page. Without the add-on the start adds no events. Change or delete them on the **Events** page like any
 event.
 
 ## On the Free plan {#on-the-free-plan}

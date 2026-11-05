@@ -288,7 +288,8 @@ counts for any day.
 
 A signer who gives an email is added to your contacts, or matched to the contact you
 already have for them, with the signing on their timeline. Their source reads
-**Waiver signed** in your contacts list, on their record and in the contact reports.
+**Waiver signed** in your contacts list, on their record and in the contact reports,
+and the list's **Source** filter finds everyone who came in that way.
 
 ## Privacy
 
@@ -309,7 +310,7 @@ adult age, if that's later.
 
 When you [erase a person](../../workspace-and-billing/signing-in-and-sessions.md#erasing-a-person)
 from your workspace, the waivers they signed are kept for the same period, not
-erased:
+erased. The **Erase a person** card says so, with your period, before you file:
 
 - its link to the person's contact is removed, because the contact is erased;
 - on the **Signatures** card its status reads **Kept until** and the date it will be

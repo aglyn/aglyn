@@ -247,6 +247,31 @@ fun memberPermissions(member: Map<String, Any?>?, orgRole: String?, customRole: 
 fun sitePermissions(workspace: Map<String, Boolean>, siteStamp: Map<String, Any?>?): Map<String, Boolean> =
   workspace + booleansOf(siteStamp).orEmpty()
 
+/**
+ * One row of a permission editor (`groupOrgPermissions`, `offeredOrgPermissions`): a key the workspace is offered, under its
+ * group's heading. [first] marks the group's first row, where the heading goes.
+ */
+data class PermissionEditorRow(val key: String, val label: String, val description: String, val group: String, val groupLabel: String, val first: Boolean)
+
+/**
+ * The keys an editor offers, in the groups' display order: every core key, and a plugin's keys while the plugin is on for the
+ * workspace (null: no filter). [narrowable] keeps only the keys a site can narrow. A key stored for a plugin that is now off is
+ * not offered and not dropped: the save writes back the stored map.
+ */
+fun permissionEditorRows(catalog: OrgRoleGrants, enabledPlugins: List<String>?, narrowable: Boolean = false): List<PermissionEditorRow> {
+  val groups = catalog.groups.orEmpty()
+  val offered = catalog.permissions.filter { entry ->
+    (!narrowable || entry.narrowable == true) && (entry.pluginId == null || enabledPlugins == null || entry.pluginId in enabledPlugins)
+  }
+  val order = (groups.map { it.id } + offered.map { it.group.orEmpty() }).distinct()
+  return order.flatMap { id ->
+    val label = groups.firstOrNull { it.id == id }?.label ?: id
+    offered.filter { it.group.orEmpty() == id }.mapIndexed { index, entry ->
+      PermissionEditorRow(entry.key, entry.label, entry.description, id, label, index == 0)
+    }
+  }
+}
+
 /** What a refusal says when a member lacks a key (`permissionRefusalText`): it names the permission, never a role. */
 fun permissionRefusalText(key: String): String {
   val label = Contracts.orgRoleGrants.permissions.firstOrNull { it.key == key }?.label ?: key

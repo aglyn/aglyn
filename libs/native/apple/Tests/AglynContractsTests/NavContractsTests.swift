@@ -294,6 +294,25 @@ final class NavContractsTests: XCTestCase {
     XCTAssertEqual(sitePermissions(workspace, siteStamp: nil), workspace)
   }
 
+  func testAPermissionEditorOffersTheWorkspacesKeysByGroup() {
+    let catalog = ContractValues.shared.orgRoleGrants
+    let all = permissionEditorRows(catalog, enabledPlugins: nil)
+    XCTAssertEqual(all.count, catalog.permissions.count)
+    XCTAssertEqual(all.first?.first, true)
+    XCTAssertEqual(all.first?.groupLabel, "Organization")
+    // Each group's heading goes on its first row, and a group's rows sit together.
+    XCTAssertEqual(Set(all.filter(\.first).map(\.group)).count, all.filter(\.first).count)
+    // A plugin's keys show only while it is on; the core's always do.
+    let none = permissionEditorRows(catalog, enabledPlugins: [])
+    XCTAssertFalse(none.contains { $0.key == "marketplace.payouts" })
+    XCTAssertTrue(none.contains { $0.key == "members.manage" })
+    XCTAssertTrue(permissionEditorRows(catalog, enabledPlugins: ["marketplace"]).contains { $0.key == "marketplace.payouts" })
+    // Only the keys a site can narrow ask the narrowing choice.
+    let narrow = permissionEditorRows(catalog, enabledPlugins: nil, narrowable: true)
+    XCTAssertTrue(narrow.contains { $0.key == "managePos" })
+    XCTAssertFalse(narrow.contains { $0.key == "members.manage" })
+  }
+
   func testARefusalNamesThePermission() {
     XCTAssertEqual(
       permissionRefusalText(ContractValues.shared.orgRoleGrants, key: "marketplace.payouts"),

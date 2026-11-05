@@ -78,6 +78,8 @@ public struct SpecScreenView: View {
     }
     .environment(\.aglynPluginContext, plugin)
     .onChange(of: session.claims) { _, _ in model?.rebase(baseContext) }
+    .onChange(of: session.orgPermissions) { _, _ in model?.rebase(baseContext) }
+    .onChange(of: session.sitePermissions) { _, _ in model?.rebase(baseContext) }
     .navigationTitle(ScreenValues.render(spec.title, in: model?.context ?? baseContext))
     .aglynScreenTitle(ScreenValues.render(spec.title, in: model?.context ?? baseContext))
     .task(id: "\(plugin.orgID ?? ""):\(plugin.hostID ?? ""):\(params.sorted { $0.key < $1.key }.map { "\($0.key)=\($0.value)" })") {

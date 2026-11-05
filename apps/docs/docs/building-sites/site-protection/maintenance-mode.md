@@ -20,7 +20,8 @@ sees the site the same way, and visitors without a 503 page get a **Coming soon*
 
 1. Open **Admin → Error pages** for the site — the same card that assigns your
    [error pages](error-screens.md). The switch takes every page of the site offline for
-   every visitor, so the Admin area is limited to **site admins**.
+   every visitor, so the Admin area takes the **Manage site settings** permission, which a
+   site's admins hold by default.
 2. Switch on **Maintenance mode — show the 503 page at every address**. It confirms with
    *"Maintenance mode on — visitors see the 503 page"*.
 3. Visitors now see your [503 error page](error-screens.md) on every path.

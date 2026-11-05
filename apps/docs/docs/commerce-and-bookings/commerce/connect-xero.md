@@ -19,8 +19,8 @@ Stripe payout to your bank. You choose the accounts; Aglyn never creates
 accounts in your chart.
 
 Accounting comes with every plan that includes selling online, at no extra
-cost. Only an organization **owner or admin** (anyone whose role includes
-**Manage accounting**) can connect or change it.
+cost. Connecting or changing it takes the **Manage accounting** permission, which
+organization owners and admins hold by default.
 
 ## Before you start
 

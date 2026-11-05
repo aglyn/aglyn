@@ -17,8 +17,8 @@ contact, adding one by hand, and every edit to one — their name, phone, job ti
 address, tags and notes, owner, lifecycle stage and company, custom fields, tasks,
 deals, files, logged calls and activities, one-to-one email and merging two records.
 On Free the Contacts section is shown locked, with the rest of the CRM. The people your
-sites capture are still kept, and workspace owners and admins can export them, or erase
-a person, from
+sites capture are still kept, and members holding **Privacy requests**, which workspace
+owners and admins hold by default, can export them, or erase a person, from
 [Settings → Privacy](../../workspace-and-billing/signing-in-and-sessions.md#privacy-requests).
 See [What each plan includes](./overview.md#what-each-plan-includes).
 :::

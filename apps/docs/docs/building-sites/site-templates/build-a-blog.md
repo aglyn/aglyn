@@ -31,10 +31,9 @@ in search. Unpublish or delete every entry and the listing comes down the same w
 
 **Delete collection** is at the bottom of **Collection settings**, the panel under the
 **Collection** dropdown in **Collections & Entries**, and acts on the collection currently
-picked in that dropdown. It is a **site admin** action: if your role on this site is editor or
-viewer the button is not there at all, and an org role on its own does not grant it — the
-check reads your role on *this site*. Ask a site admin, or have one raise your role in
-**Members**.
+picked in that dropdown. It takes the **Manage site settings** permission on *this site*,
+which the site's admins hold by default: without it the button is not there at all. Ask a
+site admin, or have one raise your role in **Members**.
 
 Aglyn refuses the delete while anything still depends on the collection, and the dialog
 tells you which of these it is before you can type anything:

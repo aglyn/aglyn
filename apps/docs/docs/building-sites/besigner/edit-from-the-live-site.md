@@ -17,10 +17,11 @@ opens it in the Besigner in one click.
 
 ## Who sees it
 
-The bar only appears for someone whose
-[role on the site](../../workspace-and-billing/teams-and-roles/overview.md#site-roles) can
-edit content: **Admin**, **Editor** or **Author**. Workspace owners and admins are admins
-on every site. A **Viewer** doesn't get a read-only bar; they get no bar at all.
+The bar only appears for someone holding the **Edit site content** permission on the site,
+which the [site roles](../../workspace-and-billing/teams-and-roles/overview.md#site-roles)
+**Admin**, **Editor** and **Author** hold by default. Workspace owners and admins are admins
+on every site. Someone without it, such as a **Viewer**, doesn't get a read-only bar; they
+get no bar at all.
 
 Nobody else gets the bar. A visitor who isn't signed in, or who is signed in without
 edit access to this site, gets the page exactly as it is.
