@@ -72,6 +72,13 @@
       "blocks": [
         {
           "type": "notice",
+          "id": "keyRefusal",
+          "tone": "info",
+          "when": "!site.can[inventorySync.manage]",
+          "text": "{app.permissionRefusal[inventorySync.manage]}. You can read what is set here."
+        },
+        {
+          "type": "notice",
           "id": "none",
           "tone": "info",
           "when": "!data.conn.offered && !data.conn.connection",
@@ -94,7 +101,7 @@
               "id": "connectCin7",
               "label": "Connect Cin7 Core",
               "icon": "link|link",
-              "when": "data.conn.offered[id=const.ids.cin7]",
+              "when": "site.can[inventorySync.manage] && data.conn.offered[id=const.ids.cin7]",
               "url": "/api/inventory-sync/connect/keys",
               "prompt": [
                 {
@@ -124,7 +131,7 @@
               "id": "connectInflow",
               "label": "Connect inFlow Inventory",
               "icon": "link|link",
-              "when": "data.conn.offered[id=const.ids.inflow]",
+              "when": "site.can[inventorySync.manage] && data.conn.offered[id=const.ids.inflow]",
               "url": "/api/inventory-sync/connect/keys",
               "prompt": [
                 {
@@ -154,7 +161,7 @@
               "id": "connectBrightpearl",
               "label": "Connect Brightpearl",
               "icon": "link|link",
-              "when": "data.conn.offered[id=const.ids.brightpearl]",
+              "when": "site.can[inventorySync.manage] && data.conn.offered[id=const.ids.brightpearl]",
               "url": "/api/inventory-sync/connect/oauth",
               "prompt": [
                 {
@@ -262,7 +269,7 @@
               "id": "reconnectCin7",
               "label": "Connect Cin7 Core",
               "icon": "link|link",
-              "when": "data.conn.offered[id=const.ids.cin7] && data.conn.connection.status == reconnect && data.conn.connection.provider == cin7-core",
+              "when": "site.can[inventorySync.manage] && data.conn.offered[id=const.ids.cin7] && data.conn.connection.status == reconnect && data.conn.connection.provider == cin7-core",
               "url": "/api/inventory-sync/connect/keys",
               "prompt": [
                 {
@@ -292,7 +299,7 @@
               "id": "reconnectInflow",
               "label": "Connect inFlow Inventory",
               "icon": "link|link",
-              "when": "data.conn.offered[id=const.ids.inflow] && data.conn.connection.status == reconnect && data.conn.connection.provider == inflow",
+              "when": "site.can[inventorySync.manage] && data.conn.offered[id=const.ids.inflow] && data.conn.connection.status == reconnect && data.conn.connection.provider == inflow",
               "url": "/api/inventory-sync/connect/keys",
               "prompt": [
                 {
@@ -322,7 +329,7 @@
               "id": "reconnectBrightpearl",
               "label": "Connect Brightpearl",
               "icon": "link|link",
-              "when": "data.conn.offered[id=const.ids.brightpearl] && data.conn.connection.status == reconnect && data.conn.connection.provider == brightpearl",
+              "when": "site.can[inventorySync.manage] && data.conn.offered[id=const.ids.brightpearl] && data.conn.connection.status == reconnect && data.conn.connection.provider == brightpearl",
               "url": "/api/inventory-sync/connect/oauth",
               "prompt": [
                 {
@@ -345,7 +352,7 @@
               "id": "sync",
               "label": "Sync now",
               "icon": "arrow.triangle.2.circlepath|sync",
-              "when": "data.conn.connection.status == active",
+              "when": "site.can[inventorySync.manage] && data.conn.connection.status == active",
               "url": "/api/inventory-sync/sync-now",
               "body": {
                 "hostId": "{site.id}"
@@ -356,7 +363,7 @@
               "id": "pause",
               "label": "Pause",
               "icon": "pause.circle|pause_circle",
-              "when": "data.conn.connection.status == active",
+              "when": "site.can[inventorySync.manage] && data.conn.connection.status == active",
               "method": "PATCH",
               "url": "/api/inventory-sync/settings",
               "body": {
@@ -369,7 +376,7 @@
               "id": "resume",
               "label": "Resume",
               "icon": "play.circle|play_circle",
-              "when": "data.conn.connection.status == paused",
+              "when": "site.can[inventorySync.manage] && data.conn.connection.status == paused",
               "method": "PATCH",
               "url": "/api/inventory-sync/settings",
               "body": {
@@ -389,7 +396,8 @@
               "body": {
                 "hostId": "{site.id}"
               },
-              "success": "Disconnected."
+              "success": "Disconnected.",
+              "when": "site.can[inventorySync.manage]"
             }
           ]
         },
@@ -541,7 +549,8 @@
               "orderCustomer": "{form.orderCustomer}",
               "taxRule": "{form.taxRule}"
             },
-            "success": "Saved."
+            "success": "Saved.",
+            "disabledWhen": "!site.can[inventorySync.manage]"
           }
         },
         {
@@ -563,7 +572,8 @@
                 "hostId": "{site.id}",
                 "recordId": "{item.recordId}"
               },
-              "success": "{item.displayRef} sent."
+              "success": "{item.displayRef} sent.",
+              "when": "site.can[inventorySync.orders]"
             }
           ]
         },

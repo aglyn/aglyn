@@ -27,6 +27,8 @@
  * reads what the parent is handed.
  */
 
+import { registerPluginContactSource } from '@aglyn/aglyn/plugin-manager/plugin-contact-capture'
+import { unregisterPluginServices } from '@aglyn/aglyn/plugin-manager/plugin-services'
 import { fireEvent, render, screen, waitFor, within } from '@testing-library/react'
 import { useState } from 'react'
 import DynamicListRuleFields, {
@@ -146,6 +148,20 @@ describe('the CRM controls on the rule form', () => {
       { target: { value: '' } },
     )
     expect(draftToRule(last(onDraft)).engagedWithinDays).toBeUndefined()
+  })
+
+  it('offers a capture source a plugin declared, and stores its word', () => {
+    registerPluginContactSource({ source: 'kiosk', label: 'Guest book' }, { pluginId: 'kiosk' })
+    try {
+      const onDraft = jest.fn()
+      render(<Harness onDraft={onDraft} />)
+      fireEvent.mouseDown(screen.getByRole('combobox', { name: 'Captured by' }))
+      fireEvent.click(within(screen.getByRole('listbox')).getByText('Guest book'))
+      expect(last(onDraft).captureSources).toEqual(['kiosk'])
+      expect(draftToRule(last(onDraft)).captureSources).toEqual(['kiosk'])
+    } finally {
+      unregisterPluginServices('kiosk')
+    }
   })
 
   it('offers the team as owners and stores the chosen uid', () => {

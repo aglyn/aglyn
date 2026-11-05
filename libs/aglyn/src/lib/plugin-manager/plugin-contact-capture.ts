@@ -423,6 +423,19 @@ export function isKnownContactSource(source: unknown): boolean {
   return Object.hasOwn(CONTACT_SOURCE_LABELS, word) || pluginContactSource(word) !== null
 }
 
+/**
+ * Whether a capture source is a plugin's word rather than one of the core's.
+ *
+ * A capture writes its source into the holder's facet, and that is the only place
+ * a plugin's word has ever been. A list's sweep still reads the core's words off
+ * the top of the row, so reading them from the facet too would change who an
+ * existing source-filtered list selects. It asks this to read the facet for the
+ * words no existing list could have named.
+ */
+export function isPluginContactSource(source: string): boolean {
+  return !Object.hasOwn(CONTACT_SOURCE_LABELS, source)
+}
+
 /** One source a filter offers: the stored word, and how it reads. */
 export interface PluginContactSourceOption {
   value: string

@@ -99,7 +99,8 @@
                 "hostId": "{site.id}",
                 "orderId": "{params.orderId}"
               },
-              "icon": "refresh|refresh"
+              "icon": "refresh|refresh",
+              "when": "site.can[couriers.dispatch]"
             },
             {
               "id": "cancel",
@@ -112,7 +113,8 @@
               "icon": "xmark.circle|cancel",
               "destructive": true,
               "confirm": "Cancel the courier? {data.view.run.providerLabel} is asked to call the courier off. The delivery goes back to your own queue; {data.view.run.providerLabel} may still charge your account if the courier was already on the way.",
-              "success": "Courier canceled"
+              "success": "Courier canceled",
+              "when": "site.can[couriers.dispatch]"
             }
           ]
         },
@@ -173,7 +175,7 @@
                 "idempotencyKey": "{params.orderId}-{data.view.quote.expiresAtMs}"
               },
               "icon": "send|send",
-              "when": "data.conn.connection && !data.view.run && data.order.testMode && data.conn.connection.test.configured && data.view.quote.expiresAtMs > @now.ms || data.conn.connection && !data.view.run && !data.order.testMode && data.conn.connection.live.configured && data.view.quote.expiresAtMs > @now.ms || data.conn.connection && data.view.run.state == delivered,cancelled,returned && data.order.testMode && data.conn.connection.test.configured && data.view.quote.expiresAtMs > @now.ms || data.conn.connection && data.view.run.state == delivered,cancelled,returned && !data.order.testMode && data.conn.connection.live.configured && data.view.quote.expiresAtMs > @now.ms",
+              "when": "site.can[couriers.dispatch] && data.conn.connection && !data.view.run && data.order.testMode && data.conn.connection.test.configured && data.view.quote.expiresAtMs > @now.ms || site.can[couriers.dispatch] && data.conn.connection && !data.view.run && !data.order.testMode && data.conn.connection.live.configured && data.view.quote.expiresAtMs > @now.ms || site.can[couriers.dispatch] && data.conn.connection && data.view.run.state == delivered,cancelled,returned && data.order.testMode && data.conn.connection.test.configured && data.view.quote.expiresAtMs > @now.ms || site.can[couriers.dispatch] && data.conn.connection && data.view.run.state == delivered,cancelled,returned && !data.order.testMode && data.conn.connection.live.configured && data.view.quote.expiresAtMs > @now.ms",
               "success": "{data.conn.connection.providerLabel} courier requested"
             },
             {
@@ -186,7 +188,7 @@
                 "provider": "{data.conn.connection.provider}"
               },
               "icon": "refresh|refresh",
-              "when": "data.conn.connection && !data.view.run && data.order.testMode && data.conn.connection.test.configured && data.view.quote.expiresAtMs > @now.ms || data.conn.connection && !data.view.run && !data.order.testMode && data.conn.connection.live.configured && data.view.quote.expiresAtMs > @now.ms || data.conn.connection && data.view.run.state == delivered,cancelled,returned && data.order.testMode && data.conn.connection.test.configured && data.view.quote.expiresAtMs > @now.ms || data.conn.connection && data.view.run.state == delivered,cancelled,returned && !data.order.testMode && data.conn.connection.live.configured && data.view.quote.expiresAtMs > @now.ms",
+              "when": "site.can[couriers.dispatch] && data.conn.connection && !data.view.run && data.order.testMode && data.conn.connection.test.configured && data.view.quote.expiresAtMs > @now.ms || site.can[couriers.dispatch] && data.conn.connection && !data.view.run && !data.order.testMode && data.conn.connection.live.configured && data.view.quote.expiresAtMs > @now.ms || site.can[couriers.dispatch] && data.conn.connection && data.view.run.state == delivered,cancelled,returned && data.order.testMode && data.conn.connection.test.configured && data.view.quote.expiresAtMs > @now.ms || site.can[couriers.dispatch] && data.conn.connection && data.view.run.state == delivered,cancelled,returned && !data.order.testMode && data.conn.connection.live.configured && data.view.quote.expiresAtMs > @now.ms",
               "success": "New quote"
             },
             {
@@ -199,7 +201,7 @@
                 "provider": "{data.conn.connection.provider}"
               },
               "icon": "request_quote|request_quote",
-              "when": "data.conn.connection && !data.view.run && data.order.testMode && data.conn.connection.test.configured && !data.view.quote || data.conn.connection && !data.view.run && !data.order.testMode && data.conn.connection.live.configured && !data.view.quote || data.conn.connection && data.view.run.state == delivered,cancelled,returned && data.order.testMode && data.conn.connection.test.configured && !data.view.quote || data.conn.connection && data.view.run.state == delivered,cancelled,returned && !data.order.testMode && data.conn.connection.live.configured && !data.view.quote || data.conn.connection && !data.view.run && data.order.testMode && data.conn.connection.test.configured && data.view.quote.expiresAtMs <= @now.ms || data.conn.connection && !data.view.run && !data.order.testMode && data.conn.connection.live.configured && data.view.quote.expiresAtMs <= @now.ms || data.conn.connection && data.view.run.state == delivered,cancelled,returned && data.order.testMode && data.conn.connection.test.configured && data.view.quote.expiresAtMs <= @now.ms || data.conn.connection && data.view.run.state == delivered,cancelled,returned && !data.order.testMode && data.conn.connection.live.configured && data.view.quote.expiresAtMs <= @now.ms",
+              "when": "site.can[couriers.dispatch] && data.conn.connection && !data.view.run && data.order.testMode && data.conn.connection.test.configured && !data.view.quote || site.can[couriers.dispatch] && data.conn.connection && !data.view.run && !data.order.testMode && data.conn.connection.live.configured && !data.view.quote || site.can[couriers.dispatch] && data.conn.connection && data.view.run.state == delivered,cancelled,returned && data.order.testMode && data.conn.connection.test.configured && !data.view.quote || site.can[couriers.dispatch] && data.conn.connection && data.view.run.state == delivered,cancelled,returned && !data.order.testMode && data.conn.connection.live.configured && !data.view.quote || site.can[couriers.dispatch] && data.conn.connection && !data.view.run && data.order.testMode && data.conn.connection.test.configured && data.view.quote.expiresAtMs <= @now.ms || site.can[couriers.dispatch] && data.conn.connection && !data.view.run && !data.order.testMode && data.conn.connection.live.configured && data.view.quote.expiresAtMs <= @now.ms || site.can[couriers.dispatch] && data.conn.connection && data.view.run.state == delivered,cancelled,returned && data.order.testMode && data.conn.connection.test.configured && data.view.quote.expiresAtMs <= @now.ms || site.can[couriers.dispatch] && data.conn.connection && data.view.run.state == delivered,cancelled,returned && !data.order.testMode && data.conn.connection.live.configured && data.view.quote.expiresAtMs <= @now.ms",
               "success": "Quote ready"
             }
           ]

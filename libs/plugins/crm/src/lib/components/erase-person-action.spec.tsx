@@ -15,6 +15,7 @@
  * limitations under the License.
  */
 
+import { PERSON_ERASURE_NOTES_HEADING, PERSON_ERASURE_NOTES_UNAVAILABLE } from '@aglyn/aglyn'
 import { fireEvent, render, screen, waitFor } from '@testing-library/react'
 import { CrmOrgMountProvider } from '../hooks/use-crm-org-mount'
 import { useErasePersonAction, type UseErasePersonActionProps } from './erase-person-action'
@@ -37,6 +38,8 @@ jest.mock('@aglyn/shared-ui-snackstack', () => ({
 
 let calls: Array<{ url: string; body: Record<string, unknown> }>
 let answer: () => { status: number; payload: Record<string, unknown> }
+let notes: () => { status: number; payload: Record<string, unknown> }
+let noteReads: string[]
 
 /**
  * The hook's three outputs, rendered plainly: each item as a button that
@@ -78,7 +81,14 @@ beforeEach(() => {
     status: 200,
     payload: { ok: true, requestId: 'org1__k', pendingSinceMs: 1_700_000_000_000, alreadyPending: false },
   })
+  notes = () => ({ status: 200, payload: { notes: [], unavailable: [] } })
+  noteReads = []
   ;(globalThis as any).fetch = jest.fn(async (url: string, init: any) => {
+    if (String(url).includes('/api/person-erasure-notes')) {
+      noteReads.push(String(url))
+      const { status, payload } = notes()
+      return { ok: status < 400, status, json: async () => payload }
+    }
     calls.push({ url: String(url), body: JSON.parse(init.body) })
     const { status, payload } = answer()
     return { ok: status < 400, status, json: async () => payload }
@@ -232,6 +242,47 @@ describe('the dialog', () => {
  * route's org variant files the request, so the item is offered and the
  * body names the org; on a surface mounted nowhere the item is held.
  */
+/*
+ * What a plugin keeps (AGL-4042): the same `/api/person-erasure-notes` answer the
+ * Privacy card prints, asked when the dialog opens.
+ */
+describe('what the plugins keep', () => {
+  const open = () => {
+    render(<Harness hostId="h1" orgId="org1" subject={contact} requestedAtMs={null} />)
+    fireEvent.click(item())
+  }
+
+  it('asks nothing until the dialog opens', () => {
+    render(<Harness hostId="h1" orgId="org1" subject={contact} requestedAtMs={null} />)
+    expect(noteReads).toEqual([])
+  })
+
+  it('prints the kept-waivers line under its heading, for this workspace', async () => {
+    notes = () => ({
+      status: 200,
+      payload: { notes: [{ pluginId: 'waivers', text: 'Signed waivers stay as they are.' }], unavailable: [] },
+    })
+    open()
+    expect(await screen.findByText('Signed waivers stay as they are.')).toBeTruthy()
+    expect(screen.getByText(PERSON_ERASURE_NOTES_HEADING)).toBeTruthy()
+    expect(noteReads).toEqual(['/api/person-erasure-notes?orgId=org1'])
+  })
+
+  it('prints no heading when nothing is kept, and holds no confirm back', async () => {
+    open()
+    await waitFor(() => expect(noteReads).toHaveLength(1))
+    expect(screen.queryByText(PERSON_ERASURE_NOTES_HEADING)).toBeNull()
+    expect(screen.queryByText(PERSON_ERASURE_NOTES_UNAVAILABLE)).toBeNull()
+  })
+
+  it('says details are missing when a plugin could not answer, never that nothing is kept', async () => {
+    notes = () => ({ status: 500, payload: {} })
+    open()
+    expect(await screen.findByText(PERSON_ERASURE_NOTES_UNAVAILABLE)).toBeTruthy()
+    expect(screen.queryByText(PERSON_ERASURE_NOTES_HEADING)).toBeNull()
+  })
+})
+
 describe('a contact no site captured', () => {
   const orgMount = ({ children }: { children: React.ReactNode }) => (
     <CrmOrgMountProvider

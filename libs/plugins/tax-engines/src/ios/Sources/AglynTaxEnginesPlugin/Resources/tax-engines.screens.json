@@ -23,6 +23,13 @@
       "blocks": [
         {
           "type": "notice",
+          "id": "keyRefusal",
+          "tone": "info",
+          "when": "!site.can[taxEngines.manage]",
+          "text": "{app.permissionRefusal[taxEngines.manage]}. You can read what is set here."
+        },
+        {
+          "type": "notice",
           "id": "unavailable",
           "tone": "info",
           "when": "!data.conn.available",
@@ -96,7 +103,8 @@
               "companyCode": "{form.companyCode}",
               "secret": "{form.secret}"
             },
-            "success": "{response.detail}"
+            "success": "{response.detail}",
+            "disabledWhen": "!site.can[taxEngines.manage]"
           }
         },
         {
@@ -172,7 +180,8 @@
               "body": {
                 "hostId": "{site.id}"
               },
-              "success": "{response.detail}"
+              "success": "{response.detail}",
+              "when": "site.can[taxEngines.manage]"
             },
             {
               "id": "disconnect",
@@ -184,7 +193,8 @@
               "body": {
                 "hostId": "{site.id}"
               },
-              "success": "Disconnected"
+              "success": "Disconnected",
+              "when": "site.can[taxEngines.manage]"
             }
           ]
         },
@@ -241,7 +251,8 @@
                 "country": "{form.country}"
               }
             },
-            "success": "Ship-from address saved"
+            "success": "Ship-from address saved",
+            "disabledWhen": "!site.can[taxEngines.manage]"
           }
         },
         {
@@ -266,7 +277,8 @@
               "hostId": "{site.id}",
               "defaultTaxCode": "{form.defaultTaxCode:upper}"
             },
-            "success": "Default tax code saved"
+            "success": "Default tax code saved",
+            "disabledWhen": "!site.can[taxEngines.manage]"
           }
         },
         {
@@ -289,7 +301,8 @@
               "hostId": "{site.id}",
               "recordTransactions": "{form.recordTransactions}"
             },
-            "success": "Saved"
+            "success": "Saved",
+            "disabledWhen": "!site.can[taxEngines.manage]"
           }
         },
         {
@@ -319,7 +332,8 @@
                 "hostId": "{site.id}",
                 "id": "{item.id}"
               },
-              "success": "Removed"
+              "success": "Removed",
+              "when": "site.can[taxEngines.exemptions]"
             }
           ],
           "empty": "No customers are marked tax exempt."
@@ -391,7 +405,8 @@
                 "type": "{form.type}",
                 "certificateNumber": "{form.certificateNumber}"
               },
-              "success": "Added {form.email}"
+              "success": "Added {form.email}",
+              "when": "site.can[taxEngines.exemptions]"
             }
           ]
         }

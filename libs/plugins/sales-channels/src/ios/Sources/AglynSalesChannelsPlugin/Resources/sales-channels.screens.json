@@ -106,6 +106,13 @@
       "blocks": [
         {
           "type": "notice",
+          "id": "keyRefusal",
+          "tone": "info",
+          "when": "!site.can[salesChannels.feeds]",
+          "text": "{app.permissionRefusal[salesChannels.feeds]}. You can read what is set here."
+        },
+        {
+          "type": "notice",
           "id": "notSelling",
           "tone": "info",
           "when": "!data.state.sells",
@@ -191,7 +198,8 @@
                 "defaultGoogleCategory": "{form.defaultGoogleCategory}"
               }
             },
-            "success": "Defaults saved"
+            "success": "Defaults saved",
+            "disabledWhen": "!site.can[salesChannels.settings]"
           }
         },
         {
@@ -231,7 +239,8 @@
                 "channel": "{item.id}",
                 "enabled": true
               },
-              "success": "{item.label} feed is on"
+              "success": "{item.label} feed is on",
+              "when": "site.can[salesChannels.feeds]"
             },
             "off": {
               "label": "Turn off",
@@ -241,7 +250,8 @@
                 "channel": "{item.id}",
                 "enabled": false
               },
-              "success": "{item.label} feed is off"
+              "success": "{item.label} feed is off",
+              "when": "site.can[salesChannels.feeds]"
             }
           },
           "open": {
@@ -352,6 +362,13 @@
       "blocks": [
         {
           "type": "notice",
+          "id": "keyRefusal",
+          "tone": "info",
+          "when": "!site.can[salesChannels.connect]",
+          "text": "{app.permissionRefusal[salesChannels.connect]}. You can read what is set here."
+        },
+        {
+          "type": "notice",
           "id": "reach",
           "tone": "info",
           "text": "{const.channels[id=params.channel].reach}"
@@ -416,7 +433,7 @@
               "id": "on",
               "label": "Turn feed on",
               "icon": "power|power_settings_new",
-              "when": "!data.state.channels[id=params.channel].enabled && data.state.sells",
+              "when": "site.can[salesChannels.feeds] && !data.state.channels[id=params.channel].enabled && data.state.sells",
               "url": "/api/sales-channels/channel",
               "body": {
                 "hostId": "{site.id}",
@@ -437,7 +454,7 @@
               "id": "rotate",
               "label": "Replace address",
               "icon": "arrow.triangle.2.circlepath|autorenew",
-              "when": "data.state.channels[id=params.channel].enabled && data.state.channels[id=params.channel].url",
+              "when": "site.can[salesChannels.replaceAddress] && data.state.channels[id=params.channel].enabled && data.state.channels[id=params.channel].url",
               "confirm": "The current address stops working at once, and {const.channels[id=params.channel].label} stops receiving updates until you paste the new one.",
               "url": "/api/sales-channels/rotate",
               "body": {
@@ -451,7 +468,7 @@
               "label": "Turn feed off",
               "icon": "power|power_off",
               "destructive": true,
-              "when": "data.state.channels[id=params.channel].enabled",
+              "when": "site.can[salesChannels.feeds] && data.state.channels[id=params.channel].enabled",
               "url": "/api/sales-channels/channel",
               "body": {
                 "hostId": "{site.id}",
@@ -499,7 +516,8 @@
               "body": {
                 "hostId": "{site.id}"
               },
-              "success": "Earlier address turned off"
+              "success": "Earlier address turned off",
+              "when": "site.can[salesChannels.replaceAddress]"
             }
           ]
         },
@@ -636,7 +654,7 @@
               "id": "connect",
               "label": "Connect {const.channels[id=params.channel].service}",
               "icon": "link|link",
-              "when": "!data.state.connect.providers[provider=params.channel].connection",
+              "when": "site.can[salesChannels.connect] && !data.state.connect.providers[provider=params.channel].connection",
               "url": "/api/sales-channels/connect/start",
               "body": {
                 "hostId": "{site.id}",
@@ -650,7 +668,7 @@
               "id": "target",
               "label": "Choose {const.channels[id=params.channel].target}",
               "icon": "building.2|account_balance",
-              "when": "data.state.connect.providers[provider=params.channel].connection && data.state.connect.providers[provider=params.channel].connection.targets",
+              "when": "site.can[salesChannels.connect] && data.state.connect.providers[provider=params.channel].connection && data.state.connect.providers[provider=params.channel].connection.targets",
               "url": "/api/sales-channels/connect/select",
               "prompt": [
                 {
@@ -678,7 +696,7 @@
               "id": "syncNow",
               "label": "Sync now",
               "icon": "arrow.triangle.2.circlepath|sync",
-              "when": "data.state.connect.providers[provider=params.channel].connection && data.state.connect.providers[provider=params.channel].connection.targetId",
+              "when": "site.can[salesChannels.sync] && data.state.connect.providers[provider=params.channel].connection && data.state.connect.providers[provider=params.channel].connection.targetId",
               "url": "/api/sales-channels/sync",
               "body": {
                 "hostId": "{site.id}",
@@ -690,7 +708,7 @@
               "id": "reconnect",
               "label": "Reconnect",
               "icon": "link|link",
-              "when": "data.state.connect.providers[provider=params.channel].connection.tokenExpiresAtMs < @now.ms+7d",
+              "when": "site.can[salesChannels.connect] && data.state.connect.providers[provider=params.channel].connection.tokenExpiresAtMs < @now.ms+7d",
               "url": "/api/sales-channels/connect/start",
               "body": {
                 "hostId": "{site.id}",
@@ -705,7 +723,7 @@
               "label": "Disconnect",
               "icon": "xmark.circle|link_off",
               "destructive": true,
-              "when": "data.state.connect.providers[provider=params.channel].connection",
+              "when": "site.can[salesChannels.connect] && data.state.connect.providers[provider=params.channel].connection",
               "confirm": "Disconnect {const.channels[id=params.channel].service}? Products already sent stay there until you remove them. The feed address keeps working.",
               "url": "/api/sales-channels/connect/disconnect",
               "body": {

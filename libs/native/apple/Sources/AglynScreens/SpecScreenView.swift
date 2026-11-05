@@ -55,7 +55,7 @@ public struct SpecScreenView: View {
           message: spec.scope == "staff"
             ? "This page is for Aglyn staff."
             : ScreenValues.requiredKey(spec.requires).map { permissionRefusalText(ContractValues.shared.orgRoleGrants, key: $0) }
-              ?? "Ask an owner or admin of this workspace for access.")
+              ?? "Your role does not include this permission — ask an organization admin.")
       } else if let model {
         if !embedded, splitBlock != nil {
           WideLayoutReader { wide in

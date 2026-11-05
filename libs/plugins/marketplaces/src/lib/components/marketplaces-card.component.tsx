@@ -165,7 +165,12 @@ export function MarketplacesCard(props: MarketplacesCardProps) {
 
   if (viewRefused) {
     return (
-      <CardDisplay header="Online marketplaces" contentGutterX contentGutterY>
+      <CardDisplay
+        header="Online marketplaces"
+        help={help('Connect your own seller account and sell from one stock count.', '#connect-a-marketplace')}
+        contentGutterX
+        contentGutterY
+      >
         <Typography variant="body2" color="text.secondary">
           {permissionRefusalText('marketplaces.view')}
         </Typography>

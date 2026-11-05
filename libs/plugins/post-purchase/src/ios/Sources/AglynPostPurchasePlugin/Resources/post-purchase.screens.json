@@ -26,6 +26,13 @@
       "blocks": [
         {
           "type": "notice",
+          "id": "keyRefusal",
+          "tone": "info",
+          "when": "!site.can[postPurchase.manage]",
+          "text": "{app.permissionRefusal[postPurchase.manage]}. You can read what is set here."
+        },
+        {
+          "type": "notice",
           "id": "unavailable",
           "tone": "info",
           "when": "!data.settings.vendors",
@@ -117,7 +124,8 @@
                 "enabled": "{form.enabled}"
               }
             },
-            "success": "AfterShip saved"
+            "success": "AfterShip saved",
+            "disabledWhen": "!site.can[postPurchase.manage]"
           }
         },
         {
@@ -139,7 +147,8 @@
                   "disconnect": true
                 }
               },
-              "success": "AfterShip disconnected"
+              "success": "AfterShip disconnected",
+              "when": "site.can[postPurchase.manage]"
             }
           ]
         },
@@ -216,7 +225,8 @@
                 "enabled": "{form.enabled}"
               }
             },
-            "success": "Route saved"
+            "success": "Route saved",
+            "disabledWhen": "!site.can[postPurchase.manage]"
           }
         },
         {
@@ -238,7 +248,8 @@
                   "disconnect": true
                 }
               },
-              "success": "Route disconnected"
+              "success": "Route disconnected",
+              "when": "site.can[postPurchase.manage]"
             }
           ]
         },
@@ -322,7 +333,8 @@
                 "enabled": "{form.enabled}"
               }
             },
-            "success": "Narvar saved"
+            "success": "Narvar saved",
+            "disabledWhen": "!site.can[postPurchase.manage]"
           }
         },
         {
@@ -344,7 +356,8 @@
                   "disconnect": true
                 }
               },
-              "success": "Narvar disconnected"
+              "success": "Narvar disconnected",
+              "when": "site.can[postPurchase.manage]"
             }
           ]
         }

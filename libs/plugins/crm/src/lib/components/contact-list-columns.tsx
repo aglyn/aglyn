@@ -196,7 +196,6 @@ export function contactListColumns(
             headerName: 'Known by',
             flex: 1.1,
             minWidth: 200,
-            sortable: false,
             filterable: false,
             valueGetter: (_value: unknown, row: ContactRecord) =>
               row.capturedByHostIds.map(siteName).join(', '),
@@ -263,7 +262,6 @@ export function contactListColumns(
       flex: 1,
       minWidth: 150,
       ...listFilterColumn(CONTACT_LIST_FILTER_FIELDS, 'tags'),
-      sortable: false,
       valueGetter: (_value, row: ContactRecord) => (row.tags ?? []).join(', '),
       renderCell: ({ row }: { row: ContactRecord }) =>
         (row.tags ?? []).slice(0, 3).join(', '),

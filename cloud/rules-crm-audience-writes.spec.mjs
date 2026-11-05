@@ -37,6 +37,11 @@
  *     reach, the scope, the CRM suite, and each collection's field limits.
  *   - no client update changes where a deal stands, or a contact's stage:
  *     those are the routes', which ask "Move contacts and deals between stages".
+ *   - no client creates a deal already won or lost: closing is the same route's.
+ *   - a colleague's personal email template asks "Change colleagues' email
+ *     templates" over the whole workspace on top of "Manage data": every role's
+ *     by default, so those two already decided it and still do until a custom
+ *     role or an override refuses the key.
  *
  *   npx firebase emulators:start --only firestore --project aglyn-main
  *   node cloud/rules-crm-audience-writes.spec.mjs
@@ -126,6 +131,21 @@ const MEMBERS = {
   },
   // Every key held, and still stopped by something that is not the role.
   suspended: { role: 'owner', allHosts: true, orgSuspended: true },
+  // "Change colleagues' email templates" decided, one way and the other.
+  adminRefusedTemplates: {
+    role: 'admin',
+    allHosts: true,
+    roleId: 'no-templates',
+    resolvedPermissions: { 'data.manage': true, 'crm.colleagueTemplates': false },
+  },
+  editorOverrideRefusedTemplates: { role: 'editor', allHosts: true, permissions: { 'crm.colleagueTemplates': false } },
+  collabGrantedTemplates: {
+    role: 'editor',
+    allHosts: false,
+    hostAccess: { [HOST]: 'editor' },
+    scopeTokens: COLLABORATOR_TOKENS,
+    resolvedPermissions: { 'data.manage': true, 'crm.colleagueTemplates': true },
+  },
 }
 
 /** The verdicts: [name, holds "Manage data", holds "Run email campaigns", org-wide, why]. */
@@ -155,13 +175,14 @@ const uidOf = (name) => `uid-ca-${name}`
 
 const [emulatorHost, emulatorPort] = (process.env.FIRESTORE_EMULATOR_HOST || '127.0.0.1:8082').split(':')
 
+// The comment-stripped artifact is what deploys (AGL-3544).
+const RULES = readFileSync('cloud/firebase-firestore.deploy.rules', 'utf8')
 const env = await initializeTestEnvironment({
   projectId: 'aglyn-main',
   firestore: {
     host: emulatorHost,
     port: Number(emulatorPort),
-    // The comment-stripped artifact is what deploys (AGL-3544).
-    rules: readFileSync('cloud/firebase-firestore.deploy.rules', 'utf8'),
+    rules: RULES,
   },
 })
 
@@ -472,12 +493,32 @@ for (const [name, who] of STAGE_WRITERS) {
   await allow(`${who} still creates a deal in its first stage`, () =>
     creates(name, 'deals', { ...DEAL_IN_A_STAGE, title: 'New', visibleTo: [scope] }),
   )
+  // Closing is the route's, on a create too: its stamps and its events travel with it.
+  await deny(`${who} cannot create a deal already won`, () =>
+    creates(name, 'deals', { ...DEAL_IN_A_STAGE, title: 'New', visibleTo: [scope], status: 'won' }),
+  )
+  await deny(`${who} cannot create a deal already lost`, () =>
+    creates(name, 'deals', {
+      ...DEAL_IN_A_STAGE,
+      title: 'New',
+      visibleTo: [scope],
+      status: 'lost',
+      lostReason: 'Went elsewhere',
+    }),
+  )
 }
 await deny('a member without "Manage data" cannot move a deal either', () =>
   updateDoc(ref('viewer', 'deals', 'deal-staged'), { stageId: 'negotiation' }),
 )
 await deny('a member a custom role refuses "Manage data" cannot edit a deal in a stage', () =>
   updateDoc(ref('editorRefusedData', 'deals', 'deal-staged'), { title: 'Refused' }),
+)
+await allow('staff keep their support create of a closed deal', () =>
+  setDoc(doc(as('uid-ca-staff', { staff: true }), 'orgs', ORG, 'deals', 'staff-closed'), {
+    ...DEAL_IN_A_STAGE,
+    visibleTo: [ORG_TOKEN],
+    status: 'won',
+  }),
 )
 await allow('staff keep their support write to a deal', () =>
   updateDoc(doc(as('uid-ca-staff', { staff: true }), 'orgs', ORG, 'deals', 'deal-staged'), { stageId: 'qualification', notes: 'Support' }),
@@ -488,6 +529,95 @@ for (const [name, who] of STAGE_WRITERS) {
   await deny(`${who} cannot write a contact's lifecycle stage`, () =>
     updateDoc(ref(name, 'contacts', 'contact-site'), { 'facets.group-site.lifecycleStage': 'customer' }),
   )
+}
+
+/*
+ * A COLLEAGUE'S PERSONAL EMAIL TEMPLATE. Every member who could tidy one before the
+ * key existed still can, row by row: the verdict is the row's "Manage data" and its
+ * reach, and only a refusal of the key itself takes it away.
+ */
+const TEMPLATE_AUTHOR = 'uid-ca-template-author'
+const TEMPLATE = {
+  name: 'Follow-up',
+  subject: 'Hello',
+  body: 'Still keen?',
+  kind: 'template',
+  hostId: HOST,
+  visibleTo: [SITE_TOKEN],
+  createdByUid: TEMPLATE_AUTHOR,
+  createdAtMs: 1,
+  updatedAtMs: 1,
+}
+const PERSONAL_TEMPLATE = { ...TEMPLATE, visibility: 'personal', ownerUid: TEMPLATE_AUTHOR }
+const SHARED_TEMPLATE = { ...TEMPLATE, visibility: 'shared' }
+const seedTemplate = (db, id, fields) => {
+  seeded.push(['orgs', ORG, 'crmEmailTemplates', id])
+  return setDoc(doc(db, 'orgs', ORG, 'crmEmailTemplates', id), fields)
+}
+const TEMPLATE_ROWS = [
+  ...ROWS.map(([name, data, , orgWide, who]) => [name, data && orgWide, who]),
+  ['adminRefusedTemplates', false, 'an admin a custom role refuses the key'],
+  ['editorOverrideRefusedTemplates', false, 'an editor never stamped, whose own override refuses the key'],
+  ['collabGrantedTemplates', false, 'a site collaborator granted the key, whose reach is still one site'],
+]
+await env.withSecurityRulesDisabled(async (context) => {
+  const db = context.firestore()
+  for (const [name] of TEMPLATE_ROWS) {
+    await seedTemplate(db, `personal-${name}`, PERSONAL_TEMPLATE)
+    await seedTemplate(db, `delete-${name}`, PERSONAL_TEMPLATE)
+  }
+  await seedTemplate(db, 'shared-site', SHARED_TEMPLATE)
+})
+for (const [name, tidies, who] of TEMPLATE_ROWS) {
+  await expectThat(tidies, `${who} ${tidies ? 'may' : 'may not'} change a colleague's personal template`, () =>
+    updateDoc(ref(name, 'crmEmailTemplates', `personal-${name}`), { name: 'Tidied' }),
+  )
+  await expectThat(tidies, `${who} ${tidies ? 'may' : 'may not'} delete a colleague's personal template`, () =>
+    deleteDoc(ref(name, 'crmEmailTemplates', `delete-${name}`)),
+  )
+}
+// Refused the key, an admin is left what any member of the site has.
+await allow('an admin refused the key still changes a shared template', () =>
+  updateDoc(ref('adminRefusedTemplates', 'crmEmailTemplates', 'shared-site'), { body: 'Still there?' }),
+)
+await deny('an admin refused the key cannot re-file a shared template', () =>
+  updateDoc(ref('adminRefusedTemplates', 'crmEmailTemplates', 'shared-site'), { visibleTo: [ORG_TOKEN] }),
+)
+await allow('an admin holding the key can', () =>
+  updateDoc(ref('admin', 'crmEmailTemplates', 'shared-site'), { visibleTo: [ORG_TOKEN] }),
+)
+
+/*
+ * NEGATIVE CONTROL. The same artifact without the two clauses this lane added: what
+ * refused the rows above was those clauses and nothing else. Each replacement is
+ * asserted to have matched, so a rename cannot turn this into nothing.
+ */
+{
+  let open = RULES
+  const take = (needle, replacement) => {
+    if (!open.includes(needle)) throw new Error(`The negative control no longer matches ${needle}`)
+    open = open.replace(needle, replacement)
+  }
+  take("memberKeyOrOverride('crm.colleagueTemplates', ['owner', 'admin', 'editor', 'viewer'])", 'true')
+  take("request.resource.data.get('status', 'open') == 'open'", 'true')
+  const controlEnv = await initializeTestEnvironment({
+    projectId: 'aglyn-crm-audience-control',
+    firestore: { host: emulatorHost, port: Number(emulatorPort), rules: open },
+  })
+  await controlEnv.withSecurityRulesDisabled(async (context) => {
+    const db = context.firestore()
+    await setDoc(doc(db, 'orgs', ORG), { name: 'CRM audience keys', slug: 'crm-audience-keys', plan: 'agency' })
+    await setDoc(doc(db, 'orgs', ORG, 'members', uidOf('adminRefusedTemplates')), MEMBERS.adminRefusedTemplates)
+    await setDoc(doc(db, 'orgs', ORG, 'crmEmailTemplates', 'personal'), PERSONAL_TEMPLATE)
+  })
+  const db = controlEnv.authenticatedContext(uidOf('adminRefusedTemplates'), { email_verified: true }).firestore()
+  await allow('control: without the clause, an admin refused the key changes a colleague\'s template', () =>
+    updateDoc(doc(db, 'orgs', ORG, 'crmEmailTemplates', 'personal'), { name: 'Tidied' }),
+  )
+  await allow('control: without the clause, a client creates a deal already won', () =>
+    setDoc(doc(db, 'orgs', ORG, 'deals', 'won'), { ...DEAL_IN_A_STAGE, visibleTo: [ORG_TOKEN], status: 'won' }),
+  )
+  await controlEnv.cleanup()
 }
 
 // Remove ONLY what this spec seeded.

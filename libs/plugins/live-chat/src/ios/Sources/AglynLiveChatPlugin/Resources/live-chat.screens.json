@@ -23,7 +23,7 @@
           "id": "admin",
           "tone": "info",
           "when": "!data.cfg.canManage",
-          "text": "Live chat is set up by a site admin."
+          "text": "Setting up live chat takes the \"Manage site settings\" permission, which site admins hold by default."
         },
         {
           "type": "fields",

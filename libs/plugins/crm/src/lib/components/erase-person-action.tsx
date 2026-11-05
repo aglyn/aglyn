@@ -18,6 +18,8 @@
 
 import {
   PERSON_ERASURE_NOT_REACHED,
+  PERSON_ERASURE_NOTES_HEADING,
+  PERSON_ERASURE_NOTES_UNAVAILABLE,
   PERSON_ERASURE_REMOVES,
   PERSON_ERASURE_RETAINS,
   personErasureConfirmationMatches,
@@ -26,6 +28,8 @@ import { mdiAccountOffOutline } from '@aglyn/shared-data-mdi'
 import { MdiIcon } from '@aglyn/shared-ui-jsx'
 import type { RowActionsMenuItem } from '@aglyn/shared-ui-jsx/components/row-actions-menu.component'
 import { useSnackbar } from '@aglyn/shared-ui-snackstack'
+import { useUser } from '@aglyn/tenant-feature-instance'
+import { usePersonErasureNotes } from '@aglyn/tenant-feature-instance/hooks/use-person-erasure-notes'
 import {
   Alert,
   Button,
@@ -146,6 +150,7 @@ export function useErasePersonAction(props: UseErasePersonActionProps): ErasePer
       open={open}
       onClose={() => setOpen(false)}
       hostId={hostId}
+      orgId={orgId}
       subject={subject}
       onFiled={(atMs) => setFiledAtMs(atMs)}
     />
@@ -182,6 +187,8 @@ export interface ErasePersonDialogProps {
   onClose: () => void
   /** The site the request is filed from, or `null` beneath the org hub's mount. */
   hostId: string | null
+  /** The workspace whose plugins answer what an erasure keeps. */
+  orgId: string | null | undefined
   subject: ErasePersonSubject
   /** Called with the request's queue time once the route has filed it. */
   onFiled: (pendingSinceMs: number) => void
@@ -193,9 +200,14 @@ export interface ErasePersonDialogProps {
  * — the address is closed to capture at once, and the sweep runs with the
  * nightly job. The admin types the address back; the route checks the same
  * match before it files anything.
+ *
+ * What a plugin keeps (a signed waiver, AGL-4042) is asked when the dialog
+ * opens, not with every record page, and never holds the confirm back.
  */
 export function ErasePersonDialog(props: ErasePersonDialogProps) {
-  const { open, onClose, hostId, subject, onFiled } = props
+  const { open, onClose, hostId, orgId, subject, onFiled } = props
+  const { data: user } = useUser()
+  const erasureNotes = usePersonErasureNotes(user, open ? orgId : null)
   const call = useCrmApi(hostId)
   const { enqueueSnackbar } = useSnackbar()
   const [typed, setTyped] = useState('')
@@ -247,7 +259,13 @@ export function ErasePersonDialog(props: ErasePersonDialogProps) {
         <Stack spacing={2}>
           <ListBlock heading="Removed across the workspace" lines={PERSON_ERASURE_REMOVES} />
           <ListBlock heading="Kept, with the person taken off" lines={PERSON_ERASURE_RETAINS} />
+          {erasureNotes.lines.length ? (
+            <ListBlock heading={PERSON_ERASURE_NOTES_HEADING} lines={erasureNotes.lines} />
+          ) : null}
           <ListBlock heading="Not reached — finish these by hand" lines={PERSON_ERASURE_NOT_REACHED} />
+          {erasureNotes.unavailable ? (
+            <Alert severity="info">{PERSON_ERASURE_NOTES_UNAVAILABLE}</Alert>
+          ) : null}
           <TextField
             label="Type the email address to confirm"
             value={typed}
