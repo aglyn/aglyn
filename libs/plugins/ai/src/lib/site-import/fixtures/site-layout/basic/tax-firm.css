@@ -1,0 +1,5 @@
+body{background-color:#ffffff;color:#1f2430;font-family:"Libre Baskerville",serif}
+.band.plain{background-color:#ffffff;padding:48px 24px}
+.action{padding:12px 28px;border-radius:999px}
+.action.ghost{border:1px solid #dbb024;color:#dbb024;background-color:transparent}
+a{color:#dbb024}

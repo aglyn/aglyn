@@ -46,14 +46,17 @@ import {
 import { useCallback, useEffect, useState, type ReactNode } from 'react'
 import type { AiJobSummary } from '../model/ai-jobs.types'
 import {
+  aiSiteImportPlanAwaits,
   aiSiteImportReviewWave,
   aiSiteImportRunningWave,
   aiSiteImportWaveChoice,
   type AiSiteImportChoice,
+  type AiSiteImportPlanChoice,
   type AiSiteImportWave,
 } from '../model/ai-site-import'
 import {
   AI_SITE_IMPORT_FINISH_COPY,
+  AI_SITE_IMPORT_PLAN_COPY_TEXT,
   aiSiteImportChoiceText,
   aiSiteImportFieldChoice,
   aiSiteImportFinishFieldOf,
@@ -61,6 +64,9 @@ import {
   aiSiteImportHeldCopy,
   aiSiteImportLeftOutLines,
   aiSiteImportPhaseOf,
+  aiSiteImportPlanFellBackText,
+  aiSiteImportPlanFieldOf,
+  aiSiteImportPlanQuote,
   aiSiteImportPlanText,
   aiSiteImportRunningLede,
   aiSiteImportStartAction,
@@ -78,6 +84,7 @@ import {
 import { AiJobCancelButton } from './ai-job-cancel.component'
 import { aiCreditsBillingHref, aiJobOutputHref } from './ai-job-links'
 import { AiSiteImportFinish } from './ai-site-import-finish.component'
+import { AiSiteImportPlanPanel, AiSiteImportWhatsNewList } from './ai-site-import-plan.component'
 import { AI_SITE_IMPORT_HELP } from './ai-site-import-start.component'
 import { AiSiteOwnershipProof, postAiSiteOwnership } from './ai-site-ownership-proof.component'
 
@@ -126,27 +133,39 @@ function WaveRows({ job, wave, orgSlug }: { job: AiJobSummary; wave: AiSiteImpor
                 <Typography variant="body2" color="text.secondary" sx={{ overflowWrap: 'anywhere' }}>
                   {`${row.from} → ${row.to}`}
                 </Typography>
-                <Button
-                  size="small"
-                  component="a"
-                  href={row.oldPage}
-                  target="_blank"
-                  rel="noopener noreferrer"
-                  endIcon={<MdiIcon path={mdiOpenInNew.path} aria-hidden />}
-                  aria-label={`Old page: ${row.from}, opens in a new tab`}
-                  sx={{ minWidth: 0, py: 0 }}
-                >
-                  {'Old page'}
-                </Button>
+                {row.isNew ? null : (
+                  <Button
+                    size="small"
+                    component="a"
+                    href={row.oldPage}
+                    target="_blank"
+                    rel="noopener noreferrer"
+                    endIcon={<MdiIcon path={mdiOpenInNew.path} aria-hidden />}
+                    aria-label={`Old page: ${row.from}, opens in a new tab`}
+                    sx={{ minWidth: 0, py: 0 }}
+                  >
+                    {'Old page'}
+                  </Button>
+                )}
               </Stack>
               {row.build || row.words ? (
                 <Typography variant="body2" color="text.secondary">
                   {[row.build, row.words].filter(Boolean).join(' · ')}
                 </Typography>
               ) : null}
+              {row.added ? (
+                <Typography variant="body2" color="text.secondary">
+                  {row.added}
+                </Typography>
+              ) : null}
               {row.photos ? (
                 <Typography variant="body2" color="text.secondary">
                   {row.photos}
+                </Typography>
+              ) : null}
+              {row.pictures ? (
+                <Typography variant="body2" color="text.secondary">
+                  {row.pictures}
                 </Typography>
               ) : null}
               {row.note && row.state !== 'done' ? (
@@ -200,9 +219,10 @@ export interface AiSiteImportJobProps {
   notice: string | null
   /**
    * Starts the next wave, or reads the site again: the resume door. A wave
-   * that has not started carries how it is to be built (AGL-4152).
+   * that has not started carries how it is to be built, and a plan the owner's
+   * answer to it (AGL-4152).
    */
-  onResume: (choice?: AiSiteImportChoice) => void
+  onResume: (choice?: AiSiteImportChoice, plan?: AiSiteImportPlanChoice) => void
   /**
    * Starts every remaining wave with no review between them (AGL-4083). The
    * button is drawn only where the page can start them this way.
@@ -226,7 +246,9 @@ export function AiSiteImportJob({ job, orgId, orgSlug, host, siteName, user, bus
   const phase = aiSiteImportPhaseOf(job)
   const state = job.siteImport ?? null
   const start = aiSiteImportStartAction(job)
-  const startAll = onStartAll ? aiSiteImportStartAllAction(job) : null
+  // The plan's review (AGL-4152): what it shows and what its owner switches, before anything is built.
+  const planWaits = aiSiteImportPlanAwaits(state)
+  const startAll = onStartAll && !planWaits ? aiSiteImportStartAllAction(job) : null
   // Keep my site or Improve it (AGL-4152), changeable while the next wave has not started.
   const choosable = start?.wave.status === 'waiting'
   const [field, setField] = useState<AiSiteImportFinishField>(() => aiSiteImportFinishFieldOf(state))
@@ -238,6 +260,9 @@ export function AiSiteImportJob({ job, orgId, orgSlug, host, siteName, user, bus
     if (!choosing) setField(aiSiteImportFinishFieldOf({ finish: storedFinish, wording: storedWording }))
   }, [storedFinish, storedWording, choosing])
   const choice = choosable ? aiSiteImportFieldChoice(field) : undefined
+  const generativeOffer = state?.generative === true
+  const [planField, setPlanField] = useState(() => aiSiteImportPlanFieldOf(state))
+  const planFallBack = aiSiteImportPlanFellBackText(state)
   const held = aiSiteImportHeldCopy(job)
   const pagesHref = host && orgSlug ? buildRoute(Route.HOST_SCREENS, { orgSlug, host }) : null
   const [claim, setClaim] = useState<AiSiteImportClaim | null>(null)
@@ -264,10 +289,11 @@ export function AiSiteImportJob({ job, orgId, orgSlug, host, siteName, user, bus
           wordingCredits={aiSiteImportWordingCreditsText({ job, wave: start.wave })}
           help={AI_SITE_IMPORT_HELP.finish}
           disabled={busy}
+          generative={generativeOffer}
         />
       ) : (
         <Stack direction="row" spacing={1} sx={{ alignItems: 'center', flexWrap: 'wrap' }}>
-          <Typography variant="body2">{`${AI_SITE_IMPORT_FINISH_COPY.current}: ${aiSiteImportChoiceText(aiSiteImportFieldChoice(field))}`}</Typography>
+          <Typography variant="body2">{`${AI_SITE_IMPORT_FINISH_COPY.current}: ${aiSiteImportChoiceText(aiSiteImportFieldChoice(field), generativeOffer ? { generative: true } : {})}`}</Typography>
           <Button size="small" disabled={busy} onClick={() => setChoosing(true)} aria-label={`${AI_SITE_IMPORT_FINISH_COPY.change} how your new site looks`}>
             {AI_SITE_IMPORT_FINISH_COPY.change}
           </Button>
@@ -279,8 +305,8 @@ export function AiSiteImportJob({ job, orgId, orgSlug, host, siteName, user, bus
       {finishChoice}
       <Stack direction={{ xs: 'column', sm: 'row' }} spacing={1.5} sx={{ alignItems: { sm: 'center' } }}>
         <Box>
-          <Button variant="contained" size="large" disabled={busy} onClick={() => onResume(choice)}>
-            {busy ? 'Starting…' : start.label}
+          <Button variant="contained" size="large" disabled={busy} onClick={() => (planWaits ? onResume(undefined, planField) : onResume(choice))}>
+            {busy ? 'Starting…' : planWaits ? AI_SITE_IMPORT_PLAN_COPY_TEXT.build : start.label}
           </Button>
         </Box>
         {startAll && onStartAll ? (
@@ -293,7 +319,7 @@ export function AiSiteImportJob({ job, orgId, orgSlug, host, siteName, user, bus
       </Stack>
       <Stack direction="row" spacing={0.5} sx={{ alignItems: 'center' }}>
         <Typography variant="body2" color="text.secondary">
-          {`${start.quote}, from your AI credits. Its pages land in your site’s preview, or as drafts where the site is not in preview.`}
+          {`${(planWaits ? aiSiteImportPlanQuote(job, planField) : null) ?? start.quote}, from your AI credits. Its pages land in your site’s preview, or as drafts where the site is not in preview.`}
         </Typography>
         <HelpTip {...AI_SITE_IMPORT_HELP.waves} ariaLabel="How waves work" />
       </Stack>
@@ -373,6 +399,26 @@ export function AiSiteImportJob({ job, orgId, orgSlug, host, siteName, user, bus
     )
   }
 
+  // A plan is in, and nothing of the site is built until its owner says so (AGL-4152).
+  if (phase === 'ready' && state && planWaits) {
+    return (
+      <Frame siteName={siteName} heading="Your new site is planned" lede={job.review?.message ?? undefined}>
+        {notice && <Alert severity="warning">{notice}</Alert>}
+        <AiSiteImportPlanPanel state={state} field={planField} onChange={setPlanField} disabled={busy} />
+        {start ? (
+          <Card variant="outlined" sx={{ borderRadius: 2 }}>
+            <Typography variant="subtitle1" component="h2" sx={{ px: { xs: 2, sm: 3 }, pt: { xs: 2, sm: 3 } }}>
+              {aiSiteImportWaveHeading(state, start.wave)}
+            </Typography>
+            <WaveRows job={job} wave={start.wave} orgSlug={orgSlug} />
+          </Card>
+        ) : null}
+        {startButton}
+        {cancel}
+      </Frame>
+    )
+  }
+
   if (phase === 'ready' && state) {
     return (
       <Frame siteName={siteName} heading={aiSiteImportStoppedCopy(job) ? 'Your import is waiting for you' : 'Your site is read'} lede={job.review?.message ?? undefined}>
@@ -409,8 +455,9 @@ export function AiSiteImportJob({ job, orgId, orgSlug, host, siteName, user, bus
         siteName={siteName}
         heading={wave ? `Bringing in ${wave.label}` : 'Bringing in your site'}
         // What the wave does with each page, the way it is built (AGL-4152).
-        lede={aiSiteImportRunningLede(wave ? aiSiteImportWaveChoice(state, wave) : aiSiteImportFieldChoice(field))}
+        lede={aiSiteImportRunningLede(wave ? aiSiteImportWaveChoice(state, wave) : aiSiteImportFieldChoice(field), wave?.generative ? { generative: true } : {})}
       >
+        {planFallBack ? <Alert severity="info">{planFallBack}</Alert> : null}
         <Card variant="outlined" sx={{ borderRadius: 2 }}>
           {rows.length ? (
             <LinearProgress variant="determinate" value={Math.round((done / rows.length) * 100)} aria-label={`${done} of ${rows.length} in`} />
@@ -442,12 +489,15 @@ export function AiSiteImportJob({ job, orgId, orgSlug, host, siteName, user, bus
         }
       >
         {notice && <Alert severity="warning">{notice}</Alert>}
+        {planFallBack ? <Alert severity="info">{planFallBack}</Alert> : null}
+        {wave.generative ? <AiSiteImportPlanPanel state={state} field={planField} /> : null}
         <Card variant="outlined" sx={{ borderRadius: 2 }}>
           <Typography variant="subtitle1" component="h2" sx={{ px: { xs: 2, sm: 3 }, pt: { xs: 2, sm: 3 } }}>
             {aiSiteImportWaveHeading(state, wave)}
           </Typography>
           <WaveRows job={job} wave={wave} orgSlug={orgSlug} />
         </Card>
+        <AiSiteImportWhatsNewList state={state} wave={wave} />
         <Typography variant="body2" color="text.secondary">
           {`This wave used ${spent.toLocaleString('en-US')} AI ${spent === 1 ? 'credit' : 'credits'}.`}
         </Typography>
@@ -543,12 +593,15 @@ export function AiSiteImportJob({ job, orgId, orgSlug, host, siteName, user, bus
           </Box>
         ) : null}
         {state.waves.map((wave) => (
-          <Card key={wave.index} variant="outlined" sx={{ borderRadius: 2 }}>
-            <Typography variant="subtitle1" component="h2" sx={{ px: { xs: 2, sm: 3 }, pt: { xs: 2, sm: 3 } }}>
-              {aiSiteImportWaveHeading(state, wave)}
-            </Typography>
-            <WaveRows job={job} wave={wave} orgSlug={orgSlug} />
-          </Card>
+          <Stack key={wave.index} spacing={2}>
+            <Card variant="outlined" sx={{ borderRadius: 2 }}>
+              <Typography variant="subtitle1" component="h2" sx={{ px: { xs: 2, sm: 3 }, pt: { xs: 2, sm: 3 } }}>
+                {aiSiteImportWaveHeading(state, wave)}
+              </Typography>
+              <WaveRows job={job} wave={wave} orgSlug={orgSlug} />
+            </Card>
+            <AiSiteImportWhatsNewList state={state} wave={wave} />
+          </Stack>
         ))}
         {leftOutCard}
       </Frame>

@@ -395,6 +395,19 @@ export const FLAG_DOC_PAGES: Partial<
     },
   ],
 
+  // AGL-4152. A generative Improve it is a section of the page about Bring my
+  // site, which is itself released: the section discloses beside what it says,
+  // tied to its heading by the window.
+  release_ai_site_import_generative: [
+    {
+      path: 'docs/ai/bring-my-site.md',
+      disclosure: [
+        /### A planned, rewritten Improve it[\s\S]{0,60}\*\*A planned, rewritten Improve it is rolling out\*\*,[\s\S]{0,40}may not have it yet\./,
+      ],
+      checkNoPriceClaim: true,
+    },
+  ],
+
   // AGL-3614. The flag closes the organization's Accounting tab, and each of
   // the three guides is ABOUT connecting one ledger to it, so all take the
   // admonition, whole-file. They are also `unlisted: true` until the flag is

@@ -144,6 +144,8 @@ export interface AiLayoutFrameBrand {
   alt?: string
   /** The logo's width over its height, which the header row is measured with (AGL-4108). */
   aspect?: number
+  /** The height a redesigned header draws it at (AGL-4152); absent, `AI_LAYOUT_LOGO_HEIGHT`. */
+  height?: string
 }
 
 /** The height a header's logo is drawn at: a Besigner field the owner may change. */
@@ -315,7 +317,7 @@ export function aiCompileLayoutFrame(
   const source = plan.source ?? null
   const alt = (plan.brand?.alt ?? '').replace(/\s+/g, ' ').trim().slice(0, 120) || name.slice(0, 40)
   const brand = logo
-    ? brandMark(tree, { src: logo, srcDark: plan.brand?.logoDark?.src ?? null, name: name.slice(0, 40), alt, withName: plan.brand?.name === true, homeId: plan.homeId, centered: centeredNav, grow: !source })
+    ? brandMark(tree, { src: logo, srcDark: plan.brand?.logoDark?.src ?? null, name: name.slice(0, 40), alt, withName: plan.brand?.name === true, homeId: plan.homeId, centered: centeredNav, grow: !source, height: plan.brand?.height ?? AI_LAYOUT_LOGO_HEIGHT })
     : plan.homeId
     ? tree.add(
         'muiScreenLink',
@@ -338,7 +340,7 @@ export function aiCompileLayoutFrame(
       )
   // How wide the brand is drawn, which the row is measured with (AGL-4108).
   const aspect = plan.brand?.aspect && Number.isFinite(plan.brand.aspect) && plan.brand.aspect > 0 ? Math.min(plan.brand.aspect, 8) : null
-  const logoHeight = Number.parseInt(AI_LAYOUT_LOGO_HEIGHT, 10)
+  const logoHeight = Number.parseInt(plan.brand?.height ?? AI_LAYOUT_LOGO_HEIGHT, 10)
   const brandWidth = logo
     ? (aspect ? Math.round(aspect * logoHeight) : AI_LAYOUT_HEADER_MEASURE.logo) + (plan.brand?.name ? name.slice(0, 40).length * 11 + 12 : 0)
     : Math.min(name.length, 40) * 11
@@ -815,8 +817,10 @@ function sourceFooter(page: PageScope, source: AiLayoutFrameSource, plan: Pick<A
   const drawn = aiLayoutSourceFooter(tree, source.footer as NonNullable<AiLayoutFrameSource['footer']>, { name })
   // It opens with the logo, where the source's does (AGL-4139).
   const logo = footerLogoOf(tree, plan, name)
-  const stack = tree.add('muiStack', { spacing: '6' }, drawn.sx, [logo, drawn.top, drawn.bottom], 'footerStack')
-  const container = tree.add('muiContainer', { maxWidth: 'lg' }, { py: { xs: 6, md: 8 } }, [stack], 'footerInner')
+  // A planned footer with no columns to carry is one short band, never a tall one around its © line (AGL-4152).
+  const compact = source.planned === true && !drawn.top
+  const stack = tree.add('muiStack', { spacing: compact ? '2' : '6' }, drawn.sx, [logo, drawn.top, drawn.bottom], 'footerStack')
+  const container = tree.add('muiContainer', { maxWidth: 'lg' }, compact ? { py: { xs: 3, md: 4 } } : { py: { xs: 6, md: 8 } }, [stack], 'footerInner')
   return tree.add(
     'section',
     { element: 'footer', ariaLabel: 'Site footer' },
@@ -879,7 +883,7 @@ function logoPictures(
  */
 function brandMark(
   tree: AiLayoutTreeBuilder,
-  input: { src: string; srcDark: string | null; name: string; alt: string; withName: boolean; homeId: string | null; centered: boolean; grow: boolean },
+  input: { src: string; srcDark: string | null; name: string; alt: string; withName: boolean; homeId: string | null; centered: boolean; grow: boolean; height: string },
 ): string {
   const image = (alone: boolean, linked: boolean) =>
     logoPictures(tree, {
@@ -890,7 +894,7 @@ function brandMark(
         ...(alone ? { alt: input.alt } : { decorative: true }),
         objectFit: 'contain',
         width: 'auto',
-        height: AI_LAYOUT_LOGO_HEIGHT,
+        height: input.height,
         loading: 'eager',
         ...(linked && input.homeId ? { screenId: input.homeId } : {}),
       },

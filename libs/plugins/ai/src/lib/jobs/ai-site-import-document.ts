@@ -41,7 +41,9 @@ import {
   AI_SITE_IMPORT_MAX_SECTIONS,
   type AiSiteImportBuild,
   type AiSiteImportFinish,
+  type AiSiteImportPageRole,
   type AiSiteImportPhoto,
+  type AiSiteImportPlan,
   type AiSiteImportWords,
   type SiteImportLayout,
 } from '../model/ai-site-import'
@@ -80,6 +82,24 @@ export interface AiSiteImportDocument {
   forms?: Array<{ index: number; formId: string | null }> | null
   /** The page's videos (AGL-4140), which its layout places by index; absent on a page that shows none. */
   videos?: SiteImportVideo[]
+  /** Redesigned from its ledger (AGL-4152): its wave was stamped generative. Absent, today's Improve it. */
+  generative?: true
+  /** What the site says of itself, the same bytes on every page of an import: a redesign's cached digest (AGL-4152). */
+  siteLines?: string[]
+  /** The lines of the wave's other pages, which a redesign's facts may come from (AGL-4152). */
+  scope?: string[]
+  /** The site's plan, once a wave has one (AGL-4152). */
+  plan?: AiSiteImportPlan | null
+  /** The theme's colors as its look drew them, where one was drawn (`SiteImportFidelityTheme`, AGL-4152). */
+  theme?: Record<string, unknown> | null
+  /** The plan's proposed page (AGL-4152): new to the site, with no source to hold it to, and never kept as a fallback. */
+  proposed?: true
+  /** What the page is for in the planned site (AGL-4152), as its plan says; absent, read from its address and what it holds. */
+  role?: AiSiteImportPageRole
+  /** Source photos of the site's earlier pages that none of them placed, for a slot of this one (AGL-4152). */
+  sitePhotos?: AiSiteImportPhoto[]
+  /** A slot nothing else fills may take a generated picture: its owner said so, and it is quoted (AGL-4152). */
+  generatedPictures?: true
 }
 
 /** The most characters a text element holds (the palette's ceiling for body copy). */
@@ -208,12 +228,8 @@ export function aiSiteImportDocumentOf(inputs: Readonly<Record<string, unknown>>
   })
   const strings = (list: unknown) => (Array.isArray(list) ? list.filter((entry): entry is string => typeof entry === 'string') : [])
   const size = (value: unknown) => (typeof value === 'number' && Number.isFinite(value) && value > 0 ? Math.round(value) : 0)
-  return {
-    build,
-    title: typeof value['title'] === 'string' ? value['title'] : '',
-    url: typeof value['url'] === 'string' ? value['url'].slice(0, 2048) : '',
-    blocks,
-    photos: (Array.isArray(value['photos']) ? value['photos'] : []).flatMap((entry): AiSiteImportPhoto[] => {
+  const photosOf = (list: unknown) =>
+    (Array.isArray(list) ? list : []).flatMap((entry): AiSiteImportPhoto[] => {
       const photo = entry as Record<string, unknown> | null
       return photo && typeof photo['mediaId'] === 'string' && typeof photo['src'] === 'string'
         ? [
@@ -228,7 +244,13 @@ export function aiSiteImportDocumentOf(inputs: Readonly<Record<string, unknown>>
             },
           ]
         : []
-    }),
+    })
+  return {
+    build,
+    title: typeof value['title'] === 'string' ? value['title'] : '',
+    url: typeof value['url'] === 'string' ? value['url'].slice(0, 2048) : '',
+    blocks,
+    photos: photosOf(value['photos']),
     links: (Array.isArray(value['links']) ? value['links'] : []).flatMap((entry) => {
       const link = entry as Record<string, unknown> | null
       return link && typeof link['path'] === 'string' && typeof link['id'] === 'string' ? [{ path: link['path'], id: link['id'] }] : []
@@ -237,6 +259,14 @@ export function aiSiteImportDocumentOf(inputs: Readonly<Record<string, unknown>>
     // How the page's wave finishes it and whether its words are improved (AGL-4152); anything else is absent: kept.
     ...(value['finish'] === 'keep' || value['finish'] === 'improve' ? { finish: value['finish'] } : {}),
     ...(value['wording'] === 'kept' || value['wording'] === 'improved' ? { wording: value['wording'] } : {}),
+    ...(value['generative'] === true ? { generative: true as const } : {}),
+    ...(Array.isArray(value['siteLines']) ? { siteLines: strings(value['siteLines']) } : {}),
+    ...(Array.isArray(value['scope']) ? { scope: strings(value['scope']) } : {}),
+    ...(value['plan'] && typeof value['plan'] === 'object' ? { plan: value['plan'] as AiSiteImportPlan } : {}),
+    ...(value['theme'] && typeof value['theme'] === 'object' ? { theme: value['theme'] as Record<string, unknown> } : {}),
+    ...(value['proposed'] === true ? { proposed: true as const } : {}),
+    ...(Array.isArray(value['sitePhotos']) ? { sitePhotos: photosOf(value['sitePhotos']) } : {}),
+    ...(value['generatedPictures'] === true ? { generatedPictures: true as const } : {}),
     ...(isLayout(value['layout']) ? { layout: value['layout'] } : {}),
     ...(Array.isArray(value['videos']) ? { videos: (value['videos'] as unknown[]).map(videoOf) } : {}),
   }

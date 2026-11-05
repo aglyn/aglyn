@@ -313,3 +313,119 @@ describe('Keep my site or Improve it, before each wave (AGL-4152)', () => {
     expect(results.violations.map((violation) => `${violation.id}: ${violation.nodes.map((node) => node.html.slice(0, 120)).join(' | ')}`)).toEqual([])
   })
 })
+
+describe('Improve it, generative (AGL-4152)', () => {
+  const planned = (patch: Partial<AiSiteImportState> = {}): AiSiteImportState => {
+    const base = harbor()
+    const first = base.pages[0] as AiSiteImportState['pages'][number]
+    const about = base.pages[1] as AiSiteImportState['pages'][number]
+    const wave = { ...(base.waves[0] as AiSiteImportState['waves'][number]), status: 'running' as const, startedAt: 'x', finish: 'improve' as const, wording: true, generative: true as const, slots: [first.slot, about.slot, 'proposed'] }
+    return {
+      ...base,
+      finish: 'improve',
+      wording: true,
+      generative: true,
+      waves: [wave, ...base.waves.slice(1)],
+      pages: [
+        { ...first, wave: wave.index, build: 'arranged', wording: 'improved' },
+        { ...about, wave: wave.index, build: 'arranged', wording: 'improved' },
+        ...base.pages.slice(2),
+        { slot: 'proposed', url: 'https://harbor-dental.com/common-questions', path: '/common-questions', title: 'Common questions', group: 'main', wave: wave.index, draftId: 'd-new', slug: 'common-questions', words: 0, images: 0, origin: 'proposed', build: 'arranged', wording: 'improved' },
+      ],
+      plan: {
+        site: { what: 'A family dental practice.', audience: 'families nearby', kind: 'wellness', voice: 'warm' },
+        nav: { groups: [{ label: 'About us', pages: [about.draftId] }, { label: 'Common questions', pages: ['d-new'] }], primaryCta: { label: 'Book a visit', target: about.draftId }, footer: [{ label: 'Practice', pages: [about.draftId, 'd-new'] }] },
+        design: { hero: 'split', group: 'cards', rhythm: 'alternate', cta: 'band' },
+        proposed: { title: 'Common questions', slug: 'common-questions', purpose: 'What families ask before a first visit.', on: true, draftId: 'd-new' },
+      },
+      ...patch,
+    }
+  }
+  const rowsFor = (state: AiSiteImportState) => state.waves[0]?.slots.map((slot) => ({ slot, op: 'page', label: slot, status: 'pending' as const, attempt: 1, creditsSpent: 0, creditsRefunded: 0, outputs: [] })) ?? []
+  const shown = (state = planned()) => summary({ siteImport: state, items: rowsFor(state), review: { reason: 'wave', message: 'Your new site is planned. Check its menu and its new page, then build it.', findings: [] } })
+
+  it('shows Your new site before anything is built, and the build carries its two switches', () => {
+    const onResume = jest.fn()
+    view(shown(), onResume)
+    expect(screen.getByRole('heading', { name: 'Your new site is planned' })).toBeTruthy()
+    expect(screen.getByRole('heading', { name: 'Your new site' })).toBeTruthy()
+    expect(screen.getByText('A family dental practice. For families nearby.')).toBeTruthy()
+    expect(screen.getByText(/^Book a visit → /)).toBeTruthy()
+    expect(screen.getByRole('heading', { name: 'Footer' })).toBeTruthy()
+    const page = screen.getByRole('switch', { name: 'Add this new page: Common questions' }) as HTMLInputElement
+    const pictures = screen.getByRole('switch', { name: 'Create pictures with AI where needed' }) as HTMLInputElement
+    expect(page.checked).toBe(true)
+    // On unless its owner turns them off (AGL-4152).
+    expect(pictures.checked).toBe(true)
+    expect(screen.queryByRole('button', { name: 'Start every remaining wave' })).toBeNull()
+    fireEvent.click(page)
+    fireEvent.click(pictures)
+    fireEvent.click(screen.getByRole('button', { name: 'Build my new site' }))
+    expect(onResume).toHaveBeenCalledWith(undefined, { addPage: false, pictures: false })
+  })
+
+  it('quotes as its switches stand, before they are saved', () => {
+    view(shown())
+    const quote = () => screen.getByText(/from your AI credits/).textContent ?? ''
+    expect(quote()).toContain('3 pages redesigned by Aglyn AI')
+    fireEvent.click(screen.getByRole('switch', { name: 'Add this new page: Common questions' }))
+    expect(quote()).toContain('2 pages redesigned by Aglyn AI')
+    expect(quote()).toContain('up to 4 generated pictures')
+    fireEvent.click(screen.getByRole('switch', { name: 'Create pictures with AI where needed' }))
+    expect(quote()).not.toContain('generated pictures')
+  })
+
+  it('rows the proposed page with no old page to open', () => {
+    view(shown())
+    expect(screen.getByText('/common-questions → /common-questions')).toBeTruthy()
+    expect(screen.queryByRole('link', { name: /Old page: \/common-questions/ })).toBeNull()
+    expect(screen.getAllByText('Redesigned by Aglyn AI').length).toBeGreaterThan(0)
+  })
+
+  it('reads the plan as built once a wave is in, with What’s new, and no switches', () => {
+    const base = planned({ planAccepted: true })
+    const state: AiSiteImportState = {
+      ...base,
+      waves: base.waves.map((wave, index) => (index === 0 ? { ...wave, status: 'review', finishedAt: 'y' } : wave)),
+      pages: base.pages.map((entry, index) => (index === 1 ? { ...entry, redesign: 'redesigned', added: [{ heading: 'Why us' }, { heading: 'FAQ', items: 4 }], pictures: { source: 1, stock: 1, generated: 1, slots: 0, unplaced: [] } } : entry)),
+    }
+    view(summary({ siteImport: state, items: rowsFor(state).map((row) => ({ ...row, status: 'succeeded' as const })), review: { reason: 'wave', message: 'In.', findings: [] } }))
+    expect(screen.getByRole('heading', { name: 'Your new site' })).toBeTruthy()
+    expect(screen.queryByRole('switch')).toBeNull()
+    expect(screen.getByRole('heading', { name: 'What’s new' })).toBeTruthy()
+    expect(screen.getByText('Redesigned by Aglyn AI · 2 new sections')).toBeTruthy()
+    expect(screen.getAllByText('New: Why us, FAQ (4)').length).toBe(2)
+    expect(screen.getAllByText('1 stock photo, 1 generated picture').length).toBe(2)
+  })
+
+  it('says so where the plan did not pass, and goes on', () => {
+    const state = planned({ plan: null })
+    view(summary({ status: 'running', siteImport: state, items: rowsFor(state), review: null }))
+    expect(screen.getByText(/the plan for your new site did not pass/)).toBeTruthy()
+    expect(screen.queryByRole('heading', { name: 'Your new site' })).toBeNull()
+  })
+
+  it('names the switch for what it now does, only under the flag, and quotes the plan first', () => {
+    const base = harbor()
+    const state: AiSiteImportState = { ...base, finish: 'improve', wording: true, generative: true, pages: base.pages.map((entry, index) => (index < 2 ? { ...entry, build: 'arranged', wording: undefined } : entry)) }
+    view(summary({ siteImport: state, items: base.pages.map((entry) => ({ slot: entry.slot, op: 'page', label: entry.title, status: 'pending' as const, attempt: 1, creditsSpent: 0, creditsRefunded: 0, outputs: [] })) }))
+    expect(screen.getByText(/your site’s plan/)).toBeTruthy()
+    expect(screen.getByText('How your new site looks: Improve it, with new copy')).toBeTruthy()
+    fireEvent.click(screen.getByRole('button', { name: /how your new site looks/ }))
+    expect(screen.getByRole('switch', { name: 'Also write new copy' })).toBeTruthy()
+    expect(screen.queryByRole('switch', { name: 'Also improve my wording' })).toBeNull()
+  })
+
+  it('draws exactly today’s screens with the flag off', () => {
+    const base = harbor()
+    const state: AiSiteImportState = { ...base, finish: 'improve', wording: true }
+    view(summary({ siteImport: state, items: [] }))
+    expect(screen.queryByText(/your site’s plan/)).toBeNull()
+    expect(screen.queryByRole('heading', { name: 'Your new site' })).toBeNull()
+    expect(screen.queryByRole('heading', { name: 'What’s new' })).toBeNull()
+    expect(screen.getByText('How your new site looks: Improve it, and my wording')).toBeTruthy()
+    fireEvent.click(screen.getByRole('button', { name: /how your new site looks/ }))
+    expect(screen.getByRole('switch', { name: 'Also improve my wording' })).toBeTruthy()
+    expect(screen.queryByRole('switch', { name: 'Also write new copy' })).toBeNull()
+  })
+})

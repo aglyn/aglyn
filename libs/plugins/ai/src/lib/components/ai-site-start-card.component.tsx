@@ -492,6 +492,7 @@ export function AiSiteStartCard({
   // "Bring my site" (AGL-3976): asked of its own door, absent while its flag
   // is off, drawn disabled with the reason where the workspace can change it.
   const [importAvailability, setImportAvailability] = useState<AiSiteImportAvailability>({ state: 'checking' })
+  const [importGenerative, setImportGenerative] = useState(false)
   const [importing, setImporting] = useState(false)
 
   useEffect(() => {
@@ -520,6 +521,7 @@ export function AiSiteStartCard({
           }
           const shown = response.status !== 404 && response.status !== 403
           setImportAvailability(aiSiteImportOfferOf(payload?.siteImport))
+          setImportGenerative(payload?.siteImportGenerative === true)
           setVerdict(shown ? 'ready' : 'hidden')
           // "Create site" shows its own dialog when this one will not draw.
           pendingRef.current?.ready(shown)
@@ -1090,6 +1092,7 @@ export function AiSiteStartCard({
                 pendingSite={pendingSite}
                 onBack={() => setImporting(false)}
                 leave={leave}
+                generative={importGenerative}
               />
             ) : stylingStarter ? (
               <Stack spacing={3} component="section" aria-label="Style of your starter site">

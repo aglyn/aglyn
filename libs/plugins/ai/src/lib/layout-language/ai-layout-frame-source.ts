@@ -172,6 +172,11 @@ export interface AiLayoutFrameSource {
   ctas: AiLayoutFrameSourceCta[]
   header: AiLayoutFrameSourceGround
   footer: AiLayoutFrameSourceFooter | null
+  /**
+   * The header and footer a site's plan organized (AGL-4152): a footer with no
+   * columns to carry is drawn compact, never a tall band around one line.
+   */
+  planned?: true
 }
 
 /** The most kept of each part: the reader's own limits, held again on the way in. */
@@ -295,7 +300,7 @@ export function aiLayoutFrameSourceOf(raw: unknown): AiLayoutFrameSource | null 
     .filter(present)
   if (!nav.length && !ctas.length) return null
   const header = GROUNDS.includes(raw['header'] as AiLayoutFrameSourceGround) ? (raw['header'] as AiLayoutFrameSourceGround) : 'paper'
-  return { nav, ctas, header, footer: footerOf(raw['footer']) }
+  return { nav, ctas, header, footer: footerOf(raw['footer']), ...(raw['planned'] === true ? { planned: true as const } : {}) }
 }
 
 function footerOf(raw: unknown): AiLayoutFrameSourceFooter | null {

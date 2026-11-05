@@ -22,3 +22,12 @@
  * module of its own so the job and the doors read it without each other.
  */
 export const SITE_IMPORT_RELEASE_FLAG = 'release_ai_site_import' as const
+
+/**
+ * Improve it, generative (AGL-4152): read per org when a wave starts, and
+ * stamped on the wave, so a wave keeps the build it started with. Off by
+ * default and off everywhere in production; a test organization gets it with
+ * the per-org override (`orgs/{orgId}.releaseFlags`). Off, Improve it is
+ * exactly today's: no new call, tool, text, theme or screen.
+ */
+export const SITE_IMPORT_GENERATIVE_RELEASE_FLAG = 'release_ai_site_import_generative' as const

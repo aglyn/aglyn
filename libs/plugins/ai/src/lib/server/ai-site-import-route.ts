@@ -75,7 +75,7 @@ import {
   readSiteVerificationMeta,
   type SiteImportCrawlSeams,
 } from '../site-import/site-import-crawl'
-import { SITE_IMPORT_RELEASE_FLAG } from '../site-import/site-import-flag'
+import { SITE_IMPORT_GENERATIVE_RELEASE_FLAG, SITE_IMPORT_RELEASE_FLAG } from '../site-import/site-import-flag'
 
 export { SITE_IMPORT_RELEASE_FLAG }
 
@@ -187,6 +187,15 @@ export async function siteImportOfferFor(input: {
   if (!input.member || !(await memberHasOrgPermission(input.orgId, input.member, 'ai.import'))) return 'role'
   if (resolveEffectivePlan(input.org ?? {}) === 'free') return 'plan'
   return 'ready'
+}
+
+/**
+ * Whether a workspace is offered a generative Improve it (AGL-4152): what Bring
+ * my site says of its choice before there is an import. Off by default, and on
+ * only by the flag; a read that fails is off.
+ */
+export async function siteImportGenerativeOfferFor(orgId: string): Promise<boolean> {
+  return isServerReleaseFlagOnForOrg(SITE_IMPORT_GENERATIVE_RELEASE_FLAG, orgId).catch(() => false)
 }
 
 async function audit(
