@@ -51,6 +51,7 @@ export async function memberMayActOnDataset(input: {
   return memberMayActOnPlaced({
     ...rest,
     workspace: await memberHasOrgPermission(input.orgId, input.member, workspaceKey as never),
+    workspaceKey,
     siteKey,
     sitePreset: DATA_SITE_ROLE_PRESET,
   })

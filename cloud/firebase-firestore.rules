@@ -1605,16 +1605,18 @@ service cloud.firestore {
       }
       /**
        * The site's stamp, which every layer has been applied to. On a site the
-       * projection has not reached since the key existed, the site role's preset
-       * for a member on the viewer role alone: anyone else's stamp-less answer is
-       * "Manage data", asked above, so a member refused it can't regain it here.
+       * projection has not reached since the key existed, the site role's preset,
+       * unless someone decided against this member in a way the stamp would carry:
+       * a custom role, or their own "Manage data" refused. Those wait for the
+       * stamp, so nobody refused regains it here.
        */
       function siteDatasetVerdict(hostId) {
         let site = get(/databases/$(database)/documents/hosts/$(hostId)).data;
-        let stamp = site.get('memberPermissions', {}).get(request.auth.uid, {}).get('data.siteManage', null);
         return site.get('orgId', '') == orgId && isHostMember(hostId) && !hostSuspended(hostId) &&
-          (stamp is bool ? stamp == true :
-            orgMember().get('role', '') == 'viewer' && hostMemberRole(hostId) in ['admin', 'editor']);
+          hostSiteRoleKey(hostId, 'data.siteManage', ['admin', 'editor']) &&
+          (site.get('memberPermissions', {}).get(request.auth.uid, {}).get('data.siteManage', null) is bool ||
+           (orgMember().get('roleId', null) == null &&
+            orgMember().get('permissions', {}).get('data.manage', null) != false));
       }
       // CRM sharing (AGL-3336, `model/crm-sharing.ts`): a share widens
       // `visibleTo`, never write access. A shared record carries `writeTo`

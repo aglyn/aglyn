@@ -130,7 +130,9 @@ export function transferAccessVerdict(
     const onSite = resolveCollaboratorHostPermissions(inputs.member, hostId as never) as Record<string, boolean> | null
     const role = inputs.member ? (hostRoleFor(inputs.member, hostId as never) as TransferImportRole | null) : null
     axis = {
-      holds: (permission) => onSite?.[permission] === true,
+      // A key that alone decides an export is a workspace key, as the gate asks it.
+      holds: (permission) =>
+        action === 'export' && declared?.readPermissionOnly === true ? inputs.can(permission) : onSite?.[permission] === true,
       reachesSite: role !== null,
       role,
     }

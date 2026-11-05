@@ -1609,12 +1609,14 @@ return datasetOnOneSite(visibleTo) && siteDatasetVerdict(visibleTo[0].split(':')
 
 
 
+
 function siteDatasetVerdict(hostId) {
 let site = get(/databases/$(database)/documents/hosts/$(hostId)).data;
-let stamp = site.get('memberPermissions', {}).get(request.auth.uid, {}).get('data.siteManage', null);
 return site.get('orgId', '') == orgId && isHostMember(hostId) && !hostSuspended(hostId) &&
-(stamp is bool ? stamp == true :
-orgMember().get('role', '') == 'viewer' && hostMemberRole(hostId) in ['admin', 'editor']);
+hostSiteRoleKey(hostId, 'data.siteManage', ['admin', 'editor']) &&
+(site.get('memberPermissions', {}).get(request.auth.uid, {}).get('data.siteManage', null) is bool ||
+(orgMember().get('roleId', null) == null &&
+orgMember().get('permissions', {}).get('data.manage', null) != false));
 }
 
 

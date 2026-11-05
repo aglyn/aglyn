@@ -69,20 +69,23 @@ export function placementVerdict<T extends boolean | Promise<boolean>>(input: {
 /**
  * The site key as the site's stamp gives it, read as the rules read it:
  * `memberPermissions[uid][key]`, else, on a site the projection has not reached
- * since the key existed, the site role's preset for a member on the viewer role
- * alone. Anyone else's stamp-less answer is their workspace key's, already asked,
- * so a member a role or override refused cannot regain it from `memberRoles`.
+ * since the key existed, the site role's preset, unless someone decided against
+ * this member in a way the stamp would carry: a custom role, or their own
+ * workspace key refused. Those wait for the stamp, so nobody refused regains it
+ * from `memberRoles`.
  */
 export function stampedPlacementKey(
   stamps: { memberPermissions?: unknown; memberRoles?: unknown } | null | undefined,
   uid: string,
   key: string,
   preset: Readonly<Partial<Record<HostAccessRole, boolean>>>,
-  workspaceRole: unknown,
+  member: (Partial<AglynOrgMember> & { roleId?: unknown; permissions?: unknown }) | null | undefined,
+  workspaceKey: string,
 ): boolean {
   const stamp = (stamps?.memberPermissions as Record<string, Record<string, unknown> | undefined> | undefined)?.[uid]?.[key]
   if (typeof stamp === 'boolean') return stamp
-  return workspaceRole === 'viewer' && hostStampedSitePermission({ memberRoles: stamps?.memberRoles }, uid, key, preset)
+  if (member?.roleId != null || (member?.permissions as Record<string, unknown> | undefined)?.[workspaceKey] === false) return false
+  return hostStampedSitePermission({ memberRoles: stamps?.memberRoles }, uid, key, preset)
 }
 
 /** The site key from the membership alone, by the function the site's stamp is written from. */

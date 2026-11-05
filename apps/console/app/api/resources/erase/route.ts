@@ -234,6 +234,7 @@ async function handler(request: Request): Promise<Response> {
           member,
           visibleTo,
           workspace: await memberHasOrgPermission(scopeId, member, 'org.eraseRecords'),
+          workspaceKey: 'org.eraseRecords',
           siteKey: placed.siteKey,
           sitePreset: placed.sitePreset,
         })

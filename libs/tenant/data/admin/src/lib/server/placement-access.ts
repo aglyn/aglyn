@@ -34,10 +34,11 @@ export async function memberMayActOnPlaced(input: {
   visibleTo: unknown
   /** The member's answer on the workspace key, which the caller has resolved. */
   workspace: boolean
+  workspaceKey: string
   siteKey: string
   sitePreset: Readonly<Partial<Record<HostAccessRole, boolean>>>
 }): Promise<boolean> {
-  const { firestore, orgId, uid, member, visibleTo, workspace, siteKey, sitePreset } = input
+  const { firestore, orgId, uid, member, visibleTo, workspace, workspaceKey, siteKey, sitePreset } = input
   return placementVerdict<Promise<boolean>>({
     member,
     visibleTo,
@@ -55,7 +56,8 @@ export async function memberMayActOnPlaced(input: {
         uid,
         siteKey,
         sitePreset,
-        member.role,
+        member,
+        workspaceKey,
       )
     },
   })

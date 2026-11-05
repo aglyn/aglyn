@@ -227,7 +227,8 @@ async function accessRefusal(
   let holds = !needed.length
   for (const permission of needed) {
     if (holds) break
-    holds = hostId
+    // A key that alone decides an export is a workspace key: naming a site doesn't change who holds it.
+    holds = hostId && !(intent === 'export' && declared?.readPermissionOnly === true)
       ? await memberHasPermissionOnHost(orgId, hostId, member, permission)
       : await memberHasOrgPermission(orgId, member, permission)
   }
