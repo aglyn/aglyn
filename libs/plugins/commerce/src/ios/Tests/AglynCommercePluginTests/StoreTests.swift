@@ -67,9 +67,12 @@ final class StoreOrdersTests: XCTestCase {
   }
 
   func testAnUnpaidQuoteIsNotAnOrder() {
-    XCTAssertTrue(isUnpaidQuote(HostOrder(channel: .quote, status: .pending)))
-    XCTAssertFalse(isUnpaidQuote(HostOrder(channel: .quote, status: .paid)))
-    XCTAssertFalse(isUnpaidQuote(HostOrder(channel: .online, status: .pending)))
+    func doc(_ data: [String: Any]) -> FirestoreDocument { FirestoreDocument(id: "o", data: data) }
+    XCTAssertTrue(isUnpaidQuote(doc(["channel": "quote", "status": "pending"])))
+    // A field this build cannot decode must not bring it back as a pending order.
+    XCTAssertTrue(isUnpaidQuote(doc(["channel": "quote", "status": "pending", "number": "Q-1"])))
+    XCTAssertFalse(isUnpaidQuote(doc(["channel": "quote", "status": "paid"])))
+    XCTAssertFalse(isUnpaidQuote(doc(["channel": "online", "status": "pending"])))
   }
 
   func testARefundIsOfferedOnlyWhileSomethingIsLeftToRefund() {

@@ -377,7 +377,9 @@ class OrdersTest {
   @Test
   fun anUnpaidQuoteIsNotAnOrder() {
     fun doc(id: String, channel: String, status: String) = FirestoreDoc(id, "hosts/h1/orders/$id", mapOf("channel" to channel, "status" to status))
-    val rows = orderRows(listOf(doc("q1", "quote", "pending"), doc("q2", "quote", "paid"), doc("o1", "online", "pending")))
+    // A field this build cannot decode must not bring it back as a pending order.
+    val undecodable = FirestoreDoc("q3", "hosts/h1/orders/q3", mapOf("channel" to "quote", "status" to "pending", "number" to "Q-1"))
+    val rows = orderRows(listOf(doc("q1", "quote", "pending"), undecodable, doc("q2", "quote", "paid"), doc("o1", "online", "pending")))
     kotlin.test.assertEquals(listOf("q2", "o1"), rows.map { it.id })
   }
 }
