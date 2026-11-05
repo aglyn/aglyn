@@ -40,8 +40,8 @@ import {
  * and keep `pluginVersions` to staff, so their routes are the only way in.
  *
  * Whether someone belongs to the publishing workspace at all, with no key
- * asked, is `isPublisherMember` (free own installs, no self-purchase, no
- * self-review).
+ * asked, is `isPublisherMember` (no self-purchase, no self-review, and, with
+ * the install landing in that workspace, free own installs: `ownsListingHere`).
  */
 export type PublisherPermissionVerdict = 'granted' | 'refused' | 'not-a-member'
 

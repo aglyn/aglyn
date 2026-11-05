@@ -109,4 +109,19 @@ describe('every install door checks the listing, not just the buyer (AGL-2290)',
     expect(file).toBeDefined()
     expect(file!.text).toMatch(/isPrivateListing\(listing\) && !ownsListing/)
   })
+
+  // Free only on the publisher's OWN sites (AGL-2484, AGL-4047). Two doors
+  // asked "does the install land in the publishing workspace" and eight did
+  // not, because each door carried its own copy of the waiver. Every door
+  // now asks the one definition; none asks membership alone. The behavior is
+  // held door by door in `own-listing-own-sites.spec.ts`.
+  it.each(doors.length ? doors.map((file) => file.name) : ['<no doors found>'])(
+    '%s decides the own-listing waiver with ownsListingHere, never membership alone',
+    (name) => {
+      const file = doors.find((entry) => entry.name === name)
+      expect(file).toBeDefined()
+      expect(file!.text).toContain('ownsListingHere(firestore, {')
+      expect(file!.text).not.toMatch(/\bisPublisherMember\(/)
+    },
+  )
 })

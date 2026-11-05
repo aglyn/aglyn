@@ -48,7 +48,8 @@ import {
   siteStarterSearchTokens,
   siteStarterSummaryOf,
 } from '../model/site-starter-listing'
-import { isPublisherMember, PUBLISHER_PROFILES } from './publisher-profile'
+import { ownsListingHere } from './own-listing'
+import { PUBLISHER_PROFILES } from './publisher-profile'
 import { hasLivePurchase, requirePurchase } from './purchase-entitlement'
 import { isPublisherSecurityLocked } from './sale-risk'
 import { recordVersionMove } from './version-stats'
@@ -118,13 +119,11 @@ async function viewerPublishes(
   listing: ListingDoc,
   viewer: SiteStarterViewer,
 ): Promise<boolean> {
-  const publisherOrgId = String(listing.profileId ?? '')
-  const viewerOrgId = String(viewer?.orgId ?? '')
-  return viewerOrgId
-    ? publisherOrgId !== '' &&
-        viewerOrgId === publisherOrgId &&
-        isPublisherMember(firestore, String(viewer?.uid ?? ''), listing.profileId)
-    : false
+  return ownsListingHere(firestore, {
+    uid: String(viewer?.uid ?? ''),
+    publisherOrgId: listing.profileId,
+    targetOrgId: viewer?.orgId,
+  })
 }
 
 /**

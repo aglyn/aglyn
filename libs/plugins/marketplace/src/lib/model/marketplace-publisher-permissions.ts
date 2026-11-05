@@ -30,8 +30,9 @@ import type { PluginPermission } from '@aglyn/aglyn/plugin-manager/plugin-permis
  * grant or refuse it.
  *
  * What is NOT a key: whether someone belongs to the workspace that published
- * a listing (`isPublisherMember`). Its own sites install it free, and nobody
- * in it may buy or review it. That is a fact about who published the
+ * a listing (`isPublisherMember`). Its members install it free on its own
+ * sites (`ownsListingHere`; anywhere else they buy it like anyone), and
+ * nobody in it may buy or review it. That is a fact about who published the
  * listing, so no grant can buy it and no refusal can take it away.
  *
  * Declared through `registerPluginPermissions`, as Sequences declares its own
