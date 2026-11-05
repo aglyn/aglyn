@@ -247,7 +247,7 @@ final class RedirectsEditor {
       let text = error.localizedDescription.lowercased()
       self.error =
         text.contains("permission")
-        ? "Changing a redirect needs a publishing role. Ask an editor or admin."
+        ? "Your role does not include \"Publish site content\" — ask an organization admin"
         : "That did not go through. Check the connection and try again."
     }
   }

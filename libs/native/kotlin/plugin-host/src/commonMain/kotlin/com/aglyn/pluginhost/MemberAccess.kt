@@ -67,9 +67,6 @@ fun rememberMemberPermissions(context: NativePluginContext): MemberPermissions =
 /** The scope clause [access] needs on an org-shared list: none for an org-wide member, their tokens otherwise. */
 fun OrgAccess.listScopeTokens(): List<String>? = if (orgWide) null else tokens
 
-/** Roles that may change org data (`canWriteOrgData()` in the rules). */
-val ORG_WRITER_ROLES = setOf("owner", "admin", "editor")
-
 /*
  * A resource's sharing scope (`visibleTo`), as scope-tokens.ts words and
  * checks it; the data plugin's tests replay the console's answers.

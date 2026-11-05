@@ -80,7 +80,7 @@ internal object AiInsightUpsell {
     return if (canManageBilling) {
       "$feature is switched off for this workspace. It comes with $addon credits, which you can add in Billing."
     } else {
-      "$feature is switched off for this workspace. It comes with $addon credits. Ask a workspace owner or admin to add them in Billing."
+      "$feature is switched off for this workspace. It comes with $addon credits. Adding them needs \"Manage billing\" — ask an organization admin."
     }
   }
 }
@@ -118,7 +118,7 @@ fun AiInsightTile(context: NativePluginContext, surface: AiInsightSurface) {
   }
   if (asking) AiInsightDialog(context, surface) { asking = false }
   if (upsell) {
-    val canManage = context.orgRole in setOf("owner", "admin")
+    val canManage = com.aglyn.pluginhost.rememberMemberPermissions(context).can("billing.manage")
     AlertDialog(
       onDismissRequest = { upsell = false },
       title = { Text(copy.title) },

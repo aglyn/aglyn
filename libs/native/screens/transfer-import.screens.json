@@ -6,7 +6,7 @@
       "title": "{params.title|'Import records'}",
       "icon": "square.and.arrow.down|upload",
       "scope": "org",
-      "requires": "org.manager",
+      "requires": "org.can[data.manage]",
       "load": {
         "info": {
           "url": "/api/transfer/fields",
@@ -128,7 +128,7 @@
       "title": "Match the columns",
       "icon": "tablecells|view_agenda",
       "scope": "org",
-      "requires": "org.manager",
+      "requires": "org.can[data.manage]",
       "constants": {
         "matchReason": {
           "exactAlias": "Same name",
@@ -294,7 +294,7 @@
       "title": "What each value becomes",
       "icon": "checklist|inventory_2",
       "scope": "org",
-      "requires": "org.manager",
+      "requires": "org.can[data.manage]",
       "constants": {
         "picklistAction": {
           "mapTo": "Map to a list value",
@@ -606,7 +606,7 @@
       "title": "How rows find their records",
       "icon": "magnifyingglass|search",
       "scope": "org",
-      "requires": "org.manager",
+      "requires": "org.can[data.manage]",
       "constants": {
         "matchKind": {
           "new": "New",
@@ -749,7 +749,7 @@
       "title": "What happens to a row",
       "icon": "slider.horizontal.3|tune",
       "scope": "org",
-      "requires": "org.manager",
+      "requires": "org.can[data.manage]",
       "constants": {
         "mode": {
           "overwrite": {
@@ -1073,7 +1073,7 @@
       "title": "Review the import",
       "icon": "checklist|inventory_2",
       "scope": "org",
-      "requires": "org.manager",
+      "requires": "org.can[data.manage]",
       "constants": {
         "warning": {
           "derivation": {
@@ -1523,7 +1523,7 @@
       "title": "Imported",
       "icon": "checkmark.circle|check_circle",
       "scope": "org",
-      "requires": "org.manager",
+      "requires": "org.can[data.manage]",
       "constants": {
         "reason": {
           "matchedSkipped": "Matched a record, and matched rows are skipped",
@@ -1634,7 +1634,7 @@
       "title": "Undo the import",
       "icon": "arrow.uturn.backward|undo",
       "scope": "org",
-      "requires": "org.manager",
+      "requires": "org.can[data.manage]",
       "constants": {
         "action": {
           "created": "Delete it",
@@ -1766,7 +1766,7 @@
       "title": "Import",
       "icon": "arrow.up.arrow.down|sync",
       "scope": "org",
-      "requires": "org.manager",
+      "requires": "org.can[data.manage]",
       "constants": {
         "status": {
           "draft": "Uploaded",

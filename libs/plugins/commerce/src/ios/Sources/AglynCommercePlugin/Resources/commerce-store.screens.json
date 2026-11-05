@@ -1734,7 +1734,7 @@
           "id": "readonly",
           "tone": "info",
           "when": "data.view.canEdit == false",
-          "text": "Only a site admin can change which payment methods your store offers."
+          "text": "Your role does not include \"Manage payment methods\" — ask an organization admin"
         },
         {
           "type": "list",
@@ -1881,7 +1881,7 @@
           "id": "intro",
           "tone": "info",
           "when": "!data.status.connected && data.status.available != false",
-          "text": "Already labeling in ShipStation? Connect it as a Custom Store: ShipStation imports the orders you still have to ship, and each label you buy there marks the order shipped here and emails your customer the tracking link. Only a site admin can connect it."
+          "text": "Already labeling in ShipStation? Connect it as a Custom Store: ShipStation imports the orders you still have to ship, and each label you buy there marks the order shipped here and emails your customer the tracking link. Connecting it needs \"Connect shipping apps\" — ask an organization admin."
         },
         {
           "type": "fields",
@@ -2028,7 +2028,7 @@
           "id": "intro",
           "tone": "info",
           "when": "!data.status.connected && data.status.available != false",
-          "text": "Labeling in ShippingEasy? Connect it with the API key, API secret and store API key from your ShippingEasy account: each order is sent there as it is paid, and each label you buy there marks the order shipped here and emails your customer the tracking link. Only a site admin can connect it."
+          "text": "Labeling in ShippingEasy? Connect it with the API key, API secret and store API key from your ShippingEasy account: each order is sent there as it is paid, and each label you buy there marks the order shipped here and emails your customer the tracking link. Connecting it needs \"Connect shipping apps\" — ask an organization admin."
         },
         {
           "type": "notice",

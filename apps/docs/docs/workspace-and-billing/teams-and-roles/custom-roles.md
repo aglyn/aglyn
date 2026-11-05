@@ -204,6 +204,12 @@ permissions. In the organization hub, with no site picked, **Run email campaigns
 the workspace role instead: owners, admins and editors of the whole workspace hold it. A custom
 role, a per-member override or the site's **Permissions** dialog can grant or deny either one.
 
+Creating or editing a campaign asks **Run email campaigns** on the workspace. On a campaign placed
+on one site, holding it on that site is enough too. So turning it off for someone in a site's
+**Permissions** dialog stops them sending, duplicating and deleting there, and, if they hold it on
+the workspace, they can still create and edit campaigns. A campaign placed on several sites or on
+every site follows the workspace permission alone.
+
 ### Marketplace permissions on a site {#marketplace-site-permissions}
 
 | Permission | What it opens | Admin | Editor | Author | Viewer |

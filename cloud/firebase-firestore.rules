@@ -2081,23 +2081,58 @@ service cloud.firestore {
        * nothing.
        *
        * The authority is "Run email campaigns" (`marketing.campaigns`,
-       * AGL-4047), whose workspace default is the owner, admins and editors
-       * this asked by name, read off the member document: the workspace's
-       * verdict, the one this rule always asked, and not the site's. So a
-       * member whose site access is wider or narrower than their workspace
-       * role answers here as they did before.
+       * AGL-4047), asked two ways, and holding either is enough:
+       *
+       *   - `canWriteCampaignContainers`, the workspace's verdict, whose
+       *     default is the owner, admins and editors, read off the member
+       *     document. It answers for every campaign, and a site that narrows
+       *     a member takes nothing from it, so it can admit someone the
+       *     campaign routes refuse on that site. That stays on purpose.
+       *   - `canWriteOneSiteCampaign`, the site's verdict, on a campaign
+       *     placed on exactly one site, for a member with access to it. It
+       *     adds the site Admins and Editors the routes already let send,
+       *     duplicate and delete there. It never re-scopes: a campaign it
+       *     admits stays on that one site.
+       *
+       * A campaign on every site or on several answers to the workspace's
+       * verdict alone.
        */
       function canWriteCampaignContainers() {
         return isOrgMember() && isVerified() &&
           memberKeyOrOverride('marketing.campaigns', ['owner', 'admin', 'editor']) &&
           orgNotSuspended();
       }
+      /**
+       * Is `visibleTo` exactly one site of this workspace, whose stamp gives
+       * this member "Run email campaigns"? The site's verdict is the routes'
+       * (`holdsStampedSiteKey`): its `memberPermissions` stamp, else the preset
+       * of the member's `memberRoles` entry. The site must be this workspace's,
+       * because the writer chooses `visibleTo` on a create, and being a site's
+       * Admin in another workspace decides nothing here. A suspended site adds
+       * nobody. One extra read, the host, and none for a member the workspace's
+       * verdict already admitted.
+       */
+      function canWriteOneSiteCampaign(visibleTo) {
+        return isOrgMember() && isVerified() && orgNotSuspended() &&
+          visibleTo is list && visibleTo.size() == 1 &&
+          visibleTo[0].matches('host:[^:/]+') &&
+          siteHoldsCampaigns(visibleTo[0].split(':')[1]);
+      }
+      function siteHoldsCampaigns(hostId) {
+        return get(/databases/$(database)/documents/hosts/$(hostId)).data.get('orgId', '') == orgId &&
+          isHostMember(hostId) && !hostSuspended(hostId) &&
+          hostSiteRoleKey(hostId, 'marketing.campaigns', ['admin', 'editor']);
+      }
       match /emailCampaigns/{campaignId} {
         allow read: if isStaff() || canReadScoped();
-        allow create: if isStaff() || (canWriteCampaignContainers() && canCreateScoped());
+        allow create: if isStaff() ||
+          (canWriteCampaignContainers() && canCreateScoped()) ||
+          (canWriteOneSiteCampaign(request.resource.data.get('visibleTo', null)) && canCreateScoped());
         allow update: if isStaff() ||
           (canWriteCampaignContainers() && canReadScoped() &&
-           (isOrgWideMember() || scopeUnchanged()));
+           (isOrgWideMember() || scopeUnchanged())) ||
+          (canWriteOneSiteCampaign(resource.data.get('visibleTo', null)) && canReadScoped() &&
+           scopeUnchanged());
         allow delete: if false;
       }
       /**
