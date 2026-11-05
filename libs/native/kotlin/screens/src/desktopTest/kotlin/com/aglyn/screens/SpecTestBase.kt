@@ -25,6 +25,12 @@ import java.io.File
 import kotlin.test.BeforeTest
 
 /**
+ * The owner's verdict on every catalog key (AGL-4047). Screens now gate their actions on `site.can[<key>]` and
+ * `org.can[<key>]`, so an "owner" session with no verdicts reads as a member who may do nothing.
+ */
+internal val OWNER: Map<String, Boolean> = com.aglyn.contracts.rolePermissions("owner")
+
+/**
  * What a plugin spec test needs: the real spec file from a plugin's screens folder, a screen built over data in the
  * route's own shapes, and the blocks and requests it shows. One place, so each audit area's test reads its spec.
  */
@@ -66,7 +72,7 @@ abstract class SpecTestBase {
       .first { it.id == id }
 
   protected fun screen(spec: ScreenSpec, params: Map<String, String>, data: String): ScreenModel {
-    val session = ScreenSession(orgName = "Acme", orgRole = "owner", siteName = "Shop", origin = "https://console.test")
+    val session = ScreenSession(orgName = "Acme", orgRole = "owner", siteName = "Shop", origin = "https://console.test", orgPermissions = OWNER, sitePermissions = OWNER)
     val model = ScreenModel(spec, session.context(Site(), params), null)
     model.seed(Json.parseToJsonElement(data))
     return model
@@ -84,7 +90,7 @@ abstract class SpecTestBase {
   }
 
   protected fun withWriter(spec: ScreenSpec, params: Map<String, String>, data: String, writer: RecordingWriter): ScreenModel {
-    val session = ScreenSession(orgName = "Acme", orgRole = "owner", siteName = "Shop", origin = "https://console.test")
+    val session = ScreenSession(orgName = "Acme", orgRole = "owner", siteName = "Shop", origin = "https://console.test", orgPermissions = OWNER, sitePermissions = OWNER)
     val model = ScreenModel(spec, session.context(Site(), params), null, null, writer)
     model.seed(kotlinx.serialization.json.Json.parseToJsonElement(data))
     return model
