@@ -16,6 +16,7 @@
  */
 
 import HostDatasetsCard from './components/host-datasets-card.component'
+import { datasetInstanceImportAccess } from './components/use-dataset-writes-blocked'
 import * as Aglyn from '@aglyn/aglyn'
 import { registerRepeatSource } from '@aglyn/aglyn/app-utils/repeat-sources'
 import { mdiDatabaseOutline } from '@aglyn/shared-data-mdi'
@@ -80,7 +81,13 @@ export function registerDataConsole(): void {
   registerPluginTransferResourceUi(
     DATASET_TRANSFER_RESOURCE,
     // The Import & export hub lists each dataset from the `dataset` record list (AGL-3535).
-    { label: 'Dataset records', icon: { path: mdiDatabaseOutline.path }, instancesFrom: 'dataset' },
+    // Its Import there answers as this one's does on the Data page (AGL-4047).
+    {
+      label: 'Dataset records',
+      icon: { path: mdiDatabaseOutline.path },
+      instancesFrom: 'dataset',
+      instanceImportAccess: datasetInstanceImportAccess,
+    },
     { pluginId: BUNDLE_ID },
   )
   Aglyn.registerConsoleExtension({

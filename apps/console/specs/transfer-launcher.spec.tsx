@@ -137,7 +137,7 @@ jest.mock('@aglyn/shared-util-http/authorized-token', () => ({
   },
 }))
 
-import TransferLauncherProvider from '../components/transfer-launcher-provider.component'
+import TransferLauncherProvider, { transferRefusedPermission } from '../components/transfer-launcher-provider.component'
 
 let launcher: TransferLauncher | null = null
 let accessTarget: TransferAccessTarget = { resource: 'data.dataset:ds-1', scope: 'org' }
@@ -378,6 +378,41 @@ describe('the transfer launcher', () => {
       </TransferLauncherProvider>,
     )
     expect(access).toEqual({ import: false, export: false })
+  })
+
+  it('names the permission refusing an action only once it is known to be one (AGL-4047)', () => {
+    const inputs = {
+      permissionsLoaded: true,
+      can: () => false,
+      orgWide: true,
+      member: null,
+      entitled: () => true,
+    }
+    const gift = { resource: 'commerce.gift-cards', scope: 'host' as const, hostId: 'host-a' }
+    const anything = { resource: 'crm.contacts', scope: 'org' as const }
+    expect(transferRefusedPermission(inputs, 'import', anything)).toBe('data.manage')
+    // Not yet known.
+    expect(transferRefusedPermission({ ...inputs, permissionsLoaded: false }, 'import', anything)).toBeNull()
+    // The plan's to refuse, in its own words.
+    expect(transferRefusedPermission({ ...inputs, entitled: () => false }, 'import', anything)).toBeNull()
+    // A resource's own key, once "Manage data" is held.
+    expect(transferRefusedPermission({ ...inputs, can: (key) => key === 'data.manage' }, 'import', gift)).toBe(
+      'commerce.giftCards.import',
+    )
+    // Held: nothing refuses.
+    expect(transferRefusedPermission({ ...inputs, can: () => true }, 'import', gift)).toBeNull()
+    // A collaborator whose document is still being read, or could not be.
+    const site = { ...inputs, orgWide: false }
+    expect(transferRefusedPermission({ ...site, member: undefined }, 'import', gift)).toBeNull()
+    expect(transferRefusedPermission({ ...site, member: null }, 'import', gift)).toBeNull()
+    // A collaborator on the site, and a site they do not reach.
+    const member = { role: 'viewer', allHosts: false, hostAccess: { 'host-a': 'viewer' } } as never
+    expect(transferRefusedPermission({ ...site, member }, 'import', gift)).toBe('data.manage')
+    expect(transferRefusedPermission({ ...site, member }, 'import', { ...gift, hostId: 'host-z' })).toBeNull()
+    // The surface's own answer on an instance.
+    const instance = { resource: 'data.dataset:ds-1', scope: 'org' as const }
+    expect(transferRefusedPermission(inputs, 'import', { ...instance, importAllowed: false })).toBe('data.manage')
+    expect(transferRefusedPermission(inputs, 'import', { ...instance, importAllowed: true })).toBeNull()
   })
 
   it('keeps one launcher while the answers stand, so a list is not re-rendered for nothing', () => {
