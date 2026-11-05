@@ -42,6 +42,7 @@ import { announceDatasetRecords as announceDatasetChange } from '../announce-dat
 import { loadCustomFieldTypes } from '../custom-field-types'
 import { coerceDocumentValues, datasetIntegrityFields, datasetIntegrityUpdate, effectiveDatasetModel, validateDocument } from '../../model/dataset-models'
 import { fillRecordAddresses } from '../../record-pages/record-pages'
+import { datasetNameLower } from '../../model/datasets'
 
 /**
  * The organization's datasets on the customer REST API, `/v1/datasets/…`
@@ -227,6 +228,7 @@ async function createDataset(
     const id = createResourceUid()
     await collection.doc(id).create({
       displayName: parsed.values.name,
+      nameLower: datasetNameLower(parsed.values.name),
       fields: parsed.values.fields,
       ...(parsed.values.model ? { model: parsed.values.model } : {}),
       // AGL-1484: the required argument exists so a creator that has not
@@ -280,7 +282,10 @@ async function updateDataset(
   }
   const { name, fields, model } = parsed.values
   const update: Record<string, unknown> = {}
-  if (name !== undefined) update.displayName = name
+  if (name !== undefined) {
+    update.displayName = name
+    update.nameLower = datasetNameLower(name)
+  }
   if (fields !== undefined) update.fields = fields
   if (model !== undefined) update.model = model
   // An empty body is a no-op, answered with the current dataset rather than a

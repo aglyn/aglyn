@@ -244,6 +244,7 @@ describe('install: a new, empty dataset for the whole organization', () => {
         id: 'ds-installed',
         data: {
           displayName: 'Sessions',
+          nameLower: 'sessions',
           description: 'Talks and who gives them',
           fields: ['title', 'speaker', 'venue'],
           model: prepared.content,
@@ -269,6 +270,8 @@ describe('install: a new, empty dataset for the whole organization', () => {
     await prepared.commit(STAMP)
 
     expect(state.creates[0].data['displayName']).toBe('Dataset')
+    // The name's search key, beside the name it was given (AGL-4047).
+    expect(state.creates[0].data['nameLower']).toBe('dataset')
     expect('description' in state.creates[0].data).toBe(false)
   })
 

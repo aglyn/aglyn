@@ -337,6 +337,8 @@ describe('the dataset writer', () => {
     expect(written.ok && (written.facts as { records: number }).records).toBe(3)
     expect(dataset()).toMatchObject({
       displayName: 'Menu',
+      // The name's search key, beside the name (AGL-4047).
+      nameLower: 'menu',
       fields: ['dish', 'description', 'category', 'vegetarian', 'allergens', 'slug'],
       visibleTo: ['host:host-1'],
       createdAt: NOW,

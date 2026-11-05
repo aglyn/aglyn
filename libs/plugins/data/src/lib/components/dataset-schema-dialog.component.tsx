@@ -64,7 +64,7 @@ import {
   type ListenHandle,
 } from '@aglyn/tenant-feature-instance'
 import { DATASET_AUTHORABLE_FIELD_TYPES, DATASET_FIELD_TYPES, DATASET_FIELD_TYPE_LABELS, type DatasetFieldDefinition, type DatasetFieldType, type DatasetModel, effectiveDatasetModel } from '../model/dataset-models'
-import { datasetDisplayName, defaultDatasetFieldId, validateDatasetFieldId } from '../model/datasets'
+import { datasetDisplayName, datasetNameLower, defaultDatasetFieldId, validateDatasetFieldId } from '../model/datasets'
 import { RECORD_PAGE_ADDRESS_FIELD_TYPE, isRecordAddressField } from '../record-pages/record-pages'
 
 /** Types surfaced in the picker; the rest exist for compat, not authoring. */
@@ -530,8 +530,12 @@ export function DatasetSchemaDialog(props: DatasetSchemaDialogProps) {
                 singular: names.singular.trim(),
                 plural: names.plural.trim(),
               },
+              // The name's search key moves with it (AGL-4047).
               ...(names.plural.trim()
-                ? { displayName: names.plural.trim() }
+                ? {
+                    displayName: names.plural.trim(),
+                    nameLower: datasetNameLower(names.plural),
+                  }
                 : {}),
               // v1 compat: keep the flat column list mirroring the model order
               // so unmigrated consumers (AGL-103 bindings) keep working.
