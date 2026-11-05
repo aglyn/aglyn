@@ -15,6 +15,7 @@
  * limitations under the License.
  */
 
+import type { CouriersSitePermission } from '../model/couriers-permissions'
 import { normalizePhone } from '@aglyn/aglyn/foundation/definitions/contact.types'
 import { createHash, randomBytes, timingSafeEqual } from 'node:crypto'
 import { COURIERS_API_ROUTES } from '../constants'
@@ -49,8 +50,6 @@ import { connectionId, type CourierStore, type StoredConnection, type StoredKeys
  * webhook token itself, ONCE, in the answer that minted it.
  */
 
-export type CourierRole = 'editor' | 'admin'
-
 export interface CourierGateResult {
   orgId: string
   hostId: string
@@ -65,7 +64,7 @@ export interface CourierRouteDeps {
   provider(id: CourierProviderId): CourierProvider
   /** Whether the deployment holds the sealing key. */
   configured(): boolean
-  gate(request: Request, role: CourierRole): Promise<CourierGateResult | Response>
+  gate(request: Request, permission: CouriersSitePermission): Promise<CourierGateResult | Response>
   /** The console address of a path, or `null` when the deployment has none. */
   consoleAddress(path: string, requestUrl: string): string | null
   /** Records a step on the workspace's activity log. Must not throw. */
@@ -165,10 +164,10 @@ export function createCourierRoutes(deps: CourierRouteDeps) {
 
   /** Runs a gated handler, turning a refusal into its answer and anything else into a 500. */
   const guarded =
-    (role: CourierRole, method: 'GET' | 'POST', handle: (gate: CourierGateResult, request: Request) => Promise<Response>) =>
+    (permission: CouriersSitePermission, method: 'GET' | 'POST', handle: (gate: CourierGateResult, request: Request) => Promise<Response>) =>
     async (request: Request): Promise<Response> => {
       if (request.method !== method) return fail(405, 'Method not allowed')
-      const gate = await deps.gate(request, role)
+      const gate = await deps.gate(request, permission)
       if (gate instanceof Response) return gate
       try {
         return await handle(gate, request)
@@ -180,8 +179,8 @@ export function createCourierRoutes(deps: CourierRouteDeps) {
     }
 
   const withOrder =
-    (role: CourierRole, handle: (gate: CourierGateResult, orderId: string, request: Request) => Promise<Response>, method: 'GET' | 'POST' = 'POST') =>
-    guarded(role, method, async (gate, request) => {
+    (permission: CouriersSitePermission, handle: (gate: CourierGateResult, orderId: string, request: Request) => Promise<Response>, method: 'GET' | 'POST' = 'POST') =>
+    guarded(permission, method, async (gate, request) => {
       const orderId = readOrderId(gate.body, request)
       if (!orderId) return fail(400, 'Missing orderId')
       return handle(gate, orderId, request)
@@ -189,7 +188,7 @@ export function createCourierRoutes(deps: CourierRouteDeps) {
 
   return {
     /** GET ?hostId — what the deployment offers and the site's connection. */
-    list: guarded('editor', 'GET', async (gate, request) => {
+    list: guarded('couriers.view', 'GET', async (gate, request) => {
       const connection = await deps.store.getConnection(gate.hostId, 'doordash')
       return json({
         available: true,
@@ -198,7 +197,7 @@ export function createCourierRoutes(deps: CourierRouteDeps) {
       })
     }),
 
-    connect: guarded('admin', 'POST', async (gate, request) => {
+    connect: guarded('couriers.manage', 'POST', async (gate, request) => {
       const provider = readProvider(gate.body, request)
       if (!provider) return fail(400, 'Unknown courier')
       const keys: Partial<Record<CourierKeyMode, CourierKeys>> = {}
@@ -219,14 +218,14 @@ export function createCourierRoutes(deps: CourierRouteDeps) {
       return json({ connection: connectionView(connection, request.url), webhookToken })
     }),
 
-    test: guarded('admin', 'POST', async (gate, request) => {
+    test: guarded('couriers.manage', 'POST', async (gate, request) => {
       const provider = readProvider(gate.body, request)
       if (!provider) return fail(400, 'Unknown courier')
       const connection = await deps.engine.test(gate.hostId, provider)
       return json({ connection: connectionView(connection, request.url) })
     }),
 
-    settings: guarded('admin', 'POST', async (gate, request) => {
+    settings: guarded('couriers.manage', 'POST', async (gate, request) => {
       const provider = readProvider(gate.body, request)
       if (!provider) return fail(400, 'Unknown courier')
       const connection = await deps.store.getConnection(gate.hostId, provider)
@@ -240,7 +239,7 @@ export function createCourierRoutes(deps: CourierRouteDeps) {
       return json({ connection: connectionView({ ...connection, ...patch }, request.url) })
     }),
 
-    webhookToken: guarded('admin', 'POST', async (gate, request) => {
+    webhookToken: guarded('couriers.manage', 'POST', async (gate, request) => {
       const provider = readProvider(gate.body, request)
       if (!provider) return fail(400, 'Unknown courier')
       const connection = await deps.store.getConnection(gate.hostId, provider)
@@ -251,7 +250,7 @@ export function createCourierRoutes(deps: CourierRouteDeps) {
       return json({ connection: connectionView({ ...connection, ...patch }, request.url), webhookToken: minted.token })
     }),
 
-    disconnect: guarded('admin', 'POST', async (gate, request) => {
+    disconnect: guarded('couriers.manage', 'POST', async (gate, request) => {
       const provider = readProvider(gate.body, request)
       if (!provider) return fail(400, 'Unknown courier')
       if (await deps.store.hasOpenRun(gate.hostId)) {
@@ -263,18 +262,18 @@ export function createCourierRoutes(deps: CourierRouteDeps) {
     }),
 
     order: withOrder(
-      'editor',
+      'couriers.view',
       async (gate, orderId) => json(orderView(orderId, await deps.store.getDelivery(gate.hostId, orderId))),
       'GET',
     ),
 
-    quote: withOrder('editor', async (gate, orderId, request) => {
+    quote: withOrder('couriers.dispatch', async (gate, orderId, request) => {
       const provider = readProvider(gate.body, request)
       if (!provider) return fail(400, 'Unknown courier')
       return json(await deps.engine.quote({ orgId: gate.orgId, hostId: gate.hostId, orderId, uid: gate.uid, provider }))
     }),
 
-    dispatch: withOrder('editor', async (gate, orderId) => {
+    dispatch: withOrder('couriers.dispatch', async (gate, orderId) => {
       const view = await deps.engine.dispatch({
         hostId: gate.hostId,
         orderId,
@@ -287,7 +286,7 @@ export function createCourierRoutes(deps: CourierRouteDeps) {
       return json(view)
     }),
 
-    cancel: withOrder('editor', async (gate, orderId) => {
+    cancel: withOrder('couriers.dispatch', async (gate, orderId) => {
       const view = await deps.engine.cancel({ hostId: gate.hostId, orderId, reason: 'Canceled by the store', byStore: true })
       if (view.run) {
         await deps.logActivity({ orgId: gate.orgId, uid: gate.uid, action: 'cancelled', provider: view.run.provider, hostId: gate.hostId, orderId })
@@ -295,7 +294,7 @@ export function createCourierRoutes(deps: CourierRouteDeps) {
       return json(view)
     }),
 
-    refresh: withOrder('editor', async (gate, orderId) => json(await deps.engine.refresh(gate.hostId, orderId))),
+    refresh: withOrder('couriers.dispatch', async (gate, orderId) => json(await deps.engine.refresh(gate.hostId, orderId))),
 
     /** POST ?site — DoorDash Drive's webhook. Acknowledged once verified, whatever it names. */
     async webhookDoordash(request: Request): Promise<Response> {

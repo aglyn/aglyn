@@ -17,6 +17,10 @@
  * limitations under the License.
  */
 
+import { permissionRefusalText } from '@aglyn/aglyn/app-utils/org-permissions'
+import { BlockedControl } from '@aglyn/shared-ui-jsx/components/blocked-control.component'
+import { useSiteKeys } from '@aglyn/tenant-feature-instance/hooks/use-site-keys'
+import { TAX_ENGINES_SITE_PRESETS } from '../model/tax-engines-permissions'
 import { useSnackbar } from '@aglyn/shared-ui-snackstack'
 import {
   Button,
@@ -60,6 +64,8 @@ const EMPTY: ExemptionForm = { email: '', name: '', type: 'wholesale', certifica
  * exemption manager applies by the same email, as the customer code.
  */
 export function TaxExemptionsSection(props: { hostId: string }) {
+  const refused = useSiteKeys(props.hostId).blocked('taxEngines.exemptions', TAX_ENGINES_SITE_PRESETS['taxEngines.exemptions'])
+  const refusal = permissionRefusalText('taxEngines.exemptions')
   const { hostId } = props
   const request = useTaxEnginesFetch()
   const { enqueueSnackbar } = useSnackbar()
@@ -122,9 +128,11 @@ export function TaxExemptionsSection(props: { hostId: string }) {
     <Stack spacing={1}>
       <Stack direction="row" sx={{ alignItems: 'center', justifyContent: 'space-between' }}>
         <Typography variant="subtitle2">{'Exempt customers'}</Typography>
-        <Button size="small" onClick={() => setEditing(EMPTY)}>
+        <BlockedControl blocked={refused} reason={refusal}>
+          <Button size="small" onClick={() => setEditing(EMPTY)}>
           {'Add exempt customer'}
         </Button>
+        </BlockedControl>
       </Stack>
       {rows && rows.length === 0 ? (
         <Typography variant="body2" color="text.secondary">
@@ -139,7 +147,8 @@ export function TaxExemptionsSection(props: { hostId: string }) {
               disableGutters
               secondaryAction={
                 <Stack direction="row" spacing={0.5}>
-                  <Button
+                  <BlockedControl blocked={refused} reason={refusal}>
+                    <Button
                     size="small"
                     onClick={() =>
                       setEditing({
@@ -153,9 +162,12 @@ export function TaxExemptionsSection(props: { hostId: string }) {
                   >
                     {'Edit'}
                   </Button>
-                  <Button size="small" color="error" onClick={() => handleRemove(row)}>
+                  </BlockedControl>
+                  <BlockedControl blocked={refused} reason={refusal}>
+                    <Button size="small" color="error" onClick={() => handleRemove(row)}>
                     {'Remove'}
                   </Button>
+                  </BlockedControl>
                 </Stack>
               }
             >

@@ -15,6 +15,10 @@
  * limitations under the License.
  */
 
+import { permissionRefusalText } from '@aglyn/aglyn/app-utils/org-permissions'
+import { BlockedControl } from '@aglyn/shared-ui-jsx/components/blocked-control.component'
+import { useSiteKeys } from '@aglyn/tenant-feature-instance/hooks/use-site-keys'
+import { MARKETPLACES_SITE_PRESETS } from '../model/marketplaces-permissions'
 import { StatusChip, type StatusTone } from '@aglyn/shared-ui-jsx/components/status-chip.component'
 import { useSnackbar } from '@aglyn/shared-ui-snackstack'
 import { Alert, Box, Button, Stack, Typography } from '@mui/material'
@@ -59,6 +63,7 @@ const money = (minor: number, currency: string) => {
 export function OrderMarketplaceWidget(props: OrderMarketplaceWidgetProps) {
   const routesApi = useMarketplacesApi(props.hostId)
   const api = props.api ?? routesApi
+  const refused = useSiteKeys(props.hostId).blocked('marketplaces.orders', MARKETPLACES_SITE_PRESETS['marketplaces.orders'])
   const { enqueueSnackbar } = useSnackbar()
   const [view, setView] = useState<MarketplaceOrderView | null>(null)
   const [busy, setBusy] = useState(false)
@@ -123,9 +128,11 @@ export function OrderMarketplaceWidget(props: OrderMarketplaceWidgetProps) {
         {error ? <Alert severity="error">{error}</Alert> : null}
         {failed ? (
           <Box>
-            <Button size="small" disabled={busy} onClick={() => void retry()}>
+            <BlockedControl blocked={refused} reason={permissionRefusalText('marketplaces.orders')}>
+              <Button size="small" disabled={busy} onClick={() => void retry()}>
               Send tracking again
             </Button>
+            </BlockedControl>
           </Box>
         ) : null}
       </Stack>

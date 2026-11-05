@@ -32,6 +32,10 @@ type Answer = { status?: number; body: unknown }
 let routes: Record<string, (body: any, url: URL) => Answer>
 const sent: Array<{ route: string; body: any }> = []
 
+jest.mock('@aglyn/tenant-feature-instance/hooks/use-site-keys', () => ({
+  useSiteKeys: () => ({ blocked: (key: string) => mockBlockedKeys.has(key) }),
+}))
+const mockBlockedKeys = new Set<string>()
 jest.mock('@aglyn/tenant-feature-instance', () => ({ useUser: () => ({ data: { uid: 'u' } }) }))
 jest.mock('@aglyn/shared-util-http/authorized-token', () => ({
   authorizedFetch: async (_user: unknown, url: string, init: RequestInit = {}) => {
@@ -268,5 +272,17 @@ describe('the product editor’s Print on demand section', () => {
     expect(container.innerHTML).toBe('')
     const unsaved = render(<ProductPodSource hostId="h" product={{ id: null }} />)
     expect(unsaved.container.innerHTML).toBe('')
+  })
+})
+
+describe('the card follows the keys its routes ask (AGL-4047)', () => {
+  afterEach(() => mockBlockedKeys.clear())
+
+  it('switches Connect off with the permission named', async () => {
+    mockBlockedKeys.add('printOnDemand.manage')
+    render(<PrintOnDemandCard hostId="h" />)
+    const connect = (await screen.findByRole('button', { name: /^Connect/ })) as HTMLButtonElement
+    expect(connect.disabled).toBe(true)
+    expect(connect.parentElement?.getAttribute('aria-label')).toContain('does not include')
   })
 })

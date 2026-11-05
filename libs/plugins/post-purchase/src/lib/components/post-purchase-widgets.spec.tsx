@@ -31,6 +31,10 @@ let availability = { loading: false, available: false, vendors: [] as string[] }
 const request = jest.fn()
 const enqueueSnackbar = jest.fn()
 
+jest.mock('@aglyn/tenant-feature-instance/hooks/use-site-keys', () => ({
+  useSiteKeys: () => ({ blocked: (key: string) => mockBlockedKeys.has(key) }),
+}))
+const mockBlockedKeys = new Set<string>()
 jest.mock('./post-purchase-api', () => ({
   ...jest.requireActual('./post-purchase-api'),
   usePostPurchaseAvailability: () => availability,
@@ -105,5 +109,19 @@ describe('PostPurchaseOrderWidget', () => {
     expect((await screen.findByTestId('post-purchase-protection-status')).textContent).toBe('Covered')
     expect(screen.getByText(/Route policy pol_1/)).toBeTruthy()
     expect(screen.getByText('1Z999 · followed by AfterShip')).toBeTruthy()
+  })
+})
+
+describe('the card follows the keys its routes ask (AGL-4047)', () => {
+  afterEach(() => mockBlockedKeys.clear())
+
+  it('switches Save and the service switches off with the permission named', async () => {
+    mockBlockedKeys.add('postPurchase.manage')
+    availability = { loading: false, available: true, vendors: ['route'] }
+    request.mockResolvedValue({ settings: SETTINGS, vendors: ['route'] })
+    render(<PostPurchaseSettingsCards hostId="host-1" />)
+    const save = (await screen.findByRole('button', { name: 'Save' })) as HTMLButtonElement
+    expect(save.disabled).toBe(true)
+    expect(save.parentElement?.getAttribute('aria-label')).toContain('does not include')
   })
 })

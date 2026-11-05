@@ -21,6 +21,10 @@ import type { FulfillmentNetworksApi } from './fulfillment-networks-api'
 import { FulfillmentNetworksCard } from './fulfillment-networks-card.component'
 import { OrderNetworksWidget } from './order-networks-widget.component'
 
+jest.mock('@aglyn/tenant-feature-instance/hooks/use-site-keys', () => ({
+  useSiteKeys: () => ({ blocked: (key: string) => mockBlockedKeys.has(key) }),
+}))
+const mockBlockedKeys = new Set<string>()
 jest.mock('./fulfillment-networks-api', () => ({ useFulfillmentNetworksApi: () => null }))
 const mockSnack = jest.fn()
 jest.mock('@aglyn/shared-ui-snackstack', () => ({ useSnackbar: () => ({ enqueueSnackbar: mockSnack }) }))
@@ -240,5 +244,23 @@ describe('the order’s fulfillment networks (AGL-3634)', () => {
     expect(screen.queryByRole('button', { name: 'Send to ShipBob' })).toBeNull()
     fireEvent.click(screen.getByRole('button', { name: 'Cancel at ShipBob' }))
     await waitFor(() => expect(routes.cancel).toHaveBeenCalledWith('order-1', 'shipbob'))
+  })
+})
+
+describe('the card follows the keys its routes ask (AGL-4047)', () => {
+  afterEach(() => mockBlockedKeys.clear())
+
+  it('switches Connect off and names the permission without the manage key', async () => {
+    mockBlockedKeys.add('fulfillmentNetworks.manage')
+    const routes = api({ list: jest.fn(async () => ({ offered: [{ id: 'shipbob' as const, sandbox: false }], connections: [] })) })
+    render(<FulfillmentNetworksCard hostId="h" api={routes} />)
+    expect(((await screen.findByRole('button', { name: 'Connect ShipBob' })) as HTMLButtonElement).disabled).toBe(true)
+    expect(screen.getByText(/does not include/).textContent).toContain('ask an organization admin')
+  })
+
+  it('names the permission rather than drawing nothing without the view key', async () => {
+    mockBlockedKeys.add('fulfillmentNetworks.view')
+    render(<FulfillmentNetworksCard hostId="h" api={api()} />)
+    expect((await screen.findByText(/does not include/)).textContent).toContain('ask an organization admin')
   })
 })

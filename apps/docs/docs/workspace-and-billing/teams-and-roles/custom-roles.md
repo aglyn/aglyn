@@ -340,8 +340,11 @@ role or a per-member override can grant or deny each one.
 Each integration plugin declares its own permissions, so a custom role, a per-member
 override or the site's **Permissions** dialog can grant or deny them one by one. Each
 starts from the member's role on the site, so nobody's access changed when they became
-permissions. Reading a site's rewards program, its members and its sales channels stays
-open to everyone on the site.
+permissions. Some reads stay open to everyone on the site: its rewards program and members,
+its sales channels, its after-the-sale and review settings, its print-on-demand connections
+and imported products, its tax engine connection and a product's tax code, and what an order
+shows from a fulfillment network, an inventory system, an online marketplace, an
+after-the-sale or review service, or a print-on-demand service.
 
 | Permission | What it opens | Admin | Editor | Author | Viewer |
 |---|---|---|---|---|---|
@@ -365,6 +368,30 @@ open to everyone on the site.
 | **Check rates and see labels** (`shipping.labels`) | Check an address, compare rates and see an order's labels | Yes | Yes | No | No |
 | **Buy shipping labels** (`shipping.buyLabels`) | Buy a label or a batch of labels, which charges the workspace | Yes | Yes | No | No |
 | **Void shipping labels** (`shipping.voidLabels`) | Void a label that has not been used | Yes | Yes | No | No |
+| **See ad conversion connections** (`adConversions.view`) | See which ad accounts a site sends conversions to | Yes | Yes | No | No |
+| **Manage ad conversion connections** (`adConversions.manage`) | Connect, change, pause and disconnect an ad account, and send a test event | Yes | No | No | No |
+| **See the courier connection** (`couriers.view`) | See a site's courier connection and an order's delivery | Yes | Yes | No | No |
+| **Manage the courier connection** (`couriers.manage`) | Connect, test and disconnect a courier, and change its settings and webhook token | Yes | No | No | No |
+| **Dispatch couriers** (`couriers.dispatch`) | Get a quote, send a courier for an order, cancel one and refresh where it is | Yes | Yes | No | No |
+| **See fulfillment network connections** (`fulfillmentNetworks.view`) | See a site's fulfillment networks and each one's activity | Yes | Yes | No | No |
+| **Manage fulfillment network connections** (`fulfillmentNetworks.manage`) | Connect and disconnect a network, change its settings and webhook secret, and run its sync | Yes | No | No | No |
+| **Send orders to a fulfillment network** (`fulfillmentNetworks.orders`) | Send an order's lines to a network, or ask it to cancel them | Yes | Yes | No | No |
+| **See the inventory connection** (`inventorySync.view`) | See a site's inventory system, its activity and the orders that could not be sent | Yes | Yes | No | No |
+| **Manage the inventory connection** (`inventorySync.manage`) | Connect and disconnect a system, change its settings and locations, and run its sync | Yes | No | No | No |
+| **Send orders to the inventory system** (`inventorySync.orders`) | Send an order that could not be sent again | Yes | Yes | No | No |
+| **See online marketplace connections** (`marketplaces.view`) | See the online marketplaces a site sells on, their activity and the listings to look at | Yes | Yes | No | No |
+| **Manage online marketplace connections** (`marketplaces.manage`) | Connect and disconnect a seller account, change its settings and run its sync | Yes | No | No | No |
+| **Resend marketplace shipments** (`marketplaces.orders`) | Send an order's refused or failed shipments to its marketplace again | Yes | Yes | No | No |
+| **Change after-the-sale services** (`postPurchase.manage`) | Connect, change and disconnect the services that follow an order after it is placed | Yes | No | No | No |
+| **Manage print-on-demand connections** (`printOnDemand.manage`) | Connect and disconnect a service, and choose how paid orders are sent to it | Yes | No | No | No |
+| **Import print-on-demand products** (`printOnDemand.products`) | Browse a service's products, import or re-sync them, and stop filling a product through it | Yes | Yes | No | No |
+| **Work print-on-demand orders** (`printOnDemand.orders`) | See the service orders, and send, confirm, refresh or cancel one | Yes | Yes | No | No |
+| **Change review services** (`reviewPlatforms.manage`) | Connect, change and disconnect the services that ask buyers for reviews | Yes | No | No | No |
+| **Manage the tax engine connection** (`taxEngines.manage`) | Connect, test and disconnect a tax engine, and change its address, default tax code and recording | Yes | No | No | No |
+| **Manage exempt customers** (`taxEngines.exemptions`) | See, save and remove the customers exempt from tax | Yes | Yes | No | No |
+| **Set product tax codes** (`taxEngines.productCodes`) | Set the tax code a product is taxed under | Yes | Yes | No | No |
+| **Check addresses with the tax engine** (`taxEngines.addresses`) | Ask the tax engine how it reads an address | Yes | Yes | No | No |
+| **See and resend orders to the tax engine** (`taxEngines.orders`) | See how an order stands with the tax engine, and send it again | Yes | Yes | No | No |
 
 ### Email and inbox permissions {#email-and-inbox-permissions}
 

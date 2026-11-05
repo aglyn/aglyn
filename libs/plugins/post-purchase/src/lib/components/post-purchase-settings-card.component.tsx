@@ -17,6 +17,10 @@
 
 'use client'
 
+import { permissionRefusalText } from '@aglyn/aglyn/app-utils/org-permissions'
+import { BlockedControl } from '@aglyn/shared-ui-jsx/components/blocked-control.component'
+import { useSiteKeys } from '@aglyn/tenant-feature-instance/hooks/use-site-keys'
+import { POST_PURCHASE_SITE_PRESETS } from '../model/post-purchase-permissions'
 import { pluginDocsHelp } from '@aglyn/aglyn/app-utils/docs-help'
 import { CardDisplay } from '@aglyn/shared-ui-jsx'
 import { StatusChip } from '@aglyn/shared-ui-jsx/components/status-chip.component'
@@ -104,7 +108,10 @@ function VendorCard(props: {
   const { enqueueSnackbar } = useSnackbar()
   const current = settings[vendor]
   const [draft, setDraft] = useState<Omit<PostPurchaseSettingsWrite, 'vendor'>>({})
-  const [saving, setSaving] = useState(false)
+  const [working, setSaving] = useState(false)
+  // Off for a member without the key, the same way as while a change saves.
+  const refused = useSiteKeys(hostId).blocked('postPurchase.manage', POST_PURCHASE_SITE_PRESETS['postPurchase.manage'])
+  const saving = working || refused
   const label = POST_PURCHASE_VENDOR_LABELS[vendor]
   const enabled = draft.enabled ?? current.enabled
 
@@ -157,13 +164,15 @@ function VendorCard(props: {
                 {'Disconnect'}
               </Button>
             ) : null}
-            <Button
+            <BlockedControl blocked={refused} reason={permissionRefusalText('postPurchase.manage')}>
+              <Button
               variant="contained"
               disabled={saving || Object.keys(draft).length === 0}
               onClick={() => send(draft, `${label} saved`)}
             >
-              {saving ? 'Saving…' : 'Save'}
+              {working ? 'Saving…' : 'Save'}
             </Button>
+            </BlockedControl>
           </Stack>
         ),
       }}
@@ -194,6 +203,7 @@ function VendorCard(props: {
             <FormControlLabel
               control={
                 <Switch
+                  disabled={refused}
                   checked={draft.defaultSelected ?? settings.route.defaultSelected}
                   onChange={(event) => setDraft((prior) => ({ ...prior, defaultSelected: event.target.checked }))}
                 />
@@ -215,6 +225,7 @@ function VendorCard(props: {
         <FormControlLabel
           control={
             <Switch
+              disabled={refused}
               checked={enabled}
               onChange={(event) => setDraft((prior) => ({ ...prior, enabled: event.target.checked }))}
             />

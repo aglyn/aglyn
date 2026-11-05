@@ -10216,6 +10216,176 @@
         }
       ]
     },
+    "describeSharing": {
+      "module": "libs/aglyn/src/lib/app-utils/scope-tokens.ts",
+      "cases": [
+        {
+          "args": [
+            {
+              "visibleTo": [
+                "org"
+              ]
+            },
+            {}
+          ],
+          "result": "All sites"
+        },
+        {
+          "args": [
+            {
+              "visibleTo": [
+                "host:a"
+              ]
+            },
+            {
+              "a": "Bakery"
+            }
+          ],
+          "result": "Bakery only"
+        },
+        {
+          "args": [
+            {
+              "visibleTo": [
+                "host:a",
+                "host:b"
+              ]
+            },
+            {}
+          ],
+          "result": "2 sites"
+        },
+        {
+          "args": [
+            {
+              "visibleTo": [
+                "host:b"
+              ],
+              "scopeMode": "allExcept",
+              "scopeExcept": [
+                "host:a"
+              ]
+            },
+            {
+              "a": "Bakery"
+            }
+          ],
+          "result": "All sites except Bakery"
+        },
+        {
+          "args": [
+            {
+              "visibleTo": [
+                "host:b"
+              ],
+              "scopeMode": "allExcept",
+              "scopeExcept": [
+                "host:a"
+              ]
+            },
+            {}
+          ],
+          "result": "All sites except 1 site"
+        },
+        {
+          "args": [
+            {
+              "visibleTo": [
+                "host:c"
+              ],
+              "scopeMode": "allExcept",
+              "scopeExcept": [
+                "host:a",
+                "host:b"
+              ]
+            },
+            {
+              "a": "Bakery",
+              "b": "Deli"
+            }
+          ],
+          "result": "All sites except Bakery and Deli"
+        },
+        {
+          "args": [
+            {
+              "visibleTo": [
+                "host:c"
+              ],
+              "scopeMode": "allExcept",
+              "scopeExcept": [
+                "host:a",
+                "host:b"
+              ]
+            },
+            {
+              "a": "Bakery"
+            }
+          ],
+          "result": "All sites except 2 sites"
+        },
+        {
+          "args": [
+            {
+              "visibleTo": [
+                "host:d"
+              ],
+              "scopeMode": "allExcept",
+              "scopeExcept": [
+                "host:a",
+                "host:b",
+                "host:c"
+              ]
+            },
+            {
+              "a": "Bakery",
+              "b": "Deli",
+              "c": "Cafe"
+            }
+          ],
+          "result": "All sites except 3 sites"
+        },
+        {
+          "args": [
+            {
+              "visibleTo": [],
+              "scopeMode": "allExcept",
+              "scopeExcept": [
+                "host:a"
+              ]
+            },
+            {
+              "a": "Bakery"
+            }
+          ],
+          "result": "No sites"
+        },
+        {
+          "args": [
+            {
+              "visibleTo": [
+                "org"
+              ],
+              "scopeMode": "allExcept",
+              "scopeExcept": [
+                "host:a"
+              ]
+            },
+            {
+              "a": "Bakery"
+            }
+          ],
+          "result": "All sites"
+        },
+        {
+          "args": [
+            null,
+            {}
+          ],
+          "result": "No sites"
+        }
+      ]
+    },
     "describeShippingCoverage": {
       "module": "libs/plugins/commerce/src/lib/model/commerce-shipping.ts",
       "cases": [
@@ -18704,6 +18874,119 @@
             "xxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxx"
           ],
           "result": false
+        }
+      ]
+    },
+    "isSiteOnlyScope": {
+      "module": "libs/aglyn/src/lib/app-utils/scope-tokens.ts",
+      "cases": [
+        {
+          "args": [
+            {
+              "visibleTo": [
+                "host:a"
+              ]
+            },
+            "a"
+          ],
+          "result": true
+        },
+        {
+          "args": [
+            {
+              "visibleTo": [
+                "host:a",
+                "host:a"
+              ]
+            },
+            "a"
+          ],
+          "result": true
+        },
+        {
+          "args": [
+            {
+              "visibleTo": [
+                "host:a",
+                "host:b"
+              ]
+            },
+            "a"
+          ],
+          "result": false
+        },
+        {
+          "args": [
+            {
+              "visibleTo": [
+                "org"
+              ]
+            },
+            "a"
+          ],
+          "result": false
+        },
+        {
+          "args": [
+            {
+              "visibleTo": []
+            },
+            "a"
+          ],
+          "result": false
+        },
+        {
+          "args": [
+            {},
+            "a"
+          ],
+          "result": false
+        },
+        {
+          "args": [
+            null,
+            "a"
+          ],
+          "result": false
+        },
+        {
+          "args": [
+            {
+              "visibleTo": [
+                "host:a"
+              ],
+              "scopeMode": "allExcept",
+              "scopeExcept": [
+                "host:b"
+              ]
+            },
+            "a"
+          ],
+          "result": false
+        },
+        {
+          "args": [
+            {
+              "visibleTo": [
+                "host:a"
+              ],
+              "scopeMode": "other"
+            },
+            "a"
+          ],
+          "result": false
+        },
+        {
+          "args": [
+            {
+              "visibleTo": [
+                "host:a"
+              ],
+              "scopeMode": null
+            },
+            "a"
+          ],
+          "result": true
         }
       ]
     },
@@ -37802,6 +38085,561 @@
             null
           ],
           "result": {}
+        }
+      ]
+    },
+    "reconcileAllExcept": {
+      "module": "libs/aglyn/src/lib/app-utils/scope-tokens.ts",
+      "cases": [
+        {
+          "args": [
+            {
+              "visibleTo": [
+                "org"
+              ]
+            },
+            [
+              "a",
+              "b",
+              "c"
+            ]
+          ],
+          "result": {
+            "fields": null,
+            "status": "unmarked"
+          }
+        },
+        {
+          "args": [
+            {
+              "visibleTo": [
+                "host:a"
+              ]
+            },
+            [
+              "a",
+              "b",
+              "c"
+            ]
+          ],
+          "result": {
+            "fields": null,
+            "status": "unmarked"
+          }
+        },
+        {
+          "args": [
+            {
+              "visibleTo": [
+                "host:b",
+                "host:c"
+              ],
+              "scopeMode": "allExcept",
+              "scopeExcept": [
+                "host:a"
+              ]
+            },
+            [
+              "a",
+              "b",
+              "c"
+            ]
+          ],
+          "result": {
+            "fields": null,
+            "status": "current"
+          }
+        },
+        {
+          "args": [
+            {
+              "visibleTo": [
+                "host:c",
+                "host:b"
+              ],
+              "scopeMode": "allExcept",
+              "scopeExcept": [
+                "host:a"
+              ]
+            },
+            [
+              "a",
+              "b",
+              "c"
+            ]
+          ],
+          "result": {
+            "fields": null,
+            "status": "current"
+          }
+        },
+        {
+          "args": [
+            {
+              "visibleTo": [
+                "host:b"
+              ],
+              "scopeMode": "allExcept",
+              "scopeExcept": [
+                "host:a"
+              ]
+            },
+            [
+              "a",
+              "b",
+              "c"
+            ]
+          ],
+          "result": {
+            "fields": {
+              "scopeExcept": [
+                "host:a"
+              ],
+              "scopeMode": "allExcept",
+              "visibleTo": [
+                "host:b",
+                "host:c"
+              ]
+            },
+            "status": "changed"
+          }
+        },
+        {
+          "args": [
+            {
+              "visibleTo": [
+                "host:b",
+                "host:c",
+                "host:gone"
+              ],
+              "scopeMode": "allExcept",
+              "scopeExcept": [
+                "host:a"
+              ]
+            },
+            [
+              "a",
+              "b",
+              "c"
+            ]
+          ],
+          "result": {
+            "fields": {
+              "scopeExcept": [
+                "host:a"
+              ],
+              "scopeMode": "allExcept",
+              "visibleTo": [
+                "host:b",
+                "host:c"
+              ]
+            },
+            "status": "changed"
+          }
+        },
+        {
+          "args": [
+            {
+              "visibleTo": [
+                "host:b",
+                "host:c"
+              ],
+              "scopeMode": "allExcept",
+              "scopeExcept": [
+                "host:a",
+                "host:gone"
+              ]
+            },
+            [
+              "a",
+              "b",
+              "c"
+            ]
+          ],
+          "result": {
+            "fields": {
+              "scopeExcept": [
+                "host:a"
+              ],
+              "scopeMode": "allExcept",
+              "visibleTo": [
+                "host:b",
+                "host:c"
+              ]
+            },
+            "status": "changed"
+          }
+        },
+        {
+          "args": [
+            {
+              "visibleTo": [
+                "host:b",
+                "host:c"
+              ],
+              "scopeMode": "allExcept",
+              "scopeExcept": [
+                "host:gone"
+              ]
+            },
+            [
+              "b",
+              "c"
+            ]
+          ],
+          "result": {
+            "fields": {
+              "scopeExcept": null,
+              "scopeMode": null,
+              "visibleTo": [
+                "org"
+              ]
+            },
+            "status": "changed"
+          }
+        },
+        {
+          "args": [
+            {
+              "visibleTo": [
+                "host:b"
+              ],
+              "scopeMode": "allExcept",
+              "scopeExcept": [
+                "host:a"
+              ]
+            },
+            [
+              "a"
+            ]
+          ],
+          "result": {
+            "fields": {
+              "scopeExcept": [
+                "host:a"
+              ],
+              "scopeMode": "allExcept",
+              "visibleTo": []
+            },
+            "status": "changed"
+          }
+        },
+        {
+          "args": [
+            {
+              "visibleTo": [
+                "host:b"
+              ],
+              "scopeMode": "allExcept",
+              "scopeExcept": [
+                "host:a"
+              ]
+            },
+            []
+          ],
+          "result": {
+            "fields": {
+              "scopeExcept": null,
+              "scopeMode": null,
+              "visibleTo": [
+                "org"
+              ]
+            },
+            "status": "changed"
+          }
+        },
+        {
+          "args": [
+            {
+              "visibleTo": [
+                "org"
+              ],
+              "scopeMode": "allExcept",
+              "scopeExcept": [
+                "host:a"
+              ]
+            },
+            [
+              "a",
+              "b",
+              "c"
+            ]
+          ],
+          "result": {
+            "fields": null,
+            "status": "invalid"
+          }
+        },
+        {
+          "args": [
+            {
+              "visibleTo": [
+                "host:b"
+              ],
+              "scopeMode": "allExcept"
+            },
+            [
+              "a",
+              "b",
+              "c"
+            ]
+          ],
+          "result": {
+            "fields": null,
+            "status": "invalid"
+          }
+        },
+        {
+          "args": [
+            {
+              "visibleTo": [
+                "host:b"
+              ],
+              "scopeMode": "allExcept",
+              "scopeExcept": [
+                "junk"
+              ]
+            },
+            [
+              "a",
+              "b",
+              "c"
+            ]
+          ],
+          "result": {
+            "fields": null,
+            "status": "invalid"
+          }
+        },
+        {
+          "args": [
+            {
+              "visibleTo": [
+                "host:b"
+              ],
+              "scopeMode": "other",
+              "scopeExcept": [
+                "host:a"
+              ]
+            },
+            [
+              "a",
+              "b",
+              "c"
+            ]
+          ],
+          "result": {
+            "fields": null,
+            "status": "invalid"
+          }
+        },
+        {
+          "args": [
+            {
+              "scopeMode": "allExcept",
+              "scopeExcept": [
+                "host:a"
+              ]
+            },
+            [
+              "a",
+              "b",
+              "c"
+            ]
+          ],
+          "result": {
+            "fields": null,
+            "status": "invalid"
+          }
+        },
+        {
+          "args": [
+            {
+              "visibleTo": [
+                "host:b"
+              ],
+              "scopeMode": "allExcept",
+              "scopeExcept": [
+                "host:a"
+              ]
+            },
+            [
+              "a",
+              "b",
+              "c"
+            ],
+            {
+              "maxIncluded": 1
+            }
+          ],
+          "result": {
+            "fields": null,
+            "status": "capped"
+          }
+        },
+        {
+          "args": [
+            {
+              "visibleTo": [
+                "host:b",
+                "host:gone"
+              ],
+              "scopeMode": "allExcept",
+              "scopeExcept": [
+                "host:a"
+              ]
+            },
+            [
+              "a",
+              "b",
+              "c"
+            ],
+            {
+              "maxIncluded": 1
+            }
+          ],
+          "result": {
+            "fields": {
+              "scopeExcept": [
+                "host:a"
+              ],
+              "scopeMode": "allExcept",
+              "visibleTo": [
+                "host:b"
+              ]
+            },
+            "status": "capped"
+          }
+        },
+        {
+          "args": [
+            {
+              "visibleTo": [
+                "host:b",
+                "host:c"
+              ],
+              "scopeMode": "allExcept",
+              "scopeExcept": [
+                "host:a"
+              ]
+            },
+            [
+              "a",
+              "b",
+              "c"
+            ],
+            {
+              "maxIncluded": 1
+            }
+          ],
+          "result": {
+            "fields": null,
+            "status": "current"
+          }
+        },
+        {
+          "args": [
+            {
+              "visibleTo": [
+                "host:b",
+                "host:c"
+              ],
+              "scopeMode": "allExcept",
+              "scopeExcept": [
+                "host:a"
+              ]
+            },
+            [
+              "a",
+              "b",
+              "c"
+            ],
+            {
+              "keepHostIds": [
+                "a"
+              ]
+            }
+          ],
+          "result": {
+            "fields": {
+              "scopeExcept": [
+                "host:a"
+              ],
+              "scopeMode": "allExcept",
+              "visibleTo": [
+                "host:a",
+                "host:b",
+                "host:c"
+              ]
+            },
+            "status": "changed"
+          }
+        },
+        {
+          "args": [
+            {
+              "visibleTo": [
+                "host:b",
+                "host:c"
+              ],
+              "scopeMode": "allExcept",
+              "scopeExcept": [
+                "host:a"
+              ],
+              "sharing": {
+                "added": [
+                  "host:a"
+                ]
+              }
+            },
+            [
+              "a",
+              "b",
+              "c"
+            ]
+          ],
+          "result": {
+            "fields": {
+              "scopeExcept": [
+                "host:a"
+              ],
+              "scopeMode": "allExcept",
+              "visibleTo": [
+                "host:a",
+                "host:b",
+                "host:c"
+              ]
+            },
+            "status": "changed"
+          }
+        },
+        {
+          "args": [
+            {
+              "visibleTo": [
+                "host:b",
+                "host:c"
+              ],
+              "scopeMode": "allExcept",
+              "scopeExcept": [
+                "host:a"
+              ]
+            },
+            [
+              "a",
+              "b",
+              "c"
+            ],
+            {
+              "keepHostIds": [
+                "gone"
+              ]
+            }
+          ],
+          "result": {
+            "fields": null,
+            "status": "current"
+          }
         }
       ]
     },
@@ -61211,6 +62049,8 @@
           ],
           "result": {
             "accounting.manage": true,
+            "adConversions.manage": true,
+            "adConversions.view": true,
             "ai.generate": true,
             "ai.import": true,
             "ai.use": true,
@@ -61231,12 +62071,18 @@
             "commerce.shippingConnections": true,
             "commerce.walkIns": true,
             "commerce.webhooks": true,
+            "couriers.dispatch": true,
+            "couriers.manage": true,
+            "couriers.view": true,
             "crm.moveStages": true,
             "crm.settings": true,
             "data.manage": true,
             "domains.manage": true,
             "email.lists": true,
             "email.suppressions": true,
+            "fulfillmentNetworks.manage": true,
+            "fulfillmentNetworks.orders": true,
+            "fulfillmentNetworks.view": true,
             "funnels.manage": true,
             "helpDesks.manage": true,
             "helpDesks.view": true,
@@ -61244,6 +62090,9 @@
             "hosts.delete": true,
             "inbox.assign": true,
             "inbox.reply": true,
+            "inventorySync.manage": true,
+            "inventorySync.orders": true,
+            "inventorySync.view": true,
             "loyalty.adjustBalances": true,
             "loyalty.connection": true,
             "loyalty.program": true,
@@ -61258,6 +62107,9 @@
             "marketplace.publisherProfile": true,
             "marketplace.siteInstall": true,
             "marketplace.sitePublish": true,
+            "marketplaces.manage": true,
+            "marketplaces.orders": true,
+            "marketplaces.view": true,
             "members.manage": true,
             "org.apiKeys": true,
             "org.auditLog": true,
@@ -61278,6 +62130,11 @@
             "posDiscount": true,
             "posRefund": true,
             "posSell": true,
+            "postPurchase.manage": true,
+            "printOnDemand.manage": true,
+            "printOnDemand.orders": true,
+            "printOnDemand.products": true,
+            "reviewPlatforms.manage": true,
             "salesChannels.connect": true,
             "salesChannels.feeds": true,
             "salesChannels.replaceAddress": true,
@@ -61295,6 +62152,11 @@
             "site.manage": true,
             "site.publish": true,
             "site.sensitive": true,
+            "taxEngines.addresses": true,
+            "taxEngines.exemptions": true,
+            "taxEngines.manage": true,
+            "taxEngines.orders": true,
+            "taxEngines.productCodes": true,
             "workflows.orgAutomations": true,
             "workflows.sitePause": true
           }
@@ -61307,6 +62169,8 @@
           ],
           "result": {
             "accounting.manage": true,
+            "adConversions.manage": true,
+            "adConversions.view": true,
             "ai.generate": true,
             "ai.import": true,
             "ai.use": true,
@@ -61327,12 +62191,18 @@
             "commerce.shippingConnections": true,
             "commerce.walkIns": true,
             "commerce.webhooks": true,
+            "couriers.dispatch": true,
+            "couriers.manage": true,
+            "couriers.view": true,
             "crm.moveStages": true,
             "crm.settings": true,
             "data.manage": true,
             "domains.manage": true,
             "email.lists": true,
             "email.suppressions": true,
+            "fulfillmentNetworks.manage": true,
+            "fulfillmentNetworks.orders": true,
+            "fulfillmentNetworks.view": true,
             "funnels.manage": true,
             "helpDesks.manage": true,
             "helpDesks.view": true,
@@ -61340,6 +62210,9 @@
             "hosts.delete": true,
             "inbox.assign": true,
             "inbox.reply": true,
+            "inventorySync.manage": true,
+            "inventorySync.orders": true,
+            "inventorySync.view": true,
             "loyalty.adjustBalances": true,
             "loyalty.connection": true,
             "loyalty.program": true,
@@ -61354,6 +62227,9 @@
             "marketplace.publisherProfile": true,
             "marketplace.siteInstall": true,
             "marketplace.sitePublish": true,
+            "marketplaces.manage": true,
+            "marketplaces.orders": true,
+            "marketplaces.view": true,
             "members.manage": true,
             "org.apiKeys": true,
             "org.auditLog": true,
@@ -61374,6 +62250,11 @@
             "posDiscount": true,
             "posRefund": true,
             "posSell": true,
+            "postPurchase.manage": true,
+            "printOnDemand.manage": true,
+            "printOnDemand.orders": true,
+            "printOnDemand.products": true,
+            "reviewPlatforms.manage": true,
             "salesChannels.connect": true,
             "salesChannels.feeds": true,
             "salesChannels.replaceAddress": true,
@@ -61391,6 +62272,11 @@
             "site.manage": true,
             "site.publish": true,
             "site.sensitive": true,
+            "taxEngines.addresses": true,
+            "taxEngines.exemptions": true,
+            "taxEngines.manage": true,
+            "taxEngines.orders": true,
+            "taxEngines.productCodes": true,
             "workflows.orgAutomations": true,
             "workflows.sitePause": true
           }
@@ -61403,6 +62289,8 @@
           ],
           "result": {
             "accounting.manage": false,
+            "adConversions.manage": false,
+            "adConversions.view": true,
             "ai.generate": true,
             "ai.import": false,
             "ai.use": true,
@@ -61423,12 +62311,18 @@
             "commerce.shippingConnections": false,
             "commerce.walkIns": true,
             "commerce.webhooks": false,
+            "couriers.dispatch": true,
+            "couriers.manage": false,
+            "couriers.view": true,
             "crm.moveStages": true,
             "crm.settings": false,
             "data.manage": true,
             "domains.manage": false,
             "email.lists": true,
             "email.suppressions": true,
+            "fulfillmentNetworks.manage": false,
+            "fulfillmentNetworks.orders": true,
+            "fulfillmentNetworks.view": true,
             "funnels.manage": true,
             "helpDesks.manage": false,
             "helpDesks.view": true,
@@ -61436,6 +62330,9 @@
             "hosts.delete": false,
             "inbox.assign": true,
             "inbox.reply": true,
+            "inventorySync.manage": false,
+            "inventorySync.orders": true,
+            "inventorySync.view": true,
             "loyalty.adjustBalances": true,
             "loyalty.connection": false,
             "loyalty.program": false,
@@ -61450,6 +62347,9 @@
             "marketplace.publisherProfile": false,
             "marketplace.siteInstall": true,
             "marketplace.sitePublish": true,
+            "marketplaces.manage": false,
+            "marketplaces.orders": true,
+            "marketplaces.view": true,
             "members.manage": false,
             "org.apiKeys": false,
             "org.auditLog": false,
@@ -61470,6 +62370,11 @@
             "posDiscount": true,
             "posRefund": true,
             "posSell": true,
+            "postPurchase.manage": false,
+            "printOnDemand.manage": false,
+            "printOnDemand.orders": true,
+            "printOnDemand.products": true,
+            "reviewPlatforms.manage": false,
             "salesChannels.connect": false,
             "salesChannels.feeds": true,
             "salesChannels.replaceAddress": false,
@@ -61487,6 +62392,11 @@
             "site.manage": false,
             "site.publish": true,
             "site.sensitive": true,
+            "taxEngines.addresses": true,
+            "taxEngines.exemptions": true,
+            "taxEngines.manage": false,
+            "taxEngines.orders": true,
+            "taxEngines.productCodes": true,
             "workflows.orgAutomations": true,
             "workflows.sitePause": true
           }
@@ -61499,6 +62409,8 @@
           ],
           "result": {
             "accounting.manage": false,
+            "adConversions.manage": false,
+            "adConversions.view": false,
             "ai.generate": false,
             "ai.import": false,
             "ai.use": false,
@@ -61519,12 +62431,18 @@
             "commerce.shippingConnections": false,
             "commerce.walkIns": false,
             "commerce.webhooks": false,
+            "couriers.dispatch": false,
+            "couriers.manage": false,
+            "couriers.view": false,
             "crm.moveStages": false,
             "crm.settings": false,
             "data.manage": false,
             "domains.manage": false,
             "email.lists": false,
             "email.suppressions": false,
+            "fulfillmentNetworks.manage": false,
+            "fulfillmentNetworks.orders": false,
+            "fulfillmentNetworks.view": false,
             "funnels.manage": false,
             "helpDesks.manage": false,
             "helpDesks.view": false,
@@ -61532,6 +62450,9 @@
             "hosts.delete": false,
             "inbox.assign": false,
             "inbox.reply": false,
+            "inventorySync.manage": false,
+            "inventorySync.orders": false,
+            "inventorySync.view": false,
             "loyalty.adjustBalances": false,
             "loyalty.connection": false,
             "loyalty.program": false,
@@ -61546,6 +62467,9 @@
             "marketplace.publisherProfile": false,
             "marketplace.siteInstall": false,
             "marketplace.sitePublish": false,
+            "marketplaces.manage": false,
+            "marketplaces.orders": false,
+            "marketplaces.view": false,
             "members.manage": false,
             "org.apiKeys": false,
             "org.auditLog": false,
@@ -61566,6 +62490,11 @@
             "posDiscount": false,
             "posRefund": false,
             "posSell": false,
+            "postPurchase.manage": false,
+            "printOnDemand.manage": false,
+            "printOnDemand.orders": false,
+            "printOnDemand.products": false,
+            "reviewPlatforms.manage": false,
             "salesChannels.connect": false,
             "salesChannels.feeds": false,
             "salesChannels.replaceAddress": false,
@@ -61583,6 +62512,11 @@
             "site.manage": false,
             "site.publish": false,
             "site.sensitive": false,
+            "taxEngines.addresses": false,
+            "taxEngines.exemptions": false,
+            "taxEngines.manage": false,
+            "taxEngines.orders": false,
+            "taxEngines.productCodes": false,
             "workflows.orgAutomations": false,
             "workflows.sitePause": false
           }
@@ -61595,6 +62529,8 @@
           ],
           "result": {
             "accounting.manage": false,
+            "adConversions.manage": false,
+            "adConversions.view": false,
             "ai.generate": false,
             "ai.import": false,
             "ai.use": false,
@@ -61615,12 +62551,18 @@
             "commerce.shippingConnections": false,
             "commerce.walkIns": false,
             "commerce.webhooks": false,
+            "couriers.dispatch": false,
+            "couriers.manage": false,
+            "couriers.view": false,
             "crm.moveStages": false,
             "crm.settings": false,
             "data.manage": false,
             "domains.manage": false,
             "email.lists": false,
             "email.suppressions": false,
+            "fulfillmentNetworks.manage": false,
+            "fulfillmentNetworks.orders": false,
+            "fulfillmentNetworks.view": false,
             "funnels.manage": false,
             "helpDesks.manage": false,
             "helpDesks.view": false,
@@ -61628,6 +62570,9 @@
             "hosts.delete": false,
             "inbox.assign": false,
             "inbox.reply": false,
+            "inventorySync.manage": false,
+            "inventorySync.orders": false,
+            "inventorySync.view": false,
             "loyalty.adjustBalances": false,
             "loyalty.connection": false,
             "loyalty.program": false,
@@ -61642,6 +62587,9 @@
             "marketplace.publisherProfile": false,
             "marketplace.siteInstall": false,
             "marketplace.sitePublish": false,
+            "marketplaces.manage": false,
+            "marketplaces.orders": false,
+            "marketplaces.view": false,
             "members.manage": false,
             "org.apiKeys": false,
             "org.auditLog": false,
@@ -61662,6 +62610,11 @@
             "posDiscount": false,
             "posRefund": false,
             "posSell": false,
+            "postPurchase.manage": false,
+            "printOnDemand.manage": false,
+            "printOnDemand.orders": false,
+            "printOnDemand.products": false,
+            "reviewPlatforms.manage": false,
             "salesChannels.connect": false,
             "salesChannels.feeds": false,
             "salesChannels.replaceAddress": false,
@@ -61679,6 +62632,11 @@
             "site.manage": false,
             "site.publish": false,
             "site.sensitive": false,
+            "taxEngines.addresses": false,
+            "taxEngines.exemptions": false,
+            "taxEngines.manage": false,
+            "taxEngines.orders": false,
+            "taxEngines.productCodes": false,
             "workflows.orgAutomations": false,
             "workflows.sitePause": false
           }
@@ -61691,6 +62649,8 @@
           ],
           "result": {
             "accounting.manage": false,
+            "adConversions.manage": false,
+            "adConversions.view": false,
             "ai.generate": false,
             "ai.import": false,
             "ai.use": false,
@@ -61711,12 +62671,18 @@
             "commerce.shippingConnections": false,
             "commerce.walkIns": false,
             "commerce.webhooks": false,
+            "couriers.dispatch": false,
+            "couriers.manage": false,
+            "couriers.view": false,
             "crm.moveStages": false,
             "crm.settings": false,
             "data.manage": false,
             "domains.manage": false,
             "email.lists": false,
             "email.suppressions": false,
+            "fulfillmentNetworks.manage": false,
+            "fulfillmentNetworks.orders": false,
+            "fulfillmentNetworks.view": false,
             "funnels.manage": false,
             "helpDesks.manage": false,
             "helpDesks.view": false,
@@ -61724,6 +62690,9 @@
             "hosts.delete": false,
             "inbox.assign": false,
             "inbox.reply": false,
+            "inventorySync.manage": false,
+            "inventorySync.orders": false,
+            "inventorySync.view": false,
             "loyalty.adjustBalances": false,
             "loyalty.connection": false,
             "loyalty.program": false,
@@ -61738,6 +62707,9 @@
             "marketplace.publisherProfile": false,
             "marketplace.siteInstall": false,
             "marketplace.sitePublish": false,
+            "marketplaces.manage": false,
+            "marketplaces.orders": false,
+            "marketplaces.view": false,
             "members.manage": false,
             "org.apiKeys": false,
             "org.auditLog": false,
@@ -61758,6 +62730,11 @@
             "posDiscount": false,
             "posRefund": false,
             "posSell": false,
+            "postPurchase.manage": false,
+            "printOnDemand.manage": false,
+            "printOnDemand.orders": false,
+            "printOnDemand.products": false,
+            "reviewPlatforms.manage": false,
             "salesChannels.connect": false,
             "salesChannels.feeds": false,
             "salesChannels.replaceAddress": false,
@@ -61775,6 +62752,11 @@
             "site.manage": false,
             "site.publish": false,
             "site.sensitive": false,
+            "taxEngines.addresses": false,
+            "taxEngines.exemptions": false,
+            "taxEngines.manage": false,
+            "taxEngines.orders": false,
+            "taxEngines.productCodes": false,
             "workflows.orgAutomations": false,
             "workflows.sitePause": false
           }
@@ -61794,6 +62776,8 @@
           ],
           "result": {
             "accounting.manage": false,
+            "adConversions.manage": false,
+            "adConversions.view": true,
             "ai.generate": false,
             "ai.import": false,
             "ai.use": true,
@@ -61814,12 +62798,18 @@
             "commerce.shippingConnections": false,
             "commerce.walkIns": true,
             "commerce.webhooks": false,
+            "couriers.dispatch": true,
+            "couriers.manage": false,
+            "couriers.view": true,
             "crm.moveStages": false,
             "crm.settings": false,
             "data.manage": false,
             "domains.manage": false,
             "email.lists": true,
             "email.suppressions": true,
+            "fulfillmentNetworks.manage": false,
+            "fulfillmentNetworks.orders": true,
+            "fulfillmentNetworks.view": true,
             "funnels.manage": true,
             "helpDesks.manage": false,
             "helpDesks.view": true,
@@ -61827,6 +62817,9 @@
             "hosts.delete": false,
             "inbox.assign": true,
             "inbox.reply": true,
+            "inventorySync.manage": false,
+            "inventorySync.orders": true,
+            "inventorySync.view": true,
             "loyalty.adjustBalances": true,
             "loyalty.connection": false,
             "loyalty.program": false,
@@ -61841,6 +62834,9 @@
             "marketplace.publisherProfile": false,
             "marketplace.siteInstall": true,
             "marketplace.sitePublish": true,
+            "marketplaces.manage": false,
+            "marketplaces.orders": true,
+            "marketplaces.view": true,
             "members.manage": false,
             "org.apiKeys": false,
             "org.auditLog": false,
@@ -61861,6 +62857,11 @@
             "posDiscount": true,
             "posRefund": true,
             "posSell": true,
+            "postPurchase.manage": false,
+            "printOnDemand.manage": false,
+            "printOnDemand.orders": true,
+            "printOnDemand.products": true,
+            "reviewPlatforms.manage": false,
             "salesChannels.connect": false,
             "salesChannels.feeds": true,
             "salesChannels.replaceAddress": false,
@@ -61878,6 +62879,11 @@
             "site.manage": false,
             "site.publish": true,
             "site.sensitive": true,
+            "taxEngines.addresses": true,
+            "taxEngines.exemptions": true,
+            "taxEngines.manage": false,
+            "taxEngines.orders": true,
+            "taxEngines.productCodes": true,
             "workflows.orgAutomations": true,
             "workflows.sitePause": true
           }
@@ -61899,6 +62905,8 @@
           ],
           "result": {
             "accounting.manage": false,
+            "adConversions.manage": false,
+            "adConversions.view": false,
             "ai.generate": false,
             "ai.import": false,
             "ai.use": true,
@@ -61919,12 +62927,18 @@
             "commerce.shippingConnections": false,
             "commerce.walkIns": false,
             "commerce.webhooks": false,
+            "couriers.dispatch": false,
+            "couriers.manage": false,
+            "couriers.view": false,
             "crm.moveStages": false,
             "crm.settings": false,
             "data.manage": false,
             "domains.manage": false,
             "email.lists": false,
             "email.suppressions": false,
+            "fulfillmentNetworks.manage": false,
+            "fulfillmentNetworks.orders": false,
+            "fulfillmentNetworks.view": false,
             "funnels.manage": false,
             "helpDesks.manage": false,
             "helpDesks.view": false,
@@ -61932,6 +62946,9 @@
             "hosts.delete": false,
             "inbox.assign": false,
             "inbox.reply": false,
+            "inventorySync.manage": false,
+            "inventorySync.orders": false,
+            "inventorySync.view": false,
             "loyalty.adjustBalances": false,
             "loyalty.connection": false,
             "loyalty.program": false,
@@ -61946,6 +62963,9 @@
             "marketplace.publisherProfile": false,
             "marketplace.siteInstall": false,
             "marketplace.sitePublish": false,
+            "marketplaces.manage": false,
+            "marketplaces.orders": false,
+            "marketplaces.view": false,
             "members.manage": false,
             "org.apiKeys": false,
             "org.auditLog": false,
@@ -61966,6 +62986,11 @@
             "posDiscount": false,
             "posRefund": false,
             "posSell": false,
+            "postPurchase.manage": false,
+            "printOnDemand.manage": false,
+            "printOnDemand.orders": false,
+            "printOnDemand.products": false,
+            "reviewPlatforms.manage": false,
             "salesChannels.connect": false,
             "salesChannels.feeds": false,
             "salesChannels.replaceAddress": false,
@@ -61983,6 +63008,11 @@
             "site.manage": false,
             "site.publish": false,
             "site.sensitive": false,
+            "taxEngines.addresses": false,
+            "taxEngines.exemptions": false,
+            "taxEngines.manage": false,
+            "taxEngines.orders": false,
+            "taxEngines.productCodes": false,
             "workflows.orgAutomations": false,
             "workflows.sitePause": false
           }
@@ -61999,6 +63029,8 @@
           ],
           "result": {
             "accounting.manage": true,
+            "adConversions.manage": true,
+            "adConversions.view": true,
             "ai.generate": true,
             "ai.import": true,
             "ai.use": true,
@@ -62019,12 +63051,18 @@
             "commerce.shippingConnections": true,
             "commerce.walkIns": true,
             "commerce.webhooks": true,
+            "couriers.dispatch": true,
+            "couriers.manage": true,
+            "couriers.view": true,
             "crm.moveStages": true,
             "crm.settings": true,
             "data.manage": true,
             "domains.manage": true,
             "email.lists": true,
             "email.suppressions": true,
+            "fulfillmentNetworks.manage": true,
+            "fulfillmentNetworks.orders": true,
+            "fulfillmentNetworks.view": true,
             "funnels.manage": true,
             "helpDesks.manage": true,
             "helpDesks.view": true,
@@ -62032,6 +63070,9 @@
             "hosts.delete": false,
             "inbox.assign": true,
             "inbox.reply": true,
+            "inventorySync.manage": true,
+            "inventorySync.orders": true,
+            "inventorySync.view": true,
             "loyalty.adjustBalances": true,
             "loyalty.connection": true,
             "loyalty.program": true,
@@ -62046,6 +63087,9 @@
             "marketplace.publisherProfile": true,
             "marketplace.siteInstall": true,
             "marketplace.sitePublish": true,
+            "marketplaces.manage": true,
+            "marketplaces.orders": true,
+            "marketplaces.view": true,
             "members.manage": true,
             "org.apiKeys": true,
             "org.auditLog": true,
@@ -62066,6 +63110,11 @@
             "posDiscount": true,
             "posRefund": true,
             "posSell": true,
+            "postPurchase.manage": true,
+            "printOnDemand.manage": true,
+            "printOnDemand.orders": true,
+            "printOnDemand.products": true,
+            "reviewPlatforms.manage": true,
             "salesChannels.connect": true,
             "salesChannels.feeds": true,
             "salesChannels.replaceAddress": true,
@@ -62083,6 +63132,11 @@
             "site.manage": true,
             "site.publish": true,
             "site.sensitive": true,
+            "taxEngines.addresses": true,
+            "taxEngines.exemptions": true,
+            "taxEngines.manage": true,
+            "taxEngines.orders": true,
+            "taxEngines.productCodes": true,
             "workflows.orgAutomations": true,
             "workflows.sitePause": true
           }
@@ -62099,6 +63153,8 @@
           ],
           "result": {
             "accounting.manage": false,
+            "adConversions.manage": false,
+            "adConversions.view": false,
             "ai.generate": false,
             "ai.import": false,
             "ai.use": false,
@@ -62119,12 +63175,18 @@
             "commerce.shippingConnections": false,
             "commerce.walkIns": false,
             "commerce.webhooks": false,
+            "couriers.dispatch": false,
+            "couriers.manage": false,
+            "couriers.view": false,
             "crm.moveStages": false,
             "crm.settings": false,
             "data.manage": false,
             "domains.manage": false,
             "email.lists": false,
             "email.suppressions": false,
+            "fulfillmentNetworks.manage": false,
+            "fulfillmentNetworks.orders": false,
+            "fulfillmentNetworks.view": false,
             "funnels.manage": false,
             "helpDesks.manage": false,
             "helpDesks.view": false,
@@ -62132,6 +63194,9 @@
             "hosts.delete": false,
             "inbox.assign": false,
             "inbox.reply": false,
+            "inventorySync.manage": false,
+            "inventorySync.orders": false,
+            "inventorySync.view": false,
             "loyalty.adjustBalances": false,
             "loyalty.connection": false,
             "loyalty.program": false,
@@ -62146,6 +63211,9 @@
             "marketplace.publisherProfile": false,
             "marketplace.siteInstall": false,
             "marketplace.sitePublish": false,
+            "marketplaces.manage": false,
+            "marketplaces.orders": false,
+            "marketplaces.view": false,
             "members.manage": false,
             "org.apiKeys": false,
             "org.auditLog": false,
@@ -62166,6 +63234,11 @@
             "posDiscount": false,
             "posRefund": false,
             "posSell": false,
+            "postPurchase.manage": false,
+            "printOnDemand.manage": false,
+            "printOnDemand.orders": false,
+            "printOnDemand.products": false,
+            "reviewPlatforms.manage": false,
             "salesChannels.connect": false,
             "salesChannels.feeds": false,
             "salesChannels.replaceAddress": false,
@@ -62183,6 +63256,11 @@
             "site.manage": false,
             "site.publish": false,
             "site.sensitive": false,
+            "taxEngines.addresses": false,
+            "taxEngines.exemptions": false,
+            "taxEngines.manage": false,
+            "taxEngines.orders": false,
+            "taxEngines.productCodes": false,
             "workflows.orgAutomations": false,
             "workflows.sitePause": false
           }
@@ -62199,6 +63277,8 @@
           ],
           "result": {
             "accounting.manage": false,
+            "adConversions.manage": false,
+            "adConversions.view": false,
             "ai.generate": false,
             "ai.import": false,
             "ai.use": false,
@@ -62219,12 +63299,18 @@
             "commerce.shippingConnections": false,
             "commerce.walkIns": false,
             "commerce.webhooks": false,
+            "couriers.dispatch": false,
+            "couriers.manage": false,
+            "couriers.view": false,
             "crm.moveStages": false,
             "crm.settings": false,
             "data.manage": false,
             "domains.manage": false,
             "email.lists": false,
             "email.suppressions": false,
+            "fulfillmentNetworks.manage": false,
+            "fulfillmentNetworks.orders": false,
+            "fulfillmentNetworks.view": false,
             "funnels.manage": false,
             "helpDesks.manage": false,
             "helpDesks.view": false,
@@ -62232,6 +63318,9 @@
             "hosts.delete": false,
             "inbox.assign": false,
             "inbox.reply": false,
+            "inventorySync.manage": false,
+            "inventorySync.orders": false,
+            "inventorySync.view": false,
             "loyalty.adjustBalances": false,
             "loyalty.connection": false,
             "loyalty.program": false,
@@ -62246,6 +63335,9 @@
             "marketplace.publisherProfile": false,
             "marketplace.siteInstall": false,
             "marketplace.sitePublish": false,
+            "marketplaces.manage": false,
+            "marketplaces.orders": false,
+            "marketplaces.view": false,
             "members.manage": false,
             "org.apiKeys": false,
             "org.auditLog": false,
@@ -62266,6 +63358,11 @@
             "posDiscount": true,
             "posRefund": true,
             "posSell": true,
+            "postPurchase.manage": false,
+            "printOnDemand.manage": false,
+            "printOnDemand.orders": false,
+            "printOnDemand.products": false,
+            "reviewPlatforms.manage": false,
             "salesChannels.connect": false,
             "salesChannels.feeds": false,
             "salesChannels.replaceAddress": false,
@@ -62283,6 +63380,11 @@
             "site.manage": false,
             "site.publish": false,
             "site.sensitive": false,
+            "taxEngines.addresses": false,
+            "taxEngines.exemptions": false,
+            "taxEngines.manage": false,
+            "taxEngines.orders": false,
+            "taxEngines.productCodes": false,
             "workflows.orgAutomations": false,
             "workflows.sitePause": false
           }
@@ -62299,6 +63401,8 @@
           ],
           "result": {
             "accounting.manage": false,
+            "adConversions.manage": false,
+            "adConversions.view": true,
             "ai.generate": true,
             "ai.import": false,
             "ai.use": true,
@@ -62319,12 +63423,18 @@
             "commerce.shippingConnections": false,
             "commerce.walkIns": true,
             "commerce.webhooks": false,
+            "couriers.dispatch": true,
+            "couriers.manage": false,
+            "couriers.view": true,
             "crm.moveStages": true,
             "crm.settings": false,
             "data.manage": true,
             "domains.manage": false,
             "email.lists": true,
             "email.suppressions": true,
+            "fulfillmentNetworks.manage": false,
+            "fulfillmentNetworks.orders": true,
+            "fulfillmentNetworks.view": true,
             "funnels.manage": true,
             "helpDesks.manage": false,
             "helpDesks.view": true,
@@ -62332,6 +63442,9 @@
             "hosts.delete": false,
             "inbox.assign": true,
             "inbox.reply": true,
+            "inventorySync.manage": false,
+            "inventorySync.orders": true,
+            "inventorySync.view": true,
             "loyalty.adjustBalances": true,
             "loyalty.connection": false,
             "loyalty.program": false,
@@ -62346,6 +63459,9 @@
             "marketplace.publisherProfile": false,
             "marketplace.siteInstall": true,
             "marketplace.sitePublish": true,
+            "marketplaces.manage": false,
+            "marketplaces.orders": true,
+            "marketplaces.view": true,
             "members.manage": false,
             "org.apiKeys": false,
             "org.auditLog": false,
@@ -62366,6 +63482,11 @@
             "posDiscount": false,
             "posRefund": false,
             "posSell": false,
+            "postPurchase.manage": false,
+            "printOnDemand.manage": false,
+            "printOnDemand.orders": true,
+            "printOnDemand.products": true,
+            "reviewPlatforms.manage": false,
             "salesChannels.connect": false,
             "salesChannels.feeds": true,
             "salesChannels.replaceAddress": false,
@@ -62383,6 +63504,11 @@
             "site.manage": false,
             "site.publish": true,
             "site.sensitive": true,
+            "taxEngines.addresses": true,
+            "taxEngines.exemptions": true,
+            "taxEngines.manage": false,
+            "taxEngines.orders": true,
+            "taxEngines.productCodes": true,
             "workflows.orgAutomations": true,
             "workflows.sitePause": true
           }
@@ -62399,6 +63525,8 @@
           ],
           "result": {
             "accounting.manage": false,
+            "adConversions.manage": false,
+            "adConversions.view": true,
             "ai.generate": true,
             "ai.import": false,
             "ai.use": true,
@@ -62419,12 +63547,18 @@
             "commerce.shippingConnections": false,
             "commerce.walkIns": true,
             "commerce.webhooks": false,
+            "couriers.dispatch": true,
+            "couriers.manage": false,
+            "couriers.view": true,
             "crm.moveStages": true,
             "crm.settings": false,
             "data.manage": true,
             "domains.manage": false,
             "email.lists": true,
             "email.suppressions": true,
+            "fulfillmentNetworks.manage": false,
+            "fulfillmentNetworks.orders": true,
+            "fulfillmentNetworks.view": true,
             "funnels.manage": true,
             "helpDesks.manage": false,
             "helpDesks.view": true,
@@ -62432,6 +63566,9 @@
             "hosts.delete": false,
             "inbox.assign": true,
             "inbox.reply": true,
+            "inventorySync.manage": false,
+            "inventorySync.orders": true,
+            "inventorySync.view": true,
             "loyalty.adjustBalances": true,
             "loyalty.connection": false,
             "loyalty.program": false,
@@ -62446,6 +63583,9 @@
             "marketplace.publisherProfile": false,
             "marketplace.siteInstall": true,
             "marketplace.sitePublish": true,
+            "marketplaces.manage": false,
+            "marketplaces.orders": true,
+            "marketplaces.view": true,
             "members.manage": false,
             "org.apiKeys": false,
             "org.auditLog": false,
@@ -62466,6 +63606,11 @@
             "posDiscount": true,
             "posRefund": false,
             "posSell": true,
+            "postPurchase.manage": false,
+            "printOnDemand.manage": false,
+            "printOnDemand.orders": true,
+            "printOnDemand.products": true,
+            "reviewPlatforms.manage": false,
             "salesChannels.connect": false,
             "salesChannels.feeds": true,
             "salesChannels.replaceAddress": false,
@@ -62483,6 +63628,11 @@
             "site.manage": false,
             "site.publish": true,
             "site.sensitive": true,
+            "taxEngines.addresses": true,
+            "taxEngines.exemptions": true,
+            "taxEngines.manage": false,
+            "taxEngines.orders": true,
+            "taxEngines.productCodes": true,
             "workflows.orgAutomations": true,
             "workflows.sitePause": true
           }
@@ -62499,6 +63649,8 @@
           ],
           "result": {
             "accounting.manage": false,
+            "adConversions.manage": false,
+            "adConversions.view": false,
             "ai.generate": false,
             "ai.import": false,
             "ai.use": false,
@@ -62519,12 +63671,18 @@
             "commerce.shippingConnections": false,
             "commerce.walkIns": false,
             "commerce.webhooks": false,
+            "couriers.dispatch": false,
+            "couriers.manage": false,
+            "couriers.view": false,
             "crm.moveStages": false,
             "crm.settings": false,
             "data.manage": false,
             "domains.manage": false,
             "email.lists": false,
             "email.suppressions": false,
+            "fulfillmentNetworks.manage": false,
+            "fulfillmentNetworks.orders": false,
+            "fulfillmentNetworks.view": false,
             "funnels.manage": false,
             "helpDesks.manage": false,
             "helpDesks.view": false,
@@ -62532,6 +63690,9 @@
             "hosts.delete": false,
             "inbox.assign": false,
             "inbox.reply": false,
+            "inventorySync.manage": false,
+            "inventorySync.orders": false,
+            "inventorySync.view": false,
             "loyalty.adjustBalances": false,
             "loyalty.connection": false,
             "loyalty.program": false,
@@ -62546,6 +63707,9 @@
             "marketplace.publisherProfile": false,
             "marketplace.siteInstall": false,
             "marketplace.sitePublish": false,
+            "marketplaces.manage": false,
+            "marketplaces.orders": false,
+            "marketplaces.view": false,
             "members.manage": false,
             "org.apiKeys": false,
             "org.auditLog": false,
@@ -62566,6 +63730,11 @@
             "posDiscount": false,
             "posRefund": false,
             "posSell": false,
+            "postPurchase.manage": false,
+            "printOnDemand.manage": false,
+            "printOnDemand.orders": false,
+            "printOnDemand.products": false,
+            "reviewPlatforms.manage": false,
             "salesChannels.connect": false,
             "salesChannels.feeds": false,
             "salesChannels.replaceAddress": false,
@@ -62583,6 +63752,11 @@
             "site.manage": false,
             "site.publish": false,
             "site.sensitive": false,
+            "taxEngines.addresses": false,
+            "taxEngines.exemptions": false,
+            "taxEngines.manage": false,
+            "taxEngines.orders": false,
+            "taxEngines.productCodes": false,
             "workflows.orgAutomations": false,
             "workflows.sitePause": false
           }
@@ -62599,6 +63773,8 @@
           ],
           "result": {
             "accounting.manage": false,
+            "adConversions.manage": false,
+            "adConversions.view": true,
             "ai.generate": true,
             "ai.import": false,
             "ai.use": true,
@@ -62619,12 +63795,18 @@
             "commerce.shippingConnections": false,
             "commerce.walkIns": false,
             "commerce.webhooks": false,
+            "couriers.dispatch": true,
+            "couriers.manage": false,
+            "couriers.view": true,
             "crm.moveStages": true,
             "crm.settings": false,
             "data.manage": true,
             "domains.manage": false,
             "email.lists": true,
             "email.suppressions": true,
+            "fulfillmentNetworks.manage": false,
+            "fulfillmentNetworks.orders": true,
+            "fulfillmentNetworks.view": true,
             "funnels.manage": true,
             "helpDesks.manage": false,
             "helpDesks.view": true,
@@ -62632,6 +63814,9 @@
             "hosts.delete": false,
             "inbox.assign": true,
             "inbox.reply": true,
+            "inventorySync.manage": false,
+            "inventorySync.orders": true,
+            "inventorySync.view": true,
             "loyalty.adjustBalances": true,
             "loyalty.connection": false,
             "loyalty.program": false,
@@ -62646,6 +63831,9 @@
             "marketplace.publisherProfile": false,
             "marketplace.siteInstall": true,
             "marketplace.sitePublish": true,
+            "marketplaces.manage": false,
+            "marketplaces.orders": true,
+            "marketplaces.view": true,
             "members.manage": false,
             "org.apiKeys": false,
             "org.auditLog": false,
@@ -62666,6 +63854,11 @@
             "posDiscount": true,
             "posRefund": true,
             "posSell": true,
+            "postPurchase.manage": false,
+            "printOnDemand.manage": false,
+            "printOnDemand.orders": true,
+            "printOnDemand.products": true,
+            "reviewPlatforms.manage": false,
             "salesChannels.connect": false,
             "salesChannels.feeds": true,
             "salesChannels.replaceAddress": false,
@@ -62683,6 +63876,11 @@
             "site.manage": false,
             "site.publish": true,
             "site.sensitive": true,
+            "taxEngines.addresses": true,
+            "taxEngines.exemptions": true,
+            "taxEngines.manage": false,
+            "taxEngines.orders": true,
+            "taxEngines.productCodes": true,
             "workflows.orgAutomations": true,
             "workflows.sitePause": true
           }
@@ -62703,6 +63901,8 @@
           ],
           "result": {
             "accounting.manage": false,
+            "adConversions.manage": false,
+            "adConversions.view": true,
             "ai.generate": true,
             "ai.import": false,
             "ai.use": true,
@@ -62723,12 +63923,18 @@
             "commerce.shippingConnections": false,
             "commerce.walkIns": true,
             "commerce.webhooks": false,
+            "couriers.dispatch": true,
+            "couriers.manage": false,
+            "couriers.view": true,
             "crm.moveStages": true,
             "crm.settings": false,
             "data.manage": true,
             "domains.manage": false,
             "email.lists": true,
             "email.suppressions": true,
+            "fulfillmentNetworks.manage": false,
+            "fulfillmentNetworks.orders": true,
+            "fulfillmentNetworks.view": true,
             "funnels.manage": true,
             "helpDesks.manage": false,
             "helpDesks.view": true,
@@ -62736,6 +63942,9 @@
             "hosts.delete": false,
             "inbox.assign": true,
             "inbox.reply": true,
+            "inventorySync.manage": false,
+            "inventorySync.orders": true,
+            "inventorySync.view": true,
             "loyalty.adjustBalances": true,
             "loyalty.connection": false,
             "loyalty.program": false,
@@ -62750,6 +63959,9 @@
             "marketplace.publisherProfile": false,
             "marketplace.siteInstall": true,
             "marketplace.sitePublish": true,
+            "marketplaces.manage": false,
+            "marketplaces.orders": true,
+            "marketplaces.view": true,
             "members.manage": false,
             "org.apiKeys": false,
             "org.auditLog": false,
@@ -62770,6 +63982,11 @@
             "posDiscount": true,
             "posRefund": true,
             "posSell": true,
+            "postPurchase.manage": false,
+            "printOnDemand.manage": false,
+            "printOnDemand.orders": true,
+            "printOnDemand.products": true,
+            "reviewPlatforms.manage": false,
             "salesChannels.connect": false,
             "salesChannels.feeds": true,
             "salesChannels.replaceAddress": false,
@@ -62787,6 +64004,11 @@
             "site.manage": false,
             "site.publish": true,
             "site.sensitive": true,
+            "taxEngines.addresses": true,
+            "taxEngines.exemptions": true,
+            "taxEngines.manage": false,
+            "taxEngines.orders": true,
+            "taxEngines.productCodes": true,
             "workflows.orgAutomations": true,
             "workflows.sitePause": true
           }
@@ -64079,6 +65301,159 @@
         }
       ]
     },
+    "scopeSharingOf": {
+      "module": "libs/aglyn/src/lib/app-utils/scope-tokens.ts",
+      "cases": [
+        {
+          "args": [
+            {
+              "visibleTo": [
+                "org"
+              ]
+            }
+          ],
+          "result": {
+            "mode": "all"
+          }
+        },
+        {
+          "args": [
+            {
+              "visibleTo": [
+                "host:a",
+                "host:b"
+              ]
+            }
+          ],
+          "result": {
+            "hostIds": [
+              "a",
+              "b"
+            ],
+            "mode": "selected"
+          }
+        },
+        {
+          "args": [
+            {
+              "visibleTo": [
+                "host:b",
+                "host:c"
+              ],
+              "scopeMode": "allExcept",
+              "scopeExcept": [
+                "host:a"
+              ]
+            }
+          ],
+          "result": {
+            "exceptHostIds": [
+              "a"
+            ],
+            "includedHostIds": [
+              "b",
+              "c"
+            ],
+            "mode": "allExcept"
+          }
+        },
+        {
+          "args": [
+            {
+              "visibleTo": [],
+              "scopeMode": "allExcept",
+              "scopeExcept": [
+                "host:a"
+              ]
+            }
+          ],
+          "result": {
+            "exceptHostIds": [
+              "a"
+            ],
+            "includedHostIds": [],
+            "mode": "allExcept"
+          }
+        },
+        {
+          "args": [
+            {
+              "visibleTo": [
+                "org"
+              ],
+              "scopeMode": "allExcept",
+              "scopeExcept": [
+                "host:a"
+              ]
+            }
+          ],
+          "result": {
+            "mode": "all"
+          }
+        },
+        {
+          "args": [
+            {
+              "visibleTo": [
+                "host:b"
+              ],
+              "scopeMode": "allExcept"
+            }
+          ],
+          "result": {
+            "hostIds": [
+              "b"
+            ],
+            "mode": "selected"
+          }
+        },
+        {
+          "args": [
+            {
+              "visibleTo": [
+                "host:b"
+              ],
+              "scopeMode": "allExcept",
+              "scopeExcept": [
+                "org"
+              ]
+            }
+          ],
+          "result": {
+            "hostIds": [
+              "b"
+            ],
+            "mode": "selected"
+          }
+        },
+        {
+          "args": [
+            {
+              "visibleTo": []
+            }
+          ],
+          "result": {
+            "mode": "none"
+          }
+        },
+        {
+          "args": [
+            {}
+          ],
+          "result": {
+            "mode": "none"
+          }
+        },
+        {
+          "args": [
+            null
+          ],
+          "result": {
+            "mode": "none"
+          }
+        }
+      ]
+    },
     "scopeToStore": {
       "module": "libs/aglyn/src/lib/app-utils/scope-tokens.ts",
       "cases": [
@@ -65111,6 +66486,592 @@
               "scope": "org:o2"
             }
           ]
+        }
+      ]
+    },
+    "sharingCovers": {
+      "module": "libs/aglyn/src/lib/app-utils/scope-tokens.ts",
+      "cases": [
+        {
+          "args": [
+            {
+              "visibleTo": [
+                "org"
+              ]
+            },
+            {
+              "visibleTo": [
+                "host:a"
+              ]
+            }
+          ],
+          "result": true
+        },
+        {
+          "args": [
+            {
+              "visibleTo": [
+                "org"
+              ]
+            },
+            {
+              "visibleTo": [
+                "host:b"
+              ],
+              "scopeMode": "allExcept",
+              "scopeExcept": [
+                "host:a"
+              ]
+            }
+          ],
+          "result": true
+        },
+        {
+          "args": [
+            {
+              "visibleTo": [
+                "host:a"
+              ]
+            },
+            {
+              "visibleTo": [
+                "org"
+              ]
+            }
+          ],
+          "result": false
+        },
+        {
+          "args": [
+            {
+              "visibleTo": [
+                "host:a",
+                "host:b"
+              ]
+            },
+            {
+              "visibleTo": [
+                "host:a"
+              ]
+            }
+          ],
+          "result": true
+        },
+        {
+          "args": [
+            {
+              "visibleTo": [
+                "host:a"
+              ]
+            },
+            {
+              "visibleTo": [
+                "host:a",
+                "host:b"
+              ]
+            }
+          ],
+          "result": false
+        },
+        {
+          "args": [
+            {
+              "visibleTo": [
+                "host:a",
+                "host:b"
+              ]
+            },
+            {
+              "visibleTo": [
+                "host:a",
+                "host:b"
+              ],
+              "scopeMode": "allExcept",
+              "scopeExcept": [
+                "host:c"
+              ]
+            }
+          ],
+          "result": false
+        },
+        {
+          "args": [
+            {
+              "visibleTo": [
+                "host:b",
+                "host:c"
+              ],
+              "scopeMode": "allExcept",
+              "scopeExcept": [
+                "host:a"
+              ]
+            },
+            {
+              "visibleTo": [
+                "host:b"
+              ]
+            }
+          ],
+          "result": true
+        },
+        {
+          "args": [
+            {
+              "visibleTo": [
+                "host:b",
+                "host:c"
+              ],
+              "scopeMode": "allExcept",
+              "scopeExcept": [
+                "host:a"
+              ]
+            },
+            {
+              "visibleTo": [
+                "host:a"
+              ]
+            }
+          ],
+          "result": false
+        },
+        {
+          "args": [
+            {
+              "visibleTo": [
+                "host:b",
+                "host:c"
+              ],
+              "scopeMode": "allExcept",
+              "scopeExcept": [
+                "host:a"
+              ]
+            },
+            {
+              "visibleTo": [
+                "org"
+              ]
+            }
+          ],
+          "result": false
+        },
+        {
+          "args": [
+            {
+              "visibleTo": [
+                "host:b",
+                "host:c"
+              ],
+              "scopeMode": "allExcept",
+              "scopeExcept": [
+                "host:a"
+              ]
+            },
+            {
+              "visibleTo": [
+                "host:c"
+              ],
+              "scopeMode": "allExcept",
+              "scopeExcept": [
+                "host:a",
+                "host:b"
+              ]
+            }
+          ],
+          "result": true
+        },
+        {
+          "args": [
+            {
+              "visibleTo": [
+                "host:c"
+              ],
+              "scopeMode": "allExcept",
+              "scopeExcept": [
+                "host:a",
+                "host:b"
+              ]
+            },
+            {
+              "visibleTo": [
+                "host:b",
+                "host:c"
+              ],
+              "scopeMode": "allExcept",
+              "scopeExcept": [
+                "host:a"
+              ]
+            }
+          ],
+          "result": false
+        },
+        {
+          "args": [
+            {
+              "visibleTo": [
+                "host:b",
+                "host:c"
+              ],
+              "scopeMode": "allExcept",
+              "scopeExcept": [
+                "host:a"
+              ]
+            },
+            {
+              "visibleTo": [
+                "host:a",
+                "host:c"
+              ],
+              "scopeMode": "allExcept",
+              "scopeExcept": [
+                "host:b"
+              ]
+            }
+          ],
+          "result": false
+        },
+        {
+          "args": [
+            {
+              "visibleTo": [
+                "host:b",
+                "host:c"
+              ],
+              "scopeMode": "allExcept",
+              "scopeExcept": [
+                "host:a"
+              ]
+            },
+            {
+              "visibleTo": [
+                "host:a",
+                "host:b",
+                "host:c"
+              ],
+              "scopeMode": "allExcept",
+              "scopeExcept": [
+                "host:a"
+              ]
+            }
+          ],
+          "result": false
+        },
+        {
+          "args": [
+            null,
+            {
+              "visibleTo": [
+                "host:a"
+              ]
+            }
+          ],
+          "result": false
+        }
+      ]
+    },
+    "sharingFromChoice": {
+      "module": "libs/aglyn/src/lib/app-utils/scope-tokens.ts",
+      "cases": [
+        {
+          "args": [
+            {
+              "mode": "all"
+            },
+            [
+              "a",
+              "b",
+              "c"
+            ]
+          ],
+          "result": {
+            "fields": {
+              "scopeExcept": null,
+              "scopeMode": null,
+              "visibleTo": [
+                "org"
+              ]
+            },
+            "problem": null
+          }
+        },
+        {
+          "args": [
+            {
+              "mode": "selected",
+              "hostIds": [
+                "a"
+              ]
+            },
+            [
+              "a",
+              "b",
+              "c"
+            ]
+          ],
+          "result": {
+            "fields": {
+              "scopeExcept": null,
+              "scopeMode": null,
+              "visibleTo": [
+                "host:a"
+              ]
+            },
+            "problem": null
+          }
+        },
+        {
+          "args": [
+            {
+              "mode": "selected",
+              "hostIds": []
+            },
+            [
+              "a",
+              "b",
+              "c"
+            ]
+          ],
+          "result": {
+            "fields": null,
+            "problem": "Choose at least one site, or share with All sites."
+          }
+        },
+        {
+          "args": [
+            {
+              "mode": "allExcept",
+              "exceptHostIds": [
+                "a"
+              ]
+            },
+            [
+              "a",
+              "b",
+              "c"
+            ]
+          ],
+          "result": {
+            "fields": {
+              "scopeExcept": [
+                "host:a"
+              ],
+              "scopeMode": "allExcept",
+              "visibleTo": [
+                "host:b",
+                "host:c"
+              ]
+            },
+            "problem": null
+          }
+        },
+        {
+          "args": [
+            {
+              "mode": "allExcept",
+              "exceptHostIds": [
+                "a",
+                "a",
+                "gone"
+              ]
+            },
+            [
+              "a",
+              "b",
+              "c"
+            ]
+          ],
+          "result": {
+            "fields": {
+              "scopeExcept": [
+                "host:a"
+              ],
+              "scopeMode": "allExcept",
+              "visibleTo": [
+                "host:b",
+                "host:c"
+              ]
+            },
+            "problem": null
+          }
+        },
+        {
+          "args": [
+            {
+              "mode": "allExcept",
+              "exceptHostIds": []
+            },
+            [
+              "a",
+              "b",
+              "c"
+            ]
+          ],
+          "result": {
+            "fields": null,
+            "problem": "Choose at least one site to leave out, or share with All sites."
+          }
+        },
+        {
+          "args": [
+            {
+              "mode": "allExcept",
+              "exceptHostIds": [
+                "gone"
+              ]
+            },
+            [
+              "a",
+              "b",
+              "c"
+            ]
+          ],
+          "result": {
+            "fields": null,
+            "problem": "Choose at least one site to leave out, or share with All sites."
+          }
+        },
+        {
+          "args": [
+            {
+              "mode": "allExcept",
+              "exceptHostIds": [
+                "a",
+                "b",
+                "c"
+              ]
+            },
+            [
+              "a",
+              "b",
+              "c"
+            ]
+          ],
+          "result": {
+            "fields": null,
+            "problem": "Keep at least one site in, or choose the sites."
+          }
+        },
+        {
+          "args": [
+            {
+              "mode": "allExcept",
+              "exceptHostIds": [
+                "a"
+              ]
+            },
+            [
+              "a",
+              "b",
+              "c"
+            ],
+            {
+              "maxIncluded": 1
+            }
+          ],
+          "result": {
+            "fields": null,
+            "problem": "This can reach 1 site at most. Leave out more sites, or choose the sites."
+          }
+        },
+        {
+          "args": [
+            {
+              "mode": "allExcept",
+              "exceptHostIds": [
+                "a"
+              ]
+            },
+            [
+              "a",
+              "b",
+              "c"
+            ],
+            {
+              "maxIncluded": 2
+            }
+          ],
+          "result": {
+            "fields": {
+              "scopeExcept": [
+                "host:a"
+              ],
+              "scopeMode": "allExcept",
+              "visibleTo": [
+                "host:b",
+                "host:c"
+              ]
+            },
+            "problem": null
+          }
+        },
+        {
+          "args": [
+            {
+              "mode": "allExcept",
+              "exceptHostIds": [
+                "a"
+              ]
+            },
+            [
+              "a",
+              "b",
+              "c"
+            ],
+            {
+              "keepHostIds": [
+                "a"
+              ]
+            }
+          ],
+          "result": {
+            "fields": {
+              "scopeExcept": [
+                "host:a"
+              ],
+              "scopeMode": "allExcept",
+              "visibleTo": [
+                "host:a",
+                "host:b",
+                "host:c"
+              ]
+            },
+            "problem": null
+          }
+        },
+        {
+          "args": [
+            {
+              "mode": "allExcept",
+              "exceptHostIds": [
+                "a",
+                "b",
+                "c"
+              ]
+            },
+            [
+              "a",
+              "b",
+              "c"
+            ],
+            {
+              "keepHostIds": [
+                "b"
+              ]
+            }
+          ],
+          "result": {
+            "fields": {
+              "scopeExcept": [
+                "host:a",
+                "host:b",
+                "host:c"
+              ],
+              "scopeMode": "allExcept",
+              "visibleTo": [
+                "host:b"
+              ]
+            },
+            "problem": null
+          }
         }
       ]
     },

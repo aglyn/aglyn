@@ -28,8 +28,8 @@ A store syncs with one system at a time.
 
 ## Connect a system
 
-You need to be an admin of the site to connect, change or disconnect a
-system.
+Connecting, changing or disconnecting a system takes **Manage the inventory
+connection**, which a site's admins hold by default ([custom roles](../../workspace-and-billing/teams-and-roles/custom-roles.md#integration-permissions)).
 
 1. Open **Products → Integrations** and find the **Inventory and ERP** card.
 2. Connect the system you use:

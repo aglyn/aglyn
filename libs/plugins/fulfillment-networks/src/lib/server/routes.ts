@@ -15,6 +15,7 @@
  * limitations under the License.
  */
 
+import type { FulfillmentNetworksSitePermission } from '../model/fulfillment-networks-permissions'
 import { timingSafeEqual } from 'node:crypto'
 import { FULFILLMENT_NETWORKS_API_ROUTES, OAUTH_STATE_TTL_MS } from '../constants'
 import {
@@ -70,8 +71,6 @@ import {
  * and {@link routingView}.
  */
 
-export type NetworkRole = 'viewer' | 'editor' | 'admin'
-
 export interface NetworkGateResult {
   orgId: string
   hostId: string
@@ -88,7 +87,7 @@ export interface NetworkRouteDeps {
   engine: Engine
   /** Opens a connection's grant, refreshing it when it is about to expire. */
   credential(connectionId: string, connection: StoredConnection): Promise<NetworkCredential>
-  gate(request: Request, role: NetworkRole): Promise<NetworkGateResult | Response>
+  gate(request: Request, permission: FulfillmentNetworksSitePermission | null): Promise<NetworkGateResult | Response>
   /** The console address of a path of this plugin, or `null` when the deployment has none. */
   consoleAddress(path: string, requestUrl: string): string | null
   /** Records a connect or a disconnect on the workspace's activity log. Must not throw. */
@@ -182,7 +181,7 @@ export function createNetworkRoutes(deps: NetworkRouteDeps) {
     /** GET ?hostId — what this deployment offers, and the site's connections. */
     async list(request: Request): Promise<Response> {
       if (request.method !== 'GET') return fail(405, 'Method not allowed')
-      const gate = await deps.gate(request, 'editor')
+      const gate = await deps.gate(request, 'fulfillmentNetworks.view')
       if (gate instanceof Response) return gate
       const config = deps.config()
       const networks = offered()
@@ -198,7 +197,7 @@ export function createNetworkRoutes(deps: NetworkRouteDeps) {
     /** POST { hostId, provider, returnTo } — start connecting; answers the network's consent page address. */
     async connect(request: Request): Promise<Response> {
       if (request.method !== 'POST') return fail(405, 'Method not allowed')
-      const gate = await deps.gate(request, 'admin')
+      const gate = await deps.gate(request, 'fulfillmentNetworks.manage')
       if (gate instanceof Response) return gate
       const provider = readProvider(gate.body, request)
       if (!provider) return fail(400, 'Choose a network')
@@ -324,7 +323,7 @@ export function createNetworkRoutes(deps: NetworkRouteDeps) {
     /** PATCH { hostId, provider, …settings } · DELETE { hostId, provider } */
     async connection(request: Request): Promise<Response> {
       if (request.method !== 'PATCH' && request.method !== 'DELETE') return fail(405, 'Method not allowed')
-      const gate = await deps.gate(request, 'admin')
+      const gate = await deps.gate(request, 'fulfillmentNetworks.manage')
       if (gate instanceof Response) return gate
       const provider = readProvider(gate.body, request)
       if (!provider) return fail(400, 'Choose a network')
@@ -396,7 +395,7 @@ export function createNetworkRoutes(deps: NetworkRouteDeps) {
     /** POST { hostId, provider } — count the stock now and read back the orders the network holds. */
     async syncNow(request: Request): Promise<Response> {
       if (request.method !== 'POST') return fail(405, 'Method not allowed')
-      const gate = await deps.gate(request, 'admin')
+      const gate = await deps.gate(request, 'fulfillmentNetworks.manage')
       if (gate instanceof Response) return gate
       const provider = readProvider(gate.body, request)
       if (!provider) return fail(400, 'Choose a network')
@@ -417,7 +416,7 @@ export function createNetworkRoutes(deps: NetworkRouteDeps) {
     /** GET ?hostId&provider — the connection's activity, newest first. */
     async log(request: Request): Promise<Response> {
       if (request.method !== 'GET') return fail(405, 'Method not allowed')
-      const gate = await deps.gate(request, 'editor')
+      const gate = await deps.gate(request, 'fulfillmentNetworks.view')
       if (gate instanceof Response) return gate
       const provider = readProvider(gate.body, request)
       if (!provider) return fail(400, 'Choose a network')
@@ -429,7 +428,7 @@ export function createNetworkRoutes(deps: NetworkRouteDeps) {
     /** GET ?hostId&recordId — where one order stands with each network. */
     async order(request: Request): Promise<Response> {
       if (request.method !== 'GET') return fail(405, 'Method not allowed')
-      const gate = await deps.gate(request, 'viewer')
+      const gate = await deps.gate(request, null)
       if (gate instanceof Response) return gate
       const recordId = readRecordId(gate.body, request)
       if (!recordId) return fail(400, 'Missing recordId')
@@ -439,7 +438,7 @@ export function createNetworkRoutes(deps: NetworkRouteDeps) {
     /** POST { hostId, recordId, provider } — send one order's lines to a network now, or again. */
     async orderSend(request: Request): Promise<Response> {
       if (request.method !== 'POST') return fail(405, 'Method not allowed')
-      const gate = await deps.gate(request, 'editor')
+      const gate = await deps.gate(request, 'fulfillmentNetworks.orders')
       if (gate instanceof Response) return gate
       const provider = readProvider(gate.body, request)
       const recordId = readRecordId(gate.body, request)
@@ -489,7 +488,7 @@ export function createNetworkRoutes(deps: NetworkRouteDeps) {
     /** POST { hostId, recordId, provider } — ask the network to cancel what it holds of one order. */
     async orderCancel(request: Request): Promise<Response> {
       if (request.method !== 'POST') return fail(405, 'Method not allowed')
-      const gate = await deps.gate(request, 'editor')
+      const gate = await deps.gate(request, 'fulfillmentNetworks.orders')
       if (gate instanceof Response) return gate
       const provider = readProvider(gate.body, request)
       const recordId = readRecordId(gate.body, request)
@@ -516,7 +515,7 @@ export function createNetworkRoutes(deps: NetworkRouteDeps) {
      */
     async connectKey(request: Request): Promise<Response> {
       if (request.method !== 'POST') return fail(405, 'Method not allowed')
-      const gate = await deps.gate(request, 'admin')
+      const gate = await deps.gate(request, 'fulfillmentNetworks.manage')
       if (gate instanceof Response) return gate
       const provider = readProvider(gate.body, request)
       if (!provider) return fail(400, 'Choose a network')
@@ -598,7 +597,7 @@ export function createNetworkRoutes(deps: NetworkRouteDeps) {
      */
     async webhookSecret(request: Request): Promise<Response> {
       if (request.method !== 'POST') return fail(405, 'Method not allowed')
-      const gate = await deps.gate(request, 'admin')
+      const gate = await deps.gate(request, 'fulfillmentNetworks.manage')
       if (gate instanceof Response) return gate
       const provider = readProvider(gate.body, request)
       if (!provider) return fail(400, 'Choose a network')

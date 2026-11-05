@@ -15,6 +15,9 @@
  * limitations under the License.
  */
 
+import { holdsStampedSiteKey } from '@aglyn/aglyn/app-utils/host-permissions'
+import { permissionRefusalText } from '@aglyn/aglyn/app-utils/org-permissions'
+import { AD_CONVERSIONS_SITE_PRESETS, type AdConversionsSitePermission } from '../model/ad-conversions-permissions'
 import type { VisitorConsentHost } from '@aglyn/aglyn/app-utils/visitor-consent'
 import { resolveHostEnabledPlugins } from '@aglyn/aglyn/plugin-manager/enabled-plugins'
 import { getHostDocAdmin, getOrgForHost } from '@aglyn/tenant-data-admin'
@@ -32,7 +35,7 @@ import { defaultProviderHttp, type ProviderHttp } from '../providers/http'
 import { readAdConversionsKeyring } from './config'
 import type { DeliveryDeps } from './delivery'
 import type { IntakeDeps } from './intake'
-import { fail, type AdGateResult, type AdRole, type AdRouteDeps } from './routes'
+import { fail, type AdGateResult, type AdRouteDeps } from './routes'
 import { createFirestoreAdConversionStore, type AdConversionStore } from './store'
 
 /**
@@ -59,8 +62,6 @@ export const platformAdConversionStore = (): AdConversionStore => (store ??= cre
 const hostDoc = async (hostId: string): Promise<VisitorConsentHost | null> =>
   ((await getHostDocAdmin(hostId)) as VisitorConsentHost | null) ?? null
 
-const ROLE_RANK: Record<string, number> = { viewer: 1, author: 1, editor: 2, admin: 3 }
-
 const HOST_ID = /^[A-Za-z0-9_-]{1,128}$/
 
 async function readBody(request: Request): Promise<Record<string, unknown>> {
@@ -70,12 +71,12 @@ async function readBody(request: Request): Promise<Record<string, unknown>> {
 }
 
 /**
- * Who may use a route: a verified member of the site at `role`, the plugin on
+ * Who may use a route: a verified member of the site holding the key named, the plugin on
  * for the site, the site not locked. No plan entitlement, for the reason the
  * browser tags have none: the Tracking settings these events pair with are on
  * every plan.
  */
-export async function adConversionsGate(request: Request, role: AdRole): Promise<AdGateResult | Response> {
+export async function adConversionsGate(request: Request, permission: AdConversionsSitePermission | null): Promise<AdGateResult | Response> {
   const authorization = request.headers.get('authorization') ?? ''
   if (!authorization.startsWith('Bearer ')) return fail(401, 'Unauthenticated')
   let decoded
@@ -95,8 +96,11 @@ export async function adConversionsGate(request: Request, role: AdRole): Promise
   if (!resolved || !host) return fail(404, 'That site was not found')
   const org = resolved.org as Record<string, unknown>
   const staff = decoded['staff'] === true
-  const memberRole = String(((host as Record<string, unknown>)['memberRoles'] as Record<string, unknown> | undefined)?.[decoded.uid] ?? '')
-  if (!staff && (ROLE_RANK[memberRole] ?? 0) < ROLE_RANK[role]) return fail(403, 'Not permitted')
+  // No key named: anyone on the site's roster reads it.
+  if (!staff && !(((host as Record<string, unknown>)['memberRoles'] ?? {}) as Record<string, unknown>)[decoded.uid]) return fail(403, 'Not permitted')
+  if (!staff && permission && !holdsStampedSiteKey((host as Record<string, unknown>), decoded.uid, permission, AD_CONVERSIONS_SITE_PRESETS[permission])) {
+    return fail(403, permissionRefusalText(permission))
+  }
   const enabled = resolveHostEnabledPlugins(
     org as { enabledPlugins?: string[] },
     host as { disabledPlugins?: string[]; enabledPlugins?: string[] },

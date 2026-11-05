@@ -15,6 +15,9 @@
  * limitations under the License.
  */
 
+import { permissionRefusalText } from '@aglyn/aglyn/app-utils/org-permissions'
+import { useSiteKeys } from '@aglyn/tenant-feature-instance/hooks/use-site-keys'
+import { COURIERS_SITE_PRESETS } from '../model/couriers-permissions'
 import { pluginDocsHelp } from '@aglyn/aglyn/app-utils/docs-help'
 import { PLATFORM_BRAND_NAME } from '@aglyn/aglyn/app-utils/platform-brand'
 import { CardDisplay, useConfirmationContext } from '@aglyn/shared-ui-jsx'
@@ -116,6 +119,11 @@ export function CouriersCard(props: CouriersCardProps) {
   const { hostId } = props
   const routes = useCouriersApi(hostId)
   const api = props.api ?? routes
+  // What the routes ask, read as they read it (AGL-4047): a member who can't
+  // sees the card with the permission named, and its controls switched off.
+  const { blocked } = useSiteKeys(hostId)
+  const viewRefused = blocked('couriers.view', COURIERS_SITE_PRESETS['couriers.view'])
+  const manageRefused = blocked('couriers.manage', COURIERS_SITE_PRESETS['couriers.manage'])
   const [answer, setAnswer] = useState<CourierConnectionAnswer | null>(null)
   const [webhookToken, setWebhookToken] = useState<string | null>(null)
 
@@ -143,22 +151,42 @@ export function CouriersCard(props: CouriersCardProps) {
     [hostId],
   )
 
+  if (viewRefused) {
+    return (
+      <CardDisplay header="Couriers" contentGutterX contentGutterY>
+        <Typography variant="body2" color="text.secondary">
+          {permissionRefusalText('couriers.view')}
+        </Typography>
+      </CardDisplay>
+    )
+  }
   if (!answer?.available) return null
   const provider = answer.providers[0]
   if (!provider) return null
-  return answer.connection ? (
-    <ConnectedCard
-      api={api}
-      connection={answer.connection}
-      webhookToken={webhookToken}
-      onChange={replace}
-    />
-  ) : (
-    <ConnectCard api={api} provider={provider} onConnected={replace} />
+  return (
+    <Stack spacing={2}>
+      {manageRefused ? (
+        <Typography variant="body2" color="text.secondary">
+          {permissionRefusalText('couriers.manage')}
+        </Typography>
+      ) : null}
+      {answer.connection ? (
+        <ConnectedCard
+          locked={manageRefused}
+          api={api}
+          connection={answer.connection}
+          webhookToken={webhookToken}
+          onChange={replace}
+        />
+      ) : (
+        <ConnectCard locked={manageRefused} api={api} provider={provider} onConnected={replace} />
+      )}
+    </Stack>
   )
 }
 
 function ConnectCard(props: {
+  locked: boolean
   api: CouriersApi
   provider: CourierConnectionAnswer['providers'][number]
   onConnected: (connection: CourierConnectionView, token: string | null) => void
@@ -167,7 +195,9 @@ function ConnectCard(props: {
   const { enqueueSnackbar } = useSnackbar()
   const [liveKeys, setLiveKeys] = useState<CourierKeysInput>(EMPTY_KEYS)
   const [testKeys, setTestKeys] = useState<CourierKeysInput>(EMPTY_KEYS)
-  const [busy, setBusy] = useState(false)
+  const [working, setBusy] = useState(false)
+  // Off for a member without the key, the same way as while a change runs.
+  const busy = working || props.locked
   const [error, setError] = useState<string | null>(null)
 
   const handleConnect = async () => {
@@ -223,6 +253,7 @@ function ConnectCard(props: {
 }
 
 function ConnectedCard(props: {
+  locked: boolean
   api: CouriersApi
   connection: CourierConnectionView
   webhookToken: string | null
@@ -232,7 +263,9 @@ function ConnectedCard(props: {
   const provider: CourierProviderId = connection.provider
   const { enqueueSnackbar } = useSnackbar()
   const { confirm } = useConfirmationContext()
-  const [busy, setBusy] = useState(false)
+  const [working, setBusy] = useState(false)
+  // Off for a member without the key, the same way as while a change runs.
+  const busy = working || props.locked
   const [error, setError] = useState<string | null>(null)
   const [pickupPhone, setPickupPhone] = useState(connection.pickupPhone ?? '')
   const [pickupNote, setPickupNote] = useState(connection.pickupNote ?? '')

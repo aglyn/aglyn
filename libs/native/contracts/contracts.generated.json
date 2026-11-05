@@ -7461,6 +7461,11 @@
         "shipping.labels",
         "shipping.buyLabels",
         "shipping.voidLabels",
+        "taxEngines.manage",
+        "taxEngines.exemptions",
+        "taxEngines.productCodes",
+        "taxEngines.addresses",
+        "taxEngines.orders",
         "salesChannels.feeds",
         "salesChannels.settings",
         "salesChannels.replaceAddress",
@@ -7468,13 +7473,32 @@
         "salesChannels.sync",
         "marketingPlatforms.view",
         "marketingPlatforms.manage",
+        "postPurchase.manage",
+        "fulfillmentNetworks.view",
+        "fulfillmentNetworks.manage",
+        "fulfillmentNetworks.orders",
+        "marketplaces.view",
+        "marketplaces.manage",
+        "marketplaces.orders",
+        "printOnDemand.manage",
+        "printOnDemand.products",
+        "printOnDemand.orders",
+        "inventorySync.view",
+        "inventorySync.manage",
+        "inventorySync.orders",
         "loyalty.program",
         "loyalty.connection",
         "loyalty.adjustBalances",
+        "couriers.view",
+        "couriers.manage",
+        "couriers.dispatch",
+        "reviewPlatforms.manage",
         "helpDesks.view",
         "helpDesks.manage",
         "manageWaivers",
         "collectWaivers",
+        "adConversions.view",
+        "adConversions.manage",
         "domains.manage"
       ],
       "editor": [
@@ -7517,14 +7541,29 @@
         "shipping.labels",
         "shipping.buyLabels",
         "shipping.voidLabels",
+        "taxEngines.exemptions",
+        "taxEngines.productCodes",
+        "taxEngines.addresses",
+        "taxEngines.orders",
         "salesChannels.feeds",
         "salesChannels.settings",
         "salesChannels.sync",
         "marketingPlatforms.view",
+        "fulfillmentNetworks.view",
+        "fulfillmentNetworks.orders",
+        "marketplaces.view",
+        "marketplaces.orders",
+        "printOnDemand.products",
+        "printOnDemand.orders",
+        "inventorySync.view",
+        "inventorySync.orders",
         "loyalty.adjustBalances",
+        "couriers.view",
+        "couriers.dispatch",
         "helpDesks.view",
         "manageWaivers",
-        "collectWaivers"
+        "collectWaivers",
+        "adConversions.view"
       ],
       "owner": [
         "org.settings",
@@ -7599,6 +7638,11 @@
         "shipping.labels",
         "shipping.buyLabels",
         "shipping.voidLabels",
+        "taxEngines.manage",
+        "taxEngines.exemptions",
+        "taxEngines.productCodes",
+        "taxEngines.addresses",
+        "taxEngines.orders",
         "salesChannels.feeds",
         "salesChannels.settings",
         "salesChannels.replaceAddress",
@@ -7606,13 +7650,32 @@
         "salesChannels.sync",
         "marketingPlatforms.view",
         "marketingPlatforms.manage",
+        "postPurchase.manage",
+        "fulfillmentNetworks.view",
+        "fulfillmentNetworks.manage",
+        "fulfillmentNetworks.orders",
+        "marketplaces.view",
+        "marketplaces.manage",
+        "marketplaces.orders",
+        "printOnDemand.manage",
+        "printOnDemand.products",
+        "printOnDemand.orders",
+        "inventorySync.view",
+        "inventorySync.manage",
+        "inventorySync.orders",
         "loyalty.program",
         "loyalty.connection",
         "loyalty.adjustBalances",
+        "couriers.view",
+        "couriers.manage",
+        "couriers.dispatch",
+        "reviewPlatforms.manage",
         "helpDesks.view",
         "helpDesks.manage",
         "manageWaivers",
         "collectWaivers",
+        "adConversions.view",
+        "adConversions.manage",
         "domains.manage"
       ],
       "viewer": []
@@ -7700,6 +7763,10 @@
         "label": "Shipping"
       },
       {
+        "id": "tax-engines",
+        "label": "Tax engines"
+      },
+      {
         "id": "sales-channels",
         "label": "Sales channels"
       },
@@ -7708,8 +7775,36 @@
         "label": "Email platforms"
       },
       {
+        "id": "post-purchase",
+        "label": "After the sale"
+      },
+      {
+        "id": "fulfillment-networks",
+        "label": "Fulfillment networks"
+      },
+      {
+        "id": "marketplaces",
+        "label": "Online marketplaces"
+      },
+      {
+        "id": "print-on-demand",
+        "label": "Print on demand"
+      },
+      {
+        "id": "inventory-sync",
+        "label": "Inventory sync"
+      },
+      {
         "id": "loyalty",
         "label": "Rewards"
+      },
+      {
+        "id": "couriers",
+        "label": "Local delivery couriers"
+      },
+      {
+        "id": "review-platforms",
+        "label": "Review platforms"
       },
       {
         "id": "help-desks",
@@ -7719,6 +7814,10 @@
         "id": "waivers",
         "label": "Waivers",
         "pluginId": "waivers"
+      },
+      {
+        "id": "ad-conversions",
+        "label": "Ad conversions"
       },
       {
         "id": "domains",
@@ -8451,6 +8550,71 @@
         }
       },
       {
+        "description": "Connect, test and disconnect a tax engine, and change its ship-from address, default tax code and recording. Follows the site role unless a role or member sets it.",
+        "group": "tax-engines",
+        "key": "taxEngines.manage",
+        "label": "Manage the tax engine connection",
+        "scope": "site",
+        "sitePreset": {
+          "admin": true,
+          "author": false,
+          "editor": false,
+          "viewer": false
+        }
+      },
+      {
+        "description": "See, save and remove the customers exempt from tax. Follows the site role unless a role or member sets it.",
+        "group": "tax-engines",
+        "key": "taxEngines.exemptions",
+        "label": "Manage exempt customers",
+        "scope": "site",
+        "sitePreset": {
+          "admin": true,
+          "author": false,
+          "editor": true,
+          "viewer": false
+        }
+      },
+      {
+        "description": "Set the tax code a product is taxed under. Follows the site role unless a role or member sets it.",
+        "group": "tax-engines",
+        "key": "taxEngines.productCodes",
+        "label": "Set product tax codes",
+        "scope": "site",
+        "sitePreset": {
+          "admin": true,
+          "author": false,
+          "editor": true,
+          "viewer": false
+        }
+      },
+      {
+        "description": "Ask the tax engine how it reads an address. Follows the site role unless a role or member sets it.",
+        "group": "tax-engines",
+        "key": "taxEngines.addresses",
+        "label": "Check addresses with the tax engine",
+        "scope": "site",
+        "sitePreset": {
+          "admin": true,
+          "author": false,
+          "editor": true,
+          "viewer": false
+        }
+      },
+      {
+        "description": "See how an order stands with the tax engine, and send it again. Follows the site role unless a role or member sets it.",
+        "group": "tax-engines",
+        "key": "taxEngines.orders",
+        "label": "See and resend orders to the tax engine",
+        "scope": "site",
+        "sitePreset": {
+          "admin": true,
+          "author": false,
+          "editor": true,
+          "viewer": false
+        }
+      },
+      {
         "description": "Turn each shopping channel’s product feed on or off. Follows the site role unless a role or member sets it.",
         "group": "sales-channels",
         "key": "salesChannels.feeds",
@@ -8542,6 +8706,175 @@
         }
       },
       {
+        "description": "Connect, change and disconnect the services that follow an order after it is placed. Follows the site role unless a role or member sets it.",
+        "group": "post-purchase",
+        "key": "postPurchase.manage",
+        "label": "Change after-the-sale services",
+        "scope": "site",
+        "sitePreset": {
+          "admin": true,
+          "author": false,
+          "editor": false,
+          "viewer": false
+        }
+      },
+      {
+        "description": "See which fulfillment networks this site is connected to, and each connection’s activity. Follows the site role unless a role or member sets it.",
+        "group": "fulfillment-networks",
+        "key": "fulfillmentNetworks.view",
+        "label": "See fulfillment network connections",
+        "scope": "site",
+        "sitePreset": {
+          "admin": true,
+          "author": false,
+          "editor": true,
+          "viewer": false
+        }
+      },
+      {
+        "description": "Connect and disconnect a network, change its settings and webhook secret, and run its sync. Follows the site role unless a role or member sets it.",
+        "group": "fulfillment-networks",
+        "key": "fulfillmentNetworks.manage",
+        "label": "Manage fulfillment network connections",
+        "scope": "site",
+        "sitePreset": {
+          "admin": true,
+          "author": false,
+          "editor": false,
+          "viewer": false
+        }
+      },
+      {
+        "description": "Send an order’s lines to a network, or ask the network to cancel them. Follows the site role unless a role or member sets it.",
+        "group": "fulfillment-networks",
+        "key": "fulfillmentNetworks.orders",
+        "label": "Send orders to a fulfillment network",
+        "scope": "site",
+        "sitePreset": {
+          "admin": true,
+          "author": false,
+          "editor": true,
+          "viewer": false
+        }
+      },
+      {
+        "description": "See which online marketplaces this site sells on, each connection’s activity and the listings to look at. Follows the site role unless a role or member sets it.",
+        "group": "marketplaces",
+        "key": "marketplaces.view",
+        "label": "See online marketplace connections",
+        "scope": "site",
+        "sitePreset": {
+          "admin": true,
+          "author": false,
+          "editor": true,
+          "viewer": false
+        }
+      },
+      {
+        "description": "Connect and disconnect a marketplace seller account, change its settings and run its sync. Follows the site role unless a role or member sets it.",
+        "group": "marketplaces",
+        "key": "marketplaces.manage",
+        "label": "Manage online marketplace connections",
+        "scope": "site",
+        "sitePreset": {
+          "admin": true,
+          "author": false,
+          "editor": false,
+          "viewer": false
+        }
+      },
+      {
+        "description": "Send an order’s refused or failed shipments to its marketplace again. Follows the site role unless a role or member sets it.",
+        "group": "marketplaces",
+        "key": "marketplaces.orders",
+        "label": "Resend marketplace shipments",
+        "scope": "site",
+        "sitePreset": {
+          "admin": true,
+          "author": false,
+          "editor": true,
+          "viewer": false
+        }
+      },
+      {
+        "description": "Connect and disconnect a print-on-demand service, and choose how paid orders are sent to it. Follows the site role unless a role or member sets it.",
+        "group": "print-on-demand",
+        "key": "printOnDemand.manage",
+        "label": "Manage print-on-demand connections",
+        "scope": "site",
+        "sitePreset": {
+          "admin": true,
+          "author": false,
+          "editor": false,
+          "viewer": false
+        }
+      },
+      {
+        "description": "Browse a service’s products, import or re-sync them, and stop filling a product through it. Follows the site role unless a role or member sets it.",
+        "group": "print-on-demand",
+        "key": "printOnDemand.products",
+        "label": "Import print-on-demand products",
+        "scope": "site",
+        "sitePreset": {
+          "admin": true,
+          "author": false,
+          "editor": true,
+          "viewer": false
+        }
+      },
+      {
+        "description": "See the service orders, and send, confirm, refresh or cancel one, which a service may charge for. Follows the site role unless a role or member sets it.",
+        "group": "print-on-demand",
+        "key": "printOnDemand.orders",
+        "label": "Work print-on-demand orders",
+        "scope": "site",
+        "sitePreset": {
+          "admin": true,
+          "author": false,
+          "editor": true,
+          "viewer": false
+        }
+      },
+      {
+        "description": "See which inventory system this site is connected to, its activity and the orders that could not be sent. Follows the site role unless a role or member sets it.",
+        "group": "inventory-sync",
+        "key": "inventorySync.view",
+        "label": "See the inventory connection",
+        "scope": "site",
+        "sitePreset": {
+          "admin": true,
+          "author": false,
+          "editor": true,
+          "viewer": false
+        }
+      },
+      {
+        "description": "Connect and disconnect an inventory system, change its settings and locations, and run its sync. Follows the site role unless a role or member sets it.",
+        "group": "inventory-sync",
+        "key": "inventorySync.manage",
+        "label": "Manage the inventory connection",
+        "scope": "site",
+        "sitePreset": {
+          "admin": true,
+          "author": false,
+          "editor": false,
+          "viewer": false
+        }
+      },
+      {
+        "description": "Send an order that could not be sent to the inventory system again. Follows the site role unless a role or member sets it.",
+        "group": "inventory-sync",
+        "key": "inventorySync.orders",
+        "label": "Send orders to the inventory system",
+        "scope": "site",
+        "sitePreset": {
+          "admin": true,
+          "author": false,
+          "editor": true,
+          "viewer": false
+        }
+      },
+      {
         "description": "Change how rewards are earned and spent, the referral offer and the rewards emails. Follows the site role unless a role or member sets it.",
         "group": "loyalty",
         "key": "loyalty.program",
@@ -8577,6 +8910,58 @@
           "admin": true,
           "author": false,
           "editor": true,
+          "viewer": false
+        }
+      },
+      {
+        "description": "See which courier this site is connected to, and an order’s delivery. Follows the site role unless a role or member sets it.",
+        "group": "couriers",
+        "key": "couriers.view",
+        "label": "See the courier connection",
+        "scope": "site",
+        "sitePreset": {
+          "admin": true,
+          "author": false,
+          "editor": true,
+          "viewer": false
+        }
+      },
+      {
+        "description": "Connect and disconnect a courier, test it, change its settings and its webhook token. Follows the site role unless a role or member sets it.",
+        "group": "couriers",
+        "key": "couriers.manage",
+        "label": "Manage the courier connection",
+        "scope": "site",
+        "sitePreset": {
+          "admin": true,
+          "author": false,
+          "editor": false,
+          "viewer": false
+        }
+      },
+      {
+        "description": "Get a quote, send a courier for an order, cancel one and refresh where it is. A courier’s charge is the store’s. Follows the site role unless a role or member sets it.",
+        "group": "couriers",
+        "key": "couriers.dispatch",
+        "label": "Dispatch couriers",
+        "scope": "site",
+        "sitePreset": {
+          "admin": true,
+          "author": false,
+          "editor": true,
+          "viewer": false
+        }
+      },
+      {
+        "description": "Connect, change and disconnect the services that ask buyers for reviews. Follows the site role unless a role or member sets it.",
+        "group": "review-platforms",
+        "key": "reviewPlatforms.manage",
+        "label": "Change review services",
+        "scope": "site",
+        "sitePreset": {
+          "admin": true,
+          "author": false,
+          "editor": false,
           "viewer": false
         }
       },
@@ -8623,6 +9008,32 @@
         "narrowable": true,
         "pluginId": "waivers",
         "scope": "org"
+      },
+      {
+        "description": "See which ad accounts this site sends conversions to. Follows the site role unless a role or member sets it.",
+        "group": "ad-conversions",
+        "key": "adConversions.view",
+        "label": "See ad conversion connections",
+        "scope": "site",
+        "sitePreset": {
+          "admin": true,
+          "author": false,
+          "editor": true,
+          "viewer": false
+        }
+      },
+      {
+        "description": "Connect and disconnect an ad account, change its settings, pause it and send a test event. Follows the site role unless a role or member sets it.",
+        "group": "ad-conversions",
+        "key": "adConversions.manage",
+        "label": "Manage ad conversion connections",
+        "scope": "site",
+        "sitePreset": {
+          "admin": true,
+          "author": false,
+          "editor": false,
+          "viewer": false
+        }
       },
       {
         "description": "Buy, transfer in, unlock and renew the workspace’s domains, and change their contacts and DNS. Paying for one also needs \"Manage billing\".",
