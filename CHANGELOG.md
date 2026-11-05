@@ -78,6 +78,28 @@ content on the marketing site and is written separately.
 
 6 commit(s) did not parse as conventional commits (merge commits and the like) and did not contribute to the version bump.
 
+### Added while this release was open
+
+- docs(ai): Keep my site's look measures, and what a button too light for white words does ([AGL-4152](https://linear.app/aglyn/issue/AGL-4152))
+- feat(ai): the reader keeps each button style's case, the outlined color, the soft fill and a page's dark scheme from its CSS ([AGL-4152](https://linear.app/aglyn/issue/AGL-4152))
+- feat(commerce): product CSV carries add-ons, check-in, quick key ([AGL-4060](https://linear.app/aglyn/issue/AGL-4060))
+- feat(native): a role and a member's permissions cover the whole catalog ([AGL-4047](https://linear.app/aglyn/issue/AGL-4047))
+- feat(privacy): plugins say what a person erasure keeps on the Erase a person card ([AGL-4042](https://linear.app/aglyn/issue/AGL-4042))
+- fix(ai): Keep my site's fidelity fails what the eye fails: the opening's place, grounds in both schemes, fill, case per style, outline ([AGL-4152](https://linear.app/aglyn/issue/AGL-4152))
+- fix(ai): Keep my site's measures read the theme's own roles, and the 11/5 Home is held red to green; the look line prints paper, outline and text case ([AGL-4152](https://linear.app/aglyn/issue/AGL-4152))
+- fix(ai): Keep my site's theme holds the source's paper, its fill under a label that reads, and its outlined and text buttons over the base ([AGL-4152](https://linear.app/aglyn/issue/AGL-4152))
+- fix(ai): a light band is read against its page's ground, and a dark fill only where the dark scheme changes it; Improve it reads as before ([AGL-4152](https://linear.app/aglyn/issue/AGL-4152))
+- fix(ai): an answer of none opens a kept page as the source's own too, and the set of heroes an answer could pick goes ([AGL-4152](https://linear.app/aglyn/issue/AGL-4152))
+- fix(ai): under Keep my site the opening is the source's own hero, whatever the answer asks, its heading held to the source's measure ([AGL-4152](https://linear.app/aglyn/issue/AGL-4152))
+- fix(apple): the app model imports the contracts for the plugin list ([AGL-4047](https://linear.app/aglyn/issue/AGL-4047))
+- fix(commerce): the kiosk reaches the whole catalog past its first 200 ([AGL-4060](https://linear.app/aglyn/issue/AGL-4060))
+- fix(site): the members page header is whole, Markdown reads _italics_, Minimal's quiet text is readable ([AGL-4182](https://linear.app/aglyn/issue/AGL-4182))
+- fix(themes): tabs stay inside the page on a phone ([AGL-4181](https://linear.app/aglyn/issue/AGL-4181))
+- test(ai): a page's dark scheme is read from its media queries and root marks, and none from aglyn.com's Home ([AGL-4152](https://linear.app/aglyn/issue/AGL-4152))
+- test(ai): aglyn.com's Home recorded as it read on 11/5, with the answer that import took ([AGL-4152](https://linear.app/aglyn/issue/AGL-4152))
+- test(outreach): the rules drift spec reads the key the read now asks ([AGL-4047](https://linear.app/aglyn/issue/AGL-4047))
+- test: count the campaign member read, and widen a flaky rate-limit deadline ([AGL-4047](https://linear.app/aglyn/issue/AGL-4047), [AGL-2404](https://linear.app/aglyn/issue/AGL-2404))
+
 ## v1.11.0 — 2026-11-04
 
 [Compare with the previous release](https://github.com/aglyn/aglyn/compare/v1.10.0...v1.11.0)
