@@ -65,7 +65,6 @@ import {
   dynamicListRuleListIds,
   dynamicListRuleWithoutListReference,
   dynamicListRuleNeedsContactFacet,
-  contactSourceIsPluginWord,
   dynamicListDimensionsForCrmView,
   dynamicListPlanningRule,
   CRM_COLLECTIONS,
@@ -89,6 +88,7 @@ import {
   type ResolvedSegmentFilters,
 } from '@aglyn/aglyn/server'
 import { consentGroupHoldersInMotion } from '@aglyn/aglyn/app-utils/consent-group-change'
+import { isPluginContactSource } from '@aglyn/aglyn/plugin-manager/plugin-contact-capture'
 import { runPluginDeclarationsRepair } from '@aglyn/aglyn/plugin-manager/plugin-declarations-repair'
 import { firebaseAdmin } from './firebase-admin'
 import { readPersonEngagementByKeys } from './email-delivery-log'
@@ -291,7 +291,7 @@ async function crmViewDimensionsWithDeclarations(
 
 /**
  * The plugin-declared capture sources in a facet, for the sweep's source match:
- * see `contactSourceIsPluginWord` for why the core's words are left out.
+ * see `isPluginContactSource` for why the core's words are left out.
  */
 function pluginSourcesFromFacet(
   data: Record<string, unknown>,
@@ -299,7 +299,7 @@ function pluginSourcesFromFacet(
 ): NonNullable<DynamicListCandidate['sources']> {
   return Object.fromEntries(
     Object.entries(readContactFacet(data, groupId).sources).filter(
-      ([source, held]) => held && contactSourceIsPluginWord(source),
+      ([source, held]) => held && isPluginContactSource(source),
     ),
   )
 }
@@ -625,7 +625,7 @@ export async function collectDynamicListCandidates(options: {
   let facetGroupId: string | null = null
   if (
     dynamicListRuleNeedsContactFacet(planning) ||
-    (segment?.sources ?? []).some(contactSourceIsPluginWord)
+    (segment?.sources ?? []).some(isPluginContactSource)
   ) {
     const found = await getOrgForHost(options.hostId).catch(() => null)
     const org = (found?.org as Record<string, unknown> | undefined) ?? null
