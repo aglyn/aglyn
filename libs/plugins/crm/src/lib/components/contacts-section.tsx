@@ -20,7 +20,6 @@ import * as Aglyn from '@aglyn/aglyn'
 import {
   CONTACT_LIFECYCLE_STAGE_LABELS,
   CONTACT_LIFECYCLE_STAGES,
-  CONTACT_SOURCE_LABELS,
   CRM_CONTACT_VIEW_FIELDS,
   type CrmViewFilterClause,
   crmContactCustomColumn,
@@ -31,6 +30,7 @@ import {
   pluginDocsHelp,
 } from '@aglyn/aglyn'
 import { type ConsolePluginPageProps } from '@aglyn/aglyn'
+import { listContactSourceOptions } from '@aglyn/aglyn/plugin-manager/plugin-contact-capture'
 import { hiddenFilterVisibility } from '@aglyn/shared-ui-jsx/const/list-filter'
 import { ListTable } from '@aglyn/shared-ui-jsx/components/list-table.component'
 import { ListPagination } from '@aglyn/shared-ui-jsx/components/list-pagination.component'
@@ -122,14 +122,6 @@ import {
 import { useListGridFilter } from '@aglyn/shared-ui-jsx/hooks/use-list-grid-filter'
 import CrmViewsControl, { type CrmViewPreset } from './crm-views-control'
 import { CrmSuiteLockedButton, CrmSuiteNotice, crmSuiteIncluded } from './crm-suite-lock'
-
-/**
- * The shared labels, under the name this file has always called them.
- *
- * The map lives beside the `ContactSource` union so the dynamic-list rule
- * editor and this filter cannot disagree about what `order` is called.
- */
-const SOURCE_LABELS = CONTACT_SOURCE_LABELS
 
 /**
  * The page sorts a column needs other than its cell's text (AGL-3680): the
@@ -591,8 +583,9 @@ export function ContactsPeopleSection(props: ConsolePluginPageProps) {
    * The choices the filter bar picks from. The companies are read only once
    * the reader has reached for a filter or is looking at a view that names
    * one — a read a list nobody is narrowing should not pay for, the same
-   * bargain the roster gets above. A stage and a source are fixed lists and
-   * cost nothing; a custom `select` field offers its own options.
+   * bargain the roster gets above. A stage is a fixed list and a source is
+   * the core's plus each door a plugin declared, read from what is registered,
+   * so neither costs a read; a custom `select` field offers its own options.
    */
   const companies = useCompanyOptions({
     hostId,
@@ -611,9 +604,7 @@ export function ContactsPeopleSection(props: ConsolePluginPageProps) {
         value: stage,
         label: CONTACT_LIFECYCLE_STAGE_LABELS[stage],
       })),
-      [CRM_CONTACT_VIEW_FIELDS.source]: Object.entries(SOURCE_LABELS).map(
-        ([value, label]) => ({ value, label }),
-      ),
+      [CRM_CONTACT_VIEW_FIELDS.source]: listContactSourceOptions(),
       [CRM_CONTACT_VIEW_FIELDS.company]: companies.options.map((company) => ({
         value: company.id,
         label: company.name,

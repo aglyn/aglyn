@@ -470,9 +470,9 @@ function conversionTouchOf(
  * a label, and the capture is the part that matters.
  *
  * A declared word READS by its plugin's label (`labelContactSource`, AGL-4042:
- * the waivers plugin's `waiver`). ⛔ What it still costs, until the union is
- * widened: the console's source filter keys on the union, so a plugin's word
- * matches no filter option, and an UNDECLARED word also renders raw.
+ * the waivers plugin's `waiver`) and is a choice in the console's source filter
+ * (`listContactSourceOptions`, AGL-3680). ⛔ An UNDECLARED word renders raw and
+ * no filter offers it.
  */
 export function contactSourceOf(source: string): ContactSource {
   const word = String(source ?? '').trim()
