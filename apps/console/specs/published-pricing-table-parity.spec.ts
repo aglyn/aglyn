@@ -1030,10 +1030,12 @@ describe('AGL-2469 · the published pricing table is still what the code does', 
      * sentence under the add-ons grid prices Managed Starter as Starter plus
      * the add-on: "$74 a month, or $65 a month billed yearly".
      *
-     * The card's other figures — $79 per started hour of extra work, and the
-     * $249 / $749 / $349 starting prices of landing pages, redesigns and a
-     * logo or brand kit — have no constant to pin yet: extra time bills as
-     * invoice items and projects as one-off invoices (AGL-3959, AGL-3970).
+     * The card's other figure — $79 per started hour of extra work — and the
+     * Site Care project price list in the panel under the cards (one flat
+     * price per job since 2026-11-05, redesign from $749) have no constant to
+     * pin: extra time bills as invoice items and projects as one-off
+     * invoices (AGL-3959, AGL-3970). The list's figures live in
+     * `tools/scripts/publish-pricing-site-care-project-prices.mjs`.
      */
     describe('Site Care add-on card', () => {
       it('$49 / mo — flat, on every paid plan', () => {
