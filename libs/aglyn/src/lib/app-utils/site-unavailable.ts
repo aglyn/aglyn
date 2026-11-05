@@ -83,7 +83,7 @@ export function isHostInMaintenance(
 
 /** What the middleware knows about a site, from its verdict. */
 export interface SiteUnavailableVerdict {
-  /** Maintenance mode is on. */
+  /** Maintenance mode is on: the public gets the notice, the team the site. */
   maintenance?: boolean
   /** The WHOLE site is in preview. One page in preview is not this. */
   preview?: boolean
@@ -105,12 +105,9 @@ export interface SiteUnavailableRouting {
 /**
  * Does this page request get the site's 503 answer as an HTTP 503?
  *
- * - **Maintenance: yes, for everyone**, the site's team included. It is the
- *   switch that means "nobody", and the loader serves the 503 page to every
- *   request, the team's preview route included, so every status says so.
- * - **A site in preview: yes, for the public**, the requests answered from the
- *   shared cache. A request carrying a team cookie goes to the uncached
- *   preview route instead, which shows the team the whole site.
+ * - **Maintenance or a site in preview: yes, for the public**, the requests
+ *   answered from the shared cache. A request carrying a team cookie goes to
+ *   the uncached preview route instead, which shows the team the whole site.
  * - **An entry preview link: no.** When the site is unavailable its route
  *   redirects to the plain address, which answers 503 by the rules above; a
  *   503 set here would only argue with that redirect.
@@ -128,6 +125,8 @@ export function siteUnavailableForRequest(
   routing: SiteUnavailableRouting,
 ): boolean {
   if (!verdict || routing.entryPreview || routing.noticeRequest) return false
-  if (verdict.maintenance === true) return true
-  return verdict.preview === true && !routing.teamPreview
+  return (
+    (verdict.maintenance === true || verdict.preview === true) &&
+    !routing.teamPreview
+  )
 }

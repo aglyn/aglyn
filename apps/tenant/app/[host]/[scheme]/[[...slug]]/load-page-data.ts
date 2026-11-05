@@ -627,16 +627,19 @@ const composePageResult = async (
     }
 
     // Sent as a 503 by the middleware, which reads this same predicate off the
-    // verdict (AGL-4110): the page cannot set its own status.
-    if (isHostInMaintenance(hostRes.host as never)) return serveUnavailable()
+    // verdict (AGL-4110): the page cannot set its own status. The site's team
+    // sees the site, as it does in preview: the uncached preview route verified
+    // them and asked with `teamView`.
+    if (isHostInMaintenance(hostRes.host as never) && !teamView) {
+      return serveUnavailable()
+    }
 
     // Preview (AGL-4086): the public gets the 503 page, or the built-in notice
     // worded "Coming soon", at every address — the maintenance answer, cached
-    // 30 s like it, `noindex` like it, and sent as a 503 like it (AGL-4110). Below maintenance on purpose: a site in
-    // both is in maintenance, for the team as for everyone, because that is
-    // the switch that means "nobody". The team's own view of a site in
-    // preview never reaches here; the uncached preview route verified it and
-    // asked with `teamView`.
+    // 30 s like it, `noindex` like it, and sent as a 503 like it (AGL-4110).
+    // Below maintenance on purpose: the public of a site in both gets the
+    // maintenance answer. The team's own view never reaches here; the uncached
+    // preview route verified it and asked with `teamView`.
     if (isHostInPreview(hostRes.host as never) && !teamView) {
       return serveUnavailable({ sitePreview: true })
     }

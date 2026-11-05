@@ -22,8 +22,10 @@ import {
   isHostInPreview,
   PAGE_PREVIEW_BANNER_TEXT,
   previewScreenIds,
+  SITE_MAINTENANCE_BANNER_TEXT,
   SITE_PREVIEW_BANNER_TEXT,
 } from '@aglyn/aglyn/app-utils/site-preview'
+import { isHostInMaintenance } from '@aglyn/aglyn/app-utils/site-unavailable'
 import type { Metadata } from 'next'
 import { notFound, redirect } from 'next/navigation'
 import { cache } from 'react'
@@ -43,7 +45,8 @@ import PreviewBanner from '../preview-banner'
 
 /**
  * The uncached render: an unpublished collection entry (AGL-3205), and a site
- * or page in preview as its team sees it (AGL-4086).
+ * in maintenance or preview, or a page in preview, as its team sees it
+ * (AGL-4086).
  *
  * ## Why this is a route of its own and not a branch of the catch-all
  *
@@ -74,7 +77,8 @@ import PreviewBanner from '../preview-banner'
  *
  * - `?aglyn_preview=` — a two-hour, one-entry token the console minted. The
  *   loader verifies it inside the collection branch.
- * - A team cookie, while the site or the page at this address is in preview.
+ * - A team cookie, while the site is in maintenance or preview, or the page at
+ *   this address is in preview.
  *   The middleware checked only that one was PRESENT; `sitePreviewViewer`
  *   verifies it here, and only a verified viewer is rendered the team's view.
  *
@@ -125,17 +129,17 @@ function consoleOrigin(): string {
 
 interface ResolvedPreview {
   result: LoadResult
-  /** The team's view of a site or page in preview, verified. */
+  /** The team's view of a site in maintenance or preview, or a page in preview, verified. */
   team: boolean
-  /** Which kind of preview the team is looking at, for the banner. */
-  scope: 'site' | 'page' | null
+  /** What the team is looking past, for the banner. */
+  scope: 'maintenance' | 'site' | 'page' | null
   host: Record<string, unknown> | null
 }
 
 /**
  * Who is asking, and what they get — once per request, for the head and the
- * body alike. The viewer check runs only for a host that has something in
- * preview: an entry preview on a public site costs no extra read.
+ * body alike. The viewer check runs only for a host that is closed to the
+ * public somewhere: an entry preview on a public site costs no extra read.
  */
 const resolvePreview = cache(
   async (
@@ -148,14 +152,22 @@ const resolvePreview = cache(
     const host = (hostRes.host ?? null) as Record<string, unknown> | null
     const hostId = String(host?.['$id'] ?? '')
     const sitePreview = isHostInPreview(host as never)
-    const anyPreview = sitePreview || previewScreenIds(host as never).length > 0
+    const maintenance = isHostInMaintenance(host as never)
+    const anyPreview =
+      maintenance || sitePreview || previewScreenIds(host as never).length > 0
     const viewer = hostId && anyPreview ? await sitePreviewViewer(hostId) : null
     const override: SiteOverride = viewer?.admitted ? SITE_PREVIEW_TEAM_VIEW : ''
     const result = await loadPageData(hostParam, slug, token, override)
     return {
       result,
       team: override === SITE_PREVIEW_TEAM_VIEW,
-      scope: !viewer?.admitted ? null : sitePreview ? 'site' : 'page',
+      scope: !viewer?.admitted
+        ? null
+        : maintenance
+          ? 'maintenance'
+          : sitePreview
+            ? 'site'
+            : 'page',
       host,
     }
   },
@@ -187,6 +199,13 @@ export async function generateMetadata({
       robots: { index: false, follow: false, nocache: true },
     }
   }
+  // The maintenance notice, or a lockdown's: the public answer's title.
+  if (props?.maintenanceFallback) {
+    return {
+      title: 'Temporarily unavailable',
+      robots: { index: false, follow: false, nocache: true },
+    }
+  }
   const screen = props?.data?.screen?.data as
     | { displayName?: string; seo?: { title?: string } }
     | undefined
@@ -214,7 +233,8 @@ export default async function PreviewPage({
   )
 
   /**
-   * The team's view of a site or page in preview (AGL-4086): the whole site,
+   * The team's view of a site in maintenance or preview, or a page in preview
+   * (AGL-4086): the whole site,
    * redirects and all, under the bar that says only the team can see it.
    * A site's own redirect rule is followed, as the public path follows it;
    * the redirect lands back on the middleware, which routes the team here
@@ -233,7 +253,13 @@ export default async function PreviewPage({
       <>
         {team ? (
           <PreviewBanner
-            sentence={scope === 'page' ? PAGE_PREVIEW_BANNER_TEXT : SITE_PREVIEW_BANNER_TEXT}
+            sentence={
+              scope === 'maintenance'
+                ? SITE_MAINTENANCE_BANNER_TEXT
+                : scope === 'page'
+                  ? PAGE_PREVIEW_BANNER_TEXT
+                  : SITE_PREVIEW_BANNER_TEXT
+            }
             link={await consoleLink(hostDoc, scope)}
           />
         ) : null}
@@ -290,7 +316,7 @@ export default async function PreviewPage({
  */
 async function consoleLink(
   host: Record<string, unknown> | null,
-  scope: 'site' | 'page' | null,
+  scope: 'maintenance' | 'site' | 'page' | null,
 ): Promise<{ href: string; label: string }> {
   const origin = consoleOrigin()
   const subdomain = String(host?.['subdomain'] ?? '')

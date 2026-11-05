@@ -135,15 +135,19 @@ export function sitePreviewPaths(
 
 /**
  * Whether a request path is one the team must be routed around the public
- * cache for: every path while the site is in preview, or the address of a
- * page in preview. Trailing slashes are ignored, as Next ignores them.
+ * cache for: every path while the site is in preview or in maintenance, or the
+ * address of a page in preview. Trailing slashes are ignored, as Next ignores
+ * them.
  */
 export function isSitePreviewRequest(
-  verdict: { preview?: boolean; previewPaths?: readonly string[] } | null | undefined,
+  verdict:
+    | { preview?: boolean; maintenance?: boolean; previewPaths?: readonly string[] }
+    | null
+    | undefined,
   pathname: string,
 ): boolean {
   if (!verdict) return false
-  if (verdict.preview === true) return true
+  if (verdict.preview === true || verdict.maintenance === true) return true
   const paths = verdict.previewPaths
   if (!paths || !paths.length) return false
   const normalized = routingPathToRequestPath(pathname)
@@ -253,6 +257,10 @@ export function sitePreviewNotice(siteName: string | null | undefined): {
 /** The fixed line the team reads on every page of a site in preview. */
 export const SITE_PREVIEW_BANNER_TEXT =
   'Preview — only your team can see this site. Make it public in Admin → Error pages.'
+
+/** The same line for a site in maintenance mode, whatever else it is in. */
+export const SITE_MAINTENANCE_BANNER_TEXT =
+  'Maintenance mode — only your team can see this site. Turn it off in Admin → Error pages.'
 
 /** The same line for one page in preview on a public site. */
 export const PAGE_PREVIEW_BANNER_TEXT =
