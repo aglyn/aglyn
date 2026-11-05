@@ -32,7 +32,7 @@ import { AI_ROUTING_TABLE, aiModelForStep } from '../providers/routing'
 import { aiDevEffortFor } from '../runtime/ai-dev-env'
 import { runAiRequest, type AiEffort, type AiSystemBlock } from '../runtime/ai-runtime'
 import type { AssistTokenUsage } from '../usage/assist-usage'
-import type { AiSiteImportState, AiSiteImportWords } from '../model/ai-site-import'
+import type { AiSiteImportAddedSection, AiSiteImportPagePictures, AiSiteImportRedesign, AiSiteImportState, AiSiteImportWords } from '../model/ai-site-import'
 import type { AiSitePhotos } from '../model/ai-site-photos'
 import { aiJobStepBudget } from './ai-job-budget'
 import { aiOverlayCopyRequested } from '../model/ai-overlay-copy'
@@ -173,6 +173,8 @@ export interface AiJobStepOutcome {
    * the import step writes onto the page's row so it reads as kept.
    */
   wording?: AiSiteImportWords
+  /** How a generative Improve it came out (AGL-4152): what its row says, what it added and what it shows. */
+  redesign?: { status: AiSiteImportRedesign; added: AiSiteImportAddedSection[]; pictures: AiSiteImportPagePictures | null }
   /**
    * A `site` job's pictures left on a starter photo after this pass
    * (AGL-3988), whole: what its late photo pass fills before the site is

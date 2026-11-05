@@ -42,6 +42,7 @@ import {
   type AiSiteImportBuild,
   type AiSiteImportFinish,
   type AiSiteImportPhoto,
+  type AiSiteImportPlan,
   type AiSiteImportWords,
   type SiteImportLayout,
 } from '../model/ai-site-import'
@@ -80,6 +81,16 @@ export interface AiSiteImportDocument {
   forms?: Array<{ index: number; formId: string | null }> | null
   /** The page's videos (AGL-4140), which its layout places by index; absent on a page that shows none. */
   videos?: SiteImportVideo[]
+  /** Redesigned from its ledger (AGL-4152): its wave was stamped generative. Absent, today's Improve it. */
+  generative?: true
+  /** What the site says of itself, the same bytes on every page of an import: a redesign's cached digest (AGL-4152). */
+  siteLines?: string[]
+  /** The lines of the wave's other pages, which a redesign's facts may come from (AGL-4152). */
+  scope?: string[]
+  /** The site's plan, once a wave has one (AGL-4152). */
+  plan?: AiSiteImportPlan | null
+  /** The theme's colors as its look drew them, where one was drawn (`SiteImportFidelityTheme`, AGL-4152). */
+  theme?: Record<string, unknown> | null
 }
 
 /** The most characters a text element holds (the palette's ceiling for body copy). */
@@ -237,6 +248,11 @@ export function aiSiteImportDocumentOf(inputs: Readonly<Record<string, unknown>>
     // How the page's wave finishes it and whether its words are improved (AGL-4152); anything else is absent: kept.
     ...(value['finish'] === 'keep' || value['finish'] === 'improve' ? { finish: value['finish'] } : {}),
     ...(value['wording'] === 'kept' || value['wording'] === 'improved' ? { wording: value['wording'] } : {}),
+    ...(value['generative'] === true ? { generative: true as const } : {}),
+    ...(Array.isArray(value['siteLines']) ? { siteLines: strings(value['siteLines']) } : {}),
+    ...(Array.isArray(value['scope']) ? { scope: strings(value['scope']) } : {}),
+    ...(value['plan'] && typeof value['plan'] === 'object' ? { plan: value['plan'] as AiSiteImportPlan } : {}),
+    ...(value['theme'] && typeof value['theme'] === 'object' ? { theme: value['theme'] as Record<string, unknown> } : {}),
     ...(isLayout(value['layout']) ? { layout: value['layout'] } : {}),
     ...(Array.isArray(value['videos']) ? { videos: (value['videos'] as unknown[]).map(videoOf) } : {}),
   }

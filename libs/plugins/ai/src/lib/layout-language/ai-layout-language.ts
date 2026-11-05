@@ -168,6 +168,8 @@ export interface AiLayoutItem {
   markPath?: string
   /** Its figure is set in the muted words' color (AGL-4138). */
   figureMuted?: true
+  /** The source's picture a redesigned item shows (`submit_improved_page`, AGL-4152), by its ledger ref. */
+  ref?: string
 }
 
 /**
@@ -487,10 +489,12 @@ function readItem(raw: unknown): AiLayoutItem | null {
   if (!item.title.trim() && !item.text.trim()) return null
   const to = text(raw['to'])
   const icon = text(raw['icon'])
-  return { ...item, ...(to ? { to } : {}), ...(icon ? { icon } : {}) }
+  const ref = text(raw['ref'])
+  return { ...item, ...(to ? { to } : {}), ...(icon ? { icon } : {}), ...(ref ? { ref: ref.trim() } : {}) }
 }
 
-function readBlock(
+/** One block of an answer read, or `null` with why it could not be. */
+export function aiReadLayoutBlock(
   raw: unknown,
   at: string,
   settled: AiLayoutSettlement[],
@@ -583,7 +587,7 @@ export function aiReadLayoutSection(
   }
   const blocks = Array.isArray(raw['blocks']) ? raw['blocks'] : []
   blocks.forEach((entry, index) => {
-    const block = readBlock(entry, `${at}.blocks[${index}]`, settled)
+    const block = aiReadLayoutBlock(entry, `${at}.blocks[${index}]`, settled)
     if (!block) return
     if (
       block.col !== undefined &&

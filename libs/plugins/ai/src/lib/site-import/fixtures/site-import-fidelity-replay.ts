@@ -28,6 +28,7 @@
 
 import { DEFAULT_SITE_THEME } from '@aglyn/aglyn/app-utils/default-site'
 import { aiImportedPageCheck } from '../../jobs/ai-job-page-language'
+import { aiReadImprovedPage, aiSiteImportImproveDestinations, aiSiteImportImproveLedger, aiSiteImportImproveScope, aiSiteImportImprovedPage, type AiSiteImportImprovedPage } from '../../jobs/ai-site-import-improve'
 import { aiSiteImportFrameJob, aiSiteImportHomeOf } from '../../jobs/ai-job-import-step'
 import { aiLayoutSiteBrandOf, aiLayoutSiteFrameOf, aiLayoutSourceFrameBuild } from '../../jobs/ai-job-layout-language'
 import { aiLayoutChecks } from '../../jobs/ai-job-layout-step'
@@ -53,7 +54,21 @@ import { extractSiteImportPage, type SiteImportBlock } from '../site-import-html
 import { siteImportLayout, siteImportLookOf } from '../site-import-layout'
 import { siteImportFooterColumns, siteImportNavTree, type SiteImportFrameSource } from '../site-import-nav'
 import { siteImportPageRead } from '../site-import-page'
-import { SITE_LAYOUT_PAGES, siteLayoutRecording, siteLayoutSameSite, type SiteLayoutPageName } from './site-layout-recordings'
+import { SITE_BASIC_PAGES, SITE_LAYOUT_PAGES, siteBasicRecording, siteLayoutRecording, siteLayoutSameSite, type SiteBasicPageName, type SiteLayoutPageName } from './site-layout-recordings'
+
+/** A page the replay reads: one of the recorded pages, or a basic site that does not exist (AGL-4152). */
+export type SiteImportReplayName = SiteLayoutPageName | SiteBasicPageName
+
+const isBasic = (name: SiteImportReplayName): name is SiteBasicPageName => name in SITE_BASIC_PAGES
+
+/** A page's address, its markup and its stylesheet, and whether an address is its own site's. */
+function recordingOf(name: SiteImportReplayName): { url: string; html: string; sheets: string[]; same: (url: URL) => boolean } {
+  if (!isBasic(name)) return { url: SITE_LAYOUT_PAGES[name].url, html: siteLayoutRecording(name), sheets: [], same: siteLayoutSameSite(name) }
+  const { url } = SITE_BASIC_PAGES[name]
+  const { html, css } = siteBasicRecording(name)
+  const origin = new URL(url).origin
+  return { url, html, sheets: [css], same: (address) => address.origin === origin }
+}
 
 /** The page's same-site addresses, each a page the import plans: every page a link may go to. */
 function plannedLinks(blocks: readonly SiteImportBlock[], origin: string): Array<{ path: string; id: string }> {
@@ -72,10 +87,10 @@ function plannedLinks(blocks: readonly SiteImportBlock[], origin: string): Array
 }
 
 /** A recorded page as a wave's read keeps it and the import step hands it on: its blocks, its layout, its photos in the library. */
-export function siteImportReplayDocument(name: SiteLayoutPageName): AiSiteImportDocument {
-  const { url } = SITE_LAYOUT_PAGES[name]
-  const page = extractSiteImportPage(siteLayoutRecording(name), url, siteLayoutSameSite(name), { structure: true })
-  const layout = siteImportLayout(page as Parameters<typeof siteImportLayout>[0])
+export function siteImportReplayDocument(name: SiteImportReplayName): AiSiteImportDocument {
+  const { url, html, sheets, same } = recordingOf(name)
+  const page = extractSiteImportPage(html, url, same, { structure: true })
+  const layout = siteImportLayout(page as Parameters<typeof siteImportLayout>[0], sheets)
   const path = new URL(url).pathname
   const read = siteImportPageRead({ ...page, layout, url, path, foundBy: path === '/' ? 'home' : 'sitemap', bytes: 0 } as never, 'now')
   const blocks = read.blocks ?? []
@@ -119,6 +134,8 @@ export interface SiteImportReplayOptions {
   words?: AiSiteImportWords
   /** Recorded rewrites of its lines (lane G): the page is built in them, and scored against the words as its source wrote them. */
   wording?: readonly SiteImportReplayRewrite[]
+  /** The site's design seed; absent, one kept the same in every report. */
+  seed?: number
 }
 
 /**
@@ -133,7 +150,7 @@ export interface SiteImportReplayOptions {
  * `wording` builds it in recorded rewrites of its lines, while its source
  * keeps the words as written.
  */
-export function siteImportReplayPage(name: SiteLayoutPageName, options: SiteImportReplayOptions = {}): SiteImportReplayPage {
+export function siteImportReplayPage(name: SiteImportReplayName, options: SiteImportReplayOptions = {}): SiteImportReplayPage {
   const read = siteImportReplayDocument(name)
   const { layout, ...rest } = read
   const rewrites = new Map((options.wording ?? []).map((rewrite) => [rewrite.line, rewrite.text]))
@@ -156,7 +173,7 @@ export function siteImportReplayPage(name: SiteLayoutPageName, options: SiteImpo
     sectionIds,
     targets: targets as never,
     context: { screenIds: doc.links.map((link) => link.id), formIds: forms.map((form) => form.id), componentIds: [], codeBuilt: true },
-    design: { kind: 'business', seed: 7, home: name === 'home' } as never,
+    design: { kind: 'business', seed: options.seed ?? 7, home: name === 'home' } as never,
     doc,
   })
   const result = check(options.answer ?? null)
@@ -176,11 +193,67 @@ export function siteImportReplayPage(name: SiteLayoutPageName, options: SiteImpo
  * default theme, and is marked as computed from the site style. `finish` is handed to the
  * look's style as the pass hands it, for the pass that reads it.
  */
-export function siteImportReplayTheme(name: SiteLayoutPageName, finish?: AiSiteImportFinish): SiteImportFidelityTheme | null {
+export function siteImportReplayTheme(name: SiteImportReplayName, finish?: AiSiteImportFinish, options: { generative?: boolean } = {}): SiteImportFidelityTheme | null {
   const read = siteImportReplayDocument(name)
-  const input = { seed: 7, description: read.title, facts: read.layout?.look ?? null, ...(finish ? { finish } : {}) }
+  const input = { seed: 7, description: read.title, facts: read.layout?.look ?? null, ...(finish ? { finish } : {}), ...(options.generative ? { generative: true } : {}) }
   const style = aiSiteImportStyle(null, input as Parameters<typeof aiSiteImportStyle>[1])
   return style ? siteImportFidelityThemeOf(aiSiteTheme(style, DEFAULT_SITE_THEME), 'style') : null
+}
+
+/** A basic site's page as a recorded `submit_improved_page` answer draws it (AGL-4152), with what the code that keeps it reads. */
+export interface SiteImportReplayImproved extends SiteImportReplayPage {
+  page: AiSiteImportImprovedPage
+  /** Every line the facts may come from. */
+  scope: string[]
+  /** Every destination the source's links have here. */
+  destinations: string[]
+}
+
+/** The forms the basic sites hold a saved form for. */
+const BASIC_FORMS = [{ id: 'form-basic', name: 'Contact' }]
+
+/**
+ * A recorded redesign built as the page step builds it (AGL-4152): its answer
+ * read, its `keep`s expanded, compiled, stored and checked; no model. `design`
+ * is the site the page is drawn for; a basic site has one form.
+ */
+export function siteImportReplayImproved(name: SiteImportReplayName, answer: unknown, options: { seed?: number; theme?: SiteImportFidelityTheme | null } = {}): SiteImportReplayImproved {
+  const read = siteImportReplayDocument(name)
+  const forms = BASIC_FORMS
+  const doc: AiSiteImportDocument = { ...read, finish: 'improve', wording: 'improved', generative: true }
+  const ledger = aiSiteImportImproveLedger(doc)
+  const given = aiReadImprovedPage(answer)
+  if (!given) throw new Error(`the recorded answer for ${name} has no section`)
+  const formAt = given.findIndex((section) => section.blocks.some((block) => block.kind === 'keep' && (block as { ref: string }).ref.startsWith('form:')))
+  const destinations = aiSiteImportImproveDestinations(doc, ledger, { sections: given.length, formSection: formAt === -1 ? null : formAt })
+  const design = { kind: 'business', seed: options.seed ?? 7, home: true } as never
+  const page = aiSiteImportImprovedPage(given, { doc, ledger, design, destinations, formId: forms[0]?.id ?? null, theme: options.theme ?? null })
+  const sectionIds = page.names.map((_, index) => `sec-${index}`)
+  const screen = { title: doc.title, slug: '/', sections: page.names.map((section) => ({ name: section, uses: [] as string[], items: 0 })) }
+  const targets = { pageId: 'p0', pages: [], homeIds: [], forms, formPageId: null, components: [], facts: '' }
+  const result = aiImportedPageCheck({
+    screen: screen as never,
+    sectionIds,
+    targets: targets as never,
+    context: { screenIds: doc.links.map((link) => link.id), formIds: forms.map((form) => form.id), componentIds: [], codeBuilt: true },
+    design,
+    doc,
+    given: page.given,
+    rewritten: page.written,
+  })(null)
+  const nodes = (result.value?.nodes ?? {}) as unknown as SiteImportFidelityTree['nodes']
+  return {
+    doc,
+    source: { layout: read.layout as NonNullable<typeof read.layout>, blocks: read.blocks, photos: read.photos },
+    tree: { rootId: '_@_', nodes },
+    violations: result.violations,
+    page,
+    scope: aiSiteImportImproveScope(doc, null),
+    destinations: [...new Set(ledger.links.flatMap((link) => {
+      const to = destinations.get(link.ref)
+      return to ? [to] : []
+    }))],
+  }
 }
 
 /**
@@ -209,23 +282,23 @@ export const SITE_IMPORT_REPLAY_HOME_ANSWER_1105: Readonly<Record<string, unknow
 }
 
 /** The recorded home pages a header and footer is drawn from. */
-export type SiteImportReplayHome = Extract<SiteLayoutPageName, 'home' | 'pottery'>
+export type SiteImportReplayHome = Extract<SiteLayoutPageName, 'home' | 'pottery'> | SiteBasicPageName
 
 const NOW = new Date('2026-10-29T18:00:00.000Z')
 
 /** A recorded home page as the crawl keeps it: its menu, footer and look read as the source builds them. */
 function crawledHome(name: SiteImportReplayHome): SiteImportInventory['pages'][number] {
-  const { url } = SITE_LAYOUT_PAGES[name]
-  const extract = extractSiteImportPage(siteLayoutRecording(name), url, siteLayoutSameSite(name), { structure: true })
+  const { url, html, sheets, same } = recordingOf(name)
+  const extract = extractSiteImportPage(html, url, same, { structure: true })
   const source = extract as SiteImportFrameSource
   const { structure: _structure, loginForm: _loginForm, ...rest } = extract
-  return { ...rest, url, path: '/', foundBy: 'home', bytes: 0, nav: siteImportNavTree(source), footer: siteImportFooterColumns(source), look: siteImportLookOf(source) }
+  return { ...rest, url, path: '/', foundBy: 'home', bytes: 0, nav: siteImportNavTree(source, sheets), footer: siteImportFooterColumns(source, sheets), look: siteImportLookOf(source, sheets) }
 }
 
 /** A site planned for its first wave: Home, and two pages of its own. */
 function replayState(name: SiteImportReplayHome): AiSiteImportState {
-  const origin = new URL(SITE_LAYOUT_PAGES[name].url).origin
-  const paths = name === 'home' ? ['/', '/product', '/pricing'] : ['/', '/classes', '/gallery']
+  const origin = new URL(recordingOf(name).url).origin
+  const paths = name === 'home' ? ['/', '/product', '/pricing'] : isBasic(name) ? ['/'] : ['/', '/classes', '/gallery']
   const home = aiSiteImportHomeOf({ pages: [crawledHome(name)] })
   const pages: AiSiteImportPage[] = paths.map((path, index) => {
     const slug = path === '/' ? '/' : (path.split('/').filter(Boolean).pop() as string)
@@ -275,8 +348,9 @@ export interface SiteImportReplayFrame {
 }
 
 /** A recorded home page's header and footer, drawn with no model as the layout step stores them (AGL-4108). */
-export function siteImportReplayFrame(name: SiteImportReplayHome): SiteImportReplayFrame {
-  const state = replayState(name)
+export function siteImportReplayFrame(name: SiteImportReplayHome, options: { generative?: boolean } = {}): SiteImportReplayFrame {
+  const base = replayState(name)
+  const state = options.generative ? { ...base, waves: base.waves.map((wave) => ({ ...wave, generative: true as const })) } : base
   const job = {
     $id: 'importJob',
     orgId: 'org-replay',

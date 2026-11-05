@@ -123,6 +123,7 @@ import {
   type AiLayoutStartPage,
 } from './ai-job-page-language'
 import { aiSiteImportDocumentOf } from './ai-site-import-document'
+import { AI_SITE_IMPORT_MAX_SECTIONS } from '../model/ai-site-import'
 import { aiImportedPageListing, aiImportedPageListingOwed, aiImportPageModel, aiSiteImportLinkablePages } from './ai-site-import-compile'
 import { aiWithSiteMotion } from '../layout-language/ai-layout-motion'
 import {
@@ -754,7 +755,9 @@ export function createAiJobPageStep(deps: AiJobPageStepDeps = {}): AiJobStepRunn
       // by this pass or by its author — comes back as it is, and is not written.
       const motion = aiLayoutMotionSiteOf(job, screen.slug)
       // A link that goes nowhere is settled as the check below reads it, with every section built (AGL-4076).
-      const links = { ...context, scrollTargetIds: sectionIds, ownScreenIds: [screen.id, draftId] }
+      // A redesign plans its own sections (AGL-4152): any of them may be scrolled to, past its source's count.
+      const scrollIds = imported?.generative ? Array.from({ length: Math.max(sectionIds.length, AI_SITE_IMPORT_MAX_SECTIONS) }, (_, at) => aiPageSectionNodeId(job.$id, at)) : sectionIds
+      const links = { ...context, scrollTargetIds: scrollIds, ownScreenIds: [screen.id, draftId] }
       const settle = <T extends AiDoctrineTree>(tree: T): T => {
         const settled = aiSettleUnrelatedScreenLinks(
           aiSettlePlaceholderItems(aiSettleMechanicalRules(tree, 'page', links), 'page', context),
@@ -764,7 +767,7 @@ export function createAiJobPageStep(deps: AiJobPageStepDeps = {}): AiJobStepRunn
             ownScreenIds: [screen.id, draftId],
           },
         )
-        const moved = aiWithSiteMotion(settled.nodes, motion, { sectionIds })
+        const moved = aiWithSiteMotion(settled.nodes, motion, { sectionIds: scrollIds })
         return moved === settled.nodes ? settled : { ...settled, nodes: moved }
       }
       const settled = settle({ rootId: CANVAS_ROOT_ELEMENT_ID, nodes: page as unknown as AiDoctrineTree['nodes'] })
@@ -788,7 +791,7 @@ export function createAiJobPageStep(deps: AiJobPageStepDeps = {}): AiJobStepRunn
       // A link the page carries to one of its sections goes there, now every section is built.
       const report = validateAiDoctrineTree({ rootId: CANVAS_ROOT_ELEMENT_ID, nodes: page }, 'page', {
         ...context,
-        scrollTargetIds: sectionIds,
+        scrollTargetIds: scrollIds,
       })
       // The facts the brief did not give, on the page or in the defaults its components show (AGL-3056).
       const note =
@@ -799,7 +802,8 @@ export function createAiJobPageStep(deps: AiJobPageStepDeps = {}): AiJobStepRunn
           }),
           recordNote,
           // A section the last answer could not fill was left out, and the page says which (AGL-3771).
-          language ? aiLayoutLeftOutNote(screen, sectionIds, page as unknown as Record<string, unknown>) : null,
+          // A redesign's sections are its own: none of its source's is left out by not being one of them (AGL-4152).
+          language && !imported?.generative ? aiLayoutLeftOutNote(screen, sectionIds, page as unknown as Record<string, unknown>) : null,
         ]
           .filter(Boolean)
           .join(' ') || null
@@ -1003,6 +1007,8 @@ export function createAiJobPageStep(deps: AiJobPageStepDeps = {}): AiJobStepRunn
         ...(latePass ? { sitePhotos: { pages: [{ screen: draftId, slots: starters }], lists: [] } } : {}),
         // How a page brought in under Also improve my wording came out, for its row (AGL-4152).
         ...(result.value.words ? { wording: result.value.words } : {}),
+        // How a generative Improve it came out, for its row (AGL-4152).
+        ...(result.value.redesign ? { redesign: result.value.redesign } : {}),
       }
     }
     const maxTokens = aiJobPageSectionMaxTokens(model)

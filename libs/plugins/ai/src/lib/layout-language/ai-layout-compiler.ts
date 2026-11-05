@@ -183,6 +183,12 @@ export interface AiLayoutCompileOptions {
    * link is still the source's.
    */
   finish?: AiLayoutImportFinish
+  /**
+   * How a page's plain and soft bands run, over the site's design choice
+   * (AGL-4152): a generative Improve it plans its own grounds, and neighbors of
+   * one ground never meet. Absent, the design's own.
+   */
+  bandRhythm?: AiLayoutDesignChoices['bandRhythm']
 }
 
 /** Words exactly as given, one space between them: how a page brought in shows them (AGL-4107). */
@@ -380,7 +386,7 @@ export function aiCompileLayoutPage(
     pageIcon: pageIconOf(sections),
     formsPlaced: new Set(),
     itemIds: plan.sections.map(() => []),
-    design: options.design ? { input: options.design, choices: aiLayoutDesignChoices(options.design) } : null,
+    design: options.design ? { input: options.design, choices: { ...aiLayoutDesignChoices(options.design), ...(options.bandRhythm ? { bandRhythm: options.bandRhythm } : {}) } } : null,
     pictures: 0,
     features: 0,
     splitAt: -2,
@@ -1480,7 +1486,9 @@ function image(
 ): string | null {
   const { page } = scope
   // A page brought in places the source's own picture, as the library holds it (AGL-4107).
-  if (page.options.verbatim) return block.picture ? sourcePicture(scope, block.picture, room) : null
+  // An image a redesign asks for in words (AGL-4152), with no picture of its own, is a slot like any other page's.
+  if (page.options.verbatim && block.picture) return sourcePicture(scope, block.picture, room)
+  if (page.options.verbatim && !block.text) return null
   const alt = aiLayoutFitText(block.text, 'alt', scope.page.options.language)
   if (!alt) return null
   if (page.images >= maxImages(page)) {
@@ -4352,8 +4360,8 @@ function logos(scope: SectionScope, block: AiLayoutBlock): string | null {
 function importedHero(scope: SectionScope, raw: AiLayoutSection, blocks: readonly AiLayoutBlock[]): string | null {
   const { page } = scope
   if (!page.design || !raw.hero) return null
-  // Its one picture, or its one film, poster first (AGL-4140).
-  const pictures = blocks.filter((block) => (block.kind === 'image' && block.picture) || (block.kind === 'video' && block.video))
+  // Its one picture, or its one film, poster first (AGL-4140); a slot a redesign asked for in words (AGL-4152).
+  const pictures = blocks.filter((block) => (block.kind === 'image' && (block.picture || block.text)) || (block.kind === 'video' && block.video))
   if (pictures.length !== 1) return null
   const words = blocks.filter((block) => block.kind !== 'image' && block.kind !== 'video')
   if (!words.length || !words.every((block) => WORD_KINDS.has(block.kind))) return null
@@ -4381,7 +4389,7 @@ function importedHero(scope: SectionScope, raw: AiLayoutSection, blocks: readonl
     scope,
     flow,
     {
-      alt: picture?.alt ?? '',
+      alt: picture?.alt ?? pictures[0].text ?? '',
       given: true,
       ...(picture?.src ? { src: picture.src } : {}),
       ...(picture?.fit ? { fit: picture.fit } : {}),

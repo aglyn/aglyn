@@ -1062,7 +1062,25 @@ export interface AiSiteImportPage {
   forms?: Array<{ index: number; formId: string | null }> | null
   /** What the page's row says of its forms. */
   formNote?: string | null
+  /** Where the page came from under a generative Improve it (AGL-4152): the source's, or the plan's proposed page. Absent is the source's. */
+  origin?: 'source' | 'proposed' | null
+  /** The sections its redesign added (AGL-4152). */
+  added?: AiSiteImportAddedSection[] | null
+  /** Its pictures by where each came from (AGL-4152). */
+  pictures?: AiSiteImportPagePictures | null
+  /**
+   * How its generative Improve it came out (AGL-4152): `redesigned` from its
+   * answer, or `layout-kept` where the redesign did not pass and today's
+   * compile drew it. Absent on every other page.
+   */
+  redesign?: AiSiteImportRedesign | null
 }
+
+/** How a page's generative Improve it came out (AGL-4152). */
+export type AiSiteImportRedesign = 'redesigned' | 'layout-kept'
+
+/** What a page's row says where its redesign did not pass (AGL-4152). */
+export const AI_SITE_IMPORT_LAYOUT_KEPT = 'Layout kept: the redesign did not pass'
 
 /**
  * A wave's place in its import: waiting to start, running, in and waiting for
@@ -1086,6 +1104,12 @@ export interface AiSiteImportWave {
   finish?: AiSiteImportFinish | null
   /** Whether its improved pages' wording was improved too, stamped at its start (AGL-4152). */
   wording?: boolean | null
+  /**
+   * Whether its improved pages are redesigned from a ledger (AGL-4152):
+   * `SITE_IMPORT_GENERATIVE_RELEASE_FLAG` was on for the organization when the
+   * wave started, under Improve it with copy on. Absent, today's Improve it.
+   */
+  generative?: true
 }
 
 export interface AiSiteImportState {
@@ -1133,6 +1157,53 @@ export interface AiSiteImportState {
   finish?: AiSiteImportFinish | null
   /** Under `improve`, whether the main pages' wording is improved too (AGL-4152): on unless the owner turns it off. */
   wording?: boolean | null
+  /**
+   * The one site plan a generative Improve it draws from (AGL-4152), written
+   * once after the first wave's read. Absent until that step exists, and on
+   * every import that is not generative; a page's design then comes from the
+   * import's own inputs (`aiSiteImportDesignInputs`).
+   */
+  plan?: AiSiteImportPlan | null
+}
+
+/**
+ * The site plan (AGL-4152): what the site is, its menu, its design, and at
+ * most one proposed page. Page references are draft ids. Its words are the
+ * site's own data, fenced wherever a prompt reads them.
+ */
+export interface AiSiteImportPlan {
+  site: { what: string; audience: string; kind: string; voice: string }
+  nav: {
+    groups: Array<{ label: string; pages: string[] }>
+    /** Where the header's filled call to action goes: a page's draft id, `form` or `phone`. */
+    primaryCta: { label: string; target: string } | null
+    footer: Array<{ label: string; pages: string[] }>
+  }
+  /** One for the site, so every page of every wave is drawn alike. */
+  design: { hero: string; group: string; rhythm: string; cta: string }
+  /** At most one new page, on by default, with a switch (`AiSiteImportPage.origin`). */
+  proposed: { title: string; slug: string; purpose: string; on: boolean } | null
+}
+
+/** A section a redesign added to a page (AGL-4152): what its row and What's new say. */
+export interface AiSiteImportAddedSection {
+  heading: string
+  /** The items it holds, where it holds a group of them. */
+  items?: number
+}
+
+/** What a redesigned page shows of its pictures (AGL-4152), by where each came from. */
+export interface AiSiteImportPagePictures {
+  /** The page's own and the site's source photos placed. */
+  source: number
+  /** Slots filled from the stock library. */
+  stock: number
+  /** Slots filled by a generated picture. */
+  generated: number
+  /** Slots with no picture yet, which a later pass fills or drops. */
+  slots: number
+  /** The source's photos left off the page, by address, listed for the owner. */
+  unplaced: string[]
 }
 
 /**
@@ -1223,6 +1294,12 @@ export interface AiSiteImportLook {
   seed: number | null
   /** The look's header arrangement, band rhythm and motion, which the header, the footer and every page are drawn in. */
   style?: { headerAlign?: string; rhythm?: string; motion?: string } | null
+  /**
+   * Under a generative Improve it (AGL-4152), the colors the theme drew, which
+   * a redesign is held to as it is asked (`SiteImportFidelityTheme`). Absent
+   * on every other import, and where the owner's own theme was kept.
+   */
+  drawn?: Record<string, unknown> | null
 }
 
 /*------------------------------------------
@@ -2069,14 +2146,16 @@ export function aiSiteImportWaveChoice(state: Pick<AiSiteImportState, 'finish' |
  * wave once, when it starts, so a change made before a later wave reaches only
  * the waves that have not started.
  */
-export function aiSiteImportWaveStamped(state: AiSiteImportState, index: number): AiSiteImportState {
+export function aiSiteImportWaveStamped(state: AiSiteImportState, index: number, options: { generative?: boolean } = {}): AiSiteImportState {
   const wave = state.waves.find((entry) => entry.index === index)
   if (!wave) return state
   const choice = aiSiteImportChoiceOf(state)
   const slots = new Set(wave.slots)
+  // A generative Improve it only with copy on (AGL-4152); off, the wave is stamped as it always was.
+  const generative = options.generative === true && choice.finish === 'improve' && choice.wording
   return {
     ...state,
-    waves: state.waves.map((entry) => (entry.index === index ? { ...entry, finish: choice.finish, wording: choice.wording } : entry)),
+    waves: state.waves.map((entry) => (entry.index === index ? { ...entry, finish: choice.finish, wording: choice.wording, ...(generative ? { generative: true as const } : {}) } : entry)),
     pages: state.pages.map((page) => (slots.has(page.slot) ? { ...page, wording: aiSiteImportPageWording(page, choice) } : page)),
   }
 }
@@ -2099,6 +2178,11 @@ export function aiSiteImportFinishUpdate(
   // Under Improve, the switch as given, else as it stands, else on (its default).
   const asked = typeof change.wording === 'boolean' ? change.wording : now.finish === 'improve' ? now.wording : AI_SITE_IMPORT_DEFAULT_CHOICE.wording
   return { 'siteImport.finish': finish, 'siteImport.wording': aiSiteImportWordingOf(finish, asked) }
+}
+
+/** How a page's generative Improve it came out (AGL-4152), what it added and what it shows, for its row. */
+export function aiSiteImportRedesignOf(state: AiSiteImportState, slot: string, redesign: AiSiteImportRedesign, added?: readonly AiSiteImportAddedSection[], pictures?: AiSiteImportPagePictures | null): AiSiteImportState {
+  return withPage(state, slot, { redesign, ...(added?.length ? { added: [...added] } : {}), ...(pictures ? { pictures } : {}) })
 }
 
 /**

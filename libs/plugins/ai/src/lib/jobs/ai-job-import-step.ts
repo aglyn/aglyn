@@ -104,6 +104,7 @@ import {
   aiSiteImportWaveChoice,
   aiSiteImportOtherAddresses,
   aiSiteImportWaveStamped,
+  aiSiteImportRedesignOf,
   aiSiteImportWordsKept,
   aiSiteImportWaveStarted,
   type AiSiteImportBuild,
@@ -118,7 +119,7 @@ import {
   type SiteImportNavEntry,
 } from '../model/ai-site-import'
 import { aiModelForStep } from '../providers/routing'
-import { SITE_IMPORT_RELEASE_FLAG } from '../site-import/site-import-flag'
+import { SITE_IMPORT_GENERATIVE_RELEASE_FLAG, SITE_IMPORT_RELEASE_FLAG } from '../site-import/site-import-flag'
 import { crawlSiteForImport, siteImportOrigins, type SiteImportCrawlSeams, type SiteImportInventory } from '../site-import/site-import-crawl'
 import { bringInSiteImportPhotos, type SiteImportPhotosDeps } from '../site-import/site-import-images'
 import {
@@ -258,6 +259,8 @@ export interface AiSiteImportStepDeps {
   ownership?: (orgId: string, domain: string) => Promise<AiSiteImportOwnership | null>
   rateLimit?: (key: string, options: { limit: number; windowMs: number }) => Promise<{ allowed: boolean }>
   releaseFlagOn?: (orgId: string) => Promise<boolean>
+  /** Whether a wave of this organization is a generative Improve it (AGL-4152); absent, `SITE_IMPORT_GENERATIVE_RELEASE_FLAG`'s verdict for it. */
+  generativeFlagOn?: (orgId: string) => Promise<boolean>
   ingest?: () => PluginMediaIngest | null
   fetchImage?: SiteImportPhotosDeps['fetch']
   readRoom?: typeof readAiScreenRoom
@@ -462,7 +465,7 @@ export function aiSiteImportHeaderGround(background: string | null, look: AiSite
  * (`aiSiteImportFrameLinkTo`). Every label is the source's, as written.
  * `null` where the reader found no menu on the home page.
  */
-export function aiSiteImportFrameSource(state: AiSiteImportState, wave: Pick<AiSiteImportWave, 'index'>): AiLayoutFrameSource | null {
+export function aiSiteImportFrameSource(state: AiSiteImportState, wave: Pick<AiSiteImportWave, 'index' | 'generative'>): AiLayoutFrameSource | null {
   const home = state.home
   const nav = home?.nav
   if (!home || !nav || !aiSiteImportFrameIsRead(state)) return null
@@ -512,7 +515,7 @@ export function aiSiteImportFrameSource(state: AiSiteImportState, wave: Pick<AiS
         ...(group.panel?.width ? { measure: group.panel.width >= 1400 ? ('xl' as const) : ('lg' as const) } : {}),
       }))
       .filter((group) => group.items.length || group.to),
-    ctas: nav.ctas.map((cta) => {
+    ctas: wave.generative ? aiSiteImportImprovedCtas(nav, link) : nav.ctas.map((cta) => {
       const target = link(cta.label, cta.href)
       return target ? { ...target, style: cta.style } : null
     }).filter(present),
@@ -537,6 +540,26 @@ export function aiSiteImportFrameSource(state: AiSiteImportState, wave: Pick<AiS
         }
       : null,
   }
+}
+
+/** A menu entry that asks a visitor to act, which a redesigned header's button may take where the source draws none (AGL-4152). */
+const ACTION_ENTRY = /\b(?:book|contact|estimate|quote|schedule|appointment|visit|reserve|get started|call)\b/i
+
+/**
+ * A redesigned header's buttons (AGL-4152): its first filled, whatever the
+ * source drew it as; where it draws none, the menu's entry that asks a visitor
+ * to act, filled. Every label and address is still the source's.
+ */
+function aiSiteImportImprovedCtas<T extends { label: string; to: string }>(nav: NonNullable<AiSiteImportHome['nav']>, link: (label: string, href: string | null | undefined) => T | null): Array<T & { style: 'primary' | 'secondary' | 'quiet' }> {
+  const own = nav.ctas.flatMap((cta) => {
+    const target = link(cta.label, cta.href)
+    return target ? [{ ...target, style: cta.style }] : []
+  })
+  const [first, ...rest] = own
+  if (first) return [{ ...first, style: 'primary' }, ...rest]
+  const entry = nav.items.find((group) => !group.items.length && ACTION_ENTRY.test(group.label))
+  const target = entry ? link(entry.label, entry.href) : null
+  return target ? [{ ...target, style: 'primary' }] : []
 }
 
 /** A tile's fill and its icon as theme roles (AGL-4139): on a filled tile of the brand's or the second color, the icon in that color's own ink. */
@@ -622,6 +645,34 @@ export function aiSiteImportFrameJob(job: AiJob, state: AiSiteImportState, wave:
   }
 }
 
+/** The most characters of a wave's other pages a redesign's facts are held against. */
+const AI_SITE_IMPORT_SCOPE_MAX_CHARS = 60_000
+
+/** What the site says of itself (AGL-4152): the home page's description and facts and the pages it brings in, the same bytes on every page. */
+export function aiSiteImportSiteLines(state: AiSiteImportState): string[] {
+  const home = state.home
+  return [
+    state.siteName,
+    ...(home ? [home.siteName, home.title, home.description, home.brand.text, ...home.facts.lines, ...home.facts.emails, ...home.facts.phones, home.facts.address] : []),
+    ...state.pages.filter((page) => !page.refused).map((page) => `Page: ${page.title} (${page.path})`),
+  ].filter((line): line is string => typeof line === 'string' && !!line.trim())
+}
+
+/** The lines of a wave's other pages, as far as they are read (AGL-4152): a fact one of them says is no invention. */
+function aiSiteImportWaveLines(state: AiSiteImportState, page: AiSiteImportPage): string[] {
+  const out: string[] = []
+  let chars = 0
+  for (const other of state.pages) {
+    if (other.slot === page.slot || other.wave !== page.wave) continue
+    for (const block of other.read?.blocks ?? []) {
+      if (block.kind === 'image' || !block.text.trim() || chars >= AI_SITE_IMPORT_SCOPE_MAX_CHARS) continue
+      chars += block.text.length
+      out.push(block.text)
+    }
+  }
+  return out
+}
+
 /** The page brought in, as its page job carries it: its lines, its photos, and the pages its links may go to (AGL-4084). */
 export function aiSiteImportDocumentFor(state: AiSiteImportState, page: AiSiteImportPage): AiSiteImportDocument | null {
   const blocks = page.read?.blocks
@@ -632,6 +683,16 @@ export function aiSiteImportDocumentFor(state: AiSiteImportState, page: AiSiteIm
     build: page.build ?? aiSiteImportBuildOf(page),
     finish: wave ? aiSiteImportWaveChoice(state, wave).finish : 'keep',
     wording: page.wording === 'improved' ? 'improved' : 'kept',
+    // Redesigned from its ledger (AGL-4152), its wave stamped so and its words improved: never a policy page.
+    ...(wave?.generative && page.wording === 'improved'
+      ? {
+          generative: true as const,
+          siteLines: aiSiteImportSiteLines(state),
+          scope: aiSiteImportWaveLines(state, page),
+          ...(state.plan ? { plan: state.plan } : {}),
+          ...(state.look?.drawn ? { theme: state.look.drawn } : {}),
+        }
+      : {}),
     title: page.title,
     url: page.url,
     blocks,
@@ -945,6 +1006,7 @@ export function createAiJobImportStep(deps: AiSiteImportStepDeps = {}): AiJobSte
   const ownershipOf = deps.ownership ?? readOwnership
   const rateLimit = deps.rateLimit ?? consumeRateLimit
   const flagOn = deps.releaseFlagOn ?? ((orgId: string) => isServerReleaseFlagOnForOrg(SITE_IMPORT_RELEASE_FLAG, orgId))
+  const generativeOn = deps.generativeFlagOn ?? ((orgId: string) => isServerReleaseFlagOnForOrg(SITE_IMPORT_GENERATIVE_RELEASE_FLAG, orgId))
   const ingestOf = deps.ingest ?? pluginMediaIngest
   const readRoom = deps.readRoom ?? readAiScreenRoom
   const siteNameOf = deps.readSiteName ?? readSiteName
@@ -1137,9 +1199,13 @@ export function createAiJobImportStep(deps: AiSiteImportStepDeps = {}): AiJobSte
         )
       }
       // Stamped with how it is built (AGL-4152): the choice now, which a later change never redraws.
+      // Asked only of a wave that could be redesigned; off or unread, it is built as it always was (AGL-4152).
+      const asked = aiSiteImportChoiceOf(state)
+      const generative = asked.finish === 'improve' && asked.wording && (await generativeOn(job.orgId).catch(() => false))
       const started = aiSiteImportWaveStamped(
         aiSiteImportWithBuilds(aiSiteImportWaveStarted(state, wave.index, nowIso, aiSiteImportReadsWithin({ ...job, items: ledger }, state, reads))),
         wave.index,
+        generative ? { generative: true } : {},
       )
       const running = started.waves.find((entry) => entry.index === wave.index) as AiSiteImportWave
       return closing(started, ledger, running, unspent({ items: ledger }))
@@ -1180,6 +1246,7 @@ export function createAiJobImportStep(deps: AiSiteImportStepDeps = {}): AiJobSte
           at: nowIso,
           // The first wave's finish (AGL-4152): Keep my site keeps more of the source's look.
           finish: aiSiteImportWaveChoice(state, wave).finish,
+          ...(wave.generative ? { generative: true } : {}),
           ...(signal ? { signal } : {}),
         },
         {
@@ -1279,6 +1346,8 @@ export function createAiJobImportStep(deps: AiSiteImportStepDeps = {}): AiJobSte
       }
       // A page whose rewrite was refused keeps its words, and its row says so (AGL-4152).
       if (page && outcome.wording === 'kept' && page.wording === 'improved') current = aiSiteImportWordsKept(current, slot)
+      // How its redesign came out (AGL-4152): what its row says, what it added and what it shows.
+      if (page && outcome.redesign) current = aiSiteImportRedesignOf(current, slot, outcome.redesign.status, outcome.redesign.added, outcome.redesign.pictures)
       const spent = aiUnitSpend(outcome)
       const stopped = aiUnitFailure(slot, outcome)
       if (stopped?.status === 'running') return { ...spent, outputs: [], item: stopped, siteImport: current, continue: true }

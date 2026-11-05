@@ -30,6 +30,7 @@ import { aiCreditRangeText } from './ai-credit-estimate'
 import type { AiJobItemLedger, AiJobSummary } from './ai-jobs.types'
 import {
   AI_SITE_IMPORT_FRAME_SLOT,
+  AI_SITE_IMPORT_LAYOUT_KEPT,
   AI_SITE_IMPORT_LEFT_OUT_COPY,
   AI_SITE_IMPORT_LEFT_OUT_REASONS,
   AI_SITE_IMPORT_DEFAULT_CHOICE,
@@ -239,6 +240,8 @@ const BUILD_COPY = {
 /** A page's build as its row says it, with whether its words were improved where its wave improved wording (AGL-4152). */
 function buildCopy(page: AiSiteImportPage, choice: AiSiteImportChoice): string | null {
   if (!page.build) return null
+  // A redesign that did not pass (AGL-4152): today's compile drew the page.
+  if (page.redesign === 'layout-kept') return AI_SITE_IMPORT_LAYOUT_KEPT
   if (page.build === 'arranged' && page.wording === 'improved') return BUILD_COPY.reworded
   if (page.build === 'arranged' && page.wording === 'kept' && choice.wording) return BUILD_COPY.wordsKept
   return BUILD_COPY[page.build]
