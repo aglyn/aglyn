@@ -169,7 +169,7 @@ describe('the tool and its cached text', () => {
   })
 
   it('demands real design in general terms: nothing of any one site', () => {
-    for (const word of ['filled primary button', 'closing call to action', 'Never stack pictures', 'Neighboring sections never share a ground', 'Plan the grid']) expect(AI_SITE_IMPORT_IMPROVE_TEXT).toContain(word)
+    for (const word of ['filled primary button', 'Closing band', 'never stacked one under another', 'no two neighboring sections share a shape or a ground', 'Draw like things as a group', 'How it works', 'Why choose it', 'A quote drawn as a quote', 'new sections']) expect(AI_SITE_IMPORT_IMPROVE_TEXT).toContain(word)
     expect(AI_SITE_IMPORT_IMPROVE_TEXT).toContain('Never write a name, number, price, date, testimonial, client, award, credential, address or guarantee')
   })
 })
@@ -235,7 +235,7 @@ describe('the honesty validator', () => {
 
   it('refuses a thing the page must keep left out, placed twice, or a ref it does not hold', () => {
     const left = copied('tax-firm')
-    const last = left.sections[3] as Answer['sections'][number]
+    const last = left.sections.at(-1) as Answer['sections'][number]
     last.blocks = last.blocks.filter((block) => block['ref'] !== 'form:1')
     expect(honestyOf('tax-firm', left).map((violation) => violation.message)).toEqual(expect.arrayContaining([expect.stringContaining('form:1 is not on the page')]))
     const twice = copied('tax-firm')
@@ -252,7 +252,7 @@ describe('the honesty validator', () => {
     const violations = honestyOf('salon', away)
     expect(violations.map((violation) => violation.code)).toContain(AI_SITE_IMPORT_INVENTED_FACT_CODE)
     const dropped = copied('salon')
-    const last = dropped.sections[3] as Answer['sections'][number]
+    const last = dropped.sections.at(-1) as Answer['sections'][number]
     last.blocks = last.blocks.filter((block) => block['to'] !== 'link:2')
     expect(honestyOf('salon', dropped).map((violation) => violation.message)).toEqual(expect.arrayContaining([expect.stringContaining('link:2')]))
   })
@@ -356,7 +356,7 @@ describe('a recorded redesign, in structure', () => {
   it('opens as the site’s hero, runs its services across as cards, and closes on a call to action', () => {
     const nodes = nodesOf('tax-firm')
     const sections = nodes[CANVAS_ROOT_ELEMENT_ID]?.nodes ?? []
-    expect(sections).toHaveLength(4)
+    expect(sections).toHaveLength(5)
     const opener = under(nodes, sections[0] as string)
     expect(opener.some((id) => nodes[id]?.componentId === 'muiButton' && nodes[id]?.props?.['variant'] === 'contained')).toBe(true)
     expect(opener.some((id) => nodes[id]?.componentId === 'image' && nodes[id]?.props?.['src'])).toBe(true)
@@ -364,8 +364,8 @@ describe('a recorded redesign, in structure', () => {
     expect(services.filter((id) => nodes[id]?.componentId === 'muiCard')).toHaveLength(3)
     expect(services.filter((id) => nodes[id]?.componentId === 'image')).toHaveLength(3)
     expect(services.some((id) => nodes[id]?.componentId === 'muiGrid' && nodes[id]?.props?.['container'])).toBe(true)
-    expect(nodes[sections[3] as string]?.props?.['colorScheme']).toBe('dark')
-    expect(under(nodes, sections[3] as string).some((id) => nodes[id]?.componentId === 'form')).toBe(true)
+    expect(nodes[sections[4] as string]?.props?.['colorScheme']).toBe('dark')
+    expect(under(nodes, sections[4] as string).some((id) => nodes[id]?.componentId === 'form')).toBe(true)
   })
 
   it('draws a kept thing exactly as the owner wrote it', () => {
@@ -388,7 +388,10 @@ describe('a recorded redesign, in structure', () => {
   })
 
   it('says which sections it added', () => {
-    expect(redesigned('tax-firm').replay.page.added).toEqual([{ heading: 'How working with us goes', items: 3 }])
+    expect(redesigned('tax-firm').replay.page.added).toEqual([
+      { heading: 'How working with us goes', items: 3 },
+      { heading: 'Why people bring us their taxes', items: 3 },
+    ])
   })
 
   it('never lets a heading of today’s kept path draw a picture it was not given', () => {
@@ -455,10 +458,13 @@ describe('the page step’s redesign', () => {
     if (result.status !== 'ok') return
     expect(result.value.words).toBe('improved')
     expect(result.value.redesign?.status).toBe('redesigned')
-    expect(result.value.redesign?.added).toEqual([{ heading: 'How working with us goes', items: 3 }])
+    expect(result.value.redesign?.added).toEqual([
+      { heading: 'How working with us goes', items: 3 },
+      { heading: 'Why people bring us their taxes', items: 3 },
+    ])
     // Past its source's three sections, each its own.
     const root = (result.value.nodes as unknown as Record<string, { nodes?: string[] }>)[CANVAS_ROOT_ELEMENT_ID]
-    expect(root?.nodes).toHaveLength(4)
+    expect(root?.nodes).toHaveLength(5)
     expect(root?.nodes?.slice(0, 3)).toEqual(['sec-0', 'sec-1', 'sec-2'])
   })
 

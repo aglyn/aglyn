@@ -41,6 +41,7 @@ import {
   AI_SITE_IMPORT_MAX_SECTIONS,
   type AiSiteImportBuild,
   type AiSiteImportFinish,
+  type AiSiteImportPageRole,
   type AiSiteImportPhoto,
   type AiSiteImportPlan,
   type AiSiteImportWords,

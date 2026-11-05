@@ -21,6 +21,10 @@
  * was called: they say what a good redesign of each page looks like in structure,
  * so the code that draws and scores one can be held offline. The paid eval
  * records real answers; these are not a measure of what a model will do.
+ *
+ * Each is a designer's page, as the redesign is asked for one: a hero beside
+ * its picture, like things as a group, and the two new sections a home page
+ * needs, written from what the page says and inventing nothing.
  */
 
 import type { SiteBasicPageName } from './site-layout-recordings'
@@ -73,6 +77,16 @@ export const SITE_IMPORT_IMPROVE_ANSWERS: Readonly<Record<SiteBasicPageName, { s
           ],
         }),
       ]),
+      section('soft', [
+        block('heading', { text: 'Why people bring us their taxes' }),
+        block('cards', {
+          items: [
+            item('Every deduction', 'We look for every deduction you are entitled to.', { icon: 'money' }),
+            item('Every deadline', 'Your filings go in accurate and on time.', { icon: 'calendar' }),
+            item('A plan of your own', 'A customized plan, for you or for your business.', { icon: 'chart' }),
+          ],
+        }),
+      ]),
       section(
         'dark',
         [block('heading', { col: 0, text: 'Talk to us' }), block('lede', { col: 0, text: 'Tell us what you need and we will take it from there.' }), keep('contact:1', 0), keep('form:1', 1)],
@@ -82,13 +96,17 @@ export const SITE_IMPORT_IMPROVE_ANSWERS: Readonly<Record<SiteBasicPageName, { s
   },
   contractor: {
     sections: [
-      section('plain', [
-        block('heading', { text: 'Roofs and remodels done right' }),
-        block('lede', { text: 'Family owned since 1994. Licensed and insured, license 88213.' }),
-        block('button', { text: 'Ask for an estimate', to: 'link:1', style: 'primary' }),
-        block('button', { text: 'See our projects', to: 'link:2', style: 'secondary' }),
-        keep('picture:1'),
-      ]),
+      section(
+        'plain',
+        [
+          block('heading', { col: 0, text: 'Roofs and remodels done right' }),
+          block('lede', { col: 0, text: 'Roofing, siding and kitchens from a family business you can call by name.' }),
+          block('button', { col: 0, text: 'Ask for an estimate', to: 'link:1', style: 'primary' }),
+          block('button', { col: 0, text: 'See our projects', to: 'link:2', style: 'secondary' }),
+          keep('picture:1', 1),
+        ],
+        { cols: [7, 5] },
+      ),
       section('soft', [
         block('heading', { text: 'What we do for your home' }),
         block('cards', {
@@ -97,6 +115,26 @@ export const SITE_IMPORT_IMPROVE_ANSWERS: Readonly<Record<SiteBasicPageName, { s
             item('New roofs', 'In asphalt, metal and cedar.', { icon: 'home' }),
             item('Siding and gutters', 'Fitted and sealed.', { icon: 'home' }),
             item('Kitchen remodels', 'From cabinets to counters.', { icon: 'home' }),
+          ],
+        }),
+      ]),
+      section('plain', [
+        block('heading', { text: 'Why homeowners call us' }),
+        block('cards', {
+          items: [
+            item('Family owned', 'Family owned since 1994.', { icon: 'people' }),
+            item('Licensed and insured', 'Licensed and insured, license 88213.', { icon: 'shield' }),
+            item('One crew, start to finish', 'Roofs, siding and kitchens from the same people.', { icon: 'tools' }),
+          ],
+        }),
+      ]),
+      section('soft', [
+        block('heading', { text: 'How a job goes' }),
+        block('steps', {
+          items: [
+            item('Ask for an estimate', 'Tell us about the roof or the room.'),
+            item('We look at the job', 'We come out, measure and talk it through with you.'),
+            item('We do the work', 'Then we clean up before we leave.'),
           ],
         }),
       ]),
@@ -127,7 +165,27 @@ export const SITE_IMPORT_IMPROVE_ANSWERS: Readonly<Record<SiteBasicPageName, { s
           keep('picture:1'),
         ],
       ),
-      section('soft', [block('heading', { text: 'Our prices' }), keep('table:1')]),
+      section('soft', [
+        block('heading', { text: 'Cuts, color and care' }),
+        block('cards', {
+          items: [
+            item('Cuts', "Women's and men's cuts, shaped around how you wear your hair.", { icon: 'cut' }),
+            item('Color', 'Single process color and balayage.', { icon: 'brush' }),
+            item('Care', 'Products we trust, and advice on keeping your hair healthy between visits.', { icon: 'care' }),
+          ],
+        }),
+      ]),
+      section('plain', [block('heading', { text: 'Our prices' }), keep('table:1')]),
+      section('soft', [
+        block('heading', { text: 'What a visit is like' }),
+        block('steps', {
+          items: [
+            item('Book a chair', 'Pick a time that works for you.'),
+            item('Talk it through', 'Tell your stylist how you like to wear your hair.'),
+            item('Leave happy', 'Walk out with hair that feels like yours.'),
+          ],
+        }),
+      ]),
       section(
         'plain',
         [
@@ -171,6 +229,16 @@ export const SITE_IMPORT_IMPROVE_ANSWERS: Readonly<Record<SiteBasicPageName, { s
       ]),
       section('plain', [block('heading', { text: 'Doctors who know you' }), block('text', { text: 'Dr. Amara Voss and Dr. Felix Ono have seen patients here for 12 years.' })], { align: 'center' }),
       section('soft', [
+        block('heading', { text: 'Your first visit' }),
+        block('steps', {
+          items: [
+            item('Call the front desk', 'We will find you a time this week.'),
+            item('Come in', 'There is a free lot behind the building.'),
+            item('See your doctor', 'Care for every age, in one place.'),
+          ],
+        }),
+      ]),
+      section('plain', [
         block('heading', { text: 'Common questions' }),
         block('faq', {
           items: [

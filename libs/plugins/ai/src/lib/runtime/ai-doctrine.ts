@@ -944,6 +944,14 @@ interface AiGenerationInputBase {
    * for a smaller one of its kind.
    */
   cutOff?: AiGenerationCutOff
+  /**
+   * What a generation's own ceiling leaves for its re-ask (AGL-4152): given
+   * what it has spent and what its last answer wrote, the most tokens the
+   * re-ask may ask, or 0 when the ceiling cannot pay for one, and the
+   * generation ends on what its last answer broke. Absent, a re-ask is
+   * bounded only by the output allowance.
+   */
+  reaskTokens?: (spent: AiUsage, last: { outputTokens: number }) => number
   thinking?: AiThinking
   effort?: AiEffort
   signal?: AbortSignal
@@ -1205,6 +1213,8 @@ export async function runValidatedGeneration(
   // `jobs/ai-job-budget.ts` plans a step's least time against. A generation
   // that has spent it all stops: nothing is left to answer with.
   const allowance = AI_GENERATION_MAX_ATTEMPTS * maxTokens
+  // What the last answer wrote, for a ceiling that asks whether a re-ask still fits (AGL-4152).
+  let lastOutput = 0
   while (answers < AI_GENERATION_MAX_ATTEMPTS) {
     const spent = Number(spend.usage.outputTokens)
     const left = allowance - (Number.isFinite(spent) ? spent : 0)
@@ -1212,13 +1222,16 @@ export async function runValidatedGeneration(
       if (!violations.length) violations = [cutOffAnswer(kind, input.cutOff)]
       break
     }
+    // A re-ask the generation's own ceiling cannot pay for is not asked: it ends on what the last answer broke.
+    const room = answers > 0 && input.reaskTokens ? input.reaskTokens(spend.usage, { outputTokens: lastOutput }) : Number.POSITIVE_INFINITY
+    if (room <= 0) break
     spend.attempts += 1
     const result = await runAiRequest({
       model,
       system,
       messages,
       tools,
-      maxTokens: Math.min(maxTokens, left),
+      maxTokens: Math.min(maxTokens, left, room),
       stream: false,
       ...(input.thinking ? { thinking: input.thinking } : {}),
       ...(effort ? { effort } : {}),
@@ -1245,6 +1258,7 @@ export async function runValidatedGeneration(
     }
     spend.estCostUsd = Math.round((spend.estCostUsd + result.estCostUsd) * 1_000_000) / 1_000_000
     spend.stopReason = result.stopReason
+    lastOutput = result.usage.outputTokens
     if (result.kind === 'refusal') return { ...spend, status: 'refused' }
 
     const answer = answerOf(result, input.tool.name)

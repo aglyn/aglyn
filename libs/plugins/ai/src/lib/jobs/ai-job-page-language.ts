@@ -100,6 +100,12 @@ import {
   aiSiteImportImprovePrompt,
   aiSiteImportImproveScope,
   aiSiteImportImprovedMisses,
+  aiSiteImportImproveInputUsage,
+  aiSiteImportImproveReaskTokens,
+  aiSiteImportImproveRoleLines,
+  aiSiteImportImproveTokensWithin,
+  aiSiteImportNewSectionsWanted,
+  aiSiteImportPageRoleOf,
   type AiSiteImportImproved,
 } from './ai-site-import-improve'
 import {
@@ -1456,25 +1462,36 @@ async function aiRunImprovedPage(scope: {
   const source = { layout: aiSiteImportLayoutOf(doc), blocks: doc.blocks, photos: doc.photos }
   const savedForms = doc.forms ? doc.forms.filter((form) => form.formId).length : input.targets.forms.length ? 1 : 0
   const observe = (input.observe ?? ((inner) => inner)) as (check: AiGenerationCheck<AiSiteImportImproved<AiLayoutPageBuilt>>) => AiGenerationCheck<AiSiteImportImproved<AiLayoutPageBuilt>>
+  // What the page is for, and the new sections it has room for (AGL-4152).
+  const role = aiSiteImportPageRoleOf(doc, input.screen.slug)
+  const needs = { role, wanted: aiSiteImportNewSectionsWanted(role, ledger, !!doc.proposed) }
+  const instructions = aiSiteImportImproveInstructions(aiSiteImportImproveDigest({ siteName, scope: doc.siteLines ?? [], plan: doc.plan ?? null }))
+  const prompt = aiSiteImportImprovePrompt({
+    screen: input.screen,
+    doc,
+    ledger,
+    destinations: aiSiteImportImproveDestinations(doc, ledger),
+    kindLines: aiSiteKindDesignLines(input.job.inputs),
+    seed: input.job.$id.slice(-6),
+    roleLines: aiSiteImportImproveRoleLines({ ...needs, folded: ledger.folded, kind: doc.plan?.site.kind ?? null, seed: aiSiteSeed(input.job.$id) }),
+  })
+  // The page's ceiling holds in code: the answer asks no more than it buys, and a re-ask it cannot pay for is not asked.
+  const most = aiSiteImportImproveMaxTokens(input.model)
+  const first = aiSiteImportImproveTokensWithin({
+    model: input.model,
+    spent: spend.usage,
+    input: aiSiteImportImproveInputUsage({ systemChars: instructions.reduce((sum, block) => sum + block.text.length, 0), promptChars: prompt.length }),
+    most,
+  })
   const answered = await runValidatedGeneration<AiSiteImportImproved<AiLayoutPageBuilt>>(AI_SITE_IMPORT_IMPROVE_KIND, {
     step: 'job.page',
     model: input.model,
-    instructions: aiSiteImportImproveInstructions(aiSiteImportImproveDigest({ siteName, scope: doc.siteLines ?? [], plan: doc.plan ?? null })),
-    messages: [
-      {
-        role: 'user',
-        content: aiSiteImportImprovePrompt({
-          screen: input.screen,
-          doc,
-          ledger,
-          destinations: aiSiteImportImproveDestinations(doc, ledger),
-          kindLines: aiSiteKindDesignLines(input.job.inputs),
-          seed: input.job.$id.slice(-6),
-        }),
-      },
-    ],
+    instructions,
+    messages: [{ role: 'user', content: prompt }],
     tool: AI_SITE_IMPORT_IMPROVE_TOOL,
-    maxTokens: aiSiteImportImproveMaxTokens(input.model),
+    maxTokens: Math.max(1, first),
+    // Nothing is spent before it: a page brought in is compiled with no model first.
+    reaskTokens: (spent, last) => aiSiteImportImproveReaskTokens({ model: input.model, spent, lastOutput: last.outputTokens, most }),
     cutOff: { noun: 'page', smaller: 'Write shorter copy, and fewer sections.' },
     ...AI_LAYOUT_LANGUAGE_THINKING,
     check: observe(
@@ -1487,6 +1504,7 @@ async function aiRunImprovedPage(scope: {
         framing: input.context.framing ?? null,
         plan: doc.plan ?? null,
         theme,
+        needs,
         build: (page) =>
           aiImportedPageCheck({
             ...checkInput,

@@ -721,7 +721,7 @@ describe('what a generative Improve it is quoted at', () => {
   it('adds generated pictures to the ceiling alone, only where they are switched on', () => {
     const state = waiting({ generatedPictures: true })
     const wave = state.waves[0] as AiSiteImportState['waves'][number]
-    const off = aiSiteImportWaveCreditRange(waiting(), wave)
+    const off = aiSiteImportWaveCreditRange(waiting({ generatedPictures: false }), wave)
     const on = aiSiteImportWaveCreditRange(state, wave)
     expect(on.likely).toBe(off.likely)
     expect(on.p90).toBe(off.p90)
@@ -1035,11 +1035,13 @@ describe('the page a plan proposes', () => {
   })
 
   it('is nothing a Keep my site or an ordinary redesign ever carries', () => {
-    const state = site()
+    const state = site({ generatedPictures: false })
     const doc = aiSiteImportDocumentFor(state, state.pages[1] as AiSiteImportPage)
     expect(doc).toMatchObject({ generative: true })
     expect(doc).not.toHaveProperty('proposed')
     expect(doc).not.toHaveProperty('generatedPictures')
+    // On where its owner has not said: the default, with a switch.
+    expect(aiSiteImportDocumentFor(site(), state.pages[1] as AiSiteImportPage)).toMatchObject({ generatedPictures: true })
     const on = aiSiteImportDocumentFor(site({ generatedPictures: true }), state.pages[1] as AiSiteImportPage)
     expect(on).toMatchObject({ generatedPictures: true })
   })

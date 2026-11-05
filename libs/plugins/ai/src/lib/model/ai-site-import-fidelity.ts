@@ -2181,6 +2181,9 @@ function fixedHeightOf(value: unknown): number | null {
 const fillsFrame = (node: SiteImportFidelityNode | undefined) => node?.sx?.['position'] === 'absolute' || node?.props?.['height'] === '100%' || node?.sx?.['height'] === '100%'
 
 /** Whether a node shows a heading of the page's outline. */
+/** Elements that draw a run of like items as one group: a line inside one is no line stacked on its own. */
+const GROUPS_A_RUN: ReadonlySet<string> = new Set(['muiAccordion', 'muiList', 'muiCard'])
+
 const isHeading = (node: SiteImportFidelityNode | undefined) => {
   if (node?.componentId !== 'muiTypography') return false
   const tag = node.props?.['component'] ?? node.props?.['variant']
@@ -2269,18 +2272,21 @@ function improvedScore(source: SiteImportFidelitySource, built: Built, look: Loo
   const bandOf = (id: string | undefined) => siteImportFidelityBandOf(id ? built.node(id) : undefined)
   const apart = Array.from({ length: pairs }, (_, at) => bandOf(drawnSections[at]) !== bandOf(drawnSections[at + 1])).filter(Boolean).length
   const rhythm = pairs ? line(apart, pairs, apart / pairs >= RHYTHM_SHARE) : null
-  // Columns: no pictures stacked across the page, no run of headings or of short lines one under another, a row somewhere.
+  // Columns: no pictures stacked across the page, no run of headings or of short lines one under another, a row somewhere,
+  // and, on a page of three sections or more, like items drawn as a group somewhere (AGL-4152).
+  // A question list's questions and answers are one group, never a run of lines.
   const inRow = (id: string, root: string) => {
     for (const at of built.ancestry(id)) {
       if (at === root) return false
-      if (setsSideBySide(built.node(at))) return true
+      if (setsSideBySide(built.node(at)) || GROUPS_A_RUN.has(built.node(at)?.componentId ?? '')) return true
     }
     return false
   }
   const planned = drawnSections.filter((id) => {
     const nodes = built.under(id)
     const across = nodes.filter((at) => {
-      if (built.node(at)?.componentId !== 'image' || fillsFrame(built.node(at))) return false
+      // A picture of a row, such as a strip of logos, sits beside the others, whatever the width it is measured at.
+      if (built.node(at)?.componentId !== 'image' || fillsFrame(built.node(at)) || inRow(at, id)) return false
       const { box, section } = boxPx(built, at, id)
       return box >= 0.75 * section
     })
@@ -2294,8 +2300,18 @@ function improvedScore(source: SiteImportFidelitySource, built: Built, look: Loo
     return lines.length < 4
   }).length
   const anyRow = drawnSections.some((id) => built.under(id).some((at) => id !== at && setsSideBySide(built.node(at)) && built.children(at).length >= 2))
+  // A group: three or more cells of one grid, questions of one list, or lines of one list.
+  const anyGroup = drawnSections.some((id) =>
+    built.under(id).some((at) => {
+      const node = built.node(at)
+      if (node?.componentId === 'muiGrid' && setsSideBySide(node)) return built.children(at).length >= 3
+      if (node?.componentId === 'muiAccordion') return (built.parent.get(at) ? built.children(built.parent.get(at) as string).filter((child) => built.node(child)?.componentId === 'muiAccordion').length : 0) >= 3
+      if (node?.componentId === 'muiList') return built.children(at).length >= 3
+      return false
+    }),
+  )
   const columns = drawnSections.length
-    ? line(planned, drawnSections.length, planned === drawnSections.length && (drawnSections.length < 3 || anyRow))
+    ? line(planned, drawnSections.length, planned === drawnSections.length && (drawnSections.length < 3 || (anyRow && anyGroup)))
     : null
   // Framing: every picture at a size a screen holds, in a frame it fills.
   const natural = new Map((source.photos ?? []).flatMap((photo) => (photo.width && photo.height ? [[photo.src, photo.width / photo.height] as const] : [])))

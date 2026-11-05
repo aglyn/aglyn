@@ -213,13 +213,13 @@ export function siteImportLedger(source: { layout: SiteImportLayout; blocks: rea
     hrefs.add(href)
     links.push({ ref: `link:${links.length + 1}`, line: ref, href: block.href, text: clean(block.text) })
   })
-  // A long page folds its groups: each is shown by its titles, and kept whole (AGL-4152).
+  // A long page folds its groups: each is shown by its titles, and kept whole, as are its tabs, figures and logos:
+  // one answer places what the page holds and writes what is around it (AGL-4152).
   const folded = lines.reduce((sum, entry) => sum + entry.text.length, 0) > SITE_IMPORT_LEDGER_FOLD_CHARS
   if (folded) {
     for (const item of items) {
-      if (item.kind !== 'group') continue
-      item.folded = true
-      item.must = true
+      if (item.kind === 'group') item.folded = true
+      if (item.kind !== 'picture') item.must = true
     }
   }
   return { items, links, lines, folded }
