@@ -541,6 +541,12 @@ export interface SiteImportLookFacts {
   buttonRadius: number | null
   /** The color its text links are drawn in. */
   link: string | null
+  /**
+   * The brand colors its root's custom properties declare (AGL-4152), the most
+   * read first: what it says its brand is, whether or not this page draws it.
+   * Absent with none, and on a read made before.
+   */
+  palette?: string[]
   /** Its header bar's background. */
   header: string | null
   /**

@@ -76,6 +76,37 @@ export const SITE_LAYOUT_PAGES = {
 
 export type SiteLayoutPageName = keyof typeof SITE_LAYOUT_PAGES
 
+/**
+ * Pages written for the reads of a site's brand and its forms (AGL-4152),
+ * about a bookkeeper that does not exist and in the markup of no builder, so
+ * the readers are never tuned to one site. They are not scored against a build
+ * as the pages above are.
+ *
+ * `vars-theme` links five stylesheets, saved beside it in `vars-theme/`: four
+ * of a site kit's shared widgets, whose loud colors are nobody's brand, then
+ * the site's own, the last link, whose colors and fonts are custom properties
+ * (comma triples and the modern spaced syntax) and whose buttons are styled
+ * through `:is()` and `:where()`. `json-form` has no `<form>`: its fields are
+ * JSON a script block holds, beside two arrays that only look like fields.
+ */
+export const SITE_READ_ORIGIN = 'https://www.harbor-lane.example'
+
+export const SITE_READ_VARS_THEME_URL = `${SITE_READ_ORIGIN}/`
+export const SITE_READ_JSON_FORM_URL = `${SITE_READ_ORIGIN}/contact`
+
+/** A written page's markup, by its file in `site-layout/`. */
+export const siteReadPage = (file: 'vars-theme.html' | 'json-form.html'): string => readFileSync(join(DIR, file), 'utf8')
+
+/** The `vars-theme` page's stylesheets, by the address its markup links each from, in link order. */
+export const siteReadVarsThemeSheets = (): Array<{ url: string; text: string }> =>
+  [
+    ['https://cdn.sitekit.example/universal/reset.css', 'reset.css'],
+    ['https://cdn.sitekit.example/components/gallery.css', 'gallery.css'],
+    ['https://cdn.sitekit.example/components/map.css', 'map.css'],
+    ['https://cdn.sitekit.example/components/booking.css', 'booking.css'],
+    ['https://assets.sitekit.example/sites/4182/site.css', 'site.css'],
+  ].map(([url, file]) => ({ url: url as string, text: readFileSync(join(DIR, 'vars-theme', file as string), 'utf8') }))
+
 const cache = new Map<string, string>()
 
 /** One recorded page's markup. */

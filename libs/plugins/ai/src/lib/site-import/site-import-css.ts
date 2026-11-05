@@ -24,12 +24,14 @@
  * filled button. This is a small cascade, enough for that and no more:
  *
  * - **The sheets.** The page's own `<style>` sheets and the ones it links,
- *   read in order. `@media` rules apply as a 1280-pixel screen in light mode
+ *   every one to a byte budget (`siteImportReadStylesheets`, AGL-4152), read
+ *   in order. `@media` rules apply as a 1280-pixel screen in light mode
  *   sees them, so a grid's desktop columns win over its phone ones;
  *   `@layer`, `@supports` and `@container` are read through; keyframes, font
  *   faces (their families noted) and page rules are skipped.
  * - **Selectors.** Tags, classes (escaped ones too, as utility frameworks
- *   write them), ids and attributes, joined by any combinator. A rule that
+ *   write them), ids and attributes, joined by any combinator, and `:is()`
+ *   and `:where()` spelled out (AGL-4152). A rule that
  *   only applies on hover, focus or to a generated part (`::before`) is a
  *   state the page is not in and is not read.
  * - **The cascade.** Specificity, then order, `!important` over both, and the
@@ -143,6 +145,8 @@ export interface SiteImportCss {
   fontFaces: string[]
   /** Read for its dark scheme (AGL-4152): the rules that scheme alone selects, by a media query or a class on the page. */
   darkRules: number
+  /** How many declarations read each custom property (AGL-4152): what its palette uses most. */
+  variableUses: Map<string, number>
 }
 
 /** Which of a page's color schemes a read of its stylesheets answers for. */
@@ -223,6 +227,42 @@ function parseSelector(text: string): ComplexSelector | null {
     if (compound.tag) tags += 1
   }
   return { compounds, combinators, specificity: ids * 1_000_000 + classes * 1_000 + tags }
+}
+
+/** The most selectors one written with `:is()` or `:where()` is spelled out into. */
+const SELECTOR_VARIANTS = 24
+
+/**
+ * A selector with its `:is()` and `:where()` spelled out (AGL-4152), each with
+ * the weight to take off for a `:where()`, which counts for nothing. A variant
+ * two compounds cannot be joined into (`.x:is(div)`, `.x:is(.a .b)`) is left out.
+ */
+function spelledOut(text: string): Array<{ text: string; discount: number }> {
+  const match = /:(?:is|where)\(/i.exec(text)
+  if (!match) return [{ text, discount: 0 }]
+  const inner = match.index + match[0].length
+  let depth = 1
+  let end = inner
+  while (end < text.length && depth > 0) {
+    if (text[end] === '(') depth += 1
+    else if (text[end] === ')') depth -= 1
+    end += 1
+  }
+  if (depth) return [{ text, discount: 0 }]
+  const head = text.slice(0, match.index)
+  const tail = text.slice(end)
+  const zeroed = /where/i.test(match[0])
+  const joined = !head || /[\s>+~]$/.test(head)
+  const out: Array<{ text: string; discount: number }> = []
+  for (const option of splitList(text.slice(inner, end - 1))) {
+    if (!joined && (/\s/.test(option) || /^[\w*]/.test(option))) continue
+    const discount = zeroed ? (parseSelector(option.replace(/:(?:is|where)\([^()]*\)/gi, ''))?.specificity ?? 0) : 0
+    for (const variant of spelledOut(`${head}${option}${tail}`)) {
+      if (out.length >= SELECTOR_VARIANTS) return out
+      out.push({ text: variant.text, discount: discount + variant.discount })
+    }
+  }
+  return out
 }
 
 /** Splits at top-level commas: none inside brackets or parentheses. */
@@ -358,7 +398,7 @@ function keyOf(selector: ComplexSelector): string {
  * it makes sense, as a browser would; nothing throws.
  */
 export function siteImportCssOf(sheets: readonly string[], viewport: number = SITE_IMPORT_CSS_VIEWPORT.width, options: SiteImportCssOptions = {}): SiteImportCss {
-  const css: SiteImportCss = { rules: [], index: new Map(), fontFaces: [], darkRules: 0 }
+  const css: SiteImportCss = { rules: [], index: new Map(), fontFaces: [], darkRules: 0, variableUses: new Map() }
   const scheme = options.scheme ?? 'light'
   let order = 0
   /** For each open group: whether only a dark scheme's media query opens it. */
@@ -366,19 +406,26 @@ export function siteImportCssOf(sheets: readonly string[], viewport: number = SI
   const addRule = (prelude: string, body: string) => {
     const decls = declarationsOf(body)
     if (!decls.length) return
+    for (const [, value] of decls) {
+      if (!value.includes('var(')) continue
+      for (const use of value.matchAll(/var\(\s*(--[\w-]+)/g)) css.variableUses.set(use[1] as string, (css.variableUses.get(use[1] as string) ?? 0) + 1)
+    }
     for (const text of splitList(prelude)) {
       const lifted = scheme === 'dark' ? withoutDarkScope(text) : null
-      const selector = parseSelector(lifted ?? text)
-      if (!selector) continue
-      if (scheme === 'dark' && (lifted !== null || darkGroups.includes(true))) css.darkRules += 1
-      // The mark it lost still counts: a dark rule outranks the same rule of the light scheme.
-      if (lifted !== null) selector.specificity += 1_000
-      const rule: CssRule = { selector, order: order++, decls }
-      css.rules.push(rule)
-      const key = keyOf(selector)
-      const list = css.index.get(key)
-      if (list) list.push(rule)
-      else css.index.set(key, [rule])
+      for (const variant of spelledOut(lifted ?? text)) {
+        const selector = parseSelector(variant.text)
+        if (!selector) continue
+        selector.specificity = Math.max(0, selector.specificity - variant.discount)
+        if (scheme === 'dark' && (lifted !== null || darkGroups.includes(true))) css.darkRules += 1
+        // The mark it lost still counts: a dark rule outranks the same rule of the light scheme.
+        if (lifted !== null) selector.specificity += 1_000
+        const rule: CssRule = { selector, order: order++, decls }
+        css.rules.push(rule)
+        const key = keyOf(selector)
+        const list = css.index.get(key)
+        if (list) list.push(rule)
+        else css.index.set(key, [rule])
+      }
     }
   }
   for (const sheet of sheets) {
@@ -557,14 +604,19 @@ export interface SiteImportStyles {
   of(element: number): SiteImportComputedStyle
   /** The root's (`<html>`) element id, which `:root` matches; -1 for none. */
   readonly root: number
+  /** The custom properties the root declares (AGL-4152), each read through to what it holds. */
+  rootVariables(): ReadonlyMap<string, string>
 }
 
 const EMPTY_STYLE: SiteImportComputedStyle = new Map()
 
+/** How far a variable that names a variable is followed: a site builder's palette goes several deep. */
+const VARIABLE_DEPTH = 8
+
 /** Replaces each `var(--x, fallback)` with what the custom properties hold, to a few levels. */
 function withVariables(value: string, custom: ReadonlyMap<string, string>): string {
   let out = value
-  for (let pass = 0; pass < 4 && out.includes('var('); pass += 1) {
+  for (let pass = 0; pass < VARIABLE_DEPTH && out.includes('var('); pass += 1) {
     out = out.replace(/var\(\s*(--[\w-]+)\s*(?:,\s*((?:[^()]|\([^()]*\))*))?\)/g, (_, name: string, fallback?: string) => custom.get(name) ?? fallback?.trim() ?? '')
   }
   return out
@@ -625,8 +677,11 @@ export function siteImportStylesOf(structure: Pick<SiteImportStructure, 'element
     if (element.attrs.id) candidates.push(...(css.index.get(`#${element.attrs.id}`) ?? []))
     const matched = candidates.filter((rule) => selectorMatches(rule.selector, element, elements, rootStyle.element))
     const own = new Map<string, string>()
-    const custom = new Map(parent.custom)
-    apply(matched, inlineDeclarations(element.attrs.style), own, custom)
+    const inline = inlineDeclarations(element.attrs.style)
+    // A palette can be thousands of properties: only an element that declares one takes a copy of them.
+    const declares = inline.some(([property]) => property.startsWith('--')) || matched.some((rule) => rule.decls.some(([property]) => property.startsWith('--')))
+    const custom = declares ? new Map(parent.custom) : parent.custom
+    apply(matched, inline, own, custom)
     const style = new Map<string, string>()
     for (const property of INHERITED) {
       const value = parent.style.get(property)
@@ -659,6 +714,9 @@ export function siteImportStylesOf(structure: Pick<SiteImportStructure, 'element
     of(element: number): SiteImportComputedStyle {
       if (element === -2) return rootStyle.style
       return elements[element] ? resolve(element).style : EMPTY_STYLE
+    },
+    rootVariables() {
+      return new Map([...rootStyle.custom].map(([name, value]) => [name, withVariables(value, rootStyle.custom)]))
     },
   }
 }
@@ -711,7 +769,7 @@ export function siteImportColorOf(value: string | undefined): SiteImportRgba | n
   const text = value.toLowerCase()
   const hex = /#([0-9a-f]{8}|[0-9a-f]{6}|[0-9a-f]{4}|[0-9a-f]{3})\b/.exec(text)
   const rgb = /rgba?\(\s*(-?[\d.]+%?)\s*[,\s]\s*(-?[\d.]+%?)\s*[,\s]\s*(-?[\d.]+%?)\s*(?:[,/]\s*(-?[\d.]+%?)\s*)?\)/.exec(text)
-  const hsl = /hsla?\(\s*(-?[\d.]+)(?:deg)?\s*[,\s]\s*([\d.]+)%\s*[,\s]\s*([\d.]+)%\s*(?:[,/]\s*([\d.]+%?)\s*)?\)/.exec(text)
+  const hsl = /hsla?\(\s*(-?[\d.]+)(?:deg)?\s*[,\s]\s*([\d.]+)%?\s*[,\s]\s*([\d.]+)%?\s*(?:[,/]\s*([\d.]+%?)\s*)?\)/.exec(text)
   const named = /\b(transparent|[a-z]+)\b/.exec(text.replace(/[a-z-]+\(/g, ' ('))
   const first = [hex, rgb, hsl].filter((match): match is RegExpExecArray => !!match).sort((a, b) => a.index - b.index)[0]
   const alphaOf = (raw: string | undefined) => (raw === undefined ? 1 : raw.endsWith('%') ? Number(raw.slice(0, -1)) / 100 : Number(raw))
@@ -750,6 +808,41 @@ export function siteImportColorOf(value: string | undefined): SiteImportRgba | n
     if (known) return siteImportColorOf(known)
   }
   return null
+}
+
+/** A variable's name that says it holds a brand's color. */
+const BRAND_VARIABLE = /primary|secondary|brand|accent|highlight/i
+
+/** A custom property's whole value as a color: a color function, or the triple a color function reads through `var()`. */
+function colorOfVariable(value: string): SiteImportRgba | null {
+  const text = value.trim()
+  if (/^(?:#[0-9a-f]{3,8}|(?:rgb|hsl)a?\([^()]*\))$/i.test(text)) return siteImportColorOf(text)
+  if (/^-?[\d.]+(?:deg)?[\s,]+[\d.]+%[\s,]+[\d.]+%$/.test(text)) return siteImportColorOf(`hsl(${text})`)
+  if (/^\d{1,3}[\s,]+\d{1,3}[\s,]+\d{1,3}$/.test(text)) return siteImportColorOf(`rgb(${text})`)
+  return null
+}
+
+/** The most colors of a palette kept. */
+const PALETTE_COLORS = 6
+
+/**
+ * The brand colors a page's root declares (AGL-4152): the custom properties
+ * named for a brand that hold a color, a triple included, none too pale, dark
+ * or grey to carry one, the most read first. What the page says its brand is,
+ * even where nothing on this page happens to draw it.
+ */
+export function siteImportPaletteOf(styles: Pick<SiteImportStyles, 'rootVariables'>, uses: ReadonlyMap<string, number>): string[] {
+  const tally = new Map<string, number>()
+  for (const [name, value] of styles.rootVariables()) {
+    if (!BRAND_VARIABLE.test(name)) continue
+    const color = colorOfVariable(value)
+    if (!color || color.a < 0.5 || siteImportSaturation(color) < 0.2) continue
+    const light = siteImportLuminance(color)
+    if (light < 0.01 || light > 0.9) continue
+    const hex = siteImportHex(color)
+    tally.set(hex, (tally.get(hex) ?? 0) + (uses.get(name) ?? 0))
+  }
+  return [...tally.entries()].sort((a, b) => b[1] - a[1]).slice(0, PALETTE_COLORS).map(([hex]) => hex)
 }
 
 /** `#rrggbb` of a color, its strength ignored. */
@@ -983,4 +1076,89 @@ export function siteImportFontFamilies(value: string | undefined): string[] {
   return splitList(value)
     .map((family) => family.replace(/^["']|["']$/g, '').trim())
     .filter((family) => family && !/^(?:serif|sans-serif|monospace|cursive|fantasy|system-ui|ui-[\w-]+|-apple-system|blinkmacsystemfont|inherit|initial|emoji|math|var\(.*)$/i.test(family))
+}
+
+/*------------------------------------------
+ * Reading a page's stylesheets
+ *-----------------------------------------*/
+
+/**
+ * How much of a page's stylesheets is read (AGL-4152). A site builder's own
+ * sheet can be its fifth link and 1.3 MB, with half a megabyte more behind it,
+ * and every color and font of the site is in it. So:
+ *
+ * - `firstLookBytes`: every link is first read this far. Most sheets end
+ *   inside it, and those are done; a larger one shows here whether it declares
+ *   `:root` custom properties, which they do at their top.
+ * - `budgetBytes`: what all the page's sheets may hold together, first looks
+ *   included. Three times the sheet that set it, with room for what comes with
+ *   it. What does not fit is cut, and a cut sheet is read as far as it goes.
+ * - `atOnce`: first looks asked together, so twenty links are not twenty
+ *   connections to one host.
+ *
+ * So one page's read costs at most its links' first looks and the budget:
+ * 3.8 MB at the most links a page lists, however large its sheets are.
+ */
+export const SITE_IMPORT_SHEET_LIMITS = {
+  firstLookBytes: 32 * 1024,
+  budgetBytes: 3 * 1024 * 1024,
+  atOnce: 6,
+} as const
+
+/** What a read of a stylesheet gives back. */
+export interface SiteImportSheetAnswer {
+  ok: boolean
+  text: string
+  /** Bytes read. */
+  bytes: number
+  /** Whether the sheet goes on past `maxBytes`. */
+  truncated: boolean
+}
+
+/** Reads a stylesheet to a number of bytes; `null` where it cannot. */
+export type SiteImportSheetRead = (url: string, maxBytes: number) => Promise<SiteImportSheetAnswer | null>
+
+/** Whether a sheet declares custom properties on the page's root: its theme, not a widget's. */
+const ROOT_VARIABLES = /(?:^|[},;\s])(?::root|html)\b[^{}]*\{[^{}]*--[\w-]+\s*:/
+
+/**
+ * Every stylesheet a page links, to a byte budget (AGL-4152), in link order,
+ * as the cascade needs them. Each is read a first look; then the ones that go
+ * on are read whole, the ones declaring `:root` custom properties first, then
+ * the rest in link order, each to what is left of the budget. A read that fails
+ * leaves its sheet out, and never the page.
+ */
+export async function siteImportReadStylesheets(
+  urls: readonly string[],
+  read: SiteImportSheetRead,
+  options: { budgetBytes?: number; outOfTime?: () => boolean } = {},
+): Promise<string[]> {
+  const budget = options.budgetBytes ?? SITE_IMPORT_SHEET_LIMITS.budgetBytes
+  const outOfTime = options.outOfTime ?? (() => false)
+  const unique = [...new Set(urls)]
+  const looks: Array<SiteImportSheetAnswer | null> = unique.map(() => null)
+  const ask = (url: string, maxBytes: number) => read(url, maxBytes).then((answer) => (answer?.ok ? answer : null), () => null)
+  let next = 0
+  await Promise.all(
+    Array.from({ length: Math.min(SITE_IMPORT_SHEET_LIMITS.atOnce, unique.length) }, async () => {
+      while (next < unique.length && !outOfTime()) {
+        const at = next
+        next += 1
+        looks[at] = await ask(unique[at] as string, SITE_IMPORT_SHEET_LIMITS.firstLookBytes)
+      }
+    }),
+  )
+  let room = budget - looks.reduce((sum, look) => sum + (look?.bytes ?? 0), 0)
+  const rest = unique.map((_, at) => at).filter((at) => looks[at]?.truncated)
+  const theme = (at: number) => (ROOT_VARIABLES.test((looks[at] as SiteImportSheetAnswer).text) ? 0 : 1)
+  rest.sort((a, b) => theme(a) - theme(b) || a - b)
+  for (const at of rest) {
+    if (room <= 0 || outOfTime()) break
+    const look = looks[at] as SiteImportSheetAnswer
+    const whole = await ask(unique[at] as string, look.bytes + room)
+    if (!whole) continue
+    room -= whole.bytes - look.bytes
+    looks[at] = whole
+  }
+  return looks.flatMap((look) => (look ? [look.text] : []))
 }

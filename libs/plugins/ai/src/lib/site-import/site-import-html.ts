@@ -333,7 +333,8 @@ export const SITE_IMPORT_PAGE_LIMITS = {
   svgIcons: 200,
   anchors: 800,
   styleChars: 1_500_000,
-  stylesheets: 4,
+  /** The links listed (AGL-4152); how much of them is read is a byte budget's to say (`SITE_IMPORT_SHEET_LIMITS`). */
+  stylesheets: 24,
   /** A page's videos (AGL-4140). */
   videos: 10,
 } as const
@@ -1330,6 +1331,15 @@ function readStyleSheets(html: string, pageUrl: string): { styles: string[]; sty
     if (stylesheets.length >= SITE_IMPORT_PAGE_LIMITS.stylesheets) break
   }
   return { styles, stylesheets }
+}
+
+/**
+ * The stylesheets a page links (AGL-4152), to read: every one, on its own host
+ * or a CDN's, print ones and comments left out, Google Fonts' read by its
+ * address alone (`siteImportGoogleFamilies`).
+ */
+export function siteImportStylesheetLinks(html: string, pageUrl: string): string[] {
+  return readStyleSheets(html.replace(/<!--[\s\S]*?(?:-->|$)/g, ' '), pageUrl).stylesheets.filter((url) => !/fonts\.googleapis\.com/i.test(url))
 }
 
 /** Elements with no content and no end tag. */

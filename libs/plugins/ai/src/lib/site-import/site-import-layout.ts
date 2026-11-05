@@ -89,6 +89,7 @@ import {
   siteImportColorDistance,
   siteImportColorOf,
   siteImportCssOf,
+  siteImportPaletteOf,
   siteImportFontFamilies,
   siteImportFontSizePx,
   siteImportGridColumns,
@@ -185,7 +186,7 @@ export function siteImportLayout(page: SiteImportLayoutSource, stylesheets: read
     v: 1,
     sections,
     icons: structure.icons.map((icon) => ({ ...icon })),
-    look: siteImportLookFacts(structure, styles, css.fontFaces, blocks, sections, darkStyles),
+    look: siteImportLookFacts(structure, styles, css.fontFaces, blocks, sections, darkStyles, css.variableUses),
   }
 }
 
@@ -1836,10 +1837,10 @@ export function siteImportLookOf(
   if (!page.structure) return null
   if (page.blocks?.length) {
     const { css, styles, darkStyles, sections } = readSections({ structure: page.structure, blocks: [...page.blocks], ...(page.videos ? { videos: page.videos } : {}) }, stylesheets)
-    return siteImportLookFacts(page.structure, styles, css.fontFaces, page.blocks, sections, darkStyles)
+    return siteImportLookFacts(page.structure, styles, css.fontFaces, page.blocks, sections, darkStyles, css.variableUses)
   }
   const css = siteImportCssOf([...page.structure.styles, ...stylesheets])
-  return siteImportLookFacts(page.structure, siteImportStylesOf(page.structure, css), css.fontFaces, [])
+  return siteImportLookFacts(page.structure, siteImportStylesOf(page.structure, css), css.fontFaces, [], [], null, css.variableUses)
 }
 
 /**
@@ -1937,6 +1938,7 @@ export function siteImportLookFacts(
   blocks: readonly SiteImportBlock[] = [],
   sections: readonly SiteImportLayoutSection[] = [],
   darkStyles: SiteImportStyles | null = null,
+  variableUses: ReadonlyMap<string, number> | null = null,
 ): SiteImportLookFacts {
   const { elements } = structure
   const body = structure.body >= 0 ? structure.body : -2
@@ -1947,7 +1949,9 @@ export function siteImportLookFacts(
   }
   const imports = structure.styles.flatMap((css) => [...css.matchAll(/@import\s+(?:url\()?\s*["']?(https:\/\/fonts\.googleapis\.com\/[^"')\s;]+)/gi)].map((match) => match[1] as string))
   const google = siteImportGoogleFamilies([...structure.stylesheets, ...imports])
-  const bodyFamily = siteImportFontFamilies(bodyStyle.get('font-family'))[0] ?? siteImportFontFamilies(styles.of(-2).get('font-family'))[0] ?? null
+  // Its body's family; where neither the body nor the root names one, the family its words are set in (AGL-4152).
+  const paragraph = elements.find((element) => element.tag === 'p' && element.region === 'main') ?? elements.find((element) => element.tag === 'p')
+  const bodyFamily = siteImportFontFamilies(bodyStyle.get('font-family'))[0] ?? siteImportFontFamilies(styles.of(-2).get('font-family'))[0] ?? (paragraph ? siteImportFontFamilies(styles.of(paragraph.id).get('font-family'))[0] : undefined) ?? null
   const heading = elements.find((element) => /^h[12]$/.test(element.tag) && element.region === 'main') ?? elements.find((element) => /^h[1-3]$/.test(element.tag))
   const headingFamily = heading ? (siteImportFontFamilies(styles.of(heading.id).get('font-family'))[0] ?? bodyFamily) : bodyFamily
   const known = (family: string | null) => (family && (google.includes(family) || fontFaces.includes(family) || !/^(?:arial|helvetica|helvetica neue|segoe ui|roboto fallback|times new roman|georgia|verdana)$/i.test(family)) ? family : null)
@@ -2036,6 +2040,7 @@ export function siteImportLookFacts(
   // The page's own fill in its dark scheme, where its stylesheets change it.
   const darkFill = darkStyles ? (siteImportBackgroundOf(darkStyles.of(body)).color ?? siteImportBackgroundOf(darkStyles.of(-2)).color) : null
   const darkGround = darkFill && darkFill.a >= 0.5 && (!background || siteImportHex(darkFill) !== siteImportHex(background)) ? siteImportHex(darkFill) : null
+  const palette = variableUses ? siteImportPaletteOf(styles, variableUses) : []
   return {
     fonts: { body: known(bodyFamily), headings: known(headingFamily), google },
     background: background ? siteImportHex(background) : null,
@@ -2056,6 +2061,7 @@ export function siteImportLookFacts(
     outlinedFill: mostUsedFill(outlinedFills),
     // Its eyebrows' own color: none of its words', its buttons' or its links', which the theme draws already.
     eyebrow: blocks.length ? eyebrowColorOf(structure, styles, blocks, [text, topFill?.[0] ?? null, link]) : null,
+    ...(palette.length ? { palette } : {}),
   }
 }
 
