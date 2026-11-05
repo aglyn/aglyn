@@ -2167,7 +2167,8 @@ const isHeading = (node: SiteImportFidelityNode | undefined) => {
 const crowdsPhone = (size: unknown) => {
   if (typeof size !== 'string') return false
   const xs = /\bxs:(\d+)\b/.exec(size)?.[1]
-  return !!xs ? Number(xs) < 6 : !/\b(?:sm|md|lg):/.test(size) && size.trim() !== '' && Number(size) < 6
+  if (xs) return Number(xs) < 6
+  return !/\b(?:sm|md|lg):/.test(size) && size.trim() !== '' && Number(size) < 6
 }
 
 /** The kept ledger and the design lines of a page a generative Improve it built (AGL-4152). */

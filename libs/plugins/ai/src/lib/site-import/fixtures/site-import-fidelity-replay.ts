@@ -237,7 +237,7 @@ export function siteImportReplayImproved(name: SiteImportReplayName, answer: unk
   const ledger = aiSiteImportImproveLedger(doc)
   const given = aiReadImprovedPage(answer)
   if (!given) throw new Error(`the recorded answer for ${name} has no section`)
-  const formAt = given.findIndex((section) => section.blocks.some((block) => block.kind === 'keep' && (block as { ref: string }).ref.startsWith('form:')))
+  const formAt = given.findIndex((section) => section.blocks.some((block) => block.kind === 'keep' && block.ref.startsWith('form:')))
   const destinations = aiSiteImportImproveDestinations(doc, ledger, { sections: given.length, formSection: formAt === -1 ? null : formAt })
   const design = { kind: 'business', seed: options.seed ?? 7, home: true } as never
   const page = aiSiteImportImprovedPage(given, { doc, ledger, design, destinations, formId: forms[0]?.id ?? null, theme: options.theme ?? null })

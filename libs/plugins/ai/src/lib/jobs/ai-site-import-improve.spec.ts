@@ -81,7 +81,7 @@ const honestyOf = (name: SiteBasicPageName, answer: unknown) => {
   const doc = siteImportReplayDocument(name)
   const ledger = aiSiteImportImproveLedger(doc)
   const read = aiReadImprovedPage(answer) ?? []
-  const formAt = read.findIndex((section) => section.blocks.some((block) => block.kind === 'keep' && (block as { ref: string }).ref.startsWith('form:')))
+  const formAt = read.findIndex((section) => section.blocks.some((block) => block.kind === 'keep' && block.ref.startsWith('form:')))
   return aiSiteImportHonesty(read, {
     ledger,
     scope: aiSiteImportImproveScope(doc, null),

@@ -43,7 +43,7 @@ export const AI_SITE_IMPORT_INVENTED_FACT_CODE = 'improve-invented-fact'
 export const AI_SITE_IMPORT_DROPPED_ITEM_CODE = 'improve-dropped-item'
 
 /** A block a redesign answered: the layout language, or a `keep` of a ledger ref. */
-export type AiSiteImportImprovedBlock = (Omit<AiLayoutBlock, 'kind'> & { kind: AiLayoutBlock['kind'] }) | { kind: 'keep'; ref: string; col?: number }
+export type AiSiteImportImprovedBlock = AiLayoutBlock | { kind: 'keep'; ref: string; col?: number }
 
 /** A section a redesign answered. */
 export interface AiSiteImportImprovedSection {
@@ -144,7 +144,7 @@ const linksOf = (block: AiLayoutBlock): string[] => [...(block.to ? [block.to] :
 /** Every picture ref an answer's blocks place. */
 const placedOf = (sections: readonly AiSiteImportImprovedSection[]): string[] =>
   sections.flatMap((section) =>
-    section.blocks.flatMap((block) => (block.kind === 'keep' ? [(block as { ref: string }).ref] : ((block as AiLayoutBlock).items ?? []).flatMap((item) => (item.ref ? [item.ref] : [])))),
+    section.blocks.flatMap((block) => (block.kind === 'keep' ? [block.ref] : (block.items ?? []).flatMap((item) => (item.ref ? [item.ref] : [])))),
   )
 
 const invented = (message: string, detail?: string): AiDoctrineViolation => ({ rule: 14, code: AI_SITE_IMPORT_INVENTED_FACT_CODE, message, ...(detail ? { detail } : {}) })
@@ -164,7 +164,7 @@ export function aiSiteImportHonesty(sections: readonly AiSiteImportImprovedSecti
   sections.forEach((section, index) => {
     section.blocks.forEach((raw, position) => {
       if (raw.kind === 'keep') return
-      const block = raw as AiLayoutBlock
+      const block = raw
       const at = `section ${index + 1}, block ${position + 1}`
       for (const line of writtenLines(block, at)) {
         const reason = aiSiteImportInventedIn(line.text, held)
@@ -188,7 +188,7 @@ export function aiSiteImportHonesty(sections: readonly AiSiteImportImprovedSecti
   for (const item of input.ledger.items) {
     if (item.must && !placed.includes(item.ref)) out.push(dropped(`${item.ref} is not on the page. Place it with a keep block, exactly once.`))
   }
-  const kept = new Set(sections.flatMap((section) => section.blocks.flatMap((block) => (block.kind === 'keep' ? [(block as { ref: string }).ref] : []))))
+  const kept = new Set(sections.flatMap((section) => section.blocks.flatMap((block) => (block.kind === 'keep' ? [block.ref] : []))))
   const keptLines = new Set(input.ledger.items.filter((item) => kept.has(item.ref)).flatMap((item) => item.lines))
   for (const link of input.ledger.links) {
     const to = input.destinations.get(link.ref)

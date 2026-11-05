@@ -436,10 +436,10 @@ export function aiSiteImportImprovedPage(answer: readonly AiSiteImportImprovedSe
   }
   const sections = answer.map((section, index): AiLayoutSection => {
     scope.at = `sections[${index}]`
-    const words = section.blocks.flatMap((block) => (block.kind !== 'keep' && 'text' in block && (block.kind === 'heading' || block.kind === 'eyebrow') ? [block.text ?? ''] : [])).join(' ')
+    const words = section.blocks.flatMap((block) => (block.kind === 'heading' || block.kind === 'eyebrow' ? [block.text ?? ''] : [])).join(' ')
     const blocks = section.blocks.flatMap((raw): AiLayoutBlock[] => {
-      if (raw.kind === 'keep') return keepOf((raw as { ref: string }).ref, raw.col)
-      const block = raw as AiLayoutBlock
+      if (raw.kind === 'keep') return keepOf(raw.ref, raw.col)
+      const block = raw
       const placed = block.col !== undefined ? { col: block.col } : {}
       if (block.kind === 'image') {
         const { col: _col, ...rest } = block
@@ -456,7 +456,8 @@ export function aiSiteImportImprovedPage(answer: readonly AiSiteImportImprovedSe
       if (block.kind === 'button') {
         say(block.text)
         const to = resolve(block.to)
-        return [{ ...block, ...(to ? { to } : {}), ...(!to ? { to: undefined } : {}) }]
+        const { to: _asked, ...rest } = block
+        return [{ ...rest, ...(to ? { to } : {}) }]
       }
       const groupItems = (block.items ?? []).map((item, at): AiLayoutItem => {
         say(item.title)
@@ -495,7 +496,7 @@ export function aiSiteImportImprovedPage(answer: readonly AiSiteImportImprovedSe
     const group = sections[index]?.blocks.find((block) => block.items?.length)
     return [{ heading: names[index] as string, ...(group?.items?.length ? { items: group.items.length } : {}) }]
   })
-  const placed = new Set(answer.flatMap((section) => section.blocks.flatMap((block) => (block.kind === 'keep' ? [(block as { ref: string }).ref] : ((block as AiLayoutBlock).items ?? []).flatMap((item) => (item.ref ? [item.ref] : []))))))
+  const placed = new Set(answer.flatMap((section) => section.blocks.flatMap((block) => (block.kind === 'keep' ? [block.ref] : (block.items ?? []).flatMap((item) => (item.ref ? [item.ref] : []))))))
   const allPictures = ledger.items.filter((item) => item.kind === 'picture')
   const unplaced = allPictures.filter((item) => !placed.has(item.ref)).flatMap((item) => {
     const block = doc.blocks[item.lines[0] as number]
@@ -589,7 +590,7 @@ export function aiSiteImportImproveCheck<T>(input: {
   return (answer) => {
     const read = aiReadImprovedPage(answer)
     if (!read) return { value: null, violations: [{ rule: null, code: 'improve-unreadable', message: `The answer gave no section that can be drawn. Answer with ${AI_SITE_IMPORT_IMPROVE_TOOL.name}.` }] }
-    const formAt = read.findIndex((section) => section.blocks.some((block) => block.kind === 'keep' && (block as { ref: string }).ref.startsWith('form:')))
+    const formAt = read.findIndex((section) => section.blocks.some((block) => block.kind === 'keep' && block.ref.startsWith('form:')))
     const destinations = aiSiteImportImproveDestinations(input.doc, input.ledger, { sections: read.length, formSection: formAt === -1 ? null : formAt })
     const honesty = aiSiteImportHonesty(read, { ledger: input.ledger, scope: input.scope, destinations, framing: input.framing ?? null })
     if (honesty.length) return { value: null, violations: honesty }
