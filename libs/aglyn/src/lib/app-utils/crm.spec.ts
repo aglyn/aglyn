@@ -1508,7 +1508,8 @@ describe('crm assignment settings', () => {
           { when: {}, assign: { memberUid: 'uid-2' } },
           // Names nobody and no pool.
           { id: 'c', when: {}, assign: {} },
-          // A source outside the capture vocabulary is not a condition.
+          // A word nothing declares is still a condition: it matches no capture,
+          // where dropping it would have the rule claim every capture it ever saw.
           { id: 'd', when: { source: 'carrier-pigeon', tag: ' VIP ' }, assign: { roundRobin: true } },
           'not a rule',
           null,
@@ -1518,7 +1519,7 @@ describe('crm assignment settings', () => {
     })
     expect(rules).toEqual([
       { id: 'a', when: { source: 'form' }, assign: { memberUid: 'uid-1' } },
-      { id: 'd', when: { tag: 'vip' }, assign: { roundRobin: true } },
+      { id: 'd', when: { source: 'carrier-pigeon', tag: 'vip' }, assign: { roundRobin: true } },
       { id: 'f', when: { emailDomain: 'acme.com', formId: 'form-1' }, assign: { memberUid: 'uid-3' } },
     ])
   })
@@ -1641,6 +1642,21 @@ describe('roundRobinOrder', () => {
 
 describe('describeAssignmentRule', () => {
   const name = (uid: string) => (uid === 'uid-1' ? 'Sam' : uid)
+
+  it('names a plugin\'s source by its label, and a rule keeps it through a read', () => {
+    registerPluginContactSource({ source: 'kiosk', label: 'Guest book' }, { pluginId: 'kiosk' })
+    try {
+      const rule = readCrmAssignmentRule({
+        id: 'r',
+        when: { source: 'kiosk' },
+        assign: { memberUid: 'uid-1' },
+      })
+      expect(rule?.when).toEqual({ source: 'kiosk' })
+      expect(describeAssignmentRule(rule as never, name).when).toBe('source is Guest book')
+    } finally {
+      unregisterPluginServices('kiosk')
+    }
+  })
 
   it('reads the conditions in words and the target by name', () => {
     expect(

@@ -291,8 +291,12 @@ public func permissionEditorRows(_ catalog: OrgRoleGrants, enabledPlugins: [Stri
 
 /// What a refusal says when a member lacks a key (`permissionRefusalText`): it names the permission, never a role.
 public func permissionRefusalText(_ catalog: OrgRoleGrants, key: String) -> String {
-  let label = catalog.permissions.first { $0.key == key }?.label ?? key
-  return "Your role does not include \"\(label)\" — ask an organization admin"
+  "Your role does not include \"\(orgPermissionLabel(catalog, key: key))\" — ask an organization admin"
+}
+
+/// A permission's name in the catalog (`orgPermissionLabel`), or the key when the catalog has none.
+public func orgPermissionLabel(_ catalog: OrgRoleGrants, key: String) -> String {
+  catalog.permissions.first { $0.key == key }?.label ?? key
 }
 
 /// A JSON boolean as Foundation bridges it: `true`/`false` arrive as `NSNumber` booleans, never as 0 or 1.

@@ -1371,6 +1371,27 @@ describe('the export/import round trip is lossless (AGL-1382)', () => {
       'host:host-1',
     ])
   })
+
+  it('takes the all-sites-except marker off on the way out, and writes none on the way in', async () => {
+    // It names sites of the workspace it came from, and only the server sets one (AGL-4047).
+    for (const entry of SEEDS.filter((row) => ['datasets', 'media', 'mediaFolders'].includes(row.collection))) {
+      seed(entry.path, entry.id, { ...entry.doc, scopeMode: 'allExcept', scopeExcept: ['host:host-2'] })
+    }
+    const bundle = await runExport()
+    for (const item of [bundle.media[0], bundle.mediaFolders[0], bundle.datasets[0]]) {
+      expect(item).not.toHaveProperty('scopeMode')
+      expect(item).not.toHaveProperty('scopeExcept')
+    }
+    for (const item of [bundle.media[0], bundle.mediaFolders[0], bundle.datasets[0]]) {
+      item.scopeMode = 'allExcept'
+      item.scopeExcept = ['host:elsewhere']
+    }
+    await runImport(bundle)
+    for (const path of ['orgs/org-1/media/media-1', 'orgs/org-1/datasets/dataset-1']) {
+      expect(storedAt(path)).not.toHaveProperty('scopeMode')
+      expect(storedAt(path)).not.toHaveProperty('scopeExcept')
+    }
+  })
 })
 
 /**

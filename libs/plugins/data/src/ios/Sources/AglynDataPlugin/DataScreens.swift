@@ -342,7 +342,7 @@ struct DatasetsScreen: View {
 
   private func detail(_ id: String, titled: Bool) -> some View {
     DatasetDetailView(
-      context: context, datasets: model.rows, datasetID: id, titled: titled, canWrite: canWrite, runner: runner,
+      context: context, datasets: model.rows, datasetID: id, titled: titled, runner: runner,
       onDelete: { dataset, records in
         runner.clear()
         sheet = .delete(dataset, records: records)
@@ -477,14 +477,16 @@ struct DatasetDetailView: View {
   let datasets: [DatasetRow]
   let datasetID: String
   var titled = true
-  let canWrite: Bool
   let runner: PluginActionRunner
   let onDelete: (DatasetRow, Int?) -> Void
   let onExport: (DatasetRow) -> Void
 
   @State private var records: Int?
+  @State private var placement = DatasetPlacement()
 
   private var dataset: DatasetRow? { datasets.first { $0.id == datasetID } }
+  private var verdict: DatasetAccess { placement.access(context, visibleTo: dataset?.visibleTo) }
+  private var canWrite: Bool { verdict.canWrite }
 
   var body: some View {
     Group {
@@ -500,6 +502,7 @@ struct DatasetDetailView: View {
     }
     .navigationTitle(titled ? (dataset?.name ?? "Dataset") : "Data")
     .aglynScreenTitle(titled ? (dataset?.name ?? "Dataset") : "Data")
+    .task(id: dataset?.visibleTo) { placement.start(context, visibleTo: dataset?.visibleTo) }
   }
 
   private func content(_ dataset: DatasetRow) -> some View {
@@ -525,17 +528,36 @@ struct DatasetDetailView: View {
               Label("Edit schema", systemImage: "tablecells")
             }
             .disabled(!canWrite)
-            if canWrite {
-              Button { context.navigate(dataImportScreen, datasetImportParams(id: dataset.id, name: dataset.name)) } label: {
-                Label("Import records", systemImage: "square.and.arrow.up")
+            Button {
+              guard canWrite else {
+                runner.error = verdict.writeRefusal
+                return
               }
-              .accessibilityIdentifier("import-dataset-records")
+              context.navigate(dataImportScreen, datasetImportParams(id: dataset.id, name: dataset.name))
+            } label: {
+              Label("Import records", systemImage: "square.and.arrow.up")
             }
-            Button { onExport(dataset) } label: { Label("Export records", systemImage: "square.and.arrow.down") }
+            .accessibilityIdentifier("import-dataset-records")
+            Button {
+              guard verdict.canExport else {
+                runner.error = context.refusal("data.export")
+                return
+              }
+              onExport(dataset)
+            } label: {
+              Label("Export records", systemImage: "square.and.arrow.down")
+            }
               .disabled((records ?? 1) == 0)
             Divider()
-            Button(role: .destructive) { onDelete(dataset, records) } label: { Label("Delete dataset", systemImage: "trash") }
-              .disabled(!canWrite)
+            Button(role: .destructive) {
+              guard verdict.canDelete else {
+                runner.error = verdict.deleteRefusal
+                return
+              }
+              onDelete(dataset, records)
+            } label: {
+              Label("Delete dataset", systemImage: "trash")
+            }
           } label: {
             Label("More", systemImage: "ellipsis.circle").labelStyle(.iconOnly).imageScale(.large)
           }

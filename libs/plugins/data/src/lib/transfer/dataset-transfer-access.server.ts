@@ -35,14 +35,14 @@ export async function datasetImportAccess(subject: TransferImportAccessSubject):
   const dataset = datasetId
     ? await firestore.collection('orgs').doc(subject.orgId).collection('datasets').doc(datasetId).get()
     : null
-  const visibleTo = dataset?.exists ? dataset.get('visibleTo') : undefined
+  const placed = dataset?.exists ? dataset.data() : undefined
   const allowed = await memberMayActOnDataset({
     firestore,
     orgId: subject.orgId,
     uid: subject.uid,
     member: subject.member as Partial<AglynOrgMember>,
-    visibleTo,
+    dataset: placed,
     act: 'write',
   })
-  return allowed ? { allowed: true } : { allowed: false, permission: datasetRefusalPermission('write', visibleTo) }
+  return allowed ? { allowed: true } : { allowed: false, permission: datasetRefusalPermission('write', placed) }
 }

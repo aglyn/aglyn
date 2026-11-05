@@ -34,15 +34,33 @@ import { hostRoleFor, isOrgWideMember } from './organizations'
  *     the resource sits on;
  *   - else, on that one site, the site key.
  *
- * Placed on every site or on several, the workspace key alone: no one site can be
- * asked, and a security rule cannot look through a list of them.
+ * Placed on every site, on several, or on all sites except some, the workspace key
+ * alone: no one site can be asked, and a security rule cannot look through a list
+ * of them.
  *
  * The rules ask the same thing in their own words, so these are kept in step with
  * them, placement test included.
  */
 
-/** The one site `visibleTo` places a resource on, or `null` for every site, several, or none. */
-export function oneSitePlacement(visibleTo: unknown): string | null {
+/**
+ * Where a resource sits: the fields of its document that decide it. A whole
+ * document, never `visibleTo` alone, so no caller can answer without the marker.
+ */
+export type ScopePlaced = Readonly<{ visibleTo?: unknown; scopeMode?: unknown; scopeExcept?: unknown }>
+
+/**
+ * The one site a resource is placed on, or `null` for every site, several, or
+ * none.
+ *
+ * `null` for a document shared with all sites except some, however few it reaches
+ * today. Its list can shrink to one site while it still belongs to the whole
+ * workspace, and the next new site joins it, so that one site never comes to
+ * answer for it. Read as the rules' `scopePlacement` reads it: either key present
+ * is marked, so a stored null or half a marker fails closed.
+ */
+export function oneSitePlacement(placed: ScopePlaced | null | undefined): string | null {
+  if (!placed || placed.scopeMode !== undefined || placed.scopeExcept !== undefined) return null
+  const { visibleTo } = placed
   if (!Array.isArray(visibleTo) || visibleTo.length !== 1) return null
   const [token] = visibleTo as unknown[]
   const match = typeof token === 'string' ? /^host:([^:/]+)$/.exec(token) : null
@@ -50,17 +68,17 @@ export function oneSitePlacement(visibleTo: unknown): string | null {
 }
 
 /**
- * The verdict for a resource placed at `visibleTo`: see above. `site` is asked
+ * The verdict for a resource placed as `placed` says: see above. `site` is asked
  * only when the workspace key did not settle it, so a door pays for reading the
  * site only then.
  */
 export function placementVerdict<T extends boolean | Promise<boolean>>(input: {
   member: Partial<AglynOrgMember> | null | undefined
-  visibleTo: unknown
+  placed: ScopePlaced | null | undefined
   workspace: boolean
   site: (hostId: string) => T
 }): boolean | T {
-  const hostId = oneSitePlacement(input.visibleTo)
+  const hostId = oneSitePlacement(input.placed)
   if (!hostId) return input.workspace
   if (input.workspace && !siteMayNarrow(input.member, hostId)) return true
   return input.site(hostId)
@@ -101,11 +119,14 @@ export function resolvedPlacementKey(
 
 /**
  * Whether deleting a resource is out of this member's reach whatever they hold:
- * they do not reach every site, and it is placed on every site or on several. It
- * belongs to the whole workspace.
+ * they do not reach every site, and it is placed on every site, on several, or on
+ * all sites except some. It belongs to the whole workspace.
  */
-export function deleteBeyondReach(member: Partial<AglynOrgMember> | null | undefined, visibleTo: unknown): boolean {
-  return !isOrgWideMember(member) && oneSitePlacement(visibleTo) === null
+export function deleteBeyondReach(
+  member: Partial<AglynOrgMember> | null | undefined,
+  placed: ScopePlaced | null | undefined,
+): boolean {
+  return !isOrgWideMember(member) && oneSitePlacement(placed) === null
 }
 
 /** The refusal for it, which names the reach it takes because no permission decides it. */

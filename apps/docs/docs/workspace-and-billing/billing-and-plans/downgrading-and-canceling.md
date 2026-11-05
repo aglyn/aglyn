@@ -178,7 +178,8 @@ Deleting a site also deletes what is the site's own:
 - **Datasets shared with this site only**, with all their records. The
   **Delete site** card lists them, with how many records each holds, before you
   confirm. A dataset the site shares with other sites stays, and the site is
-  removed from its sharing. A dataset shared with **All sites** isn't affected.
+  removed from its sharing, even if it's shared with all sites except some and this was
+  the last site it reached. A dataset shared with **All sites** isn't affected.
 - **The site's AI jobs, AI insights and Assist conversations.**
 
 To keep a dataset, share it with another site, or with **All sites**, from its

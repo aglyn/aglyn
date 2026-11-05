@@ -34,6 +34,7 @@ import {
 } from './ai-layout-copy'
 import {
   AI_LAYOUT_GROUP_KINDS,
+  AI_LAYOUT_MAX_COLS,
   AI_LAYOUT_MAX_ITEMS,
   type AiLayoutBand,
   type AiLayoutBlock,
@@ -507,10 +508,10 @@ function sectionScope(page: PageScope, raw: AiLayoutSection, index: number): Sec
       from: index,
       formSection: page.formSection,
     },
-    heading: raw.blocks.find((block) => block.kind === 'heading')?.text,
+    heading: inRows(raw.blocks).find((block) => block.kind === 'heading')?.text,
     words: [
       page.plan.sections[index]?.name ?? '',
-      ...raw.blocks.filter((block) => block.kind === 'heading' || block.kind === 'eyebrow').map((block) => block.text ?? ''),
+      ...inRows(raw.blocks).filter((block) => block.kind === 'heading' || block.kind === 'eyebrow').map((block) => block.text ?? ''),
     ].join(' '),
   }
 }
@@ -640,7 +641,7 @@ function drawSection(
     for (let at = list.length - 1; at >= 0; at -= 1)
       if (list[at].kind === 'heading' && !speaks(list[at])) list.splice(at, 1)
   }
-  if (index === 0 && !inOrder().some(speaks)) {
+  if (index === 0 && !inRows(inOrder()).some(speaks)) {
     head.unshift({ kind: 'heading', text: page.plan.title })
     page.settled.push({
       at,
@@ -798,7 +799,7 @@ function isItemGroup(block: AiLayoutBlock): boolean {
 
 /** Whether a block spans more than a reading column: a row of several items, or a table, tabs or logos of a page brought in. */
 function isWideGroup(block: AiLayoutBlock): boolean {
-  if (block.kind === 'table' || block.kind === 'tabs' || block.kind === 'logos') return true
+  if (block.kind === 'table' || block.kind === 'tabs' || block.kind === 'logos' || block.kind === 'row') return true
   return (
     (block.kind === 'cards' ||
       block.kind === 'steps' ||
@@ -1182,9 +1183,27 @@ function compileBlock(
       return logos(scope, block)
     case 'video':
       return block.video ? video(scope, block.video, block.picture) : null
+    case 'row':
+      return columnsRow(scope, block, room)
     default:
       return null
   }
+}
+
+/** Blocks and the blocks of the rows among them (AGL-4152), top to bottom: what a section says, whichever row says it. */
+function inRows(blocks: readonly AiLayoutBlock[]): AiLayoutBlock[] {
+  return blocks.flatMap((block) => (block.kind === 'row' ? inRows((block.row ?? []).flatMap((column) => column.blocks)) : [block]))
+}
+
+/**
+ * A row of a page brought in past its section's first (AGL-4152), in its
+ * columns as `compileRow` sets them. Where the room is a column too narrow to
+ * split, or only one column has anything in it, one under another.
+ */
+function columnsRow(scope: SectionScope, block: AiLayoutBlock, room: Room): string | null {
+  const filled = (block.row ?? []).filter((column) => column.blocks.length)
+  if (filled.length < 2 || room === 'narrow') return compileFlow(scope, filled.flatMap((column) => column.blocks), room)
+  return compileRow(scope, filled.map((column) => ({ column: column.blocks, weight: column.weight })))
 }
 
 /** Secondary words' color: muted text, or the band's own on a brand band. */
@@ -2541,8 +2560,11 @@ function hero(
   if (variant === 'panel') return panelHero(scope, flow, picture, home)
   if (variant === 'portrait') return portraitHero(scope, flow, picture)
   const band = scope.band
+  // A page kept as it is (AGL-4152) keeps a centered opening's words centered beside its picture.
+  const keptCentered = scope.page.options.verbatim === true && scope.page.options.finish !== 'improve' && scope.centered
   scope.centered = false
   if (variant === 'split') {
+    scope.centered = keptCentered
     const words = compileFlow(scope, flow, 'half') as string
     const photo = designPicture(
       scope,
@@ -4057,11 +4079,13 @@ function importedItem(scope: SectionScope, block: AiLayoutBlock, item: AiLayoutI
     parts.push(tree.add(AI_ICON_COMPONENT_ID, { iconId: AI_ICON_LIBRARY.quote.id, size: '32' }, { color: 'primary.main' }, null, 'quoteMark'))
     parts.push(...paragraphs(scope, [item.text, ...(item.more ?? [])], 'body1', null, 'quote'))
     if (title) parts.push(tree.add('muiTypography', { children: title, variant: 'subtitle2', component: 'p', ...align(scope) }, null, null, 'attribution'))
+    if (item.links?.length) parts.push(itemLinks(scope, item.links))
   } else if (kind === 'stats') {
     const lead = figure || title
     if (lead) parts.push(tree.add('muiTypography', { children: lead, variant: 'h2', component: 'p', ...align(scope) }, accent(scope), null, 'figure'))
     if (figure && title) parts.push(titleNode())
     parts.push(...paragraphs(scope, [item.text, ...(item.more ?? [])], 'body2', muted(scope), 'label'))
+    if (item.links?.length) parts.push(itemLinks(scope, item.links))
   } else {
     if (item.picture) parts.push(itemPicture(scope, item.picture))
     const { lead, mark } = leadRow(scope, item, style)
@@ -4312,6 +4336,7 @@ function chip(scope: SectionScope, words: string, role: string): string {
 /** A strip of logos of a page brought in: each picture at one height, or each short line as a label on an outlined surface. */
 function logos(scope: SectionScope, block: AiLayoutBlock): string | null {
   const tree = scope.page.tree
+  if (block.variant === 'pictures') return gallery(scope, block)
   const ids = (block.items ?? []).flatMap((item): string[] => {
     if (item.picture) {
       scope.page.images += 1
@@ -4341,6 +4366,37 @@ function logos(scope: SectionScope, block: AiLayoutBlock): string | null {
     noted(scope, ids),
     'logos',
   )
+}
+
+/**
+ * A gallery of a page brought in (AGL-4152): its photos in the source's
+ * columns, two to a row on a tablet and one on a phone, each cropped to one
+ * shape so the rows line up: their own where they all share one, else the
+ * source's crop where all share one, else 4:3.
+ */
+function gallery(scope: SectionScope, block: AiLayoutBlock): string | null {
+  const tree = scope.page.tree
+  const pictures = (block.items ?? []).flatMap((item) => (item.picture ? [item.picture] : []))
+  if (!pictures.length) return null
+  const columns = Math.max(1, Math.min(AI_LAYOUT_MAX_COLS, block.columns ?? 3, pictures.length))
+  const first = pictures[0]?.ratio
+  const alike = !!first && pictures.every((picture) => !!picture.ratio && Math.abs(picture.ratio / first - 1) <= 0.05)
+  const crops = new Set(pictures.map((picture) => (picture.fit?.cropped ? picture.fit.ratio : undefined)))
+  const shape = alike ? String(Math.round((first as number) * 10_000) / 10_000) : crops.size === 1 ? ([...crops][0] ?? '4 / 3') : '4 / 3'
+  const span = Math.max(1, Math.round(12 / columns))
+  const size = columns >= 3 ? `xs:12 sm:6 md:${span}` : `xs:12 md:${span}`
+  const cells = pictures.map((picture) => {
+    scope.page.images += 1
+    const image = tree.add(
+      'image',
+      { src: picture.src, ...(picture.alt ? { alt: picture.alt } : { decorative: true }), objectFit: 'cover', ...(scope.page.images > 1 ? { loading: 'lazy' } : {}) },
+      { aspectRatio: shape },
+      null,
+      'galleryPicture',
+    )
+    return tree.add('muiGrid', { size }, null, [image], 'galleryCell')
+  })
+  return tree.add('muiGrid', { container: true, spacing: '2' }, null, cells, 'gallery')
 }
 
 /**

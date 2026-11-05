@@ -6,7 +6,7 @@
       "title": "Imports and exports",
       "icon": "arrow.up.arrow.down|sync",
       "scope": "org",
-      "requires": "org.can[data.manage]",
+      "requires": "org.can[data.manage] || org.can[org.export]",
       "links": [
         "/settings/data"
       ],
@@ -33,7 +33,9 @@
           },
           "cursor": "next",
           "cursorParam": "after",
-          "items": "jobs"
+          "items": "jobs",
+          "when": "org.can[data.manage]",
+          "optional": true
         },
         "unfinished": {
           "url": "/api/transfer/jobs",
@@ -42,14 +44,16 @@
             "orgId": "{org.id}",
             "unfinished": true
           },
-          "optional": true
+          "optional": true,
+          "when": "org.can[data.manage]"
         }
       },
       "blocks": [
         {
           "type": "notice",
           "tone": "info",
-          "text": "Every import shows what it would do before it writes anything, asks how to handle each conflict, and can be undone for seven days."
+          "text": "Every import shows what it would do before it writes anything, asks how to handle each conflict, and can be undone for seven days.",
+          "when": "org.can[data.manage]"
         },
         {
           "type": "links",
@@ -59,6 +63,24 @@
               "subtitle": "Export what each plugin keeps, or move a package",
               "icon": "tablecells|view_agenda",
               "screen": "core.settings.data.records"
+            }
+          ],
+          "when": "org.can[data.manage]"
+        },
+        {
+          "type": "actions",
+          "title": "Download workspace data",
+          "when": "org.can[org.export]",
+          "footer": "A machine-readable JSON copy of everything this workspace holds — its sites and their content, datasets, contacts, orders, form submissions, members, support threads and billing identifiers. It needs the “Export workspace data” permission, which owners and admins hold by default.",
+          "items": [
+            {
+              "id": "export",
+              "label": "Download workspace data",
+              "icon": "arrow.down.doc|download",
+              "method": "GET",
+              "url": "/api/orgs/export-data?orgId={org.id}",
+              "download": "aglyn-workspace-export.json",
+              "success": "Your data is downloading."
             }
           ]
         },
@@ -81,12 +103,13 @@
                 "screen": "core.settings.data.packageImport"
               }
             }
-          ]
+          ],
+          "when": "org.can[data.manage]"
         },
         {
           "type": "list",
           "title": "Unfinished imports",
-          "when": "data.unfinished.unfinished",
+          "when": "org.can[data.manage] && data.unfinished.unfinished",
           "items": "data.unfinished.unfinished",
           "count": true,
           "primary": "{item.fileName|item.label}",
@@ -190,12 +213,13 @@
                 }
               }
             }
-          ]
+          ],
+          "when": "org.can[data.manage]"
         },
         {
           "type": "list",
           "title": "Site package imports",
-          "when": "data.jobs.sitePackageImports",
+          "when": "org.can[data.manage] && data.jobs.sitePackageImports",
           "items": "data.jobs.sitePackageImports",
           "count": true,
           "primary": "Site package · {item.hostName|item.hostId}",
@@ -237,7 +261,6 @@
       "subtitle": "Move records and packages in and out of this workspace"
     },
     {
-
       "id": "core.settings.data.packageExport",
       "title": "Export a package",
       "icon": "arrow.down.doc|download",
@@ -324,7 +347,6 @@
       ]
     },
     {
-
       "id": "core.settings.data.packageImport",
       "title": "Import a package",
       "icon": "square.and.arrow.down|upload",
@@ -374,7 +396,6 @@
       ]
     },
     {
-
       "id": "core.settings.data.packageReview",
       "title": "Review the import",
       "icon": "checklist|inventory_2",
@@ -735,7 +756,6 @@
       ]
     },
     {
-
       "id": "core.settings.data.packageDone",
       "title": "Imported",
       "icon": "checkmark.circle|check_circle",
@@ -811,7 +831,6 @@
       ]
     },
     {
-
       "id": "core.settings.data.packageUndo",
       "title": "Undo the import",
       "icon": "arrow.uturn.backward|undo",
@@ -944,7 +963,6 @@
       ]
     },
     {
-
       "id": "core.settings.data.sitePackageUndo",
       "title": "Undo the site package import",
       "icon": "arrow.uturn.backward|undo",

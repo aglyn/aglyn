@@ -37,6 +37,7 @@ import androidx.compose.ui.semantics.heading
 import androidx.compose.ui.semantics.semantics
 import androidx.compose.ui.text.input.KeyboardType
 import androidx.compose.ui.unit.dp
+import com.aglyn.contracts.permissionRefusalText
 import com.aglyn.contracts.DatasetFieldDefinition
 import com.aglyn.contracts.DatasetFieldType
 import com.aglyn.contracts.DatasetModel
@@ -149,13 +150,19 @@ fun RecordsScreen(context: NativePluginContext, datasetId: String, initialRecord
 private fun Records(context: NativePluginContext, orgId: String, dataset: DatasetRow, initialRecordId: String?, startNew: Boolean) {
   val scope = rememberCoroutineScope()
   val model = remember(dataset.id, dataset.model) { RecordsModel(orgId, dataset, context.firestore, scope) }
-  LaunchedEffect(model) { model.reload() }
+  val access = rememberDatasetAccess(context, orgId, dataset.visibleTo)
+  val canWrite = access.canWrite
+  LaunchedEffect(model, access.canRead) { if (access.canRead) model.reload() }
   val api = remember(orgId, context.api, context.writer) { DataApi(context.api, context.writer, orgId) }
   val runner = remember(dataset.id) { ActionRunner(scope) }
-  val canWrite = rememberMemberPermissions(context).can("data.manage")
   val references = rememberReferenceChoices(context.firestore, orgId, dataset.model)
   var dialog by remember { mutableStateOf<RecordDialog?>(if (startNew && canWrite) RecordDialog.Edit(null, newRecordInputs(dataset.model)) else null) }
   val noun = dataset.singular.ifBlank { "record" }.lowercase()
+
+  if (!access.canRead) {
+    com.aglyn.ui.EmptyState(dataset.plural.ifBlank { dataset.name }, body = permissionRefusalText("data.viewRecords"), icon = AglynIcons.named("lock"))
+    return
+  }
 
   AglynListDetail(
     initialSelected = initialRecordId,
@@ -168,10 +175,8 @@ private fun Records(context: NativePluginContext, orgId: String, dataset: Datase
         ListHeader(dataset.plural.ifBlank { dataset.name }) {
           OverflowMenu(
             buildList {
-              if (canWrite) {
-                add(MenuAction("import", "Import records", "upload") { context.navigate(DATA_IMPORT_SCREEN, datasetImportParams(dataset.id, dataset.name)) })
-              }
-              add(MenuAction("export", "Export records", "download") { dialog = RecordDialog.Export })
+              add(MenuAction("import", "Import records", "upload") { if (canWrite) context.navigate(DATA_IMPORT_SCREEN, datasetImportParams(dataset.id, dataset.name)) else runner.error = access.writeRefusal })
+              add(MenuAction("export", "Export records", "download") { if (access.canExport) dialog = RecordDialog.Export else runner.error = permissionRefusalText("data.export") })
             },
           )
           Button(

@@ -44,6 +44,12 @@
  * icons, site name and Organization structured data come along for the
  * header, the footer and the site's own facts.
  *
+ * What a visitor cannot see is not the page (AGL-4152): a first walk says how
+ * the page is built and what each element says, `site-import-concealed.ts`
+ * reads that through the page's stylesheets, and a second walk, building the
+ * same elements, leaves that out. A `<br>` in a paragraph ends a paragraph, and
+ * a first line wholly in bold over other lines is its block's heading.
+ *
  * A video is kept where it sits (AGL-4140): a `<video>`, a video host's
  * `<iframe>`, a facade that stands in for one (a play button over a still),
  * and the page's `VideoObject` structured data and `og:video`, each once,
@@ -52,6 +58,7 @@
  *=========================================*/
 
 import { videoEmbedOf } from '@aglyn/aglyn/plugin-manager/video-embed-provider'
+import { siteImportConcealedOf, type SiteImportConcealed } from './site-import-concealed'
 import { siteImportDataForms } from './site-import-data-forms'
 
 /** One run of a page's content, in the order the page draws it. */
@@ -193,6 +200,11 @@ export interface SiteImportExtract {
   forms: { kept: SiteImportForm[]; removed: number }
   /** Its videos (AGL-4140), each once, in the order they were found; absent on a page with none. */
   videos?: SiteImportVideo[]
+  /**
+   * What the page holds that a visitor cannot see (AGL-4152), left out of all
+   * the rest: the fidelity holds a build to not drawing it. Absent on a page with none.
+   */
+  concealed?: SiteImportConcealedParts
   /** True when the page has a password field; nothing else is extracted. */
   loginForm: boolean
   /**
@@ -202,6 +214,12 @@ export interface SiteImportExtract {
    * into a layout and drops it.
    */
   structure?: SiteImportStructure
+}
+
+/** The pictures and the words a page holds that a visitor cannot see (AGL-4152). */
+export interface SiteImportConcealedParts {
+  pictures: string[]
+  words: string[]
 }
 
 /** The attributes of an element the layout reader reads; everything else is dropped. */
@@ -216,6 +234,18 @@ export interface SiteImportElementAttrs {
   href?: string
   /** `hidden`, or `aria-hidden="true"`. */
   hidden?: true
+  /** The `hidden` attribute: drawn nowhere (AGL-4152). */
+  notDrawn?: true
+  /** `aria-hidden="true"`: a screen reader skips it, a visitor may still see it (AGL-4152). */
+  ariaHidden?: true
+  /** A `<dialog>` left open (AGL-4152). */
+  open?: true
+  /** A picture still to load: an address in its `data-` attributes and none of its own (AGL-4152). */
+  lazy?: true
+  /** A picture sized to nothing, or to a tracking pixel (AGL-4152). */
+  tiny?: true
+  /** The share of the screen's width a picture's `sizes` says it is drawn at on a wide screen, in percent (AGL-4152). */
+  share?: number
   /** `data-section-theme` or `data-theme`: a site builder's name for a band's look. */
   theme?: string
   type?: string
@@ -314,6 +344,10 @@ export interface SiteImportStructure {
 export interface SiteImportExtractOptions {
   /** Keep how the page is built (`structure`), for the layout reader (AGL-4106). */
   structure?: boolean
+  /** The text of the stylesheets the page links: what a visitor cannot see is read through them, as through its own `<style>`s (AGL-4152). */
+  stylesheets?: readonly string[]
+  /** Read what a visitor cannot see as well: the page as an older read saw it, for a check that holds a build to not drawing it. */
+  readConcealed?: boolean
 }
 
 /** Ceilings that keep one odd page from becoming the whole inventory. */
@@ -338,6 +372,8 @@ export const SITE_IMPORT_PAGE_LIMITS = {
   stylesheets: 24,
   /** A page's videos (AGL-4140). */
   videos: 10,
+  /** What a page conceals that the fidelity is told of (AGL-4152). */
+  concealed: 40,
 } as const
 
 /** Elements removed with everything inside them. */
@@ -433,6 +469,48 @@ const RUN_BOUNDARY = new Set(['a', 'img', 'button', 'input', 'select', 'textarea
 
 /** Where one run of words ends and the next begins, resolved when a block is written. */
 const RUN_BREAK = '\u0001'
+
+/** Where a line of a text block ends, resolved when the block is written (AGL-4152). */
+const LINE_BREAK = '\u0004'
+
+/** The most characters a bold first line runs to and still heads its block. */
+const LEAD_MAX_CHARS = 80
+
+/** A block this long under its bold first line is a part of the page; a shorter one, a note. */
+const LEAD_LONG_LINES = 3
+const LEAD_LONG_CHARS = 240
+
+/**
+ * The lines of a text block (AGL-4152): where a page breaks a block with `<br>`
+ * or sets its lines apart, each line is a paragraph, for that is how it reads
+ * ("About us" over a family firm's four paragraphs). A line that runs on into
+ * the next in lower case is one sentence wrapped by hand, and stays whole. A
+ * first line wholly in bold, short and no sentence, over other lines, is the
+ * block's heading.
+ */
+function blockLines(raw: string, bold: ReadonlyArray<readonly [number, number]>): Array<{ start: number; end: number; heading?: 2 | 3 }> {
+  const lines: Array<{ start: number; end: number; text: string }> = []
+  let start = 0
+  for (let at = 0; at <= raw.length; at += 1) {
+    if (at < raw.length && raw[at] !== LINE_BREAK) continue
+    const text = collapse(decodeHtmlEntities(raw.slice(start, at)))
+    if (text) {
+      const last = lines[lines.length - 1]
+      if (last && /^\p{Ll}/u.test(text) && !/[.!?:;]["'\u2019\u201d)]*$/.test(last.text)) {
+        last.end = at
+        last.text = `${last.text} ${text}`
+      } else lines.push({ start, end: at, text })
+    }
+    start = at + 1
+  }
+  const first = lines[0]
+  if (!first || lines.length < 2) return lines
+  const body = lines.slice(1)
+  const wholly = [...raw.slice(first.start, first.end)].every((char, offset) => !char.trim() || char === RUN_BREAK || char === LINE_BREAK || bold.some(([from, to]) => first.start + offset >= from && first.start + offset < to))
+  if (!wholly || first.text.length > LEAD_MAX_CHARS || /[.!?,;]["'\u2019\u201d)]*$/.test(first.text)) return lines
+  const long = body.length >= LEAD_LONG_LINES || body.reduce((sum, line) => sum + line.text.length, 0) >= LEAD_LONG_CHARS
+  return [{ ...first, heading: long ? 2 : 3 }, ...body]
+}
 
 /**
  * The runs of a block joined as a reader sees them: a space between two
@@ -684,7 +762,8 @@ export function resolveSiteLink(raw: string | undefined, base: string): string |
   const value = String(raw ?? '').trim()
   const mail = /^mailto:([^?\s<>"']+@[^?\s<>"']+)/i.exec(value)
   if (mail) return `mailto:${decodeURIComponent(mail[1]).toLowerCase()}`
-  const phone = /^tel:([+\d][\d\s().-]{2,30})$/i.exec(value)
+  // A link that texts a number goes to the same number (AGL-4152): the one a site's buttons can reach.
+  const phone = /^(?:tel|sms):([+\d][\d\s().-]{2,30})(?:[?&;].*)?$/i.exec(value)
   if (phone) return `tel:${phone[1].replace(/[\s().-]/g, '')}`
   if (value.startsWith('#')) return null
   return resolveSiteUrl(value, base)?.toString() ?? null
@@ -1277,9 +1356,16 @@ function viewBoxOf(attributes: Record<string, string>): string {
 function readSvgIcons(html: string, icons: SiteImportSvgIcon[]): string {
   const seen = new Map<string, number>()
   return html.replace(SVG_ELEMENT, (whole: string, attributeSource: string, inner: string) => {
+    // Words it draws are the words of what holds it (AGL-4152), read from the name it gives a screen reader.
+    if (/<text\b/i.test(inner) && !/<(?:image|foreignobject|script)\b/i.test(inner)) return ' <aglyn-svg type="words"> '
     if (/<(?:image|foreignobject|use|text|script)\b/i.test(inner)) return ' '
     const shapes = [...inner.matchAll(SVG_SHAPE)]
     if (!shapes.length) return ' '
+    // One `<rect>` with no size of its own is a filled box as wide as its place, no icon (AGL-4152).
+    if (shapes.length === 1 && shapes[0][1].toLowerCase() === 'rect') {
+      const rect = parseAttributes(shapes[0][2])
+      if (!/^[\d.]+$/.test(rect['width'] ?? '') || !/^[\d.]+$/.test(rect['height'] ?? '')) return ' <aglyn-svg type="box"> '
+    }
     const viewBox = viewBoxOf(parseAttributes(attributeSource))
     let icon: SiteImportSvgIcon | null = null
     if (shapes.length === 1 && shapes[0][1].toLowerCase() === 'path') {
@@ -1394,6 +1480,31 @@ const IMPLIED_END: Record<string, { ends: ReadonlySet<string>; walls: ReadonlySe
 }
 const P_WALLS = new Set(['button', 'table', 'td', 'th', 'caption', 'object', 'template', 'html', 'marquee', 'applet'])
 
+/** The `data-` attributes a lazy loader keeps a picture's address in, the most usual first. */
+const LAZY_SOURCES = ['data-src', 'data-lazy-src', 'data-original', 'data-lazy']
+
+/** Whether a `src` is only a stand-in until the picture loads: inline data, or a blank by its name. */
+const PLACEHOLDER_SRC = /^\s*data:|(?:^|[/_-])(?:blank|spacer|placeholder|transparent|pixel)[^/]*\.(?:gif|png|svg)(?:$|[?#])/i
+
+/** A picture a lazy loader holds back: its address in its `data-` attributes, and none of its own but a stand-in. */
+function isLazyPicture(attributes: Record<string, string>): boolean {
+  return [...LAZY_SOURCES, 'data-srcset'].some((name) => !!attributes[name]) && (!attributes['src'] || PLACEHOLDER_SRC.test(attributes['src']))
+}
+
+/** The share of the screen a picture's `sizes` gives it on the widest screen it names: its last entry's `vw`, or `null`. */
+function sizesShare(sizes: string | undefined): number | null {
+  const last = String(sizes ?? '').split(',').map((entry) => entry.trim()).filter((entry) => entry && entry !== 'auto').pop() ?? ''
+  const match = /^(?:\([^)]*\)\s*)?(\d+(?:\.\d+)?)vw$/i.exec(last)
+  const share = match ? Number(match[1]) : NaN
+  return share > 0 && share <= 100 ? Math.round(share * 100) / 100 : null
+}
+
+/** The address a picture shows: its own, else what a lazy loader holds, else the first of its `srcset`. */
+function pictureAddress(attributes: Record<string, string>): string | undefined {
+  const own = attributes['src'] && !(isLazyPicture(attributes) && PLACEHOLDER_SRC.test(attributes['src'])) ? attributes['src'] : undefined
+  return own || LAZY_SOURCES.map((name) => attributes[name]).find(Boolean) || firstSrcset(attributes['srcset'] || attributes['data-srcset'])
+}
+
 /** The attributes the layout reader reads; a picture's and a film's own size as numbers (AGL-4138). */
 function elementAttrs(attributes: Record<string, string>, tag = ''): SiteImportElementAttrs {
   const attrs: SiteImportElementAttrs = {}
@@ -1415,6 +1526,9 @@ function elementAttrs(attributes: Record<string, string>, tag = ''): SiteImportE
   put('controls', text(attributes['aria-controls'], 120))
   put('labelledby', text(attributes['aria-labelledby'], 120))
   if ('hidden' in attributes || (attributes['aria-hidden'] ?? '').toLowerCase() === 'true') attrs.hidden = true
+  if ('hidden' in attributes) attrs.notDrawn = true
+  if ((attributes['aria-hidden'] ?? '').toLowerCase() === 'true') attrs.ariaHidden = true
+  if (tag === 'dialog' && 'open' in attributes) attrs.open = true
   if (tag === 'img' || tag === 'video') {
     const size = (value: string | undefined) => (/^\s*\d{1,5}(?:px)?\s*$/.test(value ?? '') ? Number.parseInt(value as string, 10) : 0)
     const width = size(attributes['width'])
@@ -1422,6 +1536,12 @@ function elementAttrs(attributes: Record<string, string>, tag = ''): SiteImportE
     if (width > 0 && height > 0) {
       attrs.width = width
       attrs.height = height
+    }
+    if (tag === 'img') {
+      const share = sizesShare(attributes['sizes'])
+      if (share !== null) attrs.share = share
+      if (isLazyPicture(attributes)) attrs.lazy = true
+      if ((width <= 1 && /^\s*[01](?:px)?\s*$/.test(attributes['width'] ?? '')) || (height <= 1 && /^\s*[01](?:px)?\s*$/.test(attributes['height'] ?? ''))) attrs.tiny = true
     }
   }
   return attrs
@@ -1439,6 +1559,24 @@ export function extractSiteImportPage(
   isSameSite: (url: URL) => boolean,
   options: SiteImportExtractOptions = {},
 ): SiteImportExtract {
+  const first = readSiteImportPage(html, pageUrl, isSameSite, null)
+  const concealed = first.extract.structure && !options.readConcealed ? siteImportConcealedOf(first.extract.structure, first.runs, options.stylesheets ?? []) : null
+  const { extract } = concealed ? readSiteImportPage(html, pageUrl, isSameSite, concealed) : first
+  if (options.structure !== true) delete extract.structure
+  return extract
+}
+
+/**
+ * One walk of the page. The first says how it is built and what each element
+ * says; with what that leaves out for a visitor (`concealed`), a second walk,
+ * which builds the same elements, reads the page a visitor sees (AGL-4152).
+ */
+function readSiteImportPage(
+  html: string,
+  pageUrl: string,
+  isSameSite: (url: URL) => boolean,
+  concealed: SiteImportConcealed | null,
+): { extract: SiteImportExtract; runs: ReadonlyMap<number, string> } {
   const empty: SiteImportExtract = {
     title: '',
     description: '',
@@ -1460,13 +1598,12 @@ export function extractSiteImportPage(
   let source = String(html ?? '')
     .replace(/<!--[\s\S]*?(?:-->|$)/g, ' ')
     .replace(/<!\[CDATA\[[\s\S]*?\]\]>/g, ' ')
-  if (PASSWORD_INPUT.test(source)) return { ...empty, loginForm: true }
+  if (PASSWORD_INPUT.test(source)) return { extract: { ...empty, loginForm: true }, runs: new Map() }
 
   // Read before scripts go: the structured data is a script's body.
   const organization = readOrganization(source)
   const icons = readIcons(source, pageUrl)
-  const keep = options.structure === true
-  const sheets = keep ? readStyleSheets(source, pageUrl) : { styles: [], stylesheets: [] }
+  const sheets = readStyleSheets(source, pageUrl)
   // A form defined in data (AGL-4152), read before scripts go: a marker at its place, its fields from the data.
   const dataForms = siteImportDataForms(source, formWords, SITE_IMPORT_PAGE_LIMITS)
   source = dataForms.html
@@ -1545,6 +1682,8 @@ export function extractSiteImportPage(
     /** Its element, and the first icon inside it (AGL-4106). */
     element: number
     icon?: number
+    /** Words inside it only a screen reader hears: the name of a link that shows an icon alone (AGL-4152). */
+    quiet: string
   } | null = null
   /** The links read into the block being built, written after it. */
   let pending: Array<{ text: string; href: string; start: number; end: number; crossed: boolean; region: SiteImportRegion; element: number }> = []
@@ -1557,9 +1696,20 @@ export function extractSiteImportPage(
   const texts: Array<{ element: number; text: string }> = []
   /** Where in `buffer` the words no link has taken begin: a menu's own words are read from here. */
   let ownFrom = 0
+  /** What each element says itself, on the first walk: what tells a copy, a panel and a ticker apart (AGL-4152). */
+  const runs = new Map<number, string>()
+  /** What a visitor cannot see, as the walk finds it. */
+  const concealedPictures = new Set<string>()
+  const concealedWords = new Set<string>()
+  /** Words of the block being read that only a screen reader hears. */
+  let heard = ''
+  /** The block being read draws words in a drawing, whose name is what it says. */
+  let drawsWords = false
+  /** The stretches of `buffer` set in bold: a first line wholly in them heads its block. */
+  let bold: Array<readonly [number, number]> = []
   /** A menu's or a header's own words, outside its links (AGL-4106), from `ownFrom` on. */
   const takeOwnWords = (element: number) => {
-    if (!keep || element < 0 || !(navDepth > 0 || headerDepth > 0) || texts.length >= SITE_IMPORT_PAGE_LIMITS.anchors) return
+    if (element < 0 || !(navDepth > 0 || headerDepth > 0) || texts.length >= SITE_IMPORT_PAGE_LIMITS.anchors) return
     const words = clip(collapse(decodeHtmlEntities(buffer.slice(ownFrom))), 300)
     if (words) texts.push({ element, text: words })
   }
@@ -1571,6 +1721,24 @@ export function extractSiteImportPage(
   /** The element the loose words being read began in. */
   let looseElement = -1
   const top = () => (open.length ? (open[open.length - 1] as number) : -1)
+  /** Whether the walk is where a visitor's reading is held to what shows: a page's own content, never a menu or a footer. */
+  const inPage = () => navDepth === 0 && headerDepth === 0 && footerDepth === 0
+  const isGone = (element: number) => !!concealed && inPage() && concealed.gone.has(element)
+  /** Whether the words being read sit in bold, up to the block they are in. */
+  const inBold = () => {
+    for (let at = open.length - 1; at >= 0; at -= 1) {
+      const node = elements[open[at] as number] as SiteImportElement
+      if (node.id === current?.element) return false
+      if (node.tag === 'strong' || node.tag === 'b' || /font-weight\s*:\s*(?:bold|[6-9]00)/i.test(node.attrs.style ?? '')) return true
+    }
+    return false
+  }
+  /** A line ends in a text block: a paragraph of its own (AGL-4152), where the block is one that holds paragraphs. */
+  const lineBreak = (): boolean => {
+    if (current?.tag !== 'p' || anchor || !inPage()) return false
+    buffer += LINE_BREAK
+    return true
+  }
 
   const region = (): SiteImportRegion =>
     footerDepth > 0 ? 'footer' : headerDepth > 0 ? 'header' : 'main'
@@ -1581,7 +1749,6 @@ export function extractSiteImportPage(
   /** A block, and where its words sit. */
   const push = (block: SiteImportBlock, element: number) => {
     blocks.push(block)
-    if (!keep) return
     blockElement.push(element)
     const owner = elements[element]
     if (!owner) return
@@ -1603,7 +1770,6 @@ export function extractSiteImportPage(
   const P_ONLY = new Set(['p'])
   /** An element opens: what it implies is closed first, then it is the innermost. */
   const openElement = (tag: string, attributes: Record<string, string>, selfClosing: boolean): number => {
-    if (!keep) return -1
     if (CLOSES_P.has(tag)) endOpen(P_ONLY, P_WALLS)
     const implied = IMPLIED_END[tag]
     if (implied) endOpen(implied.ends, implied.walls)
@@ -1622,7 +1788,6 @@ export function extractSiteImportPage(
   }
   /** An element closes: it and everything still open inside it. */
   const closeElement = (tag: string) => {
-    if (!keep) return
     for (let at = open.length - 1; at >= 0; at -= 1) {
       if (elements[open[at] as number]?.tag === tag) {
         open.length = at
@@ -1631,29 +1796,23 @@ export function extractSiteImportPage(
     }
   }
 
-  const flush = () => {
-    const raw = buffer
-    const written = pending
-    const loose = current === null
-    const element = current?.element ?? looseElement
-    if (!anchor) takeOwnWords(element)
-    ownFrom = 0
-    buffer = ''
-    pending = []
-    looseElement = -1
-    if (anchor && collapse(decodeHtmlEntities(raw.slice(anchor.start)))) anchor.crossed = true
-    if (anchor) anchor.start = 0
-    const kind = current?.kind ?? 'paragraph'
-    const level = current?.level
-    current = null
-    const text = clip(collapse(decodeHtmlEntities(raw)), SITE_IMPORT_PAGE_LIMITS.blockChars)
-    if (navDepth > 0) return
+  /** One run of a block's words, its links after it. `apart`: its words stand alone, so a line of links alone is those links. */
+  const writeRun = (
+    raw: string,
+    written: ReadonlyArray<{ text: string; href: string; start: number; end: number; crossed: boolean; region: SiteImportRegion; element: number }>,
+    kind: 'heading' | 'paragraph' | 'list-item' | 'quote',
+    level: number | undefined,
+    element: number,
+    apart: boolean,
+    named: string,
+  ) => {
+    const text = named || clip(collapse(decodeHtmlEntities(raw)), SITE_IMPORT_PAGE_LIMITS.blockChars)
     // Loose words that are only links (a row of buttons, an address in a
     // card) are those links, each a block of its own; words around a link
     // keep their block, and the link follows it.
     let rest = raw
     for (const link of [...written].sort((a, b) => b.start - a.start)) rest = `${rest.slice(0, link.start)}${rest.slice(link.end)}`
-    const onlyLinks = loose && written.length > 0 && !collapse(decodeHtmlEntities(rest))
+    const onlyLinks = (apart || !text) && written.length > 0 && !collapse(decodeHtmlEntities(rest))
     if (text && !onlyLinks && room()) {
       const last = blocks[blocks.length - 1]
       if (!(last && last.kind !== 'image' && last.kind !== 'link' && last.text === text)) {
@@ -1673,6 +1832,39 @@ export function extractSiteImportPage(
     }
   }
 
+  const flush = () => {
+    const raw = buffer
+    const written = pending
+    const loose = current === null
+    const element = current?.element ?? looseElement
+    const stretches = bold
+    // Every word of it only heard: its accessible name is what it says (AGL-4152), a heading split up for an animation.
+    const named = heard && current && !collapse(decodeHtmlEntities(raw.split(LINE_BREAK).join(' '))) ? clip(collapse(elements[current.element]?.attrs.label || (drawsWords ? decodeHtmlEntities(heard).replace(/[\s\-\u2013\u2014|\u00b7\u2022]+$/, '') : '')), SITE_IMPORT_PAGE_LIMITS.blockChars) : ''
+    if (!anchor) takeOwnWords(element)
+    ownFrom = 0
+    buffer = ''
+    pending = []
+    looseElement = -1
+    heard = ''
+    drawsWords = false
+    bold = []
+    if (anchor && collapse(decodeHtmlEntities(raw.slice(anchor.start)))) anchor.crossed = true
+    if (anchor) anchor.start = 0
+    const kind = current?.kind ?? 'paragraph'
+    const level = current?.level
+    current = null
+    if (navDepth > 0) return
+    const lines = raw.includes(LINE_BREAK) ? blockLines(raw, stretches) : null
+    if (!lines || lines.length < 2) {
+      writeRun(raw.split(LINE_BREAK).join(' '), written, kind, level, element, loose, named)
+      return
+    }
+    for (const line of lines) {
+      const own = written.filter((link) => link.start >= line.start && link.start < line.end).map((link) => ({ ...link, start: link.start - line.start, end: link.end - line.start }))
+      writeRun(raw.slice(line.start, line.end).split(LINE_BREAK).join(' '), own, line.heading ? 'heading' : kind, line.heading ?? level, element, true, '')
+    }
+  }
+
   /** A boundary between two runs of words: in the block, and in the link being read. */
   const boundary = (block: boolean) => {
     buffer += RUN_BREAK
@@ -1686,8 +1878,10 @@ export function extractSiteImportPage(
     if (tag === 'a') {
       if (closing) {
         if (anchor) {
-          const label = clip(collapse(decodeHtmlEntities(anchor.text)), 300)
-          const firstLine = clip(collapse(decodeHtmlEntities(anchor.lines.find((line) => collapse(decodeHtmlEntities(line))) ?? '')), 120)
+          // A link that shows an icon alone is called what only a screen reader hears; around a picture, it is that picture.
+          const quietName = anchor.icon !== undefined && !anchor.image ? clip(collapse(decodeHtmlEntities(anchor.quiet)), 300) : ''
+          const label = clip(collapse(decodeHtmlEntities(anchor.text)), 300) || quietName
+          const firstLine = clip(collapse(decodeHtmlEntities(anchor.lines.find((line) => collapse(decodeHtmlEntities(line))) ?? '')), 120) || clip(quietName, 120)
           if (inNav() && anchor.url && firstLine && navLinks.length < SITE_IMPORT_PAGE_LIMITS.navLinks) {
             navLinks.push({ text: firstLine, url: anchor.url.toString() })
           }
@@ -1697,7 +1891,7 @@ export function extractSiteImportPage(
           if (!inNav() && anchor.href && label) {
             pending.push({ text: label, href: anchor.href, start: anchor.start, end: buffer.length, crossed: anchor.crossed, region: anchor.region, element: anchor.element })
           }
-          if (keep && anchor.element >= 0 && anchors.length < SITE_IMPORT_PAGE_LIMITS.anchors) {
+          if (anchor.element >= 0 && anchors.length < SITE_IMPORT_PAGE_LIMITS.anchors) {
             const lines = anchor.lines.map((line) => clip(collapse(decodeHtmlEntities(line)), 300)).filter(Boolean)
             anchors.push({
               element: anchor.element,
@@ -1730,6 +1924,7 @@ export function extractSiteImportPage(
         crossed: false,
         region: region(),
         element,
+        quiet: '',
       }
       if (url && isSameSite(url) && links.length < SITE_IMPORT_PAGE_LIMITS.links) {
         const key = url.toString()
@@ -1742,9 +1937,10 @@ export function extractSiteImportPage(
     }
 
     if (tag === 'aglyn-svg') {
+      if (attributes['type'] === 'words') drawsWords = true
       // An icon at its place: never words (AGL-4106).
       const index = Number(attributes['data-icon'])
-      if (keep && element >= 0 && Number.isInteger(index) && svgIcons[index]) {
+      if (element >= 0 && Number.isInteger(index) && svgIcons[index] && !isGone(element)) {
         const own = elements[element] as SiteImportElement
         own.icon = index
         own.order = blocks.length - 0.5
@@ -1758,7 +1954,7 @@ export function extractSiteImportPage(
       flush()
       boundary(true)
       const index = Number(attributes['data-video'])
-      if (!closing && keep && element >= 0 && Number.isInteger(index) && videos[index]) {
+      if (!closing && element >= 0 && Number.isInteger(index) && videos[index]) {
         const own = elements[element] as SiteImportElement
         own.video = index
         own.order = blocks.length - 0.5
@@ -1768,7 +1964,7 @@ export function extractSiteImportPage(
 
     if (tag === 'aglyn-form') {
       const index = Number(attributes['data-form'])
-      if (keep && element >= 0 && Number.isInteger(index)) {
+      if (element >= 0 && Number.isInteger(index)) {
         const own = elements[element] as SiteImportElement
         own.form = index
         own.order = blocks.length - 0.5
@@ -1777,15 +1973,17 @@ export function extractSiteImportPage(
     }
 
     if (tag === 'img' && !closing) {
-      const url = resolveSiteUrl(
-        attributes['src'] || attributes['data-src'] || firstSrcset(attributes['srcset'] || attributes['data-srcset']),
-        pageUrl,
-      )
+      const url = resolveSiteUrl(pictureAddress(attributes), pageUrl)
       boundary(false)
+      // A picture a visitor cannot see is no picture of the page (AGL-4152).
+      if (url && isGone(element)) {
+        concealedPictures.add(url.toString())
+        return
+      }
       if (url && images.length < SITE_IMPORT_PAGE_LIMITS.images) {
         const key = url.toString()
         const alt = clip(collapse(attributes['alt'] ?? ''), 300)
-        if (keep && element >= 0) (elements[element] as SiteImportElement).picture = { url: key, alt }
+        if (element >= 0) (elements[element] as SiteImportElement).picture = { url: key, alt }
         if (anchor && !anchor.image) anchor.image = { url: key, alt }
         if (!imageSeen.has(key)) {
           imageSeen.add(key)
@@ -1832,6 +2030,7 @@ export function extractSiteImportPage(
 
     if (BREAK_TAGS.has(tag)) {
       if (tag === 'br' && current) {
+        if (lineBreak()) return
         buffer += ' '
         if (anchor) anchor.text += ' '
         return
@@ -1842,14 +2041,29 @@ export function extractSiteImportPage(
     }
 
     if (RUN_BOUNDARY.has(tag)) boundary(false)
+    // An inline element a sheet sets on a line of its own (AGL-4152).
+    if (concealed && (closing ? concealed.lines.has(top()) : concealed.lines.has(element))) lineBreak()
   }
 
   for (const match of body.matchAll(new RegExp(`${TAG.source}|([^<]+)|<`, 'g'))) {
     const text = match[4]
     if (text !== undefined || match[2] === undefined) {
-      const run = text ?? '<'
+      let run = text ?? '<'
+      const at = top()
+      if (run.trim() && at >= 0) runs.set(at, `${runs.get(at) ?? ''} ${decodeHtmlEntities(run)}`)
+      if (concealed && inPage() && (concealed.gone.has(at) || concealed.unread.has(at))) {
+        // Words a visitor cannot see are no words of the page (AGL-4152).
+        const words = clip(collapse(decodeHtmlEntities(run)), 200)
+        if (/\p{L}.*\p{L}.*\p{L}/u.test(words)) concealedWords.add(words)
+        if (run.trim()) heard += run
+        if (anchor) anchor.quiet += run
+        continue
+      }
+      // Line breaks a block's words are written with, where it keeps them.
+      if (concealed?.preserved.has(at) && current?.tag === 'p' && !anchor && inPage() && run.includes('\n')) run = run.replace(/[ \t]*\r?\n[ \t]*/g, LINE_BREAK)
+      if (current?.tag === 'p' && inBold()) bold.push([buffer.length, buffer.length + run.length])
       buffer += run
-      if (keep && looseElement < 0 && current === null && run.trim()) looseElement = top()
+      if (looseElement < 0 && current === null && run.trim()) looseElement = top()
       if (anchor) {
         anchor.text += run
         anchor.lines[anchor.lines.length - 1] += run
@@ -1865,7 +2079,14 @@ export function extractSiteImportPage(
   }
   flush()
 
-  return {
+  // What was left out and shown nowhere else: a label the page also prints is its words.
+  const lettersOf = (text: string) => text.replace(/[^\p{L}\p{N}]+/gu, ' ').trim()
+  const shownWords = new Set(blocks.flatMap((block) => (block.kind === 'image' ? [] : [lettersOf(block.text)])))
+  const leftPictures = [...concealedPictures].filter((url) => !imageSeen.has(url)).slice(0, SITE_IMPORT_PAGE_LIMITS.concealed)
+  const leftWords = [...concealedWords].filter((words) => !shownWords.has(lettersOf(words))).slice(0, SITE_IMPORT_PAGE_LIMITS.concealed)
+  const left = leftPictures.length || leftWords.length ? { pictures: leftPictures, words: leftWords } : null
+
+  const extract: SiteImportExtract = {
     title,
     description,
     lang,
@@ -1882,22 +2103,20 @@ export function extractSiteImportPage(
     links,
     forms: { kept: forms.kept, removed: forms.removed + dataForms.removed },
     ...(videos.length ? { videos } : {}),
+    ...(left ? { concealed: left } : {}),
     loginForm: false,
-    ...(keep
-      ? {
-          structure: {
-            elements,
-            blockElement,
-            icons: svgIcons,
-            anchors,
-            texts,
-            styles: sheets.styles,
-            stylesheets: sheets.stylesheets,
-            main: mainElement >= 0 ? mainElement : roleMain,
-            body: bodyElement,
-            root: htmlTag ? elementAttrs(parseAttributes(htmlTag[1])) : {},
-          },
-        }
-      : {}),
+    structure: {
+      elements,
+      blockElement,
+      icons: svgIcons,
+      anchors,
+      texts,
+      styles: sheets.styles,
+      stylesheets: sheets.stylesheets,
+      main: mainElement >= 0 ? mainElement : roleMain,
+      body: bodyElement,
+      root: htmlTag ? elementAttrs(parseAttributes(htmlTag[1])) : {},
+    },
   }
+  return { extract, runs }
 }

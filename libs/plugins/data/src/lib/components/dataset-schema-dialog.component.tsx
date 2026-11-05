@@ -19,17 +19,21 @@
 import {
   getCustomFieldType,
   listCustomFieldTypes,
-  describeScope,
+  describeSharing,
   HOST_ACCESS_ROLES,
-  hostScopeToken,
   narrowsScope,
-  scopeCovers,
-  ORG_SCOPE_TOKEN,
-  scopeToStore,
+  scopeSharingOf,
+  sharingCovers,
+  sharingFromChoice,
   storedScope,
   visibleToHost,
 } from '@aglyn/aglyn'
 import { useConfirmationContext } from '@aglyn/shared-ui-jsx'
+import {
+  SiteSharingField,
+  type SiteSharingValue,
+} from '@aglyn/shared-ui-jsx/components/site-sharing-field.component'
+import { authorizedFetch } from '@aglyn/shared-util-http/authorized-token'
 import { useSnackbar } from '@aglyn/shared-ui-snackstack'
 import {
   Button,
@@ -44,13 +48,12 @@ import {
   FormControlLabel,
   IconButton,
   MenuItem,
-  Select,
   Stack,
   TextField,
   Typography,
 } from '@mui/material'
 import { collection, doc, limit, query, updateDoc, where } from 'firebase/firestore'
-import { type ReactNode, useCallback, useEffect, useState } from 'react'
+import { type ReactNode, useCallback, useEffect, useMemo, useState } from 'react'
 import {
   useFirestore,
   useFirestoreCollection,
@@ -128,6 +131,27 @@ function SchemaControls(props: { locked: boolean; children: ReactNode }) {
 }
 
 /**
+ * How a dataset is shared, as the choice the sharing field edits, or null where
+ * it stores no sharing (AGL-1484). The seed and the save both read it from here,
+ * so a dialog nobody touched compares equal to its own document and writes none.
+ */
+function sharingChoiceOf(dataset: unknown): SiteSharingValue | null {
+  const sharing = scopeSharingOf(dataset as Record<string, unknown> | null)
+  if (sharing.mode === 'all') return { mode: 'all' }
+  if (sharing.mode === 'selected') return { mode: 'selected', hostIds: sharing.hostIds }
+  if (sharing.mode === 'allExcept') return { mode: 'allExcept', exceptHostIds: sharing.exceptHostIds }
+  return null
+}
+
+/** Two choices compare by what they pick, in any order. */
+function sharingChoiceKey(choice: SiteSharingValue | null): string {
+  if (!choice) return 'unset'
+  if (choice.mode === 'all') return 'all'
+  const picked = choice.mode === 'selected' ? choice.hostIds : choice.exceptHostIds
+  return `${choice.mode}:${[...picked].sort().join(',')}`
+}
+
+/**
  * Model builder (AGL-178): edits the AGL-177 typed model on a dataset —
  * singular/plural display names (dod.ts Schema.Name), add/edit/remove/
  * reorder fields, per-field type/required/default/description/validation.
@@ -166,7 +190,7 @@ export function DatasetSchemaDialog(props: DatasetSchemaDialogProps) {
   // Sharing scope (AGL-1044) — org datasets only; the legacy host path is
   // site-private by construction.
   // `orgWide` reads TRUE while the member doc loads (AGL-1047), which would
-  // offer a scoped collaborator the scope Select for a beat before replacing
+  // offer a scoped collaborator the sharing field for a beat before replacing
   // it with the read-only summary — and offering a control the AGL-1041
   // rules will reject is the thing the branch below exists to avoid. Hold
   // the whole block until `loaded` rather than flash the wrong one.
@@ -206,10 +230,15 @@ export function DatasetSchemaDialog(props: DatasetSchemaDialogProps) {
     { idField: '$id' },
   )
   const orgHostList: Array<{ $id: string; name?: string; subdomain?: string }> =
-    orgHostDocs ?? []
-  const [visibleTo, setVisibleTo] = useState<string[]>([])
+    useMemo(() => orgHostDocs ?? [], [orgHostDocs])
+  const sitesReady = Array.isArray(orgHostDocs)
+  const sharingSites = useMemo(
+    () => orgHostList.map((host) => ({ id: host.$id, name: host.name ?? host.subdomain ?? host.$id })),
+    [orgHostList],
+  )
   /**
-   * The dataset stores NO scope (AGL-1484) — as opposed to storing `['org']`.
+   * Who this dataset is shared with, as edited here. Null while the dataset
+   * stores NO scope (AGL-1484) — as opposed to storing `['org']`.
    *
    * The dialog used to render the two identically, which for a dataset is a
    * worse lie than it was for a media file: `orgs/{orgId}/datasets` is read
@@ -218,7 +247,23 @@ export function DatasetSchemaDialog(props: DatasetSchemaDialogProps) {
    * in the product. It renders on no site and is missing from the reference
    * cards even for an org-wide member — while this control said "All sites".
    */
-  const [scopeUnset, setScopeUnset] = useState(false)
+  const [sharing, setSharing] = useState<SiteSharingValue | null>(null)
+  const scopeUnset = sharing === null
+  /**
+   * What the choice would write, or why it cannot be. The same answer the
+   * `set-sharing` route gives from the workspace's sites, which it reads for
+   * itself: the sites a choice leaves out stay known here even where this member
+   * can't name them, so they aren't taken for sites that are gone.
+   */
+  const sharingDraft = useMemo(() => {
+    if (!sharing) return null
+    const leftOut = sharing.mode === 'allExcept' ? sharing.exceptHostIds : []
+    return sharingFromChoice(sharing, [...orgHostList.map((host) => host.$id), ...leftOut])
+  }, [sharing, orgHostList])
+  // Nothing to say about leaving sites out until the sites have been read.
+  const sharingProblem = sharing?.mode !== 'allExcept' || sitesReady ? (sharingDraft?.problem ?? null) : null
+  /** The dataset as this choice would leave it, for what depends on where it is. */
+  const sharingPreview = useMemo(() => sharingDraft?.fields ?? { visibleTo: [] as string[] }, [sharingDraft])
 
   const [model, setModel] = useState<DatasetModel>({ fields: {}, order: [] })
   const [names, setNames] = useState<{ singular: string; plural: string }>({
@@ -232,11 +277,9 @@ export function DatasetSchemaDialog(props: DatasetSchemaDialogProps) {
     // AGL-1466 ruled it out: opening a dialog would write, the AGL-1042
     // rules refuse that write from anyone who is not org-wide, and it
     // repairs only what somebody happens to look at — a repair mechanism
-    // wearing a UI. `previousScope` in `handleSave` reads the SAME helper;
-    // see the note there for why the pair is the safety property.
-    const storedDatasetScope = storedScope((dataset as { visibleTo?: string[] }).visibleTo)
-    setVisibleTo(storedDatasetScope ?? [])
-    setScopeUnset(!storedDatasetScope)
+    // wearing a UI. `handleSave` reads the SAME helper; see the note there
+    // for why the pair is the safety property.
+    setSharing(sharingChoiceOf(dataset))
     const effective = effectiveDatasetModel(dataset)
     setModel({
       fields: JSON.parse(JSON.stringify(effective.fields)),
@@ -382,7 +425,7 @@ export function DatasetSchemaDialog(props: DatasetSchemaDialogProps) {
   const handleSave = useCallback(async () => {
     if (!dataset || !dataScope) return
     /**
-     * What the document actually carries, `[]` when it carries nothing
+     * What the document actually carries, nothing when it carries nothing
      * (AGL-1484) — matching the seed above, through the same helper.
      *
      * The pairing is the whole safety property, not tidiness. Both sides
@@ -394,41 +437,41 @@ export function DatasetSchemaDialog(props: DatasetSchemaDialogProps) {
      * — one the AGL-1041 rules then reject for any member who is not
      * org-wide, failing the WHOLE schema save with it.
      *
-     * `[]` is also the honest previous value in the other direction: a
+     * Nothing is also the honest previous value in the other direction: a
      * deliberate save of exactly `['org']` on an unset dataset used to
      * compare equal to the default and be dropped, and that is the one save
      * an unstamped dataset most needs to land.
      */
-    const previousScope: string[] = storedScope((dataset as { visibleTo?: string[] }).visibleTo) ?? []
-    const scopeChanged =
-      JSON.stringify([...previousScope].sort()) !==
-      JSON.stringify([...visibleTo].sort())
+    const scopeChanged = sharingChoiceKey(sharingChoiceOf(dataset)) !== sharingChoiceKey(sharing)
     /**
-     * The scope this save writes, or null when it writes none.
+     * The sharing this save writes, or null when it writes none.
      *
-     * Only an org-wide member may change the scope — the AGL-1041 rules deny
-     * anyone else, and a rejected field fails the WHOLE write.
+     * Only an org-wide member may change it — the route and the AGL-1041 rules
+     * refuse anyone else, and it is written through the route because a marker
+     * is the server's alone (AGL-4047).
      *
-     * A selection `scopeToStore` cannot store — "Selected sites…" with no site
-     * picked, or more sites than one query can match — refuses the save rather
-     * than substituting a scope: the org token would share the collection with
-     * every site, and anything narrower would drop sites somebody picked.
+     * A choice that cannot be stored — "Selected sites" with no site picked, or
+     * more sites than one query can match, or nothing left out, or everything —
+     * refuses the save rather than substituting a scope: the org token would
+     * share the collection with every site, and anything narrower would drop
+     * sites somebody picked.
      */
-    const scopeWrite =
-      orgId && viewerOrgWide && canChangeSharing && scopeChanged ? scopeToStore(visibleTo) : null
-    if (scopeWrite?.problem) {
-      return void enqueueSnackbar(scopeWrite.problem, {
+    const sharingWrite = orgId && viewerOrgWide && canChangeSharing && scopeChanged ? sharing : null
+    if (sharingWrite && sharingDraft?.problem) {
+      return void enqueueSnackbar(sharingDraft.problem, {
         variant: 'warning',
         persist: false,
       })
     }
-    if (scopeChanged && narrowsScope(previousScope, visibleTo)) {
+    const previousScope: string[] = storedScope((dataset as { visibleTo?: string[] }).visibleTo) ?? []
+    const nextScope: readonly string[] = sharingPreview.visibleTo
+    if (scopeChanged && narrowsScope(previousScope, nextScope)) {
       // Narrowing takes a dataset away from sites whose pages may bind it,
       // and a repeatable bound to a dataset it can no longer see renders
       // nothing (AGL-1039). Name the cost before paying it.
       const losing = orgHostList
         .filter((host) => visibleToHost(previousScope, host.$id))
-        .filter((host) => !visibleToHost(visibleTo, host.$id))
+        .filter((host) => !visibleToHost(nextScope, host.$id))
         .map((host) => host.name ?? host.subdomain ?? host.$id)
       const proceed = await confirm({
         title: 'Limit which sites can use this collection?',
@@ -443,7 +486,7 @@ export function DatasetSchemaDialog(props: DatasetSchemaDialogProps) {
       if (!proceed) return
     }
     // Nothing of theirs to write when the sharing did not move.
-    if (sharingOnlyReason && !scopeWrite?.scope) return void onClose()
+    if (sharingOnlyReason && !sharingWrite) return void onClose()
     if (!model.order.length) {
       return void enqueueSnackbar('A collection needs at least one field', {
         variant: 'warning',
@@ -465,7 +508,11 @@ export function DatasetSchemaDialog(props: DatasetSchemaDialogProps) {
      *   not even warn about the sites it is really taking access from.
      * - `model` is the entire schema. A cached seed reinstates fields that
      *   were deleted and drops fields that were added.
+     *
+     * The schema goes first, because who may write it depends on where the
+     * dataset sits as it stands, the question the rule asks of this one save.
      */
+    let sharingRefusal: string | null = null
     await writeGuardedBySeed(
       {
         subject: 'collection schema',
@@ -473,26 +520,42 @@ export function DatasetSchemaDialog(props: DatasetSchemaDialogProps) {
         fromCache: seedFromCache,
         listen: seedListen,
       },
-      async () =>
-        void (await updateDoc(
-          doc(firestore, dataScope[0], dataScope[1], 'datasets', dataset.$id),
-          sharingOnlyReason
-            ? (scopeWrite?.scope ? { visibleTo: scopeWrite.scope } : {})
-            : {
-                model,
-                names: {
-                  singular: names.singular.trim(),
-                  plural: names.plural.trim(),
-                },
-                ...(names.plural.trim()
-                  ? { displayName: names.plural.trim() }
-                  : {}),
-                // v1 compat: keep the flat column list mirroring the model order
-                // so unmigrated consumers (AGL-103 bindings) keep working.
-                fields: model.order,
-                ...(scopeWrite?.scope ? { visibleTo: scopeWrite.scope } : {}),
+      async () => {
+        if (!sharingOnlyReason) {
+          await updateDoc(
+            doc(firestore, dataScope[0], dataScope[1], 'datasets', dataset.$id),
+            {
+              model,
+              names: {
+                singular: names.singular.trim(),
+                plural: names.plural.trim(),
               },
-        )),
+              ...(names.plural.trim()
+                ? { displayName: names.plural.trim() }
+                : {}),
+              // v1 compat: keep the flat column list mirroring the model order
+              // so unmigrated consumers (AGL-103 bindings) keep working.
+              fields: model.order,
+            },
+          )
+        }
+        if (sharingWrite) {
+          const response = await authorizedFetch(user, '/api/orgs/datasets', {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({
+              orgId,
+              action: 'set-sharing',
+              datasetId: dataset.$id,
+              choice: sharingWrite,
+            }),
+          })
+          if (!response.ok) {
+            const payload = await response.json().catch(() => ({}))
+            sharingRefusal = String(payload?.error ?? 'The sharing could not be changed.')
+          }
+        }
+      },
     )
       .then((result) => {
         // A refusal leaves the dialog open with the edited schema intact.
@@ -501,6 +564,12 @@ export function DatasetSchemaDialog(props: DatasetSchemaDialogProps) {
             variant: 'warning',
             persist: false,
           })
+        }
+        if (sharingRefusal) {
+          return void enqueueSnackbar(
+            sharingOnlyReason ? sharingRefusal : `Schema saved. Its sharing didn’t change: ${sharingRefusal}`,
+            { variant: 'warning', persist: false },
+          )
         }
         enqueueSnackbar(sharingOnlyReason ? 'Sharing saved' : 'Schema saved', { variant: 'success', persist: false })
         onClose()
@@ -512,7 +581,10 @@ export function DatasetSchemaDialog(props: DatasetSchemaDialogProps) {
     dataset,
     model,
     names,
-    visibleTo,
+    sharing,
+    sharingDraft,
+    sharingPreview,
+    user,
     viewerOrgWide,
     canChangeSharing,
     sharingOnlyReason,
@@ -596,7 +668,8 @@ export function DatasetSchemaDialog(props: DatasetSchemaDialogProps) {
                     words the folder dialog and the media drawer already
                     use. It costs a sentence, and it is the difference
                     between reading "All sites" off a collection no site can
-                    see and being told to choose.
+                    see and being told to choose. No choice shows as picked
+                    until someone picks one.
                   */}
                   {scopeUnset ? (
                     <Alert severity="warning">
@@ -606,39 +679,13 @@ export function DatasetSchemaDialog(props: DatasetSchemaDialogProps) {
                         'it is shared with to fix that.'}
                     </Alert>
                   ) : null}
-                  <Select
-                    size="small"
-                    value={
-                      visibleTo.includes(ORG_SCOPE_TOKEN)
-                        ? 'org'
-                        : scopeUnset
-                          ? 'unset'
-                          : 'hosts'
-                    }
-                    onChange={(event) => {
-                      // Any choice ends the unset state — from here the
-                      // control shows what was picked, not what was (not)
-                      // stored.
-                      setScopeUnset(false)
-                      setVisibleTo(
-                        event.target.value === 'org' ? [ORG_SCOPE_TOKEN] : [],
-                      )
-                    }}
-                  >
-                    {/*
-                      A real sentinel, never '' — MUI cannot hold an empty
-                      string as a selected value and a corpus spec forbids
-                      one. Rendered only while unset and disabled, so the
-                      control cannot be set back into "nobody has decided".
-                    */}
-                    {scopeUnset ? (
-                      <MenuItem value="unset" disabled>
-                        {'Not shared with any site'}
-                      </MenuItem>
-                    ) : null}
-                    <MenuItem value="org">{'All sites'}</MenuItem>
-                    <MenuItem value="hosts">{'Selected sites…'}</MenuItem>
-                  </Select>
+                  <SiteSharingField
+                    value={sharing}
+                    onChange={setSharing}
+                    sites={sharingSites}
+                    sitesReady={sitesReady}
+                    problem={sharingProblem}
+                  />
                   {/* Says what sharing does NOT do, which is the part
                       people get wrong (AGL-1046). It controls which sites
                       may use the data; it is not a permission on the rows
@@ -648,46 +695,6 @@ export function DatasetSchemaDialog(props: DatasetSchemaDialogProps) {
                       'Sites you exclude cannot see or use this dataset — in the console or on their pages.'
                     }
                   </Typography>
-                  {/*
-                    The host chips are the "Selected sites…" detail. Showing
-                    them under an unset collection would invite a save of
-                    the empty selection already sitting there, which is the
-                    widening-by-accident this class keeps producing.
-                  */}
-                  {!scopeUnset && !visibleTo.includes(ORG_SCOPE_TOKEN) ? (
-                    <Stack
-                      direction="row"
-                      spacing={0.5}
-                      useFlexGap
-                      sx={{ flexWrap: 'wrap' }}
-                    >
-                      {orgHostList.map((host) => {
-                        const token = hostScopeToken(host.$id)
-                        const on = visibleTo.includes(token)
-                        return (
-                          <Chip
-                            key={host.$id}
-                            size="small"
-                            label={host.name ?? host.subdomain ?? host.$id}
-                            color={on ? 'primary' : 'default'}
-                            variant={on ? 'filled' : 'outlined'}
-                            onClick={() =>
-                              setVisibleTo((prev) =>
-                                on
-                                  ? prev.filter((t) => t !== token)
-                                  : [...prev, token],
-                              )
-                            }
-                          />
-                        )
-                      })}
-                    </Stack>
-                  ) : null}
-                  {!scopeUnset && scopeToStore(visibleTo).problem ? (
-                    <Typography variant="caption" color="error">
-                      {scopeToStore(visibleTo).problem}
-                    </Typography>
-                  ) : null}
                 </>
               ) : (
                 <Typography variant="body2">
@@ -701,13 +708,10 @@ export function DatasetSchemaDialog(props: DatasetSchemaDialogProps) {
                   */}
                   {scopeUnset
                     ? 'Never shared — hidden from every site'
-                    : describeScope(
-                        visibleTo,
+                    : describeSharing(
+                        dataset as Record<string, unknown> | null,
                         Object.fromEntries(
-                          orgHostList.map((host) => [
-                            host.$id,
-                            host.name ?? host.subdomain ?? host.$id,
-                          ]),
+                          sharingSites.map((site) => [site.id, site.name]),
                         ),
                       )}
                 </Typography>
@@ -1027,10 +1031,7 @@ export function DatasetSchemaDialog(props: DatasetSchemaDialogProps) {
                     (target) =>
                       target.$id ===
                         editorDefinition?.reference?.datasetId ||
-                      scopeCovers(
-                        (target as { visibleTo?: string[] }).visibleTo,
-                        visibleTo,
-                      ),
+                      sharingCovers(target as Record<string, unknown>, sharingPreview as Record<string, unknown>),
                   )
                   .map((target) => (
                     <MenuItem key={target.$id} value={target.$id}>
@@ -1046,10 +1047,7 @@ export function DatasetSchemaDialog(props: DatasetSchemaDialogProps) {
                 const target = (datasets ?? []).find((d) => d.$id === targetId)
                 if (
                   !target ||
-                  scopeCovers(
-                    (target as { visibleTo?: string[] }).visibleTo,
-                    visibleTo,
-                  )
+                  sharingCovers(target as Record<string, unknown>, sharingPreview as Record<string, unknown>)
                 ) {
                   return null
                 }

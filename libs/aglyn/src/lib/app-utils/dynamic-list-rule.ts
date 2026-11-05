@@ -46,6 +46,7 @@
  * basis are separate joins and `marketing-consent.ts` owns the second one.
  */
 
+import { isKnownContactSource, isPluginContactSource } from '../plugin-manager/plugin-contact-capture'
 import { normalizeContainerIds } from './container-membership'
 import {
   CONTACT_SOURCE_LABELS,
@@ -1050,6 +1051,7 @@ function allDimensions(rule: DynamicListRule): DynamicListDimensions[] {
 export function dynamicListRuleNeedsContactFacet(rule: DynamicListRule): boolean {
   return allDimensions(rule).some(
     (dimensions) =>
+      (dimensions.captureSources ?? []).some(isPluginContactSource) ||
       (dimensions.campaignIds?.length ?? 0) > 0 ||
       (dimensions.ownerUids?.length ?? 0) > 0 ||
       (dimensions.lifecycleStages?.length ?? 0) > 0 ||
@@ -1262,8 +1264,11 @@ export function dynamicListDimensionsForCrmView(
         break
       case fields.source:
         if (values?.length) {
+          // A source a plugin declared is a source here as it is on the list. A
+          // word nothing declares stays unsupported, so the audience is never
+          // wider than the view.
           const sources = values.filter(
-            (source): source is ContactSource => source in CONTACT_SOURCE_LABELS,
+            (source): source is ContactSource => isKnownContactSource(source),
           )
           if (sources.length === values.length) {
             dimensions.captureSources = [

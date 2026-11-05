@@ -31,6 +31,7 @@ import androidx.compose.ui.platform.testTag
 import androidx.compose.ui.semantics.heading
 import androidx.compose.ui.semantics.semantics
 import com.aglyn.contracts.Contracts
+import com.aglyn.contracts.permissionRefusalText
 import com.aglyn.contracts.DatasetFieldDefinition
 import com.aglyn.contracts.DatasetFieldType
 import com.aglyn.core.FirestoreQuery
@@ -39,6 +40,7 @@ import com.aglyn.core.OrgAccess
 import com.aglyn.core.nowMillis
 import com.aglyn.core.relativeTime
 import com.aglyn.pluginhost.ActionRunner
+import com.aglyn.pluginhost.RunnerBanners
 import com.aglyn.pluginhost.NativePluginContext
 import com.aglyn.pluginhost.rememberMemberPermissions
 import com.aglyn.pluginhost.TransferExportDialog
@@ -133,6 +135,7 @@ fun DatasetsScreen(context: NativePluginContext, initialDatasetId: String? = nul
 
   AglynListDetail(
     initialSelected = initialDatasetId,
+    detailBanner = { if (dialog == null) RunnerBanners(runner) },
     list = { selected, onSelect ->
       Column(Modifier.fillMaxSize()) {
         // Calm (Figma Data · Empty 122:7480): one primary action. With no datasets yet it is the empty state's own.
@@ -198,7 +201,7 @@ fun DatasetsScreen(context: NativePluginContext, initialDatasetId: String? = nul
         selected == null -> SelectionPlaceholder("Pick a dataset to see it here", icon = AglynIcons.named("dataset"))
         rows == null -> SkeletonList(rows = 6, modifier = Modifier.padding(space(2f)))
         dataset == null -> EmptyState("This dataset is gone", body = "It was deleted, or it is no longer shared with you.", icon = AglynIcons.named("dataset"))
-        else -> DatasetDetail(context, orgId, dataset, rows, canWrite) { dialog = it }
+        else -> DatasetDetail(context, orgId, dataset, rows, { runner.error = it }) { dialog = it }
       }
     },
   )
@@ -212,9 +215,11 @@ private fun DatasetDetail(
   orgId: String,
   dataset: DatasetRow,
   all: List<DatasetRow>,
-  canWrite: Boolean,
+  onRefused: (String) -> Unit,
   open: (DatasetDialog) -> Unit,
 ) {
+  val access = rememberDatasetAccess(context, orgId, dataset.visibleTo)
+  val canWrite = access.canWrite
   var records by remember(dataset.id) { mutableStateOf<Long?>(null) }
   LaunchedEffect(dataset.id, dataset.updatedAt) {
     records = runCatching { context.firestore.count(FirestoreQuery(recordsPath(orgId, dataset.id))) }.getOrNull()
@@ -236,11 +241,9 @@ private fun DatasetDetail(
         OverflowMenu(
           buildList {
             add(MenuAction("schema", "Edit schema", "table_chart", enabled = canWrite) { context.navigate(DATA_SCHEMA_SCREEN, mapOf("dataset" to dataset.id)) })
-            if (canWrite) {
-              add(MenuAction("import", "Import records", "upload") { context.navigate(DATA_IMPORT_SCREEN, datasetImportParams(dataset.id, dataset.name)) })
-            }
-            add(MenuAction("export", "Export records", "download", enabled = (records ?: 1L) > 0) { open(DatasetDialog.Export(dataset)) })
-            add(MenuAction("delete", "Delete dataset", "delete", destructive = true, enabled = canWrite) { open(DatasetDialog.Delete(dataset, records)) })
+            add(MenuAction("import", "Import records", "upload") { if (canWrite) context.navigate(DATA_IMPORT_SCREEN, datasetImportParams(dataset.id, dataset.name)) else onRefused(access.writeRefusal) })
+            add(MenuAction("export", "Export records", "download", enabled = (records ?: 1L) > 0) { if (access.canExport) open(DatasetDialog.Export(dataset)) else onRefused(permissionRefusalText("data.export")) })
+            add(MenuAction("delete", "Delete dataset", "delete", destructive = true) { if (access.canDelete) open(DatasetDialog.Delete(dataset, records)) else onRefused(access.deleteRefusal) })
           },
         )
       }

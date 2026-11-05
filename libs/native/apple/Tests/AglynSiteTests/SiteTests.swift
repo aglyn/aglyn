@@ -49,8 +49,7 @@ final class SiteTests: XCTestCase {
       "Your plan includes one site, and this workspace is using all of them. Upgrade or add extra sites from Billing.")
     XCTAssertEqual(
       CreateSiteBlock.role.message,
-      "Your role in this workspace does not allow creating sites. Ask a workspace owner or admin to create it, or to "
-        + "change your role.")
+      "Your role does not include \"Create sites\" — ask an organization admin")
   }
 
   /// The plan's site limit is said before the click, counted as the console's create-site dialog counts it: the set

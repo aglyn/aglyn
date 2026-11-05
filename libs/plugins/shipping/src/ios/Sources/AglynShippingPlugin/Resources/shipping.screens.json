@@ -104,6 +104,13 @@
       "blocks": [
         {
           "type": "notice",
+          "id": "keyRefusal",
+          "tone": "info",
+          "when": "!site.can[shipping.settings]",
+          "text": "{app.permissionRefusal[shipping.settings]}. You can read what is set here."
+        },
+        {
+          "type": "notice",
           "id": "unresolved",
           "tone": "warning",
           "when": "!data.s.shipFromResolved",
@@ -224,7 +231,8 @@
                 "customsSigner": "{data.s.settings.customsSigner}"
               }
             },
-            "success": "Shipping settings saved"
+            "success": "Shipping settings saved",
+            "disabledWhen": "!site.can[shipping.settings]"
           }
         }
       ]
@@ -239,6 +247,13 @@
         "s": "/api/shipping/settings?hostId={site.id}"
       },
       "blocks": [
+        {
+          "type": "notice",
+          "id": "keyRefusal",
+          "tone": "info",
+          "when": "!site.can[shipping.settings]",
+          "text": "{app.permissionRefusal[shipping.settings]}. You can read what is set here."
+        },
         {
           "type": "list",
           "id": "boxes",
@@ -334,7 +349,8 @@
                   "customsSigner": "{data.s.settings.customsSigner}"
                 }
               },
-              "success": "Saved"
+              "success": "Saved",
+              "when": "site.can[shipping.settings]"
             },
             {
               "id": "makeDefault",
@@ -355,7 +371,8 @@
                   "customsSigner": "{data.s.settings.customsSigner}"
                 }
               },
-              "success": "Default box saved"
+              "success": "Default box saved",
+              "when": "site.can[shipping.settings]"
             },
             {
               "id": "remove",
@@ -383,7 +400,8 @@
                   "customsSigner": "{data.s.settings.customsSigner}"
                 }
               },
-              "success": "Removed"
+              "success": "Removed",
+              "when": "site.can[shipping.settings]"
             }
           ]
         },
@@ -456,7 +474,8 @@
                   "customsSigner": "{data.s.settings.customsSigner}"
                 }
               },
-              "success": "Box added"
+              "success": "Box added",
+              "when": "site.can[shipping.settings]"
             }
           ]
         }
@@ -472,6 +491,13 @@
         "s": "/api/shipping/settings?hostId={site.id}"
       },
       "blocks": [
+        {
+          "type": "notice",
+          "id": "keyRefusal",
+          "tone": "info",
+          "when": "!site.can[shipping.settings]",
+          "text": "{app.permissionRefusal[shipping.settings]}. You can read what is set here."
+        },
         {
           "type": "form",
           "id": "labels",
@@ -558,7 +584,8 @@
                 "customsSigner": "{form.customsSigner}"
               }
             },
-            "success": "Shipping settings saved"
+            "success": "Shipping settings saved",
+            "disabledWhen": "!site.can[shipping.settings]"
           }
         }
       ]
@@ -573,6 +600,13 @@
         "s": "/api/shipping/settings?hostId={site.id}"
       },
       "blocks": [
+        {
+          "type": "notice",
+          "id": "keyRefusal",
+          "tone": "info",
+          "when": "!site.can[shipping.settings]",
+          "text": "{app.permissionRefusal[shipping.settings]}. You can read what is set here."
+        },
         {
           "type": "notice",
           "id": "hint",
@@ -612,7 +646,8 @@
                   "customsSigner": "{data.s.settings.customsSigner}"
                 }
               },
-              "success": "Saved"
+              "success": "Saved",
+              "when": "site.can[shipping.settings]"
             },
             "off": {
               "label": "Stop offering",
@@ -636,7 +671,8 @@
                   "customsSigner": "{data.s.settings.customsSigner}"
                 }
               },
-              "success": "Saved"
+              "success": "Saved",
+              "when": "site.can[shipping.settings]"
             }
           },
           "empty": "The carrier platform offers no services yet."
@@ -653,6 +689,13 @@
         "acct": "/api/shipping/account?hostId={site.id}"
       },
       "blocks": [
+        {
+          "type": "notice",
+          "id": "keyRefusal",
+          "tone": "info",
+          "when": "!site.can[shipping.labelCharges]",
+          "text": "{app.permissionRefusal[shipping.labelCharges]}. You can read what is set here."
+        },
         {
           "type": "notice",
           "id": "own",
@@ -708,7 +751,7 @@
               "id": "accept",
               "label": "I agree",
               "icon": "checkmark|check",
-              "when": "!data.acct.consent",
+              "when": "site.can[shipping.labelCharges] && !data.acct.consent",
               "url": "/api/shipping/account",
               "body": {
                 "hostId": "{site.id}",
@@ -721,7 +764,7 @@
               "label": "Withdraw consent",
               "icon": "xmark.circle|link_off",
               "destructive": true,
-              "when": "data.acct.consent",
+              "when": "site.can[shipping.labelCharges] && data.acct.consent",
               "url": "/api/shipping/account",
               "body": {
                 "hostId": "{site.id}",
@@ -743,6 +786,13 @@
         "carriers": "/api/shipping/carrier-accounts?hostId={site.id}"
       },
       "blocks": [
+        {
+          "type": "notice",
+          "id": "keyRefusal",
+          "tone": "info",
+          "when": "!site.can[shipping.carrierAccounts]",
+          "text": "{app.permissionRefusal[shipping.carrierAccounts]}. You can read what is set here."
+        },
         {
           "type": "notice",
           "id": "hint",
@@ -792,7 +842,8 @@
                 "carrierAccountId": "{item.id}",
                 "active": true
               },
-              "success": "Saved"
+              "success": "Saved",
+              "when": "site.can[shipping.carrierAccounts]"
             },
             "off": {
               "label": "Stop using",
@@ -802,7 +853,8 @@
                 "carrierAccountId": "{item.id}",
                 "active": false
               },
-              "success": "Saved"
+              "success": "Saved",
+              "when": "site.can[shipping.carrierAccounts]"
             }
           },
           "empty": "No carrier accounts yet."
@@ -837,6 +889,13 @@
       "blocks": [
         {
           "type": "notice",
+          "id": "keyRefusal",
+          "tone": "info",
+          "when": "!site.can[shipping.carrierAccounts]",
+          "text": "{app.permissionRefusal[shipping.carrierAccounts]}. You can read what is set here."
+        },
+        {
+          "type": "notice",
           "id": "ups",
           "tone": "info",
           "when": "params.carrier == ups",
@@ -869,7 +928,8 @@
               "carrier": "{params.carrier}",
               "credentials": "{form}"
             },
-            "success": "Carrier account connected"
+            "success": "Carrier account connected",
+            "disabledWhen": "!site.can[shipping.carrierAccounts]"
           }
         },
         {
@@ -961,7 +1021,8 @@
               },
               "returnTo": "/"
             },
-            "success": "Carrier account connected"
+            "success": "Carrier account connected",
+            "disabledWhen": "!site.can[shipping.carrierAccounts]"
           }
         }
       ]
@@ -976,6 +1037,13 @@
         "own": "/api/shipping/own-accounts?hostId={site.id}"
       },
       "blocks": [
+        {
+          "type": "notice",
+          "id": "keyRefusal",
+          "tone": "info",
+          "when": "!site.can[shipping.ownAccounts]",
+          "text": "{app.permissionRefusal[shipping.ownAccounts]}. You can read what is set here."
+        },
         {
           "type": "notice",
           "id": "hint",
@@ -1033,7 +1101,8 @@
                 "hostId": "{site.id}",
                 "kind": "{item.kind}"
               },
-              "success": "{item.label} disconnected"
+              "success": "{item.label} disconnected",
+              "when": "site.can[shipping.ownAccounts]"
             }
           ]
         },
@@ -1066,6 +1135,13 @@
         "own": "/api/shipping/own-accounts?hostId={site.id}"
       },
       "blocks": [
+        {
+          "type": "notice",
+          "id": "keyRefusal",
+          "tone": "info",
+          "when": "!site.can[shipping.ownAccounts]",
+          "text": "{app.permissionRefusal[shipping.ownAccounts]}. You can read what is set here."
+        },
         {
           "type": "notice",
           "id": "summary",
@@ -1101,7 +1177,8 @@
               "values": "{form}"
             },
             "back": true,
-            "success": "Connected"
+            "success": "Connected",
+            "disabledWhen": "!site.can[shipping.ownAccounts]"
           }
         }
       ]

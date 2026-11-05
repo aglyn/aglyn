@@ -156,8 +156,9 @@ records**, or **Delete this site's datasets** on that site. So:
   override doesn't get them back from their site role. Those decisions stand.
 
 A dataset shared with every site or with several answers to **Manage data** and **Delete
-workspace records** alone, because no one site speaks for it. That has two consequences
-worth knowing:
+workspace records** alone, because no one site speaks for it. So does one shared with all
+sites except some, however few sites it reaches today: it belongs to the workspace, and the
+next new site joins it. That has two consequences worth knowing:
 
 - A member who reaches only some sites can't delete a dataset shared with every site or with
   several, whatever they hold. It takes access to every site.
@@ -309,6 +310,16 @@ A custom role or a per-member override can grant or deny it. A site collaborator
 holds it, because it acts on the whole workspace. Everyone who can open the CRM can still
 read the settings, and a member without the permission sees each control switched off with
 the permission named beside it.
+
+### Colleagues' email templates {#crm-colleague-templates-permission}
+
+| Permission | What it opens | Owner | Admin | Editor | Viewer |
+|---|---|---|---|---|---|
+| **Change colleagues' email templates** (`crm.colleagueTemplates`) | Change or delete a [personal email template](../../content-and-data/crm/email-templates.md#shared-or-personal) someone else keeps, or re-file any template | Yes | Yes | Yes | Yes |
+
+It also asks **Manage data** over the whole workspace, which a Viewer doesn't hold by
+default, so a Viewer reaches it only once granted that. A site collaborator never holds it.
+A custom role or a per-member override can refuse it.
 
 ### Moving contacts and deals between stages {#crm-move-stages-permission}
 

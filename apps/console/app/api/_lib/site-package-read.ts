@@ -204,10 +204,11 @@ export async function readSiteBundle(context: SiteReadContext): Promise<SiteBund
    * (AGL-1046): an agency's export of a client site must contain that
    * client's data and no other's. `visibleTo` itself is stripped on the way
    * out — its `host:` tokens name hosts of THIS org, a dangling reference once
-   * the bundle is restored elsewhere; the import assigns a fresh scope.
+   * the bundle is restored elsewhere; the import assigns a fresh scope. The
+   * all-sites-except marker goes with it, for the same reason (AGL-4047).
    */
   const scopeless = (doc: FirebaseFirestore.QueryDocumentSnapshot) => {
-    const { visibleTo: _visibleTo, ...data } = doc.data()
+    const { visibleTo: _visibleTo, scopeMode: _scopeMode, scopeExcept: _scopeExcept, ...data } = doc.data()
     return { $id: doc.id, ...data }
   }
   const exportOrgCollection = async (name: 'media' | 'mediaFolders', cap: number) => {
@@ -313,7 +314,7 @@ const VERSION_FIELDS: Record<string, string> = {
 }
 
 /** The keys a restore stamps or scopes itself, and so never what an item IS. */
-const STAMPED = new Set(['createdAt', 'updatedAt', 'deletedAt', 'visibleTo', 'createdBy'])
+const STAMPED = new Set(['createdAt', 'updatedAt', 'deletedAt', 'visibleTo', 'scopeMode', 'scopeExcept', 'createdBy'])
 
 function project(fields: readonly string[] | undefined, doc: Doc): Doc {
   const out: Doc = {}

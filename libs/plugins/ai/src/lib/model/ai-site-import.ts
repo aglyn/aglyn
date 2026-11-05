@@ -423,6 +423,8 @@ export interface SiteImportLayoutGroup {
    * a plan's name, words and button, or a label and its value (AGL-4083).
    */
   inline?: true
+  /** Its items are photos, not marks (AGL-4152): a gallery, drawn as its pictures in its columns. Only on a `logos` group. */
+  gallery?: true
   items: SiteImportLayoutItem[]
 }
 
@@ -935,6 +937,8 @@ export function siteImportLayoutWithoutDrawings(layout: SiteImportLayout): SiteI
 
 /** What a wave's read found on one page, for its model answer. Never on the wire. */
 export interface AiSiteImportPageRead {
+  /** What the page holds that a visitor cannot see (AGL-4152): the addresses of its pictures, and its words. A build is held to not drawing them. */
+  concealed?: { pictures: string[]; words: string[] }
   at: string
   title: string
   /** The page's text in order, cut to `AI_SITE_IMPORT_PAGE_TEXT_MAX_CHARS`; fenced only when a prompt reads it. */

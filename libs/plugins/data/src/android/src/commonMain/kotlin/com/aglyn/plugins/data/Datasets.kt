@@ -288,6 +288,11 @@ class DataApi(private val api: ConsoleApiClient, private val writer: FirestoreWr
     )
   }
 
+  /** Who a dataset is shared with, alone: what a member a site narrows can still change. */
+  suspend fun saveSharing(dataset: DatasetRow, visibleTo: List<String>) {
+    writer.update("${datasetsPath(orgId)}/${dataset.id}", linkedMapOf<String, Any?>("visibleTo" to visibleTo))
+  }
+
   /** The Schema dialog's save: the model, its names and (for an org-wide member) the sharing scope. */
   suspend fun saveSchema(dataset: DatasetRow, model: DatasetModel, singular: String, plural: String, visibleTo: List<String>?) {
     val data = linkedMapOf<String, Any?>(

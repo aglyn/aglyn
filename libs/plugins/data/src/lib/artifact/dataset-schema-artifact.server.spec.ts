@@ -107,6 +107,7 @@ jest.mock('@aglyn/tenant-data-admin', () => {
         docs: rows.map((row) => ({
           id: row['$id'],
           ref: datasetDoc(orgId, row['$id']),
+          data: () => row,
           get: (field: string) => read(row, field),
         })),
       }

@@ -144,6 +144,10 @@ export interface SiteImportPageFidelity {
   widths: SiteImportFidelityCount
   /** The source's rows of two or more columns, set side by side on the page. */
   rows: SiteImportFidelityCount
+  /** The source's galleries (AGL-4152), each kept when every photo of it is drawn as a photo, cropped to fill, side by side. Absent on a page with none. */
+  galleries?: SiteImportFidelityCount
+  /** Pictures and labels the source hides from a visitor, drawn all the same (AGL-4152); any at all is a miss. Absent when the read says of none. */
+  concealed?: SiteImportFidelityCount
   /** The source's groups by kind. A group of lines that only share a shape (`text`) is drawn as its lines, and is not scored. */
   groups: Partial<Record<SiteImportGroupKind, SiteImportFidelityGroup>>
   tables: SiteImportFidelityCount
@@ -380,6 +384,8 @@ export interface SiteImportFidelitySource {
   blocks: readonly SiteImportBlock[]
   /** The source's pictures as the site's library holds them (`from` → `src`, and their size); without them a picture is counted, not placed. */
   photos?: ReadonlyArray<{ from?: string; src: string; width?: number; height?: number }>
+  /** What the source holds that a visitor cannot see (AGL-4152): a build that draws any of it fails `concealed`. */
+  concealed?: { pictures: readonly string[]; words: readonly string[] }
 }
 
 /*------------------------------------------
@@ -1034,6 +1040,8 @@ export function siteImportFidelity(source: SiteImportFidelitySource, tree: SiteI
     tables: ratioKept(tables.source, tables.built),
     tabs: ratioKept(tabs.source, tabs.built),
     pictures,
+    ...(source.concealed ? { concealed: concealedScore(source, built) } : {}),
+    ...galleriesScore(source, built, placement),
     framing,
     icons: { ...ratioKept(icons.source, icons.built), lone: icons.lone },
     buttons: { ...ratioKept(buttons.source, buttons.built), unlinked: buttons.unlinked },
@@ -1168,6 +1176,42 @@ function picturesScore(source: SiteImportFidelitySource, built: Built, placement
   return ratioKept(refs.length, refs.filter((ref) => placement.of.has(ref)).length)
 }
 
+/**
+ * The source's galleries drawn as galleries (AGL-4152): every photo of one
+ * placed, each an Image cropped to fill its cell, in a row of columns. A photo
+ * drawn as a mark (fitted whole, as small as a logo) is a gallery lost.
+ */
+function galleriesScore(source: SiteImportFidelitySource, built: Built, placement: Placement): Pick<SiteImportPageFidelity, 'galleries'> {
+  const galleries = source.layout.sections.flatMap((section) => layoutNodes(section.nodes)).filter((node): node is SiteImportLayoutGroup => node.kind === 'group' && !!node.gallery)
+  if (!galleries.length) return {}
+  const drawn = galleries.filter((group) =>
+    group.items.every((item) =>
+      item.lines.every((ref) => {
+        if (source.blocks[ref]?.kind !== 'image') return true
+        const id = placement.of.get(ref)
+        const node = id ? built.node(id) : undefined
+        if (node?.componentId !== 'image' || node.props?.['objectFit'] === 'contain' || node.props?.['width'] === 'auto') return false
+        return built.ancestry(id as string).some((at) => setsSideBySide(built.node(at)))
+      }),
+    ),
+  )
+  return { galleries: ratioKept(galleries.length, drawn.length) }
+}
+
+/** What a visitor of the source cannot see and a visitor of the build can (AGL-4152): a hidden picture, or a line that is only a screen reader's label. */
+function concealedScore(source: SiteImportFidelitySource, built: Built): SiteImportFidelityCount {
+  const pictures = new Set(source.concealed?.pictures ?? [])
+  const copies = new Set((source.photos ?? []).flatMap((photo) => (photo.from && pictures.has(photo.from) ? [photo.src] : [])))
+  const drawn = built.order.filter((id) => {
+    const src = clean(built.node(id)?.props?.['src'])
+    return built.node(id)?.componentId === 'image' && (pictures.has(src) || copies.has(src))
+  }).length
+  const labels = new Set((source.concealed?.words ?? []).map(wordLine))
+  const said = built.pieces.filter((piece) => labels.has(piece.key)).length
+  const found = drawn + said
+  return { source: 0, built: found, ratio: found ? 0 : 1 }
+}
+
 /** How near two shapes must be to be one (AGL-4138): 5%. */
 const SAME_SHAPE = 0.05
 
@@ -1254,7 +1298,8 @@ function framingScore(source: SiteImportFidelitySource, built: Built, placement:
       if (node.kind === 'picture' && node.line !== behind) score(node.line, node.fit)
       // A film's poster is framed as any picture is (AGL-4140).
       if (node.kind === 'video' && node.poster !== undefined && node.poster !== behind) score(node.poster, node.fit)
-      if (node.kind === 'group') for (const item of node.items) if (item.image !== undefined && item.image !== behind) score(item.image, item.imageFit)
+      // A gallery crops its photos to one shape so its rows line up (AGL-4152): `galleries` holds it.
+      if (node.kind === 'group' && !node.gallery) for (const item of node.items) if (item.image !== undefined && item.image !== behind) score(item.image, item.imageFit)
     }
   }
   return ratioKept(measured, kept)
@@ -1262,7 +1307,9 @@ function framingScore(source: SiteImportFidelitySource, built: Built, placement:
 
 /** The headings: each of the source's drawn as a heading (an `h1`–`h6`, or the question of an accordion). */
 function headingsScore(source: SiteImportFidelitySource, built: Built, placement: Placement): SiteImportFidelityCount {
-  const refs = source.layout.sections.flatMap((section: SiteImportLayoutSection) => section.lines).filter((ref) => source.blocks[ref]?.kind === 'heading')
+  // Words a source sets in a heading and groups as a customer's quote are that quote (AGL-4152), no part of the page's outline.
+  const quoted = new Set(source.layout.sections.flatMap((section) => layoutNodes(section.nodes)).flatMap((node) => (node.kind === 'group' && node.group === 'quotes' ? node.items.flatMap((item) => item.lines) : [])))
+  const refs = source.layout.sections.flatMap((section: SiteImportLayoutSection) => section.lines).filter((ref) => source.blocks[ref]?.kind === 'heading' && !quoted.has(ref))
   const kept = refs.filter((ref) => {
     const id = placement.of.get(ref)
     const node = id ? built.node(id) : undefined
@@ -1288,6 +1335,8 @@ function pageMeasures(report: Omit<SiteImportPageFidelity, 'score' | 'lowest'>):
     ['headings', report.headings],
     ['forms', report.forms],
     ['videos', report.videos],
+    ...(report.concealed ? [['concealed', report.concealed] as [string, SiteImportFidelityCount]] : []),
+    ...(report.galleries ? [['galleries', report.galleries] as [string, SiteImportFidelityCount]] : []),
   ]
 }
 

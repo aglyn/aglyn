@@ -42,7 +42,10 @@
  *   `grid-column`, cells by row overlap and then column overlap, and rows
  *   built to the same columns stacked into those columns, so a card's words
  *   stay under its own heading. What comes out is rows, cells and groups like
- *   any others. `order` on a flex or grid child is read the same way.
+ *   any others. `order` on a flex or grid child is read the same way. A page
+ *   laid whole on one grid is cut into the parts it draws: a box painted across
+ *   it behind its rows is a band of its own, and past that a row with an `h1`
+ *   or an `h2` opens a part.
  * - **Groups.** Three or more siblings built alike (the same elements in the
  *   same order) are a group, and what they hold says its kind: icon or
  *   picture with a title and words are `cards`, a leading number `steps`, a
@@ -101,6 +104,7 @@ import {
   siteImportFontSizePx,
   siteImportGridBoxes,
   siteImportGridColumns,
+  siteImportGridTrackCount,
   siteImportHasBorder,
   siteImportHasShadow,
   siteImportHex,
@@ -177,6 +181,16 @@ const WIDTH_CLASSES: ReadonlyArray<readonly [RegExp, number]> = [
 ]
 const STEP_NUMBER = /^(?:step\s*)?(?:0?\d{1,2}|[ivx]{1,4})[.):]?$/i
 const FIGURE = /^[^\s]{0,3}[\d][\d.,:/x×+%kmb$€£-]*\s?[^\s]{0,12}$|^\d+-[a-z]+$/i
+/** A picture drawn at this share of the screen or more is a photo (AGL-4152), in percent. */
+const GALLERY_MIN_SHARE = 15
+/** A picture this wide or wider, by its own size, is a photo where no sheet holds it to a mark's height. */
+const GALLERY_MIN_PX = 400
+const GALLERY_MAX_RATIO = 2.4
+/** The tallest a sheet draws a mark. */
+const MARK_MAX_PX = 100
+/** A gallery's columns where nothing says them, and the most it is drawn in. */
+const GALLERY_COLUMNS = 3
+const GALLERY_COLUMNS_MAX = 4
 /** The width a page is read at for its tablet columns (AGL-4138): between a framework's `sm` and `md`. */
 const TABLET_WIDTH = 768
 /** A paragraph set this much larger than the body, and bold, is a statement (AGL-4138), not a lede. */
@@ -247,6 +261,8 @@ class LayoutReader {
   private readonly placedWidth = new Map<number, number>()
   /** A placed child that holds no words and has words laid over it. */
   private readonly placedBehind = new Set<number>()
+  /** Where a placed grid draws the parts of a page, a band of its own or a heading opening each (AGL-4152). */
+  private readonly drawnParts = new Map<number, DrawnPart[]>()
   /** Block index → its index among the main-region blocks; -1 for every other block. */
   private readonly mainIndex: number[]
   /** Each element's leaves, its subtree's, in order (memoized). */
@@ -331,7 +347,9 @@ class LayoutReader {
     // What is not drawn takes no cell: it stays where it is read, after what is.
     const content = node.children.filter((child) => this.leaves(child).length && this.style(child).get('display') !== 'none')
     if (content.length < 2) return false
-    const boxes = siteImportGridBoxes(style, content.map((child) => this.style(child)))
+    // A box it draws and writes nothing in (a filled rectangle behind the words) takes its cells too, and says where a band runs.
+    const painted = node.children.filter((child) => !this.leaves(child).length && this.style(child).get('display') !== 'none' && this.paints(child))
+    const boxes = siteImportGridBoxes(style, [...content, ...painted].map((child) => this.style(child)))
     if (!boxes) return false
     const items = content.map((element, at): PlacedItem => {
       const lines = this.leaves(element).filter((leaf) => leaf.kind === 'line').map((leaf) => this.block(leaf)?.kind)
@@ -350,7 +368,113 @@ class LayoutReader {
     this.setChildren(grid, [...children, ...rest])
     this.placed.set(grid, 'stack')
     this.moveLeaves([...bands.flat().flatMap((cell) => cell.items.map((item) => item.element)), ...rest])
+    this.readDrawnParts(grid, bands, painted.map((element, at) => ({ element, box: boxes[content.length + at] as SiteImportGridBox })), siteImportGridTrackCount(style.get('grid-template-columns')))
     return true
+  }
+
+  /** Whether an element that holds no line paints a box: a fill of its own, or a drawing of a plain box, as far in as it holds only one thing. */
+  private paints(element: number): boolean {
+    return this.paintedFill(element) !== null || this.holdsPlainBox(element)
+  }
+
+  private holdsPlainBox(element: number): boolean {
+    const node = this.elements[element]
+    if (!node) return false
+    return (node.tag === 'aglyn-svg' && node.attrs.type === 'box') || node.children.some((child) => this.holdsPlainBox(child))
+  }
+
+  /** The fill an element with no line paints, on it or on the one wrapper at a time inside it. */
+  private paintedFill(element: number): SiteImportRgba | null {
+    let at = element
+    for (let depth = 0; depth < 4 && at >= 0; depth += 1) {
+      const fill = siteImportBackgroundOf(this.style(at)).color
+      if (fill && fill.a >= 0.5) return fill
+      const children: number[] = this.elements[at]?.children ?? []
+      if (children.length !== 1) return null
+      at = children[0] as number
+    }
+    return null
+  }
+
+  /**
+   * The parts of a page one placed grid holds (AGL-4152): some builders lay a
+   * whole page on one grid in one section. A box painted across the grid behind
+   * its rows is a band of its own; past that, a row that holds an `h1` or an
+   * `h2` opens a part, as it would anywhere. A row of only buttons standing over
+   * a part goes with it. Read at the end, for an outer grid may yet move these.
+   */
+  private readDrawnParts(grid: number, bands: readonly DrawnCell[][], painted: ReadonlyArray<{ element: number; box: SiteImportGridBox }>, tracks: number | null): void {
+    const allColumns = tracks ?? Math.max(...bands.flat().map((cell) => cell.end - 1), ...painted.map((entry) => entry.box.columnEnd - 1))
+    const wide = painted.filter((entry) => (entry.box.columnEnd - entry.box.columnStart) * 5 >= allColumns * 3)
+    const itemsOf = (band: readonly DrawnCell[]) => band.flatMap((cell) => cell.items)
+    const boxOf = (band: readonly DrawnCell[]) => {
+      const items = itemsOf(band)
+      const from = Math.min(...items.map((item) => item.box.rowStart))
+      const to = Math.max(...items.map((item) => item.box.rowEnd))
+      return wide.find((entry) => overlapOf(from, to, entry.box.rowStart, entry.box.rowEnd) * 2 >= to - from) ?? null
+    }
+    const opensPart = (band: readonly DrawnCell[]) => itemsOf(band).some((item) => this.leaves(item.element).some((leaf) => {
+      const block = this.block(leaf)
+      return block?.kind === 'heading' && block.level <= 2
+    }))
+    const onlyLinks = (band: readonly DrawnCell[]) => itemsOf(band).every((item) => this.leaves(item.element).every((leaf) => this.block(leaf)?.kind === 'link'))
+    const starts: Array<{ at: number; box: { element: number; box: SiteImportGridBox } | null }> = []
+    let held: { element: number; box: SiteImportGridBox } | null = null
+    bands.forEach((band, at) => {
+      const box = boxOf(band)
+      if (!starts.length || box !== held || (!box && opensPart(band))) starts.push({ at, box })
+      held = box
+    })
+    for (const start of starts.slice(1)) {
+      const before = bands[start.at - 1]
+      if (!start.box && before && !boxOf(before) && onlyLinks(before) && !starts.some((other) => other.at === start.at - 1)) start.at -= 1
+    }
+    if (starts.length < 2) return
+    this.drawnParts.set(grid, starts.map((start) => ({
+      elements: itemsOf(bands[start.at] as DrawnCell[]).map((item) => item.element),
+      ...(start.box ? { box: start.box.element } : {}),
+    })))
+  }
+
+  /** The sections a whole section's placed grid draws, each read from it by the range it holds. */
+  private partsOf(cut: Cut): Cut[] {
+    if (cut.anchor === null) return [cut]
+    const parts = this.drawnParts.get(this.unwrap(cut.anchor, cut.range))
+    if (!parts) return [cut]
+    const starts = parts.map((part) => Math.min(...part.elements.flatMap((element) => this.leaves(element).map((leaf) => leaf.order))))
+    return parts.map((part, at) => {
+      const drawn = part.box === undefined ? null : this.partBand(part.box, starts[at] as number, starts[at + 1] ?? Number.POSITIVE_INFINITY, cut.anchor as number)
+      return {
+        element: cut.element,
+        anchor: cut.anchor,
+        from: cut.from,
+        range: [at === 0 ? cut.range[0] : (starts[at] as number), at === parts.length - 1 ? cut.range[1] : (starts[at + 1] as number)] as [number, number],
+        ...(drawn ? { drawn } : {}),
+      }
+    })
+  }
+
+  /** The band a painted box draws: its fill, or where a sheet paints it some way no sheet says, what the words set on it say of it. */
+  private partBand(box: number, from: number, to: number, within: number): ReadBand | null {
+    const fill = this.paintedFill(box)
+    if (fill) return { band: siteImportBandOn(fill, this.pageGround), absolute: siteImportBandOfColor(fill), background: siteImportHex(fill) }
+    const lines = this.leaves(within).filter((entry) => entry.order >= from && entry.order < to && entry.kind === 'line' && !/^(?:image|link)$/.test(this.block(entry)?.kind ?? ''))
+    const light = lines.filter((entry) => {
+      const ink = this.wordsInk(entry.element)
+      return !!ink && ink.a >= 0.5 && siteImportLuminance(ink) >= LIGHT_INK
+    })
+    return lines.length && light.length * 2 >= lines.length ? { band: 'dark', background: null } : null
+  }
+
+  /** The color a line's words are set in, by the element that holds them: the inline one a text editor wraps them in, where there is one. */
+  private wordsInk(element: number): SiteImportRgba | null {
+    let at = element
+    for (let depth = 0; depth < 3; depth += 1) {
+      const children: number[] = this.elements[at]?.children ?? []
+      if (children.length !== 1) break
+      at = children[0] as number
+    }
+    return siteImportColorOf(this.style(at).get('color'))
   }
 
   /** A row a placed grid draws: its cells side by side, each one child or the children stacked in it. */
@@ -456,12 +580,15 @@ class LayoutReader {
     const elementParts = parts.filter(isElementPart)
     const landmarks = elementParts.filter((part) => this.isLandmark(part.element))
     let cuts: Cut[] = []
-    if (elementParts.length >= 2 && landmarks.length >= Math.max(2, Math.ceil(elementParts.length / 2))) {
+    // A page laid whole on one placed grid is the parts it draws (AGL-4152).
+    if (container >= 0 && this.drawnParts.has(container)) cuts = this.partsOf({ element: container, anchor: container, range: [all[0], all[1]], from: 'container' })
+    else if (elementParts.length >= 2 && landmarks.length >= Math.max(2, Math.ceil(elementParts.length / 2))) {
       // A container of its own among the landmarks (a post's article column) is a section too; a stray line joins the next.
       cuts = this.cutsAt(parts, (part) => this.isLandmark(part.element) || this.holdsHeading(part.element) || this.lineCount(part.element) >= 3, 'landmark')
     } else if (elementParts.length >= 2 && this.containersHoldSections(elementParts)) {
       cuts = this.cutsAt(parts, (part) => this.holdsHeading(part.element), 'container')
     }
+    if (!this.drawnParts.has(container)) cuts = cuts.flatMap((cut) => this.partsOf(cut))
     if (cuts.length < 2) cuts = this.headingCuts(rootLeaves)
     const sections: SiteImportLayoutSection[] = []
     for (const cut of cuts.slice(0, AI_SITE_IMPORT_MAX_SECTIONS * 2)) {
@@ -569,7 +696,7 @@ class LayoutReader {
     const scope = element ?? container
     let nodes = scope >= 0 ? this.read(scope, range) : this.readLeaves(range)
     const name = this.nameOf(cut.anchor, this.linesOf(nodes), index)
-    let band = cut.anchor !== null ? this.bandOf(cut.anchor, false) : this.bandOf(container, true)
+    let band = cut.drawn ?? (cut.anchor !== null ? this.bandOf(cut.anchor, false) : this.bandOf(container, true))
     // A film playing on its own behind the words is the section's backdrop (AGL-4140), its poster the first paint.
     const behind = band.backdrop ? undefined : this.videoBehind(nodes)
     if (behind) {
@@ -577,7 +704,7 @@ class LayoutReader {
       band = { band: 'dark', background: band.background, backdrop: { kind: 'video', video: behind.video, ...(behind.poster !== undefined ? { poster: behind.poster } : {}) } }
     }
     // Its fill in the page's dark scheme, read as its fill is, where that scheme changes it.
-    const dark = this.darkStyles ? (cut.anchor !== null ? this.bandOf(cut.anchor, false, this.darkStyles) : this.bandOf(container, true, this.darkStyles)) : null
+    const dark = this.darkStyles && !cut.drawn ? (cut.anchor !== null ? this.bandOf(cut.anchor, false, this.darkStyles) : this.bandOf(container, true, this.darkStyles)) : null
     const lines = behind?.poster !== undefined ? [behind.poster, ...this.linesOf(nodes)] : this.linesOf(nodes)
     if (!lines.length && !behind && !nodes.some((node) => node.kind === 'icon' || node.kind === 'form' || node.kind === 'video')) return null
     const width = this.widthOf(cut.anchor ?? container)
@@ -1164,7 +1291,8 @@ class LayoutReader {
     const items = parts.map((part) => this.item(part.element, range))
     const chips = parts.length >= 4 && this.isRow(container) && parts.every((part) => this.isChip(part.element, range))
     const kind = chips ? 'logos' : this.groupKind(parts.map((part) => part.element), items, range)
-    const columns = this.columnsOf(container, parts)
+    const gallery = !chips && kind === 'logos' && this.isGallery(items)
+    const columns = gallery ? this.galleryColumns(container, parts, items) : this.columnsOf(container, parts)
     const frames = parts.map((part) => this.frameOf(part.element))
     const half = Math.ceil(parts.length / 2)
     const boxed = parts.length > 0 && frames.filter((frame) => frame.box).length >= half
@@ -1230,6 +1358,7 @@ class LayoutReader {
       columns,
       ...(columnsSm !== null ? { columnsSm } : {}),
       boxed,
+      ...(gallery ? { gallery: true as const } : {}),
       ...(ruled ? { rule: ruled } : {}),
       ...(align ? { align } : {}),
       ...(inline ? { inline: true as const } : {}),
@@ -1467,7 +1596,8 @@ class LayoutReader {
     const first = (item: SiteImportLayoutItem) => this.lineText(item.lines[0] ?? -1).trim()
     const blockKinds = (item: SiteImportLayoutItem) => item.lines.map((ref) => this.mainBlocks()[ref]?.kind)
     if (elements.some((element) => this.elements[element]?.tag === 'details')) return 'faq'
-    if (share((item) => item.lines.length === 0 || blockKinds(item).every((kind) => kind === 'image')) === 1 && items.some((item) => item.lines.length) && count >= 4) return 'logos'
+    // Pictures alone, two or more, are marks or a gallery (AGL-4152): `group` says which.
+    if (share((item) => item.lines.length === 0 || blockKinds(item).every((kind) => kind === 'image')) === 1 && items.some((item) => item.lines.length) && count >= 2) return 'logos'
     if (share((item) => blockKinds(item).includes('quote') || /^[“"«]/.test(first(item))) >= 0.6) return 'quotes'
     if (share((item) => item.lines.some((ref) => PRICE.test(this.lineText(ref)) && this.lineText(ref).length <= 24) && (item.lines.some((ref) => PERIOD.test(this.lineText(ref))) || !!item.link)) >= 0.6 && count >= 2) {
       return 'pricing'
@@ -1483,6 +1613,42 @@ class LayoutReader {
     if (titled >= 0.6) return 'cards'
     void range
     return 'text'
+  }
+
+  /**
+   * Whether a group of pictures alone is photos (AGL-4152), not marks: each
+   * picture drawn at a good share of the screen by its `sizes`, or its own size
+   * a photo's (400 px wide or more, no banner's shape) and no sheet holding it
+   * to a mark's height.
+   */
+  private isGallery(items: readonly SiteImportLayoutItem[]): boolean {
+    return items.every((item) => {
+      const pictures = this.pictureElements(item)
+      return pictures.length > 0 && pictures.every((node) => {
+        if ((node.attrs.share ?? 0) >= GALLERY_MIN_SHARE) return true
+        const { width, height } = node.attrs
+        if (!width || !height || width < GALLERY_MIN_PX || width / height > GALLERY_MAX_RATIO || height / width > GALLERY_MAX_RATIO) return false
+        const held = siteImportLengthPx(this.style(node.id).get('height') ?? '')
+        return held === null || held > MARK_MAX_PX
+      })
+    })
+  }
+
+  private pictureElements(item: SiteImportLayoutItem): SiteImportElement[] {
+    const mainBlocks = this.mainBlocks()
+    return item.lines.filter((ref) => mainBlocks[ref]?.kind === 'image').flatMap((ref) => {
+      const element = this.elements.find((node) => node.blocks.some((index) => this.mainIndex[index] === ref))
+      return element ? [element] : []
+    })
+  }
+
+  /** A gallery's columns: its container's, else as many as its pictures' share of the screen fits, else three at most. */
+  private galleryColumns(container: number, parts: Array<{ element: number }>, items: readonly SiteImportLayoutItem[]): number {
+    const read = this.columnsOf(container, parts)
+    if (read > 1) return read
+    const share = this.pictureElements(items[0] as SiteImportLayoutItem)[0]?.attrs.share
+    const fits = share ? Math.floor(100 / share) : GALLERY_COLUMNS
+    return Math.max(1, Math.min(parts.length, GALLERY_COLUMNS_MAX, fits))
   }
 
   /** How many columns a group's items sit in on a wide screen. */
@@ -1785,6 +1951,15 @@ class LayoutReader {
   }
 }
 
+/** A part of a page one placed grid draws (AGL-4152): what opens it, and the box painted behind it. */
+interface DrawnPart {
+  elements: number[]
+  box?: number
+}
+
+/** Words at least this light are set on something dark. */
+const LIGHT_INK = 0.6
+
 /** One child of a placed grid (AGL-4152): its box, and what it holds that says whether a row below it is more of the same card. */
 interface PlacedItem {
   element: number
@@ -1868,7 +2043,8 @@ function columnsFor(band: readonly DrawnCell[], cells: readonly DrawnCell[]): nu
     const overlaps = band.map((column) => overlapOf(column.start, column.end, cell.start, cell.end))
     const best = overlaps.indexOf(Math.max(...overlaps))
     const column = band[best] as DrawnCell
-    if ((overlaps[best] as number) * 2 < cell.end - cell.start || taken.includes(best)) return null
+    // Mostly under it: a block centered across two columns joins neither.
+    if ((overlaps[best] as number) * 3 < (cell.end - cell.start) * 2 || taken.includes(best)) return null
     const has = (test: (item: PlacedItem) => boolean) => cell.items.some(test) && column.items.some(test)
     if (has((item) => item.heading) || has((item) => item.picture)) return null
     taken.push(best)
@@ -1991,6 +2167,8 @@ interface Cut {
   anchor: number | null
   range: [number, number]
   from: SiteImportLayoutSection['from']
+  /** The band a box painted behind this stretch of a grid draws (AGL-4152). */
+  drawn?: ReadBand
 }
 
 function mode(values: readonly number[]): number {
@@ -2100,7 +2278,7 @@ export function siteImportLookOfHtml(html: string, pageUrl: string, stylesheets:
   } catch {
     return null
   }
-  const extract = extractSiteImportPage(html, pageUrl, (url) => url.origin === origin, { structure: true })
+  const extract = extractSiteImportPage(html, pageUrl, (url) => url.origin === origin, { structure: true, stylesheets })
   return extract.structure ? siteImportLookOf({ structure: extract.structure, blocks: extract.blocks, ...(extract.videos ? { videos: extract.videos } : {}) }, stylesheets) : null
 }
 
