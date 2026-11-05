@@ -249,6 +249,36 @@ public func sitePermissions(_ workspace: [String: Bool], siteStamp: [String: Any
   return out
 }
 
+/// One row of a permission editor (`groupOrgPermissions`, `offeredOrgPermissions`): a key the workspace is offered, under
+/// its group's heading. `first` marks the group's first row, where the heading goes.
+public struct PermissionEditorRow: Equatable, Sendable {
+  public let key: String
+  public let label: String
+  public let description: String
+  public let group: String
+  public let groupLabel: String
+  public let first: Bool
+}
+
+/// The keys an editor offers, in the groups' display order: every core key, and a plugin's keys while the plugin is on for
+/// the workspace (nil: no filter). `narrowable` keeps only the keys a site can narrow. A key stored for a plugin that is now
+/// off is not offered and not dropped: the save writes back the stored map.
+public func permissionEditorRows(_ catalog: OrgRoleGrants, enabledPlugins: [String]?, narrowable: Bool = false) -> [PermissionEditorRow] {
+  let groups = catalog.groups ?? []
+  let offered = catalog.permissions.filter { entry in
+    (!narrowable || entry.narrowable == true)
+      && (entry.pluginId == nil || enabledPlugins == nil || enabledPlugins?.contains(entry.pluginId ?? "") == true)
+  }
+  var order = groups.map(\.id)
+  for entry in offered where !order.contains(entry.group ?? "") { order.append(entry.group ?? "") }
+  return order.flatMap { id -> [PermissionEditorRow] in
+    let label = groups.first { $0.id == id }?.label ?? id
+    return offered.filter { ($0.group ?? "") == id }.enumerated().map { index, entry in
+      PermissionEditorRow(key: entry.key, label: entry.label, description: entry.description, group: id, groupLabel: label, first: index == 0)
+    }
+  }
+}
+
 /// What a refusal says when a member lacks a key (`permissionRefusalText`): it names the permission, never a role.
 public func permissionRefusalText(_ catalog: OrgRoleGrants, key: String) -> String {
   let label = catalog.permissions.first { $0.key == key }?.label ?? key

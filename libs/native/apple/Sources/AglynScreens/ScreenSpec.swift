@@ -723,6 +723,8 @@ public struct FieldSpec: Sendable, Identifiable {
           let scope = ScreenContext.with(ScreenContext.with(context, item: row), "index", .number(Double(position)))
           return perRow.compactMap { template -> FieldSpec? in
             guard case .object(let record) = template else { return nil }
+            // `if`: this template only for the rows it holds on (a group's heading, once).
+            if let only = record["if"]?.stringValue, !ScreenValues.condition(only, in: scope) { return nil }
             let rendered = record.mapValues { value -> JSONValue in
               if case .string(let text) = value { return .string(ScreenValues.render(text, in: scope)) }
               return value

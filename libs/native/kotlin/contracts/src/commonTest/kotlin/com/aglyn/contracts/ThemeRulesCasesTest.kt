@@ -104,6 +104,26 @@ class ThemeRulesCasesTest {
   }
 
   @Test
+  fun aPermissionEditorOffersTheWorkspacesKeysByGroup() {
+    val catalog = Contracts.orgRoleGrants
+    val all = permissionEditorRows(catalog, null)
+    assertEquals(catalog.permissions.size, all.size)
+    assertEquals(true, all.first().first)
+    assertEquals("Organization", all.first().groupLabel)
+    // Each group's heading goes on its first row, and a group's rows sit together.
+    assertEquals(all.filter { it.first }.size, all.filter { it.first }.map { it.group }.toSet().size)
+    // A plugin's keys show only while it is on; the core's always do.
+    val none = permissionEditorRows(catalog, emptyList())
+    assertEquals(false, none.any { it.key == "marketplace.payouts" })
+    assertEquals(true, none.any { it.key == "members.manage" })
+    assertEquals(true, permissionEditorRows(catalog, listOf("marketplace")).any { it.key == "marketplace.payouts" })
+    // Only the keys a site can narrow ask the narrowing choice.
+    val narrow = permissionEditorRows(catalog, null, narrowable = true)
+    assertEquals(true, narrow.any { it.key == "managePos" })
+    assertEquals(false, narrow.any { it.key == "members.manage" })
+  }
+
+  @Test
   fun aRefusalNamesThePermission() =
     assertEquals("Your role does not include \"Manage marketplace payouts\" — ask an organization admin", permissionRefusalText("marketplace.payouts"))
 

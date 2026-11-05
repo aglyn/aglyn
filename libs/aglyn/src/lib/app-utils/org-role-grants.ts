@@ -70,6 +70,12 @@ export interface OrgPermissionEntry {
    * refines.
    */
   follows?: string
+  /**
+   * Whether a site can narrow the key (`narrowsPerSite`, AGL-4047), so the
+   * role and member editors offer its "follow the site role" choice. Absent
+   * for a key a site cannot narrow.
+   */
+  narrowable?: boolean
 }
 
 /** A heading the role editor groups keys under. */
@@ -393,6 +399,8 @@ export function assembleOrgRoleGrants(
       ...(declaration.follows && declaration.follows !== declaration.key && !declaration.refines
         ? { follows: declaration.follows }
         : {}),
+      // A plugin's own declaration carries `narrowsPerSite` (a flag or one per role); only whether it is set matters here.
+      ...((declaration as { narrowsPerSite?: unknown }).narrowsPerSite ? { narrowable: true } : {}),
     })
     if (group && !groupIds.has(group)) {
       groupIds.add(group)
