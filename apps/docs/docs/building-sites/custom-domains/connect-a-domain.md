@@ -159,7 +159,8 @@ will not help; connect a domain registered to you instead.
 
 **Disconnect**, next to the connected domain's chip, releases the domain immediately —
 there is no confirmation step — and the Aglyn subdomain resumes serving within a minute
-or so. Disconnecting requires the **site admin** role.
+or so. Disconnecting takes the **Manage site settings** permission, which a site's admins
+hold by default.
 
 Aglyn never touches your DNS: the CNAME, ALIAS, or A record at your registrar is yours,
 so remember to remove or repoint it yourself after disconnecting.

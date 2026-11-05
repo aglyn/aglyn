@@ -618,11 +618,11 @@ export const DOCS_HELP_SECTION_EXCERPTS: {
     '#basic-details': 'The Basic details card, under Site Admin → General, names your site, sets its Aglyn address and picks the time zone its dates are read in — fill in a display name and a subdomain, then press Update.',
     '#business-details': 'Setup → Business profile opens on the Business details card, the one place your business\'s details are entered.',
     '#display-name': 'The Display name is what the site is called inside the console — the site switcher, breadcrumbs, the Sites list and notifications — up to 30 characters.',
-    '#site-admin': 'Site Admin holds the controls only a site\'s owners and admins should touch, kept apart from Setup so a collaborator never trips over them.',
+    '#site-admin': 'Site Admin holds the controls that take the Manage site settings permission, kept apart from Setup so a collaborator never trips over them.',
     '#site-emails': 'Setup → Emails lists the emails your site sends its own customers, grouped by the feature that sends them.',
     '#site-logo': 'The Site logo card sets your brand mark: pick a Light mode logo from your media library — square, at least 512 px, the logo filling about 80% with a little space around it, as an SVG or a PNG — and add a Dark mode…',
     '#subdomain': 'The Subdomain is your site\'s free address, up to 15 characters, and it works from the moment the site exists.',
-    '#who-can-open-site-admin': 'Only a site\'s admins can open Site Admin; anyone else who follows a link to it is told so instead of seeing the sections.',
+    '#who-can-open-site-admin': 'Opening Site Admin takes the Manage site settings permission on the site, which the site\'s admins hold by default, and workspace owners and admins are admins of every site.',
   },
   glossary: {
     '#organization-org': 'The entity. One subscription, one members roster (owner / admin / editor / viewer), one isolation boundary in Firestore (orgs/{orgId}), one plugin switchboard (enabledPlugins), org-scoped shared data (datasets,…',

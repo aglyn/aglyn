@@ -32,8 +32,8 @@ list:
 
 A page's own visibility is set by anyone who can edit that page. The **Error pages**
 section is different: both settings there are site-wide — maintenance mode replaces every
-page for every visitor — so, like deleting the site, they live in **Admin** and are
-limited to **site admins**.
+page for every visitor — so, like deleting the site, they live in **Admin** and take the
+**Manage site settings** permission, which a site's admins hold by default.
 
 ![The Page Access card on a page's detail view, with the Visibility menu open on Public, Unlisted, Password protected and Members only](/img/seo/page-access-visibility.png)
 

@@ -150,9 +150,9 @@ their work on your behalf. Press undo again to keep going back through your own
 edits. This is uncommon, and only happens on an element two of you touched.
 :::
 
-Anyone with **edit access** to the site (a site admin or editor, or a workspace owner
-/ admin / editor) can co-edit. Viewers see presence but their changes are refused at
-the door.
+Anyone holding **Edit site content** on the site (by default a site admin, editor or
+author, or a workspace owner, admin or editor) can co-edit. Viewers see presence but their
+changes are refused at the door.
 
 Live edits are working state, not saves — the document still saves when someone
 presses **Save**, and a successful save is what makes the shared state durable.

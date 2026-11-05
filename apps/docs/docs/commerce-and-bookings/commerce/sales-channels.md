@@ -174,8 +174,8 @@ card. Replacing the Google address turns it off too.
 
 ## Turn sales channels off for a site {#turn-off}
 
-Sales channels are on for every site in a workspace. A site admin can switch
-them off for one site under **Admin → Plugins → Sales channels**. Every feed of that site, the earlier Google address included, then stops
+Sales channels are on for every site in a workspace. A member holding **Manage site
+settings**, which a site's admins hold by default, can switch them off for one site under **Admin → Plugins → Sales channels**. Every feed of that site, the earlier Google address included, then stops
 answering; each feed's address, switch and the defaults are kept for when it
 is switched back on.
 

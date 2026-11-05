@@ -55,8 +55,8 @@ The providers, where they process data and what each receives are listed on the
 
 ## Turn AI off {#turn-ai-off}
 
-A site admin can switch AI off for one site; every AI request for that site is then
-refused. See [Switch AI off for one site](./overview.md#switch-ai-off-for-one-site). A
+A member holding **Manage site settings**, which a site's admins hold by default, can
+switch AI off for one site; every AI request for that site is then refused. See [Switch AI off for one site](./overview.md#switch-ai-off-for-one-site). A
 member whose role lacks the AI permissions cannot use AI at all; see
 [Who can use it](./overview.md#who-can-use-it).
 

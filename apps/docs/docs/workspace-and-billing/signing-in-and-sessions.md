@@ -327,7 +327,7 @@ every lead its sites captured. Each opens the same export dialog as the CRM's
 [**Export…**](../content-and-data/crm/export.md): choose the fields (custom fields
 included) and the format — CSV, JSON or NDJSON — and the file covers every record,
 whether or not your plan includes the CRM. Exporting needs the **Manage data**
-permission, which owners and admins hold. If fewer rows arrive than the server
+permission, which owners, admins and editors hold by default. If fewer rows arrive than the server
 promised, because a connection dropped, nothing is saved and you are told so; try
 again.
 

@@ -194,7 +194,8 @@ Where a new dataset starts depends on where you create it and on your workspace'
 
 **Default sharing for new datasets**, at the top of the organization **Data** page,
 decides what a dataset created on a site's Data page starts shared with: **All sites**,
-or only that site. Only workspace owners and admins can change it.
+or only that site. Changing it takes the **Organization settings** permission, which
+workspace owners and admins hold by default; without it the control stays off.
 
 The setting only decides where a new dataset starts. It changes nothing that already
 exists, and you can widen or narrow any dataset afterwards.

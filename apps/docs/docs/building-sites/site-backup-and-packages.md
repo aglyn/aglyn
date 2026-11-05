@@ -13,7 +13,8 @@ holds, shows you what changes and asks how to handle each item before it
 writes anything, and you can undo it afterwards.
 
 :::info Plan availability
-**Pro** and above. Site admins only.
+**Pro** and above. Takes the **Manage site settings** permission, which a site's admins
+hold by default.
 :::
 
 Open **Admin → Backup & template** on the site.

@@ -843,8 +843,9 @@ publish, and it counts against your form allowance like a new form.
 
 ## Switch Forms off for one site {#switch-forms-off-for-one-site}
 
-Forms is **on for every site** in a workspace. A site admin can switch it off for one site
-on that site's **Admin → Plugins → Forms** page. The switch asks first: it lists the
+Forms is **on for every site** in a workspace. A member holding **Manage site settings**,
+which a site's admins hold by default, can switch it off for one site on that site's
+**Admin → Plugins → Forms** page. The switch asks first: it lists the
 published pages on the site that carry a form, because those forms stop rendering and
 stop accepting submissions the moment Forms is off.
 

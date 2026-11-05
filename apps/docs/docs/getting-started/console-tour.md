@@ -157,8 +157,10 @@ reusable pieces pages are assembled from — see
 [Pages & Layouts](../building-sites/screens-and-layouts/overview.md)), **Templates**
 (saved starting points), **Content** (collections and blog entries), **Users** (the people
 who sign in to the site you're building, not your own team), and **Analytics**. **Admin**
-appears only if you're an owner or admin of the site; it holds per-site plugin settings,
-the custom domain, the site's security lists, the full activity log, and the danger zone.
+appears only if you hold the **Manage site settings** permission on the site, which the
+site's admins hold by default, and workspace owners and admins are admins of every site. It
+holds per-site plugin settings, the custom domain, the site's security lists, the full
+activity log, and the danger zone.
 
 :::note Sections that come and go
 Tabs such as **Data**, **Products**, **Logic**, **Automation**, **Inbox**, **Bookings**,
