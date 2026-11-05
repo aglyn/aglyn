@@ -45,17 +45,17 @@
  * it" rather than shown a clean slate.
  *
  * Both routes serve the site variant too (`hostId` alone, authorized by the
- * host role that creates actions today), so a site-level caller gets the
+ * site key that creates actions today), so a site-level caller gets the
  * same answers; the org variant (`orgId` in the body) is the one the org
  * hub uses.
  */
 
+import { holdsSiteKey, siteKeyRefusal } from '@aglyn/aglyn/app-utils/host-permissions'
 import {
   ACTIONS_MAX_PER_HOST,
   type AglynOrganization,
   checkEntitlement,
   createResourceUid,
-  hostRoleCanWrite,
   planLabelGrantingFeature,
   type PluginApiHandler,
   type PluginApiRequest,
@@ -109,10 +109,11 @@ function typed(value: unknown, max: number): string {
 }
 
 /**
- * The site variant's authority: the role on the host document that creates
- * an action through `/api/hosts/resources` today. Staff pass, as they pass
- * that route. Answers the host snapshot it read, so the caller reads it
- * once.
+ * The site variant's authority: "Edit site content" (`site.edit`, AGL-4047) on
+ * the host document, whose preset is the Admin, Editor and Author this asked
+ * for and which creates an action through `/api/hosts/resources` today. Staff
+ * pass, as they pass that route. Answers the host snapshot it read, so the
+ * caller reads it once.
  */
 async function authorizeSiteWriter(
   req: PluginApiRequest,
@@ -141,9 +142,8 @@ async function authorizeSiteWriter(
     .doc(hostId)
     .get()
   if (!host.exists) return { ok: false, status: 404, error: 'Unknown site' }
-  const role = (host.get('memberRoles') ?? {})[decoded.uid]
-  if (!staff && !hostRoleCanWrite(role)) {
-    return { ok: false, status: 403, error: 'Editing requires the editor role' }
+  if (!staff && !holdsSiteKey(host, decoded.uid, 'site.edit')) {
+    return { ok: false, status: 403, error: siteKeyRefusal('site.edit') }
   }
   const resolved = await getOrgForHost(hostId)
   if (!resolved) return { ok: false, status: 404, error: 'Unknown site' }

@@ -301,6 +301,10 @@ with the same rules.
 
 ## Moving, winning and losing
 
+Moving, winning, losing and reopening a deal take the [**Move contacts and deals between
+stages**](../../workspace-and-billing/teams-and-roles/custom-roles.md#crm-move-stages-permission)
+permission as well as **Manage data**. Without it, these controls stay in view, switched off.
+
 Stage changes go through the server rather than being written directly, so
 that automations can hear them. Three events fire, and each can trigger a
 [workflow or action](../../marketing-and-automation/workflows-and-actions/overview.md)

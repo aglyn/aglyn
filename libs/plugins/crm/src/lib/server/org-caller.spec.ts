@@ -57,11 +57,13 @@ jest.mock('@aglyn/tenant-data-admin', () => ({
 
 import { resolveOrgPermissions as mockResolveCatalog } from '@aglyn/aglyn'
 import { registerPluginPermissions } from '@aglyn/aglyn/plugin-manager/plugin-permissions'
-import { CRM_PERMISSIONS } from '../model/crm-permissions'
-import { authorizeOrgCaller, holdsDataManage } from './org-caller'
+import { registerPluginEntitlements } from '@aglyn/aglyn/plugin-manager/plugin-entitlements'
+import { CRM_MOVE_STAGES_REFUSAL, CRM_PERMISSIONS, CRM_SITE_PERMISSIONS } from '../model/crm-permissions'
+import { authorizeOrgCaller, authorizeOrgStageMover, holdsDataManage } from './org-caller'
 
-// The CRM's key, as the declarations register it in every process.
+// The CRM's keys, as the declarations register them in every process.
 registerPluginPermissions(CRM_PERMISSIONS)
+registerPluginEntitlements({ pluginId: 'crm', orgPermissions: CRM_SITE_PERMISSIONS })
 
 const request = () =>
   ({
@@ -120,6 +122,41 @@ describe('the organization gate asks the catalog for data.manage (AGL-2843)', ()
  * those roles, so a custom role or an override decides it for anyone org-wide,
  * and staff acting alone still do not pass.
  */
+describe('a stage move at the organization level (AGL-4047)', () => {
+  const mover = () => authorizeOrgStageMover(request(), 'org-1', 'Refused')
+
+  it.each([
+    ['an owner', { role: 'owner' }, true],
+    ['an org-wide editor', { role: 'editor', allHosts: true }, true],
+    ['an org-wide viewer', { role: 'viewer', allHosts: true }, false],
+    ['a viewer granted "Manage data", which the key follows', { role: 'viewer', allHosts: true, permissions: { 'data.manage': true } }, true],
+    ['an editor refused "Manage data"', { role: 'editor', allHosts: true, permissions: { 'data.manage': false } }, false],
+    [
+      'a site collaborator granted both: the reach refuses',
+      { role: 'editor', allHosts: false, hostAccess: { 'host-1': 'admin' }, permissions: { 'data.manage': true, 'crm.moveStages': true } },
+      false,
+    ],
+  ])('%s: %s', async (_name, member, admitted) => {
+    members.set('org-1:caller', member)
+    expect((await mover()).ok).toBe(admitted)
+  })
+
+  it('a refusal of the key itself stops an admin who holds "Manage data", in its own words', async () => {
+    members.set('org-1:caller', { role: 'admin', allHosts: true, permissions: { 'crm.moveStages': false } })
+    expect(await mover()).toEqual({ ok: false, status: 403, error: CRM_MOVE_STAGES_REFUSAL })
+  })
+
+  it('a grant of the key does not stand in for "Manage data"', async () => {
+    members.set('org-1:caller', { role: 'viewer', allHosts: true, permissions: { 'crm.moveStages': true } })
+    expect(await mover()).toEqual({ ok: false, status: 403, error: 'Refused' })
+  })
+
+  it('admits staff, as the "Manage data" door always has', async () => {
+    verifyIdToken.mockImplementation(async () => ({ uid: 'support', staff: true }))
+    expect((await mover()).ok).toBe(true)
+  })
+})
+
 describe('the organization gate asks "Change CRM settings" (AGL-4047)', () => {
   const settings = () =>
     authorizeOrgCaller(request(), 'org-1', { needs: 'crm.settings', refusal: 'Refused' })

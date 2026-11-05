@@ -59,8 +59,8 @@ import type { OrgPermission } from '@aglyn/aglyn'
  *
  * `data.manage` is the catalog key whose subject is exactly this data: the
  * Firestore rules place contacts in the org-shared data block and gate their
- * writes on `canWriteOrgData()` — owner, admin, editor — which is the
- * population `data.manage` defaults to. It is also the key the CRM plugin
+ * writes on `canWriteOrgData()`, which asks this key (the owner, admins and
+ * editors by default). It is also the key the CRM plugin
  * declares for its SITE hub, so the two CRM surfaces name one permission
  * rather than two, and an owner revoking it closes both.
  *

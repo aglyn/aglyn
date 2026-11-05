@@ -88,9 +88,10 @@ import { crmNextActivityLinksOf, recomputeCrmNextTaskAt } from './crm-next-activ
  *
  * Both authenticate the way the other console plugin routes do — the ID
  * token in the `Authorization` header — and then ask the same two questions
- * the rules ask of a `crmTasks` write: is this member allowed to write org
- * data (`owner`/`admin`/`editor`, and `data.manage` resolved through their
- * custom role), and can they reach THIS document's scope.
+ * the rules ask of a `crmTasks` write: does this member hold "Manage data"
+ * (`data.manage`, resolved through their custom role and own permissions; the
+ * owner, admins and editors by default), and can they reach THIS document's
+ * scope.
  *
  * ## The organization variant (AGL-2637)
  *
@@ -115,6 +116,9 @@ export type Refusal = {
   status: number
   body: { error: string; reason?: string; code?: string }
 }
+
+/** What a site's CRM writer is refused with: names the permission, never a role. */
+const MANAGE_DATA_REFUSAL = 'Your role does not include "Manage data" — ask an organization admin'
 
 /** What the suite gate names when a task route refuses a plan without it. */
 const TASKS_ACT = "Working a record's tasks"
@@ -158,8 +162,8 @@ export interface CrmWriterOptions {
 /**
  * Who is asking, and whether they may write this CRM at all.
  *
- * Under a site: the org resolved from the site and the rules' own role and
- * permission questions. At the organization level: the org the body names,
+ * Under a site: the org resolved from the site and the rules' own question,
+ * "Manage data". At the organization level: the org the body names,
  * for an org-wide member with the permission. The scope question — may they
  * reach THIS task — is asked by the caller against the document, because on
  * a create the document does not exist yet and its scope is what the route
@@ -211,24 +215,19 @@ export async function authorizeCrmWriter(
   )
   const member = (membership?.member ?? null) as Partial<AglynOrgMember> | null
   if (!staff) {
-    const role = String(member?.role ?? '')
     /*
-     * The rules' `canWriteOrgData()` restated: the role list is what an
-     * unstamped permission map falls through to, and the permission is the
-     * only half a custom role's revocation can reach. A route that checked
-     * one and not the other would open a door the rules keep shut.
+     * The rules' `canWriteOrgData()` restated (AGL-4047): a member who is not
+     * suspended and holds the key, whose default is the owner, admins and
+     * editors. A route that asked anything else would open a door the rules
+     * keep shut, or shut one they open.
      */
-    const writerRole = role === 'owner' || role === 'admin' || role === 'editor'
     const suspended =
       (member as { orgSuspended?: boolean } | null)?.orgSuspended === true
-    if (!member || !writerRole || suspended) {
-      return refuse(403, 'Your organization role does not allow editing the CRM.')
+    if (!member || suspended) {
+      return refuse(403, MANAGE_DATA_REFUSAL)
     }
     if (!(await memberHasOrgPermission(orgId, member, 'data.manage'))) {
-      return refuse(
-        403,
-        'Your organization role does not allow editing the CRM.',
-      )
+      return refuse(403, MANAGE_DATA_REFUSAL)
     }
   }
   const suite = suiteAct ? crmSuiteRefusal(org, suiteAct) : null

@@ -567,7 +567,7 @@
     },
     {
       "path": "libs/plugins/crm/src/lib/model/crm-permissions.ts",
-      "why": "The CRM plugin's workspace key (change CRM settings) and its tier defaults, assembled into the contracts' ORG_ROLE_GRANTS (AGL-4047); type-only imports."
+      "why": "The CRM plugin's keys (change CRM settings, with its tier defaults; move contacts and deals between stages, with its site-role preset), assembled into the contracts' ORG_ROLE_GRANTS (AGL-4047); type-only imports."
     },
     {
       "path": "libs/plugins/workflows/src/lib/model/workflows-permissions.ts",

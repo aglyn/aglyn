@@ -374,7 +374,10 @@ re-engagement audience is built.
 ## Lifecycle stages
 
 The **Stage** says where a person is in your funnel. The list has a Stage
-column and a Stage filter; the record page lets you set it.
+column and a Stage filter; the record page lets you set it, with the [**Move contacts
+and deals between
+stages**](../../workspace-and-billing/teams-and-roles/custom-roles.md#crm-move-stages-permission)
+permission.
 
 Every capture that reaches a contact sets the earliest stage that describes
 what happened, and never moves anyone back: a newsletter opt-in or a member

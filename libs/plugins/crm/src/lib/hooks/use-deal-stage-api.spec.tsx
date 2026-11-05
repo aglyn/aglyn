@@ -41,6 +41,13 @@ jest.mock('@aglyn/shared-util-http/authorized-token', () => ({
 jest.mock('@aglyn/tenant-feature-instance', () => ({
   useUser: () => ({ data: { uid: 'u-1', getIdToken: async () => 'token' } }),
 }))
+let stageMoveAskedFor: Array<string | null | undefined>
+jest.mock('./use-stage-move-blocked', () => ({
+  useStageMoveBlocked: (hostId: string | null | undefined) => {
+    stageMoveAskedFor.push(hostId)
+    return hostId === 'blocked-site'
+  },
+}))
 
 function orgMount({ children }: { children: ReactNode }) {
   return (
@@ -59,6 +66,8 @@ function orgMount({ children }: { children: ReactNode }) {
 }
 
 beforeEach(() => {
+
+  stageMoveAskedFor = []
   calls = []
 })
 
@@ -96,5 +105,15 @@ describe('useDealStageApi', () => {
       dealId: 'd1',
       stageId: 'negotiation',
     })
+  })
+
+  it('asks the permission where the route will: the mounted site, or the org beneath the mount (AGL-4047)', () => {
+    const site = renderHook(() => useDealStageApi('blocked-site'))
+    expect(site.result.current.moveBlocked).toBe(true)
+    expect(stageMoveAskedFor).toContain('blocked-site')
+    stageMoveAskedFor = []
+    const hub = renderHook(() => useDealStageApi('site-x'), { wrapper: orgMount })
+    expect(hub.result.current.moveBlocked).toBe(false)
+    expect(stageMoveAskedFor.every((asked) => asked === null)).toBe(true)
   })
 })

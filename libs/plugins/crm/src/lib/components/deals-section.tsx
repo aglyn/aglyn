@@ -689,6 +689,7 @@ export function DealsSection(props: ConsolePluginPageProps) {
                 labelFor={roster.nameOf}
                 moving={moving}
                 onOpen={openDeal}
+                moveBlocked={api.moveBlocked}
                 onMove={handleMove}
                 onWon={handleWon}
                 onLost={handleLost}

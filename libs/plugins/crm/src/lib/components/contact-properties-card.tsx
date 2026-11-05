@@ -61,6 +61,8 @@ import { useContactFieldDefinitions } from '../hooks/use-contact-field-definitio
 import { useContactUpdate } from '../hooks/use-contact-update'
 import { useCrmActivityLogger } from '../hooks/use-crm-activity-logger'
 import { useCrmPicklist } from '../hooks/use-crm-picklist'
+import { useStageMoveBlocked } from '../hooks/use-stage-move-blocked'
+import { CRM_MOVE_STAGES_REFUSAL } from '../model/crm-permissions'
 import { useLeadSourcePicklist } from '../hooks/use-lead-source-picklist'
 import { type ContactRecord, parseContactTags } from '../model/contact-record'
 import type { ContactUpdateFields } from '../model/contact-update'
@@ -262,6 +264,8 @@ export function ContactPropertiesCard(props: ContactPropertiesCardProps) {
   // The site a stage move is routed through: the mounted one, or at the
   // organization level the holder's own (AGL-2630).
   const siteHostId = hostId ?? (consentGroup.hostId || null)
+  // "Move contacts and deals between stages" (AGL-4047), where the route asks it.
+  const stageBlocked = useStageMoveBlocked(siteHostId)
   /*
    * The feed the act is logged in, decided by the level it was performed
    * at (AGL-2738) and so given the MOUNTED site rather than `siteHostId`:
@@ -747,8 +751,8 @@ export function ContactPropertiesCard(props: ContactPropertiesCardProps) {
             onChange={(event) =>
               change(setLifecycleStage, event.target.value as ContactLifecycleStage | '')
             }
-            disabled={suiteLocked}
-            helperText={suiteLocked ? crmSuiteLockedReason() : undefined}
+            disabled={suiteLocked || stageBlocked}
+            helperText={suiteLocked ? crmSuiteLockedReason() : stageBlocked ? CRM_MOVE_STAGES_REFUSAL : undefined}
             fullWidth
           >
             <MenuItem value="">{'Not placed yet'}</MenuItem>

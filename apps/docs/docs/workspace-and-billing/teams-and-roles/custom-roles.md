@@ -110,10 +110,13 @@ override can hand one to someone outside the roles that held it, or take it away
 
 Each starts with exactly the roles that could do it before, so nobody's access changed.
 
-**Manage data** (`data.manage`) decides the workspace's datasets on its own: creating,
-editing and deleting datasets and their records, and importing into them. Owners,
-admins and editors hold it by default and viewers don't, so a custom role or a
-per-member override can let a viewer edit datasets, or stop an editor from doing so.
+**Manage data** (`data.manage`) decides the workspace's data on its own: creating,
+editing and deleting datasets and their records, and importing into them; working the
+CRM's records, such as leads, companies, deals and tasks; and changing the workspace's
+marketing lists and email topics. Owners, admins and editors hold it by default and viewers
+don't, so a custom role or a per-member override can let a viewer do this work, or stop
+an editor from doing so. Lists and topics belong to the whole workspace, so a collaborator
+added to particular sites doesn't change them, even when granted this permission.
 
 ### Site permissions {#site-permissions}
 
@@ -243,6 +246,19 @@ A custom role or a per-member override can grant or deny it. A site collaborator
 holds it, because it acts on the whole workspace. Everyone who can open the CRM can still
 read the settings, and a member without the permission sees each control switched off with
 the permission named beside it.
+
+### Moving contacts and deals between stages {#crm-move-stages-permission}
+
+| Permission | What it opens | Admin | Editor | Author | Viewer |
+|---|---|---|---|---|---|
+| **Move contacts and deals between stages** (`crm.moveStages`) | Change a contact's lifecycle stage, and move a deal through its pipeline, including winning, losing and reopening it | Yes | Yes | No | No |
+
+This one starts from the member's role on the site, so nobody's access changed when it
+became a permission. In the organization hub, with no site picked, it follows **Manage
+data** until a custom role or a per-member override sets it. A custom role, a per-member
+override or the site's **Permissions** dialog can grant or deny it. Moving a deal also
+takes **Manage data**. A member without the permission still sees each stage control,
+switched off with the permission named beside it.
 
 ### Automation and domain permissions {#automation-and-domain-permissions}
 

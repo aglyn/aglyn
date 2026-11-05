@@ -414,13 +414,14 @@ of later sends.
 **A host role is necessary and not sufficient.** Lists live at
 `orgs/{orgId}/lists`, so the security rules put the list document behind
 `isOrgWideMember()` and its `members` — which are people, with a consent record
-attached — behind that plus a role of owner, admin or editor. An editor invited
+attached — behind that plus "Manage data". An editor invited
 to ONE site is an org member
 with `allHosts: false`; gating this route on the host role alone would let a
 single-site collaborator enroll people into an audience every other site in the
 org can mail. The Admin SDK evaluates no rules, so the route is the enforcement
 rather than an echo of it, and it asks the same two questions
-`canWriteOrgWideData()` does: org-wide reach, and a role of owner/admin/editor.
+`canWriteOrgWideData()` does: org-wide reach, and "Manage data" (`data.manage`,
+owner/admin/editor by default).
 
 ## Part 3 — Open questions for the owner
 

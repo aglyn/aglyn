@@ -97,7 +97,7 @@
       "note": "The health probe picks a member of its own test site."
     },
     "cloud/firebase-firestore.deploy.rules": {
-      "count": 22,
+      "count": 3,
       "kind": "pending"
     },
     "libs/plugins/ai/src/lib/jobs/ai-layout-stock-photos.ts": {
@@ -130,30 +130,6 @@
       "kind": "not-a-gate",
       "note": "Platform staff roles (super, billing) on a staff page, not a member’s role."
     },
-    "libs/plugins/crm/src/lib/server-deal-stage.ts": {
-      "count": 1,
-      "kind": "pending"
-    },
-    "libs/plugins/crm/src/lib/server.ts": {
-      "count": 1,
-      "kind": "pending"
-    },
-    "libs/plugins/crm/src/lib/server/crm-setup-writers.server.ts": {
-      "count": 2,
-      "kind": "pending"
-    },
-    "libs/plugins/crm/src/lib/server/email-template-duplicate.ts": {
-      "count": 1,
-      "kind": "pending"
-    },
-    "libs/plugins/crm/src/lib/server/recipe-routes.ts": {
-      "count": 1,
-      "kind": "pending"
-    },
-    "libs/plugins/crm/src/lib/server/task-routes.ts": {
-      "count": 1,
-      "kind": "pending"
-    },
     "libs/plugins/domains/src/lib/server/domain-emails.ts": {
       "count": 1,
       "kind": "not-a-gate",
@@ -163,14 +139,6 @@
       "count": 1,
       "kind": "not-a-gate",
       "note": "Lists the owners and admins a sending address can be sent as."
-    },
-    "libs/plugins/email/src/lib/server-list-gate.ts": {
-      "count": 3,
-      "kind": "pending"
-    },
-    "libs/plugins/inbox/src/lib/server.ts": {
-      "count": 3,
-      "kind": "pending"
     },
     "libs/plugins/marketplace/src/lib/server/publisher-review-email.ts": {
       "count": 1,

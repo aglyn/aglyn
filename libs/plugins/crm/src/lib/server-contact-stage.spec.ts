@@ -94,7 +94,7 @@ jest.mock('@aglyn/tenant-data-admin', () => ({
   firebaseAdmin: {
     app: () => ({
       auth: () => ({ verifyIdToken: (token: string) => mockVerifyIdToken(token) }),
-      // `hosts/{hostId}` — the one document the role check reads.
+      // `hosts/{hostId}` — the one document the permission check reads.
       firestore: () => ({
         collection: () => ({
           doc: (id: string) => ({
@@ -220,11 +220,40 @@ describe('the gate', () => {
     expect(mockContactsCollection).not.toHaveBeenCalled()
   })
 
-  it('refuses a viewer and a caller with no role on the site, reading no contact', async () => {
+  it.each([
+    ['admin', 200],
+    ['editor', 200],
+    ['author', 403],
+    ['viewer', 403],
+  ])('with nothing decided, a site %s answers as the role did (AGL-4047)', async (role, expected) => {
+    mockHosts = { [HOST]: { memberRoles: { 'user-1': role } } }
+    expect((await post(MOVE)).status).toBe(expected)
+  })
+
+  it('reads the site’s stamp first, either way (AGL-4047)', async () => {
+    mockHosts = {
+      [HOST]: {
+        memberRoles: { 'user-1': 'viewer' },
+        memberPermissions: { 'user-1': { 'crm.moveStages': true } },
+      },
+    }
+    expect((await post(MOVE)).status).toBe(200)
+    mockHosts = {
+      [HOST]: {
+        memberRoles: { 'user-1': 'admin' },
+        memberPermissions: { 'user-1': { 'crm.moveStages': false } },
+      },
+    }
+    const refused = await post(MOVE)
+    expect(refused.status).toBe(403)
+    expect(refused.payload).toEqual({ error: 'Your role does not include "Move contacts and deals between stages" — ask an organization admin' })
+  })
+
+  it('refuses a viewer and a caller with no access to the site, reading no contact', async () => {
     mockDecoded = { uid: 'user-2' }
     const viewer = await post(MOVE)
     expect(viewer.status).toBe(403)
-    expect(viewer.payload).toEqual({ error: 'Not a site admin or editor' })
+    expect(viewer.payload).toEqual({ error: 'Your role does not include "Move contacts and deals between stages" — ask an organization admin' })
     mockDecoded = { uid: 'stranger' }
     expect((await post(MOVE)).status).toBe(403)
     expect(mockContactsCollection).not.toHaveBeenCalled()
@@ -260,12 +289,12 @@ describe('the plan (AGL-2787)', () => {
     expect(mockEmit).not.toHaveBeenCalled()
   })
 
-  it('tells a viewer on a Free workspace about the role, not the plan', async () => {
+  it('tells a viewer on a Free workspace about the permission, not the plan', async () => {
     mockOrg = { plan: 'free' }
     mockDecoded = { uid: 'user-2' }
     const { status, payload } = await post(MOVE)
     expect(status).toBe(403)
-    expect(payload).toEqual({ error: 'Not a site admin or editor' })
+    expect(payload).toEqual({ error: 'Your role does not include "Move contacts and deals between stages" — ask an organization admin' })
   })
 
   it('admits Starter, the lowest plan that carries the suite', async () => {

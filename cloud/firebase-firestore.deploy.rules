@@ -1364,9 +1364,16 @@ isVerified() && orgNotSuspended());
 
 
 
+
+
+
+
+
+
+
 function canWriteOrgData() {
 return isOrgMember() && isVerified() &&
-orgMember().role in ['owner', 'admin', 'editor'] &&
+memberKeyOrOverride('data.manage', ['owner', 'admin', 'editor']) &&
 orgNotSuspended();
 }
 
@@ -1472,9 +1479,12 @@ memberKeyOrOverride('data.manage', ['owner', 'admin', 'editor']);
 
 
 
+
+
+
 function canWriteOrgWideData() {
 return isOrgWideMember() && isVerified() &&
-orgMember().role in ['owner', 'admin', 'editor'] &&
+memberKeyOrOverride('data.manage', ['owner', 'admin', 'editor']) &&
 orgNotSuspended();
 }
 
@@ -1566,9 +1576,6 @@ orgNotSuspended();
 
 
 
-
-
-
 function canWriteScopedOrgDatasets() {
 return canWriteOrgDatasets() && canReadScoped();
 }
@@ -1579,6 +1586,8 @@ return canWriteOrgDatasets() && canReadScoped();
 function crmWriteScope() {
 return resource.data.get('writeTo', resource.data.visibleTo);
 }
+
+
 function canWriteScopedCrm() {
 return canWriteOrgData() &&
 (isOrgWideMember() ||
@@ -1682,7 +1691,6 @@ allow update, delete: if isStaff() ||
 (canWriteOrgDatasets() && parentDatasetVisible());
 }
 }
-
 
 
 
@@ -2057,11 +2065,24 @@ allow delete: if isStaff();
 
 
 
+
+
+
+
+
+
+
+function canWriteCampaignContainers() {
+return isOrgMember() && isVerified() &&
+memberKeyOrOverride('marketing.campaigns', ['owner', 'admin', 'editor']) &&
+orgNotSuspended();
+}
 match /emailCampaigns/{campaignId} {
 allow read: if isStaff() || canReadScoped();
-allow create: if isStaff() || (canWriteOrgData() && canCreateScoped());
+allow create: if isStaff() || (canWriteCampaignContainers() && canCreateScoped());
 allow update: if isStaff() ||
-(canWriteScopedOrgData() && (isOrgWideMember() || scopeUnchanged()));
+(canWriteCampaignContainers() && canReadScoped() &&
+(isOrgWideMember() || scopeUnchanged()));
 allow delete: if false;
 }
 

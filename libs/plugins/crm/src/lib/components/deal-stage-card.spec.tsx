@@ -60,6 +60,7 @@ const api = () => ({
   moveToStage: jest.fn().mockResolvedValue({ ok: true }),
   markWon: jest.fn().mockResolvedValue({ ok: true }),
   markLost: jest.fn().mockResolvedValue({ ok: true }),
+  moveBlocked: false,
 })
 
 const closingStep = () => screen.getByTestId('deal-stage-closing-step')
@@ -109,5 +110,26 @@ describe('the deal’s path', () => {
     expect(closingStep().textContent).toContain('Closed Won')
     expect((closingStep() as HTMLButtonElement).disabled).toBe(true)
     expect(screen.getByRole('combobox', { name: 'Reopen into' })).toBeTruthy()
+  })
+
+  it('switches every move off with the permission named, without the permission (AGL-4047)', () => {
+    render(<DealStageCard deal={deal()} pipeline={pipeline} api={{ ...api(), moveBlocked: true }} nowMs={0} />)
+    expect((screen.getByRole('button', { name: 'Won' }) as HTMLButtonElement).disabled).toBe(true)
+    expect((screen.getByRole('button', { name: 'Lost' }) as HTMLButtonElement).disabled).toBe(true)
+    expect((closingStep() as HTMLButtonElement).disabled).toBe(true)
+    expect(screen.getAllByLabelText('Your role does not include "Move contacts and deals between stages" — ask an organization admin').length).toBeGreaterThan(0)
+  })
+
+  it('switches a closed deal’s reopen off with the permission named (AGL-4047)', () => {
+    render(
+      <DealStageCard
+        deal={deal({ status: 'won', stageId: 'won', closedAtMs: 0 } as Partial<DealDoc>)}
+        pipeline={pipeline}
+        api={{ ...api(), moveBlocked: true }}
+        nowMs={0}
+      />,
+    )
+    expect(screen.getByRole('combobox', { name: 'Reopen into' }).getAttribute('aria-disabled')).toBe('true')
+    expect(screen.getByText('Your role does not include "Move contacts and deals between stages" — ask an organization admin')).toBeTruthy()
   })
 })

@@ -201,6 +201,10 @@ const firestoreHandle: any = {
 }
 
 jest.mock('@aglyn/tenant-data-admin', () => ({
+  // The catalog's own answer for "Manage data", the list writer's key (AGL-4047).
+  memberHasOrgPermission: async (_orgId: string, member: Record<string, unknown> | null, key: string) =>
+    Boolean(member) &&
+    jest.requireActual('@aglyn/aglyn/app-utils/org-permissions').resolveOrgPermissions(member, null)[key] === true,
   // The literal three call sites compare against — the unsubscribe writes
   // it, the resubscribe link refuses to reverse anything else, and the
   // preference page reads it. A mock that omitted it would write `undefined`
@@ -691,6 +695,21 @@ describe('the two gates on the route', () => {
     expect((await add({ email: OPTED_IN })).code).toBe(403)
     expect((await preview({ email: OPTED_IN })).code).toBe(403)
     expect(memberRows()).toHaveLength(0)
+  })
+
+  it('asks "Manage data", org-wide (AGL-4047)', async () => {
+    membership = { orgId: ORG_ID, member: { role: 'viewer', allHosts: true } }
+    expect((await preview({ email: OPTED_IN })).code).toBe(403)
+    membership = { orgId: ORG_ID, member: { role: 'viewer', allHosts: true, permissions: { 'data.manage': true } } }
+    expect((await preview({ email: OPTED_IN })).code).toBe(200)
+    membership = { orgId: ORG_ID, member: { role: 'admin', allHosts: true, permissions: { 'data.manage': false } } }
+    expect((await preview({ email: OPTED_IN })).code).toBe(403)
+    // No grant restores the reach.
+    membership = {
+      orgId: ORG_ID,
+      member: { role: 'editor', allHosts: false, hostAccess: { [HOST_ID]: true }, permissions: { 'data.manage': true } },
+    }
+    expect((await preview({ email: OPTED_IN })).code).toBe(403)
   })
 
   it('refuses a SUSPENDED org', async () => {
