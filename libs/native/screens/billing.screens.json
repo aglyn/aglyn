@@ -123,7 +123,7 @@
         {
           "type": "actions",
           "title": "Manage",
-          "when": "org.manager",
+          "when": "org.can[billing.manage]",
           "footer": "Plans, payment methods and cancellations open on Stripe's secure pages.",
           "items": [
             {
@@ -209,14 +209,14 @@
               "subtitle": "Move purchased collaborator and register seats between sites",
               "icon": "person.2|group",
               "screen": "core.billing.seats",
-              "when": "org.manager"
+              "when": "org.can[billing.manage]"
             },
             {
               "title": "Billing details",
               "subtitle": "Email, address, tax IDs, cards",
               "icon": "building.columns|account_balance",
               "screen": "core.billing.settings",
-              "when": "org.manager"
+              "when": "org.can[billing.manage]"
             }
           ]
         },
@@ -228,11 +228,12 @@
       ]
     },
     {
+
       "id": "core.billing.plans",
       "title": "Choose a plan",
       "icon": "sparkles|workspace_premium",
       "scope": "org",
-      "requires": "org.manager",
+      "requires": "org.can[billing.manage]",
       "blocks": [
         {
           "type": "notice",
@@ -258,7 +259,7 @@
               "id": "switch",
               "label": "Switch to this plan",
               "icon": "arrow.left.arrow.right|swap_horiz",
-              "when": "org.manager && data.org.subscription.status == active,trialing,past_due && item.id != free && item.id != @data.org.plan",
+              "when": "org.can[billing.manage] && data.org.subscription.status == active,trialing,past_due && item.id != free && item.id != @data.org.plan",
               "check": {
                 "label": "Preview",
                 "url": "/api/billing/subscription",
@@ -445,7 +446,7 @@
               "label": "Cancel my plan",
               "icon": "xmark.circle|cancel",
               "destructive": true,
-              "when": "org.manager && data.org.subscription.status == active,trialing,past_due && item.id == free && !data.billing.subscription.cancelAtPeriodEnd",
+              "when": "org.can[billing.manage] && data.org.subscription.status == active,trialing,past_due && item.id == free && !data.billing.subscription.cancelAtPeriodEnd",
               "navigate": {
                 "screen": "core.billing.cancel"
               }
@@ -454,7 +455,7 @@
               "id": "monthly",
               "label": "Continue, billed monthly",
               "icon": "calendar|event",
-              "when": "org.manager && data.org.subscription.status != active,trialing,past_due && item.id != free",
+              "when": "org.can[billing.manage] && data.org.subscription.status != active,trialing,past_due && item.id != free",
               "url": "/api/billing/checkout",
               "body": {
                 "orgId": "{org.id}",
@@ -468,7 +469,7 @@
               "id": "yearly",
               "label": "Continue, billed yearly",
               "icon": "calendar.badge.clock|event",
-              "when": "org.manager && data.org.subscription.status != active,trialing,past_due && item.id != free",
+              "when": "org.can[billing.manage] && data.org.subscription.status != active,trialing,past_due && item.id != free",
               "url": "/api/billing/checkout",
               "body": {
                 "orgId": "{org.id}",
@@ -592,6 +593,7 @@
       }
     },
     {
+
       "id": "core.billing.invoices",
       "title": "Invoices",
       "icon": "doc.text|receipt_long",
@@ -662,6 +664,7 @@
       ]
     },
     {
+
       "id": "core.billing.usage",
       "title": "Usage",
       "icon": "chart.bar|bar_chart",
@@ -1111,7 +1114,7 @@
           ],
           "submit": {
             "label": "Save limit",
-            "when": "org.manager",
+            "when": "org.can[billing.manage]",
             "url": "/api/billing/usage-budget",
             "body": {
               "orgId": "{org.id}",
@@ -1126,7 +1129,7 @@
         },
         {
           "type": "actions",
-          "when": "org.manager && data.budget.budgetSet",
+          "when": "org.can[billing.manage] && data.budget.budgetSet",
           "items": [
             {
               "id": "clearBudget",
@@ -1182,7 +1185,7 @@
         {
           "type": "form",
           "id": "storageCap",
-          "when": "data.storage && org.manager",
+          "when": "data.storage && org.can[billing.manage]",
           "fields": [
             {
               "key": "capUsd",
@@ -1205,11 +1208,12 @@
       ]
     },
     {
+
       "id": "core.billing.settings",
       "title": "Billing details",
       "icon": "building.columns|account_balance",
       "scope": "org",
-      "requires": "org.manager",
+      "requires": "org.can[billing.manage]",
       "links": [
         "/billing/settings"
       ],
@@ -1482,12 +1486,13 @@
       ]
     },
     {
+
       "id": "core.billing.seats",
       "title": "Seats by site",
       "subtitle": "Collaborator and register seats",
       "icon": "person.2|group",
       "scope": "org",
-      "requires": "org.manager",
+      "requires": "org.can[billing.manage]",
       "load": {
         "collab": {
           "url": "/api/billing/collaborator-allocations",
@@ -1551,7 +1556,7 @@
               "id": "set",
               "label": "Set seats",
               "icon": "slider.horizontal.3|tune",
-              "when": "org.manager",
+              "when": "org.can[billing.manage]",
               "prompt": [
                 {
                   "key": "seats",
@@ -1611,7 +1616,7 @@
               "id": "set",
               "label": "Set seats",
               "icon": "slider.horizontal.3|tune",
-              "when": "org.manager",
+              "when": "org.can[billing.manage]",
               "prompt": [
                 {
                   "key": "seats",
@@ -1637,6 +1642,7 @@
       ]
     },
     {
+
       "id": "core.billing.addons",
       "title": "Plan add-ons",
       "subtitle": "Seats, sites and extras on your plan",
@@ -1735,7 +1741,7 @@
               "id": "set",
               "label": "Change quantity",
               "icon": "slider.horizontal.3|tune",
-              "when": "!item.toggle && org.manager && data.addons.hasSubscription && data.addons.catalog[@item.kind].configured && !data.addons.catalog[@item.kind].upgradeRequired && item.kind != aiAddon",
+              "when": "!item.toggle && org.can[billing.manage] && data.addons.hasSubscription && data.addons.catalog[@item.kind].configured && !data.addons.catalog[@item.kind].upgradeRequired && item.kind != aiAddon",
               "prompt": [
                 {
                   "key": "quantity",
@@ -1837,7 +1843,7 @@
               "id": "on",
               "label": "Turn on",
               "icon": "power|power_settings_new",
-              "when": "item.toggle && org.manager && data.addons.hasSubscription && data.addons.catalog[@item.kind].configured && !data.addons.catalog[@item.kind].upgradeRequired && !data.addons.quantities[@item.kind]",
+              "when": "item.toggle && org.can[billing.manage] && data.addons.hasSubscription && data.addons.catalog[@item.kind].configured && !data.addons.catalog[@item.kind].upgradeRequired && !data.addons.quantities[@item.kind]",
               "check": {
                 "label": "Preview",
                 "url": "/api/billing/addons",
@@ -1924,7 +1930,7 @@
               "id": "off",
               "label": "Turn off",
               "icon": "poweroff|power_settings_new",
-              "when": "item.toggle && org.manager && data.addons.hasSubscription && data.addons.catalog[@item.kind].configured && !data.addons.catalog[@item.kind].upgradeRequired && data.addons.quantities[@item.kind]",
+              "when": "item.toggle && org.can[billing.manage] && data.addons.hasSubscription && data.addons.catalog[@item.kind].configured && !data.addons.catalog[@item.kind].upgradeRequired && data.addons.quantities[@item.kind]",
               "check": {
                 "label": "Preview",
                 "url": "/api/billing/addons",
@@ -2004,7 +2010,7 @@
               "id": "blocks",
               "label": "Change blocks",
               "icon": "sparkles|auto_awesome",
-              "when": "item.kind == aiAddon && org.manager && data.addons.hasSubscription && data.addons.catalog[@item.kind].configured && !data.addons.catalog[@item.kind].upgradeRequired",
+              "when": "item.kind == aiAddon && org.can[billing.manage] && data.addons.hasSubscription && data.addons.catalog[@item.kind].configured && !data.addons.catalog[@item.kind].upgradeRequired",
               "prompt": [
                 {
                   "key": "blocks",
@@ -2211,6 +2217,7 @@
       }
     },
     {
+
       "id": "core.billing.usage.site",
       "title": "{params.siteName|'Site usage'}",
       "icon": "chart.bar|bar_chart",
@@ -2386,11 +2393,12 @@
       ]
     },
     {
+
       "id": "core.billing.cancel",
       "title": "Before you go",
       "icon": "xmark.circle|cancel",
       "scope": "org",
-      "requires": "org.manager",
+      "requires": "org.can[billing.manage]",
       "blocks": [
         {
           "type": "form",
@@ -2467,11 +2475,12 @@
       ]
     },
     {
+
       "id": "core.billing.cancel.offers",
       "title": "Before you go",
       "icon": "xmark.circle|cancel",
       "scope": "org",
-      "requires": "org.manager",
+      "requires": "org.can[billing.manage]",
       "load": {
         "org": {
           "doc": "orgs/{org.id}"

@@ -1126,10 +1126,19 @@ class ScreenSpecTest {
   }
 
   @Test
+  fun aRefusalInASpecNamesThePermission() {
+    val context = Json.parseToJsonElement("""{"app":{"permissionRefusal":{"org.settings":"Your role does not include Organization settings"}}}""")
+    assertEquals(
+      "Your role does not include Organization settings. You can see what this workspace runs.",
+      ScreenValues.render("{app.permissionRefusal[org.settings]}. You can see what this workspace runs.", context),
+    )
+  }
+
+  @Test
   fun aSitePluginScreenWritesOnlyTheFieldsTheSiteOverrides() {
     val spec = ScreenSpec.parseFile(File(screensDir, "plugin-settings.screens.json").readText()).first { it.id == "core.sitePluginSettings.ai" }
     assertEquals(listOf("sitePluginSettings"), spec.zones)
-    assertEquals("org.manager && params.pluginId == ai", spec.requires)
+    assertEquals("site.can[site.manage] && params.pluginId == ai", spec.requires)
     val form = spec.blocks.first { it.type == "form" }
     val submit = ActionSpec.parse(form["submit"])!!
     val scope = Json.parseToJsonElement(
@@ -1192,7 +1201,7 @@ class ScreenSpecTest {
     val turnOn = actions.first { it.id == "on" }
     val constants = spec.raw.obj("constants").toString()
     fun scope(addons: String, extra: String = "") = Json.parseToJsonElement(
-      """{"org":{"id":"o1","manager":true},"const":$constants,"data":{"addons":$addons},"item":{"kind":"aiAddon","label":"Aglyn AI credits","toggle":false}$extra}""",
+      """{"org":{"id":"o1","manager":true,"can":{"billing.manage":true}},"const":$constants,"data":{"addons":$addons},"item":{"kind":"aiAddon","label":"Aglyn AI credits","toggle":false}$extra}""",
     )
     val held = """{"hasSubscription":true,"plan":"pro","interval":"month","quantities":{"aiAddon":3},""" +
       """"catalog":{"aiAddon":{"unitUsd":10,"max":30,"credits":5000,"configured":true,"upgradeRequired":false}}}"""
@@ -1306,7 +1315,7 @@ class ScreenSpecTest {
     assertTrue("over the Free plan on: 2 sites (Free includes 1)" in text)
     assertTrue("7 team members (Free includes 1)" in text)
     assertTrue("Nothing is deleted and these keep working" in text)
-    val manager = Json.parseToJsonElement("""{"org":{"manager":true,"plan":"pro"},"data":{"org":{"plan":"pro","subscription":{"status":"active"}}},"item":{"id":"business"}}""")
+    val manager = Json.parseToJsonElement("""{"org":{"manager":true,"can":{"billing.manage":true},"plan":"pro"},"data":{"org":{"plan":"pro","subscription":{"status":"active"}}},"item":{"id":"business"}}""")
     assertTrue(ScreenValues.condition(switchPlan.whenCondition, manager))
     val current = Json.parseToJsonElement("""{"org":{"manager":true},"data":{"org":{"plan":"pro","subscription":{"status":"active"}}},"item":{"id":"pro"}}""")
     assertFalse(ScreenValues.condition(switchPlan.whenCondition, current))
@@ -1577,7 +1586,7 @@ class ScreenSpecTest {
     val records = ScreenSpec.parseFile(File(screensDir, "transfer-resources.screens.json").readText()).first { it.id == "core.settings.data.records" }
     val consts = records.raw.obj("constants")!!
     fun context(crm: Boolean, running: List<String>) = Json.parseToJsonElement(
-      """{"org":{"id":"o1","manager":true},"const":$consts,"data":{
+      """{"org":{"id":"o1","manager":true,"can":{"billing.manage":true}},"const":$consts,"data":{
           "sw":{"rows":[${running.joinToString(",") { """{"id":"$it","on":true}""" }}]},
           "ent":{"features":{"crm":$crm}},
           "datasets":{"items":[{"${'$'}id":"d1","name":"Pets"}]}}}""",

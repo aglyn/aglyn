@@ -6,7 +6,7 @@
       "title": "Imports and exports",
       "icon": "arrow.up.arrow.down|sync",
       "scope": "org",
-      "requires": "org.manager",
+      "requires": "org.can[data.manage]",
       "links": [
         "/settings/data"
       ],
@@ -237,11 +237,12 @@
       "subtitle": "Move records and packages in and out of this workspace"
     },
     {
+
       "id": "core.settings.data.packageExport",
       "title": "Export a package",
       "icon": "arrow.down.doc|download",
       "scope": "org",
-      "requires": "org.manager",
+      "requires": "org.can[data.manage]",
       "load": {
         "catalog": {
           "url": "/api/transfer/package",
@@ -323,11 +324,12 @@
       ]
     },
     {
+
       "id": "core.settings.data.packageImport",
       "title": "Import a package",
       "icon": "square.and.arrow.down|upload",
       "scope": "org",
-      "requires": "org.manager",
+      "requires": "org.can[data.manage]",
       "subtitle": "Review every item, then import it; undo for seven days",
       "blocks": [
         {
@@ -372,11 +374,12 @@
       ]
     },
     {
+
       "id": "core.settings.data.packageReview",
       "title": "Review the import",
       "icon": "checklist|inventory_2",
       "scope": "org",
-      "requires": "org.manager",
+      "requires": "org.can[data.manage]",
       "constants": {
         "decision": {
           "create": {
@@ -732,11 +735,12 @@
       ]
     },
     {
+
       "id": "core.settings.data.packageDone",
       "title": "Imported",
       "icon": "checkmark.circle|check_circle",
       "scope": "org",
-      "requires": "org.manager",
+      "requires": "org.can[data.manage]",
       "blocks": [
         {
           "type": "notice",
@@ -807,11 +811,12 @@
       ]
     },
     {
+
       "id": "core.settings.data.packageUndo",
       "title": "Undo the import",
       "icon": "arrow.uturn.backward|undo",
       "scope": "org",
-      "requires": "org.manager",
+      "requires": "org.can[data.manage]",
       "constants": {
         "action": {
           "created": "Delete it",
@@ -939,11 +944,12 @@
       ]
     },
     {
+
       "id": "core.settings.data.sitePackageUndo",
       "title": "Undo the site package import",
       "icon": "arrow.uturn.backward|undo",
       "scope": "org",
-      "requires": "org.manager",
+      "requires": "org.can[data.manage]",
       "load": {
         "undo": {
           "url": "/api/hosts/import",

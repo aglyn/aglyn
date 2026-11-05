@@ -7,7 +7,7 @@
       "subtitle": "How AI behaves for this workspace",
       "icon": "gearshape|settings",
       "scope": "org",
-      "requires": "org.manager",
+      "requires": "org.can[org.settings]",
       "constants": {
         "defaults": {
           "provider": "platform",
@@ -1153,7 +1153,7 @@
       "zones": [
         "sitePluginSettings"
       ],
-      "requires": "org.manager && params.pluginId == ai",
+      "requires": "site.can[site.manage] && params.pluginId == ai",
       "constants": {
         "defaults": {
           "provider": "platform",
@@ -2610,7 +2610,7 @@
       "subtitle": "How Commerce behaves for this workspace",
       "icon": "gearshape|settings",
       "scope": "org",
-      "requires": "org.manager",
+      "requires": "org.can[org.settings]",
       "constants": {
         "defaults": {
           "posMaxDiscountPct": 100,
@@ -2817,7 +2817,7 @@
       "zones": [
         "sitePluginSettings"
       ],
-      "requires": "org.manager && params.pluginId == commerce",
+      "requires": "site.can[site.manage] && params.pluginId == commerce",
       "constants": {
         "defaults": {
           "posMaxDiscountPct": 100,
@@ -3244,7 +3244,7 @@
       "subtitle": "How Bookings behaves for this workspace",
       "icon": "gearshape|settings",
       "scope": "org",
-      "requires": "org.manager",
+      "requires": "org.can[org.settings]",
       "constants": {
         "defaults": {
           "maxDaysAhead": 60,
@@ -3304,7 +3304,7 @@
       "zones": [
         "sitePluginSettings"
       ],
-      "requires": "org.manager && params.pluginId == bookings",
+      "requires": "site.can[site.manage] && params.pluginId == bookings",
       "constants": {
         "defaults": {
           "maxDaysAhead": 60,

@@ -165,6 +165,7 @@ public struct ScreenSession: Sendable {
       ],
       "app": [
         "origin": .string(origin), "passkeyRp": passkeyRelyingParty.map(JSONValue.string) ?? .null,
+        "permissionRefusal": .object(Dictionary(uniqueKeysWithValues: ContractValues.shared.orgRoleGrants.permissions.map { ($0.key, JSONValue.string(permissionRefusalText(ContractValues.shared.orgRoleGrants, key: $0.key))) })),
         "permissionCatalog": rows(narrowable: false), "narrowablePermissions": rows(narrowable: true),
       ],
       "now": ScreenSession.now(),
