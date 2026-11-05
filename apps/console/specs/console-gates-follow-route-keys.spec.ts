@@ -311,3 +311,86 @@ describe('the publisher keys: one key for the control, the route and the rule (A
     expect(rules).toContain("memberKeyOrOverride('outreach.use', ['owner', 'admin'])")
   })
 })
+
+/**
+ * THE READERS THAT ASKED A ROLE AND A KEY ASK THE KEY ALONE (AGL-4047).
+ *
+ * The CRM's people, a list's people, the AI usage and billing documents and
+ * the hardware orders were read in the rules as "the owner/admin(/editor)
+ * role AND the key, or the key stamped". The key's default is exactly that
+ * role list, so `memberKeyOrOverride(key, thoseRoles)` gives every member the
+ * same answer with no role named. Each row holds the rule to the key the
+ * console registers the surface with and the route that serves the same data
+ * asks, so a route or a page that moves to another key fails here.
+ */
+const PLUGINS = '../../libs/plugins'
+const READER_GATES: Array<{
+  reader: string
+  rule: string
+  console: Array<[string, string]>
+  routes: Array<[string, RegExp]>
+}> = [
+  {
+    reader: 'the CRM’s people (`canReadScopedPeople`)',
+    rule: "function canReadScopedPeople() {\nreturn canReadScoped() &&\nmemberKeyOrOverride('data.manage', ['owner', 'admin', 'editor']);\n}",
+    console: [[`${PLUGINS}/crm/src/lib/plugin.ts`, "permission: 'data.manage'"]],
+    routes: [
+      [`${PLUGINS}/crm/src/lib/server/record-facts.ts`, /memberHasOrgPermission\(orgId, member, 'data\.manage'\)/],
+      [`${PLUGINS}/crm/src/lib/server/org-caller.ts`, /memberHasOrgPermission\(orgId, member, 'data\.manage'\)/],
+    ],
+  },
+  {
+    reader: 'a list’s people (`isOrgWideAudienceManager`)',
+    rule: "function isOrgWideAudienceManager() {\nreturn isOrgWideMember() &&\nmemberKeyOrOverride('data.manage', ['owner', 'admin', 'editor']);\n}",
+    console: [[`${PLUGINS}/email/src/lib/plugin.ts`, "permission: 'data.manage'"]],
+    routes: [],
+  },
+  {
+    reader: 'a person’s AI usage months (`aiUsageByUser`)',
+    rule: "(memberKeyOrOverride('billing.view', ['owner', 'admin']) ||\nmemberKeyOrOverride('org.auditLog', ['owner', 'admin'])));",
+    console: [[`${PLUGINS}/ai/src/lib/plugin.ts`, "permission: 'billing.view'"]],
+    routes: [
+      [`${PLUGINS}/ai/src/lib/server/ai-usage.ts`, /memberHasOrgPermission\(orgId, member, 'billing\.view'\)/],
+      [`${PLUGINS}/ai/src/lib/server/ai-usage.ts`, /memberHasOrgPermission\(orgId, member, 'org\.auditLog'\)/],
+    ],
+  },
+  {
+    reader: 'the AI allotments, billing standing and overage charges',
+    rule: "(memberKeyOrOverride('billing.view', ['owner', 'admin']) ||\nmemberKeyOrOverride('billing.manage', ['owner', 'admin']))",
+    console: [[`${PLUGINS}/ai/src/lib/plugin.ts`, "permission: 'billing.view'"]],
+    routes: [
+      [`${PLUGINS}/ai/src/lib/server/ai-allotments.ts`, /memberHasOrgPermission\(orgId, member, 'billing\.view'\)/],
+      [`${PLUGINS}/ai/src/lib/server/ai-allotments.ts`, /memberHasOrgPermission\(orgId, member, 'billing\.manage'\)/],
+      [`${PLUGINS}/ai/src/lib/server/billing-overage.ts`, /memberHasOrgPermission\(orgId, actor\?\.member, 'billing\.manage'\)/],
+    ],
+  },
+  {
+    reader: 'the hardware orders (`hardwareOrders`)',
+    rule: "(memberKeyOrOverride('managePos', ['owner', 'admin', 'editor']) ||\nmemberStamps('posBuyHardware')));",
+    console: [],
+    routes: [[`${PLUGINS}/commerce/src/lib/server/pos-auth.ts`, /permissions\?\.\['managePos'\] === true/]],
+  },
+]
+
+describe('the readers that asked a role and a key ask the key alone (AGL-4047)', () => {
+  const rules = read('../../cloud/firebase-firestore.deploy.rules')
+
+  it.each(READER_GATES)('$reader', ({ rule, console: surfaces, routes }) => {
+    expect(rules).toContain(rule)
+    for (const [surface, gate] of surfaces) expect(read(surface)).toContain(gate)
+    for (const [route, gate] of routes) expect(read(route)).toMatch(gate)
+  })
+
+  it('the four AI usage and billing reads no longer ask the role', () => {
+    expect(rules.match(/memberKeyOrOverride\('billing\.manage', \['owner', 'admin'\]\)/g)).toHaveLength(3)
+    for (const match of ['aiUsageByUser/{subjectUid}/months/{month}', 'aiAllotments/{subject}', 'aiBilling/{document}', 'aiOverageCharges/{chargeId}']) {
+      const block = rules.slice(rules.indexOf(`match /${match} {`), rules.indexOf('allow write: if false;', rules.indexOf(`match /${match} {`)))
+      expect(block.length).toBeGreaterThan(0)
+      expect(block).not.toContain('canManageOrg()')
+    }
+  })
+
+  it('the helper whose absent answer was "allowed" is gone with its last caller', () => {
+    expect(rules).not.toMatch(/\bmemberResolves\(/)
+  })
+})
