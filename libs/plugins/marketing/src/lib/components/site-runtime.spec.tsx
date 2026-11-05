@@ -852,3 +852,51 @@ describe('authored analytics events on the real render path (AGL-1587)', () => {
     expect(calls[0][2]).toEqual({ plan: 'starter', placement: 'hero' })
   })
 })
+
+/**
+ * A header lying over the hero is absolute to the top of the page, so the bar
+ * cannot push it down. It reads the bar's published height instead (AGL-4176).
+ */
+describe('the announcement bar publishes its height (AGL-4176)', () => {
+  const VAR = '--aglyn-announcement-bar-height'
+
+  afterEach(() => {
+    jest.restoreAllMocks()
+    document.documentElement.style.removeProperty(VAR)
+  })
+
+  it('while it is up, and clears it when dismissed', async () => {
+    window.localStorage.clear()
+    jest
+      .spyOn(HTMLElement.prototype, 'getBoundingClientRect')
+      .mockReturnValue({ height: 37 } as DOMRect)
+    const { unmount } = render(
+      <MarketingSiteRuntime
+        hostId="host-1"
+        screens={{}}
+        page={{
+          announcementBar: {
+            overlayId: 'bar-1',
+            contentHash: 'hash-1',
+            text: 'Pre-orders are open',
+            dismissible: true,
+          } as never,
+          popup: null,
+          experiments: [],
+          automationOverlays: null,
+          clientAutomations: [],
+        }}
+      />,
+    )
+
+    await waitFor(() =>
+      expect(document.documentElement.style.getPropertyValue(VAR)).toBe('37px'),
+    )
+
+    fireEvent.click(screen.getByRole('button', { name: 'Dismiss announcement' }))
+    await waitFor(() =>
+      expect(document.documentElement.style.getPropertyValue(VAR)).toBe(''),
+    )
+    unmount()
+  })
+})
