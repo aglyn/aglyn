@@ -136,7 +136,7 @@ class OrdersListModel(
 }
 
 /** The dialogs an order's screen opens, one at a time. */
-enum class OrderDialog { FULFILL, DELIVERED, REFUND, CANCEL, RECEIPT, NOTE, EDIT_TRACKING, CANCEL_SHIPMENT, REFUND_LINE }
+enum class OrderDialog { FULFILL, DELIVERED, REFUND, CANCEL, RECEIPT, INVOICE, NOTE, EDIT_TRACKING, CANCEL_SHIPMENT, REFUND_LINE }
 
 /**
  * One order's actions: which dialog is open, whether its call is running,
@@ -177,6 +177,14 @@ class OrderActionsModel(
 
   /** The store's currency, which a typed shipping cost is in. */
   suspend fun storeCurrency(): String = api.storeCurrency()
+
+  /** The business name and contact address the invoice form shows. */
+  suspend fun invoiceSite(): InvoiceSite = api.invoiceSite()
+
+  /** The form changed: the next press is a new attempt, not a retry of the last one. */
+  fun formChanged() {
+    attemptKey = mintKey()
+  }
 
   fun close() {
     if (!busy) dialog = null

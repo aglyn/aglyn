@@ -193,10 +193,15 @@ class ConsoleApiClient(
    * and the file name its `Content-Disposition` gives. A refusal is a
    * [ConsoleApiError] with the route's own words, as [request] throws it.
    */
-  suspend fun download(path: String, body: JsonElement? = null, method: ApiMethod = ApiMethod.POST): DownloadedFile {
+  suspend fun download(
+    path: String,
+    body: JsonElement? = null,
+    method: ApiMethod = ApiMethod.POST,
+    query: Map<String, Any?> = emptyMap(),
+  ): DownloadedFile {
     val bearer = getIdToken(false) ?: throw ConsoleApiError("Sign in to continue.", 401, null)
     val response = try {
-      http.request(urlFor(path)) {
+      http.request(urlFor(path, query)) {
         this.method = HttpMethod.parse(method.name)
         header("Authorization", "Bearer $bearer")
         if (body != null) {
