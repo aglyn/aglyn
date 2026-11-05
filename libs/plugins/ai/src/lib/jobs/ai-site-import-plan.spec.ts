@@ -88,6 +88,7 @@ import {
   aiSiteImportLogoHoldsName,
   aiSiteImportMenuPageIds,
   aiSiteImportPageJob,
+  aiSiteImportRunMinimumMs,
   createAiJobImportStep,
   type AiSiteImportStepDeps,
 } from './ai-job-import-step'
@@ -106,6 +107,7 @@ import {
   aiSiteImportPictureTally,
 } from './ai-site-import-pictures'
 import {
+  AI_SITE_IMPORT_PLAN_BUDGET,
   AI_SITE_IMPORT_PLAN_TEXT,
   AI_SITE_IMPORT_PLAN_TOOL,
   aiRunSiteImportPlan,
@@ -247,7 +249,7 @@ describe('the plan’s tool and text', () => {
   })
 
   it('caches its text, says what it may not invent, and names no site', () => {
-    expect(aiSiteImportPlanInstructions()[0]).toMatchObject({ text: AI_SITE_IMPORT_PLAN_TEXT, cacheBreakpoint: true })
+    expect(aiSiteImportPlanInstructions().at(-1)).toMatchObject({ text: AI_SITE_IMPORT_PLAN_TEXT, cacheBreakpoint: true })
     expect(AI_SITE_IMPORT_PLAN_TEXT).toMatch(/Never write a name, number, price, date, testimonial, client, award, credential, address or guarantee/)
     expect(AI_SITE_IMPORT_PLAN_TEXT).not.toMatch(/Larkspur|squarespace|\.com\b/i)
   })
@@ -404,6 +406,13 @@ describe('the plan’s pass', () => {
     // A later wave is never planned.
     const later = { ...state, waves: [{ ...state.waves[0], status: 'done' as const }, { ...state.waves[1], status: 'running' as const, startedAt: 'x', generative: true as const }] } as AiSiteImportState
     expect(aiSiteImportNextWork(later, rows(later))).not.toMatchObject({ kind: 'plan' })
+  })
+
+  it('holds a beat long enough for its answer and its one re-ask, and asks none for the owner’s say-so', () => {
+    const state = site()
+    expect(aiSiteImportRunMinimumMs(importJob(state, rows(state)))).toBe(AI_SITE_IMPORT_PLAN_BUDGET.minimumMs)
+    const shown = planned()
+    expect(aiSiteImportRunMinimumMs(importJob(shown, rows(shown)))).toBe(0)
   })
 
   it('stamps a generative wave under Improve it, with new copy or without, and never under Keep my site', () => {

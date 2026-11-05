@@ -154,7 +154,7 @@ export const AI_SITE_IMPORT_PLAN_TEXT = [
 
 /** A plan's system blocks: the platform's text, cached across sites. The site's own words ride the user turn. */
 export function aiSiteImportPlanInstructions(): readonly AiSystemBlock[] {
-  return [{ text: AI_SITE_IMPORT_PLAN_TEXT, cacheBreakpoint: true }, { text: UNTRUSTED_TEXT_RULE }]
+  return [{ text: UNTRUSTED_TEXT_RULE }, { text: AI_SITE_IMPORT_PLAN_TEXT, cacheBreakpoint: true }]
 }
 
 /*------------------------------------------

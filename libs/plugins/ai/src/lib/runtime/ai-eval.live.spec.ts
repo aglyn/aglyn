@@ -78,7 +78,8 @@ async function readFixture(file: string): Promise<Buffer> {
 
 const files = (dir: string): string[] =>
   readdirSync(dir, { withFileTypes: true }).flatMap((entry) =>
-    entry.isDirectory() ? files(join(dir, entry.name)) : entry.name.endsWith('.json') ? [join(dir, entry.name)] : [],
+    // A generative Improve it's recordings sit beside the cases (AGL-4152), read by their own live spec.
+    entry.isDirectory() ? files(join(dir, entry.name)) : entry.name.endsWith('.json') && !entry.name.startsWith('import-improve-') ? [join(dir, entry.name)] : [],
   )
 
 const live = aiEvalLiveAllowed(process.env)

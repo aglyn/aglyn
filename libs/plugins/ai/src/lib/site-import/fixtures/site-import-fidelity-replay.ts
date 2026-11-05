@@ -346,6 +346,42 @@ function replayState(name: SiteImportReplayHome): AiSiteImportState {
   }
 }
 
+/**
+ * A recorded site as a generative Improve it's plan reads it (AGL-4152): its
+ * first wave read, its home page with its blocks and layout, and each page its
+ * menu names, its title the menu's label: what the plan may organize.
+ */
+export function siteImportReplayPlanState(name: SiteImportReplayHome): AiSiteImportState {
+  const base = replayState(name)
+  const doc = siteImportReplayDocument(name)
+  const origin = new URL(doc.url).origin
+  const home = base.pages[0] as AiSiteImportPage
+  const paths = new Set(base.pages.map((page) => page.path))
+  const listed = (base.home?.nav?.items ?? []).flatMap((group) => [{ label: group.label, href: group.href }, ...group.items.map((entry) => ({ label: entry.label, href: entry.href }))])
+  const pages: AiSiteImportPage[] = [{ ...home, title: doc.title, build: 'arranged', wording: 'improved', read: { at: NOW.toISOString(), title: doc.title, text: '', sections: [], images: [], blocks: doc.blocks, words: 300, forms: [], layout: doc.layout ?? null } }]
+  for (const entry of listed) {
+    let path = ''
+    try {
+      const url = new URL(entry.href ?? '')
+      path = url.origin === origin ? url.pathname.replace(/\/+$/, '') || '/' : ''
+    } catch {
+      continue
+    }
+    if (!path || path === '/' || paths.has(path) && pages.some((page) => page.path === path)) continue
+    paths.add(path)
+    const at = pages.length
+    pages.push({ slot: `p${at}`, url: `${origin}${path}`, path, title: entry.label, group: 'main', wave: 1, draftId: `draft${at}`, slug: path.split('/').filter(Boolean).join('-'), words: 300, images: 0, build: 'arranged', wording: 'improved', read: { at: NOW.toISOString(), title: entry.label, text: '', sections: [], images: [], blocks: [{ kind: 'heading', level: 1, text: entry.label, region: 'main' }], words: 300, forms: [], layout: null } })
+  }
+  return {
+    ...base,
+    pages,
+    finish: 'improve',
+    wording: true,
+    generative: true,
+    waves: base.waves.map((wave) => ({ ...wave, slots: pages.map((page) => page.slot), finish: 'improve', wording: true, generative: true as const })),
+  }
+}
+
 /** The pictures a home page's menus show, each once: what the look pass brings in. */
 function siteImportMenuPictures(home: AiSiteImportState['home']): string[] {
   const urls = (home?.nav?.items ?? []).flatMap((group) => (group.columns ?? []).flatMap((column) => (column.image ? [column.image.url] : [])))

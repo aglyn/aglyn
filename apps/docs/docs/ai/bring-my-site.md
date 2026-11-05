@@ -163,6 +163,52 @@ how it was built, for example **Main pages · Keep my site** or **Main pages · 
 
 An import started before this choice existed is built as **Keep my site**.
 
+### A planned, rewritten Improve it {#improve-planned}
+
+**A planned, rewritten Improve it is rolling out**, so your workspace may not have it yet.
+Where it is on, **Improve it** does more than redraw your pages. It reorganizes your site
+and can add to it. Without it, Improve it works as described above.
+
+**Your new site.** When you start your first wave, Aglyn AI reads your pages and plans the
+site before anything is built, then waits for you. **Your new site** shows what it plans:
+
+- what your site is and who it serves;
+- your new menu, with like pages grouped under one entry;
+- your header's main button and where it goes;
+- your footer's columns;
+- one new page your site lacks, if there is one it can write, with a switch to leave it
+  out. It is on unless you switch it off, it counts toward your plan's page limit, and it
+  is not proposed when your plan has no room;
+- **Create pictures with AI where needed**, a switch that is off until you turn it on.
+
+Choose **Build my new site** to go on. Every page of every wave is then drawn to that plan,
+so your whole site reads as one design. If the plan does not pass our checks, your import's
+page says so and your own menu and footer stand.
+
+**Also write new copy** takes the place of **Also improve my wording** and is on unless you
+switch it off. Aglyn AI plans each main page again, adds the sections a visitor of your kind
+of business looks for, and writes new headings, paragraphs and buttons from what your site
+says. It never makes up a name, number, price, date, testimonial, client, award, credential,
+address or guarantee, and every picture, form, plan, table, quote and video your page has
+stays on it. If a redesign does not pass those checks, its row says **Layout kept: the
+redesign did not pass**, and the page keeps your words. With the switch off, every word stays
+as you wrote it, and your layout and menu are still redesigned. Policy pages and pages of a
+collection, such as blog posts, always keep every word.
+
+**Pictures.** Where a redesigned page needs a picture, it takes one from these, in order: your
+page's own photos, then the photos your other pages left off, then the stock library, which
+uses no AI credits and keeps its photographer's credit. With **Create pictures with AI where
+needed** on, a page's opening picture or a section's first picture that none of those fits
+can be created for you, up to two a page, never of a person. Each uses the credits a picture
+in [Create images](./create-images.md) does, and you see the most it can add before you start.
+A picture nothing fits is left out, and the row around it closes up. Your own opening photo
+always comes before a new one.
+
+**What it says it did.** A page's row says **Redesigned by Aglyn AI**, how many sections it
+added, and which, for example **New: Why us, FAQ (4)**, and how many of its pictures came from
+stock or were created. Each wave lists its **What's new** once it is in. A wave's cost includes
+the plan, the new page and, where you turned them on, the most its pictures can add.
+
 ## Waves {#waves}
 
 - **The first wave** brings in your main pages: home, then the pages in your menu,

@@ -42,6 +42,7 @@ import {
   aiSiteImportGeneratedPicturesOn,
   aiSiteImportNextWave,
   aiSiteImportPagesText,
+  aiSiteImportPlanAccepted,
   aiSiteImportPlanAwaits,
   aiSiteImportQuoteText,
   aiSiteImportReadStops,
@@ -342,7 +343,7 @@ export function aiSiteImportWaveRows(
       oldPage: page.url,
       // Beside the old page's own words, its main region's as the wave read them: its menu and footer are the site's (AGL-4084).
       // A page whose words were improved keeps its facts, not its count (AGL-4152).
-      words: page.brought
+      words: page.brought && page.origin !== 'proposed'
         ? page.wording === 'improved'
           ? AI_SITE_IMPORT_REWORDED_WORDS
           : `${page.brought.words.toLocaleString('en-US')} of ${(page.read?.words ?? page.words).toLocaleString('en-US')} words`
@@ -646,6 +647,22 @@ export function aiSiteImportPicturesSwitchText(state: AiSiteImportState): string
 /** Whether generated pictures are switched on now, for the panel's first draw. */
 export function aiSiteImportPlanFieldOf(state: AiSiteImportState | null | undefined): { addPage: boolean; pictures: boolean } {
   return { addPage: state?.plan?.proposed?.on !== false, pictures: aiSiteImportGeneratedPicturesOn(state) }
+}
+
+/** Whether a plan's generated pictures switch means anything: only pages with new copy ask for a picture. */
+export function aiSiteImportPlanTakesPictures(state: Pick<AiSiteImportState, 'pages'>): boolean {
+  return state.pages.some((page) => page.wording === 'improved' && !page.refused)
+}
+
+/** The wave's quote as the plan's switches stand now (AGL-4152), before they are saved: with or without its new page, and its pictures. */
+export function aiSiteImportPlanQuote(job: Pick<AiJobSummary, 'items' | 'siteImport'>, field: { addPage: boolean; pictures: boolean }): string | null {
+  const state = job.siteImport ?? null
+  const plan = state?.plan
+  if (!state || !plan) return null
+  const asked: AiSiteImportState = { ...state, generatedPictures: field.pictures, plan: { ...plan, proposed: plan.proposed ? { ...plan.proposed, on: field.addPage } : null } }
+  const next = aiSiteImportPlanAccepted(asked, job.items ?? [])
+  const wave = aiSiteImportRunningWave(next.state)
+  return wave ? aiSiteImportWaveQuote({ items: next.items, siteImport: next.state }, wave) : null
 }
 
 /** One page's lines of a wave's "What's new" (AGL-4152): its new sections, and its pictures. */

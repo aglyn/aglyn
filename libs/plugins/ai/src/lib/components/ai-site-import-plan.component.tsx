@@ -18,13 +18,12 @@
 'use client'
 
 import { Card, CardContent, CardHeader, Chip, Divider, FormControlLabel, Stack, Switch, Typography } from '@mui/material'
-import { useId } from 'react'
-import type { AiJobSummary } from '../model/ai-jobs.types'
+import { useId, type ReactNode } from 'react'
 import type { AiSiteImportState, AiSiteImportWave } from '../model/ai-site-import'
-import { AI_SITE_IMPORT_PLAN_COPY_TEXT, aiSiteImportPicturesSwitchText, aiSiteImportPlanViewOf, aiSiteImportWhatsNew } from '../model/ai-site-import-view'
+import { AI_SITE_IMPORT_PLAN_COPY_TEXT, aiSiteImportPicturesSwitchText, aiSiteImportPlanTakesPictures, aiSiteImportPlanViewOf, aiSiteImportWhatsNew } from '../model/ai-site-import-view'
 
 /** One line of the plan: a small label over what it says. */
-function PlanRow({ label, children }: { label: string; children: React.ReactNode }) {
+function PlanRow({ label, children }: { label: string; children: ReactNode }) {
   return (
     <Stack spacing={0.5}>
       <Typography variant="overline" color="text.secondary" component="h3">
@@ -59,7 +58,6 @@ export interface AiSiteImportPlanField {
 }
 
 export interface AiSiteImportPlanPanelProps {
-  job: Pick<AiJobSummary, 'items' | 'siteImport'>
   state: AiSiteImportState
   field: AiSiteImportPlanField
   /** Absent, the plan is read only: it was accepted, and what it switched is built. */
@@ -81,7 +79,7 @@ export function AiSiteImportPlanPanel({ state, field, onChange, disabled }: AiSi
   const copy = AI_SITE_IMPORT_PLAN_COPY_TEXT
   return (
     <Card variant="outlined" sx={{ borderRadius: 2 }}>
-      <CardHeader title={copy.heading} subheader={view.what} slotProps={{ title: { variant: 'subtitle1', component: 'h2' }, subheader: { variant: 'body2' } }} />
+      <CardHeader title={copy.heading} subheader={`${view.what} For ${view.audience}.`} slotProps={{ title: { variant: 'subtitle1', component: 'h2' }, subheader: { variant: 'body2' } }} />
       <Divider />
       <CardContent>
         <Stack spacing={2.5}>
@@ -129,7 +127,7 @@ export function AiSiteImportPlanPanel({ state, field, onChange, disabled }: AiSi
               </Stack>
             </Stack>
           ) : null}
-          {view.editable && onChange ? (
+          {view.editable && onChange && aiSiteImportPlanTakesPictures(state) ? (
             <Stack spacing={0.5}>
               <FormControlLabel
                 control={

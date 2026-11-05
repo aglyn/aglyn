@@ -66,6 +66,7 @@ import {
   aiSiteImportPhaseOf,
   aiSiteImportPlanFellBackText,
   aiSiteImportPlanFieldOf,
+  aiSiteImportPlanQuote,
   aiSiteImportPlanText,
   aiSiteImportRunningLede,
   aiSiteImportStartAction,
@@ -245,7 +246,9 @@ export function AiSiteImportJob({ job, orgId, orgSlug, host, siteName, user, bus
   const phase = aiSiteImportPhaseOf(job)
   const state = job.siteImport ?? null
   const start = aiSiteImportStartAction(job)
-  const startAll = onStartAll ? aiSiteImportStartAllAction(job) : null
+  // The plan's review (AGL-4152): what it shows and what its owner switches, before anything is built.
+  const planWaits = aiSiteImportPlanAwaits(state)
+  const startAll = onStartAll && !planWaits ? aiSiteImportStartAllAction(job) : null
   // Keep my site or Improve it (AGL-4152), changeable while the next wave has not started.
   const choosable = start?.wave.status === 'waiting'
   const [field, setField] = useState<AiSiteImportFinishField>(() => aiSiteImportFinishFieldOf(state))
@@ -257,9 +260,7 @@ export function AiSiteImportJob({ job, orgId, orgSlug, host, siteName, user, bus
     if (!choosing) setField(aiSiteImportFinishFieldOf({ finish: storedFinish, wording: storedWording }))
   }, [storedFinish, storedWording, choosing])
   const choice = choosable ? aiSiteImportFieldChoice(field) : undefined
-  // The plan's review (AGL-4152): what it shows and what its owner switches, before anything is built.
   const generativeOffer = state?.generative === true
-  const planWaits = aiSiteImportPlanAwaits(state)
   const [planField, setPlanField] = useState(() => aiSiteImportPlanFieldOf(state))
   const planFallBack = aiSiteImportPlanFellBackText(state)
   const held = aiSiteImportHeldCopy(job)
@@ -318,7 +319,7 @@ export function AiSiteImportJob({ job, orgId, orgSlug, host, siteName, user, bus
       </Stack>
       <Stack direction="row" spacing={0.5} sx={{ alignItems: 'center' }}>
         <Typography variant="body2" color="text.secondary">
-          {`${start.quote}, from your AI credits. Its pages land in your site’s preview, or as drafts where the site is not in preview.`}
+          {`${(planWaits ? aiSiteImportPlanQuote(job, planField) : null) ?? start.quote}, from your AI credits. Its pages land in your site’s preview, or as drafts where the site is not in preview.`}
         </Typography>
         <HelpTip {...AI_SITE_IMPORT_HELP.waves} ariaLabel="How waves work" />
       </Stack>
@@ -403,7 +404,7 @@ export function AiSiteImportJob({ job, orgId, orgSlug, host, siteName, user, bus
     return (
       <Frame siteName={siteName} heading="Your new site is planned" lede={job.review?.message ?? undefined}>
         {notice && <Alert severity="warning">{notice}</Alert>}
-        <AiSiteImportPlanPanel job={job} state={state} field={planField} onChange={setPlanField} disabled={busy} />
+        <AiSiteImportPlanPanel state={state} field={planField} onChange={setPlanField} disabled={busy} />
         {start ? (
           <Card variant="outlined" sx={{ borderRadius: 2 }}>
             <Typography variant="subtitle1" component="h2" sx={{ px: { xs: 2, sm: 3 }, pt: { xs: 2, sm: 3 } }}>
@@ -489,7 +490,7 @@ export function AiSiteImportJob({ job, orgId, orgSlug, host, siteName, user, bus
       >
         {notice && <Alert severity="warning">{notice}</Alert>}
         {planFallBack ? <Alert severity="info">{planFallBack}</Alert> : null}
-        {wave.generative ? <AiSiteImportPlanPanel job={job} state={state} field={planField} /> : null}
+        {wave.generative ? <AiSiteImportPlanPanel state={state} field={planField} /> : null}
         <Card variant="outlined" sx={{ borderRadius: 2 }}>
           <Typography variant="subtitle1" component="h2" sx={{ px: { xs: 2, sm: 3 }, pt: { xs: 2, sm: 3 } }}>
             {aiSiteImportWaveHeading(state, wave)}

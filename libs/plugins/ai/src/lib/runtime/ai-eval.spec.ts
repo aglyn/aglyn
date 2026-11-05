@@ -68,7 +68,8 @@ function caseFiles(dir: string): string[] {
   return readdirSync(dir, { withFileTypes: true }).flatMap((entry) =>
     entry.isDirectory()
       ? caseFiles(join(dir, entry.name))
-      : entry.name.endsWith('.json')
+      : // A generative Improve it's recordings sit beside the cases (AGL-4152): its own live spec reads them, and they hold no candidate.
+        entry.name.endsWith('.json') && !entry.name.startsWith('import-improve-')
         ? [join(dir, entry.name)]
         : [],
   )

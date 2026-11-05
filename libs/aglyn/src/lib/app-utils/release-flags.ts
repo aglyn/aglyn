@@ -251,9 +251,10 @@ const PLATFORM_RELEASE_FLAGS: readonly ReleaseFlagDefinition[] = [
       'off, the ownership and crawl doors answer 404.',
     defaultEnabled: true,
   },
-  // Improve it, generative (AGL-4152): under Bring my site's Improve it with
-  // copy on, a page is redesigned from a ledger of what the source holds, with
-  // new sections and new copy. Off by default and off everywhere in production
+  // Improve it, generative (AGL-4152): under Bring my site's Improve it, the
+  // site is planned before anything is built, its menu and design drawn to it,
+  // and with new copy on a page is redesigned from a ledger of what the source
+  // holds, with new sections. Off by default and off everywhere in production
   // until its paid eval and the owner's read pass; a test organization gets it
   // with the per-org override, `orgs/{orgId}.releaseFlags`. Off, Improve it is
   // exactly what `release_ai_site_import` ships today.
@@ -261,10 +262,11 @@ const PLATFORM_RELEASE_FLAGS: readonly ReleaseFlagDefinition[] = [
     key: 'release_ai_site_import_generative',
     label: 'Bring my site: generative Improve it',
     description:
-      'Under Improve it with copy on, each main page is redesigned from what ' +
-      'the source holds: pages reorganized, sections added, new copy written ' +
-      'and checked so that it invents no name, number, price or credential ' +
-      '(AGL-4152). OFF by default; on for one organization by its per-org ' +
+      'Under Improve it, the site is planned before anything is built: its ' +
+      'menu, footer, design and one proposed page. With new copy on, each main ' +
+      'page is redesigned from what the source holds: sections added, new copy ' +
+      'written and checked so that it invents no name, number, price or ' +
+      'credential (AGL-4152). OFF by default; on for one organization by its per-org ' +
       'override while it is evaluated. Off, Improve it is unchanged.',
     defaultEnabled: false,
   },
