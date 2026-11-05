@@ -1017,8 +1017,10 @@ describe('the polished blocks (AGL-3897)', () => {
     expect(html).toMatch(/>Note<\/div><div [^>]*>Leave it<br \/>at the door<\/div>/)
     expect(html).toMatch(/font-weight:700;padding-right:16px;">Total charged<\/td><td [^>]*font-weight:700;/)
     expect(html).not.toContain('Location')
-    // The plain-text part keeps the lines as written.
+    // The plain-text part keeps the lines as written, but for the one the panel drops.
     expect(text).toContain('Total charged: $24.00')
+    expect(text).toContain('Note: Leave it\nat the door')
+    expect(text).not.toContain('Location')
   })
 
   it('draws an eyebrow small, uppercase and in the brand’s text shade', () => {

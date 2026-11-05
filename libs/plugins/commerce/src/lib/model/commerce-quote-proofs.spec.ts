@@ -20,7 +20,9 @@ import { buildQuotePageView, quotePayRefusal } from './commerce-quote-pay'
 import {
   applyQuoteResponse,
   latestQuoteResponse,
+  parseQuoteLibraryProofs,
   parseQuoteResponseInput,
+  quoteLibraryProofProblem,
   quoteProofChangeRefusal,
   quoteProofInHistory,
   quoteRespondRefusal,
@@ -305,5 +307,53 @@ describe('approval and paying', () => {
     const paid = buildQuotePageView({ order: { ...answered.order, status: 'paid' }, orderId: 'q-1', storeName: 'Acme', currency: 'USD' })
     expect(paid.proofs).toHaveLength(1)
     expect(paid.respondable).toBe(false)
+  })
+})
+
+describe('proofs on a quote with no lines (AGL-4184)', () => {
+  const noLines = (proofs: QuoteProof[]): HostOrder =>
+    ({
+      number: 1,
+      status: 'pending',
+      channel: 'quote',
+      lineItems: [],
+      quote: { stage: 'draft', revision: 1, proofs, createdAtMs: 1, updatedAtMs: 1, createdBy: 'a', updatedBy: 'a' },
+    }) as unknown as HostOrder
+
+  it('keeps the last proof until there is another', () => {
+    expect(withQuoteProofRemoved(noLines([proof('a')]), 'a', BY)).toEqual({ ok: false, reason: 'needs-proof' })
+    expect(withQuoteProofRemoved(noLines([proof('a'), proof('b')]), 'a', BY)).toMatchObject({ ok: true })
+    // An id it does not hold is still that answer, not this one.
+    expect(withQuoteProofRemoved(noLines([proof('a')]), 'z', BY)).toEqual({ ok: false, reason: 'unknown-proof' })
+  })
+
+  it('starts a new revision like any other, whose proofs are still to come', () => {
+    const started = startQuoteRevision(noLines([proof('a')]), BY)
+    expect(started).toMatchObject({ ok: true, revision: 1 })
+    if ('order' in started) expect(started.order.quote?.revision).toBe(2)
+  })
+})
+
+describe('the media library files a new quote names (AGL-4184)', () => {
+  it('takes none, drops repeats and holds to what a revision holds', () => {
+    expect(parseQuoteLibraryProofs(undefined)).toEqual({ ok: true, proofs: [] })
+    const one = { mediaScope: 'org:o', mediaId: 'm' }
+    expect(parseQuoteLibraryProofs([one, one, { ...one, junk: 1 }])).toEqual({ ok: true, proofs: [one] })
+    const many = Array.from({ length: QUOTE_MAX_PROOFS + 1 }, (_entry, index) => ({ ...one, mediaId: `m${index}` }))
+    expect(parseQuoteLibraryProofs(many)).toMatchObject({ ok: false })
+  })
+
+  it('refuses anything that does not name a file', () => {
+    for (const raw of ['x', [{}], [{ mediaScope: 'org:o' }], [{ mediaScope: 1, mediaId: 2 }], [null]]) {
+      expect(parseQuoteLibraryProofs(raw)).toMatchObject({ ok: false })
+    }
+  })
+
+  it('says sooner what the server would refuse', () => {
+    const named = { mediaId: 'm', mediaScope: 'org:o' }
+    expect(quoteLibraryProofProblem({ ...named, fileName: 'a.png', contentType: 'image/png' })).toBeNull()
+    expect(quoteLibraryProofProblem({ ...named, fileName: 'a.pdf', contentType: 'application/pdf' })).toBeNull()
+    expect(quoteLibraryProofProblem({ ...named, fileName: 'clip.mp4', contentType: 'video/mp4' })).toBe('clip.mp4 can’t be used as a proof. Choose an image or a PDF.')
+    expect(quoteLibraryProofProblem({ fileName: 'a.png', contentType: 'image/png' })).toBe('That file can’t be used as a proof. Choose another.')
   })
 })

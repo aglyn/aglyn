@@ -124,6 +124,9 @@ const uploads: QuoteUploadCalls = {
     finalized.push(input)
     return { ok: true, file: { id: 'a1', name: 'logo.ai', contentType: 'application/illustrator', size: 900, path: 'hosts/site1/private/uploads/quote-artwork/q-1/a1', uploadedAtMs: 9 } }
   },
+  keepCopy: async () => {
+    throw new Error('a customer’s route keeps no copy of a library file')
+  },
   read: async (scope, id) => (scope.purpose === 'quote-artwork' && scope.purposeId === 'q-1' ? (kept.get(id) ?? null) : null),
   remove: async () => undefined,
   removeAll: async () => undefined,

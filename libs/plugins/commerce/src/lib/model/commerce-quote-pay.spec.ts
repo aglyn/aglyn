@@ -256,6 +256,8 @@ describe('the customer’s page', () => {
         'number',
         'payable',
         'paidAtMs',
+        // A proof going out before it has a price (AGL-4184).
+        'proofOnly',
         // The proofs and the customer's own answer (AGL-4096).
         'proofs',
         'receiptUrl',
@@ -611,5 +613,63 @@ describe('a store that can’t take payments (AGL-4162)', () => {
     const page = buildQuotePageView({ order: quote(), orderId: 'q-1', storeName: 'Acme Tents', currency: 'USD', paymentsReady: true })
     expect(page).toMatchObject({ payable: true, notPayableMessage: null })
     expect(quoteTaxBasisFromKey(page.taxKey)).toEqual({ kind: 'rate', pct: 8.25, label: 'Texas sales tax' })
+  })
+})
+
+describe('a proof only quote (AGL-4184)', () => {
+  const PROOF = { id: 'p1', revision: 1, name: 'Banner.png', contentType: 'image/png', size: 100, path: 'hosts/h/private/uploads/quote-proof/q-1/p1', addedAtMs: 1, addedBy: 'a' }
+  const proofOnly = (section: Record<string, unknown> = {}) =>
+    quote({ lineItems: [], totals: { itemsCents: 0, discountCents: 0, shippingCents: 0, taxCents: 0, feeCents: 0, totalCents: 0 } }, { proofs: [PROOF], discount: null, shipping: null, ...section })
+  const STORE: PayLinkStore = { tax: { mode: 'stripe_tax', pricesIncludeTax: false } as never }
+
+  it('shows its proof with Approve and Request changes, and nothing about money', () => {
+    const view = buildQuotePageView({ order: proofOnly(), orderId: 'q-1', storeName: 'Acme Tents', currency: 'USD', store: STORE, paymentsReady: true })
+    expect(view).toMatchObject({
+      proofOnly: true,
+      number: 'Proof #1042',
+      lines: [],
+      totals: { itemsCents: 0, discountCents: 0, shippingCents: 0, taxCents: 0, totalCents: 0 },
+      taxLabel: '',
+      taxAtPayment: false,
+      taxKey: null,
+      payable: false,
+      notPayableMessage: null,
+      approvalRequired: false,
+      respondable: true,
+    })
+    expect(view.proofs).toHaveLength(1)
+  })
+
+  it('asks nothing of the store: no payments notice in place of what it does not charge', () => {
+    const view = buildQuotePageView({ order: proofOnly(), orderId: 'q-1', storeName: 'Acme Tents', currency: 'USD', store: STORE, paymentsReady: false })
+    expect(view.notPayableMessage).toBeNull()
+    expect(view.payable).toBe(false)
+  })
+
+  it('does not ask for an approval before a payment it does not take', () => {
+    const view = buildQuotePageView({ order: proofOnly({ requireProofApproval: true }), orderId: 'q-1', storeName: 'Acme Tents', currency: 'USD' })
+    expect(view.approvalRequired).toBe(false)
+    expect(view.respondable).toBe(true)
+  })
+
+  it('is refused by Pay, ahead of everything a quote with a price is refused for', () => {
+    expect(quotePayRefusal(proofOnly(), 'q-1')).toBe('nothing-to-pay')
+    expect(quotePayRefusal(proofOnly({ requireProofApproval: true }), 'q-1')).toBe('nothing-to-pay')
+    expect(quotePayRefusal(proofOnly(), 'q-1', { tax: null })).toBe('nothing-to-pay')
+    expect(payLinkRefusalWithPayments(quotePayRefusal(proofOnly(), 'q-1'), false)).toBe('payments-unavailable')
+  })
+
+  it('becomes a normal quote the moment it has a line', () => {
+    const priced = quote({}, { proofs: [PROOF] })
+    const view = buildQuotePageView({ order: priced, orderId: 'q-1', storeName: 'Acme Tents', currency: 'USD' })
+    expect(view.proofOnly).toBe(false)
+    expect(view.number).toBe('Quote #1042')
+    expect(view.lines.length).toBeGreaterThan(0)
+    expect(view.totals.totalCents).toBeGreaterThan(0)
+  })
+
+  it('is not what a document with no list of lines is', () => {
+    const { lineItems: _dropped, ...partial } = quote()
+    expect(buildQuotePageView({ order: partial as HostOrder, orderId: 'q-1', storeName: '', currency: 'USD' }).proofOnly).toBe(false)
   })
 })

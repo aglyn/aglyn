@@ -300,7 +300,7 @@ describe('parseQuoteInput', () => {
   })
 
   it.each([
-    [{ lines: [] }, 'Add at least one line to the quote.'],
+    [{ lines: [] }, 'Add at least one line, or a proof, to the quote.'],
     [{ lines: [{ ...custom, quantity: 0 }] }, 'Line 1: enter a quantity from 1 to 9,999.'],
     [{ lines: [{ ...custom, name: ' ' }] }, 'Line 1: name the item.'],
     [{ lines: [{ ...custom, unitAmountCents: -1 }] }, 'Line 1: enter a price from $0 to $1,000,000.'],

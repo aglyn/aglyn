@@ -19,6 +19,7 @@
 
 import * as CommerceModel from '../../model'
 import { commerceSitePermissionRefusal } from '../../model/plugin-permissions'
+import { useMediaPicker } from '@aglyn/aglyn/app-utils/media-picker-context'
 import {
   checkVisitorUploadSelection,
   formatVisitorUploadBytes,
@@ -220,20 +221,24 @@ function QuoteResponseNote(props: {
 /**
  * A quote's proofs and revisions (AGL-4096), in its editor: the current
  * revision's proofs (a picture for an image, a chip for a PDF or a design
- * file), Add proof, what the customer last said with any files they sent,
- * "Start revision N+1", and every earlier revision as it was kept.
+ * file), Add proof and From media library (AGL-4184), what the customer last
+ * said with any files they sent, "Start revision N+1", and every earlier
+ * revision as it was kept.
  */
 export function QuoteProofsSection(props: QuoteProofsSectionProps) {
   const { hostId, quoteId, quote, canEdit, onEdited } = props
   const { data: user } = useUser()
   const { enqueueSnackbar } = useSnackbar()
+  const { pickMedia } = useMediaPicker()
   const section = quote.quote
   const revision = Math.max(1, Number(section?.revision ?? 1) || 1)
   const proofs = CommerceModel.currentQuoteProofs(section)
+  const proofOnly = CommerceModel.quoteIsProofOnly(quote)
   const latest = CommerceModel.latestQuoteResponse(section)
   const unpaid = CommerceModel.isUnpaidQuote(quote)
   const addRefusal = CommerceModel.quoteProofChangeRefusal(quote, 'add')
-  const removable = CommerceModel.quoteProofChangeRefusal(quote, 'remove') === null
+  // A quote with no lines keeps its last proof (`needs-proof`), so it offers no way to remove it.
+  const removable = CommerceModel.quoteProofChangeRefusal(quote, 'remove') === null && !(proofOnly && proofs.length === 1)
   const [sending, setSending] = useState<{ done: number; total: number } | null>(null)
   const [busy, setBusy] = useState(false)
   const [confirmingRevision, setConfirmingRevision] = useState(false)
@@ -307,6 +312,38 @@ export function QuoteProofsSection(props: QuoteProofsSectionProps) {
     [user, hostId, quoteId, proofs.length, onEdited, enqueueSnackbar],
   )
 
+  /**
+   * A file from the media library: the shared picker offers what this member
+   * can read, a private file included, and the server copies the bytes into the
+   * quote's private proofs. Only the file's library and id are sent.
+   */
+  const addFromLibrary = useCallback(async () => {
+    const picked = await pickMedia?.({ allowPrivate: true })
+    if (!picked) return
+    const problem = CommerceModel.quoteLibraryProofProblem(picked)
+    if (problem) return void enqueueSnackbar(problem, { variant: 'error', allowDuplicate: true })
+    setSending({ done: 0, total: 1 })
+    try {
+      const answer = await postQuote(user, {
+        action: 'proof-from-media',
+        hostId,
+        quoteId,
+        media: { mediaScope: picked.mediaScope, mediaId: picked.mediaId },
+      })
+      if (!answer.ok) {
+        return void enqueueSnackbar(String(answer.payload['error'] ?? 'The proof could not be added'), {
+          variant: 'error',
+          allowDuplicate: true,
+        })
+      }
+      onEdited(Number(answer.payload['updatedAtMs']) || 0)
+    } catch {
+      enqueueSnackbar('The proof could not be added', { variant: 'error', allowDuplicate: true })
+    } finally {
+      setSending(null)
+    }
+  }, [pickMedia, user, hostId, quoteId, onEdited, enqueueSnackbar])
+
   const removeProof = useCallback(
     async (proofId: string) => {
       setBusy(true)
@@ -365,7 +402,9 @@ export function QuoteProofsSection(props: QuoteProofsSectionProps) {
       <Stack spacing={0.5}>
         <Typography variant="subtitle2">{`Proofs · Revision ${revision}`}</Typography>
         <Typography variant="body2" color="text.secondary">
-          {section?.requireProofApproval
+          {proofOnly
+            ? 'The customer sees these on the proof page, with no prices, and can approve them or ask for changes.'
+            : section?.requireProofApproval
             ? 'The customer sees these on the quote page and approves them before they can pay.'
             : 'The customer sees these on the quote page, and can approve them or ask for changes. Paying doesn’t wait on it.'}
         </Typography>
@@ -381,7 +420,9 @@ export function QuoteProofsSection(props: QuoteProofsSectionProps) {
         </Stack>
       ) : (
         <Typography variant="body2" color="text.secondary">
-          {'No proofs on this revision yet. Add an image, a PDF or a design file for the customer to approve.'}
+          {proofOnly
+            ? 'No proof on this revision yet, so there is nothing to send. Add one for the customer to approve, or add items to the quote.'
+            : 'No proofs on this revision yet. Add an image, a PDF or a design file for the customer to approve.'}
         </Typography>
       )}
 
@@ -408,6 +449,16 @@ export function QuoteProofsSection(props: QuoteProofsSectionProps) {
               {sending ? `Sending ${sending.done + 1} of ${sending.total}…` : 'Add proof'}
             </Button>
           </BlockedControl>
+          {pickMedia ? (
+            <BlockedControl
+              blocked={!canEdit || Boolean(addRefusal)}
+              reason={!canEdit ? REFUSAL : addRefusal ? CommerceModel.quoteProofRefusalMessage(addRefusal) : ''}
+            >
+              <Button variant="outlined" size="small" disabled={busy || Boolean(sending)} onClick={() => void addFromLibrary()}>
+                {'From media library'}
+              </Button>
+            </BlockedControl>
+          ) : null}
           <BlockedControl blocked={!canEdit} reason={REFUSAL}>
             <Button size="small" disabled={busy || Boolean(sending)} onClick={() => setConfirmingRevision(true)}>
               {`Start revision ${revision + 1}`}

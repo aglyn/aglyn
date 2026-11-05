@@ -42,7 +42,7 @@ function order(quote: Partial<NonNullable<HostOrder['quote']>> = {}): HostOrder 
     number: 1042,
     status: 'pending',
     channel: 'quote',
-    lineItems: [],
+    lineItems: [{ productId: '', custom: true, name: 'Banner', quantity: 1, unitAmountCents: 125_000 }],
     totals: { itemsCents: 125_000, discountCents: 0, shippingCents: 0, taxCents: 0, feeCents: 0, totalCents: 125_000 },
     quote: {
       stage: 'draft',
@@ -255,5 +255,61 @@ describe('the quote email says what it is and what to do next (AGL-4097)', () =>
       const name = token.replace(/[{}\s]/g, '')
       if (!name.startsWith('host.')) expect(declared.has(name)).toBe(true)
     }
+  })
+})
+
+describe('a proof with no price yet (AGL-4184)', () => {
+  const proofOnly = (quote: Partial<NonNullable<HostOrder['quote']>> = {}) => ({
+    ...order({ proofs: [proof('p1', 'banner-front.png', 'image/png'), proof('p3', 'banner.ai', 'application/postscript')], ...quote }),
+    lineItems: [],
+    totals: { itemsCents: 0, discountCents: 0, shippingCents: 0, taxCents: 0, feeCents: 0, totalCents: 0 },
+  })
+
+  it('reads as a proof, and names no price, no PDF and no payment', () => {
+    const content = quoteEmailContent(input({ order: proofOnly(), subject: 'Proof #1042 from Northwind Signs' }))
+    expect(content.proofOnly).toBe(true)
+    expect(content.approvalFirst).toBe(false)
+    expect(content.tokens).toMatchObject({
+      'quote.label': 'Proof',
+      'quote.total': '',
+      'quote.heading': 'Your proof from Northwind Signs',
+      'quote.intro': 'Northwind Signs sent you a proof to look over.',
+      'quote.nextStep': 'Look over the proof, then approve it or ask for changes on your proof page.',
+      'quote.buttonLabel': 'Review the proof',
+    })
+    const { html, text } = render(content)
+    expect(text).toContain('Northwind Signs · Proof #1042')
+    expect(text).toContain('Proof: #1042')
+    expect(text).toContain('Revision: 1')
+    expect(text).toContain(`Review the proof: ${PAY_URL}`)
+    expect(text).toContain('See it on your proof page.')
+    for (const said of [text, content.text, html]) {
+      expect(said).not.toContain('Total')
+      expect(said).not.toContain('$')
+      expect(said).not.toContain('PDF')
+      expect(said.replaceAll('/pay-quote', '')).not.toMatch(/\bpay\b/i)
+    }
+    expect(content.text).toContain('Proof: #1042\nRevision: 1')
+  })
+
+  it('says its new revision is an updated proof, and that the old link moved on', () => {
+    const content = quoteEmailContent(input({ order: proofOnly({ revision: 2, sends: [sent(1)] }), linkReplaced: true }))
+    expect(content.tokens['quote.heading']).toBe('Your updated proof')
+    expect(content.tokens['quote.intro']).toBe(
+      'Northwind Signs updated your proof. This is revision 2, and it replaces the one sent before. ' +
+        'The link in the earlier email no longer opens the proof, so use the button below.',
+    )
+  })
+
+  it('says an approved proof is approved, and that changes can still be asked for', () => {
+    const content = quoteEmailContent(input({ order: proofOnly({ approvedRevision: 1 }) }))
+    expect(content.tokens['quote.nextStep']).toBe('You approved this proof. You can still ask for changes on your proof page.')
+  })
+
+  it('goes back to a quote’s words the moment it has a line', () => {
+    const content = quoteEmailContent(input({ order: order({ proofs: [proof('p1', 'banner-front.png', 'image/png')] }) }))
+    expect(content.proofOnly).toBe(false)
+    expect(content.tokens['quote.label']).toBe('Quote')
+    expect(content.tokens['quote.total']).toBe('$1,250.00')
   })
 })

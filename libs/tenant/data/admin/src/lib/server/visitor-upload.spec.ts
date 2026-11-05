@@ -24,6 +24,7 @@ import {
   deleteVisitorUpload,
   deleteVisitorUploads,
   finalizeVisitorUpload,
+  keepVisitorUploadCopy,
   mintVisitorUploadTicket,
   readVisitorUpload,
   sendVisitorUploadFile,
@@ -95,6 +96,16 @@ function fileOf(path: string): VisitorUploadObject {
       if (!stored) throw new Error('No such object')
       objects.set(destination, { ...stored })
       objects.delete(path)
+    },
+    copy: async (destination, options) => {
+      const stored = objects.get(path)
+      if (!stored) throw new Error('No such object')
+      // A metadata body replaces the source's, as a rewrite's does.
+      objects.set(destination, {
+        bytes: Buffer.from(stored.bytes),
+        contentType: options?.contentType ?? stored.contentType,
+        metadata: options?.metadata ? { metadata: options.metadata } : stored.metadata,
+      })
     },
     setMetadata: async (metadata) => {
       const stored = objects.get(path)
@@ -519,5 +530,113 @@ describe('storage (AGL-4096)', () => {
     expect(file.size).toBe(PNG.length)
     expect(gateAsked).toEqual([])
     expect(counted).toEqual([{ hostId: 'site1', bytes: PNG.length, files: 1 }])
+  })
+})
+
+describe('keeping a copy of a file already in Storage (AGL-4184)', () => {
+  const MEMBER = { uid: 'member-1' }
+  const PROOF_SCOPE = { hostId: 'site1', purpose: 'quote-proof', purposeId: 'q-1' }
+  const SOURCE = 'orgs/org-1/media/art/m1'
+  const KEPT = 'hosts/site1/private/uploads/quote-proof/q-1/upload1'
+  const PENDING = 'visitor-uploads-pending/site1/quote-proof/q-1/upload1'
+  const inLibrary = (bytes: Buffer, contentType: string, path = SOURCE) =>
+    objects.set(path, { bytes, contentType, metadata: { metadata: { firebaseStorageDownloadTokens: 'public-token', alt: 'Banner' } } })
+  const keep = (name = 'Banner.png', path = SOURCE) =>
+    keepVisitorUploadCopy(deps, { scope: PROOF_SCOPE, source: { path, name }, caller: MEMBER })
+
+  it('keeps the bytes in the private folder, without the source’s download token, and leaves the source alone', async () => {
+    inLibrary(PNG, 'image/png')
+    const kept = await keep()
+    expect(kept).toEqual({
+      ok: true,
+      file: { id: 'upload1', name: 'Banner.png', contentType: 'image/png', size: PNG.length, path: KEPT, uploadedAtMs: nowMs },
+    })
+    const stored = objects.get(KEPT)
+    expect(stored?.bytes.equals(PNG)).toBe(true)
+    const custom = stored?.metadata['metadata'] as Record<string, unknown>
+    expect(custom['firebaseStorageDownloadTokens']).toBeNull()
+    expect(custom['alt']).toBeUndefined()
+    expect(stored?.metadata['cacheControl']).toBe('private, no-store')
+    expect(objects.has(PENDING)).toBe(false)
+    expect(objects.get(SOURCE)?.metadata['metadata']).toMatchObject({ firebaseStorageDownloadTokens: 'public-token' })
+  })
+
+  it('is its own file from then on: changing or deleting the source does not touch it', async () => {
+    inLibrary(PNG, 'image/png')
+    await keep()
+    objects.get(SOURCE)!.bytes = Buffer.from('replaced')
+    expect(objects.get(KEPT)?.bytes.equals(PNG)).toBe(true)
+    objects.delete(SOURCE)
+    expect(objects.get(KEPT)?.bytes.equals(PNG)).toBe(true)
+  })
+
+  it('counts toward the site’s storage, and asks the member’s band first with the object’s real size', async () => {
+    inLibrary(PNG, 'image/png')
+    await keep()
+    expect(gateAsked).toEqual([{ hostId: 'site1', bytes: PNG.length }])
+    expect(counted).toEqual([{ hostId: 'site1', bytes: PNG.length, files: 1 }])
+  })
+
+  it('is refused by the storage band, copying nothing', async () => {
+    inLibrary(PNG, 'image/png')
+    storageFull = { status: 403, error: 'Your workspace is out of storage.', code: 'storage' }
+    expect(await keep()).toMatchObject({ ok: false, status: 403, code: 'storage' })
+    expect(objects.has(PENDING)).toBe(false)
+    expect(counted).toEqual([])
+  })
+
+  it('spends the same limits an upload does, and is refused past them', async () => {
+    inLibrary(PNG, 'image/png')
+    await keep()
+    expect(spent.map((entry) => entry.key)).toEqual([
+      'visitor-upload:site1:uid:member-1',
+      'visitor-upload-site:site1',
+      'visitor-upload-finalize:site1:uid:member-1',
+    ])
+    allow = (key) => !key.startsWith('visitor-upload-site:')
+    expect(await keep()).toMatchObject({ ok: false, status: 429, code: 'rate' })
+  })
+
+  it('is refused while the platform’s uploads are paused', async () => {
+    inLibrary(PNG, 'image/png')
+    paused = true
+    expect(await keep()).toMatchObject({ ok: false, status: 423, code: 'paused' })
+    expect(objects.has(PENDING)).toBe(false)
+  })
+
+  it('refuses a kind of file an upload would refuse, by its real type', async () => {
+    inLibrary(Buffer.alloc(100, 1), 'video/mp4')
+    expect(await keep('clip.mp4')).toMatchObject({ ok: false, status: 400, code: 'type' })
+    expect(await keep('clip.png')).toMatchObject({ ok: false, status: 400, code: 'type' })
+    expect(objects.has(PENDING)).toBe(false)
+  })
+
+  it('refuses a file over the 25 MB an upload may be, by the object’s real size', async () => {
+    inLibrary(Buffer.alloc(25 * 1024 * 1024 + 1, 1), 'image/png')
+    expect(await keep()).toMatchObject({ ok: false, status: 413, code: 'size' })
+    expect(objects.has(PENDING)).toBe(false)
+  })
+
+  it('refuses bytes that are not what the file says it is, and keeps nothing', async () => {
+    inLibrary(Buffer.from('<html><script>alert(1)</script></html>'), 'image/png')
+    expect(await keep()).toMatchObject({ ok: false, status: 415, code: 'inspection' })
+    expect(objects.has(PENDING)).toBe(false)
+    expect(objects.has(KEPT)).toBe(false)
+    expect(counted).toEqual([])
+  })
+
+  it('strips script from an SVG, whatever the library held', async () => {
+    const svg = Buffer.from('<svg xmlns="http://www.w3.org/2000/svg"><script>alert(1)</script><rect width="1" height="1"/></svg>')
+    inLibrary(svg, 'image/svg+xml')
+    const kept = await keep('Mark.svg')
+    expect(kept).toMatchObject({ ok: true, file: { contentType: 'image/svg+xml' } })
+    const stored = objects.get(KEPT)
+    expect(stored?.bytes.toString()).not.toContain('script')
+    expect((stored?.metadata['metadata'] as Record<string, unknown>)['firebaseStorageDownloadTokens']).toBeNull()
+    expect(objects.has(PENDING)).toBe(false)
+  })
+
+  it('says so when the source is gone', async () => {
+    expect(await keep()).toMatchObject({ ok: false, status: 409, code: 'missing' })
   })
 })

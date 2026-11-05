@@ -357,3 +357,48 @@ describe('an invoice on the same page (AGL-4099)', () => {
     expect(await screen.findByRole('heading', { name: 'This invoice was updated' })).toBeTruthy()
   })
 })
+
+describe('a proof with no price yet (AGL-4184)', () => {
+  const PROOF = { id: 'p1', revision: 1, name: 'Banner.png', contentType: 'image/png', size: 2_048, path: 'hosts/x/private/uploads/quote-proof/q-1/p1', addedAtMs: 1, addedBy: 'a' }
+  const proofOnly = (proofs: unknown[] = [PROOF]) =>
+    view({ ...ORDER, lineItems: [], quote: { ...ORDER.quote, discount: null, shipping: null, proofs } })
+
+  it('shows the proof with Approve and Request changes, and nothing about money', async () => {
+    mockSiteFetch.mockResolvedValue(json(proofOnly()))
+    render(<QuotePage heading="Your quote" />)
+    expect(await screen.findByRole('heading', { name: 'Proof #1042' })).toBeTruthy()
+    expect(screen.getByRole('heading', { name: 'Your proof' })).toBeTruthy()
+    expect(screen.getByRole('img', { name: 'Banner.png' }).getAttribute('src')).toBe(
+      '/api/commerce/quote-proof?hostId=host-1&q=q-1&t=1.tok&file=p1',
+    )
+    expect(screen.getByRole('button', { name: 'Approve this proof' })).toBeTruthy()
+    expect(screen.getByRole('button', { name: 'Request changes' })).toBeTruthy()
+    for (const gone of ['Items', 'Subtotal', 'Total', 'Unpaid', 'Download PDF']) {
+      expect(screen.queryByText(gone)).toBeNull()
+    }
+    expect(screen.queryByRole('button', { name: /^Pay/ })).toBeNull()
+    expect(document.body.textContent).not.toContain('$')
+    expect(screen.getByText('Questions about this proof? Contact Acme Tents.')).toBeTruthy()
+  })
+
+  it('says the next version is coming when a new revision has no proof yet', async () => {
+    mockSiteFetch.mockResolvedValue(json(proofOnly([])))
+    render(<QuotePage />)
+    expect(await screen.findByText('Acme Tents is working on the next version of your proof, and will send it when it’s ready.')).toBeTruthy()
+    expect(screen.queryByRole('button', { name: 'Approve this proof' })).toBeNull()
+  })
+
+  it('names a replaced link as a proof’s', async () => {
+    mockSiteFetch.mockResolvedValue(json({ state: 'replaced', kind: 'quote', noun: 'proof', storeName: 'Acme Tents' }))
+    render(<QuotePage />)
+    expect(await screen.findByRole('heading', { name: 'This proof was updated' })).toBeTruthy()
+  })
+
+  it('is a normal quote with its price and Pay the moment it has lines', async () => {
+    mockSiteFetch.mockResolvedValue(json(view({ ...ORDER, quote: { ...ORDER.quote, proofs: [PROOF] } })))
+    render(<QuotePage />)
+    expect(await screen.findByRole('heading', { name: 'Quote #1042' })).toBeTruthy()
+    expect(screen.getByRole('button', { name: 'Pay $2,675.48' })).toBeTruthy()
+    expect(screen.getByRole('button', { name: 'Approve this proof' })).toBeTruthy()
+  })
+})
