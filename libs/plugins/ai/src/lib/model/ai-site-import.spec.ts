@@ -26,6 +26,8 @@ import type { AiJobItemLedger } from './ai-jobs.types'
 import {
   AI_SITE_IMPORT_FRAME_SLOT,
   AI_SITE_IMPORT_LEFT_OUT_COPY,
+  AI_SITE_IMPORT_UNREAD_REASONS,
+  aiSiteImportOtherAddresses,
   AI_SITE_IMPORT_LEFT_OUT_REASONS,
   AI_SITE_IMPORT_PAGE_CEILING_CREDITS,
   AI_SITE_IMPORT_WAVE_PAGES,
@@ -168,6 +170,45 @@ describe('never past the plan: kept in order until the room is used, the rest le
     expect(AI_SITE_IMPORT_LEFT_OUT_COPY.blocked).toBe(
       'The site’s bot protection or firewall turned AglynBot away. Allow AglynBot in your site’s bot or firewall settings, then bring the site in again.',
     )
+  })
+})
+
+describe('addresses that are not pages of their own (AGL-4152)', () => {
+  const others = {
+    pages: [listed('/')],
+    skipped: [
+      { url: 'https://harbor-dental.com/gallery?itemId=1', reason: 'duplicate' as const, sameAs: 'https://harbor-dental.com/gallery' },
+      { url: 'https://harbor-dental.com/home', reason: 'duplicate' as const, sameAs: 'https://harbor-dental.com/' },
+      { url: 'https://harbor-dental.com/cart', reason: 'system-page' as const },
+      { url: 'https://harbor-dental.com/old', reason: 'missing' as const },
+    ],
+  }
+
+  it('lists each with its reason and tells a query’s addresses apart', () => {
+    const state = inventory(others)
+    expect(state.leftOutCount).toEqual({ duplicate: 2, 'system-page': 1, missing: 1 })
+    expect(state.leftOut).toContainEqual(expect.objectContaining({ path: '/gallery?itemId=1', sameAs: '/gallery', reason: 'duplicate' }))
+    expect(state.leftOut).toContainEqual(expect.objectContaining({ path: '/cart', reason: 'system-page' }))
+    expect(state.leftOut.find((entry) => entry.path === '/cart')).not.toHaveProperty('sameAs')
+  })
+
+  it('keeps only the addresses of another path for where links go: a query’s address already finds its page by its path', () => {
+    expect(aiSiteImportOtherAddresses(inventory(others))).toEqual([{ path: '/home', sameAs: '/' }])
+  })
+
+  it('never counts them when it says most of a site was turned away', () => {
+    const blocked = Array.from({ length: 3 }, (_, index) => ({ url: `https://harbor-dental.com/b${index}`, reason: 'blocked' as const }))
+    const copies = Array.from({ length: 40 }, (_, index) => ({ url: `https://harbor-dental.com/g?i=${index}`, reason: 'duplicate' as const }))
+    expect(inventory({ pages: [listed('/')], skipped: [...blocked, ...copies] }).verdict?.kind).toBe('mostly-blocked')
+  })
+
+  it('says each in words a person reads, and a missing page is not one that could not be read', () => {
+    for (const reason of ['duplicate', 'system-page', 'missing'] as const) {
+      expect(AI_SITE_IMPORT_LEFT_OUT_REASONS).toContain(reason)
+      expect(AI_SITE_IMPORT_LEFT_OUT_COPY[reason]).toMatch(/^[A-Z].*\.$/)
+    }
+    expect(AI_SITE_IMPORT_UNREAD_REASONS).not.toContain('missing')
+    expect(AI_SITE_IMPORT_UNREAD_REASONS).not.toContain('duplicate')
   })
 })
 

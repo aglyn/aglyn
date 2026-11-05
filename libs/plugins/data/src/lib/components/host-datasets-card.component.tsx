@@ -61,6 +61,7 @@ import {
   deleteField,
   doc,
   getCountFromServer,
+  getDoc,
   getDocs,
   limit,
   query,
@@ -92,6 +93,13 @@ import {
 import { coerceDocumentValues, datasetIntegrityUpdate, datasetValueToInput, effectiveDatasetModel, formatDatasetValue, modelFromFieldEntries, validateDocument } from '../model/dataset-models'
 import { fillRecordAddresses } from '../record-pages/record-pages'
 import { planReferenceFixups, referencingFieldIds, restrictedDeleteMessage } from '../model/dataset-record-delete-plan'
+import { BlockedControl } from '@aglyn/shared-ui-jsx/components/blocked-control.component'
+import { datasetListScope } from '../model/dataset-record-list'
+import {
+  DATASETS_DELETE_REFUSAL,
+  DATASETS_WRITE_REFUSAL,
+  useDatasetWritesBlocked,
+} from './use-dataset-writes-blocked'
 import { DATASET_SAMPLE_RECORD_NOTE, datasetDisplayName, isSampleDatasetRecord, parseDatasetFieldEntries } from '../model/datasets'
 import { datasetTransferResourceKey } from '../transfer/dataset-transfer-key'
 
@@ -123,6 +131,18 @@ export interface HostDatasetsCardProps {
 /** The records walk serves no header order: every header sorts the page. */
 const NO_QUERY_SORTS: never[] = []
 
+/** Stable, so an empty answer does not re-render the card. */
+const NO_DATASETS: any[] = []
+
+/** The most datasets the card lists, and the most a delete's reference check walks. */
+const DATASET_LIST_WINDOW = 100
+
+/** A dataset read off its document, as the card's rows carry it. */
+const datasetRow = (snapshot: { id: string; data(): unknown }) => ({
+  $id: snapshot.id,
+  ...(snapshot.data() as object),
+})
+
 export function newDatasetSharingNote(siteOnly: boolean): string {
   return siteOnly
     ? 'Datasets belong to your organization. Your default sharing starts a ' +
@@ -153,18 +173,33 @@ export function HostDatasetsCard(props: HostDatasetsCardProps) {
   // rules a scoped member's UNFILTERED list is rejected outright —
   // Firestore fails the whole query if any candidate would fail — so
   // without this the Data page errors rather than showing fewer rows.
-  // Org-wide members get no filter: they read everything, and adding one
-  // would hide any dataset the AGL-1040 backfill missed.
   const {
     tokens: scopeTokens,
     orgWide: viewerOrgWide,
     loaded: scopeLoaded,
   } = useScopeTokens(orgId)
-  // Every dataset this card can now reach is an org dataset, and org
-  // datasets are all scoped (AGL-1041) — so the filter turns purely on
-  // whether the VIEWER is org-wide. It used to also ask whether an org had
-  // resolved, for the sake of unscoped rows on the host path.
-  const needsScope = !viewerOrgWide
+  /**
+   * The site whose Data page this is, or undefined on the organization Data
+   * page. The explicit `orgId` is that page's own scope and already wins over
+   * `hostId` when the org is resolved, so it wins here too, even if a caller
+   * hands the card both.
+   */
+  const pageHostId = props.orgId ? undefined : hostId || undefined
+  // What the VIEWER reaches: their scope tokens, or no filter for an org-wide
+  // member, who reads everything. Every dataset here is an org dataset, and
+  // org datasets are all scoped (AGL-1041).
+  const reachScope = viewerOrgWide ? null : scopeTokens
+  /**
+   * What this page lists (AGL-4047): a site's Data page shows that site's and
+   * the workspace-wide datasets, whoever is looking, as every other site
+   * surface does. It used to ask only the viewer's reach, so an owner, who
+   * reaches everything, saw every site's datasets on every site. The
+   * organization Data page lists the viewer's reach.
+   */
+  const listScope = useMemo(
+    () => datasetListScope({ hostId: pageHostId, memberScope: reachScope }),
+    [pageHostId, reachScope],
+  )
   // Two answers must be in before listing: the org path (AGL-1061) and the
   // viewer's scope tokens (AGL-1047). `useScopeTokens` reports org-wide
   // while loading, so without `scopeLoaded` a scoped collaborator's first
@@ -173,6 +208,7 @@ export function HostDatasetsCard(props: HostDatasetsCardProps) {
   // it easy to miss: the page looks right and logs a denial every mount.
   const scopeReady = Boolean(dataScope) && scopeLoaded
   const firestore = useFirestore()
+  const blocked = useDatasetWritesBlocked(orgId)
   const { enqueueSnackbar } = useSnackbar()
   const { confirm } = useConfirmationContext()
   const { org } = props
@@ -184,12 +220,9 @@ export function HostDatasetsCard(props: HostDatasetsCardProps) {
    *
    * `/api/orgs/datasets` stamps a new dataset with the org's Default sharing,
    * and that setting can only narrow to a site the request names — so a
-   * create that names none lands on All sites whatever the org chose. The
-   * explicit `orgId` is the org Data page's own scope and already wins over
-   * `hostId` when the org is resolved, so it wins here too: a create made
-   * there names no site, even if a caller hands the card both.
+   * create that names none lands on All sites whatever the org chose.
    */
-  const createdFromHostId = props.orgId ? undefined : hostId || undefined
+  const createdFromHostId = pageHostId
   const createdFrom = useMemo(
     () => (createdFromHostId ? { hostId: createdFromHostId } : {}),
     [createdFromHostId],
@@ -278,13 +311,13 @@ export function HostDatasetsCard(props: HostDatasetsCardProps) {
       dataScope && scopeReady
         ? query(
             collection(firestore, dataScope[0], dataScope[1], 'datasets'),
-            ...(needsScope
-              ? [where('visibleTo', 'array-contains-any', scopeTokens)]
+            ...(listScope
+              ? [where('visibleTo', 'array-contains-any', [...listScope])]
               : []),
-            limit(100),
+            limit(DATASET_LIST_WINDOW),
           )
         : null,
-    [firestore, dataScope, needsScope, scopeTokens, scopeReady],
+    [firestore, dataScope, listScope, scopeReady],
     { idField: '$id' },
   )
   const datasets = useMemo(
@@ -735,6 +768,49 @@ export function HostDatasetsCard(props: HostDatasetsCardProps) {
     logActivity,
   ])
 
+  /**
+   * What the selected dataset's references point at beyond this site's list
+   * (AGL-4047). A dataset this site sees can name a target another site holds;
+   * the schema dialog warns about exactly that, and a cell still labels the
+   * row it points at, so the target has to be known even though the site's
+   * list does not show it. Read one by one, and only when there is one; a
+   * target the viewer may not read stays unknown.
+   */
+  const [outsideTargets, setOutsideTargets] = useState<any[]>(NO_DATASETS)
+  useEffect(() => {
+    let active = true
+    const missing = pageHostId
+      ? [
+          ...new Set(
+            model.order
+              .map((fieldId) => model.fields[fieldId]?.reference?.datasetId)
+              .filter((id): id is string => Boolean(id)),
+          ),
+        ].filter((id) => !datasets.some((item) => item.$id === id))
+      : []
+    if (!missing.length || !dataScope) {
+      setOutsideTargets(NO_DATASETS)
+      return
+    }
+    void Promise.all(
+      missing.map((id) =>
+        getDoc(doc(firestore, dataScope[0], dataScope[1], 'datasets', id)).then(
+          (snapshot) => (snapshot.exists() ? datasetRow(snapshot) : null),
+          () => null,
+        ),
+      ),
+    ).then((rows) => {
+      if (active) setOutsideTargets(rows.filter(Boolean))
+    })
+    return () => {
+      active = false
+    }
+  }, [pageHostId, model, datasets, firestore, dataScope])
+  const knownDatasets = useMemo(
+    () => (outsideTargets.length ? [...datasets, ...outsideTargets] : datasets),
+    [datasets, outsideTargets],
+  )
+
   // Reference pickers (AGL-180): load target-collection rows for every
   // reference field in the model (id -> display label).
   const [refOptions, setRefOptions] = useState<
@@ -757,7 +833,7 @@ export function HostDatasetsCard(props: HostDatasetsCardProps) {
           datasetId: string
           displayFieldId?: string
         }
-        const target = datasets.find(
+        const target = knownDatasets.find(
           (item) => item.$id === reference.datasetId,
         )
         const displayFieldId =
@@ -791,7 +867,7 @@ export function HostDatasetsCard(props: HostDatasetsCardProps) {
     return () => {
       active = false
     }
-  }, [model, datasets, firestore, dataScope])
+  }, [model, knownDatasets, firestore, dataScope])
   /**
    * One reference target's label, or `null` when this ID resolves to nothing.
    *
@@ -1006,12 +1082,40 @@ export function HostDatasetsCard(props: HostDatasetsCardProps) {
        * fails open is worse than no check, because the UI then tells the user
        * the record is safe to remove.
        *
-       * ⚠️ Reaches the collections in `datasets`, which is this viewer's
-       * scoped, capped picker window. A referencing collection shared with no
-       * site this member can see is one the client may not read at all, so it
-       * is not consulted; only a server route could close that.
+       * ⚠️ Reaches the collections in this viewer's scoped, capped window. A
+       * referencing collection shared with no site this member can see is one
+       * the client may not read at all, so it is not consulted; only a server
+       * route could close that.
+       *
+       * On a site's Data page that window is NOT the list (AGL-4047). The list
+       * is the site's, and a dataset another site holds can reference a row of
+       * one shared with both: narrowing what the page shows must not narrow
+       * what a delete protects. So the page reads the viewer's reach here, once,
+       * at the moment of the delete, and refuses if it cannot.
        */
-      for (const other of datasets) {
+      let referencing: any[] = datasets
+      if (pageHostId) {
+        try {
+          const reach = await getDocs(
+            query(
+              collection(firestore, dataScope[0], dataScope[1], 'datasets'),
+              ...(reachScope
+                ? [where('visibleTo', 'array-contains-any', [...reachScope])]
+                : []),
+              limit(DATASET_LIST_WINDOW),
+            ),
+          )
+          referencing = reach.docs.map(datasetRow)
+        } catch {
+          return void enqueueSnackbar(
+            'Cannot delete: the datasets that may reference this record could ' +
+              'not be checked, so removing it could break them. Nothing was ' +
+              'deleted.',
+            { variant: 'error' },
+          )
+        }
+      }
+      for (const other of referencing) {
         const otherModel = effectiveDatasetModel(other)
         if (!referencingFieldIds(otherModel, selected.$id).length) continue
         let snapshot
@@ -1089,7 +1193,16 @@ export function HostDatasetsCard(props: HostDatasetsCardProps) {
       }
       enqueueSnackbar('Record deleted', { variant: 'success', persist: false })
     },
-    [selected, datasets, firestore, dataScope, announceRecords, enqueueSnackbar],
+    [
+      selected,
+      datasets,
+      pageHostId,
+      reachScope,
+      firestore,
+      dataScope,
+      announceRecords,
+      enqueueSnackbar,
+    ],
   )
 
   /**
@@ -1192,16 +1305,20 @@ export function HostDatasetsCard(props: HostDatasetsCardProps) {
                 <Button size="small" onClick={() => setViewerId(record.$id)}>
                   {'View'}
                 </Button>
-                <Button size="small" onClick={handleOpenRecord(record)}>
-                  {'Edit'}
-                </Button>
-                <Button
-                  size="small"
-                  color="error"
-                  onClick={handleDeleteRecord(record)}
-                >
-                  {'Delete'}
-                </Button>
+                <BlockedControl blocked={blocked.writes} reason={DATASETS_WRITE_REFUSAL}>
+                  <Button size="small" onClick={handleOpenRecord(record)}>
+                    {'Edit'}
+                  </Button>
+                </BlockedControl>
+                <BlockedControl blocked={blocked.writes} reason={DATASETS_WRITE_REFUSAL}>
+                  <Button
+                    size="small"
+                    color="error"
+                    onClick={handleDeleteRecord(record)}
+                  >
+                    {'Delete'}
+                  </Button>
+                </BlockedControl>
               </Stack>
             ),
             { width: 220 },
@@ -1218,6 +1335,7 @@ export function HostDatasetsCard(props: HostDatasetsCardProps) {
       handleOpenRecord,
       handleDeleteRecord,
       recordFilter,
+      blocked.writes,
     ],
   )
 
@@ -1304,16 +1422,20 @@ export function HostDatasetsCard(props: HostDatasetsCardProps) {
                 </MenuItem>
               ))}
             </TextField>
-            <Button
-              size="small"
-              color="primary"
-              onClick={handleOpenRecord()}
-            >
-              {'Add record'}
-            </Button>
-            <Button size="small" onClick={() => setSchemaOpen(true)}>
-              {'Schema'}
-            </Button>
+            <BlockedControl blocked={blocked.writes} reason={DATASETS_WRITE_REFUSAL}>
+              <Button
+                size="small"
+                color="primary"
+                onClick={handleOpenRecord()}
+              >
+                {'Add record'}
+              </Button>
+            </BlockedControl>
+            <BlockedControl blocked={blocked.writes} reason={DATASETS_WRITE_REFUSAL}>
+              <Button size="small" onClick={() => setSchemaOpen(true)}>
+                {'Schema'}
+              </Button>
+            </BlockedControl>
             {/* An import left unfinished, reopened where it stopped (AGL-3549). */}
             {transferTarget ? (
               <TransferResumeImport
@@ -1335,9 +1457,11 @@ export function HostDatasetsCard(props: HostDatasetsCardProps) {
                 {'Export'}
               </Button>
             ) : null}
-            <Button size="small" color="error" onClick={handleDeleteDataset}>
-              {'Delete'}
-            </Button>
+            <BlockedControl blocked={blocked.deletes} reason={DATASETS_DELETE_REFUSAL}>
+              <Button size="small" color="error" onClick={handleDeleteDataset}>
+                {'Delete'}
+              </Button>
+            </BlockedControl>
           </Stack>
         )}
         {/* The per-dataset record cap, standing rather than only on refusal
@@ -1409,18 +1533,22 @@ export function HostDatasetsCard(props: HostDatasetsCardProps) {
           useFlexGap
           sx={{ flexWrap: 'wrap' }}
         >
-          <Button
-            size="small"
-            variant="outlined"
-            color="primary"
-            onClick={handleOpenCreator}
-          >
-            {'Add dataset'}
-          </Button>
-          {datasets.length >= 2 ? (
-            <Button size="small" onClick={() => setJoiner({ a: '', b: '' })}>
-              {'Add join collection'}
+          <BlockedControl blocked={blocked.writes} reason={DATASETS_WRITE_REFUSAL}>
+            <Button
+              size="small"
+              variant="outlined"
+              color="primary"
+              onClick={handleOpenCreator}
+            >
+              {'Add dataset'}
             </Button>
+          </BlockedControl>
+          {datasets.length >= 2 ? (
+            <BlockedControl blocked={blocked.writes} reason={DATASETS_WRITE_REFUSAL}>
+              <Button size="small" onClick={() => setJoiner({ a: '', b: '' })}>
+                {'Add join collection'}
+              </Button>
+            </BlockedControl>
           ) : null}
         </Stack>
       </Stack>
@@ -1724,7 +1852,7 @@ export function HostDatasetsCard(props: HostDatasetsCardProps) {
         hostId={hostId}
         orgId={orgId ?? undefined}
         dataset={schemaOpen && selected ? selected : null}
-        datasets={datasets}
+        datasets={knownDatasets}
         // The dataset's documents, not the loaded window (AGL-1716) — the
         // dialog warns "N documents exist" before a narrowing type change,
         // and 500 was the cap talking, not the collection.

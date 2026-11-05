@@ -378,6 +378,20 @@ describe('the frame job for an import whose menu was read (AGL-4108)', () => {
     expect(aiSiteImportWaveOwed({ ...state, home: { ...(state.home as NonNullable<AiSiteImportState['home']>), nav: null } }, state.waves[0]).frame).toBe(true)
   })
 
+  it('sends a link to another address of a kept page to that page (AGL-4152)', () => {
+    const state = aglynState()
+    const leftOut = [
+      { url: 'https://aglyn.com/home', path: '/home', title: '', reason: 'duplicate' as const, sameAs: '/' },
+      { url: 'https://aglyn.com/plans', path: '/plans', title: '', reason: 'duplicate' as const, sameAs: '/pricing' },
+      { url: 'https://aglyn.com/gone', path: '/gone', title: '', reason: 'missing' as const },
+    ]
+    const to = aiSiteImportFrameLinkTo({ ...state, leftOut }, 1)
+    expect(to('https://aglyn.com/home')).toBe('page:draft0')
+    expect(to('https://www.aglyn.com/plans/')).toBe('page:draft2')
+    expect(to('https://aglyn.com/pricing?itemId=1')).toBe('page:draft2')
+    expect(to('https://aglyn.com/gone')).toBe('https://aglyn.com/gone')
+  })
+
   it('hands no frame for a source whose menu could not be read, which the frame model then designs', () => {
     const state = aglynState()
     const unread = { ...state, home: { ...(state.home as NonNullable<AiSiteImportState['home']>), nav: null } }

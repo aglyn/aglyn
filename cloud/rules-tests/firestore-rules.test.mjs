@@ -4211,6 +4211,40 @@ describe('hosts', () => {
   })
 })
 
+describe("a site's dataset list (AGL-4047)", () => {
+  const OTHER_SITE = 'site-not-theirs'
+  const datasets = (uid) => collection(authed(uid), 'orgs', ORG, 'datasets')
+  const forSite = (uid, hostId) =>
+    query(datasets(uid), where('visibleTo', 'array-contains-any', ['org', `host:${hostId}`]), limit(100))
+
+  beforeEach(async () => {
+    await env.withSecurityRulesDisabled(async (context) => {
+      const db = context.firestore()
+      await setDoc(doc(db, 'orgs', ORG, 'datasets', 'wide'), { visibleTo: ['org'] })
+      await setDoc(doc(db, 'orgs', ORG, 'datasets', 'mine'), { visibleTo: [`host:${HOST}`] })
+      await setDoc(doc(db, 'orgs', ORG, 'datasets', 'theirs'), { visibleTo: [`host:${OTHER_SITE}`] })
+    })
+  })
+
+  it('answers an org-wide member with the site’s and the workspace-wide datasets alone', async () => {
+    const snapshot = await assertSucceeds(getDocs(forSite(OWNER, HOST)))
+    const ids = snapshot.docs.map((row) => row.id)
+    assert.ok(ids.includes('wide') && ids.includes('mine'))
+    assert.ok(!ids.includes('theirs'))
+    // The control: the same member reads the other site's on the workspace page.
+    const everything = await assertSucceeds(getDocs(query(datasets(OWNER), limit(100))))
+    assert.ok(everything.docs.some((row) => row.id === 'theirs'))
+  })
+
+  it('admits a site collaborator to their own site’s list, and to nothing wider', async () => {
+    const snapshot = await assertSucceeds(getDocs(forSite(EDITOR, HOST)))
+    assert.ok(!snapshot.docs.some((row) => row.id === 'theirs'))
+    // Unprovable lists stay refused: no filter, and another site's tokens.
+    await assertFails(getDocs(query(datasets(EDITOR), limit(100))))
+    await assertFails(getDocs(forSite(EDITOR, OTHER_SITE)))
+  })
+})
+
 describe('org-shared data (AGL-237)', () => {
   beforeEach(async () => {
     await env.withSecurityRulesDisabled(async (context) => {
