@@ -182,7 +182,7 @@ export interface SiteImportPageFidelity {
      */
     case?: SiteImportFidelityCount
     fill?: SiteImportFidelityCount
-    /** Its outlined ones drawn as the source draws them: no fill of their own, their words and border in the source's color, within OKLab ΔE 0.05. */
+    /** Its outlined ones drawn as the source draws them: no fill of their own, their words and border in the source's color, within OKLab ΔE 0.1 (`SITE_IMPORT_OUTLINE_DELTA`). */
     outline?: SiteImportFidelityCount
   }
   /** The source's headings, drawn as headings. */
@@ -287,10 +287,13 @@ export interface SiteImportFidelityTheme {
    * the brand's (`MuiButton`), and the case its words are set in; the outlined
    * and text buttons' own style, where the theme sets one: its colors as the
    * theme names them, a palette path resolved in the scheme a button is drawn in.
+   * `fillDark` and `labelDark` are the filled button's in the dark scheme.
    */
   button: {
     fill: string | null
     label: string | null
+    fillDark?: string | null
+    labelDark?: string | null
     case: 'upper' | 'none' | null
     outlined?: { text: unknown; border: unknown; fill: unknown; case: 'upper' | 'none' | null }
     text?: { case: 'upper' | 'none' | null }
@@ -352,6 +355,14 @@ export interface SiteImportFidelityMeaning {
 
 /** How far a ground of the theme may sit from the source's (AGL-4152), in OKLab. */
 export const SITE_IMPORT_GROUND_DELTA = 0.05
+
+/**
+ * How far an outlined button's color may sit from the source's (AGL-4152), in
+ * OKLab: it is the theme's primary, a shade deepened to carry white words where
+ * the source's own does not, so a role and not a pin. A grey or a light one is
+ * far past it.
+ */
+export const SITE_IMPORT_OUTLINE_DELTA = 0.1
 
 /** How far the hero heading's share of its section may sit from the source's (AGL-4152), relatively. */
 export const SITE_IMPORT_MEASURE_SHARE = 0.1
@@ -1356,6 +1367,12 @@ function colorIn(value: unknown, scheme: SiteImportFidelityScheme): string | nul
   return paths[value] ?? null
 }
 
+/** The color a theme draws an outlined button's words in, in its light scheme: its own style's, else the brand's. */
+export function siteImportOutlinedColorOf(theme: SiteImportFidelityTheme): string | null {
+  const named = theme.button.outlined?.text
+  return named === null || named === undefined ? theme.light.brand : colorIn(named, theme.light)
+}
+
 /** A CSS `text-transform` as the case a button's words are set in. */
 const CASE_OF: Readonly<Record<string, 'upper' | 'none'>> = { uppercase: 'upper', none: 'none', capitalize: 'none', lowercase: 'none' }
 
@@ -1382,7 +1399,9 @@ export function siteImportFidelityThemeOf(theme: unknown, from: SiteImportFideli
     return [...[...own].reverse().flatMap((entry) => [pathIn(entry, 'sx'), pathIn(entry, 'style')]), pathIn(button, 'styleOverrides', `${variant}Primary`), pathIn(button, 'styleOverrides', variant)].filter(isRecord)
   }
   const contained = stylesOf('contained')
-  const pick = (...keys: string[]) => contained.flatMap((style) => keys.map((key) => colorIn(style[key], light))).find((color): color is string => !!color) ?? null
+  const dark = schemeOf(pathIn(theme, 'colorSchemes', 'dark'))
+  const pickIn = (scheme: SiteImportFidelityScheme, ...keys: string[]) => contained.flatMap((style) => keys.map((key) => colorIn(style[key], scheme))).find((color): color is string => !!color) ?? null
+  const pick = (...keys: string[]) => pickIn(light, ...keys)
   const transform = [
     pathIn(button, 'styleOverrides', 'root', 'textTransform'),
     pathIn(button, 'sx', 'root', 'textTransform'),
@@ -1398,16 +1417,20 @@ export function siteImportFidelityThemeOf(theme: unknown, from: SiteImportFideli
   return {
     from,
     light,
-    dark: schemeOf(pathIn(theme, 'colorSchemes', 'dark')),
+    dark,
     button: {
       fill: pick('backgroundColor', 'bgcolor', 'background'),
       label: pick('color'),
+      ...(dark ? { fillDark: pickIn(dark, 'backgroundColor', 'bgcolor', 'background'), labelDark: pickIn(dark, 'color') } : {}),
       case: caseIn(contained),
       outlined: { text: named('color'), border: named('borderColor'), fill: named('backgroundColor', 'bgcolor', 'background'), case: caseIn(outlined) },
       text: { case: caseIn(stylesOf('text')) },
     },
   }
 }
+
+/** How near the page a fill sits and is the page's own, in OKLab: the look's own line for a fill to be drawn as one. */
+const LIKE_THE_PAGE = 0.1
 
 /** The look a built page is drawn in, read through its theme: each node's scheme, a section's ground and ink, a button's case and fill. */
 class LookOf {
@@ -1446,7 +1469,9 @@ class LookOf {
     const scheme = this.scheme(id)
     if (!scheme) return null
     const own = this.built.node(id)?.sx?.['bgcolor'] ?? this.built.node(id)?.sx?.['backgroundColor']
-    return own !== undefined ? colorIn(own, scheme) : (this.theme?.button.fill ?? scheme.brand)
+    if (own !== undefined) return colorIn(own, scheme)
+    const button = this.theme?.button
+    return (scheme === this.theme?.dark ? (button?.fillDark ?? button?.fill) : button?.fill) ?? scheme.brand
   }
 
   /** A filled button's label: its own, else the theme's for filled buttons, else the words on its scheme's brand. */
@@ -1454,7 +1479,9 @@ class LookOf {
     const scheme = this.scheme(id)
     if (!scheme) return null
     const own = this.built.node(id)?.sx?.['color']
-    return own !== undefined ? colorIn(own, scheme) : (this.theme?.button.label ?? scheme.onBrand)
+    if (own !== undefined) return colorIn(own, scheme)
+    const button = this.theme?.button
+    return (scheme === this.theme?.dark ? (button?.labelDark ?? button?.label) : button?.label) ?? scheme.onBrand
   }
 
   /**
@@ -1477,12 +1504,14 @@ class LookOf {
   /**
    * Whether a filled button is drawn in the source's own fill, within OKLab ΔE
    * 0.05, whatever its label: a light fill under a label that cannot be read
-   * on it keeps the fill and takes a label that can. `null` where either is
-   * not known.
+   * on it keeps the fill and takes a label that can. A fill that sits on the
+   * page like the page is no fill the look can keep: a white button on a near
+   * white page reads as its border. `null` where either is not known.
    */
   fillKept(id: string | null): boolean | null {
     const wanted = hexOf(this.facts?.buttonFill)
     if (!wanted || !this.theme) return null
+    if (siteImportOklabDelta(wanted, this.page()) < LIKE_THE_PAGE) return null
     const drawn = id ? this.fill(id) : (this.theme.button.fill ?? this.theme.light.brand)
     return drawn ? siteImportOklabDelta(wanted, drawn) <= SITE_IMPORT_GROUND_DELTA : null
   }
@@ -1490,7 +1519,7 @@ class LookOf {
   /**
    * Whether an outlined button is drawn as the source draws its own: no fill
    * of its own where it sets none, and its words and border in its color,
-   * within OKLab ΔE 0.05. On a dark band, which the source's color was not
+   * within OKLab ΔE 0.1. On a dark band, which the source's color was not
    * read for, in the scheme's brand. `null` where either is not known.
    */
   outlineKept(id: string | null): boolean | null {
@@ -1502,9 +1531,11 @@ class LookOf {
     const ownFill = hexOf(this.facts?.outlinedFill)
     const filled = fill !== null && fill !== 'transparent' && fill !== 'none'
     if (ownFill ? !filled || siteImportOklabDelta(ownFill, colorIn(fill, scheme) ?? ownFill) > SITE_IMPORT_GROUND_DELTA : filled) return false
-    const near = (color: string | null, to: string | null | undefined) => !!color && !!to && siteImportOklabDelta(color, to) <= SITE_IMPORT_GROUND_DELTA
+    const near = (color: string | null, to: string | null | undefined) => !!color && !!to && siteImportOklabDelta(color, to) <= SITE_IMPORT_OUTLINE_DELTA
     const named = [style?.text, style?.border].map((color) => (color === null || color === undefined ? scheme.brand : colorIn(color, scheme)))
-    return named.every((color) => (scheme === this.theme?.light ? near(color, wanted) : near(color, scheme.brand) || near(color, scheme.brandLight)))
+    // A grey or a black of the source's is its words' color: the theme's words are their own ink, not a pin.
+    const light = aiHexOklch(wanted).C < 0.03 ? scheme.ink : wanted
+    return named.every((color) => (scheme === this.theme?.light ? near(color, light) : near(color, scheme.brand) || near(color, scheme.brandLight) || near(color, scheme.ink)))
   }
 
   /** The source's page ground: white where it sets none. */
@@ -1747,6 +1778,9 @@ function runPx(built: Built, root: string | undefined | null): number {
   return Math.min(cap ?? VIEW_PX, VIEW_PX)
 }
 
+/** A section's band as Improve it reads it: by its color alone. */
+const bandAsItsColor = (section: SiteImportLayoutSection | undefined) => section?.absoluteBand ?? section?.band
+
 /** A line of the design measure: the share of what it asks the source and the build each do, `null` where neither is asked anything. */
 function designLine(source: [number, number], built: [number, number]): SiteImportDesignLine | null {
   if (!source[1] || !built[1]) return null
@@ -1778,9 +1812,6 @@ function designScore(source: SiteImportFidelitySource, built: Built, placement: 
   // Opening: a first section holding a picture opens as the hero, its heading and its picture together.
   const first = sections[0]
   const pictured = !!first && (first.lines.some((ref) => source.blocks[ref]?.kind === 'image') || first.backdrop?.kind === 'picture' || first.backdrop?.kind === 'video')
-/** A section's band as Improve it reads it: by its color alone. */
-const bandAsItsColor = (section: SiteImportLayoutSection | undefined) => section?.absoluteBand ?? section?.band
-
   const title = sections.flatMap((section) => section.lines).find((ref) => {
     const block = source.blocks[ref]
     return block?.kind === 'heading' && block.level === 1
