@@ -259,12 +259,12 @@ function shortOf(rows: readonly PageRow[], frames: ReadonlyArray<{ name: string;
       const said = [...words.examples.missing.map((word: string) => `-${word}`), ...words.examples.extra.map((word: string) => `+${word}`)].join(' ')
       short.push(`words: ${words.missing} missing, ${words.extra} extra${said ? ` (${said})` : ''}`)
     }
-    for (const key of ['sections', 'bands', 'widths', 'rows', 'tables', 'tabs', 'pictures', 'framing', 'icons', 'buttons', 'headings', 'forms', 'videos', 'align', 'boxed', 'ground', 'measure']) {
+    for (const key of ['sections', 'bands', 'widths', 'rows', 'tables', 'tabs', 'pictures', 'framing', 'icons', 'buttons', 'headings', 'forms', 'videos', 'align', 'boxed', 'ground', 'darkGround', 'measure']) {
       if (report[key] && report[key].ratio < 1 && !free.has(key)) short.push(`${key} ${count(report[key])}`)
     }
     for (const [kind, entry] of Object.entries(report.groups as Dict)) if (entry.items.ratio < 1) short.push(`${kind} ${count(entry.items)}`)
     if (report.bands.ratio < 1 && !free.has('bands')) short.push(`bands read ${report.bands.read.join(', ')}; drawn ${report.bands.drawn.join(', ')}`)
-    for (const key of ['case', 'fill']) if (report.buttons[key] && report.buttons[key].ratio < 1) short.push(`button ${key} ${count(report.buttons[key])}`)
+    for (const key of ['case', 'fill', 'outline']) if (report.buttons[key] && report.buttons[key].ratio < 1) short.push(`button ${key} ${count(report.buttons[key])}`)
     if (report.ground?.worst > 0.05 && !free.has('ground')) short.push(`a ground ΔE ${report.ground.worst.toFixed(3)} from the source's`)
     if (report.measure?.ratio < 1 && report.measure.shares && !free.has('measure')) short.push(`hero heading at ${report.measure.shares.built.toFixed(2)} of its section, the source's ${report.measure.shares.source.toFixed(2)}`)
     if (report.facts && report.facts.ratio < 1) {
@@ -294,7 +294,7 @@ function keepTable(rows: readonly PageRow[], threshold: number): string | null {
   const kept = rows.filter(({ report }) => report.scoredAs?.finish === 'keep')
   if (!kept.length) return null
   return table(
-    ['page', 'score', 'holds', 'align', 'boxed', 'ground', 'worst ΔE', 'measure', 'share', 'readable', 'button case', 'button fill', 'lowest'],
+    ['page', 'score', 'holds', 'align', 'boxed', 'ground', 'worst ΔE', 'dark ground', 'measure', 'share', 'readable', 'button case', 'button fill', 'button outline', 'lowest'],
     kept.map(({ name, report }) => [
       name,
       score(report.score),
@@ -303,11 +303,13 @@ function keepTable(rows: readonly PageRow[], threshold: number): string | null {
       count(report.boxed),
       report.ground.theme ? count(report.ground) : 'no theme',
       report.ground.worst === null ? '-' : report.ground.worst.toFixed(3),
+      report.darkGround ? count(report.darkGround) : '-',
       report.measure.shares ? count(report.measure) : 'not read',
       report.measure.shares ? share(report.measure.shares) : '-',
       count(report.readable),
       report.buttons.case ? count(report.buttons.case) : '-',
       report.buttons.fill ? count(report.buttons.fill) : '-',
+      report.buttons.outline ? count(report.buttons.outline) : '-',
       report.lowest ?? '-',
     ]),
   )
@@ -375,8 +377,9 @@ function finishSections(rows: readonly PageRow[], threshold: number, themeNote: 
       ? [
           '## Keep my site: the look kept',
           '',
-          'Kept when the score holds the bar, the words are whole, and align, boxed, ground and measure are each whole. A button is kept',
-          'in its source’s case and, filled, in its fill within OKLab ΔE 0.05; a ground within 0.05 of the source’s.',
+          'Kept when the score holds the bar, the words are whole, and align, boxed, ground, dark ground and measure are each whole. A button is kept',
+          'in its source’s case and, filled, in its fill within OKLab ΔE 0.05, outlined, with no fill of its own and in its color; a ground within 0.05',
+          'of the source’s and in its place against the page, in both schemes.',
           ...(themeNote ? ['', themeNote] : []),
           '',
           keep,
@@ -403,7 +406,7 @@ function finishSections(rows: readonly PageRow[], threshold: number, themeNote: 
 /** What the bar holds, said for the finish the pages were scored as. */
 function barSaid(finish: string | null, words: string | null): string {
   const said = words === 'improved' ? 'facts and lines exactly 1, each rewrite’s meaning at 0.4' : 'words exactly 1'
-  if (finish === 'keep') return `on structure, ${said}, align, boxed, ground and measure whole`
+  if (finish === 'keep') return `on structure, ${said}, align, boxed, ground, dark ground and measure whole`
   if (finish === 'improve') return `on content, ${said}`
   return `on structure, ${said}`
 }

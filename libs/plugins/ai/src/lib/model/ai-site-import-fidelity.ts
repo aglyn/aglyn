@@ -182,6 +182,8 @@ export interface SiteImportPageFidelity {
      */
     case?: SiteImportFidelityCount
     fill?: SiteImportFidelityCount
+    /** Its outlined ones drawn as the source draws them: no fill of their own, their words and border in the source's color, within OKLab ΔE 0.05. */
+    outline?: SiteImportFidelityCount
   }
   /** The source's headings, drawn as headings. */
   headings: SiteImportFidelityCount
@@ -211,9 +213,18 @@ export interface SiteImportPageFidelity {
    * Sections with a ground of their own drawn on a ground of the theme
    * within OKLab ΔE 0.05 of it (`SITE_IMPORT_GROUND_DELTA`): `theme` says
    * where the theme's colors were read from, `null` where none was given and
-   * nothing is measured; `worst` is the farthest one.
+   * nothing is measured; `worst` is the farthest one. Under Keep my site
+   * (AGL-4152) in their place against the page too: a section lighter than its
+   * page's ground draws lighter than the theme's, and one on its page's ground
+   * draws on the theme's, for two near whites read alike by ΔE alone.
    */
   ground?: SiteImportFidelityCount & { theme: SiteImportFidelityTheme['from'] | null; worst: number | null }
+  /**
+   * Under Keep my site (AGL-4152), the same sections in the theme's dark
+   * scheme: on the source's own dark fill within OKLab ΔE 0.05 where its
+   * stylesheets say one, else in their place against the dark page.
+   */
+  darkGround?: SiteImportFidelityCount & { worst: number | null }
   /**
    * The hero heading's box as a share of its section, within 10% of the
    * source's (`SITE_IMPORT_MEASURE_SHARE`): measured where the reader kept the
@@ -259,6 +270,10 @@ export interface SiteImportFidelityScheme {
   onBrand: string | null
   /** `text.primary`: the words' ink. */
   ink: string | null
+  /** `primary.light`: what a theme may draw its own filled buttons in. */
+  brandLight?: string | null
+  /** `divider`: a hairline, as a base may border an outlined button. */
+  divider?: string | null
 }
 
 /** The colors and button style of the theme a page is drawn in, `#rrggbb`. */
@@ -267,8 +282,19 @@ export interface SiteImportFidelityTheme {
   from: 'theme' | 'style'
   light: SiteImportFidelityScheme
   dark: SiteImportFidelityScheme | null
-  /** A filled button's own fill and label where the theme sets them apart from the brand's (`MuiButton`), and the case its words are set in. */
-  button: { fill: string | null; label: string | null; case: 'upper' | 'none' | null }
+  /**
+   * A filled button's own fill and label where the theme sets them apart from
+   * the brand's (`MuiButton`), and the case its words are set in; the outlined
+   * and text buttons' own style, where the theme sets one: its colors as the
+   * theme names them, a palette path resolved in the scheme a button is drawn in.
+   */
+  button: {
+    fill: string | null
+    label: string | null
+    case: 'upper' | 'none' | null
+    outlined?: { text: unknown; border: unknown; fill: unknown; case: 'upper' | 'none' | null }
+    text?: { case: 'upper' | 'none' | null }
+  }
 }
 
 /** One line of the design measure: the share of what it asks that the source and the build each do, 0 to 1. */
@@ -830,6 +856,7 @@ export function siteImportFidelity(source: SiteImportFidelitySource, tree: SiteI
   // Keep my site's buttons in the source's case, and its filled ones in its fill (AGL-4152).
   const buttonCase = { source: 0, built: 0 }
   const buttonFill = { source: 0, built: 0 }
+  const buttonOutline = { source: 0, built: 0 }
   const boxed = { source: 0, built: 0 }
   const icons = { source: 0, built: 0, lone: 0 }
   // The films drawn as the Video element, playing from an address (AGL-4140).
@@ -841,7 +868,7 @@ export function siteImportFidelity(source: SiteImportFidelitySource, tree: SiteI
     const drawnAs = id ? built.node(id) : undefined
     const drawn = drawnAs?.componentId === 'muiButton' && drawnAs.props?.['variant'] === BUTTON_VARIANT[style] && hasDestination(drawnAs)
     if (!pinned) return drawn
-    const cased = look.caseKept(id ?? null)
+    const cased = look.caseKept(id ?? null, style)
     if (cased !== null) {
       buttonCase.source += 1
       if (drawn && cased) buttonCase.built += 1
@@ -851,7 +878,12 @@ export function siteImportFidelity(source: SiteImportFidelitySource, tree: SiteI
       buttonFill.source += 1
       if (drawn && filled) buttonFill.built += 1
     }
-    return drawn && cased !== false && filled !== false
+    const outlined = style === 'secondary' ? look.outlineKept(id ?? null) : null
+    if (outlined !== null) {
+      buttonOutline.source += 1
+      if (drawn && outlined) buttonOutline.built += 1
+    }
+    return drawn && cased !== false && filled !== false && outlined !== false
   }
 
   sections.forEach((section, index) => {
@@ -862,8 +894,16 @@ export function siteImportFidelity(source: SiteImportFidelitySource, tree: SiteI
           icons.lone += 1
           break
         case 'line': {
-          if (!node.button) break
           const block = source.blocks[node.line]
+          if (!node.button) {
+            // A link standing on its own is drawn as a text button: under Keep my site it is held to the source's case as one (AGL-4152).
+            const id = placement.of.get(node.line)
+            if (pinned && block?.kind === 'link' && id && built.node(id)?.componentId === 'muiButton') {
+              buttons.source += 1
+              if (buttonKept(node.line, 'quiet')) buttons.built += 1
+            }
+            break
+          }
           // A button whose words say it plays a film plays the page's film where one is drawn (AGL-4140).
           if (block?.kind === 'paragraph' && films && SITE_IMPORT_PLAY_WORDS.test(block.text)) {
             buttons.source += 1
@@ -992,13 +1032,14 @@ export function siteImportFidelity(source: SiteImportFidelitySource, tree: SiteI
   if (!finished) return { ...lowestOf(pageMeasures(report)), ...report }
 
   // The measures a finish adds (AGL-4152).
-  if (pinned) report.buttons = { ...report.buttons, case: ratioKept(buttonCase.source, buttonCase.built), fill: ratioKept(buttonFill.source, buttonFill.built) }
+  if (pinned) report.buttons = { ...report.buttons, case: ratioKept(buttonCase.source, buttonCase.built), fill: ratioKept(buttonFill.source, buttonFill.built), outline: ratioKept(buttonOutline.source, buttonOutline.built) }
   const added: Partial<SiteImportPageFidelity> = {
     scoredAs: { finish, words: improvedWords ? 'improved' : 'kept' },
     free: finish === 'improve' ? [...SITE_IMPORT_IMPROVE_FREE, ...(improvedWords ? ['words'] : [])] : improvedWords ? ['words'] : [],
-    align: alignScore(source, built, placement),
+    align: alignScore(source, built, placement, pinned),
     boxed: ratioKept(boxed.source, boxed.built),
-    ground: groundScore(sections, look, roots),
+    ground: groundScore(sections, look, roots, pinned),
+    ...(pinned ? { darkGround: darkGroundScore(sections, look, roots) } : {}),
     measure: measureScore(source, built, placement, roots),
     readable: look.readable(drawnSections),
     ...(finish === 'improve' ? { design: designScore(source, built, placement, look, roots, drawnSections) } : {}),
@@ -1020,6 +1061,7 @@ function finishMeasures(report: Omit<SiteImportPageFidelity, 'score' | 'lowest'>
     ['align', report.align],
     ['boxed', report.boxed],
     ['ground', report.ground],
+    ['darkGround', report.darkGround],
     ['measure', report.measure],
   ]
   const words: Array<[string, SiteImportFidelityCount]> = report.scoredAs?.finish === 'improve' && !free.has('words') ? [['words', report.words]] : []
@@ -1030,14 +1072,14 @@ function finishMeasures(report: Omit<SiteImportPageFidelity, 'score' | 'lowest'>
  * Whether a page ships (AGL-4109, AGL-4152): its score at the bar, and what
  * is held at exactly 1 whole. Its words, as written, or under improved words
  * every fact and every line, and each line's meaning at the floor; under
- * Keep my site, its alignment, boxes, grounds and measure.
+ * Keep my site, its alignment, boxes, grounds in both schemes and measure.
  */
 export function siteImportFidelityHolds(report: SiteImportPageFidelity, threshold = SITE_IMPORT_FIDELITY_THRESHOLD): boolean {
   if (report.score < threshold) return false
   const improvedWords = report.scoredAs?.words === 'improved'
   if (improvedWords ? report.facts?.ratio !== 1 || report.lines?.ratio !== 1 || (report.meaning?.below ?? 0) > 0 : report.words.ratio !== 1) return false
   if (report.scoredAs?.finish !== 'keep') return true
-  return [report.align, report.boxed, report.ground, report.measure].every((count) => !count || count.ratio === 1)
+  return [report.align, report.boxed, report.ground, report.darkGround, report.measure].every((count) => !count || count.ratio === 1)
 }
 
 /** Whether an item of a group is kept: its own element, every line of it found, and the parts its kind and source say it has. */
@@ -1289,6 +1331,8 @@ function schemeOf(colors: unknown): SiteImportFidelityScheme | null {
     brand: hexOf(pathIn(colors, 'primary', 'main')),
     onBrand: hexOf(pathIn(colors, 'primary', 'contrastText')),
     ink: hexOf(pathIn(colors, 'text', 'primary')),
+    brandLight: hexOf(pathIn(colors, 'primary', 'light')),
+    divider: hexOf(pathIn(colors, 'divider')),
   }
   return Object.values(scheme).some(Boolean) ? scheme : null
 }
@@ -1303,6 +1347,10 @@ function colorIn(value: unknown, scheme: SiteImportFidelityScheme): string | nul
     'background.default': scheme.ground,
     'background.paper': scheme.paper,
     'text.primary': scheme.ink,
+    'primary.light': scheme.brandLight ?? null,
+    divider: scheme.divider ?? null,
+    'common.white': '#ffffff',
+    'common.black': '#000000',
   }
   return paths[value] ?? null
 }
@@ -1324,23 +1372,39 @@ export function siteImportFidelityThemeOf(theme: unknown, from: SiteImportFideli
   if (!light?.ground) return null
   const button = pathIn(theme, 'components', 'MuiButton')
   const variants = pathIn(button, 'variants')
-  const contained = (Array.isArray(variants) ? variants : []).filter((entry) => {
-    const color = pathIn(entry, 'props', 'color')
-    return pathIn(entry, 'props', 'variant') === 'contained' && (color === undefined || color === 'primary')
-  })
-  const styles = [...contained.flatMap((entry) => [pathIn(entry, 'style'), pathIn(entry, 'sx')]), pathIn(button, 'styleOverrides', 'containedPrimary'), pathIn(button, 'styleOverrides', 'contained')].filter(isRecord)
-  const pick = (...keys: string[]) => styles.flatMap((style) => keys.map((key) => colorIn(style[key], light))).find((color): color is string => !!color) ?? null
+  /** A variant's styles, the one that wins first: the last of the variants, then its style overrides. */
+  const stylesOf = (variant: 'contained' | 'outlined' | 'text') => {
+    const own = (Array.isArray(variants) ? variants : []).filter((entry) => {
+      const color = pathIn(entry, 'props', 'color')
+      return pathIn(entry, 'props', 'variant') === variant && (color === undefined || color === 'primary')
+    })
+    return [...[...own].reverse().flatMap((entry) => [pathIn(entry, 'sx'), pathIn(entry, 'style')]), pathIn(button, 'styleOverrides', `${variant}Primary`), pathIn(button, 'styleOverrides', variant)].filter(isRecord)
+  }
+  const contained = stylesOf('contained')
+  const pick = (...keys: string[]) => contained.flatMap((style) => keys.map((key) => colorIn(style[key], light))).find((color): color is string => !!color) ?? null
   const transform = [
     pathIn(button, 'styleOverrides', 'root', 'textTransform'),
     pathIn(button, 'sx', 'root', 'textTransform'),
     pathIn(theme, 'typography', 'variants', 'button', 'textTransform'),
     pathIn(theme, 'typography', 'button', 'textTransform'),
   ].find((value): value is string => typeof value === 'string')
+  const caseIn = (styles: ReadonlyArray<Record<string, unknown>>): 'upper' | 'none' | null => {
+    const own = [...styles.map((style) => style['textTransform']), transform].find((value): value is string => typeof value === 'string')
+    return own ? (CASE_OF[own] ?? null) : null
+  }
+  const outlined = stylesOf('outlined')
+  const named = (...keys: string[]) => outlined.flatMap((style) => keys.map((key) => style[key])).find((value) => value !== undefined) ?? null
   return {
     from,
     light,
     dark: schemeOf(pathIn(theme, 'colorSchemes', 'dark')),
-    button: { fill: pick('backgroundColor', 'bgcolor', 'background'), label: pick('color'), case: transform ? (CASE_OF[transform] ?? null) : null },
+    button: {
+      fill: pick('backgroundColor', 'bgcolor', 'background'),
+      label: pick('color'),
+      case: caseIn(contained),
+      outlined: { text: named('color'), border: named('borderColor'), fill: named('backgroundColor', 'bgcolor', 'background'), case: caseIn(outlined) },
+      text: { case: caseIn(stylesOf('text')) },
+    },
   }
 }
 
@@ -1392,24 +1456,67 @@ class LookOf {
     return own !== undefined ? colorIn(own, scheme) : (this.theme?.button.label ?? scheme.onBrand)
   }
 
-  /** Whether a button is set in the source's case: its own `textTransform`, else the theme's. `null` where either is not known. */
-  caseKept(id: string | null): boolean | null {
-    const wanted = this.facts?.buttonCase
+  /**
+   * Whether a button is set in its style's case in the source: its own
+   * `textTransform`, else the theme's for that style. A read made before each
+   * style's case was kept holds its filled buttons' alone. `null` where either
+   * is not known.
+   */
+  caseKept(id: string | null, style: SiteImportButtonStyle): boolean | null {
+    const facts = this.facts
+    const wanted = style === 'primary' ? facts?.buttonCase : style === 'secondary' ? (facts?.outlinedCase === undefined ? facts?.buttonCase : facts.outlinedCase) : facts?.textCase === undefined ? facts?.buttonCase : facts.textCase
     if (wanted !== 'upper' && wanted !== 'none') return null
     const own = id ? this.built.node(id)?.sx?.['textTransform'] : undefined
-    const drawn = typeof own === 'string' ? (CASE_OF[own] ?? 'none') : (this.theme?.button.case ?? null)
+    const button = this.theme?.button
+    const themed = style === 'primary' ? button?.case : style === 'secondary' ? (button?.outlined?.case ?? button?.case) : (button?.text?.case ?? button?.case)
+    const drawn = typeof own === 'string' ? (CASE_OF[own] ?? 'none') : (themed ?? null)
     return drawn === null ? null : drawn === wanted
   }
 
-  /** Whether a filled button is drawn in the source's own fill, within OKLab ΔE 0.05. `null` where either is not known. */
+  /**
+   * Whether a filled button is drawn in the source's own fill, within OKLab ΔE
+   * 0.05, whatever its label: a light fill under a label that cannot be read
+   * on it keeps the fill and takes a label that can. `null` where either is
+   * not known.
+   */
   fillKept(id: string | null): boolean | null {
     const wanted = hexOf(this.facts?.buttonFill)
     if (!wanted || !this.theme) return null
-    // A fill its own label cannot be read on is deepened by the look's reading rule, Keep's polish, and is not a loss.
-    const label = hexOf(this.facts?.buttonText)
-    if (label && !reads(label, wanted)) return null
     const drawn = id ? this.fill(id) : (this.theme.button.fill ?? this.theme.light.brand)
     return drawn ? siteImportOklabDelta(wanted, drawn) <= SITE_IMPORT_GROUND_DELTA : null
+  }
+
+  /**
+   * Whether an outlined button is drawn as the source draws its own: no fill
+   * of its own where it sets none, and its words and border in its color,
+   * within OKLab ΔE 0.05. On a dark band, which the source's color was not
+   * read for, in the scheme's brand. `null` where either is not known.
+   */
+  outlineKept(id: string | null): boolean | null {
+    const wanted = hexOf(this.facts?.buttonOutline)
+    if (!wanted || !this.theme) return null
+    const scheme = (id ? this.scheme(id) : null) ?? this.theme.light
+    const style = this.theme.button.outlined
+    const fill = style?.fill ?? null
+    const ownFill = hexOf(this.facts?.outlinedFill)
+    const filled = fill !== null && fill !== 'transparent' && fill !== 'none'
+    if (ownFill ? !filled || siteImportOklabDelta(ownFill, colorIn(fill, scheme) ?? ownFill) > SITE_IMPORT_GROUND_DELTA : filled) return false
+    const near = (color: string | null, to: string | null | undefined) => !!color && !!to && siteImportOklabDelta(color, to) <= SITE_IMPORT_GROUND_DELTA
+    const named = [style?.text, style?.border].map((color) => (color === null || color === undefined ? scheme.brand : colorIn(color, scheme)))
+    return named.every((color) => (scheme === this.theme?.light ? near(color, wanted) : near(color, scheme.brand) || near(color, scheme.brandLight)))
+  }
+
+  /** The source's page ground: white where it sets none. */
+  page(): string {
+    return hexOf(this.facts?.background) ?? '#ffffff'
+  }
+
+  /** The color a section is drawn on in the theme's dark scheme: its band's role there. `null` where the theme has no dark scheme. */
+  darkGround(id: string): string | null {
+    const scheme = this.theme?.dark ?? null
+    if (!scheme) return null
+    const fill = this.built.node(id)?.sx?.['bgcolor']
+    return fill === undefined || fill === null ? scheme.ground : colorIn(fill, scheme)
   }
 
   /** The inks and grounds the page shows: each section's, and each filled button's label on its fill, once each. */
@@ -1471,15 +1578,16 @@ const longRead = (source: SiteImportFidelitySource, section: SiteImportLayoutSec
 
 /**
  * The sections set as the source sets them (AGL-4152): their headings, else
- * their words, centered or at the start. The opening a hero draws is the
- * hero's to place, and is measured by its framing and pictures; a long read
- * set at the start, as text is read, is kept whatever its source centers.
+ * their words, centered or at the start; a long read set at the start, as
+ * text is read, is kept whatever its source centers. Under Keep my site the
+ * opening a hero draws is held to it too: a centered opening drawn at the
+ * start is the opening moved. Elsewhere it is the hero's to place.
  */
-function alignScore(source: SiteImportFidelitySource, built: Built, placement: Placement): SiteImportFidelityCount {
+function alignScore(source: SiteImportFidelitySource, built: Built, placement: Placement, pinned: boolean): SiteImportFidelityCount {
   let measured = 0
   let kept = 0
   for (const [index, section] of source.layout.sections.entries()) {
-    if (index === 0 && section.hero?.picture) continue
+    if (index === 0 && section.hero?.picture && !pinned) continue
     const own = flowLines(section.nodes)
     const headings = own.filter((ref) => source.blocks[ref]?.kind === 'heading')
     const lines = (headings.length ? headings : own.filter((ref) => ['paragraph', 'list-item', 'quote'].includes(source.blocks[ref]?.kind ?? ''))).flatMap((ref) => {
@@ -1496,9 +1604,25 @@ function alignScore(source: SiteImportFidelitySource, built: Built, placement: P
   return ratioKept(measured, kept)
 }
 
-/** Each section with a ground of its own on a ground of the theme within OKLab ΔE 0.05 of it. A picture or a film behind its words is its ground, and is not scored. */
-function groundScore(sections: readonly SiteImportLayoutSection[], look: LookOf, roots: ReadonlyArray<string | null>): NonNullable<SiteImportPageFidelity['ground']> {
+/** How far a ground may sit from its page's and still be its page's (AGL-4152), in OKLab. */
+const SAME_GROUND = 0.02
+
+/** Where a ground sits against its page's: on it, lighter or darker. */
+function placeOn(ground: string, page: string): -1 | 0 | 1 {
+  if (siteImportOklabDelta(ground, page) <= SAME_GROUND) return 0
+  return aiHexOklch(ground).L > aiHexOklch(page).L ? 1 : -1
+}
+
+/**
+ * Each section with a ground of its own on a ground of the theme within OKLab
+ * ΔE 0.05 of it. A picture or a film behind its words is its ground, and is
+ * not scored. `ordered`, under Keep my site (AGL-4152), in its place against
+ * the page too: two near whites read alike by ΔE, and swapped they draw the
+ * wrong bands dark in the dark scheme.
+ */
+function groundScore(sections: readonly SiteImportLayoutSection[], look: LookOf, roots: ReadonlyArray<string | null>, ordered: boolean): NonNullable<SiteImportPageFidelity['ground']> {
   if (!look.theme) return { ...ratioKept(0, 0), theme: null, worst: null }
+  const themePage = look.theme.light.ground as string
   let measured = 0
   let kept = 0
   let worst: number | null = null
@@ -1511,9 +1635,44 @@ function groundScore(sections: readonly SiteImportLayoutSection[], look: LookOf,
     if (!drawn) continue
     const delta = siteImportOklabDelta(wanted, drawn)
     worst = Math.max(worst ?? 0, delta)
-    if (delta <= SITE_IMPORT_GROUND_DELTA) kept += 1
+    if (delta <= SITE_IMPORT_GROUND_DELTA && (!ordered || placeOn(wanted, look.page()) === placeOn(drawn, themePage))) kept += 1
   }
   return { ...ratioKept(measured, kept), theme: look.theme.from, worst: worst === null ? null : round(worst) }
+}
+
+/**
+ * The same sections in the theme's dark scheme (AGL-4152): on the source's own
+ * dark fill within OKLab ΔE 0.05 where its stylesheets say one. Else as the
+ * light page orders them, against the dark page: a section lighter than its
+ * page draws lighter, one on its page's ground on the dark page, one darker
+ * set apart from it, and a dark band of the source no lighter than the dark
+ * page. A brand band is the brand's in either scheme, and is not scored.
+ */
+function darkGroundScore(sections: readonly SiteImportLayoutSection[], look: LookOf, roots: ReadonlyArray<string | null>): NonNullable<SiteImportPageFidelity['darkGround']> {
+  const darkPage = look.theme?.dark?.ground ?? null
+  if (!darkPage) return { ...ratioKept(0, 0), worst: null }
+  let measured = 0
+  let kept = 0
+  let worst: number | null = null
+  for (const [index, section] of sections.entries()) {
+    const wanted = hexOf(section.background)
+    if (!wanted || section.band === 'brand' || section.backdrop?.kind === 'picture' || section.backdrop?.kind === 'video') continue
+    measured += 1
+    const root = roots[index]
+    const drawn = root ? look.darkGround(root) : null
+    if (!drawn) continue
+    const own = hexOf(section.darkBackground)
+    if (own) {
+      const delta = siteImportOklabDelta(own, drawn)
+      worst = Math.max(worst ?? 0, delta)
+      if (delta <= SITE_IMPORT_GROUND_DELTA) kept += 1
+      continue
+    }
+    const place = placeOn(drawn, darkPage)
+    const wantedPlace = section.band === 'dark' ? -1 : placeOn(wanted, look.page())
+    if (wantedPlace === -1 ? (section.band === 'dark' ? place <= 0 : place !== 0) : place === wantedPlace) kept += 1
+  }
+  return { ...ratioKept(measured, kept), worst: worst === null ? null : round(worst) }
 }
 
 /** The width a page is measured at (AGL-4152): the 1280 the 11/4 live checks set the source beside the import at. */
