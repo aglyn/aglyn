@@ -470,7 +470,12 @@ async function recordedReport(load: (file: string) => Promise<Dict>, args: Args)
   const scored = (key: string, page: Dict): Dict =>
     finished ? fidelity.siteImportFidelity(page.source, page.tree, { ...finished, theme: themeOf(key) }) : fidelity.siteImportFidelity(page.source, page.tree)
   const rows: PageRow[] = NAMES.map(([key, name]) => ({ name, report: scored(key, built(key)) }))
-  rows.splice(1, 0, { name: 'Home, arranged', report: scored('home', built('home', { answer: replay.SITE_IMPORT_REPLAY_HOME_ANSWER })) })
+  rows.splice(
+    1,
+    0,
+    { name: 'Home, arranged', report: scored('home', built('home', { answer: replay.SITE_IMPORT_REPLAY_HOME_ANSWER })) },
+    { name: 'Home, arranged, 11/5', report: scored('home', built('home', { answer: replay.SITE_IMPORT_REPLAY_HOME_ANSWER_1105 })) },
+  )
   const control: PageRow[] = NAMES.map(([key, name]) => ({ name, report: scored(key, built(key, { layout: false })) }))
   const frames = (
     [
@@ -486,8 +491,8 @@ async function recordedReport(load: (file: string) => Promise<Dict>, args: Args)
   const themeNote = finished
     ? 'Theme: a recorded page stores none, so each page’s is computed from the site style the look pass draws from its look facts.'
     : null
-  // Home is on the table twice; what it leaves out is said once.
-  const said = notScored(rows.filter(({ name }) => name !== 'Home, arranged'))
+  // Home is on the table three times; what it leaves out is said once.
+  const said = notScored(rows.filter(({ name }) => !name.startsWith('Home, arranged')))
   const short = shortOf(rows, frames)
   console.log(
     [

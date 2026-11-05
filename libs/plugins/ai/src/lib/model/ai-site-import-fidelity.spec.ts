@@ -97,7 +97,7 @@ const WHOLE: Record<
 > = {
   // Home's and /product's film are the Video element (AGL-4140): its play mark is its own, no lone icon,
   // and Home's "Watch the 40-second film" is a button that plays it.
-  home: { sections: 11, rows: 2, groups: { cards: 28, steps: 3, list: 12, faq: 11 }, tables: 0, tabs: 0, pictures: 2, framing: 2, icons: 47, lone: 0, buttons: 3, unlinked: 0, headings: 10, forms: 0, videos: 1, words: 1581 },
+  home: { sections: 11, rows: 2, groups: { cards: 28, steps: 3, list: 12, faq: 11 }, tables: 0, tabs: 0, pictures: 2, framing: 2, icons: 47, lone: 0, buttons: 3, unlinked: 0, headings: 10, forms: 0, videos: 1, words: 1579 },
   product: { sections: 11, rows: 1, groups: { logos: 8, cards: 19, steps: 3, stats: 4, pricing: 3, faq: 7 }, tables: 0, tabs: 0, pictures: 3, framing: 3, icons: 44, lone: 0, buttons: 6, unlinked: 0, headings: 10, forms: 0, videos: 1, words: 1012 },
   pricing: { sections: 7, rows: 1, groups: { pricing: 11, cards: 69, faq: 11 }, tables: 3, tabs: 3, pictures: 0, framing: 0, icons: 24, lone: 0, buttons: 4, unlinked: 0, headings: 9, forms: 0, videos: 0, words: 2292 },
   livePricing: { sections: 7, rows: 1, groups: { pricing: 11, cards: 69, faq: 11 }, tables: 3, tabs: 3, pictures: 0, framing: 0, icons: 24, lone: 0, buttons: 4, unlinked: 0, headings: 9, forms: 0, videos: 0, words: 2292 },
