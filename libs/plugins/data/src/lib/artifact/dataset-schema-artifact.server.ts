@@ -21,8 +21,8 @@ import {
   createResourceUid,
   defaultScopeForNewResource,
   newResourceScopeFields,
-  scopeCovers,
 } from '@aglyn/aglyn/server'
+import { sharingCovers } from '@aglyn/aglyn/app-utils/scope-tokens'
 import type {
   ArtifactInstallRequest,
   ArtifactLocateRequest,
@@ -203,7 +203,7 @@ export async function prepareDatasetSchemaInstall(
   // Relink reference fields onto this org's datasets by display name; what
   // can't be relinked degrades to text and is reported to the installer.
   // A candidate has to be visible everywhere the new dataset is, which is
-  // the rule every reference answers to (`scopeCovers`, AGL-1044): one
+  // the rule every reference answers to (`sharingCovers`, AGL-1044): one
   // pointing at a dataset some of those sites cannot see resolves to nothing
   // there, and nothing says why. That is also what keeps an install from
   // binding its reference fields to an agency's internal dataset of the same
@@ -211,7 +211,7 @@ export async function prepareDatasetSchemaInstall(
   // path, arriving here instead.
   const byLabel: Record<string, string> = {}
   for (const entry of datasets.docs) {
-    if (!scopeCovers(entry.get('visibleTo'), visibleTo)) continue
+    if (!sharingCovers(entry.data(), { visibleTo })) continue
     const label = String(entry.get('displayName') ?? '').toLowerCase()
     if (label && !byLabel[label]) byLabel[label] = entry.id
   }

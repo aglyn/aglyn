@@ -171,4 +171,72 @@ describe('ScopeDriftCard', () => {
       screen.getByText('Stamp the missing scopes').closest('button')?.disabled,
     ).toBe(true)
   })
+
+  /**
+   * Documents shared with all sites except some (AGL-4047). A marked document that
+   * has fallen behind is in `planned`, since a stamp's sweep repairs it, so the
+   * card can't call it "missing its scope". An unreadable marker is in no plan at
+   * all, so `planned === 0` must not read as "No drift" over one.
+   */
+  describe('all-except drift', () => {
+    const scanWith = (allExcept: Record<string, number>, planned: number, more = false) =>
+      reply({
+        planned,
+        drift: { byCollection: {}, members: 0, allExcept },
+        done: !more,
+        nextCursor: more ? 'next' : null,
+      })
+
+    it('sums the pages, and says what is behind without calling it missing', async () => {
+      ;(global.fetch as jest.Mock)
+        .mockResolvedValueOnce(scanWith({ stale: 2, invalid: 0, capped: 0 }, 2, true))
+        .mockResolvedValueOnce(scanWith({ stale: 1, invalid: 0, capped: 0 }, 1))
+
+      render(<ScopeDriftCard />)
+      fireEvent.click(screen.getByText('Scan for drift'))
+
+      await waitFor(() => expect(screen.getByText(/3 document\(s\) shared with all sites except some have fallen behind/)).toBeTruthy())
+      expect(screen.queryByText(/missing their sharing/)).toBeNull()
+      // A stamp's sweep brings these level, so the scan offers it.
+      expect(screen.getByText('Stamp the missing scopes').closest('button')?.disabled).toBe(false)
+    })
+
+    it('an unreadable marker is not "No drift", and offers no stamp that would not touch it', async () => {
+      ;(global.fetch as jest.Mock).mockResolvedValueOnce(scanWith({ stale: 0, invalid: 4, capped: 0 }, 0))
+
+      render(<ScopeDriftCard />)
+      fireEvent.click(screen.getByText('Scan for drift'))
+
+      await waitFor(() => expect(screen.getByText(/4 document\(s\) carry an all-except marker/)).toBeTruthy())
+      expect(screen.queryByText(/No drift/)).toBeNull()
+      expect(screen.getByText('Stamp the missing scopes').closest('button')?.disabled).toBe(true)
+    })
+
+    it('at their limit is said, and is no alarm', async () => {
+      ;(global.fetch as jest.Mock).mockResolvedValueOnce(scanWith({ stale: 0, invalid: 0, capped: 5 }, 0))
+
+      render(<ScopeDriftCard />)
+      fireEvent.click(screen.getByText('Scan for drift'))
+
+      await waitFor(() => expect(screen.getByText(/5 document\(s\) shared with all sites except some have reached/)).toBeTruthy())
+      expect(screen.getByText(/No drift/)).toBeTruthy()
+    })
+
+    it('counts documents with no scope apart from the ones behind', async () => {
+      ;(global.fetch as jest.Mock).mockResolvedValueOnce(
+        reply({
+          planned: 5,
+          drift: { byCollection: { media: 3 }, members: 0, allExcept: { stale: 2, invalid: 0, capped: 0 } },
+          done: true,
+          nextCursor: null,
+        }),
+      )
+
+      render(<ScopeDriftCard />)
+      fireEvent.click(screen.getByText('Scan for drift'))
+
+      await waitFor(() => expect(screen.getByText(/^3 document\(s\) are missing/)).toBeTruthy())
+      expect(screen.getByText(/2 document\(s\) shared with all sites except some/)).toBeTruthy()
+    })
+  })
 })

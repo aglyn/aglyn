@@ -15,6 +15,7 @@
  * limitations under the License.
  */
 
+import type { ScopePlaced } from '@aglyn/aglyn/app-utils/site-placement'
 import type { AglynOrgMember } from '@aglyn/aglyn/foundation/definitions/organization.types'
 import { memberHasOrgPermission } from '@aglyn/tenant-data-admin'
 import { memberMayActOnPlaced, placedRefusalPermission } from '@aglyn/tenant-data-admin/server/placement-access'
@@ -33,23 +34,24 @@ const ACTS = {
 } as const
 
 /** The key a refusal names: the site's on a one-site dataset, else the workspace's. */
-export function datasetRefusalPermission(act: keyof typeof ACTS, visibleTo: unknown): string {
-  return placedRefusalPermission(visibleTo, ACTS[act].workspaceKey, ACTS[act].siteKey)
+export function datasetRefusalPermission(act: keyof typeof ACTS, dataset: ScopePlaced | null | undefined): string {
+  return placedRefusalPermission(dataset, ACTS[act].workspaceKey, ACTS[act].siteKey)
 }
 
-/** May this member write or delete a dataset placed at `visibleTo`? The routes' `canWriteDatasetOn`. */
+/** May this member write or delete this dataset, as its document places it? The routes' `canWriteDatasetOn`. */
 export async function memberMayActOnDataset(input: {
   firestore: FirebaseFirestore.Firestore
   orgId: string
   uid: string
   member: Partial<AglynOrgMember>
-  visibleTo: unknown
+  dataset: ScopePlaced | null | undefined
   act: keyof typeof ACTS
 }): Promise<boolean> {
-  const { act, ...rest } = input
+  const { act, dataset, ...rest } = input
   const { workspaceKey, siteKey } = ACTS[act]
   return memberMayActOnPlaced({
     ...rest,
+    placed: dataset,
     workspace: await memberHasOrgPermission(input.orgId, input.member, workspaceKey as never),
     workspaceKey,
     siteKey,

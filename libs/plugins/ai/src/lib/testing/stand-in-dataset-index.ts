@@ -82,6 +82,8 @@ function record(id: string, data: Record<string, unknown> | undefined): PluginIn
         ...(str(model.fields[fieldId]?.customType) ? { customType: str(model.fields[fieldId]?.customType) } : {}),
       })),
       visibleTo: Array.isArray(data['visibleTo']) ? data['visibleTo'] : [],
+      ...(data['scopeMode'] !== undefined ? { scopeMode: data['scopeMode'] } : {}),
+      ...(data['scopeExcept'] !== undefined ? { scopeExcept: data['scopeExcept'] } : {}),
     },
   }
 }

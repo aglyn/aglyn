@@ -15,6 +15,8 @@
  * limitations under the License.
  */
 
+import { isOrgWideMember } from '@aglyn/aglyn/app-utils/organizations'
+import { type ScopeSharingChoice, sharingFromChoice } from '@aglyn/aglyn/app-utils/scope-tokens'
 import {
   defaultScopeForNewResource,
   newResourceScopeFields,
@@ -41,6 +43,7 @@ import {
   resolveOrgMembership,
 } from '@aglyn/tenant-data-admin'
 import { isRefusedIdToken } from '@aglyn/tenant-data-admin/server/id-token-refusal'
+import { fieldsToWrite, orgHostIdsFromDoc } from '@aglyn/tenant-data-admin/server/scope-sharing-sweep'
 import { FieldPath, FieldValue, Timestamp } from 'firebase-admin/firestore'
 import { dataPermissionRefusal } from '../model/dataset-access'
 import { announceDatasetRecords as announceDatasetChange } from './announce-dataset-records'
@@ -115,6 +118,30 @@ const DATASET_ACTIONS: ReadonlySet<string> = new Set([
   'delete-record',
 ])
 
+/** The most site ids one sharing choice may name: far past any workspace. */
+const SHARING_CHOICE_MAX_IDS = 1000
+
+/** A sharing choice off the wire, or null for anything else. Ids are checked against the workspace after. */
+function sharingChoiceFrom(value: unknown): ScopeSharingChoice | null {
+  const choice = (value ?? {}) as { mode?: unknown; hostIds?: unknown; exceptHostIds?: unknown }
+  const ids = (list: unknown): string[] | null =>
+    Array.isArray(list) &&
+    list.length <= SHARING_CHOICE_MAX_IDS &&
+    list.every((id) => typeof id === 'string' && /^[^:/]+$/.test(id))
+      ? (list as string[])
+      : null
+  if (choice.mode === 'all') return { mode: 'all' }
+  if (choice.mode === 'selected') {
+    const hostIds = ids(choice.hostIds)
+    return hostIds && { mode: 'selected', hostIds }
+  }
+  if (choice.mode === 'allExcept') {
+    const exceptHostIds = ids(choice.exceptHostIds)
+    return exceptHostIds && { mode: 'allExcept', exceptHostIds }
+  }
+  return null
+}
+
 /**
  * Rows written per import transaction.
  *
@@ -149,6 +176,8 @@ const ADDRESS_FILL_MAX = 5000
  * - `update-record` / `delete-record`: the Data card's record edit and
  *   delete (with its reference integrity) for the native apps, which have no
  *   browser to write from (AGL-3668).
+ * - `set-sharing`: who a dataset is shared with: all sites, the sites chosen, or
+ *   all sites except some (AGL-4047).
  *
  * Since AGL-2163 both record actions ALSO enforce `checkDataStorageQuota`.
  * See {@link refuseIfDataStorageBlocked}: that check's `allowed` field had no
@@ -381,6 +410,58 @@ export const datasetsHandler: PluginWebApiHandler = async (request) => {
       return Response.json({ ok: true, id }, { status: 200 })
     }
 
+    /**
+     * Who a dataset is shared with (AGL-4047).
+     *
+     * Who may do it is what the rule on a client's `visibleTo` write asks: "Manage
+     * data", asked above, with every site in reach. A site's verdict writes a
+     * dataset and never moves it.
+     *
+     * The `scopeMode` and `scopeExcept` of a dataset shared with all sites except
+     * some are the server's alone (the rules' `scopeMarkerUnchanged`), so this is
+     * the one door that sets or removes them, and removing them is a field delete.
+     *
+     * The workspace's sites are read in the transaction: a site being created
+     * writes the same document, so it either lands first and is on this list, or
+     * lands after and its sweep finds this dataset. A sweep can't miss it.
+     *
+     * A site this workspace doesn't hold is dropped from a choice, never refused
+     * and never stored: it may be one that has just gone, and a token no site
+     * holds would make a dataset nobody could reach.
+     */
+    if (action === 'set-sharing') {
+      if (decoded['staff'] !== true && !isOrgWideMember(member)) {
+        return Response.json(
+          { error: 'Changing who a dataset is shared with takes access to every site in the workspace.', reason: 'reach' },
+          { status: 403 },
+        )
+      }
+      const datasetId = String(body?.datasetId ?? '')
+      const choice = sharingChoiceFrom(body?.choice)
+      if (!datasetId || datasetId.includes('/') || !choice) {
+        return Response.json({ error: 'Missing datasetId or sharing choice' }, { status: 400 })
+      }
+      const datasetRef = orgRef.collection('datasets').doc(datasetId)
+      const answer = await firestore.runTransaction(async (tx) => {
+        const [liveOrg, dataset] = await tx.getAll(orgRef, datasetRef)
+        if (!dataset.exists) return { status: 404, error: 'Unknown dataset' }
+        const orgHostIds = orgHostIdsFromDoc(liveOrg.data())
+        const shared = sharingFromChoice(
+          choice.mode === 'selected'
+            ? { mode: 'selected', hostIds: choice.hostIds.filter((id) => orgHostIds.includes(id)) }
+            : choice,
+          orgHostIds,
+        )
+        if (!shared.fields) return { status: 400, error: shared.problem }
+        tx.update(datasetRef, { ...fieldsToWrite(shared.fields), updatedAt: Timestamp.now() })
+        return { status: 200, visibleTo: shared.fields.visibleTo, scopeExcept: shared.fields.scopeExcept }
+      })
+      if (answer.status !== 200) {
+        return Response.json({ error: answer.error }, { status: answer.status })
+      }
+      return Response.json({ ok: true, visibleTo: answer.visibleTo, scopeExcept: answer.scopeExcept }, { status: 200 })
+    }
+
     if (DATASET_ACTIONS.has(action)) {
       const datasetId = String(body?.datasetId ?? '')
       if (!datasetId) {
@@ -422,10 +503,10 @@ export const datasetsHandler: PluginWebApiHandler = async (request) => {
        * "Manage data", unless a site narrows the member on the one site it is
        * placed on; or that one site's verdict.
        */
-      const placedOn = (datasetSnapshot.data() as { visibleTo?: string[] } | undefined)?.visibleTo
+      const placedOn = datasetSnapshot.data()
       if (
         decoded['staff'] !== true &&
-        !(await memberMayActOnDataset({ firestore, orgId, uid: decoded.uid, member, visibleTo: placedOn, act: 'write' }))
+        !(await memberMayActOnDataset({ firestore, orgId, uid: decoded.uid, member, dataset: placedOn, act: 'write' }))
       ) {
         return datasetsPermissionRefusal(datasetRefusalPermission('write', placedOn))
       }
@@ -624,10 +705,10 @@ export const datasetsHandler: PluginWebApiHandler = async (request) => {
           if (plan.kind === 'strip') {
             // Stripping a reference writes THAT dataset, so it asks what writing
             // it asks, as the card's client-direct batch does at the rule (AGL-4047).
-            const otherPlacedOn = (other.data() as { visibleTo?: string[] }).visibleTo
+            const otherPlacedOn = other.data()
             if (
               decoded['staff'] !== true &&
-              !(await memberMayActOnDataset({ firestore, orgId, uid: decoded.uid, member, visibleTo: otherPlacedOn, act: 'write' }))
+              !(await memberMayActOnDataset({ firestore, orgId, uid: decoded.uid, member, dataset: otherPlacedOn, act: 'write' }))
             ) {
               return datasetsPermissionRefusal(datasetRefusalPermission('write', otherPlacedOn))
             }

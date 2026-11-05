@@ -15,12 +15,12 @@
  * limitations under the License.
  */
 
-import { oneSitePlacement, placementVerdict, stampedPlacementKey } from '@aglyn/aglyn/app-utils/site-placement'
+import { oneSitePlacement, placementVerdict, type ScopePlaced, stampedPlacementKey } from '@aglyn/aglyn/app-utils/site-placement'
 import { isLockdownActive } from '@aglyn/aglyn/app-utils/lockdown'
 import type { AglynOrgMember, HostAccessRole } from '@aglyn/aglyn/foundation/definitions/organization.types'
 
 /**
- * May this member act on a workspace resource placed at `visibleTo` (AGL-4047),
+ * May this member act on a workspace resource placed as `placed` says (AGL-4047),
  * by the verdict in `site-placement`? The Admin SDK evaluates no rules, so this
  * repeats the rule for the routes, reading what it reads: the site's stamp, the
  * workspace it belongs to and its suspension. One read of the site, and none for
@@ -31,17 +31,17 @@ export async function memberMayActOnPlaced(input: {
   orgId: string
   uid: string
   member: Partial<AglynOrgMember>
-  visibleTo: unknown
+  placed: ScopePlaced | null | undefined
   /** The member's answer on the workspace key, which the caller has resolved. */
   workspace: boolean
   workspaceKey: string
   siteKey: string
   sitePreset: Readonly<Partial<Record<HostAccessRole, boolean>>>
 }): Promise<boolean> {
-  const { firestore, orgId, uid, member, visibleTo, workspace, workspaceKey, siteKey, sitePreset } = input
+  const { firestore, orgId, uid, member, placed, workspace, workspaceKey, siteKey, sitePreset } = input
   return placementVerdict<Promise<boolean>>({
     member,
-    visibleTo,
+    placed,
     workspace,
     site: async (hostId) => {
       const site = await firestore.collection('hosts').doc(hostId).get()
@@ -64,6 +64,10 @@ export async function memberMayActOnPlaced(input: {
 }
 
 /** The key a refusal names: the site's for a resource on one site, else the workspace's. */
-export function placedRefusalPermission(visibleTo: unknown, workspaceKey: string, siteKey: string): string {
-  return oneSitePlacement(visibleTo) ? siteKey : workspaceKey
+export function placedRefusalPermission(
+  placed: ScopePlaced | null | undefined,
+  workspaceKey: string,
+  siteKey: string,
+): string {
+  return oneSitePlacement(placed) ? siteKey : workspaceKey
 }

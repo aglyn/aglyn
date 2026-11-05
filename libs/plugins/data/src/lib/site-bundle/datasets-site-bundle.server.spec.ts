@@ -32,6 +32,7 @@ import { listDeclaredSiteBundleSections } from '@aglyn/aglyn/plugin-manager/plug
 import type { SiteBundleImportRequest } from '@aglyn/aglyn/plugin-manager/plugin-site-bundle'
 import {
   DATASET_RESTORE_FIELDS,
+  exportSiteDatasets,
   importSiteDatasets,
   RECORD_RESTORE_FIELDS,
   siteDatasetsRefusal,
@@ -97,6 +98,32 @@ describe('the data plugin declares its section of the backup', () => {
   })
 })
 
+describe('backing up a site’s datasets', () => {
+  it('takes the sharing off on the way out, the all-sites-except marker with it', async () => {
+    const records = { limit: () => ({ get: async () => ({ docs: [] }) }) }
+    const doc = {
+      id: 'dataset-1',
+      ref: { collection: () => records },
+      get: () => undefined,
+      data: () => ({ displayName: 'Menu', visibleTo: ['host:host-1'], scopeMode: 'allExcept', scopeExcept: ['host:host-2'] }),
+    }
+    const firestore = {
+      collection: () => ({
+        doc: () => ({ collection: () => ({ limit: () => ({ get: async () => ({ docs: [doc] }) }) }) }),
+      }),
+    }
+    jest.spyOn(jest.requireMock('@aglyn/tenant-data-admin').firebaseAdmin, 'app').mockReturnValue({ firestore: () => firestore })
+
+    const [exported] = await exportSiteDatasets({ hostId: 'host-1', orgId: 'org-1', limit: 50 })
+
+    expect(exported).toEqual({ $id: 'dataset-1', displayName: 'Menu', records: [] })
+  })
+
+  it('no restore field names the sharing', () => {
+    for (const field of ['visibleTo', 'scopeMode', 'scopeExcept']) expect(DATASET_RESTORE_FIELDS).not.toContain(field)
+  })
+})
+
 describe('restoring a site’s datasets', () => {
   it('writes every restore field back, with the restore’s stamps and a fresh site scope', async () => {
     const { request, writes } = restoreInto({
@@ -127,6 +154,8 @@ describe('restoring a site’s datasets', () => {
         {
           ...DATASET,
           visibleTo: ['org'],
+          scopeMode: 'allExcept',
+          scopeExcept: ['host:elsewhere'],
           deletedAt: 1,
           injected: true,
           records: [{ ...RECORD, deletedAt: 1, referencedIds: ['forged'] }],
@@ -137,6 +166,9 @@ describe('restoring a site’s datasets', () => {
 
     const [dataset, record] = writes
     expect(dataset.data['visibleTo']).toEqual(['host:host-1'])
+    // A marker names sites of the workspace it came from, and only the server sets one.
+    expect(dataset.data).not.toHaveProperty('scopeMode')
+    expect(dataset.data).not.toHaveProperty('scopeExcept')
     expect(dataset.data).not.toHaveProperty('deletedAt')
     expect(dataset.data).not.toHaveProperty('injected')
     expect(record.data).not.toHaveProperty('deletedAt')

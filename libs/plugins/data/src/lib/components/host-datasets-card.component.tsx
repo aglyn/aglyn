@@ -16,6 +16,7 @@
  */
 'use client'
 
+import type { ScopePlaced } from '@aglyn/aglyn/app-utils/site-placement'
 import { TransferResumeImport } from '@aglyn/aglyn/app-utils/transfer-resume-import'
 import {
   type AglynOrgBilling,
@@ -338,7 +339,7 @@ export function HostDatasetsCard(props: HostDatasetsCardProps) {
     datasets.find((item) => item.$id === selectedId) ?? datasets[0]
   // What this member may do with THIS dataset (AGL-4047): one placed on one site
   // answers to that site.
-  const blocked = useDatasetWritesBlocked(orgId, (selected as { visibleTo?: unknown } | undefined)?.visibleTo)
+  const blocked = useDatasetWritesBlocked(orgId, selected as ScopePlaced | undefined)
   // Typed model (AGL-179): drives headers, cell rendering, and the
   // document form; v1 datasets get a derived all-text model.
   const model = useMemo(

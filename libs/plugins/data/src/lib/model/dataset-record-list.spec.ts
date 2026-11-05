@@ -117,6 +117,17 @@ describe('the dataset list source', () => {
     expect(datasetRecordListSource.record('gone', { displayName: 'Old', deletedAt: 1 })).toBeNull()
   })
 
+  it('carries the all-sites-except marker where a dataset has one, so a reader can’t take it for a list of sites', () => {
+    const facts = (extra: Record<string, unknown>) => datasetRecordListSource.record('team', { displayName: 'Team', ...extra })?.facts
+    expect(facts({ visibleTo: ['host:a'], scopeMode: 'allExcept', scopeExcept: ['host:b'] })).toMatchObject({
+      visibleTo: ['host:a'],
+      scopeMode: 'allExcept',
+      scopeExcept: ['host:b'],
+    })
+    expect(facts({ visibleTo: ['host:a'] })).not.toHaveProperty('scopeMode')
+    expect(facts({ visibleTo: ['host:a'] })).not.toHaveProperty('scopeExcept')
+  })
+
   it('says where an installed dataset came from, at the version its install stamped', () => {
     expect(
       datasetRecordListSource.record('crm', {

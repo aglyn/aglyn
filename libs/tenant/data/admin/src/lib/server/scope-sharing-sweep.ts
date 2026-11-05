@@ -176,7 +176,7 @@ async function eachConcurrently<T>(
 }
 
 /** A write's data: a `null` marker field is deleted, never stored. */
-function fieldsToWrite(fields: ScopeSharingFields): Record<string, unknown> {
+export function fieldsToWrite(fields: ScopeSharingFields): Record<string, unknown> {
   return {
     visibleTo: fields.visibleTo,
     scopeMode: fields.scopeMode ?? FieldValue.delete(),

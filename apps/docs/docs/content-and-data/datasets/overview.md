@@ -169,8 +169,13 @@ Datasets belong to the **workspace**, not to a single site, so one dataset can d
 on every site you run. When that isn't what you want, the **Sharing** control on each
 dataset decides which sites can see it:
 
-- **All sites** — everyone in the workspace, on every site.
-- **Selected sites…** — pick the sites that share it, up to 30.
+- **All sites** — everyone in the workspace, on every site. A new site gets it
+  automatically.
+- **Selected sites** — tick the sites that share it, up to 30. A new site doesn't get it
+  until you add that site.
+- **All sites except…** — tick the sites to leave out. Every other site shares it, and a
+  new site gets it automatically. A workspace with one site has nothing to leave out, so
+  this choice stays off until you add a second, and at least one site has to stay in.
 
 Where a new dataset starts depends on where you create it and on your workspace's
 **Default sharing for new datasets**, the setting at the top of the organization
@@ -179,7 +184,7 @@ Where a new dataset starts depends on where you create it and on your workspace'
 
 - **Created on a site's Data page** — it follows that setting. Set to **All sites**, the
   dataset starts on **All sites**. Set to **Only the site they were created in**, it
-  starts shared with that site alone, and its control reads **Selected sites…** with
+  starts shared with that site alone, and its control reads **Selected sites** with
   just that site picked.
 - **Created on the organization Data page** — it starts on **All sites** whatever the
   setting says, because there is no site to limit it to.
@@ -200,8 +205,8 @@ workspace owners and admins hold by default; without it the control stays off.
 The setting only decides where a new dataset starts. It changes nothing that already
 exists, and you can widen or narrow any dataset afterwards.
 
-A dataset with no sharing stored is visible to **no** site; its control reads **Not
-shared with any site** until you choose one of the two.
+A dataset with no sharing stored is visible to **no** site. Its control says it has never
+been shared, with nothing picked, until you choose one of the three.
 
 This matters most for agencies. If you run three internal sites alongside twelve client
 sites, your rate card can be shared with the internal three and stay invisible to the
@@ -215,7 +220,8 @@ Sharing decides who sees a dataset, not who may change it. A member invited to o
 holds **Manage data** can change the records of a dataset shared with the whole workspace,
 because it is shared with their site too; see
 [Custom roles & permissions](../../workspace-and-billing/teams-and-roles/custom-roles.md).
-They can't change what the dataset is shared with.
+They can't change what the dataset is shared with: that takes **Manage data** and access to
+every site.
 
 A few consequences worth knowing:
 
@@ -224,20 +230,27 @@ A few consequences worth knowing:
   a change that takes a site's access away.
 - **Reference fields need both sides.** A reference from one dataset to another only
   resolves on sites that can see both, so the target's sharing has to cover the source's.
+  A dataset shared with all sites except some reaches every new site, so a target that
+  covers it has to reach them too: **All sites**, or all sites except no more than it
+  leaves out.
 - **Limits are workspace-wide.** Your dataset and record allowances count everything the
   workspace owns, whether or not you can see it all. Sharing decides visibility, not
   billing.
-- **Deleting is a workspace action.** A dataset shared with more than one site can't be
-  deleted from a single site's Data page — narrow its sharing instead, or delete it from
-  the workspace Data page. That takes access to every site: a member who reaches only some
-  sites can't delete a dataset shared beyond one site.
+- **Deleting is a workspace action.** A dataset shared with more than one site, or with all
+  sites except some, can't be deleted from a single site's Data page — narrow its sharing
+  instead, or delete it from the workspace Data page. That takes access to every site: a
+  member who reaches only some sites can't delete a dataset shared beyond one site.
 - **A dataset on one site answers to that site.** Who may edit and delete a dataset shared
   with one site alone follows that site's access, and who may read and export records each
-  have a permission of their own. See
+  have a permission of their own. A dataset shared with all sites except some belongs to the
+  workspace however few sites it reaches today, so it answers as one on several sites does.
+  See
   [Dataset permissions](../../workspace-and-billing/teams-and-roles/custom-roles.md#dataset-permissions).
 - **Deleting a site deletes the datasets shared with it alone.** They go with the site,
   records and all, and the **Delete site** card lists them before you confirm. A dataset
-  the site shares with other sites stays, and the site is removed from its sharing. See
+  the site shares with other sites stays, and the site is removed from its sharing. A dataset
+  shared with all sites except some stays too, even if that was the last site it reached:
+  no site sees it until a new one joins or you change its sharing. See
   [Deleting a single site](../../workspace-and-billing/billing-and-plans/downgrading-and-canceling.md#deleting-a-single-site).
 
 ## Import & export
