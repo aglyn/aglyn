@@ -50,7 +50,7 @@ export const MINIMAL_THEME: HostTheme = {
         default: '#ffffff',
         paper: '#ffffff',
       },
-      text: { primary: '#09090b', secondary: '#71717a', disabled: '#a1a1aa' },
+      text: { primary: '#09090b', secondary: '#6b6b74', disabled: '#a1a1aa' },
       tint: { primary: '#f4f4f5', secondary: '#f4f4f5', tertiary: '#fafafa' },
       divider: '#e4e4e7',
     },

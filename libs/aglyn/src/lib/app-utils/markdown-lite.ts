@@ -82,7 +82,7 @@ export type MarkdownBlock =
     }
 
 const INLINE_PATTERN =
-  /(\*\*([^*]+)\*\*)|(\*([^*]+)\*)|(\[([^\]]+)\]\(([^)\s]+)\))/g
+  /(\*\*([^*]+)\*\*)|(\*([^*]+)\*)|(\[([^\]]+)\]\(([^)\s]+)\))|(?<![\w_])_([^_\n]+)_(?![\w_])/g
 
 /**
  * Only absolute http(s) survives; anything else renders as text. The `http:`
@@ -297,6 +297,10 @@ export function parseMarkdownInlines(text: string): MarkdownInline[] {
       inlines.push({ type: 'bold', text: match[2] })
     } else if (match[4] != null) {
       inlines.push({ type: 'italic', text: match[4] })
+    } else if (match[8] != null) {
+      // `_italic_` (AGL-4182). Only as a whole word, so `snake_case_name` and
+      // a file name stay as they were typed.
+      inlines.push({ type: 'italic', text: match[8] })
     } else if (match[6] != null) {
       const href = safeLinkUrl(match[7])
       if (href) inlines.push({ type: 'link', text: match[6], href })
