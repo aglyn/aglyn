@@ -424,7 +424,7 @@ export function isKnownContactSource(source: unknown): boolean {
 }
 
 /** One source a filter offers: the stored word, and how it reads. */
-export interface ContactSourceOption {
+export interface PluginContactSourceOption {
   value: string
   label: string
 }
@@ -435,7 +435,7 @@ export interface ContactSourceOption {
  * choice and a row's chip cannot disagree. A plugin that declares a core word
  * adds no second entry and does not change its label.
  */
-export function listContactSourceOptions(): ContactSourceOption[] {
+export function listContactSourceOptions(): PluginContactSourceOption[] {
   const words = new Set([
     ...Object.keys(CONTACT_SOURCE_LABELS),
     ...listPluginContactSources().map((door) => door.source),
