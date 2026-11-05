@@ -35,7 +35,8 @@
  *   clearing, a payout a bank transfer, and a daily summary a manual journal.
  * - Creates carry Xero's `Idempotency-Key` header, and every document but a
  *   journal is found again by its number or reference.
- * - 60 calls a minute and 5,000 a day per organization: calls are paced a
+ * - 60 calls a minute and 1,000 a day per organization on Xero's free Starter
+ *   plan (5,000 on the plans above it): calls are paced a
  *   second apart, and the engine keeps the daily count.
  */
 
@@ -101,8 +102,11 @@ export const XERO_SCOPES = [
 /** 60 a minute is one a second. */
 export const XERO_MIN_INTERVAL_MS = 1000
 
-/** Xero's daily limit per organization. */
-export const XERO_DAILY_CALL_LIMIT = 5000
+/**
+ * Xero's daily limit per organization on the Starter plan, which a new app
+ * starts on. Raise it to 5,000 when the app moves up a plan.
+ */
+export const XERO_DAILY_CALL_LIMIT = 1000
 
 export interface XeroConfig {
   clientId: string
@@ -140,12 +144,13 @@ const INCOME_TYPES = new Set(['REVENUE', 'SALES', 'OTHERINCOME'])
 const EXPENSE_TYPES = new Set(['EXPENSE', 'DIRECTCOSTS', 'OVERHEADS', 'DEPRECIATN'])
 const LIABILITY_TYPES = new Set(['CURRLIAB', 'LIABILITY', 'TERMLIAB', 'PAYGLIABILITY', 'SUPERANNUATIONLIABILITY', 'WAGESPAYABLELIABILITY'])
 
-function classify(type: string, enablePayments: boolean): AccountingAccountOption['classification'] {
+function classify(type: string): AccountingAccountOption['classification'] {
+  // Only a real bank account. One that merely has payments enabled takes an
+  // invoice's payment, but Xero refuses it for a spend-money fee and a bank
+  // transfer, which would leave the books half posted.
   if (type === 'BANK') return 'bank'
   if (INCOME_TYPES.has(type)) return 'income'
   if (EXPENSE_TYPES.has(type)) return 'expense'
-  // An account with payments enabled can take a payment like a bank account.
-  if (enablePayments) return 'bank'
   if (LIABILITY_TYPES.has(type)) return 'liability'
   return 'other'
 }
@@ -430,7 +435,7 @@ export function createXeroProvider(config: XeroConfig, options: AccountingHttpOp
             code: typeof row['Code'] === 'string' && row['Code'] ? row['Code'] : null,
             name: String(row['Name'] ?? ''),
             type,
-            classification: classify(type, row['EnablePaymentsToAccount'] === true),
+            classification: classify(type),
             currency: typeof row['CurrencyCode'] === 'string' ? row['CurrencyCode'] : null,
           }
         })

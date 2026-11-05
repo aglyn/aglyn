@@ -100,6 +100,7 @@ describe('Xero adapter, call by call', () => {
             { AccountID: 'acc-clr', Name: 'Aglyn clearing', Type: 'BANK', Code: '' },
             { AccountID: 'acc-inc', Name: 'Sales', Type: 'REVENUE', Code: '200', CurrencyCode: 'GBP' },
             { AccountID: 'acc-fee', Name: 'Fees', Type: 'EXPENSE', Code: '404' },
+            { AccountID: 'acc-pay', Name: 'Clearing Account', Type: 'CURRLIAB', Code: '855', EnablePaymentsToAccount: true },
             { Name: 'No id' },
           ],
         },
@@ -111,9 +112,12 @@ describe('Xero adapter, call by call', () => {
       ['acc-clr', null],
       ['acc-inc', '200'],
       ['acc-fee', '404'],
+      ['acc-pay', '855'],
     ])
     expect(accounts[0].classification).toBe('bank')
     expect(accounts[1]).toMatchObject({ classification: 'income', currency: 'GBP' })
+    // Xero refuses a spend-money fee and a bank transfer on it, so it is no clearing account.
+    expect(accounts[3].classification).toBe('liability')
   })
 
   it('lists the active tax rates with their effective rate', async () => {
