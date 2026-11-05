@@ -16,6 +16,7 @@
  */
 'use client'
 
+import { permissionRefusalText } from '@aglyn/aglyn/app-utils/org-permissions'
 import { pluginDocsHelp } from '@aglyn/aglyn'
 import { ICON_VARIANT_CLOSE } from '@aglyn/shared-data-enums'
 import {
@@ -114,7 +115,7 @@ function identityChip(view: SendingIdentityView): {
  * so far say, and the removal confirmation counts the sites not yet read.
  *
  * Managing — adding a domain, checking it, choosing what a site sends as, or
- * editing a sender — needs the organization admin role, exactly as on a
+ * editing a sender — asks "Organization settings" (`org.settings`), exactly as on a
  * site's page, and the page says so to anybody else rather than offering
  * controls that would refuse.
  */
@@ -302,7 +303,7 @@ function OrgSendingTables(props: { mount: EmailOrgMount; basePath: string }) {
   ): RowActionsMenuItem[] => {
     const working = Boolean(domainBusy)
     const domainRouteReason = !canManage
-      ? 'Managing sending domains needs the organization admin role.'
+      ? permissionRefusalText('org.settings')
       : !entitled
         ? 'Managing sending domains needs a plan that carries sending as ' +
           'your own domain.'
@@ -339,8 +340,7 @@ function OrgSendingTables(props: { mount: EmailOrgMount; basePath: string }) {
             ? 'Only a verified domain can be sent as. Publish its records and ' +
               'check DNS first.'
             : !canManage
-              ? 'Choosing what a site sends as needs the organization admin ' +
-                'role.'
+              ? permissionRefusalText('org.settings')
               : undefined,
         onClick: () => {
           if (mount.hosts.length === 1) {
@@ -398,9 +398,7 @@ function OrgSendingTables(props: { mount: EmailOrgMount; basePath: string }) {
 
         {first && !canManage ? (
           <Alert severity="info">
-            {'Adding a domain, choosing what a site sends as and editing its ' +
-              'senders need the organization admin role. You can see the ' +
-              'current state here.'}
+            {`${permissionRefusalText('org.settings')}. You can see the current state here.`}
           </Alert>
         ) : null}
 

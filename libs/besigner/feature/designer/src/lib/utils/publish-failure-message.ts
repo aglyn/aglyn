@@ -15,6 +15,8 @@
  * limitations under the License.
  */
 
+import { permissionRefusalText } from '@aglyn/aglyn/app-utils/org-permissions'
+
 /**
  * What to tell an author whose publish threw (AGL-1334).
  *
@@ -42,7 +44,7 @@ export function publishFailureMessage(error: unknown): string {
   const lead = 'Not published — live pages still show the previous version.'
 
   if (/permission|insufficient|unauthenticated/i.test(detail)) {
-    return `${lead} You do not have permission to publish this component. Ask an owner or admin of this site to publish it.`
+    return `${lead} ${permissionRefusalText('site.publish')}.`
   }
   if (/invalid data|unsupported field value/i.test(detail)) {
     return `${lead} This component has an element the site cannot store. Reload the editor and publish again — if it happens twice, report it with this: ${detail}`

@@ -207,11 +207,11 @@ describe('AGL-2847 · adding a paid download', () => {
     routes({
       references: () => answer(200, { references: [], complete: true }),
       folders: () =>
-        answer(403, { error: 'Only an organization admin can change this' }),
+        answer(403, { error: 'Only members of the whole workspace can change this, not members who work on named sites' }),
     })
     expect(await attachDownload(publicFilm)).toBeNull()
     expect(mockEnqueueSnackbar).toHaveBeenCalledWith(
-      'Only an organization admin can change this. The file was not added.',
+      'Only members of the whole workspace can change this, not members who work on named sites. The file was not added.',
       expect.objectContaining({ variant: 'error' }),
     )
   })
@@ -320,11 +320,11 @@ describe('AGL-2814 · adding a members video', () => {
     routes({
       references: () => answer(200, { references: [], complete: true }),
       folders: () =>
-        answer(403, { error: 'Only an organization admin can change this' }),
+        answer(403, { error: 'Only members of the whole workspace can change this, not members who work on named sites' }),
     })
     expect(await attach(publicFilm)).toBeNull()
     expect(mockEnqueueSnackbar).toHaveBeenCalledWith(
-      'Only an organization admin can change this. The video was not added.',
+      'Only members of the whole workspace can change this, not members who work on named sites. The video was not added.',
       expect.objectContaining({ variant: 'error' }),
     )
   })

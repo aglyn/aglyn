@@ -142,7 +142,7 @@ describe('the Funnels card (AGL-3605)', () => {
     render(<FunnelsCard hostId="h1" orgId="o1" />)
     expect(screen.queryByText('New funnel')).toBeNull()
     expect(screen.queryByText('zone-funnelsCreate')).toBeNull()
-    expect(screen.getByText('A site admin or editor can create one.')).toBeTruthy()
+    expect(screen.getByText('Creating one takes the "Manage funnels" permission, which site admins and editors hold by default.')).toBeTruthy()
   })
 
   it('shows a funnel’s result: bars, drop-off, time between steps and sources, and the ask zone', async () => {
@@ -257,7 +257,7 @@ describe('the Funnels card (AGL-3605)', () => {
       mockFunnels = [DRAFT]
       render(<FunnelsCard hostId="h1" orgId="o1" />)
       expect(screen.queryByText('Activate')).toBeNull()
-      expect(screen.getByText(/until a site admin or editor activates it\./)).toBeTruthy()
+      expect(screen.getByText(/until someone holding "Manage funnels" activates it\./)).toBeTruthy()
     })
   })
 })

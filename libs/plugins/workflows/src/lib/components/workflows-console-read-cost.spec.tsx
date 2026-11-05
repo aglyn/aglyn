@@ -71,6 +71,9 @@ standInFormList()
  */
 const mockListens: Array<{ path: string; limit: number }> = []
 
+/** What `orgs/org1/members/u1` holds, for a section gated on the member's verdict. */
+let mockMemberDoc: Record<string, unknown> | null = null
+
 /**
  * A query with no `limit()` still reads the whole collection. Counting it as
  * zero would let an unbounded listen look CHEAPER than a bounded one, which
@@ -115,13 +118,27 @@ jest.mock('firebase/firestore', () => {
     sum: marker('sum'),
     onSnapshot: (
       ref: { __path?: string; __limit?: number; __doc?: boolean },
-      ..._rest: unknown[]
+      ...rest: unknown[]
     ) => {
       mockListens.push({
         path: ref?.__path ?? '(unknown)',
         // A single-document listen reads exactly one document.
         limit: ref?.__doc ? 1 : (ref?.__limit ?? 0),
       })
+      // The signed-in member's document answers, so a section gated on the
+      // member's verdict goes on to read what that verdict lets it.
+      if (ref?.__path === 'orgs/org1/members/u1' && mockMemberDoc) {
+        const next = rest.find((arg) => typeof arg === 'function') as (snapshot: unknown) => void
+        const member = mockMemberDoc
+        queueMicrotask(() =>
+          next({
+            id: 'u1',
+            exists: () => true,
+            data: () => member,
+            metadata: { fromCache: false, hasPendingWrites: false },
+          }),
+        )
+      }
       return () => undefined
     },
     getDocs: async () => ({ docs: [], empty: true, size: 0 }),
@@ -663,11 +680,35 @@ describe('the org Automation hub’s read cost', () => {
     ])
   })
 
-  it('reads webhooks for an admin or editor, and nothing for a viewer', async () => {
-    await renderOrgConsole('webhooks', { sites: 1 })
-    expect(pinned()).toEqual(['hosts/site1/webhooks#11'])
+  describe('webhooks ask the rule’s question of each site, for one read of the member', () => {
+    const MEMBER = 'orgs/org1/members/u1#1'
+    const open = async (member: Record<string, unknown>, sites = 1) => {
+      mockMemberDoc = member
+      await renderOrgConsole('webhooks', { sites })
+      await act(async () => {
+        await Promise.resolve()
+      })
+      mockMemberDoc = null
+    }
 
-    await renderOrgConsole('webhooks', { sites: 1, editHosts: false })
-    expect(mockListens).toHaveLength(0)
+    it('reads each site for a member who holds the key on every one', async () => {
+      await open({ role: 'editor', allHosts: true }, 2)
+      expect(pinned()).toEqual(['hosts/site1/webhooks#11', 'hosts/site2/webhooks#11', MEMBER])
+    })
+
+    it('reads no site for a viewer, whose every site refuses', async () => {
+      await open({ role: 'viewer', allHosts: true })
+      expect(pinned()).toEqual([MEMBER])
+    })
+
+    it('reads only the site that holds it, where a viewer is raised', async () => {
+      await open({ role: 'viewer', allHosts: true, hostAccess: { site2: 'editor' } }, 2)
+      expect(pinned()).toEqual(['hosts/site2/webhooks#11', MEMBER])
+    })
+
+    it('reads no site before the member answers', async () => {
+      await renderOrgConsole('webhooks', { sites: 3 })
+      expect(pinned()).toEqual([MEMBER])
+    })
   })
 })

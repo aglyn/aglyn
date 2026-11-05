@@ -168,8 +168,8 @@ jest.mock('../components/plugin-widget-slot.component', () => ({
 jest.mock('../components/host-id-provider', () => ({
   useHostId: () => HOST_ID,
   useHostSubdomain: () => 'acme',
-  useIsHostAdmin: () => mockIsAdmin,
-  useHostAdminKnown: () => true,
+  useCanManageSite: () => mockIsAdmin,
+  useCanManageSiteKnown: () => true,
 }))
 jest.mock('../hooks/use-current-org', () => ({
   __esModule: true,

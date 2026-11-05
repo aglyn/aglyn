@@ -163,7 +163,7 @@ async function handler(request: Request): Promise<Response> {
     }
     const memberRole = (hostSnapshot.get('memberRoles') ?? {})[decoded.uid]
     if (!memberRole) {
-      return Response.json({ error: 'Not a site admin' }, { status: 403 })
+      return Response.json({ error: 'You are not a member of this site' }, { status: 403 })
     }
 
     // Lockdown verdict (AGL-1506): platform/org/host/user scopes; distinct

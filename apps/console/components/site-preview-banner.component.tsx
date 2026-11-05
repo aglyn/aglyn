@@ -17,12 +17,13 @@
 'use client'
 
 import { buildRoute, Route } from '@aglyn/aglyn'
+import { permissionRefusalText } from '@aglyn/aglyn/app-utils/org-permissions'
 import { isHostInPreview } from '@aglyn/aglyn/app-utils/site-preview'
 import { AppLink } from '@aglyn/shared-ui-jsx'
 import { useFirestore } from '@aglyn/tenant-feature-instance'
 import { Alert, Button, Tooltip } from '@mui/material'
 import { doc } from 'firebase/firestore'
-import { useHostId, useHostSubdomain, useIsHostAdmin } from './host-id-provider'
+import { useHostId, useHostSubdomain, useCanManageSite } from './host-id-provider'
 import { useOrgSlug } from '../hooks/use-org-scope'
 import useFirestoreDoc from '../hooks/use-firestore-doc'
 
@@ -32,15 +33,15 @@ import useFirestoreDoc from '../hooks/use-firestore-doc'
  *
  * Not dismissible, for that banner's reason: the whole failure mode of a
  * private site is that it stays private after launch day because nobody
- * remembered the switch. "Make it public" takes a site admin to the switch in
+ * remembered the switch. "Make it public" takes a holder of "Manage site settings" to the switch in
  * Admin → Error pages, where the change is made on purpose; anyone else sees
- * it off, with who can make it, rather than not at all.
+ * it off, with the permission it takes, rather than not at all.
  */
 export function SitePreviewBanner() {
   const hostId = useHostId()
   const host = useHostSubdomain()
   const orgSlug = useOrgSlug()
-  const isAdmin = useIsHostAdmin()
+  const canManageSite = useCanManageSite()
   const firestore = useFirestore()
   const { data: hostDoc } = useFirestoreDoc<any>(
     () => (hostId ? doc(firestore, 'hosts', hostId) : null),
@@ -52,7 +53,7 @@ export function SitePreviewBanner() {
 
   const action =
     orgSlug && host ? (
-      isAdmin ? (
+      canManageSite ? (
         <AppLink
           componentVariant="button"
           color="inherit"
@@ -62,7 +63,7 @@ export function SitePreviewBanner() {
           {'Make it public'}
         </AppLink>
       ) : (
-        <Tooltip title="Only a site admin can make the site public">
+        <Tooltip title={permissionRefusalText('site.manage')}>
           {/* A disabled button fires no hover events; the span carries them. */}
           <span>
             <Button color="inherit" size="small" disabled>

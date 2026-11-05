@@ -344,7 +344,7 @@ export function FunnelsCard({ hostId, orgId }: FunnelsCardProps) {
             </Stack>
           ) : (
             <Typography variant="body2" color="text.secondary">
-              {'A site admin or editor can create one.'}
+              {'Creating one takes the "Manage funnels" permission, which site admins and editors hold by default.'}
             </Typography>
           )}
         </Stack>
@@ -423,7 +423,7 @@ export function FunnelsCard({ hostId, orgId }: FunnelsCardProps) {
               <Typography variant="body2" sx={{ mb: 1 }}>
                 {'A draft, set up for you to review. It is not measured, and the site does not record visits ' +
                   'for it, until ' +
-                  (canManage ? 'you activate it.' : 'a site admin or editor activates it.')}
+                  (canManage ? 'you activate it.' : 'someone holding "Manage funnels" activates it.')}
               </Typography>
               <ol aria-label="Draft steps" style={{ margin: 0, paddingInlineStart: 20 }}>
                 {selected.steps.map((step, index) => (

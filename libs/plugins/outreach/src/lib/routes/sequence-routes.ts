@@ -279,7 +279,7 @@ function mailboxIssues(
       issue(
         path,
         'mailbox_not_yours',
-        'Only the member who connected this mailbox, or an organization owner or admin, can send from it.',
+        'Only the member who connected this mailbox, or a member holding "Manage everyone’s Sequences", can send from it.',
       ),
     ]
   }

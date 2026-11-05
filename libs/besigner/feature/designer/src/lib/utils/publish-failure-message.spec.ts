@@ -47,9 +47,9 @@ describe('publishFailureMessage (AGL-1334)', () => {
     )
   })
 
-  it('tells an author without rights who can publish', () => {
+  it('tells an author without rights which permission publishing takes', () => {
     expect(publishFailureMessage(new Error('Missing or insufficient permissions.')))
-      .toContain('owner or admin')
+      .toContain('Your role does not include "Publish site content"')
   })
 
   it('reads as a connection problem when it is one', () => {

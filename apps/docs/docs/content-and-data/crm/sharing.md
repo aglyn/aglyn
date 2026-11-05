@@ -135,9 +135,16 @@ A site a record was shared with:
 
 ## Who can do this
 
-Sharing, unsharing and sharing rules are for workspace **owners and
-admins**. Other members see the Sharing card and the chips, but no share
-buttons.
+Sharing, unsharing and sharing rules take the **Change CRM settings**
+permission, which owners and admins hold by default. Other members see the
+Sharing card and the chips, with the share buttons switched off and the
+permission named.
+
+Editing a shared record is a different permission. A member invited to one site
+who holds **Manage data** can change and delete records shared with the whole
+workspace, because a record shared with every site is shared with theirs too;
+see [Custom roles & permissions](../../workspace-and-billing/teams-and-roles/custom-roles.md).
+They can't change what a record is shared with.
 
 Sharing is part of the **CRM**, included from **Starter**. It is only useful
 with more than one site, and the number of sites is set by your plan.

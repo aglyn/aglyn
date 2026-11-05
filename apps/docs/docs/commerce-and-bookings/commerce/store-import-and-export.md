@@ -138,7 +138,7 @@ What a file does not change:
 
 ### Add-ons, check-in and quick keys
 
-Three columns carry what a product does at the register and the window. Like
+Four columns carry what a product does at the register and the window. Like
 the other product fields, they go on a product's first row, and **Variant
 check-in** goes on the variant's own row. A file without these columns leaves
 them as they are. So does a blank cell, unless you set **A blank cell** to clear

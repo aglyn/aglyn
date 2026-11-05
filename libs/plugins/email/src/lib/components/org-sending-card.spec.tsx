@@ -312,13 +312,13 @@ describe('what a reader may do is what the route says they may do', () => {
 
     expect(screen.queryByText('Add domain')).toBeNull()
     expect(screen.queryByText('Edit sender')).toBeNull()
-    expect(screen.getByText(/need the organization admin role/i)).toBeTruthy()
+    expect(screen.getByText(/does not include "Organization settings"/)).toBeTruthy()
     // The domain is still listed, which the owner-or-admin domains route
     // would have refused an editor outright.
     expect(screen.getByText('acme.com')).toBeTruthy()
     const remove = screen.getByText('Remove domain') as HTMLButtonElement
     expect(remove.disabled).toBe(true)
-    expect(remove.title).toMatch(/organization admin role/)
+    expect(remove.title).toMatch(/does not include "Organization settings"/)
   })
 
   it('opens one site’s sender in the drawer the site’s page uses', async () => {

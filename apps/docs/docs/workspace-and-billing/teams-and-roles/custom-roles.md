@@ -102,21 +102,29 @@ override can hand one to someone outside the roles that held it, or take it away
 
 | Permission | What it opens | Owner / Admin | Editor | Viewer |
 |---|---|---|---|---|
-| **Export workspace data** (`org.export`) | Download a copy of everything the workspace holds | Yes | No | No |
+| **Export workspace data** (`org.export`) | Download a copy of everything the workspace holds, from **Settings → Import & export** | Yes | No | No |
 | **Sending domains** (`org.sendingDomains`) | Add, verify and remove the domains the workspace's mail is sent from | Yes | No | No |
 | **Business profile** (`org.businessProfile`) | Change the services, audience and tone every site starts from | Yes | No | No |
 | **Edit the workspace media library** (`org.media`) | Upload, change, move and remove the files every site shares | Yes | Yes | No |
-| **Delete workspace records** (`org.eraseRecords`) | Delete records the whole workspace shares | Yes | Yes | No |
+| **Delete workspace records** (`org.eraseRecords`) | Delete a whole dataset or list the workspace shares, with everything in it (deleting one row of a dataset asks **Manage data**) | Yes | Yes | No |
 
 Each starts with exactly the roles that could do it before, so nobody's access changed.
 
-**Manage data** (`data.manage`) decides the workspace's data on its own: creating,
-editing and deleting datasets and their records, and importing into them; working the
+**Manage data** (`data.manage`) decides the workspace's data on its own: creating and
+editing datasets, adding, changing and deleting their records, and importing into them
+(deleting a whole dataset asks **Delete workspace records**); working the
 CRM's records, such as leads, companies, deals and tasks; and changing the workspace's
 marketing lists and email topics. Owners, admins and editors hold it by default and viewers
 don't, so a custom role or a per-member override can let a viewer do this work, or stop
 an editor from doing so. Lists and topics belong to the whole workspace, so a collaborator
 added to particular sites doesn't change them, even when granted this permission.
+
+A member invited to one site who holds **Manage data** can add, change and delete records
+shared with the whole workspace, such as a company, a deal or a dataset's rows, because a
+record shared with every site is shared with theirs too. They can't change what a record is
+shared with, and records shared only with other sites stay out of their reach. To keep
+someone to their own site's records, share the rest with the sites that need them rather
+than with the whole workspace, or take **Manage data** away from them.
 
 ### Site permissions {#site-permissions}
 

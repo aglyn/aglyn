@@ -18,6 +18,7 @@
 
 import type { ConsolePluginOrgHost } from '@aglyn/aglyn'
 import { hostEventLabel, pluginDocsHelp } from '@aglyn/aglyn'
+import { orgPermissionLabel } from '@aglyn/aglyn/app-utils/org-permissions'
 import { AppLink, CardDisplay } from '@aglyn/shared-ui-jsx'
 import { ScrollTable } from '@aglyn/shared-ui-jsx/components/scroll-table.component'
 import {
@@ -47,6 +48,12 @@ import {
 } from '@mui/material'
 import { collection } from 'firebase/firestore'
 import { useState } from 'react'
+import {
+  useWebhookSiteAccess,
+  WEBHOOKS_PERMISSION,
+  WEBHOOKS_REFUSAL,
+  type WebhookSiteAccess,
+} from './use-webhook-site-access'
 import {
   orgSiteAutomationPath,
   type WorkflowsOrgMount,
@@ -119,20 +126,25 @@ const COPY: Record<
  * linking into that site's own Automation hub, where the thing is edited.
  * "Add" asks which site and goes there.
  *
- * `canRead` gates the webhooks list: a webhook holds its site's secret and
- * the rules admit only a site's admins and editors, so a reader who is
- * neither is told so rather than handed listeners that would be refused.
+ * `access` gates the webhooks list, site by site: a webhook holds its site's
+ * secret and the rules ask "See orders and webhooks" of each site, so only the
+ * sites the reader holds it on are read, and the others are named as left out
+ * rather than handed listeners that would be refused. Workflows and actions
+ * pass none: every member reads those.
  */
 export function OrgSiteAutomationList(props: {
   mount: WorkflowsOrgMount
   kind: OrgSiteAutomationKind
-  canRead: boolean
+  access?: WebhookSiteAccess
 }) {
-  const { mount, kind, canRead } = props
+  const { mount, kind, access } = props
   const copy = COPY[kind]
   const [opened, setOpened] = useState(false)
   const [addAnchor, setAddAnchor] = useState<HTMLElement | null>(null)
-  const reachable = mount.hosts.slice(0, ORG_SITE_LIST_MAX_SITES)
+  const readable = access
+    ? mount.hosts.filter((host) => access.holds(host.id))
+    : mount.hosts
+  const reachable = readable.slice(0, ORG_SITE_LIST_MAX_SITES)
   const shown = opened
     ? reachable
     : reachable.slice(0, ORG_SITE_LIST_OPEN_SITES)
@@ -153,11 +165,11 @@ export function OrgSiteAutomationList(props: {
         <Typography variant="body2" color="text.secondary">
           {copy.intro}
         </Typography>
-        {!canRead ? (
-          <Alert severity="info">
-            {`Each site’s ${copy.plural} are listed for its admins and editors.`}
+        {access?.errored ? (
+          <Alert severity="warning">
+            {'Your access could not be checked. Reload the page to try again.'}
           </Alert>
-        ) : !mount.hostsReady ? (
+        ) : !mount.hostsReady || (access && !access.known) ? (
           <Typography variant="caption" color="text.secondary">
             {'…'}
           </Typography>
@@ -165,8 +177,16 @@ export function OrgSiteAutomationList(props: {
           <Typography variant="body2" color="text.secondary">
             {'This organization has no sites yet.'}
           </Typography>
+        ) : !readable.length ? (
+          <Alert severity="info">{WEBHOOKS_REFUSAL}</Alert>
         ) : (
           <>
+            {readable.length < mount.hosts.length ? (
+              <Alert severity="info">
+                {`The ${copy.plural} of sites where your role does not include ` +
+                  `"${orgPermissionLabel(WEBHOOKS_PERMISSION)}" are not listed.`}
+              </Alert>
+            ) : null}
             <ScrollTable size="small" aria-label={copy.header}>
               <TableHead>
                 <TableRow>
@@ -194,7 +214,7 @@ export function OrgSiteAutomationList(props: {
                 {`Show ${folded} more ${folded === 1 ? 'site' : 'sites'}`}
               </Button>
             ) : null}
-            {mount.hosts.length > ORG_SITE_LIST_MAX_SITES ? (
+            {readable.length > ORG_SITE_LIST_MAX_SITES ? (
               <Alert severity="info">
                 {`Listing the first ${ORG_SITE_LIST_MAX_SITES} sites. Open a ` +
                   `site’s own Automation for the ${copy.plural} of the rest.`}
@@ -236,6 +256,17 @@ export function OrgSiteAutomationList(props: {
   )
 }
 OrgSiteAutomationList.displayName = 'OrgSiteAutomationList'
+
+/**
+ * The webhooks section: the list above, answering to the reader's verdict on
+ * each site. A component of its own so the membership is read for this section
+ * alone, never for the workflows and actions lists beside it.
+ */
+export function OrgSiteWebhookList(props: { mount: WorkflowsOrgMount }) {
+  const access = useWebhookSiteAccess(props.mount.orgId)
+  return <OrgSiteAutomationList mount={props.mount} kind="webhooks" access={access} />
+}
+OrgSiteWebhookList.displayName = 'OrgSiteWebhookList'
 
 /** How a row's trigger or direction reads. */
 function rowTrigger(kind: OrgSiteAutomationKind, row: any): string {

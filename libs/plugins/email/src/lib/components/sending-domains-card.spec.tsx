@@ -327,7 +327,7 @@ describe('what a reader may do is what the server says they may do', () => {
     await mount()
 
     expect(screen.queryByText('Add domain')).toBeNull()
-    expect(screen.getByText(/needs the organization admin role/i)).toBeTruthy()
+    expect(screen.getByText(/does not include "Organization settings"/)).toBeTruthy()
   })
 
   it('explains the plan gate rather than offering an action that 403s', async () => {
@@ -395,8 +395,8 @@ describe('navigating to one domain', () => {
  *
  * The table had no per-row control at all, so every operation on a domain
  * meant opening its page first. What it must not gain instead is a menu of
- * actions that 403 — the routes behind these gate on the organization admin
- * role and on the own-domain entitlement, and both are already in the view
+ * actions that 403 — the routes behind these gate on an organization key
+ * and on the own-domain entitlement, and both are already in the view
  * this card holds. So an item the reader cannot use is present and INERT with
  * the reason on it, which is the one of the three states that says something:
  * an absent control and an inapplicable one look identical to a reader.
@@ -489,7 +489,7 @@ describe('the row menu offers only what the routes will accept', () => {
     expect(menuItem(/Check DNS/i).disabled).toBe(true)
     expect(menuItem(/Remove domain/i).disabled).toBe(true)
     expect(menuItem(/Remove domain/i).getAttribute('title')).toMatch(
-      /organization admin role/i,
+      /does not include "Organization settings"/,
     )
     // Opening it is still offered — reading a domain's records needs nothing.
     expect(
@@ -636,7 +636,7 @@ describe('the offer of an Aglyn sending domain', () => {
 
     // The notice about who CAN is what they get instead.
     expect(screen.queryByRole('button', { name: /Ask for/i })).toBeNull()
-    expect(screen.getByText(/needs the organization admin role/i)).toBeTruthy()
+    expect(screen.getByText(/does not include "Organization settings"/)).toBeTruthy()
   })
 
   /**

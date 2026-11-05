@@ -61,7 +61,7 @@ function imageSize(src: string): Promise<{ width: number; height: number } | nul
 }
 
 const NOT_ALLOWED =
-  'Only an admin or editor with the "Registers and devices" point of sale permission can change the readers.'
+  'Changing the readers takes the "Registers and devices" permission, which site admins and editors hold by default.'
 
 /**
  * "Reader start-up screen" on the POS devices card (AGL-4048): what the

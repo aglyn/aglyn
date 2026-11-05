@@ -44,10 +44,10 @@ import useCurrentOrg from '../../../../../../../../hooks/use-current-org'
 import { useOrgScope, useOrgSlug } from '../../../../../../../../hooks/use-org-scope'
 import { useSitePluginSwitchboard } from '../../../../../../../../hooks/use-plugin-switchboard'
 import {
-  useHostAdminKnown,
+  useCanManageSiteKnown,
   useHostId,
   useHostSubdomain,
-  useIsHostAdmin,
+  useCanManageSite,
 } from '../../../../../../../../components/host-id-provider'
 
 /**
@@ -76,10 +76,10 @@ const SitePluginInstallation: NextPageWithLayout<Record<string, never>> = () => 
    * the host document, and `hosts/{hostId}/pluginSettings/{pluginId}`. Read as
    * the rules read it, from the host document's stamp, else the preset of the
    * member's site role. False until the document is read, so every control
-   * below holds while it loads; `adminKnown` is what tells that from a refusal.
+   * below holds while it loads; `canManageSiteKnown` is what tells that from a refusal.
    */
-  const isAdmin = useIsHostAdmin()
-  const adminKnown = useHostAdminKnown()
+  const canManageSite = useCanManageSite()
+  const canManageSiteKnown = useCanManageSiteKnown()
   const firestore = useFirestore()
   const { currentOrg } = useOrgScope()
   // EXEMPT from `no-unguarded-loading-hook`: `org` reaches only
@@ -143,7 +143,7 @@ const SitePluginInstallation: NextPageWithLayout<Record<string, never>> = () => 
    */
   const switchboard = useSitePluginSwitchboard(hostId, {
     autoSave: true,
-    readOnly: !isAdmin,
+    readOnly: !canManageSite,
     labelFor: (id) =>
       FIRST_PARTY_PLUGINS.find((plugin) => plugin.id === id)?.label ??
       (id === pluginRef ? displayName : id),
@@ -271,7 +271,7 @@ const SitePluginInstallation: NextPageWithLayout<Record<string, never>> = () => 
             save. Only once the answer is known: not while the site loads, and
             not after a failed read, when nobody has been refused anything.
           */}
-          {adminKnown && !isAdmin ? (
+          {canManageSiteKnown && !canManageSite ? (
             <Alert severity="info">
               {`${permissionRefusalText('site.manage')}. You can read what is ` +
                 'set here.'}
@@ -368,7 +368,7 @@ const SitePluginInstallation: NextPageWithLayout<Record<string, never>> = () => 
                   <Switch
                     checked={runsHere}
                     disabled={
-                      !isAdmin ||
+                      !canManageSite ||
                       !orgEnabled ||
                       switchboard.busy ||
                       !switchboard.ready
@@ -429,7 +429,7 @@ const SitePluginInstallation: NextPageWithLayout<Record<string, never>> = () => 
               pluginId={pluginId}
               manifest={pin?.manifest}
               displayName={displayName}
-              disabled={!isAdmin}
+              disabled={!canManageSite}
             />
           ) : null}
 
@@ -454,7 +454,7 @@ const SitePluginInstallation: NextPageWithLayout<Record<string, never>> = () => 
             three routes that 404.
           */}
           {pluginId === ACCOUNTS_PLUGIN_ID && hostId ? (
-            <AuthScreensCard hostId={hostId} disabled={!isAdmin} />
+            <AuthScreensCard hostId={hostId} disabled={!canManageSite} />
           ) : null}
         </Stack>
         <PluginDisableCascadeDialog {...switchboard.dialogProps} />

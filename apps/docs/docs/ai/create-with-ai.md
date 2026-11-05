@@ -78,7 +78,7 @@ opens a short window saying what it would make:
 - a member holding **Manage billing** sees **Add Aglyn AI**, which opens **Billing** to
   choose a tier, or
   **Not now**;
-- anyone else is asked to have a workspace owner or admin choose one.
+- anyone else is asked to have a member holding **Manage billing** choose one.
 
 ## When it is not there {#when-it-is-not-there}
 
