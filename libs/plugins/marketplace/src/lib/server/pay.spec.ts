@@ -42,11 +42,10 @@ jest.mock('@aglyn/tenant-runtime/org-permissions', () => ({
 
 const mockPublisher: { current: Record<string, unknown> | null } = { current: null }
 jest.mock('./publisher-profile', () => ({
-  canActAsPublisher: async () => false,
+  isPublisherMember: async () => false,
   resolvePublisherProfile: async () => mockPublisher.current,
 }))
 jest.mock('./purchase-entitlement', () => ({ hasLivePurchase: async () => false }))
-jest.mock('./sale-risk', () => ({ isOrgMember: async () => false }))
 
 const mockRecord = jest.fn(async (_invoice: unknown) => undefined)
 jest.mock('./billing-webhook', () => ({

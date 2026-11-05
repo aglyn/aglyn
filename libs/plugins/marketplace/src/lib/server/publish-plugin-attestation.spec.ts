@@ -62,7 +62,7 @@ jest.mock('@aglyn/tenant-runtime/org-permissions', () => ({
 }))
 
 jest.mock('./publisher-profile', () => ({
-  canActAsPublisher: async () => true,
+  isPublisherMember: async () => true,
   resolvePublisherProfile: async () => ({
     orgId: 'org-1',
     handle: 'acme',

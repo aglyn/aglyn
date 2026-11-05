@@ -37,20 +37,15 @@ jest.mock('@aglyn/aglyn/server', () => {
 })
 
 const mockPublisher: { current: Record<string, unknown> | null } = { current: null }
-const mockActsAsPublisher = { current: false }
+const mockSellerMember = { current: false }
 jest.mock('./publisher-profile', () => ({
-  canActAsPublisher: async () => mockActsAsPublisher.current,
+  isPublisherMember: async () => mockSellerMember.current,
   resolvePublisherProfile: async () => mockPublisher.current,
 }))
 
 const mockOwned = { current: false }
 jest.mock('./purchase-entitlement', () => ({
   hasLivePurchase: async () => mockOwned.current,
-}))
-
-const mockSellerMember = { current: false }
-jest.mock('./sale-risk', () => ({
-  isOrgMember: async () => mockSellerMember.current,
 }))
 
 import { resolveSale, type SaleBuyer, type SaleRefusal } from './sale'
@@ -118,7 +113,6 @@ beforeAll(() => {
 beforeEach(() => {
   delete process.env.AGLYN_PLATFORM_ORG_ID
   mockPublisher.current = READY_PUBLISHER
-  mockActsAsPublisher.current = false
   mockOwned.current = false
   mockSellerMember.current = false
   seed()
@@ -179,11 +173,8 @@ describe('every refusal', () => {
     expect((await refusalOf()).status).toBe(400)
   })
 
-  it('the seller cannot buy from itself, by org, by managing it or by being a member', async () => {
+  it('the seller cannot buy from itself, by org or by being a member in any role', async () => {
     expect((await refusalOf({ ...BUYER, orgId: 'seller-org' })).status).toBe(400)
-    mockActsAsPublisher.current = true
-    expect((await refusalOf()).status).toBe(400)
-    mockActsAsPublisher.current = false
     mockSellerMember.current = true
     expect((await refusalOf()).status).toBe(400)
   })

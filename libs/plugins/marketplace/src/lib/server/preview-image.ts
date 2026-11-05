@@ -48,7 +48,7 @@ const PREVIEW_PATH = (listingId: string) =>
  *
  * Lives in the plugin, like every other `marketplace/*` operation. It was the
  * one that didn't: it sat in the console app and imported this plugin's
- * `canActAsPublisher` across the `scope:app` → `aglyn:addons` boundary, which
+ * publisher role helper across the `scope:app` → `aglyn:addons` boundary, which
  * failed lint on main. Registered at the same path, so the URL clients call
  * is unchanged — `/api/marketplace/preview-image` reaches the plugin catch-all
  * with exactly the shape it had as a named app route.

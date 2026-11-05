@@ -275,7 +275,7 @@ describe('publisherProfileSaveHandler and the publisher agreement (AGL-4105)', (
 
 /**
  * "Edit the publisher profile" (AGL-4047). The save asked
- * `canActAsPublisher`, the owner or admin role; it asks the key whose default
+ * the owner-or-admin role helper; it asks the key whose default
  * is those roles, the same key the profile rules ask, and its refusal names
  * the permission rather than a role.
  */

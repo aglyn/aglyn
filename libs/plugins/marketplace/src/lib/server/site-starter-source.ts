@@ -48,7 +48,7 @@ import {
   siteStarterSearchTokens,
   siteStarterSummaryOf,
 } from '../model/site-starter-listing'
-import { canActAsPublisher, PUBLISHER_PROFILES } from './publisher-profile'
+import { isPublisherMember, PUBLISHER_PROFILES } from './publisher-profile'
 import { hasLivePurchase, requirePurchase } from './purchase-entitlement'
 import { isPublisherSecurityLocked } from './sale-risk'
 import { recordVersionMove } from './version-stats'
@@ -106,11 +106,12 @@ async function authorNames(
 }
 
 /**
- * Whether the viewer acts for the listing's publisher, in the publisher's
+ * Whether the viewer belongs to the listing's publisher, in the publisher's
  * own workspace: it picks its own starter free, and only into itself — the
  * waiver is about the publisher's OWN sites (AGL-2484), so a person who
  * administers the publisher and creates a site elsewhere is a buyer like
- * anyone else there.
+ * anyone else there. Membership, not a permission (AGL-4047): who published
+ * the starter is a fact, not a capability a role grants.
  */
 async function viewerPublishes(
   firestore: FirebaseFirestore.Firestore,
@@ -122,7 +123,7 @@ async function viewerPublishes(
   return viewerOrgId
     ? publisherOrgId !== '' &&
         viewerOrgId === publisherOrgId &&
-        canActAsPublisher(firestore, String(viewer?.uid ?? ''), listing.profileId)
+        isPublisherMember(firestore, String(viewer?.uid ?? ''), listing.profileId)
     : false
 }
 

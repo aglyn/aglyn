@@ -55,6 +55,7 @@ import { PLATFORM_BRAND_LEGAL_NAME } from '@aglyn/aglyn/app-utils/platform-brand
 import { LISTING_LOGO_HINT } from '../constants/listing-media'
 import {
   MARKETPLACE_MANAGE_LISTINGS_PERMISSION,
+  MARKETPLACE_PAYOUTS_PERMISSION,
   MARKETPLACE_PUBLISHER_PROFILE_PERMISSION,
   marketplacePublisherPermissionRefusal,
 } from '../model/marketplace-publisher-permissions'
@@ -97,9 +98,10 @@ export interface OrgSellerPanelProps {
   basePath: string
   /**
    * The viewer's resolved permissions, from the shell (AGL-4047). Saving the
-   * profile asks "Edit the publisher profile" and a listing's edit,
-   * visibility and unpublish actions ask "Manage published listings", as
-   * their routes and the rules do; a control the viewer may not use stays on
+   * profile asks "Edit the publisher profile", a listing's edit, visibility
+   * and unpublish actions ask "Manage published listings", and setting up
+   * payouts asks "Manage marketplace payouts", as their routes (and, for the
+   * first two, the rules) do; a control the viewer may not use stays on
    * screen, disabled, with the permission named. An absent key reads as
    * allowed, as the map reads while it loads: the route still decides.
    */
@@ -121,6 +123,8 @@ export function OrgSellerPanel(props: OrgSellerPanelProps) {
     permissions?.[MARKETPLACE_PUBLISHER_PROFILE_PERMISSION] !== false
   const canManageListings =
     permissions?.[MARKETPLACE_MANAGE_LISTINGS_PERMISSION] !== false
+  const canManagePayouts =
+    permissions?.[MARKETPLACE_PAYOUTS_PERMISSION] !== false
   const router = useRouter()
   const firestore = useFirestore()
   const { data: user } = useUser()
@@ -1039,7 +1043,7 @@ export function OrgSellerPanel(props: OrgSellerPanelProps) {
               <Button
                 variant={chargesEnabled ? 'outlined' : 'contained'}
                 color="primary"
-                disabled={payoutsBusy}
+                disabled={payoutsBusy || !canManagePayouts}
                 onClick={handlePayouts}
               >
                 {payoutsBusy
@@ -1054,6 +1058,14 @@ export function OrgSellerPanel(props: OrgSellerPanelProps) {
                           ? 'Recheck payout status'
                           : 'Set up payouts'}
               </Button>
+              {/* Why the payout button is off, named (AGL-4047). */}
+              {canManagePayouts ? null : (
+                <Typography variant="caption" color="text.secondary">
+                  {marketplacePublisherPermissionRefusal(
+                    MARKETPLACE_PAYOUTS_PERMISSION,
+                  )}
+                </Typography>
+              )}
               {/*
                 Where the money actually is. Aglyn records no
                 balance, no payout schedule, and handles no `payout.failed`

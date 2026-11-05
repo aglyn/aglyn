@@ -30,7 +30,7 @@ import {
 } from '@aglyn/aglyn/server'
 import { dropPluginSiteCache } from '@aglyn/aglyn/plugin-manager/plugin-site-cache'
 import { resolveOrgPermissions } from '@aglyn/tenant-runtime/org-permissions'
-import { canActAsPublisher } from './publisher-profile'
+import { isPublisherMember } from './publisher-profile'
 import { requirePurchase } from './purchase-entitlement'
 import { pinnedProvenance } from './provenance'
 import { recordVersionMove } from './version-stats'
@@ -251,9 +251,11 @@ export const installPluginHandler: PluginApiHandler = async (req, res) => {
 
     // The publisher installs their own listing for free, and may install
     // an unapproved version of it to test. Org-owned now (AGL-652), so this
-    // is a role check — comparing a uid to an org id would never match.
+    // asks the publishing org's members (comparing a uid to an org id would
+    // never match). Membership, not a permission (AGL-4047): it is a fact
+    // about who published the listing.
     //
-    // TWO facts, correlated (AGL-2484). `canActAsPublisher` answers a
+    // TWO facts, correlated (AGL-2484). `isPublisherMember` answers a
     // question about the PUBLISHER org alone; the install TARGET is a
     // different org, resolved from the host by the permission gate above.
     // Nothing tied them together, so one flag computed from org P waived
@@ -262,9 +264,9 @@ export const installPluginHandler: PluginApiHandler = async (req, res) => {
     // holds `installPlugins` on a host in org Q could therefore push P's
     // pending — or rejected — bundle onto Q's live public site, for free.
     //
-    // Same-org is a NECESSARY condition, never a sufficient one: the role
-    // check still has to pass, so this narrows the waiver and cannot widen
-    // it. `strictNullChecks` is off repo-wide, hence the explicit `!== ''`
+    // Same-org is a NECESSARY condition, never a sufficient one: the
+    // membership check still has to pass, so this narrows the waiver and
+    // cannot widen it. `strictNullChecks` is off repo-wide, hence the explicit `!== ''`
     // rather than a truthiness test — a listing with no `profileId` is
     // owned by nobody and must waive nothing.
     const publisherOrgId = String(listing.profileId ?? '')
@@ -272,7 +274,7 @@ export const installPluginHandler: PluginApiHandler = async (req, res) => {
     const ownsListing =
       publisherOrgId !== '' &&
       installTargetOrgId === publisherOrgId &&
-      (await canActAsPublisher(firestore, decoded.uid, listing.profileId))
+      (await isPublisherMember(firestore, decoded.uid, listing.profileId))
 
     // Private plugins are installable ONLY by the owning org (AGL-968).
     // This is what makes private mean private; the UI merely hides them.
