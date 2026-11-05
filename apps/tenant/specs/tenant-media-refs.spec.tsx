@@ -108,12 +108,9 @@ describe('legacy collection surface: the entry cover (AGL-1407)', () => {
     ])
   })
 
-  describe('the legacy stored forms are passed through untouched', () => {
-
-    it('the AGL-175 relative CDN path', async () => {
-      expect(sources(await renderCover(LEGACY_CDN_PATH))).toEqual([
-        LEGACY_CDN_PATH,
-      ])
+  describe('the legacy stored forms still reach the image', () => {
+    it('the AGL-175 relative CDN path, naming the site', async () => {
+      expect(sources(await renderCover(LEGACY_CDN_PATH))).toEqual([RESOLVED])
     })
 
     it('an external URL the author typed themselves', async () => {
@@ -157,10 +154,8 @@ describe('white-label badge: the brand logo (AGL-1407)', () => {
     expect(sources(await renderBadge(EXTERNAL_URL))).toEqual([EXTERNAL_URL])
   })
 
-  it('still renders the AGL-175 relative CDN path', async () => {
-    expect(sources(await renderBadge(LEGACY_CDN_PATH))).toEqual([
-      LEGACY_CDN_PATH,
-    ])
+  it('still renders the AGL-175 relative CDN path, naming the site', async () => {
+    expect(sources(await renderBadge(LEGACY_CDN_PATH))).toEqual([RESOLVED])
   })
 
   /**

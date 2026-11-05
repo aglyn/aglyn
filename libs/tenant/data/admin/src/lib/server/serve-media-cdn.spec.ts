@@ -123,6 +123,44 @@ describe('mediaCdnAllows (AGL-1043)', () => {
  * second one is broken on every URL there is. Separating them is what lets
  * the route say the difference in its logs.
  */
+describe('an asset shared with all sites except some (AGL-4047)', () => {
+  const orgWide = parseMediaCdnScope('org:acme') as NonNullable<
+    ReturnType<typeof parseMediaCdnScope>
+  >
+  const forSiteA = parseMediaCdnScope('org:acme:site-a') as NonNullable<
+    ReturnType<typeof parseMediaCdnScope>
+  >
+  const forSiteB = parseMediaCdnScope('org:acme:site-b') as NonNullable<
+    ReturnType<typeof parseMediaCdnScope>
+  >
+  const INCLUDED = ['host:site-a']
+
+  it('serves the bare URL', () => {
+    expect(mediaCdnScopeRefusal(orgWide, INCLUDED, 'allExcept')).toBeNull()
+    expect(mediaCdnAllows(orgWide, INCLUDED, 'allExcept')).toBe(true)
+  })
+
+  it('still asks the named site, so an excluded site is refused', () => {
+    expect(mediaCdnScopeRefusal(forSiteA, INCLUDED, 'allExcept')).toBeNull()
+    expect(mediaCdnScopeRefusal(forSiteB, INCLUDED, 'allExcept')).toBe(
+      'restricted',
+    )
+  })
+
+  it('reads only the exact marker, so chosen sites stay refused', () => {
+    for (const scopeMode of [undefined, null, '', 'allexcept', 'selected', 1, true]) {
+      expect(mediaCdnScopeRefusal(orgWide, INCLUDED, scopeMode)).toBe(
+        'restricted',
+      )
+    }
+  })
+
+  it('never serves a document with no sites to serve it to', () => {
+    expect(mediaCdnScopeRefusal(orgWide, [], 'allExcept')).toBe('no-sites')
+    expect(mediaCdnScopeRefusal(orgWide, undefined, 'allExcept')).toBe('unscoped')
+  })
+})
+
 describe('mediaCdnScopeRefusal', () => {
   const orgWide = parseMediaCdnScope('org:acme') as NonNullable<
     ReturnType<typeof parseMediaCdnScope>

@@ -1315,10 +1315,11 @@ export async function serveMediaCdn(
       res.status(410).json({ error: 'Gone' })
       return
     }
-    // Scope check (AGL-1043). The bare `org:` form serves ORG-WIDE assets
-    // only; a restricted asset must be requested through the form that
-    // names the site using it, which is when AGL-1045's confirmation already
-    // warns which pages are affected.
+    // Scope check (AGL-1043). The bare `org:` form serves ORG-WIDE assets and
+    // assets shared with all sites except some; an asset shared with chosen
+    // sites must be requested through the form that names the site using it,
+    // which is when AGL-1045's confirmation already warns which pages are
+    // affected.
     //
     // An asset carrying no `visibleTo` is refused here rather than treated as
     // org-wide: absent is "nobody has said who may see this", not "everybody"
@@ -1330,7 +1331,11 @@ export async function serveMediaCdn(
     // something the caller has no standing to learn. Short max-age so
     // re-widening a scope propagates quickly instead of being pinned by a
     // long-lived negative cache entry.
-    const refusal = mediaCdnScopeRefusal(scope, snapshot.get('visibleTo'))
+    const refusal = mediaCdnScopeRefusal(
+      scope,
+      snapshot.get('visibleTo'),
+      snapshot.get('scopeMode'),
+    )
     if (refusal) {
       /**
        * A `restricted` refusal is the gate WORKING and is deliberately
