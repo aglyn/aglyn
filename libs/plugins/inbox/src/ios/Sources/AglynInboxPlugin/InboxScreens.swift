@@ -145,6 +145,7 @@ struct PeopleScreen: View {
     .onDisappear {
       members.stop()
       leads.stop()
+      member.stop()
     }
     .aglynSearchable(text: $searchText, prompt: tab == "members" ? "Search members" : "Search leads", onSubmit: { search = searchText })
     .onChange(of: searchText) { _, text in if text.isEmpty { search = "" } }
