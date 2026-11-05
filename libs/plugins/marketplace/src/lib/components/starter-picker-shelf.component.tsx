@@ -28,6 +28,7 @@ import {
   type OptionCardChip,
   type OptionCardImage,
 } from '@aglyn/shared-ui-jsx/components/option-card-grid.component'
+import { BlockedControl } from '@aglyn/shared-ui-jsx/components/blocked-control.component'
 import {
   Alert,
   Box,
@@ -364,18 +365,23 @@ export function StarterPickerShelf(props: ConsoleHostStarterPickerZoneProps) {
             data-starter-buy={pickedRow.listingId}
             sx={PICK_NOTE_SX}
             action={
-              <Button
-                color="inherit"
-                size="small"
-                disabled={purchase.busy || !orgId}
-                onClick={() => void buy(pickedRow)}
+              <BlockedControl
+                blocked={Boolean(pickedRow.buyBlockedReason)}
+                reason={pickedRow.buyBlockedReason ?? ''}
               >
-                {purchase.busy ? 'Opening…' : 'Buy and continue'}
-              </Button>
+                <Button
+                  color="inherit"
+                  size="small"
+                  disabled={purchase.busy || !orgId}
+                  onClick={() => void buy(pickedRow)}
+                >
+                  {purchase.busy ? 'Opening…' : 'Buy and continue'}
+                </Button>
+              </BlockedControl>
             }
           >
             {`${pickedRow.displayName || 'This starter'} costs ${starterPriceLabel(pickedRow.priceUsd)}. ` +
-              'Buy it here, then create your site from it.'}
+              (pickedRow.buyBlockedReason ?? 'Buy it here, then create your site from it.')}
           </Alert>
         )
       ) : null}
