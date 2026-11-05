@@ -231,7 +231,7 @@ it at, and the pill says whether it is live.
 | --- | --- |
 | **Live** (green) | How many pages are published — "12 published pages." |
 | **Draft** (gray outline) | "Nothing published yet — visitors see the placeholder." |
-| **Maintenance** (amber) | "Every path serves the maintenance page." |
+| **Maintenance** (amber) | "Only your team can see this site. Visitors see the 503 page." |
 | **Suspended** (red) | "This site is serving a lockdown notice instead of content." |
 
 **Live** means exactly one thing: the site has at least one published page. Publishing
