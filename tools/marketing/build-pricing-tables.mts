@@ -297,7 +297,7 @@ const GROUPS: Array<{ title: string; rows: Row[] }> = [
         value: () => 'Unlimited',
       },
       { label: 'White-label', value: (p) => bool(F(p).whiteLabel) },
-      { label: 'Single sign-on (SAML/OIDC)', value: (p) => bool(F(p).ssoEnabled) },
+      { label: 'Single sign-on (SSO, SAML/OIDC)', value: (p) => bool(F(p).ssoEnabled) },
     ],
   },
   {
