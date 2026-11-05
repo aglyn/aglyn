@@ -15,6 +15,10 @@
  * limitations under the License.
  */
 
+import { permissionRefusalText } from '@aglyn/aglyn/app-utils/org-permissions'
+import { BlockedControl } from '@aglyn/shared-ui-jsx/components/blocked-control.component'
+import { useSiteKeys } from '@aglyn/tenant-feature-instance/hooks/use-site-keys'
+import { COURIERS_SITE_PRESETS } from '../model/couriers-permissions'
 import { Button, Dialog, DialogActions, DialogContent, DialogTitle, Link } from '@mui/material'
 import { useState } from 'react'
 import { useCouriersApi, useCourierConnection, type CouriersApi } from './couriers-api'
@@ -41,6 +45,7 @@ const SENDABLE = new Set(['scheduled', 'failed'])
  */
 export function QueueCourierButton(props: QueueCourierButtonProps) {
   const { hostId, order } = props
+  const locked = useSiteKeys(hostId).blocked('couriers.dispatch', COURIERS_SITE_PRESETS['couriers.dispatch'])
   const routes = useCouriersApi(hostId)
   const api = props.api ?? routes
   const delivery = order.fulfillmentMethod === 'local_delivery' ? order.localDelivery : null
@@ -62,15 +67,17 @@ export function QueueCourierButton(props: QueueCourierButtonProps) {
           </Button>
         )
       ) : (
-        <Button size="small" variant="outlined" onClick={() => setOpen(true)}>
+        <BlockedControl blocked={locked} reason={permissionRefusalText('couriers.dispatch')}>
+          <Button size="small" variant="outlined" onClick={() => setOpen(true)}>
           {'Send a courier'}
         </Button>
+        </BlockedControl>
       )}
       <Dialog open={open} onClose={() => setOpen(false)} fullWidth maxWidth="xs">
         <DialogTitle>{`Courier for ${order.number}`}</DialogTitle>
         <DialogContent>
           {open ? (
-            <CourierPanel orderId={order.id} api={api} connection={answer.connection} testMode={order.testMode} />
+            <CourierPanel locked={locked} orderId={order.id} api={api} connection={answer.connection} testMode={order.testMode} />
           ) : null}
         </DialogContent>
         <DialogActions>

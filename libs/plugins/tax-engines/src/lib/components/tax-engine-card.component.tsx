@@ -17,6 +17,9 @@
  * limitations under the License.
  */
 
+import { permissionRefusalText } from '@aglyn/aglyn/app-utils/org-permissions'
+import { useSiteKeys } from '@aglyn/tenant-feature-instance/hooks/use-site-keys'
+import { TAX_ENGINES_SITE_PRESETS } from '../model/tax-engines-permissions'
 import { pluginDocsHelp } from '@aglyn/aglyn/app-utils/docs-help'
 import { PLATFORM_BRAND_NAME } from '@aglyn/aglyn/app-utils/platform-brand'
 import { CardDisplay } from '@aglyn/shared-ui-jsx'
@@ -84,11 +87,21 @@ export function TaxEngineCard(props: TaxEngineCardProps) {
   const { hostId } = props
   const state = useTaxEngineConnection(hostId)
   const storeTax = useStoreTaxSettings(state.available ? hostId : undefined)
+  const refused = useSiteKeys(hostId).blocked('taxEngines.manage', TAX_ENGINES_SITE_PRESETS['taxEngines.manage'])
   if (state.loading || !state.available) return null
-  return state.connection ? (
-    <ConnectedCard hostId={hostId} connection={state.connection} storeTax={storeTax} onChange={state.replace} />
-  ) : (
-    <ConnectCard hostId={hostId} storeTax={storeTax} onConnected={state.replace} />
+  return (
+    <Stack spacing={2}>
+      {refused ? (
+        <Typography variant="body2" color="text.secondary">
+          {permissionRefusalText('taxEngines.manage')}
+        </Typography>
+      ) : null}
+      {state.connection ? (
+        <ConnectedCard hostId={hostId} connection={state.connection} storeTax={storeTax} onChange={state.replace} />
+      ) : (
+        <ConnectCard hostId={hostId} storeTax={storeTax} onConnected={state.replace} />
+      )}
+    </Stack>
   )
 }
 
@@ -173,7 +186,10 @@ function ConnectCard(props: {
   const request = useTaxEnginesFetch()
   const { enqueueSnackbar } = useSnackbar()
   const [form, setForm] = useState<ConnectForm>(EMPTY_FORM)
-  const [busy, setBusy] = useState(false)
+  const [working, setBusy] = useState(false)
+  // Off for a member without the key, the same way as while a change runs.
+  const refused = useSiteKeys(hostId).blocked('taxEngines.manage', TAX_ENGINES_SITE_PRESETS['taxEngines.manage'])
+  const busy = working || refused
   const [error, setError] = useState<string | null>(null)
   const set = (patch: Partial<ConnectForm>) => setForm((current) => ({ ...current, ...patch }))
   const avalara = form.provider === 'avalara'
@@ -269,7 +285,7 @@ function ConnectCard(props: {
           onClick={handleConnect}
           sx={{ alignSelf: 'flex-start' }}
         >
-          {busy ? 'Testing…' : 'Test and connect'}
+          {working ? 'Testing…' : 'Test and connect'}
         </Button>
       </Stack>
     </CardDisplay>
@@ -286,7 +302,10 @@ function ConnectedCard(props: {
   const inUse = storeTax !== undefined && taxServiceUse(storeTax).applies
   const request = useTaxEnginesFetch()
   const { enqueueSnackbar } = useSnackbar()
-  const [busy, setBusy] = useState(false)
+  const [working, setBusy] = useState(false)
+  // Off for a member without the key, the same way as while a change runs.
+  const refused = useSiteKeys(hostId).blocked('taxEngines.manage', TAX_ENGINES_SITE_PRESETS['taxEngines.manage'])
+  const busy = working || refused
   const [shipFrom, setShipFrom] = useState<TaxEngineAddress>(connection.shipFrom ?? { country: 'US' })
   const [defaultTaxCode, setDefaultTaxCode] = useState(connection.defaultTaxCode ?? '')
   const [messages, setMessages] = useState<string[]>([])

@@ -1572,12 +1572,51 @@ service cloud.firestore {
           orgNotSuspended();
       }
       /**
-       * The dataset-only twin of `canWriteScopedOrgData`: the same scoping
-       * and the same key, kept apart for the reason `canWriteOrgDatasets`
-       * gives.
+       * A dataset placed on one site answers to that site (AGL-4047): writing
+       * one takes "Manage data", unless a site narrows the member on the one
+       * site it sits on, or that site's "Manage this site's data". `site-placement`
+       * in the platform core is the routes' twin, and the console's.
+       *
+       *   - A workspace editor given Author or Viewer access to the site loses
+       *     the first arm there, and the stamp says whether they keep the key
+       *     ("Keep this permission") or the site gave it back.
+       *   - A site Admin or Editor on the viewer role holds the second.
+       *   - On every site or on several, `oneSiteOf` answers nothing: no one
+       *     site can be asked, so "Manage data" alone decides.
+       *
+       * `visibleTo` is the placement the document holds. It costs one read of
+       * the site, and none for a member the first arm admitted.
        */
-      function canWriteScopedOrgDatasets() {
-        return canWriteOrgDatasets() && canReadScoped();
+      function canWriteDatasetOn(visibleTo) {
+        return isOrgMember() && isVerified() && orgNotSuspended() &&
+          ((memberKeyOrOverride('data.manage', ['owner', 'admin', 'editor']) &&
+            !siteNarrowsDataset(visibleTo)) ||
+           siteHoldsDatasetKey(visibleTo));
+      }
+      function datasetOnOneSite(visibleTo) {
+        return visibleTo is list && visibleTo.size() == 1 && visibleTo[0].matches('host:[^:/]+');
+      }
+      function siteNarrowsDataset(visibleTo) {
+        return datasetOnOneSite(visibleTo) &&
+          hostNarrowsMember(visibleTo[0].split(':')[1], orgMember());
+      }
+      function siteHoldsDatasetKey(visibleTo) {
+        return datasetOnOneSite(visibleTo) && siteDatasetVerdict(visibleTo[0].split(':')[1]);
+      }
+      /**
+       * The site's stamp, which every layer has been applied to. On a site the
+       * projection has not reached since the key existed, the site role's preset,
+       * unless someone decided against this member in a way the stamp would carry:
+       * a custom role, or their own "Manage data" refused. Those wait for the
+       * stamp, so nobody refused regains it here.
+       */
+      function siteDatasetVerdict(hostId) {
+        let site = get(/databases/$(database)/documents/hosts/$(hostId)).data;
+        return site.get('orgId', '') == orgId && isHostMember(hostId) && !hostSuspended(hostId) &&
+          hostSiteRoleKey(hostId, 'data.siteManage', ['admin', 'editor']) &&
+          (site.get('memberPermissions', {}).get(request.auth.uid, {}).get('data.siteManage', null) is bool ||
+           (orgMember().get('roleId', null) == null &&
+            orgMember().get('permissions', {}).get('data.manage', null) != false));
       }
       // CRM sharing (AGL-3336, `model/crm-sharing.ts`): a share widens
       // `visibleTo`, never write access. A shared record carries `writeTo`
@@ -1648,7 +1687,7 @@ service cloud.firestore {
       // Dataset/record CREATES are API-only (AGL-473): the console route
       // enforces the dataStore entitlement and dataset/record quotas
       // server-side. Record updates/deletes stay client-writable for a
-      // member holding "Manage data" (`canWriteOrgDatasets`) — they don't
+      // member who may write the dataset (`canWriteDatasetOn`) — they don't
       // consume quota.
       // Deleting the DATASET doc is API-only too (AGL-945): the doc owns a
       // `records` subcollection and Firestore doesn't cascade, so a client
@@ -1665,8 +1704,14 @@ service cloud.firestore {
       match /datasets/{datasetId} {
         allow read: if isStaff() || canReadScoped();
         allow create: if isStaff();
+        // Re-scoping stays with an org-wide member who holds "Manage data": a
+        // site's verdict writes the dataset and never moves it, and a site that
+        // narrows that member takes the schema and leaves the sharing alone.
         allow update: if isStaff() ||
-          (canWriteScopedOrgDatasets() && (isOrgWideMember() || scopeUnchanged()));
+          (canReadScoped() && canWriteDatasetOn(resource.data.get('visibleTo', null)) && scopeUnchanged()) ||
+          (canWriteOrgDatasets() && isOrgWideMember() &&
+           (canWriteDatasetOn(resource.data.get('visibleTo', null)) ||
+            request.resource.data.diff(resource.data).affectedKeys().hasOnly(['visibleTo'])));
         allow delete: if isStaff();
         match /records/{recordId} {
           // A record has no `visibleTo` of its own; it inherits the
@@ -1685,10 +1730,18 @@ service cloud.firestore {
                  .data.visibleTo
                  .hasAny(orgMember().get('scopeTokens', ['org'])));
           }
-          allow read: if isStaff() || parentDatasetVisible();
+          // "View dataset records", every role's by default (AGL-4047). A site's
+          // pages read through the server, which is no member and doesn't ask.
+          allow read: if isStaff() ||
+            (parentDatasetVisible() &&
+             memberKeyOrOverride('data.viewRecords', ['owner', 'admin', 'editor', 'viewer']));
           allow create: if isStaff();
+          // A member with no site access written down can't be narrowed, which
+          // spares the read of the parent on most writes.
           allow update, delete: if isStaff() ||
-            (canWriteOrgDatasets() && parentDatasetVisible());
+            (parentDatasetVisible() &&
+             ((canWriteOrgDatasets() && orgMember().get('hostAccess', {}).size() == 0) ||
+              canWriteDatasetOn(get(/databases/$(database)/documents/orgs/$(orgId)/datasets/$(datasetId)).data.get('visibleTo', null))));
         }
       }
       /**

@@ -699,7 +699,7 @@ export const PLUGIN_DOCS_SECTION_EXCERPTS: {
     '#users-admin': 'Staff-claim management and disabling users, with gated listing; a whole email address typed in the search box looks the account up directly.',
   },
   taxServices: {
-    '#connect': 'Open Products → Taxes and find the Tax service card. Only an admin of the site can connect, test or disconnect a service and change its address.',
+    '#connect': 'Open Products → Taxes and find the Tax service card. Connecting, testing or disconnecting a service and changing its address takes Manage the tax engine connection, which a site\'s admins hold by default (custom roles).',
     '#how-sales-are-taxed': 'A product you marked tax-exempt is sent as non-taxable and charged no tax.',
   },
   waivers: {

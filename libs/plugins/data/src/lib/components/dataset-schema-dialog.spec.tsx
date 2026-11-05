@@ -349,7 +349,7 @@ describe('DatasetSchemaDialog shows the stored scope (AGL-1484)', () => {
   /** The write is still gated on that comparison, and only on it. */
   it('still writes the scope only when it changed', () => {
     expect(SOURCE).toMatch(
-      /const scopeWrite =\s*orgId && viewerOrgWide && scopeChanged \?/,
+      /const scopeWrite =\s*orgId && viewerOrgWide && canChangeSharing && scopeChanged \?/,
     )
     expect(SOURCE).toMatch(
       /\.\.\.\(scopeWrite\?\.scope \? \{ visibleTo: scopeWrite\.scope \} : \{\}\)/,

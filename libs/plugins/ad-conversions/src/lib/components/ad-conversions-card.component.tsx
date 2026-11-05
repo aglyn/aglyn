@@ -16,6 +16,9 @@
  */
 'use client'
 
+import { permissionRefusalText } from '@aglyn/aglyn/app-utils/org-permissions'
+import { useSiteKeys } from '@aglyn/tenant-feature-instance/hooks/use-site-keys'
+import { AD_CONVERSIONS_SITE_PRESETS } from '../model/ad-conversions-permissions'
 import { pluginDocsHelp } from '@aglyn/aglyn/app-utils/docs-help'
 import { CardDisplay, useConfirmationContext } from '@aglyn/shared-ui-jsx'
 import { StatusChip, type StatusTone } from '@aglyn/shared-ui-jsx/components/status-chip.component'
@@ -80,6 +83,11 @@ const help = (provider: AdProviderId) => pluginDocsHelp('adConversions', PROVIDE
 export function AdConversionsCard(props: AdConversionsCardProps) {
   const routesApi = useAdConversionsApi(props.hostId)
   const api = props.api ?? routesApi
+  // What the routes ask, read as they read it (AGL-4047): a member who can't
+  // sees the card with the permission named, and its controls switched off.
+  const { blocked } = useSiteKeys(props.hostId)
+  const viewRefused = blocked('adConversions.view', AD_CONVERSIONS_SITE_PRESETS['adConversions.view'])
+  const manageRefused = blocked('adConversions.manage', AD_CONVERSIONS_SITE_PRESETS['adConversions.manage'])
   const [state, setState] = useState<{
     loading: boolean
     available: boolean
@@ -115,12 +123,26 @@ export function AdConversionsCard(props: AdConversionsCardProps) {
   }, [])
 
   if (state.loading || !state.setup) return null
+  if (viewRefused) {
+    return (
+      <CardDisplay header="Ad conversions" contentGutterX contentGutterY>
+        <Typography variant="body2" color="text.secondary">
+          {permissionRefusalText('adConversions.view')}
+        </Typography>
+      </CardDisplay>
+    )
+  }
   // A connection made before the deployment lost its key is still shown, so
   // it can be disconnected.
   if (!state.available && !state.connections.length) return null
 
   return (
     <Stack spacing={2}>
+      {manageRefused ? (
+        <Typography variant="body2" color="text.secondary">
+          {permissionRefusalText('adConversions.manage')}
+        </Typography>
+      ) : null}
       {!state.setup.asksAboutAdvertising ? (
         <Alert severity="warning">
           Nothing is sent until this site asks visitors about advertising. Turn on the advertising question in Cookie
@@ -131,6 +153,7 @@ export function AdConversionsCard(props: AdConversionsCardProps) {
       {AD_PROVIDER_IDS.map((provider) => (
         <ProviderCard
           key={provider}
+          locked={manageRefused}
           api={api}
           provider={provider}
           available={state.available}
@@ -145,6 +168,7 @@ export function AdConversionsCard(props: AdConversionsCardProps) {
 AdConversionsCard.displayName = 'AdConversionsCard'
 
 function ProviderCard(props: {
+  locked: boolean
   api: AdConversionsApi
   provider: AdProviderId
   available: boolean
@@ -156,7 +180,9 @@ function ProviderCard(props: {
   const info = AD_PROVIDERS[provider]
   const { enqueueSnackbar } = useSnackbar()
   const { confirm } = useConfirmationContext()
-  const [busy, setBusy] = useState(false)
+  const [working, setBusy] = useState(false)
+  // Off for a member without the key, the same way as while a change runs.
+  const busy = working || props.locked
   const [error, setError] = useState<string | null>(null)
   const [connecting, setConnecting] = useState(false)
   const [token, setToken] = useState('')
@@ -292,7 +318,7 @@ function ProviderCard(props: {
                 disabled={busy || !token.trim() || (Boolean(info.adAccount) && !adAccountId.trim())}
                 onClick={connect}
               >
-                {busy ? 'Saving…' : 'Save and connect'}
+                {working ? 'Saving…' : 'Save and connect'}
               </Button>
               <Button size="small" disabled={busy} onClick={() => setConnecting(false)}>
                 Cancel

@@ -17,6 +17,9 @@
  * limitations under the License.
  */
 
+import { permissionRefusalText } from '@aglyn/aglyn/app-utils/org-permissions'
+import { useSiteKeys } from '@aglyn/tenant-feature-instance/hooks/use-site-keys'
+import { FULFILLMENT_NETWORKS_SITE_PRESETS } from '../model/fulfillment-networks-permissions'
 import { pluginDocsHelp } from '@aglyn/aglyn/app-utils/docs-help'
 import { PLATFORM_BRAND_NAME } from '@aglyn/aglyn/app-utils/platform-brand'
 import { CardDisplay, useConfirmationContext } from '@aglyn/shared-ui-jsx'
@@ -105,6 +108,11 @@ const help = (excerpt: string, anchor: HelpAnchor) => pluginDocsHelp('fulfillmen
 export function FulfillmentNetworksCard(props: FulfillmentNetworksCardProps) {
   const routesApi = useFulfillmentNetworksApi(props.hostId)
   const api = props.api ?? routesApi
+  // What the routes ask, read as they read it (AGL-4047): a member who can't
+  // sees the card with the permission named, and its controls switched off.
+  const { blocked } = useSiteKeys(props.hostId)
+  const viewRefused = blocked('fulfillmentNetworks.view', FULFILLMENT_NETWORKS_SITE_PRESETS['fulfillmentNetworks.view'])
+  const manageRefused = blocked('fulfillmentNetworks.manage', FULFILLMENT_NETWORKS_SITE_PRESETS['fulfillmentNetworks.manage'])
   const { enqueueSnackbar } = useSnackbar()
   const [state, setState] = useState<{ loading: boolean; offered: NetworkOffer[]; connections: NetworkConnectionView[] }>({
     loading: true,
@@ -146,6 +154,15 @@ export function FulfillmentNetworksCard(props: FulfillmentNetworksCardProps) {
     }))
   }, [])
 
+  if (viewRefused) {
+    return (
+      <CardDisplay header="Fulfillment networks" contentGutterX contentGutterY>
+        <Typography variant="body2" color="text.secondary">
+          {permissionRefusalText('fulfillmentNetworks.view')}
+        </Typography>
+      </CardDisplay>
+    )
+  }
   if (state.loading) return null
   // A connection whose network is no longer offered (its app was removed) is
   // still shown, so it can be disconnected.
@@ -156,9 +173,15 @@ export function FulfillmentNetworksCard(props: FulfillmentNetworksCardProps) {
 
   return (
     <Stack spacing={2}>
+      {manageRefused ? (
+        <Typography variant="body2" color="text.secondary">
+          {permissionRefusalText('fulfillmentNetworks.manage')}
+        </Typography>
+      ) : null}
       {shown.map((provider) => (
         <NetworkCard
           key={provider}
+          locked={manageRefused}
           api={api}
           provider={provider}
           offer={state.offered.find((offer) => offer.id === provider) ?? null}
@@ -172,6 +195,7 @@ export function FulfillmentNetworksCard(props: FulfillmentNetworksCardProps) {
 FulfillmentNetworksCard.displayName = 'FulfillmentNetworksCard'
 
 function NetworkCard(props: {
+  locked: boolean
   api: FulfillmentNetworksApi
   provider: NetworkProviderId
   offer: NetworkOffer | null
@@ -182,7 +206,9 @@ function NetworkCard(props: {
   const info = NETWORK_PROVIDERS[provider]
   const { enqueueSnackbar } = useSnackbar()
   const { confirm } = useConfirmationContext()
-  const [busy, setBusy] = useState(false)
+  const [working, setBusy] = useState(false)
+  // Off for a member without the key, the same way as while a change runs.
+  const busy = working || props.locked
   const [error, setError] = useState<string | null>(null)
   const [logKey, setLogKey] = useState(0)
   const apiKeyNetwork = info.auth === 'api-key'

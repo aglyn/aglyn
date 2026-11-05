@@ -24,6 +24,7 @@ export function registerPluginServerDeclarations(): Promise<void> {
     ;(await import('@aglyn/plugins-crm/declarations')).registerCrmDeclarations()
     ;(await import('@aglyn/plugins-crm/declarations.server')).registerCrmServerDeclarations()
     ;(await import('@aglyn/plugins-accounting/declarations.server')).registerAccountingServerDeclarations()
+    ;(await import('@aglyn/plugins-data/declarations')).registerDataDeclarations()
     ;(await import('@aglyn/plugins-data/declarations.server')).registerDataServerDeclarations()
     ;(await import('@aglyn/plugins-email/declarations')).registerEmailDeclarations()
     ;(await import('@aglyn/plugins-inbox/declarations')).registerInboxDeclarations()

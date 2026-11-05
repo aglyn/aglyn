@@ -103,6 +103,13 @@ export interface TransferAccessTarget {
   scope: TransferLaunchScope
   /** The site, for a `host` resource or a workspace resource read through one site. */
   hostId?: string | null
+  /**
+   * The surface's own verdict on importing into this instance (AGL-4047), for
+   * a resource whose server half answers `importAccess`, in place of "Manage
+   * data" on the workspace. The plan is still asked. The routes stay the
+   * enforcement.
+   */
+  importAllowed?: boolean
 }
 
 /**
@@ -124,7 +131,8 @@ export interface TransferLauncher {
    * permissions have answered. Importing needs "Manage data" (on the named
    * site, for a site's records); exporting needs only access to the
    * records — membership, and reaching the named site — unless the resource
-   * declares a `readPermission`. The routes stay the enforcement.
+   * declares a `readPermission`, or the target carries the resource's own
+   * `importAllowed`. The routes stay the enforcement.
    */
   can(action: TransferAction, target: TransferAccessTarget): boolean
   /**

@@ -37,7 +37,8 @@ import { TRANSFER_PLAN_REQUIRED, type TransferApiRoute, type TransferPlanRequire
  *    way datasets are read; a `readPermission` admits whoever holds it; and
  *    a resource that declares neither keeps `data.manage`, because its
  *    records may be ones the rules let only managers read (CRM contacts).
- *    `data.manage` always admits. Which records a reader then sees is the
+ *    `data.manage` always admits, unless the resource declares
+ *    `readPermissionOnly`, where only `readPermission` does. Which records a reader then sees is the
  *    resource's own business: `readPage` and `count` honor the reader's
  *    `scopeTokens`, as every other door onto the records does.
  *
@@ -51,7 +52,10 @@ import { TRANSFER_PLAN_REQUIRED, type TransferApiRoute, type TransferPlanRequire
  *==========================================*/
 
 /** What a resource declares about who may read and import its records. */
-export type TransferReadDeclaration = Pick<TransferResourceDescriptor, 'readPermission' | 'readableByMembers' | 'importPermission'>
+export type TransferReadDeclaration = Pick<
+  TransferResourceDescriptor,
+  'readPermission' | 'readPermissionOnly' | 'readableByMembers' | 'importPermission'
+>
 
 /** What a resource declares about the plan that moves its records. */
 export type TransferPlanDeclaration = Pick<TransferResourceDescriptor, 'featureFlag' | 'featureFlagExempt'>
@@ -82,6 +86,7 @@ export function transferAccessPermissions(
   if (intent === 'import') return [TRANSFER_MANAGE_PERMISSION]
   if (descriptor?.readableByMembers === true) return []
   const read = descriptor?.readPermission?.trim()
+  if (read && descriptor?.readPermissionOnly === true) return [read]
   // Whoever may write the records may read them.
   return read && read !== TRANSFER_MANAGE_PERMISSION ? [read, TRANSFER_MANAGE_PERMISSION] : [TRANSFER_MANAGE_PERMISSION]
 }

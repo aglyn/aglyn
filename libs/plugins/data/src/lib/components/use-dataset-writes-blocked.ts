@@ -16,12 +16,32 @@
  */
 
 import {
+  type AglynOrgCustomRole,
   type OrgPermission,
   permissionRefusalText,
   resolveOrgPermissions,
 } from '@aglyn/aglyn/app-utils/org-permissions'
+import { siteMayNarrow } from '@aglyn/aglyn/app-utils/host-permissions'
+import { isOrgWideMember } from '@aglyn/aglyn/app-utils/organizations'
+import {
+  deleteBeyondReach,
+  deleteBeyondReachRefusal,
+  oneSitePlacement,
+  placementVerdict,
+  resolvedPlacementKey,
+} from '@aglyn/aglyn/app-utils/site-placement'
+import type { AglynOrgMember } from '@aglyn/aglyn/foundation/definitions/organization.types'
 import { useFirestore, useFirestoreDoc, useUser } from '@aglyn/tenant-feature-instance'
 import { doc } from 'firebase/firestore'
+import {
+  DATA_ERASE_PERMISSION,
+  DATA_EXPORT_PERMISSION,
+  DATA_MANAGE_PERMISSION,
+  DATA_SITE_DELETE_PERMISSION,
+  DATA_SITE_MANAGE_PERMISSION,
+  DATA_VIEW_RECORDS_PERMISSION,
+  dataPermissionRefusal,
+} from '../model/dataset-access'
 
 /** What the doors read off a membership document. */
 type DatasetWriter = NonNullable<Parameters<typeof resolveOrgPermissions>[0]> & {
@@ -30,19 +50,20 @@ type DatasetWriter = NonNullable<Parameters<typeof resolveOrgPermissions>[0]> & 
 }
 
 /** Creating, editing and sharing datasets, and every record write. */
-export const DATASETS_WRITE_PERMISSION: OrgPermission = 'data.manage'
+export const DATASETS_WRITE_PERMISSION: OrgPermission = DATA_MANAGE_PERMISSION
 /** Deleting a whole dataset, which the erase route asks. */
-export const DATASETS_DELETE_PERMISSION: OrgPermission = 'org.eraseRecords'
+export const DATASETS_DELETE_PERMISSION: OrgPermission = DATA_ERASE_PERMISSION
 
 export const DATASETS_WRITE_REFUSAL = permissionRefusalText(DATASETS_WRITE_PERMISSION)
 export const DATASETS_DELETE_REFUSAL = permissionRefusalText(DATASETS_DELETE_PERMISSION)
+export const DATASETS_VIEW_RECORDS_REFUSAL = dataPermissionRefusal(DATA_VIEW_RECORDS_PERMISSION)
+export const DATASETS_EXPORT_REFUSAL = dataPermissionRefusal(DATA_EXPORT_PERMISSION)
 
 /**
- * A member's answer for a dataset key (AGL-4047), as the rules' `canWriteOrgDatasets`
+ * A member's answer for a dataset key (AGL-4047), as the rules' `memberKeyOrOverride`
  * and the routes' `memberHasOrgPermission` read it: the decision written on
  * `resolvedPermissions`, or, for a member the projection never stamped, on their
- * own `permissions`; else their workspace role's default. A workspace key: no
- * site narrows it, so a site's Data page asks the same thing as the workspace's.
+ * own `permissions`; else their workspace role's default.
  */
 export function holdsDatasetPermission(member: DatasetWriter, permission: OrgPermission): boolean {
   const stamped = (member.resolvedPermissions ?? member.permissions)?.[permission]
@@ -50,16 +71,99 @@ export function holdsDatasetPermission(member: DatasetWriter, permission: OrgPer
   return resolveOrgPermissions(member)[permission] === true
 }
 
-/**
- * Which dataset writes the signed-in member is known not to hold, so those
- * controls switch off with the permission named rather than failing on save.
- * Neither is blocked until the read lands, nor for a reader with no membership,
- * who is staff. Not a security boundary: the rules and routes refuse regardless.
- */
-export function useDatasetWritesBlocked(orgId: string | null | undefined): {
+/** What the signed-in member is known not to be able to do with a dataset, and why. */
+export interface DatasetAccessBlocked {
+  /** Whether these answers rest on the member's reads, rather than on their not having landed. */
+  known: boolean
+  /** Making a new dataset: "Manage data". */
+  creates: boolean
+  /** Changing this dataset's schema or records, or importing into it. */
   writes: boolean
+  writesReason: string
+  /**
+   * The writes are off, and changing who it is shared with stays this member's:
+   * they hold "Manage data" across every site, and a site narrows them on the one
+   * this dataset sits on. Sharing is not among what a narrowing takes.
+   */
+  sharingOnly: boolean
+  /** Deleting this dataset. */
   deletes: boolean
-} {
+  deletesReason: string
+  /** Reading this dataset's records. */
+  records: boolean
+  /** Taking this dataset's records out as a file. */
+  exports: boolean
+}
+
+const NOTHING_BLOCKED: DatasetAccessBlocked = {
+  known: false,
+  creates: false,
+  writes: false,
+  writesReason: DATASETS_WRITE_REFUSAL,
+  sharingOnly: false,
+  deletes: false,
+  deletesReason: DATASETS_DELETE_REFUSAL,
+  records: false,
+  exports: false,
+}
+
+/**
+ * The verdict for a member and a dataset placed at `visibleTo`, as the rule's
+ * `canWriteDatasetOn` and the routes' `memberMayActOnDataset` give it, resolved
+ * from what the site's stamp is written from. `customRole` is the member's custom
+ * role when they carry one and it was read.
+ */
+export function datasetAccessBlocked(
+  member: DatasetWriter,
+  visibleTo: unknown,
+  customRole?: AglynOrgCustomRole | null,
+): DatasetAccessBlocked {
+  const seat = member as Partial<AglynOrgMember>
+  const site = oneSitePlacement(visibleTo)
+  const writes = placementVerdict<boolean>({
+    member: seat,
+    visibleTo,
+    workspace: holdsDatasetPermission(member, DATA_MANAGE_PERMISSION),
+    site: (hostId) => resolvedPlacementKey(seat, hostId, DATA_SITE_MANAGE_PERMISSION, customRole),
+  })
+  const deletes = placementVerdict<boolean>({
+    member: seat,
+    visibleTo,
+    workspace: holdsDatasetPermission(member, DATA_ERASE_PERMISSION),
+    site: (hostId) => resolvedPlacementKey(seat, hostId, DATA_SITE_DELETE_PERMISSION, customRole),
+  })
+  const beyond = deleteBeyondReach(seat, visibleTo)
+  const holdsManage = holdsDatasetPermission(member, DATA_MANAGE_PERMISSION)
+  return {
+    known: true,
+    creates: !holdsManage,
+    writes: !writes,
+    sharingOnly: !writes && holdsManage && isOrgWideMember(seat),
+    writesReason: site ? dataPermissionRefusal(DATA_SITE_MANAGE_PERMISSION) : DATASETS_WRITE_REFUSAL,
+    deletes: beyond || !deletes,
+    deletesReason: beyond
+      ? deleteBeyondReachRefusal('dataset')
+      : site
+        ? dataPermissionRefusal(DATA_SITE_DELETE_PERMISSION)
+        : DATASETS_DELETE_REFUSAL,
+    records: !holdsDatasetPermission(member, DATA_VIEW_RECORDS_PERMISSION),
+    exports: !holdsDatasetPermission(member, DATA_EXPORT_PERMISSION),
+  }
+}
+
+/**
+ * Which dataset controls switch off with the reason named rather than failing on
+ * save, for the dataset placed at `visibleTo`. Nothing is blocked until the reads
+ * land, nor for a reader with no membership, who is staff. Not a security
+ * boundary: the rules and routes refuse regardless.
+ *
+ * Costs the membership the page already reads, and one read of a custom role
+ * only for a member of the whole workspace whom the site decides.
+ */
+export function useDatasetWritesBlocked(
+  orgId: string | null | undefined,
+  visibleTo?: unknown,
+): DatasetAccessBlocked {
   const firestore = useFirestore()
   const { data: user } = useUser()
   const uid = (user as { uid?: string } | undefined)?.uid ?? ''
@@ -67,9 +171,18 @@ export function useDatasetWritesBlocked(orgId: string | null | undefined): {
     () => (orgId && uid ? doc(firestore, 'orgs', orgId, 'members', uid) : null),
     [firestore, orgId, uid],
   )
-  if (status !== 'success' || !member) return { writes: false, deletes: false }
-  return {
-    writes: !holdsDatasetPermission(member, DATASETS_WRITE_PERMISSION),
-    deletes: !holdsDatasetPermission(member, DATASETS_DELETE_PERMISSION),
-  }
+  const seat = (status === 'success' ? member : null) as (DatasetWriter & { roleId?: unknown }) | null | undefined
+  const site = oneSitePlacement(visibleTo)
+  // Only someone the site decides: narrowed on it, or on a role wider or narrower here.
+  const siteDecides =
+    Boolean(seat && site) &&
+    isOrgWideMember(seat as Partial<AglynOrgMember>) &&
+    (Boolean(siteMayNarrow(seat as Partial<AglynOrgMember>, site)) || !holdsDatasetPermission(seat as DatasetWriter, DATA_MANAGE_PERMISSION))
+  const roleId = siteDecides && typeof seat?.roleId === 'string' ? seat.roleId : ''
+  const role = useFirestoreDoc<AglynOrgCustomRole>(
+    () => (orgId && roleId ? doc(firestore, 'orgs', orgId, 'roles', roleId) : null),
+    [firestore, orgId, roleId],
+  )
+  if (!seat || (roleId && role.status === 'loading')) return NOTHING_BLOCKED
+  return datasetAccessBlocked(seat, visibleTo, roleId && role.status === 'success' ? (role.data ?? null) : null)
 }

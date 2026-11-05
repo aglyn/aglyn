@@ -1701,6 +1701,7 @@
         "console": "registerDataConsole",
         "consoleApi": "registerDataConsoleApi",
         "tenantApi": "registerDataTenantApi",
+        "declarations": "registerDataDeclarations",
         "serverDeclarations": "registerDataServerDeclarations",
         "consoleServerDeclarations": "registerDataConsoleServerDeclarations",
         "usageAxes": "dataUsageAxes"
@@ -1823,7 +1824,7 @@
       ],
       "transferResources": [
         {
-          "$comment": "A dataset's records (AGL-3530), one dataset at a time: reached as data.dataset:<datasetId>, so a job, a person's remembered export fields and the one running import each belong to one dataset. The server half registers from consoleServerDeclarations, the client half from the console registrar. readableByMembers (AGL-3546): every member may read a dataset they can see, so every such member may export it; the resource checks the dataset's visibility itself. AGL-3548: the Data page's plan feature (`dataStore`) gates both directions, as the page and the datasets API do.",
+          "$comment": "A dataset's records (AGL-3530), one dataset at a time: reached as data.dataset:<datasetId>, so a job, a person's remembered export fields and the one running import each belong to one dataset. The server half registers from consoleServerDeclarations, the client half from the console registrar. readPermission (AGL-4047): the Export data key, every role's by default, and it alone decides so taking it away stops the export whoever may write the records; the resource checks the dataset's visibility itself, and importAccess decides importing per dataset. AGL-3548: the Data page's plan feature (`dataStore`) gates both directions, as the page and the datasets API do.",
           "key": "data.dataset",
           "featureFlag": "dataStore",
           "label": "Dataset records",
@@ -1834,7 +1835,8 @@
           "formats": ["csv", "json", "ndjson"],
           "limits": { "maxRows": 50000 },
           "instances": true,
-          "readableByMembers": true
+          "readPermission": "data.export",
+          "readPermissionOnly": true
         }
       ],
       "contributes": {
@@ -3175,6 +3177,7 @@
       "package": "@aglyn/plugins-post-purchase",
       "uses": ["commerce"],
       "register": {
+        "consoleDeclarations": "registerPostPurchaseConsoleDeclarations",
         "console": "registerPostPurchaseConsole",
         "consoleApi": "registerPostPurchaseConsoleApi",
         "serverDeclarations": "registerPostPurchaseServerDeclarations",
@@ -3224,6 +3227,7 @@
       "package": "@aglyn/plugins-review-platforms",
       "uses": ["commerce"],
       "register": {
+        "consoleDeclarations": "registerReviewPlatformsConsoleDeclarations",
         "console": "registerReviewPlatformsConsole",
         "consoleApi": "registerReviewPlatformsConsoleApi",
         "serverDeclarations": "registerReviewPlatformsServerDeclarations",
@@ -3409,6 +3413,7 @@
       "package": "@aglyn/plugins-tax-engines",
       "uses": ["commerce"],
       "register": {
+        "consoleDeclarations": "registerTaxEnginesConsoleDeclarations",
         "console": "registerTaxEnginesConsole",
         "consoleApi": "registerTaxEnginesConsoleApi",
         "serverDeclarations": "registerTaxEnginesServerDeclarations",
@@ -3595,6 +3600,7 @@
       "package": "@aglyn/plugins-ad-conversions",
       "uses": ["commerce"],
       "register": {
+        "consoleDeclarations": "registerAdConversionsConsoleDeclarations",
         "console": "registerAdConversionsConsole",
         "consoleApi": "registerAdConversionsConsoleApi",
         "serverDeclarations": "registerAdConversionsServerDeclarations",
@@ -3716,6 +3722,7 @@
       "package": "@aglyn/plugins-fulfillment-networks",
       "uses": ["commerce"],
       "register": {
+        "consoleDeclarations": "registerFulfillmentNetworksConsoleDeclarations",
         "console": "registerFulfillmentNetworksConsole",
         "consoleApi": "registerFulfillmentNetworksConsoleApi",
         "serverDeclarations": "registerFulfillmentNetworksServerDeclarations",
@@ -3780,6 +3787,7 @@
       "package": "@aglyn/plugins-couriers",
       "uses": ["commerce"],
       "register": {
+        "consoleDeclarations": "registerCouriersConsoleDeclarations",
         "console": "registerCouriersConsole",
         "consoleApi": "registerCouriersConsoleApi",
         "serverDeclarations": "registerCouriersServerDeclarations",
@@ -3846,6 +3854,7 @@
       "package": "@aglyn/plugins-marketplaces",
       "uses": ["commerce"],
       "register": {
+        "consoleDeclarations": "registerMarketplacesConsoleDeclarations",
         "console": "registerMarketplacesConsole",
         "consoleApi": "registerMarketplacesConsoleApi",
         "serverDeclarations": "registerMarketplacesServerDeclarations",
@@ -3914,6 +3923,7 @@
       "package": "@aglyn/plugins-print-on-demand",
       "uses": ["commerce"],
       "register": {
+        "consoleDeclarations": "registerPrintOnDemandConsoleDeclarations",
         "console": "registerPrintOnDemandConsole",
         "consoleApi": "registerPrintOnDemandConsoleApi",
         "serverDeclarations": "registerPrintOnDemandServerDeclarations",
@@ -3984,6 +3994,7 @@
       "package": "@aglyn/plugins-inventory-sync",
       "uses": ["commerce"],
       "register": {
+        "consoleDeclarations": "registerInventorySyncConsoleDeclarations",
         "console": "registerInventorySyncConsole",
         "consoleApi": "registerInventorySyncConsoleApi",
         "serverDeclarations": "registerInventorySyncServerDeclarations",

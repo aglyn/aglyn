@@ -99,6 +99,12 @@ export interface TransferResourceDescriptor {
    */
   readPermission?: string
   /**
+   * `readPermission` alone decides an export (AGL-4047): `data.manage` does
+   * not also admit, so taking the permission away from someone who may write
+   * the records stops the export too. Needs `readPermission`.
+   */
+  readPermissionOnly?: boolean
+  /**
    * The resource is exported and never imported — a record of work done (a
    * CRM's logged activities) or a setup edited on its own page. The upload
    * refuses it, its plugin registers no `apply` or `revert`, and a surface
@@ -314,6 +320,12 @@ export function transferResourceProblems(descriptor: TransferResourceDescriptor)
   }
   if (descriptor.readableByMembers === true && descriptor.readPermission !== undefined) {
     problems.push(`${descriptor.key} is readable by every member and names a read permission; say one.`)
+  }
+  if (descriptor.readPermissionOnly !== undefined && typeof descriptor.readPermissionOnly !== 'boolean') {
+    problems.push(`${descriptor.key} says "readPermissionOnly" with something other than true or false.`)
+  }
+  if (descriptor.readPermissionOnly === true && descriptor.readPermission === undefined) {
+    problems.push(`${descriptor.key} says "readPermissionOnly" and names no read permission.`)
   }
   if (descriptor.exportOnly !== undefined && typeof descriptor.exportOnly !== 'boolean') {
     problems.push(`${descriptor.key} says "exportOnly" with something other than true or false.`)

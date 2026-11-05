@@ -68,8 +68,9 @@ custom role and overrides give them, and members whose access matches their
 workspace role everywhere (owners and admins always do) see no change.
 
 Whether a permission follows the narrower site role is a setting of its own. Each
-permission a site can narrow (the point of sale ones, the waivers ones and the two AI
-ones) has a second choice under it, **On sites where their role is narrower**:
+permission a site can narrow (the point of sale ones, the waivers ones, the two AI ones
+and [the two site dataset ones](#dataset-permissions)) has a second choice under it, **On
+sites where their role is narrower**:
 
 - **Follow the site role**: on that site the member holds what their Viewer or Author
   access holds, which for the register and waivers is nothing.
@@ -79,8 +80,8 @@ ones) has a second choice under it, **On sites where their role is narrower**:
 
 Set it on a custom role for everyone on that role, or on one member in their
 **Permissions** card, where it wins over their custom role. Left on **Inherit**, the
-built-in default applies: the point of sale and waivers permissions follow the site
-role, and the AI permissions are kept, so nothing changes until you choose otherwise.
+built-in default applies: the point of sale, waivers and site dataset permissions follow
+the site role, and the AI permissions are kept.
 Keeping **Sell at the register** also keeps the register open for selling, and only
 for selling. The choice changes something only for editors: owners and admins are
 admins of every site, and a viewer has no narrower access to be given. Keeping a
@@ -125,6 +126,53 @@ record shared with every site is shared with theirs too. They can't change what 
 shared with, and records shared only with other sites stay out of their reach. To keep
 someone to their own site's records, share the rest with the sites that need them rather
 than with the whole workspace, or take **Manage data** away from them.
+
+### Dataset permissions {#dataset-permissions}
+
+Four permissions sit beside **Manage data** and **Delete workspace records**:
+
+| Permission | What it opens | Owner / Admin | Editor | Viewer | Site Admin / Editor | Site Author / Viewer |
+|---|---|---|---|---|---|---|
+| **Manage this site's data** (`data.siteManage`) | Change the schema and records of a dataset shared with that site alone, and import into it | Yes | Yes | No | Yes | No |
+| **Delete this site's datasets** (`data.siteDelete`) | Delete a dataset shared with that site alone, with its records | Yes | Yes | No | Yes | No |
+| **View dataset records** (`data.viewRecords`) | Read the records of the datasets the member can see | Yes | Yes | Yes | Yes | Yes |
+| **Export data** (`data.export`) | Take those records out as a file; needs **View dataset records** | Yes | Yes | Yes | Yes | Yes |
+
+**A dataset shared with one site alone answers to that site.** Writing it takes **Manage
+data**, or **Manage this site's data** on that site. Deleting it takes **Delete workspace
+records**, or **Delete this site's datasets** on that site. So:
+
+- A site Admin or Editor who is a viewer of the workspace can edit and delete the datasets
+  shared with that site alone, without holding anything across the workspace. Allow or deny
+  either permission for one person from the site's **Users** card, under **Permissions**.
+- An editor of the whole workspace given **Viewer** or **Author** access to a site loses
+  both on the datasets shared with that site alone, schema, records, delete and import, and
+  keeps them everywhere else. They can still change who such a dataset is shared with. Choose **Keep this permission** for either
+  permission on their custom role or their **Permissions** card to keep it there, or allow
+  it from the site's **Users** card to give it back on that one site. See
+  [A site's access narrows its register and waivers](#site-access-narrows), which works the
+  same way.
+- Someone refused **Manage data** or **Delete workspace records** by a custom role or an
+  override doesn't get them back from their site role. Those decisions stand.
+
+A dataset shared with every site or with several answers to **Manage data** and **Delete
+workspace records** alone, because no one site speaks for it. That has two consequences
+worth knowing:
+
+- A member who reaches only some sites can't delete a dataset shared with every site or with
+  several, whatever they hold. It takes access to every site.
+- A member who reaches only some sites and holds **Manage data** can change the schema and
+  records of a dataset shared with every site or with several of theirs.
+
+Creating a dataset still takes **Manage data**, wherever it's created from, and changing who
+a dataset is shared with takes **Manage data** with access to every site.
+
+**View dataset records** and **Export data** start with every role, so taking one away is a
+choice you make for a role or a person. Without **View dataset records**, the Data page lists
+a member's datasets and says which permission their records need, and AI won't read figures
+from them for that member. Without **Export data**, **Export** is shown switched off.
+Published sites aren't members: a page showing a dataset's records keeps showing them,
+whoever holds what.
 
 ### Site permissions {#site-permissions}
 
@@ -292,8 +340,11 @@ role or a per-member override can grant or deny each one.
 Each integration plugin declares its own permissions, so a custom role, a per-member
 override or the site's **Permissions** dialog can grant or deny them one by one. Each
 starts from the member's role on the site, so nobody's access changed when they became
-permissions. Reading a site's rewards program, its members and its sales channels stays
-open to everyone on the site.
+permissions. Some reads stay open to everyone on the site: its rewards program and members,
+its sales channels, its after-the-sale and review settings, its print-on-demand connections
+and imported products, its tax engine connection and a product's tax code, and what an order
+shows from a fulfillment network, an inventory system, an online marketplace, an
+after-the-sale or review service, or a print-on-demand service.
 
 | Permission | What it opens | Admin | Editor | Author | Viewer |
 |---|---|---|---|---|---|
@@ -317,6 +368,30 @@ open to everyone on the site.
 | **Check rates and see labels** (`shipping.labels`) | Check an address, compare rates and see an order's labels | Yes | Yes | No | No |
 | **Buy shipping labels** (`shipping.buyLabels`) | Buy a label or a batch of labels, which charges the workspace | Yes | Yes | No | No |
 | **Void shipping labels** (`shipping.voidLabels`) | Void a label that has not been used | Yes | Yes | No | No |
+| **See ad conversion connections** (`adConversions.view`) | See which ad accounts a site sends conversions to | Yes | Yes | No | No |
+| **Manage ad conversion connections** (`adConversions.manage`) | Connect, change, pause and disconnect an ad account, and send a test event | Yes | No | No | No |
+| **See the courier connection** (`couriers.view`) | See a site's courier connection and an order's delivery | Yes | Yes | No | No |
+| **Manage the courier connection** (`couriers.manage`) | Connect, test and disconnect a courier, and change its settings and webhook token | Yes | No | No | No |
+| **Dispatch couriers** (`couriers.dispatch`) | Get a quote, send a courier for an order, cancel one and refresh where it is | Yes | Yes | No | No |
+| **See fulfillment network connections** (`fulfillmentNetworks.view`) | See a site's fulfillment networks and each one's activity | Yes | Yes | No | No |
+| **Manage fulfillment network connections** (`fulfillmentNetworks.manage`) | Connect and disconnect a network, change its settings and webhook secret, and run its sync | Yes | No | No | No |
+| **Send orders to a fulfillment network** (`fulfillmentNetworks.orders`) | Send an order's lines to a network, or ask it to cancel them | Yes | Yes | No | No |
+| **See the inventory connection** (`inventorySync.view`) | See a site's inventory system, its activity and the orders that could not be sent | Yes | Yes | No | No |
+| **Manage the inventory connection** (`inventorySync.manage`) | Connect and disconnect a system, change its settings and locations, and run its sync | Yes | No | No | No |
+| **Send orders to the inventory system** (`inventorySync.orders`) | Send an order that could not be sent again | Yes | Yes | No | No |
+| **See online marketplace connections** (`marketplaces.view`) | See the online marketplaces a site sells on, their activity and the listings to look at | Yes | Yes | No | No |
+| **Manage online marketplace connections** (`marketplaces.manage`) | Connect and disconnect a seller account, change its settings and run its sync | Yes | No | No | No |
+| **Resend marketplace shipments** (`marketplaces.orders`) | Send an order's refused or failed shipments to its marketplace again | Yes | Yes | No | No |
+| **Change after-the-sale services** (`postPurchase.manage`) | Connect, change and disconnect the services that follow an order after it is placed | Yes | No | No | No |
+| **Manage print-on-demand connections** (`printOnDemand.manage`) | Connect and disconnect a service, and choose how paid orders are sent to it | Yes | No | No | No |
+| **Import print-on-demand products** (`printOnDemand.products`) | Browse a service's products, import or re-sync them, and stop filling a product through it | Yes | Yes | No | No |
+| **Work print-on-demand orders** (`printOnDemand.orders`) | See the service orders, and send, confirm, refresh or cancel one | Yes | Yes | No | No |
+| **Change review services** (`reviewPlatforms.manage`) | Connect, change and disconnect the services that ask buyers for reviews | Yes | No | No | No |
+| **Manage the tax engine connection** (`taxEngines.manage`) | Connect, test and disconnect a tax engine, and change its address, default tax code and recording | Yes | No | No | No |
+| **Manage exempt customers** (`taxEngines.exemptions`) | See, save and remove the customers exempt from tax | Yes | Yes | No | No |
+| **Set product tax codes** (`taxEngines.productCodes`) | Set the tax code a product is taxed under | Yes | Yes | No | No |
+| **Check addresses with the tax engine** (`taxEngines.addresses`) | Ask the tax engine how it reads an address | Yes | Yes | No | No |
+| **See and resend orders to the tax engine** (`taxEngines.orders`) | See how an order stands with the tax engine, and send it again | Yes | Yes | No | No |
 
 ### Email and inbox permissions {#email-and-inbox-permissions}
 

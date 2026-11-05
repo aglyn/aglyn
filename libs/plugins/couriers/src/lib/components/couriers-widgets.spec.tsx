@@ -28,6 +28,10 @@ import { QueueCourierButton } from './queue-courier-button.component'
  * panel quotes, books under one attempt key and cancels.
  */
 
+jest.mock('@aglyn/tenant-feature-instance/hooks/use-site-keys', () => ({
+  useSiteKeys: () => ({ blocked: (key: string) => mockBlockedKeys.has(key) }),
+}))
+const mockBlockedKeys = new Set<string>()
 jest.mock('./couriers-api', () => ({
   ...jest.requireActual('./couriers-api'),
   useCouriersApi: () => null,
@@ -244,5 +248,23 @@ describe('QueueCourierButton (AGL-3695)', () => {
     )
     await waitFor(() => expect(fake.connection).toHaveBeenCalled())
     expect(container.innerHTML).toBe('')
+  })
+})
+
+describe('the card follows the keys its routes ask (AGL-4047)', () => {
+  afterEach(() => mockBlockedKeys.clear())
+
+  it('switches Connect off and names the permission without "Manage the courier connection"', async () => {
+    mockBlockedKeys.add('couriers.manage')
+    const fake = api({ connection: jest.fn(async () => ({ available: true, providers: PROVIDERS, connection: null })) })
+    render(<CouriersCard hostId="h" api={fake} />)
+    expect(((await screen.findByRole('button', { name: 'Connect DoorDash' })) as HTMLButtonElement).disabled).toBe(true)
+    expect(screen.getByText(/does not include/).textContent).toContain('ask an organization admin')
+  })
+
+  it('names the permission rather than drawing nothing without "See the courier connection"', async () => {
+    mockBlockedKeys.add('couriers.view')
+    render(<CouriersCard hostId="h" api={api()} />)
+    expect((await screen.findByText(/does not include/)).textContent).toContain('ask an organization admin')
   })
 })

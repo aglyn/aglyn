@@ -1063,7 +1063,7 @@ export const DOCS_HELP_SECTION_EXCERPTS: {
     '#the-dashboard-card': 'The site dashboard shows a Tasks due card: how many of your tasks are overdue, how many are due today, and the next five assigned to you, each with its due date.',
   },
   taxServices: {
-    '#connect': 'Open Products → Taxes and find the Tax service card. Only an admin of the site can connect, test or disconnect a service and change its address.',
+    '#connect': 'Open Products → Taxes and find the Tax service card. Connecting, testing or disconnecting a service and changing its address takes Manage the tax engine connection, which a site\'s admins hold by default (custom roles).',
     '#how-sales-are-taxed': 'A product you marked tax-exempt is sent as non-taxable and charged no tax.',
   },
   team: {

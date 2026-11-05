@@ -47,4 +47,5 @@ export const DATASET_TRANSFER_HOOKS: PluginTransferResource = {
   plan: async (ctx, input) => ((await hooks()).plan as NonNullable<TransferRecordsHooks['plan']>)(ctx, input),
   apply: async (ctx, chunk, writer) => (await hooks()).apply(ctx, chunk, writer),
   revert: async (ctx, snapshot, decisions) => (await hooks()).revert(ctx, snapshot, decisions),
+  importAccess: async (subject) => (await import('./dataset-transfer-access.server')).datasetImportAccess(subject),
 }
