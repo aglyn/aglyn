@@ -54713,7 +54713,7 @@
                 "new": "1"
               },
               "permission": "hosts.create",
-              "reason": "Your role can't create this here. Ask an owner or admin of the workspace.",
+              "reason": "Your role does not include this permission — ask an organization admin.",
               "screen": "site.sites"
             },
             {
@@ -54786,7 +54786,7 @@
                 "new": "1"
               },
               "permission": "hosts.create",
-              "reason": "Your role can't create this here. Ask an owner or admin of the workspace.",
+              "reason": "Your role does not include this permission — ask an organization admin.",
               "screen": "site.sites"
             }
           ]
@@ -55164,7 +55164,7 @@
               "params": {
                 "new": "1"
               },
-              "reason": "Your role on this site can't create this. Ask a site admin.",
+              "reason": "Your access to this site does not include this — ask an organization admin.",
               "screen": "site.pages"
             },
             {
@@ -55289,7 +55289,7 @@
               "permission": "data.manage",
               "planFeature": "crm",
               "pluginId": "crm",
-              "reason": "Your role can't create this here. Ask an owner or admin of the workspace.",
+              "reason": "Your role does not include this permission — ask an organization admin.",
               "screen": "crm.contacts"
             }
           ]

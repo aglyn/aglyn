@@ -23,6 +23,7 @@ import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.Switch
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.collectAsState
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
@@ -42,7 +43,10 @@ import com.aglyn.contracts.ORG_AUTOMATION_TRIGGER_EVENTS
 import com.aglyn.contracts.OrgAutomationRead
 import com.aglyn.contracts.hostEventLabel
 import com.aglyn.contracts.hostEventPayloadHint
+import com.aglyn.contracts.orgPermissionLabel
+import com.aglyn.contracts.permissionRefusalText
 import com.aglyn.contracts.readOrgAutomation
+import com.aglyn.contracts.sitePermissions
 import com.aglyn.contracts.stepLabel
 import com.aglyn.contracts.stepRunsAfterWait
 import com.aglyn.contracts.str
@@ -74,6 +78,8 @@ import com.aglyn.ui.TextButton
 import com.aglyn.ui.space
 import kotlinx.coroutines.CancellationException
 import kotlinx.coroutines.launch
+import kotlinx.coroutines.flow.combine
+import kotlinx.coroutines.flow.flowOf
 
 /*
  * THE ORGANIZATION'S AUTOMATION HUB (org-automations-card, its editor and
@@ -141,7 +147,7 @@ fun OrgHub(context: NativePluginContext, orgId: String, section: String?, open: 
           if (kind != SiteListKind.WEBHOOKS) {
             RunQuotaLine(context, if (kind == SiteListKind.WORKFLOWS) RunCounter.WORKFLOW_RUNS else RunCounter.ACTION_RUNS, orgId, null, entitlements)
           }
-          OrgSiteList(context, kind, sites, canRead = kind != SiteListKind.WEBHOOKS || canEdit)
+          OrgSiteList(context, kind, sites)
         }
       }
     }
@@ -293,17 +299,29 @@ fun OrgAutomationsCard(
 
 /** One of "Workflows / Actions / Webhooks on every site": the first sites' rows, each opening in its site. */
 @Composable
-fun OrgSiteList(context: NativePluginContext, kind: SiteListKind, sites: Live<List<OrgSite>>, canRead: Boolean) {
+fun OrgSiteList(context: NativePluginContext, kind: SiteListKind, sites: Live<List<OrgSite>>) {
   var expanded by remember { mutableStateOf(false) }
+  val webhooks = kind == SiteListKind.WEBHOOKS
+  val holding = if (webhooks && sites is Live.Ready) rememberSitesHoldingWebhooks(context, sites.value) else null
   SectionCard(kind.header, Modifier.fillMaxWidth().testTag("org-list-${kind.key}")) {
     Intro(kind.intro)
     when {
-      !canRead -> NoticeBanner("Each site’s ${kind.plural} are listed for its admins and editors.", StatusTone.INFO)
       sites is Live.Loading -> SkeletonList(rows = 2)
       sites is Live.Failed -> NoticeBanner("The workspace's sites could not be loaded.", StatusTone.ERROR)
       sites is Live.Ready && sites.value.isEmpty() -> Caption("This organization has no sites yet.")
+      sites is Live.Ready && webhooks && holding == null -> SkeletonList(rows = 2)
+      sites is Live.Ready && webhooks && holding.orEmpty().isEmpty() ->
+        NoticeBanner(permissionRefusalText(WEBHOOKS_PERMISSION), StatusTone.INFO)
       sites is Live.Ready -> {
-        val reachable = sites.value.take(ORG_SITE_LIST_MAX_SITES)
+        val listed = if (webhooks) sites.value.take(ORG_SITE_LIST_MAX_SITES) else sites.value
+        val readable = if (webhooks) listed.filter { it.id in holding.orEmpty() } else listed
+        if (readable.size < listed.size) {
+          NoticeBanner(
+            "The ${kind.plural} of sites where your role does not include \"${orgPermissionLabel(WEBHOOKS_PERMISSION)}\" are not listed.",
+            StatusTone.INFO,
+          )
+        }
+        val reachable = readable.take(ORG_SITE_LIST_MAX_SITES)
         val shown = if (expanded) reachable else reachable.take(ORG_SITE_LIST_OPEN_SITES)
         Row(Modifier.fillMaxWidth().padding(vertical = space(0.5f)), horizontalArrangement = Arrangement.spacedBy(space(1f))) {
           listOf("Name" to 1.4f, "Site" to 1f, (if (kind == SiteListKind.WEBHOOKS) "Direction" else "Trigger") to 1.2f, "Status" to 0.6f).forEach { (label, weight) ->
@@ -324,6 +342,25 @@ fun OrgSiteList(context: NativePluginContext, kind: SiteListKind, sites: Live<Li
       }
     }
   }
+}
+
+/**
+ * The sites whose webhooks this member may read, decided per site as the rule `canReadHostSensitive` decides it, from
+ * each site's own document. Null until every site has answered, so nothing is refused early.
+ */
+@Composable
+private fun rememberSitesHoldingWebhooks(context: NativePluginContext, sites: List<OrgSite>): Set<String>? {
+  val workspace = com.aglyn.pluginhost.rememberMemberPermissions(context).workspace
+  val ids = remember(sites) { sites.take(ORG_SITE_LIST_MAX_SITES).map { it.id } }
+  val docs by remember(ids, context.firestore) {
+    if (ids.isEmpty()) flowOf(emptyList()) else combine(ids.map { context.firestore.observeDoc("hosts/$it") }) { it.toList() }
+  }.collectAsState(null)
+  val answers = docs ?: return null
+  if (answers.any { it is Live.Loading }) return null
+  return ids.filterIndexed { index, _ ->
+    val site = (answers[index] as? Live.Ready)?.value?.data ?: return@filterIndexed false
+    sitePermissions(workspace, site, context.uid)[WEBHOOKS_PERMISSION] == true
+  }.toSet()
 }
 
 @Composable

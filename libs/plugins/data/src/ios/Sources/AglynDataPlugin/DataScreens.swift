@@ -525,12 +525,16 @@ struct DatasetDetailView: View {
               Label("Edit schema", systemImage: "tablecells")
             }
             .disabled(!canWrite)
-            if canWrite {
-              Button { context.navigate(dataImportScreen, datasetImportParams(id: dataset.id, name: dataset.name)) } label: {
-                Label("Import records", systemImage: "square.and.arrow.up")
+            Button {
+              guard canWrite else {
+                runner.error = context.refusal("data.manage")
+                return
               }
-              .accessibilityIdentifier("import-dataset-records")
+              context.navigate(dataImportScreen, datasetImportParams(id: dataset.id, name: dataset.name))
+            } label: {
+              Label("Import records", systemImage: "square.and.arrow.up")
             }
+            .accessibilityIdentifier("import-dataset-records")
             Button { onExport(dataset) } label: { Label("Export records", systemImage: "square.and.arrow.down") }
               .disabled((records ?? 1) == 0)
             Divider()

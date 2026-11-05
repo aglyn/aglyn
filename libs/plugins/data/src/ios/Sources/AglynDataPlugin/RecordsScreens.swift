@@ -202,14 +202,16 @@ private struct RecordsBody: View {
     }
     .aglynScreenToolbar(id: "records") {
       AglynSecondaryActions {
-        if canWrite {
-          Button {
-            context.navigate(dataImportScreen, datasetImportParams(id: dataset.id, name: dataset.name))
-          } label: {
-            Label("Import records", systemImage: "square.and.arrow.up")
+        Button {
+          guard canWrite else {
+            runner.error = context.refusal("data.manage")
+            return
           }
-          .accessibilityIdentifier("import-records")
+          context.navigate(dataImportScreen, datasetImportParams(id: dataset.id, name: dataset.name))
+        } label: {
+          Label("Import records", systemImage: "square.and.arrow.up")
         }
+        .accessibilityIdentifier("import-records")
         Button {
           exportRecords()
         } label: {

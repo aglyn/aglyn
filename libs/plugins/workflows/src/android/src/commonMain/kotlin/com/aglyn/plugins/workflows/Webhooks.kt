@@ -34,14 +34,16 @@ import kotlinx.coroutines.launch
 
 /** The site roles that may read and manage webhooks (the rules' own). */
 
+/** "See orders and webhooks": what the rules ask of a site's webhooks. */
+const val WEBHOOKS_PERMISSION = "site.sensitive"
+
 @Composable
 fun WebhooksSection(context: NativePluginContext, hostId: String, entitlements: Entitlements?, open: (AutomationTarget) -> Unit) {
   val api = remember(context.api, context.writer) { AutomationApi(context.api, context.writer) }
   val scope = rememberCoroutineScope()
   val copy = rememberCopyToClipboard()
   val host = liveDoc(context, "hosts/$hostId")
-  // "See orders and webhooks", which the rules ask of a site's webhooks.
-  val allowed = com.aglyn.pluginhost.rememberMemberPermissions(context).can("site.sensitive")
+  val allowed = com.aglyn.pluginhost.rememberMemberPermissions(context).can(WEBHOOKS_PERMISSION)
   val live = liveQuery(context, remember(hostId, allowed) { if (allowed) ceilingQuery(webhooksPath(hostId), WEBHOOK_CEILING) else null })
   val siteBase = hostPublicOrigin((host as? Live.Ready)?.value?.data) ?: ""
   var notice by remember { mutableStateOf<Pair<String, StatusTone>?>(null) }
@@ -55,7 +57,7 @@ fun WebhooksSection(context: NativePluginContext, hostId: String, entitlements: 
     emptyText = null,
     header = {
       Intro("Send signed JSON to outside systems from the actions builder, or accept calls that run a workflow. Business plans.")
-      if (!allowed) NoticeBanner("Each site’s webhooks are listed for its admins and editors.", StatusTone.INFO)
+      if (!allowed) NoticeBanner(com.aglyn.contracts.permissionRefusalText(WEBHOOKS_PERMISSION), StatusTone.INFO)
       AutomationNoticeBanner()
       notice?.let { (message, tone) -> NoticeBanner(message, tone, action = { TextButton(onClick = { notice = null }) { Text("Dismiss") } }) }
     },
