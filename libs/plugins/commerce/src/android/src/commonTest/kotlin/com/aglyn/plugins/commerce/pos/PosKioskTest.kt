@@ -120,6 +120,12 @@ private class ScriptedKiosk : PosKioskApi {
     return contextAnswer
   }
 
+  override suspend fun search(token: String, search: String): PosKioskCatalog {
+    calls += "search $search"
+    failure?.let { throw it }
+    return catalogAnswer
+  }
+
   override suspend fun catalog(token: String, categoryId: String?): PosKioskCatalog {
     calls += "catalog ${categoryId ?: "-"}"
     failure?.let { throw it }
@@ -205,6 +211,17 @@ private class PairingDevice : PosDeviceApi {
 }
 
 class PosKioskItemTest {
+  @Test
+  fun aWordTypedMatchesAsTheCatalogSearchDoes() {
+    for ((typed, expected) in listOf(
+      "   " to true, "zeb" to true, "lat" to true, "  ZEBRA   latte " to true, "latte zeb" to true,
+      "ebra" to false, "zebra mocha" to false, "zebralattezebralatte" to false,
+    )) {
+      assertEquals(expected, posKioskNameMatches("Zebra Latte", typed), typed)
+    }
+    assertTrue(posKioskNameMatches("Internationalization", "internationalization"))
+  }
+
   @Test
   fun aKioskProductIsTheRegistersItemSoTheSameRulesPriceItsChoices() {
     val item = kioskItemOf(latte)

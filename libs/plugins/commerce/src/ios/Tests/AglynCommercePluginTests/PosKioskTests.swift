@@ -87,6 +87,12 @@ private final class ScriptedKiosk: PosKioskAPI, @unchecked Sendable {
     return contextAnswer
   }
 
+  func search(token: String, search: String) async throws -> PosKioskCatalog {
+    note("search \(search)")
+    if let failure { throw failure }
+    return catalogAnswer
+  }
+
   func catalog(token: String, categoryID: String?) async throws -> PosKioskCatalog {
     note("catalog \(categoryID ?? "-")")
     if let failure { throw failure }
@@ -169,6 +175,16 @@ private final class PairingDevice: PosDeviceAPI, @unchecked Sendable {
 }
 
 final class PosKioskItemTests: XCTestCase {
+  func testAWordTypedMatchesAsTheCatalogSearchDoes() {
+    for (typed, expected) in [
+      ("   ", true), ("zeb", true), ("lat", true), ("  ZEBRA   latte ", true), ("latte zeb", true),
+      ("ebra", false), ("zebra mocha", false), ("zebralattezebralatte", false),
+    ] {
+      XCTAssertEqual(posKioskNameMatches("Zebra Latte", typed), expected, typed)
+    }
+    XCTAssertTrue(posKioskNameMatches("Internationalization", "internationalization"))
+  }
+
   func testAKioskProductIsTheRegistersItemSoTheSameRulesPriceItsChoices() {
     let item = posItem(from: latte)
     XCTAssertEqual(item.variants.map(\.label), ["Small", "Large"])

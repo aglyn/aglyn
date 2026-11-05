@@ -78,10 +78,25 @@ struct PosKioskUnlock: Equatable {
   let expiresAtMs: Double
 }
 
+/// How long the typing rests before the word is asked of the catalog.
+let posKioskSearchDebounce = Duration.milliseconds(400)
+
+/// Whether a product's name answers the words typed, the way the catalog's search does (`posKioskNameMatches`): every
+/// word is the start of a word in the name, whatever the case. The query can hold only the first word, so the rest are
+/// asked here.
+func posKioskNameMatches(_ name: String, _ typed: String) -> Bool {
+  let key = nameSearchKey(typed)
+  if key.isEmpty { return true }
+  let tokens = Set(nameSearchTokens(name))
+  return key.split(separator: " ").allSatisfy { tokens.contains(nameSearchToken(String($0))) }
+}
+
 /// The kiosk's half of `commerce/pos-kiosk`, with the device token.
 protocol PosKioskAPI: Sendable {
   func context(token: String) async throws -> PosKioskContext
   func catalog(token: String, categoryID: String?) async throws -> PosKioskCatalog
+  /// A word typed at the menu, asked of the whole catalog.
+  func search(token: String, search: String) async throws -> PosKioskCatalog
   func sale(token: String, orderID: String) async throws -> PosKioskSale
   func checkout(token: String, lines: JSONValue, attemptKey: String) async throws -> PosKioskSale
   func pay(token: String, orderID: String, method: PosKioskMethod, tip: PosKioskTip, attemptKey: String) async throws -> PosKioskPayment
@@ -122,6 +137,10 @@ struct ConsolePosKioskAPI: PosKioskAPI {
 
   func context(token: String) async throws -> PosKioskContext {
     try decode(PosKioskContext.self, try await get(token, [("action", "context")]), "its settings")
+  }
+
+  func search(token: String, search: String) async throws -> PosKioskCatalog {
+    try decode(PosKioskCatalog.self, try await get(token, [("action", "catalog"), ("search", search)]), "its menu")
   }
 
   func catalog(token: String, categoryID: String?) async throws -> PosKioskCatalog {
@@ -268,6 +287,20 @@ final class PosKioskModel {
   private(set) var catalog: PosKioskCatalog?
   private(set) var catalogLoading = false
   var categoryID: String?
+  /// The word typed at the menu. The search shows only when the catalog is longer than the menu can list.
+  var search = ""
+  /// The server's answer to a word typed; `products` nil when it couldn't answer, which leaves the customer narrowing the
+  /// menu already loaded.
+  private(set) var found: (typed: String, products: [PosKioskProduct]?)?
+  var typed: String { search.trimmingCharacters(in: .whitespacesAndNewlines) }
+  /// The server hasn't answered the word typed yet.
+  var searching: Bool { !typed.isEmpty && found?.typed != typed }
+  var showsSearch: Bool { !search.isEmpty || catalog?.truncated == true }
+  /// What to list: the catalog, or what answers the word typed.
+  var menuProducts: [PosKioskProduct] {
+    let listed = (typed.isEmpty ? nil : found?.products) ?? catalog?.products ?? []
+    return typed.isEmpty ? listed : listed.filter { posKioskNameMatches($0.name, typed) }
+  }
   private(set) var phase = PosKioskPhase.start
   private(set) var cart = Cart.empty
   private(set) var sale: PosKioskSale?
@@ -341,6 +374,8 @@ final class PosKioskModel {
     token = nil
     context = nil
     catalog = nil
+    search = ""
+    found = nil
     sale = nil
     cart = .empty
     tip = .none
@@ -373,6 +408,26 @@ final class PosKioskModel {
       await prepareTap()
     } catch {
       _ = lost(error)
+    }
+  }
+
+  /// A word typed, once the typing rests, asked of the whole catalog. The caller's task is cancelled by the next word.
+  func runSearch() async {
+    let typed = typed
+    guard let token, !typed.isEmpty else {
+      found = nil
+      return
+    }
+    try? await Task.sleep(for: posKioskSearchDebounce)
+    if Task.isCancelled { return }
+    do {
+      let answer = try await api.search(token: token, search: typed)
+      if Task.isCancelled { return }
+      offline = false
+      found = (typed, answer.products)
+    } catch {
+      if Task.isCancelled || lost(error) { return }
+      found = (typed, nil)
     }
   }
 
@@ -453,6 +508,7 @@ final class PosKioskModel {
     tip = .none
     notice = nil
     categoryID = nil
+    search = ""
     checkoutKey = nil
     payKey = nil
     idleWarning = nil

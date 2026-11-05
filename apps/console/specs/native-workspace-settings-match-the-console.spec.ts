@@ -17,7 +17,7 @@
 
 import { readFileSync } from 'node:fs'
 import { join } from 'node:path'
-import { CONSOLE_WIDGET_SLOTS, PERSON_ERASURE_NOT_REACHED, PERSON_ERASURE_REMOVES, PERSON_ERASURE_RETAINS, PLAN_LABELS, planLabelGrantingFeature, resolveOrgEntitlements } from '@aglyn/aglyn'
+import { CONSOLE_WIDGET_SLOTS, PERSON_ERASURE_NOTES_HEADING, PERSON_ERASURE_NOTES_UNAVAILABLE, PERSON_ERASURE_NOT_REACHED, PERSON_ERASURE_REMOVES, PERSON_ERASURE_RETAINS, PLAN_LABELS, planLabelGrantingFeature, resolveOrgEntitlements } from '@aglyn/aglyn'
 import { RISK_OWNER_ACTIONS } from '@aglyn/shared-util-email/risk-notice-catalog'
 
 /**
@@ -166,6 +166,11 @@ describe('native workspace settings', () => {
       expect(texts).toContain(bullets('Removed across the workspace', PERSON_ERASURE_REMOVES))
       expect(texts).toContain(bullets('Kept, with the person taken off', PERSON_ERASURE_RETAINS))
       expect(texts).toContain(bullets('Not reached — finish these by hand', PERSON_ERASURE_NOT_REACHED))
+      // What a plugin keeps is the plugin's to say (AGL-4047): printed from the same route, or the same sentence when it could not be read.
+      expect(texts).toContain(PERSON_ERASURE_NOTES_UNAVAILABLE)
+      const notes = screen('core.settings.privacy').blocks.find((block) => block.id === 'erasureNotes') as unknown as { title: string; items: string }
+      expect(notes.title).toBe(PERSON_ERASURE_NOTES_HEADING)
+      expect(notes.items).toBe('data.erasureNotes.notes')
       sentences(card, nativeText('core.settings.privacy'), [
         'A privacy erasure, not a delete: the person is removed from every site in this workspace, whether or not a page shows them.',
         'Erasure requested — it runs with the nightly job',
