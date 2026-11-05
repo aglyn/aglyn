@@ -34,7 +34,11 @@ import {
   type ReconciledInstallTallies,
 } from './version-stats'
 import { verifiedLivePins } from './install-pin-counts'
-import { canActAsPublisher } from './publisher-profile'
+import {
+  MARKETPLACE_MANAGE_LISTINGS_PERMISSION,
+  marketplacePublisherPermissionRefusal,
+} from '../model/marketplace-publisher-permissions'
+import { publisherPermissionVerdict } from './publisher-permissions'
 import { attestationsForBytes } from '../model/publisher-attestation'
 import { compareArtifactVersions } from '../model/update-state'
 
@@ -102,16 +106,32 @@ const publisherVersions: PluginApiHandler = async (req, res) => {
   if (!listing || listing.deletedAt) {
     return res.status(404).json({ error: 'Unknown listing' })
   }
-  // Listings are org-owned (AGL-652), so this is an org-membership question,
-  // not a uid comparison — the same gate the publish and edit paths use.
-  const isPublisher = await canActAsPublisher(
-    firestore,
-    decoded.uid,
-    listing.profileId,
-  )
-  if (!isPublisher && decoded['staff'] !== true) {
-    // 404, not 403: whether a listing exists is not a stranger's business.
-    return res.status(404).json({ error: 'Unknown listing' })
+  // Listings are org-owned (AGL-652), so this is a question about the
+  // publishing org, not a uid comparison. It asks "Manage published
+  // listings" (`marketplace.manageListings`, AGL-4047), the key the edit
+  // paths ask, whose default is the owner and admins this asked for by role
+  // before. Staff read any listing's versions, as before.
+  if (decoded['staff'] !== true) {
+    const verdict = await publisherPermissionVerdict(
+      decoded.uid,
+      listing.profileId,
+      MARKETPLACE_MANAGE_LISTINGS_PERMISSION,
+    )
+    if (verdict === 'not-a-member') {
+      // 404, not 403: whether a listing exists is not a stranger's business.
+      return res.status(404).json({ error: 'Unknown listing' })
+    }
+    if (verdict === 'refused') {
+      // A member sees the listing in their own workspace already, so the
+      // refusal names the permission they are missing.
+      return res.status(403).json({
+        error: marketplacePublisherPermissionRefusal(
+          MARKETPLACE_MANAGE_LISTINGS_PERMISSION,
+        ),
+        reason: 'permission',
+        permission: MARKETPLACE_MANAGE_LISTINGS_PERMISSION,
+      })
+    }
   }
   const artifactType = listingArtifactType(listing)
   const snapshot = await listingRef

@@ -42,7 +42,6 @@ import { renderOwnerRiskNotice, riskPayoutDelayText } from '@aglyn/shared-util-e
 import { YOUNG_PUBLISHER_DAYS, YOUNG_PUBLISHER_PAYOUT_DELAY_DAYS } from '../model/publisher-risk'
 import {
   applyPublisherPayoutPolicy,
-  isOrgMember,
   screenMarketplaceSale,
 } from './sale-risk'
 
@@ -271,13 +270,5 @@ describe("a sale's fraud shape", () => {
     const result = await screenMarketplaceSale(sale(), { firestore, stripeKey: KEY, notifyRisk, nowMs: NOW })
     expect(result.signals).toEqual([])
     expect(payoutWrites()).toHaveLength(1)
-  })
-})
-
-describe('isOrgMember', () => {
-  it('answers for any role, and no for a stranger', async () => {
-    docs.set('orgs/org-pub/members/editor-1', { role: 'editor' })
-    expect(await isOrgMember(firestore, 'org-pub', 'editor-1')).toBe(true)
-    expect(await isOrgMember(firestore, 'org-pub', 'buyer-1')).toBe(false)
   })
 })

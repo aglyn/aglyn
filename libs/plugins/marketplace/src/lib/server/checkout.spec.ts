@@ -44,7 +44,12 @@ jest.mock('@aglyn/tenant-runtime/org-permissions', () => ({
 }))
 
 jest.mock('./publisher-profile', () => ({
-  canActAsPublisher: async () => false,
+  // The real membership fact, read off the seeded store (AGL-4047): the
+  // self-purchase refusal below is about any member of the publisher.
+  isPublisherMember: (...args: Parameters<typeof import('./publisher-profile').isPublisherMember>) =>
+    jest
+      .requireActual<typeof import('./publisher-profile')>('./publisher-profile')
+      .isPublisherMember(...args),
   resolvePublisherProfile: async () =>
     (jest.requireMock('./publisher-profile') as { __publisher: unknown })
       .__publisher,
@@ -574,8 +579,8 @@ describe('a publisher cannot pay itself, and a locked one sells nothing (AGL-336
   })
 
   it('refuses ANY member of the publishing workspace, not only a manager', async () => {
-    // `canActAsPublisher` answers false here (owner/admin only); the buyer is
-    // an editor of the publisher, which is still the publisher buying.
+    // The buyer is an editor of the publisher, which is still the publisher
+    // buying: membership in any role, never a role or a permission.
     seed()
     store()['orgs/seller-org/members/buyer-1'] = { role: 'editor' }
     const res = makeRes()

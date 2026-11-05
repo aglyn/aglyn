@@ -34,7 +34,14 @@ import {
  *
  * The same answer `publisherManager()` and `listingManager()` give in the
  * Firestore rules, read off the member's stamped permissions there, so the
- * route and the client-direct write cannot disagree.
+ * route and the client-direct write cannot disagree. Payouts, the Verified
+ * badge ask and the publisher's version history have no client-direct door to
+ * agree with: the rules freeze the payout fields and `verificationRequest`,
+ * and keep `pluginVersions` to staff, so their routes are the only way in.
+ *
+ * Whether someone belongs to the publishing workspace at all, with no key
+ * asked, is `isPublisherMember` (free own installs, no self-purchase, no
+ * self-review).
  */
 export type PublisherPermissionVerdict = 'granted' | 'refused' | 'not-a-member'
 
@@ -59,8 +66,7 @@ export interface PublisherDoorRefusal {
  * The listing doors' gate (AGL-4047): editing a published listing, its
  * picture, its visibility, and unpublishing or republishing it ask "Manage
  * published listings" of a member of the workspace that published it. They
- * asked `canActAsPublisher`, the owner or admin role, which is the key's
- * default. Staff moderate any listing, as before. Someone outside the
+ * asked for the owner or admin role, which is the key's default. Staff moderate any listing, as before. Someone outside the
  * workspace hears the listing is not theirs, as before; a member without the
  * key hears which permission they are missing.
  */

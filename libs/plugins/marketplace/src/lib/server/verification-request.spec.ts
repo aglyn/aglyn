@@ -48,7 +48,15 @@ jest.mock('@aglyn/tenant-data-admin', () => ({
 jest.mock('firebase-admin/firestore', () => ({
   FieldValue: { serverTimestamp: () => 'server-timestamp', delete: () => 'delete' },
 }))
-jest.mock('./publisher-profile', () => ({ canActAsPublisher: async () => true }))
+/** The caller's standing on "Edit the publisher profile", and what was asked (AGL-4047). */
+const mockVerdict: { current: 'granted' | 'refused' | 'not-a-member' } = { current: 'granted' }
+const mockAsked: Array<[unknown, unknown, unknown]> = []
+jest.mock('./publisher-permissions', () => ({
+  publisherPermissionVerdict: async (uid: unknown, orgId: unknown, key: unknown) => {
+    mockAsked.push([uid, orgId, key])
+    return mockVerdict.current
+  },
+}))
 
 import { verificationRequestHandler } from './verification-request'
 import { publisherAgreementConsent } from '../model/publisher-agreement'
@@ -83,6 +91,8 @@ async function call(token: string | null = 'token', agreement: unknown = publish
 }
 
 beforeEach(() => {
+  mockVerdict.current = 'granted'
+  mockAsked.length = 0
   mockVerifyIdToken.mockReset()
   mockVerifyIdToken.mockResolvedValue({ uid: 'publisher-1' })
   mockListingGet.mockReset()
@@ -126,5 +136,47 @@ describe('verification-request carries the publisher agreement (AGL-4105)', () =
     expect(answer.status).toBe(428)
     expect(mockVerifyIdToken).not.toHaveBeenCalled()
     expect(mockListingGet).not.toHaveBeenCalled()
+  })
+})
+
+describe('asking for the badge asks "Edit the publisher profile" (AGL-4047)', () => {
+  const listed = () =>
+    mockListingGet.mockResolvedValue({ data: () => ({ profileId: 'pub-org', reviewStatus: 'listed' }) })
+  const recorded = () =>
+    (
+      jest.requireMock('./publisher-agreement-acceptance') as {
+        recordPublisherAgreementAcceptance: jest.Mock
+      }
+    ).recordPublisherAgreementAcceptance
+
+  beforeEach(() => recorded().mockClear())
+
+  it('asks the key of the workspace that published the listing, never a role', async () => {
+    listed()
+    mockVerdict.current = 'refused'
+    await call()
+    expect(mockAsked).toEqual([['publisher-1', 'pub-org', 'marketplace.publisherProfile']])
+  })
+
+  it('a member without it hears the permission named, and nothing is recorded or written', async () => {
+    listed()
+    mockVerdict.current = 'refused'
+    const answer = await call()
+    expect(answer).toEqual({
+      status: 403,
+      body: {
+        error: 'Your role does not include "Edit the publisher profile" — ask an organization admin',
+        reason: 'permission',
+        permission: 'marketplace.publisherProfile',
+      },
+    })
+    expect(recorded()).not.toHaveBeenCalled()
+  })
+
+  it('someone outside the publishing workspace hears the listing is not there, as before', async () => {
+    listed()
+    mockVerdict.current = 'not-a-member'
+    expect((await call()).status).toBe(404)
+    expect(recorded()).not.toHaveBeenCalled()
   })
 })

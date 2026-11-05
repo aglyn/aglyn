@@ -57,7 +57,7 @@ jest.mock('@aglyn/shared-util-email', () => ({
 }))
 
 jest.mock('./publisher-profile', () => ({
-  canActAsPublisher: async () => false,
+  isPublisherMember: async () => false,
 }))
 
 jest.mock('./provenance', () => ({

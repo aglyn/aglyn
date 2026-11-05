@@ -49,7 +49,7 @@ import { listingArtifactType } from '../model/marketplace'
 import { readPublishedProps } from '../model/marketplace-props'
 import { artifactTypeOwnerOrRefusal, marketplaceInstallStamp } from './artifact-owner'
 import { recordInstallProvenance } from './provenance'
-import { canActAsPublisher } from './publisher-profile'
+import { isPublisherMember } from './publisher-profile'
 import { requirePurchase } from './purchase-entitlement'
 import { recordVersionMove } from './version-stats'
 import { isPublisherSecurityLocked } from './sale-risk'
@@ -240,7 +240,7 @@ export const updateArtifactHandler: PluginApiHandler = async (req, res) => {
         buyerOrgId: membership.orgId ?? '',
         listingId,
         priceUsd,
-        ownsListing: await canActAsPublisher(
+        ownsListing: await isPublisherMember(
           firestore,
           decoded.uid,
           listing.profileId,

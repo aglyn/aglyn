@@ -23,7 +23,11 @@ import {
   VERIFICATION_BLOCK_MESSAGES,
   verificationRequestBlock,
 } from '../model/marketplace'
-import { canActAsPublisher } from './publisher-profile'
+import {
+  MARKETPLACE_PUBLISHER_PROFILE_PERMISSION,
+  marketplacePublisherPermissionRefusal,
+} from '../model/marketplace-publisher-permissions'
+import { publisherPermissionVerdict } from './publisher-permissions'
 import { recordPublisherAgreementAcceptance } from './publisher-agreement-acceptance'
 import { publisherAgreementConsentRefusal } from '../model/publisher-agreement'
 import type { DecodedIdToken } from 'firebase-admin/auth'
@@ -81,17 +85,35 @@ export const verificationRequestHandler: PluginApiHandler = async (req, res) => 
     const listing = (await listingRef.get()).data()
     if (!listing) return res.status(404).json({ error: 'Unknown listing' })
 
-    // Membership of the PUBLISHING org, resolved from the listing rather than
-    // from anything the caller sent. A client-supplied orgId here would let a
-    // publisher of one listing act on another.
+    // The PUBLISHING org, resolved from the listing rather than from anything
+    // the caller sent. A client-supplied orgId here would let a publisher of
+    // one listing act on another.
+    //
+    // Asking for the badge is a claim about the publisher, so it asks "Edit
+    // the publisher profile" (`marketplace.publisherProfile`, AGL-4047) of a
+    // member of that org. Its default is the owner and admins this asked for
+    // by role before, so nobody's access moved.
     const publisherOrgId = String(listing.profileId ?? '')
-    if (
-      !publisherOrgId ||
-      !(await canActAsPublisher(firestore, decoded.uid, publisherOrgId))
-    ) {
+    const verdict = await publisherPermissionVerdict(
+      decoded.uid,
+      publisherOrgId,
+      MARKETPLACE_PUBLISHER_PROFILE_PERMISSION,
+    )
+    if (verdict === 'not-a-member') {
       // 404, not 403: a listing the caller does not publish should not be
       // confirmed to exist by the shape of the refusal.
       return res.status(404).json({ error: 'Unknown listing' })
+    }
+    if (verdict === 'refused') {
+      // A member already sees the listing in their own workspace, so the
+      // refusal names the permission they are missing.
+      return res.status(403).json({
+        error: marketplacePublisherPermissionRefusal(
+          MARKETPLACE_PUBLISHER_PROFILE_PERMISSION,
+        ),
+        reason: 'permission',
+        permission: MARKETPLACE_PUBLISHER_PROFILE_PERMISSION,
+      })
     }
 
     // The agreement this save was sent with, recorded before it writes
@@ -136,8 +158,8 @@ export const verificationRequestHandler: PluginApiHandler = async (req, res) => 
       if (!fresh) return { error: 'Unknown listing', status: 404 } as const
       // `viewerOrgId` is fed the listing's own `profileId` on purpose, which
       // makes the `not-publisher` branch unreachable here. That is NOT the
-      // authorization check — `canActAsPublisher` above is, and it ran against
-      // the caller's uid. This call is asking the remaining question: is the
+      // authorization check — the permission verdict above is, and it ran
+      // against the caller's uid. This call is asking the remaining question: is the
       // listing in a state that can carry a request right now.
       const blocked = verificationRequestBlock({
         listing: fresh as never,

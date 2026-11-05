@@ -32,7 +32,7 @@ import { type PluginApiHandler } from '@aglyn/aglyn/server'
 import { resolveOrgPermissions } from '@aglyn/tenant-runtime/org-permissions'
 import { isPrivateListing } from '../model/marketplace'
 import { readPublishedProps } from '../model/marketplace-props'
-import { canActAsPublisher } from './publisher-profile'
+import { isPublisherMember } from './publisher-profile'
 import { hasDivergedFromBase, recordInstallProvenance } from './provenance'
 import { requirePurchase } from './purchase-entitlement'
 import { recordVersionMove } from './version-stats'
@@ -160,9 +160,11 @@ export const installHandler: PluginApiHandler = async (req, res) => {
 
     const priceUsd = Number(listing.priceUsd ?? 0)
     // The publisher installs their own listing for free. Org-owned now
-    // (AGL-652), so this is a role check — comparing a uid to an org id
-    // would never match and would charge publishers for their own work.
-    const ownsListing = await canActAsPublisher(
+    // (AGL-652), so this asks the publishing org's members (comparing a uid
+    // to an org id would never match and would charge publishers for their
+    // own work). Membership, not a permission (AGL-4047): it is a fact about
+    // who published the listing, not a capability a role grants.
+    const ownsListing = await isPublisherMember(
       firestore,
       decoded.uid,
       listing.profileId,

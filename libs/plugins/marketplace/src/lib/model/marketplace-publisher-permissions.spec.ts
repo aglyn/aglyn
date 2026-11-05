@@ -17,8 +17,9 @@
 
 /**
  * The marketplace's publisher keys (AGL-4047), as the plugin really declares
- * them. Each replaced `canActAsPublisher` (the owner or admin role) and the
- * rules' role list on `publisherProfiles` and `marketplaceListings`, so each
+ * them. Each replaced the owner-or-admin role helper (and, for the profile
+ * and the listings, the rules' role list on `publisherProfiles` and
+ * `marketplaceListings`), so each
  * default must be exactly that gate for every workspace role, a site
  * collaborator included, and a custom role or a member's own permissions
  * must then decide it either way.
@@ -33,8 +34,12 @@ import {
   type MarketplacePublisherPermission,
 } from './marketplace-publisher-permissions'
 
-const KEYS: MarketplacePublisherPermission[] = ['marketplace.publisherProfile', 'marketplace.manageListings']
-/** The gate before: `canActAsPublisher`, and the rules' `role in ['owner', 'admin']`. */
+const KEYS: MarketplacePublisherPermission[] = [
+  'marketplace.publisherProfile',
+  'marketplace.manageListings',
+  'marketplace.payouts',
+]
+/** The gate before: the owner-or-admin role helper, and the rules' `role in ['owner', 'admin']`. */
 const before = (role: unknown) => role === 'owner' || role === 'admin'
 
 beforeAll(() => registerMarketplaceDeclarations())
@@ -94,6 +99,15 @@ describe('the marketplace’s publisher keys (AGL-4047)', () => {
         null,
       )['marketplace.publisherProfile'],
     ).toBe(false)
+    // Payouts are their own key: an editor trusted with them is not thereby
+    // trusted with the profile, and an admin refused them keeps the rest.
+    const payouts = resolveOrgPermissions(
+      { role: 'editor', allHosts: true, permissions: { 'marketplace.payouts': true } },
+      null,
+    )
+    expect([payouts['marketplace.payouts'], payouts['marketplace.publisherProfile']]).toEqual([true, false])
+    const noPayouts = resolveOrgPermissions({ role: 'admin', permissions: { 'marketplace.payouts': false } }, null)
+    expect([noPayouts['marketplace.payouts'], noPayouts['marketplace.manageListings']]).toEqual([false, true])
   })
 
   it('refuse in the permission’s words, never a role’s', () => {
@@ -102,6 +116,9 @@ describe('the marketplace’s publisher keys (AGL-4047)', () => {
     )
     expect(marketplacePublisherPermissionRefusal('marketplace.manageListings')).toBe(
       'Your role does not include "Manage published listings" — ask an organization admin',
+    )
+    expect(marketplacePublisherPermissionRefusal('marketplace.payouts')).toBe(
+      'Your role does not include "Manage marketplace payouts" — ask an organization admin',
     )
   })
 })

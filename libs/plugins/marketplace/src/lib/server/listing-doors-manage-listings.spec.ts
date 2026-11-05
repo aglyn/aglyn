@@ -25,7 +25,7 @@
  * Editing a published listing (`update-listing`), its picture
  * (`/api/marketplace/preview-image`), its visibility (`set-visibility`) and
  * unpublishing or republishing it (`set-published`) asked
- * `canActAsPublisher`, the owner or admin role. Each now asks the key, for
+ * the owner-or-admin role helper. Each now asks the key, for
  * the workspace that published the listing, through `manageListingsRefusal`;
  * a refusal is answered as the gate words it and nothing is recorded or
  * written. The three `publish-plugin` actions let staff moderate, as they

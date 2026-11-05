@@ -28,7 +28,14 @@ let mockDocs: Map<string, Record<string, unknown>>
 let mockUid = 'rater-1'
 let mockCreatedMs = Date.now() - 400 * DAY
 
-jest.mock('./publisher-profile', () => ({ canActAsPublisher: async () => false }))
+// The real membership fact, read off the seeded documents (AGL-4047): the
+// self-review refusal is about any member of the publisher.
+jest.mock('./publisher-profile', () => ({
+  isPublisherMember: (...args: Parameters<typeof import('./publisher-profile').isPublisherMember>) =>
+    jest
+      .requireActual<typeof import('./publisher-profile')>('./publisher-profile')
+      .isPublisherMember(...args),
+}))
 
 // The account's age is read across pools (AGL-1122): an SSO reviewer is
 // not in the project pool.

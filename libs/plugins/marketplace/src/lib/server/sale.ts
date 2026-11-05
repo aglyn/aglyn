@@ -27,9 +27,8 @@ import { SITE_STARTER_ARTIFACT_TYPE } from '@aglyn/aglyn/app-utils/site-starter'
 import { isListingBrowsable, isPrivateListing, listingArtifactType } from '../model/marketplace'
 import { sellsAsPlatform } from '../model/platform-seller'
 import { readPlatformOrgId } from './platform-org'
-import { canActAsPublisher, resolvePublisherProfile } from './publisher-profile'
+import { isPublisherMember, resolvePublisherProfile } from './publisher-profile'
 import { hasLivePurchase } from './purchase-entitlement'
-import { isOrgMember } from './sale-risk'
 
 /**
  * THE TAX CLASSIFICATION OF A MARKETPLACE SALE (AGL-1553).
@@ -187,7 +186,7 @@ export async function resolveSale(input: {
   // route has always been stricter than that, and a sale is the wrong place
   // to loosen a gate.
   //
-  // No owner exemption, unlike the install routes: `canActAsPublisher`
+  // No owner exemption, unlike the install routes: `isPublisherMember`
   // below already refuses a publisher buying their own listing, so the
   // buyer here is never the owner.
   if (!isListingBrowsable(listing) || isPrivateListing(listing)) {
@@ -200,15 +199,16 @@ export async function resolveSale(input: {
   // Publishing is org-owned (AGL-652): `profileId` IS the publisher org id.
   const sellerOrgId = String(listing.profileId ?? '')
   // ANY member of the publishing workspace, and any purchase FOR it
-  // (AGL-3365). `canActAsPublisher` asks only for an owner or admin, so an
-  // editor of the publisher — or an owner buying "for" the publisher's own
-  // workspace through a role that can install — passed it, and a publisher
-  // could pay itself: the stolen-card cash-out the payout exists to make
-  // worth doing. A workspace one step removed is the sale screen's to flag.
+  // (AGL-3365). Asking only for an owner or admin let an editor of the
+  // publisher (or an owner buying "for" the publisher's own workspace
+  // through a role that can install) through, and a publisher could pay
+  // itself: the stolen-card cash-out the payout exists to make worth doing.
+  // Membership, never a permission (AGL-4047): an admin whose publisher keys
+  // are refused still published the listing. A workspace one step removed is
+  // the sale screen's to flag.
   if (
     buyer.orgId === sellerOrgId ||
-    (await canActAsPublisher(firestore, buyer.uid, sellerOrgId)) ||
-    (await isOrgMember(firestore, sellerOrgId, buyer.uid))
+    (await isPublisherMember(firestore, buyer.uid, sellerOrgId))
   ) {
     return refuse(400, { error: 'Your organization published this listing' })
   }
