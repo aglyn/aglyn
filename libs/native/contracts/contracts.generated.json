@@ -7785,7 +7785,7 @@
         }
       },
       {
-        "description": "Create, edit, and delete organization datasets, the CRM’s records, and marketing lists and topics.",
+        "description": "Create and edit organization datasets, add, change and delete their rows, and manage the CRM’s records and marketing lists and topics.",
         "group": "datasets",
         "key": "data.manage",
         "label": "Manage data"
@@ -7797,7 +7797,7 @@
         "label": "Edit the workspace media library"
       },
       {
-        "description": "Delete records the whole workspace shares, such as dataset rows, contacts and lists.",
+        "description": "Delete a whole dataset or list the workspace shares, with everything in it. Deleting one row of a dataset asks “Manage data”.",
         "group": "datasets",
         "key": "org.eraseRecords",
         "label": "Delete workspace records"

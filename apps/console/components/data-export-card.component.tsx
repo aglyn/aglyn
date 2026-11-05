@@ -17,6 +17,7 @@
 'use client'
 
 import { CardDisplay } from '@aglyn/shared-ui-jsx'
+import { BlockedControl } from '@aglyn/shared-ui-jsx/components/blocked-control.component'
 import { LEGAL_REFERENCE_URLS } from '../constants/shared'
 import { useSnackbar } from '@aglyn/shared-ui-snackstack'
 import { authorizedFetch } from '@aglyn/shared-util-http/authorized-token'
@@ -56,9 +57,13 @@ export interface DataExportCardProps {
   orgId?: string
   /** Shown above the button; each subject explains a different scope. */
   description?: string
+  /** The button holds, with no reason yet, while the reader's permissions load. */
+  held?: boolean
+  /** Why the button is switched off for this reader, when it is. */
+  refusal?: string
 }
 
-export function DataExportCard({ user, orgId, description }: DataExportCardProps) {
+export function DataExportCard({ user, orgId, description, held, refusal }: DataExportCardProps) {
   const { enqueueSnackbar } = useSnackbar()
   const [busy, setBusy] = useState(false)
 
@@ -136,7 +141,8 @@ export function DataExportCard({ user, orgId, description }: DataExportCardProps
               ? 'A machine-readable JSON copy of everything this workspace ' +
                 'holds — its sites and their content, datasets, contacts, ' +
                 'orders, form submissions, members, support threads and ' +
-                'billing identifiers. Owners and admins only.'
+                'billing identifiers. It needs the “Export workspace data” ' +
+                'permission, which owners and admins hold by default.'
               : 'A machine-readable JSON copy of everything we hold about ' +
                 'you — your profile, contact details, workspace memberships, ' +
                 'passkeys, public handle and the support messages you wrote.')}
@@ -182,17 +188,19 @@ export function DataExportCard({ user, orgId, description }: DataExportCardProps
           </Typography>
         ) : null}
         <Box>
-          <Button
-            variant="outlined"
-            disabled={busy}
-            onClick={() => void download()}
-          >
-            {busy
-              ? 'Preparing…'
-              : orgId
-                ? 'Download workspace data'
-                : 'Download my data'}
-          </Button>
+          <BlockedControl blocked={Boolean(refusal)} reason={refusal ?? ''}>
+            <Button
+              variant="outlined"
+              disabled={busy || held}
+              onClick={() => void download()}
+            >
+              {busy
+                ? 'Preparing…'
+                : orgId
+                  ? 'Download workspace data'
+                  : 'Download my data'}
+            </Button>
+          </BlockedControl>
         </Box>
       </Stack>
     </CardDisplay>

@@ -18,7 +18,7 @@
 
 import { BlockedControl } from '@aglyn/shared-ui-jsx/components/blocked-control.component'
 import { MARKETING_CAMPAIGNS_REFUSAL } from '../model/marketing-permissions'
-import { useCampaignContainersBlocked } from './use-campaign-containers-blocked'
+import { useCampaignListAccess } from './use-campaign-containers-blocked'
 import { buildRoute, createResourceUid, pluginDocsHelp, Route } from '@aglyn/aglyn'
 /*
  * The MODULE, not the barrel, for the two PURE helpers — a spec that mocks
@@ -242,8 +242,9 @@ export function HostCampaignsCard(props: {
   const { orgId } = useMarketingOrgId(hostId)
   // "Run email campaigns" (AGL-4047): the container's create is client-direct,
   // so the rule asks it, and the button says so before the save does. Created
-  // here it is placed on this site, so the site's verdict counts.
-  const containersBlocked = useCampaignContainersBlocked(orgId, hostId)
+  // here it is placed on this site, so the site's verdict counts. A row's Delete
+  // answers the manage route, which the same hook reads.
+  const { createBlocked: containersBlocked, deleteBlocked } = useCampaignListAccess(orgId, hostId)
   // A container is the org's, so deleting one from the org hub names the org.
   const manageApi = useCampaignManageApi(hostId, orgId)
 
@@ -917,11 +918,13 @@ export function HostCampaignsCard(props: {
                 label: 'Delete campaign',
                 icon: <MdiIcon path={mdiDeleteOutline.path} size={0.8} />,
                 destructive: true,
-                disabled: row.legacy || Boolean(deletingId),
+                disabled: row.legacy || deleteBlocked || Boolean(deletingId),
                 disabledReason: row.legacy
                   ? 'This is a single send, not a campaign. Open it to ' +
                     'manage the email itself.'
-                  : 'A campaign is being deleted',
+                  : deleteBlocked
+                    ? MARKETING_CAMPAIGNS_REFUSAL
+                    : 'A campaign is being deleted',
                 onClick: () => void handleDelete(row as CampaignListRow),
               },
             ]}
@@ -930,7 +933,7 @@ export function HostCampaignsCard(props: {
         { width: 72 },
       ),
     ],
-    [listNames, campaignHref, deletingId, handleDelete, orgMount, filterHeaders],
+    [listNames, campaignHref, deletingId, deleteBlocked, handleDelete, orgMount, filterHeaders],
   )
 
   /** Nothing of this kind stored at all — not a filter that matched nothing. */
@@ -1075,9 +1078,11 @@ export function HostCampaignsCard(props: {
               <Stack direction="row" spacing={1}>
                 {/* Other ways to start a campaign, the header's zone again. */}
                 {campaignsZone}
-                <Button variant="contained" onClick={() => setCreateOpen(true)}>
-                  {'Create campaign'}
-                </Button>
+                <BlockedControl blocked={containersBlocked} reason={MARKETING_CAMPAIGNS_REFUSAL}>
+                  <Button variant="contained" onClick={() => setCreateOpen(true)}>
+                    {'Create campaign'}
+                  </Button>
+                </BlockedControl>
               </Stack>
             ) : undefined
           }

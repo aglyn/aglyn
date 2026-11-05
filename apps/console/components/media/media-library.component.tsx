@@ -49,7 +49,9 @@ import {
   pluginHostCollectionRouteSlug,
 } from '@aglyn/aglyn/plugin-manager/plugin-host-collections'
 import { hostDisplayDomain } from '../../constants/tenant-links'
+import { permissionRefusalText } from '@aglyn/aglyn/app-utils/org-permissions'
 import { AppLink, useConfirmationContext } from '@aglyn/shared-ui-jsx'
+import { BlockedControl } from '@aglyn/shared-ui-jsx/components/blocked-control.component'
 import ListFilterChips from '@aglyn/shared-ui-jsx/components/list-filter-chips.component'
 import ListQueryNotices from '@aglyn/shared-ui-jsx/components/list-query-notices.component'
 import { ListTable } from '@aglyn/shared-ui-jsx/components/list-table.component'
@@ -149,6 +151,7 @@ import useFirestoreCollection from '../../hooks/use-firestore-collection'
 import useFirestoreDoc from '../../hooks/use-firestore-doc'
 import useHostActivityLogger from '../../hooks/use-host-activity-logger'
 import useOrgHosts from '../../hooks/use-org-hosts'
+import useOrgPermissions from '../../hooks/use-org-permissions'
 import firestoreOneShotRetry from '../../utils/firestore-one-shot-retry'
 import {
   getDocBounded,
@@ -309,6 +312,9 @@ const PICKER_KIND_COPY: Readonly<
 
 /** Page size for cursor pagination (AGL-174). */
 const MEDIA_PAGE_SIZE = 60
+
+/** What a member without the media key is told beside a sharing control. */
+const SHARING_REFUSAL = permissionRefusalText('org.media')
 
 /**
  * Docs per request in the folder sharing cascade (AGL-1045). Small enough
@@ -587,6 +593,18 @@ export function MediaLibraryComponent(props: MediaLibraryComponentProps) {
    * org-scope-less library (a host library) has nothing to wait for.
    */
   const scopeReady = !orgId || scopeLoaded
+  /*
+   * Who may change sharing (AGL-4047). Every door that writes `visibleTo` here
+   * asks "Edit the workspace media library" as well as a reach over the whole
+   * workspace: the rules' `canWriteOrgMedia` and the folders route's
+   * `resolveMediaScope` both refuse without it. So a member of the whole
+   * workspace who does not hold it sees the control switched off with the
+   * permission named, instead of a save that fails. Held while permissions
+   * load; the reason is said only once they have answered.
+   */
+  const orgPermissions = useOrgPermissions()
+  const sharingHeld = !orgPermissions.loaded
+  const sharingRefused = orgPermissions.loaded && !orgPermissions.can('org.media')
   // Picking for a site narrows to THAT site's read set; otherwise a scoped
   // member narrows to their own. An org-wide member browsing the library
   // outright needs no filter.
@@ -4537,9 +4555,15 @@ export function MediaLibraryComponent(props: MediaLibraryComponentProps) {
             {'Remove tag…'}
           </Button>
           {canShareScope ? (
-            <Button size="small" onClick={openSelectionScope}>
-              {'Shared with…'}
-            </Button>
+            <BlockedControl blocked={sharingRefused} reason={SHARING_REFUSAL}>
+              <Button
+                size="small"
+                disabled={sharingHeld}
+                onClick={openSelectionScope}
+              >
+                {'Shared with…'}
+              </Button>
+            </BlockedControl>
           ) : null}
           <Button size="small" color="error" onClick={handleBulkDelete}>
             {'Delete…'}
@@ -4731,6 +4755,8 @@ export function MediaLibraryComponent(props: MediaLibraryComponentProps) {
                 onSetScope={
                   canShareScope ? () => openFolderScope(folder) : undefined
                 }
+                setScopeHeld={sharingHeld}
+                setScopeRefusal={sharingRefused ? SHARING_REFUSAL : undefined}
                 scopeLabel={
                   orgId &&
                   Array.isArray((folder as any).visibleTo) &&
@@ -5157,51 +5183,58 @@ export function MediaLibraryComponent(props: MediaLibraryComponentProps) {
                         'with to fix that.'}
                     </Alert>
                   ) : null}
-                  <Select
-                    size="small"
+                  <BlockedControl
+                    blocked={sharingRefused}
+                    reason={SHARING_REFUSAL}
                     fullWidth
-                    value={
-                      (editor?.visibleTo ?? []).includes(ORG_SCOPE_TOKEN)
-                        ? 'org'
-                        : editor?.scopeUnset
-                          ? 'unset'
-                          : 'hosts'
-                    }
-                    onChange={(event) =>
-                      setEditor((prev) =>
-                        prev
-                          ? {
-                              ...prev,
-                              // Any choice ends the unset state — from here
-                              // the control shows what was picked, not what
-                              // was (not) stored.
-                              scopeUnset: false,
-                              visibleTo:
-                                event.target.value === 'org'
-                                  ? [ORG_SCOPE_TOKEN]
-                                  : // Default the narrowed case to the site
-                                    // being browsed, or none — never a guess
-                                    // at which sites the author meant.
-                                    [],
-                            }
-                          : prev,
-                      )
-                    }
                   >
-                    {/*
-                      A real sentinel, never '' — MUI cannot hold an empty
-                      string as a selected value. Rendered only while unset
-                      and disabled, so the control cannot be set back into
-                      "nobody has decided".
-                    */}
-                    {editor?.scopeUnset ? (
-                      <MenuItem value="unset" disabled>
-                        {'Not shared with any site'}
-                      </MenuItem>
-                    ) : null}
-                    <MenuItem value="org">{'All sites'}</MenuItem>
-                    <MenuItem value="hosts">{'Selected sites…'}</MenuItem>
-                  </Select>
+                    <Select
+                      size="small"
+                      fullWidth
+                      disabled={sharingHeld}
+                      value={
+                        (editor?.visibleTo ?? []).includes(ORG_SCOPE_TOKEN)
+                          ? 'org'
+                          : editor?.scopeUnset
+                            ? 'unset'
+                            : 'hosts'
+                      }
+                      onChange={(event) =>
+                        setEditor((prev) =>
+                          prev
+                            ? {
+                                ...prev,
+                                // Any choice ends the unset state — from here
+                                // the control shows what was picked, not what
+                                // was (not) stored.
+                                scopeUnset: false,
+                                visibleTo:
+                                  event.target.value === 'org'
+                                    ? [ORG_SCOPE_TOKEN]
+                                    : // Default the narrowed case to the site
+                                      // being browsed, or none — never a guess
+                                      // at which sites the author meant.
+                                      [],
+                              }
+                            : prev,
+                        )
+                      }
+                    >
+                      {/*
+                        A real sentinel, never '' — MUI cannot hold an empty
+                        string as a selected value. Rendered only while unset
+                        and disabled, so the control cannot be set back into
+                        "nobody has decided".
+                      */}
+                      {editor?.scopeUnset ? (
+                        <MenuItem value="unset" disabled>
+                          {'Not shared with any site'}
+                        </MenuItem>
+                      ) : null}
+                      <MenuItem value="org">{'All sites'}</MenuItem>
+                      <MenuItem value="hosts">{'Selected sites…'}</MenuItem>
+                    </Select>
+                  </BlockedControl>
                   {!editor?.scopeUnset &&
                   !(editor?.visibleTo ?? []).includes(ORG_SCOPE_TOKEN) ? (
                     <Box sx={{ mt: 1, display: 'flex', flexWrap: 'wrap', gap: 0.5 }}>
@@ -5215,6 +5248,7 @@ export function MediaLibraryComponent(props: MediaLibraryComponentProps) {
                             label={host.name ?? host.subdomain ?? host.$id}
                             color={on ? 'primary' : 'default'}
                             variant={on ? 'filled' : 'outlined'}
+                            disabled={sharingHeld || sharingRefused}
                             onClick={() =>
                               setEditor((prev) =>
                                 prev
