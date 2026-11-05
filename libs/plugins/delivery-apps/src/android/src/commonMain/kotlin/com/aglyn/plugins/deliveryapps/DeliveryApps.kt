@@ -22,8 +22,8 @@ import kotlinx.serialization.json.put
  *
  * The queue and its actions go through the SAME routes the console register's
  * `DeliveryQueue` calls (`delivery-apps/queue`, `delivery-apps/order-action`),
- * as the signed-in member, so the register's own gate holds on the device: an
- * admin or editor of the site with `managePos`, the `pos` entitlement, and this
+ * as the signed-in member, so the register's own gate holds on the device: a
+ * member holding `managePos` for the queue, and `posSell` for its actions, the `pos` entitlement, and this
  * plugin on for the site. With no service connected the queue answers
  * `connected: false` and the register draws nothing.
  */

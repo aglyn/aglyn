@@ -33,7 +33,7 @@ enum AiInsightUpsell {
     let addon = "\(ContractValues.shared.platformBrandName) AI"
     return canManageBilling
       ? "\(feature) is switched off for this workspace. It comes with \(addon) credits, which you can add in Billing."
-      : "\(feature) is switched off for this workspace. It comes with \(addon) credits. Ask a workspace owner or admin to add them in Billing."
+      : "\(feature) is switched off for this workspace. It comes with \(addon) credits. Adding them needs \"Manage billing\" — ask an organization admin."
   }
 }
 
@@ -109,7 +109,7 @@ struct AiInsightUpsellSheet: View {
   let context: NativePluginContext
   @Environment(\.dismiss) private var dismiss
 
-  private var canManageBilling: Bool { ["owner", "admin"].contains(context.orgRole ?? "") }
+  private var canManageBilling: Bool { context.can("billing.manage") }
 
   var body: some View {
     NavigationStack {

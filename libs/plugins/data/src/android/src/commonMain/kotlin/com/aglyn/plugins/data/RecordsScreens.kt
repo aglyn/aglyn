@@ -51,7 +51,7 @@ import com.aglyn.pluginhost.ActionRunner
 import com.aglyn.pluginhost.RunnerBanners
 import com.aglyn.pluginhost.ClauseFilterBar
 import com.aglyn.pluginhost.NativePluginContext
-import com.aglyn.pluginhost.ORG_WRITER_ROLES
+import com.aglyn.pluginhost.rememberMemberPermissions
 import com.aglyn.pluginhost.TransferExportDialog
 import com.aglyn.ui.ActionDialog
 import com.aglyn.ui.AglynIcons
@@ -152,7 +152,7 @@ private fun Records(context: NativePluginContext, orgId: String, dataset: Datase
   LaunchedEffect(model) { model.reload() }
   val api = remember(orgId, context.api, context.writer) { DataApi(context.api, context.writer, orgId) }
   val runner = remember(dataset.id) { ActionRunner(scope) }
-  val canWrite = context.orgRole in ORG_WRITER_ROLES
+  val canWrite = rememberMemberPermissions(context).can("data.manage")
   val references = rememberReferenceChoices(context.firestore, orgId, dataset.model)
   var dialog by remember { mutableStateOf<RecordDialog?>(if (startNew && canWrite) RecordDialog.Edit(null, newRecordInputs(dataset.model)) else null) }
   val noun = dataset.singular.ifBlank { "record" }.lowercase()

@@ -112,7 +112,7 @@ private struct SchemaEditor: View {
     _visibleTo = State(initialValue: dataset.visibleTo ?? [])
   }
 
-  private var canWrite: Bool { orgWriterRoles.contains(context.orgRole ?? "") }
+  private var canWrite: Bool { context.can("data.manage") }
   private var orgWide: Bool { if case .ready(let wide, _) = access { wide } else { false } }
   private var accessKnown: Bool { if case .ready = access { true } else { false } }
   private var previousScope: [String] { dataset.visibleTo ?? [] }

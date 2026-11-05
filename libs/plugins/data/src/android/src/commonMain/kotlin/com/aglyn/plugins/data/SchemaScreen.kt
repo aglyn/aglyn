@@ -50,7 +50,7 @@ import com.aglyn.core.OrgAccess
 import com.aglyn.pluginhost.jsNumber
 import com.aglyn.pluginhost.ActionRunner
 import com.aglyn.pluginhost.NativePluginContext
-import com.aglyn.pluginhost.ORG_WRITER_ROLES
+import com.aglyn.pluginhost.rememberMemberPermissions
 import com.aglyn.pluginhost.describeScope
 import com.aglyn.pluginhost.narrowsScope
 import com.aglyn.pluginhost.rememberOrgAccess
@@ -127,7 +127,7 @@ private fun SchemaEditor(context: NativePluginContext, orgId: String, dataset: D
   val scope = rememberCoroutineScope()
   val api = remember(orgId, context.api, context.writer) { DataApi(context.api, context.writer, orgId) }
   val runner = remember(dataset.id) { ActionRunner(scope) }
-  val canWrite = context.orgRole in ORG_WRITER_ROLES
+  val canWrite = rememberMemberPermissions(context).can("data.manage")
   var model by remember(dataset.id) { mutableStateOf(dataset.model) }
   var singular by remember(dataset.id) { mutableStateOf(dataset.singular) }
   var plural by remember(dataset.id) { mutableStateOf(dataset.plural) }

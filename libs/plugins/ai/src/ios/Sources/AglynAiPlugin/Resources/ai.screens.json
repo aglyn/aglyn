@@ -375,7 +375,7 @@
           ],
           "submit": {
             "label": "Save",
-            "when": "org.manager",
+            "when": "org.can[billing.manage]",
             "url": "/api/ai/billing/overage",
             "body": {
               "orgId": "{org.id}",
@@ -400,7 +400,7 @@
           ],
           "submit": {
             "label": "Save cap",
-            "when": "org.manager",
+            "when": "org.can[billing.manage]",
             "url": "/api/ai/billing/overage",
             "body": {
               "orgId": "{org.id}",
@@ -1487,7 +1487,7 @@
           "icon": "sparkles|auto_awesome",
           "toggle": {
             "value": "{data.member.aiPermissions[ai.use] ?? const.defaults[@data.member.role][ai.use]}",
-            "disabled": "!org.manager || data.member.status == invited",
+            "disabled": "!site.can[site.manage] || data.member.status == invited",
             "label": "Assist with AI",
             "on": {
               "id": "on",
@@ -1532,7 +1532,7 @@
           "icon": "sparkles|auto_awesome",
           "toggle": {
             "value": "{data.member.aiPermissions[ai.generate] ?? const.defaults[@data.member.role][ai.generate]}",
-            "disabled": "!org.manager || data.member.status == invited",
+            "disabled": "!site.can[site.manage] || data.member.status == invited",
             "label": "Generate with AI",
             "on": {
               "id": "on",
@@ -1713,7 +1713,7 @@
         "transferStep"
       ],
       "order": 20,
-      "requires": "stash.importResource == commerce.products && org.manager",
+      "requires": "stash.importResource == commerce.products && org.can[data.manage]",
       "load": {
         "jobs": {
           "url": "/api/ai/jobs?orgId={org.id}&limit=20",
