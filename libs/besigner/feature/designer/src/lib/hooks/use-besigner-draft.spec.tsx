@@ -861,6 +861,7 @@ describe('describeDraftOffer origin (AGL-2508)', () => {
     staleAgainstDocument: false,
     restoreBlockedBy: null,
     sharedDraftUnopened: false,
+    sharedDraftLoading: false,
     openWithheld: false,
     restore: () => undefined,
     discard: () => undefined,
