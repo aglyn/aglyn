@@ -16,6 +16,8 @@
  */
 'use client'
 
+import { MARKETING_CAMPAIGNS_REFUSAL } from '../model/marketing-permissions'
+import { useCampaignContainersBlocked } from './use-campaign-containers-blocked'
 import { pluginRecordHref } from '@aglyn/aglyn/plugin-manager/plugin-record-routes'
 import {
   mdiDeleteOutline,
@@ -258,6 +260,9 @@ export function CampaignDetailCard(props: CampaignDetailCardProps) {
   const router = useRouter()
   const orgMount = useMarketingOrgMount()
   const { orgId } = useMarketingOrgId(hostId)
+  // "Run email campaigns" (AGL-4047): the container's edit is client-direct, so
+  // the rule asks it, and the menu says so before the save does.
+  const containersBlocked = useCampaignContainersBlocked(orgId)
   const { confirm } = useConfirmationContext()
   const { enqueueSnackbar } = useSnackbar()
   const manageApi = useCampaignManageApi(hostId, orgId)
@@ -858,6 +863,8 @@ export function CampaignDetailCard(props: CampaignDetailCardProps) {
                 {
                   key: 'edit',
                   label: 'Edit campaign',
+                  disabled: containersBlocked,
+                  ...(containersBlocked ? { disabledReason: MARKETING_CAMPAIGNS_REFUSAL } : {}),
                   icon: <MdiIcon path={mdiPencilOutline.path} size={0.8} />,
                   onClick: () => {
                     setSaveError(null)

@@ -16,9 +16,8 @@
  */
 
 import { holdsStampedSiteKey } from '@aglyn/aglyn/app-utils/host-permissions'
-import { resolveOrgPermissions } from '@aglyn/aglyn/app-utils/org-permissions'
+import { type AglynOrgCustomRole, resolveOrgPermissions } from '@aglyn/aglyn/app-utils/org-permissions'
 import { isOrgWideMember } from '@aglyn/aglyn/app-utils/organizations'
-import type { AglynOrgCustomRole } from '@aglyn/aglyn/foundation/definitions/organization.types'
 import { useFirestore, useFirestoreDoc, useUser } from '@aglyn/tenant-feature-instance'
 import { doc } from 'firebase/firestore'
 import { CRM_MOVE_STAGES_PERMISSION, CRM_MOVE_STAGES_SITE_ROLE_PRESET } from '../model/crm-permissions'
