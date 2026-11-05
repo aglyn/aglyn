@@ -342,6 +342,44 @@ describe('owned, on a priced starter (AGL-4049 lane 3)', () => {
   })
 })
 
+describe('buyBlockedReason, on a priced starter (AGL-4047)', () => {
+  const REASON = "Someone in this workspace who isn't in Pub Studio needs to buy it."
+
+  it('tells a member of the publisher, in another workspace, why they cannot buy it', async () => {
+    listing('paid', { priceUsd: 29 })
+    state.publisherMembers.add(`${BUYER.uid}@${PUBLISHER}`)
+    const [row] = await search()
+    expect(row).toMatchObject({ owned: false, buyBlockedReason: REASON })
+    expect(await source.describe({ listingId: 'paid' }, BUYER)).toMatchObject({
+      owned: false,
+      buyBlockedReason: REASON,
+    })
+  })
+
+  it('says nothing to a stranger', async () => {
+    listing('paid', { priceUsd: 29 })
+    const [row] = await search()
+    expect(row?.owned).toBe(false)
+    expect(row).not.toHaveProperty('buyBlockedReason')
+  })
+
+  it('says nothing on the publisher’s own workspace, where it is free', async () => {
+    listing('paid', { priceUsd: 29 })
+    state.publisherMembers.add(`owner-1@${PUBLISHER}`)
+    const [row] = await source.search({ word: '', filter: {}, limit: 10 }, { orgId: PUBLISHER, uid: 'owner-1' })
+    expect(row?.owned).toBe(true)
+    expect(row).not.toHaveProperty('buyBlockedReason')
+  })
+
+  it('says nothing of a free starter, or one this workspace already holds', async () => {
+    listing('free')
+    listing('paid', { priceUsd: 29, createdAt: 50 })
+    state.publisherMembers.add(`${BUYER.uid}@${PUBLISHER}`)
+    state.docs.set('marketplacePurchases/p1', { buyerOrgId: BUYER.orgId, buyerUid: 'someone', listingId: 'paid' })
+    for (const row of await search()) expect(row).not.toHaveProperty('buyBlockedReason')
+  })
+})
+
 describe('describe (AGL-4049 lane 3)', () => {
   it('answers one starter as a search would list it for this viewer, from the listing alone', async () => {
     listing('a', { priceUsd: 29, category: 'Restaurant & café' })

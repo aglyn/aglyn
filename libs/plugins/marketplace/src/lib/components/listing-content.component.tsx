@@ -37,7 +37,13 @@ import {
   type InstallTargeting,
   type UninstallTarget,
 } from '../model/marketplace'
-import { landsInPublisherWorkspace } from '../model/own-listing'
+import {
+  isPublisherMemberElsewhere,
+  landsInPublisherWorkspace,
+  publisherMemberBuyReason,
+} from '../model/own-listing'
+import { BlockedControl } from '@aglyn/shared-ui-jsx/components/blocked-control.component'
+import { PrerequisiteNotice } from '@aglyn/shared-ui-jsx/components/prerequisite-notice.component'
 import UninstallImpactDialog from './uninstall-impact-dialog.component'
 import { ListingImage } from './listing-image.component'
 import {
@@ -1110,6 +1116,31 @@ export function MarketplaceListingContent({
     !purchased &&
     !landsInPublisherWorkspace(listing?.profileId, viewerOrgId) &&
     !installed
+  // A member of the publisher is refused by the sale for any workspace
+  // (AGL-3365), so Buy stays on screen, switched off, with the reason
+  // (AGL-4047). Their OWN member document: the same one `isPublisherMember`
+  // reads, which the rules let anyone read of themselves, so it says nothing of
+  // the publisher's roster. Asked only where Buy is on offer, and only once the
+  // acting workspace is known, so the publisher's own site never flashes it. A
+  // read that fails leaves Buy on, and the sale still decides.
+  const publisherOrgId = typeof listing?.profileId === 'string' ? listing.profileId : ''
+  const { data: ownPublisherMembership } = useFirestoreDoc<any>(
+    () =>
+      mustBuy && viewerOrgId && publisherOrgId && user?.uid
+        ? doc(firestore, 'orgs', publisherOrgId, 'members', user.uid)
+        : null,
+    [firestore, mustBuy, viewerOrgId, publisherOrgId, user?.uid],
+  )
+  const buyBlocked =
+    mustBuy &&
+    isPublisherMemberElsewhere({
+      publisherOrgId,
+      targetOrgId: viewerOrgId,
+      publisherMember: Boolean(ownPublisherMembership),
+    })
+  const buyBlockedReason = publisherMemberBuyReason(
+    profile?.displayName?.trim() || profile?.handle,
+  )
   // Updating an installed plugin stays at its current scope; a fresh install
   // uses the picker (plugins) or the artifact's only target (everything else).
   const installTargetScope: 'org' | 'host' | undefined =
@@ -1968,87 +1999,98 @@ export function MarketplaceListingContent({
                                 : undefined,
                           }}
                         >
-                          <Button
-                            // Full-width and contained (AGL-1005): in a
-                            // sidebar card this is the page's primary action,
-                            // and "already installed and current" is the only
-                            // state where it steps back to an outline.
+                          <BlockedControl
+                            blocked={buyBlocked}
+                            reason={buyBlockedReason}
                             fullWidth
-                            variant={upToDate ? 'outlined' : 'contained'}
-                            color="primary"
-                            disabled={
-                              Boolean(upToDate) ||
-                              !listing?.profileId ||
-                              // Paying is under way in the panel below.
-                              buying ||
-                              Boolean(payPanel) ||
-                              // Nothing selected to install to (AGL-773).
-                              (orgTargeting &&
-                                !installed &&
-                                !mustBuy &&
-                                installPlanSteps.length === 0)
-                            }
-                            onClick={
-                              // A site starter is bought to create a site
-                              // with, so that is the permission it asks for,
-                              // as the pay door does (AGL-4049).
-                              (artifactType === SITE_STARTER_ARTIFACT_TYPE
-                                ? permissions.createHosts
-                                : permissions.installPlugins)
-                                ? () =>
-                                    // Buying opens the payment panel below,
-                                    // which is its own confirmation; a free or
-                                    // entitled install confirms its targets
-                                    // first (AGL-867). Updating a copied
-                                    // artifact reviews the diff before writing
-                                    // anything (AGL-1018).
-                                    mustBuy
-                                      ? buy(listing)
-                                      : copiedUpdatable
-                                        ? openUpdateReview()
-                                        : setConfirmOpen(true)
-                                : () =>
-                                    enqueueSnackbar(
-                                      'Your team role does not allow installing from the marketplace',
-                                      { variant: 'warning', persist: false },
-                                    )
-                            }
                           >
-                            {upToDate
-                              ? `Installed (v${installedVersion})`
-                              : copiedUpdatable
-                                ? // Not "Update": pressing this shows what the
-                                  // update would do and writes nothing. Without
-                                  // an ordered version pair there is no "to
-                                  // vN" to promise (AGL-1034), so it says the
-                                  // honest, smaller thing.
-                                  updateStatus.state === 'update-available'
-                                  ? `Review update to v${offeredVersion}`
-                                  : 'Review this version'
-                                : artifactInstall
-                                ? // Re-adding makes another dataset / another
-                                  // draft, so this stays enabled (AGL-789). A
-                                  // theme has no "again" — there is one per
-                                  // site, and re-pressing this re-applies it.
-                                  artifactType === 'theme'
-                                  ? `Applied (v${installedVersion}) · re-apply`
-                                  : `${
-                                      artifactType === 'emailTemplate'
-                                        ? 'Draft added'
-                                        : 'Added'
-                                    } (v${installedVersion}) · add again`
-                                : installed
-                                  ? `Update to v${offeredVersion}`
-                                  : mustBuy
-                                    ? licensedElsewhere
-                                      ? `Buy for this workspace — $${priceUsd}`
-                                      : `Buy for $${priceUsd}`
-                                    : unreviewedInstall
-                                      ? `Install unreviewed v${listing?.latestVersion} for testing`
-                                    : orgTargeting || installTargets.length > 1
-                                      ? 'Install'
-                                      : 'Add to this site'}
-                          </Button>
+                            <Button
+                              // Full-width and contained (AGL-1005): in a
+                              // sidebar card this is the page's primary action,
+                              // and "already installed and current" is the only
+                              // state where it steps back to an outline.
+                              fullWidth
+                              variant={upToDate ? 'outlined' : 'contained'}
+                              color="primary"
+                              disabled={
+                                Boolean(upToDate) ||
+                                !listing?.profileId ||
+                                // Paying is under way in the panel below.
+                                buying ||
+                                Boolean(payPanel) ||
+                                // Nothing selected to install to (AGL-773).
+                                (orgTargeting &&
+                                  !installed &&
+                                  !mustBuy &&
+                                  installPlanSteps.length === 0)
+                              }
+                              onClick={
+                                // A site starter is bought to create a site
+                                // with, so that is the permission it asks for,
+                                // as the pay door does (AGL-4049).
+                                (artifactType === SITE_STARTER_ARTIFACT_TYPE
+                                  ? permissions.createHosts
+                                  : permissions.installPlugins)
+                                  ? () =>
+                                      // Buying opens the payment panel below,
+                                      // which is its own confirmation; a free or
+                                      // entitled install confirms its targets
+                                      // first (AGL-867). Updating a copied
+                                      // artifact reviews the diff before writing
+                                      // anything (AGL-1018).
+                                      mustBuy
+                                        ? buy(listing)
+                                        : copiedUpdatable
+                                          ? openUpdateReview()
+                                          : setConfirmOpen(true)
+                                  : () =>
+                                      enqueueSnackbar(
+                                        'Your team role does not allow installing from the marketplace',
+                                        { variant: 'warning', persist: false },
+                                      )
+                              }
+                            >
+                              {upToDate
+                                ? `Installed (v${installedVersion})`
+                                : copiedUpdatable
+                                  ? // Not "Update": pressing this shows what the
+                                    // update would do and writes nothing. Without
+                                    // an ordered version pair there is no "to
+                                    // vN" to promise (AGL-1034), so it says the
+                                    // honest, smaller thing.
+                                    updateStatus.state === 'update-available'
+                                    ? `Review update to v${offeredVersion}`
+                                    : 'Review this version'
+                                  : artifactInstall
+                                  ? // Re-adding makes another dataset / another
+                                    // draft, so this stays enabled (AGL-789). A
+                                    // theme has no "again" — there is one per
+                                    // site, and re-pressing this re-applies it.
+                                    artifactType === 'theme'
+                                    ? `Applied (v${installedVersion}) · re-apply`
+                                    : `${
+                                        artifactType === 'emailTemplate'
+                                          ? 'Draft added'
+                                          : 'Added'
+                                      } (v${installedVersion}) · add again`
+                                  : installed
+                                    ? `Update to v${offeredVersion}`
+                                    : mustBuy
+                                      ? licensedElsewhere
+                                        ? `Buy for this workspace — $${priceUsd}`
+                                        : `Buy for $${priceUsd}`
+                                      : unreviewedInstall
+                                        ? `Install unreviewed v${listing?.latestVersion} for testing`
+                                      : orgTargeting || installTargets.length > 1
+                                        ? 'Install'
+                                        : 'Add to this site'}
+                            </Button>
+                          </BlockedControl>
+                          {buyBlocked ? (
+                            <PrerequisiteNotice sx={{ mt: 1 }}>
+                              {buyBlockedReason}
+                            </PrerequisiteNotice>
+                          ) : null}
                         </Box>
                         {/* Paying for it, in place under the button (AGL-4049). */}
                         {payPanel}

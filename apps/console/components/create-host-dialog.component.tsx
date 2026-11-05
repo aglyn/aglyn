@@ -664,7 +664,7 @@ function CreateSiteFlow({
       : pickBlock === 'none'
         ? 'Choose an AI starter to continue.'
         : pickBlock === 'purchase'
-          ? 'Buy this starter to continue with it.'
+          ? (pick?.buyBlockedReason ?? 'Buy this starter to continue with it.')
           : !answersRead
             ? 'Reading this starter’s answers…'
             : null
@@ -675,7 +675,7 @@ function CreateSiteFlow({
           ? 'Choose a style to create your site.'
           : 'Choose a starter to create your site.'
         : pickBlock === 'purchase'
-          ? 'Buy this starter to create your site from it.'
+          ? (pick?.buyBlockedReason ?? 'Buy this starter to create your site from it.')
           : null
 
   // On to the questions with an AI starter's answers. The site is created by
