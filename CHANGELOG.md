@@ -9,6 +9,49 @@ content on the marketing site and is written separately.
 
 <!-- releases below -->
 
+## v1.14.0 — 2026-11-05
+
+[Compare with the previous release](https://github.com/aglyn/aglyn/compare/v1.13.0...v1.14.0)
+
+### Added
+
+- **native:** dataset screens follow the placement verdict and new data keys ([AGL-4047](https://linear.app/aglyn/issue/AGL-4047))
+- **native:** integration screens ask their permission keys ([AGL-4047](https://linear.app/aglyn/issue/AGL-4047))
+- **datasets:** share a dataset with all sites except some ([AGL-4047](https://linear.app/aglyn/issue/AGL-4047))
+- **native:** webhooks per site, export for key holders, Import names its key ([AGL-4047](https://linear.app/aglyn/issue/AGL-4047))
+- **crm:** erase notes, plugin sources as audiences and menus, dead sort flags ([AGL-4042](https://linear.app/aglyn/issue/AGL-4042))
+
+### Fixed
+
+- **console:** a stalled landing still provisions the sign-up's workspace ([AGL-4117](https://linear.app/aglyn/issue/AGL-4117))
+- **ai:** a gallery is drawn as its photos in their columns; the fidelity holds it ([AGL-4152](https://linear.app/aglyn/issue/AGL-4152))
+- **ai:** a group of pictures alone is read as marks or a gallery, in its columns ([AGL-4152](https://linear.app/aglyn/issue/AGL-4152))
+- **ai:** a quote and a figure keep their links; a quote in a heading costs no heading ([AGL-4152](https://linear.app/aglyn/issue/AGL-4152))
+- **ai:** every row of a section stands in its columns, and a kept opening stays centered ([AGL-4152](https://linear.app/aglyn/issue/AGL-4152))
+- **ai:** the fidelity goes red on a hidden picture or a stray label a build draws ([AGL-4152](https://linear.app/aglyn/issue/AGL-4152))
+- **ai:** a page laid on one placed grid reads in its columns and its parts ([AGL-4152](https://linear.app/aglyn/issue/AGL-4152))
+- **ai:** a read leaves out what a visitor cannot see; a text block keeps its paragraphs ([AGL-4152](https://linear.app/aglyn/issue/AGL-4152))
+- **rules:** closed deal creates, colleagues' templates key, marked docs keep scope ([AGL-4047](https://linear.app/aglyn/issue/AGL-4047))
+
+### Changed
+
+- **crm:** the plugin source check lives with the capture contract ([AGL-4042](https://linear.app/aglyn/issue/AGL-4042))
+
+### Documentation
+
+- **datasets:** what's new, and deleting a site a marked dataset reached ([AGL-4047](https://linear.app/aglyn/issue/AGL-4047))
+- **datasets:** a marked dataset answers as on several sites ([AGL-4047](https://linear.app/aglyn/issue/AGL-4047))
+- **crm:** the erase dialog's kept-as-they-are row ([AGL-4042](https://linear.app/aglyn/issue/AGL-4042))
+
+<details>
+<summary>Also in this release: 1 test, 2 chore</summary>
+
+- **datasets:** all sites except some ready to land ([AGL-4047](https://linear.app/aglyn/issue/AGL-4047))
+- **crm:** deal gaps and marker freeze ready to merge ([AGL-4047](https://linear.app/aglyn/issue/AGL-4047))
+- **datasets:** pin the marker off exports without marking the shared seeds ([AGL-4047](https://linear.app/aglyn/issue/AGL-4047))
+
+</details>
+
 ## v1.13.0 — 2026-11-05
 
 [Compare with the previous release](https://github.com/aglyn/aglyn/compare/v1.12.0...v1.13.0)
