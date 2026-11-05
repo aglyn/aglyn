@@ -112,6 +112,8 @@ export function transferAccessVerdict(
   // for the plan, whatever the person holds.
   const feature = transferPlanFeature(action, declared)
   if (feature && !inputs.entitled(feature)) return false
+  // The resource's own answer on this instance (AGL-4047), as its `importAccess` gives the gate.
+  if (action === 'import' && typeof target.importAllowed === 'boolean') return target.importAllowed
   const hostId = target.hostId?.trim() || null
   let axis: TransferMemberAxis
   if (inputs.orgWide || !hostId) {
@@ -121,7 +123,9 @@ export function transferAccessVerdict(
   } else {
     const onSite = resolveCollaboratorHostPermissions(inputs.member, hostId as never) as Record<string, boolean> | null
     axis = {
-      holds: (permission) => onSite?.[permission] === true,
+      // A key that alone decides an export is a workspace key, as the gate asks it.
+      holds: (permission) =>
+        action === 'export' && declared?.readPermissionOnly === true ? inputs.can(permission) : onSite?.[permission] === true,
       reachesSite: Boolean(inputs.member && hostRoleFor(inputs.member, hostId as never)),
     }
   }
@@ -270,7 +274,7 @@ export function TransferLauncherProvider({ children }: { children?: JSX.Children
       },
       discard,
       can: (action, target) => {
-        const key = [action, target.resource, target.scope, target.hostId ?? ''].join('\u0000')
+        const key = [action, target.resource, target.scope, target.hostId ?? '', String(target.importAllowed)].join('\u0000')
         let answer = answers.get(key)
         if (answer === undefined) {
           answer = transferAccessVerdict(inputs, action, target)

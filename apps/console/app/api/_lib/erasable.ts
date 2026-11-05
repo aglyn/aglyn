@@ -33,6 +33,11 @@ export interface ErasableResource {
   scopes: readonly Scope[]
   /** Human label for messages — "Dataset", "List". */
   label: string
+  /**
+   * The kind answers to where it is placed (AGL-4047, `site-placement`): the
+   * site key that decides a delete on one site, with its site-role preset.
+   */
+  placed?: { siteKey: string; sitePreset: Readonly<Record<'admin' | 'editor' | 'author' | 'viewer', boolean>> }
 }
 
 /**
@@ -60,7 +65,13 @@ export interface ErasableResource {
  */
 export const ERASABLE: Record<string, ErasableResource> = {
   // orgs/{orgId}/datasets/{id}/records — form submissions, automation rows.
-  datasets: { scopes: ['orgs'], label: 'Dataset' },
+  // A dataset on one site answers to that site, and one shared beyond it is
+  // the whole workspace's to delete (AGL-4047).
+  datasets: {
+    scopes: ['orgs'],
+    label: 'Dataset',
+    placed: { siteKey: 'data.siteDelete', sitePreset: { admin: true, editor: true, author: false, viewer: false } },
+  },
   // orgs/{orgId}/lists/{id}/members — enrolled contacts (PII).
   lists: { scopes: ['orgs'], label: 'List' },
   // hosts/{hostId}/collections/{id}/entries — published content entries.

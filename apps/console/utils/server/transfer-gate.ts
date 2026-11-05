@@ -28,7 +28,12 @@ import {
   type TransferErrorResponse,
 } from '@aglyn/aglyn/data-transfer'
 import { resolveEnabledPlugins, resolveHostEnabledPlugins } from '@aglyn/aglyn/plugin-manager/enabled-plugins'
-import { declaredTransferResource, transferPlanRefusal } from '@aglyn/aglyn/plugin-manager/plugin-transfer-resources'
+import {
+  declaredTransferResource,
+  transferImportAccess,
+  transferPlanRefusal,
+} from '@aglyn/aglyn/plugin-manager/plugin-transfer-resources'
+import { orgPermissionLabel } from '@aglyn/aglyn/app-utils/org-permissions'
 import {
   consumeRateLimit,
   emailUnverifiedResponse,
@@ -75,7 +80,10 @@ import { FieldValue } from 'firebase-admin/firestore'
  *     `data.manage` stays the key. The route and the resource's `readPage`
  *     then read only what the member's scope sees. A resource that names
  *     `importPermission` (AGL-4047) is imported only by a member holding it,
- *     them where the records are (gift cards: a site's admins). Staff pass.
+ *     where the records are. A resource whose server half answers
+ *     `importAccess` (AGL-4047) decides importing into one instance itself, in
+ *     place of `data.manage`: a dataset on one site answers to that site. Staff
+ *     pass.
  *  5. the resource's plugin runs for the request (AGL-3548): switched on
  *     for the named site, or for the workspace without one, and released to
  *     the workspace — the plugin dispatcher's 404 otherwise. An export the
@@ -186,6 +194,7 @@ async function accessRefusal(
   hostId: string | null,
   member: CallerMember | null,
   resource: string | null,
+  uid: string,
 ): Promise<Response | null> {
   const intent = transferRouteIntent(route)
   const declared = resource ? declaredTransferResource(parseTransferResourceKey(resource).key) : null
@@ -197,19 +206,32 @@ async function accessRefusal(
   if (hostId && !isOrgWideMember(member) && !memberCanSee(member, [hostScopeToken(hostId)])) {
     return transferRefusal(404, 'notFound', 'No such site')
   }
-  let holds = !needed.length
+  // The resource's own answer on this instance, asked at most once a request.
+  const ownAnswer = resource
+    ? () => transferImportAccess({ resource, orgId, uid, member: member as unknown as Readonly<Record<string, unknown>> })
+    : () => Promise.resolve(null)
+  const answer = intent === 'import' ? await ownAnswer() : null
+  if (answer && !answer.allowed) {
+    return transferRefusal(403, 'forbidden', `Importing needs the “${orgPermissionLabel(answer.permission)}” permission`)
+  }
+  let holds = !needed.length || answer?.allowed === true
   for (const permission of needed) {
     if (holds) break
-    holds = hostId
+    // A key that alone decides an export is a workspace key: naming a site doesn't change who holds it.
+    holds = hostId && !(intent === 'export' && declared?.readPermissionOnly === true)
       ? await memberHasPermissionOnHost(orgId, hostId, member, permission)
       : await memberHasOrgPermission(orgId, member, permission)
   }
+  // The import wizard opens with `fields` too, and refusing an export takes nothing from importing.
+  if (!holds && route === 'fields') holds = (await ownAnswer())?.allowed === true
   if (!holds) {
     const verb = intent === 'export' ? 'Exporting' : 'Importing'
     return transferRefusal(
       403,
       'forbidden',
-      needed.length === 1 ? `${verb} needs the “Manage data” permission` : `${verb} these records needs a permission your role does not include`,
+      needed.length === 1
+        ? `${verb} needs the “${orgPermissionLabel(needed[0])}” permission`
+        : `${verb} these records needs a permission your role does not include`,
     )
   }
   const stricter = transferImportPermission(intent, declared)
@@ -331,7 +353,7 @@ export async function transferGate(
 
     const membership = await resolveOrgMembership(decoded.uid, orgId)
     if (!staff) {
-      const refusal = await accessRefusal(route, orgId, hostId, membership?.member ?? null, resource)
+      const refusal = await accessRefusal(route, orgId, hostId, membership?.member ?? null, resource, decoded.uid)
       if (refusal) return refusal
     }
     // The plugin runs here, as the plugin dispatcher asks it of every route

@@ -1,0 +1,2328 @@
+{
+ "$comment": [
+  "The measured table for a dataset's client-direct writes and reads (AGL-4047): every kind of member, what the rules answered BEFORE and what they answer AFTER.",
+  "cloud/rules-dataset-access.spec.mjs seeds these into the emulator and asks Firestore.",
+  "libs/plugins/data/src/lib/model/dataset-access-table.spec.ts re-derives scopeTokens, the resolved keys and both hosts' stamps from the real projections, and asks the route and console verdicts over the same rows."
+ ],
+ "hosts": {
+  "host-h": {
+   "memberRoles": {
+    "uid-0": "admin",
+    "uid-1": "admin",
+    "uid-2": "editor",
+    "uid-3": "viewer",
+    "uid-4": "viewer",
+    "uid-5": "editor",
+    "uid-6": "admin",
+    "uid-7": "viewer",
+    "uid-8": "editor",
+    "uid-9": "admin",
+    "uid-10": "admin",
+    "uid-11": "editor",
+    "uid-12": "author",
+    "uid-13": "editor",
+    "uid-14": "author",
+    "uid-15": "viewer",
+    "uid-16": "editor",
+    "uid-17": "viewer",
+    "uid-18": "viewer",
+    "uid-19": "viewer",
+    "uid-20": "admin",
+    "uid-21": "editor",
+    "uid-22": "author",
+    "uid-23": "viewer",
+    "uid-24": "author",
+    "uid-25": "editor",
+    "uid-26": "viewer",
+    "uid-27": "admin",
+    "uid-28": "editor",
+    "uid-29": "author",
+    "uid-30": "viewer",
+    "uid-31": "editor",
+    "uid-32": "viewer",
+    "uid-33": "editor",
+    "uid-34": "editor",
+    "uid-35": "viewer"
+   },
+   "memberPermissions": {
+    "uid-0": {
+     "data.siteManage": true,
+     "data.siteDelete": true
+    },
+    "uid-1": {
+     "data.siteManage": true,
+     "data.siteDelete": true
+    },
+    "uid-2": {
+     "data.siteManage": true,
+     "data.siteDelete": true
+    },
+    "uid-3": {
+     "data.siteManage": false,
+     "data.siteDelete": false
+    },
+    "uid-4": {
+     "data.siteManage": true,
+     "data.siteDelete": true
+    },
+    "uid-5": {
+     "data.siteManage": false,
+     "data.siteDelete": false
+    },
+    "uid-6": {
+     "data.siteManage": false,
+     "data.siteDelete": false
+    },
+    "uid-7": {
+     "data.siteManage": true,
+     "data.siteDelete": true
+    },
+    "uid-8": {
+     "data.siteManage": false,
+     "data.siteDelete": false
+    },
+    "uid-9": {
+     "data.siteManage": false,
+     "data.siteDelete": false
+    },
+    "uid-10": {
+     "data.siteManage": true,
+     "data.siteDelete": true
+    },
+    "uid-11": {
+     "data.siteManage": true,
+     "data.siteDelete": true
+    },
+    "uid-12": {
+     "data.siteManage": false,
+     "data.siteDelete": false
+    },
+    "uid-13": {
+     "data.siteManage": false,
+     "data.siteDelete": true
+    },
+    "uid-14": {
+     "data.siteManage": false,
+     "data.siteDelete": false
+    },
+    "uid-15": {
+     "data.siteManage": false,
+     "data.siteDelete": false
+    },
+    "uid-16": {
+     "data.siteManage": true,
+     "data.siteDelete": true
+    },
+    "uid-17": {
+     "data.siteManage": true,
+     "data.siteDelete": true
+    },
+    "uid-18": {
+     "data.siteManage": true,
+     "data.siteDelete": true
+    },
+    "uid-19": {
+     "data.siteManage": true,
+     "data.siteDelete": true
+    },
+    "uid-20": {
+     "data.siteManage": true,
+     "data.siteDelete": true
+    },
+    "uid-21": {
+     "data.siteManage": true,
+     "data.siteDelete": true
+    },
+    "uid-22": {
+     "data.siteManage": false,
+     "data.siteDelete": false
+    },
+    "uid-23": {
+     "data.siteManage": false,
+     "data.siteDelete": false
+    },
+    "uid-24": {
+     "data.siteManage": true,
+     "data.siteDelete": true
+    },
+    "uid-25": {
+     "data.siteManage": false,
+     "data.siteDelete": false
+    },
+    "uid-26": {
+     "data.siteManage": false,
+     "data.siteDelete": false
+    },
+    "uid-27": {
+     "data.siteManage": true,
+     "data.siteDelete": true
+    },
+    "uid-28": {
+     "data.siteManage": true,
+     "data.siteDelete": true
+    },
+    "uid-29": {
+     "data.siteManage": false,
+     "data.siteDelete": false
+    },
+    "uid-30": {
+     "data.siteManage": false,
+     "data.siteDelete": false
+    },
+    "uid-31": {
+     "data.siteManage": true,
+     "data.siteDelete": true
+    },
+    "uid-32": {
+     "data.siteManage": false,
+     "data.siteDelete": false
+    },
+    "uid-33": {
+     "data.siteManage": true,
+     "data.siteDelete": true
+    },
+    "uid-34": {
+     "data.siteManage": true,
+     "data.siteDelete": true
+    },
+    "uid-35": {
+     "data.siteManage": false,
+     "data.siteDelete": false
+    }
+   }
+  },
+  "host-other": {
+   "memberRoles": {
+    "uid-0": "admin",
+    "uid-1": "admin",
+    "uid-2": "editor",
+    "uid-3": "viewer",
+    "uid-4": "viewer",
+    "uid-5": "editor",
+    "uid-6": "admin",
+    "uid-7": "viewer",
+    "uid-8": "editor",
+    "uid-9": "admin",
+    "uid-10": "viewer",
+    "uid-11": "viewer",
+    "uid-12": "viewer",
+    "uid-13": "viewer",
+    "uid-14": "editor",
+    "uid-15": "editor",
+    "uid-16": "author",
+    "uid-17": "editor",
+    "uid-18": "editor",
+    "uid-19": "editor",
+    "uid-31": "editor",
+    "uid-32": "viewer",
+    "uid-34": "editor",
+    "uid-35": "viewer"
+   },
+   "memberPermissions": {
+    "uid-0": {
+     "data.siteManage": true,
+     "data.siteDelete": true
+    },
+    "uid-1": {
+     "data.siteManage": true,
+     "data.siteDelete": true
+    },
+    "uid-2": {
+     "data.siteManage": true,
+     "data.siteDelete": true
+    },
+    "uid-3": {
+     "data.siteManage": false,
+     "data.siteDelete": false
+    },
+    "uid-4": {
+     "data.siteManage": true,
+     "data.siteDelete": true
+    },
+    "uid-5": {
+     "data.siteManage": false,
+     "data.siteDelete": false
+    },
+    "uid-6": {
+     "data.siteManage": false,
+     "data.siteDelete": false
+    },
+    "uid-7": {
+     "data.siteManage": true,
+     "data.siteDelete": true
+    },
+    "uid-8": {
+     "data.siteManage": false,
+     "data.siteDelete": false
+    },
+    "uid-9": {
+     "data.siteManage": false,
+     "data.siteDelete": false
+    },
+    "uid-10": {
+     "data.siteManage": false,
+     "data.siteDelete": false
+    },
+    "uid-11": {
+     "data.siteManage": false,
+     "data.siteDelete": false
+    },
+    "uid-12": {
+     "data.siteManage": false,
+     "data.siteDelete": false
+    },
+    "uid-13": {
+     "data.siteManage": false,
+     "data.siteDelete": false
+    },
+    "uid-14": {
+     "data.siteManage": true,
+     "data.siteDelete": true
+    },
+    "uid-15": {
+     "data.siteManage": true,
+     "data.siteDelete": true
+    },
+    "uid-16": {
+     "data.siteManage": false,
+     "data.siteDelete": false
+    },
+    "uid-17": {
+     "data.siteManage": true,
+     "data.siteDelete": true
+    },
+    "uid-18": {
+     "data.siteManage": true,
+     "data.siteDelete": true
+    },
+    "uid-19": {
+     "data.siteManage": true,
+     "data.siteDelete": true
+    },
+    "uid-31": {
+     "data.siteManage": true,
+     "data.siteDelete": true
+    },
+    "uid-32": {
+     "data.siteManage": false,
+     "data.siteDelete": false
+    },
+    "uid-34": {
+     "data.siteManage": true,
+     "data.siteDelete": true
+    },
+    "uid-35": {
+     "data.siteManage": false,
+     "data.siteDelete": false
+    }
+   }
+  }
+ },
+ "rows": [
+  {
+   "name": "owner",
+   "uid": "uid-0",
+   "member": {
+    "role": "owner",
+    "allHosts": true
+   },
+   "scopeTokens": [
+    "org"
+   ],
+   "resolved": {
+    "data.manage": true,
+    "org.eraseRecords": true,
+    "data.siteManage": true,
+    "data.siteDelete": true,
+    "data.viewRecords": true,
+    "data.export": true
+   },
+   "before": {
+    "schemaHere": true,
+    "schemaOrg": true,
+    "schemaTwo": true,
+    "schemaOther": true,
+    "shareHere": true,
+    "shareOrg": true,
+    "recordEditHere": true,
+    "recordEditOrg": true,
+    "recordEditTwo": true,
+    "recordEditOther": true,
+    "recordDeleteHere": true,
+    "recordDeleteOrg": true,
+    "readRecordsHere": true,
+    "readRecordsOrg": true
+   },
+   "after": {
+    "schemaHere": true,
+    "schemaOrg": true,
+    "schemaTwo": true,
+    "schemaOther": true,
+    "shareHere": true,
+    "shareOrg": true,
+    "recordEditHere": true,
+    "recordEditOrg": true,
+    "recordEditTwo": true,
+    "recordEditOther": true,
+    "recordDeleteHere": true,
+    "recordDeleteOrg": true,
+    "readRecordsHere": true,
+    "readRecordsOrg": true
+   }
+  },
+  {
+   "name": "admin",
+   "uid": "uid-1",
+   "member": {
+    "role": "admin",
+    "allHosts": true
+   },
+   "scopeTokens": [
+    "org"
+   ],
+   "resolved": {
+    "data.manage": true,
+    "org.eraseRecords": true,
+    "data.siteManage": true,
+    "data.siteDelete": true,
+    "data.viewRecords": true,
+    "data.export": true
+   },
+   "before": {
+    "schemaHere": true,
+    "schemaOrg": true,
+    "schemaTwo": true,
+    "schemaOther": true,
+    "shareHere": true,
+    "shareOrg": true,
+    "recordEditHere": true,
+    "recordEditOrg": true,
+    "recordEditTwo": true,
+    "recordEditOther": true,
+    "recordDeleteHere": true,
+    "recordDeleteOrg": true,
+    "readRecordsHere": true,
+    "readRecordsOrg": true
+   },
+   "after": {
+    "schemaHere": true,
+    "schemaOrg": true,
+    "schemaTwo": true,
+    "schemaOther": true,
+    "shareHere": true,
+    "shareOrg": true,
+    "recordEditHere": true,
+    "recordEditOrg": true,
+    "recordEditTwo": true,
+    "recordEditOther": true,
+    "recordDeleteHere": true,
+    "recordDeleteOrg": true,
+    "readRecordsHere": true,
+    "readRecordsOrg": true
+   }
+  },
+  {
+   "name": "editor",
+   "uid": "uid-2",
+   "member": {
+    "role": "editor",
+    "allHosts": true
+   },
+   "scopeTokens": [
+    "org"
+   ],
+   "resolved": {
+    "data.manage": true,
+    "org.eraseRecords": true,
+    "data.siteManage": true,
+    "data.siteDelete": true,
+    "data.viewRecords": true,
+    "data.export": true
+   },
+   "before": {
+    "schemaHere": true,
+    "schemaOrg": true,
+    "schemaTwo": true,
+    "schemaOther": true,
+    "shareHere": true,
+    "shareOrg": true,
+    "recordEditHere": true,
+    "recordEditOrg": true,
+    "recordEditTwo": true,
+    "recordEditOther": true,
+    "recordDeleteHere": true,
+    "recordDeleteOrg": true,
+    "readRecordsHere": true,
+    "readRecordsOrg": true
+   },
+   "after": {
+    "schemaHere": true,
+    "schemaOrg": true,
+    "schemaTwo": true,
+    "schemaOther": true,
+    "shareHere": true,
+    "shareOrg": true,
+    "recordEditHere": true,
+    "recordEditOrg": true,
+    "recordEditTwo": true,
+    "recordEditOther": true,
+    "recordDeleteHere": true,
+    "recordDeleteOrg": true,
+    "readRecordsHere": true,
+    "readRecordsOrg": true
+   }
+  },
+  {
+   "name": "viewer",
+   "uid": "uid-3",
+   "member": {
+    "role": "viewer",
+    "allHosts": true
+   },
+   "scopeTokens": [
+    "org"
+   ],
+   "resolved": {
+    "data.manage": false,
+    "org.eraseRecords": false,
+    "data.siteManage": false,
+    "data.siteDelete": false,
+    "data.viewRecords": true,
+    "data.export": true
+   },
+   "before": {
+    "schemaHere": false,
+    "schemaOrg": false,
+    "schemaTwo": false,
+    "schemaOther": false,
+    "shareHere": false,
+    "shareOrg": false,
+    "recordEditHere": false,
+    "recordEditOrg": false,
+    "recordEditTwo": false,
+    "recordEditOther": false,
+    "recordDeleteHere": false,
+    "recordDeleteOrg": false,
+    "readRecordsHere": true,
+    "readRecordsOrg": true
+   },
+   "after": {
+    "schemaHere": false,
+    "schemaOrg": false,
+    "schemaTwo": false,
+    "schemaOther": false,
+    "shareHere": false,
+    "shareOrg": false,
+    "recordEditHere": false,
+    "recordEditOrg": false,
+    "recordEditTwo": false,
+    "recordEditOther": false,
+    "recordDeleteHere": false,
+    "recordDeleteOrg": false,
+    "readRecordsHere": true,
+    "readRecordsOrg": true
+   }
+  },
+  {
+   "name": "custom role grants Manage data and Delete: viewer",
+   "uid": "uid-4",
+   "member": {
+    "role": "viewer",
+    "allHosts": true,
+    "roleId": "r1"
+   },
+   "customRole": {
+    "permissions": {
+     "data.manage": true,
+     "org.eraseRecords": true
+    }
+   },
+   "scopeTokens": [
+    "org"
+   ],
+   "resolved": {
+    "data.manage": true,
+    "org.eraseRecords": true,
+    "data.siteManage": true,
+    "data.siteDelete": true,
+    "data.viewRecords": true,
+    "data.export": true
+   },
+   "before": {
+    "schemaHere": true,
+    "schemaOrg": true,
+    "schemaTwo": true,
+    "schemaOther": true,
+    "shareHere": true,
+    "shareOrg": true,
+    "recordEditHere": true,
+    "recordEditOrg": true,
+    "recordEditTwo": true,
+    "recordEditOther": true,
+    "recordDeleteHere": true,
+    "recordDeleteOrg": true,
+    "readRecordsHere": true,
+    "readRecordsOrg": true
+   },
+   "after": {
+    "schemaHere": true,
+    "schemaOrg": true,
+    "schemaTwo": true,
+    "schemaOther": true,
+    "shareHere": true,
+    "shareOrg": true,
+    "recordEditHere": true,
+    "recordEditOrg": true,
+    "recordEditTwo": true,
+    "recordEditOther": true,
+    "recordDeleteHere": true,
+    "recordDeleteOrg": true,
+    "readRecordsHere": true,
+    "readRecordsOrg": true
+   }
+  },
+  {
+   "name": "custom role refuses Manage data and Delete: editor",
+   "uid": "uid-5",
+   "member": {
+    "role": "editor",
+    "allHosts": true,
+    "roleId": "r2"
+   },
+   "customRole": {
+    "permissions": {
+     "data.manage": false,
+     "org.eraseRecords": false
+    }
+   },
+   "scopeTokens": [
+    "org"
+   ],
+   "resolved": {
+    "data.manage": false,
+    "org.eraseRecords": false,
+    "data.siteManage": false,
+    "data.siteDelete": false,
+    "data.viewRecords": true,
+    "data.export": true
+   },
+   "before": {
+    "schemaHere": false,
+    "schemaOrg": false,
+    "schemaTwo": false,
+    "schemaOther": false,
+    "shareHere": false,
+    "shareOrg": false,
+    "recordEditHere": false,
+    "recordEditOrg": false,
+    "recordEditTwo": false,
+    "recordEditOther": false,
+    "recordDeleteHere": false,
+    "recordDeleteOrg": false,
+    "readRecordsHere": true,
+    "readRecordsOrg": true
+   },
+   "after": {
+    "schemaHere": false,
+    "schemaOrg": false,
+    "schemaTwo": false,
+    "schemaOther": false,
+    "shareHere": false,
+    "shareOrg": false,
+    "recordEditHere": false,
+    "recordEditOrg": false,
+    "recordEditTwo": false,
+    "recordEditOther": false,
+    "recordDeleteHere": false,
+    "recordDeleteOrg": false,
+    "readRecordsHere": true,
+    "readRecordsOrg": true
+   }
+  },
+  {
+   "name": "custom role refuses Manage data and Delete: admin",
+   "uid": "uid-6",
+   "member": {
+    "role": "admin",
+    "allHosts": true,
+    "roleId": "r3"
+   },
+   "customRole": {
+    "permissions": {
+     "data.manage": false,
+     "org.eraseRecords": false
+    }
+   },
+   "scopeTokens": [
+    "org"
+   ],
+   "resolved": {
+    "data.manage": false,
+    "org.eraseRecords": false,
+    "data.siteManage": false,
+    "data.siteDelete": false,
+    "data.viewRecords": true,
+    "data.export": true
+   },
+   "before": {
+    "schemaHere": false,
+    "schemaOrg": false,
+    "schemaTwo": false,
+    "schemaOther": false,
+    "shareHere": false,
+    "shareOrg": false,
+    "recordEditHere": false,
+    "recordEditOrg": false,
+    "recordEditTwo": false,
+    "recordEditOther": false,
+    "recordDeleteHere": false,
+    "recordDeleteOrg": false,
+    "readRecordsHere": true,
+    "readRecordsOrg": true
+   },
+   "after": {
+    "schemaHere": false,
+    "schemaOrg": false,
+    "schemaTwo": false,
+    "schemaOther": false,
+    "shareHere": false,
+    "shareOrg": false,
+    "recordEditHere": false,
+    "recordEditOrg": false,
+    "recordEditTwo": false,
+    "recordEditOther": false,
+    "recordDeleteHere": false,
+    "recordDeleteOrg": false,
+    "readRecordsHere": true,
+    "readRecordsOrg": true
+   }
+  },
+  {
+   "name": "member override grants Manage data and Delete: viewer",
+   "uid": "uid-7",
+   "member": {
+    "role": "viewer",
+    "allHosts": true,
+    "permissions": {
+     "data.manage": true,
+     "org.eraseRecords": true
+    }
+   },
+   "scopeTokens": [
+    "org"
+   ],
+   "resolved": {
+    "data.manage": true,
+    "org.eraseRecords": true,
+    "data.siteManage": true,
+    "data.siteDelete": true,
+    "data.viewRecords": true,
+    "data.export": true
+   },
+   "before": {
+    "schemaHere": true,
+    "schemaOrg": true,
+    "schemaTwo": true,
+    "schemaOther": true,
+    "shareHere": true,
+    "shareOrg": true,
+    "recordEditHere": true,
+    "recordEditOrg": true,
+    "recordEditTwo": true,
+    "recordEditOther": true,
+    "recordDeleteHere": true,
+    "recordDeleteOrg": true,
+    "readRecordsHere": true,
+    "readRecordsOrg": true
+   },
+   "after": {
+    "schemaHere": true,
+    "schemaOrg": true,
+    "schemaTwo": true,
+    "schemaOther": true,
+    "shareHere": true,
+    "shareOrg": true,
+    "recordEditHere": true,
+    "recordEditOrg": true,
+    "recordEditTwo": true,
+    "recordEditOther": true,
+    "recordDeleteHere": true,
+    "recordDeleteOrg": true,
+    "readRecordsHere": true,
+    "readRecordsOrg": true
+   }
+  },
+  {
+   "name": "member override refuses Manage data and Delete: editor",
+   "uid": "uid-8",
+   "member": {
+    "role": "editor",
+    "allHosts": true,
+    "permissions": {
+     "data.manage": false,
+     "org.eraseRecords": false
+    }
+   },
+   "scopeTokens": [
+    "org"
+   ],
+   "resolved": {
+    "data.manage": false,
+    "org.eraseRecords": false,
+    "data.siteManage": false,
+    "data.siteDelete": false,
+    "data.viewRecords": true,
+    "data.export": true
+   },
+   "before": {
+    "schemaHere": false,
+    "schemaOrg": false,
+    "schemaTwo": false,
+    "schemaOther": false,
+    "shareHere": false,
+    "shareOrg": false,
+    "recordEditHere": false,
+    "recordEditOrg": false,
+    "recordEditTwo": false,
+    "recordEditOther": false,
+    "recordDeleteHere": false,
+    "recordDeleteOrg": false,
+    "readRecordsHere": true,
+    "readRecordsOrg": true
+   },
+   "after": {
+    "schemaHere": false,
+    "schemaOrg": false,
+    "schemaTwo": false,
+    "schemaOther": false,
+    "shareHere": false,
+    "shareOrg": false,
+    "recordEditHere": false,
+    "recordEditOrg": false,
+    "recordEditTwo": false,
+    "recordEditOther": false,
+    "recordDeleteHere": false,
+    "recordDeleteOrg": false,
+    "readRecordsHere": true,
+    "readRecordsOrg": true
+   }
+  },
+  {
+   "name": "member override refuses Manage data and Delete: admin",
+   "uid": "uid-9",
+   "member": {
+    "role": "admin",
+    "allHosts": true,
+    "permissions": {
+     "data.manage": false,
+     "org.eraseRecords": false
+    }
+   },
+   "scopeTokens": [
+    "org"
+   ],
+   "resolved": {
+    "data.manage": false,
+    "org.eraseRecords": false,
+    "data.siteManage": false,
+    "data.siteDelete": false,
+    "data.viewRecords": true,
+    "data.export": true
+   },
+   "before": {
+    "schemaHere": false,
+    "schemaOrg": false,
+    "schemaTwo": false,
+    "schemaOther": false,
+    "shareHere": false,
+    "shareOrg": false,
+    "recordEditHere": false,
+    "recordEditOrg": false,
+    "recordEditTwo": false,
+    "recordEditOther": false,
+    "recordDeleteHere": false,
+    "recordDeleteOrg": false,
+    "readRecordsHere": true,
+    "readRecordsOrg": true
+   },
+   "after": {
+    "schemaHere": false,
+    "schemaOrg": false,
+    "schemaTwo": false,
+    "schemaOther": false,
+    "shareHere": false,
+    "shareOrg": false,
+    "recordEditHere": false,
+    "recordEditOrg": false,
+    "recordEditTwo": false,
+    "recordEditOther": false,
+    "recordDeleteHere": false,
+    "recordDeleteOrg": false,
+    "readRecordsHere": true,
+    "readRecordsOrg": true
+   }
+  },
+  {
+   "name": "viewer raised to Admin here",
+   "uid": "uid-10",
+   "member": {
+    "role": "viewer",
+    "allHosts": true,
+    "hostAccess": {
+     "host-h": "admin"
+    }
+   },
+   "scopeTokens": [
+    "org"
+   ],
+   "resolved": {
+    "data.manage": false,
+    "org.eraseRecords": false,
+    "data.siteManage": false,
+    "data.siteDelete": false,
+    "data.viewRecords": true,
+    "data.export": true
+   },
+   "before": {
+    "schemaHere": false,
+    "schemaOrg": false,
+    "schemaTwo": false,
+    "schemaOther": false,
+    "shareHere": false,
+    "shareOrg": false,
+    "recordEditHere": false,
+    "recordEditOrg": false,
+    "recordEditTwo": false,
+    "recordEditOther": false,
+    "recordDeleteHere": false,
+    "recordDeleteOrg": false,
+    "readRecordsHere": true,
+    "readRecordsOrg": true
+   },
+   "after": {
+    "schemaHere": true,
+    "schemaOrg": false,
+    "schemaTwo": false,
+    "schemaOther": false,
+    "shareHere": false,
+    "shareOrg": false,
+    "recordEditHere": true,
+    "recordEditOrg": false,
+    "recordEditTwo": false,
+    "recordEditOther": false,
+    "recordDeleteHere": true,
+    "recordDeleteOrg": false,
+    "readRecordsHere": true,
+    "readRecordsOrg": true
+   }
+  },
+  {
+   "name": "viewer raised to Editor here",
+   "uid": "uid-11",
+   "member": {
+    "role": "viewer",
+    "allHosts": true,
+    "hostAccess": {
+     "host-h": "editor"
+    }
+   },
+   "scopeTokens": [
+    "org"
+   ],
+   "resolved": {
+    "data.manage": false,
+    "org.eraseRecords": false,
+    "data.siteManage": false,
+    "data.siteDelete": false,
+    "data.viewRecords": true,
+    "data.export": true
+   },
+   "before": {
+    "schemaHere": false,
+    "schemaOrg": false,
+    "schemaTwo": false,
+    "schemaOther": false,
+    "shareHere": false,
+    "shareOrg": false,
+    "recordEditHere": false,
+    "recordEditOrg": false,
+    "recordEditTwo": false,
+    "recordEditOther": false,
+    "recordDeleteHere": false,
+    "recordDeleteOrg": false,
+    "readRecordsHere": true,
+    "readRecordsOrg": true
+   },
+   "after": {
+    "schemaHere": true,
+    "schemaOrg": false,
+    "schemaTwo": false,
+    "schemaOther": false,
+    "shareHere": false,
+    "shareOrg": false,
+    "recordEditHere": true,
+    "recordEditOrg": false,
+    "recordEditTwo": false,
+    "recordEditOther": false,
+    "recordDeleteHere": true,
+    "recordDeleteOrg": false,
+    "readRecordsHere": true,
+    "readRecordsOrg": true
+   }
+  },
+  {
+   "name": "viewer raised to Author here",
+   "uid": "uid-12",
+   "member": {
+    "role": "viewer",
+    "allHosts": true,
+    "hostAccess": {
+     "host-h": "author"
+    }
+   },
+   "scopeTokens": [
+    "org"
+   ],
+   "resolved": {
+    "data.manage": false,
+    "org.eraseRecords": false,
+    "data.siteManage": false,
+    "data.siteDelete": false,
+    "data.viewRecords": true,
+    "data.export": true
+   },
+   "before": {
+    "schemaHere": false,
+    "schemaOrg": false,
+    "schemaTwo": false,
+    "schemaOther": false,
+    "shareHere": false,
+    "shareOrg": false,
+    "recordEditHere": false,
+    "recordEditOrg": false,
+    "recordEditTwo": false,
+    "recordEditOther": false,
+    "recordDeleteHere": false,
+    "recordDeleteOrg": false,
+    "readRecordsHere": true,
+    "readRecordsOrg": true
+   },
+   "after": {
+    "schemaHere": false,
+    "schemaOrg": false,
+    "schemaTwo": false,
+    "schemaOther": false,
+    "shareHere": false,
+    "shareOrg": false,
+    "recordEditHere": false,
+    "recordEditOrg": false,
+    "recordEditTwo": false,
+    "recordEditOther": false,
+    "recordDeleteHere": false,
+    "recordDeleteOrg": false,
+    "readRecordsHere": true,
+    "readRecordsOrg": true
+   }
+  },
+  {
+   "name": "viewer raised to Editor here, override refuses Manage data",
+   "uid": "uid-13",
+   "member": {
+    "role": "viewer",
+    "allHosts": true,
+    "hostAccess": {
+     "host-h": "editor"
+    },
+    "permissions": {
+     "data.manage": false
+    }
+   },
+   "scopeTokens": [
+    "org"
+   ],
+   "resolved": {
+    "data.manage": false,
+    "org.eraseRecords": false,
+    "data.siteManage": false,
+    "data.siteDelete": false,
+    "data.viewRecords": true,
+    "data.export": true
+   },
+   "before": {
+    "schemaHere": false,
+    "schemaOrg": false,
+    "schemaTwo": false,
+    "schemaOther": false,
+    "shareHere": false,
+    "shareOrg": false,
+    "recordEditHere": false,
+    "recordEditOrg": false,
+    "recordEditTwo": false,
+    "recordEditOther": false,
+    "recordDeleteHere": false,
+    "recordDeleteOrg": false,
+    "readRecordsHere": true,
+    "readRecordsOrg": true
+   },
+   "after": {
+    "schemaHere": false,
+    "schemaOrg": false,
+    "schemaTwo": false,
+    "schemaOther": false,
+    "shareHere": false,
+    "shareOrg": false,
+    "recordEditHere": false,
+    "recordEditOrg": false,
+    "recordEditTwo": false,
+    "recordEditOther": false,
+    "recordDeleteHere": false,
+    "recordDeleteOrg": false,
+    "readRecordsHere": true,
+    "readRecordsOrg": true
+   }
+  },
+  {
+   "name": "editor narrowed to Author here",
+   "uid": "uid-14",
+   "member": {
+    "role": "editor",
+    "allHosts": true,
+    "hostAccess": {
+     "host-h": "author"
+    }
+   },
+   "scopeTokens": [
+    "org"
+   ],
+   "resolved": {
+    "data.manage": true,
+    "org.eraseRecords": true,
+    "data.siteManage": true,
+    "data.siteDelete": true,
+    "data.viewRecords": true,
+    "data.export": true
+   },
+   "before": {
+    "schemaHere": true,
+    "schemaOrg": true,
+    "schemaTwo": true,
+    "schemaOther": true,
+    "shareHere": true,
+    "shareOrg": true,
+    "recordEditHere": true,
+    "recordEditOrg": true,
+    "recordEditTwo": true,
+    "recordEditOther": true,
+    "recordDeleteHere": true,
+    "recordDeleteOrg": true,
+    "readRecordsHere": true,
+    "readRecordsOrg": true
+   },
+   "after": {
+    "schemaHere": false,
+    "schemaOrg": true,
+    "schemaTwo": true,
+    "schemaOther": true,
+    "shareHere": true,
+    "shareOrg": true,
+    "recordEditHere": false,
+    "recordEditOrg": true,
+    "recordEditTwo": true,
+    "recordEditOther": true,
+    "recordDeleteHere": false,
+    "recordDeleteOrg": true,
+    "readRecordsHere": true,
+    "readRecordsOrg": true
+   }
+  },
+  {
+   "name": "editor narrowed to Viewer here",
+   "uid": "uid-15",
+   "member": {
+    "role": "editor",
+    "allHosts": true,
+    "hostAccess": {
+     "host-h": "viewer"
+    }
+   },
+   "scopeTokens": [
+    "org"
+   ],
+   "resolved": {
+    "data.manage": true,
+    "org.eraseRecords": true,
+    "data.siteManage": true,
+    "data.siteDelete": true,
+    "data.viewRecords": true,
+    "data.export": true
+   },
+   "before": {
+    "schemaHere": true,
+    "schemaOrg": true,
+    "schemaTwo": true,
+    "schemaOther": true,
+    "shareHere": true,
+    "shareOrg": true,
+    "recordEditHere": true,
+    "recordEditOrg": true,
+    "recordEditTwo": true,
+    "recordEditOther": true,
+    "recordDeleteHere": true,
+    "recordDeleteOrg": true,
+    "readRecordsHere": true,
+    "readRecordsOrg": true
+   },
+   "after": {
+    "schemaHere": false,
+    "schemaOrg": true,
+    "schemaTwo": true,
+    "schemaOther": true,
+    "shareHere": true,
+    "shareOrg": true,
+    "recordEditHere": false,
+    "recordEditOrg": true,
+    "recordEditTwo": true,
+    "recordEditOther": true,
+    "recordDeleteHere": false,
+    "recordDeleteOrg": true,
+    "readRecordsHere": true,
+    "readRecordsOrg": true
+   }
+  },
+  {
+   "name": "editor narrowed to Author on the other site",
+   "uid": "uid-16",
+   "member": {
+    "role": "editor",
+    "allHosts": true,
+    "hostAccess": {
+     "host-other": "author"
+    }
+   },
+   "scopeTokens": [
+    "org"
+   ],
+   "resolved": {
+    "data.manage": true,
+    "org.eraseRecords": true,
+    "data.siteManage": true,
+    "data.siteDelete": true,
+    "data.viewRecords": true,
+    "data.export": true
+   },
+   "before": {
+    "schemaHere": true,
+    "schemaOrg": true,
+    "schemaTwo": true,
+    "schemaOther": true,
+    "shareHere": true,
+    "shareOrg": true,
+    "recordEditHere": true,
+    "recordEditOrg": true,
+    "recordEditTwo": true,
+    "recordEditOther": true,
+    "recordDeleteHere": true,
+    "recordDeleteOrg": true,
+    "readRecordsHere": true,
+    "readRecordsOrg": true
+   },
+   "after": {
+    "schemaHere": true,
+    "schemaOrg": true,
+    "schemaTwo": true,
+    "schemaOther": false,
+    "shareHere": true,
+    "shareOrg": true,
+    "recordEditHere": true,
+    "recordEditOrg": true,
+    "recordEditTwo": true,
+    "recordEditOther": false,
+    "recordDeleteHere": true,
+    "recordDeleteOrg": true,
+    "readRecordsHere": true,
+    "readRecordsOrg": true
+   }
+  },
+  {
+   "name": "editor narrowed to Viewer here, keeps both keys",
+   "uid": "uid-17",
+   "member": {
+    "role": "editor",
+    "allHosts": true,
+    "hostAccess": {
+     "host-h": "viewer"
+    },
+    "siteNarrowing": {
+     "data.siteManage": false,
+     "data.siteDelete": false
+    }
+   },
+   "scopeTokens": [
+    "org"
+   ],
+   "resolved": {
+    "data.manage": true,
+    "org.eraseRecords": true,
+    "data.siteManage": true,
+    "data.siteDelete": true,
+    "data.viewRecords": true,
+    "data.export": true
+   },
+   "before": {
+    "schemaHere": true,
+    "schemaOrg": true,
+    "schemaTwo": true,
+    "schemaOther": true,
+    "shareHere": true,
+    "shareOrg": true,
+    "recordEditHere": true,
+    "recordEditOrg": true,
+    "recordEditTwo": true,
+    "recordEditOther": true,
+    "recordDeleteHere": true,
+    "recordDeleteOrg": true,
+    "readRecordsHere": true,
+    "readRecordsOrg": true
+   },
+   "after": {
+    "schemaHere": true,
+    "schemaOrg": true,
+    "schemaTwo": true,
+    "schemaOther": true,
+    "shareHere": true,
+    "shareOrg": true,
+    "recordEditHere": true,
+    "recordEditOrg": true,
+    "recordEditTwo": true,
+    "recordEditOther": true,
+    "recordDeleteHere": true,
+    "recordDeleteOrg": true,
+    "readRecordsHere": true,
+    "readRecordsOrg": true
+   }
+  },
+  {
+   "name": "editor narrowed to Viewer here, custom role keeps both keys",
+   "uid": "uid-18",
+   "member": {
+    "role": "editor",
+    "allHosts": true,
+    "hostAccess": {
+     "host-h": "viewer"
+    },
+    "roleId": "r4"
+   },
+   "customRole": {
+    "permissions": {},
+    "siteNarrowing": {
+     "data.siteManage": false,
+     "data.siteDelete": false
+    }
+   },
+   "scopeTokens": [
+    "org"
+   ],
+   "resolved": {
+    "data.manage": true,
+    "org.eraseRecords": true,
+    "data.siteManage": true,
+    "data.siteDelete": true,
+    "data.viewRecords": true,
+    "data.export": true
+   },
+   "before": {
+    "schemaHere": true,
+    "schemaOrg": true,
+    "schemaTwo": true,
+    "schemaOther": true,
+    "shareHere": true,
+    "shareOrg": true,
+    "recordEditHere": true,
+    "recordEditOrg": true,
+    "recordEditTwo": true,
+    "recordEditOther": true,
+    "recordDeleteHere": true,
+    "recordDeleteOrg": true,
+    "readRecordsHere": true,
+    "readRecordsOrg": true
+   },
+   "after": {
+    "schemaHere": true,
+    "schemaOrg": true,
+    "schemaTwo": true,
+    "schemaOther": true,
+    "shareHere": true,
+    "shareOrg": true,
+    "recordEditHere": true,
+    "recordEditOrg": true,
+    "recordEditTwo": true,
+    "recordEditOther": true,
+    "recordDeleteHere": true,
+    "recordDeleteOrg": true,
+    "readRecordsHere": true,
+    "readRecordsOrg": true
+   }
+  },
+  {
+   "name": "editor narrowed to Viewer here, the site grants both keys back",
+   "uid": "uid-19",
+   "member": {
+    "role": "editor",
+    "allHosts": true,
+    "hostAccess": {
+     "host-h": "viewer"
+    },
+    "hostPermissions": {
+     "host-h": {
+      "data.siteManage": true,
+      "data.siteDelete": true
+     }
+    }
+   },
+   "scopeTokens": [
+    "org"
+   ],
+   "resolved": {
+    "data.manage": true,
+    "org.eraseRecords": true,
+    "data.siteManage": true,
+    "data.siteDelete": true,
+    "data.viewRecords": true,
+    "data.export": true
+   },
+   "before": {
+    "schemaHere": true,
+    "schemaOrg": true,
+    "schemaTwo": true,
+    "schemaOther": true,
+    "shareHere": true,
+    "shareOrg": true,
+    "recordEditHere": true,
+    "recordEditOrg": true,
+    "recordEditTwo": true,
+    "recordEditOther": true,
+    "recordDeleteHere": true,
+    "recordDeleteOrg": true,
+    "readRecordsHere": true,
+    "readRecordsOrg": true
+   },
+   "after": {
+    "schemaHere": true,
+    "schemaOrg": true,
+    "schemaTwo": true,
+    "schemaOther": true,
+    "shareHere": true,
+    "shareOrg": true,
+    "recordEditHere": true,
+    "recordEditOrg": true,
+    "recordEditTwo": true,
+    "recordEditOther": true,
+    "recordDeleteHere": true,
+    "recordDeleteOrg": true,
+    "readRecordsHere": true,
+    "readRecordsOrg": true
+   }
+  },
+  {
+   "name": "collaborator (viewer doc) site Admin",
+   "uid": "uid-20",
+   "member": {
+    "role": "viewer",
+    "allHosts": false,
+    "hostAccess": {
+     "host-h": "admin"
+    }
+   },
+   "scopeTokens": [
+    "org",
+    "host:host-h"
+   ],
+   "resolved": {
+    "data.manage": false,
+    "org.eraseRecords": false,
+    "data.siteManage": false,
+    "data.siteDelete": false,
+    "data.viewRecords": true,
+    "data.export": true
+   },
+   "before": {
+    "schemaHere": false,
+    "schemaOrg": false,
+    "schemaTwo": false,
+    "schemaOther": false,
+    "shareHere": false,
+    "shareOrg": false,
+    "recordEditHere": false,
+    "recordEditOrg": false,
+    "recordEditTwo": false,
+    "recordEditOther": false,
+    "recordDeleteHere": false,
+    "recordDeleteOrg": false,
+    "readRecordsHere": true,
+    "readRecordsOrg": true
+   },
+   "after": {
+    "schemaHere": true,
+    "schemaOrg": false,
+    "schemaTwo": false,
+    "schemaOther": false,
+    "shareHere": false,
+    "shareOrg": false,
+    "recordEditHere": true,
+    "recordEditOrg": false,
+    "recordEditTwo": false,
+    "recordEditOther": false,
+    "recordDeleteHere": true,
+    "recordDeleteOrg": false,
+    "readRecordsHere": true,
+    "readRecordsOrg": true
+   }
+  },
+  {
+   "name": "collaborator (viewer doc) site Editor",
+   "uid": "uid-21",
+   "member": {
+    "role": "viewer",
+    "allHosts": false,
+    "hostAccess": {
+     "host-h": "editor"
+    }
+   },
+   "scopeTokens": [
+    "org",
+    "host:host-h"
+   ],
+   "resolved": {
+    "data.manage": false,
+    "org.eraseRecords": false,
+    "data.siteManage": false,
+    "data.siteDelete": false,
+    "data.viewRecords": true,
+    "data.export": true
+   },
+   "before": {
+    "schemaHere": false,
+    "schemaOrg": false,
+    "schemaTwo": false,
+    "schemaOther": false,
+    "shareHere": false,
+    "shareOrg": false,
+    "recordEditHere": false,
+    "recordEditOrg": false,
+    "recordEditTwo": false,
+    "recordEditOther": false,
+    "recordDeleteHere": false,
+    "recordDeleteOrg": false,
+    "readRecordsHere": true,
+    "readRecordsOrg": true
+   },
+   "after": {
+    "schemaHere": true,
+    "schemaOrg": false,
+    "schemaTwo": false,
+    "schemaOther": false,
+    "shareHere": false,
+    "shareOrg": false,
+    "recordEditHere": true,
+    "recordEditOrg": false,
+    "recordEditTwo": false,
+    "recordEditOther": false,
+    "recordDeleteHere": true,
+    "recordDeleteOrg": false,
+    "readRecordsHere": true,
+    "readRecordsOrg": true
+   }
+  },
+  {
+   "name": "collaborator (viewer doc) site Author",
+   "uid": "uid-22",
+   "member": {
+    "role": "viewer",
+    "allHosts": false,
+    "hostAccess": {
+     "host-h": "author"
+    }
+   },
+   "scopeTokens": [
+    "org",
+    "host:host-h"
+   ],
+   "resolved": {
+    "data.manage": false,
+    "org.eraseRecords": false,
+    "data.siteManage": false,
+    "data.siteDelete": false,
+    "data.viewRecords": true,
+    "data.export": true
+   },
+   "before": {
+    "schemaHere": false,
+    "schemaOrg": false,
+    "schemaTwo": false,
+    "schemaOther": false,
+    "shareHere": false,
+    "shareOrg": false,
+    "recordEditHere": false,
+    "recordEditOrg": false,
+    "recordEditTwo": false,
+    "recordEditOther": false,
+    "recordDeleteHere": false,
+    "recordDeleteOrg": false,
+    "readRecordsHere": true,
+    "readRecordsOrg": true
+   },
+   "after": {
+    "schemaHere": false,
+    "schemaOrg": false,
+    "schemaTwo": false,
+    "schemaOther": false,
+    "shareHere": false,
+    "shareOrg": false,
+    "recordEditHere": false,
+    "recordEditOrg": false,
+    "recordEditTwo": false,
+    "recordEditOther": false,
+    "recordDeleteHere": false,
+    "recordDeleteOrg": false,
+    "readRecordsHere": true,
+    "readRecordsOrg": true
+   }
+  },
+  {
+   "name": "collaborator (viewer doc) site Viewer",
+   "uid": "uid-23",
+   "member": {
+    "role": "viewer",
+    "allHosts": false,
+    "hostAccess": {
+     "host-h": "viewer"
+    }
+   },
+   "scopeTokens": [
+    "org",
+    "host:host-h"
+   ],
+   "resolved": {
+    "data.manage": false,
+    "org.eraseRecords": false,
+    "data.siteManage": false,
+    "data.siteDelete": false,
+    "data.viewRecords": true,
+    "data.export": true
+   },
+   "before": {
+    "schemaHere": false,
+    "schemaOrg": false,
+    "schemaTwo": false,
+    "schemaOther": false,
+    "shareHere": false,
+    "shareOrg": false,
+    "recordEditHere": false,
+    "recordEditOrg": false,
+    "recordEditTwo": false,
+    "recordEditOther": false,
+    "recordDeleteHere": false,
+    "recordDeleteOrg": false,
+    "readRecordsHere": true,
+    "readRecordsOrg": true
+   },
+   "after": {
+    "schemaHere": false,
+    "schemaOrg": false,
+    "schemaTwo": false,
+    "schemaOther": false,
+    "shareHere": false,
+    "shareOrg": false,
+    "recordEditHere": false,
+    "recordEditOrg": false,
+    "recordEditTwo": false,
+    "recordEditOther": false,
+    "recordDeleteHere": false,
+    "recordDeleteOrg": false,
+    "readRecordsHere": true,
+    "readRecordsOrg": true
+   }
+  },
+  {
+   "name": "collaborator (viewer doc) site Author, site toggle ON",
+   "uid": "uid-24",
+   "member": {
+    "role": "viewer",
+    "allHosts": false,
+    "hostAccess": {
+     "host-h": "author"
+    },
+    "hostPermissions": {
+     "host-h": {
+      "data.siteManage": true,
+      "data.siteDelete": true
+     }
+    }
+   },
+   "scopeTokens": [
+    "org",
+    "host:host-h"
+   ],
+   "resolved": {
+    "data.manage": false,
+    "org.eraseRecords": false,
+    "data.siteManage": false,
+    "data.siteDelete": false,
+    "data.viewRecords": true,
+    "data.export": true
+   },
+   "before": {
+    "schemaHere": false,
+    "schemaOrg": false,
+    "schemaTwo": false,
+    "schemaOther": false,
+    "shareHere": false,
+    "shareOrg": false,
+    "recordEditHere": false,
+    "recordEditOrg": false,
+    "recordEditTwo": false,
+    "recordEditOther": false,
+    "recordDeleteHere": false,
+    "recordDeleteOrg": false,
+    "readRecordsHere": true,
+    "readRecordsOrg": true
+   },
+   "after": {
+    "schemaHere": true,
+    "schemaOrg": false,
+    "schemaTwo": false,
+    "schemaOther": false,
+    "shareHere": false,
+    "shareOrg": false,
+    "recordEditHere": true,
+    "recordEditOrg": false,
+    "recordEditTwo": false,
+    "recordEditOther": false,
+    "recordDeleteHere": true,
+    "recordDeleteOrg": false,
+    "readRecordsHere": true,
+    "readRecordsOrg": true
+   }
+  },
+  {
+   "name": "collaborator (viewer doc) site Editor, site toggle OFF",
+   "uid": "uid-25",
+   "member": {
+    "role": "viewer",
+    "allHosts": false,
+    "hostAccess": {
+     "host-h": "editor"
+    },
+    "hostPermissions": {
+     "host-h": {
+      "data.siteManage": false,
+      "data.siteDelete": false
+     }
+    }
+   },
+   "scopeTokens": [
+    "org",
+    "host:host-h"
+   ],
+   "resolved": {
+    "data.manage": false,
+    "org.eraseRecords": false,
+    "data.siteManage": false,
+    "data.siteDelete": false,
+    "data.viewRecords": true,
+    "data.export": true
+   },
+   "before": {
+    "schemaHere": false,
+    "schemaOrg": false,
+    "schemaTwo": false,
+    "schemaOther": false,
+    "shareHere": false,
+    "shareOrg": false,
+    "recordEditHere": false,
+    "recordEditOrg": false,
+    "recordEditTwo": false,
+    "recordEditOther": false,
+    "recordDeleteHere": false,
+    "recordDeleteOrg": false,
+    "readRecordsHere": true,
+    "readRecordsOrg": true
+   },
+   "after": {
+    "schemaHere": false,
+    "schemaOrg": false,
+    "schemaTwo": false,
+    "schemaOther": false,
+    "shareHere": false,
+    "shareOrg": false,
+    "recordEditHere": false,
+    "recordEditOrg": false,
+    "recordEditTwo": false,
+    "recordEditOther": false,
+    "recordDeleteHere": false,
+    "recordDeleteOrg": false,
+    "readRecordsHere": true,
+    "readRecordsOrg": true
+   }
+  },
+  {
+   "name": "collaborator (viewer doc) site Viewer, override grants Manage data and Delete",
+   "uid": "uid-26",
+   "member": {
+    "role": "viewer",
+    "allHosts": false,
+    "hostAccess": {
+     "host-h": "viewer"
+    },
+    "permissions": {
+     "data.manage": true,
+     "org.eraseRecords": true
+    }
+   },
+   "scopeTokens": [
+    "org",
+    "host:host-h"
+   ],
+   "resolved": {
+    "data.manage": true,
+    "org.eraseRecords": true,
+    "data.siteManage": true,
+    "data.siteDelete": true,
+    "data.viewRecords": true,
+    "data.export": true
+   },
+   "before": {
+    "schemaHere": true,
+    "schemaOrg": true,
+    "schemaTwo": true,
+    "schemaOther": false,
+    "shareHere": false,
+    "shareOrg": false,
+    "recordEditHere": true,
+    "recordEditOrg": true,
+    "recordEditTwo": true,
+    "recordEditOther": false,
+    "recordDeleteHere": true,
+    "recordDeleteOrg": true,
+    "readRecordsHere": true,
+    "readRecordsOrg": true
+   },
+   "after": {
+    "schemaHere": true,
+    "schemaOrg": true,
+    "schemaTwo": true,
+    "schemaOther": false,
+    "shareHere": false,
+    "shareOrg": false,
+    "recordEditHere": true,
+    "recordEditOrg": true,
+    "recordEditTwo": true,
+    "recordEditOther": false,
+    "recordDeleteHere": true,
+    "recordDeleteOrg": true,
+    "readRecordsHere": true,
+    "readRecordsOrg": true
+   }
+  },
+  {
+   "name": "collaborator (editor doc) site Admin",
+   "uid": "uid-27",
+   "member": {
+    "role": "editor",
+    "allHosts": false,
+    "hostAccess": {
+     "host-h": "admin"
+    }
+   },
+   "scopeTokens": [
+    "org",
+    "host:host-h"
+   ],
+   "resolved": {
+    "data.manage": true,
+    "org.eraseRecords": true,
+    "data.siteManage": true,
+    "data.siteDelete": true,
+    "data.viewRecords": true,
+    "data.export": true
+   },
+   "before": {
+    "schemaHere": true,
+    "schemaOrg": true,
+    "schemaTwo": true,
+    "schemaOther": false,
+    "shareHere": false,
+    "shareOrg": false,
+    "recordEditHere": true,
+    "recordEditOrg": true,
+    "recordEditTwo": true,
+    "recordEditOther": false,
+    "recordDeleteHere": true,
+    "recordDeleteOrg": true,
+    "readRecordsHere": true,
+    "readRecordsOrg": true
+   },
+   "after": {
+    "schemaHere": true,
+    "schemaOrg": true,
+    "schemaTwo": true,
+    "schemaOther": false,
+    "shareHere": false,
+    "shareOrg": false,
+    "recordEditHere": true,
+    "recordEditOrg": true,
+    "recordEditTwo": true,
+    "recordEditOther": false,
+    "recordDeleteHere": true,
+    "recordDeleteOrg": true,
+    "readRecordsHere": true,
+    "readRecordsOrg": true
+   }
+  },
+  {
+   "name": "collaborator (editor doc) site Editor",
+   "uid": "uid-28",
+   "member": {
+    "role": "editor",
+    "allHosts": false,
+    "hostAccess": {
+     "host-h": "editor"
+    }
+   },
+   "scopeTokens": [
+    "org",
+    "host:host-h"
+   ],
+   "resolved": {
+    "data.manage": true,
+    "org.eraseRecords": true,
+    "data.siteManage": true,
+    "data.siteDelete": true,
+    "data.viewRecords": true,
+    "data.export": true
+   },
+   "before": {
+    "schemaHere": true,
+    "schemaOrg": true,
+    "schemaTwo": true,
+    "schemaOther": false,
+    "shareHere": false,
+    "shareOrg": false,
+    "recordEditHere": true,
+    "recordEditOrg": true,
+    "recordEditTwo": true,
+    "recordEditOther": false,
+    "recordDeleteHere": true,
+    "recordDeleteOrg": true,
+    "readRecordsHere": true,
+    "readRecordsOrg": true
+   },
+   "after": {
+    "schemaHere": true,
+    "schemaOrg": true,
+    "schemaTwo": true,
+    "schemaOther": false,
+    "shareHere": false,
+    "shareOrg": false,
+    "recordEditHere": true,
+    "recordEditOrg": true,
+    "recordEditTwo": true,
+    "recordEditOther": false,
+    "recordDeleteHere": true,
+    "recordDeleteOrg": true,
+    "readRecordsHere": true,
+    "readRecordsOrg": true
+   }
+  },
+  {
+   "name": "collaborator (editor doc) site Author",
+   "uid": "uid-29",
+   "member": {
+    "role": "editor",
+    "allHosts": false,
+    "hostAccess": {
+     "host-h": "author"
+    }
+   },
+   "scopeTokens": [
+    "org",
+    "host:host-h"
+   ],
+   "resolved": {
+    "data.manage": true,
+    "org.eraseRecords": true,
+    "data.siteManage": true,
+    "data.siteDelete": true,
+    "data.viewRecords": true,
+    "data.export": true
+   },
+   "before": {
+    "schemaHere": true,
+    "schemaOrg": true,
+    "schemaTwo": true,
+    "schemaOther": false,
+    "shareHere": false,
+    "shareOrg": false,
+    "recordEditHere": true,
+    "recordEditOrg": true,
+    "recordEditTwo": true,
+    "recordEditOther": false,
+    "recordDeleteHere": true,
+    "recordDeleteOrg": true,
+    "readRecordsHere": true,
+    "readRecordsOrg": true
+   },
+   "after": {
+    "schemaHere": true,
+    "schemaOrg": true,
+    "schemaTwo": true,
+    "schemaOther": false,
+    "shareHere": false,
+    "shareOrg": false,
+    "recordEditHere": true,
+    "recordEditOrg": true,
+    "recordEditTwo": true,
+    "recordEditOther": false,
+    "recordDeleteHere": true,
+    "recordDeleteOrg": true,
+    "readRecordsHere": true,
+    "readRecordsOrg": true
+   }
+  },
+  {
+   "name": "collaborator (editor doc) site Viewer",
+   "uid": "uid-30",
+   "member": {
+    "role": "editor",
+    "allHosts": false,
+    "hostAccess": {
+     "host-h": "viewer"
+    }
+   },
+   "scopeTokens": [
+    "org",
+    "host:host-h"
+   ],
+   "resolved": {
+    "data.manage": true,
+    "org.eraseRecords": true,
+    "data.siteManage": true,
+    "data.siteDelete": true,
+    "data.viewRecords": true,
+    "data.export": true
+   },
+   "before": {
+    "schemaHere": true,
+    "schemaOrg": true,
+    "schemaTwo": true,
+    "schemaOther": false,
+    "shareHere": false,
+    "shareOrg": false,
+    "recordEditHere": true,
+    "recordEditOrg": true,
+    "recordEditTwo": true,
+    "recordEditOther": false,
+    "recordDeleteHere": true,
+    "recordDeleteOrg": true,
+    "readRecordsHere": true,
+    "readRecordsOrg": true
+   },
+   "after": {
+    "schemaHere": true,
+    "schemaOrg": true,
+    "schemaTwo": true,
+    "schemaOther": false,
+    "shareHere": false,
+    "shareOrg": false,
+    "recordEditHere": true,
+    "recordEditOrg": true,
+    "recordEditTwo": true,
+    "recordEditOther": false,
+    "recordDeleteHere": true,
+    "recordDeleteOrg": true,
+    "readRecordsHere": true,
+    "readRecordsOrg": true
+   }
+  },
+  {
+   "name": "editor, View records taken by override",
+   "uid": "uid-31",
+   "member": {
+    "role": "editor",
+    "allHosts": true,
+    "permissions": {
+     "data.viewRecords": false
+    }
+   },
+   "scopeTokens": [
+    "org"
+   ],
+   "resolved": {
+    "data.manage": true,
+    "org.eraseRecords": true,
+    "data.siteManage": true,
+    "data.siteDelete": true,
+    "data.viewRecords": false,
+    "data.export": false
+   },
+   "before": {
+    "schemaHere": true,
+    "schemaOrg": true,
+    "schemaTwo": true,
+    "schemaOther": true,
+    "shareHere": true,
+    "shareOrg": true,
+    "recordEditHere": true,
+    "recordEditOrg": true,
+    "recordEditTwo": true,
+    "recordEditOther": true,
+    "recordDeleteHere": true,
+    "recordDeleteOrg": true,
+    "readRecordsHere": true,
+    "readRecordsOrg": true
+   },
+   "after": {
+    "schemaHere": true,
+    "schemaOrg": true,
+    "schemaTwo": true,
+    "schemaOther": true,
+    "shareHere": true,
+    "shareOrg": true,
+    "recordEditHere": true,
+    "recordEditOrg": true,
+    "recordEditTwo": true,
+    "recordEditOther": true,
+    "recordDeleteHere": true,
+    "recordDeleteOrg": true,
+    "readRecordsHere": false,
+    "readRecordsOrg": false
+   }
+  },
+  {
+   "name": "viewer, View records taken by custom role",
+   "uid": "uid-32",
+   "member": {
+    "role": "viewer",
+    "allHosts": true,
+    "roleId": "r5"
+   },
+   "customRole": {
+    "permissions": {
+     "data.viewRecords": false
+    }
+   },
+   "scopeTokens": [
+    "org"
+   ],
+   "resolved": {
+    "data.manage": false,
+    "org.eraseRecords": false,
+    "data.siteManage": false,
+    "data.siteDelete": false,
+    "data.viewRecords": false,
+    "data.export": false
+   },
+   "before": {
+    "schemaHere": false,
+    "schemaOrg": false,
+    "schemaTwo": false,
+    "schemaOther": false,
+    "shareHere": false,
+    "shareOrg": false,
+    "recordEditHere": false,
+    "recordEditOrg": false,
+    "recordEditTwo": false,
+    "recordEditOther": false,
+    "recordDeleteHere": false,
+    "recordDeleteOrg": false,
+    "readRecordsHere": true,
+    "readRecordsOrg": true
+   },
+   "after": {
+    "schemaHere": false,
+    "schemaOrg": false,
+    "schemaTwo": false,
+    "schemaOther": false,
+    "shareHere": false,
+    "shareOrg": false,
+    "recordEditHere": false,
+    "recordEditOrg": false,
+    "recordEditTwo": false,
+    "recordEditOther": false,
+    "recordDeleteHere": false,
+    "recordDeleteOrg": false,
+    "readRecordsHere": false,
+    "readRecordsOrg": false
+   }
+  },
+  {
+   "name": "collaborator site Editor, View records taken by override",
+   "uid": "uid-33",
+   "member": {
+    "role": "viewer",
+    "allHosts": false,
+    "hostAccess": {
+     "host-h": "editor"
+    },
+    "permissions": {
+     "data.viewRecords": false
+    }
+   },
+   "scopeTokens": [
+    "org",
+    "host:host-h"
+   ],
+   "resolved": {
+    "data.manage": false,
+    "org.eraseRecords": false,
+    "data.siteManage": false,
+    "data.siteDelete": false,
+    "data.viewRecords": false,
+    "data.export": false
+   },
+   "before": {
+    "schemaHere": false,
+    "schemaOrg": false,
+    "schemaTwo": false,
+    "schemaOther": false,
+    "shareHere": false,
+    "shareOrg": false,
+    "recordEditHere": false,
+    "recordEditOrg": false,
+    "recordEditTwo": false,
+    "recordEditOther": false,
+    "recordDeleteHere": false,
+    "recordDeleteOrg": false,
+    "readRecordsHere": true,
+    "readRecordsOrg": true
+   },
+   "after": {
+    "schemaHere": true,
+    "schemaOrg": false,
+    "schemaTwo": false,
+    "schemaOther": false,
+    "shareHere": false,
+    "shareOrg": false,
+    "recordEditHere": true,
+    "recordEditOrg": false,
+    "recordEditTwo": false,
+    "recordEditOther": false,
+    "recordDeleteHere": true,
+    "recordDeleteOrg": false,
+    "readRecordsHere": false,
+    "readRecordsOrg": false
+   }
+  },
+  {
+   "name": "editor, Export taken by override",
+   "uid": "uid-34",
+   "member": {
+    "role": "editor",
+    "allHosts": true,
+    "permissions": {
+     "data.export": false
+    }
+   },
+   "scopeTokens": [
+    "org"
+   ],
+   "resolved": {
+    "data.manage": true,
+    "org.eraseRecords": true,
+    "data.siteManage": true,
+    "data.siteDelete": true,
+    "data.viewRecords": true,
+    "data.export": false
+   },
+   "before": {
+    "schemaHere": true,
+    "schemaOrg": true,
+    "schemaTwo": true,
+    "schemaOther": true,
+    "shareHere": true,
+    "shareOrg": true,
+    "recordEditHere": true,
+    "recordEditOrg": true,
+    "recordEditTwo": true,
+    "recordEditOther": true,
+    "recordDeleteHere": true,
+    "recordDeleteOrg": true,
+    "readRecordsHere": true,
+    "readRecordsOrg": true
+   },
+   "after": {
+    "schemaHere": true,
+    "schemaOrg": true,
+    "schemaTwo": true,
+    "schemaOther": true,
+    "shareHere": true,
+    "shareOrg": true,
+    "recordEditHere": true,
+    "recordEditOrg": true,
+    "recordEditTwo": true,
+    "recordEditOther": true,
+    "recordDeleteHere": true,
+    "recordDeleteOrg": true,
+    "readRecordsHere": true,
+    "readRecordsOrg": true
+   }
+  },
+  {
+   "name": "viewer, Export taken by custom role",
+   "uid": "uid-35",
+   "member": {
+    "role": "viewer",
+    "allHosts": true,
+    "roleId": "r6"
+   },
+   "customRole": {
+    "permissions": {
+     "data.export": false
+    }
+   },
+   "scopeTokens": [
+    "org"
+   ],
+   "resolved": {
+    "data.manage": false,
+    "org.eraseRecords": false,
+    "data.siteManage": false,
+    "data.siteDelete": false,
+    "data.viewRecords": true,
+    "data.export": false
+   },
+   "before": {
+    "schemaHere": false,
+    "schemaOrg": false,
+    "schemaTwo": false,
+    "schemaOther": false,
+    "shareHere": false,
+    "shareOrg": false,
+    "recordEditHere": false,
+    "recordEditOrg": false,
+    "recordEditTwo": false,
+    "recordEditOther": false,
+    "recordDeleteHere": false,
+    "recordDeleteOrg": false,
+    "readRecordsHere": true,
+    "readRecordsOrg": true
+   },
+   "after": {
+    "schemaHere": false,
+    "schemaOrg": false,
+    "schemaTwo": false,
+    "schemaOther": false,
+    "shareHere": false,
+    "shareOrg": false,
+    "recordEditHere": false,
+    "recordEditOrg": false,
+    "recordEditTwo": false,
+    "recordEditOther": false,
+    "recordDeleteHere": false,
+    "recordDeleteOrg": false,
+    "readRecordsHere": true,
+    "readRecordsOrg": true
+   }
+  }
+ ]
+}

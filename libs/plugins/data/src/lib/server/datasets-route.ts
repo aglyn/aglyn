@@ -41,9 +41,10 @@ import {
   resolveOrgMembership,
 } from '@aglyn/tenant-data-admin'
 import { isRefusedIdToken } from '@aglyn/tenant-data-admin/server/id-token-refusal'
-import { permissionRefusalText } from '@aglyn/aglyn/app-utils/org-permissions'
 import { FieldPath, FieldValue, Timestamp } from 'firebase-admin/firestore'
+import { dataPermissionRefusal } from '../model/dataset-access'
 import { announceDatasetRecords as announceDatasetChange } from './announce-dataset-records'
+import { datasetRefusalPermission, memberMayActOnDataset } from './dataset-access.server'
 import { coerceDocumentValues, datasetIntegrityFields, datasetIntegrityUpdate, effectiveDatasetModel, validateDocument } from '../model/dataset-models'
 import { defaultDatasetFieldId } from '../model/datasets'
 import { planReferenceFixups, referencingFieldIds, restrictedDeleteMessage } from '../model/dataset-record-delete-plan'
@@ -89,16 +90,30 @@ async function refuseIfDataStorageBlocked(
 const DATASETS_PERMISSION = 'data.manage'
 
 /** The 403 for a member without it, naming the permission, never a role. */
-function datasetsPermissionRefusal(): Response {
+function datasetsPermissionRefusal(permission: string = DATASETS_PERMISSION): Response {
   return Response.json(
     {
-      error: permissionRefusalText(DATASETS_PERMISSION),
+      error: dataPermissionRefusal(permission),
       reason: 'permission',
-      permission: DATASETS_PERMISSION,
+      permission,
     },
     { status: 403 },
   )
 }
+
+/**
+ * The actions on one existing dataset, whose answer depends on where it is
+ * placed (AGL-4047): `memberMayActOnDataset`, asked once the dataset is read.
+ * Every other action asks "Manage data" up front.
+ */
+const DATASET_ACTIONS: ReadonlySet<string> = new Set([
+  'create-record',
+  'import-records',
+  'announce-records',
+  'add-address-field',
+  'update-record',
+  'delete-record',
+])
 
 /**
  * Rows written per import transaction.
@@ -181,9 +196,13 @@ export const datasetsHandler: PluginWebApiHandler = async (request) => {
      * route as it opens the rules' `canWriteOrgDatasets()`, and a refusal
      * names the permission. Staff keep their bypass, as the rules' `isStaff()`
      * does, and still need a membership.
+     *
+     * The actions on one dataset ask below, once it is read (AGL-4047): a
+     * dataset placed on one site answers to that site as well.
      *=========================================*/
     if (
       decoded['staff'] !== true &&
+      !DATASET_ACTIONS.has(action) &&
       !(await memberHasOrgPermission(orgId, member, DATASETS_PERMISSION))
     ) {
       return datasetsPermissionRefusal()
@@ -362,14 +381,7 @@ export const datasetsHandler: PluginWebApiHandler = async (request) => {
       return Response.json({ ok: true, id }, { status: 200 })
     }
 
-    if (
-      action === 'create-record' ||
-      action === 'import-records' ||
-      action === 'announce-records' ||
-      action === 'add-address-field' ||
-      action === 'update-record' ||
-      action === 'delete-record'
-    ) {
+    if (DATASET_ACTIONS.has(action)) {
       const datasetId = String(body?.datasetId ?? '')
       if (!datasetId) {
         return Response.json({ error: 'Missing datasetId' }, { status: 400 })
@@ -382,8 +394,8 @@ export const datasetsHandler: PluginWebApiHandler = async (request) => {
       /**
        * The caller has to be able to SEE the dataset they add rows to.
        *
-       * The `data.manage` gate above is about the org, and a member scoped
-       * to one site can pass it. The rules hold every record update and
+       * "Manage data" is about the org, and a member scoped to one site can
+       * hold it. The rules hold every record update and
        * delete to the parent dataset being visible (`parentDatasetVisible()`),
        * and refuse client record creates outright, so this route is the one
        * place a member's create can be held to the same condition. Without it,
@@ -404,6 +416,18 @@ export const datasetsHandler: PluginWebApiHandler = async (request) => {
         )
       ) {
         return Response.json({ error: 'Unknown dataset' }, { status: 404 })
+      }
+      /**
+       * Who may write THIS dataset (AGL-4047), the rules' `canWriteDatasetOn`:
+       * "Manage data", unless a site narrows the member on the one site it is
+       * placed on; or that one site's verdict.
+       */
+      const placedOn = (datasetSnapshot.data() as { visibleTo?: string[] } | undefined)?.visibleTo
+      if (
+        decoded['staff'] !== true &&
+        !(await memberMayActOnDataset({ firestore, orgId, uid: decoded.uid, member, visibleTo: placedOn, act: 'write' }))
+      ) {
+        return datasetsPermissionRefusal(datasetRefusalPermission('write', placedOn))
       }
       /**
        * A record the BROWSER wrote, announcing itself (AGL-3113).
@@ -522,7 +546,7 @@ export const datasetsHandler: PluginWebApiHandler = async (request) => {
        * Firestore — it consumes no quota — with the values coerced, filled
        * and validated against the model and the integrity and filter index
        * moved with them; the native apps reach the same write here, under
-       * the same `data.manage` and visibility gates as a create.
+       * the same write and visibility gates as a create.
        * `values` is replaced whole, so a removed field's value strips here,
        * as it does on the card (the AGL-178 policy).
        */
@@ -597,7 +621,18 @@ export const datasetsHandler: PluginWebApiHandler = async (request) => {
               { status: 409 },
             )
           }
-          if (plan.kind === 'strip') fixups.push({ datasetId: other.id, model: otherModel, updates: plan.updates })
+          if (plan.kind === 'strip') {
+            // Stripping a reference writes THAT dataset, so it asks what writing
+            // it asks, as the card's client-direct batch does at the rule (AGL-4047).
+            const otherPlacedOn = (other.data() as { visibleTo?: string[] }).visibleTo
+            if (
+              decoded['staff'] !== true &&
+              !(await memberMayActOnDataset({ firestore, orgId, uid: decoded.uid, member, visibleTo: otherPlacedOn, act: 'write' }))
+            ) {
+              return datasetsPermissionRefusal(datasetRefusalPermission('write', otherPlacedOn))
+            }
+            fixups.push({ datasetId: other.id, model: otherModel, updates: plan.updates })
+          }
         }
         for (const fixup of fixups) {
           const holdersRef = orgRef.collection('datasets').doc(fixup.datasetId).collection('records')

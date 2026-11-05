@@ -32,6 +32,7 @@ export function registerPluginServerDeclarations(): Promise<void> {
     ;(await import('@aglyn/plugins-accounting/declarations.console')).registerAccountingConsoleDeclarations()
     ;(await import('@aglyn/plugins-accounting/declarations.server')).registerAccountingServerDeclarations()
     ;(await import('@aglyn/plugins-accounting/declarations.console-server')).registerAccountingConsoleServerDeclarations()
+    ;(await import('@aglyn/plugins-data/declarations')).registerDataDeclarations()
     ;(await import('@aglyn/plugins-data/declarations.server')).registerDataServerDeclarations()
     ;(await import('@aglyn/plugins-data/declarations.console-server')).registerDataConsoleServerDeclarations()
     ;(await import('@aglyn/plugins-email/declarations')).registerEmailDeclarations()

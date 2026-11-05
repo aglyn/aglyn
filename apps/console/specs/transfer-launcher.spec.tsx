@@ -56,7 +56,7 @@ jest.mock('next/dynamic', () => ({
 
 let mockOrg: { $id: string; role?: string; orgWide?: boolean } | null = { $id: 'org-1' }
 const mockFirestore = {}
-let mockGranted = new Set<string>(['data.manage'])
+let mockGranted = new Set<string>(['data.manage', 'data.export'])
 let mockPermissionsLoaded = true
 let mockMemberDoc: Record<string, unknown> | null = null
 
@@ -155,7 +155,7 @@ function PluginList() {
 beforeEach(() => {
   mockKit.length = 0
   mockOrg = { $id: 'org-1' }
-  mockGranted = new Set(['data.manage'])
+  mockGranted = new Set(['data.manage', 'data.export'])
   mockPermissionsLoaded = true
   mockMemberDoc = null
   mockBilling = { org: { plan: 'starter' }, ready: true }
@@ -238,13 +238,21 @@ describe('the transfer launcher', () => {
       </TransferLauncherProvider>,
     )
     expect(access).toEqual({ import: true, export: true })
-    mockGranted = new Set()
+    mockGranted = new Set(['data.export'])
     view.rerender(
       <TransferLauncherProvider>
         <PluginList />
       </TransferLauncherProvider>,
     )
     expect(access).toEqual({ import: false, export: true })
+    // "Export data" alone decides a dataset's export (AGL-4047), Manage data or not.
+    mockGranted = new Set(['data.manage'])
+    view.rerender(
+      <TransferLauncherProvider>
+        <PluginList />
+      </TransferLauncherProvider>,
+    )
+    expect(access).toEqual({ import: true, export: false })
   })
 
   it('answers false for both until the permissions answer, and off a workspace', () => {
@@ -267,7 +275,7 @@ describe('the transfer launcher', () => {
 
   it('decides a collaborator on the site named: export where they reach, never import', async () => {
     mockOrg = { $id: 'org-1', role: 'editor', orgWide: false }
-    mockGranted = new Set()
+    mockGranted = new Set(['data.export'])
     mockMemberDoc = { role: 'editor', allHosts: false, hostAccess: { 'host-a': 'editor' } }
     accessTarget = { resource: 'data.dataset:ds-1', scope: 'org', hostId: 'host-a' }
     const view = render(

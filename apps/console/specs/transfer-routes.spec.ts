@@ -163,6 +163,8 @@ jest.mock('@aglyn/tenant-data-admin/server/transfer-jobs', () => {
 // declare the permission they read with; kegs declare nothing, so they
 // export for Manage data alone. Every other key is a real declaration —
 // the CRM's, for Settings → Privacy (AGL-3552) and its plan (AGL-3555).
+const mockImportAccess = jest.fn()
+
 jest.mock('@aglyn/aglyn/plugin-manager/plugin-transfer-resources', () => {
   const actual = jest.requireActual('@aglyn/aglyn/plugin-manager/plugin-transfer-resources') as Record<
     string,
@@ -173,11 +175,15 @@ jest.mock('@aglyn/aglyn/plugin-manager/plugin-transfer-resources', () => {
     bottles: { key: 'bottles', label: 'Bottles', scope: 'org', pluginId: 'data', readableByMembers: true },
     ledgers: { key: 'ledgers', label: 'Ledgers', scope: 'org', pluginId: 'forms', readPermission: 'books.read' },
     kegs: { key: 'kegs', label: 'Kegs', scope: 'org', pluginId: 'data' },
+    // Decides importing per instance, and only its own permission exports it (AGL-4047).
+    casks: { key: 'casks', label: 'Casks', scope: 'org', pluginId: 'data', readPermission: 'casks.export', readPermissionOnly: true },
   }
   return {
     ...actual,
     __esModule: true,
     declaredTransferResource: (key: string) => fixtures[key] ?? actual['declaredTransferResource']?.(key),
+    transferImportAccess: (subject: { resource: string }) =>
+      String(subject.resource).startsWith('casks') ? mockImportAccess(subject) : Promise.resolve(null),
   }
 })
 
@@ -739,6 +745,7 @@ describe('every plugin’s plan (AGL-3548)', () => {
 
   beforeEach(() => {
     mockMember = { role: 'admin' }
+    mockOrgPermissions.add('data.export')
     mockEngine.readTransferResourceInfo.mockResolvedValue({ resource: { key: 'x', label: 'X' } })
     mockEngine.uploadTransferSource.mockResolvedValue({ job: JOB, preview: {} })
   })
@@ -766,6 +773,62 @@ describe('every plugin’s plan (AGL-3548)', () => {
     mockOrg = BUSINESS
     const refused = await exportRoute(request('export', exportBody('events', 'host-a')))
     expect((await refused.json()).error).toBe("Exporting events isn't included in any plan — it's a paid add-on. Manage your plan and add-ons from Billing.")
+  })
+})
+
+/*
+ * A RESOURCE THAT DECIDES ITS OWN INSTANCE (AGL-4047): `importAccess` answers on
+ * importing in place of Manage data on the workspace, and a `readPermissionOnly`
+ * key alone decides an export. A dataset is both, by where it is placed.
+ */
+describe('a resource that decides its own instance (AGL-4047)', () => {
+  const CASK = { orgId: 'org-1', resource: 'casks:d-1', format: 'csv', fileName: 'casks.csv' }
+  const STEP = { orgId: 'org-1', jobId: 'job-cask' }
+
+  beforeEach(() => {
+    mockMember = { role: 'viewer' }
+    mockOrgPermissions.clear()
+    mockJobs['job-cask'] = { resource: 'casks:d-1' }
+    mockImportAccess.mockReset()
+    mockEngine.uploadTransferSource.mockResolvedValue({ job: JOB, preview: {} })
+    mockEngine.readTransferResourceInfo.mockResolvedValue({ resource: { key: 'casks', label: 'Casks' } })
+  })
+
+  it('lets someone it admits import without Manage data, at every step, and asks about this instance', async () => {
+    mockImportAccess.mockResolvedValue({ allowed: true })
+    expect((await upload(request('upload', CASK))).status).toBe(200)
+    expect((await apply(request('apply', STEP))).status).toBe(200)
+    expect(mockImportAccess).toHaveBeenCalledWith(
+      expect.objectContaining({ resource: 'casks:d-1', orgId: 'org-1', uid: 'uid-1', member: mockMember }),
+    )
+  })
+
+  it('refuses someone it refuses, Manage data or not, naming what it names', async () => {
+    mockOrgPermissions.add('data.manage')
+    mockImportAccess.mockResolvedValue({ allowed: false, permission: 'data.manage' })
+    const refused = await upload(request('upload', CASK))
+    expect(refused.status).toBe(403)
+    expect(await refused.json()).toEqual({ error: 'Importing needs the “Manage data” permission', code: 'forbidden' })
+    expect((await apply(request('apply', STEP))).status).toBe(403)
+    expect(mockEngine.uploadTransferSource).not.toHaveBeenCalled()
+    expect(mockEngine.applyTransferJob).not.toHaveBeenCalled()
+  })
+
+  it('exports for its own key alone: Manage data does not stand in for it', async () => {
+    const OUT = { orgId: 'org-1', resource: 'casks:d-1', fieldIds: ['name'], scope: { kind: 'all' }, format: 'csv' }
+    mockImportAccess.mockResolvedValue({ allowed: false, permission: 'data.manage' })
+    mockOrgPermissions.add('data.manage')
+    expect((await exportRoute(request('export', OUT))).status).toBe(403)
+    mockOrgPermissions = new Set(['casks.export'])
+    expect((await exportRoute(request('export', OUT))).status).toBe(200)
+  })
+
+  it('still opens the import wizard’s fields for someone who may import and may not export', async () => {
+    const FIELDS_OF = { orgId: 'org-1', resource: 'casks:d-1' }
+    mockImportAccess.mockResolvedValue({ allowed: true })
+    expect((await fields(request('fields', FIELDS_OF))).status).toBe(200)
+    mockImportAccess.mockResolvedValue({ allowed: false, permission: 'data.manage' })
+    expect((await fields(request('fields', FIELDS_OF))).status).toBe(403)
   })
 })
 
