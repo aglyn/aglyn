@@ -2045,15 +2045,15 @@ export function aiSiteImportWordingPages(
 
 /**
  * What improving this many pages' wording adds (AGL-4152): a reworded page
- * is quoted as an AI page (`AI_MEASURED_IMPORT_CREDITS.page`) in place of an
+ * is quoted as measured (`AI_MEASURED_IMPORT_CREDITS.reworded`) in place of an
  * arranged one, its design answer and its wording together, so each adds the
  * difference between the two. Its ceiling, the page's two passes, does not
  * move, and no price is new.
  */
 export function aiSiteImportWordingCredits(pages: number): { likely: number; p90: number } {
   const count = whole(pages)
-  const { page, arranged } = AI_MEASURED_IMPORT_CREDITS
-  return { likely: count * (page.median - arranged.median), p90: count * (page.p90 - arranged.p90) }
+  const { reworded, arranged } = AI_MEASURED_IMPORT_CREDITS
+  return { likely: count * (reworded.median - arranged.median), p90: count * (reworded.p90 - arranged.p90) }
 }
 
 /*------------------------------------------
