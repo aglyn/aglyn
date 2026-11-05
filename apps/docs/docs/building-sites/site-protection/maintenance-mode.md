@@ -14,7 +14,7 @@ For a site that hasn't launched yet, use
 [Preview](make-your-site-private.md#keep-it-to-your-team-with-preview) instead: your team
 sees the site the same way, and visitors without a 503 page get a **Coming soon** notice.
 
-![The Error pages card, with the four error-page pickers and the "Maintenance mode — show the 503 page at every address" switch beneath them](/img/site-protection/setup-error-pages.png)
+![The Error pages card, with the four error-page pickers and the "Maintenance mode — show visitors the 503 page at every address" switch beneath them](/img/site-protection/setup-error-pages.png)
 
 ## Turn it on
 
@@ -22,7 +22,7 @@ sees the site the same way, and visitors without a 503 page get a **Coming soon*
    [error pages](error-screens.md). The switch takes every page of the site offline for
    every visitor, so the Admin area takes the **Manage site settings** permission, which a
    site's admins hold by default.
-2. Switch on **Maintenance mode — show the 503 page at every address**. It confirms with
+2. Switch on **Maintenance mode — show visitors the 503 page at every address**. It confirms with
    *"Maintenance mode on — visitors see the 503 page"*.
 3. Visitors now see your [503 error page](error-screens.md) on every path.
 4. When you're done, switch it back off and the site returns.

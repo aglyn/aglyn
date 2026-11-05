@@ -17,7 +17,7 @@ data class HostStatus(
     /**
      * The port of the console's `describeHostStatus`. Order matters: a
      * suspended site is not live whatever it has published, and a site in
-     * maintenance serves the maintenance page rather than its pages.
+     * maintenance serves visitors the maintenance page rather than its pages.
      */
     fun describe(host: Map<String, Any?>?, nowMillis: Long): HostStatus {
       val published = publishedScreenCount(host)
@@ -29,7 +29,7 @@ data class HostStatus(
         }
       }
       if (host?.get("maintenance") == true) {
-        return HostStatus(HostStatusKind.MAINTENANCE, "Maintenance", "Every path serves the maintenance page.", published)
+        return HostStatus(HostStatusKind.MAINTENANCE, "Maintenance", "Only your team can see this site. Visitors see the 503 page.", published)
       }
       // A site in preview (AGL-4086) is not live to its visitors whatever it has published.
       if (host?.get("preview") == true) {
