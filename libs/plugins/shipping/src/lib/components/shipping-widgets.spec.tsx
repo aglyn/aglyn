@@ -261,7 +261,7 @@ describe('the order’s label controls follow the keys their routes ask (AGL-404
     const view = render(<OrderLabelsWidget hostId="host-1" order={ORDER} />)
     const buy = (await screen.findByRole('button', { name: 'Buy label' })) as HTMLButtonElement
     expect(buy.disabled).toBe(true)
-    expect(buy.parentElement?.getAttribute('aria-label')).toContain('Buy shipping labels')
+    expect(buy.parentElement?.getAttribute('aria-label')).toContain('does not include')
     view.unmount()
     mockBlockedKeys.clear()
     render(<OrderLabelsWidget hostId="host-1" order={ORDER} />)
