@@ -80,11 +80,10 @@ final class OrgAccess {
       ContractValues.shared.orgRoleGrants, member: member.document?.data, orgRole: indexRole, customRole: role.document?.data)
   }
 
-  /// The same on the site `follow` was given, with the site's own stamp for this member applied.
+  /// The same on the site `follow` was given, as that site's own document answers for this member.
   var pickedSitePermissions: [String: Bool] {
     sitePermissions(
-      workspacePermissions,
-      siteStamp: uid.flatMap { (site.document?.data["memberPermissions"] as? [String: Any])?[$0] as? [String: Any] })
+      ContractValues.shared.orgRoleGrants, workspace: workspacePermissions, site: site.document?.data, uid: uid ?? "")
   }
 
   /// The site `pickedSitePermissions` answers for.

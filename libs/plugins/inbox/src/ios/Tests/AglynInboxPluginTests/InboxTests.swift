@@ -71,9 +71,11 @@ final class InboxTests: XCTestCase {
     XCTAssertEqual(scoped.base?.map(\.path), ["formId"])
   }
 
-  func testPermissionsFollowTheSiteRole() {
-    XCTAssertEqual(InboxPermissions(role: "admin"), InboxPermissions(canWrite: true, canReply: true))
-    XCTAssertEqual(InboxPermissions(role: "author"), InboxPermissions(canWrite: true, canReply: false))
-    XCTAssertEqual(InboxPermissions(role: nil), InboxPermissions(canWrite: false, canReply: false))
+  func testPermissionsAskTheirKeys() {
+    XCTAssertEqual(InboxPermissions(holding: { _ in true }), InboxPermissions(canWrite: true, canReply: true, canAssign: true))
+    XCTAssertEqual(InboxPermissions(holding: { $0 == "site.edit" }), InboxPermissions(canWrite: true, canReply: false, canAssign: false))
+    XCTAssertEqual(InboxPermissions(holding: { $0 == "inbox.reply" }), InboxPermissions(canWrite: false, canReply: true, canAssign: false))
+    XCTAssertEqual(InboxPermissions(holding: { $0 == "inbox.assign" }), InboxPermissions(canWrite: false, canReply: false, canAssign: true))
+    XCTAssertEqual(InboxPermissions(holding: { _ in false }), InboxPermissions(canWrite: false, canReply: false, canAssign: false))
   }
 }

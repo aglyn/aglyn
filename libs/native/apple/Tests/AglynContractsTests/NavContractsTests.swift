@@ -287,11 +287,25 @@ final class NavContractsTests: XCTestCase {
   }
 
   func testASiteStampNarrowsTheWorkspaceVerdict() {
+    let catalog = ContractValues.shared.orgRoleGrants
     let workspace = ["managePos": true, "data.manage": true]
-    let site = sitePermissions(workspace, siteStamp: ["managePos": false])
+    let site = sitePermissions(catalog, workspace: workspace, site: ["memberPermissions": ["u": ["managePos": false]]], uid: "u")
     XCTAssertEqual(site["managePos"], false)
     XCTAssertEqual(site["data.manage"], true)
-    XCTAssertEqual(sitePermissions(workspace, siteStamp: nil), workspace)
+    XCTAssertEqual(sitePermissions(catalog, workspace: workspace, site: nil, uid: "u"), workspace)
+  }
+
+  func testASiteKeyFollowsTheSiteRoleUntilAStampDecidesIt() {
+    let catalog = ContractValues.shared.orgRoleGrants
+    func held(_ site: [String: Any]) -> [String: Bool] { sitePermissions(catalog, workspace: ["crm.moveStages": true], site: site, uid: "u") }
+    XCTAssertEqual(held(["memberRoles": ["u": "author"]])["crm.moveStages"], false)
+    XCTAssertEqual(held(["memberRoles": ["u": "editor"]])["crm.moveStages"], true)
+    XCTAssertEqual(held(["memberRoles": ["u": "owner"]])["site.manage"], true)
+    XCTAssertEqual(held(["memberRoles": ["u": "editor"]])["site.manage"], false)
+    XCTAssertEqual(held(["memberRoles": ["u": "author"]])["site.edit"], true)
+    XCTAssertEqual(held(["memberRoles": ["u": "author"], "memberPermissions": ["u": ["crm.moveStages": true]]])["crm.moveStages"], true)
+    XCTAssertEqual(held(["memberRoles": ["u": "editor"], "memberPermissions": ["u": ["crm.moveStages": false]]])["crm.moveStages"], false)
+    XCTAssertEqual(held(["memberRoles": ["other": "viewer"]])["crm.moveStages"], true)
   }
 
   func testAPermissionEditorOffersTheWorkspacesKeysByGroup() {

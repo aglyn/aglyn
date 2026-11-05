@@ -129,20 +129,23 @@ func sentReply(_ doc: FirestoreDocument) -> SentReply {
     sentAt: date(doc.data["sentAtMs"]))
 }
 
-/// What the site role may do in the Inbox: write (read state, delete) is the console's content roles,
-/// reply and the list add are owner, admin and editor.
+/// What the member may do in the Inbox, by what they hold on the site: write (read state, delete) is "Edit site content",
+/// reply is "Reply from the inbox", the list add is "Add people to lists from the inbox".
 struct InboxPermissions: Equatable {
   let canWrite: Bool
   let canReply: Bool
+  let canAssign: Bool
 
-  init(canWrite: Bool, canReply: Bool) {
+  init(canWrite: Bool, canReply: Bool, canAssign: Bool) {
     self.canWrite = canWrite
     self.canReply = canReply
+    self.canAssign = canAssign
   }
 
-  init(role: String?) {
-    canWrite = ["owner", "admin", "editor", "author"].contains(role ?? "")
-    canReply = ["owner", "admin", "editor"].contains(role ?? "")
+  init(holding can: (String) -> Bool) {
+    canWrite = can("site.edit")
+    canReply = can("inbox.reply")
+    canAssign = can("inbox.assign")
   }
 }
 

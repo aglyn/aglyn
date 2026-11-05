@@ -1,6 +1,7 @@
 // Copyright 2026 Aglyn LLC
 // SPDX-License-Identifier: Apache-2.0
 
+import AglynContracts
 import AglynCore
 import AglynPluginHost
 import AglynUI
@@ -60,6 +61,7 @@ struct DealsBoard: View {
   @State private var pipelineID = ""
   @State private var list: LiveQueryList<CrmRow>?
   @State private var error: String?
+  @State private var site = LiveDoc()
 
   var body: some View {
     let pipeline = reference.pipeline(pipelineID.isEmpty ? nil : pipelineID)
@@ -69,12 +71,17 @@ struct DealsBoard: View {
           .aglynContentEdges()
       }
       if let error { AglynNotice(error, tone: .error) { self.error = nil }.aglynContentEdges() }
+      if scope.canWrite && !scope.movesStages(on: site.doc?.data) {
+        AglynNotice(permissionRefusalText(ContractValues.shared.orgRoleGrants, key: crmMoveStagesKey), tone: .info)
+          .aglynContentEdges()
+          .accessibilityIdentifier("crm-stage-refusal")
+      }
       if let list, list.ready {
         if list.rows.isEmpty {
           AglynEmptyState("No deals in \(pipeline.name) yet", systemImage: "dollarsign.circle", message: "Add a deal from the list, or convert a lead with one.")
         } else {
           AglynBoard(columns: boardColumns(pipeline, list.rows), emptyColumn: "No deals") { column, deal in
-            DealCard(deal: deal, pipeline: pipeline, columnID: column.id, canMove: scope.canWrite) {
+            DealCard(deal: deal, pipeline: pipeline, columnID: column.id, canMove: scope.canWrite, movesStages: scope.movesStages(on: site.doc?.data)) {
               context.navigate(CrmKind.deal.detailScreen, ["deal": deal.id])
             } onMove: { stageID in
               move(deal, to: stageID, in: pipeline)
@@ -88,6 +95,9 @@ struct DealsBoard: View {
         List { SkeletonRows(count: 6) }.aglynListBackground()
       }
     }
+    .task(id: scope.hostID) {
+      if !scope.hostID.isEmpty { site.start(context.firestore, ["hosts", scope.hostID]) }
+    }
     .task(id: pipeline.id) {
       let model = list ?? LiveQueryList(pageSize: 300) { crmRow(.deal, $0, scope) }
       list = model
@@ -97,7 +107,10 @@ struct DealsBoard: View {
           order: [.init("updatedAt", descending: true)], limit: $0)
       }
     }
-    .onDisappear { list?.stop() }
+    .onDisappear {
+      list?.stop()
+      site.stop()
+    }
   }
 
   private func move(_ deal: CrmRow, to stageID: String, in pipeline: Pipeline) {
@@ -122,6 +135,8 @@ private struct DealCard: View {
   let pipeline: Pipeline
   let columnID: String
   let canMove: Bool
+  /// Whether its stage can change here: the menu stays, its moves switched off, under the board's notice naming the permission.
+  let movesStages: Bool
   let onOpen: () -> Void
   let onMove: (String) -> Void
 
@@ -142,7 +157,7 @@ private struct DealCard: View {
         if canMove {
           Menu {
             ForEach(pipeline.stages.filter { $0.id != columnID }) { stage in
-              Button("Move to \(stage.name)") { onMove(stage.id) }
+              Button("Move to \(stage.name)") { onMove(stage.id) }.disabled(!movesStages)
             }
           } label: {
             Image(systemName: "ellipsis.circle").foregroundStyle(.secondary)
