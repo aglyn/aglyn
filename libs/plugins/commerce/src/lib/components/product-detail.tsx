@@ -920,7 +920,7 @@ const ProductDetail = forwardRef<HTMLDivElement, ProductDetailProps>(
               <>
                 <Typography
                   variant="body1"
-                  color="text.disabled"
+                  color="text.secondary"
                   sx={{ textDecoration: 'line-through' }}
                 >
                   {moneyFromUsd(variant.compareAtPriceUsd)}

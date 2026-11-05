@@ -381,7 +381,7 @@ export function normalizeSignInput(
   }
   const minorsRaw = Array.isArray(body['minors']) ? body['minors'] : []
   if (minorsRaw.length && !waiver.allowMinors) {
-    return { ok: false, error: 'This waiver can’t be signed for minors. Each rider signs their own.' }
+    return { ok: false, error: 'This waiver can’t be signed for minors. Each person signs their own.' }
   }
   if (minorsRaw.length > WAIVER_LIMITS.minors) {
     return { ok: false, error: `Sign for up to ${WAIVER_LIMITS.minors} minors at a time.` }
@@ -498,12 +498,12 @@ export function waiverDayStatus(
   return { signed: covering.length > 0, coveredNames: [...names.values()], signatureId: covering[0]?.id ?? null }
 }
 
-/** The console's words for one person's status: "Waiver signed", "Signed for 2 of 3 riders", "Waiver needed". */
+/** The console's words for one person's status: "Waiver signed", "Signed for 2 of 3 people", "Waiver needed". */
 export function waiverStatusLabel(status: WaiverDayStatus, expectedPeople?: number): string {
   if (!status.signed) return 'Waiver needed'
   const covered = status.coveredNames.length
   if (expectedPeople && expectedPeople > 1 && covered < expectedPeople) {
-    return `Signed for ${covered} of ${expectedPeople} riders`
+    return `Signed for ${covered} of ${expectedPeople} people`
   }
   return 'Waiver signed'
 }

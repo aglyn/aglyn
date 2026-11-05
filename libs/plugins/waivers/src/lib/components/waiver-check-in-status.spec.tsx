@@ -71,10 +71,10 @@ describe('the waiver at check-in', () => {
   })
 
   it('names a partial signing and offers to sign the rest', async () => {
-    request.mockResolvedValue({ signed: true, coveredNames: ['Jordan Lee', 'Pat Lee'], label: 'Signed for 2 of 3 riders' })
+    request.mockResolvedValue({ signed: true, coveredNames: ['Jordan Lee', 'Pat Lee'], label: 'Signed for 2 of 3 people' })
     await settled(PROPS)
     expect(request.mock.calls[0][1].query.people).toBe('3')
-    expect(screen.getByText('Signed for 2 of 3 riders')).toBeTruthy()
+    expect(screen.getByText('Signed for 2 of 3 people')).toBeTruthy()
     expect(screen.getByRole('button', { name: 'Sign waiver' })).toBeTruthy()
   })
 

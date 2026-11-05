@@ -197,7 +197,7 @@ describe('a signing', () => {
 
   it('refuses minors on a waiver that takes none', () => {
     const result = normalizeSignInput(SIGNING, { ...DRAFT, allowMinors: false }, '2026-10-24', { method: 'online' })
-    expect(result.ok === false && result.error).toMatch(/each rider signs their own/i)
+    expect(result.ok === false && result.error).toMatch(/each person signs their own/i)
   })
 
   it('counts whole years to the day', () => {
@@ -298,7 +298,7 @@ describe('a person’s waiver status for a day', () => {
     const status = waiverDayStatus([signature({})], '2026-10-24')
     expect(status).toEqual({ signed: true, coveredNames: ['Jordan Lee', 'Pat Lee'], signatureId: 's1' })
     expect(waiverStatusLabel(status)).toBe('Waiver signed')
-    expect(waiverStatusLabel(status, 3)).toBe('Signed for 2 of 3 riders')
+    expect(waiverStatusLabel(status, 3)).toBe('Signed for 2 of 3 people')
   })
 
   it('is needed the next day, and when the only signature was voided', () => {

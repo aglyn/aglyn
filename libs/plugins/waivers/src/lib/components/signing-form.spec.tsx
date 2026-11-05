@@ -61,21 +61,21 @@ describe('the signing form', () => {
     expect(screen.getByLabelText('I have read this waiver.')).toBeTruthy()
     expect(screen.getByLabelText('I agree to sign electronically.')).toBeTruthy()
     expect(screen.getByText('Good for one visit (the day it is signed)')).toBeTruthy()
-    expect(screen.getByLabelText('I’m also signing for riders under 18')).toBeTruthy()
+    expect(screen.getByLabelText('I’m also signing for people under 18')).toBeTruthy()
   })
 
   it('opens the minors section, and leaves it out of a waiver that takes none', async () => {
     const { unmount } = await settled(
       <SigningForm siteName="Acme" waiver={WAIVER} consentText="Consent." adultAge={18} mode="online" submit={jest.fn()} />,
     )
-    fireEvent.click(screen.getByLabelText('I’m also signing for riders under 18'))
+    fireEvent.click(screen.getByLabelText('I’m also signing for people under 18'))
     expect(screen.getByLabelText(/Minor’s full name/)).toBeTruthy()
     expect(screen.getByRole('button', { name: 'Add another minor' })).toBeTruthy()
     unmount()
     await settled(
       <SigningForm siteName="Acme" waiver={{ ...WAIVER, allowMinors: false }} consentText="Consent." adultAge={18} mode="online" submit={jest.fn()} />,
     )
-    expect(screen.queryByLabelText('I’m also signing for riders under 18')).toBeNull()
+    expect(screen.queryByLabelText('I’m also signing for people under 18')).toBeNull()
   })
 
   it('says what is missing before anything is sent', async () => {
