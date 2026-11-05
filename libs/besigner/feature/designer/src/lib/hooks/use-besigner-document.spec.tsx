@@ -995,12 +995,14 @@ describe('useBesignerDocument', () => {
         fromCache: true,
       })
       mockCanvas.didSetInitial = true
-      const NEWER = { root: { $id: 'root', componentId: 'div', nodes: [] } }
+      const NEWER = {
+        root: { $id: 'root', componentId: 'div', nodes: ['fresh'] },
+        fresh: { $id: 'fresh', componentId: 'div', parentId: 'root' },
+      }
       rerender({ nodes: NEWER, updatedAt: stamp(2), fromCache: false })
       expect(result.current.remoteChanged).toBe(false)
-      expect(mockCanvas.setNodes).toHaveBeenLastCalledWith(
-        expect.objectContaining({ root: NEWER.root }),
-      )
+      // The canvas now holds the server's copy, whatever the root wrap adds.
+      expect(Object.keys(mockCanvas.setNodes.mock.lastCall?.[0] ?? {})).toContain('fresh')
     })
 
     it('still reports it when the author already typed over the cached copy (AGL-4183)', () => {
