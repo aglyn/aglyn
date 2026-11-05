@@ -202,9 +202,6 @@ private fun ListingsSection(context: NativePluginContext, orgId: String, canMana
       if (listings.any { it.isPrivate }) {
         Text("Private plugins never appear in the marketplace — open one with View to install it on your sites.", style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurfaceVariant)
       }
-      if (!canManage) {
-        Text(permissionRefusalText(MANAGE_LISTINGS_KEY), style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurfaceVariant, modifier = Modifier.testTag("seller-listings-refusal"))
-      }
       listings.forEach { listing ->
         AglynListItem(
           title = listing.displayName,
@@ -239,6 +236,9 @@ private fun ListingsSection(context: NativePluginContext, orgId: String, canMana
           onClick = { context.navigate(MARKETPLACE_LISTING_SCREEN, mapOf("listing" to listing.id)) },
           modifier = Modifier.testTag("seller-listing-${listing.id}"),
         )
+      }
+      if (!canManage) {
+        Text(permissionRefusalText(MANAGE_LISTINGS_KEY), style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurfaceVariant, modifier = Modifier.testTag("seller-listings-refusal"))
       }
     }
   }
