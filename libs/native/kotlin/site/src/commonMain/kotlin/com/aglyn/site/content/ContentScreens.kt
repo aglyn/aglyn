@@ -118,7 +118,7 @@ fun ContentScreen(context: NativePluginContext, initialCollection: String? = nul
   val collectionsLive by remember(hostId, context.firestore) { context.firestore.observe(FirestoreQuery("hosts/$hostId/collections", limit = 50)) }.collectAsState(Live.Loading)
   val host by remember(hostId, context.firestore) { context.firestore.observeDoc("hosts/$hostId") }.collectAsState(Live.Loading)
   val scope = rememberCoroutineScope()
-  val runner = remember(hostId) { ActionRunner(scope, roleHint = "an author, editor or admin") }
+  val runner = remember(hostId) { ActionRunner(scope) }
   val api = remember(hostId, context.api, context.writer, context.firestore) { ContentApi(context.api, context.writer, context.firestore, hostId) }
   var dialog by remember { mutableStateOf<ContentDialog?>(null) }
   var picked by rememberSaveable(initialCollection) { mutableStateOf(initialCollection) }
@@ -287,7 +287,7 @@ private fun EntryEditor(
       val stored = remember(entry) { EntryDraft.of(entry) }
       var draft by remember(stored) { mutableStateOf(stored) }
       val saverScope = rememberCoroutineScope()
-      val saver = remember(entry.id) { ActionRunner(saverScope, roleHint = "an author, editor or admin") }
+      val saver = remember(entry.id) { ActionRunner(saverScope) }
       val now = remember(entry.updatedAt) { nowMillis() }
       val titleError = if (draft.title.isBlank()) "Required" else null
       val slugError = if (draft.effectiveSlug.isEmpty()) "Add a title or an address" else null

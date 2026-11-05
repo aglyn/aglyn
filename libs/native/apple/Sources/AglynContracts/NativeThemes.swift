@@ -187,7 +187,72 @@ public func rolePermissions(
       if let value = values[key], let flag = looseBool(value) { out[key] = flag }
     }
   }
+  // A key that refines a broader one is never held without it, and follows it where neither layer set the key; a key
+  // that only follows one takes its verdict where neither layer set the key, and nothing more. Broader keys first, so a
+  // chain settles in one pass; a refinement that loops is left alone.
+  var broader: [String: String] = [:]
+  var followsOnly = Set<String>()
+  for entry in catalog.permissions {
+    if let parent = entry.refines, out[parent] != nil {
+      broader[entry.key] = parent
+    } else if let parent = entry.follows, out[parent] != nil {
+      broader[entry.key] = parent
+      followsOnly.insert(entry.key)
+    }
+  }
+  func depth(_ key: String) -> Int {
+    var seen = Set<String>()
+    var steps = 0
+    var current = key
+    while let parent = broader[current] {
+      if !seen.insert(current).inserted { return -1 }
+      current = parent
+      steps += 1
+    }
+    return steps
+  }
+  let ordered = broader.keys.map { (key: $0, steps: depth($0)) }.filter { $0.steps > 0 }.sorted { $0.steps < $1.steps }
+  for (key, _) in ordered {
+    var stored: Bool?
+    for layer in [customRole, overrides] {
+      if let values = layer?["permissions"] as? [String: Any], let value = values[key], let flag = looseBool(value) { stored = flag }
+    }
+    let held = broader[key].flatMap { out[$0] } == true
+    out[key] = followsOnly.contains(key) ? (stored ?? held) : (held && (stored ?? true))
+  }
   return out
+}
+
+/// The signed-in member's verdict on every catalog key, as the Firestore rules and the routes read it: `resolvedPermissions`
+/// on their member row (every layer applied) where it has the key; else their role's grants, custom role and own overrides
+/// (`rolePermissions`). Until the row is read, the role the membership index names answers, so a screen does not flash a
+/// refusal at someone who holds the key. No row and no role holds nothing.
+public func memberPermissions(
+  _ catalog: OrgRoleGrants, member: [String: Any]?, orgRole: String?, customRole: [String: Any]? = nil
+) -> [String: Bool] {
+  if member == nil && orgRole == nil { return [:] }
+  let role = member?["role"] as? String ?? orgRole
+  var out = rolePermissions(catalog, role: role, customRole: member?["roleId"] as? String != nil ? customRole : nil, overrides: member)
+  for (key, value) in member?["resolvedPermissions"] as? [String: Any] ?? [:] {
+    if let flag = looseBool(value) { out[key] = flag }
+  }
+  return out
+}
+
+/// The verdict on one site: the site's own stamp for this member (`hosts/{hostId}.memberPermissions[uid]`, which holds
+/// the per-site keys and the keys a site can narrow, decided for that site) over their workspace verdict.
+public func sitePermissions(_ workspace: [String: Bool], siteStamp: [String: Any]?) -> [String: Bool] {
+  var out = workspace
+  for (key, value) in siteStamp ?? [:] {
+    if let flag = looseBool(value) { out[key] = flag }
+  }
+  return out
+}
+
+/// What a refusal says when a member lacks a key (`permissionRefusalText`): it names the permission, never a role.
+public func permissionRefusalText(_ catalog: OrgRoleGrants, key: String) -> String {
+  let label = catalog.permissions.first { $0.key == key }?.label ?? key
+  return "Your role does not include \"\(label)\" — ask an organization admin"
 }
 
 /// A JSON boolean as Foundation bridges it: `true`/`false` arrive as `NSNumber` booleans, never as 0 or 1.

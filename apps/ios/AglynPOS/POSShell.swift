@@ -76,6 +76,12 @@ struct POSShell: View {
     // The register keeps the system's navigation and toolbar on every device; it is not part of the shell redesign.
     .environment(\.aglynWideChrome, false)
     .onAppear { DebugLaunch.route(navigation) }
+    // What this register's person holds (`managePos`, `posSell`…), live, for the plugins' gates.
+    .task(id: "\(model.workspace?.org?.id ?? ""):\(model.workspace?.org?.role ?? ""):\(model.workspace?.site?.id ?? ""):\(model.auth?.user?.uid ?? ""):\(model.orgAccess.memberRoleID ?? "")") {
+      model.orgAccess.follow(
+        reader: model.reader, api: model.api, orgID: model.workspace?.org?.id, uid: model.auth?.user?.uid,
+        hostID: model.workspace?.site?.id, orgRole: model.workspace?.org?.role)
+    }
   }
 }
 

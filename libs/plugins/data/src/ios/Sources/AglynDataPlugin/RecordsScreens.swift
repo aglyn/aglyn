@@ -146,7 +146,7 @@ private struct RecordsBody: View {
   #endif
   @State private var model: RecordsModel
   @State private var references = ReferenceChoicesModel()
-  @State private var runner = PluginActionRunner(roleHint: "an owner, admin or editor")
+  @State private var runner = PluginActionRunner()
   @State private var selection: String?
   @State private var pushed: String?
   @State private var sheet: RecordSheet?

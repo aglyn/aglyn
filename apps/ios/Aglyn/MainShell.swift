@@ -33,9 +33,10 @@ struct MainShell: View {
         ShellTabs(first: navigation)
       #endif
     }
-    .task(id: "\(model.workspace?.org?.id ?? ""):\(model.auth?.user?.uid ?? ""):\(model.orgAccess.memberRoleID ?? "")") {
+    .task(id: "\(model.workspace?.org?.id ?? ""):\(model.workspace?.org?.role ?? ""):\(model.workspace?.site?.id ?? ""):\(model.auth?.user?.uid ?? ""):\(model.orgAccess.memberRoleID ?? "")") {
       model.orgAccess.follow(
-        reader: model.reader, api: model.api, orgID: model.workspace?.org?.id, uid: model.auth?.user?.uid)
+        reader: model.reader, api: model.api, orgID: model.workspace?.org?.id, uid: model.auth?.user?.uid,
+        hostID: model.workspace?.site?.id, orgRole: model.workspace?.org?.role)
     }
     .task(id: model.workspace?.ready == true) {
       guard !seeded, let seed, model.workspace?.ready == true else { return }

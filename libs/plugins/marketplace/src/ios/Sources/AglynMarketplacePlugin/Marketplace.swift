@@ -27,11 +27,13 @@ let marketplaceLicencesScreen = "marketplace.licenses"
 let marketplacePublishScreen = "marketplace.publish"
 let marketplacePluginSettingsScreen = "marketplace.plugin-settings"
 
-/// Workspace roles with `plugins.install` (`installPlugins`): the admin tier and editors.
-let installRoles: Set<String> = ["owner", "admin", "editor"]
-
-/// Site roles every host install route admits.
-let siteInstallRoles: Set<String> = ["admin", "editor"]
+/// The keys the seller's controls ask (`marketplace-publisher-permissions.ts`), as their routes and rules do.
+let publisherProfileKey = "marketplace.publisherProfile"
+let manageListingsKey = "marketplace.manageListings"
+let payoutsKey = "marketplace.payouts"
+let publishKey = "marketplace.publish"
+let installPluginsKey = "plugins.install"
+let siteInstallKey = "marketplace.siteInstall"
 
 // MARK: Ports of the console's pure rules (MarketplaceTests replays their answers)
 

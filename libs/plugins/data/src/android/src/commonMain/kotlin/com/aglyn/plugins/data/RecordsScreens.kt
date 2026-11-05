@@ -151,7 +151,7 @@ private fun Records(context: NativePluginContext, orgId: String, dataset: Datase
   val model = remember(dataset.id, dataset.model) { RecordsModel(orgId, dataset, context.firestore, scope) }
   LaunchedEffect(model) { model.reload() }
   val api = remember(orgId, context.api, context.writer) { DataApi(context.api, context.writer, orgId) }
-  val runner = remember(dataset.id) { ActionRunner(scope, roleHint = "an owner, admin or editor") }
+  val runner = remember(dataset.id) { ActionRunner(scope) }
   val canWrite = context.orgRole in ORG_WRITER_ROLES
   val references = rememberReferenceChoices(context.firestore, orgId, dataset.model)
   var dialog by remember { mutableStateOf<RecordDialog?>(if (startNew && canWrite) RecordDialog.Edit(null, newRecordInputs(dataset.model)) else null) }

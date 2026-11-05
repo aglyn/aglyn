@@ -731,6 +731,14 @@ public enum ScreenValues {
     value.addingPercentEncoding(withAllowedCharacters: componentAllowed) ?? value
   }
 
+  /// The catalog key a `requires` asks (`org.can[data.manage]`, `site.can[managePos]`), so a refusal can name it.
+  public static func requiredKey(_ expression: String?) -> String? {
+    guard let expression, let open = expression.range(of: ".can["),
+      let close = expression[open.upperBound...].firstIndex(of: "]")
+    else { return nil }
+    return String(expression[open.upperBound..<close])
+  }
+
   /// A `when` condition: clauses joined by `&&` or `||` (no mixing), each
   /// `path`, `!path`, `path == value` or `path != value`. Empty is true.
   public static func condition(_ expression: String?, in context: JSONValue) -> Bool {

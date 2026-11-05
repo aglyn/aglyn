@@ -176,7 +176,7 @@ struct DatasetsScreen: View {
     @Environment(\.horizontalSizeClass) private var sizeClass
   #endif
   @State private var model = DatasetsModel()
-  @State private var runner = PluginActionRunner(roleHint: "an owner, admin or editor")
+  @State private var runner = PluginActionRunner()
   @State private var selection: String?
   @State private var pushed: String?
   @State private var sheet: DatasetSheet?

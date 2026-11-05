@@ -68,6 +68,11 @@ public struct ScreenSession: Sendable {
   /// The relying party passkeys are made for (`aglyn.com`): set where this build can make a passkey (it is
   /// configured, linked to that domain, and the device can); nil hides the action.
   public var passkeyRelyingParty: String?
+  /// The member's verdict on every catalog key in this workspace (`memberPermissions`); a screen asks `org.can[<key>]`.
+  public var orgPermissions: [String: Bool]
+  /// The same on the site in `permissionsSiteID`, with that site's own stamp applied; a screen asks `site.can[<key>]`.
+  public var sitePermissions: [String: Bool]
+  public var permissionsSiteID: String?
 
   public init(
     email: String? = nil, displayName: String? = nil, orgName: String? = nil, orgRole: String? = nil,
@@ -76,8 +81,12 @@ public struct ScreenSession: Sendable {
     refreshClaims: @escaping @Sendable () async -> Void = {},
     impersonate: @escaping @Sendable (String, String?) async throws -> Void = { _, _ in },
     account: AccountOperations = AccountOperations(), googleConfigured: Bool = false,
-    passkeyRelyingParty: String? = nil
+    passkeyRelyingParty: String? = nil, orgPermissions: [String: Bool] = [:], sitePermissions: [String: Bool] = [:],
+    permissionsSiteID: String? = nil
   ) {
+    self.orgPermissions = orgPermissions
+    self.sitePermissions = sitePermissions
+    self.permissionsSiteID = permissionsSiteID
     self.email = email
     self.displayName = displayName
     self.orgName = orgName
@@ -99,6 +108,13 @@ public struct ScreenSession: Sendable {
     let manager = role == "owner" || role == "admin"
     var paramRecord: [String: JSONValue] = [:]
     for (key, value) in params { paramRecord[key] = .string(value) }
+    // Staff read what a manager reads, as `org.manager` lets them; the routes decide. A screen on no site, or on another
+    // site than the one the stamp was read for, reads the workspace's verdict.
+    let hostID = plugin?.hostID
+    let onSite = hostID != nil && hostID == permissionsSiteID ? sitePermissions : orgPermissions
+    func can(_ verdicts: [String: Bool]) -> JSONValue {
+      .object(verdicts.mapValues { .bool($0 || claims.isStaff) })
+    }
     return [
       "org": [
         "id": plugin?.orgID.map(JSONValue.string) ?? .null,
@@ -107,11 +123,13 @@ public struct ScreenSession: Sendable {
         "role": .string(role),
         "manager": .bool(manager || claims.isStaff),
         "owner": .bool(role == "owner"),
+        "can": can(orgPermissions),
       ],
       "site": [
         "id": plugin?.hostID.map(JSONValue.string) ?? .null,
         "slug": plugin?.hostSlug.map(JSONValue.string) ?? .null,
         "name": siteName.map(JSONValue.string) ?? .null,
+        "can": can(onSite),
       ],
       "user": [
         "uid": plugin.map { JSONValue.string($0.uid) } ?? .null,
