@@ -1,0 +1,90 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<title>Fern and Stone Gardens: plans</title>
+<meta name="description" content="Three ways to work with Fern and Stone Gardens.">
+<style>
+.band-opening, .band-tall, .band-span { background-color: #ffffff; }
+.band-plans, .band-swap { background-color: #f4f1ea; }
+.opening { display: grid; grid-template-columns: repeat(12, 1fr); grid-template-rows: repeat(8, 40px); }
+.opening-photo { grid-area: 1 / 1 / 9 / 13; }
+.opening-words { grid-area: 3 / 3 / 6 / 11; }
+.opening-more { grid-area: 6 / 3 / 8 / 11; }
+.plans { display: grid; grid-template-columns: repeat(24, minmax(0, 1fr)); }
+.tall { display: grid; grid-template-columns: 1fr 1fr; grid-template-areas: "words photo" "more photo"; }
+.tall-words { grid-area: words; }
+.tall-more { grid-area: more; }
+.tall-photo { grid-area: photo; }
+.swap { display: flex; flex-direction: row; }
+.swap-first { order: 2; }
+.swap-second { order: 1; }
+.span-grid { display: grid; grid-template-columns: repeat(3, 1fr); }
+.span-all { grid-column: 1 / -1; }
+.span-wide { grid-column: span 2; }
+</style>
+</head>
+<body>
+<header><a href="/"><img src="https://www.fern-and-stone.example/media/logo.png" alt="Fern and Stone Gardens"></a><nav><a href="/services">Services</a><a href="/contact">Contact</a></nav></header>
+<main>
+<section class="band-opening">
+<div class="opening">
+<div class="opening-words"><h1>Choose how we work together</h1></div>
+<div class="opening-more"><p>Every garden is different, so every plan starts with a walk around yours.</p></div>
+<div class="opening-photo"><img src="https://www.fern-and-stone.example/media/walk.jpg" alt="A path through tall grasses" width="1600" height="900"></div>
+</div>
+</section>
+<section class="band-plans">
+<style>
+.spot-d1 { grid-area: 1/1/3/25; }
+.spot-d2 { grid-area: 3/1/4/25; }
+.spot-d3 { grid-area: 4/1/5/25; }
+.spot-d4 { grid-area: 5/1/6/25; }
+.spot-d5 { grid-area: 6/1/7/25; }
+.spot-d6 { grid-area: 7/1/8/25; }
+.spot-d7 { grid-area: 8/1/9/25; }
+@media (min-width: 768px) {
+  .spot-d1 { grid-area: 1/1/3/17; }
+  .spot-d2 { grid-area: 4/1/6/8; }
+  .spot-d3 { grid-area: 7/1/10/8; }
+  .spot-d4 { grid-area: 4/9/6/16; }
+  .spot-d5 { grid-area: 7/17/10/24; }
+  .spot-d6 { grid-area: 4/17/6/24; }
+  .spot-d7 { grid-area: 7/9/10/16; }
+}
+</style>
+<div class="plans">
+<div class="spot-d1"><h2>Three plans</h2></div>
+<div class="spot-d2"><h3>One-time plan</h3></div>
+<div class="spot-d3"><p>A drawn plan you can plant yourself, with a list of what to buy.</p><p><a href="/plans/one-time">Get a plan</a></p></div>
+<div class="spot-d4"><h3>Planted garden</h3></div>
+<div class="spot-d5"><p>We visit four times a year and keep it looking its best.</p><p><a href="/plans/care">Join the calendar</a></p></div>
+<div class="spot-d6"><h3>Year-round care</h3></div>
+<div class="spot-d7"><p>We draw it, plant it and hand it over ready to grow.</p><p><a href="/plans/planted">Plant with us</a></p></div>
+</div>
+</section>
+<section class="band-tall">
+<div class="tall">
+<div class="tall-photo"><img src="https://www.fern-and-stone.example/media/crew.jpg" alt="The crew at work" width="800" height="1200"></div>
+<div class="tall-more"><p>Most of our crew has worked this valley for a decade.</p></div>
+<div class="tall-words"><h2>People who know the soil</h2></div>
+</div>
+</section>
+<section class="band-swap">
+<div class="swap">
+<div class="swap-first"><h2>Written second, shown first</h2><p>This column comes second on screen.</p></div>
+<div class="swap-second"><h2>Written first, shown second</h2><p>This column comes first on screen.</p></div>
+</div>
+</section>
+<section class="band-span">
+<div class="span-grid">
+<div class="span-all"><h2>Spans say how wide, not where</h2></div>
+<div><h3>The first plain note of three</h3><p>Plain cells flow in the order they are written.</p></div>
+<div><h3>The second plain note of three</h3><p>Nothing here is moved by its placement.</p></div>
+<div><h3>The third plain note of three</h3><p>So the page reads as it always has.</p></div>
+</div>
+</section>
+</main>
+<footer><p>© 2026 Fern and Stone Gardens</p></footer>
+</body>
+</html>

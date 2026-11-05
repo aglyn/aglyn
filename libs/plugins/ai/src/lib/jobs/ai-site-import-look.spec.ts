@@ -57,7 +57,9 @@ import { siteImportLookOf, siteImportLookOfHtml } from '../site-import/site-impo
 import type { SiteImportFrameSource } from '../site-import/site-import-nav'
 import { SITE_LAYOUT_PAGES, siteLayoutRecording, siteLayoutSameSite, type SiteLayoutPageName } from '../site-import/fixtures/site-layout-recordings'
 import { SITE_LOOK_SLATE_HTML, SITE_LOOK_SLATE_URL } from '../site-import/fixtures/site-look-slate'
-import { aiRunSiteImportLook, aiSiteImportBrandOf, aiSiteImportLookHeaders, aiSiteImportSourceFonts } from './ai-site-import-look'
+import type { SiteImportPage } from '../site-import/site-import-crawl'
+import { aiSiteImportHomeOf } from './ai-job-import-step'
+import { aiRunSiteImportLook, aiSiteImportBrandOf, aiSiteImportLookHeaders, aiSiteImportSourceFonts, readSiteImportLookPage } from './ai-site-import-look'
 import type { PublicFetchOptions, PublicFetchResult } from './ai-theme-brand-inputs'
 
 const TOKEN = 'a'.repeat(64)
@@ -366,5 +368,195 @@ describe('Improve it pins only the brand’s colors and fonts (AGL-4152)', () =>
     expect(theme.colorSchemes?.light?.primary?.light).not.toBe('#00b0ff')
     // Every color a theme role: the components name palette paths, never a color of their own.
     expect(JSON.stringify(theme.components ?? {})).not.toMatch(/#[0-9a-f]{6}\b/i)
+  })
+})
+
+/*------------------------------------------
+ * A bare read never leaves the stock theme (AGL-4152)
+ *-----------------------------------------*/
+
+describe('a look with no colorful fact falls back to its pictures, and never leaves the stock theme (AGL-4152)', () => {
+  const GREY_FACTS: SiteImportLookFacts = {
+    fonts: { body: null, headings: null, google: [] },
+    background: '#ffffff',
+    text: '#111111',
+    buttonFill: '#000000',
+    buttonText: '#ffffff',
+    buttonRadius: null,
+    link: '#333333',
+    header: null,
+  }
+  const HOME: AiSiteImportHome = {
+    url: 'https://www.harbor-lane.example/',
+    title: 'Home',
+    description: 'Bookkeeping for small businesses.',
+    ogImage: null,
+    siteName: 'Harbor Lane Bookkeeping',
+    brand: { kind: 'logo-only', text: '', logo: { url: 'https://cdn.harbor-lane.example/logo.png', alt: 'Harbor Lane', type: 'raster' } },
+    facts: { lines: [], emails: [], phones: [], social: [], address: '' },
+    look: GREY_FACTS,
+    hero: { url: 'https://cdn.harbor-lane.example/harbor.jpg', alt: 'Boats' },
+  }
+  const PICTURE = new Uint8Array(4096).fill(7)
+
+  /** The pass over a page that draws nothing colorful, with a library door and pictures of known colors. */
+  async function bare(home: Partial<AiSiteImportHome>, colors: Record<string, readonly string[] | null>, deps: { ingest?: boolean; html?: string; pageRead?: boolean } = {}) {
+    const saved: AiSiteStyle[] = []
+    const fetched: string[] = []
+    const stored: string[] = []
+    const look = await aiRunSiteImportLook(
+      { firestore: {} as never, hostId: 'host-import', orgId: 'org-test', uid: 'uid-owner', jobId: 'importJob', domain: 'harbor-lane.example', home: { ...HOME, ...home }, at: NOW },
+      {
+        fetch: async (url, options) => {
+          fetched.push(url)
+          if (options.binary) return { ...ok(url, ''), contentType: 'image/png', data: PICTURE, bytes: PICTURE.length }
+          if (url === HOME.url && deps.pageRead !== false) return ok(url, deps.html ?? '<html><head><title>Home</title></head><body><h1>Hi</h1></body></html>')
+          return { ...ok(url, ''), ok: false, refusal: 'http-status' }
+        },
+        save: async (_firestore, input) => {
+          saved.push(input.style)
+          return { write: 'applied', baseName: 'Base' }
+        },
+        others: async () => [],
+        readHost: async () => null,
+        fontFacts,
+        pictureColors: async (photo) => colors[photo.from as string] ?? null,
+        ingest:
+          deps.ingest === false
+            ? null
+            : ({
+                findImportedPhoto: async () => null,
+                ingest: async (input: { importedFrom?: { url: string } }) => {
+                  stored.push(input.importedFrom?.url ?? '')
+                  return { ok: true, mediaId: `m${stored.length}`, src: `media:host-import/m${stored.length}` }
+                },
+              } as never),
+      },
+    )
+    return { look, saved, fetched, stored }
+  }
+
+  const LOGO = 'https://cdn.harbor-lane.example/logo.png'
+  const HERO = 'https://cdn.harbor-lane.example/harbor.jpg'
+
+  it('takes the brand and accent from the logo’s colorful colors', async () => {
+    const { look, saved, stored } = await bare({}, { [LOGO]: ['#0f766e', '#c2410c'] })
+    expect(look).toMatchObject({ theme: 'applied', from: 'logo' })
+    expect(saved[0]?.brand).toBe('#0f766e')
+    expect(saved[0]?.accent).toBe(Math.round(aiHexOklch('#c2410c').h) % 360)
+    expect(look.colors).toContain('#0f766e')
+    // The photo was never brought in: the logo said enough.
+    expect(stored).toEqual([LOGO])
+  })
+
+  it('goes on to the hero photo when the logo has no colorful color, or cannot be read', async () => {
+    for (const logo of [['#000000', '#777777'], null]) {
+      const { look, saved, stored } = await bare({}, { [LOGO]: logo, [HERO]: ['#1d4e89', '#c2410c'] })
+      expect(look).toMatchObject({ theme: 'applied', from: 'photo' })
+      expect(saved[0]?.brand).toBe('#1d4e89')
+      expect(stored).toEqual([LOGO, HERO])
+    }
+  })
+
+  it('goes to the home page’s share picture where it kept no hero, on a read made before it was kept', async () => {
+    const { look, saved } = await bare({ hero: undefined, ogImage: 'https://cdn.harbor-lane.example/share.jpg' }, { [LOGO]: null, 'https://cdn.harbor-lane.example/share.jpg': ['#7c2d12'] })
+    expect(look.from).toBe('photo')
+    expect(saved[0]?.brand).toBe('#7c2d12')
+  })
+
+  it('never reads a picture for a look that has its own color', async () => {
+    const { look, saved, stored } = await bare({ look: { ...GREY_FACTS, buttonFill: '#0f766e' } }, { [LOGO]: ['#c2410c'], [HERO]: ['#1d4e89'] })
+    expect(look.from).toBe('source')
+    expect(saved[0]?.brand).toBe('#0f766e')
+    // The logo is still brought in for the header; the hero is not.
+    expect(stored).toEqual([LOGO])
+  })
+
+  it('takes a root stylesheet’s declared palette as a color of the look’s own, its second color the accent', async () => {
+    const { look, saved } = await bare({ look: { ...GREY_FACTS, palette: ['#a16207', '#312e81'] } }, { [LOGO]: ['#c2410c'] })
+    expect(look.from).toBe('source')
+    expect(saved[0]?.brand).toBe('#a16207')
+    expect(saved[0]?.accent).toBe(Math.round(aiHexOklch('#312e81').h) % 360)
+  })
+
+  it('keeps a filled button’s brand and takes the palette’s other color as the accent where its links have none', () => {
+    expect(aiSiteImportBrandOf({ buttonFill: '#a16207', link: '#ffffff', palette: ['#a16207', '#312e81'] })).toEqual({ brand: '#a16207', accent: '#312e81' })
+    expect(aiSiteImportBrandOf({ buttonFill: '#a16207', link: '#0f766e', palette: ['#a16207', '#312e81'] })).toEqual({ brand: '#a16207', accent: '#0f766e' })
+    expect(aiSiteImportBrandOf({ buttonFill: null, link: null, palette: [] })).toBeNull()
+  })
+
+  it('draws the kind of site’s own look from the seed with no logo and no picture, so the site still leaves the stock theme', async () => {
+    const { look, saved, stored } = await bare({ brand: { kind: 'name-only', text: 'Harbor Lane', logo: null }, hero: null }, {})
+    expect(look).toMatchObject({ theme: 'applied', from: 'seed', logo: null, colors: [] })
+    expect(stored).toEqual([])
+    expect(saved).toHaveLength(1)
+    const kind = aiSiteKindFor('Harbor Lane Bookkeeping Bookkeeping for small businesses.')
+    const drawn = aiSiteStyleFor({ kind, answer: {}, seed: aiSiteSeed('importJob'), avoid: [] })
+    expect(saved[0]).toMatchObject({ base: drawn.base, hue: drawn.hue, fonts: drawn.fonts })
+    expect(aiSiteTheme(saved[0] as AiSiteStyle, DEFAULT_SITE_THEME).colorSchemes?.light?.primary?.main).not.toBe(DEFAULT_SITE_THEME.colorSchemes?.light?.primary?.main)
+  })
+
+  it('leaves the stock theme even when the home page cannot be read again and nothing was found of it', async () => {
+    const { look, saved } = await bare({ brand: { kind: 'name-only', text: '', logo: null }, hero: null, look: null }, {}, { pageRead: false })
+    expect(look).toMatchObject({ theme: 'applied', from: 'seed' })
+    expect(saved).toHaveLength(1)
+  })
+
+  it('falls through to the seed where no library can hold a picture, and says so', async () => {
+    const { look } = await bare({}, { [LOGO]: ['#0f766e'] }, { ingest: false })
+    expect(look).toMatchObject({ theme: 'applied', from: 'seed' })
+  })
+
+  it('still tells of an owner’s theme it kept', async () => {
+    const look = await aiRunSiteImportLook(
+      { firestore: {} as never, hostId: 'h', orgId: 'o', uid: 'u', jobId: 'j', domain: 'harbor-lane.example', home: { ...HOME, brand: { kind: 'name-only', text: '', logo: null }, hero: null }, at: NOW },
+      { fetch: async (url) => ({ ...ok(url, ''), ok: false, refusal: 'http-status' }), save: async () => ({ write: 'kept', baseName: 'Base' }), others: async () => [], readHost: async () => null, fontFacts },
+    )
+    expect(look.theme).toBe('kept')
+  })
+
+  it('reads every sheet the home page links, to the same budget as the crawl, and no Google Fonts sheet', async () => {
+    const asked: string[] = []
+    const page = await readSiteImportLookPage('https://www.harbor-lane.example/', {
+      fetch: async (url) => {
+        asked.push(url)
+        if (url.endsWith('/')) return ok(url, `<html><head>${[1, 2, 3, 4, 5, 6].map((at) => `<link rel="stylesheet" href="https://cdn.sitekit.example/${at}.css">`).join('')}<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Lora"></head></html>`)
+        return ok(url, `.s{color:red}/*${url}*/`, 'text/css')
+      },
+    })
+    expect(page?.stylesheets).toHaveLength(6)
+    expect(page?.stylesheets[4]).toContain('5.css')
+    expect(asked.some((url) => url.includes('googleapis'))).toBe(false)
+  })
+})
+
+describe('the hero a home page keeps for the look (AGL-4152)', () => {
+  it('is its first main picture that is not its logo', () => {
+    const page = {
+      url: 'https://www.harbor-lane.example/',
+      path: '/',
+      foundBy: 'home',
+      title: 'Home',
+      description: '',
+      ogImage: null,
+      siteName: 'Harbor Lane',
+      icons: [],
+      organization: null,
+      blocks: [],
+      links: [],
+      navLinks: [],
+      forms: { kept: [], removed: 0 },
+      lang: 'en',
+      canonical: null,
+      bytes: 1,
+      brand: { logo: { url: 'https://cdn.example/logo.png', alt: 'Logo', type: 'raster' }, text: '' },
+      images: [
+        { url: 'https://cdn.example/logo.png', alt: 'Logo', sameSite: false, region: 'header' },
+        { url: 'https://cdn.example/logo.png', alt: 'Logo', sameSite: false, region: 'main' },
+        { url: 'https://cdn.example/harbor.jpg', alt: 'Boats', sameSite: false, region: 'main' },
+      ],
+    } as unknown as SiteImportPage
+    expect(aiSiteImportHomeOf({ pages: [page] })?.hero).toEqual({ url: 'https://cdn.example/harbor.jpg', alt: 'Boats' })
+    expect(aiSiteImportHomeOf({ pages: [{ ...page, images: [] }] })?.hero).toBeUndefined()
   })
 })

@@ -34,6 +34,11 @@
  * `<video>` playing behind its opening, a YouTube frame, a `lite-youtube`
  * facade, a card's picture linking a Vimeo page, and an `og:video` in its
  * head.
+ * A garden firm that does not exist either, in the markup a visual grid builder
+ * writes (AGL-4152), places every block with a rule of its own on a 24-column
+ * grid, inside a `min-width` query: `grid-services` shows three cards and a row
+ * of pictures, `swapped-grid` a page whose written order is not the order a
+ * visitor reads, so each card's words sit after the next card's heading.
  *
  * The aglyn.com recordings keep what the `aglyn-com/` ones dropped and the
  * layout is made of: class names, inline icons and the page's own stylesheet.
@@ -60,6 +65,7 @@ const DIR = join(__dirname, 'site-layout')
 export const SITE_LAYOUT_AGLYN_ORIGIN = 'https://aglyn.com'
 export const SITE_LAYOUT_POTTERY_ORIGIN = 'https://www.tidewater-pottery.example'
 export const SITE_LAYOUT_BAKERY_ORIGIN = 'https://www.hearth-bakery.example'
+export const SITE_LAYOUT_GARDEN_ORIGIN = 'https://www.fern-and-stone.example'
 
 /** The recorded pages, by name: the file and the address it was read from. */
 export const SITE_LAYOUT_PAGES = {
@@ -72,9 +78,42 @@ export const SITE_LAYOUT_PAGES = {
   blog: { file: 'aglyn-blog.html', url: `${SITE_LAYOUT_AGLYN_ORIGIN}/blog` },
   pottery: { file: 'squarespace-pottery.html', url: `${SITE_LAYOUT_POTTERY_ORIGIN}/` },
   bakery: { file: 'video-bakery.html', url: `${SITE_LAYOUT_BAKERY_ORIGIN}/` },
+  gridServices: { file: 'grid-services.html', url: `${SITE_LAYOUT_GARDEN_ORIGIN}/` },
+  swappedGrid: { file: 'swapped-grid.html', url: `${SITE_LAYOUT_GARDEN_ORIGIN}/plans` },
 } as const
 
 export type SiteLayoutPageName = keyof typeof SITE_LAYOUT_PAGES
+
+/**
+ * Pages written for the reads of a site's brand and its forms (AGL-4152),
+ * about a bookkeeper that does not exist and in the markup of no builder, so
+ * the readers are never tuned to one site. They are not scored against a build
+ * as the pages above are.
+ *
+ * `vars-theme` links five stylesheets, saved beside it in `vars-theme/`: four
+ * of a site kit's shared widgets, whose loud colors are nobody's brand, then
+ * the site's own, the last link, whose colors and fonts are custom properties
+ * (comma triples and the modern spaced syntax) and whose buttons are styled
+ * through `:is()` and `:where()`. `json-form` has no `<form>`: its fields are
+ * JSON a script block holds, beside two arrays that only look like fields.
+ */
+export const SITE_READ_ORIGIN = 'https://www.harbor-lane.example'
+
+export const SITE_READ_VARS_THEME_URL = `${SITE_READ_ORIGIN}/`
+export const SITE_READ_JSON_FORM_URL = `${SITE_READ_ORIGIN}/contact`
+
+/** A written page's markup, by its file in `site-layout/`. */
+export const siteReadPage = (file: 'vars-theme.html' | 'json-form.html'): string => readFileSync(join(DIR, file), 'utf8')
+
+/** The `vars-theme` page's stylesheets, by the address its markup links each from, in link order. */
+export const siteReadVarsThemeSheets = (): Array<{ url: string; text: string }> =>
+  [
+    ['https://cdn.sitekit.example/universal/reset.css', 'reset.css'],
+    ['https://cdn.sitekit.example/components/gallery.css', 'gallery.css'],
+    ['https://cdn.sitekit.example/components/map.css', 'map.css'],
+    ['https://cdn.sitekit.example/components/booking.css', 'booking.css'],
+    ['https://assets.sitekit.example/sites/4182/site.css', 'site.css'],
+  ].map(([url, file]) => ({ url: url as string, text: readFileSync(join(DIR, 'vars-theme', file as string), 'utf8') }))
 
 const cache = new Map<string, string>()
 

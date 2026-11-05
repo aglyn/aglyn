@@ -9,6 +9,68 @@ content on the marketing site and is written separately.
 
 <!-- releases below -->
 
+## v1.13.0 — 2026-11-05
+
+[Compare with the previous release](https://github.com/aglyn/aglyn/compare/v1.12.0...v1.13.0)
+
+### Added
+
+- **sharing:** sweep keeps all-except sharing current as sites change ([AGL-4047](https://linear.app/aglyn/issue/AGL-4047))
+- **data:** hub's dataset Import switches off naming the key rather than hiding ([AGL-4047](https://linear.app/aglyn/issue/AGL-4047))
+- **sites:** a site's Permissions button also opens for site.manage, as its route does ([AGL-4047](https://linear.app/aglyn/issue/AGL-4047))
+- **email:** sending domain actions ask org.sendingDomains, as the domains route does ([AGL-4047](https://linear.app/aglyn/issue/AGL-4047))
+- **media:** org library writes switch off naming org.media; temporary link stays on ([AGL-4047](https://linear.app/aglyn/issue/AGL-4047))
+- **sharing:** pure helpers for sharing with all sites except some ([AGL-4047](https://linear.app/aglyn/issue/AGL-4047))
+- **permissions:** the other nine integrations ask keys, not site roles ([AGL-4047](https://linear.app/aglyn/issue/AGL-4047))
+- **permissions:** integrations and gift card import ask keys, not site roles ([AGL-4047](https://linear.app/aglyn/issue/AGL-4047))
+- **ai:** the import reads a form defined in data ([AGL-4152](https://linear.app/aglyn/issue/AGL-4152))
+- **data:** dataset Import switches off naming the key rather than hiding ([AGL-4047](https://linear.app/aglyn/issue/AGL-4047))
+- **marketing:** empty-list Create and row Delete switch off naming the key ([AGL-4047](https://linear.app/aglyn/issue/AGL-4047))
+- **settings:** workspace export moves to Import & export so a key holder reaches it ([AGL-4047](https://linear.app/aglyn/issue/AGL-4047))
+- **workflows:** org webhooks list asks site.sensitive per site, as the rule does ([AGL-4047](https://linear.app/aglyn/issue/AGL-4047))
+- **media:** sharing controls switch off naming the media key; default sharing names its key ([AGL-4047](https://linear.app/aglyn/issue/AGL-4047))
+- **native:** an order says it was rung offline and what to check ([AGL-4162](https://linear.app/aglyn/issue/AGL-4162))
+- **native:** stays set Only N left and guests; a stored 1 stays a number ([AGL-4044](https://linear.app/aglyn/issue/AGL-4044), [AGL-4043](https://linear.app/aglyn/issue/AGL-4043))
+- **native:** per-site permissions and the register asks managePos ([AGL-4047](https://linear.app/aglyn/issue/AGL-4047))
+- **native:** download and email an order's invoice on iOS and Android ([AGL-4162](https://linear.app/aglyn/issue/AGL-4162))
+- **native:** register and kiosk price modifiers on the picked variant ([AGL-4162](https://linear.app/aglyn/issue/AGL-4162))
+- **native:** inbox quote requests and files, named notifications ([AGL-4162](https://linear.app/aglyn/issue/AGL-4162))
+- **native:** content, media, sites and shell gates ask their permission keys ([AGL-4047](https://linear.app/aglyn/issue/AGL-4047))
+- **native:** the erase card prints plugin notes, and kiosks search the menu ([AGL-4047](https://linear.app/aglyn/issue/AGL-4047))
+- **native:** settings, billing and plugin screens ask their permission keys ([AGL-4047](https://linear.app/aglyn/issue/AGL-4047))
+- **native:** crm, email and inbox gates ask their permission keys ([AGL-4047](https://linear.app/aglyn/issue/AGL-4047))
+
+### Fixed
+
+- **sharing:** a scope sweep document is named by a resource id, as every platform document is ([AGL-4047](https://linear.app/aglyn/issue/AGL-4047))
+- **permissions:** card specs read the refusal; a locked connect form keeps its label ([AGL-4047](https://linear.app/aglyn/issue/AGL-4047))
+- **ai:** an element's --primary or --secondary says its button; a skip link is no call to action ([AGL-4152](https://linear.app/aglyn/issue/AGL-4152))
+- **ai:** a bare read never leaves an imported site in the stock theme ([AGL-4152](https://linear.app/aglyn/issue/AGL-4152))
+- **ai:** the import reads every stylesheet a site links, to a byte budget ([AGL-4152](https://linear.app/aglyn/issue/AGL-4152))
+- **ai:** a page placed on a grid reads in the order and columns a visitor sees ([AGL-4152](https://linear.app/aglyn/issue/AGL-4152))
+- **permissions:** copy names the permission, not a role; rename useCanManageSite ([AGL-4047](https://linear.app/aglyn/issue/AGL-4047))
+- **workflows:** Add on a site stays as it was; the create route asks its own key ([AGL-4047](https://linear.app/aglyn/issue/AGL-4047))
+- **native:** a refusal stays on an iOS spec screen until dismissed ([AGL-4105](https://linear.app/aglyn/issue/AGL-4105))
+- **inbox:** the workspace leads screen stops its member read when it goes away ([AGL-4047](https://linear.app/aglyn/issue/AGL-4047))
+- **besigner:** saving stays closed until the page has loaded ([AGL-4174](https://linear.app/aglyn/issue/AGL-4174))
+
+### Documentation
+
+- **ai:** the import's stylesheet budget, look fallback and data forms ([AGL-4152](https://linear.app/aglyn/issue/AGL-4152))
+- **permissions:** name the permission; state a site member's reach, spec it true ([AGL-4047](https://linear.app/aglyn/issue/AGL-4047))
+- **permissions:** catalog says row deletes ask Manage data, whole deletes the erase key ([AGL-4047](https://linear.app/aglyn/issue/AGL-4047))
+
+<details>
+<summary>Also in this release: 1 test, 2 chore</summary>
+
+- gates round 2 ready to land ([AGL-4047](https://linear.app/aglyn/issue/AGL-4047))
+- **docs:** regenerate the Assist docs index ([AGL-4047](https://linear.app/aglyn/issue/AGL-4047))
+- **ai:** the job spec's site exists, since the look pass always draws it a theme ([AGL-4152](https://linear.app/aglyn/issue/AGL-4152))
+
+</details>
+
+9 commit(s) did not parse as conventional commits (merge commits and the like) and did not contribute to the version bump.
+
 ## v1.12.0 — 2026-11-05
 
 [Compare with the previous release](https://github.com/aglyn/aglyn/compare/v1.11.0...v1.12.0)
