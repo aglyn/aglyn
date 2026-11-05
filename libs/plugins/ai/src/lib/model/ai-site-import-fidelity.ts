@@ -144,6 +144,8 @@ export interface SiteImportPageFidelity {
   widths: SiteImportFidelityCount
   /** The source's rows of two or more columns, set side by side on the page. */
   rows: SiteImportFidelityCount
+  /** Pictures and labels the source hides from a visitor, drawn all the same (AGL-4152); any at all is a miss. Absent when the read says of none. */
+  concealed?: SiteImportFidelityCount
   /** The source's groups by kind. A group of lines that only share a shape (`text`) is drawn as its lines, and is not scored. */
   groups: Partial<Record<SiteImportGroupKind, SiteImportFidelityGroup>>
   tables: SiteImportFidelityCount
@@ -380,6 +382,8 @@ export interface SiteImportFidelitySource {
   blocks: readonly SiteImportBlock[]
   /** The source's pictures as the site's library holds them (`from` → `src`, and their size); without them a picture is counted, not placed. */
   photos?: ReadonlyArray<{ from?: string; src: string; width?: number; height?: number }>
+  /** What the source holds that a visitor cannot see (AGL-4152): a build that draws any of it fails `concealed`. */
+  concealed?: { pictures: readonly string[]; words: readonly string[] }
 }
 
 /*------------------------------------------
@@ -1034,6 +1038,7 @@ export function siteImportFidelity(source: SiteImportFidelitySource, tree: SiteI
     tables: ratioKept(tables.source, tables.built),
     tabs: ratioKept(tabs.source, tabs.built),
     pictures,
+    ...(source.concealed ? { concealed: concealedScore(source, built) } : {}),
     framing,
     icons: { ...ratioKept(icons.source, icons.built), lone: icons.lone },
     buttons: { ...ratioKept(buttons.source, buttons.built), unlinked: buttons.unlinked },
@@ -1168,6 +1173,20 @@ function picturesScore(source: SiteImportFidelitySource, built: Built, placement
   return ratioKept(refs.length, refs.filter((ref) => placement.of.has(ref)).length)
 }
 
+/** What a visitor of the source cannot see and a visitor of the build can (AGL-4152): a hidden picture, or a line that is only a screen reader's label. */
+function concealedScore(source: SiteImportFidelitySource, built: Built): SiteImportFidelityCount {
+  const pictures = new Set(source.concealed?.pictures ?? [])
+  const copies = new Set((source.photos ?? []).flatMap((photo) => (photo.from && pictures.has(photo.from) ? [photo.src] : [])))
+  const drawn = built.order.filter((id) => {
+    const src = clean(built.node(id)?.props?.['src'])
+    return built.node(id)?.componentId === 'image' && (pictures.has(src) || copies.has(src))
+  }).length
+  const labels = new Set((source.concealed?.words ?? []).map(wordLine))
+  const said = built.pieces.filter((piece) => labels.has(piece.key)).length
+  const found = drawn + said
+  return { source: 0, built: found, ratio: found ? 0 : 1 }
+}
+
 /** How near two shapes must be to be one (AGL-4138): 5%. */
 const SAME_SHAPE = 0.05
 
@@ -1288,6 +1307,7 @@ function pageMeasures(report: Omit<SiteImportPageFidelity, 'score' | 'lowest'>):
     ['headings', report.headings],
     ['forms', report.forms],
     ['videos', report.videos],
+    ...(report.concealed ? [['concealed', report.concealed] as [string, SiteImportFidelityCount]] : []),
   ]
 }
 
