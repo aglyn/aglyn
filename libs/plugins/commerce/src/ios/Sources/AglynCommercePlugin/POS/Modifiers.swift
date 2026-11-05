@@ -26,6 +26,15 @@ struct LineModifier: Equatable {
 
 private func isWhole(_ value: Double) -> Bool { value.isFinite && value == value.rounded(.down) }
 
+private func priceIsValid(_ cents: Double) -> Bool { isWhole(cents) && cents >= 0 && cents <= Double(posMaxModifierPriceCents) }
+
+/// A choice's price on the picked variant: its price by that variant where it has one, else its own
+/// (`modifierOptionPriceCents`). A product with no options sells a `default` variant, which no price list names.
+func modifierOptionPriceCents(_ option: ProductModifierOption, variantID: String?) -> Int {
+  if let variantID, variantID != "default", let cents = option.priceCentsByVariant?[variantID], cents.isFinite { return Int(cents) }
+  return Int(option.priceCents)
+}
+
 /// Why groups cannot be used, or nil when they are well formed (`modifierGroupsProblem`).
 func modifierGroupsProblem(_ groups: [ProductModifierGroup]) -> String? {
   if groups.count > posMaxModifierGroups { return "At most \(posMaxModifierGroups) modifier groups per product" }
@@ -41,8 +50,9 @@ func modifierGroupsProblem(_ groups: [ProductModifierGroup]) -> String? {
     for option in group.options {
       if option.id.isEmpty || !optionIDs.insert(option.id).inserted { return "Modifier choices need unique ids" }
       if option.name.trimmingCharacters(in: .whitespaces).isEmpty { return "Name every choice in “\(group.name)”" }
-      if !isWhole(option.priceCents) || option.priceCents < 0 || option.priceCents > Double(posMaxModifierPriceCents) {
-        return "“\(option.name)” needs a price of $0 to $1,000"
+      if !priceIsValid(option.priceCents) { return "“\(option.name)” needs a price of $0 to $1,000" }
+      if option.priceCentsByVariant?.values.contains(where: { !priceIsValid($0) }) == true {
+        return "“\(option.name)” needs a price of $0 to $1,000 for each option it is priced by"
       }
     }
     if !isWhole(group.min) || group.min < 0 { return "“\(group.name)” needs a minimum of 0 or more" }
@@ -73,7 +83,7 @@ enum ResolvedModifiers: Equatable {
 /// Prices a line's chosen modifiers from the product, in group order, and
 /// checks each group's minimum and maximum (`resolveLineModifiers`).
 func resolveLineModifiers(
-  _ productName: String, _ groups: [ProductModifierGroup], _ picks: [ModifierSelection]
+  _ productName: String, _ groups: [ProductModifierGroup], _ picks: [ModifierSelection], variantID: String? = nil
 ) -> ResolvedModifiers {
   let usable = usableModifierGroups(groups)
   var seen = Set<String>()
@@ -95,7 +105,7 @@ func resolveLineModifiers(
       return .refused("Choose at most \(Int(group.max)) for \(group.name.lowercased()) on \(productName).")
     }
     modifiers += chosen.map {
-      LineModifier(groupID: group.id, optionID: $0.id, group: group.name, name: $0.name, priceCents: Int($0.priceCents))
+      LineModifier(groupID: group.id, optionID: $0.id, group: group.name, name: $0.name, priceCents: modifierOptionPriceCents($0, variantID: variantID))
     }
   }
   return .ok(modifiers, extraCents: modifiers.reduce(0) { $0 + $1.priceCents })

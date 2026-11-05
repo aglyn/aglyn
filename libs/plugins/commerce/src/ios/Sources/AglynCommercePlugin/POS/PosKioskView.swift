@@ -345,7 +345,8 @@ private struct KioskItemSheet: View {
                 HStack {
                   Text(option.name)
                   Spacer()
-                  if option.priceCents > 0 { Text("+\(model.money(Int(option.priceCents)))").foregroundStyle(.secondary).monospacedDigit() }
+                  let extra = modifierOptionPriceCents(option, variantID: variantID)
+                  if extra > 0 { Text("+\(model.money(extra))").foregroundStyle(.secondary).monospacedDigit() }
                   Image(
                     systemName: chosen
                       ? (group.isSingle ? "largecircle.fill.circle" : "checkmark.square.fill") : (group.isSingle ? "circle" : "square")

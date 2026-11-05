@@ -26,6 +26,17 @@ data class LineModifier(
 
 private fun Double.isWhole() = isFinite() && this == kotlin.math.floor(this)
 
+private fun modifierPriceIsValid(cents: Double): Boolean = cents.isWhole() && cents >= 0 && cents <= POS_MAX_MODIFIER_PRICE_CENTS
+
+/**
+ * A choice's price on the picked variant: its price by that variant where it has one, else its own
+ * (`modifierOptionPriceCents`). A product with no options sells a `default` variant, which no price list names.
+ */
+fun modifierOptionPriceCents(option: ProductModifierOption, variantId: String?): Long {
+  val byVariant = if (variantId != null && variantId != "default") option.priceCentsByVariant?.get(variantId) else null
+  return (if (byVariant != null && byVariant.isFinite()) byVariant else option.priceCents).toLong()
+}
+
 /** Why groups cannot be used, or null when they are well formed (`modifierGroupsProblem`). */
 fun modifierGroupsProblem(groups: List<ProductModifierGroup>): String? {
   if (groups.size > POS_MAX_MODIFIER_GROUPS) return "At most $POS_MAX_MODIFIER_GROUPS modifier groups per product"
@@ -39,8 +50,9 @@ fun modifierGroupsProblem(groups: List<ProductModifierGroup>): String? {
     for (option in group.options) {
       if (option.id.isEmpty() || !optionIds.add(option.id)) return "Modifier choices need unique ids"
       if (option.name.isBlank()) return "Name every choice in “${group.name}”"
-      if (!option.priceCents.isWhole() || option.priceCents < 0 || option.priceCents > POS_MAX_MODIFIER_PRICE_CENTS) {
-        return "“${option.name}” needs a price of $0 to $1,000"
+      if (!modifierPriceIsValid(option.priceCents)) return "“${option.name}” needs a price of $0 to $1,000"
+      if (option.priceCentsByVariant?.values?.any { !modifierPriceIsValid(it) } == true) {
+        return "“${option.name}” needs a price of $0 to $1,000 for each option it is priced by"
       }
     }
     if (!group.min.isWhole() || group.min < 0) return "“${group.name}” needs a minimum of 0 or more"
@@ -68,7 +80,7 @@ sealed interface ResolvedModifiers {
  * Prices a line's chosen modifiers from the product, in group order, and
  * checks each group's minimum and maximum (`resolveLineModifiers`).
  */
-fun resolveLineModifiers(productName: String, groups: List<ProductModifierGroup>, picks: List<ModifierSelection>): ResolvedModifiers {
+fun resolveLineModifiers(productName: String, groups: List<ProductModifierGroup>, picks: List<ModifierSelection>, variantId: String? = null): ResolvedModifiers {
   val usable = usableModifierGroups(groups)
   val seen = mutableSetOf<String>()
   for (pick in picks.take(POS_MAX_MODIFIER_GROUPS * POS_MAX_MODIFIER_OPTIONS)) {
@@ -87,7 +99,7 @@ fun resolveLineModifiers(productName: String, groups: List<ProductModifierGroup>
     if (chosen.size > group.max) {
       return ResolvedModifiers.Refused("Choose at most ${group.max.toInt()} for ${group.name.lowercase()} on $productName.")
     }
-    chosen.mapTo(modifiers) { LineModifier(group.id, it.id, group.name, it.name, it.priceCents.toLong()) }
+    chosen.mapTo(modifiers) { LineModifier(group.id, it.id, group.name, it.name, modifierOptionPriceCents(it, variantId)) }
   }
   return ResolvedModifiers.Ok(modifiers, modifiers.sumOf { it.priceCents })
 }

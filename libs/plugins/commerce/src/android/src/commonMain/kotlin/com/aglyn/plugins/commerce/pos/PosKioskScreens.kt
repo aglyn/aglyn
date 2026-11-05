@@ -395,7 +395,7 @@ private fun KioskItemSheet(model: PosKioskModel, product: PosKioskProduct, close
                     picks = others + mine.map { ModifierSelection(group.id, it) }
                     problem = null
                   },
-                  label = { Text(if (option.priceCents > 0) "${option.name} +${model.money(option.priceCents.toLong())}" else option.name) },
+                  label = { Text(if (modifierOptionPriceCents(option, variantId) > 0) "${option.name} +${model.money(modifierOptionPriceCents(option, variantId))}" else option.name) },
                   leadingIcon = if (on) ({ Icon(AglynIcons.named("check"), null, Modifier.size(18.dp)) }) else null,
                   modifier = Modifier.heightIn(min = 48.dp).testTag("kiosk-option-${group.id}-${option.id}"),
                 )

@@ -97,12 +97,22 @@ func modifierGroups(_ raw: Any?) -> [ProductModifierGroup] {
     var options: [ProductModifierOption] = []
     for item in group["options"] as? [Any] ?? [] {
       guard let option = item as? [String: Any], let price = number(option["priceCents"]) else { return [] }
+      var byVariant: [String: Double]?
+      if let stored = option["priceCentsByVariant"] {
+        guard let prices = stored as? [String: Any] else { return [] }
+        var read: [String: Double] = [:]
+        for (id, value) in prices {
+          guard let cents = number(value) else { return [] }
+          read[id] = cents
+        }
+        byVariant = read
+      }
       options.append(
-        ProductModifierOption(id: option["id"] as? String ?? "", name: option["name"] as? String ?? "", priceCents: price))
+        ProductModifierOption(id: option["id"] as? String ?? "", name: option["name"] as? String ?? "", priceCents: price, priceCentsByVariant: byVariant))
     }
     groups.append(
       ProductModifierGroup(
-        id: group["id"] as? String ?? "", max: max, min: min, name: group["name"] as? String ?? "", options: options))
+        id: group["id"] as? String ?? "", max: max, min: min, name: group["name"] as? String ?? "", online: group["online"] as? Bool, options: options))
   }
   return usableModifierGroups(groups)
 }
@@ -140,7 +150,7 @@ enum PickResult: Equatable {
 /// What one variant with its modifier choices puts in the basket, or why it cannot be sold.
 func pick(_ item: PosItem, _ variant: PosVariant, modifiers: [ModifierSelection] = []) -> PickResult {
   guard let unit = variant.unitCents else { return .problem("Set a price for \(item.name) before selling it.") }
-  switch resolveLineModifiers(item.name, item.modifierGroups, modifiers) {
+  switch resolveLineModifiers(item.name, item.modifierGroups, modifiers, variantID: variant.id) {
   case .refused(let error): return .problem(error)
   case .ok(let resolved, let extra):
     let label = lineLabelWithModifiers(variant.label, resolved.map(\.name))

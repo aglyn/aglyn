@@ -90,12 +90,17 @@ fun modifierGroupsFrom(raw: Any?): List<ProductModifierGroup> {
       name = group["name"] as? String ?: "",
       min = group["min"].asDouble() ?: return emptyList(),
       max = group["max"].asDouble() ?: return emptyList(),
+      online = group["online"] as? Boolean,
       options = group["options"].asList().map { item ->
         val option = item.asMap() ?: return emptyList()
         ProductModifierOption(
           id = option["id"] as? String ?: "",
           name = option["name"] as? String ?: "",
           priceCents = option["priceCents"].asDouble() ?: return emptyList(),
+          priceCentsByVariant = option["priceCentsByVariant"]?.let { stored ->
+            val prices = stored.asMap() ?: return emptyList()
+            prices.entries.associate { (id, cents) -> id.toString() to (cents.asDouble() ?: return emptyList()) }
+          },
         )
       },
     )
@@ -149,7 +154,7 @@ sealed interface PickResult {
 /** What one variant with its modifier choices puts in the basket, or why it cannot be sold. */
 fun pickOf(item: PosItem, variant: PosVariant, modifiers: List<ModifierSelection> = emptyList()): PickResult {
   val unit = variant.unitCents ?: return PickResult.Problem("Set a price for ${item.name} before selling it.")
-  return when (val resolved = resolveLineModifiers(item.name, item.modifierGroups, modifiers)) {
+  return when (val resolved = resolveLineModifiers(item.name, item.modifierGroups, modifiers, variant.id)) {
     is ResolvedModifiers.Refused -> PickResult.Problem(resolved.error)
     is ResolvedModifiers.Ok -> PickResult.Ok(
       CartPick(
