@@ -24,10 +24,14 @@
  * chose a site and the save failed. They are switched off with the permission
  * named, on the real library, in each of the three places sharing is changed.
  *
- * So are the library's other writes the same doors refuse: Make private, Rename,
- * Move, tags and Delete, on the file, the folder, a selection and the drawer.
- * Copy temporary link stays on, because `/api/media/sign` does not ask the key,
- * and a site's own library answers to the site's key and is left alone.
+ * So is everything else the same doors refuse: Upload, New folder, New subfolder,
+ * Replace file, Edit image, File info, "Find where this is used", Make private,
+ * Rename, Move, tags and Delete, on the toolbar, the file, the folder, a selection
+ * and the drawer. Copy temporary link stays on, for a site's collaborator too,
+ * because `/api/media/sign` asks only that the member can see the file.
+ *
+ * A site's own library answers the same way to the site's "Edit site content",
+ * read as its door reads it, and the workspace's key has no say there.
  */
 
 import { act, fireEvent, render, screen, within } from '@testing-library/react'
@@ -473,6 +477,49 @@ describe('the org library’s other writes', () => {
       expect(standing(screen.getByRole('menuitem', { name: 'Details' }))).toBe('on')
     }, 240_000)
 
+    it('finds Upload and New folder off, on the toolbar and the rail', async () => {
+      await mountLibrary()
+      for (const button of screen.getAllByRole('button', { name: 'Upload media' })) {
+        expect(standing(button)).toBe('refused')
+      }
+      const newFolders = screen.getAllByRole('button', { name: 'New folder' })
+      expect(newFolders).toHaveLength(2)
+      for (const button of newFolders) expect(standing(button)).toBe('refused')
+    }, 240_000)
+
+    it('refuses a dropped file, saying why, and uploads nothing', async () => {
+      await mountLibrary()
+      const posts = (global.fetch as jest.Mock).mock.calls.length
+      const dropZone = screen.getByRole('button', { name: 'Upload media' }).closest('.MuiBox-root') as HTMLElement
+      const dataTransfer = { types: ['Files'], files: [new File(['x'], 'a.png', { type: 'image/png' })] }
+      fireEvent.drop(dropZone, { dataTransfer })
+      expect(mockSnackbar.enqueueSnackbar).toHaveBeenCalledWith(REFUSAL, expect.anything())
+      expect((global.fetch as jest.Mock).mock.calls.length).toBe(posts)
+    }, 240_000)
+
+    it('finds a file’s Replace file off', async () => {
+      await mountLibrary()
+      await fileMenu('logo.webp')
+      expect(standing(screen.getByRole('menuitem', { name: 'Replace file' }))).toBe('refused')
+    }, 240_000)
+
+    it('finds a folder’s New subfolder off, on the card', async () => {
+      await mountLibrary()
+      await folderItem('Covers')
+      expect(standing(screen.getByRole('menuitem', { name: 'New subfolder' }))).toBe('refused')
+    }, 240_000)
+
+    it('finds the drawer’s Replace, Edit image and usage scan off, and asks no door', async () => {
+      await mountLibrary()
+      await drawerSelect('logo.webp')
+      const drawer = document.querySelector('.MuiDrawer-paper') as HTMLElement
+      for (const name of ['Replace file', 'Edit image', 'Find where this is used']) {
+        expect([name, standing(within(drawer).getByRole('button', { name }))]).toEqual([name, 'refused'])
+      }
+      const asked = (global.fetch as jest.Mock).mock.calls.map(([input]) => String(input))
+      expect(asked.filter((url) => url.includes('/api/media/metadata') || url.includes('/api/media/references'))).toEqual([])
+    }, 240_000)
+
     it('keeps Copy temporary link on, which its route does not ask the key for', async () => {
       const library = mockDb.collections.get('orgs/org-1/media') as { id: string; data: Record<string, unknown> }[]
       const logo = library.find((row) => row.data.fileName === 'logo.webp') as { data: Record<string, unknown> }
@@ -529,6 +576,25 @@ describe('the org library’s other writes', () => {
       }
       expect(screen.queryByLabelText(REFUSAL)).toBeNull()
     }, 240_000)
+
+    it('has Upload, New folder, Replace and the usage scan on', async () => {
+      await mountLibrary()
+      for (const button of screen.getAllByRole('button', { name: 'Upload media' })) {
+        expect(standing(button)).toBe('on')
+      }
+      for (const button of screen.getAllByRole('button', { name: 'New folder' })) {
+        expect(standing(button)).toBe('on')
+      }
+      await fileMenu('logo.webp')
+      expect(standing(screen.getByRole('menuitem', { name: 'Replace file' }))).toBe('on')
+      fireEvent.keyDown(screen.getByRole('menuitem', { name: 'Replace file' }), { key: 'Escape' })
+      await drawerSelect('logo.webp')
+      const drawer = document.querySelector('.MuiDrawer-paper') as HTMLElement
+      for (const name of ['Replace file', 'Edit image', 'Find where this is used']) {
+        expect([name, standing(within(drawer).getByRole('button', { name }))]).toEqual([name, 'on'])
+      }
+      expect(screen.queryByLabelText(REFUSAL)).toBeNull()
+    }, 240_000)
   })
 
   describe('while permissions load', () => {
@@ -540,23 +606,127 @@ describe('the org library’s other writes', () => {
       await mountLibrary()
       await fileMenu('logo.webp')
       expect(standing(screen.getByRole('menuitem', { name: 'Delete' }))).toBe('held')
+      expect(standing(screen.getByRole('menuitem', { name: 'Replace file' }))).toBe('held')
       expect(screen.queryByLabelText(REFUSAL)).toBeNull()
     }, 240_000)
   })
 
-  describe('a site’s own library, which answers to the site’s key', () => {
+  describe('a site’s collaborator, who reaches only the files shared with their site', () => {
     beforeEach(() => {
       mockPermissions = REFUSED
-      mockDb.collections.clear()
-      seedLibrary('hosts/host-1', false)
+      mockDb.docs.set('orgs/org-1/members/user-1', {
+        role: 'viewer',
+        allHosts: false,
+        hostAccess: { 'host-1': 'viewer' },
+        scopeTokens: ['org', 'host:host-1'],
+      })
+      const library = mockDb.collections.get('orgs/org-1/media') as { id: string; data: Record<string, unknown> }[]
+      const logo = library.find((row) => row.data.fileName === 'logo.webp') as { data: Record<string, unknown> }
+      logo.data.private = true
     })
 
-    it('leaves its controls on for a member without the workspace’s key', async () => {
-      render(<MediaLibraryComponent hostId="host-1" />)
-      await screen.findAllByRole('button', { name: 'File actions' }, { timeout: 120_000 })
+    it('has Copy temporary link, which its route admits for anyone who can see the file', async () => {
+      await mountLibrary()
       await fileMenu('logo.webp')
-      expect(standing(screen.getByRole('menuitem', { name: 'Delete' }))).toBe('on')
-      expect(screen.queryByLabelText(REFUSAL)).toBeNull()
+      expect(standing(screen.getByRole('menuitem', { name: 'Copy temporary link' }))).toBe('on')
+      // Still not theirs: its route refuses a member who does not reach every site.
+      expect(screen.queryByRole('menuitem', { name: 'Publish file' })).toBeNull()
     }, 240_000)
   })
+})
+
+const SITE_REFUSAL = 'Your role does not include "Edit site content" — ask an organization admin'
+
+/** A control's standing in a site's own library. */
+function siteStanding(element: HTMLElement) {
+  const off = element.getAttribute('aria-disabled') === 'true' || (element as HTMLButtonElement).disabled === true
+  if (!off) return 'on'
+  return screen.queryAllByLabelText(SITE_REFUSAL).some((wrapper) => wrapper.contains(element)) ? 'refused' : 'held'
+}
+
+describe('a site’s own library, which answers to the site’s key', () => {
+  const mountSite = async () => {
+    render(<MediaLibraryComponent hostId="host-1" />)
+    await screen.findAllByRole('button', { name: 'File actions' }, { timeout: 120_000 })
+    await act(async () => {
+      await new Promise((resolve) => setTimeout(resolve, 0))
+    })
+  }
+  const allOff = async (expected: 'on' | 'refused') => {
+    for (const button of screen.getAllByRole('button', { name: 'Upload media' })) {
+      expect(['Upload media', siteStanding(button)]).toEqual(['Upload media', expected])
+    }
+    for (const button of screen.getAllByRole('button', { name: 'New folder' })) {
+      expect(['New folder', siteStanding(button)]).toEqual(['New folder', expected])
+    }
+    await fileMenu('logo.webp')
+    for (const name of ['Replace file', 'Delete']) {
+      expect([name, siteStanding(screen.getByRole('menuitem', { name }))]).toEqual([name, expected])
+    }
+    fireEvent.keyDown(screen.getByRole('menuitem', { name: 'Delete' }), { key: 'Escape' })
+    await drawerSelectSite('logo.webp')
+    const drawer = document.querySelector('.MuiDrawer-paper') as HTMLElement
+    for (const name of ['Replace file', 'Edit image', 'Find where this is used', 'Save', 'Delete file']) {
+      expect([name, siteStanding(within(drawer).getByRole('button', { name }))]).toEqual([name, expected])
+    }
+  }
+  const drawerSelectSite = async (fileName: string) => {
+    const card = (await screen.findByText(fileName)).closest('.MuiCard-root')
+    fireEvent.click(within(card as HTMLElement).getByRole('button', { name: 'File actions' }))
+    fireEvent.click(await screen.findByRole('menuitem', { name: 'Details' }))
+    await screen.findByRole('textbox', { name: 'File name' })
+  }
+
+  beforeEach(() => {
+    // The workspace's key has no say here, either way.
+    mockPermissions = REFUSED
+    mockDb.collections.clear()
+    mockDb.docs.clear()
+    seedLibrary('hosts/host-1', false)
+    global.fetch = jest.fn(async (input: RequestInfo | URL) => ({
+      ok: true,
+      status: 200,
+      json: async () => (String(input).includes('/api/media/quarantine') ? { quarantined: {} } : {}),
+    })) as unknown as typeof fetch
+  })
+
+  it.each(['admin', 'editor', 'author'])('leaves its controls on for a site %s, without the workspace’s key', async (role) => {
+    mockDb.docs.set('hosts/host-1', { memberRoles: { 'user-1': role } })
+    await mountSite()
+    await allOff('on')
+    expect(screen.queryByLabelText(SITE_REFUSAL)).toBeNull()
+  }, 240_000)
+
+  it('switches its controls off for a site viewer, naming the site’s key', async () => {
+    mockDb.docs.set('hosts/host-1', { memberRoles: { 'user-1': 'viewer' } })
+    await mountSite()
+    await allOff('refused')
+    expect(screen.queryByLabelText(REFUSAL)).toBeNull()
+    const asked = (global.fetch as jest.Mock).mock.calls.map(([input]) => String(input))
+    expect(asked.filter((url) => url.includes('/api/media/metadata') || url.includes('/api/media/references'))).toEqual([])
+  }, 240_000)
+
+  it('reads the site’s stamp before the role: an Author it refuses is off', async () => {
+    mockDb.docs.set('hosts/host-1', {
+      memberRoles: { 'user-1': 'author' },
+      memberPermissions: { 'user-1': { 'site.edit': false } },
+    })
+    await mountSite()
+    await allOff('refused')
+  }, 240_000)
+
+  it('reads the site’s stamp before the role: a Viewer it grants is on', async () => {
+    mockDb.docs.set('hosts/host-1', {
+      memberRoles: { 'user-1': 'viewer' },
+      memberPermissions: { 'user-1': { 'site.edit': true } },
+    })
+    await mountSite()
+    await allOff('on')
+  }, 240_000)
+
+  it('leaves staff, who are not on the roster, for the server to answer', async () => {
+    mockDb.docs.set('hosts/host-1', { memberRoles: {} })
+    await mountSite()
+    await allOff('on')
+  }, 240_000)
 })

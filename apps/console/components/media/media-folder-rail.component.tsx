@@ -51,9 +51,9 @@ export interface MediaFolderRailProps {
   onDelete: (folder: MediaFolder) => Promise<void>
   /** Picker mode renders without DnD hooks and without folder actions. */
   readOnly?: boolean
-  /** Rename, Delete and dragging stay off while permissions load. */
+  /** New folder, New subfolder, Rename, Delete and dragging stay off while permissions load. */
   writeHeld?: boolean
-  /** Why Rename, Delete and dragging are switched off for this reader. */
+  /** Why New folder, New subfolder, Rename, Delete and dragging are switched off for this reader. */
   writeRefusal?: string
 }
 
@@ -258,43 +258,53 @@ export function MediaFolderRail(props: MediaFolderRailProps) {
       </Stack>
       {renderChildren(null, 0)}
       {readOnly ? null : (
-        <Button
-          size="small"
-          sx={{ alignSelf: 'flex-start' }}
-          onClick={() =>
-            setPrompt({
-              title: 'New folder',
-              value: '',
-              action: async (name) => {
-                await onCreate(name, null)
-              },
-            })
-          }
-        >
-          {'New folder'}
-        </Button>
+        <BlockedControl blocked={Boolean(writeRefusal)} reason={writeRefusal ?? ''}>
+          <Button
+            size="small"
+            disabled={writeHeld}
+            sx={{ alignSelf: 'flex-start' }}
+            onClick={() =>
+              setPrompt({
+                title: 'New folder',
+                value: '',
+                action: async (name) => {
+                  await onCreate(name, null)
+                },
+              })
+            }
+          >
+            {'New folder'}
+          </Button>
+        </BlockedControl>
       )}
       <Menu
         anchorEl={menu?.anchor}
         open={Boolean(menu)}
         onClose={() => setMenu(null)}
       >
-        <MenuItem
-          onClick={() => {
-            const folder = menu?.folder
-            setMenu(null)
-            if (!folder) return
-            setPrompt({
-              title: `New folder in "${folder.name}"`,
-              value: '',
-              action: async (name) => {
-                await onCreate(name, folder.$id)
-              },
-            })
-          }}
+        <BlockedControl
+          blocked={Boolean(writeRefusal)}
+          reason={writeRefusal ?? ''}
+          fullWidth
         >
-          {'New subfolder'}
-        </MenuItem>
+          <MenuItem
+            disabled={writeHeld}
+            onClick={() => {
+              const folder = menu?.folder
+              setMenu(null)
+              if (!folder) return
+              setPrompt({
+                title: `New folder in "${folder.name}"`,
+                value: '',
+                action: async (name) => {
+                  await onCreate(name, folder.$id)
+                },
+              })
+            }}
+          >
+            {'New subfolder'}
+          </MenuItem>
+        </BlockedControl>
         <BlockedControl
           blocked={Boolean(writeRefusal)}
           reason={writeRefusal ?? ''}
