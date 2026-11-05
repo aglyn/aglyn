@@ -780,8 +780,9 @@ service cloud.firestore {
        * org block deliberately has no `{document=**}` catch-all (see the note
        * further down) — so there is no looser sibling to defeat it.
        *
-       * ⚠️ THE CUSTOM-ROLE LAYER IS NOT READ HERE. `memberResolves` further
-       * down reads it, through denormalization rather than resolution:
+       * ⚠️ THE CUSTOM-ROLE LAYER IS NOT READ HERE. `memberStamps` and
+       * `memberKeyOrOverride` further down read it, through denormalization
+       * rather than resolution:
        * `syncOrgAuthProjections` writes the RESOLVED map
        * (`resolvedPermissions`, all three layers applied) onto the member doc
        * and the rules read the answer instead of chasing the inputs. Resolving
@@ -943,9 +944,14 @@ service cloud.firestore {
       // the commerce plugin's webhook and staff route on the Admin SDK: a
       // client that could write one could mark an order shipped, point its
       // tracking anywhere, or forge one that was never paid. Readable by
-      // staff and by an org-wide member who may run the register (owner,
-      // admin or editor without a `managePos` override of false); the
-      // console itself reads them through the plugin's route.
+      // staff and by an org-wide member who may run the register: "Use the
+      // point of sale" (`managePos`), asked through `memberKeyOrOverride`
+      // with its default, the owner, admins and editors (AGL-4047), as the
+      // shop's route asks it. It asked that role list AND the member's own
+      // override (`memberGrants`), which gives every member with no decision
+      // written down the same verdict; a custom role deciding the key now
+      // decides it here as the route decides it. The console itself reads
+      // the orders through the plugin's route.
       //
       // And by an org-wide member whose resolved permissions say they may
       // buy hardware (AGL-4047): `posBuyHardware` stands on its own, so a
@@ -956,8 +962,7 @@ service cloud.firestore {
       match /hardwareOrders/{orderId} {
         allow read: if isStaff() ||
           (isOrgWideMember() && orgNotSuspended() &&
-           ((orgMember().role in ['owner', 'admin', 'editor'] &&
-             memberGrants('managePos')) ||
+           (memberKeyOrOverride('managePos', ['owner', 'admin', 'editor']) ||
             memberStamps('posBuyHardware')));
         allow write: if false;
       }
@@ -1148,11 +1153,13 @@ service cloud.firestore {
        * read is narrower than the org rollup's: the person reads their own
        * months, and an org-wide member reads everyone's only with
        * `billing.view` (the Usage page's gate) or `org.auditLog` (the team
-       * page's). A manager is read through `memberResolves`, whose absent
-       * map falls through to the role; anyone else needs the permission
-       * STAMPED on them by a custom role, which is `memberStamps`. A scoped
-       * collaborator sees nobody's month but their own — who else spends in
-       * the workspace is not a fact about the one site they were invited to.
+       * page's), each asked through `memberKeyOrOverride` with its default,
+       * the owner and admins (AGL-4047). It read "the owner or admin role
+       * AND `memberResolves`, or `memberStamps`", which is the same answers
+       * spelled with the role name: the role arm was the keys' default for
+       * an absent stamp, written out. A scoped collaborator sees nobody's
+       * month but their own — who else spends in the workspace is not a fact
+       * about the one site they were invited to.
        *
        * Server-written only: the document is a meter, and a client that
        * could write it could clear its own spend from the roster.
@@ -1161,10 +1168,8 @@ service cloud.firestore {
         allow read: if isStaff() ||
           (isOrgMember() && subjectUid == request.auth.uid) ||
           (isOrgWideMember() &&
-            ((canManageOrg() &&
-              (memberResolves('billing.view') || memberResolves('org.auditLog'))) ||
-             memberStamps('billing.view') ||
-             memberStamps('org.auditLog')));
+            (memberKeyOrOverride('billing.view', ['owner', 'admin']) ||
+             memberKeyOrOverride('org.auditLog', ['owner', 'admin'])));
         allow write: if false;
       }
 
@@ -1179,9 +1184,9 @@ service cloud.firestore {
        *    every member's model switch is bounded by it;
        *  - the subject reads their own — `member:` with their uid, or a
        *    `collab:` whose third segment is their uid;
-       *  - an org-wide manager with `billing.view` or `billing.manage`, read
-       *    the way the per-user usage months are (`memberResolves` for an
-       *    owner or admin, `memberStamps` for anyone a custom role granted);
+       *  - an org-wide member holding `billing.view` or `billing.manage`,
+       *    asked the way the per-user usage months ask theirs
+       *    (`memberKeyOrOverride`, the owner and admins by default, AGL-4047);
        *  - a collaborator holding the ADMIN role on the site the subject
        *    names reads that site's collaborator and site allotments — the
        *    collaborators card is theirs. Nothing about another site, and
@@ -1201,10 +1206,8 @@ service cloud.firestore {
              (subject.matches('collab:[A-Za-z0-9_-]+:[A-Za-z0-9_-]+') &&
               subject.split(':')[2] == request.auth.uid))) ||
           (isOrgWideMember() &&
-            ((canManageOrg() &&
-              (memberResolves('billing.view') || memberResolves('billing.manage'))) ||
-             memberStamps('billing.view') ||
-             memberStamps('billing.manage'))) ||
+            (memberKeyOrOverride('billing.view', ['owner', 'admin']) ||
+             memberKeyOrOverride('billing.manage', ['owner', 'admin']))) ||
           (isOrgMember() &&
             subject.matches('(collab|host):[A-Za-z0-9_-]+(:[A-Za-z0-9_-]+)?') &&
             orgMember().get('hostAccess', {}).get(subject.split(':')[1], '') == 'admin');
@@ -1221,8 +1224,10 @@ service cloud.firestore {
        * charge, with its Stripe invoice and status.
        *
        * Readable by the same people who may read `aiAllotments` and see a
-       * bill — this is the workspace's own billing standing, and a workspace
-       * refused for unpaid overage must be able to see that it was. Writable
+       * bill — an org-wide member holding `billing.view` or `billing.manage`
+       * (the owner and admins by default, AGL-4047) — this is the
+       * workspace's own billing standing, and a workspace refused for unpaid
+       * overage must be able to see that it was. Writable
        * by NOBODY: every field here is a spend control, and a workspace that
        * could write its own would lift its own ceiling, clear its own pause
        * and mark its own charges paid.
@@ -1230,20 +1235,16 @@ service cloud.firestore {
       match /aiBilling/{document} {
         allow read: if isStaff() ||
           (isOrgWideMember() &&
-            ((canManageOrg() &&
-              (memberResolves('billing.view') || memberResolves('billing.manage'))) ||
-             memberStamps('billing.view') ||
-             memberStamps('billing.manage')));
+            (memberKeyOrOverride('billing.view', ['owner', 'admin']) ||
+             memberKeyOrOverride('billing.manage', ['owner', 'admin'])));
         allow write: if false;
       }
 
       match /aiOverageCharges/{chargeId} {
         allow read: if isStaff() ||
           (isOrgWideMember() &&
-            ((canManageOrg() &&
-              (memberResolves('billing.view') || memberResolves('billing.manage'))) ||
-             memberStamps('billing.view') ||
-             memberStamps('billing.manage')));
+            (memberKeyOrOverride('billing.view', ['owner', 'admin']) ||
+             memberKeyOrOverride('billing.manage', ['owner', 'admin'])));
         allow write: if false;
       }
 
@@ -1358,7 +1359,8 @@ service cloud.firestore {
           orgNotSuspended();
       }
       /**
-       * The RESOLVED permission verdict, denormalized (AGL-243 residual).
+       * The RESOLVED permission verdict, denormalized (AGL-243 residual):
+       * was this permission written down as granted?
        *
        * `memberGrants` above reads the per-member override layer only, and
        * the note under the `billing` match says why the custom-role layer was
@@ -1375,49 +1377,26 @@ service cloud.firestore {
        * that has no membership change at all — on every save or delete of a
        * custom role.
        *
-       * ## The default chain, which is the whole safety argument
-       *
-       * An absent map must not read as "everything allowed", and must not
-       * read as "nothing allowed" either. Both are wrong and one of them
-       * locks out every member of every org the moment this deploys, so the
-       * fallback is neither: it is the layer the rules CAN still read.
+       * The chain read, here and in `memberKeyOrOverride` below:
        *
        *   resolvedPermissions[key]         the resolved verdict, if stamped
-       *   -> permissions[key]              the per-member override, if any
-       *   -> true                          leaving the ROLE gate to decide
+       *   -> permissions[key]              the per-member override, for a
+       *                                    member never stamped at all
+       *   -> the default                   `false` here; the key's preset
+       *                                    roles in `memberKeyOrOverride`
        *
-       * That last step is only safe because every caller conjoins this with a
-       * role check it cannot influence. A member carrying no map — every
-       * member written before this field, and any written by a path that
-       * bypasses the projection — therefore gets the verdict the role gate
-       * alone produces, which is what this rule resolves to whenever the two
-       * denormalized layers are silent. A `true` here grants nothing on its
-       * own.
+       * An absent key is `false` here, so this grants nothing on its own to a
+       * member the projection has not reached. It answers "has it been
+       * given", for a key with no role default to fall back to.
+       *
+       * (`memberResolves`, the same chain defaulting to `true`, was safe only
+       * conjoined with a role list, and every reader that conjoined them now
+       * asks `memberKeyOrOverride` instead, AGL-4047. It is gone, so nothing
+       * can call a helper whose absent answer is "allowed".)
        *
        * Costs no document read. `orgMember()` is a get() every caller on this
        * path already pays for, and identical get()s in one evaluation are
        * billed once.
-       */
-      function memberResolves(permission) {
-        return orgMember()
-          .get('resolvedPermissions', orgMember().get('permissions', {}))
-          .get(permission, true) == true;
-      }
-      /**
-       * The same default chain as `memberResolves`, read with the OPPOSITE
-       * default: was this permission written down as granted?
-       *
-       * `memberResolves` answers "has this been taken away", which is why it
-       * defaults true and why every caller conjoins it with a role gate. This
-       * one answers "has it been given", so an absent key is `false` and it
-       * grants nothing on its own to a member the projection has not reached.
-       *
-       * It exists because `resolveOrgPermissions` WIDENS as well as narrows: a
-       * custom role or a per-member override can hand `data.manage` to a
-       * viewer, and the console surfaces that gate on the resolved map admit
-       * them. A rule that stopped at the role list would deny the read those
-       * pages are already granting, and the member would get a table that
-       * never loads.
        */
       function memberStamps(permission) {
         return orgMember()
@@ -1426,7 +1405,7 @@ service cloud.firestore {
       }
       /**
        * Does this member hold a workspace key (AGL-4047), read down the same
-       * two maps `memberResolves` and `memberStamps` read?
+       * two maps `memberStamps` reads?
        *
        *   - the key as written on `resolvedPermissions` (all three layers
        *     applied), or, for a member the projection has never stamped, on
@@ -1434,10 +1413,12 @@ service cloud.firestore {
        *   - else their role in `presetRoles`, the key's default.
        *
        * `memberKeyOr` with the per-member layer read too. A gate that asked
-       * "the role AND `memberResolves(key)`" asks this instead: for a role in
-       * the preset it gives that gate's verdict on every map, and for a role
-       * outside it an explicit grant now answers, which is what the key is
-       * for. One read, the member document `orgMember()` already paid for.
+       * "the role AND the key, or the key stamped" (`role in presetRoles &&
+       * memberResolves(key) || memberStamps(key)`) asks this instead: it is
+       * the same three answers on every map, without the role name — a
+       * stamped `true` admits, a stamped `false` refuses, and an absent key
+       * falls to the preset. One read, the member document `orgMember()`
+       * already paid for.
        */
       function memberKeyOrOverride(permission, presetRoles) {
         let stamped = orgMember()
@@ -1540,18 +1521,21 @@ service cloud.firestore {
        * `isOrgWideMember()` would take a shipped capability away from every
        * agency to close a hole that is about the ROLE axis, not the scope one.
        *
-       * The disjunction mirrors the resolver rather than approximating it. An
-       * explicit grant leads, so a viewer handed `data.manage` by a custom
-       * role or a per-member override is admitted exactly as the console
-       * admits them; a member the projection never reached falls through to
-       * the role that grants it by default, which is the only reading of an
-       * absent map that neither locks out every org nor admits every viewer.
+       * THE AUTHORITY is the key alone, asked through `memberKeyOrOverride`
+       * with its default, the owner, admins and editors (AGL-4047), the way
+       * the CRM's routes ask `memberHasOrgPermission(..., 'data.manage')`.
+       * An explicit decision leads, so a viewer handed `data.manage` by a
+       * custom role or a per-member override is admitted exactly as the
+       * console admits them, and an editor one took it from is refused; a
+       * member whose map does not carry the key gets the default. It read
+       * `memberStamps('data.manage') || (role in [owner, admin, editor] &&
+       * memberResolves('data.manage'))`, which is the same three answers
+       * spelled with the role name: the role arm was the key's default for
+       * an absent stamp, written out.
        */
       function canReadScopedPeople() {
         return canReadScoped() &&
-          (memberStamps('data.manage') ||
-           (orgMember().role in ['owner', 'admin', 'editor'] &&
-            memberResolves('data.manage')));
+          memberKeyOrOverride('data.manage', ['owner', 'admin', 'editor']);
       }
       function canWriteScopedOrgData() {
         return canWriteOrgData() && canReadScoped();
@@ -2158,16 +2142,19 @@ service cloud.firestore {
          * Org-wide reach AND the authority to manage the org's data — who may
          * see the PEOPLE on an audience, as opposed to the audience's name.
          *
-         * Three conjuncts, none redundant. `isOrgWideMember()` keeps the
+         * Two conjuncts, neither redundant. `isOrgWideMember()` keeps the
          * AGL-1026 boundary: an audience belongs to the org and every host in
          * it may mail the same list, so a collaborator invited to one site is
-         * refused the whole thing. The role list is the population
-         * `data.manage` defaults to, and it is what an unstamped permission
-         * map falls through to. `memberResolves` is the only conjunct a
-         * custom role or a per-member override can reach, and it is what
-         * makes this agree with the Emails console rather than merely
-         * resemble it — that page gates on `data.manage` and this collection
-         * is the org-shared people data it opens onto.
+         * refused the whole thing. "Manage data" (`data.manage`) is the
+         * authority, asked through `memberKeyOrOverride` with its default,
+         * the owner, admins and editors (AGL-4047): that is what makes this
+         * agree with the Emails console rather than merely resemble it — that
+         * page gates on `data.manage` and this collection is the org-shared
+         * people data it opens onto. It asked the role list AND
+         * `memberResolves`, which gives every member with no decision written
+         * down the same verdict; a custom role or an override that grants
+         * the key to a viewer now opens the list's people to them, as it
+         * opens the Emails page.
          *
          * `orgNotSuspended()` is deliberately not folded in. Suspension stops
          * a workspace writing; a workspace that may not read its own audience
@@ -2176,8 +2163,7 @@ service cloud.firestore {
          */
         function isOrgWideAudienceManager() {
           return isOrgWideMember() &&
-            orgMember().role in ['owner', 'admin', 'editor'] &&
-            memberResolves('data.manage');
+            memberKeyOrOverride('data.manage', ['owner', 'admin', 'editor']);
         }
         /**
          * THE LIST DOCUMENT IS METADATA; ITS `members` ARE PEOPLE. The two

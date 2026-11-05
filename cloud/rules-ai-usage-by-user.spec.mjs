@@ -14,6 +14,14 @@
  * has not reached. The bare-admin and bare-owner rows are the load-bearing
  * half.
  *
+ * The keys decide alone (AGL-4047): each is asked through
+ * `memberKeyOrOverride` with its default, the owner and admins, where the
+ * rule asked the owner or admin role AND the key, or the key stamped. The
+ * rows below the roster hold every member to the verdict they had — the
+ * admin stamped before the keys existed, the admin a custom role took them
+ * from, the editor with nothing stamped — and an explicit grant to an editor
+ * or a viewer to the one the routes give (`/api/ai/usage`).
+ *
  *   npx firebase emulators:start --only firestore --project aglyn-main
  *   node cloud/rules-ai-usage-by-user.spec.mjs
  */
@@ -42,12 +50,28 @@ const ORG_VIEWER = 'uid-aiu-viewer'
 /** A scoped site collaborator — the subject of one month document. */
 const COLLABORATOR = 'uid-aiu-collaborator'
 const OUTSIDER = 'uid-aiu-outsider'
+/** An admin stamped before the keys existed: the map carries another key, not these. */
+const STAMPED_ADMIN = 'uid-aiu-admin-stamped-without'
+/** An admin a custom role took both keys from: the projection stamped `false`. */
+const ROLE_REVOKED_ADMIN = 'uid-aiu-admin-role-revoked'
+/** An org-wide editor with nothing stamped: the keys' default refuses. */
+const ORG_EDITOR = 'uid-aiu-editor'
+/** An org-wide editor whose own override grants `billing.view`, never stamped. */
+const OVERRIDE_EDITOR = 'uid-aiu-editor-override'
+/** An org-wide viewer a custom role stamped with `billing.view`. */
+const BILLING_VIEWER = 'uid-aiu-viewer-billing'
+/** A scoped collaborator stamped with `billing.view`: the reach still refuses. */
+const SCOPED_GRANTED = 'uid-aiu-collaborator-granted'
+
+// `emulators:exec` names the emulator it started; the fixed port is the
+// fallback for one started by hand.
+const [emulatorHost, emulatorPort] = (process.env.FIRESTORE_EMULATOR_HOST || '127.0.0.1:8082').split(':')
 
 const env = await initializeTestEnvironment({
   projectId: 'aglyn-main',
   firestore: {
-    host: '127.0.0.1',
-    port: 8082,
+    host: emulatorHost,
+    port: Number(emulatorPort),
     // The comment-stripped artifact is what deploys (AGL-3544).
     rules: readFileSync('cloud/firebase-firestore.deploy.rules', 'utf8'),
   },
@@ -108,6 +132,34 @@ await env.withSecurityRulesDisabled(async (context) => {
     allHosts: false,
     hostAccess: { 'host-abc': 'editor' },
   })
+  await setDoc(doc(db, 'orgs', ORG, 'members', STAMPED_ADMIN), {
+    role: 'admin',
+    allHosts: true,
+    resolvedPermissions: { 'data.manage': true },
+  })
+  await setDoc(doc(db, 'orgs', ORG, 'members', ROLE_REVOKED_ADMIN), {
+    role: 'admin',
+    allHosts: true,
+    roleId: 'role-no-billing',
+    resolvedPermissions: { 'billing.view': false, 'org.auditLog': false },
+  })
+  await setDoc(doc(db, 'orgs', ORG, 'members', ORG_EDITOR), { role: 'editor', allHosts: true })
+  await setDoc(doc(db, 'orgs', ORG, 'members', OVERRIDE_EDITOR), {
+    role: 'editor',
+    allHosts: true,
+    permissions: { 'billing.view': true },
+  })
+  await setDoc(doc(db, 'orgs', ORG, 'members', BILLING_VIEWER), {
+    role: 'viewer',
+    allHosts: true,
+    resolvedPermissions: { 'billing.view': true },
+  })
+  await setDoc(doc(db, 'orgs', ORG, 'members', SCOPED_GRANTED), {
+    role: 'viewer',
+    allHosts: false,
+    hostAccess: { 'host-abc': 'viewer' },
+    resolvedPermissions: { 'billing.view': true, 'org.auditLog': true },
+  })
   await setDoc(monthDocOf(db, COLLABORATOR), seededMonth(COLLABORATOR))
   await setDoc(monthDocOf(db, ADMIN), seededMonth(ADMIN))
 })
@@ -146,6 +198,26 @@ await check('an org-wide VIEWER stamped with org.auditLog reads it', () =>
 )
 await check('a bare org-wide VIEWER cannot read another person’s month', () =>
   assertFails(getDoc(monthDocOf(as(ORG_VIEWER), COLLABORATOR))),
+)
+
+// ── The keys decide alone (AGL-4047): every default as it was ───────────────
+await check('CONTROL — an ADMIN stamped before the keys existed reads it (the default)', () =>
+  assertSucceeds(getDoc(monthDocOf(as(STAMPED_ADMIN), COLLABORATOR))),
+)
+await check('an ADMIN a custom role took both keys from cannot read it', () =>
+  assertFails(getDoc(monthDocOf(as(ROLE_REVOKED_ADMIN), COLLABORATOR))),
+)
+await check('a bare org-wide EDITOR cannot read another person’s month (the default refuses)', () =>
+  assertFails(getDoc(monthDocOf(as(ORG_EDITOR), COLLABORATOR))),
+)
+await check('an org-wide EDITOR whose own override grants billing.view, nothing stamped, reads it', () =>
+  assertSucceeds(getDoc(monthDocOf(as(OVERRIDE_EDITOR), COLLABORATOR))),
+)
+await check('an org-wide VIEWER stamped with billing.view reads it', () =>
+  assertSucceeds(getDoc(monthDocOf(as(BILLING_VIEWER), COLLABORATOR))),
+)
+await check('a scoped COLLABORATOR stamped with both keys still cannot read an ADMIN’s month', () =>
+  assertFails(getDoc(monthDocOf(as(SCOPED_GRANTED), ADMIN))),
 )
 
 // ── The subject reads their own, and only their own ─────────────────────────
@@ -190,6 +262,9 @@ await env.withSecurityRulesDisabled(async (context) => {
     doc(db, 'orgs', ORG, 'members', AUDIT_VIEWER),
     doc(db, 'orgs', ORG, 'members', ORG_VIEWER),
     doc(db, 'orgs', ORG, 'members', COLLABORATOR),
+    ...[STAMPED_ADMIN, ROLE_REVOKED_ADMIN, ORG_EDITOR, OVERRIDE_EDITOR, BILLING_VIEWER, SCOPED_GRANTED].map((uid) =>
+      doc(db, 'orgs', ORG, 'members', uid),
+    ),
     doc(db, 'orgs', ORG),
   ]) {
     await deleteDoc(ref)
