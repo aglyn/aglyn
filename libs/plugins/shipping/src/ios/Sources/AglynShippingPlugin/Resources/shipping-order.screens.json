@@ -166,7 +166,7 @@
               "label": "Void",
               "icon": "xmark.circle|cancel",
               "destructive": true,
-              "when": "item.status == purchased,void_rejected",
+              "when": "site.can[shipping.voidLabels] && item.status == purchased,void_rejected",
               "confirm": "Void this label? The carrier is asked to refund it.",
               "url": "/api/shipping/labels/void",
               "body": {
@@ -186,7 +186,7 @@
               "id": "buy",
               "label": "Buy label",
               "icon": "printer|print",
-              "when": "data.order.shippable && data.order.shippingAddress && data.labels.addressCheck.verdict != corrected",
+              "when": "site.can[shipping.labels] && data.order.shippable && data.order.shippingAddress && data.labels.addressCheck.verdict != corrected",
               "prompt": [
                 {
                   "fieldsFrom": {
@@ -307,7 +307,7 @@
               "id": "buyCorrected",
               "label": "Buy label (suggested address)",
               "icon": "printer|print",
-              "when": "data.order.shippable && data.order.shippingAddress && data.labels.addressCheck.verdict == corrected",
+              "when": "site.can[shipping.labels] && data.order.shippable && data.order.shippingAddress && data.labels.addressCheck.verdict == corrected",
               "prompt": [
                 {
                   "fieldsFrom": {
@@ -429,7 +429,7 @@
               "id": "buyAsIs",
               "label": "Buy label (address as given)",
               "icon": "printer|print",
-              "when": "data.order.shippable && data.order.shippingAddress && data.labels.addressCheck.verdict == corrected",
+              "when": "site.can[shipping.labels] && data.order.shippable && data.order.shippingAddress && data.labels.addressCheck.verdict == corrected",
               "prompt": [
                 {
                   "fieldsFrom": {
@@ -550,7 +550,7 @@
               "id": "buyReturn",
               "label": "Return label",
               "icon": "printer|print",
-              "when": "data.order.returnable",
+              "when": "site.can[shipping.labels] && data.order.returnable",
               "prompt": [
                 {
                   "fieldsFrom": {
@@ -671,7 +671,7 @@
               "id": "check",
               "label": "Check address",
               "icon": "location_on|location_on",
-              "when": "data.order.shippingAddress && data.order.shippable",
+              "when": "site.can[shipping.labels] && data.order.shippingAddress && data.order.shippable",
               "url": "/api/shipping/address/validate",
               "body": {
                 "hostId": "{site.id}",
@@ -883,7 +883,8 @@
                   "text": "{response.results.*.error}"
                 }
               ],
-              "success": "{response.results.*.label.labelUrl:plural/label} bought. Each is on its order, ready to print."
+              "success": "{response.results.*.label.labelUrl:plural/label} bought. Each is on its order, ready to print.",
+              "when": "site.can[shipping.buyLabels]"
             }
           ]
         }

@@ -153,6 +153,13 @@
       "blocks": [
         {
           "type": "notice",
+          "id": "keyRefusal",
+          "tone": "info",
+          "when": "!site.can[adConversions.manage]",
+          "text": "{app.permissionRefusal[adConversions.manage]}. You can read what is set here."
+        },
+        {
+          "type": "notice",
           "id": "needsTag",
           "tone": "info",
           "when": "!data.conn.connections[provider=params.provider] && const.providers[id=params.provider].needsTag && !data.conn.setup.tagIds[@params.provider]",
@@ -234,7 +241,7 @@
               "id": "connect",
               "label": "Connect",
               "icon": "link|link",
-              "when": "!data.conn.connections[provider=params.provider] && data.conn.available && !const.providers[id=params.provider].needsTag || !data.conn.connections[provider=params.provider] && data.conn.available && data.conn.setup.tagIds[@params.provider]",
+              "when": "site.can[adConversions.manage] && !data.conn.connections[provider=params.provider] && data.conn.available && !const.providers[id=params.provider].needsTag || site.can[adConversions.manage] && !data.conn.connections[provider=params.provider] && data.conn.available && data.conn.setup.tagIds[@params.provider]",
               "url": "/api/ad-conversions/connections",
               "prompt": [
                 {
@@ -273,7 +280,7 @@
               "id": "replace",
               "label": "Replace token",
               "icon": "key|key",
-              "when": "data.conn.connections[provider=params.provider].status != reconnect && data.conn.connections[provider=params.provider] && data.conn.available",
+              "when": "site.can[adConversions.manage] && data.conn.connections[provider=params.provider].status != reconnect && data.conn.connections[provider=params.provider] && data.conn.available",
               "url": "/api/ad-conversions/connections",
               "prompt": [
                 {
@@ -312,7 +319,7 @@
               "id": "reconnect",
               "label": "Connect again",
               "icon": "link|link",
-              "when": "data.conn.connections[provider=params.provider].status == reconnect && data.conn.available",
+              "when": "site.can[adConversions.manage] && data.conn.connections[provider=params.provider].status == reconnect && data.conn.available",
               "url": "/api/ad-conversions/connections",
               "prompt": [
                 {
@@ -351,7 +358,7 @@
               "id": "pause",
               "label": "Pause",
               "icon": "pause.circle|pause_circle",
-              "when": "data.conn.connections[provider=params.provider].status == active",
+              "when": "site.can[adConversions.manage] && data.conn.connections[provider=params.provider].status == active",
               "method": "PATCH",
               "url": "/api/ad-conversions/connection",
               "body": {
@@ -365,7 +372,7 @@
               "id": "resume",
               "label": "Resume",
               "icon": "play.circle|play_circle",
-              "when": "data.conn.connections[provider=params.provider].status == paused",
+              "when": "site.can[adConversions.manage] && data.conn.connections[provider=params.provider].status == paused",
               "method": "PATCH",
               "url": "/api/ad-conversions/connection",
               "body": {
@@ -379,7 +386,7 @@
               "id": "test",
               "label": "Send test event",
               "icon": "paperplane|send",
-              "when": "data.conn.connections[provider=params.provider].status == active",
+              "when": "site.can[adConversions.manage] && data.conn.connections[provider=params.provider].status == active",
               "url": "/api/ad-conversions/test-event",
               "body": {
                 "hostId": "{site.id}",
@@ -392,7 +399,7 @@
               "label": "Disconnect",
               "icon": "xmark.circle|link_off",
               "destructive": true,
-              "when": "data.conn.connections[provider=params.provider]",
+              "when": "site.can[adConversions.manage] && data.conn.connections[provider=params.provider]",
               "confirm": "Disconnect the {const.providers[id=params.provider].label} {const.providers[id=params.provider].api}? No more server events are sent, and the stored access token and any events not yet sent are deleted. Your {const.providers[id=params.provider].tag} on the site is not affected; remove it on the Tracking tab.",
               "method": "DELETE",
               "url": "/api/ad-conversions/connection",
@@ -428,7 +435,8 @@
               "provider": "{params.provider}",
               "testEventCode": "{form.testEventCode}"
             },
-            "success": "Saved."
+            "success": "Saved.",
+            "disabledWhen": "!site.can[adConversions.manage]"
           }
         },
         {

@@ -19,6 +19,13 @@
       "blocks": [
         {
           "type": "notice",
+          "id": "keyRefusal",
+          "tone": "info",
+          "when": "!site.can[couriers.manage]",
+          "text": "{app.permissionRefusal[couriers.manage]}. You can read what is set here."
+        },
+        {
+          "type": "notice",
           "id": "unavailable",
           "tone": "info",
           "when": "!data.conn.available",
@@ -79,7 +86,8 @@
                   "signingSecret": "{form.signingSecret}"
                 }
               },
-              "success": "DoorDash connected"
+              "success": "DoorDash connected",
+              "when": "site.can[couriers.manage]"
             },
             {
               "id": "connectTest",
@@ -116,7 +124,8 @@
                   "signingSecret": "{form.signingSecret}"
                 }
               },
-              "success": "DoorDash connected"
+              "success": "DoorDash connected",
+              "when": "site.can[couriers.manage]"
             },
             {
               "id": "portal",
@@ -240,13 +249,14 @@
                 "hostId": "{site.id}",
                 "provider": "doordash"
               },
-              "success": "Tested the stored keys"
+              "success": "Tested the stored keys",
+              "when": "site.can[couriers.manage]"
             },
             {
               "id": "liveKey",
               "label": "Replace live key",
               "icon": "key|key",
-              "when": "data.conn.connection.live.configured",
+              "when": "site.can[couriers.manage] && data.conn.connection.live.configured",
               "url": "/api/couriers/connect",
               "prompt": [
                 {
@@ -284,7 +294,7 @@
               "id": "addLiveKey",
               "label": "Add live key",
               "icon": "key|key",
-              "when": "!data.conn.connection.live.configured",
+              "when": "site.can[couriers.manage] && !data.conn.connection.live.configured",
               "url": "/api/couriers/connect",
               "prompt": [
                 {
@@ -322,7 +332,7 @@
               "id": "testKey",
               "label": "Replace test key",
               "icon": "key|key",
-              "when": "data.conn.connection.test.configured",
+              "when": "site.can[couriers.manage] && data.conn.connection.test.configured",
               "url": "/api/couriers/connect",
               "prompt": [
                 {
@@ -360,7 +370,7 @@
               "id": "addTestKey",
               "label": "Add test key",
               "icon": "key|key",
-              "when": "!data.conn.connection.test.configured",
+              "when": "site.can[couriers.manage] && !data.conn.connection.test.configured",
               "url": "/api/couriers/connect",
               "prompt": [
                 {
@@ -405,7 +415,7 @@
               "id": "webhookToken",
               "label": "New webhook token",
               "icon": "key.radiowaves.forward|vpn_key",
-              "when": "data.conn.connection.webhookTokenSet",
+              "when": "site.can[couriers.manage] && data.conn.connection.webhookTokenSet",
               "url": "/api/couriers/webhook-token",
               "body": {
                 "hostId": "{site.id}",
@@ -419,7 +429,7 @@
               "id": "createWebhookToken",
               "label": "Create webhook token",
               "icon": "key.radiowaves.forward|vpn_key",
-              "when": "!data.conn.connection.webhookTokenSet",
+              "when": "site.can[couriers.manage] && !data.conn.connection.webhookTokenSet",
               "url": "/api/couriers/webhook-token",
               "body": {
                 "hostId": "{site.id}",
@@ -439,7 +449,8 @@
                 "hostId": "{site.id}",
                 "provider": "doordash"
               },
-              "success": "Disconnected"
+              "success": "Disconnected",
+              "when": "site.can[couriers.manage]"
             }
           ]
         },
@@ -475,7 +486,8 @@
               "pickupPhone": "{form.pickupPhone}",
               "pickupNote": "{form.pickupNote}"
             },
-            "success": "Saved"
+            "success": "Saved",
+            "disabledWhen": "!site.can[couriers.manage]"
           }
         }
       ]

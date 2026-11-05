@@ -131,7 +131,7 @@
               "id": "retry",
               "label": "Send tracking again",
               "icon": "send|send",
-              "when": "data.view.order.shipments.*.state == failed",
+              "when": "site.can[marketplaces.orders] && data.view.order.shipments.*.state == failed",
               "url": "/api/marketplaces/order/retry",
               "body": {
                 "hostId": "{site.id}",

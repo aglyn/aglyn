@@ -38,6 +38,13 @@
       "blocks": [
         {
           "type": "notice",
+          "id": "keyRefusal",
+          "tone": "info",
+          "when": "!site.can[loyalty.program]",
+          "text": "{app.permissionRefusal[loyalty.program]}. You can read what is set here."
+        },
+        {
+          "type": "notice",
           "id": "unavailable",
           "tone": "info",
           "when": "!data.program.program",
@@ -230,7 +237,8 @@
                 "emails": "{form.emails}"
               }
             },
-            "success": "Rewards program saved"
+            "success": "Rewards program saved",
+            "disabledWhen": "!site.can[loyalty.program]"
           }
         },
         {
@@ -299,6 +307,13 @@
       "blocks": [
         {
           "type": "notice",
+          "id": "keyRefusal",
+          "tone": "info",
+          "when": "!site.can[loyalty.connection]",
+          "text": "{app.permissionRefusal[loyalty.connection]}. You can read what is set here."
+        },
+        {
+          "type": "notice",
           "id": "unavailable",
           "tone": "info",
           "when": "!data.conn",
@@ -360,7 +375,8 @@
                 },
                 "replaceBalances": "{form.replace}"
               },
-              "success": "Smile.io connected"
+              "success": "Smile.io connected",
+              "when": "site.can[loyalty.connection]"
             },
             {
               "id": "connectYotpo",
@@ -399,7 +415,8 @@
                 },
                 "replaceBalances": "{form.replace}"
               },
-              "success": "Yotpo Loyalty connected"
+              "success": "Yotpo Loyalty connected",
+              "when": "site.can[loyalty.connection]"
             }
           ]
         },
@@ -474,7 +491,7 @@
               "id": "retry",
               "label": "Send again",
               "icon": "arrow.clockwise|refresh",
-              "when": "data.conn.attention.0",
+              "when": "site.can[loyalty.connection] && data.conn.attention.0",
               "url": "/api/loyalty/connection",
               "body": {
                 "hostId": "{site.id}",
@@ -494,7 +511,8 @@
                 "action": "disconnect",
                 "confirm": true
               },
-              "success": "{data.conn.connection.label} disconnected"
+              "success": "{data.conn.connection.label} disconnected",
+              "when": "site.can[loyalty.connection]"
             }
           ]
         }
@@ -517,6 +535,13 @@
         }
       },
       "blocks": [
+        {
+          "type": "notice",
+          "id": "keyRefusal",
+          "tone": "info",
+          "when": "!site.can[loyalty.adjustBalances]",
+          "text": "{app.permissionRefusal[loyalty.adjustBalances]}. You can read what is set here."
+        },
         {
           "type": "notice",
           "id": "unavailable",
@@ -587,7 +612,8 @@
                   "title": "Saved",
                   "text": "Saved, and the customer was emailed."
                 }
-              ]
+              ],
+              "when": "site.can[loyalty.adjustBalances]"
             },
             {
               "id": "search",
@@ -737,6 +763,13 @@
       "blocks": [
         {
           "type": "notice",
+          "id": "keyRefusal",
+          "tone": "info",
+          "when": "!site.can[loyalty.adjustBalances]",
+          "text": "{app.permissionRefusal[loyalty.adjustBalances]}. You can read what is set here."
+        },
+        {
+          "type": "notice",
           "id": "missing",
           "tone": "info",
           "when": "!data.detail.member",
@@ -831,7 +864,8 @@
                   "title": "Saved",
                   "text": "Saved, and the customer was emailed."
                 }
-              ]
+              ],
+              "when": "site.can[loyalty.adjustBalances]"
             }
           ]
         },

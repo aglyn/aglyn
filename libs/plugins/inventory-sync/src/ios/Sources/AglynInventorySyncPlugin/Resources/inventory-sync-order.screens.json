@@ -120,7 +120,7 @@
               "id": "again",
               "label": "Send again",
               "icon": "send|send",
-              "when": "data.view.order.status == failed && data.view.connection.provider == @data.view.order.provider && data.view.connection.status != reconnect",
+              "when": "site.can[inventorySync.orders] && data.view.order.status == failed && data.view.connection.provider == @data.view.order.provider && data.view.connection.status != reconnect",
               "url": "/api/inventory-sync/order/send",
               "body": {
                 "hostId": "{site.id}",
