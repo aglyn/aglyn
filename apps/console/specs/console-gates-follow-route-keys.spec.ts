@@ -46,6 +46,7 @@ const GATES: Array<{ surface: string; key: string; route: string }> = [
   { surface: 'components/org-sso-card.component.tsx', key: 'org.settings', route: 'app/api/orgs/sso/route.ts' },
   { surface: 'components/media/org-default-sharing-card.component.tsx', key: 'org.settings', route: 'app/api/orgs/settings/route.ts' },
   { surface: 'hooks/use-plugin-switchboard.ts', key: 'org.settings', route: 'app/api/orgs/settings/route.ts' },
+  { surface: 'app/(app)/[orgSlug]/plugins/page.tsx', key: 'org.settings', route: 'app/api/orgs/settings/route.ts' },
   { surface: 'app/(app)/[orgSlug]/settings/(sections)/layout.tsx', key: 'org.settings', route: 'app/api/orgs/settings/route.ts' },
   // The three sections that stayed on the owner or admin role until their
   // routes moved to keys of their own.
@@ -92,6 +93,24 @@ describe('console gates ask the key their route checks (AGL-4047)', () => {
     const block = rules.slice(rules.indexOf('match /pluginSettings/{pluginId}'))
     expect(block.slice(0, block.indexOf('\n      }'))).toContain(
       "memberKeyOrOverride('org.settings', ['owner', 'admin'])",
+    )
+  })
+
+  it('the site plugin page asks the key the rules ask of everything it writes', () => {
+    // Client-direct writes again, so the rules are the enforcer. The page's
+    // behavior is `site-plugin-refusal-follows-the-key.spec.tsx`.
+    const page = read('app/(app)/[orgSlug]/hosts/[host]/admin/plugins/[pluginRef]/page.tsx')
+    expect(page).toContain("permissionRefusalText('site.manage')")
+    expect(page).toContain('adminKnown && !isAdmin')
+    expect(page).not.toContain('Only site admins')
+    expect(read('components/host-id-provider.tsx')).toContain(
+      "hostStampedSitePermission(host, uid, 'site.manage', CORE_SITE_ROLE_PRESETS['site.manage'])",
+    )
+    const rules = read('../../cloud/firebase-firestore.rules')
+    const site = rules.slice(rules.indexOf("match /pluginSettings/{pluginId}", rules.indexOf('Per-site plugin settings')))
+    expect(site.slice(0, site.indexOf('\n      }'))).toContain("hostSiteRoleKey(hostId, 'site.manage', ['admin'])")
+    expect(rules).toMatch(
+      /hostSiteRoleKey\(hostId, 'site\.manage', \['admin'\]\) \|\|\s+!request\.resource\.data\.diff\(resource\.data\)\.affectedKeys\(\)\s+\.hasAny\(\['disabledPlugins', 'enabledPlugins', 'authScreens',/,
     )
   })
 

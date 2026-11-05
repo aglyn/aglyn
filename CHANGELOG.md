@@ -65,6 +65,7 @@ content on the marketing site and is written separately.
 <details>
 <summary>Also in this release: 4 test</summary>
 
+- **console:** the subprocessor gate names Bring my site's wording eval as a key it only mentions ([AGL-4152](https://linear.app/aglyn/issue/AGL-4152))
 - **ai:** the wording eval runs in node, where the provider batch has fetch ([AGL-4152](https://linear.app/aglyn/issue/AGL-4152))
 - **ai:** the wording eval, by the real model, on the eight recorded main pages ([AGL-4152](https://linear.app/aglyn/issue/AGL-4152))
 - **ai:** the start and job page specs read what the wording switch adds on the page row ([AGL-4152](https://linear.app/aglyn/issue/AGL-4152))
