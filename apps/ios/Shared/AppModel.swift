@@ -1,6 +1,7 @@
 // Copyright 2026 Aglyn LLC
 // SPDX-License-Identifier: Apache-2.0
 
+import AglynContracts
 import AglynCore
 import AglynPluginHost
 import AglynPluginManifest
@@ -203,7 +204,8 @@ final class AppModel {
         message: { passwordChangeMessage($0) }),
       googleConfigured: config?.google != nil, passkeyRelyingParty: config?.passkeyRelyingParty,
       orgPermissions: orgAccess.workspacePermissions, sitePermissions: orgAccess.pickedSitePermissions,
-      permissionsSiteID: orgAccess.pickedSiteID)
+      permissionsSiteID: orgAccess.pickedSiteID,
+      enabledPlugins: workspace?.orgLogo.map { resolveEnabledPlugins($0.enabledPlugins) })
   }
 
   func signOut() async {

@@ -642,6 +642,8 @@ class FieldSpec private constructor(
         return@flatMap ScreenValues.rows(ScreenValues.lookup(from.str("items").orEmpty(), context)).withIndex().flatMap { (position, row) ->
           val scope = ScreenContext.with(ScreenContext.withItem(context, row), "index", JsonPrimitive(position))
           perRow.mapNotNull { template ->
+            // `if`: this template only for the rows it holds on (a group's heading, once).
+            if ((template as? JsonObject)?.str("if")?.let { ScreenValues.condition(it, scope) } == false) return@mapNotNull null
             val rendered = JsonObject(
               (template as? JsonObject).orEmpty().mapValues { (_, value) ->
                 if (value is JsonPrimitive && value.isString) JsonPrimitive(ScreenValues.render(value.content, scope)) else value
