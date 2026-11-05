@@ -29,6 +29,7 @@ import {
 } from '../utils/interactive-signin'
 import clearServiceWorkerCaches from '@aglyn/shared-util-dom/clear-service-worker-caches'
 import { mintSession } from '../utils/session-mint'
+import { settleSessionRestore } from '../utils/session-restore-pending'
 
 // Lives in a module of its own so the auth layout can share it without this
 // hook's imports (AGL-3843); re-exported for the hand-off pages.
@@ -247,10 +248,14 @@ export function useSessionCookie(): void {
     // user out (the long-standing "authenticated emulator sessions
     // don't survive a reload" wall). Localhost is single-origin; there
     // is no cross-subdomain session to sync.
-    if (FIREBASE_AUTH_EMULATOR_ENABLED) return
+    // No shared cookie to restore from on the emulator: nothing to wait for.
+    if (FIREBASE_AUTH_EMULATOR_ENABLED) return void settleSessionRestore()
     // reactfire emits `undefined` until auth resolves; the first real
     // value (user or null) is the persisted state, not a transition.
     if (user === undefined) return
+    // A live local user is the load-time verdict; the guard has a user and
+    // nothing to wait for (AGL-4117).
+    if (user) settleSessionRestore()
     const isInitialState = !sawInitialState.current
     sawInitialState.current = true
 
@@ -348,11 +353,19 @@ export function useSessionCookie(): void {
         await restoreFromSharedCookie(auth, restoredSilently, () => active)
         return
       }
-      if (restoreAttempted.current) return
+      if (restoreAttempted.current) return void settleSessionRestore()
       restoreAttempted.current = true
       // The branch a staff member signing in through SSO actually takes on a
       // cold load of app.aglyn.com.
-      await restoreFromSharedCookie(auth, restoredSilently, () => active)
+      try {
+        await restoreFromSharedCookie(auth, restoredSilently, () => active)
+      } finally {
+        // One macrotask after the sign-in resolves, so the guard's own
+        // `onIdTokenChanged` render has landed before it is told it may
+        // bounce (AGL-4117). A 401 settles the same way, and the guard then
+        // sends a genuinely signed-out visitor to /signin as before.
+        setTimeout(settleSessionRestore, 0)
+      }
     })()
     return () => {
       active = false

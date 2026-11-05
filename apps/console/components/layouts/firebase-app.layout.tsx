@@ -56,6 +56,7 @@ import { buildOrgUserProperties } from '../../utils/analytics-user-properties'
 import BootSplash from '../boot-splash.component'
 import useCrossPoolTabRecovery from '../../hooks/use-cross-pool-tab-recovery'
 import useSessionCookie from '../../hooks/use-session-cookie'
+import { beginSessionRestore } from '../../utils/session-restore-pending'
 import {
   buildConsolePageTitle,
   buildConsolePageViewParams,
@@ -219,6 +220,14 @@ primePlatformConsent()
  * run ahead of a seam it reports through. Browser only (the module also runs
  * during the server render, where the provider never mounts).
  */
+/*
+ * The auth guard waits for `useSessionCookie`'s load-time restore before it
+ * bounces a signed-out tab to /signin (AGL-4117). Opened here, at module
+ * load, because the guard's effect runs before the hook's: a child's effects
+ * commit before its provider's. Browser only, capped, and settled by the hook.
+ */
+beginSessionRestore()
+
 prebootFirebaseServices({
   firebaseConfig: fbClientAppOptions,
   appName: FIREBASE_CLIENT_APP_NAME,
