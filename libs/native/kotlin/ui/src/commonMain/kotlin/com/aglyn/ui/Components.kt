@@ -80,6 +80,8 @@ fun AglynListItem(
   /** A person's initials: the row is that person, drawn with [personPhoto] (their initials while there is none). */
   personInitials: String? = null,
   personPhoto: String? = null,
+  /** The title is a whole sentence to read: it wraps, never cut short. */
+  titleWraps: Boolean = false,
 ) {
   val colors = MaterialTheme.colorScheme
   val shape = MaterialTheme.shapes.large
@@ -131,7 +133,7 @@ fun AglynListItem(
         style = MaterialTheme.typography.bodyLarge,
         color = content,
         // One line at every width, the tail truncated (Figma's list rows).
-        maxLines = 1,
+        maxLines = if (titleWraps) Int.MAX_VALUE else 1,
         overflow = TextOverflow.Ellipsis,
         fontWeight = if (emphasized || selected) FontWeight.SemiBold else null,
       )

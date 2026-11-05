@@ -17,6 +17,9 @@ import com.aglyn.contracts.PosReceiptChannel
 import com.aglyn.core.ApiMethod
 import com.aglyn.core.ConsoleApiClient
 import com.aglyn.core.ConsoleApiError
+import com.aglyn.core.listquery.nameSearchKey
+import com.aglyn.core.listquery.nameSearchToken
+import com.aglyn.core.listquery.nameSearchTokens
 import com.aglyn.core.mediaPreviewUrl
 import com.aglyn.hardware.CardCollectOutcome
 import com.aglyn.hardware.CardCollectRequest
@@ -24,6 +27,7 @@ import com.aglyn.hardware.CardCollector
 import com.aglyn.hardware.CardCollectorState
 import com.aglyn.hardware.CardReaderSession
 import com.aglyn.hardware.CardReaderSessionSource
+import kotlinx.coroutines.delay
 import kotlinx.coroutines.CancellationException
 import kotlinx.serialization.json.JsonElement
 import kotlinx.serialization.json.JsonObject
@@ -95,10 +99,29 @@ data class PosKioskSettingsView(val readers: List<Reader>, val readerId: String?
 
 data class PosKioskUnlock(val unlock: String, val expiresAtMs: Double)
 
+/** How long the typing rests before the word is asked of the catalog. */
+const val POS_KIOSK_SEARCH_DEBOUNCE_MS = 400L
+
+/** The server's answer to a word typed. */
+data class PosKioskFound(val typed: String, val products: List<PosKioskProduct>?)
+
+/**
+ * Whether a product's name answers the words typed, the way the catalog's search does (`posKioskNameMatches`): every word
+ * is the start of a word in the name, whatever the case. The query can hold only the first word, so the rest are asked here.
+ */
+fun posKioskNameMatches(name: String, typed: String): Boolean {
+  val key = nameSearchKey(typed)
+  if (key.isEmpty()) return true
+  val tokens = nameSearchTokens(name).toSet()
+  return key.split(" ").all { nameSearchToken(it) in tokens }
+}
+
 /** The kiosk's half of `commerce/pos-kiosk`, with the device token. */
 interface PosKioskApi {
   suspend fun context(token: String): PosKioskContext
   suspend fun catalog(token: String, categoryId: String?): PosKioskCatalog
+  /** A word typed at the menu, asked of the whole catalog. */
+  suspend fun search(token: String, search: String): PosKioskCatalog
   suspend fun sale(token: String, orderId: String): PosKioskSale
   suspend fun checkout(token: String, lines: JsonElement, attemptKey: String): PosKioskSale
   suspend fun pay(token: String, orderId: String, method: PosKioskMethod, tip: PosKioskTip, attemptKey: String): PosKioskPayment
@@ -130,6 +153,9 @@ class ConsolePosKioskApi(private val api: ConsoleApiClient) : PosKioskApi {
 
   override suspend fun context(token: String): PosKioskContext =
     decode(PosKioskContext.serializer(), get(token, mapOf("action" to "context")), "its settings")
+
+  override suspend fun search(token: String, search: String): PosKioskCatalog =
+    decode(PosKioskCatalog.serializer(), get(token, mapOf("action" to "catalog", "search" to search)), "its menu")
 
   override suspend fun catalog(token: String, categoryId: String?): PosKioskCatalog =
     decode(PosKioskCatalog.serializer(), get(token, mapOf("action" to "catalog", "categoryId" to categoryId)), "its menu")
@@ -283,6 +309,20 @@ class PosKioskModel(
   var catalogLoading by mutableStateOf(false)
     private set
   var categoryId by mutableStateOf<String?>(null)
+  /** The word typed at the menu. The search shows only when the catalog is longer than the menu can list. */
+  var search by mutableStateOf("")
+  /** The server's answer to a word typed; `products` null when it couldn't answer, which leaves the customer narrowing the menu already loaded. */
+  var found by mutableStateOf<PosKioskFound?>(null)
+    private set
+  val typed: String get() = search.trim()
+  /** The server hasn't answered the word typed yet. */
+  val searching: Boolean get() = typed.isNotEmpty() && found?.typed != typed
+  val showsSearch: Boolean get() = search.isNotEmpty() || catalog?.truncated == true
+  /** What to list: the catalog, or what answers the word typed. */
+  val menuProducts: List<PosKioskProduct> get() {
+    val listed = (if (typed.isEmpty()) null else found?.products) ?: catalog?.products ?: emptyList()
+    return if (typed.isEmpty()) listed else listed.filter { posKioskNameMatches(it.name, typed) }
+  }
   var phase by mutableStateOf<PosKioskPhase>(PosKioskPhase.Start)
     private set
   var cart by mutableStateOf(Cart.EMPTY)
@@ -353,6 +393,8 @@ class PosKioskModel(
     token = null
     context = null
     catalog = null
+    search = ""
+    found = null
     sale = null
     cart = Cart.EMPTY
     tip = PosKioskTip.None
@@ -386,6 +428,25 @@ class PosKioskModel(
     } catch (failure: Throwable) {
       if (failure is CancellationException) throw failure
       lost(failure)
+    }
+  }
+
+  /** A word typed, once the typing rests, asked of the whole catalog. The caller's effect is cancelled by the next word. */
+  suspend fun runSearch() {
+    val word = typed
+    val current = token
+    if (current == null || word.isEmpty()) {
+      found = null
+      return
+    }
+    delay(POS_KIOSK_SEARCH_DEBOUNCE_MS)
+    try {
+      val answer = api.search(current, word)
+      offline = false
+      found = PosKioskFound(word, answer.products)
+    } catch (failure: Throwable) {
+      if (failure is CancellationException) throw failure
+      if (!lost(failure)) found = PosKioskFound(word, null)
     }
   }
 
@@ -479,6 +540,7 @@ class PosKioskModel(
     tip = PosKioskTip.None
     notice = null
     categoryId = null
+    search = ""
     checkoutKey = null
     payKey = null
     idleWarning = null

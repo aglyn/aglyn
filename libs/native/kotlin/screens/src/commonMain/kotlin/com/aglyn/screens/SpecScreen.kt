@@ -89,6 +89,7 @@ import kotlinx.serialization.json.JsonElement
 import kotlinx.serialization.json.JsonNull
 import kotlinx.serialization.json.JsonObject
 import kotlinx.serialization.json.JsonPrimitive
+import kotlinx.serialization.json.booleanOrNull
 
 internal fun tone(name: String?): StatusTone = when (name) {
   "success" -> StatusTone.SUCCESS
@@ -1040,6 +1041,8 @@ private fun ListRow(
   Column {
     AglynListItem(
       title = primary,
+      // `wrap`: a row that is a whole sentence to read, never cut short.
+      titleWraps = (block["wrap"] as? JsonPrimitive)?.booleanOrNull == true,
       supporting = supporting,
       icon = block.string("icon")?.let { AglynIcons.named(materialIcon(ScreenValues.render(it, scope))) },
       // `avatar`: the row is a person, drawn with their photo (the console's avatar), their initials when they have none

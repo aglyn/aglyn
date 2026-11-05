@@ -1813,6 +1813,12 @@
       "links": [
         "/settings/privacy"
       ],
+      "load": {
+        "erasureNotes": {
+          "url": "/api/person-erasure-notes?orgId={org.id}",
+          "optional": true
+        }
+      },
       "blocks": [
         {
           "type": "notice",
@@ -1862,6 +1868,22 @@
           "type": "notice",
           "tone": "info",
           "text": "Not reached — finish these by hand\n• Form submissions — delete them from the Inbox\n• A site member account — close it from the site’s Members page"
+        },
+        {
+          "type": "list",
+          "id": "erasureNotes",
+          "title": "Kept as they are, with the person still on them",
+          "when": "data.erasureNotes.notes",
+          "items": "data.erasureNotes.notes",
+          "count": false,
+          "wrap": true,
+          "primary": "{item.text}"
+        },
+        {
+          "type": "notice",
+          "tone": "info",
+          "when": "!data.erasureNotes || data.erasureNotes.unavailable",
+          "text": "Some details of what this keeps could not be checked right now. Try again in a moment before you confirm."
         },
         {
           "type": "actions",
