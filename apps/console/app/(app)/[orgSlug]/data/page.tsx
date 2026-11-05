@@ -35,8 +35,8 @@ import useCurrentOrg from '../../../../hooks/use-current-org'
 
 /**
  * Organization Data page (AGL-239): datasets are org-owned (AGL-237 §11)
- * and shared by every site, so their home is the org area — the host
- * Data page shows the same collections in host context.
+ * and shared with sites, so their home is the org area — a site's Data page
+ * shows the ones shared with it.
  */
 const OrgData: NextPageWithLayout<Record<string, never>> = () => {
   const orgSlug = useOrgSlug()
