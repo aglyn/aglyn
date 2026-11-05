@@ -96,7 +96,8 @@ import { planReferenceFixups, referencingFieldIds, restrictedDeleteMessage } fro
 import { BlockedControl } from '@aglyn/shared-ui-jsx/components/blocked-control.component'
 import { datasetListScope } from '../model/dataset-record-list'
 import {
-  DATASETS_DELETE_REFUSAL,
+  DATASETS_EXPORT_REFUSAL,
+  DATASETS_VIEW_RECORDS_REFUSAL,
   DATASETS_WRITE_REFUSAL,
   useDatasetWritesBlocked,
 } from './use-dataset-writes-blocked'
@@ -130,6 +131,11 @@ export interface HostDatasetsCardProps {
  */
 /** The records walk serves no header order: every header sorts the page. */
 const NO_QUERY_SORTS: never[] = []
+
+/** The grid's own Export and Print, off for a member without "Export data" (AGL-4047). */
+const EXPORT_OFF_TOOLBAR = {
+  toolbar: { csvOptions: { disableToolbarButton: true }, printOptions: { disableToolbarButton: true } },
+}
 
 /** Stable, so an empty answer does not re-render the card. */
 const NO_DATASETS: any[] = []
@@ -208,7 +214,6 @@ export function HostDatasetsCard(props: HostDatasetsCardProps) {
   // it easy to miss: the page looks right and logs a denial every mount.
   const scopeReady = Boolean(dataScope) && scopeLoaded
   const firestore = useFirestore()
-  const blocked = useDatasetWritesBlocked(orgId)
   const { enqueueSnackbar } = useSnackbar()
   const { confirm } = useConfirmationContext()
   const { org } = props
@@ -331,6 +336,9 @@ export function HostDatasetsCard(props: HostDatasetsCardProps) {
   const [schemaOpen, setSchemaOpen] = useState(false)
   const selected =
     datasets.find((item) => item.$id === selectedId) ?? datasets[0]
+  // What this member may do with THIS dataset (AGL-4047): one placed on one site
+  // answers to that site.
+  const blocked = useDatasetWritesBlocked(orgId, (selected as { visibleTo?: unknown } | undefined)?.visibleTo)
   // Typed model (AGL-179): drives headers, cell rendering, and the
   // document form; v1 datasets get a derived all-text model.
   const model = useMemo(
@@ -438,7 +446,7 @@ export function HostDatasetsCard(props: HostDatasetsCardProps) {
     setPageSize: setRecordPageSize,
   } = usePagedCollection<any>(
     (pageLimit) =>
-      dataScope && selected?.$id
+      dataScope && selected?.$id && !blocked.records
         ? query(
             collection(
               firestore,
@@ -452,7 +460,7 @@ export function HostDatasetsCard(props: HostDatasetsCardProps) {
             limit(pageLimit),
           )
         : null,
-    [firestore, dataScope, selected?.$id, recordPlanKey],
+    [firestore, dataScope, selected?.$id, recordPlanKey, blocked.records],
     { idField: '$id' },
   )
   const recordRefusals = useMemo(
@@ -540,7 +548,7 @@ export function HostDatasetsCard(props: HostDatasetsCardProps) {
   // above, which is the PICKER value and is null until the user chooses.
   const countedDatasetId: string | undefined = selected?.$id
   useEffect(() => {
-    if (!dataScope || !countedDatasetId) return
+    if (!dataScope || !countedDatasetId || blocked.records) return
     let active = true
     void getCountFromServer(
       collection(
@@ -566,7 +574,7 @@ export function HostDatasetsCard(props: HostDatasetsCardProps) {
     return () => {
       active = false
     }
-  }, [firestore, dataScope, countedDatasetId, recordCountEpoch])
+  }, [firestore, dataScope, countedDatasetId, recordCountEpoch, blocked.records])
   // Pending, denied, or answered about the PREVIOUS selection, the loaded
   // rows stand in. They can only UNDERSTATE (same collections, capped),
   // never overstate, so nothing these figures gate fires on a count larger
@@ -1212,13 +1220,18 @@ export function HostDatasetsCard(props: HostDatasetsCardProps) {
    * every other create and update, and the export streams the fields the
    * person picks. Outside the console shell there is no launcher, and no
    * Import or Export to offer. Inside it, Import is on for a member who may
-   * import (Manage data) and switched off with that permission named for one
-   * who doesn't hold it, and Export is offered to any member who can see the
-   * dataset (AGL-3546) — the transfer routes' own rule.
+   * write this dataset and switched off with the permission named for one who
+   * may not, and Export likewise for "Export data", for a member who can see it
+   * (AGL-3546, AGL-4047) — the transfer routes' own rule.
    */
   const transfer = useTransferLauncher()
   const transferTarget = selected?.$id
-    ? { resource: datasetTransferResourceKey(selected.$id), scope: 'org' as const }
+    ? {
+        resource: datasetTransferResourceKey(selected.$id),
+        scope: 'org' as const,
+        // This dataset's own answer once it is known; the workspace's until then.
+        ...(blocked.known ? { importAllowed: !blocked.writes } : {}),
+      }
     : null
   const canImport = Boolean(transfer && transferTarget && transfer.can('import', transferTarget))
   const canExport = Boolean(transfer && transferTarget && transfer.can('export', transferTarget))
@@ -1306,12 +1319,12 @@ export function HostDatasetsCard(props: HostDatasetsCardProps) {
                 <Button size="small" onClick={() => setViewerId(record.$id)}>
                   {'View'}
                 </Button>
-                <BlockedControl blocked={blocked.writes} reason={DATASETS_WRITE_REFUSAL}>
+                <BlockedControl blocked={blocked.writes} reason={blocked.writesReason}>
                   <Button size="small" onClick={handleOpenRecord(record)}>
                     {'Edit'}
                   </Button>
                 </BlockedControl>
-                <BlockedControl blocked={blocked.writes} reason={DATASETS_WRITE_REFUSAL}>
+                <BlockedControl blocked={blocked.writes} reason={blocked.writesReason}>
                   <Button
                     size="small"
                     color="error"
@@ -1337,6 +1350,7 @@ export function HostDatasetsCard(props: HostDatasetsCardProps) {
       handleDeleteRecord,
       recordFilter,
       blocked.writes,
+      blocked.writesReason,
     ],
   )
 
@@ -1423,7 +1437,7 @@ export function HostDatasetsCard(props: HostDatasetsCardProps) {
                 </MenuItem>
               ))}
             </TextField>
-            <BlockedControl blocked={blocked.writes} reason={DATASETS_WRITE_REFUSAL}>
+            <BlockedControl blocked={blocked.writes} reason={blocked.writesReason}>
               <Button
                 size="small"
                 color="primary"
@@ -1432,7 +1446,7 @@ export function HostDatasetsCard(props: HostDatasetsCardProps) {
                 {'Add record'}
               </Button>
             </BlockedControl>
-            <BlockedControl blocked={blocked.writes} reason={DATASETS_WRITE_REFUSAL}>
+            <BlockedControl blocked={blocked.writes && !blocked.sharingOnly} reason={blocked.writesReason}>
               <Button size="small" onClick={() => setSchemaOpen(true)}>
                 {'Schema'}
               </Button>
@@ -1449,7 +1463,7 @@ export function HostDatasetsCard(props: HostDatasetsCardProps) {
                 not hidden. Still absent while the answer is out, and where the
                 launcher refuses for another reason than the key. */}
             {canImport || (transfer && transferTarget && blocked.writes) ? (
-              <BlockedControl blocked={!canImport} reason={DATASETS_WRITE_REFUSAL}>
+              <BlockedControl blocked={!canImport} reason={blocked.writesReason}>
                 <Button size="small" onClick={handleImport}>
                   {'Import'}
                 </Button>
@@ -1458,12 +1472,14 @@ export function HostDatasetsCard(props: HostDatasetsCardProps) {
             {/* The real dataset size, not the loaded window (AGL-2335) —
                 the export is a server stream, so a dataset whose first page
                 has not landed yet is still exportable. */}
-            {canExport && (recordCount || records.length) ? (
-              <Button size="small" onClick={handleExport}>
-                {'Export'}
-              </Button>
+            {(canExport && (recordCount || records.length)) || (transfer && blocked.exports) ? (
+              <BlockedControl blocked={blocked.exports} reason={DATASETS_EXPORT_REFUSAL}>
+                <Button size="small" onClick={handleExport}>
+                  {'Export'}
+                </Button>
+              </BlockedControl>
             ) : null}
-            <BlockedControl blocked={blocked.deletes} reason={DATASETS_DELETE_REFUSAL}>
+            <BlockedControl blocked={blocked.deletes} reason={blocked.deletesReason}>
               <Button size="small" color="error" onClick={handleDeleteDataset}>
                 {'Delete'}
               </Button>
@@ -1482,7 +1498,11 @@ export function HostDatasetsCard(props: HostDatasetsCardProps) {
             noun="record"
           />
         ) : null}
-        {selected && (records.length > 0 || recordPage > 0 || filteringRecords) ? (
+        {selected && blocked.records ? (
+          <Typography variant="body2" color="text.secondary">
+            {DATASETS_VIEW_RECORDS_REFUSAL}
+          </Typography>
+        ) : selected && (records.length > 0 || recordPage > 0 || filteringRecords) ? (
           <>
           <ListFilterChips
             fields={recordFilter.fields}
@@ -1508,6 +1528,7 @@ export function HostDatasetsCard(props: HostDatasetsCardProps) {
             filterModel={gridFilter.filterModel}
             onFilterModelChange={gridFilter.onFilterModelChange}
             quickFilter
+            {...(blocked.exports ? { slotProps: EXPORT_OFF_TOOLBAR } : {})}
             noRowsLabel={
               filteringRecords ? 'No records match these filters' : 'No records yet.'
             }
@@ -1539,7 +1560,7 @@ export function HostDatasetsCard(props: HostDatasetsCardProps) {
           useFlexGap
           sx={{ flexWrap: 'wrap' }}
         >
-          <BlockedControl blocked={blocked.writes} reason={DATASETS_WRITE_REFUSAL}>
+          <BlockedControl blocked={blocked.creates} reason={DATASETS_WRITE_REFUSAL}>
             <Button
               size="small"
               variant="outlined"
@@ -1550,7 +1571,7 @@ export function HostDatasetsCard(props: HostDatasetsCardProps) {
             </Button>
           </BlockedControl>
           {datasets.length >= 2 ? (
-            <BlockedControl blocked={blocked.writes} reason={DATASETS_WRITE_REFUSAL}>
+            <BlockedControl blocked={blocked.creates} reason={DATASETS_WRITE_REFUSAL}>
               <Button size="small" onClick={() => setJoiner({ a: '', b: '' })}>
                 {'Add join collection'}
               </Button>
@@ -1866,6 +1887,8 @@ export function HostDatasetsCard(props: HostDatasetsCardProps) {
         seedFromCache={datasetsFromCache}
         seedUnreadable={datasetsStatus === 'error'}
         seedListen={datasetsListen}
+        canChangeSharing={!blocked.creates}
+        {...(blocked.sharingOnly ? { sharingOnlyReason: blocked.writesReason } : {})}
         onClose={() => setSchemaOpen(false)}
       />
     </CardDisplay>

@@ -641,6 +641,7 @@ export interface TransferPackageHooks<T = unknown> {
  * registration.
  */
 export type PluginTransferResource = Partial<TransferRecordsHooks> &
+  TransferImportAccessHooks &
   Partial<TransferPackageHooks> &
   TransferPlanGateHooks
 
@@ -688,6 +689,51 @@ export interface TransferPlanGateHooks {
     subject: TransferPlanSubject,
     intent: TransferAccessIntent,
   ): Promise<TransferPlanRefusal | null> | TransferPlanRefusal | null
+}
+
+/** Who is asking to import into a resource, as the gate read them. */
+export interface TransferImportAccessSubject {
+  /** The resource key, naming the instance for one declared with `instances`. */
+  resource: string
+  orgId: string
+  uid: string
+  /** The caller's workspace membership. */
+  member: Readonly<Record<string, unknown>>
+}
+
+/** The import hook a resource may answer with, beside its kind's. */
+export interface TransferImportAccessHooks {
+  /**
+   * Whether this member may import into THIS instance of the resource
+   * (AGL-4047), in place of `data.manage` on the workspace: for records whose
+   * answer depends on where the instance is placed, which the declaration
+   * cannot say. Answers the refusal's permission key when it refuses, so the
+   * gate names the right one. May read the database and load its module with
+   * its first call.
+   */
+  importAccess?(
+    subject: TransferImportAccessSubject,
+  ): Promise<TransferImportAccessVerdict> | TransferImportAccessVerdict
+}
+
+/** A resource's own answer on importing: allowed, or the permission that is missing. */
+export type TransferImportAccessVerdict = { allowed: true } | { allowed: false; permission: string }
+
+/**
+ * The resource's own answer on importing into this instance, or `null` when
+ * it has none (or its server half cannot be reached, which the route that
+ * needs it answers) and the gate's `data.manage` stands.
+ */
+export async function transferImportAccess(
+  subject: TransferImportAccessSubject,
+): Promise<TransferImportAccessVerdict | null> {
+  let hook: TransferImportAccessHooks['importAccess']
+  try {
+    hook = (await resolveTransferResource(subject.resource)).impl.importAccess
+  } catch {
+    hook = undefined
+  }
+  return hook ? hook(subject) : null
 }
 
 /** "Companies" → "companies", "CRM fields" unchanged: the label inside a sentence. */

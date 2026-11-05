@@ -35,6 +35,7 @@ import {
   Button,
   Checkbox,
   Alert,
+  Box,
   Chip,
   Dialog,
   DialogActions,
@@ -49,7 +50,7 @@ import {
   Typography,
 } from '@mui/material'
 import { collection, doc, limit, query, updateDoc, where } from 'firebase/firestore'
-import { useCallback, useEffect, useState } from 'react'
+import { type ReactNode, useCallback, useEffect, useState } from 'react'
 import {
   useFirestore,
   useFirestoreCollection,
@@ -98,7 +99,32 @@ export interface DatasetSchemaDialogProps {
   seedUnreadable?: boolean
   /** That listener, so a save waits on that read alone (AGL-4135). */
   seedListen?: ListenHandle | null
+  /**
+   * Whether this member may change who the dataset is shared with: "Manage
+   * data" with every site in reach. A site's verdict writes the dataset and never
+   * moves it, so someone it admits reads the sharing instead (AGL-4047).
+   */
+  canChangeSharing?: boolean
+  /**
+   * Why this member may change who the dataset is shared with and nothing else
+   * here, or absent where they may change it all (AGL-4047): a site that narrows
+   * them takes the dataset's schema and records, and sharing is not among those.
+   * The schema shows switched off, with this reason, and a save writes the
+   * sharing alone.
+   */
+  sharingOnlyReason?: string
   onClose: () => void
+}
+
+/** The dialog's schema controls, switched off together where only the sharing is this member's. */
+function SchemaControls(props: { locked: boolean; children: ReactNode }) {
+  return props.locked ? (
+    <Box component="fieldset" disabled sx={{ border: 0, m: 0, p: 0, minWidth: 0 }}>
+      {props.children}
+    </Box>
+  ) : (
+    <>{props.children}</>
+  )
 }
 
 /**
@@ -120,6 +146,8 @@ export function DatasetSchemaDialog(props: DatasetSchemaDialogProps) {
     seedFromCache,
     seedUnreadable,
     seedListen,
+    canChangeSharing = true,
+    sharingOnlyReason,
     onClose,
   } = props
   // Org-shared data root (AGL-237/239). Null until the async org lookup
@@ -387,7 +415,7 @@ export function DatasetSchemaDialog(props: DatasetSchemaDialogProps) {
      * every site, and anything narrower would drop sites somebody picked.
      */
     const scopeWrite =
-      orgId && viewerOrgWide && scopeChanged ? scopeToStore(visibleTo) : null
+      orgId && viewerOrgWide && canChangeSharing && scopeChanged ? scopeToStore(visibleTo) : null
     if (scopeWrite?.problem) {
       return void enqueueSnackbar(scopeWrite.problem, {
         variant: 'warning',
@@ -414,6 +442,8 @@ export function DatasetSchemaDialog(props: DatasetSchemaDialogProps) {
         .catch(() => false)
       if (!proceed) return
     }
+    // Nothing of theirs to write when the sharing did not move.
+    if (sharingOnlyReason && !scopeWrite?.scope) return void onClose()
     if (!model.order.length) {
       return void enqueueSnackbar('A collection needs at least one field', {
         variant: 'warning',
@@ -446,20 +476,22 @@ export function DatasetSchemaDialog(props: DatasetSchemaDialogProps) {
       async () =>
         void (await updateDoc(
           doc(firestore, dataScope[0], dataScope[1], 'datasets', dataset.$id),
-          {
-            model,
-            names: {
-              singular: names.singular.trim(),
-              plural: names.plural.trim(),
-            },
-            ...(names.plural.trim()
-              ? { displayName: names.plural.trim() }
-              : {}),
-            // v1 compat: keep the flat column list mirroring the model order
-            // so unmigrated consumers (AGL-103 bindings) keep working.
-            fields: model.order,
-            ...(scopeWrite?.scope ? { visibleTo: scopeWrite.scope } : {}),
-          },
+          sharingOnlyReason
+            ? (scopeWrite?.scope ? { visibleTo: scopeWrite.scope } : {})
+            : {
+                model,
+                names: {
+                  singular: names.singular.trim(),
+                  plural: names.plural.trim(),
+                },
+                ...(names.plural.trim()
+                  ? { displayName: names.plural.trim() }
+                  : {}),
+                // v1 compat: keep the flat column list mirroring the model order
+                // so unmigrated consumers (AGL-103 bindings) keep working.
+                fields: model.order,
+                ...(scopeWrite?.scope ? { visibleTo: scopeWrite.scope } : {}),
+              },
         )),
     )
       .then((result) => {
@@ -470,7 +502,7 @@ export function DatasetSchemaDialog(props: DatasetSchemaDialogProps) {
             persist: false,
           })
         }
-        enqueueSnackbar('Schema saved', { variant: 'success', persist: false })
+        enqueueSnackbar(sharingOnlyReason ? 'Sharing saved' : 'Schema saved', { variant: 'success', persist: false })
         onClose()
       })
       .catch(() =>
@@ -482,6 +514,8 @@ export function DatasetSchemaDialog(props: DatasetSchemaDialogProps) {
     names,
     visibleTo,
     viewerOrgWide,
+    canChangeSharing,
+    sharingOnlyReason,
     orgHostList,
     confirm,
     firestore,
@@ -518,6 +552,8 @@ export function DatasetSchemaDialog(props: DatasetSchemaDialogProps) {
         <DialogContent
           sx={{ display: 'flex', flexDirection: 'column', gap: 2 }}
         >
+          {sharingOnlyReason ? <Alert severity="info">{sharingOnlyReason}</Alert> : null}
+          <SchemaControls locked={Boolean(sharingOnlyReason)}>
           <Stack direction="row" spacing={1} sx={{ mt: 1 }}>
             <TextField
               size="small"
@@ -538,6 +574,7 @@ export function DatasetSchemaDialog(props: DatasetSchemaDialogProps) {
               helperText="e.g. Products (shown as the title)"
             />
           </Stack>
+          </SchemaControls>
           {/* Sharing scope (AGL-1044). Org datasets only; the legacy host
               path is site-private already. Read-only for scoped members —
               the rules deny them the write and it would fail the whole
@@ -552,7 +589,7 @@ export function DatasetSchemaDialog(props: DatasetSchemaDialogProps) {
                 <Typography variant="body2" color="text.secondary">
                   {'Checking your access…'}
                 </Typography>
-              ) : viewerOrgWide ? (
+              ) : viewerOrgWide && canChangeSharing ? (
                 <>
                   {/*
                     The state this dialog used to hide (AGL-1484), in the
@@ -677,6 +714,7 @@ export function DatasetSchemaDialog(props: DatasetSchemaDialogProps) {
               )}
             </Stack>
           ) : null}
+          <SchemaControls locked={Boolean(sharingOnlyReason)}>
           <Stack spacing={0.5}>
             {model.order.map((fieldId, index) => {
               const field = model.fields[fieldId]
@@ -762,6 +800,7 @@ export function DatasetSchemaDialog(props: DatasetSchemaDialogProps) {
           >
             {'Add field'}
           </Button>
+          </SchemaControls>
         </DialogContent>
         <DialogActions>
           <Button onClick={onClose}>{'Cancel'}</Button>
@@ -773,7 +812,7 @@ export function DatasetSchemaDialog(props: DatasetSchemaDialogProps) {
             disabled={!dataScope}
             onClick={handleSave}
           >
-            {'Save schema'}
+            {sharingOnlyReason ? 'Save sharing' : 'Save schema'}
           </Button>
         </DialogActions>
       </Dialog>

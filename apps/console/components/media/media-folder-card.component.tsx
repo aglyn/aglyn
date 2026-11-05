@@ -50,10 +50,10 @@ export interface MediaFolderCardProps {
    * org-wide member, who is the only principal the rules let write a scope.
    */
   onSetScope?: () => void
-  /** "Shared with…" stays off while the reader's permissions are loading. */
-  setScopeHeld?: boolean
-  /** Why "Shared with…" is switched off for this reader, when it is. */
-  setScopeRefusal?: string
+  /** Rename, Shared with… and Delete stay off while permissions load. */
+  writeHeld?: boolean
+  /** Why Rename, Shared with… and Delete are switched off for this reader. */
+  writeRefusal?: string
   /** Current sharing, rendered under the name when it is restricted. */
   scopeLabel?: string
 }
@@ -79,8 +79,8 @@ export function MediaFolderCard(props: MediaFolderCardProps) {
     onRename,
     onDelete,
     onSetScope,
-    setScopeHeld,
-    setScopeRefusal,
+    writeHeld,
+    writeRefusal,
     scopeLabel,
   } = props
   const [menuAnchor, setMenuAnchor] = useState<HTMLElement | null>(null)
@@ -104,7 +104,10 @@ export function MediaFolderCard(props: MediaFolderCardProps) {
     attributes,
     listeners,
     isDragging,
-  } = useDraggable({ id: `gridfolderdrag:${folder.$id}`, disabled: readOnly })
+  } = useDraggable({
+    id: `gridfolderdrag:${folder.$id}`,
+    disabled: readOnly || writeHeld || Boolean(writeRefusal),
+  })
   const setCardRef = useCallback(
     (node: HTMLElement | null) => {
       setDropRef(node)
@@ -220,23 +223,41 @@ export function MediaFolderCard(props: MediaFolderCardProps) {
           </MenuItem>
         ) : null}
         {onRename ? (
-          <MenuItem onClick={runAction(onRename)}>{'Rename'}</MenuItem>
+          <BlockedControl
+            blocked={Boolean(writeRefusal)}
+            reason={writeRefusal ?? ''}
+            fullWidth
+          >
+            <MenuItem disabled={writeHeld} onClick={runAction(onRename)}>
+              {'Rename'}
+            </MenuItem>
+          </BlockedControl>
         ) : null}
         {onSetScope ? (
           <BlockedControl
-            blocked={Boolean(setScopeRefusal)}
-            reason={setScopeRefusal ?? ''}
+            blocked={Boolean(writeRefusal)}
+            reason={writeRefusal ?? ''}
             fullWidth
           >
-            <MenuItem disabled={setScopeHeld} onClick={runAction(onSetScope)}>
+            <MenuItem disabled={writeHeld} onClick={runAction(onSetScope)}>
               {'Shared with…'}
             </MenuItem>
           </BlockedControl>
         ) : null}
         {onDelete ? (
-          <MenuItem onClick={runAction(onDelete)} sx={{ color: 'error.main' }}>
-            {'Delete'}
-          </MenuItem>
+          <BlockedControl
+            blocked={Boolean(writeRefusal)}
+            reason={writeRefusal ?? ''}
+            fullWidth
+          >
+            <MenuItem
+              disabled={writeHeld}
+              onClick={runAction(onDelete)}
+              sx={{ color: 'error.main' }}
+            >
+              {'Delete'}
+            </MenuItem>
+          </BlockedControl>
         ) : null}
       </Menu>
     </Card>

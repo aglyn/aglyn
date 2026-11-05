@@ -2190,7 +2190,8 @@ function siteBundleSectionRows() {
  * least one known kind and format, positive whole limits, and `instances:
  * true` for a resource moved one instance at a time (one dataset's records), and
  * who may export it (AGL-3546): `readableByMembers: true`, or a `readPermission`
- * that is a permission key, never both; the plan feature that moves it
+ * that is a permission key, never both, with `readPermissionOnly: true` where it
+ * alone decides; the plan feature that moves it
  * (AGL-3555), `featureFlag`, with the intents `featureFlagExempt` keeps open
  * on every plan; and the catalog key an import also asks, where its records
  * are (AGL-4047), `importPermission`, on a resource that imports. And the two
@@ -2202,7 +2203,7 @@ const TRANSFER_RESOURCE_KEY = /^[a-z][a-z0-9]*(?:[.-][a-z0-9]+)*$/
 const TRANSFER_SCOPES = ['org', 'host']
 const TRANSFER_KINDS = ['records', 'package']
 const TRANSFER_FORMATS = ['csv', 'json', 'ndjson']
-const TRANSFER_RESOURCE_FIELDS = ['key', 'label', 'singularLabel', 'scope', 'kinds', 'formats', 'limits', 'description', 'instances', 'readableByMembers', 'readPermission', 'exportOnly', 'featureFlag', 'featureFlagExempt', 'importPermission']
+const TRANSFER_RESOURCE_FIELDS = ['key', 'label', 'singularLabel', 'scope', 'kinds', 'formats', 'limits', 'description', 'instances', 'readableByMembers', 'readPermission', 'readPermissionOnly', 'exportOnly', 'featureFlag', 'featureFlagExempt', 'importPermission']
 const TRANSFER_INTENTS = ['import', 'export']
 const FEATURE_FLAG_KEY = /^[a-z][A-Za-z0-9]*$/
 const PERMISSION_KEY = /^[A-Za-z][A-Za-z0-9]*(?:\.[A-Za-z0-9]+)*$/
@@ -2232,7 +2233,7 @@ function transferResourceRows() {
     }
     for (const entry of declared) {
       const { $comment: _note, ...resource } = entry ?? {}
-      const { key, label, singularLabel, scope, kinds, formats, limits, description, instances, readableByMembers, readPermission, exportOnly, featureFlag, featureFlagExempt, importPermission } = resource
+      const { key, label, singularLabel, scope, kinds, formats, limits, description, instances, readableByMembers, readPermission, readPermissionOnly, exportOnly, featureFlag, featureFlagExempt, importPermission } = resource
       const what = `${where} "${key ?? ''}"`
       const unknown = Object.keys(resource).filter((field) => !TRANSFER_RESOURCE_FIELDS.includes(field))
       if (unknown.length) throw new Error(`${what}: ${unknown.join(', ')} is not a resource field`)
@@ -2260,6 +2261,9 @@ function transferResourceRows() {
       }
       if (readableByMembers && readPermission !== undefined) {
         throw new Error(`${what}: "readableByMembers" and "readPermission" each say who exports — declare one`)
+      }
+      if (readPermissionOnly !== undefined && (readPermissionOnly !== true || readPermission === undefined)) {
+        throw new Error(`${what}: "readPermissionOnly" is true when "readPermission" alone decides an export, and absent otherwise`)
       }
       if (exportOnly !== undefined && exportOnly !== true) {
         throw new Error(`${what}: "exportOnly" is true when the resource is exported and never imported, and absent otherwise`)

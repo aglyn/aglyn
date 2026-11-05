@@ -41,6 +41,8 @@
 
 import {
   parseTransferResourceKey,
+  TRANSFER_MANAGE_PERMISSION,
+  transferImportPermission,
   transferPlanFeature,
   transferResourceImports,
   transferResourceInstanceKey,
@@ -49,8 +51,10 @@ import {
 import { listDeclaredTransferResources, listTransferResourcesFor, pluginTransferResourceUi, TRANSFER_RESOURCES_LOAD_POINT, type ResolvedTransferResourceDeclaration } from '@aglyn/aglyn/plugin-manager/plugin-transfer-resources'
 import { pluginRecordListQuery, pluginRecordsFromRows } from '@aglyn/aglyn/plugin-manager/plugin-record-lists'
 import { useTransferLauncher, type TransferLauncher } from '@aglyn/aglyn/app-utils/transfer-launcher-context'
+import { permissionRefusalText } from '@aglyn/aglyn/app-utils/org-permissions'
 import { planLabelGrantingFeature } from '@aglyn/aglyn'
 import { AppLink, CardDisplay } from '@aglyn/shared-ui-jsx'
+import { BlockedControl } from '@aglyn/shared-ui-jsx/components/blocked-control.component'
 import { authorizedFetch } from '@aglyn/shared-util-http/authorized-token'
 import { useFirestore, useUser } from '@aglyn/tenant-feature-instance'
 import { Alert, Box, Button, Chip, Divider, MenuItem, Stack, TextField, Typography } from '@mui/material'
@@ -99,8 +103,10 @@ function InstanceRows(props: {
   orgId: string
   hostId: string | null
   launcher: TransferLauncher
+  /** Whether the workspace's plan lets it import this resource. */
+  planAllowsImport: boolean
 }) {
-  const { resource, firestore, orgId, hostId, launcher } = props
+  const { resource, firestore, orgId, hostId, launcher, planAllowsImport } = props
   const kind = pluginTransferResourceUi(resource.key)?.instancesFrom ?? null
   const [instances, setInstances] = useState<Array<{ id: string; name: string }> | null>(null)
   useEffect(() => {
@@ -147,16 +153,29 @@ function InstanceRows(props: {
         }
         // Each only for whom the route takes it (AGL-3554): an instance asks
         // under its own key, as its route does.
-        const imports = transferResourceImports(resource) && launcher.can('import', launch)
+        const takesFile = transferResourceImports(resource)
+        const imports = takesFile && launcher.can('import', launch)
         const exports = launcher.can('export', launch)
+        // Off with the permission named, not hidden (AGL-4047), once an answer
+        // is known to be about the permission: `can` also says no while its
+        // reads are out, and for the plan, which this row has its own words
+        // for. Export answering yes means those reads are in.
+        const importRefused = takesFile && !imports && exports && planAllowsImport
         return (
           <Stack key={instance.id} direction="row" spacing={1} sx={{ alignItems: 'center', justifyContent: 'space-between' }}>
             <Typography variant="body2">{instance.name}</Typography>
             <Stack direction="row" spacing={1}>
-              {imports ? (
-                <Button size="small" onClick={() => launcher.openImport(launch)}>
-                  {'Import'}
-                </Button>
+              {imports || importRefused ? (
+                <BlockedControl
+                  blocked={importRefused}
+                  reason={permissionRefusalText(
+                    transferImportPermission('import', resource) ?? TRANSFER_MANAGE_PERMISSION,
+                  )}
+                >
+                  <Button size="small" onClick={() => launcher.openImport(launch)}>
+                    {'Import'}
+                  </Button>
+                </BlockedControl>
               ) : null}
               {exports ? (
                 <Button size="small" onClick={() => launcher.openExport(launch)}>
@@ -388,6 +407,7 @@ export function OrgDataTransferCard(props: { onImported?(): void }) {
                   orgId={orgId}
                   hostId={siteId}
                   launcher={launcher}
+                  planAllowsImport={planAllows(resource, 'import')}
                 />,
               ]
             : [row]

@@ -17,6 +17,7 @@
 'use client'
 
 import { permissionRefusalText } from '@aglyn/aglyn/app-utils/org-permissions'
+import { BlockedControl } from '@aglyn/shared-ui-jsx/components/blocked-control.component'
 import { pluginDocsHelp } from '@aglyn/aglyn'
 import { ICON_VARIANT_CLOSE } from '@aglyn/shared-data-enums'
 import {
@@ -142,6 +143,8 @@ function OrgSendingTables(props: { mount: EmailOrgMount; basePath: string }) {
   const { sites } = sitePage
   const { views, errors, loading, reload, first } = useOrgSendingViews(sites)
   const canManage = first?.canManage === true
+  // The domains route's key (AGL-4047); `canManage` is the identity route's.
+  const canManageDomains = first?.canManageDomains === true
   const entitled = first?.entitled === true
   const domains = first?.domains ?? []
 
@@ -302,8 +305,8 @@ function OrgSendingTables(props: { mount: EmailOrgMount; basePath: string }) {
     record: SendingIdentityView['domains'][number],
   ): RowActionsMenuItem[] => {
     const working = Boolean(domainBusy)
-    const domainRouteReason = !canManage
-      ? permissionRefusalText('org.settings')
+    const domainRouteReason = !canManageDomains
+      ? permissionRefusalText('org.sendingDomains')
       : !entitled
         ? 'Managing sending domains needs a plan that carries sending as ' +
           'your own domain.'
@@ -375,15 +378,20 @@ function OrgSendingTables(props: { mount: EmailOrgMount; basePath: string }) {
       contentGutterY
       contentBordered="all"
       HeaderProps={{
-        action: canManage ? (
-          <Button
-            size="small"
-            variant="contained"
-            disabled={!entitled}
-            onClick={() => setAdding(true)}
+        action: first ? (
+          <BlockedControl
+            blocked={!canManageDomains}
+            reason={permissionRefusalText('org.sendingDomains')}
           >
-            {'Add domain'}
-          </Button>
+            <Button
+              size="small"
+              variant="contained"
+              disabled={!entitled}
+              onClick={() => setAdding(true)}
+            >
+              {'Add domain'}
+            </Button>
+          </BlockedControl>
         ) : null,
       }}
     >

@@ -201,6 +201,16 @@ export interface PluginOrgPermissionDeclaration {
    */
   narrowsPerSite?: boolean | Partial<Record<OrgRole, boolean>>
   /**
+   * A site can also RAISE this key (AGL-4047). Where a member of the whole
+   * workspace has wider access to one site than their workspace role, the key
+   * reads `hostRoleDefaults` for that access there, unless a custom role or
+   * their own permissions decide it or the key it `follows`. For a key that
+   * narrows and raises with the site, which `presetFromSiteRole` cannot be:
+   * that gives up the workspace's verdict, and with it `narrowsPerSite`'s
+   * "Keep this permission". Needs `hostRoleDefaults`.
+   */
+  raisesPerSite?: boolean
+  /**
    * The key's preset is the member's role ON THE SITE, for every member
    * (AGL-4047), not only for a site collaborator: the owner and admins are
    * admins of every site, a workspace-wide editor or viewer holds their
@@ -257,6 +267,8 @@ export interface PluginCatalogPermission {
    * default for whether it does, normalized from the declaration.
    */
   narrowsPerSite?: Readonly<Record<OrgRole, boolean>>
+  /** A site can raise the key (AGL-4047); see the declaration's. */
+  raisesPerSite?: true
   /** The key's preset is the member's role on the site (AGL-4047); see the declaration's. */
   presetFromSiteRole?: true
   /** That preset holds for members of the whole workspace only (AGL-4047); see the declaration's. */
@@ -510,6 +522,9 @@ export function listPluginCatalogPermissions(): PluginCatalogPermission[] {
             ...(permission.workspaceMembersOnly ? { workspaceMembersOnly: true as const } : {}),
           }
         : narrowingDefaultsOf(permission.narrowsPerSite)),
+      ...(permission.raisesPerSite && permission.hostRoleDefaults && !permission.presetFromSiteRole
+        ? { raisesPerSite: true as const }
+        : {}),
     })
   }
   for (const permission of listPluginPermissions()) {

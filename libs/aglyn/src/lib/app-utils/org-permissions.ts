@@ -131,6 +131,13 @@ export interface OrgPermissionDefinition {
    */
   narrowsPerSite?: Readonly<Record<OrgRole, boolean>>
   /**
+   * A site can raise the key (AGL-4047): wider access to one site than the
+   * member's workspace role reads `hostRoleDefaults` there, unless a custom
+   * role or their own permissions decide it or the key it follows.
+   * `resolveSiteRaisedPermissions` decides it. Only a plugin's key.
+   */
+  raisesPerSite?: true
+  /**
    * The key's preset is the member's role ON THE SITE a request names, for
    * every member (AGL-4047): `hostRoleDefaults` read for the access they hold
    * there, then their custom role, their own permissions and that site's
@@ -316,6 +323,7 @@ function syncCatalog(): void {
       ...(declared.refines ? { refines: declared.refines } : {}),
       ...(declared.follows && !declared.refines ? { follows: declared.follows } : {}),
       ...(declared.narrowsPerSite ? { narrowsPerSite: { ...declared.narrowsPerSite } } : {}),
+      ...(declared.raisesPerSite ? { raisesPerSite: true as const } : {}),
       ...(declared.presetFromSiteRole && declared.hostRoleDefaults ? { presetFromSiteRole: true as const } : {}),
       ...(declared.presetFromSiteRole && declared.hostRoleDefaults && declared.workspaceMembersOnly
         ? { workspaceMembersOnly: true as const }

@@ -25,6 +25,7 @@
  */
 
 import type { AglynOrgMember } from '../foundation'
+import { registerPluginEntitlements } from '../plugin-manager/plugin-entitlements'
 import { registerPluginPermissions } from '../plugin-manager/plugin-permissions'
 import {
   narrowedPermissionKeysOf,
@@ -355,5 +356,66 @@ describe('the narrowing control: one member, over their custom role', () => {
       new Map([['floor', keepsAll]]),
     )
     expect(stamp['floor']).toMatchObject({ 'till.open': true, 'till.sell': true, 'desk.collect': false })
+  })
+})
+
+describe('a site raises a key that says so (AGL-4047)', () => {
+  const RAISES = 'raise.site'
+  const FOLLOWED = 'raise.followed'
+  const ON = { admin: true, editor: true, author: false, viewer: false } as const
+  const viewerOn = (access: string, extra: Record<string, unknown> = {}) =>
+    ({ role: 'viewer', allHosts: true, hostAccess: { [A]: access }, ...extra }) as Partial<AglynOrgMember>
+  const verdict = (member: Partial<AglynOrgMember>, hostId = A, customRole: AglynOrgCustomRole | null = null) =>
+    resolveMemberHostPermissions({ member, customRole, hostId })[RAISES]
+
+  beforeAll(() => {
+    registerPluginEntitlements({
+      pluginId: 'acme-raise',
+      orgPermissions: [
+        { key: FOLLOWED, label: 'Followed', description: 'Followed.', roleDefaults: { owner: true, admin: true, editor: true, viewer: false } },
+        {
+          key: RAISES,
+          label: 'Raised',
+          description: 'Raised.',
+          roleDefaults: { owner: true, admin: true, editor: true, viewer: false },
+          hostRoleDefaults: ON,
+          follows: FOLLOWED,
+          narrowsPerSite: { editor: true },
+          raisesPerSite: true,
+        },
+      ],
+    })
+  })
+
+  it('gives a viewer raised to Admin or Editor the key on that site, and no other', () => {
+    expect(verdict(viewerOn('admin'))).toBe(true)
+    expect(verdict(viewerOn('editor'))).toBe(true)
+    expect(verdict(viewerOn('editor'), B)).toBe(false)
+  })
+
+  it('gives nothing where that access holds nothing', () => {
+    expect(verdict(viewerOn('author'))).toBe(false)
+    expect(verdict({ role: 'viewer', allHosts: true } as Partial<AglynOrgMember>)).toBe(false)
+  })
+
+  it('never goes round a decision someone wrote down, on the key or the key it follows', () => {
+    expect(verdict(viewerOn('editor', { permissions: { [RAISES]: false } }))).toBe(false)
+    expect(verdict(viewerOn('editor', { permissions: { [FOLLOWED]: false } }))).toBe(false)
+    expect(verdict(viewerOn('editor', { roleId: 'r' }), A, { permissions: { [FOLLOWED]: false } })).toBe(false)
+  })
+
+  it('still narrows an editor, and keeps what they choose to keep', () => {
+    const narrowed = { role: 'editor', allHosts: true, hostAccess: { [A]: 'viewer' } } as Partial<AglynOrgMember>
+    expect(verdict(narrowed)).toBe(false)
+    expect(verdict(narrowed, B)).toBe(true)
+    expect(verdict({ ...narrowed, siteNarrowing: { [RAISES]: false } } as Partial<AglynOrgMember>)).toBe(true)
+    expect(verdict({ ...narrowed, hostPermissions: { [A]: { [RAISES]: true } } } as Partial<AglynOrgMember>)).toBe(true)
+  })
+
+  it('holds a collaborator to their site role, as before', () => {
+    const collaborator = (access: string) =>
+      ({ role: 'viewer', allHosts: false, hostAccess: { [A]: access } }) as Partial<AglynOrgMember>
+    expect(verdict(collaborator('editor'))).toBe(true)
+    expect(verdict(collaborator('author'))).toBe(false)
   })
 })

@@ -88,6 +88,7 @@ import useCurrentOrg from '../hooks/use-current-org'
 import useFirestoreCollection from '../hooks/use-firestore-collection'
 import useFirestoreDoc from '../hooks/use-firestore-doc'
 import useOrgPermissions from '../hooks/use-org-permissions'
+import { useCanManageSite, useCanManageSiteKnown } from './host-id-provider'
 
 /**
  * Site-collaborator roles, weakest first.
@@ -148,6 +149,13 @@ export function HostMembersCard(props: HostMembersCardProps) {
   const { org, ready: orgReady } = useCurrentOrg()
   const { permissions } = useOrgPermissions()
   const canManage = permissions.manageMembers
+  // The Permissions dialog's door admits "Manage site settings" on this site
+  // as well as the workspace's "Manage members" (AGL-4047).
+  const canManageSite = useCanManageSite()
+  const canManageSiteKnown = useCanManageSiteKnown()
+  const canSetSitePermissions = canManage || canManageSite
+  // Refused only once the site has answered: until then it is "not yet".
+  const sitePermissionsRefused = canManageSiteKnown && !canSetSitePermissions
   // Columns a plugin contributes to this table (AGL-2940), between the site
   // access and the actions; cards a plugin adds render under the table.
   const { columns: pluginColumns } = usePluginListColumns('hostMembers')
@@ -660,16 +668,21 @@ export function HostMembersCard(props: HostMembersCardProps) {
                 {/* What this person may do on this site, every per-site
                     key (AGL-4047). A pending invite has no member document
                     to carry a toggle yet; the door reads only for people
-                    who manage the site's collaborators. */}
+                    who manage this site or the workspace's members, and
+                    refuses in the words of its own key. */}
                 <BlockedControl
-                  blocked={member.status === 'invited' || !canManage}
+                  blocked={member.status === 'invited' || sitePermissionsRefused}
                   reason={
                     member.status === 'invited'
                       ? 'Permissions can be set once the invite is accepted'
-                      : permissionRefusalText('members.manage')
+                      : permissionRefusalText('site.manage')
                   }
                 >
-                  <Button size="small" onClick={() => setPermissionsFor(member)}>
+                  <Button
+                    size="small"
+                    disabled={!canSetSitePermissions}
+                    onClick={() => setPermissionsFor(member)}
+                  >
                     {'Permissions'}
                   </Button>
                 </BlockedControl>
@@ -701,6 +714,8 @@ export function HostMembersCard(props: HostMembersCardProps) {
       handleRemove,
       busy,
       canManage,
+      canSetSitePermissions,
+      sitePermissionsRefused,
       pluginMemberColumns,
     ],
   )
@@ -896,7 +911,7 @@ export function HostMembersCard(props: HostMembersCardProps) {
         <SitePermissionsDialog
           hostId={hostId}
           member={permissionsFor}
-          canManage={canManage}
+          canManage={canSetSitePermissions}
           onClose={() => setPermissionsFor(null)}
         />
       </Stack>

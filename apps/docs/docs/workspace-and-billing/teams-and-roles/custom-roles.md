@@ -68,8 +68,9 @@ custom role and overrides give them, and members whose access matches their
 workspace role everywhere (owners and admins always do) see no change.
 
 Whether a permission follows the narrower site role is a setting of its own. Each
-permission a site can narrow (the point of sale ones, the waivers ones and the two AI
-ones) has a second choice under it, **On sites where their role is narrower**:
+permission a site can narrow (the point of sale ones, the waivers ones, the two AI ones
+and [the two site dataset ones](#dataset-permissions)) has a second choice under it, **On
+sites where their role is narrower**:
 
 - **Follow the site role**: on that site the member holds what their Viewer or Author
   access holds, which for the register and waivers is nothing.
@@ -79,8 +80,8 @@ ones) has a second choice under it, **On sites where their role is narrower**:
 
 Set it on a custom role for everyone on that role, or on one member in their
 **Permissions** card, where it wins over their custom role. Left on **Inherit**, the
-built-in default applies: the point of sale and waivers permissions follow the site
-role, and the AI permissions are kept, so nothing changes until you choose otherwise.
+built-in default applies: the point of sale, waivers and site dataset permissions follow
+the site role, and the AI permissions are kept.
 Keeping **Sell at the register** also keeps the register open for selling, and only
 for selling. The choice changes something only for editors: owners and admins are
 admins of every site, and a viewer has no narrower access to be given. Keeping a
@@ -125,6 +126,53 @@ record shared with every site is shared with theirs too. They can't change what 
 shared with, and records shared only with other sites stay out of their reach. To keep
 someone to their own site's records, share the rest with the sites that need them rather
 than with the whole workspace, or take **Manage data** away from them.
+
+### Dataset permissions {#dataset-permissions}
+
+Four permissions sit beside **Manage data** and **Delete workspace records**:
+
+| Permission | What it opens | Owner / Admin | Editor | Viewer | Site Admin / Editor | Site Author / Viewer |
+|---|---|---|---|---|---|---|
+| **Manage this site's data** (`data.siteManage`) | Change the schema and records of a dataset shared with that site alone, and import into it | Yes | Yes | No | Yes | No |
+| **Delete this site's datasets** (`data.siteDelete`) | Delete a dataset shared with that site alone, with its records | Yes | Yes | No | Yes | No |
+| **View dataset records** (`data.viewRecords`) | Read the records of the datasets the member can see | Yes | Yes | Yes | Yes | Yes |
+| **Export data** (`data.export`) | Take those records out as a file; needs **View dataset records** | Yes | Yes | Yes | Yes | Yes |
+
+**A dataset shared with one site alone answers to that site.** Writing it takes **Manage
+data**, or **Manage this site's data** on that site. Deleting it takes **Delete workspace
+records**, or **Delete this site's datasets** on that site. So:
+
+- A site Admin or Editor who is a viewer of the workspace can edit and delete the datasets
+  shared with that site alone, without holding anything across the workspace. Allow or deny
+  either permission for one person from the site's **Users** card, under **Permissions**.
+- An editor of the whole workspace given **Viewer** or **Author** access to a site loses
+  both on the datasets shared with that site alone, schema, records, delete and import, and
+  keeps them everywhere else. They can still change who such a dataset is shared with. Choose **Keep this permission** for either
+  permission on their custom role or their **Permissions** card to keep it there, or allow
+  it from the site's **Users** card to give it back on that one site. See
+  [A site's access narrows its register and waivers](#site-access-narrows), which works the
+  same way.
+- Someone refused **Manage data** or **Delete workspace records** by a custom role or an
+  override doesn't get them back from their site role. Those decisions stand.
+
+A dataset shared with every site or with several answers to **Manage data** and **Delete
+workspace records** alone, because no one site speaks for it. That has two consequences
+worth knowing:
+
+- A member who reaches only some sites can't delete a dataset shared with every site or with
+  several, whatever they hold. It takes access to every site.
+- A member who reaches only some sites and holds **Manage data** can change the schema and
+  records of a dataset shared with every site or with several of theirs.
+
+Creating a dataset still takes **Manage data**, wherever it's created from, and changing who
+a dataset is shared with takes **Manage data** with access to every site.
+
+**View dataset records** and **Export data** start with every role, so taking one away is a
+choice you make for a role or a person. Without **View dataset records**, the Data page lists
+a member's datasets and says which permission their records need, and AI won't read figures
+from them for that member. Without **Export data**, **Export** is shown switched off.
+Published sites aren't members: a page showing a dataset's records keeps showing them,
+whoever holds what.
 
 ### Site permissions {#site-permissions}
 

@@ -126,7 +126,8 @@ of the address, because the list holds addresses rather than names. See
 ### AI access for collaborators {#collaborator-ai-access}
 
 A site collaborator's AI access is decided **per site**, on the site's **Users**
-card: choose **Permissions** beside a collaborator to see every permission that is
+card: choose **Permissions** beside a collaborator (it takes **Manage site settings** on
+that site or **Manage members** on the workspace) to see every permission that is
 set per site, AI's two among them — **Use AI assistance** (the assistant, copy
 rewrites, generating a section) and **Generate with AI** (AI generation jobs and AI
 edits). The site role sets the default — Admin, Editor and Author get both,
