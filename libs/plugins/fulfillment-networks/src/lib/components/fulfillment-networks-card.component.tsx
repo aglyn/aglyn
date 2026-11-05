@@ -156,7 +156,12 @@ export function FulfillmentNetworksCard(props: FulfillmentNetworksCardProps) {
 
   if (viewRefused) {
     return (
-      <CardDisplay header="Fulfillment networks" contentGutterX contentGutterY>
+      <CardDisplay
+        header="Fulfillment networks"
+        help={help('Send paid orders to your own fulfillment network and get its shipments back on the order.', '#connect-a-network')}
+        contentGutterX
+        contentGutterY
+      >
         <Typography variant="body2" color="text.secondary">
           {permissionRefusalText('fulfillmentNetworks.view')}
         </Typography>

@@ -720,6 +720,9 @@ export const PLUGIN_DOCS_SECTION_TITLES: {
   actionsBuilder: {
     '#create-an-action': 'Create an action',
   },
+  adConversions: {
+    '#conversions-api': 'Connect an account',
+  },
   aglynAssist: {
     '#what-it-can-do': 'What it can do',
   },
@@ -1109,6 +1112,9 @@ export const PLUGIN_DOCS_SECTION_TITLES: {
     '#site-plugins': 'Plugins on one site',
     '#step-3-reviews': 'Step 3 — Read the reviews, and know who can leave one',
     '#where-a-plugin-runs': 'Where a plugin runs',
+  },
+  inventorySync: {
+    '#connect-a-system': 'Connect a system',
   },
   inviteTeammates: {
     '#activity-log': 'Activity log',
