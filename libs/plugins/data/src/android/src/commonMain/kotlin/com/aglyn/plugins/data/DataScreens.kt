@@ -201,7 +201,7 @@ fun DatasetsScreen(context: NativePluginContext, initialDatasetId: String? = nul
         selected == null -> SelectionPlaceholder("Pick a dataset to see it here", icon = AglynIcons.named("dataset"))
         rows == null -> SkeletonList(rows = 6, modifier = Modifier.padding(space(2f)))
         dataset == null -> EmptyState("This dataset is gone", body = "It was deleted, or it is no longer shared with you.", icon = AglynIcons.named("dataset"))
-        else -> DatasetDetail(context, orgId, dataset, rows, canWrite, { runner.error = permissionRefusalText("data.manage") }) { dialog = it }
+        else -> DatasetDetail(context, orgId, dataset, rows, { runner.error = it }) { dialog = it }
       }
     },
   )
@@ -215,10 +215,11 @@ private fun DatasetDetail(
   orgId: String,
   dataset: DatasetRow,
   all: List<DatasetRow>,
-  canWrite: Boolean,
-  onImportRefused: () -> Unit,
+  onRefused: (String) -> Unit,
   open: (DatasetDialog) -> Unit,
 ) {
+  val access = rememberDatasetAccess(context, orgId, dataset.visibleTo)
+  val canWrite = access.canWrite
   var records by remember(dataset.id) { mutableStateOf<Long?>(null) }
   LaunchedEffect(dataset.id, dataset.updatedAt) {
     records = runCatching { context.firestore.count(FirestoreQuery(recordsPath(orgId, dataset.id))) }.getOrNull()
@@ -240,9 +241,9 @@ private fun DatasetDetail(
         OverflowMenu(
           buildList {
             add(MenuAction("schema", "Edit schema", "table_chart", enabled = canWrite) { context.navigate(DATA_SCHEMA_SCREEN, mapOf("dataset" to dataset.id)) })
-            add(MenuAction("import", "Import records", "upload") { if (canWrite) context.navigate(DATA_IMPORT_SCREEN, datasetImportParams(dataset.id, dataset.name)) else onImportRefused() })
-            add(MenuAction("export", "Export records", "download", enabled = (records ?: 1L) > 0) { open(DatasetDialog.Export(dataset)) })
-            add(MenuAction("delete", "Delete dataset", "delete", destructive = true, enabled = canWrite) { open(DatasetDialog.Delete(dataset, records)) })
+            add(MenuAction("import", "Import records", "upload") { if (canWrite) context.navigate(DATA_IMPORT_SCREEN, datasetImportParams(dataset.id, dataset.name)) else onRefused(access.writeRefusal) })
+            add(MenuAction("export", "Export records", "download", enabled = (records ?: 1L) > 0) { if (access.canExport) open(DatasetDialog.Export(dataset)) else onRefused(permissionRefusalText("data.export")) })
+            add(MenuAction("delete", "Delete dataset", "delete", destructive = true) { if (access.canDelete) open(DatasetDialog.Delete(dataset, records)) else onRefused(access.deleteRefusal) })
           },
         )
       }
