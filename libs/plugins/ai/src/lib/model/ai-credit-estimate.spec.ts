@@ -55,6 +55,7 @@ describe('what a job is quoted from (AGL-3722)', () => {
     expect(AI_MEASURED_IMPORT_AT).toEqual({ read: '2026-11-01', job: 'mxOkjt2ff7', arranged: 77, copied: 266 })
     expect(AI_MEASURED_IMPORT_CREDITS.arranged).toEqual({ median: 10, p90: 12 })
     expect(AI_MEASURED_IMPORT_CREDITS.copied).toEqual({ median: 0, p90: 1 })
+    expect(AI_MEASURED_IMPORT_CREDITS.reworded).toEqual({ median: 35, p90: 50 })
   })
 
   it('quotes a wave of copied pages at nothing likely, up to its ceiling', () => {
