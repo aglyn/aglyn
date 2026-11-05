@@ -356,7 +356,7 @@ async function chargeWorkspaceMonth(
       productId: config.productId,
       amountCents: stored.amountCents,
       currency: 'usd',
-      description: `4G for ${stored.readers} Stripe Reader S710 card reader${stored.readers === 1 ? '' : 's'}, ${label}`,
+      description: `4G for ${stored.readers} S710 card reader${stored.readers === 1 ? '' : 's'}, ${label}`,
       metadata: {
         orgId,
         pluginId: BUNDLE_ID,

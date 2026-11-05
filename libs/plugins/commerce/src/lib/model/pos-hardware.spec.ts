@@ -36,6 +36,7 @@ import {
   posHardwareSaleBuyer,
   posHardwareSaleSetOptions,
   posHardwareShippingLabel,
+  posHardwareSku,
   POS_HARDWARE_DEFAULT_MARKUP_BPS,
   POS_HARDWARE_ENV,
   POS_HARDWARE_MAX_PER_LINE,
@@ -172,7 +173,7 @@ describe('pricePosHardwareCart: the server prices the basket', () => {
     expect(priced).toEqual({
       ok: true,
       lines: [
-        { sku: 'stripe-reader-s710', name: 'Stripe Reader S710', quantity: 2, unitCents: 12_500, lineCents: 25_000 },
+        { sku: 'stripe-reader-s710', name: 'Touchscreen reader, 4G-capable (S710)', quantity: 2, unitCents: 12_500, lineCents: 25_000 },
         {
           sku: 'stripe-reader-s700-dock',
           name: 'Charging dock for the S700 and S710',
@@ -224,6 +225,35 @@ describe('the catalog (AGL-4038)', () => {
       ['bbpos-wisepos-e-dock', 'accessory', 'BBPOS WisePOS E Dock'],
       ['bbpos-wisepos-e-power-cable', 'accessory', 'BBPOS WisePOS E 5ft Power Cable'],
     ])
+  })
+
+  it('shows the merchant plain names with the model, never the maker’s name', () => {
+    expect(POS_HARDWARE_SKUS.map((sku) => [sku.id, sku.displayName])).toEqual([
+      ['stripe-reader-s710', 'Touchscreen reader, 4G-capable (S710)'],
+      ['stripe-reader-s700', 'Touchscreen reader (S700)'],
+      ['stripe-reader-t600', 'Countertop reader (T600)'],
+      ['bbpos-wisepos-e', 'Countertop reader (WisePOS E)'],
+      ['stripe-reader-m2', 'Pocket reader (M2)'],
+      ['stripe-reader-s700-dock', 'Charging dock for the S700 and S710'],
+      ['stripe-reader-hub', 'Hub for the S700, S710 and T600'],
+      ['stripe-reader-s700-case', 'Case for the S700 and S710'],
+      ['stripe-reader-s700-cable', 'Cable for the S700 and S710'],
+      ['stripe-reader-charger', 'Charger for card readers'],
+      ['stripe-reader-m2-dock', 'Charging dock for the M2'],
+      ['stripe-reader-m2-mount', 'Mount for the M2'],
+      ['bbpos-wisepos-e-dock', 'Charging dock for the WisePOS E'],
+      ['bbpos-wisepos-e-power-cable', '5 ft power cable for the WisePOS E'],
+    ])
+    for (const sku of POS_HARDWARE_SKUS) {
+      expect(`${sku.displayName} ${sku.use}`).not.toMatch(/stripe|bbpos/i)
+    }
+  })
+
+  it('promises no 4G the store has not turned on, and no offline card payments', () => {
+    for (const sku of POS_HARDWARE_SKUS) {
+      expect(`${sku.displayName} ${sku.use}`).not.toMatch(/with 4G|offline/i)
+    }
+    expect(posHardwareSku('stripe-reader-s710')?.use).toMatch(/4G is a separate monthly service/)
   })
 
   it('lists readers before accessories, so the card offers readers first', () => {

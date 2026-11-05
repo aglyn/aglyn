@@ -69,7 +69,7 @@ function tokens(origin: string): Record<string, SystemEmailMergeToken> {
     items: {
       name: 'order.items',
       description: 'What was ordered, one line per item',
-      sample: 'Stripe Reader S710 × 1\nCharging dock for the S700 and S710 × 1',
+      sample: 'Touchscreen reader, 4G-capable (S710) × 1\nCharging dock for the S700 and S710 × 1',
     },
     total: { name: 'order.total', description: 'What was charged, shipping and tax included', sample: '$123.45' },
     shipTo: {
@@ -148,7 +148,7 @@ export function posHardwareSystemEmailTemplates(
       defaultBody: [
         { block: 'text', text: '{{site.name}} · Order {{order.number}}', variant: 'eyebrow' },
         { block: 'text', text: 'Your hardware order is in', variant: 'heading' },
-        { block: 'text', text: 'Thanks for your order. We place it with Stripe, which makes the readers and ships them straight to you. We will email you again with tracking as soon as it ships.', variant: 'body' },
+        { block: 'text', text: 'Thanks for your order. We will email you again with tracking as soon as it ships.', variant: 'body' },
         { block: 'text', text: '{{order.items}}\nShipping: {{order.shippingMethod}}\nTotal charged: {{order.total}}', variant: 'details' },
         { block: 'text', text: 'Shipping to', variant: 'subheading' },
         { block: 'text', text: '{{order.shipTo}}', variant: 'details' },
@@ -174,11 +174,11 @@ export function posHardwareSystemEmailTemplates(
       defaultBody: [
         { block: 'text', text: '{{site.name}} · Order {{order.number}}', variant: 'eyebrow' },
         { block: 'text', text: 'Your hardware is on its way', variant: 'heading' },
-        { block: 'text', text: 'Your order left Stripe’s warehouse and is with {{order.carrier}}. Someone may need to sign for it, so keep an eye on the tracking page for the delivery day.', variant: 'body' },
+        { block: 'text', text: 'Your order is on its way with {{order.carrier}}. Someone may need to sign for it, so keep an eye on the tracking page for the delivery day.', variant: 'body' },
         { block: 'text', text: '{{order.items}}\nCarrier: {{order.carrier}}\nTracking number: {{order.trackingNumber}}', variant: 'details' },
         { block: 'button', label: 'Track your parcel', href: '{{order.trackingUrl}}' },
         { block: 'text', text: 'Before it arrives', variant: 'subheading' },
-        { block: 'text', text: 'Pick the spot where the reader will live: it needs power and Wi-Fi, or a cellular signal for the S710. Once it is delivered, you add it to a register on the POS devices card in a minute.', variant: 'body' },
+        { block: 'text', text: 'Pick the spot where the reader will live: it needs power and Wi-Fi. Once it is delivered, you add it to a register on the POS devices card in a minute.', variant: 'body' },
         { block: 'text', text: 'Shipping to: {{order.shipTo}}', variant: 'caption' },
       ],
       footerReason: footer,

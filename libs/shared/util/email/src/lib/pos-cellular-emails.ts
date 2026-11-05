@@ -19,7 +19,7 @@
  * 4G FOR CARD READERS, AS SYSTEM EMAILS (AGL-4038).
  *
  * Two emails to the people who manage a workspace's billing, about its
- * monthly charge for 4G on its Stripe Reader S710s:
+ * monthly charge for 4G on its S710 readers:
  *
  * - PAYMENT DUE, the day the charge doesn't go through: how much, for which
  *   month, and the day 4G turns off for its stores unless the open invoice
@@ -59,8 +59,8 @@ function tokens(origin: string): Record<string, SystemEmailMergeToken> {
     amount: { name: 'cellular.amount', description: 'What that month’s 4G charge came to', sample: '$21.65' },
     readers: {
       name: 'cellular.readers',
-      description: 'How many Stripe Reader S710s that month’s charge was for',
-      sample: '2 Stripe Reader S710s',
+      description: 'How many S710 readers that month’s charge was for',
+      sample: '2 S710 readers',
     },
     openedOn: { name: 'cellular.openedOn', description: 'The day the charge did not go through', sample: 'November 2, 2026' },
     turnedOffOn: { name: 'cellular.turnedOffOn', description: 'The day 4G was turned off', sample: 'November 16, 2026' },
@@ -95,7 +95,7 @@ export function posCellularSystemEmailTemplates(origin: string): SystemEmailTemp
       name: '4G charge unpaid: the day 4G turns off',
       description:
         'Sent to the people who manage a workspace’s billing the day its ' +
-        'monthly charge for 4G on Stripe Reader S710s doesn’t go through, ' +
+        'monthly charge for 4G on S710 readers doesn’t go through, ' +
         'once: the amount, and the day 4G turns off for its stores unless ' +
         'the open invoice is paid.',
       deliveredBy: 'resend',
@@ -132,7 +132,7 @@ export function posCellularSystemEmailTemplates(origin: string): SystemEmailTemp
       name: '4G turned off: charge unpaid',
       description:
         'Sent to the people who manage a workspace’s billing when its monthly ' +
-        'charge for 4G on Stripe Reader S710s is still unpaid after the grace ' +
+        'charge for 4G on S710 readers is still unpaid after the grace ' +
         'period, and 4G has been turned off for its stores.',
       deliveredBy: 'resend',
       defaultSubject: '4G is off for your card readers: the {{cellular.month}} charge is unpaid',

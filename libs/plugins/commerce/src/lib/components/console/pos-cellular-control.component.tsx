@@ -45,10 +45,10 @@ export interface PosCellularControlProps {
   onChanged: () => void | Promise<void>
 }
 
-const readersText = (count: number) => `${count} Stripe Reader S710${count === 1 ? '' : 's'}`
+const readersText = (count: number) => `${count} S710 reader${count === 1 ? '' : 's'}`
 
 /**
- * 4G for a store's Stripe Reader S710s (AGL-4038), on the POS devices card.
+ * 4G for a store's S710 readers (AGL-4038), on the POS devices card.
  * Stripe turns cellular service on for a store's reader Location, so this is
  * one switch for the store: it says plainly that every S710 at the store
  * gets 4G and that each one is charged, and turning it on takes an explicit
@@ -98,8 +98,8 @@ export function PosCellularControl({ hostId, cellular, blocked, onChanged }: Pos
         </Typography>
         <Typography variant="caption" color="text.secondary" component="p">
           {cellular.enabled
-            ? `On for every Stripe Reader S710 at this store (${readersText(cellular.readers)} now). Each is charged ${price} a month.`
-            : `A Stripe Reader S710 can use Stripe's 4G service when Wi-Fi drops. It turns on for every S710 at this store, at ${price} a month each.`}
+            ? `On for every S710 reader at this store (${readersText(cellular.readers)} now). Each is charged ${price} a month.`
+            : `An S710 reader can use 4G service when Wi-Fi drops. It turns on for every S710 at this store, at ${price} a month each.`}
         </Typography>
       </Box>
       <Chip size="small" label={cellular.enabled ? 'On' : 'Off'} color={cellular.enabled ? 'success' : 'default'} />
@@ -118,14 +118,14 @@ export function PosCellularControl({ hostId, cellular, blocked, onChanged }: Pos
         <DialogTitle>{'Turn on 4G for this store?'}</DialogTitle>
         <DialogContent sx={{ display: 'flex', flexDirection: 'column', gap: 1.5 }}>
           <Typography variant="body2">
-            {`Every Stripe Reader S710 at this store gets Stripe's 4G service and uses it whenever Wi-Fi and Ethernet are not available. That is ${readersText(cellular.readers)} now, and any S710 you add here later.`}
+            {`Every S710 reader at this store gets 4G service and uses it whenever Wi-Fi and Ethernet are not available. That is ${readersText(cellular.readers)} now, and any S710 you add here later.`}
           </Typography>
           <Typography variant="body2">
             {`Each S710 is charged ${price} a month, plus any sales tax, for every calendar month it has 4G. The charge goes to this workspace's card at the start of the next month. Turning 4G off stops the charge from the next month. If a month's charge isn't paid, 4G is turned off after a grace period, until it's paid and turned on again.`}
           </Typography>
           <FormControlLabel
             control={<Checkbox checked={agreed} onChange={(event) => setAgreed(event.target.checked)} />}
-            label={`I agree to ${price} a month for each Stripe Reader S710 at this store while 4G is on.`}
+            label={`I agree to ${price} a month for each S710 reader at this store while 4G is on.`}
           />
         </DialogContent>
         <DialogActions>

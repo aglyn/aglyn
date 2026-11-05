@@ -9292,14 +9292,14 @@
           {
             "key": "pos-cellular-payment-due",
             "name": "4G charge unpaid: the day 4G turns off",
-            "description": "Sent to the people who manage a workspace’s billing the day its monthly charge for 4G on Stripe Reader S710s doesn’t go through, once: the amount, and the day 4G turns off for its stores unless the open invoice is paid.",
+            "description": "Sent to the people who manage a workspace’s billing the day its monthly charge for 4G on S710 readers doesn’t go through, once: the amount, and the day 4G turns off for its stores unless the open invoice is paid.",
             "deliveredBy": "resend",
             "editable": true
           },
           {
             "key": "pos-cellular-turned-off-unpaid",
             "name": "4G turned off: charge unpaid",
-            "description": "Sent to the people who manage a workspace’s billing when its monthly charge for 4G on Stripe Reader S710s is still unpaid after the grace period, and 4G has been turned off for its stores.",
+            "description": "Sent to the people who manage a workspace’s billing when its monthly charge for 4G on S710 readers is still unpaid after the grace period, and 4G has been turned off for its stores.",
             "deliveredBy": "resend",
             "editable": true
           }
@@ -15770,7 +15770,7 @@
             {
               "name": "order.items",
               "description": "What was ordered, one line per item",
-              "sample": "Stripe Reader S710 × 1\nCharging dock for the S700 and S710 × 1"
+              "sample": "Touchscreen reader, 4G-capable (S710) × 1\nCharging dock for the S700 and S710 × 1"
             },
             {
               "name": "order.total",
@@ -15827,7 +15827,7 @@
             {
               "name": "order.items",
               "description": "What was ordered, one line per item",
-              "sample": "Stripe Reader S710 × 1\nCharging dock for the S700 and S710 × 1"
+              "sample": "Touchscreen reader, 4G-capable (S710) × 1\nCharging dock for the S700 and S710 × 1"
             },
             {
               "name": "order.shipTo",
@@ -15889,7 +15889,7 @@
             {
               "name": "order.items",
               "description": "What was ordered, one line per item",
-              "sample": "Stripe Reader S710 × 1\nCharging dock for the S700 and S710 × 1"
+              "sample": "Touchscreen reader, 4G-capable (S710) × 1\nCharging dock for the S700 and S710 × 1"
             },
             {
               "name": "order.setupUrl",
@@ -15936,7 +15936,7 @@
             {
               "name": "order.items",
               "description": "What was ordered, one line per item",
-              "sample": "Stripe Reader S710 × 1\nCharging dock for the S700 and S710 × 1"
+              "sample": "Touchscreen reader, 4G-capable (S710) × 1\nCharging dock for the S700 and S710 × 1"
             },
             {
               "name": "order.refunded",
@@ -15973,7 +15973,7 @@
             {
               "name": "order.items",
               "description": "What was ordered, one line per item",
-              "sample": "Stripe Reader S710 × 1\nCharging dock for the S700 and S710 × 1"
+              "sample": "Touchscreen reader, 4G-capable (S710) × 1\nCharging dock for the S700 and S710 × 1"
             },
             {
               "name": "order.refundedNow",
@@ -16020,7 +16020,7 @@
             {
               "name": "order.items",
               "description": "What was ordered, one line per item",
-              "sample": "Stripe Reader S710 × 1\nCharging dock for the S700 and S710 × 1"
+              "sample": "Touchscreen reader, 4G-capable (S710) × 1\nCharging dock for the S700 and S710 × 1"
             },
             {
               "name": "order.refundedNow",
@@ -16067,7 +16067,7 @@
             {
               "name": "order.items",
               "description": "What was ordered, one line per item",
-              "sample": "Stripe Reader S710 × 1\nCharging dock for the S700 and S710 × 1"
+              "sample": "Touchscreen reader, 4G-capable (S710) × 1\nCharging dock for the S700 and S710 × 1"
             },
             {
               "name": "order.total",
@@ -16113,8 +16113,8 @@
             },
             {
               "name": "cellular.readers",
-              "description": "How many Stripe Reader S710s that month’s charge was for",
-              "sample": "2 Stripe Reader S710s"
+              "description": "How many S710 readers that month’s charge was for",
+              "sample": "2 S710 readers"
             },
             {
               "name": "cellular.openedOn",
@@ -16170,8 +16170,8 @@
             },
             {
               "name": "cellular.readers",
-              "description": "How many Stripe Reader S710s that month’s charge was for",
-              "sample": "2 Stripe Reader S710s"
+              "description": "How many S710 readers that month’s charge was for",
+              "sample": "2 S710 readers"
             },
             {
               "name": "cellular.openedOn",

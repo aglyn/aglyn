@@ -270,7 +270,7 @@ export async function setPosStoreCellular(
     if (!capable) {
       return {
         status: 409,
-        body: { error: '4G works on the Stripe Reader S710. Add one to this store first.', code: 'no-capable-reader' },
+        body: { error: '4G works on the S710 reader. Add one to this store first.', code: 'no-capable-reader' },
       }
     }
     const billing = (await readOrgBilling(staff.orgId).catch(() => ({}))) as { stripeCustomerId?: unknown }
