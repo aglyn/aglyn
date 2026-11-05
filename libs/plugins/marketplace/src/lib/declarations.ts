@@ -16,13 +16,16 @@
  */
 
 import { registerPluginEntitlements } from '@aglyn/aglyn/plugin-manager/plugin-entitlements'
+import { registerPluginPermissions } from '@aglyn/aglyn/plugin-manager/plugin-permissions'
+import { MARKETPLACE_PUBLISHER_PERMISSIONS } from './model/marketplace-publisher-permissions'
 import { MARKETPLACE_SITE_PERMISSIONS } from './model/marketplace-site-permissions'
 
 let declared = false
 
 /**
  * The plugin's DECLARATIONS (AGL-4047): installing into a site and publishing
- * from one, which the one permission catalog lists beside the core keys.
+ * from one, and the workspace's publisher acts (its profile, its published
+ * listings), which the one permission catalog lists beside the core keys.
  * Loaded eagerly by the console (client and server) and the tenant's server
  * through the generated declarations manifest, so the role editor offers
  * them, a custom role or a per-member override keeps them, and the site's
@@ -33,6 +36,7 @@ export function registerMarketplaceDeclarations(): void {
   if (declared) return
   declared = true
   registerPluginEntitlements({ pluginId: 'marketplace', orgPermissions: MARKETPLACE_SITE_PERMISSIONS })
+  registerPluginPermissions(MARKETPLACE_PUBLISHER_PERMISSIONS)
 }
 
 registerMarketplaceDeclarations()
