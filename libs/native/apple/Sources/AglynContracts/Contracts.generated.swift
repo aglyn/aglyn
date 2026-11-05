@@ -3491,16 +3491,18 @@ public struct OrgPermissionEntry: Codable, Hashable, Sendable {
   public var group: String?
   public var key: String
   public var label: String
+  public var narrowable: Bool?
   public var pluginId: String?
   public var refines: String?
   public var scope: OrgPermissionScope?
 
-  public init(description: String, follows: String? = nil, group: String? = nil, key: String, label: String, pluginId: String? = nil, refines: String? = nil, scope: OrgPermissionScope? = nil) {
+  public init(description: String, follows: String? = nil, group: String? = nil, key: String, label: String, narrowable: Bool? = nil, pluginId: String? = nil, refines: String? = nil, scope: OrgPermissionScope? = nil) {
     self.description = description
     self.follows = follows
     self.group = group
     self.key = key
     self.label = label
+    self.narrowable = narrowable
     self.pluginId = pluginId
     self.refines = refines
     self.scope = scope

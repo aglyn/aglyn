@@ -528,9 +528,14 @@ public enum ScreenValues {
       let spec = record["$collect"] ?? .null
       let prefix = spec["prefix"]?.stringValue ?? ""
       let kind = spec["as"]?.stringValue ?? "text"
+      // `over: <path>`: the map stored there with the inputs laid over it, so a key this form does not offer is kept.
+      // `changes: <path>`: only what differs from the map stored there, a cleared key being null.
+      let stored = (spec["over"] ?? spec["changes"])?.stringValue.flatMap { lookup($0, in: context) }
       var map: [String: JSONValue] = [:]
+      if spec["over"] != nil { for entry in stored.objectEntries { map[entry.key] = entry.value } }
       if case .object(let form)? = lookup("form", in: context) {
         for (key, value) in form where key.hasPrefix(prefix) {
+          if spec["over"] != nil { map[String(key.dropFirst(prefix.count))] = nil }
           let name = String(key.dropFirst(prefix.count))
           switch (kind, value) {
           case ("flag", .bool(let flag)): map[name] = .bool(flag)
@@ -544,6 +549,16 @@ public enum ScreenValues {
           default: map[name] = value
           }
         }
+      }
+      if spec["changes"] != nil, case .object(let form)? = lookup("form", in: context) {
+        var changes: [String: JSONValue] = [:]
+        for key in form.keys where key.hasPrefix(prefix) {
+          let name = String(key.dropFirst(prefix.count))
+          let before = stored?[name]?.boolValue
+          let after = map[name]?.boolValue
+          if before != after { changes[name] = after.map(JSONValue.bool) ?? .null }
+        }
+        return .object(changes)
       }
       return .object(map)
     case .object(let record) where record.count == 1 && record["$afterHours"] != nil:

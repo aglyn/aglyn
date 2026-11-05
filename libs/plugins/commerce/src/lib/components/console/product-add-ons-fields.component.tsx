@@ -65,12 +65,6 @@ export function priceByLabel(options: readonly Pick<CommerceModel.ProductOption,
   return named.length === 1 ? `Price by ${named[0].name.trim().toLowerCase()}` : 'Price by variant'
 }
 
-/** How a variant is named in a choice's price list. */
-export function variantPriceLabel(variant: Pick<CommerceModel.ProductVariant, 'options'>): string {
-  const values = Object.values(variant.options ?? {}).filter(Boolean)
-  return values.length ? values.join(' / ') : 'Default'
-}
-
 /** A new group, as the console makes it from now on: shown on the website (AGL-4100). */
 export function newAddOnGroup(): CommerceModel.ProductModifierGroup {
   return {
@@ -276,7 +270,7 @@ export const ProductAddOnsFields = memo(function ProductAddOnsFields(
                           {variants.map((variant) => (
                             <TextField
                               key={variant.id}
-                              label={variantPriceLabel(variant)}
+                              label={CommerceModel.variantPriceLabel(variant)}
                               size="small"
                               defaultValue={dollarsFromCents(option.priceCentsByVariant?.[variant.id])}
                               placeholder={dollarsFromCents(option.priceCents) || '0.00'}

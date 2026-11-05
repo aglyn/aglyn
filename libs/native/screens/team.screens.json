@@ -19,11 +19,11 @@
         },
         "invites": {
           "url": "/api/orgs/invites?orgId={org.id}",
-          "when": "org.manager"
+          "when": "org.can[members.manage]"
         },
         "seats": {
           "url": "/api/orgs/members?orgId={org.id}&counts=1",
-          "when": "org.manager"
+          "when": "org.can[members.manage]"
         }
       },
       "actions": [
@@ -31,7 +31,7 @@
           "id": "invite",
           "label": "Add or invite",
           "icon": "person.badge.plus|person_add",
-          "when": "org.manager",
+          "when": "org.can[members.manage]",
           "url": "/api/orgs/members",
           "body": {
             "orgId": "{org.id}",
@@ -190,7 +190,7 @@
               "label": "Remove from workspace",
               "icon": "person.badge.minus|person_remove",
               "destructive": true,
-              "when": "org.manager && item.role != owner",
+              "when": "org.can[members.manage] && item.role != owner",
               "confirm": "Remove {item.displayName|item.email} from {org.name}?",
               "url": "/api/orgs/members",
               "body": {
@@ -206,7 +206,7 @@
         {
           "type": "list",
           "title": "Pending invites",
-          "when": "org.manager",
+          "when": "org.can[members.manage]",
           "items": "data.invites.invites",
           "primary": "{item.email}",
           "secondary": "Invited {item.createdAt:date}",
@@ -293,13 +293,13 @@
         },
         "activity": {
           "url": "/api/orgs/activity?orgId={org.id}&actorId={params.uid}&scope=org-wide",
-          "when": "org.manager",
+          "when": "org.can[org.auditLog]",
           "cursor": "nextCursor",
           "items": "entries"
         },
         "password": {
           "url": "/api/orgs/members/password?orgId={org.id}&uid={params.uid}",
-          "when": "org.manager",
+          "when": "org.can[members.manage]",
           "optional": true
         },
         "hosts": {
@@ -314,7 +314,7 @@
             ],
             "limit": 100
           },
-          "when": "org.manager",
+          "when": "org.can[members.manage]",
           "optional": true
         }
       },
@@ -355,7 +355,7 @@
         {
           "type": "form",
           "title": "Access",
-          "when": "org.manager",
+          "when": "org.can[members.manage]",
           "object": "data.list.members[$id=params.uid]",
           "fields": [
             {
@@ -430,9 +430,108 @@
           }
         },
         {
+          "type": "form",
+          "title": "Permissions",
+          "when": "org.can[members.manage] && data.list.members[$id=params.uid].role != owner && params.uid != user.uid",
+          "object": "data.list.members[$id=params.uid]",
+          "fields": [
+            {
+              "fieldsFrom": {
+                "items": "app.permissionCatalog",
+                "each": [
+                  {
+                    "if": "item.first",
+                    "key": "h.{item.group}",
+                    "label": "{item.groupLabel}",
+                    "kind": "heading"
+                  },
+                  {
+                    "key": "p.{item.key}",
+                    "label": "{item.label}",
+                    "kind": "select",
+                    "help": "{item.description}",
+                    "initial": "{data.list.members[$id=params.uid].permissions[@item.key]}",
+                    "options": [
+                      {
+                        "value": "",
+                        "label": "Inherit"
+                      },
+                      {
+                        "value": "true",
+                        "label": "Allow"
+                      },
+                      {
+                        "value": "false",
+                        "label": "Deny"
+                      }
+                    ]
+                  }
+                ]
+              }
+            },
+            {
+              "fieldsFrom": {
+                "items": "app.narrowablePermissions",
+                "each": [
+                  {
+                    "if": "item.first",
+                    "key": "nh.{item.group}",
+                    "label": "On a narrower site: {item.groupLabel}",
+                    "kind": "heading"
+                  },
+                  {
+                    "key": "s.{item.key}",
+                    "label": "{item.label}",
+                    "kind": "select",
+                    "initial": "{data.list.members[$id=params.uid].siteNarrowing[@item.key]}",
+                    "options": [
+                      {
+                        "value": "",
+                        "label": "Inherit"
+                      },
+                      {
+                        "value": "true",
+                        "label": "Follow the site role"
+                      },
+                      {
+                        "value": "false",
+                        "label": "Keep this permission"
+                      }
+                    ]
+                  }
+                ]
+              }
+            }
+          ],
+          "submit": {
+            "label": "Save permissions",
+            "url": "/api/orgs/members",
+            "body": {
+              "orgId": "{org.id}",
+              "action": "permissions",
+              "uid": "{params.uid}",
+              "permissions?": {
+                "$collect": {
+                  "prefix": "p.",
+                  "as": "flag",
+                  "changes": "data.list.members[$id=params.uid].permissions"
+                }
+              },
+              "siteNarrowing?": {
+                "$collect": {
+                  "prefix": "s.",
+                  "as": "flag",
+                  "changes": "data.list.members[$id=params.uid].siteNarrowing"
+                }
+              }
+            },
+            "success": "Saved"
+          }
+        },
+        {
           "type": "list",
           "title": "Sites this person can open",
-          "when": "org.manager && data.list.members[$id=params.uid].role == editor,viewer && !data.list.members[$id=params.uid].allHosts",
+          "when": "org.can[members.manage] && data.list.members[$id=params.uid].role == editor,viewer && !data.list.members[$id=params.uid].allHosts",
           "footer": "Editors and viewers see only the sites they are given. Admins and anyone with All sites on see every site.",
           "items": "data.hosts.items",
           "primary": "{item.displayName|item.$id}",
@@ -491,7 +590,7 @@
         },
         {
           "type": "actions",
-          "when": "org.manager",
+          "when": "org.can[members.manage]",
           "items": [
             {
               "id": "remove",
@@ -514,7 +613,7 @@
         {
           "type": "list",
           "title": "Recent activity",
-          "when": "org.manager",
+          "when": "org.can[org.auditLog]",
           "load": "activity",
           "items": "data.activity.entries",
           "primary": "{item.actionLabel|item.action:activity}",
@@ -525,7 +624,7 @@
         {
           "type": "actions",
           "title": "Password",
-          "when": "org.manager && data.password",
+          "when": "org.can[members.manage] && data.password",
           "footer": "For a teammate who cannot get into their account. Accounts are personal and can span several workspaces, so a reset email is the normal route.",
           "items": [
             {
@@ -570,7 +669,7 @@
         {
           "type": "notice",
           "tone": "info",
-          "when": "org.manager && data.password && !data.password.canSetPassword",
+          "when": "org.can[members.manage] && data.password && !data.password.canSetPassword",
           "text": "{data.password.blockedReason|'A password cannot be set for this person.'}"
         },
         {
@@ -609,7 +708,7 @@
           "id": "new",
           "label": "New role",
           "icon": "plus|add",
-          "when": "org.manager",
+          "when": "org.can[members.manage]",
           "url": null,
           "navigate": {
             "screen": "core.team.role",
@@ -646,7 +745,7 @@
               "label": "Delete role",
               "icon": "trash|delete",
               "destructive": true,
-              "when": "org.manager",
+              "when": "org.can[members.manage]",
               "confirm": "Delete the role {item.name}? Members holding it keep their base role.",
               "url": "/api/orgs/roles",
               "body": {
@@ -666,7 +765,7 @@
       "title": "{data.roles.roles[$id=params.roleId].name|'New role'}",
       "icon": "checkmark.shield|admin_panel_settings",
       "scope": "org",
-      "requires": "org.manager",
+      "requires": "org.can[members.manage]",
       "load": {
         "roles": {
           "url": "/api/orgs/roles?orgId={org.id}"
@@ -691,65 +790,71 @@
               "initial": "{item.description}"
             },
             {
-              "key": "p_settings",
-              "label": "Organization settings",
-              "kind": "toggle",
-              "initial": "{item.permissions[org.settings]}",
-              "help": "Rename the organization, change its slug, transfer it."
+              "fieldsFrom": {
+                "items": "app.permissionCatalog",
+                "each": [
+                  {
+                    "if": "item.first",
+                    "key": "h.{item.group}",
+                    "label": "{item.groupLabel}",
+                    "kind": "heading"
+                  },
+                  {
+                    "key": "p.{item.key}",
+                    "label": "{item.label}",
+                    "kind": "select",
+                    "help": "{item.description}",
+                    "initial": "{data.roles.roles[$id=params.roleId].permissions[@item.key]}",
+                    "options": [
+                      {
+                        "value": "",
+                        "label": "Inherit"
+                      },
+                      {
+                        "value": "true",
+                        "label": "Allow"
+                      },
+                      {
+                        "value": "false",
+                        "label": "Deny"
+                      }
+                    ]
+                  }
+                ]
+              }
             },
             {
-              "key": "p_audit",
-              "label": "Activity & audit log",
-              "kind": "toggle",
-              "initial": "{item.permissions[org.auditLog]}"
-            },
-            {
-              "key": "p_billing_view",
-              "label": "View billing",
-              "kind": "toggle",
-              "initial": "{item.permissions[billing.view]}"
-            },
-            {
-              "key": "p_billing_manage",
-              "label": "Manage billing",
-              "kind": "toggle",
-              "initial": "{item.permissions[billing.manage]}"
-            },
-            {
-              "key": "p_members",
-              "label": "Manage members",
-              "kind": "toggle",
-              "initial": "{item.permissions[members.manage]}"
-            },
-            {
-              "key": "p_hosts_create",
-              "label": "Create sites",
-              "kind": "toggle",
-              "initial": "{item.permissions[hosts.create]}"
-            },
-            {
-              "key": "p_hosts_delete",
-              "label": "Delete sites",
-              "kind": "toggle",
-              "initial": "{item.permissions[hosts.delete]}"
-            },
-            {
-              "key": "p_data",
-              "label": "Manage data",
-              "kind": "toggle",
-              "initial": "{item.permissions[data.manage]}"
-            },
-            {
-              "key": "p_marketplace",
-              "label": "Publish to marketplace",
-              "kind": "toggle",
-              "initial": "{item.permissions[marketplace.publish]}"
-            },
-            {
-              "key": "p_plugins",
-              "label": "Install plugins",
-              "kind": "toggle",
-              "initial": "{item.permissions[plugins.install]}"
+              "fieldsFrom": {
+                "items": "app.narrowablePermissions",
+                "each": [
+                  {
+                    "if": "item.first",
+                    "key": "nh.{item.group}",
+                    "label": "On a narrower site: {item.groupLabel}",
+                    "kind": "heading"
+                  },
+                  {
+                    "key": "s.{item.key}",
+                    "label": "{item.label}",
+                    "kind": "select",
+                    "initial": "{data.roles.roles[$id=params.roleId].siteNarrowing[@item.key]}",
+                    "options": [
+                      {
+                        "value": "",
+                        "label": "Inherit"
+                      },
+                      {
+                        "value": "true",
+                        "label": "Follow the site role"
+                      },
+                      {
+                        "value": "false",
+                        "label": "Keep this permission"
+                      }
+                    ]
+                  }
+                ]
+              }
             }
           ],
           "submit": {
@@ -762,16 +867,18 @@
               "name": "{form.name}",
               "description": "{form.description}",
               "permissions": {
-                "org.settings": "{form.p_settings}",
-                "org.auditLog": "{form.p_audit}",
-                "billing.view": "{form.p_billing_view}",
-                "billing.manage": "{form.p_billing_manage}",
-                "members.manage": "{form.p_members}",
-                "hosts.create": "{form.p_hosts_create}",
-                "hosts.delete": "{form.p_hosts_delete}",
-                "data.manage": "{form.p_data}",
-                "marketplace.publish": "{form.p_marketplace}",
-                "plugins.install": "{form.p_plugins}"
+                "$collect": {
+                  "prefix": "p.",
+                  "as": "flag",
+                  "over": "data.roles.roles[$id=params.roleId].permissions"
+                }
+              },
+              "siteNarrowing": {
+                "$collect": {
+                  "prefix": "s.",
+                  "as": "flag",
+                  "over": "data.roles.roles[$id=params.roleId].siteNarrowing"
+                }
               }
             },
             "success": "Saved {form.name}",
