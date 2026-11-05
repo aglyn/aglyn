@@ -97,9 +97,13 @@ function positiveInt(value: unknown): number | undefined {
  * The collection slug a grid on a `/collections/{slug}` page follows when
  * it has no pinned collection — the server-side twin of the grid's
  * `collectionSlugFromLocation()`, which reads `window.location`.
+ *
+ * The tenant's path has NO leading slash (`collections/bread`, it is the slug
+ * segments joined). Requiring one seeded every collection page with the whole
+ * catalog, and a seeded grid never refetches (AGL-4177).
  */
 function collectionSlugFromPath(path: string): string {
-  const match = path.match(/\/collections\/([^/?#]+)/)
+  const match = path.match(/(?:^|\/)collections\/([^/?#]+)/)
   return match ? decodeURIComponent(match[1]) : ''
 }
 
