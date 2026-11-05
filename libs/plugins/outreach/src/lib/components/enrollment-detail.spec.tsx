@@ -442,7 +442,7 @@ describe('what the page says when it cannot show the person', () => {
     loading.unmount()
     mockEnrollment = { status: 'refused', data: null }
     const refused = renderDetail()
-    expect(screen.getByText(/Use Sequences permission/)).toBeTruthy()
+    expect(screen.getByText(/Your role does not include "Use Sequences"/)).toBeTruthy()
     refused.unmount()
     mockEnrollment = { status: 'ready', data: null }
     const gone = renderDetail()

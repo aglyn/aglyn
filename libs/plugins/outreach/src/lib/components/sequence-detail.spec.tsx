@@ -198,7 +198,7 @@ describe('a sequence: what it shows (AGL-2980)', () => {
     failed.unmount()
     mockSequence = { status: 'refused', data: null }
     const refused = renderDetail()
-    expect(screen.getByText(/Use Sequences permission/)).toBeTruthy()
+    expect(screen.getByText(/Your role does not include "Use Sequences"/)).toBeTruthy()
     refused.unmount()
     mockSequence = { status: 'ready', data: null }
     renderDetail()
