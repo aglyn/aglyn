@@ -16,6 +16,10 @@
  */
 'use client'
 
+import { permissionRefusalText } from '@aglyn/aglyn/app-utils/org-permissions'
+import { BlockedControl } from '@aglyn/shared-ui-jsx/components/blocked-control.component'
+import { useSiteKeys } from '@aglyn/tenant-feature-instance/hooks/use-site-keys'
+import { LOYALTY_SITE_PRESETS } from '../model/loyalty-permissions'
 import { pluginDocsHelp } from '@aglyn/aglyn/app-utils/docs-help'
 import { CardDisplay } from '@aglyn/shared-ui-jsx'
 import { ListPagination } from '@aglyn/shared-ui-jsx/components/list-pagination.component'
@@ -61,6 +65,7 @@ interface MembersAnswer {
  */
 export function LoyaltyMembersCard(props: { hostId: string; canEdit?: boolean }) {
   const { hostId } = props
+  const refused = useSiteKeys(hostId).blocked('loyalty.adjustBalances', LOYALTY_SITE_PRESETS['loyalty.adjustBalances'])
   const request = useLoyaltyFetch()
   const [sort, setSort] = useState<Sort>('recent')
   const [search, setSearch] = useState('')
@@ -129,9 +134,11 @@ export function LoyaltyMembersCard(props: { hostId: string; canEdit?: boolean })
       HeaderProps={{
         action:
           props.canEdit === false ? null : (
-            <Button variant="contained" onClick={() => setAdjusting(true)}>
-              {'Give store credit'}
-            </Button>
+            <BlockedControl blocked={refused} reason={permissionRefusalText('loyalty.adjustBalances')}>
+              <Button variant="contained" onClick={() => setAdjusting(true)}>
+                {'Give store credit'}
+              </Button>
+            </BlockedControl>
           ),
       }}
       contentGutterX

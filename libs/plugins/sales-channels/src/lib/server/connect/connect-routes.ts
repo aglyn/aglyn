@@ -15,6 +15,9 @@
  * limitations under the License.
  */
 
+import { holdsStampedSiteKey } from '@aglyn/aglyn/app-utils/host-permissions'
+import { permissionRefusalText } from '@aglyn/aglyn/app-utils/org-permissions'
+import { SALES_CHANNELS_SITE_PRESETS, type SalesChannelsSitePermission } from '../../model/sales-channels-permissions'
 import { checkEntitlement } from '@aglyn/aglyn/app-utils/plan-entitlements'
 import type { PluginApiRequestSubject } from '@aglyn/aglyn/server'
 import { getOrgForHost, logHostActivity } from '@aglyn/tenant-data-admin'
@@ -49,11 +52,11 @@ import { clearSyncRecord, runSync, SyncBusyError, SyncRefusedError } from './syn
 /**
  * THE CHANNEL CONNECTIONS' ROUTES (AGL-3637, phase 2), served by the console:
  *
- *   POST sales-channels/connect/start       the provider's consent address (admin)
+ *   POST sales-channels/connect/start       the provider's consent address (salesChannels.connect)
  *   GET  sales-channels/connect/callback    the provider's redirect back (signed state, no bearer)
- *   POST sales-channels/connect/select      the account or catalog to push to (admin)
- *   POST sales-channels/connect/disconnect  forget the grant, revoking it (admin)
- *   POST sales-channels/sync                push the catalog now (editor)
+ *   POST sales-channels/connect/select      the account or catalog to push to (salesChannels.connect)
+ *   POST sales-channels/connect/disconnect  forget the grant, revoking it (salesChannels.connect)
+ *   POST sales-channels/sync                push the catalog now (salesChannels.sync)
  *
  * Each answers 404 for a provider this deployment has not configured, so an
  * unconfigured connection is not merely hidden in the card but absent.
@@ -90,11 +93,11 @@ export async function connectStartRoute(request: Request): Promise<Response> {
   const body = await readJsonBody(request)
   const picked = configuredProvider(body['provider'])
   if (picked instanceof Response) return picked
-  const actor = await channelsGate(request, { role: 'admin', body })
+  const actor = await channelsGate(request, { permission: 'salesChannels.connect', body })
   if (actor instanceof Response) return actor
   // The grant is the merchant's own Google or Meta account, so the member who
-  // connects is one of the site's admins; staff support does not connect one.
-  if (!isSiteAdmin(actor.host, actor.uid)) return routeError(403, 'Only a site admin can connect a channel.')
+  // connects holds the key themselves; staff support does not connect one.
+  if (!holdsConnectKey(actor.host, actor.uid)) return routeError(403, permissionRefusalText('salesChannels.connect'))
   const origin = consoleOriginFor(request.url)
   const redirectUri = connectRedirectUri(request.url)
   if (!origin || !redirectUri) return routeError(503, 'This console has no address to come back to.')
@@ -133,15 +136,12 @@ export function connectCallbackSubject(request: Request): PluginApiRequestSubjec
   return null
 }
 
-const ROLE_RANK: Record<string, number> = { viewer: 1, author: 1, editor: 2, admin: 3 }
-
-/** Whether `uid` holds the site's admin role. */
-function isSiteAdmin(host: Record<string, unknown>, uid: string): boolean {
-  const roles = (host['memberRoles'] ?? {}) as Record<string, unknown>
-  return (ROLE_RANK[String(roles[uid] ?? '')] ?? 0) >= ROLE_RANK['admin']
+/** Whether `uid` holds "Connect Google and Meta" on the site. */
+function holdsConnectKey(host: Record<string, unknown>, uid: string): boolean {
+  return holdsStampedSiteKey(host, uid, 'salesChannels.connect', SALES_CHANNELS_SITE_PRESETS['salesChannels.connect'])
 }
 
-/** Whether the member who started the connect may still finish it: a site admin, on a plan that sells. */
+/** Whether the member who started the connect may still finish it: holding the key, on a plan that sells. */
 async function mayStillConnect(hostId: string, uid: string): Promise<boolean> {
   const [hostSnapshot, resolved] = await Promise.all([
     firestore().collection('hosts').doc(hostId).get(),
@@ -149,7 +149,7 @@ async function mayStillConnect(hostId: string, uid: string): Promise<boolean> {
   ])
   if (!hostSnapshot.exists || !resolved) return false
   if (!checkEntitlement(resolved.org as never, SALES_CHANNELS_ENTITLEMENT)) return false
-  return isSiteAdmin(hostSnapshot.data() ?? {}, uid)
+  return holdsConnectKey(hostSnapshot.data() ?? {}, uid)
 }
 
 const plain = (status: number, text: string) =>
@@ -242,7 +242,7 @@ export async function connectCallbackRoute(request: Request): Promise<Response> 
 /** The connection a body names, behind the gate and the configuration. */
 async function connectionRoute(
   request: Request,
-  role: 'editor' | 'admin',
+  permission: SalesChannelsSitePermission,
 ): Promise<
   | Response
   | {
@@ -257,7 +257,7 @@ async function connectionRoute(
   const body = await readJsonBody(request)
   const picked = configuredProvider(body['provider'])
   if (picked instanceof Response) return picked
-  const actor = await channelsGate(request, { role, body })
+  const actor = await channelsGate(request, { permission, body })
   if (actor instanceof Response) return actor
   const connection = await getConnection(actor.hostId, picked.provider)
   if (!connection) return routeError(409, `${providerLabel(picked.provider)} is not connected.`)
@@ -265,7 +265,7 @@ async function connectionRoute(
 }
 
 export async function connectSelectRoute(request: Request): Promise<Response> {
-  const resolved = await connectionRoute(request, 'admin')
+  const resolved = await connectionRoute(request, 'salesChannels.connect')
   if (resolved instanceof Response) return resolved
   const { body, actor, provider, connection } = resolved
   const target = connection.targets.find((candidate) => candidate.id === String(body['targetId'] ?? ''))
@@ -283,7 +283,7 @@ export async function connectSelectRoute(request: Request): Promise<Response> {
 }
 
 export async function disconnectRoute(request: Request): Promise<Response> {
-  const resolved = await connectionRoute(request, 'admin')
+  const resolved = await connectionRoute(request, 'salesChannels.connect')
   if (resolved instanceof Response) return resolved
   const { actor, provider, config, connection } = resolved
   try {
@@ -300,7 +300,7 @@ export async function disconnectRoute(request: Request): Promise<Response> {
 }
 
 export async function syncRoute(request: Request): Promise<Response> {
-  const resolved = await connectionRoute(request, 'editor')
+  const resolved = await connectionRoute(request, 'salesChannels.sync')
   if (resolved instanceof Response) return resolved
   const { actor, config, connection } = resolved
   try {

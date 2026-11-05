@@ -106,6 +106,10 @@ jest.mock('@aglyn/tenant-data-admin', () => ({
             'uid-admin': 'admin',
             'uid-billing': 'admin',
           },
+          memberPermissions: {
+            'uid-viewer': { 'shipping.voidLabels': true },
+            'uid-admin': { 'shipping.settings': false },
+          },
         }
       : null,
   readOrgBilling: async () => ({}),
@@ -306,6 +310,18 @@ describe('the gate every console route climbs', () => {
   })
 })
 
+describe('the keys the routes ask (AGL-4047)', () => {
+  it('a stamp grants a key to a viewer the preset refuses', async () => {
+    expect((await call(labelsVoidRoute, { token: 'tok-viewer', body: { hostId: HOST, labelId: 'missing' } })).status).not.toBe(403)
+  })
+
+  it('a stamp refuses an admin the preset admits, naming the permission', async () => {
+    const refused = await call(settingsRoute, { token: 'tok-admin', body: { hostId: HOST, settings: {} } })
+    expect(refused.status).toBe(403)
+    expect((await read(refused)).body.error).toContain('does not include')
+  })
+})
+
 describe('settings and the workspace account', () => {
   it('reads a site’s settings with its ship-from places and the services it can offer', async () => {
     const { status, body } = await read(await call(settingsRoute, { query: { hostId: HOST } }))
@@ -316,7 +332,7 @@ describe('settings and the workspace account', () => {
   })
 
   it('lets an admin save settings', async () => {
-    const response = await call(settingsRoute, { token: 'tok-admin', body: { hostId: HOST, settings: { labelFormat: 'zpl' } } })
+    const response = await call(settingsRoute, { token: 'tok-billing', body: { hostId: HOST, settings: { labelFormat: 'zpl' } } })
     expect(response.status).toBe(200)
   })
 

@@ -154,6 +154,7 @@ only, set them for that site in its **Users** card: choose **Permissions** besid
 | **Create and edit quotes** (`commerce.quotes`) | Create, edit and delete [quotes](../../commerce-and-bookings/commerce/quotes-and-proofs.md) for customers, and download a quote's [PDF](../../commerce-and-bookings/commerce/quotes-and-proofs.md#pdf) | Yes | Yes | No | No |
 | **Send quotes and invoices to customers** (`commerce.quotes.send`) | [Email a quote](../../commerce-and-bookings/commerce/quotes-and-proofs.md#send) to the customer, copy its [pay link](../../commerce-and-bookings/commerce/quotes-and-proofs.md#pay-link) to send yourself, and replace it so the old link stops working. [Send an invoice](../../commerce-and-bookings/commerce/orders-and-returns.md#send-invoice) for an order or a quote. A quote's PDF carries the pay link only for someone who has this | Yes | Yes | No | No |
 | **Issue gift cards** (`commerce.giftCards`) | Issue, adjust and void the store's gift cards | Yes | Yes | No | No |
+| **Import gift cards** (`commerce.giftCards.import`) | Import gift cards from a file, which issues each one as spendable money (also takes **Manage data**) | Yes | No | No | No |
 | **Manage payment methods** (`commerce.paymentMethods`) | Turn the store's payment methods on and off (anyone with **Manage orders** sees them) | Yes | No | No | No |
 | **Connect shipping apps** (`commerce.shippingConnections`) | Connect, sync and disconnect ShipStation and ShippingEasy, and show or replace their credentials (anyone with **Manage orders** sees whether they're connected) | Yes | No | No | No |
 | **Refund orders** (`commerce.refunds`) | Refund any order, online or at the register, with no register limit | Yes* | No | No | No |
@@ -285,6 +286,37 @@ Both are for members of the whole workspace. **Pause org automations on a site**
 (`workflows.sitePause`) starts from the member's role on the site instead: a site's admins
 and editors hold it. Nobody's access changed when these became permissions, and a custom
 role or a per-member override can grant or deny each one.
+
+### Integration permissions {#integration-permissions}
+
+Each integration plugin declares its own permissions, so a custom role, a per-member
+override or the site's **Permissions** dialog can grant or deny them one by one. Each
+starts from the member's role on the site, so nobody's access changed when they became
+permissions. Reading a site's rewards program, its members and its sales channels stays
+open to everyone on the site.
+
+| Permission | What it opens | Admin | Editor | Author | Viewer |
+|---|---|---|---|---|---|
+| **See email platform connections** (`marketingPlatforms.view`) | See a site's Mailchimp, Klaviyo, Omnisend or Attentive connections and their sync log | Yes | Yes | No | No |
+| **Manage email platform connections** (`marketingPlatforms.manage`) | Connect, change, pause, sync and disconnect those platforms | Yes | No | No | No |
+| **See help desk connections** (`helpDesks.view`) | See a site's help desk connections and their sync log | Yes | Yes | No | No |
+| **Manage help desk connections** (`helpDesks.manage`) | Connect, change, pause, sync and disconnect a help desk | Yes | No | No | No |
+| **Change the rewards program** (`loyalty.program`) | Change how rewards are earned and spent, the referral offer and the emails | Yes | No | No | No |
+| **Connect a rewards service** (`loyalty.connection`) | Connect and disconnect Smile.io or Yotpo Loyalty, and bring balances in | Yes | No | No | No |
+| **Adjust rewards balances** (`loyalty.adjustBalances`) | Add or take away a member's points or store credit by hand | Yes | Yes | No | No |
+| **Turn product feeds on and off** (`salesChannels.feeds`) | Turn a shopping channel's product feed on or off | Yes | Yes | No | No |
+| **Change sales channel defaults** (`salesChannels.settings`) | Change the store defaults the feeds use | Yes | Yes | No | No |
+| **Replace a feed address** (`salesChannels.replaceAddress`) | Replace a feed's address, and turn off an earlier Google address | Yes | No | No | No |
+| **Connect Google and Meta** (`salesChannels.connect`) | Connect and disconnect a Google Merchant Center or Meta catalog, and choose the account | Yes | No | No | No |
+| **Push the catalog to a channel** (`salesChannels.sync`) | Send the catalog to a connected channel now | Yes | Yes | No | No |
+| **See shipping settings** (`shipping.viewSettings`) | See where parcels ship from, the boxes and the label settings | Yes | Yes | No | No |
+| **Change shipping settings** (`shipping.settings`) | Change those settings and the services checkout offers | Yes | No | No | No |
+| **Manage label charges** (`shipping.labelCharges`) | See how labels are paid for, and agree to the charges (agreeing also takes **Manage billing**) | Yes | No | No | No |
+| **Manage carrier accounts** (`shipping.carrierAccounts`) | See the carrier accounts, connect one and switch them on and off (changing them also takes **Manage billing**) | Yes | No | No | No |
+| **Manage your own shipping accounts** (`shipping.ownAccounts`) | See and connect your own Easyship, Sendcloud or ShipperHQ account (changing them also takes **Manage billing**) | Yes | No | No | No |
+| **Check rates and see labels** (`shipping.labels`) | Check an address, compare rates and see an order's labels | Yes | Yes | No | No |
+| **Buy shipping labels** (`shipping.buyLabels`) | Buy a label or a batch of labels, which charges the workspace | Yes | Yes | No | No |
+| **Void shipping labels** (`shipping.voidLabels`) | Void a label that has not been used | Yes | Yes | No | No |
 
 ### Email and inbox permissions {#email-and-inbox-permissions}
 

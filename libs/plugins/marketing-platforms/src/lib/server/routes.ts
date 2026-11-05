@@ -15,6 +15,7 @@
  * limitations under the License.
  */
 
+import type { MarketingPlatformsSitePermission } from '../model/marketing-platforms-permissions'
 import { LOG_PAGE_LIMIT, OAUTH_STATE_TTL_MS, SYNC_NOW_MAX_PAGES } from '../constants'
 import {
   isMarketingProviderId,
@@ -41,14 +42,13 @@ import { connectionView, emptyConnection, type ConnectionStore, type StoredConne
 /**
  * The console routes of the connections card (AGL-3639). Every route but the
  * provider's redirect back is behind {@link MarketingRouteDeps.gate}: a
- * signed-in, verified member of the site, at `editor` to read and `admin` to
- * change anything, on a plan with the CRM, the site not locked. The redirect
+ * signed-in, verified member of the site, holding "See email platform connections" to
+ * read and "Manage email platform connections" to change anything, on a plan
+ * with the CRM, the site not locked. The redirect
  * back is authenticated by the single-use state its connect stored.
  *
  * No answer ever carries a credential: the page sees {@link connectionView}.
  */
-
-export type MarketingRole = 'editor' | 'admin'
 
 export interface MarketingGateResult {
   orgId: string
@@ -63,7 +63,7 @@ export interface MarketingRouteDeps {
   store: ConnectionStore
   provider(id: MarketingProviderId): MarketingProvider
   http: ProviderHttp
-  gate(request: Request, role: MarketingRole): Promise<MarketingGateResult | Response>
+  gate(request: Request, permission: MarketingPlatformsSitePermission | null): Promise<MarketingGateResult | Response>
   redirectUri(requestUrl: string): string | null
   /** Runs a connection's sync now, a few pages at most; the job continues it. */
   syncNow(connectionId: string, maxPages: number): Promise<unknown>
@@ -142,7 +142,7 @@ export function createMarketingRoutes(deps: MarketingRouteDeps) {
     /** GET ?hostId — what this deployment offers, and the site's connections. */
     async list(request: Request): Promise<Response> {
       if (request.method !== 'GET') return fail(405, 'Method not allowed')
-      const gate = await deps.gate(request, 'editor')
+      const gate = await deps.gate(request, 'marketingPlatforms.view')
       if (gate instanceof Response) return gate
       const available = providerAvailability(deps.config())
       const connections = (await deps.store.listForHost(gate.hostId)).map(({ id, connection }) =>
@@ -154,7 +154,7 @@ export function createMarketingRoutes(deps: MarketingRouteDeps) {
     /** POST { hostId, provider, apiKey } — connect with the merchant's own key. */
     async connect(request: Request): Promise<Response> {
       if (request.method !== 'POST') return fail(405, 'Method not allowed')
-      const gate = await deps.gate(request, 'admin')
+      const gate = await deps.gate(request, 'marketingPlatforms.manage')
       if (gate instanceof Response) return gate
       const provider = readProvider(gate.body, request)
       if (!provider) return fail(400, 'Choose a platform')
@@ -190,7 +190,7 @@ export function createMarketingRoutes(deps: MarketingRouteDeps) {
     /** PATCH { hostId, provider, …settings } · DELETE { hostId, provider } */
     async connection(request: Request): Promise<Response> {
       if (request.method !== 'PATCH' && request.method !== 'DELETE') return fail(405, 'Method not allowed')
-      const gate = await deps.gate(request, 'admin')
+      const gate = await deps.gate(request, 'marketingPlatforms.manage')
       if (gate instanceof Response) return gate
       const provider = readProvider(gate.body, request)
       if (!provider) return fail(400, 'Choose a platform')
@@ -237,7 +237,7 @@ export function createMarketingRoutes(deps: MarketingRouteDeps) {
     /** POST { hostId, provider } — run the sync now; resumes one stopped by failures. */
     async syncNow(request: Request): Promise<Response> {
       if (request.method !== 'POST') return fail(405, 'Method not allowed')
-      const gate = await deps.gate(request, 'admin')
+      const gate = await deps.gate(request, 'marketingPlatforms.manage')
       if (gate instanceof Response) return gate
       const provider = readProvider(gate.body, request)
       if (!provider) return fail(400, 'Choose a platform')
@@ -255,7 +255,7 @@ export function createMarketingRoutes(deps: MarketingRouteDeps) {
     /** GET ?hostId&provider&before — the connection's runs and errors, newest first. */
     async log(request: Request): Promise<Response> {
       if (request.method !== 'GET') return fail(405, 'Method not allowed')
-      const gate = await deps.gate(request, 'editor')
+      const gate = await deps.gate(request, 'marketingPlatforms.view')
       if (gate instanceof Response) return gate
       const provider = readProvider(gate.body, request)
       if (!provider) return fail(400, 'Choose a platform')
@@ -272,7 +272,7 @@ export function createMarketingRoutes(deps: MarketingRouteDeps) {
     /** POST { hostId, provider, returnTo } — start an OAuth connect; answers the consent page address. */
     async oauthStart(request: Request): Promise<Response> {
       if (request.method !== 'POST') return fail(405, 'Method not allowed')
-      const gate = await deps.gate(request, 'admin')
+      const gate = await deps.gate(request, 'marketingPlatforms.manage')
       if (gate instanceof Response) return gate
       const provider = readProvider(gate.body, request)
       if (!provider) return fail(400, 'Choose a platform')

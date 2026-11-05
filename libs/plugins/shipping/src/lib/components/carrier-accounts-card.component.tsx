@@ -16,6 +16,10 @@
  */
 'use client'
 
+import { permissionRefusalText } from '@aglyn/aglyn/app-utils/org-permissions'
+import { BlockedControl } from '@aglyn/shared-ui-jsx/components/blocked-control.component'
+import { useSiteKeys } from '@aglyn/tenant-feature-instance/hooks/use-site-keys'
+import { SHIPPING_SITE_PRESETS } from '../model/shipping-permissions'
 import type { PluginShippingAddress } from '@aglyn/aglyn/plugin-manager/plugin-shipping-rates'
 import { pluginDocsHelp } from '@aglyn/aglyn/app-utils/docs-help'
 import { CardDisplay } from '@aglyn/shared-ui-jsx'
@@ -59,6 +63,8 @@ import type { ShippingSettingsWidgetProps } from './shipping-settings-card.compo
  */
 export function CarrierAccountsCard(props: ShippingSettingsWidgetProps) {
   const { hostId } = props
+  const refused = useSiteKeys(hostId).blocked('shipping.carrierAccounts', SHIPPING_SITE_PRESETS['shipping.carrierAccounts'])
+  const refusal = permissionRefusalText('shipping.carrierAccounts')
   const availability = useShippingAvailability(hostId)
   const request = useShippingFetch()
   const { enqueueSnackbar } = useSnackbar()
@@ -166,7 +172,13 @@ export function CarrierAccountsCard(props: ShippingSettingsWidgetProps) {
       })}
       HeaderProps={
         canConnect
-          ? { action: <Button onClick={openConnect}>{'Connect your own account'}</Button> }
+          ? {
+              action: (
+                <BlockedControl blocked={refused} reason={refusal}>
+                  <Button onClick={openConnect}>{'Connect your own account'}</Button>
+                </BlockedControl>
+              ),
+            }
           : undefined
       }
       contentGutterX
@@ -177,11 +189,13 @@ export function CarrierAccountsCard(props: ShippingSettingsWidgetProps) {
         {(accounts ?? []).map((account) => (
           <Stack key={account.id} direction="row" spacing={1} sx={{ alignItems: 'center' }}>
             {canToggle ? (
-              <Switch
+              <BlockedControl blocked={refused} reason={refusal}>
+                <Switch
                 checked={account.active}
                 onChange={(event) => handleActive(account, event.target.checked)}
                 slotProps={{ input: { 'aria-label': `Use ${account.carrierName}` } }}
               />
+              </BlockedControl>
             ) : null}
             <Typography sx={{ flex: 1 }}>
               {account.carrierName}

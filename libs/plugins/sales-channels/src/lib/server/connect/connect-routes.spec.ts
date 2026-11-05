@@ -365,7 +365,7 @@ describe('connect callback', () => {
     expect(response.headers.get('location')).toBeNull()
   })
 
-  it('does not finish a connect for a member who is no longer an admin', async () => {
+  it('does not finish a connect for a member who no longer holds the key', async () => {
     const { state } = await start('google')
     db.docs.set(`hosts/${HOST}`, { memberRoles: { 'uid-admin': 'editor' } })
     const response = await connectCallbackRoute(callback({ code: 'c', state }))

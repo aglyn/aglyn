@@ -143,7 +143,7 @@ function channelFromBody(body: Record<string, unknown>): SalesChannelDefinition 
 
 export async function stateRoute(request: Request): Promise<Response> {
   if (request.method !== 'GET') return methodNotAllowed('GET')
-  const actor = await channelsGate(request, { role: 'viewer' })
+  const actor = await channelsGate(request, { permission: null })
   if (actor instanceof Response) return actor
   try {
     const [sells, store, state] = await Promise.all([
@@ -181,7 +181,7 @@ export async function stateRoute(request: Request): Promise<Response> {
 export async function channelRoute(request: Request): Promise<Response> {
   if (request.method !== 'POST') return methodNotAllowed('POST')
   const body = await readJsonBody(request)
-  const actor = await channelsGate(request, { role: 'editor', body })
+  const actor = await channelsGate(request, { permission: 'salesChannels.feeds', body })
   if (actor instanceof Response) return actor
   const channel = channelFromBody(body)
   if (channel instanceof Response) return channel
@@ -207,7 +207,7 @@ export async function channelRoute(request: Request): Promise<Response> {
 export async function rotateRoute(request: Request): Promise<Response> {
   if (request.method !== 'POST') return methodNotAllowed('POST')
   const body = await readJsonBody(request)
-  const actor = await channelsGate(request, { role: 'admin', body })
+  const actor = await channelsGate(request, { permission: 'salesChannels.replaceAddress', body })
   if (actor instanceof Response) return actor
   const channel = channelFromBody(body)
   if (channel instanceof Response) return channel
@@ -226,7 +226,7 @@ export async function rotateRoute(request: Request): Promise<Response> {
 export async function legacyRoute(request: Request): Promise<Response> {
   if (request.method !== 'POST') return methodNotAllowed('POST')
   const body = await readJsonBody(request)
-  const actor = await channelsGate(request, { role: 'admin', body })
+  const actor = await channelsGate(request, { permission: 'salesChannels.replaceAddress', body })
   if (actor instanceof Response) return actor
   try {
     const feed = await retireLegacyGoogleFeed({ hostId: actor.hostId, uid: actor.uid })
@@ -240,7 +240,7 @@ export async function legacyRoute(request: Request): Promise<Response> {
 export async function settingsRoute(request: Request): Promise<Response> {
   if (request.method !== 'POST') return methodNotAllowed('POST')
   const body = await readJsonBody(request)
-  const actor = await channelsGate(request, { role: 'editor', body })
+  const actor = await channelsGate(request, { permission: 'salesChannels.settings', body })
   if (actor instanceof Response) return actor
   const raw = body['settings']
   if (!raw || typeof raw !== 'object') return routeError(400, 'Missing settings')
@@ -259,7 +259,7 @@ export async function settingsRoute(request: Request): Promise<Response> {
 
 export async function diagnosticsRoute(request: Request): Promise<Response> {
   if (request.method !== 'GET') return methodNotAllowed('GET')
-  const actor = await channelsGate(request, { role: 'viewer' })
+  const actor = await channelsGate(request, { permission: null })
   if (actor instanceof Response) return actor
   try {
     const [store, state] = await Promise.all([storeOrNull(actor.hostId), getChannelState(actor.hostId)])
