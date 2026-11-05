@@ -84,6 +84,8 @@ export interface AiSiteImportStartProps {
   onBack: () => void
   /** The dialog closes before the job's page opens. */
   leave?: () => void
+  /** A generative Improve it is on for this workspace (AGL-4152): its words for the choice. */
+  generative?: boolean
 }
 
 /**
@@ -99,7 +101,7 @@ export interface AiSiteImportStartProps {
  * and waits for the person to start its first wave, so even this costs no
  * AI credits.
  */
-export function AiSiteImportStart({ orgId, orgSlug, hostId, host, user, pendingSite, onBack, leave }: AiSiteImportStartProps) {
+export function AiSiteImportStart({ orgId, orgSlug, hostId, host, user, pendingSite, onBack, leave, generative }: AiSiteImportStartProps) {
   const router = useRouter()
   const userRef = useRef(user)
   userRef.current = user
@@ -268,6 +270,7 @@ export function AiSiteImportStart({ orgId, orgSlug, hostId, host, user, pendingS
             wordingCredits={aiSiteImportWordingCreditsText(null)}
             help={AI_SITE_IMPORT_HELP.finish}
             disabled={busy}
+            generative={generative === true}
           />
           {/* Start in preview (AGL-4086), for a site this creates: on unless
               the person switches it off. */}

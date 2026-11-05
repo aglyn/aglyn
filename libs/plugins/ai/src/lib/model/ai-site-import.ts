@@ -52,7 +52,8 @@
 import { PLATFORM_BRAND_NAME } from '@aglyn/aglyn/app-utils/platform-brand'
 import { videoEmbedOf } from '@aglyn/aglyn/plugin-manager/video-embed-provider'
 import type { SiteImportBlock, SiteImportForm, SiteImportVideo } from '../site-import/site-import-html'
-import { aiCreditRangeOrdered, aiCreditRangeText, AI_MEASURED_IMPORT_CREDITS, type AiCreditRange } from './ai-credit-estimate'
+import { aiCreditRangeOrdered, aiCreditRangeText, AI_MEASURED_IMPORT_CREDITS, AI_MEASURED_PAID_SITE_CREDITS, type AiCreditRange } from './ai-credit-estimate'
+import { aiMediaCreditsPerPicture } from './ai-media-credits'
 import type { AiJob, AiJobItemLedger } from './ai-jobs.types'
 
 /** The job kind. */
@@ -1066,7 +1067,28 @@ export interface AiSiteImportPage {
   forms?: Array<{ index: number; formId: string | null }> | null
   /** What the page's row says of its forms. */
   formNote?: string | null
+  /** Where the page came from under a generative Improve it (AGL-4152): the source's, or the plan's proposed page. Absent is the source's. */
+  origin?: 'source' | 'proposed' | null
+  /** The sections its redesign added (AGL-4152). */
+  added?: AiSiteImportAddedSection[] | null
+  /** Its pictures by where each came from (AGL-4152). */
+  pictures?: AiSiteImportPagePictures | null
+  /**
+   * How its generative Improve it came out (AGL-4152): `redesigned` from its
+   * answer, or `layout-kept` where the redesign did not pass and today's
+   * compile drew it. Absent on every other page.
+   */
+  redesign?: AiSiteImportRedesign | null
 }
+
+/** How a page's generative Improve it came out (AGL-4152). */
+export type AiSiteImportRedesign = 'redesigned' | 'layout-kept'
+
+/** What a page's row says where its redesign did not pass (AGL-4152). */
+export const AI_SITE_IMPORT_LAYOUT_KEPT = 'Layout kept: the redesign did not pass'
+
+/** What a proposed page's row says where it could not be written: it has no old page to keep, so it is left out. */
+export const AI_SITE_IMPORT_PROPOSED_NOT_WRITTEN = 'This new page was left out: it could not be written without inventing facts. Its credits are given back.'
 
 /**
  * A wave's place in its import: waiting to start, running, in and waiting for
@@ -1090,6 +1112,13 @@ export interface AiSiteImportWave {
   finish?: AiSiteImportFinish | null
   /** Whether its improved pages' wording was improved too, stamped at its start (AGL-4152). */
   wording?: boolean | null
+  /**
+   * Whether it is a generative Improve it (AGL-4152):
+   * `SITE_IMPORT_GENERATIVE_RELEASE_FLAG` was on for the organization when the
+   * wave started, under Improve it. Its site is planned, and with new copy on
+   * its improved pages are redesigned from a ledger. Absent, today's Improve it.
+   */
+  generative?: true
 }
 
 export interface AiSiteImportState {
@@ -1137,6 +1166,119 @@ export interface AiSiteImportState {
   finish?: AiSiteImportFinish | null
   /** Under `improve`, whether the main pages' wording is improved too (AGL-4152): on unless the owner turns it off. */
   wording?: boolean | null
+  /**
+   * The one site plan a generative Improve it draws from (AGL-4152), written
+   * once after the first wave's read. Absent until that step exists, and on
+   * every import that is not generative; a page's design then comes from the
+   * import's own inputs (`aiSiteImportDesignInputs`). `null` is a plan asked
+   * for that did not pass: the import's frame and design inputs stand, and its
+   * page says so.
+   */
+  plan?: AiSiteImportPlan | null
+  /** The owner saw the plan and started the build (AGL-4152): its proposed page is settled, in or out. */
+  planAccepted?: true
+  /** Whether a slot nothing else fills may take a generated picture (AGL-4152); absent is `AI_SITE_IMPORT_GENERATED_PICTURES_DEFAULT`. */
+  generatedPictures?: boolean | null
+  /**
+   * `SITE_IMPORT_GENERATIVE_RELEASE_FLAG` was on for the organization when the
+   * site was read (AGL-4152): what its page says and quotes before a wave
+   * starts. A wave's own stamp decides how it is built.
+   */
+  generative?: true
+  /** The source's photos a redesigned page left off (AGL-4152), which a later page's slot takes before a stock photo. */
+  sitePhotos?: AiSiteImportPhoto[] | null
+}
+
+/**
+ * The site plan (AGL-4152): what the site is, its menu, its design, and at
+ * most one proposed page. Page references are draft ids. Its words are the
+ * site's own data, fenced wherever a prompt reads them.
+ */
+export interface AiSiteImportPlan {
+  site: { what: string; audience: string; kind: string; voice: string }
+  nav: {
+    groups: Array<{ label: string; pages: string[] }>
+    /**
+     * The header's filled call to action: `target` is a page's draft id, `form`
+     * or `phone`; `page` is the page a `form` target sends a visitor to, read
+     * when the plan was checked, since a settled page keeps no form.
+     */
+    primaryCta: { label: string; target: string; page?: string } | null
+    footer: Array<{ label: string; pages: string[] }>
+  }
+  /** One for the site, so every page of every wave is drawn alike. */
+  design: AiSiteImportPlanDesign
+  /** At most one new page, on by default, with a switch (`AiSiteImportPage.origin`). `draftId` names its page once the plan is in. */
+  proposed: { title: string; slug: string; purpose: string; on: boolean; draftId?: string } | null
+  /**
+   * What each page is for in the new site, by its draft id (AGL-4152): what
+   * its redesign plans it as, and how many new sections it has room for. A
+   * plan made before roles reads each page's from its address and what it holds.
+   */
+  roles?: Record<string, AiSiteImportPageRole>
+}
+
+/** What a page is for in a planned site (AGL-4152): what its redesign plans it as. */
+export type AiSiteImportPageRole = 'home' | 'service' | 'about' | 'contact' | 'gallery' | 'pricing' | 'faq' | 'other'
+
+export const AI_SITE_IMPORT_PAGE_ROLES: readonly AiSiteImportPageRole[] = ['home', 'service', 'about', 'contact', 'gallery', 'pricing', 'faq', 'other']
+
+/** How a plan draws the site: the hero, each group, the bands' rhythm and the closing call to action. */
+export interface AiSiteImportPlanDesign {
+  hero: 'cover' | 'poster' | 'split' | 'bleed' | 'editorial' | 'column' | 'panel'
+  group: 'cards' | 'ruled' | 'icons'
+  rhythm: 'alternate' | 'plain'
+  /** A closing call to action on a strong band, or over a photo. */
+  cta: 'band' | 'photo'
+}
+
+/** The owner's answer to the plan's review (AGL-4152): the proposed page, and generated pictures. */
+export interface AiSiteImportPlanChoice {
+  addPage?: boolean
+  pictures?: boolean
+}
+
+/**
+ * Whether generated pictures are on where the owner has not said (AGL-4152):
+ * on, with a switch. A picture costs credits, so a wave that may take them
+ * quotes them in its ceiling before it starts, and the switch turns them off.
+ */
+export const AI_SITE_IMPORT_GENERATED_PICTURES_DEFAULT = true
+
+/** What a plan's row and panel say where it did not pass (AGL-4152). */
+export const AI_SITE_IMPORT_PLAN_FELL_BACK = 'Your menu and footer stay as your site has them: the plan for your new site did not pass.'
+
+/** The ledger slot of the plan's proposed page. */
+export const AI_SITE_IMPORT_PROPOSED_SLOT = 'proposed'
+
+/** What a plan's answer calls its proposed page before it has an id. */
+export const AI_SITE_IMPORT_PROPOSED_PAGE = 'new'
+
+/** The most generated pictures one page takes (AGL-4152), a hero or a section's lead only. */
+export const AI_SITE_IMPORT_GENERATED_PICTURES_PER_PAGE = 2
+
+/** What the plan's own pass may spend at most: its answer and its one re-ask at the measured p90. */
+export const AI_SITE_IMPORT_PLAN_CEILING_CREDITS = 180
+
+/** A section a redesign added to a page (AGL-4152): what its row and What's new say. */
+export interface AiSiteImportAddedSection {
+  heading: string
+  /** The items it holds, where it holds a group of them. */
+  items?: number
+}
+
+/** What a redesigned page shows of its pictures (AGL-4152), by where each came from. */
+export interface AiSiteImportPagePictures {
+  /** The page's own and the site's source photos placed. */
+  source: number
+  /** Slots filled from the stock library. */
+  stock: number
+  /** Slots filled by a generated picture. */
+  generated: number
+  /** Slots with no picture yet, which a later pass fills or drops. */
+  slots: number
+  /** The source's photos left off the page, by address, listed for the owner. */
+  unplaced: string[]
 }
 
 /**
@@ -1227,6 +1369,12 @@ export interface AiSiteImportLook {
   seed: number | null
   /** The look's header arrangement, band rhythm and motion, which the header, the footer and every page are drawn in. */
   style?: { headerAlign?: string; rhythm?: string; motion?: string } | null
+  /**
+   * Under a generative Improve it (AGL-4152), the colors the theme drew, which
+   * a redesign is held to as it is asked (`SiteImportFidelityTheme`). Absent
+   * on every other import, and where the owner's own theme was kept.
+   */
+  drawn?: Record<string, unknown> | null
 }
 
 /*------------------------------------------
@@ -1749,6 +1897,10 @@ export type AiSiteImportWork =
   | { kind: 'start-wave'; wave: AiSiteImportWave }
   /** Pages of the running wave its read did not reach before its clock ran out. */
   | { kind: 'read'; wave: AiSiteImportWave; pages: AiSiteImportPage[] }
+  /** The site's plan (AGL-4152), once, after the first wave's read and before its look. */
+  | { kind: 'plan'; wave: AiSiteImportWave }
+  /** The owner started the build under a plan they saw: its proposed page settled, no model. */
+  | { kind: 'plan-accepted'; wave: AiSiteImportWave }
   | { kind: 'frame'; wave: AiSiteImportWave }
   | { kind: 'images'; wave: AiSiteImportWave; page: AiSiteImportPage }
   /** A page's forms, rebuilt as the site's own before the page places them (AGL-4083). */
@@ -1817,6 +1969,11 @@ export function aiSiteImportNextWork(
   // first (AGL-4083): a read that stopped short, or that left pages out to keep
   // the job within what one document holds, goes on once their words are gone.
   if (unread.length && !reached.length) return { kind: 'read', wave: running, pages: unread }
+  // A generative Improve it plans the site once, before anything of it is built (AGL-4152).
+  if (running.generative && running.frame && state.waves[0]?.index === running.index) {
+    if (state.plan === undefined) return { kind: 'plan', wave: running }
+    if (state.plan && !state.planAccepted) return { kind: 'plan-accepted', wave: running }
+  }
   if (running.frame && state.frame && aiSiteImportItemOpen(items, AI_SITE_IMPORT_FRAME_SLOT)) {
     return { kind: 'frame', wave: running }
   }
@@ -2073,14 +2230,17 @@ export function aiSiteImportWaveChoice(state: Pick<AiSiteImportState, 'finish' |
  * wave once, when it starts, so a change made before a later wave reaches only
  * the waves that have not started.
  */
-export function aiSiteImportWaveStamped(state: AiSiteImportState, index: number): AiSiteImportState {
+export function aiSiteImportWaveStamped(state: AiSiteImportState, index: number, options: { generative?: boolean } = {}): AiSiteImportState {
   const wave = state.waves.find((entry) => entry.index === index)
   if (!wave) return state
   const choice = aiSiteImportChoiceOf(state)
   const slots = new Set(wave.slots)
+  // A generative Improve it plans the site and its design with new copy or without (AGL-4152):
+  // a page is redesigned from its ledger only where its words are improved too.
+  const generative = options.generative === true && choice.finish === 'improve'
   return {
     ...state,
-    waves: state.waves.map((entry) => (entry.index === index ? { ...entry, finish: choice.finish, wording: choice.wording } : entry)),
+    waves: state.waves.map((entry) => (entry.index === index ? { ...entry, finish: choice.finish, wording: choice.wording, ...(generative ? { generative: true as const } : {}) } : entry)),
     pages: state.pages.map((page) => (slots.has(page.slot) ? { ...page, wording: aiSiteImportPageWording(page, choice) } : page)),
   }
 }
@@ -2103,6 +2263,155 @@ export function aiSiteImportFinishUpdate(
   // Under Improve, the switch as given, else as it stands, else on (its default).
   const asked = typeof change.wording === 'boolean' ? change.wording : now.finish === 'improve' ? now.wording : AI_SITE_IMPORT_DEFAULT_CHOICE.wording
   return { 'siteImport.finish': finish, 'siteImport.wording': aiSiteImportWordingOf(finish, asked) }
+}
+
+/** The most source photos an import holds for a later page's slots: each is a library reference, and every page rides one job document. */
+const SITE_PHOTOS_HELD = 24
+
+/**
+ * How a page's generative Improve it came out (AGL-4152), what it added and what
+ * it shows, for its row; and the source's photos it left off, which a later
+ * page's slot takes before a stock photo.
+ */
+export function aiSiteImportRedesignOf(state: AiSiteImportState, slot: string, redesign: AiSiteImportRedesign, added?: readonly AiSiteImportAddedSection[], pictures?: AiSiteImportPagePictures | null): AiSiteImportState {
+  const next = withPage(state, slot, { redesign, ...(added?.length ? { added: [...added] } : {}), ...(pictures ? { pictures } : {}) })
+  const left = new Set(pictures?.unplaced ?? [])
+  if (!left.size) return next
+  const assets = state.pages.find((page) => page.slot === slot)?.photos?.assets ?? []
+  const held = next.sitePhotos ?? []
+  const pool = [...held, ...assets.filter((photo) => !!photo.from && left.has(photo.from) && !held.some((other) => other.src === photo.src))].slice(0, SITE_PHOTOS_HELD)
+  return pool.length ? { ...next, sitePhotos: pool } : next
+}
+
+/*------------------------------------------
+ * The site's plan (AGL-4152)
+ *-----------------------------------------*/
+
+/** Whether generated pictures are on for an import: as its owner said, else the default. */
+export function aiSiteImportGeneratedPicturesOn(state: Pick<AiSiteImportState, 'generatedPictures'> | null | undefined): boolean {
+  return typeof state?.generatedPictures === 'boolean' ? state.generatedPictures : AI_SITE_IMPORT_GENERATED_PICTURES_DEFAULT
+}
+
+/** Whether the job waits on its owner's say-so over a plan (AGL-4152): shown, and nothing of the site built. */
+export function aiSiteImportPlanAwaits(state: Pick<AiSiteImportState, 'plan' | 'planAccepted'> | null | undefined): boolean {
+  return !!state?.plan && !state.planAccepted
+}
+
+/** Whether the site has room for a page more than the import brings in (AGL-4152): the plan's count, against what is there and what is coming. */
+export function aiSiteImportHasRoomForPage(state: Pick<AiSiteImportState, 'pages'>, room: { limit: number | null; used: number }): boolean {
+  if (room.limit === null) return true
+  return room.limit - room.used - state.pages.filter((page) => !page.refused).length >= 1
+}
+
+/**
+ * The plan in, or the plan that did not pass (`null`). A proposed page takes
+ * its place in the wave's rows as a page of its own, new, with no source: its
+ * words are written from what the site says, so its one line is its purpose.
+ */
+export function aiSiteImportPlanIn(state: AiSiteImportState, wave: Pick<AiSiteImportWave, 'index'>, plan: AiSiteImportPlan | null, at: string, draftId: string): AiSiteImportState {
+  if (!plan?.proposed) return { ...state, plan }
+  const proposed = plan.proposed
+  const named = (pages: readonly string[]) => pages.map((page) => (page === AI_SITE_IMPORT_PROPOSED_PAGE ? draftId : page))
+  const page: AiSiteImportPage = {
+    slot: AI_SITE_IMPORT_PROPOSED_SLOT,
+    url: `https://${state.domain}/${proposed.slug}`,
+    path: `/${proposed.slug}`,
+    title: proposed.title,
+    group: 'main',
+    wave: wave.index,
+    draftId,
+    slug: proposed.slug,
+    words: 0,
+    images: 0,
+    origin: 'proposed',
+    build: 'arranged',
+    wording: 'improved',
+    photos: { brought: 0, reused: 0, skipped: 0, assets: [] },
+    read: {
+      at,
+      title: proposed.title,
+      text: proposed.purpose,
+      sections: [proposed.title],
+      images: [],
+      blocks: [
+        { kind: 'heading', level: 1, text: proposed.title, region: 'main' },
+        { kind: 'paragraph', text: proposed.purpose, region: 'main' },
+      ],
+      words: proposed.purpose.split(/\s+/).filter(Boolean).length,
+      forms: [],
+      layout: null,
+    },
+  }
+  const cta = plan.nav.primaryCta
+  return {
+    ...state,
+    plan: {
+      ...plan,
+      nav: {
+        groups: plan.nav.groups.map((group) => ({ ...group, pages: named(group.pages) })),
+        primaryCta: cta && cta.target === AI_SITE_IMPORT_PROPOSED_PAGE ? { ...cta, target: draftId } : cta,
+        footer: plan.nav.footer.map((column) => ({ ...column, pages: named(column.pages) })),
+      },
+      proposed: { ...proposed, draftId },
+      ...(plan.roles ? { roles: Object.fromEntries(Object.entries(plan.roles).map(([id, role]) => [id === AI_SITE_IMPORT_PROPOSED_PAGE ? draftId : id, role])) } : {}),
+    },
+    pages: [...state.pages, page],
+    waves: state.waves.map((entry) => (entry.index === wave.index ? { ...entry, slots: [...entry.slots, AI_SITE_IMPORT_PROPOSED_SLOT] } : entry)),
+  }
+}
+
+/** A plan with its proposed page's row: pending, unless it is the one row a plan has already added. */
+export function aiSiteImportPlanRow(state: Pick<AiSiteImportState, 'plan'>, items: readonly AiJobItemLedger[]): AiJobItemLedger[] {
+  const proposed = state.plan?.proposed
+  if (!proposed || items.some((row) => row.slot === AI_SITE_IMPORT_PROPOSED_SLOT)) return [...items]
+  return [...items, { slot: AI_SITE_IMPORT_PROPOSED_SLOT, op: 'page', label: proposed.title, status: 'pending', attempt: 1, creditsSpent: 0, creditsRefunded: 0, outputs: [] }]
+}
+
+/**
+ * The owner started the build (AGL-4152). A proposed page they switched off is
+ * gone: its row, its place in the wave, and every menu entry that named it.
+ */
+export function aiSiteImportPlanAccepted(state: AiSiteImportState, items: readonly AiJobItemLedger[]): { state: AiSiteImportState; items: AiJobItemLedger[] } {
+  const plan = state.plan
+  if (!plan?.proposed || plan.proposed.on) return { state: { ...state, planAccepted: true }, items: [...items] }
+  const off = plan.proposed.draftId
+  const kept = (pages: readonly string[]) => pages.filter((page) => page !== off)
+  const cta = plan.nav.primaryCta
+  return {
+    state: {
+      ...state,
+      planAccepted: true,
+      plan: {
+        ...plan,
+        nav: {
+          groups: plan.nav.groups.map((group) => ({ ...group, pages: kept(group.pages) })).filter((group) => group.pages.length),
+          primaryCta: cta?.target === off ? null : cta,
+          footer: plan.nav.footer.map((column) => ({ ...column, pages: kept(column.pages) })).filter((column) => column.pages.length),
+        },
+        proposed: { ...plan.proposed, on: false },
+      },
+      pages: state.pages.filter((page) => page.slot !== AI_SITE_IMPORT_PROPOSED_SLOT),
+      waves: state.waves.map((wave) => ({ ...wave, slots: wave.slots.filter((slot) => slot !== AI_SITE_IMPORT_PROPOSED_SLOT) })),
+    },
+    items: items.filter((row) => row.slot !== AI_SITE_IMPORT_PROPOSED_SLOT),
+  }
+}
+
+/**
+ * The owner's answer to a plan (AGL-4152), as the resume door writes it onto
+ * an import waiting on one. What is not given stands. `null` when the job is
+ * not an import waiting on a plan, or nothing is asked.
+ */
+export function aiSiteImportPlanUpdate(
+  job: Pick<AiJob, 'kind' | 'status' | 'review' | 'siteImport'>,
+  change: AiSiteImportPlanChoice,
+): Record<string, boolean> | null {
+  const state = job.siteImport ?? null
+  if (job.kind !== AI_SITE_IMPORT_KIND || job.status !== 'needs_review' || job.review?.reason !== 'wave' || !aiSiteImportPlanAwaits(state)) return null
+  const update: Record<string, boolean> = {}
+  if (typeof change.addPage === 'boolean' && state?.plan?.proposed) update['siteImport.plan.proposed.on'] = change.addPage
+  if (typeof change.pictures === 'boolean') update['siteImport.generatedPictures'] = change.pictures
+  return Object.keys(update).length ? update : null
 }
 
 /**
@@ -2168,25 +2477,41 @@ const whole = (value: number | undefined) => Math.max(0, Math.floor(Number.isFin
  */
 export function aiSiteImportCreditRange(
   pages: number,
-  options: { frame?: boolean; arranged?: number; copied?: number; reworded?: number } = {},
+  options: {
+    frame?: boolean
+    arranged?: number
+    copied?: number
+    reworded?: number
+    /** The site's plan, still owed under a generative Improve it (AGL-4152), priced as a paid site's plan until it is measured. */
+    plan?: boolean
+    /** A proposed page not yet among the wave's own, quoted as a redesigned page (AGL-4152). */
+    proposed?: number
+    /** Generated pictures it may take at most (AGL-4152): in its ceiling only, since each takes what nothing else fills. */
+    pictures?: number
+  } = {},
 ): AiCreditRange {
   const count = whole(pages)
-  const arranged = whole(options.arranged)
+  const proposed = whole(options.proposed)
+  const arranged = whole(options.arranged) + proposed
   const copied = whole(options.copied)
-  const wording = aiSiteImportWordingCredits(Math.min(arranged, whole(options.reworded)))
+  const wording = aiSiteImportWordingCredits(Math.min(arranged, whole(options.reworded) + proposed))
   const measured = AI_MEASURED_IMPORT_CREDITS
+  const plan = options.plan ? AI_MEASURED_PAID_SITE_CREDITS.plan : { median: 0, p90: 0 }
   return aiCreditRangeOrdered({
     likely:
       count * measured.page.median +
       arranged * measured.arranged.median +
       wording.likely +
       copied * measured.copied.median +
-      (options.frame ? measured.frame.median : 0),
-    p90: count * measured.page.p90 + arranged * measured.arranged.p90 + wording.p90 + copied * measured.copied.p90 + (options.frame ? measured.frame.p90 : 0),
+      (options.frame ? measured.frame.median : 0) +
+      plan.median,
+    p90: count * measured.page.p90 + arranged * measured.arranged.p90 + wording.p90 + copied * measured.copied.p90 + (options.frame ? measured.frame.p90 : 0) + plan.p90,
     ceiling:
       (count + arranged) * AI_SITE_IMPORT_PAGE_CEILING_CREDITS +
       copied * AI_SITE_IMPORT_COPIED_CEILING_CREDITS +
-      (options.frame ? AI_SITE_IMPORT_FRAME_CEILING_CREDITS : 0),
+      (options.frame ? AI_SITE_IMPORT_FRAME_CEILING_CREDITS : 0) +
+      (options.plan ? AI_SITE_IMPORT_PLAN_CEILING_CREDITS : 0) +
+      whole(options.pictures) * aiMediaCreditsPerPicture('photo', undefined, '1K'),
   })
 }
 
@@ -2200,11 +2525,14 @@ export function aiSiteImportWaveOwed(
   state: AiSiteImportState,
   wave: AiSiteImportWave,
   items?: readonly AiJobItemLedger[] | null,
-): { pages: number; arranged: number; reworded: number; copied: number; frame: boolean } {
+): { pages: number; arranged: number; reworded: number; copied: number; frame: boolean; plan?: boolean; proposed?: number; pictures?: number } {
   const owed = (slot: string) => (items ? aiSiteImportItemOpen(items, slot) : true)
   const choice = aiSiteImportWaveChoice(state, wave)
+  // A generative Improve it's own (AGL-4152): its frame draws from the plan, and a plan is owed once.
+  const generative = aiSiteImportWaveIsGenerative(state, wave)
+  const planned = generative && !!state.plan
   // A header and footer drawn from the source's own menu ask no model (AGL-4108), so are owed nothing.
-  const counts = { pages: 0, arranged: 0, reworded: 0, copied: 0, frame: wave.frame && !!state.frame && !aiSiteImportFrameIsRead(state) && owed(AI_SITE_IMPORT_FRAME_SLOT) }
+  const counts = { pages: 0, arranged: 0, reworded: 0, copied: 0, frame: wave.frame && !!state.frame && !aiSiteImportFrameIsRead(state) && !planned && owed(AI_SITE_IMPORT_FRAME_SLOT) }
   for (const slot of wave.slots) {
     const page = state.pages.find((entry) => entry.slot === slot)
     if (!owed(slot) || page?.refused) continue
@@ -2214,7 +2542,21 @@ export function aiSiteImportWaveOwed(
     } else if (page?.build === 'copied') counts.copied += 1
     else counts.pages += 1
   }
-  return counts
+  if (!generative) return counts
+  const first = state.waves[0]?.index === wave.index && wave.frame
+  // Before the plan is in, a page it may propose is quoted, where the plan's count has room for one.
+  const proposed = first && state.plan === undefined && choice.wording && aiSiteImportHasRoomForPage(state, { limit: state.pageLimit, used: state.existingPages }) ? 1 : 0
+  const pictures = choice.wording && aiSiteImportGeneratedPicturesOn(state) ? (counts.reworded + proposed) * AI_SITE_IMPORT_GENERATED_PICTURES_PER_PAGE : 0
+  return { ...counts, ...(first && state.plan === undefined ? { plan: true } : {}), ...(proposed ? { proposed } : {}), ...(pictures ? { pictures } : {}) }
+}
+
+/**
+ * Whether a wave is a generative Improve it (AGL-4152): as stamped once it has
+ * started; before, whether the import was read under the flag and asks to be
+ * improved now.
+ */
+export function aiSiteImportWaveIsGenerative(state: Pick<AiSiteImportState, 'generative' | 'finish' | 'wording'>, wave: AiSiteImportWave): boolean {
+  return wave.startedAt ? wave.generative === true : state.generative === true && aiSiteImportChoiceOf(state).finish === 'improve'
 }
 
 /** A wave's quote: the pages it has still to bring in, and its header and footer while they are owed. */
@@ -2224,7 +2566,7 @@ export function aiSiteImportWaveCreditRange(
   items?: readonly AiJobItemLedger[] | null,
 ): AiCreditRange {
   const owed = aiSiteImportWaveOwed(state, wave, items)
-  return aiSiteImportCreditRange(owed.pages, { frame: owed.frame, arranged: owed.arranged, reworded: owed.reworded, copied: owed.copied })
+  return aiSiteImportCreditRange(owed.pages, { frame: owed.frame, arranged: owed.arranged, reworded: owed.reworded, copied: owed.copied, plan: owed.plan, proposed: owed.proposed, pictures: owed.pictures })
 }
 
 /** Every wave still waiting, quoted at once: "Start every remaining wave" (AGL-4083). */
@@ -2232,7 +2574,7 @@ export function aiSiteImportRemainingCreditRange(
   state: AiSiteImportState,
   items?: readonly AiJobItemLedger[] | null,
 ): AiCreditRange {
-  const total = { pages: 0, arranged: 0, reworded: 0, copied: 0, frame: false }
+  const total = { pages: 0, arranged: 0, reworded: 0, copied: 0, frame: false, plan: false, proposed: 0, pictures: 0 }
   for (const wave of state.waves) {
     if (wave.status !== 'waiting') continue
     const owed = aiSiteImportWaveOwed(state, wave, items)
@@ -2241,8 +2583,11 @@ export function aiSiteImportRemainingCreditRange(
     total.reworded += owed.reworded
     total.copied += owed.copied
     total.frame = total.frame || owed.frame
+    total.plan = total.plan || owed.plan === true
+    total.proposed += owed.proposed ?? 0
+    total.pictures += owed.pictures ?? 0
   }
-  return aiSiteImportCreditRange(total.pages, { frame: total.frame, arranged: total.arranged, reworded: total.reworded, copied: total.copied })
+  return aiSiteImportCreditRange(total.pages, { frame: total.frame, arranged: total.arranged, reworded: total.reworded, copied: total.copied, plan: total.plan, proposed: total.proposed, pictures: total.pictures })
 }
 
 /**
@@ -2252,11 +2597,13 @@ export function aiSiteImportRemainingCreditRange(
  */
 export function aiSiteImportQuoteText(
   range: AiCreditRange,
-  owed: Pick<ReturnType<typeof aiSiteImportWaveOwed>, 'arranged' | 'copied'> & Partial<Pick<ReturnType<typeof aiSiteImportWaveOwed>, 'reworded'>>,
+  owed: Pick<ReturnType<typeof aiSiteImportWaveOwed>, 'arranged' | 'copied'> & Partial<Pick<ReturnType<typeof aiSiteImportWaveOwed>, 'reworded' | 'plan' | 'proposed' | 'pictures'>>,
+  options: { generative?: boolean } = {},
 ): string {
   const reworded = Math.min(owed.arranged, whole(owed.reworded))
   const runs: Array<[number, (count: number) => string]> = [
-    [reworded, () => `arranged and reworded by ${PLATFORM_BRAND_NAME} AI`],
+    // Under a generative Improve it, a page redesigned from its ledger (AGL-4152).
+    [reworded, () => (options.generative ? `redesigned by ${PLATFORM_BRAND_NAME} AI` : `arranged and reworded by ${PLATFORM_BRAND_NAME} AI`)],
     [owed.arranged - reworded, () => `arranged by ${PLATFORM_BRAND_NAME} AI`],
     [owed.copied, (count) => `copied as ${count === 1 ? 'it is' : 'they are'}`],
   ]
@@ -2266,6 +2613,10 @@ export function aiSiteImportQuoteText(
     // The first run names its pages; the rest are counted beside it.
     parts.push(`${parts.length ? count.toLocaleString('en-US') : aiSiteImportPagesText(count)} ${what(count)}`)
   }
+  // What a generative Improve it adds (AGL-4152): its plan, the page it may propose, the pictures it may generate.
+  if (owed.plan) parts.unshift('your site’s plan')
+  if (owed.proposed) parts.push('a new page if the plan proposes one')
+  if (owed.pictures) parts.push(`up to ${owed.pictures.toLocaleString('en-US')} generated pictures`)
   return parts.length ? `${aiCreditRangeText(range)}: ${parts.join(', ')}` : aiCreditRangeText(range)
 }
 

@@ -161,6 +161,13 @@
       "description": "Bring my site (AGL-3973): a paid workspace proves it owns a domain (DNS, meta tag or emailed code), then AglynBot reads the site within robots.txt. ON since 2026-10-25 (beta.282); turned off, the doors answer 404.",
       "valueType": "JSON"
     },
+    "release_ai_site_import_generative": {
+      "defaultValue": {
+        "value": "{\"enabled\":false,\"rolloutPercent\":0}"
+      },
+      "description": "Bring my site, generative Improve it (AGL-4152): each main page is redesigned from a ledger of what the source holds, with new sections and checked new copy. OFF everywhere; a test organization gets it by its per-org override.",
+      "valueType": "JSON"
+    },
     "release_crm_assist_whole_record": {
       "defaultValue": {
         "value": "{\"enabled\":true,\"rolloutPercent\":0,\"note\":\"AGL-3520: legal v10 (Privacy §2 + Subprocessors) published 2026-10-05; beta.225 live\"}"

@@ -33,6 +33,14 @@
  * its theme is computed from the site style the look pass draws from its
  * look facts, and the report says so.
  *
+ *   node libs/plugins/ai/scripts/site-import-fidelity-report.mts --generative
+ *
+ * scores a generative Improve it (AGL-4152) on four basic sites that do not
+ * exist: its kept ledger and its design lines, today's output beside a recorded
+ * answer written by hand. No model is called: these are not a measure of what
+ * one will do, only that each line reads red on what today's build draws and
+ * green on a redesign.
+ *
  *   node libs/plugins/ai/scripts/site-import-fidelity-report.mts --host <id>
  *
  * reports a site an import built, for a live check. Its reads are Admin SDK
@@ -52,6 +60,8 @@
  *                           page's wave stamp, else the import's own, else keep.
  *   --words kept|improved   Score every page's words so. Default: the page's own
  *                           stamp, else improved where its wave improved them.
+ *   --generative            Score every page as a generative Improve it (AGL-4152):
+ *                           its kept ledger and its design lines.
  *   --json <file>           Also write every report in full.
  *
  * Against production, run it from the repo root with the Admin SDK's
@@ -114,16 +124,23 @@ interface Args {
   json: string | null
   finish: 'keep' | 'improve' | null
   words: 'kept' | 'improved' | null
+  generative: boolean
 }
 
-const USAGE = 'Usage: site-import-fidelity-report.mts [--host <id> [--job <id>] [--page <path>]… [--source <path>=<file>]…] [--finish keep|improve] [--words kept|improved] [--json <file>]'
+const USAGE = 'Usage: site-import-fidelity-report.mts [--host <id> [--job <id>] [--page <path>]… [--source <path>=<file>]…] [--finish keep|improve] [--words kept|improved] [--generative] [--json <file>]'
 
 const pathKey = (path: string) => (path.replace(/\/+$/, '') || '/').replace(/^(?!\/)/, '/')
 
 function readArgs(argv: readonly string[]): Args {
-  const args: Args = { host: null, job: null, pages: [], sources: new Map(), json: null, finish: null, words: null }
+  const args: Args = { host: null, job: null, pages: [], sources: new Map(), json: null, finish: null, words: null, generative: false }
   for (let at = 0; at < argv.length; at += 2) {
     const name = argv[at] as string
+    // The one option with no value.
+    if (name === '--generative') {
+      args.generative = true
+      at -= 1
+      continue
+    }
     const value = argv[at + 1]
     if (value === undefined || value.startsWith('--')) throw new Error(`${name} needs a value.\n${USAGE}`)
     if (name === '--host') args.host = value
@@ -336,6 +353,22 @@ function improveTable(rows: readonly PageRow[], threshold: number): string | nul
   )
 }
 
+const IMPROVED_LEDGER = ['facts', 'invented', 'held', 'links', 'meaning'] as const
+const IMPROVED_DESIGN = ['cta', 'rhythm', 'columns', 'framing', 'contrast', 'frame', 'phone'] as const
+
+/** One line of a generative Improve it: how much of what it asks the page does, marked where it is short. */
+const improvedCell = (line: Dict | null | undefined) => (line ? `${line.done}/${line.of}${line.ok ? '' : ' RED'}` : '-')
+
+/** A generative Improve it, each page a row (AGL-4152): its kept ledger, held at 1, and its design lines. */
+function generativeTable(rows: readonly PageRow[]): string | null {
+  const improved = rows.filter(({ report }) => report.improved)
+  if (!improved.length) return null
+  return table(
+    ['page', ...IMPROVED_LEDGER, ...IMPROVED_DESIGN],
+    improved.map(({ name, report }) => [name, ...IMPROVED_LEDGER.map((key) => improvedCell(report.improved.ledger[key])), ...IMPROVED_DESIGN.map((key) => improvedCell(report.improved.design[key]))]),
+  )
+}
+
 /** What Improve it leaves free, each page a row: reported, never scored. */
 function freeTable(rows: readonly PageRow[]): string | null {
   const improved = rows.filter(({ report }) => report.scoredAs?.finish === 'improve' || report.free?.length)
@@ -372,7 +405,11 @@ function finishSections(rows: readonly PageRow[], threshold: number, themeNote: 
   const improve = improveTable(rows, threshold)
   const free = freeTable(rows)
   const wording = wordingTable(rows)
+  const generative = generativeTable(rows)
   return [
+    ...(generative
+      ? ['## Improve it, generative: the kept ledger and the design lines', '', 'facts, invented, held, links and meaning are held whole; each design line says what is short of the bar.', '', generative, '']
+      : []),
     ...(keep
       ? [
           '## Keep my site: the look kept',
@@ -444,7 +481,57 @@ function ledgerTable(pages: readonly Dict[], items: readonly Dict[]): string {
  * The recorded pages
  *-----------------------------------------*/
 
+/** A generative Improve it on four basic sites that do not exist (AGL-4152): today's output, then a recorded answer written by hand. */
+async function generativeReport(load: (file: string) => Promise<Dict>): Promise<boolean> {
+  const replay = await load(`${AI}/site-import/fixtures/site-import-fidelity-replay.ts`)
+  const { SITE_IMPORT_IMPROVE_ANSWERS } = await load(`${AI}/site-import/fixtures/site-import-improve-answers.ts`)
+  const improve = await load(`${AI}/jobs/ai-site-import-improve.ts`)
+  const fidelity = await load(`${AI}/model/ai-site-import-fidelity.ts`)
+  const seed = replay.siteImportReplayOneGroundSeed()
+  const names = ['tax-firm', 'contractor', 'salon', 'clinic'] as const
+  const today: PageRow[] = []
+  const recorded: PageRow[] = []
+  for (const name of names) {
+    const page = replay.siteImportReplayPage(name, { finish: 'improve', words: 'improved', seed, forms: [{ id: 'form-basic', name: 'Contact' }] })
+    const ledger = improve.aiSiteImportImproveLedger(page.doc)
+    const destinations = improve.aiSiteImportImproveDestinations(page.doc, ledger)
+    const wanted = [...new Set(ledger.links.flatMap((link: Dict) => destinations.get(link.ref) ?? []))]
+    const scored = { finish: 'improve', words: 'improved' }
+    today.push({
+      name,
+      report: fidelity.siteImportFidelity(page.source, page.tree, { ...scored, theme: replay.siteImportReplayTheme(name, 'improve'), improved: { destinations: wanted, forms: 1, frame: replay.siteImportReplayFrame(name).tree } }),
+    })
+    const theme = replay.siteImportReplayTheme(name, 'improve', { generative: true })
+    const answer = replay.siteImportReplayImproved(name, SITE_IMPORT_IMPROVE_ANSWERS[name], { theme })
+    recorded.push({
+      name,
+      report: fidelity.siteImportFidelity(answer.source, answer.tree, { ...scored, theme, improved: { scope: answer.scope, destinations: answer.destinations, forms: 1, frame: replay.siteImportReplayFrame(name, { generative: true }).tree } }),
+    })
+  }
+  const green = recorded.every(({ report }) => report.improved.holds && !report.improved.red.length)
+  console.log(
+    [
+      '# Bring my site: generative Improve it, four basic sites',
+      '',
+      'Sites that do not exist. Today is the page as today’s Improve it draws it, on a site whose seed runs one ground, in today’s theme.',
+      'Recorded is an answer written by hand, no model called: it says each line can go green, not that a model will.',
+      '',
+      '## Today',
+      '',
+      generativeTable(today) as string,
+      '',
+      '## Recorded',
+      '',
+      generativeTable(recorded) as string,
+      '',
+      green ? 'Result: every recorded page holds its ledger, every design line green.' : 'Result: A RECORDED PAGE IS SHORT.',
+    ].join('\n'),
+  )
+  return green
+}
+
 async function recordedReport(load: (file: string) => Promise<Dict>, args: Args): Promise<boolean> {
+  if (args.generative) return generativeReport(load)
   const replay = await load(`${AI}/site-import/fixtures/site-import-fidelity-replay.ts`)
   const fidelity = await load(`${AI}/model/ai-site-import-fidelity.ts`)
   const threshold = fidelity.SITE_IMPORT_FIDELITY_THRESHOLD as number
@@ -705,7 +792,7 @@ async function hostReportFrom(db: Dict, load: (file: string) => Promise<Dict>, a
     const how = siteImportPageFinish(state, page, { finish: args.finish, words: args.words })
     const said = `${how.finish}, words ${how.words} (${how.from === 'asked' ? 'asked here' : how.from === 'wave' ? 'its wave' : how.from === 'import' ? 'the import' : 'none named: keep'})`
     finishes.set(said, (finishes.get(said) ?? 0) + 1)
-    rows.push({ name: page.path, report: fidelity.siteImportFidelity({ layout: read.layout, blocks: read.blocks ?? [], photos, ...(read.concealed ? { concealed: read.concealed } : {}) }, tree, { finish: how.finish, words: how.words, theme }) })
+    rows.push({ name: page.path, report: fidelity.siteImportFidelity({ layout: read.layout, blocks: read.blocks ?? [], photos, ...(read.concealed ? { concealed: read.concealed } : {}) }, tree, { finish: how.finish, words: how.words, theme, ...(args.generative ? { improved: {} } : {}) }) })
   }
   const themeNote = theme
     ? theme.from === 'style'

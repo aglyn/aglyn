@@ -56,8 +56,8 @@ beforeEach(() => {
 })
 
 /** The read step, reached as a person reaches it: the address typed, a site already proved. */
-async function atTheRead() {
-  const view = render(<AiSiteImportStart orgId="org-1" orgSlug="acme" hostId="host-1" host="harbor" user={user} onBack={jest.fn()} />)
+async function atTheRead(generative = false) {
+  const view = render(<AiSiteImportStart orgId="org-1" orgSlug="acme" hostId="host-1" host="harbor" user={user} onBack={jest.fn()} generative={generative} />)
   fireEvent.change(screen.getByLabelText('Website address'), { target: { value: 'harbor-dental.com' } })
   mockFetch.mockResolvedValueOnce(json({ claim }))
   fireEvent.click(screen.getByRole('button', { name: 'Next' }))
@@ -106,6 +106,17 @@ describe('how should your new site look?', () => {
     expect(screen.queryByRole('switch', { name: 'Also improve my wording' })).toBeNull()
     const body = await readMySite()
     expect(body['inputs']).toEqual({ domain: 'harbor-dental.com', finish: 'keep', wording: false })
+  })
+
+  it('names the switch for what it does where a generative Improve it is on, and asks the same two answers (AGL-4152)', async () => {
+    await atTheRead(true)
+    expect((screen.getByRole('switch', { name: 'Also write new copy' }) as HTMLInputElement).checked).toBe(true)
+    expect(screen.queryByRole('switch', { name: 'Also improve my wording' })).toBeNull()
+    expect(screen.getByText(/never makes up a name, number, price, date, testimonial, client, award, credential, address or guarantee/)).toBeTruthy()
+    expect(screen.getByText(/Off, every word stays as you wrote it, and your layout and menu are still redesigned/)).toBeTruthy()
+    fireEvent.click(screen.getByRole('switch', { name: 'Also write new copy' }))
+    const body = await readMySite()
+    expect(body['inputs']).toEqual({ domain: 'harbor-dental.com', finish: 'improve', wording: false })
   })
 
   it('has no axe violations', async () => {

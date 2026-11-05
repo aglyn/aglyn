@@ -97,7 +97,13 @@ import {
   type AiPageSection,
 } from './ai-job-page-sections'
 import { aiLayoutSitePages } from './ai-job-layout-site-pages'
-import { aiResolveLayoutPictures, type AiLayoutPicturePhoto } from '../layout-language/ai-layout-pictures'
+import { aiResolveLayoutPictures, type AiLayoutPicturePhoto, type AiLayoutPictureSource } from '../layout-language/ai-layout-pictures'
+import { pluginMediaIngest } from '@aglyn/aglyn/plugin-manager/plugin-media-ingest'
+import type { AiImageProvider } from '../providers/image-contract'
+import { vertexImageProvider } from '../providers/vertex-image'
+import { assistBandRefuses } from '../usage/assist-credits'
+import { publicAssistQuota } from '../usage/assist-usage'
+import { aiSiteImportPagePicturesOf, aiSiteImportPictureMaker, aiSiteImportPictureSource, aiSiteImportPictureTally } from './ai-site-import-pictures'
 import type { AiSiteStarterSlot } from '../model/ai-site-photos'
 import { aiLayoutPagePhotosOf, aiLayoutSitePhotoSource } from './ai-layout-owner-photos'
 import {
@@ -123,6 +129,7 @@ import {
   type AiLayoutStartPage,
 } from './ai-job-page-language'
 import { aiSiteImportDocumentOf } from './ai-site-import-document'
+import { AI_SITE_IMPORT_MAX_SECTIONS } from '../model/ai-site-import'
 import { aiImportedPageListing, aiImportedPageListingOwed, aiImportPageModel, aiSiteImportLinkablePages } from './ai-site-import-compile'
 import { aiWithSiteMotion } from '../layout-language/ai-layout-motion'
 import {
@@ -524,6 +531,10 @@ export interface AiJobPageStepDeps {
   runnerFor?: typeof aiJobStepRunnerFor
   /** The stock photo source of a language page's pictures (AGL-3660); core's provider otherwise. */
   stockPhotos?: typeof aiLayoutSitePhotoSource
+  /** A redesign's generated pictures (AGL-4152): what makes them, and what it makes them through; the deployment's otherwise. */
+  pictureMaker?: typeof aiSiteImportPictureMaker
+  imageProvider?: () => AiImageProvider | null
+  ingest?: typeof pluginMediaIngest
 }
 
 export function createAiJobPageStep(deps: AiJobPageStepDeps = {}): AiJobStepRunner {
@@ -754,7 +765,9 @@ export function createAiJobPageStep(deps: AiJobPageStepDeps = {}): AiJobStepRunn
       // by this pass or by its author — comes back as it is, and is not written.
       const motion = aiLayoutMotionSiteOf(job, screen.slug)
       // A link that goes nowhere is settled as the check below reads it, with every section built (AGL-4076).
-      const links = { ...context, scrollTargetIds: sectionIds, ownScreenIds: [screen.id, draftId] }
+      // A redesign plans its own sections (AGL-4152): any of them may be scrolled to, past its source's count.
+      const scrollIds = imported?.generative ? Array.from({ length: Math.max(sectionIds.length, AI_SITE_IMPORT_MAX_SECTIONS) }, (_, at) => aiPageSectionNodeId(job.$id, at)) : sectionIds
+      const links = { ...context, scrollTargetIds: scrollIds, ownScreenIds: [screen.id, draftId] }
       const settle = <T extends AiDoctrineTree>(tree: T): T => {
         const settled = aiSettleUnrelatedScreenLinks(
           aiSettlePlaceholderItems(aiSettleMechanicalRules(tree, 'page', links), 'page', context),
@@ -764,7 +777,7 @@ export function createAiJobPageStep(deps: AiJobPageStepDeps = {}): AiJobStepRunn
             ownScreenIds: [screen.id, draftId],
           },
         )
-        const moved = aiWithSiteMotion(settled.nodes, motion, { sectionIds })
+        const moved = aiWithSiteMotion(settled.nodes, motion, { sectionIds: scrollIds })
         return moved === settled.nodes ? settled : { ...settled, nodes: moved }
       }
       const settled = settle({ rootId: CANVAS_ROOT_ELEMENT_ID, nodes: page as unknown as AiDoctrineTree['nodes'] })
@@ -788,7 +801,7 @@ export function createAiJobPageStep(deps: AiJobPageStepDeps = {}): AiJobStepRunn
       // A link the page carries to one of its sections goes there, now every section is built.
       const report = validateAiDoctrineTree({ rootId: CANVAS_ROOT_ELEMENT_ID, nodes: page }, 'page', {
         ...context,
-        scrollTargetIds: sectionIds,
+        scrollTargetIds: scrollIds,
       })
       // The facts the brief did not give, on the page or in the defaults its components show (AGL-3056).
       const note =
@@ -799,7 +812,8 @@ export function createAiJobPageStep(deps: AiJobPageStepDeps = {}): AiJobStepRunn
           }),
           recordNote,
           // A section the last answer could not fill was left out, and the page says which (AGL-3771).
-          language ? aiLayoutLeftOutNote(screen, sectionIds, page as unknown as Record<string, unknown>) : null,
+          // A redesign's sections are its own: none of its source's is left out by not being one of them (AGL-4152).
+          language && !imported?.generative ? aiLayoutLeftOutNote(screen, sectionIds, page as unknown as Record<string, unknown>) : null,
         ]
           .filter(Boolean)
           .join(' ') || null
@@ -934,10 +948,35 @@ export function createAiJobPageStep(deps: AiJobPageStepDeps = {}): AiJobStepRunn
       // The pictures left on a starter, which a site start's late photo pass fills (AGL-3988).
       const latePass = job.inputs?.[AI_STOCK_PHOTO_LATE_PASS_INPUT] === true
       let starters: AiSiteStarterSlot[] = []
+      // A redesign's slots fill from the source's own photos it left off, then stock, then a picture generated where its owner switched them on (AGL-4152).
+      const redesigned = imported?.generative && result.value.redesign?.status === 'redesigned' ? result.value.redesign : null
+      const pictureTally = aiSiteImportPictureTally()
+      const redesignPhotoSource = (siteSource: AiLayoutPictureSource | null): AiLayoutPictureSource | null => {
+        const unplaced = new Set(redesigned?.pictures?.unplaced ?? [])
+        // A walled workspace with too little left takes no picture, as the Media door tells it.
+        const quota = stepContext.reservation ? publicAssistQuota(stepContext.reservation).credits : null
+        const walled = !!quota && assistBandRefuses(org)
+        return aiSiteImportPictureSource({
+          photos: [...(imported?.photos ?? []).filter((photo) => !!photo.from && unplaced.has(photo.from)), ...(imported?.sitePhotos ?? [])],
+          next: siteSource
+            ? async (slots, report) => {
+                const found = await siteSource(slots, report)
+                pictureTally.stock += found.filter((photo) => photo?.src).length
+                return found
+              }
+            : null,
+          make: imported?.generatedPictures
+            ? (deps.pictureMaker ?? aiSiteImportPictureMaker)({ provider: deps.imageProvider ? deps.imageProvider() : vertexImageProvider, ingest: (deps.ingest ?? pluginMediaIngest)(), firestore, orgId: job.orgId, hostId, uid: job.createdBy, about: aiSiteWords(job.inputs).about, ...(walled ? { roomFor: (credits: number) => (quota?.remaining ?? 0) >= credits } : {}) })
+            : null,
+          nodes: result.value.nodes,
+          tally: pictureTally,
+        })
+      }
       const pictured = await aiResolveLayoutPictures(result.value.nodes, {
         rootId: CANVAS_ROOT_ELEMENT_ID,
-        sectionIds,
-        sectionNames,
+        // A redesign's sections are its own, past its source's count (AGL-4152).
+        sectionIds: redesigned?.names ? redesigned.names.map((_, at) => sectionIds[at] ?? aiPageSectionNodeId(job.$id, at)) : sectionIds,
+        sectionNames: redesigned?.names ?? sectionNames,
         seed,
         ...(jobPhotos.length ? { jobPhotos } : {}),
         ...(photoWords.language ? { language: photoWords.language } : {}),
@@ -949,19 +988,21 @@ export function createAiJobPageStep(deps: AiJobPageStepDeps = {}): AiJobStepRunn
             }
           : {}),
         // The owner's own photos first (AGL-3957), the stock library for the rest.
-        source: (deps.stockPhotos ?? aiLayoutSitePhotoSource)({
-          hostId,
-          uid: job.createdBy,
-          seed,
-          business: aiSiteWords(job.inputs).about,
-          ...photoWords,
-          sectionNames,
-          jobId: aiOriginJobId(job),
-          ...(avoid.length ? { avoid } : {}),
-          // A page brought in from the owner's site places its own pictures first (AGL-3976).
-          pagePhotos: aiLayoutPagePhotosOf(job.inputs),
-          ...(signal ? { signal } : {}),
-        }),
+        source: (redesigned ? redesignPhotoSource : (own: AiLayoutPictureSource | null) => own)(
+          (deps.stockPhotos ?? aiLayoutSitePhotoSource)({
+            hostId,
+            uid: job.createdBy,
+            seed,
+            business: aiSiteWords(job.inputs).about,
+            ...photoWords,
+            sectionNames,
+            jobId: aiOriginJobId(job),
+            ...(avoid.length ? { avoid } : {}),
+            // A page brought in from the owner's site places its own pictures first (AGL-3976); a redesign has placed them already.
+            pagePhotos: redesigned ? [] : aiLayoutPagePhotosOf(job.inputs),
+            ...(signal ? { signal } : {}),
+          }),
+        ),
       })
       if (!written) {
         // Never written once the job is canceled (AGL-3616).
@@ -1003,6 +1044,18 @@ export function createAiJobPageStep(deps: AiJobPageStepDeps = {}): AiJobStepRunn
         ...(latePass ? { sitePhotos: { pages: [{ screen: draftId, slots: starters }], lists: [] } } : {}),
         // How a page brought in under Also improve my wording came out, for its row (AGL-4152).
         ...(result.value.words ? { wording: result.value.words } : {}),
+        // How a generative Improve it came out, for its row (AGL-4152), its pictures as they were filled.
+        ...(result.value.redesign
+          ? {
+              redesign: {
+                status: result.value.redesign.status,
+                added: result.value.redesign.added,
+                pictures: redesigned?.pictures ? aiSiteImportPagePicturesOf(redesigned.pictures, pictureTally) : result.value.redesign.pictures,
+              },
+            }
+          : {}),
+        // What its generated pictures cost: on the row as credits, already on the meter on their own line.
+        ...(pictureTally.generatedUsd ? { estCostUsd: spent.estCostUsd + pictureTally.generatedUsd } : {}),
       }
     }
     const maxTokens = aiJobPageSectionMaxTokens(model)

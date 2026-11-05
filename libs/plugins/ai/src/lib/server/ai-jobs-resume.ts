@@ -43,7 +43,7 @@ import {
 } from '../model/ai-build-job'
 import { aiCreditsConfirmation, type AiCreditsPrompt } from '../model/ai-credit-estimate'
 import { aiJobInputProblems } from '../model/ai-job-input'
-import { aiSiteImportFinishUpdate } from '../model/ai-site-import'
+import { aiSiteImportFinishUpdate, aiSiteImportPlanUpdate } from '../model/ai-site-import'
 import { FREE_AI_TASTE_CREDITS_PER_MONTH } from '../plan-entitlements'
 import { aiGateLadder } from '../runtime/ai-gate'
 import { releaseAssistMessage } from '../usage/assist-usage'
@@ -230,13 +230,21 @@ export async function POST(
   const finish = rawFinish === 'keep' || rawFinish === 'improve' ? rawFinish : null
   const choosing = finish !== null || typeof rawWording === 'boolean'
   const finishUpdate = choosing ? aiSiteImportFinishUpdate(existing, { finish, wording: typeof rawWording === 'boolean' ? rawWording : null }) : null
-  if (startAll || finishUpdate) {
+  // A generative Improve it's plan (AGL-4152): whether its proposed page and generated pictures are in.
+  const rawPlan = payload?.['plan'] && typeof payload['plan'] === 'object' ? (payload['plan'] as Record<string, unknown>) : null
+  const planUpdate = rawPlan
+    ? aiSiteImportPlanUpdate(existing, {
+        ...(typeof rawPlan['addPage'] === 'boolean' ? { addPage: rawPlan['addPage'] } : {}),
+        ...(typeof rawPlan['pictures'] === 'boolean' ? { pictures: rawPlan['pictures'] } : {}),
+      })
+    : null
+  if (startAll || finishUpdate || planUpdate) {
     await gate.firestore
       .collection('orgs')
       .doc(gate.orgId)
       .collection(AI_JOBS_COLLECTION)
       .doc(jobId)
-      .update({ ...(startAll ?? {}), ...(finishUpdate ?? {}) })
+      .update({ ...(startAll ?? {}), ...(finishUpdate ?? {}), ...(planUpdate ?? {}) })
   }
   const now = new Date()
   const confirmation = aiCreditsConfirmation(confirmedCredits, gate.uid, now)
@@ -266,6 +274,7 @@ export async function POST(
       reason: retryFailedItems ? 'retry-failed-items' : answering ? 'input' : (existing.review?.reason ?? null),
       kind: existing.kind,
       ...(finishUpdate ? { finish: finishUpdate['siteImport.finish'], wording: finishUpdate['siteImport.wording'] } : {}),
+      ...(planUpdate ? { plan: planUpdate } : {}),
     },
   })
   if (job.status !== 'queued') {

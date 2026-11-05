@@ -399,8 +399,8 @@ export function AiSiteBuildPage({ hostId, segments, basePath }: ConsolePluginPag
         user={user}
         busy={busy}
         notice={notice}
-        // A wave not yet started carries Keep my site or Improve it (AGL-4152).
-        onResume={(choice) => void confirmPlan(ready, choice ? { finish: choice.finish, wording: choice.wording } : {})}
+        // A wave not yet started carries Keep my site or Improve it, and a plan its owner's answer (AGL-4152).
+        onResume={(choice, plan) => void confirmPlan(ready, { ...(choice ? { finish: choice.finish, wording: choice.wording } : {}), ...(plan ? { plan } : {}) })}
         // Start every remaining wave (AGL-4084): the same door, told to go on after each wave.
         onStartAll={(choice) => void confirmPlan(ready, { startAll: true, ...(choice ? { finish: choice.finish, wording: choice.wording } : {}) })}
         onJob={setJob}

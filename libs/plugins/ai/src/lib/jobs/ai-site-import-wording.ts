@@ -54,6 +54,7 @@
 import { fenceUntrustedText, UNTRUSTED_TEXT_RULE } from '@aglyn/shared-util-tools/untrusted-text'
 import { aiLayoutGuardContacts } from '../layout-language/ai-layout-copy'
 import type { SiteImportLayoutNode, SiteImportLineRef } from '../model/ai-site-import'
+import { SITE_IMPORT_POSTAL_PATTERNS } from '../model/ai-site-import-ledger'
 import {
   SITE_IMPORT_MEANING_FLOOR,
   siteImportContentKept,
@@ -190,12 +191,7 @@ const FIXED_GROUPS = new Set(['quotes', 'pricing', 'stats', 'logos'])
 /** Groups whose items' titles are names: a card's title is a product's or a service's. */
 const NAMED_GROUPS = new Set(['cards', 'pricing'])
 
-/** A postal address as a page writes one: a house number, a few words and a street word; a PO box; a region and postal code. */
-const POSTAL = [
-  /\b\d{1,6}\s+(?:[\p{L}\d'.-]+\s+){0,4}(?:street|st|avenue|ave|road|rd|boulevard|blvd|lane|ln|drive|dr|way|court|ct|place|pl|parkway|pkwy|highway|hwy|trail|trl|circle|cir|square|sq|suite|ste)\b/iu,
-  /\bp\.?\s?o\.?\s+box\s+\d/iu,
-  /\b[A-Z]{2}\s+\d{5}(?:-\d{4})?\b/u,
-] as const
+const POSTAL = SITE_IMPORT_POSTAL_PATTERNS
 
 const clean = (text: unknown): string => (typeof text === 'string' ? text.replace(/\s+/g, ' ').trim() : '')
 

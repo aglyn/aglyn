@@ -115,6 +115,30 @@ export const siteReadVarsThemeSheets = (): Array<{ url: string; text: string }> 
     ['https://assets.sitekit.example/sites/4182/site.css', 'site.css'],
   ].map(([url, file]) => ({ url: url as string, text: readFileSync(join(DIR, 'vars-theme', file as string), 'utf8') }))
 
+/**
+ * Four basic sites that do not exist (AGL-4152), each one page and the
+ * stylesheet saved beside it in `site-layout/basic/`, written for a generative
+ * Improve it: a tax firm, a contractor, a salon and a clinic, as small
+ * businesses build them on a site builder, plain bands, a stacked column of
+ * pictures, a text link for a call to action. Every business, name, address,
+ * phone and word is invented, so nothing is tuned to one site. They are not
+ * among `SITE_LAYOUT_PAGES`: the reports of today's build score those.
+ */
+export const SITE_BASIC_PAGES = {
+  'tax-firm': { url: 'https://www.larkspur-tax.example/' },
+  contractor: { url: 'https://www.brightwater-roofing.example/' },
+  salon: { url: 'https://www.juniper-row.example/' },
+  clinic: { url: 'https://www.stillwater-clinic.example/' },
+} as const
+
+export type SiteBasicPageName = keyof typeof SITE_BASIC_PAGES
+
+/** A basic site's page, and its stylesheet. */
+export const siteBasicRecording = (name: SiteBasicPageName): { html: string; css: string } => ({
+  html: readFileSync(join(DIR, 'basic', `${name}.html`), 'utf8'),
+  css: readFileSync(join(DIR, 'basic', `${name}.css`), 'utf8'),
+})
+
 const cache = new Map<string, string>()
 
 /** One recorded page's markup. */

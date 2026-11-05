@@ -65,6 +65,7 @@ import { AI_JOB_PAGE_INSTRUCTIONS, AI_PAGE_SECTION_TOOL } from '../jobs/ai-job-p
 import { AI_JOB_PLAN_INSTRUCTIONS } from '../jobs/ai-job-plan-step'
 import { AI_JOB_LAYOUT_LANGUAGE_INSTRUCTIONS, AI_LAYOUT_FRAME_KIND } from '../jobs/ai-job-layout-language'
 import { AI_JOB_PAGE_LANGUAGE_INSTRUCTIONS, AI_LAYOUT_PAGE_KIND } from '../jobs/ai-job-page-language'
+import { AI_SITE_IMPORT_PLAN_KIND, AI_SITE_IMPORT_PLAN_TOOL, aiSiteImportPlanInstructions } from '../jobs/ai-site-import-plan'
 import { AI_LAYOUT_FRAME_TOOL, AI_LAYOUT_PAGE_TOOL } from '../layout-language/ai-layout-language'
 import { buildAnthropicRequestBody } from '../providers/anthropic'
 import { AI_JOB_TEMPLATE_INSTRUCTIONS } from '../jobs/ai-job-template-step'
@@ -256,6 +257,11 @@ const AI_DOORS: Record<string, { step: AiStepKind; caches: boolean; why: string 
     step: 'job.page',
     caches: true,
     why: 'the doctrine and the layout language; a whole page is one answer, and a site asks it once a page (AGL-3660)',
+  },
+  'jobs/ai-site-import-plan.ts': {
+    step: 'job.page',
+    caches: true,
+    why: 'the doctrine and the site-plan rules; the same bytes on every site, its own words riding the user turn (AGL-4152)',
   },
   'jobs/ai-job-theme-step.ts': {
     step: 'job.theme',
@@ -450,6 +456,12 @@ const REQUESTS: Record<string, Composed> = {
         scope: aiDoctrineScopeFor(AI_LAYOUT_PAGE_KIND),
       }),
     tools: () => [AI_LAYOUT_PAGE_TOOL, aiInventoryLookupTool()],
+  },
+  'site-import-plan': {
+    door: 'jobs/ai-site-import-plan.ts',
+    step: 'job.page',
+    blocks: () => aiDoctrineSystemBlocks(null, { instructions: aiSiteImportPlanInstructions(), scope: aiDoctrineScopeFor(AI_SITE_IMPORT_PLAN_KIND) }),
+    tools: () => [AI_SITE_IMPORT_PLAN_TOOL],
   },
   'layout-frame': {
     door: 'jobs/ai-job-layout-step.ts',
@@ -868,6 +880,9 @@ describe('the ledger: what each request caches, against its model’s minimum', 
       // English (AGL-3760) took it up 55 more, and saying they are required
       // whenever the language is not English (AGL-3779) 15 more.
       'site-plan': { prefixTokens: 3_133, minimum: 512, caches: true, toolsStable: true },
+      // A generative Improve it's one plan (AGL-4152).
+      // A generative Improve it's plan names each page's role and two nav rules (AGL-4152): up 187.
+      'site-import-plan': { prefixTokens: 1_855, minimum: 512, caches: true, toolsStable: true },
       // The layout, template, component and section doors each grew 20 when
       // the palette learned the layout elements' Color scheme (AGL-3284).
       // All four then came DOWN 2 at AGL-3411: Tertiary

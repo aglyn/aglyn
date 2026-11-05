@@ -64,6 +64,7 @@
 import { contrastRatio } from '@aglyn/aglyn/app-utils/site-theme'
 import type { SiteImportBlock } from '../site-import/site-import-html'
 import { SITE_IMPORT_PLAY_WORDS, siteImportWidthOf, type AiSiteImportFinish, type AiSiteImportWords } from './ai-site-import'
+import { siteImportLedger } from './ai-site-import-ledger'
 import { aiHexOklch } from './ai-site-look'
 import type {
   SiteImportBand,
@@ -245,6 +246,63 @@ export interface SiteImportPageFidelity {
   lines?: SiteImportFidelityCount & { extra: number }
   /** Under improved words (G4): how much of each line's content its rewrite keeps, held at `floor` a line. */
   meaning?: SiteImportFidelityMeaning
+  /** Under a generative Improve it (AGL-4152): the kept ledger, held at 1, and the design lines. */
+  improved?: SiteImportImprovedFidelity
+}
+
+/** One line a generative Improve it is held to (AGL-4152): how much of what it asks the page does, and whether that is enough. */
+export interface SiteImportImprovedLine {
+  done: number
+  of: number
+  ok: boolean
+}
+
+/**
+ * A page a generative Improve it built, scored (AGL-4152). Its sections and
+ * words are the redesign's own, so what is scored is what must have come
+ * through and whether it reads as designed.
+ */
+export interface SiteImportImprovedFidelity {
+  /** What must have come through, each at 1. */
+  ledger: {
+    /** Every fact the source says, on the page. */
+    facts: SiteImportImprovedLine & { missing: string[] }
+    /** Facts and names on the page that nothing the import read says: none. */
+    invented: SiteImportImprovedLine & { found: string[] }
+    /** Every thing that must land, on the page. */
+    held: SiteImportImprovedLine & { missing: string[] }
+    /** Every link's destination, on the page. */
+    links: SiteImportImprovedLine & { missing: string[] }
+    /** The source's content words on the page, at `SITE_IMPORT_IMPROVED_MEANING` or more. */
+    meaning: SiteImportImprovedLine
+  }
+  /** How it reads; a line is `null` where the page asks it nothing, or what it reads is not given. */
+  design: Record<SiteImportImprovedLineName, SiteImportImprovedLine | null>
+  /** Whether the ledger holds whole. */
+  holds: boolean
+  /** The lines short of the bar, ledger first. */
+  red: string[]
+}
+
+/** The design lines of a generative Improve it (AGL-4152). */
+export const SITE_IMPORT_IMPROVED_LINES = ['cta', 'rhythm', 'columns', 'framing', 'contrast', 'frame', 'phone'] as const
+export type SiteImportImprovedLineName = (typeof SITE_IMPORT_IMPROVED_LINES)[number]
+
+/** The share of a source's content words a redesign keeps on its page (AGL-4152). */
+export const SITE_IMPORT_IMPROVED_MEANING = 0.6
+
+/** What a generative Improve it is scored against, besides its source. */
+export interface SiteImportImprovedOptions {
+  /** Every other line the import read: a fact one of these says is no invention. */
+  scope?: readonly string[]
+  /** Every destination the source's links have on the new site (`page:<id>`, an address). Absent, not measured. */
+  destinations?: readonly string[]
+  /** How many forms have a saved form to place. Absent, every form the source has. */
+  forms?: number
+  /** The site's header and footer, for the `frame` line. Absent, not measured. */
+  frame?: SiteImportFidelityTree | null
+  /** A page the site's plan proposed: new, so no source's facts or meaning to hold, only what it says. */
+  proposed?: boolean
 }
 
 /** How a page was finished and its words kept (AGL-4152), and the theme it is drawn in. */
@@ -260,6 +318,8 @@ export interface SiteImportFidelityOptions {
    * measured.
    */
   theme?: SiteImportFidelityTheme | null
+  /** Scored as a generative Improve it (AGL-4152): its kept ledger and design lines, in place of its structure. */
+  improved?: SiteImportImprovedOptions | null
 }
 
 /** One scheme of a theme, as the fidelity reads it. */
@@ -1066,6 +1126,16 @@ export function siteImportFidelity(source: SiteImportFidelitySource, tree: SiteI
     ...(improvedWords ? wordingScores(source, built, placement) : {}),
   }
   const full = { ...report, ...added }
+  if (options.improved && finish === 'improve') {
+    const improved = improvedScore(source, built, look, drawnSections, options.improved)
+    const ledger = Object.entries(improved.ledger) as Array<[string, SiteImportImprovedLine]>
+    // A redesign plans its own sections: what it scores on is what its ledger held, and the lowest of those.
+    const lowest = ledger.reduce<[string, number] | null>((least, [name, line]) => {
+      const ratio = line.of > 0 ? Math.min(1, line.done / line.of) : 1
+      return !line.ok && (!least || ratio < least[1]) ? [name, ratio] : least
+    }, null)
+    return { ...full, improved, score: lowest ? lowest[1] : 1, lowest: lowest ? lowest[0] : null }
+  }
   return { ...lowestOf(finishMeasures(full)), ...full }
 }
 
@@ -1095,6 +1165,7 @@ function finishMeasures(report: Omit<SiteImportPageFidelity, 'score' | 'lowest'>
  * Keep my site, its alignment, boxes, grounds in both schemes and measure.
  */
 export function siteImportFidelityHolds(report: SiteImportPageFidelity, threshold = SITE_IMPORT_FIDELITY_THRESHOLD): boolean {
+  if (report.improved) return report.improved.holds
   if (report.score < threshold) return false
   const improvedWords = report.scoredAs?.words === 'improved'
   if (improvedWords ? report.facts?.ratio !== 1 || report.lines?.ratio !== 1 || (report.meaning?.below ?? 0) > 0 : report.words.ratio !== 1) return false
@@ -2088,6 +2159,246 @@ function wordingScores(source: SiteImportFidelitySource, built: Built, placement
       examples: below.slice(0, 8),
     },
   }
+}
+
+/*------------------------------------------
+ * A generative Improve it (AGL-4152)
+ *-----------------------------------------*/
+
+/** The tallest a picture reads as framed on a wide screen, in px: past it, one picture is the whole screen. */
+const FRAMED_PX = 600
+
+/** The tallest the picture a page opens on reads as framed: a hero may hold the screen. */
+const FRAMED_OPENING_PX = 800
+
+/** The share of neighbors a page keeps on different grounds. */
+const RHYTHM_SHARE = 0.75
+
+/** The widest fixed size a phone's screen holds, in px. */
+const PHONE_PX = 360
+
+/** The tallest fixed picture a phone reads, in px. */
+const PHONE_PICTURE_PX = 520
+
+const line = (done: number, of: number, ok = done >= of): SiteImportImprovedLine => ({ done, of, ok })
+
+/** A piece that is only a number of a digit or two: a step's number, a count on a cart, no fact of the page's. */
+const bareNumber = (text: string) => /^\s*\d{1,2}\s*$/.test(text)
+
+/** A width over a height from how a frame writes it: `16 / 9`, `1.5`, or its value at the width a page is measured at. */
+function ratioOf(value: unknown): number | null {
+  const at = atView(value)
+  if (typeof at === 'number') return at > 0 ? at : null
+  if (typeof at !== 'string') return null
+  const parts = at.split('/').map((part) => Number.parseFloat(part))
+  const [width, height] = parts as [number, number | undefined]
+  if (!(width > 0)) return null
+  return height === undefined ? width : height > 0 ? width / height : null
+}
+
+/** A height a node sets outright, in px; `null` for none, or one that follows the screen. */
+function fixedHeightOf(value: unknown): number | null {
+  const at = atView(value)
+  if (typeof at === 'number') return at > 8 ? at : null
+  if (typeof at === 'string' && /^\d+(?:\.\d+)?px$/.test(at)) return Number.parseFloat(at)
+  return null
+}
+
+/** Whether a picture fills a frame that sets its own shape: laid over it, or at its whole height. */
+const fillsFrame = (node: SiteImportFidelityNode | undefined) => node?.sx?.['position'] === 'absolute' || node?.props?.['height'] === '100%' || node?.sx?.['height'] === '100%'
+
+/** Whether a node shows a heading of the page's outline. */
+/** Elements that draw a run of like items as one group: a line inside one is no line stacked on its own. */
+const GROUPS_A_RUN: ReadonlySet<string> = new Set(['muiAccordion', 'muiList', 'muiCard'])
+
+const isHeading = (node: SiteImportFidelityNode | undefined) => {
+  if (node?.componentId !== 'muiTypography') return false
+  const tag = node.props?.['component'] ?? node.props?.['variant']
+  return typeof tag === 'string' && /^h[2-6]$/.test(tag)
+}
+
+/** Whether a Grid cell keeps its place beside another on a phone, on more than two across. */
+const crowdsPhone = (size: unknown) => {
+  if (typeof size !== 'string') return false
+  const xs = /\bxs:(\d+)\b/.exec(size)?.[1]
+  if (xs) return Number(xs) < 6
+  return !/\b(?:sm|md|lg):/.test(size) && size.trim() !== '' && Number(size) < 6
+}
+
+/** The kept ledger and the design lines of a page a generative Improve it built (AGL-4152). */
+function improvedScore(source: SiteImportFidelitySource, built: Built, look: LookOf, drawnSections: readonly string[], options: SiteImportImprovedOptions): SiteImportImprovedFidelity {
+  const ledger = siteImportLedger({ layout: source.layout, blocks: source.blocks })
+  const pieces = built.pieces
+  const sourceTexts = source.blocks.flatMap((block) => (isLine(block) && block.kind !== 'image' ? [clean(block.text)] : []))
+  const anywhere = [...sourceTexts, ...(options.scope ?? [])]
+  const scope = siteImportFactScope(anywhere)
+  const shown = pieces.map((piece) => piece.text).filter((text) => !bareNumber(text))
+  const onPage = new Set(shown.flatMap((text) => siteImportFactTokens(text, scope, false)))
+  // Facts: every one the source says, at least once anywhere on the page.
+  const ownScope = siteImportFactScope(sourceTexts)
+  // A label in title case, "Start Now", says no one's name: its capitals are its style.
+  const titleCased = (text: string) => wordsOf(text).length >= 2 && wordsOf(text).every((word) => word.length < 3 || /^\p{Lu}/u.test(word))
+  // A page the site's plan proposed has no source to hold: only what it says is held (AGL-4152).
+  const said = options.proposed ? [] : [...new Set(sourceTexts.filter((text) => !bareNumber(text)).flatMap((text) => siteImportFactTokens(text, ownScope, false).filter((token) => !token.startsWith('name:') || !titleCased(text))))]
+  const missingFacts = said.filter((token) => !onPage.has(token))
+  // Invented: none that nothing the import read says.
+  const allowed = new Set(anywhere.flatMap((text) => siteImportFactTokens(text, scope, false)))
+  const found = [...new Set(shown.flatMap((text) => siteImportFactTokens(text, scope, true)))].filter((token) => !allowed.has(token) && token !== 'name:FAQ' && token !== 'name:FAQs')
+  // Held: every thing that must land, on the page.
+  const photoOf = new Map((source.photos ?? []).flatMap((photo) => (photo.from ? [[photo.from, photo.src] as const] : [])))
+  const keys = pieces.map((piece) => ` ${piece.key} `)
+  const shows = (ref: SiteImportLineRef) => {
+    const key = wordLine(clean((source.blocks[ref] as { text?: string } | undefined)?.text))
+    return !key || keys.some((piece) => piece.includes(` ${key} `))
+  }
+  const srcs = new Set(built.order.flatMap((id) => [built.node(id)?.props?.['src'], built.node(id)?.props?.['poster']].filter(Boolean) as unknown[]))
+  const formsDrawn = built.order.filter((id) => built.node(id)?.componentId === 'form').length
+  const formsWanted = options.forms ?? ledger.items.filter((item) => item.kind === 'form').length
+  const formOf = (ref: string) => Number(ref.slice(ref.indexOf(':') + 1))
+  const musts = ledger.items.filter((item) => item.must && (item.kind !== 'form' || formOf(item.ref) <= formsWanted))
+  const missingHeld = musts
+    .filter((item) => {
+      if (item.kind === 'form') return formsDrawn < formOf(item.ref)
+      if (item.kind === 'video') return !built.order.some((id) => built.node(id)?.componentId === 'video')
+      if (item.kind === 'picture') {
+        const block = source.blocks[item.lines[0] as number]
+        const src = block?.kind === 'image' ? photoOf.get(block.url) : undefined
+        return !!src && !srcs.has(src)
+      }
+      return !item.lines.every(shows)
+    })
+    .map((item) => item.ref)
+  // Links: every destination the source's links have here, on the page.
+  const hrefs = new Set(built.order.flatMap((id) => {
+    const props = built.node(id)?.props ?? {}
+    return [props['href'], ...(clean(props['screenId']) ? [`page:${clean(props['screenId'])}`] : [])].filter((value): value is string => typeof value === 'string')
+  }))
+  const destinations = options.destinations ?? []
+  const missingLinks = destinations.filter((to) => !hrefs.has(to) && !hrefs.has(to.replace(/\/+$/, '')))
+  // Meaning: the source's content words, on the page.
+  const sourceWords = contentOf(sourceTexts.join(' '))
+  const pageWords = contentOf(pieces.map((piece) => piece.text).join(' '))
+  const kept = [...sourceWords].filter((stem) => pageWords.has(stem)).length
+  const meaningOk = options.proposed === true || sourceWords.size === 0 || kept / sourceWords.size >= SITE_IMPORT_IMPROVED_MEANING
+  const ledgerLines = {
+    facts: { ...line(said.length - missingFacts.length, said.length), missing: missingFacts.slice(0, 8) },
+    invented: { ...line(found.length ? 0 : 1, 1), found: found.slice(0, 8) },
+    held: { ...line(musts.length - missingHeld.length, musts.length), missing: missingHeld },
+    links: { ...line(destinations.length - missingLinks.length, destinations.length), missing: missingLinks.slice(0, 8) },
+    meaning: line(kept, sourceWords.size, meaningOk),
+  }
+
+  const has = (id: string, test: (node: SiteImportFidelityNode) => boolean) => built.has(id, test)
+  const opener = drawnSections[0]
+  const closer = drawnSections[drawnSections.length - 1]
+  const filled = (node: SiteImportFidelityNode) => node.componentId === 'muiButton' && node.props?.['variant'] === 'contained' && hasDestination(node)
+  const asks = (node: SiteImportFidelityNode) => (node.componentId === 'muiButton' && hasDestination(node)) || node.componentId === 'form'
+  const cta = opener && closer ? line((has(opener, filled) ? 1 : 0) + (has(closer, asks) ? 1 : 0), 2) : null
+  // Rhythm: neighbors on different grounds.
+  const pairs = Math.max(0, drawnSections.length - 1)
+  const bandOf = (id: string | undefined) => siteImportFidelityBandOf(id ? built.node(id) : undefined)
+  const apart = Array.from({ length: pairs }, (_, at) => bandOf(drawnSections[at]) !== bandOf(drawnSections[at + 1])).filter(Boolean).length
+  const rhythm = pairs ? line(apart, pairs, apart / pairs >= RHYTHM_SHARE) : null
+  // Columns: no pictures stacked across the page, no run of headings or of short lines one under another, a row somewhere,
+  // and, on a page of three sections or more, like items drawn as a group somewhere (AGL-4152).
+  // A question list's questions and answers are one group, never a run of lines.
+  const inRow = (id: string, root: string) => {
+    for (const at of built.ancestry(id)) {
+      if (at === root) return false
+      if (setsSideBySide(built.node(at)) || GROUPS_A_RUN.has(built.node(at)?.componentId ?? '')) return true
+    }
+    return false
+  }
+  const planned = drawnSections.filter((id) => {
+    const nodes = built.under(id)
+    const across = nodes.filter((at) => {
+      // A picture of a row, such as a strip of logos, sits beside the others, whatever the width it is measured at.
+      if (built.node(at)?.componentId !== 'image' || fillsFrame(built.node(at)) || inRow(at, id)) return false
+      const { box, section } = boxPx(built, at, id)
+      return box >= 0.75 * section
+    })
+    if (across.length >= 2) return false
+    const heads = nodes.filter((at) => isHeading(built.node(at)) && !inRow(at, id))
+    if (heads.length >= 4) return false
+    const lines = nodes.filter((at) => {
+      const node = built.node(at)
+      return node?.componentId === 'muiTypography' && !isHeading(node) && node.props?.['component'] !== 'h1' && clean(node.props?.['children']).length > 0 && clean(node.props?.['children']).length < 200 && !inRow(at, id)
+    })
+    return lines.length < 4
+  }).length
+  const anyRow = drawnSections.some((id) => built.under(id).some((at) => id !== at && setsSideBySide(built.node(at)) && built.children(at).length >= 2))
+  // A group: three or more cells of one grid, questions of one list, or lines of one list.
+  const anyGroup = drawnSections.some((id) =>
+    built.under(id).some((at) => {
+      const node = built.node(at)
+      if (node?.componentId === 'muiGrid' && setsSideBySide(node)) return built.children(at).length >= 3
+      if (node?.componentId === 'muiAccordion') return (built.parent.get(at) ? built.children(built.parent.get(at) as string).filter((child) => built.node(child)?.componentId === 'muiAccordion').length : 0) >= 3
+      if (node?.componentId === 'muiList') return built.children(at).length >= 3
+      return false
+    }),
+  )
+  const columns = drawnSections.length
+    ? line(planned, drawnSections.length, planned === drawnSections.length && (drawnSections.length < 3 || (anyRow && anyGroup)))
+    : null
+  // Framing: every picture at a size a screen holds, in a frame it fills.
+  const natural = new Map((source.photos ?? []).flatMap((photo) => (photo.width && photo.height ? [[photo.src, photo.width / photo.height] as const] : [])))
+  const rootOf = (id: string) => drawnSections.find((root) => built.holds(root, id)) ?? null
+  const images = built.order.filter((id) => built.node(id)?.componentId === 'image')
+  const framed = images.filter((id) => {
+    const node = built.node(id) as SiteImportFidelityNode
+    const frame = fillsFrame(node) ? built.node(built.parent.get(id) ?? '') : node
+    const most = opener && built.holds(opener, id) ? FRAMED_OPENING_PX : FRAMED_PX
+    const fixed = fixedHeightOf(node.props?.['height']) ?? fixedHeightOf(frame?.sx?.['height'])
+    if (fixed !== null) return fixed <= most
+    // A frame as tall as the screen says, a cover's, is no height a picture sets.
+    if (fillsFrame(node) && !frame?.sx?.['aspectRatio']) return true
+    const ratio = ratioOf(frame?.sx?.['aspectRatio']) ?? ratioOf(node.sx?.['aspectRatio']) ?? natural.get(String(node.props?.['src'])) ?? 16 / 9
+    return boxPx(built, id, rootOf(id)).box / ratio <= most
+  }).length
+  const framing = images.length ? line(framed, images.length) : null
+  // Contrast: every ink reads, and the source's own brand fills its buttons.
+  const facts = source.layout.look
+  const brand = [facts?.buttonFill, facts?.link, facts?.buttonOutline, ...(facts?.palette ?? [])].map(hexOf).find((hex): hex is string => !!hex && aiHexOklch(hex).C >= 0.04)
+  const pairsRead = look.pairs(drawnSections)
+  const fill = look.theme ? (look.theme.button.fill ?? look.theme.light.brand) : null
+  const brandShows = !brand || !fill || siteImportOklabDelta(brand, fill) <= SITE_IMPORT_OUTLINE_DELTA
+  const contrast = look.theme ? line(pairsRead.filter(([a, b]) => reads(a, b)).length + (brandShows ? 1 : 0), pairsRead.length + 1) : null
+  // Frame: a header with its row and a filled call to action, a phone menu, a footer.
+  let frame: SiteImportImprovedLine | null = null
+  if (options.frame) {
+    const shell = new Built(options.frame)
+    const drawer = shell.order.find((id) => shell.node(id)?.componentId === 'muiDrawer') ?? null
+    const header = shell.order.find((id) => shell.node(id)?.componentId === 'muiAppBar' || shell.node(id)?.props?.['component'] === 'header') ?? null
+    const footer = shell.order.find((id) => shell.node(id)?.props?.['element'] === 'footer' || shell.node(id)?.props?.['component'] === 'footer') ?? null
+    const inHeader = header ? shell.under(header).filter((id) => !drawer || !shell.holds(drawer, id)) : []
+    const row = inHeader.some((id) => shell.node(id)?.props?.['component'] === 'nav')
+    const button = inHeader.some((id) => {
+      const node = shell.node(id)
+      return !!node && filled(node)
+    })
+    const links = footer ? shell.has(footer, (node) => hasDestination(node)) || shell.pieces.some((piece) => shell.holds(footer, piece.node)) : false
+    frame = line([row, button, !!drawer, links].filter(Boolean).length, 4)
+  }
+  // Phone: every row stacks, nothing wider or taller than a phone holds.
+  const nodes = built.order.map((id) => built.node(id)).filter((node): node is SiteImportFidelityNode => !!node)
+  const widths = (node: SiteImportFidelityNode) => [node.sx?.['width'], node.sx?.['minWidth'], node.props?.['width']].some((value) => {
+    const fixed = fixedHeightOf(typeof value === 'object' && value && 'xs' in (value as object) ? (value as Record<string, unknown>)['xs'] : value)
+    return fixed !== null && fixed > PHONE_PX
+  })
+  const tall = (node: SiteImportFidelityNode) => [node.props?.['height'], node.sx?.['height']].some((value) => {
+    const at = typeof value === 'object' && value && 'xs' in (value as object) ? (value as Record<string, unknown>)['xs'] : value
+    const fixed = fixedHeightOf(at)
+    return fixed !== null && fixed > PHONE_PICTURE_PX
+  })
+  const bars = nodes.filter((node) => (node.componentId === 'muiGrid' && crowdsPhone(node.props?.['size'])) || widths(node) || tall(node))
+  const phone = drawnSections.length ? line(drawnSections.length - Math.min(drawnSections.length, bars.length), drawnSections.length, bars.length === 0) : null
+
+  const design: SiteImportImprovedFidelity['design'] = { cta, rhythm, columns, framing, contrast, frame, phone }
+  const red = [
+    ...Object.entries(ledgerLines).filter(([, entry]) => !entry.ok).map(([name]) => name),
+    ...SITE_IMPORT_IMPROVED_LINES.filter((name) => design[name] && !design[name]?.ok),
+  ]
+  return { ledger: ledgerLines, design, holds: Object.values(ledgerLines).every((entry) => entry.ok), red }
 }
 
 /*------------------------------------------
