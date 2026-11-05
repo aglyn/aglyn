@@ -24299,6 +24299,28 @@
               "help": "Super staff only. Off by default for everyone: no."
             },
             {
+              "key": "release.release_ai_site_import_generative",
+              "label": "Early access: Bring my site: generative Improve it",
+              "kind": "select",
+              "initial": "{item.releaseFlags.release_ai_site_import_generative}",
+              "when": "staff.super",
+              "options": [
+                {
+                  "value": "",
+                  "label": "Inherit the plan"
+                },
+                {
+                  "value": "true",
+                  "label": "On"
+                },
+                {
+                  "value": "false",
+                  "label": "Off"
+                }
+              ],
+              "help": "Super staff only. Off by default for everyone: yes."
+            },
+            {
               "key": "release.release_crm_assist_whole_record",
               "label": "Early access: CRM assistance: whole record",
               "kind": "select",

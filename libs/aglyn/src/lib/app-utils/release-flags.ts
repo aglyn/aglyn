@@ -47,6 +47,7 @@ export type ReleaseFlagKey =
   | 'release_video_delivery'
   | 'release_ai_generative'
   | 'release_ai_site_import'
+  | 'release_ai_site_import_generative'
   | 'release_crm_assist_whole_record'
   | 'release_ai_site_inspiration'
   | 'release_ad_audience_sync'
@@ -249,6 +250,23 @@ const PLATFORM_RELEASE_FLAGS: readonly ReleaseFlagDefinition[] = [
       'Legal v18 import clause and the blocked-page reason, AGL-4029); turned ' +
       'off, the ownership and crawl doors answer 404.',
     defaultEnabled: true,
+  },
+  // Improve it, generative (AGL-4152): under Bring my site's Improve it with
+  // copy on, a page is redesigned from a ledger of what the source holds, with
+  // new sections and new copy. Off by default and off everywhere in production
+  // until its paid eval and the owner's read pass; a test organization gets it
+  // with the per-org override, `orgs/{orgId}.releaseFlags`. Off, Improve it is
+  // exactly what `release_ai_site_import` ships today.
+  {
+    key: 'release_ai_site_import_generative',
+    label: 'Bring my site: generative Improve it',
+    description:
+      'Under Improve it with copy on, each main page is redesigned from what ' +
+      'the source holds: pages reorganized, sections added, new copy written ' +
+      'and checked so that it invents no name, number, price or credential ' +
+      '(AGL-4152). OFF by default; on for one organization by its per-org ' +
+      'override while it is evaluated. Off, Improve it is unchanged.',
+    defaultEnabled: false,
   },
   // What CRM assistance hands the model provider, not whether it runs:
   // `release_ai_generative` opens the doors, this widens what a record sends
