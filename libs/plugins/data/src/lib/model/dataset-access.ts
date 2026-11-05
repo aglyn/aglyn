@@ -15,6 +15,7 @@
  * limitations under the License.
  */
 
+import { type OrgPermission, permissionRefusalText } from '@aglyn/aglyn/app-utils/org-permissions'
 import type { HostAccessRole } from '@aglyn/aglyn/foundation/definitions/organization.types'
 import type { PluginOrgPermissionDeclaration } from '@aglyn/aglyn/plugin-manager/plugin-entitlements'
 
@@ -110,3 +111,12 @@ export const DATA_PERMISSIONS: readonly PluginOrgPermissionDeclaration[] = [
     refines: DATA_VIEW_RECORDS_PERMISSION,
   },
 ]
+
+/**
+ * The refusal for one of these keys, naming it, from this table rather than the
+ * live catalog: a module can ask before the declarations have registered.
+ */
+export function dataPermissionRefusal(key: string): string {
+  const label = DATA_PERMISSIONS.find((permission) => permission.key === key)?.label
+  return label ? `Your role does not include "${label}" — ask an organization admin` : permissionRefusalText(key as OrgPermission)
+}

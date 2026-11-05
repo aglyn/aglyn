@@ -17,9 +17,7 @@
 
 import { oneSitePlacement, placementVerdict, stampedPlacementKey } from '@aglyn/aglyn/app-utils/site-placement'
 import { isLockdownActive } from '@aglyn/aglyn/app-utils/lockdown'
-import type { OrgPermission } from '@aglyn/aglyn/app-utils/org-permissions'
 import type { AglynOrgMember, HostAccessRole } from '@aglyn/aglyn/foundation/definitions/organization.types'
-import { memberHasOrgPermission } from './organizations'
 
 /**
  * May this member act on a workspace resource placed at `visibleTo` (AGL-4047),
@@ -34,15 +32,16 @@ export async function memberMayActOnPlaced(input: {
   uid: string
   member: Partial<AglynOrgMember>
   visibleTo: unknown
-  workspaceKey: string
+  /** The member's answer on the workspace key, which the caller has resolved. */
+  workspace: boolean
   siteKey: string
   sitePreset: Readonly<Partial<Record<HostAccessRole, boolean>>>
 }): Promise<boolean> {
-  const { firestore, orgId, uid, member, visibleTo, workspaceKey, siteKey, sitePreset } = input
+  const { firestore, orgId, uid, member, visibleTo, workspace, siteKey, sitePreset } = input
   return placementVerdict<Promise<boolean>>({
     member,
     visibleTo,
-    workspace: await memberHasOrgPermission(orgId, member, workspaceKey as OrgPermission),
+    workspace,
     site: async (hostId) => {
       const site = await firestore.collection('hosts').doc(hostId).get()
       if (!site.exists || site.get('orgId') !== orgId) return false

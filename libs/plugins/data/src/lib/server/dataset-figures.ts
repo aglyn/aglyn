@@ -15,9 +15,8 @@
  * limitations under the License.
  */
 
-import { permissionRefusalText } from '@aglyn/aglyn/app-utils/org-permissions'
 import { hostRoleFor, isOrgWideMember, memberCanSee } from '@aglyn/aglyn/app-utils/organizations'
-import { DATA_VIEW_RECORDS_PERMISSION } from '../model/dataset-access'
+import { DATA_VIEW_RECORDS_PERMISSION, dataPermissionRefusal } from '../model/dataset-access'
 import { visibleToHost } from '@aglyn/aglyn/app-utils/scope-tokens'
 import type { AglynOrgMember } from '@aglyn/aglyn/foundation/definitions/organization.types'
 import {
@@ -192,7 +191,7 @@ export function datasetFigureReaders(firestore: DatasetFigureFirestore): PluginF
       read: async (request) => {
         const db = firestore()
         const datasets = await visibleDatasets(db, request)
-        if (!datasets) return refused(403, permissionRefusalText(DATA_VIEW_RECORDS_PERMISSION))
+        if (!datasets) return refused(403, dataPermissionRefusal(DATA_VIEW_RECORDS_PERMISSION))
         const named = request.params['dataset']
         if (!named) {
           const counted = await Promise.all(
@@ -286,7 +285,7 @@ export function datasetFigureReaders(firestore: DatasetFigureFirestore): PluginF
       read: async (request) => {
         const db = firestore()
         const datasets = await visibleDatasets(db, request)
-        if (!datasets) return refused(403, permissionRefusalText(DATA_VIEW_RECORDS_PERMISSION))
+        if (!datasets) return refused(403, dataPermissionRefusal(DATA_VIEW_RECORDS_PERMISSION))
         const named = request.params['dataset'] ?? ''
         const dataset = datasets.find((entry) => entry.id === named || entry.name.toLowerCase() === named.toLowerCase())
         if (!dataset) return refused(404, 'That dataset is not one you can read here')

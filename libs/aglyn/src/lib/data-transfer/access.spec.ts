@@ -52,6 +52,9 @@ describe('transfer access (AGL-3546)', () => {
   })
 
   it('exports with membership alone for a resource every member may read', () => {
+    // `readPermissionOnly` (AGL-4047): taking the key from someone who may write the records stops the export too.
+    expect(transferAccessPermissions('export', { readPermission: 'data.export', readPermissionOnly: true })).toEqual(['data.export'])
+    expect(transferAccessPermissions('export', { readPermission: 'data.export' })).toEqual(['data.export', 'data.manage'])
     expect(transferAccessPermissions('export', { readableByMembers: true })).toEqual([])
     expect(transferAccessAllowed('export', { readableByMembers: true }, holding())).toBe(true)
     expect(transferAccessAllowed('import', { readableByMembers: true }, holding())).toBe(false)

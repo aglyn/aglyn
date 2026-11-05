@@ -37,6 +37,48 @@ const LEGACY = member({ role: 'editor' })
 
 const base = { label: 'Dataset', exists: true }
 
+/*
+ * A site-only holder of "Delete workspace records" (AGL-4047). Their real tokens,
+ * `['org', 'host:x']`, reach whatever the workspace shares, and `hostId` is a hint.
+ * Measured on the code before this: with no hint both shared placements answered
+ * null, and the route deleted the dataset and every record under it.
+ */
+const SITE_ONLY_HOLDER = member({
+  role: 'viewer',
+  allHosts: false,
+  hostAccess: { 'client-1': 'editor' },
+  scopeTokens: ['org', 'host:client-1'],
+})
+const SHARED_REFUSAL = 'This dataset is shared beyond one site, so deleting it takes access to every site in the workspace.'
+
+describe('what the workspace shares is the workspace’s to delete (AGL-4047)', () => {
+  it.each([
+    ['every site', ['org']],
+    ['several sites', ['host:client-1', 'host:client-2']],
+  ])('%s: refused with no hint, and with one', (_placement, visibleTo) => {
+    const refused = { error: SHARED_REFUSAL, status: 403 }
+    expect(eraseScopeDenial({ ...base, visibleTo, member: SITE_ONLY_HOLDER, protectsShared: true })).toEqual(refused)
+    expect(eraseScopeDenial({ ...base, visibleTo, member: SITE_ONLY_HOLDER, protectsShared: true, fromHostId: 'client-1' })).toEqual(refused)
+  })
+
+  it('leaves a dataset placed on their own site to them', () => {
+    expect(eraseScopeDenial({ ...base, visibleTo: ['host:client-1'], member: SITE_ONLY_HOLDER, protectsShared: true })).toBeNull()
+  })
+
+  it('still answers 404 on one they cannot see', () => {
+    expect(eraseScopeDenial({ ...base, visibleTo: ['host:other'], member: SITE_ONLY_HOLDER, protectsShared: true })?.status).toBe(404)
+  })
+
+  it('leaves a member of the whole workspace as they were', () => {
+    expect(eraseScopeDenial({ ...base, visibleTo: ['org'], member: ORG_EDITOR, protectsShared: true })).toBeNull()
+    expect(eraseScopeDenial({ ...base, visibleTo: ['host:a', 'host:b'], member: OWNER, protectsShared: true })).toBeNull()
+  })
+
+  it('touches no other kind', () => {
+    expect(eraseScopeDenial({ label: 'List', exists: true, visibleTo: ['org'], member: SITE_ONLY_HOLDER })).toBeNull()
+  })
+})
+
 describe('eraseScopeDenial (AGL-1046)', () => {
   describe('the boundary', () => {
     it('stops a collaborator erasing a dataset they cannot even read', () => {

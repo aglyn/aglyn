@@ -16,6 +16,7 @@
  */
 
 import type { AglynOrgMember } from '@aglyn/aglyn/foundation/definitions/organization.types'
+import { memberHasOrgPermission } from '@aglyn/tenant-data-admin'
 import { memberMayActOnPlaced, placedRefusalPermission } from '@aglyn/tenant-data-admin/server/placement-access'
 import {
   DATA_ERASE_PERMISSION,
@@ -37,7 +38,7 @@ export function datasetRefusalPermission(act: keyof typeof ACTS, visibleTo: unkn
 }
 
 /** May this member write or delete a dataset placed at `visibleTo`? The routes' `canWriteDatasetOn`. */
-export function memberMayActOnDataset(input: {
+export async function memberMayActOnDataset(input: {
   firestore: FirebaseFirestore.Firestore
   orgId: string
   uid: string
@@ -46,5 +47,11 @@ export function memberMayActOnDataset(input: {
   act: keyof typeof ACTS
 }): Promise<boolean> {
   const { act, ...rest } = input
-  return memberMayActOnPlaced({ ...rest, ...ACTS[act], sitePreset: DATA_SITE_ROLE_PRESET })
+  const { workspaceKey, siteKey } = ACTS[act]
+  return memberMayActOnPlaced({
+    ...rest,
+    workspace: await memberHasOrgPermission(input.orgId, input.member, workspaceKey as never),
+    siteKey,
+    sitePreset: DATA_SITE_ROLE_PRESET,
+  })
 }

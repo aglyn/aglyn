@@ -76,6 +76,10 @@ describe('transfer resources', () => {
   it('refuses an empty read permission, and two answers to who may export (AGL-3546)', () => {
     expect(transferResourceProblems({ ...people, readPermission: 'crm.view' })).toEqual([])
     expect(transferResourceProblems({ ...people, readPermission: ' ' })).toEqual(['people names an empty read permission.'])
+    expect(transferResourceProblems({ ...people, readPermission: 'data.export', readPermissionOnly: true })).toEqual([])
+    expect(transferResourceProblems({ ...people, readPermissionOnly: true })).toEqual([
+      'people says "readPermissionOnly" and names no read permission.',
+    ])
     expect(transferResourceProblems({ ...people, readableByMembers: true })).toEqual([])
     expect(transferResourceProblems({ ...people, readableByMembers: 'yes' as never })).toEqual([
       'people says "readableByMembers" with something other than true or false.',

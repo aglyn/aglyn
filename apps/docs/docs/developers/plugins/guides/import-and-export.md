@@ -82,9 +82,17 @@ flickering away.
     collaborator only on a site they reach. Your `readPage` and `count` keep
     a scoped reader to their own records through `scopeTokens`.
   - `"readPermission": "<key>"` — whoever holds that permission (a key your
-    plugin declared, say) may export, beside **Manage data**.
+    plugin declared, say) may export, beside **Manage data**. Add
+    `"readPermissionOnly": true` for that key alone to decide, so taking it
+    away stops the export whoever may write the records. A dataset's records
+    are declared this way, with **Export data**.
   - Neither — **Manage data**, the same as importing. This is the default
     because a resource's records may be ones only managers read.
+- **Import** can answer per instance: register `importAccess` with the server
+  half when who may import depends on the instance, as a dataset's does on where
+  it is shared. It answers in place of **Manage data** on the workspace, every
+  transfer route asks it, and your surface passes the same answer to `can` as
+  `importAllowed` on the target.
 - **The plan** comes before either, when your resource declares a
   `"featureFlag"` (the flag your console surfaces are gated by): on a plan
   without it, `can` answers `false` for every intent your resource doesn't

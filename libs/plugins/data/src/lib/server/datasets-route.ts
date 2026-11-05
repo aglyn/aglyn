@@ -41,8 +41,8 @@ import {
   resolveOrgMembership,
 } from '@aglyn/tenant-data-admin'
 import { isRefusedIdToken } from '@aglyn/tenant-data-admin/server/id-token-refusal'
-import { permissionRefusalText } from '@aglyn/aglyn/app-utils/org-permissions'
 import { FieldPath, FieldValue, Timestamp } from 'firebase-admin/firestore'
+import { dataPermissionRefusal } from '../model/dataset-access'
 import { announceDatasetRecords as announceDatasetChange } from './announce-dataset-records'
 import { datasetRefusalPermission, memberMayActOnDataset } from './dataset-access.server'
 import { coerceDocumentValues, datasetIntegrityFields, datasetIntegrityUpdate, effectiveDatasetModel, validateDocument } from '../model/dataset-models'
@@ -93,7 +93,7 @@ const DATASETS_PERMISSION = 'data.manage'
 function datasetsPermissionRefusal(permission: string = DATASETS_PERMISSION): Response {
   return Response.json(
     {
-      error: permissionRefusalText(permission),
+      error: dataPermissionRefusal(permission),
       reason: 'permission',
       permission,
     },

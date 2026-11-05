@@ -154,8 +154,8 @@ describe('the Data card opens the transfer framework on the selected dataset', (
     mount(transfer)
     expect(textButton('Import')).toBeNull()
     expect(textButton('Export')).not.toBeNull()
-    expect(transfer.can).toHaveBeenCalledWith('import', { resource: 'data.dataset:ds-1', scope: 'org' })
-    expect(transfer.can).toHaveBeenCalledWith('export', { resource: 'data.dataset:ds-1', scope: 'org' })
+    expect(transfer.can).toHaveBeenCalledWith('import', expect.objectContaining({ resource: 'data.dataset:ds-1', scope: 'org' }))
+    expect(transfer.can).toHaveBeenCalledWith('export', expect.objectContaining({ resource: 'data.dataset:ds-1', scope: 'org' }))
   })
 
   it('offers neither while the answer is out, or to a member who may do neither', () => {

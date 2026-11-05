@@ -40,6 +40,7 @@ import {
   DATA_SITE_DELETE_PERMISSION,
   DATA_SITE_MANAGE_PERMISSION,
   DATA_VIEW_RECORDS_PERMISSION,
+  dataPermissionRefusal,
 } from '../model/dataset-access'
 
 /** What the doors read off a membership document. */
@@ -55,8 +56,8 @@ export const DATASETS_DELETE_PERMISSION: OrgPermission = DATA_ERASE_PERMISSION
 
 export const DATASETS_WRITE_REFUSAL = permissionRefusalText(DATASETS_WRITE_PERMISSION)
 export const DATASETS_DELETE_REFUSAL = permissionRefusalText(DATASETS_DELETE_PERMISSION)
-export const DATASETS_VIEW_RECORDS_REFUSAL = permissionRefusalText(DATA_VIEW_RECORDS_PERMISSION)
-export const DATASETS_EXPORT_REFUSAL = permissionRefusalText(DATA_EXPORT_PERMISSION)
+export const DATASETS_VIEW_RECORDS_REFUSAL = dataPermissionRefusal(DATA_VIEW_RECORDS_PERMISSION)
+export const DATASETS_EXPORT_REFUSAL = dataPermissionRefusal(DATA_EXPORT_PERMISSION)
 
 /**
  * A member's answer for a dataset key (AGL-4047), as the rules' `memberKeyOrOverride`
@@ -72,6 +73,8 @@ export function holdsDatasetPermission(member: DatasetWriter, permission: OrgPer
 
 /** What the signed-in member is known not to be able to do with a dataset, and why. */
 export interface DatasetAccessBlocked {
+  /** Whether these answers rest on the member's reads, rather than on their not having landed. */
+  known: boolean
   /** Making a new dataset: "Manage data". */
   creates: boolean
   /** Changing this dataset's schema or records, or importing into it. */
@@ -87,6 +90,7 @@ export interface DatasetAccessBlocked {
 }
 
 const NOTHING_BLOCKED: DatasetAccessBlocked = {
+  known: false,
   creates: false,
   writes: false,
   writesReason: DATASETS_WRITE_REFUSAL,
@@ -123,14 +127,15 @@ export function datasetAccessBlocked(
   })
   const beyond = deleteBeyondReach(seat, visibleTo)
   return {
+    known: true,
     creates: !holdsDatasetPermission(member, DATA_MANAGE_PERMISSION),
     writes: !writes,
-    writesReason: site ? permissionRefusalText(DATA_SITE_MANAGE_PERMISSION) : DATASETS_WRITE_REFUSAL,
+    writesReason: site ? dataPermissionRefusal(DATA_SITE_MANAGE_PERMISSION) : DATASETS_WRITE_REFUSAL,
     deletes: beyond || !deletes,
     deletesReason: beyond
       ? deleteBeyondReachRefusal('dataset')
       : site
-        ? permissionRefusalText(DATA_SITE_DELETE_PERMISSION)
+        ? dataPermissionRefusal(DATA_SITE_DELETE_PERMISSION)
         : DATASETS_DELETE_REFUSAL,
     records: !holdsDatasetPermission(member, DATA_VIEW_RECORDS_PERMISSION),
     exports: !holdsDatasetPermission(member, DATA_EXPORT_PERMISSION),

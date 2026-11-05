@@ -1225,7 +1225,12 @@ export function HostDatasetsCard(props: HostDatasetsCardProps) {
    */
   const transfer = useTransferLauncher()
   const transferTarget = selected?.$id
-    ? { resource: datasetTransferResourceKey(selected.$id), scope: 'org' as const, importAllowed: !blocked.writes }
+    ? {
+        resource: datasetTransferResourceKey(selected.$id),
+        scope: 'org' as const,
+        // This dataset's own answer once it is known; the workspace's until then.
+        ...(blocked.known ? { importAllowed: !blocked.writes } : {}),
+      }
     : null
   const canImport = Boolean(transfer && transferTarget && transfer.can('import', transferTarget))
   const canExport = Boolean(transfer && transferTarget && transfer.can('export', transferTarget))

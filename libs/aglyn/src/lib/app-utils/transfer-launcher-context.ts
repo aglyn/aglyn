@@ -131,7 +131,8 @@ export interface TransferLauncher {
    * permissions have answered. Importing needs "Manage data" (on the named
    * site, for a site's records); exporting needs only access to the
    * records — membership, and reaching the named site — unless the resource
-   * declares a `readPermission`. The routes stay the enforcement.
+   * declares a `readPermission`, or the target carries the resource's own
+   * `importAllowed`. The routes stay the enforcement.
    */
   can(action: TransferAction, target: TransferAccessTarget): boolean
   /**

@@ -223,7 +223,12 @@ A few consequences worth knowing:
   billing.
 - **Deleting is a workspace action.** A dataset shared with more than one site can't be
   deleted from a single site's Data page — narrow its sharing instead, or delete it from
-  the workspace Data page.
+  the workspace Data page. That takes access to every site: a member who reaches only some
+  sites can't delete a dataset shared beyond one site.
+- **A dataset on one site answers to that site.** Who may edit and delete a dataset shared
+  with one site alone follows that site's access, and who may read and export records each
+  have a permission of their own. See
+  [Dataset permissions](../../workspace-and-billing/teams-and-roles/custom-roles.md#dataset-permissions).
 - **Deleting a site deletes the datasets shared with it alone.** They go with the site,
   records and all, and the **Delete site** card lists them before you confirm. A dataset
   the site shares with other sites stays, and the site is removed from its sharing. See
