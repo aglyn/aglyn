@@ -824,7 +824,7 @@ function contactFormNodes(formId) {
     contactForm: {
       $id: 'contactForm',
       componentId: 'form',
-      pluginId: 'mui',
+      pluginId: 'forms',
       parentId: 'contactWrap',
       nodes: ['cf-name', 'cf-email', 'cf-message'],
       props: {

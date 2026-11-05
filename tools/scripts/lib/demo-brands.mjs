@@ -735,8 +735,8 @@ export const BRANDS = {
           totals: { itemsCents: 3200, shippingCents: 0, taxCents: 264, discountCents: 0, totalCents: 3464, feeCents: 96 },
         },
       ],
-      discounts: [{ id: 'seed-disc-1', name: 'Day-old 30%', type: 'automatic', percentOff: 30, active: true }],
-      coupons: [{ id: 'seed-coupon-1', code: 'WELCOME15', percentOff: 15, active: true, redemptions: 3 }],
+      discounts: [{ id: 'seed-disc-1', name: 'Day-old 30%', kind: 'percent', valuePct: 30, enabled: true }],
+      coupons: [{ id: 'WELCOME15', percentOff: 15, enabled: true, redemptions: 3 }],
       giftCards: [{ id: 'seed-gift-1', code: 'GIFT-DEMO-0001', balanceCents: 5000, initialCents: 5000, active: true }],
       reviews: [
         {
@@ -767,7 +767,7 @@ export const BRANDS = {
         button: 'See this week’s bakes',
       },
       overlays: [
-        { id: 'seed-overlay-bar', name: 'Pre-order bar', kind: 'bar', bar: { text: 'Holiday pre-orders close Friday', link: '/order' }, enabled: true },
+        { id: 'seed-overlay-bar', name: 'Pre-order bar', kind: 'bar', bar: { text: 'Holiday pre-orders close Friday', href: '/order' }, enabled: true },
       ],
       experiments: [
         {
@@ -1004,7 +1004,7 @@ export const BRANDS = {
         button: 'Add to calendar',
       },
       overlays: [
-        { id: 'seed-overlay-bar', name: 'Accepting patients bar', kind: 'bar', bar: { text: 'Now accepting new patients — same-week openings', link: '/book' }, enabled: true },
+        { id: 'seed-overlay-bar', name: 'Accepting patients bar', kind: 'bar', bar: { text: 'Now accepting new patients — same-week openings', href: '/book' }, enabled: true },
       ],
       experiments: [],
     },
@@ -1432,8 +1432,8 @@ export const BRANDS = {
           totals: { itemsCents: 150000, shippingCents: 0, taxCents: 12375, discountCents: 7500, totalCents: 154875, feeCents: 4200 },
         },
       ],
-      discounts: [{ id: 'seed-disc-1', name: 'Weekday catering 5%', type: 'automatic', percentOff: 5, active: true }],
-      coupons: [{ id: 'seed-coupon-1', code: 'PATIO10', percentOff: 10, active: true, redemptions: 11 }],
+      discounts: [{ id: 'seed-disc-1', name: 'Weekday catering 5%', kind: 'percent', valuePct: 5, enabled: true }],
+      coupons: [{ id: 'PATIO10', percentOff: 10, enabled: true, redemptions: 11 }],
       giftCards: [{ id: 'seed-gift-1', code: 'GIFT-CV-0042', balanceCents: 7500, initialCents: 10000, active: true }],
       reviews: [
         {
@@ -1448,30 +1448,38 @@ export const BRANDS = {
     },
     reservations: {
       units: [
-        { id: 'seed-unit-1', name: 'Patio table (up to 6)', nightlyRateCents: 0, depositCents: 0 },
-        { id: 'seed-unit-2', name: 'Chef’s counter (2)', nightlyRateCents: 0, depositCents: 2500 },
-        { id: 'seed-unit-3', name: 'Back room (up to 24)', nightlyRateCents: 0, depositCents: 20000 },
+        { id: 'seed-unit-1', name: 'Patio table', capacity: 6, units: 1, nightlyRateUsd: 0, minNights: 1 },
+        { id: 'seed-unit-2', name: 'Chef’s counter', capacity: 2, units: 1, nightlyRateUsd: 25, depositPct: 100, minNights: 1 },
+        { id: 'seed-unit-3', name: 'Back room', capacity: 24, units: 1, nightlyRateUsd: 200, depositPct: 100, minNights: 1 },
       ],
       bookings: [
         {
           id: 'seed-resv-1',
-          unitId: 'seed-unit-3',
-          email: 'privateevent@example.com',
-          startDay: '2026-09-12',
-          endDay: '2026-09-12',
+          resourceId: 'seed-unit-3',
+          guestName: 'Private event',
+          guestEmail: 'privateevent@example.com',
+          guests: 18,
+          checkInDayMs: Date.UTC(2026, 8, 12),
+          checkOutDayMs: Date.UTC(2026, 8, 13),
           nights: 1,
           status: 'confirmed',
           totalCents: 20000,
+          depositCents: 20000,
+          paidCents: 20000,
         },
         {
           id: 'seed-resv-2',
-          unitId: 'seed-unit-2',
-          email: 'guest@example.com',
-          startDay: '2026-09-05',
-          endDay: '2026-09-05',
+          resourceId: 'seed-unit-2',
+          guestName: 'Counter guest',
+          guestEmail: 'guest@example.com',
+          guests: 2,
+          checkInDayMs: Date.UTC(2026, 8, 5),
+          checkOutDayMs: Date.UTC(2026, 8, 6),
           nights: 1,
           status: 'confirmed',
           totalCents: 2500,
+          depositCents: 2500,
+          paidCents: 2500,
         },
       ],
     },
@@ -1492,8 +1500,8 @@ export const BRANDS = {
         button: 'View the menu',
       },
       overlays: [
-        { id: 'seed-overlay-bar', name: 'Taco Tuesday bar', kind: 'bar', bar: { text: 'Taco Tuesday — $3 suadero all night', link: '/menu' }, enabled: true },
-        { id: 'seed-overlay-popup', name: 'Catering enquiry popup', kind: 'popup', popup: { title: 'Feeding a crowd?', body: 'Taquiza packages from 20 guests.' }, enabled: true, frequency: 'oncePerVisitor' },
+        { id: 'seed-overlay-bar', name: 'Taco Tuesday bar', kind: 'bar', bar: { text: 'Taco Tuesday — $3 suadero all night', href: '/menu' }, enabled: true },
+        { id: 'seed-overlay-popup', name: 'Catering enquiry popup', kind: 'popup', popup: { headline: 'Feeding a crowd?', body: 'Taquiza packages from 20 guests.' }, enabled: true, frequency: 'oncePerVisitor' },
       ],
       experiments: [
         {
@@ -1763,8 +1771,8 @@ export const BRANDS = {
           totals: { itemsCents: 14900, shippingCents: 0, taxCents: 1229, discountCents: 0, totalCents: 16129, feeCents: 498 },
         },
       ],
-      discounts: [{ id: 'seed-disc-1', name: 'Annual prepay 15%', type: 'automatic', percentOff: 15, active: true }],
-      coupons: [{ id: 'seed-coupon-1', code: 'BRINGAFRIEND', percentOff: 50, active: true, redemptions: 7 }],
+      discounts: [{ id: 'seed-disc-1', name: 'Annual prepay 15%', kind: 'percent', valuePct: 15, enabled: true }],
+      coupons: [{ id: 'BRINGAFRIEND', percentOff: 50, enabled: true, redemptions: 7 }],
       giftCards: [],
       reviews: [
         {
@@ -1795,7 +1803,7 @@ export const BRANDS = {
         button: 'Book the screen',
       },
       overlays: [
-        { id: 'seed-overlay-popup', name: 'Trial popup', kind: 'popup', popup: { title: 'Two weeks, free', body: 'Every class, no card up front.' }, enabled: true, frequency: 'oncePerVisitor' },
+        { id: 'seed-overlay-popup', name: 'Trial popup', kind: 'popup', popup: { headline: 'Two weeks, free', body: 'Every class, no card up front.' }, enabled: true, frequency: 'oncePerVisitor' },
       ],
       experiments: [
         {
