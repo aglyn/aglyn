@@ -34,6 +34,7 @@ import {
 } from './ai-layout-copy'
 import {
   AI_LAYOUT_GROUP_KINDS,
+  AI_LAYOUT_MAX_COLS,
   AI_LAYOUT_MAX_ITEMS,
   type AiLayoutBand,
   type AiLayoutBlock,
@@ -4335,6 +4336,7 @@ function chip(scope: SectionScope, words: string, role: string): string {
 /** A strip of logos of a page brought in: each picture at one height, or each short line as a label on an outlined surface. */
 function logos(scope: SectionScope, block: AiLayoutBlock): string | null {
   const tree = scope.page.tree
+  if (block.variant === 'pictures') return gallery(scope, block)
   const ids = (block.items ?? []).flatMap((item): string[] => {
     if (item.picture) {
       scope.page.images += 1
@@ -4364,6 +4366,37 @@ function logos(scope: SectionScope, block: AiLayoutBlock): string | null {
     noted(scope, ids),
     'logos',
   )
+}
+
+/**
+ * A gallery of a page brought in (AGL-4152): its photos in the source's
+ * columns, two to a row on a tablet and one on a phone, each cropped to one
+ * shape so the rows line up: their own where they all share one, else the
+ * source's crop where all share one, else 4:3.
+ */
+function gallery(scope: SectionScope, block: AiLayoutBlock): string | null {
+  const tree = scope.page.tree
+  const pictures = (block.items ?? []).flatMap((item) => (item.picture ? [item.picture] : []))
+  if (!pictures.length) return null
+  const columns = Math.max(1, Math.min(AI_LAYOUT_MAX_COLS, block.columns ?? 3, pictures.length))
+  const first = pictures[0]?.ratio
+  const alike = !!first && pictures.every((picture) => !!picture.ratio && Math.abs(picture.ratio / first - 1) <= 0.05)
+  const crops = new Set(pictures.map((picture) => (picture.fit?.cropped ? picture.fit.ratio : undefined)))
+  const shape = alike ? String(Math.round((first as number) * 10_000) / 10_000) : crops.size === 1 ? ([...crops][0] ?? '4 / 3') : '4 / 3'
+  const span = Math.max(1, Math.round(12 / columns))
+  const size = columns >= 3 ? `xs:12 sm:6 md:${span}` : `xs:12 md:${span}`
+  const cells = pictures.map((picture) => {
+    scope.page.images += 1
+    const image = tree.add(
+      'image',
+      { src: picture.src, ...(picture.alt ? { alt: picture.alt } : { decorative: true }), objectFit: 'cover', ...(scope.page.images > 1 ? { loading: 'lazy' } : {}) },
+      { aspectRatio: shape },
+      null,
+      'galleryPicture',
+    )
+    return tree.add('muiGrid', { size }, null, [image], 'galleryCell')
+  })
+  return tree.add('muiGrid', { container: true, spacing: '2' }, null, cells, 'gallery')
 }
 
 /**

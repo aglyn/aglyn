@@ -144,6 +144,8 @@ export interface SiteImportPageFidelity {
   widths: SiteImportFidelityCount
   /** The source's rows of two or more columns, set side by side on the page. */
   rows: SiteImportFidelityCount
+  /** The source's galleries (AGL-4152), each kept when every photo of it is drawn as a photo, cropped to fill, side by side. Absent on a page with none. */
+  galleries?: SiteImportFidelityCount
   /** Pictures and labels the source hides from a visitor, drawn all the same (AGL-4152); any at all is a miss. Absent when the read says of none. */
   concealed?: SiteImportFidelityCount
   /** The source's groups by kind. A group of lines that only share a shape (`text`) is drawn as its lines, and is not scored. */
@@ -1039,6 +1041,7 @@ export function siteImportFidelity(source: SiteImportFidelitySource, tree: SiteI
     tabs: ratioKept(tabs.source, tabs.built),
     pictures,
     ...(source.concealed ? { concealed: concealedScore(source, built) } : {}),
+    ...galleriesScore(source, built, placement),
     framing,
     icons: { ...ratioKept(icons.source, icons.built), lone: icons.lone },
     buttons: { ...ratioKept(buttons.source, buttons.built), unlinked: buttons.unlinked },
@@ -1173,6 +1176,28 @@ function picturesScore(source: SiteImportFidelitySource, built: Built, placement
   return ratioKept(refs.length, refs.filter((ref) => placement.of.has(ref)).length)
 }
 
+/**
+ * The source's galleries drawn as galleries (AGL-4152): every photo of one
+ * placed, each an Image cropped to fill its cell, in a row of columns. A photo
+ * drawn as a mark (fitted whole, as small as a logo) is a gallery lost.
+ */
+function galleriesScore(source: SiteImportFidelitySource, built: Built, placement: Placement): Pick<SiteImportPageFidelity, 'galleries'> {
+  const galleries = source.layout.sections.flatMap((section) => layoutNodes(section.nodes)).filter((node): node is SiteImportLayoutGroup => node.kind === 'group' && !!node.gallery)
+  if (!galleries.length) return {}
+  const drawn = galleries.filter((group) =>
+    group.items.every((item) =>
+      item.lines.every((ref) => {
+        if (source.blocks[ref]?.kind !== 'image') return true
+        const id = placement.of.get(ref)
+        const node = id ? built.node(id) : undefined
+        if (node?.componentId !== 'image' || node.props?.['objectFit'] === 'contain' || node.props?.['width'] === 'auto') return false
+        return built.ancestry(id as string).some((at) => setsSideBySide(built.node(at)))
+      }),
+    ),
+  )
+  return { galleries: ratioKept(galleries.length, drawn.length) }
+}
+
 /** What a visitor of the source cannot see and a visitor of the build can (AGL-4152): a hidden picture, or a line that is only a screen reader's label. */
 function concealedScore(source: SiteImportFidelitySource, built: Built): SiteImportFidelityCount {
   const pictures = new Set(source.concealed?.pictures ?? [])
@@ -1273,7 +1298,8 @@ function framingScore(source: SiteImportFidelitySource, built: Built, placement:
       if (node.kind === 'picture' && node.line !== behind) score(node.line, node.fit)
       // A film's poster is framed as any picture is (AGL-4140).
       if (node.kind === 'video' && node.poster !== undefined && node.poster !== behind) score(node.poster, node.fit)
-      if (node.kind === 'group') for (const item of node.items) if (item.image !== undefined && item.image !== behind) score(item.image, item.imageFit)
+      // A gallery crops its photos to one shape so its rows line up (AGL-4152): `galleries` holds it.
+      if (node.kind === 'group' && !node.gallery) for (const item of node.items) if (item.image !== undefined && item.image !== behind) score(item.image, item.imageFit)
     }
   }
   return ratioKept(measured, kept)
@@ -1310,6 +1336,7 @@ function pageMeasures(report: Omit<SiteImportPageFidelity, 'score' | 'lowest'>):
     ['forms', report.forms],
     ['videos', report.videos],
     ...(report.concealed ? [['concealed', report.concealed] as [string, SiteImportFidelityCount]] : []),
+    ...(report.galleries ? [['galleries', report.galleries] as [string, SiteImportFidelityCount]] : []),
   ]
 }
 
