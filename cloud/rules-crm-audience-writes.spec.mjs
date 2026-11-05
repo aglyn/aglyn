@@ -35,13 +35,15 @@
  *   - the two keys are independent;
  *   - everything that is not the role stays: verified, not suspended, the
  *     reach, the scope, the CRM suite, and each collection's field limits.
+ *   - no client update changes where a deal stands, or a contact's stage:
+ *     those are the routes', which ask "Move contacts and deals between stages".
  *
  *   npx firebase emulators:start --only firestore --project aglyn-main
  *   node cloud/rules-crm-audience-writes.spec.mjs
  */
 import { readFileSync } from 'node:fs'
 import { assertFails, assertSucceeds, initializeTestEnvironment } from '@firebase/rules-unit-testing'
-import { deleteDoc, doc, setDoc, updateDoc } from 'firebase/firestore'
+import { deleteDoc, deleteField, doc, setDoc, updateDoc } from 'firebase/firestore'
 
 const ORG = 'org-crm-audience-keys'
 const NO_SUITE_ORG = 'org-crm-audience-free'
@@ -177,6 +179,17 @@ const seed = (db, ...path) => {
 
 const SITE_RECORD = { name: 'Seed', visibleTo: [SITE_TOKEN] }
 const OTHER_RECORD = { name: 'Elsewhere', visibleTo: [OTHER_TOKEN] }
+/** A deal as a create leaves it, in a stage of a pipeline. */
+const DEAL_IN_A_STAGE = {
+  title: 'Seed',
+  visibleTo: [SITE_TOKEN],
+  pipelineId: 'default',
+  stageId: 'qualification',
+  status: 'open',
+  stageChangedAtMs: 1_700_000_000_000,
+  probability: 10,
+  forecastCategory: 'pipeline',
+}
 
 await env.withSecurityRulesDisabled(async (context) => {
   const db = context.firestore()
@@ -198,6 +211,19 @@ await env.withSecurityRulesDisabled(async (context) => {
     writeTo: [OTHER_TOKEN],
   })
   await setDoc(seed(db, 'orgs', ORG, 'deals', 'deal-site'), { title: 'Seed', visibleTo: [SITE_TOKEN] })
+  await setDoc(seed(db, 'orgs', ORG, 'deals', 'deal-staged'), DEAL_IN_A_STAGE)
+  await setDoc(seed(db, 'orgs', ORG, 'deals', 'deal-lost'), {
+    ...DEAL_IN_A_STAGE,
+    stageId: 'lost',
+    status: 'lost',
+    closedAtMs: 1_700_000_100_000,
+    lostReason: 'Went elsewhere',
+  })
+  await setDoc(seed(db, 'orgs', ORG, 'contacts', 'contact-site'), {
+    email: 'seed@example.com',
+    visibleTo: [SITE_TOKEN],
+    facets: { 'group-site': { lifecycleStage: 'lead' } },
+  })
   await setDoc(seed(db, 'orgs', ORG, 'crmTasks', 'task-site'), { title: 'Seed', visibleTo: [SITE_TOKEN] })
   await setDoc(seed(db, 'orgs', ORG, 'leads', 'lead-site'), { name: 'Seed', visibleTo: [SITE_TOKEN], status: 'new' })
   await setDoc(seed(db, 'orgs', ORG, 'emailCampaigns', 'campaign-site'), SITE_RECORD)
@@ -345,6 +371,81 @@ await deny('an owner cannot attach more files to a deal than the ceiling', () =>
 await deny('a viewer granted "Manage data" still creates no contact, which is the server’s', () =>
   setDoc(ref('viewerGrantedData', 'contacts', 'c-1'), { email: 'a@example.com', visibleTo: [ORG_TOKEN] }),
 )
+
+// ── Where a deal stands is the server's once it exists (AGL-4047) ──────────
+// Everyone who may edit a deal is refused each field the stage route writes,
+// alone and riding along with an edit they are allowed. The route's Admin SDK
+// write passes no rule, so it is the one way these change.
+const STAGE_WRITERS_SCOPED = new Set(['collabEditor'])
+const STAGE_WRITERS = [
+  ['owner', 'the owner'],
+  ['admin', 'an admin'],
+  ['editor', 'an editor'],
+  ['viewerGrantedData', 'a viewer a custom role grants "Manage data"'],
+  ['viewerOverride', 'a viewer whose own override grants "Manage data"'],
+  ['collabEditor', 'a site collaborator'],
+]
+for (const [name, who] of STAGE_WRITERS) {
+  const staged = () => ref(name, 'deals', 'deal-staged')
+  await deny(`${who} cannot move a deal to another stage`, () => updateDoc(staged(), { stageId: 'negotiation' }))
+  await deny(`${who} cannot move a deal to another pipeline`, () => updateDoc(staged(), { pipelineId: 'wholesale' }))
+  await deny(`${who} cannot mark a deal won`, () => updateDoc(staged(), { status: 'won' }))
+  await deny(`${who} cannot stamp when a deal changed stage`, () => updateDoc(staged(), { stageChangedAtMs: 1 }))
+  await deny(`${who} cannot stamp when a deal closed`, () => updateDoc(staged(), { closedAtMs: 1 }))
+  await deny(`${who} cannot write a lost reason`, () => updateDoc(staged(), { lostReason: 'No budget' }))
+  await deny(`${who} cannot slip a stage in beside an edit`, () =>
+    updateDoc(staged(), { title: 'Renamed', stageId: 'negotiation' }),
+  )
+  await deny(`${who} cannot move a deal with the apps' merged write`, () =>
+    setDoc(staged(), { stageId: 'negotiation' }, { merge: true }),
+  )
+  await deny(`${who} cannot reopen a lost deal`, () =>
+    updateDoc(ref(name, 'deals', 'deal-lost'), { stageId: 'qualification', status: 'open' }),
+  )
+  await deny(`${who} cannot clear a lost reason`, () =>
+    updateDoc(ref(name, 'deals', 'deal-lost'), { lostReason: deleteField() }),
+  )
+
+  // What the console's drawer and products card, and the apps' edit sheet, write today.
+  await allow(`${who} still edits a deal's fields in a stage`, () =>
+    updateDoc(staged(), { title: `Edited by ${name}`, titleLower: 'edited', amountCents: 500, notes: 'Note', updatedAt: new Date() }),
+  )
+  await allow(`${who} still sets a deal's probability and forecast category`, () =>
+    updateDoc(staged(), { probability: 40, forecastCategory: 'best-case' }),
+  )
+  await allow(`${who} still clears a deal's probability`, () => updateDoc(staged(), { probability: deleteField() }))
+  await allow(`${who} still sets a deal's owner`, () => updateDoc(staged(), { ownerUid: uidOf(name) }))
+  await allow(`${who} still saves with the apps' merged write`, () =>
+    setDoc(staged(), { nextStep: 'Call', updatedAt: new Date() }, { merge: true }),
+  )
+  // A write that repeats the stage it holds changes nothing, so it is no move.
+  await allow(`${who} may save a deal repeating the stage it is in`, () =>
+    updateDoc(staged(), { title: 'Same stage', pipelineId: 'default', stageId: 'qualification', status: 'open' }),
+  )
+  await allow(`${who} still edits a closed deal`, () => updateDoc(ref(name, 'deals', 'deal-lost'), { notes: 'Later' }))
+
+  // A create still sets the first stage, as the drawer and the apps do.
+  const scope = STAGE_WRITERS_SCOPED.has(name) ? SITE_TOKEN : ORG_TOKEN
+  await allow(`${who} still creates a deal in its first stage`, () =>
+    creates(name, 'deals', { ...DEAL_IN_A_STAGE, title: 'New', visibleTo: [scope] }),
+  )
+}
+await deny('a member without "Manage data" cannot move a deal either', () =>
+  updateDoc(ref('viewer', 'deals', 'deal-staged'), { stageId: 'negotiation' }),
+)
+await deny('a member a custom role refuses "Manage data" cannot edit a deal in a stage', () =>
+  updateDoc(ref('editorRefusedData', 'deals', 'deal-staged'), { title: 'Refused' }),
+)
+await allow('staff keep their support write to a deal', () =>
+  updateDoc(doc(as('uid-ca-staff', { staff: true }), 'orgs', ORG, 'deals', 'deal-staged'), { stageId: 'qualification', notes: 'Support' }),
+)
+// A contact's stage and lifecycle live in its holder's facet, and the whole
+// document is already the server's: `crm/contact-stage` is the way they move.
+for (const [name, who] of STAGE_WRITERS) {
+  await deny(`${who} cannot write a contact's lifecycle stage`, () =>
+    updateDoc(ref(name, 'contacts', 'contact-site'), { 'facets.group-site.lifecycleStage': 'customer' }),
+  )
+}
 
 // Remove ONLY what this spec seeded.
 await env.withSecurityRulesDisabled(async (context) => {

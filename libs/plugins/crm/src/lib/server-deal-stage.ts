@@ -18,11 +18,13 @@
 /**
  * `POST /api/crm/deal-stage` — the one writer of a deal's stage (AGL-2598).
  *
- * ## Why a route, when the rules would let the browser do it
+ * ## Why a route, when a deal's other fields are written from the browser
  *
  * A deal's title, amount and owner are edited client-direct against the
- * Firestore rules, and nothing about a stage change needs a server to be
- * SAFE. What it needs a server for is to be HEARD: a move between stages, a
+ * Firestore rules. Its stage is not: the rules refuse a client update to the
+ * stage and the fields written with it (`dealStageUnchanged`, AGL-4047), so
+ * `crm.moveStages` below is a gate nothing gets around. And a move has to be
+ * HEARD: a move between stages, a
  * win and a loss are the three moments an automation wants — "when a deal is
  * won, email the owner", "when one reaches negotiation, file a task" — and a
  * workflow only fires on an event the tenant runtime emits. A stage written
