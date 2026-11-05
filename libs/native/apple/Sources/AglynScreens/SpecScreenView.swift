@@ -724,6 +724,7 @@ struct SpecScreenBody: View {
       }
       return
     }
+    notice = nil
     running = action.id
     let outcome = await model.run(action, in: scope)
     running = nil
@@ -811,6 +812,8 @@ struct SpecScreenBody: View {
 
   private func show(_ text: String, _ tone: AglynTone) {
     notice = (text, tone)
+    // A success reads and goes; a refusal or a warning has to be read, so it stays until dismissed or replaced.
+    if tone == .error || tone == .warning { return }
     let shown = text
     Task {
       try? await Task.sleep(nanoseconds: 4_000_000_000)
