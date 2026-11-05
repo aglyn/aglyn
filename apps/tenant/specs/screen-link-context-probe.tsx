@@ -29,14 +29,17 @@
  */
 
 import { ScreenLinkContext } from '@aglyn/aglyn/app-utils/screen-link-context-value'
+import { SiteContext } from '@aglyn/aglyn/app-utils/site-context'
 import { useContext } from 'react'
 
 export function AglynNodeRenderer() {
   const value = useContext(ScreenLinkContext)
+  const site = useContext(SiteContext)
   return (
     <div
       data-testid="probe"
       data-screens={JSON.stringify(value.screens ?? null)}
+      data-host={site?.hostId ?? ''}
     />
   )
 }

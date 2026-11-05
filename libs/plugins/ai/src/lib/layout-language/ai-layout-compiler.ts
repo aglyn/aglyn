@@ -2569,7 +2569,9 @@ function hero(
   const rest = flow.filter((block) => block.kind !== 'eyebrow' && block.kind !== 'heading')
   const lede = rest.filter((block) => block.kind !== 'button')
   const actions = rest.filter((block) => block.kind === 'button')
-  const headId = compileFlow(scope, top, 'full')
+  const words = compileFlow(scope, top, 'full')
+  // Kept as it is (AGL-4152), its heading runs as wide as its source holds it.
+  const headId = words && scope.measure ? tree.add('muiBox', null, { maxWidth: wordsMeasure(scope, '100%') }, [words], 'measure') : words
   const ledeId = compileFlow(scope, lede, 'half')
   const actionsId = compileFlow(scope, actions, 'half')
   const under =

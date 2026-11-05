@@ -198,6 +198,16 @@ export const SITE_IMPORT_REPLAY_HOME_ANSWER: Readonly<Record<string, unknown>> =
   ],
 }
 
+/**
+ * The design answer the 11/5 live import took for aglyn.com's Home (AGL-4152):
+ * the editorial hero at the start, on a page whose source centers its words
+ * over a picture under them. Keep my site holds the source's own opening
+ * whatever this says; Improve it draws what it asks.
+ */
+export const SITE_IMPORT_REPLAY_HOME_ANSWER_1105: Readonly<Record<string, unknown>> = {
+  sections: [{ hero: 'editorial', band: 'source', align: 'start', groups: [] }],
+}
+
 /** The recorded home pages a header and footer is drawn from. */
 export type SiteImportReplayHome = Extract<SiteLayoutPageName, 'home' | 'pottery'>
 

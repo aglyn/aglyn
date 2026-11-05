@@ -2997,6 +2997,23 @@ built page against what the reader read of its source.
 - **The bar.** `SITE_IMPORT_FIDELITY_THRESHOLD`, 0.9 on structure, with words at
   exactly 1. Today's recorded pages and frames score 1.00; the same pages built
   as 10/29 built them score 0.
+- **Keep my site's look (AGL-4152).** Scored with `finish: 'keep'` and a theme
+  (`siteImportFidelityThemeOf`, read per button style, the last variant first),
+  the page is held whole on these too, and each must have failed the 11/5 live
+  Home it scored 1.00 past. `align` holds the pictured opening as well: centered
+  words moved to the start fail. `ground` adds order: a section on its page's
+  ground (within ΔE 0.02) draws on the theme's, a lighter one lighter, so two
+  near whites swapped no longer read alike by ΔE. `darkGround` is new: drawn in
+  the theme's dark scheme against the source's dark fill where its stylesheets
+  say one (`section.darkBackground`, the reader's dark pass), else the same order
+  against the dark page. `buttons.fill` measures the fill whatever the source's
+  label could read on it, and not one that sits on the page like the page.
+  `buttons.case` asks each style its own (`buttonCase`, `outlinedCase`,
+  `textCase`), and a link drawn as a text button joins `buttons`. `buttons.outline`
+  is new: no fill of its own where the source sets none, words and border within
+  ΔE 0.1 of the source's color (`SITE_IMPORT_OUTLINE_DELTA`; a grey or black is
+  the theme's ink). Improve it's score adds none of these and reads a band by its
+  color alone (`section.absoluteBand`), as the design answer's text does.
 - **Reported, not scored, by name.** An icon standing alone in the source,
   which the build leaves out (a film's play mark is its facade's own, read
   with the film, AGL-4140); a button that goes nowhere a page can send a visitor
