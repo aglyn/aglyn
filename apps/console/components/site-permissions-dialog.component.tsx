@@ -153,7 +153,7 @@ export function SitePermissionsDialog(props: {
             source: choice === 'inherit' ? `from the ${roleWord} site access` : 'set for this site',
           },
           inheritHint: `Inherit: ${fallback ? 'allowed' : 'not allowed'} for ${roleWord} site access`,
-          lockedReason: canManage ? undefined : permissionRefusalText('members.manage'),
+          lockedReason: canManage ? undefined : permissionRefusalText('site.manage'),
         }
       }),
     }),

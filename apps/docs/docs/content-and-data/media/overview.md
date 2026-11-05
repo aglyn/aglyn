@@ -85,13 +85,18 @@ to the assets [shared with that site](#who-an-asset-is-shared-with).
   - **Copy URL** — public files only. **Copy temporary link** replaces it on a private
     file, because a private file has no permanent URL to copy.
   - **Make private** / **Publish file** — only in the organization library, and only for
-    members with organization-wide access.
+    members with organization-wide access who hold the **Edit the workspace media library**
+    permission. **Copy temporary link** doesn't ask for that permission.
   - **Download file** — always, public or private. See
     [Download the original file](#download-file).
   - **Replace file** — for any file, not only images. The new file has to be the same
     kind as the one it replaces (a picture for a picture, a video for a video, a
     document for a document), because every page that uses it keeps the same link.
   - **Details** and **Delete**.
+- In the organization library, renaming, moving, tagging and deleting need the **Edit the
+  workspace media library** permission, which workspace owners, admins and editors hold by
+  default. Without it those controls are switched off, each naming the permission, and you
+  can still open a file's details and download it.
 
   **Copy URL** gives you a full absolute URL on the site's own domain, ready to paste
   anywhere — including outside Aglyn. The whole menu is hidden when the library opens as

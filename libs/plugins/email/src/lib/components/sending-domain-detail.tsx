@@ -316,9 +316,12 @@ export function SendingDomainDetail(props: SendingDomainDetailProps) {
   })
   const missing = new Set(record?.lastMissing ?? [])
   const canManage = identity?.canManage === true
+  // The domains route's key (AGL-4047): Remove and Request records go there.
+  // `canManage` is the identity route's, for what this site sends as.
+  const canManageDomains = identity?.canManageDomains === true
   const isSelected = identity?.selected === domain
 
-  const actions: RowActionsMenuItem[] = canManage
+  const actions: RowActionsMenuItem[] = canManageDomains
     ? [
         {
           key: 'release',
@@ -436,7 +439,7 @@ export function SendingDomainDetail(props: SendingDomainDetailProps) {
 
           <Divider />
           <Stack useFlexGap direction="row" spacing={1} sx={{ flexWrap: 'wrap', gap: 1 }}>
-            {record.status === 'requested' && canManage ? (
+            {record.status === 'requested' && canManageDomains ? (
               <Button
                 variant="contained"
                 disabled={busy}

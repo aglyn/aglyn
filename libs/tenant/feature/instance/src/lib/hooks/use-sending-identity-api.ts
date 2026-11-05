@@ -191,7 +191,10 @@ export interface SendingIdentityView {
      */
     lastIssueError?: string | null
   }[]
+  /** "Manage workspace settings": what this site sends as, and its senders. */
   canManage: boolean
+  /** "Sending domains": adding, checking and removing a domain (AGL-4047). */
+  canManageDomains: boolean
   entitled: boolean
   /**
    * The OFFER of a platform sending domain — never the fact of having one,

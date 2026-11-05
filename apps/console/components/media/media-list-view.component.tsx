@@ -58,6 +58,10 @@ export interface MediaRowHandlers {
   onReplace?: () => void
   onDetails?: () => void
   onDelete?: () => void
+  /** Make private and Delete stay off while the reader's permissions load. */
+  writeHeld?: boolean
+  /** Why Make private and Delete are switched off for this reader, when they are. */
+  writeRefusal?: string
 }
 
 /**
@@ -70,6 +74,10 @@ export function mediaRowMenuItems(
   handlers: MediaRowHandlers,
 ): RowActionsMenuItem[] {
   const items: RowActionsMenuItem[] = []
+  const off = {
+    disabled: Boolean(handlers.writeHeld || handlers.writeRefusal),
+    disabledReason: handlers.writeRefusal,
+  }
   if (handlers.onCopyUrl && !media.private) {
     items.push({ key: 'copy-url', label: 'Copy URL', onClick: handlers.onCopyUrl })
   }
@@ -85,6 +93,7 @@ export function mediaRowMenuItems(
     items.push({
       key: 'private',
       label: media.private ? 'Publish file' : 'Make private',
+      ...off,
       onClick: () => setPrivate(!media.private),
     })
   }
@@ -102,6 +111,7 @@ export function mediaRowMenuItems(
       key: 'delete',
       label: 'Delete',
       destructive: true,
+      ...off,
       onClick: handlers.onDelete,
     })
   }

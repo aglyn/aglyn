@@ -100,6 +100,8 @@ const SITES = [
 
 /** Whether the reader holds the organization admin role, per case. */
 let admin = true
+/** "Organization settings" when it differs from "Sending domains", per case. */
+let settingsKey: boolean | null = null
 const requests: Array<{ line: string; body?: Record<string, unknown> }> = []
 
 const identityFor = (hostId: string) => ({
@@ -119,12 +121,14 @@ const identityFor = (hostId: string) => ({
       lastCheckedAtMs: 1,
     },
   ],
-  canManage: admin,
+  canManage: settingsKey ?? admin,
+  canManageDomains: admin,
   entitled: true,
 })
 
 beforeEach(() => {
   admin = true
+  settingsKey = null
   pushed.length = 0
   requests.length = 0
   confirmed.length = 0
@@ -234,6 +238,16 @@ describe('a domain opened on the organization’s page', () => {
     // An editor is offered no control the route would refuse.
     expect(screen.queryByText('Stop sending as this domain')).toBeNull()
     expect(screen.queryByText('Remove domain')).toBeNull()
+  })
+
+  it('asks "Sending domains" of Remove, and "Organization settings" of send-as', async () => {
+    settingsKey = false
+    await mount()
+
+    expect(screen.getByText('Publish these records')).toBeTruthy()
+    expect(screen.getByText('Remove domain')).toBeTruthy()
+    expect(screen.queryByText('Stop sending as this domain')).toBeNull()
+    expect(screen.queryByText('Send as this domain')).toBeNull()
   })
 
   it('moves the site an admin picks onto the domain', async () => {
