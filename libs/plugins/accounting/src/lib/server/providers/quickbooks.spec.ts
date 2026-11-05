@@ -200,11 +200,46 @@ describe('QuickBooks Online adapter', () => {
       { match: /query.*Aglyn(%20|\+)sales/, body: { QueryResponse: { Item: [{ Id: '20', SyncToken: '3', IncomeAccountRef: { value: '1' } }] } } },
       { match: /query.*Aglyn(%20|\+)shipping/, body: { QueryResponse: {} } },
       { method: 'POST', match: '/item', body: { Item: { Id: '21' } } },
+      { match: '/companyinfo/', body: { CompanyInfo: { Country: 'US' } } },
     ])
-    await expect(adapter.prepare(session, { income: '79' }, {})).resolves.toEqual({ saleItemId: '20', shippingItemId: '21' })
+    await expect(adapter.prepare(session, { income: '79' }, {})).resolves.toEqual({
+      saleItemId: '20',
+      shippingItemId: '21',
+      companyCountry: 'US',
+    })
     const posts = calls.filter((call) => call.method === 'POST').map((call) => JSON.parse(call.body ?? '{}'))
     expect(posts[0]).toMatchObject({ Id: '20', SyncToken: '3', sparse: true, IncomeAccountRef: { value: '79' } })
     expect(posts[1]).toMatchObject({ Name: 'Aglyn shipping', Type: 'Service', IncomeAccountRef: { value: '79' } })
+  })
+
+  it('marks a US company lines TAX or NON and puts the tax code on the transaction', async () => {
+    const { adapter, calls } = provider([{ method: 'POST', match: '/salesreceipt', body: { SalesReceipt: { Id: '145' } } }])
+    const doc = buildSaleDoc(order, { ...mapping, taxCodes: { ...mapping.taxCodes, taxed: '2' } })
+    await adapter.createSalesReceipt(session, doc, {
+      idempotencyKey: 'k',
+      customerId: null,
+      extras: { saleItemId: '20', shippingItemId: '21', companyCountry: 'US' },
+      homeCurrency: 'USD',
+    })
+    const body = JSON.parse(calls[0].body ?? '{}')
+    expect(body.GlobalTaxCalculation).toBeUndefined()
+    expect(body.TxnTaxDetail).toEqual({ TxnTaxCodeRef: { value: '2' }, TotalTax: 1.6 })
+    expect(body.Line[0].SalesItemLineDetail.TaxCodeRef).toEqual({ value: 'TAX' })
+  })
+
+  it('names the tax code on the line for a company outside the US', async () => {
+    const { adapter, calls } = provider([{ method: 'POST', match: '/salesreceipt', body: { SalesReceipt: { Id: '145' } } }])
+    const doc = buildSaleDoc(order, { ...mapping, taxCodes: { ...mapping.taxCodes, taxed: '2' } })
+    await adapter.createSalesReceipt(session, doc, {
+      idempotencyKey: 'k',
+      customerId: null,
+      extras: { saleItemId: '20', shippingItemId: '21', companyCountry: 'CA' },
+      homeCurrency: 'CAD',
+    })
+    const body = JSON.parse(calls[0].body ?? '{}')
+    expect(body.GlobalTaxCalculation).toBe('TaxExcluded')
+    expect(body.TxnTaxDetail).toEqual({ TotalTax: 1.6 })
+    expect(body.Line[0].SalesItemLineDetail.TaxCodeRef).toEqual({ value: '2' })
   })
 
   it('escapes a query literal', () => {

@@ -184,18 +184,31 @@ describe('QuickBooks Online adapter, call by call', () => {
     })
   })
 
-  it('posts a fee as a purchase out of clearing, and a returned fee as a credit', async () => {
-    const { adapter, calls } = provider([{ method: 'POST', match: '/purchase', body: { Purchase: { Id: '7' } } }])
+  it('posts a fee as a purchase out of clearing, and a returned fee as a deposit back into it', async () => {
+    const { adapter, calls } = provider([
+      { method: 'POST', match: '/purchase', body: { Purchase: { Id: '7' } } },
+      { method: 'POST', match: '/deposit', body: { Deposit: { Id: '8' } } },
+    ])
     await adapter.createExpense(session, buildFeeDoc(order, mapping)!, context)
-    await adapter.createExpense(session, buildFeeRefundDoc(refund, mapping)!, context)
+    await expect(adapter.createExpense(session, buildFeeRefundDoc(refund, mapping)!, context)).resolves.toEqual({
+      id: '8',
+      type: 'Deposit',
+    })
     expect(sent(calls[0])).toMatchObject({
       PaymentType: 'Cash',
       AccountRef: { value: '35' },
-      Credit: false,
       Line: [{ Amount: 0.6, AccountBasedExpenseLineDetail: { AccountRef: { value: '60' } } }],
     })
-    expect(sent(calls[1])).toMatchObject({ Credit: true, Line: [{ Amount: 0.3 }] })
     expect(sent(calls[0]).CurrencyRef).toBeUndefined()
+    // QuickBooks ignores `Credit` on a cash purchase, which would book the returned fee as more spending.
+    expect(sent(calls[0]).Credit).toBeUndefined()
+    expect(new URL(calls[1].url).pathname).toBe('/v3/company/9130/deposit')
+    expect(new URL(calls[1].url).searchParams.get('requestid')).toBe('aglyn-key')
+    expect(sent(calls[1])).toMatchObject({
+      DepositToAccountRef: { value: '35' },
+      Line: [{ Amount: 0.3, DetailType: 'DepositLineDetail', DepositLineDetail: { AccountRef: { value: '60' } } }],
+    })
+    expect(sent(calls[1]).DocNumber).toBeUndefined()
   })
 
   it('posts a fee in a foreign currency with its currency named', async () => {
