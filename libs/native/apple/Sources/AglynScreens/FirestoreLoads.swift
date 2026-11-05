@@ -15,7 +15,7 @@ enum FirestoreLoads {
     // A stored null arrives as NSNull from both readers; it is no value, never the text "<null>".
     case nil, is NSNull: return .null
     case let text as String: return .string(text)
-    case let flag as Bool: return .bool(flag)
+    // Not `as Bool` first: that also matches an NSNumber holding 0 or 1, so a stored integer 1 would read as true.
     case let number as NSNumber:
       if CFGetTypeID(number) == CFBooleanGetTypeID() { return .bool(number.boolValue) }
       return .number(number.doubleValue)

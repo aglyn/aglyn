@@ -132,11 +132,10 @@ public func jsonValue(_ value: Any) -> JSONValue? {
   switch value {
   case let json as JSONValue: return json
   case let string as String: return .string(string)
-  case let bool as Bool: return .bool(bool)
-  case let int as Int: return .number(Double(int))
-  case let int as Int64: return .number(Double(int))
-  case let double as Double: return .number(double)
-  case let number as NSNumber: return .number(number.doubleValue)
+  // Before anything else that takes a number: `as Bool` also matches an NSNumber holding 0 or 1, so a stored
+  // integer 1 would read as true. A real Bool bridges to the CFBoolean this asks for.
+  case let number as NSNumber:
+    return CFGetTypeID(number) == CFBooleanGetTypeID() ? .bool(number.boolValue) : .number(number.doubleValue)
   case let array as [Any]: return .array(array.compactMap(jsonValue))
   case let map as [String: Any]: return .object(map.compactMapValues(jsonValue))
   default: return nil
