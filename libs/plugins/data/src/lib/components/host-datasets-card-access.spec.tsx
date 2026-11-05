@@ -25,7 +25,7 @@
  * sends no read of the records at all.
  */
 
-import { render, screen } from '@testing-library/react'
+import { fireEvent, render, screen } from '@testing-library/react'
 import { TransferLauncherContext, type TransferAccessTarget, type TransferAction, type TransferLauncher } from '@aglyn/aglyn'
 import type { ReactNode } from 'react'
 import { registerDataDeclarations } from '../declarations'
@@ -157,8 +157,21 @@ describe('writing, by where the dataset sits', () => {
   it('an editor narrowed on its one site has its writes off, and may still add a new dataset', () => {
     mockMember = { role: 'editor', allHosts: true, hostAccess: { [HERE]: 'viewer' } }
     mount()
-    for (const name of ['Add record', 'Schema', 'Import', 'Delete']) expect(off(name)).toBe(true)
+    for (const name of ['Add record', 'Import', 'Delete']) expect(off(name)).toBe(true)
     expect(off('Add dataset')).toBe(false)
+  })
+
+  it('that editor still opens Schema for the sharing, which a narrowing leaves: the schema itself is off, with the reason', () => {
+    mockMember = { role: 'editor', allHosts: true, hostAccess: { [HERE]: 'viewer' } }
+    mount()
+    expect(off('Schema')).toBe(false)
+    fireEvent.click(button('Schema') as HTMLElement)
+    expect(button('Save sharing')).toBeDefined()
+    expect(button('Save schema')).toBeUndefined()
+    expect(screen.getByText(/Manage this site’s data/)).toBeTruthy()
+    // Switched off by the fieldset around them, which is what `:disabled` reads.
+    expect(screen.getByLabelText('Plural name').matches(':disabled')).toBe(true)
+    expect(button('Add field')?.matches(':disabled')).toBe(true)
   })
 
   it('that editor has them on where they keep the key, or on a dataset shared wider', () => {

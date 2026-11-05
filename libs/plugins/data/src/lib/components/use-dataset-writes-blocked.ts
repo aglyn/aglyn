@@ -80,6 +80,12 @@ export interface DatasetAccessBlocked {
   /** Changing this dataset's schema or records, or importing into it. */
   writes: boolean
   writesReason: string
+  /**
+   * The writes are off, and changing who it is shared with stays this member's:
+   * they hold "Manage data" across every site, and a site narrows them on the one
+   * this dataset sits on. Sharing is not among what a narrowing takes.
+   */
+  sharingOnly: boolean
   /** Deleting this dataset. */
   deletes: boolean
   deletesReason: string
@@ -94,6 +100,7 @@ const NOTHING_BLOCKED: DatasetAccessBlocked = {
   creates: false,
   writes: false,
   writesReason: DATASETS_WRITE_REFUSAL,
+  sharingOnly: false,
   deletes: false,
   deletesReason: DATASETS_DELETE_REFUSAL,
   records: false,
@@ -126,10 +133,12 @@ export function datasetAccessBlocked(
     site: (hostId) => resolvedPlacementKey(seat, hostId, DATA_SITE_DELETE_PERMISSION, customRole),
   })
   const beyond = deleteBeyondReach(seat, visibleTo)
+  const holdsManage = holdsDatasetPermission(member, DATA_MANAGE_PERMISSION)
   return {
     known: true,
-    creates: !holdsDatasetPermission(member, DATA_MANAGE_PERMISSION),
+    creates: !holdsManage,
     writes: !writes,
+    sharingOnly: !writes && holdsManage && isOrgWideMember(seat),
     writesReason: site ? dataPermissionRefusal(DATA_SITE_MANAGE_PERMISSION) : DATASETS_WRITE_REFUSAL,
     deletes: beyond || !deletes,
     deletesReason: beyond

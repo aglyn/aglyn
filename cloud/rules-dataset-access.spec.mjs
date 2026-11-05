@@ -167,6 +167,14 @@ await placeOn('foreign', 'host-foreign', {
 await deny('a site in another workspace adds nobody (record)', edit(RAISED.uid, 'foreign'))
 await deny('a site in another workspace adds nobody (schema)', schema(RAISED.uid, 'foreign'))
 
+// A site that narrows a member takes the schema and leaves the sharing: the two don't travel together.
+await deny('a narrowed editor cannot change the schema while moving a dataset', () =>
+  updateDoc(doc(as(NARROWED.uid), ...datasetPath('here')), { visibleTo: ['org'], model: { order: [], fields: {}, v: 4 } }),
+)
+await allow('a narrowed editor can still change who it is shared with', () =>
+  updateDoc(doc(as(NARROWED.uid), ...datasetPath('here')), { visibleTo: [`host:${HERE}`] }),
+)
+
 // A site the projection has not reached since the key existed.
 await placeOn('unstamped', 'host-unstamped', {
   orgId: ORG,

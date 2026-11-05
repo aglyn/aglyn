@@ -146,8 +146,8 @@ records**, or **Delete this site's datasets** on that site. So:
   shared with that site alone, without holding anything across the workspace. Allow or deny
   either permission for one person from the site's **Users** card, under **Permissions**.
 - An editor of the whole workspace given **Viewer** or **Author** access to a site loses
-  both on the datasets shared with that site alone, schema, records, sharing, delete and
-  import, and keeps them everywhere else. Choose **Keep this permission** for either
+  both on the datasets shared with that site alone, schema, records, delete and import, and
+  keeps them everywhere else. They can still change who such a dataset is shared with. Choose **Keep this permission** for either
   permission on their custom role or their **Permissions** card to keep it there, or allow
   it from the site's **Users** card to give it back on that one site. See
   [A site's access narrows its register and waivers](#site-access-narrows), which works the

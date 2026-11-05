@@ -153,8 +153,8 @@ describe('the rule moved only where the four changes say', () => {
     const narrowed = narrowedHere(row, HERE, DATA_SITE_MANAGE_PERMISSION)
     const expected = stamp || (row.before['schemaHere'] && !narrowed)
     for (const cell of ['schemaHere', 'recordEditHere', 'recordDeleteHere']) expect(row.after[cell]).toBe(expected)
-    // Moving it stays with whoever could, less a site's narrowing: a site's verdict never moves it.
-    expect(row.after['shareHere']).toBe(row.before['shareHere'] && !narrowed)
+    // Who may move it is exactly who could: a site's verdict never moves it, and a narrowing leaves it.
+    expect(row.after['shareHere']).toBe(row.before['shareHere'])
   })
 
   it.each(named)('%s: reading records follows the key and nothing else', (_name, row) => {
@@ -237,6 +237,7 @@ describe('the console reads the table as the rule and the route do', () => {
 
   it.each(named)('%s: reading and exporting follow their keys', (_name, row) => {
     const blocked = consoleSays(row, 'Here')
+    expect(blocked.sharingOnly).toBe(blocked.writes && row.after['shareHere'])
     expect(blocked.records).toBe(!row.resolved['data.viewRecords'])
     expect(blocked.exports).toBe(!row.resolved['data.export'])
     expect(blocked.creates).toBe(!row.resolved[DATA_MANAGE_PERMISSION])

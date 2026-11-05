@@ -1446,7 +1446,7 @@ export function HostDatasetsCard(props: HostDatasetsCardProps) {
                 {'Add record'}
               </Button>
             </BlockedControl>
-            <BlockedControl blocked={blocked.writes} reason={blocked.writesReason}>
+            <BlockedControl blocked={blocked.writes && !blocked.sharingOnly} reason={blocked.writesReason}>
               <Button size="small" onClick={() => setSchemaOpen(true)}>
                 {'Schema'}
               </Button>
@@ -1888,6 +1888,7 @@ export function HostDatasetsCard(props: HostDatasetsCardProps) {
         seedUnreadable={datasetsStatus === 'error'}
         seedListen={datasetsListen}
         canChangeSharing={!blocked.creates}
+        {...(blocked.sharingOnly ? { sharingOnlyReason: blocked.writesReason } : {})}
         onClose={() => setSchemaOpen(false)}
       />
     </CardDisplay>

@@ -1705,11 +1705,13 @@ service cloud.firestore {
         allow read: if isStaff() || canReadScoped();
         allow create: if isStaff();
         // Re-scoping stays with an org-wide member who holds "Manage data": a
-        // site's verdict writes the dataset and never moves it.
+        // site's verdict writes the dataset and never moves it, and a site that
+        // narrows that member takes the schema and leaves the sharing alone.
         allow update: if isStaff() ||
-          (canReadScoped() && canWriteDatasetOn(resource.data.get('visibleTo', null)) &&
-           (scopeUnchanged() || (isOrgWideMember() &&
-             memberKeyOrOverride('data.manage', ['owner', 'admin', 'editor']))));
+          (canReadScoped() && canWriteDatasetOn(resource.data.get('visibleTo', null)) && scopeUnchanged()) ||
+          (canWriteOrgDatasets() && isOrgWideMember() &&
+           (canWriteDatasetOn(resource.data.get('visibleTo', null)) ||
+            request.resource.data.diff(resource.data).affectedKeys().hasOnly(['visibleTo'])));
         allow delete: if isStaff();
         match /records/{recordId} {
           // A record has no `visibleTo` of its own; it inherits the
