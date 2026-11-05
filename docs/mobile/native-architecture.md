@@ -1381,7 +1381,8 @@ A form or prompt can list fields from the data: an entry
 `{ "fieldsFrom": { items, key, label, help, required, options, kinds } }` becomes one
 field per row (a carrier that names its own credential fields), `kinds` mapping a
 row flag to a kind (`password`, or `yesno` for a No/Yes pick that sends "" or
-"true"). Body operations grow `{"$replace": {list, key, match, value}}` (the row
+"true"), and `only` naming a list of keys to keep (a route's own subset of the
+catalog, each group's heading kept). Body operations grow `{"$replace": {list, key, match, value}}` (the row
 whose key matches, replaced) and `{"$uuid": "box_"}` (a fresh id with that prefix), and
 `{form}` reads the whole form as an object. `{"$map": {list, where, fields}}` is one object of `fields` for each row of the
 list that meets `where` (all of them with none), each read with `item` set to the row: the items a batch purchase sends, from

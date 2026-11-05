@@ -509,7 +509,14 @@
       "icon": "person.crop.circle|account_circle",
       "scope": "site",
       "links": ["/users/:memberId"],
-      "load": { "member": { "doc": "hosts/{site.id}/members/{params.memberId}" } },
+      "load": {
+        "member": { "doc": "hosts/{site.id}/members/{params.memberId}" },
+        "perms": {
+          "url": "/api/hosts/members/permissions?hostId={site.id}&memberId={params.memberId}",
+          "when": "site.can[site.manage] || org.can[members.manage]",
+          "optional": true
+        }
+      },
       "blocks": [
         {
           "type": "fields",
@@ -542,6 +549,65 @@
               "success": "Removed", "back": true
             }
           ]
+        },
+        {
+          "type": "notice",
+          "tone": "info",
+          "when": "data.member.status == invited",
+          "text": "Permissions can be set once the invite is accepted."
+        },
+        {
+          "type": "notice",
+          "tone": "info",
+          "when": "data.perms.orgWide && !data.perms.narrowed",
+          "text": "This member works across the whole workspace, so their permissions are set on the Team page."
+        },
+        {
+          "type": "notice",
+          "tone": "info",
+          "when": "data.perms.narrowed",
+          "text": "This member works across the whole workspace with {data.perms.role:title} access to this site, which narrows these permissions here. Allow one to give it back on this site; everything else is set on the Team page."
+        },
+        {
+          "type": "form",
+          "title": "Permissions on this site",
+          "when": "data.perms.keys && !data.perms.orgWide || data.perms.narrowed",
+          "fields": [
+            {
+              "fieldsFrom": {
+                "items": "app.permissionCatalog",
+                "only": "data.perms.keys",
+                "each": [
+                  { "if": "item.first", "key": "h.{item.group}", "label": "{item.groupLabel}", "kind": "heading" },
+                  {
+                    "if": "data.perms.defaults[@item.key]",
+                    "key": "p.{item.key}", "label": "{item.label}", "kind": "select",
+                    "help": "{item.description} Inherit: allowed for {data.perms.role:title} site access.",
+                    "initial": "{data.perms.stored[@item.key]}",
+                    "options": [{ "value": "", "label": "Inherit" }, { "value": "true", "label": "Allow" }, { "value": "false", "label": "Deny" }]
+                  },
+                  {
+                    "if": "!data.perms.defaults[@item.key]",
+                    "key": "p.{item.key}", "label": "{item.label}", "kind": "select",
+                    "help": "{item.description} Inherit: not allowed for {data.perms.role:title} site access.",
+                    "initial": "{data.perms.stored[@item.key]}",
+                    "options": [{ "value": "", "label": "Inherit" }, { "value": "true", "label": "Allow" }, { "value": "false", "label": "Deny" }]
+                  }
+                ]
+              }
+            }
+          ],
+          "submit": {
+            "label": "Save permissions",
+            "method": "PATCH",
+            "url": "/api/hosts/members/permissions",
+            "body": {
+              "hostId": "{site.id}",
+              "memberId": "{params.memberId}",
+              "permissions": { "$collect": { "prefix": "p.", "as": "flag", "changes": "data.perms.stored" } }
+            },
+            "success": "Permissions saved"
+          }
         },
         { "type": "zone", "name": "hostMember", "title": "More", "params": { "memberId": "{params.memberId}", "who": "{data.member.displayName|data.member.email}", "subject": "collab:{site.id}:{data.member.uid|params.memberId}", "hostId": "{site.id}", "uid": "{data.member.uid|params.memberId}" } }
       ]

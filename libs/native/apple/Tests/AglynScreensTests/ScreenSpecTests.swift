@@ -1712,6 +1712,34 @@ final class ScreenSpecTests: XCTestCase {
     XCTAssertEqual(fields[3].initial, "kg")
   }
 
+  /// `only` keeps a route's subset of a catalog, with each group's heading on its first kept row.
+  func testFieldsFromOnlyKeepsTheRoutesKeysAndTheirHeadings() {
+    let context: JSONValue = [
+      "app": ["catalog": [
+        ["key": "a", "label": "A", "group": "g1", "groupLabel": "One", "first": true],
+        ["key": "b", "label": "B", "group": "g1", "groupLabel": "One", "first": false],
+        ["key": "c", "label": "C", "group": "g2", "groupLabel": "Two", "first": true],
+      ]],
+      "data": ["perms": ["keys": ["b", "c"], "defaults": ["b": true, "c": false], "stored": ["c": true]]],
+    ]
+    let entry: JSONValue = [
+      "fieldsFrom": [
+        "items": "app.catalog", "only": "data.perms.keys",
+        "each": [
+          ["if": "item.first", "key": "h.{item.group}", "label": "{item.groupLabel}", "kind": "heading"],
+          ["if": "data.perms.defaults[@item.key]", "key": "p.{item.key}", "label": "{item.label}", "help": "allowed",
+            "initial": "{data.perms.stored[@item.key]}"],
+          ["if": "!data.perms.defaults[@item.key]", "key": "p.{item.key}", "label": "{item.label}", "help": "not allowed",
+            "initial": "{data.perms.stored[@item.key]}"],
+        ],
+      ]
+    ]
+    let fields = FieldSpec.parseAll([entry], in: context)
+    XCTAssertEqual(fields.map(\.key), ["h.g1", "p.b", "h.g2", "p.c"])
+    XCTAssertEqual(fields.map(\.help), [nil, "allowed", nil, "not allowed"])
+    XCTAssertEqual(fields[3].initial, "true")
+  }
+
   /// `where` keeps only the rows a condition holds for; a row's field of every row projects with `*`.
   func testOptionsCanBeFilteredAndRowsProjected() throws {
     let context: JSONValue = [
