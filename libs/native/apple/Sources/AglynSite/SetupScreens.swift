@@ -8,9 +8,7 @@ import AglynUI
 import SwiftUI
 
 /// Roles the rules let change the host document's settings (admin, editor, author).
-private let settingsRoles: Set<String> = ["admin", "editor", "author"]
 /// The theme library's actions are an admin's or an editor's (`/api/hosts/theme`).
-private let themeLibraryRoles: Set<String> = ["admin", "editor"]
 
 /// The site's setup as the console's Setup pages show it, the section beside
 /// the list in a wide window: basic details, SEO, tracking, the theme and the
@@ -114,7 +112,7 @@ struct SetupDetail: View {
   }
 
   private func sectionForm(_ doc: FirestoreDocument, hostID: String) -> some View {
-    let canEdit = settingsRoles.contains(context.siteRole ?? "")
+    let canEdit = context.can("site.edit")
     let api = HostSettingsAPI(api: context.api, writer: context.writer, hostID: hostID)
     return Form {
       if !canEdit {
@@ -670,7 +668,7 @@ private struct ThemeSection: View {
   var body: some View {
     ThemeLibraryCard(
       context: context, hostID: hostID, host: doc.data, api: api, presets: load.value?.presets ?? [],
-      canManage: themeLibraryRoles.contains(context.siteRole ?? ""), reloadKey: reloadKey, reload: { await reload() })
+      canManage: context.can("site.publish"), reloadKey: reloadKey, reload: { await reload() })
     FontInstallerCard(context: context, hostID: hostID, canEdit: canEdit)
     ThemeEditorCard(
       api: api, canEdit: canEdit, load: load, retry: { attempt += 1 },

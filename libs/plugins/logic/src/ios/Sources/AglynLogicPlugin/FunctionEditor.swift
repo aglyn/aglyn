@@ -68,7 +68,7 @@ private struct FunctionEditor: View {
     _draft = State(initialValue: start)
   }
 
-  private var canEdit: Bool { logicWriteRoles.contains(context.siteRole ?? "") }
+  private var canEdit: Bool { context.can("site.publish") }
 
   private var taken: [String] {
     (others.state.value ?? []).filter { $0.id != functionID && $0.alive }.compactMap { $0.string("name")?.lowercased() }

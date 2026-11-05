@@ -33,6 +33,8 @@ enum class PickerStep { WORKSPACE, SITE }
  */
 @Stable
 internal class NavChromeState(private val device: KeyValueStore) {
+  /** Whether the person holds "Manage billing" in the workspace in view, which the workspace menu's upgrade asks. */
+  var managesBilling by mutableStateOf(false)
   /** The settings list swapped in for the sidebar ("‹ Juniper Street Co. settings"), null for the everyday list. */
   var settingsMode by mutableStateOf<NativeNavListId?>(null)
   var picker by mutableStateOf<PickerStep?>(null)

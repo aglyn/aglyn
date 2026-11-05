@@ -84,8 +84,6 @@ import kotlinx.coroutines.launch
 const val SITE_PAGES_SCREEN = "site.pages"
 
 /** Roles the rules let change a page's document; the routing map needs [PUBLISH_ROLES]. */
-private val CONTENT_ROLES = setOf("admin", "editor", "author")
-private val PUBLISH_ROLES = setOf("admin", "editor")
 
 /** The site's pages as far as the list has read them ([PagesTreeLoader]), the tree they make, and the host's routing map. */
 class PagesLive(val rows: Live<List<PageTreeRow>>, val pages: List<PageNode>, val routing: SiteRouting, val loader: PagesTreeLoader)
@@ -136,8 +134,8 @@ fun PagesScreen(context: NativePluginContext, initialPageId: String? = null, sta
   val api = remember(hostId, context.api, context.writer) { PagesApi(context.api, context.writer, hostId) }
   // Opened from Create new: the new-page form comes up at once.
   var dialog by remember { mutableStateOf<PageDialog?>(if (startNew) PageDialog.NewPage else null) }
-  val canEdit = context.siteRole in CONTENT_ROLES
-  val canPublish = context.siteRole in PUBLISH_ROLES
+  val canEdit = com.aglyn.pluginhost.rememberMemberPermissions(context).can("site.edit")
+  val canPublish = com.aglyn.pluginhost.rememberMemberPermissions(context).can("site.publish")
 
   AglynListDetail(
     initialSelected = initialPageId,

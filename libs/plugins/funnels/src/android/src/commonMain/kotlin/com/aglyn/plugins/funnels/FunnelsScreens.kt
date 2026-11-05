@@ -141,7 +141,7 @@ fun FunnelsScreen(context: NativePluginContext) {
                 EmptyState(
                   "No funnels yet",
                   body = "A funnel is the steps you expect a visitor to take, such as a page, then a form, then a booking. It shows how many visits reached each step and where they dropped off. Recording starts when you save the first one." +
-                    if (access.canManage) "" else " A site admin or editor can create one.",
+                    if (access.canManage) "" else " Someone with \"Publish site content\" can create one.",
                   icon = AglynIcons.named("filter_alt"),
                 )
               }
@@ -221,7 +221,7 @@ private fun DraftReview(row: FunnelRow, editor: FunnelsEditor, canManage: Boolea
   SectionCard("Draft, set up for you to review", Modifier.fillMaxWidth().testTag("funnel-draft")) {
     Text(
       "It is not measured, and the site does not record visits for it, until " +
-        (if (canManage) "you activate it." else "a site admin or editor activates it."),
+        (if (canManage) "you activate it." else "someone with \"Publish site content\" activates it."),
       style = MaterialTheme.typography.bodyMedium,
     )
     row.steps.forEachIndexed { index, step ->

@@ -240,7 +240,7 @@ private fun MediaLibrary(context: NativePluginContext, scope: MediaScope, scopeT
   }.collectAsState(Live.Loading)
   val folderList = sortedFolders((folders as? Live.Ready)?.value?.map(::mediaFolderOf).orEmpty())
   val foldersById = folderList.associateBy { it.id }
-  val canEdit = scope is MediaScope.Org && context.orgRole in setOf("owner", "admin", "editor") || scope is MediaScope.Site && context.siteRole in CONTENT_ROLES
+  val canEdit = if (scope is MediaScope.Org) com.aglyn.pluginhost.rememberMemberPermissions(context).can("org.media") else com.aglyn.pluginhost.rememberMemberPermissions(context).can("site.edit")
   val origin = context.api.origin
   val phone = currentWidthClass() == WidthClass.COMPACT && !LocalShellMetrics.current.compact
   val compact = LocalShellMetrics.current.compact

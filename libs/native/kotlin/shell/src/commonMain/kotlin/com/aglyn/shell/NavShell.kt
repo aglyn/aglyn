@@ -208,7 +208,10 @@ internal fun SignedInShell(services: ShellServices, root: ShellNavigator, uid: S
   // Less any plugin the platform has not released to this workspace (its routes would answer 404).
   val enabled = releasedPlugins(enabledPluginsFor(workspace.orgLogo?.enabledPlugins, host?.data, inSite), workspace.org?.id, workspace.orgLogo, claims.isStaff)
   val orgEnabled = releasedPlugins(enabledPluginsFor(workspace.orgLogo?.enabledPlugins, null, false), workspace.org?.id, workspace.orgLogo, claims.isStaff)
-  val hostAdmin = isHostAdmin(workspace.site?.role, workspace.org?.role)
+  // The site's Admin rows, as the console's Admin tab asks: "Manage site settings".
+  val shellHeld = com.aglyn.pluginhost.rememberMemberPermissions(services.firestore, workspace.org?.id, workspace.site?.id, uid, workspace.org?.role)
+  val hostAdmin = shellHeld.can("site.manage")
+  chrome.managesBilling = shellHeld.workspace["billing.manage"] == true
   val scopeList = if (inSite) NativeNavListId.SITE else NativeNavListId.WORKSPACE
   val scopeGroups = remember(version, enabled, hostAdmin, inSite) { navGroups(scopeList, enabled, hostAdmin, services.registry, inSite) }
   val staffGroups = remember(version, claims.isStaff) { if (claims.isStaff) staffNavGroups() else emptyList() }
@@ -532,7 +535,7 @@ internal fun SignedInShell(services: ShellServices, root: ShellNavigator, uid: S
       val loaded = planReadings
       val logo = workspace.orgLogo
       val offersUpgrade = logo?.plan != null && logo.plan in com.aglyn.core.OnboardingPlanIntent.UPGRADABLE_PLANS && !logo.enterprise &&
-        workspace.org?.role in setOf("owner", "admin")
+        shellHeld.workspace["billing.manage"] == true
       if (loaded != null && planOrgId != null && planHides >= 0 && services.prefs.get(planCardHiddenKey(planOrgId, loaded.plan)) == null &&
         com.aglyn.contracts.planCardShows(loaded.readings, offersUpgrade)
       ) {

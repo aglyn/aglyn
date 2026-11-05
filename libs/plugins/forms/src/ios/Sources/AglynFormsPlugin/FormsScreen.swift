@@ -1,6 +1,7 @@
 // Copyright 2026 Aglyn LLC
 // SPDX-License-Identifier: Apache-2.0
 
+import AglynContracts
 import AglynCore
 import AglynPluginHost
 import AglynUI
@@ -42,7 +43,6 @@ struct FormsScreen: View {
     @Environment(\.horizontalSizeClass) private var sizeClass
   #endif
   @State private var model = FormsModel()
-  @State private var role = SiteRoleModel()
   @State private var runner = PluginActionRunner()
   @State private var selection: String?
   @State private var pushed: String?
@@ -82,7 +82,7 @@ struct FormsScreen: View {
     .navigationTitle("Forms")
     .aglynScreenTitle("Forms")
     .onChange(of: searchText) { _, text in model.type(text) }
-    .aglynPrimaryAction(id: "add-form", "New form", systemImage: "plus", enabled: role.canEditContent, shortcut: KeyboardShortcut("n", modifiers: .command), help: AglynRoleReason.site("creating forms")) {
+    .aglynPrimaryAction(id: "add-form", "New form", systemImage: "plus", enabled: context.can("site.edit"), shortcut: KeyboardShortcut("n", modifiers: .command), help: permissionRefusalText(ContractValues.shared.orgRoleGrants, key: "site.edit")) {
       runner.clear()
       sheet = .create
     }
@@ -126,13 +126,12 @@ struct FormsScreen: View {
           ? "It joins the forms in use again."
           : "It leaves the forms in use. Its submissions are kept, and you can bring it back.")
     }
-    .onChange(of: role.canEditContent, initial: true) { _, canEdit in
+    .onChange(of: context.can("site.edit"), initial: true) { _, canEdit in
       guard startNew, !startedNew, canEdit else { return }
       startedNew = true
       sheet = .create
     }
     .task(id: context.hostID) {
-      role.start(context)
       model.start(context.firestore, hostID: context.hostID)
       if let initialFormID {
         selection = initialFormID
@@ -146,7 +145,6 @@ struct FormsScreen: View {
     }
     .onDisappear {
       model.stop()
-      role.stop()
     }
   }
 
@@ -210,7 +208,7 @@ struct FormsScreen: View {
         model.search.isEmpty && model.status == .inUse ? "No forms yet" : "No forms match", systemImage: FormsSymbols.form,
         message: model.search.isEmpty ? "Add a form, then place it on a page in the Besigner." : "Try another search."
       ) {
-        if model.search.isEmpty && model.status == .inUse && role.canEditContent {
+        if model.search.isEmpty && model.status == .inUse && context.can("site.edit") {
           Button("New form") { sheet = .create }.buttonStyle(.aglynProminent)
         }
         if model.search.isEmpty && model.status == .inUse { SlotWidgets(context: context, slot: ListCreateZone.forms) }
@@ -266,20 +264,20 @@ struct FormsScreen: View {
   @ViewBuilder
   private func rowActions(_ row: FormRow) -> some View {
     Button { handle(.rename(row)) } label: { Label("Rename", systemImage: "pencil") }
-      .disabled(!role.canEditContent)
+      .disabled(!context.can("site.edit"))
     Button { handle(.duplicate(row)) } label: { Label("Duplicate", systemImage: "plus.square.on.square") }
-      .disabled(!role.canEditContent)
+      .disabled(!context.can("site.edit"))
     Button { handle(.export(row)) } label: { Label("Export submissions", systemImage: "square.and.arrow.down") }
     Button(role: row.retired ? nil : .destructive) { handle(.retire(row)) } label: {
       Label(row.retired ? "Bring back" : "Retire", systemImage: row.retired ? "tray.and.arrow.up" : "archivebox")
     }
-    .disabled(!role.canEditContent)
+    .disabled(!context.can("site.edit"))
   }
 
   // MARK: The detail
 
   private func detail(_ id: String, titled: Bool) -> some View {
-    FormDetailView(context: context, formID: id, runner: runner, role: role, titled: titled, act: handle)
+    FormDetailView(context: context, formID: id, runner: runner, titled: titled, act: handle)
   }
 
   private func handle(_ action: FormDetailAction) {

@@ -8,7 +8,6 @@ import AglynUI
 import SwiftUI
 
 /// Roles that may create and change a site's components, layouts and templates (`hostRoleCanWrite`).
-private let artifactWriteRoles: Set<String> = ["admin", "editor", "author"]
 
 /// The slot a plugin fills to publish a site's component or layout (the console's `hostArtifactPublish`).
 public let artifactPublishSlot = "hostArtifactPublish"
@@ -56,7 +55,7 @@ struct ArtifactsScreen: View {
   @State private var searchText = ""
   @State private var seeded = false
 
-  private var canEdit: Bool { artifactWriteRoles.contains(context.siteRole ?? "") }
+  private var canEdit: Bool { context.can("site.edit") }
 
   var body: some View {
     Group {

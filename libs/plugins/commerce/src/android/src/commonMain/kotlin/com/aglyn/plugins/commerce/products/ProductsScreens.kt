@@ -641,10 +641,12 @@ fun productsImportParams(hostId: String?): Map<String, String> =
   }
 
 /**
- * Who may import: the import screen's own gate (a workspace owner or admin), as the console offers Import only to whom
+ * Who may import: the import screen's own gate ("Manage data"), as the console offers Import only to whom
  * the transfer route takes it from.
  */
-fun canImportProducts(context: NativePluginContext): Boolean = context.hostId != null && (context.orgRole == "owner" || context.orgRole == "admin")
+@androidx.compose.runtime.Composable
+fun canImportProducts(context: NativePluginContext): Boolean =
+  context.hostId != null && com.aglyn.pluginhost.rememberMemberPermissions(context).can("data.manage")
 
 /** What a product write's failure says: the route's own words for a refusal, else that it is not known whether it landed. */
 fun productWriteMessage(error: Throwable, fallback: String): String {

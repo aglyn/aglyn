@@ -14,8 +14,9 @@ final class OrgAccess {
   @ObservationIgnored private let member = ObservedDocument()
   @ObservationIgnored private let role = ObservedDocument()
   @ObservationIgnored private let site = ObservedDocument()
-  @ObservationIgnored private var uid: String?
-  @ObservationIgnored private var siteID: String?
+  // Observed: a view that asked for a key before `follow` set these read the workspace's verdict, and it must ask again.
+  private var uid: String?
+  private var siteID: String?
   /// The role the membership index names, which answers until the member row is read.
   private var indexRole: String?
   @ObservationIgnored private var orgID: String?

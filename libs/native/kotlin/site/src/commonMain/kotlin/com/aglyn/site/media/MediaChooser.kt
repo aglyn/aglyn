@@ -146,8 +146,7 @@ private fun MediaChooserGrid(context: NativePluginContext, scope: MediaScope, sc
   val videoProbe = LocalVideoProbe.current
   val api = remember(scope, context.api, videoProbe) { MediaApi(context.api, scope, videoProbe) }
   val runner = remember(scope) { ActionRunner(coroutines) }
-  val canUpload = scope is MediaScope.Org && context.orgRole in setOf("owner", "admin", "editor") ||
-    scope is MediaScope.Site && context.siteRole in setOf("admin", "editor", "author")
+  val canUpload = if (scope is MediaScope.Org) com.aglyn.pluginhost.rememberMemberPermissions(context).can("org.media") else com.aglyn.pluginhost.rememberMemberPermissions(context).can("site.edit")
   var uploading by remember { mutableStateOf<String?>(null) }
   // The file just uploaded here, chosen once the library lists it.
   var uploaded by remember { mutableStateOf<String?>(null) }

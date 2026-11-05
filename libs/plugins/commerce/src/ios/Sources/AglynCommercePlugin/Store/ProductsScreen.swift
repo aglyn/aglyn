@@ -450,8 +450,9 @@ func productsImportParams(hostID: String?) -> NativeParams {
   return params
 }
 
-/// Who may import: the import screen's own gate (a workspace owner or admin, or staff), as the console offers Import
+/// Who may import: the import screen's own gate ("Manage data", or staff), as the console offers Import
 /// only to whom the transfer route takes it from.
+@MainActor
 func canImportProducts(_ context: NativePluginContext) -> Bool {
-  context.hostID != nil && (context.orgRole == "owner" || context.orgRole == "admin" || context.staff != nil)
+  context.hostID != nil && (context.can("data.manage") || context.staff != nil)
 }

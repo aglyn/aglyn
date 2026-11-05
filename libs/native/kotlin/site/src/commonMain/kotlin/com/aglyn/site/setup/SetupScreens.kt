@@ -98,10 +98,8 @@ const val SITE_SETUP_SCREEN = "site.setup"
 const val SITE_THEME_SCREEN = "site.theme"
 
 /** Roles the rules let change the host document's settings (admin, editor, author). */
-private val SETTINGS_ROLES = setOf("admin", "editor", "author")
 
 /** The theme library's actions are an admin's or an editor's (`/api/hosts/theme`). */
-private val THEME_LIBRARY_ROLES = setOf("admin", "editor")
 
 /**
  * The site's setup as the console's Setup pages show it, the section beside
@@ -145,7 +143,7 @@ fun SetupScreen(context: NativePluginContext, initialSection: String? = null) {
           is Live.Failed -> EmptyState("Could not load this site's setup", body = "Check the connection and try again.", icon = AglynIcons.named("error"), tone = EmptyTone.ERROR)
           is Live.Ready -> {
             val doc = live.value ?: return@AglynListDetail EmptyState("This site is gone", icon = AglynIcons.named("public"))
-            val canEdit = context.siteRole in SETTINGS_ROLES
+            val canEdit = com.aglyn.pluginhost.rememberMemberPermissions(context).can("site.edit")
             Column(
               Modifier.fillMaxSize().verticalScroll(rememberScrollState()).padding(space(2f)).testTag("setup-detail-$selected"),
               verticalArrangement = Arrangement.spacedBy(space(2f)),
@@ -591,7 +589,7 @@ private fun ThemeSection(context: NativePluginContext, hostId: String, host: Map
       Load.Failed(error.message ?: "The theme could not be loaded.")
     }
   }
-  ThemeLibraryCard(context, hostId, host, api, (load as? Load.Ready)?.value?.presets.orEmpty(), context.siteRole in THEME_LIBRARY_ROLES)
+  ThemeLibraryCard(context, hostId, host, api, (load as? Load.Ready)?.value?.presets.orEmpty(), com.aglyn.pluginhost.rememberMemberPermissions(context).can("site.publish"))
   ThemeEditorCard(load, onRetry = { attempt++ }, api, canEdit)
   ThemeChangesCard(load, installed = themeSelectionOf(host).kind == "installed", api, canEdit)
   FontInstallerCard(context, hostId, canEdit)

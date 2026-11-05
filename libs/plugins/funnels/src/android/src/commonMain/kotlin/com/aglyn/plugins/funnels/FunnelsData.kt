@@ -48,9 +48,9 @@ fun inListOrder(rows: List<FunnelRow>): List<FunnelRow> = rows.sortedWith(compar
 /** What the signed-in person may do here: the paid analytics tier gates everything, the role gates changes. */
 data class FunnelsAccess(val canManage: Boolean, val entitled: Boolean, val ready: Boolean)
 
-fun funnelsAccess(role: Any?, org: Map<String, Any?>?, orgReady: Boolean): FunnelsAccess =
+fun funnelsAccess(canManage: Boolean, org: Map<String, Any?>?, orgReady: Boolean): FunnelsAccess =
   FunnelsAccess(
-    canManage = role == "admin" || role == "editor",
+    canManage = canManage,
     entitled = orgReady && planFeatureCarried(org, Contracts.funnelFeature),
     ready = orgReady,
   )
@@ -59,11 +59,10 @@ fun funnelsAccess(role: Any?, org: Map<String, Any?>?, orgReady: Boolean): Funne
 fun rememberFunnelsAccess(context: NativePluginContext): FunnelsAccess {
   val hostId = context.hostId
   val orgId = context.orgId
-  val host = remember(hostId) { context.firestore.observeDoc("hosts/$hostId") }.collectAsState(Live.Loading).value
   val org = remember(orgId) { context.firestore.observeDoc("orgs/$orgId") }.collectAsState(Live.Loading).value
-  @Suppress("UNCHECKED_CAST")
-  val role = ((host as? Live.Ready)?.value?.data?.get("memberRoles") as? Map<String, Any?>)?.get(context.uid) ?: context.siteRole
-  return funnelsAccess(role, (org as? Live.Ready)?.value?.data, org is Live.Ready)
+  // "Publish site content": a funnel goes live.
+  val canManage = com.aglyn.pluginhost.rememberMemberPermissions(context).can("site.publish")
+  return funnelsAccess(canManage, (org as? Live.Ready)?.value?.data, org is Live.Ready)
 }
 
 /** A site's funnels, live: `hosts/{hostId}/funnels`, the collection the Funnels card reads. */

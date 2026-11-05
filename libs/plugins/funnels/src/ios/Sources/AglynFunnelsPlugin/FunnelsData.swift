@@ -71,8 +71,8 @@ struct FunnelsAccessState: Equatable {
   var entitled: Bool
   var ready: Bool
 
-  init(role: String?, org: [String: Any]?, orgReady: Bool) {
-    canManage = role == "admin" || role == "editor"
+  init(canManage: Bool, org: [String: Any]?, orgReady: Bool) {
+    self.canManage = canManage
     entitled = orgReady && planFeatureCarried(org, ContractValues.shared.funnelFeature)
     ready = orgReady
   }
@@ -87,12 +87,10 @@ struct FunnelsAccessState: Equatable {
 final class FunnelsAccess {
   @ObservationIgnored let host = ObservedDocument()
   @ObservationIgnored let org = ObservedDocument()
-  private var uid = ""
-  private var fallbackRole: String?
+  private var context: NativePluginContext?
 
   func start(_ context: NativePluginContext) {
-    uid = context.uid
-    fallbackRole = context.siteRole
+    self.context = context
     if let hostID = context.hostID { host.start(context.firestore, ["hosts", hostID]) }
     if let orgID = context.orgID { org.start(context.firestore, ["orgs", orgID]) }
   }
@@ -103,8 +101,7 @@ final class FunnelsAccess {
   }
 
   var state: FunnelsAccessState {
-    let role = (host.document?.data["memberRoles"] as? [String: Any])?[uid] as? String ?? fallbackRole
-    return FunnelsAccessState(role: role, org: org.document?.data, orgReady: org.ready)
+    FunnelsAccessState(canManage: context?.can("site.publish") == true, org: org.document?.data, orgReady: org.ready)
   }
 }
 

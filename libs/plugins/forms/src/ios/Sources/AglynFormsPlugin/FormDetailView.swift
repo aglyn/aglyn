@@ -13,7 +13,6 @@ struct FormDetailView: View {
   let context: NativePluginContext
   let formID: String
   let runner: PluginActionRunner
-  let role: SiteRoleModel
   /// False beside the list, where the screen's own title stays.
   var titled = true
   let act: (FormDetailAction) -> Void
@@ -70,7 +69,7 @@ struct FormDetailView: View {
         }
         .listRowInsets(EdgeInsets(top: AglynSpace.one, leading: AglynSpace.one, bottom: AglynSpace.one, trailing: AglynSpace.one))
       }
-      FormRoutingSection(form: form, api: api, runner: runner, canEdit: role.canEditContent)
+      FormRoutingSection(form: form, api: api, runner: runner, canEdit: context.can("site.edit"))
       Section("Questions") {
         if form.fields.isEmpty {
           Text("This form declares no questions yet. Add them in the Besigner.").foregroundStyle(.secondary)
@@ -100,16 +99,16 @@ struct FormDetailView: View {
         Spacer(minLength: AglynSpace.one)
         Menu {
           Button { act(.rename(form)) } label: { Label("Rename", systemImage: "pencil") }
-            .disabled(!role.canEditContent)
+            .disabled(!context.can("site.edit"))
           Button { act(.duplicate(form)) } label: { Label("Duplicate", systemImage: "plus.square.on.square") }
-            .disabled(!role.canEditContent)
+            .disabled(!context.can("site.edit"))
           Button { act(.export(form)) } label: { Label("Export submissions", systemImage: "square.and.arrow.down") }
             .keyboardShortcut("e", modifiers: .command)
           Divider()
           Button(role: form.retired ? nil : .destructive) { act(.retire(form)) } label: {
             Label(form.retired ? "Bring back" : "Retire", systemImage: form.retired ? "tray.and.arrow.up" : "archivebox")
           }
-          .disabled(!role.canEditContent)
+          .disabled(!context.can("site.edit"))
         } label: {
           Label("More", systemImage: "ellipsis.circle").labelStyle(.iconOnly).imageScale(.large)
         }
@@ -143,7 +142,7 @@ struct FormDetailView: View {
           Label("Design in the Besigner", systemImage: FormsSymbols.besigner)
         }
         .buttonStyle(.aglynSecondary)
-        .disabled(!role.canEditContent || runner.busy)
+        .disabled(!context.can("site.edit") || runner.busy)
         .accessibilityIdentifier("form-edit-besigner")
       }
     }
@@ -178,7 +177,7 @@ struct FormDetailView: View {
               if !current {
                 Button("Publish") { publish(form, version) }
                   .buttonStyle(.borderless)
-                  .disabled(!role.canPublish || runner.busy)
+                  .disabled(!context.can("site.publish") || runner.busy)
                   .accessibilityIdentifier("form-version-publish-\(version.id)")
               }
             }
