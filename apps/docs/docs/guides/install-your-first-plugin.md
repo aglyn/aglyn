@@ -234,7 +234,9 @@ The **Built in** card lists the plugins that ship with Aglyn, each with its own 
 Switching one **off** removes it from every site in the workspace — its navigation, the
 editor, published pages and the API — and switching it back on restores it.
 
-- Only workspace **owners and admins** can flip a switch.
+- Flipping a switch needs the **Organization settings** permission, which the workspace's
+  owners and admins hold by default. Without it the switches stay off, and a plugin's page
+  names the permission to ask an organization admin for.
 - A few cannot be switched off at all, because sites are built out of them.
 - **AI** and **Forms** have no workspace switch: they stay on for the workspace, and a
   site switches them off for itself — see [A plugin on one site](#plugin-on-one-site).

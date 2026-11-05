@@ -22,6 +22,7 @@ import {
   listConsoleExtensions,
   planLabelGrantingFeature,
 } from '@aglyn/aglyn'
+import { permissionRefusalText } from '@aglyn/aglyn/app-utils/org-permissions'
 import { mdiPuzzleOutline } from '@aglyn/shared-data-mdi'
 import { AppLink, CardDisplay, Container } from '@aglyn/shared-ui-jsx'
 import type { NextPageWithLayout } from '@aglyn/shared-ui-next'
@@ -39,6 +40,7 @@ import { CONTENT_MAX_WIDTH } from '../../../../../constants/shared'
 import { docsHelp } from '../../../../../constants/docs-links'
 import { buildRoute, Route } from '../../../../../constants/route-links'
 import useCurrentOrg from '../../../../../hooks/use-current-org'
+import useOrgPermissions from '../../../../../hooks/use-org-permissions'
 import { useOrgHosts } from '../../../../../hooks/use-org-hosts'
 import { useOrgScope, useOrgSlug } from '../../../../../hooks/use-org-scope'
 import { useOrgPluginSwitchboard } from '../../../../../hooks/use-plugin-switchboard'
@@ -186,15 +188,24 @@ const OrgPluginInstallation: NextPageWithLayout<Record<string, never>> = () => {
       FIRST_PARTY_PLUGINS.find((plugin) => plugin.id === id)?.label ??
       (id === pluginRef ? displayName : id),
   })
+  /**
+   * Whether to say why the switch is off (AGL-4047): the key the switch and
+   * its route ask, and only once the answer is known. `canWrite` is also false
+   * while the permissions load or when the read failed, and neither of those
+   * is a refusal to accuse someone of.
+   */
+  const orgPermissions = useOrgPermissions()
+  const switchRefused =
+    orgPermissions.loaded && !orgPermissions.can('org.settings')
 
   /**
    * Whether the PLAN runs what this plugin registers (AGL-2484).
    *
-   * The switch itself is not plan-gated — it is role-gated, and a workspace on
-   * any plan may switch a plugin off — but a plugin whose console extension
-   * declares an entitlement the org does not hold renders nothing when it is
-   * on, and this is the page where an admin would otherwise conclude the
-   * switch is broken. `pending` says nothing at all: an unresolved org
+   * The switch itself is not plan-gated — it asks `org.settings`, and a
+   * workspace on any plan may switch a plugin off — but a plugin whose console
+   * extension declares an entitlement the org does not hold renders nothing
+   * when it is on, and this is the page where an admin would otherwise conclude
+   * the switch is broken. `pending` says nothing at all: an unresolved org
    * resolves the FREE tier, so a claim made before `ready` tells a paying
    * workspace it does not have what it pays for.
    */
@@ -334,12 +345,11 @@ const OrgPluginInstallation: NextPageWithLayout<Record<string, never>> = () => {
                     {firstParty.description}
                   </Typography>
                 ) : null}
-                {switchboard.canWrite ? null : (
+                {switchRefused ? (
                   <Typography variant="body2" color="text.secondary">
-                    {'Only workspace owners and admins can switch a plugin ' +
-                      'on or off.'}
+                    {permissionRefusalText('org.settings')}
                   </Typography>
-                )}
+                ) : null}
                 {planState === 'blocked' ? (
                   <Alert severity="info" variant="outlined">
                     {`Switching ${firstParty.label} on does not put it on ` +
