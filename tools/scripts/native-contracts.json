@@ -12620,6 +12620,1077 @@
         ]
       ]
     },
+    "scopeSharingOf": {
+      "module": "libs/aglyn/src/lib/app-utils/scope-tokens.ts",
+      "args": [
+        [
+          {
+            "visibleTo": [
+              "org"
+            ]
+          }
+        ],
+        [
+          {
+            "visibleTo": [
+              "host:a",
+              "host:b"
+            ]
+          }
+        ],
+        [
+          {
+            "visibleTo": [
+              "host:b",
+              "host:c"
+            ],
+            "scopeMode": "allExcept",
+            "scopeExcept": [
+              "host:a"
+            ]
+          }
+        ],
+        [
+          {
+            "visibleTo": [],
+            "scopeMode": "allExcept",
+            "scopeExcept": [
+              "host:a"
+            ]
+          }
+        ],
+        [
+          {
+            "visibleTo": [
+              "org"
+            ],
+            "scopeMode": "allExcept",
+            "scopeExcept": [
+              "host:a"
+            ]
+          }
+        ],
+        [
+          {
+            "visibleTo": [
+              "host:b"
+            ],
+            "scopeMode": "allExcept"
+          }
+        ],
+        [
+          {
+            "visibleTo": [
+              "host:b"
+            ],
+            "scopeMode": "allExcept",
+            "scopeExcept": [
+              "org"
+            ]
+          }
+        ],
+        [
+          {
+            "visibleTo": []
+          }
+        ],
+        [
+          {}
+        ],
+        [
+          null
+        ]
+      ]
+    },
+    "sharingFromChoice": {
+      "module": "libs/aglyn/src/lib/app-utils/scope-tokens.ts",
+      "args": [
+        [
+          {
+            "mode": "all"
+          },
+          [
+            "a",
+            "b",
+            "c"
+          ]
+        ],
+        [
+          {
+            "mode": "selected",
+            "hostIds": [
+              "a"
+            ]
+          },
+          [
+            "a",
+            "b",
+            "c"
+          ]
+        ],
+        [
+          {
+            "mode": "selected",
+            "hostIds": []
+          },
+          [
+            "a",
+            "b",
+            "c"
+          ]
+        ],
+        [
+          {
+            "mode": "allExcept",
+            "exceptHostIds": [
+              "a"
+            ]
+          },
+          [
+            "a",
+            "b",
+            "c"
+          ]
+        ],
+        [
+          {
+            "mode": "allExcept",
+            "exceptHostIds": [
+              "a",
+              "a",
+              "gone"
+            ]
+          },
+          [
+            "a",
+            "b",
+            "c"
+          ]
+        ],
+        [
+          {
+            "mode": "allExcept",
+            "exceptHostIds": []
+          },
+          [
+            "a",
+            "b",
+            "c"
+          ]
+        ],
+        [
+          {
+            "mode": "allExcept",
+            "exceptHostIds": [
+              "gone"
+            ]
+          },
+          [
+            "a",
+            "b",
+            "c"
+          ]
+        ],
+        [
+          {
+            "mode": "allExcept",
+            "exceptHostIds": [
+              "a",
+              "b",
+              "c"
+            ]
+          },
+          [
+            "a",
+            "b",
+            "c"
+          ]
+        ],
+        [
+          {
+            "mode": "allExcept",
+            "exceptHostIds": [
+              "a"
+            ]
+          },
+          [
+            "a",
+            "b",
+            "c"
+          ],
+          {
+            "maxIncluded": 1
+          }
+        ],
+        [
+          {
+            "mode": "allExcept",
+            "exceptHostIds": [
+              "a"
+            ]
+          },
+          [
+            "a",
+            "b",
+            "c"
+          ],
+          {
+            "maxIncluded": 2
+          }
+        ],
+        [
+          {
+            "mode": "allExcept",
+            "exceptHostIds": [
+              "a"
+            ]
+          },
+          [
+            "a",
+            "b",
+            "c"
+          ],
+          {
+            "keepHostIds": [
+              "a"
+            ]
+          }
+        ],
+        [
+          {
+            "mode": "allExcept",
+            "exceptHostIds": [
+              "a",
+              "b",
+              "c"
+            ]
+          },
+          [
+            "a",
+            "b",
+            "c"
+          ],
+          {
+            "keepHostIds": [
+              "b"
+            ]
+          }
+        ]
+      ]
+    },
+    "reconcileAllExcept": {
+      "module": "libs/aglyn/src/lib/app-utils/scope-tokens.ts",
+      "args": [
+        [
+          {
+            "visibleTo": [
+              "org"
+            ]
+          },
+          [
+            "a",
+            "b",
+            "c"
+          ]
+        ],
+        [
+          {
+            "visibleTo": [
+              "host:a"
+            ]
+          },
+          [
+            "a",
+            "b",
+            "c"
+          ]
+        ],
+        [
+          {
+            "visibleTo": [
+              "host:b",
+              "host:c"
+            ],
+            "scopeMode": "allExcept",
+            "scopeExcept": [
+              "host:a"
+            ]
+          },
+          [
+            "a",
+            "b",
+            "c"
+          ]
+        ],
+        [
+          {
+            "visibleTo": [
+              "host:c",
+              "host:b"
+            ],
+            "scopeMode": "allExcept",
+            "scopeExcept": [
+              "host:a"
+            ]
+          },
+          [
+            "a",
+            "b",
+            "c"
+          ]
+        ],
+        [
+          {
+            "visibleTo": [
+              "host:b"
+            ],
+            "scopeMode": "allExcept",
+            "scopeExcept": [
+              "host:a"
+            ]
+          },
+          [
+            "a",
+            "b",
+            "c"
+          ]
+        ],
+        [
+          {
+            "visibleTo": [
+              "host:b",
+              "host:c",
+              "host:gone"
+            ],
+            "scopeMode": "allExcept",
+            "scopeExcept": [
+              "host:a"
+            ]
+          },
+          [
+            "a",
+            "b",
+            "c"
+          ]
+        ],
+        [
+          {
+            "visibleTo": [
+              "host:b",
+              "host:c"
+            ],
+            "scopeMode": "allExcept",
+            "scopeExcept": [
+              "host:a",
+              "host:gone"
+            ]
+          },
+          [
+            "a",
+            "b",
+            "c"
+          ]
+        ],
+        [
+          {
+            "visibleTo": [
+              "host:b",
+              "host:c"
+            ],
+            "scopeMode": "allExcept",
+            "scopeExcept": [
+              "host:gone"
+            ]
+          },
+          [
+            "b",
+            "c"
+          ]
+        ],
+        [
+          {
+            "visibleTo": [
+              "host:b"
+            ],
+            "scopeMode": "allExcept",
+            "scopeExcept": [
+              "host:a"
+            ]
+          },
+          [
+            "a"
+          ]
+        ],
+        [
+          {
+            "visibleTo": [
+              "host:b"
+            ],
+            "scopeMode": "allExcept",
+            "scopeExcept": [
+              "host:a"
+            ]
+          },
+          []
+        ],
+        [
+          {
+            "visibleTo": [
+              "org"
+            ],
+            "scopeMode": "allExcept",
+            "scopeExcept": [
+              "host:a"
+            ]
+          },
+          [
+            "a",
+            "b",
+            "c"
+          ]
+        ],
+        [
+          {
+            "visibleTo": [
+              "host:b"
+            ],
+            "scopeMode": "allExcept"
+          },
+          [
+            "a",
+            "b",
+            "c"
+          ]
+        ],
+        [
+          {
+            "visibleTo": [
+              "host:b"
+            ],
+            "scopeMode": "allExcept",
+            "scopeExcept": [
+              "junk"
+            ]
+          },
+          [
+            "a",
+            "b",
+            "c"
+          ]
+        ],
+        [
+          {
+            "visibleTo": [
+              "host:b"
+            ],
+            "scopeMode": "other",
+            "scopeExcept": [
+              "host:a"
+            ]
+          },
+          [
+            "a",
+            "b",
+            "c"
+          ]
+        ],
+        [
+          {
+            "scopeMode": "allExcept",
+            "scopeExcept": [
+              "host:a"
+            ]
+          },
+          [
+            "a",
+            "b",
+            "c"
+          ]
+        ],
+        [
+          {
+            "visibleTo": [
+              "host:b"
+            ],
+            "scopeMode": "allExcept",
+            "scopeExcept": [
+              "host:a"
+            ]
+          },
+          [
+            "a",
+            "b",
+            "c"
+          ],
+          {
+            "maxIncluded": 1
+          }
+        ],
+        [
+          {
+            "visibleTo": [
+              "host:b",
+              "host:gone"
+            ],
+            "scopeMode": "allExcept",
+            "scopeExcept": [
+              "host:a"
+            ]
+          },
+          [
+            "a",
+            "b",
+            "c"
+          ],
+          {
+            "maxIncluded": 1
+          }
+        ],
+        [
+          {
+            "visibleTo": [
+              "host:b",
+              "host:c"
+            ],
+            "scopeMode": "allExcept",
+            "scopeExcept": [
+              "host:a"
+            ]
+          },
+          [
+            "a",
+            "b",
+            "c"
+          ],
+          {
+            "maxIncluded": 1
+          }
+        ],
+        [
+          {
+            "visibleTo": [
+              "host:b",
+              "host:c"
+            ],
+            "scopeMode": "allExcept",
+            "scopeExcept": [
+              "host:a"
+            ]
+          },
+          [
+            "a",
+            "b",
+            "c"
+          ],
+          {
+            "keepHostIds": [
+              "a"
+            ]
+          }
+        ],
+        [
+          {
+            "visibleTo": [
+              "host:b",
+              "host:c"
+            ],
+            "scopeMode": "allExcept",
+            "scopeExcept": [
+              "host:a"
+            ],
+            "sharing": {
+              "added": [
+                "host:a"
+              ]
+            }
+          },
+          [
+            "a",
+            "b",
+            "c"
+          ]
+        ],
+        [
+          {
+            "visibleTo": [
+              "host:b",
+              "host:c"
+            ],
+            "scopeMode": "allExcept",
+            "scopeExcept": [
+              "host:a"
+            ]
+          },
+          [
+            "a",
+            "b",
+            "c"
+          ],
+          {
+            "keepHostIds": [
+              "gone"
+            ]
+          }
+        ]
+      ]
+    },
+    "describeSharing": {
+      "module": "libs/aglyn/src/lib/app-utils/scope-tokens.ts",
+      "args": [
+        [
+          {
+            "visibleTo": [
+              "org"
+            ]
+          },
+          {}
+        ],
+        [
+          {
+            "visibleTo": [
+              "host:a"
+            ]
+          },
+          {
+            "a": "Bakery"
+          }
+        ],
+        [
+          {
+            "visibleTo": [
+              "host:a",
+              "host:b"
+            ]
+          },
+          {}
+        ],
+        [
+          {
+            "visibleTo": [
+              "host:b"
+            ],
+            "scopeMode": "allExcept",
+            "scopeExcept": [
+              "host:a"
+            ]
+          },
+          {
+            "a": "Bakery"
+          }
+        ],
+        [
+          {
+            "visibleTo": [
+              "host:b"
+            ],
+            "scopeMode": "allExcept",
+            "scopeExcept": [
+              "host:a"
+            ]
+          },
+          {}
+        ],
+        [
+          {
+            "visibleTo": [
+              "host:c"
+            ],
+            "scopeMode": "allExcept",
+            "scopeExcept": [
+              "host:a",
+              "host:b"
+            ]
+          },
+          {
+            "a": "Bakery",
+            "b": "Deli"
+          }
+        ],
+        [
+          {
+            "visibleTo": [
+              "host:c"
+            ],
+            "scopeMode": "allExcept",
+            "scopeExcept": [
+              "host:a",
+              "host:b"
+            ]
+          },
+          {
+            "a": "Bakery"
+          }
+        ],
+        [
+          {
+            "visibleTo": [
+              "host:d"
+            ],
+            "scopeMode": "allExcept",
+            "scopeExcept": [
+              "host:a",
+              "host:b",
+              "host:c"
+            ]
+          },
+          {
+            "a": "Bakery",
+            "b": "Deli",
+            "c": "Cafe"
+          }
+        ],
+        [
+          {
+            "visibleTo": [],
+            "scopeMode": "allExcept",
+            "scopeExcept": [
+              "host:a"
+            ]
+          },
+          {
+            "a": "Bakery"
+          }
+        ],
+        [
+          {
+            "visibleTo": [
+              "org"
+            ],
+            "scopeMode": "allExcept",
+            "scopeExcept": [
+              "host:a"
+            ]
+          },
+          {
+            "a": "Bakery"
+          }
+        ],
+        [
+          null,
+          {}
+        ]
+      ]
+    },
+    "isSiteOnlyScope": {
+      "module": "libs/aglyn/src/lib/app-utils/scope-tokens.ts",
+      "args": [
+        [
+          {
+            "visibleTo": [
+              "host:a"
+            ]
+          },
+          "a"
+        ],
+        [
+          {
+            "visibleTo": [
+              "host:a",
+              "host:a"
+            ]
+          },
+          "a"
+        ],
+        [
+          {
+            "visibleTo": [
+              "host:a",
+              "host:b"
+            ]
+          },
+          "a"
+        ],
+        [
+          {
+            "visibleTo": [
+              "org"
+            ]
+          },
+          "a"
+        ],
+        [
+          {
+            "visibleTo": []
+          },
+          "a"
+        ],
+        [
+          {},
+          "a"
+        ],
+        [
+          null,
+          "a"
+        ],
+        [
+          {
+            "visibleTo": [
+              "host:a"
+            ],
+            "scopeMode": "allExcept",
+            "scopeExcept": [
+              "host:b"
+            ]
+          },
+          "a"
+        ],
+        [
+          {
+            "visibleTo": [
+              "host:a"
+            ],
+            "scopeMode": "other"
+          },
+          "a"
+        ],
+        [
+          {
+            "visibleTo": [
+              "host:a"
+            ],
+            "scopeMode": null
+          },
+          "a"
+        ]
+      ]
+    },
+    "sharingCovers": {
+      "module": "libs/aglyn/src/lib/app-utils/scope-tokens.ts",
+      "args": [
+        [
+          {
+            "visibleTo": [
+              "org"
+            ]
+          },
+          {
+            "visibleTo": [
+              "host:a"
+            ]
+          }
+        ],
+        [
+          {
+            "visibleTo": [
+              "org"
+            ]
+          },
+          {
+            "visibleTo": [
+              "host:b"
+            ],
+            "scopeMode": "allExcept",
+            "scopeExcept": [
+              "host:a"
+            ]
+          }
+        ],
+        [
+          {
+            "visibleTo": [
+              "host:a"
+            ]
+          },
+          {
+            "visibleTo": [
+              "org"
+            ]
+          }
+        ],
+        [
+          {
+            "visibleTo": [
+              "host:a",
+              "host:b"
+            ]
+          },
+          {
+            "visibleTo": [
+              "host:a"
+            ]
+          }
+        ],
+        [
+          {
+            "visibleTo": [
+              "host:a"
+            ]
+          },
+          {
+            "visibleTo": [
+              "host:a",
+              "host:b"
+            ]
+          }
+        ],
+        [
+          {
+            "visibleTo": [
+              "host:a",
+              "host:b"
+            ]
+          },
+          {
+            "visibleTo": [
+              "host:a",
+              "host:b"
+            ],
+            "scopeMode": "allExcept",
+            "scopeExcept": [
+              "host:c"
+            ]
+          }
+        ],
+        [
+          {
+            "visibleTo": [
+              "host:b",
+              "host:c"
+            ],
+            "scopeMode": "allExcept",
+            "scopeExcept": [
+              "host:a"
+            ]
+          },
+          {
+            "visibleTo": [
+              "host:b"
+            ]
+          }
+        ],
+        [
+          {
+            "visibleTo": [
+              "host:b",
+              "host:c"
+            ],
+            "scopeMode": "allExcept",
+            "scopeExcept": [
+              "host:a"
+            ]
+          },
+          {
+            "visibleTo": [
+              "host:a"
+            ]
+          }
+        ],
+        [
+          {
+            "visibleTo": [
+              "host:b",
+              "host:c"
+            ],
+            "scopeMode": "allExcept",
+            "scopeExcept": [
+              "host:a"
+            ]
+          },
+          {
+            "visibleTo": [
+              "org"
+            ]
+          }
+        ],
+        [
+          {
+            "visibleTo": [
+              "host:b",
+              "host:c"
+            ],
+            "scopeMode": "allExcept",
+            "scopeExcept": [
+              "host:a"
+            ]
+          },
+          {
+            "visibleTo": [
+              "host:c"
+            ],
+            "scopeMode": "allExcept",
+            "scopeExcept": [
+              "host:a",
+              "host:b"
+            ]
+          }
+        ],
+        [
+          {
+            "visibleTo": [
+              "host:c"
+            ],
+            "scopeMode": "allExcept",
+            "scopeExcept": [
+              "host:a",
+              "host:b"
+            ]
+          },
+          {
+            "visibleTo": [
+              "host:b",
+              "host:c"
+            ],
+            "scopeMode": "allExcept",
+            "scopeExcept": [
+              "host:a"
+            ]
+          }
+        ],
+        [
+          {
+            "visibleTo": [
+              "host:b",
+              "host:c"
+            ],
+            "scopeMode": "allExcept",
+            "scopeExcept": [
+              "host:a"
+            ]
+          },
+          {
+            "visibleTo": [
+              "host:a",
+              "host:c"
+            ],
+            "scopeMode": "allExcept",
+            "scopeExcept": [
+              "host:b"
+            ]
+          }
+        ],
+        [
+          {
+            "visibleTo": [
+              "host:b",
+              "host:c"
+            ],
+            "scopeMode": "allExcept",
+            "scopeExcept": [
+              "host:a"
+            ]
+          },
+          {
+            "visibleTo": [
+              "host:a",
+              "host:b",
+              "host:c"
+            ],
+            "scopeMode": "allExcept",
+            "scopeExcept": [
+              "host:a"
+            ]
+          }
+        ],
+        [
+          null,
+          {
+            "visibleTo": [
+              "host:a"
+            ]
+          }
+        ]
+      ]
+    },
     "narrowsScope": {
       "module": "libs/aglyn/src/lib/app-utils/scope-tokens.ts",
       "args": [

@@ -19,6 +19,7 @@ import {
   defaultMediaScopeOf,
   defaultScopeForNewResource,
   describeScope,
+  describeSharing,
   grantedScopeTokens,
   heldByHost,
   heldScopeTokens,
@@ -28,6 +29,7 @@ import {
   hostScopeToken,
   isOrgWideScope,
   isScopeToken,
+  isSiteOnlyScope,
   MAX_SCOPE_HOSTS,
   narrowsScope,
   newResourceScopeFields,
@@ -35,10 +37,15 @@ import {
   ORG_SCOPE_TOKEN,
   type ScopeToken,
   parseScopeToken,
+  reconcileAllExcept,
+  SCOPE_MODE_ALL_EXCEPT,
   scopeForHosts,
+  scopeSharingOf,
   scopeToStore,
   scopeTokensForHost,
   seenOnlyThroughGrant,
+  sharingCovers,
+  sharingFromChoice,
   storedScope,
   visibleToHost,
   visibleToTokens,
@@ -519,5 +526,261 @@ describe('held scope tokens', () => {
     // A document with no grants answers exactly as before: never "only a grant".
     expect(seenOnlyThroughGrant({ visibleTo: ['host:a'] }, 'b')).toBe(false)
     expect(seenOnlyThroughGrant({}, 'b')).toBe(false)
+  })
+})
+
+describe('all sites except', () => {
+  const SITES = ['a', 'b', 'c']
+  const marked = (
+    visibleTo: string[],
+    except: string[],
+    extra: Record<string, unknown> = {},
+  ) => ({
+    visibleTo,
+    scopeMode: SCOPE_MODE_ALL_EXCEPT,
+    scopeExcept: except,
+    ...extra,
+  })
+
+  describe('scopeSharingOf', () => {
+    it('reads each way of sharing', () => {
+      expect(scopeSharingOf({ visibleTo: ['org'] })).toEqual({ mode: 'all' })
+      expect(scopeSharingOf({ visibleTo: ['host:a'] })).toEqual({ mode: 'selected', hostIds: ['a'] })
+      expect(scopeSharingOf(marked(['host:b'], ['host:a']))).toEqual({
+        mode: 'allExcept',
+        exceptHostIds: ['a'],
+        includedHostIds: ['b'],
+      })
+      expect(scopeSharingOf({})).toEqual({ mode: 'none' })
+      expect(scopeSharingOf(null)).toEqual({ mode: 'none' })
+    })
+
+    it('believes what readers enforce when the marker disagrees', () => {
+      expect(scopeSharingOf(marked(['org'], ['host:a']))).toEqual({ mode: 'all' })
+      expect(scopeSharingOf({ visibleTo: ['host:b'], scopeMode: 'allExcept' })).toEqual({
+        mode: 'selected',
+        hostIds: ['b'],
+      })
+    })
+  })
+
+  describe('sharingFromChoice', () => {
+    it('All sites clears any marker', () => {
+      expect(sharingFromChoice({ mode: 'all' }, SITES)).toEqual({
+        fields: { visibleTo: ['org'], scopeMode: null, scopeExcept: null },
+        problem: null,
+      })
+    })
+
+    it('chosen sites clear any marker and keep the query cap', () => {
+      expect(sharingFromChoice({ mode: 'selected', hostIds: ['a'] }, SITES).fields).toEqual({
+        visibleTo: ['host:a'],
+        scopeMode: null,
+        scopeExcept: null,
+      })
+      const tooMany = Array.from({ length: MAX_SCOPE_HOSTS + 1 }, (_, at) => `h${at}`)
+      expect(sharingFromChoice({ mode: 'selected', hostIds: tooMany }, tooMany).fields).toBeNull()
+    })
+
+    it('stores the included sites as tokens, with the marker beside them', () => {
+      expect(sharingFromChoice({ mode: 'allExcept', exceptHostIds: ['a'] }, SITES).fields).toEqual({
+        visibleTo: ['host:b', 'host:c'],
+        scopeMode: 'allExcept',
+        scopeExcept: ['host:a'],
+      })
+    })
+
+    it('stores past the 30 a query can ask for, unless the collection caps it', () => {
+      const many = Array.from({ length: 250 }, (_, at) => `h${at}`)
+      const choice = { mode: 'allExcept', exceptHostIds: ['h0'] } as const
+      expect(sharingFromChoice(choice, many).fields?.visibleTo).toHaveLength(249)
+      expect(sharingFromChoice(choice, many, { maxIncluded: 30 }).fields).toBeNull()
+      expect(sharingFromChoice(choice, many, { maxIncluded: 30 }).problem).toContain('30 sites')
+    })
+
+    it('refuses excluding nothing and excluding everything', () => {
+      expect(sharingFromChoice({ mode: 'allExcept', exceptHostIds: [] }, SITES).fields).toBeNull()
+      expect(sharingFromChoice({ mode: 'allExcept', exceptHostIds: ['gone'] }, SITES).fields).toBeNull()
+      expect(sharingFromChoice({ mode: 'allExcept', exceptHostIds: SITES }, SITES).fields).toBeNull()
+    })
+
+    it('a kept site stays on the list though it is excluded', () => {
+      expect(
+        sharingFromChoice({ mode: 'allExcept', exceptHostIds: ['a'] }, SITES, { keepHostIds: ['a'] }).fields,
+      ).toEqual({
+        visibleTo: ['host:a', 'host:b', 'host:c'],
+        scopeMode: 'allExcept',
+        scopeExcept: ['host:a'],
+      })
+    })
+  })
+
+  describe('reconcileAllExcept', () => {
+    it('leaves a document with no marker alone, whatever it says', () => {
+      for (const doc of [{ visibleTo: ['org'] }, { visibleTo: ['host:zzz'] }, {}, null]) {
+        expect(reconcileAllExcept(doc, SITES)).toEqual({ status: 'unmarked', fields: null })
+      }
+    })
+
+    it('adds a new site, and does not add an excluded one', () => {
+      expect(reconcileAllExcept(marked(['host:b'], ['host:a']), SITES)).toEqual({
+        status: 'changed',
+        fields: { visibleTo: ['host:b', 'host:c'], scopeMode: 'allExcept', scopeExcept: ['host:a'] },
+      })
+    })
+
+    it('takes a site that left off both lists', () => {
+      expect(
+        reconcileAllExcept(marked(['host:b', 'host:c', 'host:gone'], ['host:a', 'host:away']), SITES).fields,
+      ).toEqual({ visibleTo: ['host:b', 'host:c'], scopeMode: 'allExcept', scopeExcept: ['host:a'] })
+    })
+
+    it('reports nothing to do whatever order the list is in', () => {
+      expect(reconcileAllExcept(marked(['host:c', 'host:b'], ['host:a']), SITES)).toEqual({
+        status: 'current',
+        fields: null,
+      })
+    })
+
+    it('is idempotent: running over its own answer says current', () => {
+      const first = reconcileAllExcept(marked(['host:gone'], ['host:a']), SITES)
+      expect(first.status).toBe('changed')
+      expect(reconcileAllExcept({ ...first.fields }, SITES).status).toBe('current')
+    })
+
+    it('collapses to All sites when the last exclusion is gone', () => {
+      expect(reconcileAllExcept(marked(['host:b', 'host:c'], ['host:a']), ['b', 'c']).fields).toEqual({
+        visibleTo: ['org'],
+        scopeMode: null,
+        scopeExcept: null,
+      })
+    })
+
+    it('keeps the marker and the data when only excluded sites remain', () => {
+      expect(reconcileAllExcept(marked(['host:b'], ['host:a']), ['a']).fields).toEqual({
+        visibleTo: [],
+        scopeMode: 'allExcept',
+        scopeExcept: ['host:a'],
+      })
+    })
+
+    it('refuses to guess at a damaged marker, in either direction', () => {
+      for (const doc of [
+        marked(['org'], ['host:a']),
+        { visibleTo: ['host:b'], scopeMode: 'allExcept' },
+        { visibleTo: ['host:b'], scopeMode: 'allExcept', scopeExcept: ['junk'] },
+        { visibleTo: ['host:b'], scopeMode: 'other', scopeExcept: ['host:a'] },
+        { scopeMode: 'allExcept', scopeExcept: ['host:a'] },
+      ]) {
+        expect(reconcileAllExcept(doc, SITES)).toEqual({ status: 'invalid', fields: null })
+      }
+    })
+
+    it('stops widening at the cap, and still takes away what is gone', () => {
+      expect(reconcileAllExcept(marked(['host:b'], ['host:a']), SITES, { maxIncluded: 1 })).toEqual({
+        status: 'capped',
+        fields: null,
+      })
+      expect(
+        reconcileAllExcept(marked(['host:b', 'host:gone'], ['host:a']), SITES, { maxIncluded: 1 }),
+      ).toEqual({
+        status: 'capped',
+        fields: { visibleTo: ['host:b'], scopeMode: 'allExcept', scopeExcept: ['host:a'] },
+      })
+    })
+
+    it('never widens past the cap by keeping up: an over-cap document that is current stays', () => {
+      expect(
+        reconcileAllExcept(marked(['host:b', 'host:c'], ['host:a']), SITES, { maxIncluded: 1 }).status,
+      ).toBe('current')
+    })
+
+    it('keeps a site shared by a grant, and a kept site, only while it is in the workspace', () => {
+      const granted = marked(['host:a', 'host:b', 'host:c'], ['host:a'], {
+        sharing: { added: ['host:a'] },
+      })
+      expect(reconcileAllExcept(granted, SITES).status).toBe('current')
+      expect(reconcileAllExcept(marked(['host:b', 'host:c'], ['host:a']), SITES, { keepHostIds: ['a'] }).fields?.visibleTo).toEqual([
+        'host:a',
+        'host:b',
+        'host:c',
+      ])
+      expect(reconcileAllExcept(marked(['host:b', 'host:c'], ['host:a']), SITES, { keepHostIds: ['gone'] }).status).toBe('current')
+    })
+  })
+
+  describe('describeSharing', () => {
+    it('names excluded sites where it can, and counts where it cannot', () => {
+      expect(describeSharing(marked(['host:b'], ['host:a']), { a: 'Bakery' })).toBe('All sites except Bakery')
+      expect(describeSharing(marked(['host:b'], ['host:a']))).toBe('All sites except 1 site')
+      expect(describeSharing(marked(['host:c'], ['host:a', 'host:b']), { a: 'Bakery', b: 'Deli' })).toBe(
+        'All sites except Bakery and Deli',
+      )
+      expect(describeSharing(marked(['host:c'], ['host:a', 'host:b']), { a: 'Bakery' })).toBe('All sites except 2 sites')
+    })
+
+    it('reads as no sites when nothing is included', () => {
+      expect(describeSharing(marked([], ['host:a']), { a: 'Bakery' })).toBe('No sites')
+    })
+
+    it('answers as describeScope for a document with no marker', () => {
+      for (const visibleTo of [['org'], ['host:a'], ['host:a', 'host:b'], []]) {
+        expect(describeSharing({ visibleTo }, { a: 'Bakery' })).toBe(describeScope(visibleTo, { a: 'Bakery' }))
+      }
+    })
+  })
+
+  describe('isSiteOnlyScope', () => {
+    it('answers true only for a site-only document with no marker', () => {
+      expect(isSiteOnlyScope({ visibleTo: ['host:a'] }, 'a')).toBe(true)
+      expect(isSiteOnlyScope({ visibleTo: ['host:a', 'host:a'] }, 'a')).toBe(true)
+      expect(isSiteOnlyScope({ visibleTo: ['host:a', 'host:b'] }, 'a')).toBe(false)
+      expect(isSiteOnlyScope({ visibleTo: ['org'] }, 'a')).toBe(false)
+      expect(isSiteOnlyScope({ visibleTo: [] }, 'a')).toBe(false)
+      expect(isSiteOnlyScope({}, 'a')).toBe(false)
+      expect(isSiteOnlyScope(null, 'a')).toBe(false)
+    })
+
+    /** Deleting the last included site must never erase the workspace's data. */
+    it('is false for a marked document whose list names only this site', () => {
+      expect(isSiteOnlyScope(marked(['host:a'], ['host:b']), 'a')).toBe(false)
+      expect(isSiteOnlyScope({ visibleTo: ['host:a'], scopeMode: 'other' }, 'a')).toBe(false)
+    })
+  })
+
+  describe('sharingCovers', () => {
+    it('answers as scopeCovers when neither side is marked', () => {
+      const scopes = [['org'], ['host:a'], ['host:a', 'host:b'], [], undefined]
+      for (const target of scopes) {
+        for (const source of scopes) {
+          expect(sharingCovers({ visibleTo: target }, { visibleTo: source })).toBe(scopeCovers(target, source))
+        }
+      }
+    })
+
+    it('a chosen-sites target never covers an all-except source: the next site breaks it', () => {
+      expect(sharingCovers({ visibleTo: ['host:a', 'host:b'] }, marked(['host:a', 'host:b'], ['host:c']))).toBe(false)
+    })
+
+    it('All sites covers an all-except source', () => {
+      expect(sharingCovers({ visibleTo: ['org'] }, marked(['host:b'], ['host:a']))).toBe(true)
+    })
+
+    it('an all-except target covers chosen sites it includes, and not All sites', () => {
+      const target = marked(['host:b', 'host:c'], ['host:a'])
+      expect(sharingCovers(target, { visibleTo: ['host:b'] })).toBe(true)
+      expect(sharingCovers(target, { visibleTo: ['host:a'] })).toBe(false)
+      expect(sharingCovers(target, { visibleTo: ['org'] })).toBe(false)
+    })
+
+    it('between two all-except documents, the target may leave out only what the source does', () => {
+      const leavesOutA = marked(['host:b', 'host:c'], ['host:a'])
+      const leavesOutAB = marked(['host:c'], ['host:a', 'host:b'])
+      const leavesOutB = marked(['host:a', 'host:c'], ['host:b'])
+      expect(sharingCovers(leavesOutA, leavesOutAB)).toBe(true)
+      expect(sharingCovers(leavesOutAB, leavesOutA)).toBe(false)
+      expect(sharingCovers(leavesOutA, leavesOutB)).toBe(false)
+      expect(sharingCovers(leavesOutA, marked(['host:b', 'host:c'], ['host:a']))).toBe(true)
+    })
   })
 })
