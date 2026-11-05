@@ -106,20 +106,30 @@ function useSiteVerdict(
 }
 
 /**
- * Whether Create campaign switches off with the permission named instead of
- * failing on save. A campaign created under a site is placed on that one site, so
- * the site's verdict counts there; with no site named, the workspace's alone.
+ * The campaigns list: whether Create campaign and a row's Delete campaign switch
+ * off with the permission named instead of failing on save.
+ *
+ * A campaign created under a site is placed on that one site, so the site's
+ * verdict counts for Create there; with no site named, the workspace's alone.
+ * Delete answers the manage route, whose door goes by where the request is made
+ * from and not by the campaign, so one verdict covers every row and no row pays
+ * a read: under a site the site's verdict, on the workspace's page the workspace's.
  *
  * `false` until the reads land, and for a reader with no membership, who is staff.
  */
-export function useCampaignContainersBlocked(
+export function useCampaignListAccess(
   orgId: string | null | undefined,
-  hostId?: string | null,
-): boolean {
+  hostId: string | null | undefined,
+): { createBlocked: boolean; deleteBlocked: boolean } {
   const member = useContainerMember(orgId)
+  const site = useSiteVerdict(orgId, hostId, member)
   const refused = Boolean(member) && !holdsCampaignContainers(member as CampaignContainerMember)
-  const site = useSiteVerdict(orgId, refused ? hostId : null, member)
-  return refused && (!hostId || (site.known && !site.held))
+  return {
+    createBlocked: refused && (!hostId || (site.known && !site.held)),
+    deleteBlocked: hostId
+      ? site.known && !site.held
+      : Boolean(member) && !workspaceManagesCampaigns(member as CampaignContainerMember),
+  }
 }
 
 /**
