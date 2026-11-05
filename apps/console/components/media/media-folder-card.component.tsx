@@ -17,6 +17,7 @@
 'use client'
 
 import type * as Aglyn from '@aglyn/aglyn'
+import { BlockedControl } from '@aglyn/shared-ui-jsx/components/blocked-control.component'
 import { useDraggable, useDroppable } from '@dnd-kit/core'
 import FolderIcon from '@mui/icons-material/Folder'
 import MoreVertIcon from '@mui/icons-material/MoreVert'
@@ -49,6 +50,10 @@ export interface MediaFolderCardProps {
    * org-wide member, who is the only principal the rules let write a scope.
    */
   onSetScope?: () => void
+  /** "Shared with…" stays off while the reader's permissions are loading. */
+  setScopeHeld?: boolean
+  /** Why "Shared with…" is switched off for this reader, when it is. */
+  setScopeRefusal?: string
   /** Current sharing, rendered under the name when it is restricted. */
   scopeLabel?: string
 }
@@ -74,6 +79,8 @@ export function MediaFolderCard(props: MediaFolderCardProps) {
     onRename,
     onDelete,
     onSetScope,
+    setScopeHeld,
+    setScopeRefusal,
     scopeLabel,
   } = props
   const [menuAnchor, setMenuAnchor] = useState<HTMLElement | null>(null)
@@ -216,7 +223,15 @@ export function MediaFolderCard(props: MediaFolderCardProps) {
           <MenuItem onClick={runAction(onRename)}>{'Rename'}</MenuItem>
         ) : null}
         {onSetScope ? (
-          <MenuItem onClick={runAction(onSetScope)}>{'Shared with…'}</MenuItem>
+          <BlockedControl
+            blocked={Boolean(setScopeRefusal)}
+            reason={setScopeRefusal ?? ''}
+            fullWidth
+          >
+            <MenuItem disabled={setScopeHeld} onClick={runAction(onSetScope)}>
+              {'Shared with…'}
+            </MenuItem>
+          </BlockedControl>
         ) : null}
         {onDelete ? (
           <MenuItem onClick={runAction(onDelete)} sx={{ color: 'error.main' }}>

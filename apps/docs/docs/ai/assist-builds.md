@@ -269,8 +269,8 @@ not changed: the new one goes live when the build publishes, or when you publish
 your header or footer has no list of links to add to, the layout is left as it is, and
 **Finish your store** asks you to add the links yourself.
 
-This needs a plan that includes a store, with **Commerce** on for the site, and the editor
-role. When the build is done, the card shows **Finish your store**: connect payments, review
+This needs a plan that includes a store, with **Commerce** on for the site, and the **Edit
+site content** permission. When the build is done, the card shows **Finish your store**: connect payments, review
 your products, set shipping and tax, and fill in your policies. The payments step is marked
 done when your workspace's Stripe account already takes payments.
 

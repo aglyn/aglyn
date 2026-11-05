@@ -388,7 +388,7 @@ async function handler(request: Request): Promise<Response> {
       // Admin SDK and never sees them.
       if (!scope.viewerOrgWide) {
         return Response.json(
-          { error: 'Only an organization admin can change sharing' },
+          { error: 'Only members of the whole workspace can change sharing, not members who work on named sites' },
           { status: 403 },
         )
       }
@@ -525,7 +525,7 @@ async function handler(request: Request): Promise<Response> {
       }
       if (!scope.viewerOrgWide) {
         return Response.json(
-          { error: 'Only an organization admin can change this' },
+          { error: 'Only members of the whole workspace can change this, not members who work on named sites' },
           { status: 403 },
         )
       }

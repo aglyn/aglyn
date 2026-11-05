@@ -562,6 +562,26 @@
       "why": "The commerce plugin's keys for members of the whole workspace only (refunds, the register's approvals, order webhooks), assembled into the contracts' ORG_ROLE_GRANTS (AGL-4047); type-only imports."
     },
     {
+      "path": "libs/plugins/help-desks/src/lib/model/help-desks-permissions.ts",
+      "why": "The help desks plugin's site keys and their site-role presets, assembled into the contracts' ORG_ROLE_GRANTS (AGL-4047); type-only imports."
+    },
+    {
+      "path": "libs/plugins/loyalty/src/lib/model/loyalty-permissions.ts",
+      "why": "The rewards plugin's site keys and their site-role presets, assembled into the contracts' ORG_ROLE_GRANTS (AGL-4047); type-only imports."
+    },
+    {
+      "path": "libs/plugins/marketing-platforms/src/lib/model/marketing-platforms-permissions.ts",
+      "why": "The email platforms plugin's site keys and their site-role presets, assembled into the contracts' ORG_ROLE_GRANTS (AGL-4047); type-only imports."
+    },
+    {
+      "path": "libs/plugins/sales-channels/src/lib/model/sales-channels-permissions.ts",
+      "why": "The sales channels plugin's site keys and their site-role presets, assembled into the contracts' ORG_ROLE_GRANTS (AGL-4047); type-only imports."
+    },
+    {
+      "path": "libs/plugins/shipping/src/lib/model/shipping-permissions.ts",
+      "why": "The shipping plugin's site keys and their site-role presets, assembled into the contracts' ORG_ROLE_GRANTS (AGL-4047); type-only imports."
+    },
+    {
       "path": "libs/plugins/funnels/src/lib/model/funnels-permissions.ts",
       "why": "The funnels plugin's site key (Manage funnels) and its site-role preset, assembled into the contracts' ORG_ROLE_GRANTS (AGL-4047); type-only imports."
     },

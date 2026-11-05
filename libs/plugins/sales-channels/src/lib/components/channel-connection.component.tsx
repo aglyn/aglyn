@@ -17,6 +17,10 @@
 
 'use client'
 
+import { permissionRefusalText } from '@aglyn/aglyn/app-utils/org-permissions'
+import { BlockedControl } from '@aglyn/shared-ui-jsx/components/blocked-control.component'
+import { useSiteKeys } from '@aglyn/tenant-feature-instance/hooks/use-site-keys'
+import { SALES_CHANNELS_SITE_PRESETS } from '../model/sales-channels-permissions'
 import { pluginDocsHelp } from '@aglyn/aglyn/app-utils/docs-help'
 import { CardDisplay, useConfirmationContext } from '@aglyn/shared-ui-jsx'
 import { StatusChip } from '@aglyn/shared-ui-jsx/components/status-chip.component'
@@ -67,7 +71,7 @@ const OUTCOMES: Record<string, { severity: 'success' | 'warning' | 'error'; mess
   },
   denied: { severity: 'warning', message: (service) => `${service} access was not granted.` },
   expired: { severity: 'error', message: () => 'The connection took too long or was already used. Connect again.' },
-  'not-permitted': { severity: 'error', message: () => 'Only a site admin can connect a channel.' },
+  'not-permitted': { severity: 'error', message: () => permissionRefusalText('salesChannels.connect') },
   failed: { severity: 'error', message: (service) => `${service} could not be connected. Try again.` },
 }
 
@@ -93,6 +97,10 @@ function useConnectOutcome(provider: ConnectProvider | undefined): string | null
 
 export function ChannelConnection(props: ChannelConnectionProps) {
   const { hostId, entry } = props
+  const { blocked } = useSiteKeys(hostId)
+  const connectRefused = blocked('salesChannels.connect', SALES_CHANNELS_SITE_PRESETS['salesChannels.connect'])
+  const syncRefused = blocked('salesChannels.sync', SALES_CHANNELS_SITE_PRESETS['salesChannels.sync'])
+  const connectReason = permissionRefusalText('salesChannels.connect')
   const request = useSalesChannelsFetch()
   const { enqueueSnackbar } = useSnackbar()
   const [connection, setConnection] = useState<ConnectionState | null>(entry?.connection ?? null)
@@ -169,26 +177,34 @@ export function ChannelConnection(props: ChannelConnectionProps) {
   const result = connection?.lastSyncResult
 
   const action = !connection ? (
-    <Button variant="contained" onClick={() => void connect()} disabled={busy !== null}>
-      {busy === 'connect' ? 'Opening…' : 'Connect'}
-    </Button>
+    <BlockedControl blocked={connectRefused} reason={connectReason}>
+      <Button variant="contained" onClick={() => void connect()} disabled={busy !== null}>
+        {busy === 'connect' ? 'Opening…' : 'Connect'}
+      </Button>
+    </BlockedControl>
   ) : (
     <Stack direction="row" spacing={1}>
       {reconnectDue ? (
-        <Button variant="outlined" onClick={() => void connect()} disabled={busy !== null}>
-          {'Reconnect'}
-        </Button>
+        <BlockedControl blocked={connectRefused} reason={connectReason}>
+          <Button variant="outlined" onClick={() => void connect()} disabled={busy !== null}>
+            {'Reconnect'}
+          </Button>
+        </BlockedControl>
       ) : null}
-      <Button
-        variant="contained"
-        onClick={() => void sync()}
-        disabled={busy !== null || !connection.targetId}
-      >
-        {busy === 'sync' ? 'Syncing…' : 'Sync now'}
-      </Button>
-      <Button color="warning" onClick={() => void disconnect()} disabled={busy !== null}>
-        {'Disconnect'}
-      </Button>
+      <BlockedControl blocked={syncRefused} reason={permissionRefusalText('salesChannels.sync')}>
+        <Button
+          variant="contained"
+          onClick={() => void sync()}
+          disabled={busy !== null || !connection.targetId}
+        >
+          {busy === 'sync' ? 'Syncing…' : 'Sync now'}
+        </Button>
+      </BlockedControl>
+      <BlockedControl blocked={connectRefused} reason={connectReason}>
+        <Button color="warning" onClick={() => void disconnect()} disabled={busy !== null}>
+          {'Disconnect'}
+        </Button>
+      </BlockedControl>
     </Stack>
   )
 
@@ -235,7 +251,7 @@ export function ChannelConnection(props: ChannelConnectionProps) {
               size="small"
               label={labels.target}
               value={connection.targetId}
-              disabled={busy !== null}
+              disabled={busy !== null || connectRefused}
               onChange={(event) => void select(event.target.value)}
             >
               {connection.targets.map((target) => (

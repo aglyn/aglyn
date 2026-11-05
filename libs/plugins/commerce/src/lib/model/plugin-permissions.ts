@@ -197,6 +197,7 @@ export type CommerceSitePermission =
   | 'commerce.quotes'
   | 'commerce.quotes.send'
   | 'commerce.giftCards'
+  | 'commerce.giftCards.import'
   | 'commerce.paymentMethods'
   | 'commerce.shippingConnections'
 
@@ -304,6 +305,17 @@ export const COMMERCE_SITE_PERMISSIONS: readonly PluginOrgPermissionDeclaration[
     description: 'Issue, adjust and void the store’s gift cards. Follows the site role unless a role or member sets it.',
     roleDefaults: { ...RESERVATION_ORG_ROLE_PRESET },
     hostRoleDefaults: { ...ORDERS_SITE_ROLE_PRESET },
+    group: 'commerce',
+    groupLabel: 'Commerce',
+    presetFromSiteRole: true,
+  },
+  {
+    key: 'commerce.giftCards.import',
+    label: 'Import gift cards',
+    description:
+      'Import gift cards from a file, which issues each one as spendable money. Also takes "Manage data". Follows the site role unless a role or member sets it.',
+    roleDefaults: { ...STORE_SETTINGS_ORG_ROLE_PRESET },
+    hostRoleDefaults: { ...STORE_SETTINGS_SITE_ROLE_PRESET },
     group: 'commerce',
     groupLabel: 'Commerce',
     presetFromSiteRole: true,

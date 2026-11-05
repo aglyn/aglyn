@@ -15,6 +15,9 @@
  * limitations under the License.
  */
 
+import { holdsStampedSiteKey } from '@aglyn/aglyn/app-utils/host-permissions'
+import { permissionRefusalText } from '@aglyn/aglyn/app-utils/org-permissions'
+import { HELP_DESKS_SITE_PRESETS, type HelpDesksSitePermission } from '../model/help-desks-permissions'
 import { normalizeNotificationLink } from '@aglyn/aglyn/app-utils/notifications'
 import { checkEntitlement } from '@aglyn/aglyn/app-utils/plan-entitlements'
 import { PLATFORM_BRAND_NAME, platformConsoleOrigin } from '@aglyn/aglyn/app-utils/platform-brand'
@@ -39,7 +42,7 @@ import { createHelpDeskProvider } from '../providers/registry'
 import { readHelpDesksConfig } from './config'
 import { createCredentialOpener } from './credentials'
 import type { IntakeDeps } from './intake'
-import { fail, type HelpDeskGateResult, type HelpDeskRole, type HelpDeskRouteDeps } from './routes'
+import { fail, type HelpDeskGateResult, type HelpDeskRouteDeps } from './routes'
 import { createFirestoreConnectionStore, type ConnectionStore } from './store'
 import { runConnectionSync, type SyncRunDeps } from './sync-engine'
 
@@ -64,8 +67,6 @@ const http = (): ProviderHttp => httpOverride ?? defaultProviderHttp()
 
 let store: ConnectionStore | null = null
 export const platformConnectionStore = (): ConnectionStore => (store ??= createFirestoreConnectionStore(firestore))
-
-const ROLE_RANK: Record<string, number> = { viewer: 1, author: 1, editor: 2, admin: 3 }
 
 const HOST_ID = /^[A-Za-z0-9_-]{1,128}$/
 
@@ -125,7 +126,7 @@ async function readBody(request: Request): Promise<Record<string, unknown>> {
 }
 
 /** Who may use a route: a verified member of the site at `role`, the site entitled and not locked. */
-export async function helpDesksGate(request: Request, role: HelpDeskRole): Promise<HelpDeskGateResult | Response> {
+export async function helpDesksGate(request: Request, permission: HelpDesksSitePermission | null): Promise<HelpDeskGateResult | Response> {
   const authorization = request.headers.get('authorization') ?? ''
   if (!authorization.startsWith('Bearer ')) return fail(401, 'Unauthenticated')
   let decoded
@@ -144,8 +145,12 @@ export async function helpDesksGate(request: Request, role: HelpDeskRole): Promi
   const site = await siteContext(hostId)
   if (!site) return fail(404, 'That site was not found')
   const staff = decoded['staff'] === true
-  const memberRole = String((site.host['memberRoles'] as Record<string, unknown> | undefined)?.[decoded.uid] ?? '')
-  if (!staff && (ROLE_RANK[memberRole] ?? 0) < ROLE_RANK[role]) return fail(403, 'Not permitted')
+  const memberRoles = (site.host['memberRoles'] ?? {}) as Record<string, unknown>
+  // No key named: anyone on the site's roster reads it.
+  if (!staff && !memberRoles[decoded.uid]) return fail(403, 'Not permitted')
+  if (!staff && permission && !holdsStampedSiteKey(site.host, decoded.uid, permission, HELP_DESKS_SITE_PRESETS[permission])) {
+    return fail(403, permissionRefusalText(permission))
+  }
   if (!site.entitled) return fail(403, 'Help desk connections come with the plans that include the store')
   if (!site.enabled) return fail(403, 'Help desks is switched off for this site')
   const locked = await lockdownRefusal({

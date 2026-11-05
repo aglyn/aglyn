@@ -23,7 +23,8 @@ import useOrgPermissions from './use-org-permissions'
 
 /**
  * Whether Settings → Import & export is for this person (AGL-3554): anyone
- * who may export something from the workspace — whoever holds `data.manage`,
+ * who may export something from the workspace — whoever holds `data.manage`
+ * or `org.export` (the whole workspace's copy lives on that page, AGL-4047),
  * and a member a resource lets read its records (`readableByMembers`, a
  * `readPermission`) on a plan that moves them, as the launcher's `can`
  * answers. The page itself then offers each button only where its route
@@ -33,7 +34,7 @@ export function useTransferHubVisible(): boolean {
   const launcher = useTransferLauncher()
   const { can, loaded } = useOrgPermissions()
   if (!loaded) return false
-  if (can('data.manage')) return true
+  if (can('data.manage') || can('org.export')) return true
   if (!launcher) return false
   return PLUGIN_TRANSFER_RESOURCES_DECLARED.some(
     (one) => one.kinds.includes('records') && launcher.can('export', { resource: one.key, scope: one.scope }),

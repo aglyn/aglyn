@@ -219,7 +219,7 @@ export async function connectionRoute(request: Request): Promise<Response> {
   if (request.method !== 'GET' && request.method !== 'POST')
     return refuse(405, 'Method not allowed')
   const gate = await loyaltyGate(request, {
-    role: request.method === 'GET' ? 'viewer' : 'admin',
+    permission: request.method === 'GET' ? null : 'loyalty.connection',
   })
   if (gate instanceof Response) return gate
   const scope = { orgId: gate.orgId, hostId: gate.hostId }

@@ -277,7 +277,6 @@ describe('native workspace settings', () => {
     const card = read('apps/console/components/settings/org-general-card.component.tsx')
     it('says what the console says', () => {
       sentences(card, nativeText('core.settings.general'), [
-        'Changing these settings requires the admin role.',
         'Every site in this workspace dates its posts and pages in this zone, unless the site sets its own under Admin',
         'The old URL keeps redirecting, but share the new one going forward.',
         'Only the organization owner can change the URL.',
@@ -311,7 +310,7 @@ describe('native workspace settings', () => {
         'Deletion canceled — your organization is safe.',
       ])
       sentences(exportCard, native, [
-        'A machine-readable JSON copy of everything this workspace holds — its sites and their content, datasets, contacts, orders, form submissions, members, support threads and billing identifiers. Owners and admins only.',
+        'A machine-readable JSON copy of everything this workspace holds — its sites and their content, datasets, contacts, orders, form submissions, members, support threads and billing identifiers.',
         'Your data is downloading.',
       ])
     })

@@ -16,6 +16,10 @@
  */
 'use client'
 
+import { permissionRefusalText } from '@aglyn/aglyn/app-utils/org-permissions'
+import { BlockedControl } from '@aglyn/shared-ui-jsx/components/blocked-control.component'
+import { useSiteKeys } from '@aglyn/tenant-feature-instance/hooks/use-site-keys'
+import { LOYALTY_SITE_PRESETS } from '../model/loyalty-permissions'
 import { pluginDocsHelp } from '@aglyn/aglyn/app-utils/docs-help'
 import { CardDisplay } from '@aglyn/shared-ui-jsx'
 import { StatusChip } from '@aglyn/shared-ui-jsx/components/status-chip.component'
@@ -72,8 +76,8 @@ function toChange(draft: Draft): { change: Record<string, unknown> } | { problem
  * THE REWARDS PROGRAM, under the store's Promotions (AGL-3640): whether
  * customers earn, the earn and redeem rates, the referral offer, and the
  * emails — with what members hold right now, which is a liability the store
- * owes. Save sits in the card's header. Changing the program needs an admin;
- * anyone on the site can read it.
+ * owes. Save sits in the card's header. Changing the program takes "Change the
+ * rewards program"; anyone on the site can read it.
  */
 export function LoyaltyProgramCard(props: { hostId: string; onChanged?: (answer: LoyaltyProgramAnswer) => void }) {
   const { hostId, onChanged } = props
@@ -83,6 +87,7 @@ export function LoyaltyProgramCard(props: { hostId: string; onChanged?: (answer:
   const [draft, setDraft] = useState<Draft | null>(null)
   const [error, setError] = useState<string | null>(null)
   const [saving, setSaving] = useState(false)
+  const refused = useSiteKeys(hostId).blocked('loyalty.program', LOYALTY_SITE_PRESETS['loyalty.program'])
 
   useEffect(() => {
     let live = true
@@ -134,6 +139,7 @@ export function LoyaltyProgramCard(props: { hostId: string; onChanged?: (answer:
       onChange={(event) => setDraft((prior) => (prior ? { ...prior, [key]: event.target.value } : prior))}
       helperText={helper}
       inputMode={money ? 'decimal' : 'numeric'}
+      disabled={refused}
       slotProps={{ htmlInput: { 'data-testid': `loyalty-${key}` } }}
       fullWidth
     />
@@ -142,6 +148,7 @@ export function LoyaltyProgramCard(props: { hostId: string; onChanged?: (answer:
     <FormControlLabel
       control={
         <Switch
+          disabled={refused}
           checked={Boolean(draft[key])}
           onChange={(event) => setDraft((prior) => (prior ? { ...prior, [key]: event.target.checked } : prior))}
           slotProps={{ input: { 'aria-label': label } }}
@@ -174,9 +181,11 @@ export function LoyaltyProgramCard(props: { hostId: string; onChanged?: (answer:
               tone={program.enabled ? 'success' : 'neutral'}
               data-testid="loyalty-program-status"
             />
-            <Button variant="contained" disabled={saving || !dirty} onClick={save}>
-              {saving ? 'Saving…' : 'Save'}
-            </Button>
+            <BlockedControl blocked={refused} reason={permissionRefusalText('loyalty.program')}>
+              <Button variant="contained" disabled={saving || !dirty} onClick={save}>
+                {saving ? 'Saving…' : 'Save'}
+              </Button>
+            </BlockedControl>
           </Stack>
         ),
       }}

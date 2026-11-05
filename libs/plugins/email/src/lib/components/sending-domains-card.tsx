@@ -16,6 +16,7 @@
  */
 'use client'
 
+import { permissionRefusalText } from '@aglyn/aglyn/app-utils/org-permissions'
 import { pluginDocsHelp } from '@aglyn/aglyn'
 import { ICON_VARIANT_CLOSE } from '@aglyn/shared-data-enums'
 import {
@@ -435,8 +436,7 @@ export function SendingDomainsCard(props: SendingDomainsCardProps) {
       const manage = view?.canManage === true
       const entitled = view?.entitled === true
       const selected = view?.selected === record.domain
-      const orgAdminReason =
-        'Managing sending domains needs the organization admin role.'
+      const orgAdminReason = permissionRefusalText('org.settings')
       const domainRouteReason = !manage
         ? orgAdminReason
         : !entitled
@@ -478,8 +478,7 @@ export function SendingDomainsCard(props: SendingDomainsCardProps) {
               ? 'Only a verified domain can be sent as. Publish its records ' +
                 'and check DNS first.'
               : !manage
-                ? 'Choosing what this site sends as needs the organization ' +
-                  'admin role.'
+                ? permissionRefusalText('org.settings')
                 : undefined,
           onClick: () => void handleUseDomain(record.domain),
         },
@@ -966,8 +965,7 @@ export function SendingDomainsCard(props: SendingDomainsCardProps) {
          */}
         {view && !view.canManage ? (
           <Alert severity="info">
-            {'Adding a domain and choosing what this site sends as needs the ' +
-              'organization admin role. You can see the current state here.'}
+            {`${permissionRefusalText('org.settings')}. You can see the current state here.`}
           </Alert>
         ) : null}
 

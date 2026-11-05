@@ -32,6 +32,10 @@ let availability: Record<string, unknown> = { loading: false, available: false }
 const request = jest.fn()
 const enqueueSnackbar = jest.fn()
 
+jest.mock('@aglyn/tenant-feature-instance/hooks/use-site-keys', () => ({
+  useSiteKeys: () => ({ blocked: (key: string) => mockBlockedKeys.has(key) }),
+}))
+const mockBlockedKeys = new Set<string>()
 jest.mock('./shipping-api', () => ({
   ...jest.requireActual('./shipping-api'),
   useShippingAvailability: () => availability,

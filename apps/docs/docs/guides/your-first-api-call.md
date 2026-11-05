@@ -17,7 +17,7 @@ with Windows 10 and later. There's a JavaScript version of each step underneath.
 
 :::info What you need
 - An organization on a plan that **includes API access** — Pro or Custom.
-- Permission to manage the organization — only **owners and admins** can create keys.
+- The **Manage API keys** permission, which owners and admins hold by default.
 - A terminal.
 :::
 

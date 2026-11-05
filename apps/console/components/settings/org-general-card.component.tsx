@@ -28,6 +28,7 @@ import {
 } from '@mui/material'
 import { useSnackbar } from '@aglyn/shared-ui-snackstack'
 import { useEffect, useState } from 'react'
+import { permissionRefusalText } from '@aglyn/aglyn/app-utils/org-permissions'
 import { isValidOrgSlug, supportedTimeZones } from '@aglyn/aglyn'
 import { WORKSPACE_DOMAIN } from '../../constants/workspace-domain'
 import { docsHelp } from '../../constants/docs-links'
@@ -229,7 +230,7 @@ export function OrgGeneralCard() {
       </Stack>
     ) : (
       <Alert severity="info">
-        {'Changing these settings requires the admin role.'}
+        {permissionRefusalText('org.settings')}
       </Alert>
     )}
   </Stack>

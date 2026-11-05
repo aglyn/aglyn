@@ -15,6 +15,7 @@
  * limitations under the License.
  */
 
+import type { HelpDesksSitePermission } from '../model/help-desks-permissions'
 import { LOG_PAGE_LIMIT, SYNC_NOW_MAX_PAGES } from '../constants'
 import {
   HELP_DESK_PROVIDERS,
@@ -32,13 +33,11 @@ import { connectionView, emptyConnection, type ConnectionStore, type StoredConne
 /**
  * The console routes of the help desks card (AGL-3824). Every route is
  * behind {@link HelpDeskRouteDeps.gate}: a signed-in, verified member of the
- * site, at `editor` to read and `admin` to change anything, on a plan with
- * the store, the site not locked.
+ * site, holding "See help desk connections" to read and "Manage help desk
+ * connections" to change anything, on a plan with the store, the site not locked.
  *
  * No answer ever carries a credential: the card sees {@link connectionView}.
  */
-
-export type HelpDeskRole = 'editor' | 'admin'
 
 export interface HelpDeskGateResult {
   orgId: string
@@ -52,7 +51,7 @@ export interface HelpDeskRouteDeps {
   config(): HelpDesksConfig
   store: ConnectionStore
   provider(id: HelpDeskProviderId): HelpDeskProvider
-  gate(request: Request, role: HelpDeskRole): Promise<HelpDeskGateResult | Response>
+  gate(request: Request, permission: HelpDesksSitePermission | null): Promise<HelpDeskGateResult | Response>
   /** Runs a connection's sync now, a few pages at most; the job continues it. */
   syncNow(connectionId: string, maxPages: number): Promise<unknown>
   /** Records a connect or a disconnect on the workspace's activity log. Must not throw. */
@@ -95,7 +94,7 @@ export function createHelpDeskRoutes(deps: HelpDeskRouteDeps) {
     /** GET ?hostId — what this deployment offers, and the site's connections. */
     async list(request: Request): Promise<Response> {
       if (request.method !== 'GET') return fail(405, 'Method not allowed')
-      const gate = await deps.gate(request, 'editor')
+      const gate = await deps.gate(request, 'helpDesks.view')
       if (gate instanceof Response) return gate
       const available = availableProviders(deps.config())
       const connections = (await deps.store.listForHost(gate.hostId)).map(({ id, connection }) =>
@@ -107,7 +106,7 @@ export function createHelpDeskRoutes(deps: HelpDeskRouteDeps) {
     /** POST { hostId, provider, …credential } — connect with the merchant's own credential. */
     async connect(request: Request): Promise<Response> {
       if (request.method !== 'POST') return fail(405, 'Method not allowed')
-      const gate = await deps.gate(request, 'admin')
+      const gate = await deps.gate(request, 'helpDesks.manage')
       if (gate instanceof Response) return gate
       const provider = readProvider(gate.body, request)
       if (!provider) return fail(400, 'Choose a help desk')
@@ -176,7 +175,7 @@ export function createHelpDeskRoutes(deps: HelpDeskRouteDeps) {
     /** PATCH { hostId, provider, …settings } · DELETE { hostId, provider } */
     async connection(request: Request): Promise<Response> {
       if (request.method !== 'PATCH' && request.method !== 'DELETE') return fail(405, 'Method not allowed')
-      const gate = await deps.gate(request, 'admin')
+      const gate = await deps.gate(request, 'helpDesks.manage')
       if (gate instanceof Response) return gate
       const provider = readProvider(gate.body, request)
       if (!provider) return fail(400, 'Choose a help desk')
@@ -218,7 +217,7 @@ export function createHelpDeskRoutes(deps: HelpDeskRouteDeps) {
     /** POST { hostId, provider } — run the sync now; resumes one stopped by failures. */
     async syncNow(request: Request): Promise<Response> {
       if (request.method !== 'POST') return fail(405, 'Method not allowed')
-      const gate = await deps.gate(request, 'admin')
+      const gate = await deps.gate(request, 'helpDesks.manage')
       if (gate instanceof Response) return gate
       const provider = readProvider(gate.body, request)
       if (!provider) return fail(400, 'Choose a help desk')
@@ -236,7 +235,7 @@ export function createHelpDeskRoutes(deps: HelpDeskRouteDeps) {
     /** GET ?hostId&provider&before — the connection's runs and errors, newest first. */
     async log(request: Request): Promise<Response> {
       if (request.method !== 'GET') return fail(405, 'Method not allowed')
-      const gate = await deps.gate(request, 'editor')
+      const gate = await deps.gate(request, 'helpDesks.view')
       if (gate instanceof Response) return gate
       const provider = readProvider(gate.body, request)
       if (!provider) return fail(400, 'Choose a help desk')

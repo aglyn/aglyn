@@ -172,7 +172,7 @@ describe('the day totals card', () => {
 
   it('shows the prerequisite instead of asking when the viewer cannot use the register', () => {
     render(<PosDayTotalsCard hostId="shop" canManagePos={false} />)
-    expect(screen.getByText(/Day totals are for members who can use the register/)).toBeTruthy()
+    expect(screen.getByText(/Day totals take the "Use the point of sale" permission/)).toBeTruthy()
     expect(mockFetch).not.toHaveBeenCalled()
     expect((screen.getByText('Export CSV').closest('button') as HTMLButtonElement).disabled).toBe(true)
     expect((screen.getByText('Print').closest('button') as HTMLButtonElement).disabled).toBe(true)

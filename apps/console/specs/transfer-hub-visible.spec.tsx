@@ -25,6 +25,7 @@
 import { renderHook } from '@testing-library/react'
 
 let mockManages = false
+let mockExportsWorkspace = false
 let mockLoaded = true
 /** The resources the launcher lets this person export. */
 let mockExportable = new Set<string>()
@@ -36,13 +37,18 @@ jest.mock('@aglyn/aglyn/app-utils/transfer-launcher-context', () => ({
 }))
 jest.mock('../hooks/use-org-permissions', () => ({
   __esModule: true,
-  default: () => ({ loaded: mockLoaded, can: (permission: string) => mockManages && permission === 'data.manage' }),
+  default: () => ({
+    loaded: mockLoaded,
+    can: (permission: string) =>
+      (mockManages && permission === 'data.manage') || (mockExportsWorkspace && permission === 'org.export'),
+  }),
 }))
 
 import useTransferHubVisible from '../hooks/use-transfer-hub-visible'
 
 beforeEach(() => {
   mockManages = false
+  mockExportsWorkspace = false
   mockLoaded = true
   mockExportable = new Set()
 })
@@ -58,9 +64,15 @@ describe('useTransferHubVisible (AGL-3554)', () => {
     expect(renderHook(() => useTransferHubVisible()).result.current).toBe(true)
   })
 
+  it('is open to whoever holds Export workspace data, whose card lives on that page (AGL-4047)', () => {
+    mockExportsWorkspace = true
+    expect(renderHook(() => useTransferHubVisible()).result.current).toBe(true)
+  })
+
   it('is closed to a member who may export nothing, and until permissions answer', () => {
     expect(renderHook(() => useTransferHubVisible()).result.current).toBe(false)
     mockManages = true
+    mockExportsWorkspace = true
     mockLoaded = false
     expect(renderHook(() => useTransferHubVisible()).result.current).toBe(false)
   })

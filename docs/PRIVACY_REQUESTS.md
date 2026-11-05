@@ -128,7 +128,7 @@ reversible-where-it-matters, and need no staff involvement:
 | **Erasure — workspace** | `/[orgSlug]/settings` → **Delete** tab → **Delete organization** | Owner only; type the org name; the retention funnel; then a **7-day reversible hold** with a **Cancel deletion** button |
 | **Erasure — one site** | `/[orgSlug]/hosts/[host]/admin` → **Delete site** | Site admin. Immediate, no hold |
 | **Access / portability — person** | `/manage/user` → **Close account** tab → **Download my data** | Machine-readable JSON, served to their own session. Excludes colleagues' data; never reproduces a secret |
-| **Access / portability — workspace** | `/[orgSlug]/settings` → **Delete** tab → **Download workspace data** | Owner or admin. No plan gate — a statutory right is not a feature |
+| **Access / portability — workspace** | `/[orgSlug]/settings/data` → **Download workspace data** | The **Export workspace data** permission, which owners and admins hold by default. No plan gate — a statutory right is not a feature |
 | **Access / portability — the people a workspace holds** | `/[orgSlug]/settings/privacy` → **Export contacts** / **Export leads** | Owner or admin (the **Manage data** permission). **Every plan** — outside the CRM, so Free has it too. Each opens the transfer framework's export dialog on `crm.contacts` / `crm.leads` over the whole workspace (AGL-3552): every record, the fields and format the requester needs (CSV, JSON, NDJSON). The **Erase a person** card beside them is §6's |
 | **Rectification** | `/manage/user` and org settings | Self-service |
 | **Call/text opt-out** | reply STOP, or ask us — §5 | |
@@ -145,8 +145,9 @@ wrong account.
 **Offer self-serve first — it is a stronger answer, not merely an easier one.**
 `/manage/user` → Close account → **Download my data** produces a
 machine-readable JSON copy, served to the account's own signed-in session, so
-it cannot act on the wrong account. Owners get the whole workspace from
-**Settings → Delete → Download workspace data**, and owners and admins get the
+it cannot act on the wrong account. Holders of the **Export workspace data**
+permission, by default owners and admins, get the whole workspace from
+**Settings → Import & export → Download workspace data**, and owners and admins get the
 people it holds as CSV from **Settings → Privacy → Export contacts** /
 **Export leads**, on every plan. Reply with the link and the exact button name.
 

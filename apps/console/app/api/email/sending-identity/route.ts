@@ -123,6 +123,7 @@
  */
 
 import { holdsSiteKey, siteKeyRefusal } from '@aglyn/aglyn/app-utils/host-permissions'
+import { permissionRefusalText } from '@aglyn/aglyn/app-utils/org-permissions'
 import { checkEntitlement, pluginRequestFromWeb } from '@aglyn/aglyn/server'
 import {
   emailUnverifiedResponse,
@@ -610,9 +611,7 @@ async function handler(request: Request): Promise<Response> {
   if (!canManage) {
     return Response.json(
       {
-        error:
-          'Changing the address this site sends from needs the organization ' +
-          'admin role.',
+        error: permissionRefusalText('org.settings'),
       },
       { status: 403 },
     )

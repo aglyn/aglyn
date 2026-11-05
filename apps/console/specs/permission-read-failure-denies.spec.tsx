@@ -437,8 +437,7 @@ const RENEWAL_TEXT = subscriptionPeriodNotice({
   currentPeriodEnd: PAYING_PRO_ORG.subscription.currentPeriodEnd,
 }).sentence as string
 const REFUSAL =
-  'You do not have permission to view billing for this ' +
-  'organization — ask an organization admin for access.'
+  'Your role does not include "View billing" — ask an organization admin'
 
 let fetchMock: jest.Mock
 

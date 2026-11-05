@@ -289,7 +289,7 @@ export function createOutreachMailboxRoutes(deps: OutreachMailboxRouteDeps): Out
         'not-your-mailbox',
         who === 'member'
           ? 'Only the member who connected this mailbox can do that.'
-          : 'Only the member who connected this mailbox, or an organization owner or admin, can change it.',
+          : 'Only the member who connected this mailbox, or a member holding "Manage everyone’s Sequences", can change it.',
       )
     }
     return { gate, mailbox }

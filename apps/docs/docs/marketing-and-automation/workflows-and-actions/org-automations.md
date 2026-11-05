@@ -117,7 +117,8 @@ site's own workflows, actions and webhooks side by side, with the site each belo
 Each row opens that site's **Automation**, where it is edited, and **Add … on a site**
 asks which site first. The lists open with the first few sites and show the rest when
 asked; a site with more than fits in the list links to its own page for all of them.
-Webhooks are listed for admins and editors, because each holds its site's secret.
+Each site's webhooks are listed for members who hold **See orders and webhooks** on that
+site, because each holds its site's secret. A site's Admins and Editors hold it by default.
 
 ## Related
 

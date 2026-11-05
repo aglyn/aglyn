@@ -158,7 +158,7 @@ export function DeleteSiteCard(props: { hostId: string }) {
   const isAdmin = holdsSiteKey(host as never, (user as any)?.uid ?? '', 'site.manage')
   const siteName = (host as any)?.displayName || hostId
   const preview = useDeleteSitePreview(hostId, user, isAdmin)
-  // Only site admins can delete; the tab still renders for others without it.
+  // Deleting asks "Manage site settings"; the tab still renders for others without it.
   if (!isAdmin) return null
 
   const handleDelete = async () => {

@@ -18,7 +18,9 @@
 'use client'
 
 import { defaultMediaScopeOf } from '@aglyn/aglyn'
+import { permissionRefusalText } from '@aglyn/aglyn/app-utils/org-permissions'
 import { CardDisplay } from '@aglyn/shared-ui-jsx'
+import { BlockedControl } from '@aglyn/shared-ui-jsx/components/blocked-control.component'
 import { useSnackbar } from '@aglyn/shared-ui-snackstack'
 import { MenuItem, Skeleton, Stack, TextField } from '@mui/material'
 import { useState } from 'react'
@@ -110,9 +112,11 @@ export function OrgDefaultSharingCard(props: { kind: OrgDefaultSharingKind }) {
   const settingsRequest = useOrgSettingsRequest()
   // The key the route checks (AGL-4047), not the role: a custom role or an
   // override that grants or takes `org.settings` moves this the way it moves
-  // the server. Held while the permissions load.
+  // the server. Held while the permissions load, and the reason is said only
+  // once they have answered.
   const orgPermissions = useOrgPermissions()
   const canManage = orgPermissions.loaded && orgPermissions.can('org.settings')
+  const refused = orgPermissions.loaded && !canManage
   const [busy, setBusy] = useState(false)
 
   const stored =
@@ -153,20 +157,26 @@ export function OrgDefaultSharingCard(props: { kind: OrgDefaultSharingKind }) {
           // the wrong current value is worse than one that is not there yet.
           <Skeleton variant="rounded" height={40} />
         ) : (
-          <TextField
-            select
-            size="small"
-            label={kind.label}
-            value={scope}
-            disabled={!canManage || busy}
-            onChange={(event) => void handleChange(event.target.value)}
-            helperText={kind.helperText}
+          <BlockedControl
+            blocked={refused}
+            reason={permissionRefusalText('org.settings')}
+            fullWidth
           >
-            <MenuItem value="org">{'All sites'}</MenuItem>
-            <MenuItem value="host">
-              {'Only the site they were created in'}
-            </MenuItem>
-          </TextField>
+            <TextField
+              select
+              size="small"
+              label={kind.label}
+              value={scope}
+              disabled={!canManage || busy}
+              onChange={(event) => void handleChange(event.target.value)}
+              helperText={kind.helperText}
+            >
+              <MenuItem value="org">{'All sites'}</MenuItem>
+              <MenuItem value="host">
+                {'Only the site they were created in'}
+              </MenuItem>
+            </TextField>
+          </BlockedControl>
         )}
       </Stack>
     </CardDisplay>

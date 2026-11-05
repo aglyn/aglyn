@@ -19,8 +19,9 @@ read, such as a dataset's records. Every page with its own **Import** and
 **Export** buttons, such as a list of products or an email list, shows each
 button only when you can use it.
 
-Gift cards are stricter. Only the workspace's owners and admins, and a
-site's admins, can import them, because an import issues spendable money.
+Gift cards are stricter, because an import issues spendable money: importing them also
+takes **Import gift cards**, which the workspace's owners and admins, and a site's admins,
+hold by default.
 
 ## What you can move
 
