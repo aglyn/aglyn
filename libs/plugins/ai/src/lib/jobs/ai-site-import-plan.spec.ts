@@ -245,7 +245,7 @@ describe('the plan’s tool and text', () => {
   it('is strict, and every field is always written', () => {
     expect(AI_SITE_IMPORT_PLAN_TOOL.name).toBe('submit_site_plan')
     expect(AI_SITE_IMPORT_PLAN_TOOL.strict).toBe(true)
-    expect(AI_SITE_IMPORT_PLAN_TOOL.inputSchema).toMatchObject({ additionalProperties: false, required: ['site', 'nav', 'design', 'proposed'] })
+    expect(AI_SITE_IMPORT_PLAN_TOOL.inputSchema).toMatchObject({ additionalProperties: false, required: ['site', 'nav', 'design', 'proposed', 'roles'] })
   })
 
   it('caches its text, says what it may not invent, and names no site', () => {
@@ -272,6 +272,22 @@ describe('what holds a plan', () => {
     expect(violations).toEqual([])
     expect(plan?.nav.primaryCta).toEqual({ label: 'Start now', target: 'form', page: 'd-p3' })
     expect(plan?.proposed).toMatchObject({ title: 'Common questions', slug: 'common-questions', on: true })
+  })
+
+  it('keeps each page’s role, the new page’s by its id once it is in, and leaves out a role for no page of the site', () => {
+    const roles = [
+      { page: 'd-p0', role: 'home' },
+      { page: 'd-p1', role: 'service' },
+      { page: 'd-p3', role: 'contact' },
+      { page: 'new', role: 'faq' },
+      { page: 'd-nope', role: 'about' },
+    ]
+    const state = site()
+    const plan = planOf(state, answer({ roles }))
+    expect(plan.roles).toEqual({ 'd-p0': 'home', 'd-p1': 'service', 'd-p3': 'contact', new: 'faq' })
+    const placed = aiSiteImportPlanIn(state, { index: 1 }, plan, 'x', 'd-new')
+    expect(placed.plan?.roles).toEqual({ 'd-p0': 'home', 'd-p1': 'service', 'd-p3': 'contact', 'd-new': 'faq' })
+    expect(hold(answer()).plan?.roles).toBeUndefined()
   })
 
   it.each([
@@ -492,7 +508,8 @@ describe('the plan’s pass', () => {
     expect(state.waves[0]?.slots).not.toContain(AI_SITE_IMPORT_PROPOSED_SLOT)
     expect(state.plan?.nav.groups.map((group) => group.label)).toEqual(['Services', 'About', 'Contact'])
     expect(state.plan?.proposed?.on).toBe(false)
-    expect(aiSiteImportFrameSource(state, state.waves[0] as never)?.nav.map((entry) => entry.label)).toEqual(['Services', 'About', 'Contact'])
+    // Contact is where the header's button goes: the button is its link, not a menu entry too.
+    expect(aiSiteImportFrameSource(state, state.waves[0] as never)?.nav.map((entry) => entry.label)).toEqual(['Services', 'About'])
   })
 
   it('takes the owner’s answer only while a plan waits on it', () => {

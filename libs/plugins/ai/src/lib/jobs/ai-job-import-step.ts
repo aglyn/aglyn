@@ -590,14 +590,17 @@ export function aiSiteImportPlannedFrame(state: AiSiteImportState, wave: Pick<Ai
     return label && target ? { label, to: target } : null
   }
   const present = <T,>(value: T | null): value is T => value !== null
+  const cta = plan.nav.primaryCta
+  // The page the header's button goes to is that button's link: a menu entry of it alone is left to the button (AGL-4152).
+  const ctaPage = cta && cta.target !== 'phone' ? (cta.target === 'form' ? (cta.page ?? null) : cta.target) : null
   const nav = plan.nav.groups.flatMap((group) => {
     const entries = group.pages.map((id) => plannedPageTo(state, wave, id)).filter(present)
     const [only] = entries
     if (!only) return []
+    if (group.pages.length === 1 && group.pages[0] === ctaPage && plan.nav.groups.length > 1) return []
     // One page is a link under the plan's label; several, a menu of them under it.
     return [entries.length === 1 ? { label: group.label, to: only.to, items: [] } : { label: group.label, to: null, items: entries }]
   })
-  const cta = plan.nav.primaryCta
   const ctaTo = !cta
     ? null
     : cta.target === 'phone'

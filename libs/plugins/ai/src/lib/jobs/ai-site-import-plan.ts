@@ -40,7 +40,7 @@
 
 import { fenceUntrustedText, UNTRUSTED_TEXT_RULE } from '@aglyn/shared-util-tools/untrusted-text'
 import { aiLayoutGuardContacts } from '../layout-language/ai-layout-copy'
-import { AI_SITE_IMPORT_PROPOSED_PAGE, aiSiteImportPageIsLegal, type AiSiteImportPage, type AiSiteImportPlan, type AiSiteImportPlanDesign, type AiSiteImportState } from '../model/ai-site-import'
+import { AI_SITE_IMPORT_PAGE_ROLES, AI_SITE_IMPORT_PROPOSED_PAGE, aiSiteImportPageIsLegal, type AiSiteImportPage, type AiSiteImportPageRole, type AiSiteImportPlan, type AiSiteImportPlanDesign, type AiSiteImportState } from '../model/ai-site-import'
 import { AI_SITE_KINDS } from '../model/ai-site-kinds'
 import type { AiSystemBlock, AiTool } from '../providers/contract'
 import { AI_STEP_TIERS } from '../providers/catalog'
@@ -83,7 +83,7 @@ export const AI_SITE_IMPORT_PLAN_TOOL: AiTool = {
   inputSchema: {
     type: 'object',
     additionalProperties: false,
-    required: ['site', 'nav', 'design', 'proposed'],
+    required: ['site', 'nav', 'design', 'proposed', 'roles'],
     properties: {
       site: {
         type: 'object',
@@ -128,6 +128,15 @@ export const AI_SITE_IMPORT_PLAN_TOOL: AiTool = {
         required: ['title', 'slug', 'purpose'],
         properties: { title: { type: 'string' }, slug: { type: 'string' }, purpose: { type: 'string' } },
       },
+      roles: {
+        type: 'array',
+        items: {
+          type: 'object',
+          additionalProperties: false,
+          required: ['page', 'role'],
+          properties: { page: { type: 'string' }, role: { type: 'string', enum: [...AI_SITE_IMPORT_PAGE_ROLES] } },
+        },
+      },
     },
   },
 }
@@ -142,10 +151,13 @@ export const AI_SITE_IMPORT_PLAN_TEXT = [
   `- groups are the menu, at most ${AI_SITE_IMPORT_PLAN_MAX_GROUPS} top-level entries, in the order a visitor needs them. An entry with one page is a link under that label; an entry with several is a menu of them under the label. Pages are named by id, as the page list gives them. Group like pages under a clear label rather than listing them all; never put the home page in the menu, since the logo goes home.`,
   '- Every page the page list marks "in the menu" must stay reachable: in the menu or the footer. A policy page belongs in the footer.',
   '- cta is the header\'s one filled button: the one thing a visitor of this business most wants to do. label is its words; target is a page by id, form for the page holding the site\'s form, or phone for the phone number the site gives. Only what the page list says exists.',
-  '- footer is its columns, each a short heading over the pages it links. Use two to four where there are pages enough; none where the site is too small to fill one.',
+  '- The page the main button goes to is never also a menu entry of its own: the button is its link. Put it in the footer.',
+  '- footer is its columns, each a short heading over the pages it links: two to four where there are pages enough, and one where the site has two or three pages, so the footer is never empty.',
   `- Every label is short, at most ${AI_SITE_IMPORT_PLAN_LABEL_MAX_CHARS} characters, plain and in sentence case, so a capital reads as a name.`,
   '',
   'design: how every page of the site is drawn, chosen once for the whole site from what it is and what it shows. hero: cover, a full-bleed photo with the words over it; poster, the same, taller and centered; split, the words beside a tall photo; bleed, half the band a photo; editorial, display type over a wide photo; column, a centered masthead over a photo; panel, the words on a card over a photo. Choose a photo-led hero only where the site has photos worth it. group: how a set of services or reasons is drawn: cards, ruled columns, or icons. rhythm: alternate grounds between sections, or plain, one ground with space between. cta: the closing call to action on a strong band, or over a photo.',
+  '',
+  `roles: what each page of the list is for in the new site, by id, one of ${AI_SITE_IMPORT_PAGE_ROLES.join(', ')}: home for the home page; service for a page about what the business offers; contact for a page whose purpose is reaching it or booking; other where none fits. Every page redesigns to its role, so name each one.`,
   '',
   'proposed: at most one new page the site lacks and a visitor of this kind of business looks for, such as common questions or how it works, named new in the menu or footer wherever it belongs. Propose one only where the request says there is room, and only what you can write without inventing a fact. title is at most 60 characters; slug is its address in lowercase words and hyphens; purpose is one sentence on what it tells a visitor. No page to propose: write all three as "".',
   '',
@@ -349,12 +361,21 @@ export function aiSiteImportPlanRead(raw: unknown, input: AiSiteImportPlanScope)
     else if (aiLayoutGuardContacts(text, contacts) !== text) out.push(invented(`${where}, "${text.slice(0, 80)}": it gives a phone number or email the site does not.`))
   }
   if (out.length || !hero || !group || !rhythm || !closing) return { plan: null, violations: out }
+  // What each page is for (AGL-4152): a role it does not know, or a page that is none of the site's, is left to the page.
+  const roles: Record<string, AiSiteImportPageRole> = {}
+  for (const entry of Array.isArray(answer['roles']) ? answer['roles'] : []) {
+    const named = record(entry)
+    const page = clean(named['page'])
+    const role = AI_SITE_IMPORT_PAGE_ROLES.find((value) => value === named['role'])
+    if (role && (ids.has(page) || (page === AI_SITE_IMPORT_PROPOSED_PAGE && proposes))) roles[page] = role
+  }
   return {
     plan: {
       site: { what, audience, kind, voice: clean(site['voice']) },
       nav: { groups, primaryCta: { label: ctaLabel, target, ...(ctaPage ? { page: ctaPage } : {}) }, footer },
       design: { hero, group, rhythm, cta: closing },
       proposed: proposes ? { title, slug, purpose, on: true } : null,
+      ...(Object.keys(roles).length ? { roles } : {}),
     },
     violations: [],
   }

@@ -174,31 +174,40 @@ site before anything is built, then waits for you. **Your new site** shows what 
 
 - what your site is and who it serves;
 - your new menu, with like pages grouped under one entry;
-- your header's main button and where it goes;
-- your footer's columns;
+- your header's main button and where it goes; the page it goes to is reached from the
+  button and the footer rather than a menu entry of its own;
+- your footer's columns, at least one on any site with more than one page;
 - one new page your site lacks, if there is one it can write, with a switch to leave it
   out. It is on unless you switch it off, it counts toward your plan's page limit, and it
   is not proposed when your plan has no room;
-- **Create pictures with AI where needed**, a switch that is off until you turn it on.
+- **Create pictures with AI where needed**, a switch that is on unless you turn it off.
 
 Choose **Build my new site** to go on. Every page of every wave is then drawn to that plan,
 so your whole site reads as one design. If the plan does not pass our checks, your import's
 page says so and your own menu and footer stand.
 
 **Also write new copy** takes the place of **Also improve my wording** and is on unless you
-switch it off. Aglyn AI plans each main page again, adds the sections a visitor of your kind
-of business looks for, and writes new headings, paragraphs and buttons from what your site
-says. It never makes up a name, number, price, date, testimonial, client, award, credential,
+switch it off. Aglyn AI plans each main page again for what it is for, adds the sections a
+visitor of your kind of business looks for, and writes new headings, paragraphs and buttons
+from what your site says. Your home page and your main service pages get at least two new
+sections, such as how it works, why choose you or the questions people ask, where the page has
+room. A contact page gets none: its form is set on a framed ground beside how to reach you.
+Services and reasons are drawn as cards, steps as numbered steps, questions as a list you can
+open, quotes on their own ground, and pictures side by side. A long page keeps each of its sets
+of cards, steps, questions and photo galleries whole and is planned around them. It never makes up a name, number, price, date, testimonial, client, award, credential,
 address or guarantee, and every picture, form, plan, table, quote and video your page has
 stays on it. If a redesign does not pass those checks, its row says **Layout kept: the
 redesign did not pass**, and the page keeps your words. With the switch off, every word stays
 as you wrote it, and your layout and menu are still redesigned. Policy pages and pages of a
 collection, such as blog posts, always keep every word.
 
+Each redesigned page stays within the most a page can use, which you see before you start,
+whether or not it passes.
+
 **Pictures.** Where a redesigned page needs a picture, it takes one from these, in order: your
 page's own photos, then the photos your other pages left off, then the stock library, which
 uses no AI credits and keeps its photographer's credit. With **Create pictures with AI where
-needed** on, a page's opening picture or a section's first picture that none of those fits
+needed** on, which it is unless you turn it off, a page's opening picture or a section's first picture that none of those fits
 can be created for you, up to two a page, never of a person. Each uses the credits a picture
 in [Create images](./create-images.md) does, and you see the most it can add before you start.
 A picture nothing fits is left out, and the row around it closes up. Your own opening photo

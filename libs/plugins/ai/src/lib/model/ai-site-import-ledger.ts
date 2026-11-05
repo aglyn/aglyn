@@ -30,7 +30,7 @@
 import type { SiteImportBlock } from '../site-import/site-import-html'
 import type { SiteImportLayout, SiteImportLayoutNode, SiteImportLineRef, SiteImportPictureFit } from './ai-site-import'
 
-export type SiteImportLedgerKind = 'picture' | 'form' | 'plan' | 'table' | 'quote' | 'video' | 'contact' | 'stats' | 'logos' | 'tabs' | 'group'
+export type SiteImportLedgerKind = 'picture' | 'form' | 'plan' | 'table' | 'quote' | 'video' | 'contact' | 'stats' | 'logos' | 'gallery' | 'tabs' | 'group'
 
 /** One thing of the source a `keep` block places. */
 export interface SiteImportLedgerItem {
@@ -172,7 +172,8 @@ export function siteImportLedger(source: { layout: SiteImportLayout; blocks: rea
           add('tabs', node.tabs.flatMap((tab) => [...(tab.label === null ? [] : [tab.label]), ...siteImportLedgerNodeLines(tab.panel)]), { node })
           break
         case 'group': {
-          const whole = GROUP_ITEMS[node.group]
+          // A group of photos the reader marked a gallery is one thing, its pictures with it (AGL-4152).
+          const whole = node.group === 'logos' && node.gallery ? 'gallery' : GROUP_ITEMS[node.group]
           if (whole) {
             add(whole, node.items.flatMap((item) => item.lines), { node })
             break

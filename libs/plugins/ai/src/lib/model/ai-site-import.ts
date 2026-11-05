@@ -2353,6 +2353,7 @@ export function aiSiteImportPlanIn(state: AiSiteImportState, wave: Pick<AiSiteIm
         footer: plan.nav.footer.map((column) => ({ ...column, pages: named(column.pages) })),
       },
       proposed: { ...proposed, draftId },
+      ...(plan.roles ? { roles: Object.fromEntries(Object.entries(plan.roles).map(([id, role]) => [id === AI_SITE_IMPORT_PROPOSED_PAGE ? draftId : id, role])) } : {}),
     },
     pages: [...state.pages, page],
     waves: state.waves.map((entry) => (entry.index === wave.index ? { ...entry, slots: [...entry.slots, AI_SITE_IMPORT_PROPOSED_SLOT] } : entry)),

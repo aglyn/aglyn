@@ -171,7 +171,7 @@ export const AI_SITE_IMPORT_IMPROVE_TEXT = [
   '- cards, steps, faq: a group of items, each a title and a text. cards are services, features or reasons; steps are numbered and in order; faq items are a question and its answer. An item may carry an icon, a to, and ref naming a picture of the page, shown on the card.',
   '- list: short lines, title only.',
   '- image: text describes a picture the page should have where none of its own fits; the platform finds one, or leaves it out.',
-  '- keep: ref names one thing of the ledger, drawn exactly as the owner has it, so write nothing for it: a picture, form, plan, table, quote, video, contact line, figures, logos, tabs, or a group. Place every thing the ledger marks must, exactly once, wherever it serves the page best, in a column if that helps.',
+  '- keep: ref names one thing of the ledger, drawn exactly as the owner has it, so write nothing for it: a picture, form, plan, table, quote, video, contact line, figures, logos, a gallery of photos (drawn as a grid of them), tabs, or a group. Place every thing the ledger marks must, exactly once, wherever it serves the page best, in a column if that helps.',
   '- A group:n of the ledger is a set of like items the old page shows (its cards, steps, questions or list). keep it to draw it whole as the owner has it, with the pictures and links it holds; or write its items again as a group of your own, every link and fact of it kept. A page too long to show whole has its groups folded: each is shown by its titles, marked must, and kept whole, and you write only what is around them.',
   'icon (on a block or an item) is one of: ' + AI_ICON_WORDS.join(', ') + '.',
   '',
@@ -184,7 +184,7 @@ export const AI_SITE_IMPORT_IMPROVE_TEXT = [
   '- How it works: a heading and steps of three or four items, from first asking to done.',
   '- Why choose it: cards of three with icons, each a reason the site supports.',
   '- A quote drawn as a quote: its own section on a soft or dark ground, centered: a short heading and the kept quote alone.',
-  '- Pictures in a row: cols [1, 1, 1] or [1, 1], one picture kept in each column with a one-line caption under it. Pictures are never stacked one under another.',
+  '- Pictures in a row: cols [1, 1, 1] or [1, 1], one picture kept in each column with a one-line caption under it; a gallery kept whole is its own grid, under a short heading. Pictures are never stacked one under another.',
   '- Words beside a picture: cols [1, 1] or [5, 7]: a heading, a lede, a paragraph and a button in one column and a picture in the other, the side alternating down the page.',
   '- Questions: a heading and a faq of three to six questions a visitor of this kind of business asks, each answered only with what the site says.',
   '- Contact: the kept form on a framed ground (a soft band, cols [5, 7]): beside it a heading, a welcoming line, the kept contact line and a call or email button.',
@@ -261,6 +261,14 @@ function shownItem(item: SiteImportLedgerItem, doc: Pick<AiSiteImportDocument, '
       return `${item.ref}${must} (figures: ${short(words.join(', '), 120)})`
     case 'logos':
       return `${item.ref}${must} (a strip of logos)`
+    case 'gallery': {
+      const node = item.node?.kind === 'group' ? item.node : null
+      const alts = item.lines.flatMap((ref) => {
+        const entry = doc.blocks[ref]
+        return entry?.kind === 'image' && clean(entry.alt) ? [`"${short(clean(entry.alt), 40)}"`] : []
+      })
+      return `${item.ref}${must} (a gallery of ${node?.items.length ?? 0} photos, drawn as a grid${node?.columns ? ` ${node.columns} across` : ''}${alts.length ? `: ${alts.slice(0, 4).join(', ')}${alts.length > 4 ? ', …' : ''}` : ''})`
+    }
     case 'tabs':
       return `${item.ref}${must} (tabs: ${short(words.slice(0, 4).join(', '), 120)})`
     case 'group': {

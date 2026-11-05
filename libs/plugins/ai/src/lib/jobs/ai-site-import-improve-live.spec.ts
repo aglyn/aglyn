@@ -29,7 +29,12 @@
  *  - every answer that keeps its redesign holds its kept ledger whole;
  *  - no invented fact left after the one re-ask on at least nine answers in ten;
  *  - the design lines green on at least eight in ten;
- *  - each page within the reworded row's p90 at the billed rates.
+ *  - every page inside its ceiling (`AI_SITE_IMPORT_PAGE_CEILING_CREDITS`), its
+ *    re-ask included, and a page short enough to show whole within the
+ *    reworded row's p90 at the billed rates; the p90 of every page is printed.
+ *
+ * Generated pictures are off here by the round's own setting, whatever the
+ * product's default: no picture is made.
  *
  * A number is not the verdict: an import is judged as a whole site. Each run
  * writes, for a person to read beside its source:
@@ -182,24 +187,46 @@ interface ImproveRun {
   invented: string[]
   holds: boolean
   codes: string[]
+  /** Whether its ledger folded: a page too long to show whole. */
+  long: boolean
 }
 
-/** Each word a stored page shows, section by section, as a person reads it beside the old page. */
+/**
+ * A stored page as a person reads it beside the old page: each section with
+ * its ground, each row with its columns, each group with how many items it
+ * sets across, and the words in their roles. The first round's flat reading
+ * hid its grids; this one shows them.
+ */
 function renderedLines(nodes: Record<string, { componentId?: string; props?: Record<string, unknown>; nodes?: string[] }>, rootId: string): string[] {
   const out: string[] = []
+  const under = (id: string): string[] => (nodes[id]?.nodes ?? []).flatMap((child) => [child, ...under(child)])
   const walk = (id: string, depth: number) => {
     const node = nodes[id]
     if (!node) return
     const props = node.props ?? {}
     const indent = '  '.repeat(depth)
     const words = typeof props['children'] === 'string' ? props['children'] : typeof props['primary'] === 'string' ? props['primary'] : ''
-    if (node.componentId === 'section') out.push(`${indent}[section${props['colorScheme'] ? ` ${String(props['colorScheme'])}` : ''}]`)
-    if (node.componentId === 'image') out.push(`${indent}[picture: ${String(props['alt'] ?? '')}${props['src'] ? '' : ', a slot'}]`)
-    if (node.componentId === 'form') out.push(`${indent}[form]`)
-    if (node.componentId === 'video') out.push(`${indent}[film]`)
-    if (node.componentId === 'muiButton') out.push(`${indent}[button ${String(props['variant'] ?? '')}: ${words} -> ${String(props['href'] ?? props['screenId'] ?? props['scrollTo'] ?? '')}]`)
+    const children = node.nodes ?? []
+    let deeper = depth
+    if (node.componentId === 'section') {
+      out.push(`${indent}[section${props['colorScheme'] ? ` ${String(props['colorScheme'])}` : ''}]`)
+      deeper = depth + 1
+    } else if (node.componentId === 'muiGrid' && (props['container'] === true || props['container'] === 'true')) {
+      const cards = children.filter((child) => under(child).some((at) => nodes[at]?.componentId === 'muiCard')).length
+      const sizes = children.map((child) => String(nodes[child]?.props?.['size'] ?? '').match(/md:(\d+)/)?.[1] ?? '12')
+      out.push(`${indent}[${cards >= 2 ? `cards: ${children.length}, ${Math.round(12 / Number(sizes[0] || 12))} across` : `row ${sizes.join('/')}`}]`)
+      deeper = depth + 1
+    } else if (node.componentId === 'muiAccordion') {
+      out.push(`${indent}[question]`)
+      deeper = depth + 1
+    } else if (node.componentId === 'image') out.push(`${indent}[picture: ${String(props['alt'] ?? '')}${props['src'] ? '' : ', a slot'}]`)
+    else if (node.componentId === 'form') out.push(`${indent}[form]`)
+    else if (node.componentId === 'video') out.push(`${indent}[film]`)
+    else if (node.componentId === 'dataTable') out.push(`${indent}[table]`)
+    else if (node.componentId === 'icon') out.push(`${indent}[icon]`)
+    else if (node.componentId === 'muiButton') out.push(`${indent}[button ${String(props['variant'] ?? '')}: ${words} -> ${String(props['href'] ?? props['screenId'] ?? props['scrollTo'] ?? '')}]`)
     else if (words) out.push(`${indent}${String(props['variant'] ?? node.componentId)}: ${words}`)
-    for (const child of node.nodes ?? []) walk(child, depth + (node.componentId === 'section' ? 1 : 0))
+    for (const child of children) walk(child, deeper)
   }
   walk(rootId, 0)
   return out
@@ -219,6 +246,8 @@ async function runPage(site: string, state: AiSiteImportState, plan: AiSiteImpor
   const siteName = AI_SITE_IMPORT_IMPROVE_EVAL_SITES[site]?.name ?? state.siteName
   const inputs = { [AI_LAYOUT_IMPORTED_SECTIONS_INPUT]: doc, businessName: siteName, ...(plan ? { siteKind: plan.site.kind, siteStyle: { seed: 7, planned: { hero: plan.design.hero, group: plan.design.group, bandRhythm: plan.design.rhythm, coverClose: plan.design.cta === 'photo' } } } : { siteKind: 'business', siteStyle: { seed: 7 } }) }
   const job = { $id: `job-improve-${site}-${name}-${answer}`, brief: '', inputs }
+  // What each answer missed, by its codes: a page that fell back says why.
+  const missed = new Set<string>()
   const result = await mockRunTag.run(tag, () =>
     aiRunLayoutPage({
       job,
@@ -230,6 +259,11 @@ async function runPage(site: string, state: AiSiteImportState, plan: AiSiteImpor
       reusableComponents: false,
       inventory: null,
       model: MODEL,
+      observe: (check) => (raw) => {
+        const checked = check(raw)
+        for (const violation of checked.violations) missed.add(violation.code)
+        return checked
+      },
     }),
   )
   const calls = mockCalls.filter((call) => call.tag === tag)
@@ -246,7 +280,8 @@ async function runPage(site: string, state: AiSiteImportState, plan: AiSiteImpor
     design: {},
     invented: [],
     holds: false,
-    codes: result.status === 'needs_input' ? [...new Set(result.violations.map((violation) => violation.code))] : [],
+    codes: [...missed],
+    long: aiSiteImportImproveLedger(doc).folded,
   }
   if (result.status !== 'ok') return run
   const nodes = result.value.nodes as unknown as Record<string, { componentId?: string; props?: Record<string, unknown>; nodes?: string[] }>
@@ -297,7 +332,8 @@ function quantile(values: readonly number[], q: number): number {
 async function runSite(site: string): Promise<{ plan: AiSiteImportPlan | null; planStatus: string; runs: ImproveRun[] }> {
   const fixture = AI_SITE_IMPORT_IMPROVE_EVAL_SITES[site]
   if (!fixture) throw new Error(`no site ${site}`)
-  const base = { ...siteImportReplayPlanState(fixture.site), siteName: fixture.name }
+  // No picture is made in a round: generated pictures are off by its own setting, whatever the default.
+  const base = { ...siteImportReplayPlanState(fixture.site), siteName: fixture.name, generatedPictures: false }
   const required = aiSiteImportMenuPageIds(base)
   const scope = aiSiteImportPlanScopeLines(base, aiSiteImportSiteLines(base))
   const asked = await mockRunTag.run(`${site}/plan`, () => aiRunSiteImportPlan({ state: base, scope, required, roomForPage: true, model: MODEL }))
@@ -354,6 +390,7 @@ describe('what a live round of a generative Improve it costs (AGL-4152)', () => 
     const scored = runs.filter((run) => run.redesign === 'redesigned')
     const share = (test: (run: ImproveRun) => boolean) => scored.filter(test).length / Math.max(1, scored.length)
     const credits = scored.map((run) => run.credits)
+    const whole = scored.filter((run) => !run.long).map((run) => run.credits)
     const summary = {
       runs: runs.length,
       plans: done.map((entry, at) => [SITES[at], entry.planStatus]),
@@ -363,6 +400,10 @@ describe('what a live round of a generative Improve it costs (AGL-4152)', () => 
       designGreen: share((run) => Object.values(run.design).every(Boolean)),
       creditsMedian: quantile(credits, 0.5),
       creditsP90: quantile(credits, 0.9),
+      // A page short enough to show whole, and the most any page spent, its re-ask included.
+      wholeP90: quantile(whole, 0.9),
+      most: Math.max(0, ...runs.map((run) => run.credits)),
+      newSections: share((run) => run.added.length > 0),
       row: AI_MEASURED_IMPORT_CREDITS.reworded,
       readBesideTheSource: OUT,
     }
@@ -373,6 +414,8 @@ describe('what a live round of a generative Improve it costs (AGL-4152)', () => 
     expect(scored.filter((run) => !['facts', 'held', 'links', 'meaning'].every((line) => run.ledger[line])).map((run) => [run.site, run.page, run.answer, run.ledger])).toEqual([])
     expect(summary.inventedNone).toBeGreaterThanOrEqual(0.9)
     expect(summary.designGreen).toBeGreaterThanOrEqual(0.8)
-    expect(summary.creditsP90).toBeLessThanOrEqual(AI_MEASURED_IMPORT_CREDITS.reworded.p90)
+    // The ceiling holds per page, re-ask and fallback included; the row is quoted from pages shown whole.
+    expect(summary.most).toBeLessThanOrEqual(AI_SITE_IMPORT_PAGE_CEILING_CREDITS)
+    expect(summary.wholeP90).toBeLessThanOrEqual(AI_MEASURED_IMPORT_CREDITS.reworded.p90)
   })
 })
