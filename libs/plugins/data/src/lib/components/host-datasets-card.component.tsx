@@ -1219,9 +1219,10 @@ export function HostDatasetsCard(props: HostDatasetsCardProps) {
    * matched and written on the server, through the same record writes as
    * every other create and update, and the export streams the fields the
    * person picks. Outside the console shell there is no launcher, and no
-   * Import or Export to offer. Inside it, Import is offered to a member who
-   * may write this dataset, and Export to a member holding "Export data" who
-   * can see it (AGL-3546, AGL-4047) — the transfer routes' own rule.
+   * Import or Export to offer. Inside it, Import is on for a member who may
+   * write this dataset and switched off with the permission named for one who
+   * may not, and Export likewise for "Export data", for a member who can see it
+   * (AGL-3546, AGL-4047) — the transfer routes' own rule.
    */
   const transfer = useTransferLauncher()
   const transferTarget = selected?.$id
@@ -1458,10 +1459,15 @@ export function HostDatasetsCard(props: HostDatasetsCardProps) {
                 onFinished={() => setRecordCountEpoch((epoch) => epoch + 1)}
               />
             ) : null}
-            {canImport ? (
-              <Button size="small" onClick={handleImport}>
-                {'Import'}
-              </Button>
+            {/* Off with the permission named for a member known not to hold it,
+                not hidden. Still absent while the answer is out, and where the
+                launcher refuses for another reason than the key. */}
+            {canImport || (transfer && transferTarget && blocked.writes) ? (
+              <BlockedControl blocked={!canImport} reason={blocked.writesReason}>
+                <Button size="small" onClick={handleImport}>
+                  {'Import'}
+                </Button>
+              </BlockedControl>
             ) : null}
             {/* The real dataset size, not the loaded window (AGL-2335) —
                 the export is a server stream, so a dataset whose first page

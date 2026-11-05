@@ -117,7 +117,7 @@ describe("today's check-ins", () => {
 
   it('asks nothing for a viewer who cannot use the register, and says why', async () => {
     render(<PosCheckInsCard hostId="shop" />)
-    expect(screen.getByText(/members who can use the register/)).toBeTruthy()
+    expect(screen.getByText(/Check-ins take the "Use the point of sale" permission/)).toBeTruthy()
     await waitFor(() => expect(mockFetch).not.toHaveBeenCalled())
   })
 

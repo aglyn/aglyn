@@ -16,6 +16,9 @@
  */
 'use client'
 
+import { permissionRefusalText } from '@aglyn/aglyn/app-utils/org-permissions'
+import { useSiteKeys } from '@aglyn/tenant-feature-instance/hooks/use-site-keys'
+import { LOYALTY_SITE_PRESETS } from '../model/loyalty-permissions'
 import { pluginDocsHelp } from '@aglyn/aglyn/app-utils/docs-help'
 import { CardDisplay } from '@aglyn/shared-ui-jsx'
 import { StatusChip } from '@aglyn/shared-ui-jsx/components/status-chip.component'
@@ -79,7 +82,10 @@ export function LoyaltyConnectionCard(props: {
   const [fields, setFields] = useState<Record<string, string>>({})
   const [replace, setReplace] = useState(false)
   const [confirming, setConfirming] = useState(false)
-  const [busy, setBusy] = useState(false)
+  const [working, setBusy] = useState(false)
+  // Off without the key, the same way as while a change runs, with the permission named.
+  const refused = useSiteKeys(hostId).blocked('loyalty.connection', LOYALTY_SITE_PRESETS['loyalty.connection'])
+  const busy = working || refused
 
   useEffect(() => {
     let live = true
@@ -159,6 +165,11 @@ export function LoyaltyConnectionCard(props: {
         contentGutterY
       >
         <Stack spacing={2}>
+          {refused ? (
+            <Typography variant="body2" color="text.secondary">
+              {permissionRefusalText('loyalty.connection')}
+            </Typography>
+          ) : null}
           <Typography variant="body2" color="text.secondary">
             {`API key ending ${connection.keyLast4 || '····'}${
               connection.lastSyncedAtMs

@@ -44,8 +44,11 @@ extra cost.
 
 The first sync starts within 15 minutes. **Sync now** runs it straight away.
 
-Only a site admin can connect, change or disconnect a platform; editors can see
-the card and each platform's sync log.
+Connecting, changing or disconnecting a platform takes **Manage email platform
+connections**, which a site's admins hold by default. Seeing the card and each
+platform's sync log takes **See email platform connections**, which a site's admins and
+editors hold by default. See
+[custom roles](../../workspace-and-billing/teams-and-roles/custom-roles.md#integration-permissions).
 
 **Attentive** connects by signing in to Attentive rather than with an API key,
 and works one way only: see [Connect Attentive](./connect-attentive.md).

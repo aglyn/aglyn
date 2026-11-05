@@ -34,6 +34,10 @@ import { LoyaltyProgramCard } from './loyalty-program-card.component'
 const request = jest.fn()
 const enqueueSnackbar = jest.fn()
 
+jest.mock('@aglyn/tenant-feature-instance/hooks/use-site-keys', () => ({
+  useSiteKeys: () => ({ blocked: (key: string) => mockBlockedKeys.has(key) }),
+}))
+const mockBlockedKeys = new Set<string>()
 jest.mock('./loyalty-api', () => ({
   ...jest.requireActual('./loyalty-api'),
   useLoyaltyFetch: () => request,
@@ -193,5 +197,26 @@ describe('the money a field holds', () => {
     expect(describeLedgerEntry({ id: 'x', kind: 'earn', points: 45, creditCents: 0, orderId: null, channel: null, note: null, atMs: 0 })).toBe(
       'Earned · +45 points',
     )
+  })
+})
+
+describe('the cards follow the keys their routes ask (AGL-4047)', () => {
+  afterEach(() => mockBlockedKeys.clear())
+
+  it('switches the program’s fields and Save off with the permission named', async () => {
+    mockBlockedKeys.add('loyalty.program')
+    request.mockResolvedValueOnce({ program: LOYALTY_PROGRAM_DEFAULTS, totals: TOTALS })
+    render(<LoyaltyProgramCard hostId="host-1" />)
+    const save = (await screen.findByRole('button', { name: 'Save' })) as HTMLButtonElement
+    expect(save.disabled).toBe(true)
+    expect(save.parentElement?.getAttribute('aria-label')).toContain('Change the rewards program')
+    expect((screen.getByLabelText('Customers earn and spend rewards') as HTMLInputElement).disabled).toBe(true)
+  })
+
+  it('switches Give store credit off without "Adjust rewards balances"', async () => {
+    mockBlockedKeys.add('loyalty.adjustBalances')
+    request.mockResolvedValue({ members: [], nextAfter: null, total: 0 })
+    render(<LoyaltyMembersCard hostId="host-1" />)
+    expect(((await screen.findByRole('button', { name: 'Give store credit' })) as HTMLButtonElement).disabled).toBe(true)
   })
 })

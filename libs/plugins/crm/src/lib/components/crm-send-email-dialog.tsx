@@ -647,7 +647,7 @@ export function CrmSendEmailDialog(props: CrmSendEmailDialogProps) {
               </Typography>
             ) : (
               <Typography variant="body2" sx={{ mt: 0.5 }}>
-                {'An admin sets this up under Emails › Sending.'}
+                {'A member holding "Organization settings" sets this up under Emails › Sending.'}
               </Typography>
             )}
           </Alert>

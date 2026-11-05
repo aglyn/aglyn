@@ -100,7 +100,7 @@ export function PageHoldBannerView(props: PageHoldBannerViewProps) {
             ))}
             {hold.reviewable && !canRequestReview ? (
               <Typography variant="caption" color="text.secondary">
-                {'A workspace owner or admin can request a review.'}
+                {'Requesting a review takes the "Holds and reviews" permission, which owners and admins hold by default.'}
               </Typography>
             ) : null}
           </Alert>

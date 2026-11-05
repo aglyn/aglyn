@@ -17,6 +17,10 @@
 
 'use client'
 
+import { permissionRefusalText } from '@aglyn/aglyn/app-utils/org-permissions'
+import { BlockedControl } from '@aglyn/shared-ui-jsx/components/blocked-control.component'
+import { useSiteKeys } from '@aglyn/tenant-feature-instance/hooks/use-site-keys'
+import { SHIPPING_SITE_PRESETS } from '../model/shipping-permissions'
 import { useSnackbar } from '@aglyn/shared-ui-snackstack'
 import { Alert, Box, Button, Stack, Typography } from '@mui/material'
 import { useMemo, useState } from 'react'
@@ -63,6 +67,7 @@ export function ReturnLabelWidget(props: ReturnLabelWidgetProps) {
   const { hostId, attachReturnLabel } = props
   const returned = props.return
   const availability = useShippingAvailability(hostId)
+  const buyRefused = useSiteKeys(hostId).blocked('shipping.buyLabels', SHIPPING_SITE_PRESETS['shipping.buyLabels'])
   const { enqueueSnackbar } = useSnackbar()
   const [open, setOpen] = useState(false)
   const [attachFailure, setAttachFailure] = useState<string | null>(null)
@@ -118,9 +123,11 @@ export function ReturnLabelWidget(props: ReturnLabelWidgetProps) {
         <Typography variant="body2" sx={{ flex: 1 }}>
           {'Buy a prepaid label for the buyer to send these items back.'}
         </Typography>
-        <Button variant="outlined" onClick={() => setOpen(true)}>
-          {'Buy return label'}
-        </Button>
+        <BlockedControl blocked={buyRefused} reason={permissionRefusalText('shipping.buyLabels')}>
+          <Button variant="outlined" onClick={() => setOpen(true)}>
+            {'Buy return label'}
+          </Button>
+        </BlockedControl>
       </Stack>
       {attachFailure ? (
         <Alert severity="warning" sx={{ mt: 1 }}>

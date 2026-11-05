@@ -17,6 +17,7 @@
 
 'use client'
 
+import { permissionRefusalText } from '@aglyn/aglyn/app-utils/org-permissions'
 import { CardDisplay, Container } from '@aglyn/shared-ui-jsx'
 import {
   HubSections,
@@ -35,17 +36,20 @@ import { useOrgSlug } from '../../../../../../../hooks/use-org-scope'
 import {
   useHostId,
   useHostSubdomain,
-  useIsHostAdmin,
+  useCanManageSite,
+  useCanManageSiteKnown,
 } from '../../../../../../../components/host-id-provider'
 
 /**
  * Site Admin (AGL-1014), section by section (AGL-2501).
  *
- * Owner/admin-only site controls, kept out of the Setup page a collaborator
- * legitimately visits. The refusal below is a NOTICE, not the boundary — the
- * rules and the delete API enforce that regardless of what renders — but it
- * wraps every section so a non-admin who types a section URL is told, rather
- * than shown a rail into pages that will refuse them one at a time.
+ * Site controls behind "Manage site settings" (`site.manage`), kept out of the
+ * Setup page a collaborator legitimately visits. The refusal below is a NOTICE,
+ * not the boundary — the rules and the delete API enforce that regardless of
+ * what renders — but it wraps every section so a member without the key who
+ * types a section URL is told, rather than shown a rail into pages that will
+ * refuse them one at a time. It waits for the host document: until that is read
+ * "no" only means "not yet", so nothing is said.
  */
 export default function HostAdminSectionsLayout({
   children,
@@ -55,7 +59,8 @@ export default function HostAdminSectionsLayout({
   const hostId = useHostId()
   const orgSlug = useOrgSlug()
   const host = useHostSubdomain()
-  const isAdmin = useIsHostAdmin()
+  const canManageSite = useCanManageSite()
+  const canManageSiteKnown = useCanManageSiteKnown()
   const section = (route: Route, label: string) => ({
     href: buildRoute(route as never, { orgSlug, host } as never),
     label,
@@ -101,7 +106,7 @@ export default function HostAdminSectionsLayout({
       }}
     >
       <Container gutterY maxWidth={CONTENT_MAX_WIDTH}>
-        {isAdmin ? (
+        {canManageSite ? (
           /*
            * The scope the General section's form saves through — the host
            * listener, the drafts and the unconfirmed-seed guard, shared with
@@ -117,7 +122,7 @@ export default function HostAdminSectionsLayout({
           <HostSettingsScopeProvider>
             <HubSections sections={sections}>{children}</HubSections>
           </HostSettingsScopeProvider>
-        ) : (
+        ) : canManageSiteKnown ? (
           <CardDisplay
             header="Admin"
             help={docsHelp('gettingStarted', {
@@ -127,10 +132,10 @@ export default function HostAdminSectionsLayout({
             contentGutterY
           >
             <Typography variant="body2" color="text.secondary">
-              {'Only site admins can open this area.'}
+              {permissionRefusalText('site.manage')}
             </Typography>
           </CardDisplay>
-        )}
+        ) : null}
       </Container>
     </DashboardLayout>
   )

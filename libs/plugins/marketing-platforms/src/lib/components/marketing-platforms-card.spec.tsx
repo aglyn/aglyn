@@ -20,6 +20,10 @@ import type { MarketingConnectionView } from '../model/connections'
 import type { MarketingPlatformsApi } from './marketing-platforms-api'
 import { MarketingPlatformsCard } from './marketing-platforms-card.component'
 
+const mockBlocked = jest.fn((_key: string) => false)
+jest.mock('@aglyn/tenant-feature-instance/hooks/use-site-keys', () => ({
+  useSiteKeys: () => ({ blocked: (key: string) => mockBlocked(key) }),
+}))
 jest.mock('./marketing-platforms-api', () => ({ useMarketingPlatformsApi: () => null }))
 const mockSnack = jest.fn()
 jest.mock('@aglyn/shared-ui-snackstack', () => ({ useSnackbar: () => ({ enqueueSnackbar: mockSnack }) }))
@@ -197,5 +201,29 @@ describe('the email platforms card', () => {
     expect(await screen.findByText('Klaviyo refused the connection: revoked')).toBeTruthy()
     expect(screen.getByRole('button', { name: 'Connect again' })).toBeTruthy()
     expect(screen.queryByRole('button', { name: 'Sync now' })).toBeNull()
+  })
+})
+
+describe('the card follows the keys its routes ask (AGL-4047)', () => {
+  beforeEach(() => mockBlocked.mockReset().mockReturnValue(false))
+
+  it('switches Connect off with the permission named for a member without "marketingPlatforms.manage"', async () => {
+    mockBlocked.mockImplementation((key) => key === 'marketingPlatforms.manage')
+    render(<MarketingPlatformsCard hostId="h" api={api({ list: jest.fn(async () => ({ available: [{ id: 'klaviyo' as const, apiKey: true, oauth: false }], connections: [] })) })} />)
+    expect((await screen.findAllByRole('button', { name: 'Connect' }))[0]).toHaveProperty('disabled', true)
+    expect(screen.getByText(/does not include/).textContent).toContain('ask an organization admin')
+  })
+
+  it('names "marketingPlatforms.view" rather than drawing nothing for a member without it', async () => {
+    mockBlocked.mockImplementation((key) => key === 'marketingPlatforms.view')
+    render(<MarketingPlatformsCard hostId="h" api={api({ list: jest.fn(async () => ({ available: [{ id: 'klaviyo' as const, apiKey: true, oauth: false }], connections: [] })) })} />)
+    expect((await screen.findByText(/does not include/)).textContent).toContain('ask an organization admin')
+    expect(screen.queryByRole('button', { name: 'Connect' })).toBeNull()
+  })
+
+  it('leaves everything on for a holder, and while the answer loads (blocked is false)', async () => {
+    render(<MarketingPlatformsCard hostId="h" api={api({ list: jest.fn(async () => ({ available: [{ id: 'klaviyo' as const, apiKey: true, oauth: false }], connections: [] })) })} />)
+    expect((await screen.findAllByRole('button', { name: 'Connect' }))[0]).toHaveProperty('disabled', false)
+    expect(screen.queryByText(/does not include/)).toBeNull()
   })
 })

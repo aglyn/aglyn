@@ -48,7 +48,7 @@ import { useHostId } from '../../../../../../../../components/host-id-provider'
  * ## Where the capability is enforced
  *
  * The `admin/(sections)` layout above this page renders its children only for
- * `useIsHostAdmin()`, so the section URL refuses a non-admin rather than
+ * `useCanManageSite()`, so the section URL refuses a non-holder rather than
  * merely going missing from the rail. That is a notice, not the boundary: the
  * `errorScreens` write goes through `/api/hosts/screens`, which admits only
  * the host writer roles, and `maintenance` is a client write the Firestore

@@ -108,6 +108,10 @@ jest.mock('@aglyn/tenant-data-admin', () => ({
     Boolean(member) && mockOrgPermissions.has(permission),
   memberHasPermissionOnHost: async (...args: unknown[]) => {
     mockHostPermissionCall(...args)
+    // "Import gift cards" as its preset reads it: the member's role on the site.
+    if (args[3] === 'commerce.giftCards.import') {
+      return jest.requireActual('@aglyn/aglyn/app-utils/organizations').hostRoleFor(args[2], args[1]) === 'admin'
+    }
     return mockHostPermission
   },
   resolveOrgMembership: async () => ({ member: mockMember }),
@@ -829,13 +833,13 @@ describe('a resource that decides its own instance (AGL-4047)', () => {
 })
 
 /*
- * IMPORT ROLES (AGL-3554): a resource that names `importRoles` is imported
- * only by a member in one of them where the records are — gift cards by a
- * site's admins, which the workspace's owners and admins are — on top of
- * Manage data, on every import step; exporting never asks the role. The
+ * THE IMPORT PERMISSION (AGL-4047): a resource that names `importPermission`
+ * is imported only by a member holding it where the records are — gift cards
+ * by whoever holds "Import gift cards", whose preset is the site's Admin — on
+ * top of Manage data, on every import step; exporting never asks it. The
  * declaration is the real one.
  */
-describe('import roles (AGL-3554)', () => {
+describe('the import permission (AGL-4047)', () => {
   const upload_ = (hostId = 'host-a') => upload(request('upload', { orgId: 'org-1', resource: 'commerce.gift-cards', hostId, fileName: 'x.csv', content: 'a\n1' }))
 
   beforeEach(() => {
@@ -844,13 +848,13 @@ describe('import roles (AGL-3554)', () => {
     mockJobs['job-gifts'] = { resource: 'commerce.gift-cards', hostId: 'host-a' }
   })
 
-  it('refuses an org-wide editor holding Manage data, at every import step, in the declaration’s words', async () => {
+  it('refuses an org-wide editor holding Manage data, at every import step, naming the permission', async () => {
     mockMember = { role: 'editor', allHosts: true }
     const refused = await upload_()
     expect(refused.status).toBe(403)
     expect(await refused.json()).toEqual({
       code: 'forbidden',
-      error: 'Only the workspace’s owners and admins, and the site’s admins, can import gift cards.',
+      error: expect.stringContaining('does not include'),
     })
     for (const route of [analyze, plan, apply, status, undo]) {
       expect((await route(request('step', { orgId: 'org-1', jobId: 'job-gifts' }))).status).toBe(403)

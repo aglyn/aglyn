@@ -180,7 +180,8 @@ export function OrgPrivacyCard() {
             {'A privacy erasure, not a delete: the person is removed from every site in ' +
               'this workspace, whether or not a page shows them. The request is filed now ' +
               'and runs with the nightly erasure job, and from the moment it is filed your ' +
-              'sites stop capturing the address. Workspace owners and admins only.'}
+              'sites stop capturing the address. Filing one takes the "Privacy requests" ' +
+              'permission, which owners and admins hold by default.'}
           </Typography>
           <ErasureList heading="Removed across the workspace" lines={PERSON_ERASURE_REMOVES} />
           <ErasureList heading="Kept, with the person taken off" lines={PERSON_ERASURE_RETAINS} />

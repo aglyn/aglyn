@@ -70,9 +70,10 @@ jest.mock('../components/media-url-field.component', () => ({
 
 // The card gates on the key its route checks (AGL-4047), read through the
 // permissions hook: this reader holds it, as the role above does.
+let mockPermissions = { loaded: true, can: (_key: string) => true, permissions: {}, granted: {} }
 jest.mock('../hooks/use-org-permissions', () => {
-  const value = { loaded: true, can: () => true, permissions: {}, granted: {} }
-  return { __esModule: true, default: () => value, useOrgPermissions: () => value }
+  const read = () => mockPermissions
+  return { __esModule: true, default: read, useOrgPermissions: read }
 })
 jest.mock('../hooks/use-org-scope', () => {
   const scope = {
@@ -224,6 +225,38 @@ describe('the default-sharing card on its new home', () => {
  * card writes its own field, and shows the dataset value only while its own
  * is unset — which is what the upload routes stamp from.
  */
+describe('a member without "Organization settings" (AGL-4047)', () => {
+  const REFUSAL = 'Your role does not include "Organization settings" — ask an organization admin'
+  const holder = { loaded: true, can: (_key: string) => true, permissions: {}, granted: {} }
+  const control = (kind: 'media' | 'data') => {
+    render(<OrgDefaultSharingCard kind={kind} />)
+    return screen.getByRole('combobox')
+  }
+  afterEach(() => {
+    mockPermissions = holder
+  })
+
+  it.each(['media', 'data'] as const)('finds the %s card switched off, naming the permission', (kind) => {
+    mockPermissions = { ...holder, can: (key) => key !== 'org.settings' }
+    const select = control(kind)
+    expect(select.getAttribute('aria-disabled')).toBe('true')
+    expect(screen.getByLabelText(REFUSAL).contains(select)).toBe(true)
+  })
+
+  it('holds with no reason said while permissions load', () => {
+    mockPermissions = { ...holder, loaded: false }
+    const select = control('media')
+    expect(select.getAttribute('aria-disabled')).toBe('true')
+    expect(screen.queryByLabelText(REFUSAL)).toBeNull()
+  })
+
+  it('leaves a holder’s control on, with no reason (negative control)', () => {
+    const select = control('media')
+    expect(select.getAttribute('aria-disabled')).toBeNull()
+    expect(screen.queryByLabelText(REFUSAL)).toBeNull()
+  })
+})
+
 describe('the media card is its own setting', () => {
   it('posts the media field, never the dataset one', async () => {
     render(<OrgDefaultSharingCard kind="media" />)

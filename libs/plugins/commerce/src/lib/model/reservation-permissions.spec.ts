@@ -97,6 +97,7 @@ describe('the reservation keys (AGL-4047)', () => {
       'commerce.quotes',
       'commerce.quotes.send',
       'commerce.giftCards',
+      'commerce.giftCards.import',
       'commerce.paymentMethods',
       'commerce.shippingConnections',
       'commerce.refunds',

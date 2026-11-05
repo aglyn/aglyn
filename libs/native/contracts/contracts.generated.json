@@ -7423,6 +7423,7 @@
         "commerce.quotes",
         "commerce.quotes.send",
         "commerce.giftCards",
+        "commerce.giftCards.import",
         "commerce.paymentMethods",
         "commerce.shippingConnections",
         "commerce.refunds",
@@ -7452,6 +7453,26 @@
         "workflows.orgAutomations",
         "workflows.sitePause",
         "accounting.manage",
+        "shipping.viewSettings",
+        "shipping.settings",
+        "shipping.labelCharges",
+        "shipping.carrierAccounts",
+        "shipping.ownAccounts",
+        "shipping.labels",
+        "shipping.buyLabels",
+        "shipping.voidLabels",
+        "salesChannels.feeds",
+        "salesChannels.settings",
+        "salesChannels.replaceAddress",
+        "salesChannels.connect",
+        "salesChannels.sync",
+        "marketingPlatforms.view",
+        "marketingPlatforms.manage",
+        "loyalty.program",
+        "loyalty.connection",
+        "loyalty.adjustBalances",
+        "helpDesks.view",
+        "helpDesks.manage",
         "manageWaivers",
         "collectWaivers",
         "domains.manage"
@@ -7492,6 +7513,16 @@
         "marketing.campaigns",
         "workflows.orgAutomations",
         "workflows.sitePause",
+        "shipping.viewSettings",
+        "shipping.labels",
+        "shipping.buyLabels",
+        "shipping.voidLabels",
+        "salesChannels.feeds",
+        "salesChannels.settings",
+        "salesChannels.sync",
+        "marketingPlatforms.view",
+        "loyalty.adjustBalances",
+        "helpDesks.view",
         "manageWaivers",
         "collectWaivers"
       ],
@@ -7530,6 +7561,7 @@
         "commerce.quotes",
         "commerce.quotes.send",
         "commerce.giftCards",
+        "commerce.giftCards.import",
         "commerce.paymentMethods",
         "commerce.shippingConnections",
         "commerce.refunds",
@@ -7559,6 +7591,26 @@
         "workflows.orgAutomations",
         "workflows.sitePause",
         "accounting.manage",
+        "shipping.viewSettings",
+        "shipping.settings",
+        "shipping.labelCharges",
+        "shipping.carrierAccounts",
+        "shipping.ownAccounts",
+        "shipping.labels",
+        "shipping.buyLabels",
+        "shipping.voidLabels",
+        "salesChannels.feeds",
+        "salesChannels.settings",
+        "salesChannels.replaceAddress",
+        "salesChannels.connect",
+        "salesChannels.sync",
+        "marketingPlatforms.view",
+        "marketingPlatforms.manage",
+        "loyalty.program",
+        "loyalty.connection",
+        "loyalty.adjustBalances",
+        "helpDesks.view",
+        "helpDesks.manage",
         "manageWaivers",
         "collectWaivers",
         "domains.manage"
@@ -7642,6 +7694,26 @@
         "id": "accounting",
         "label": "Accounting",
         "pluginId": "accounting"
+      },
+      {
+        "id": "shipping",
+        "label": "Shipping"
+      },
+      {
+        "id": "sales-channels",
+        "label": "Sales channels"
+      },
+      {
+        "id": "marketing-platforms",
+        "label": "Email platforms"
+      },
+      {
+        "id": "loyalty",
+        "label": "Rewards"
+      },
+      {
+        "id": "help-desks",
+        "label": "Help desks"
       },
       {
         "id": "waivers",
@@ -7785,7 +7857,7 @@
         }
       },
       {
-        "description": "Create, edit, and delete organization datasets, the CRM’s records, and marketing lists and topics.",
+        "description": "Create and edit organization datasets, add, change and delete their rows, and manage the CRM’s records and marketing lists and topics.",
         "group": "datasets",
         "key": "data.manage",
         "label": "Manage data"
@@ -7797,7 +7869,7 @@
         "label": "Edit the workspace media library"
       },
       {
-        "description": "Delete records the whole workspace shares, such as dataset rows, contacts and lists.",
+        "description": "Delete a whole dataset or list the workspace shares, with everything in it. Deleting one row of a dataset asks “Manage data”.",
         "group": "datasets",
         "key": "org.eraseRecords",
         "label": "Delete workspace records"
@@ -7962,6 +8034,19 @@
           "admin": true,
           "author": false,
           "editor": true,
+          "viewer": false
+        }
+      },
+      {
+        "description": "Import gift cards from a file, which issues each one as spendable money. Also takes \"Manage data\". Follows the site role unless a role or member sets it.",
+        "group": "commerce",
+        "key": "commerce.giftCards.import",
+        "label": "Import gift cards",
+        "scope": "site",
+        "sitePreset": {
+          "admin": true,
+          "author": false,
+          "editor": false,
           "viewer": false
         }
       },
@@ -8260,6 +8345,266 @@
         "label": "Manage accounting",
         "pluginId": "accounting",
         "scope": "org"
+      },
+      {
+        "description": "See where parcels ship from, the boxes and the label settings. Follows the site role unless a role or member sets it.",
+        "group": "shipping",
+        "key": "shipping.viewSettings",
+        "label": "See shipping settings",
+        "scope": "site",
+        "sitePreset": {
+          "admin": true,
+          "author": false,
+          "editor": true,
+          "viewer": false
+        }
+      },
+      {
+        "description": "Change where parcels ship from, the boxes, the label settings and the services offered at checkout. Follows the site role unless a role or member sets it.",
+        "group": "shipping",
+        "key": "shipping.settings",
+        "label": "Change shipping settings",
+        "scope": "site",
+        "sitePreset": {
+          "admin": true,
+          "author": false,
+          "editor": false,
+          "viewer": false
+        }
+      },
+      {
+        "description": "See how labels are paid for, and agree to the charges. Agreeing also takes \"Manage billing\". Follows the site role unless a role or member sets it.",
+        "group": "shipping",
+        "key": "shipping.labelCharges",
+        "label": "Manage label charges",
+        "scope": "site",
+        "sitePreset": {
+          "admin": true,
+          "author": false,
+          "editor": false,
+          "viewer": false
+        }
+      },
+      {
+        "description": "See the carrier accounts, connect one and switch them on and off. Changing them also takes \"Manage billing\". Follows the site role unless a role or member sets it.",
+        "group": "shipping",
+        "key": "shipping.carrierAccounts",
+        "label": "Manage carrier accounts",
+        "scope": "site",
+        "sitePreset": {
+          "admin": true,
+          "author": false,
+          "editor": false,
+          "viewer": false
+        }
+      },
+      {
+        "description": "See and connect your own Easyship, Sendcloud or ShipperHQ account. Changing them also takes \"Manage billing\". Follows the site role unless a role or member sets it.",
+        "group": "shipping",
+        "key": "shipping.ownAccounts",
+        "label": "Manage your own shipping accounts",
+        "scope": "site",
+        "sitePreset": {
+          "admin": true,
+          "author": false,
+          "editor": false,
+          "viewer": false
+        }
+      },
+      {
+        "description": "Check an address, compare rates and see the labels bought for an order. Follows the site role unless a role or member sets it.",
+        "group": "shipping",
+        "key": "shipping.labels",
+        "label": "Check rates and see labels",
+        "scope": "site",
+        "sitePreset": {
+          "admin": true,
+          "author": false,
+          "editor": true,
+          "viewer": false
+        }
+      },
+      {
+        "description": "Buy a label for an order, or for a batch of orders, which charges the workspace. Follows the site role unless a role or member sets it.",
+        "group": "shipping",
+        "key": "shipping.buyLabels",
+        "label": "Buy shipping labels",
+        "scope": "site",
+        "sitePreset": {
+          "admin": true,
+          "author": false,
+          "editor": true,
+          "viewer": false
+        }
+      },
+      {
+        "description": "Void a label that has not been used. Follows the site role unless a role or member sets it.",
+        "group": "shipping",
+        "key": "shipping.voidLabels",
+        "label": "Void shipping labels",
+        "scope": "site",
+        "sitePreset": {
+          "admin": true,
+          "author": false,
+          "editor": true,
+          "viewer": false
+        }
+      },
+      {
+        "description": "Turn each shopping channel’s product feed on or off. Follows the site role unless a role or member sets it.",
+        "group": "sales-channels",
+        "key": "salesChannels.feeds",
+        "label": "Turn product feeds on and off",
+        "scope": "site",
+        "sitePreset": {
+          "admin": true,
+          "author": false,
+          "editor": true,
+          "viewer": false
+        }
+      },
+      {
+        "description": "Change the store defaults the product feeds use. Follows the site role unless a role or member sets it.",
+        "group": "sales-channels",
+        "key": "salesChannels.settings",
+        "label": "Change sales channel defaults",
+        "scope": "site",
+        "sitePreset": {
+          "admin": true,
+          "author": false,
+          "editor": true,
+          "viewer": false
+        }
+      },
+      {
+        "description": "Replace a product feed’s address, which stops the old one working, and turn off an earlier Google address. Follows the site role unless a role or member sets it.",
+        "group": "sales-channels",
+        "key": "salesChannels.replaceAddress",
+        "label": "Replace a feed address",
+        "scope": "site",
+        "sitePreset": {
+          "admin": true,
+          "author": false,
+          "editor": false,
+          "viewer": false
+        }
+      },
+      {
+        "description": "Connect and disconnect a Google Merchant Center or Meta catalog, and choose the account the catalog goes to. Follows the site role unless a role or member sets it.",
+        "group": "sales-channels",
+        "key": "salesChannels.connect",
+        "label": "Connect Google and Meta",
+        "scope": "site",
+        "sitePreset": {
+          "admin": true,
+          "author": false,
+          "editor": false,
+          "viewer": false
+        }
+      },
+      {
+        "description": "Send the catalog to a connected Google Merchant Center or Meta catalog now. Follows the site role unless a role or member sets it.",
+        "group": "sales-channels",
+        "key": "salesChannels.sync",
+        "label": "Push the catalog to a channel",
+        "scope": "site",
+        "sitePreset": {
+          "admin": true,
+          "author": false,
+          "editor": true,
+          "viewer": false
+        }
+      },
+      {
+        "description": "See which email platforms this site is connected to, and each connection’s activity. Follows the site role unless a role or member sets it.",
+        "group": "marketing-platforms",
+        "key": "marketingPlatforms.view",
+        "label": "See email platform connections",
+        "scope": "site",
+        "sitePreset": {
+          "admin": true,
+          "author": false,
+          "editor": true,
+          "viewer": false
+        }
+      },
+      {
+        "description": "Connect and disconnect Mailchimp, Klaviyo, Omnisend and Attentive, choose what is synced, pause a connection and run its sync. Follows the site role unless a role or member sets it.",
+        "group": "marketing-platforms",
+        "key": "marketingPlatforms.manage",
+        "label": "Manage email platform connections",
+        "scope": "site",
+        "sitePreset": {
+          "admin": true,
+          "author": false,
+          "editor": false,
+          "viewer": false
+        }
+      },
+      {
+        "description": "Change how rewards are earned and spent, the referral offer and the rewards emails. Follows the site role unless a role or member sets it.",
+        "group": "loyalty",
+        "key": "loyalty.program",
+        "label": "Change the rewards program",
+        "scope": "site",
+        "sitePreset": {
+          "admin": true,
+          "author": false,
+          "editor": false,
+          "viewer": false
+        }
+      },
+      {
+        "description": "Connect and disconnect Smile.io or Yotpo Loyalty, and bring its balances in. Follows the site role unless a role or member sets it.",
+        "group": "loyalty",
+        "key": "loyalty.connection",
+        "label": "Connect a rewards service",
+        "scope": "site",
+        "sitePreset": {
+          "admin": true,
+          "author": false,
+          "editor": false,
+          "viewer": false
+        }
+      },
+      {
+        "description": "Add or take away a member’s points or credit by hand. Follows the site role unless a role or member sets it.",
+        "group": "loyalty",
+        "key": "loyalty.adjustBalances",
+        "label": "Adjust rewards balances",
+        "scope": "site",
+        "sitePreset": {
+          "admin": true,
+          "author": false,
+          "editor": true,
+          "viewer": false
+        }
+      },
+      {
+        "description": "See which help desks this site is connected to, and each connection’s activity. Follows the site role unless a role or member sets it.",
+        "group": "help-desks",
+        "key": "helpDesks.view",
+        "label": "See help desk connections",
+        "scope": "site",
+        "sitePreset": {
+          "admin": true,
+          "author": false,
+          "editor": true,
+          "viewer": false
+        }
+      },
+      {
+        "description": "Connect and disconnect Gorgias, Re:amaze, Kustomer, Gladly and Richpanel, choose what is sent, pause a connection and run its sync. Follows the site role unless a role or member sets it.",
+        "group": "help-desks",
+        "key": "helpDesks.manage",
+        "label": "Manage help desk connections",
+        "scope": "site",
+        "sitePreset": {
+          "admin": true,
+          "author": false,
+          "editor": false,
+          "viewer": false
+        }
       },
       {
         "description": "Write, publish and retire waivers, and void a signature.",

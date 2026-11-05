@@ -30,6 +30,7 @@ import { buildRoute, Route } from '../../../../../constants/route-links'
 import { CONTENT_MAX_WIDTH } from '../../../../../constants/shared'
 import { useOrgSlug } from '../../../../../hooks/use-org-scope'
 import useCurrentOrg from '../../../../../hooks/use-current-org'
+import { permissionRefusalText } from '@aglyn/aglyn/app-utils/org-permissions'
 import useOrgPermissions from '../../../../../hooks/use-org-permissions'
 
 /**
@@ -121,8 +122,7 @@ export default function BillingSectionsLayout({
       <Container gutterY maxWidth={CONTENT_MAX_WIDTH}>
         {permissionsLoaded && !can('billing.view') ? (
           <Alert severity="warning">
-            {'You do not have permission to view billing for this ' +
-              'organization — ask an organization admin for access.'}
+            {permissionRefusalText('billing.view')}
           </Alert>
         ) : permissionsErrored ? (
           // The member read FAILED. Until AGL-243 the catch published

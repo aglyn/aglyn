@@ -34,11 +34,9 @@ import type {
   TransferRevertResult,
 } from '@aglyn/aglyn/plugin-manager/plugin-transfer-resources'
 import { firebaseAdmin, getOrgForHost, logHostActivity, resolveOrgMembership } from '@aglyn/tenant-data-admin'
+import { memberHasPermissionOnHost } from '@aglyn/tenant-data-admin/server/organizations'
 import { TransferEngineError, TransferPlanRefusedError } from '@aglyn/tenant-data-admin/server/transfer-jobs'
-import { hostRoleFor } from '@aglyn/aglyn/app-utils/organizations'
-import { transferImportRoleAllowed, transferImportRoleRefusal } from '@aglyn/aglyn/data-transfer'
-import { declaredTransferResource } from '@aglyn/aglyn/plugin-manager/plugin-transfer-resources'
-import { COMMERCE_GIFT_CARDS_TRANSFER } from './transfer-keys'
+import { permissionRefusalText } from '@aglyn/aglyn/app-utils/org-permissions'
 import { giftCardsPlanRefusal } from './gift-cards-plan'
 import { giftCardCodeOf, giftCardRedeemed } from '../model/commerce-gift-cards'
 import {
@@ -66,10 +64,10 @@ import { ROW_BUDGET_MS, firestoreOf, hostRefOf, type Firestore } from './server-
  * never writes a balance. The plan (`planGiftCardRows`) decides each card and
  * the total; this module makes the three promises the dry run states:
  *
- * - WHO: the workspace's owners and admins, and a site's admins (the
- *   declaration's `importRoles: ["admin"]`, AGL-3554), on a plan that
- *   includes gift cards. The plan,
- *   the apply and the undo each ask again, server-side.
+ * - WHO: whoever holds "Import gift cards" (the declaration's
+ *   `importPermission`, AGL-4047), whose preset is the site's Admin, on a plan
+ *   that includes gift cards. The plan, the apply and the undo each ask again,
+ *   server-side.
  * - HOW: each card through `issueGiftCard`, the Gift cards card's own issue
  *   path — so its amount is bounded, its code is created and never
  *   overwritten, its activity line is written — and only when the total the
@@ -108,22 +106,22 @@ interface GiftCardIssuer {
   ownerOrg: unknown
 }
 
-/** The member importing, checked for the role and the plan, or the refusal. */
+/** The key the declaration names for an import. */
+const GIFT_CARDS_IMPORT_PERMISSION = 'commerce.giftCards.import'
+
+/** The member importing, checked for the key and the plan, or the refusal. */
 async function issuerOf(ctx: TransferResourceContext): Promise<GiftCardIssuer> {
   const hostId = ctx.hostId
   if (!hostId) throw new TransferEngineError('invalid', 400, 'Gift cards belong to a site; name the site.')
   const uid = ctx.actorUid
   const membership = uid ? await resolveOrgMembership(uid, ctx.orgId) : null
-  // The declaration's `importRoles` (AGL-3554), which the transfer gate
-  // asked already; asked again here for the sweep that resumes an import.
-  const declared = declaredTransferResource(COMMERCE_GIFT_CARDS_TRANSFER)
-  const role = membership?.member ? hostRoleFor(membership.member, hostId as never) : null
-  if (!uid || !declared || !transferImportRoleAllowed('import', declared, role)) {
-    throw new TransferEngineError(
-      'forbidden',
-      403,
-      declared ? transferImportRoleRefusal(declared) : 'Gift cards can’t be imported here.',
-    )
+  // "Import gift cards" (AGL-4047), which the transfer gate asked already;
+  // asked again here for the sweep that resumes an import.
+  const held = uid && membership?.member
+    ? await memberHasPermissionOnHost(ctx.orgId, hostId, membership.member, GIFT_CARDS_IMPORT_PERMISSION)
+    : false
+  if (!held) {
+    throw new TransferEngineError('forbidden', 403, permissionRefusalText(GIFT_CARDS_IMPORT_PERMISSION))
   }
   const owner = await getOrgForHost(hostId).catch(() => null)
   // The transfer gate asked already (the resource's `planGate`); asked again

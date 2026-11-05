@@ -157,8 +157,7 @@ describe('writing, by where the dataset sits', () => {
   it('an editor narrowed on its one site has its writes off, and may still add a new dataset', () => {
     mockMember = { role: 'editor', allHosts: true, hostAccess: { [HERE]: 'viewer' } }
     mount()
-    for (const name of ['Add record', 'Schema', 'Delete']) expect(off(name)).toBe(true)
-    expect(button('Import')).toBeUndefined()
+    for (const name of ['Add record', 'Schema', 'Import', 'Delete']) expect(off(name)).toBe(true)
     expect(off('Add dataset')).toBe(false)
   })
 

@@ -253,7 +253,7 @@ export function SiteMemberPurchases(props: ConsoleSiteMemberZoneProps) {
       <Divider textAlign="left">{'Orders'}</Divider>
       {ordersUnreadable ? (
         <Typography variant="body2" color="text.secondary">
-          {'Order history needs the editor or admin role on this site.'}
+          {'Order history takes the "See orders and webhooks" permission on this site.'}
         </Typography>
       ) : orders.length === 0 ? (
         <Typography variant="body2" color="text.secondary">

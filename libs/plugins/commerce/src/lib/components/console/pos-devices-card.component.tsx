@@ -158,13 +158,13 @@ export function PosDevicesCard({
     : !posEntitled
       ? 'Point of Sale is not on your plan. Upgrade in Billing to pair displays and kiosks.'
       : !canManagePos
-        ? 'Only an admin or editor with the "Use the point of sale" permission can pair displays and kiosks.'
+        ? 'Pairing displays and kiosks takes the "Use the point of sale" permission, which site admins and editors hold by default.'
         : !canSetUpDevices
           ? DEVICES_KEY_REASON
           : null
   /** Why the reader controls are not offered, or null when they are. */
   const readersBlocked = !canManagePos
-    ? 'Only an admin or editor with the "Use the point of sale" permission can set up card readers.'
+    ? 'Setting up card readers takes the "Use the point of sale" permission, which site admins and editors hold by default.'
     : !canSetUpDevices
       ? DEVICES_KEY_REASON
       : null

@@ -261,7 +261,7 @@ export function MemberPermissionsEditor(props: {
   const body = !orgWide ? (
     <Alert severity="info">
       {'This member works on named sites. What they can do there follows their site role, ' +
-        'and a site admin adjusts it per site under the site’s collaborators.'}
+        'and a member holding "Manage members" adjusts it per site under the site’s collaborators.'}
     </Alert>
   ) : (
     <Stack spacing={1.5}>

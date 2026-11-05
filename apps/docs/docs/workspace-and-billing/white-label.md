@@ -34,9 +34,10 @@ everywhere at once. Upgrade again and the same values return.
 2. Choose the **Branding** tab.
 3. The card is **White-label brand**.
 
-You need the **admin** role. The Branding tab is not shown at all to members
-below it, so a teammate who cannot find it is looking at a shorter tab strip
-than you are, not at a hidden card.
+You need the **Organization settings** permission, which owners and admins hold
+by default. The Branding tab is not shown at all to members without it, so a
+teammate who cannot find it is looking at a shorter tab strip than you are, not
+at a hidden card.
 
 While your plan is still being read the card says **"Checking your plan…"**.
 On a plan without the entitlement it shows an information notice pointing you

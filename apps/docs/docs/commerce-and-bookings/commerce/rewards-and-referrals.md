@@ -33,7 +33,9 @@ The card also shows how many members you have, the points they hold and what tho
 points are worth, and the store credit they hold. Points and store credit are money
 your store owes, so keep an eye on these figures.
 
-Only a site admin can change the program; anyone on the site can read it.
+Changing the program takes **Change the rewards program**, which a site's admins hold
+by default; anyone on the site can read it. See
+[custom roles](../../workspace-and-billing/teams-and-roles/custom-roles.md#integration-permissions).
 
 ## How customers earn
 
@@ -99,7 +101,8 @@ fifty changes.
   them a member if they are not one yet. Turn on **Email the customer when credit is
   added** to send them their new balance and rewards code.
 
-Adjusting balances needs an editor or admin on the site.
+Adjusting balances takes **Adjust rewards balances**, which a site's admins and editors
+hold by default.
 
 ## On an order
 

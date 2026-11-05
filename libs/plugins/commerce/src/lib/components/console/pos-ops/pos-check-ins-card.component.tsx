@@ -334,7 +334,7 @@ function PosCheckInsBody(props: PosCheckInsCardProps) {
       <Stack spacing={2.5}>
         {!canManagePos ? (
           <Alert severity="info">
-            {'Check-ins are for members who can use the register: a site admin or editor with the "Use the point of sale" permission.'}
+            {'Check-ins take the "Use the point of sale" permission, which site admins and editors hold by default.'}
           </Alert>
         ) : null}
         <LocalizationProvider dateAdapter={AdapterDayjs}>

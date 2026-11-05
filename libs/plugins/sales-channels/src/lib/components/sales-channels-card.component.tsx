@@ -16,6 +16,10 @@
  */
 'use client'
 
+import { permissionRefusalText } from '@aglyn/aglyn/app-utils/org-permissions'
+import { BlockedControl } from '@aglyn/shared-ui-jsx/components/blocked-control.component'
+import { useSiteKeys } from '@aglyn/tenant-feature-instance/hooks/use-site-keys'
+import { SALES_CHANNELS_SITE_PRESETS } from '../model/sales-channels-permissions'
 import { pluginDocsHelp } from '@aglyn/aglyn/app-utils/docs-help'
 import { CardDisplay, useConfirmationContext } from '@aglyn/shared-ui-jsx'
 import { CopyField } from '@aglyn/shared-ui-jsx/components/copy-field.component'
@@ -212,6 +216,7 @@ function DefaultsCard(props: {
   onSaved: (settings: SalesChannelSettings) => void
 }) {
   const { hostId, settings, storeName, onSaved } = props
+  const refused = useSiteKeys(hostId).blocked('salesChannels.settings', SALES_CHANNELS_SITE_PRESETS['salesChannels.settings'])
   const request = useSalesChannelsFetch()
   const { enqueueSnackbar } = useSnackbar()
   const [draft, setDraft] = useState(settings)
@@ -242,9 +247,11 @@ function DefaultsCard(props: {
       subheader="Used for a product that leaves a field blank. Set a product's own brand, barcode and category in the product editor."
       HeaderProps={{
         action: (
+          <BlockedControl blocked={refused} reason={permissionRefusalText('salesChannels.settings')}>
           <Button variant="contained" onClick={save} disabled={!dirty || saving}>
             {saving ? 'Saving…' : 'Save'}
           </Button>
+          </BlockedControl>
         ),
       }}
       contentGutterX
@@ -297,6 +304,9 @@ function ChannelCard(props: {
   onLegacyRetired: () => void
 }) {
   const { hostId, channel, state, canEnable, diagnostics, legacy, connect, onChange, onLegacyRetired } = props
+  const { blocked } = useSiteKeys(hostId)
+  const feedsRefused = blocked('salesChannels.feeds', SALES_CHANNELS_SITE_PRESETS['salesChannels.feeds'])
+  const replaceRefused = blocked('salesChannels.replaceAddress', SALES_CHANNELS_SITE_PRESETS['salesChannels.replaceAddress'])
   const request = useSalesChannelsFetch()
   const { enqueueSnackbar } = useSnackbar()
   const { confirm } = useConfirmationContext()
@@ -374,16 +384,20 @@ function ChannelCard(props: {
         action: (
           <Stack direction="row" spacing={1} sx={{ alignItems: 'center' }}>
             {state.enabled ? (
+              <BlockedControl blocked={replaceRefused} reason={permissionRefusalText('salesChannels.replaceAddress')}>
               <Button size="small" color="warning" disabled={busy || !state.url} onClick={() => void rotate()}>
                 {'Replace address'}
               </Button>
+              </BlockedControl>
             ) : null}
-            <Switch
+            <BlockedControl blocked={feedsRefused} reason={permissionRefusalText('salesChannels.feeds')}>
+              <Switch
               checked={state.enabled}
               disabled={busy || (!state.enabled && !canEnable)}
               onChange={(event) => void toggle(event.target.checked)}
               slotProps={{ input: { 'aria-label': `${channel.label} feed` } }}
             />
+              </BlockedControl>
           </Stack>
         ),
       }}
@@ -422,9 +436,11 @@ function ChannelCard(props: {
           <Alert
             severity="info"
             action={
+              <BlockedControl blocked={replaceRefused} reason={permissionRefusalText('salesChannels.replaceAddress')}>
               <Button color="inherit" size="small" disabled={busy} onClick={() => void retireLegacy()}>
                 {'Turn off'}
               </Button>
+              </BlockedControl>
             }
           >
             {`Your earlier Merchant Center address still works: ${legacy.url}. Turn it off once Merchant Center reads the address above.`}

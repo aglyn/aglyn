@@ -31,6 +31,10 @@ import { LoyaltyProgramCard } from './loyalty-program-card.component'
 const request = jest.fn()
 const enqueueSnackbar = jest.fn()
 
+jest.mock('@aglyn/tenant-feature-instance/hooks/use-site-keys', () => ({
+  useSiteKeys: () => ({ blocked: (key: string) => mockBlockedKeys.has(key) }),
+}))
+const mockBlockedKeys = new Set<string>()
 jest.mock('./loyalty-api', () => ({
   ...jest.requireActual('./loyalty-api'),
   useLoyaltyFetch: () => request,

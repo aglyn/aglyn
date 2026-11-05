@@ -18,6 +18,7 @@
 'use client'
 
 import { pluginDocsHelp } from '@aglyn/aglyn/app-utils/docs-help'
+import { permissionRefusalText } from '@aglyn/aglyn/app-utils/org-permissions'
 import { PLATFORM_BRAND_NAME } from '@aglyn/aglyn/app-utils/platform-brand'
 import { CardDisplay, useConfirmationContext } from '@aglyn/shared-ui-jsx'
 import EmptyStateComponent from '@aglyn/shared-ui-jsx/components/empty-state.component'
@@ -25,6 +26,7 @@ import { ListPagination } from '@aglyn/shared-ui-jsx/components/list-pagination.
 import { StatusChip, type StatusTone } from '@aglyn/shared-ui-jsx/components/status-chip.component'
 import { useClientPagination } from '@aglyn/shared-ui-jsx/hooks/use-client-pagination'
 import { useSnackbar } from '@aglyn/shared-ui-snackstack'
+import { useSiteKeys } from '@aglyn/tenant-feature-instance/hooks/use-site-keys'
 import {
   Alert,
   Box,
@@ -50,6 +52,7 @@ import {
   type HelpDeskLogEntry,
   type HelpDeskProviderId,
 } from '../model/connections'
+import { HELP_DESKS_SITE_PRESETS } from '../model/help-desks-permissions'
 import { useHelpDesksApi, type HelpDesksApi } from './help-desks-api'
 
 /** What the `hostSettings` zone hands a widget. */
@@ -89,6 +92,11 @@ const help = (excerpt: string, anchor: '#connect' | '#settings' | '#contact-form
 export function HelpDesksCard(props: HelpDesksCardProps) {
   const routesApi = useHelpDesksApi(props.hostId)
   const api = props.api ?? routesApi
+  // What the routes ask, read as they read it (AGL-4047): a member who can't
+  // sees the card with the permission named, and its controls switched off.
+  const { blocked } = useSiteKeys(props.hostId)
+  const viewRefused = blocked('helpDesks.view', HELP_DESKS_SITE_PRESETS['helpDesks.view'])
+  const manageRefused = blocked('helpDesks.manage', HELP_DESKS_SITE_PRESETS['helpDesks.manage'])
   const [state, setState] = useState<{
     loading: boolean
     available: HelpDeskProviderId[]
@@ -117,6 +125,15 @@ export function HelpDesksCard(props: HelpDesksCardProps) {
     }))
   }, [])
 
+  if (viewRefused) {
+    return (
+      <CardDisplay header="Help desks" subheader="Show your support team each buyer's recent orders beside their tickets, and, if you choose, send contact form messages there as new tickets." contentGutterX contentGutterY>
+        <Typography variant="body2" color="text.secondary">
+          {permissionRefusalText('helpDesks.view')}
+        </Typography>
+      </CardDisplay>
+    )
+  }
   if (state.loading) return null
   // A connection whose help desk is no longer offered is still shown, so it can be disconnected.
   const shown = [...new Set([...state.available, ...state.connections.map((entry) => entry.provider)])]
@@ -133,10 +150,16 @@ export function HelpDesksCard(props: HelpDesksCardProps) {
       contentGutterX
       contentGutterY
     >
+      {manageRefused ? (
+        <Typography variant="body2" color="text.secondary" sx={{ mb: 2 }}>
+          {permissionRefusalText('helpDesks.manage')}
+        </Typography>
+      ) : null}
       <Stack divider={<Divider flexItem />} spacing={2}>
         {shown.map((provider) => (
           <ProviderRow
             key={provider}
+            locked={manageRefused}
             api={api}
             provider={provider}
             offered={state.available.includes(provider)}
@@ -151,6 +174,7 @@ export function HelpDesksCard(props: HelpDesksCardProps) {
 HelpDesksCard.displayName = 'HelpDesksCard'
 
 function ProviderRow(props: {
+  locked: boolean
   api: HelpDesksApi
   provider: HelpDeskProviderId
   offered: boolean
@@ -161,7 +185,9 @@ function ProviderRow(props: {
   const info = HELP_DESK_PROVIDERS[provider]
   const { enqueueSnackbar } = useSnackbar()
   const { confirm } = useConfirmationContext()
-  const [busy, setBusy] = useState(false)
+  const [working, setBusy] = useState(false)
+  // Off for a member without the key, the same way as while a change runs.
+  const busy = working || props.locked
   const [error, setError] = useState<string | null>(null)
   const [values, setValues] = useState<HelpDeskCredentialInput>({})
   const [connecting, setConnecting] = useState(false)

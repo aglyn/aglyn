@@ -200,7 +200,8 @@ Cards arrive two ways:
   store credit.
 - **You import them.** Moving from another platform, **Import** issues one
   card per row of a file, under the codes your shoppers already hold, once
-  you have typed back the total. Owners and admins only. See
+  you have typed back the total. Importing takes a workspace owner or admin, or
+  an admin of the site. See
   [Import and export store data](store-import-and-export.md#gift-cards).
 
 Balances apply automatically at checkout; a shopper enters the code and the

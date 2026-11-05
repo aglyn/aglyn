@@ -16,6 +16,10 @@
  */
 'use client'
 
+import { permissionRefusalText } from '@aglyn/aglyn/app-utils/org-permissions'
+import { BlockedControl } from '@aglyn/shared-ui-jsx/components/blocked-control.component'
+import { useSiteKeys } from '@aglyn/tenant-feature-instance/hooks/use-site-keys'
+import { SHIPPING_SITE_PRESETS } from '../model/shipping-permissions'
 import type { PluginShippingAddress } from '@aglyn/aglyn/plugin-manager/plugin-shipping-rates'
 import ScrollTable from '@aglyn/shared-ui-jsx/components/scroll-table.component'
 import { useSnackbar } from '@aglyn/shared-ui-snackstack'
@@ -74,6 +78,7 @@ interface BatchRow {
 export function OrdersBatchWidget(props: OrdersBatchWidgetProps) {
   const { hostId, selectedOrderIds, storeName = '' } = props
   const availability = useShippingAvailability(hostId)
+  const buyRefused = useSiteKeys(hostId).blocked('shipping.buyLabels', SHIPPING_SITE_PRESETS['shipping.buyLabels'])
   const request = useShippingFetch()
   const { enqueueSnackbar } = useSnackbar()
   const [open, setOpen] = useState(false)
@@ -149,7 +154,9 @@ export function OrdersBatchWidget(props: OrdersBatchWidgetProps) {
 
   return (
     <>
-      <Button onClick={() => setOpen(true)}>{`Buy labels (${selectedOrderIds.length})`}</Button>
+      <BlockedControl blocked={buyRefused} reason={permissionRefusalText('shipping.buyLabels')}>
+        <Button onClick={() => setOpen(true)}>{`Buy labels (${selectedOrderIds.length})`}</Button>
+      </BlockedControl>
       <Dialog open={open} onClose={close} fullWidth maxWidth="md">
         <DialogTitle>{`Labels for ${selectedOrderIds.length} order${selectedOrderIds.length === 1 ? '' : 's'}`}</DialogTitle>
         <DialogContent>

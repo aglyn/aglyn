@@ -174,8 +174,19 @@ describe('the gate', () => {
     ['replacing an address', rotateRoute, 'tok-editor', { channel: 'google' }],
     ['retiring the old address', legacyRoute, 'tok-editor', {}],
     ['saving the defaults', settingsRoute, 'tok-viewer', { settings: {} }],
-  ])('needs the right role for %s', async (_label, route, token, body) => {
+  ])('needs the right key for %s', async (_label, route, token, body) => {
     expect((await post(route, token, body)).status).toBe(403)
+  })
+
+  it('reads the site’s stamp before the preset (AGL-4047)', async () => {
+    db.docs.set(`hosts/${HOST}`, {
+      memberRoles: { 'uid-viewer': 'viewer', 'uid-editor': 'editor', 'uid-admin': 'admin' },
+      memberPermissions: { 'uid-editor': { 'salesChannels.replaceAddress': true }, 'uid-admin': { 'salesChannels.replaceAddress': false } },
+    })
+    expect((await post(rotateRoute, 'tok-editor', { channel: 'google' })).status).not.toBe(403)
+    const refused = await post(rotateRoute, 'tok-admin', { channel: 'google' })
+    expect(refused.status).toBe(403)
+    expect((await refused.json()).error).toContain('does not include')
   })
 
   it('refuses the wrong method', async () => {

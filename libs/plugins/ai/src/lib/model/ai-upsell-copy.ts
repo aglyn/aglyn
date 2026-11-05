@@ -152,5 +152,5 @@ export function aiUpsellOffer(canManageBilling: boolean, feature = AI_UPSELL_CRE
     ? `${feature} is switched off for this workspace. It comes with ${addon} ` +
         'credits, which you can add in Billing.'
     : `${feature} is switched off for this workspace. It comes with ${addon} ` +
-        'credits. Ask a workspace owner or admin to add them in Billing.'
+        'credits. Ask a member holding "Manage billing" to add them in Billing.'
 }

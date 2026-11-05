@@ -147,7 +147,7 @@ describe('the gate', () => {
     mockPermissions = { 'org.settings': false, 'data.manage': true }
     const settings = await post({ orgId: 'org-1', action: 'preview' })
     expect(settings.status).toBe(403)
-    expect(await settings.json()).toEqual({ error: 'Org settings require the admin role' })
+    expect(await settings.json()).toEqual({ error: 'Your role does not include "Organization settings" — ask an organization admin' })
 
     mockPermissions = { 'org.settings': true, 'data.manage': false }
     const data = await post({ orgId: 'org-1', action: 'status', changeId: 'change-1' })

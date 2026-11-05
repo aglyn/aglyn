@@ -41,6 +41,7 @@ jest.mock('@aglyn/tenant-feature-instance', () => ({
 
 jest.mock('../hooks/use-org-scope', () => ({
   useOrgScope: () => ({ currentOrg: { $id: 'org-1', orgName: 'Acme Builders', slug: 'acme' } }),
+  useOrgSlug: () => 'acme',
 }))
 
 jest.mock('../hooks/use-current-org', () => ({
@@ -48,7 +49,6 @@ jest.mock('../hooks/use-current-org', () => ({
   default: () => ({ org: { name: 'Acme Builders' }, ready: true }),
 }))
 
-jest.mock('./data-export-card.component', () => ({ __esModule: true, default: () => null }))
 jest.mock('./billing/retention-funnel.dialog', () => ({ RetentionFunnelDialog: () => null }))
 
 import { ClosureNotices, CLOSURE_NOTICES_UNAVAILABLE } from './closure-notices.component'

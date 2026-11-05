@@ -106,7 +106,7 @@ export async function programTotals(orgId: string, hostId: string, program: Loya
 /** `GET ?hostId` — the program and its totals; `POST {hostId, program}` — change it. */
 export async function programRoute(request: Request): Promise<Response> {
   if (request.method !== 'GET' && request.method !== 'POST') return refuse(405, 'Method not allowed')
-  const gate = await loyaltyGate(request, { role: request.method === 'GET' ? 'viewer' : 'admin' })
+  const gate = await loyaltyGate(request, { permission: request.method === 'GET' ? null : 'loyalty.program' })
   if (gate instanceof Response) return gate
   const current = await readLoyaltyProgram(gate.orgId, gate.hostId)
   if (request.method === 'GET') {
@@ -138,7 +138,7 @@ export async function programRoute(request: Request): Promise<Response> {
 /** `GET ?hostId&sort&q&after` — the members, a page at a time, newest first by default. */
 export async function membersRoute(request: Request): Promise<Response> {
   if (request.method !== 'GET') return refuse(405, 'Method not allowed')
-  const gate = await loyaltyGate(request, { role: 'viewer' })
+  const gate = await loyaltyGate(request, { permission: null })
   if (gate instanceof Response) return gate
   const params = new URL(request.url).searchParams
   const program = await readLoyaltyProgram(gate.orgId, gate.hostId)
@@ -209,7 +209,7 @@ function signedWhole(value: unknown): number | null {
  */
 export async function memberRoute(request: Request): Promise<Response> {
   if (request.method !== 'GET' && request.method !== 'POST') return refuse(405, 'Method not allowed')
-  const gate = await loyaltyGate(request, { role: request.method === 'GET' ? 'viewer' : 'editor' })
+  const gate = await loyaltyGate(request, { permission: request.method === 'GET' ? null : 'loyalty.adjustBalances' })
   if (gate instanceof Response) return gate
   const program = await readLoyaltyProgram(gate.orgId, gate.hostId)
   if (request.method === 'GET') {
@@ -308,7 +308,7 @@ export async function memberRoute(request: Request): Promise<Response> {
 /** `GET ?hostId&orderId` — what one order earned, spent and gave back. */
 export async function orderRoute(request: Request): Promise<Response> {
   if (request.method !== 'GET') return refuse(405, 'Method not allowed')
-  const gate = await loyaltyGate(request, { role: 'viewer' })
+  const gate = await loyaltyGate(request, { permission: null })
   if (gate instanceof Response) return gate
   const orderId = String(new URL(request.url).searchParams.get('orderId') ?? '')
   if (!isDocumentId(orderId)) return refuse(400, 'Missing orderId')

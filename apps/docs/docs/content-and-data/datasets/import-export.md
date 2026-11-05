@@ -15,7 +15,8 @@ until you have seen what an import will do.
 **Starter** and above (datasets need the data store). Importing takes what writing the
 dataset takes: **Manage data**, or **Manage this site's data** on a dataset shared with that
 site alone. Exporting takes **Export data**, which every role holds by default, and access
-to the dataset. See
+to the dataset. Whichever a member doesn't hold is switched off for them, naming the
+permission. See
 [Dataset permissions](../../workspace-and-billing/teams-and-roles/custom-roles.md#dataset-permissions).
 :::
 
