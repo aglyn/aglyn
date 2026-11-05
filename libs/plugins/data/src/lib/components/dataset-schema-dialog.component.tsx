@@ -98,6 +98,12 @@ export interface DatasetSchemaDialogProps {
   seedUnreadable?: boolean
   /** That listener, so a save waits on that read alone (AGL-4135). */
   seedListen?: ListenHandle | null
+  /**
+   * Whether this member may change who the dataset is shared with: "Manage
+   * data" with every site in reach. A site's verdict writes the dataset and never
+   * moves it, so someone it admits reads the sharing instead (AGL-4047).
+   */
+  canChangeSharing?: boolean
   onClose: () => void
 }
 
@@ -120,6 +126,7 @@ export function DatasetSchemaDialog(props: DatasetSchemaDialogProps) {
     seedFromCache,
     seedUnreadable,
     seedListen,
+    canChangeSharing = true,
     onClose,
   } = props
   // Org-shared data root (AGL-237/239). Null until the async org lookup
@@ -387,7 +394,7 @@ export function DatasetSchemaDialog(props: DatasetSchemaDialogProps) {
      * every site, and anything narrower would drop sites somebody picked.
      */
     const scopeWrite =
-      orgId && viewerOrgWide && scopeChanged ? scopeToStore(visibleTo) : null
+      orgId && viewerOrgWide && canChangeSharing && scopeChanged ? scopeToStore(visibleTo) : null
     if (scopeWrite?.problem) {
       return void enqueueSnackbar(scopeWrite.problem, {
         variant: 'warning',
@@ -482,6 +489,7 @@ export function DatasetSchemaDialog(props: DatasetSchemaDialogProps) {
     names,
     visibleTo,
     viewerOrgWide,
+    canChangeSharing,
     orgHostList,
     confirm,
     firestore,
@@ -552,7 +560,7 @@ export function DatasetSchemaDialog(props: DatasetSchemaDialogProps) {
                 <Typography variant="body2" color="text.secondary">
                   {'Checking your access…'}
                 </Typography>
-              ) : viewerOrgWide ? (
+              ) : viewerOrgWide && canChangeSharing ? (
                 <>
                   {/*
                     The state this dialog used to hide (AGL-1484), in the

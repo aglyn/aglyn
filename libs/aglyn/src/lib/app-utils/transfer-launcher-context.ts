@@ -103,6 +103,13 @@ export interface TransferAccessTarget {
   scope: TransferLaunchScope
   /** The site, for a `host` resource or a workspace resource read through one site. */
   hostId?: string | null
+  /**
+   * The surface's own verdict on importing into this instance (AGL-4047), for
+   * a resource whose server half answers `importAccess`, in place of "Manage
+   * data" on the workspace. The plan is still asked. The routes stay the
+   * enforcement.
+   */
+  importAllowed?: boolean
 }
 
 /**

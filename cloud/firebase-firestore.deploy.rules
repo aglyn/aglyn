@@ -1576,8 +1576,45 @@ orgNotSuspended();
 
 
 
-function canWriteScopedOrgDatasets() {
-return canWriteOrgDatasets() && canReadScoped();
+
+
+
+
+
+
+
+
+
+
+
+function canWriteDatasetOn(visibleTo) {
+return isOrgMember() && isVerified() && orgNotSuspended() &&
+((memberKeyOrOverride('data.manage', ['owner', 'admin', 'editor']) &&
+!siteNarrowsDataset(visibleTo)) ||
+siteHoldsDatasetKey(visibleTo));
+}
+function datasetOnOneSite(visibleTo) {
+return visibleTo is list && visibleTo.size() == 1 && visibleTo[0].matches('host:[^:/]+');
+}
+function siteNarrowsDataset(visibleTo) {
+return datasetOnOneSite(visibleTo) &&
+hostNarrowsMember(visibleTo[0].split(':')[1], orgMember());
+}
+function siteHoldsDatasetKey(visibleTo) {
+return datasetOnOneSite(visibleTo) && siteDatasetVerdict(visibleTo[0].split(':')[1]);
+}
+
+
+
+
+
+
+function siteDatasetVerdict(hostId) {
+let site = get(/databases/$(database)/documents/hosts/$(hostId)).data;
+let stamp = site.get('memberPermissions', {}).get(request.auth.uid, {}).get('data.siteManage', null);
+return site.get('orgId', '') == orgId && isHostMember(hostId) && !hostSuspended(hostId) &&
+(stamp is bool ? stamp == true :
+orgMember().get('role', '') == 'viewer' && hostMemberRole(hostId) in ['admin', 'editor']);
 }
 
 
@@ -1665,8 +1702,12 @@ request.resource.data.mediaIds.size() <= 20);
 match /datasets/{datasetId} {
 allow read: if isStaff() || canReadScoped();
 allow create: if isStaff();
+
+
 allow update: if isStaff() ||
-(canWriteScopedOrgDatasets() && (isOrgWideMember() || scopeUnchanged()));
+(canReadScoped() && canWriteDatasetOn(resource.data.get('visibleTo', null)) &&
+(scopeUnchanged() || (isOrgWideMember() &&
+memberKeyOrOverride('data.manage', ['owner', 'admin', 'editor']))));
 allow delete: if isStaff();
 match /records/{recordId} {
 
@@ -1685,10 +1726,18 @@ get(/databases/$(database)/documents/orgs/$(orgId)/datasets/$(datasetId))
 .data.visibleTo
 .hasAny(orgMember().get('scopeTokens', ['org'])));
 }
-allow read: if isStaff() || parentDatasetVisible();
+
+
+allow read: if isStaff() ||
+(parentDatasetVisible() &&
+memberKeyOrOverride('data.viewRecords', ['owner', 'admin', 'editor', 'viewer']));
 allow create: if isStaff();
+
+
 allow update, delete: if isStaff() ||
-(canWriteOrgDatasets() && parentDatasetVisible());
+(parentDatasetVisible() &&
+((canWriteOrgDatasets() && orgMember().get('hostAccess', {}).size() == 0) ||
+canWriteDatasetOn(get(/databases/$(database)/documents/orgs/$(orgId)/datasets/$(datasetId)).data.get('visibleTo', null))));
 }
 }
 

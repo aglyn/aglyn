@@ -38,6 +38,7 @@ import {
   permissionRefusal,
   resolveOrgMembership,
 } from '@aglyn/tenant-data-admin'
+import { memberMayActOnPlaced, placedRefusalPermission } from '@aglyn/tenant-data-admin/server/placement-access'
 import { invalidIdTokenResponse } from '../../_lib/invalid-id-token-response'
 
 /*
@@ -172,8 +173,11 @@ async function handler(request: Request): Promise<Response> {
       const membership = await resolveOrgMembership(decoded.uid, scopeId)
       const member = membership?.member as any
       // "Delete workspace records" (`org.eraseRecords`, AGL-4047), whose
-      // default is the owner, admin and editor this asked for.
-      if (!member || !(await memberHasOrgPermission(scopeId, member, 'org.eraseRecords'))) {
+      // default is the owner, admin and editor this asked for. A kind placed
+      // on sites asks below instead, once it knows where this one sits: on one
+      // site, that site's verdict counts as well.
+      const placed = erasable.placed
+      if (!member || (!placed && !(await memberHasOrgPermission(scopeId, member, 'org.eraseRecords')))) {
         return permissionRefusal('org.eraseRecords')
       }
       // Lockdown verdict (AGL-1506): the `orgSuspended` member projection
@@ -216,9 +220,26 @@ async function handler(request: Request): Promise<Response> {
         fromHostId: body?.hostId ? String(body.hostId) : '',
         label: erasable.label,
         exists: target.exists,
+        protectsShared: Boolean(placed),
       })
       if (denial) {
         return Response.json({ error: denial.error }, { status: denial.status })
+      }
+      if (placed) {
+        const visibleTo = target.get('visibleTo') as string[] | undefined
+        const allowed = await memberMayActOnPlaced({
+          firestore: firestore as never,
+          orgId: scopeId,
+          uid: decoded.uid,
+          member,
+          visibleTo,
+          workspaceKey: 'org.eraseRecords',
+          siteKey: placed.siteKey,
+          sitePreset: placed.sitePreset,
+        })
+        if (!allowed) {
+          return permissionRefusal(placedRefusalPermission(visibleTo, 'org.eraseRecords', placed.siteKey) as never)
+        }
       }
     } else if (!isStaff) {
       // Host scope: the site's own member roles gate content, and a

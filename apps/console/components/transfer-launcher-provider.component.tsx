@@ -116,6 +116,8 @@ export function transferAccessVerdict(
   // for the plan, whatever the person holds.
   const feature = transferPlanFeature(action, declared)
   if (feature && !inputs.entitled(feature)) return false
+  // The resource's own answer on this instance (AGL-4047), as its `importAccess` gives the gate.
+  if (action === 'import' && typeof target.importAllowed === 'boolean') return target.importAllowed
   const hostId = target.hostId?.trim() || null
   let axis: TransferMemberAxis
   if (inputs.orgWide || !hostId) {
@@ -280,7 +282,7 @@ export function TransferLauncherProvider({ children }: { children?: JSX.Children
       },
       discard,
       can: (action, target) => {
-        const key = [action, target.resource, target.scope, target.hostId ?? ''].join('\u0000')
+        const key = [action, target.resource, target.scope, target.hostId ?? '', String(target.importAllowed)].join('\u0000')
         let answer = answers.get(key)
         if (answer === undefined) {
           answer = transferAccessVerdict(inputs, action, target)

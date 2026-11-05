@@ -22,6 +22,7 @@ import {
   isOrgWideScope,
   memberCanSee,
 } from '@aglyn/aglyn/server'
+import { deleteBeyondReach, deleteBeyondReachRefusal } from '@aglyn/aglyn/app-utils/site-placement'
 
 /**
  * Whether a caller may recursively delete an org-scoped resource, and
@@ -43,17 +44,19 @@ export interface EraseScopeInput {
   label: string
   /** False when the target document does not exist. */
   exists: boolean
+  /** A member who does not reach every site may not delete this kind once it is shared beyond one (AGL-4047). */
+  protectsShared?: boolean
 }
 
 export interface EraseScopeDenial {
   error: string
-  status: 404 | 409
+  status: 403 | 404 | 409
 }
 
 /**
  * Null when the erase may proceed; otherwise the response to return.
  *
- * Two independent checks, in order of severity:
+ * Three independent checks, in order of severity:
  *
  * 1. **The boundary.** A site collaborator is an org member doc with role
  *    `editor`, so the route's role gate admits them. Without this they
@@ -64,7 +67,12 @@ export interface EraseScopeDenial {
  *    scoped member should not learn that an id they cannot see resolves to
  *    something real.
  *
- * 2. **The shared-resource rail.** Deleting from a SITE page reads as
+ * 2. **The workspace's own.** A member who reaches only some sites holding the
+ *    key could otherwise delete a dataset every site shares just by leaving
+ *    out the hint below, which is a hint. So it is refused whatever they send
+ *    (AGL-4047), for the kinds that say so. Editing one is another matter.
+ *
+ * 3. **The shared-resource rail.** Deleting from a SITE page reads as
  *    "remove this from my site", but a resource shared org-wide or with
  *    several sites is not one site's to destroy, and the cascade takes
  *    every record with it. The wanted operation is narrowing the scope.
@@ -74,13 +82,17 @@ export interface EraseScopeDenial {
 export function eraseScopeDenial(
   input: EraseScopeInput,
 ): EraseScopeDenial | null {
-  const { visibleTo, member, fromHostId, label, exists } = input
+  const { visibleTo, member, fromHostId, label, exists, protectsShared } = input
   if (!exists) return null
 
   // 404, not 403: a scoped collaborator learning that a resource EXISTS is
   // the leak this project closes (feedback_role_gate_admits_site_collaborators).
   if (!memberCanSee(member, visibleTo)) {
     return { error: `${label} not found`, status: 404 }
+  }
+
+  if (protectsShared && deleteBeyondReach(member, visibleTo)) {
+    return { error: deleteBeyondReachRefusal(label), status: 403 }
   }
 
   if (!fromHostId) return null

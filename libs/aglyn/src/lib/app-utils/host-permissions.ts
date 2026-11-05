@@ -223,7 +223,39 @@ export function applySiteRolePresets<T extends Record<string, boolean>>(
   customRole?: Pick<AglynOrgCustomRole, 'permissions'> | null,
 ): T {
   if (!hostId) return granted
-  return { ...granted, ...resolveSiteRolePresetPermissions(member, hostId, customRole) }
+  return {
+    ...granted,
+    ...resolveSiteRolePresetPermissions(member, hostId, customRole),
+    ...resolveSiteRaisedPermissions(member, hostId, customRole),
+  }
+}
+
+/**
+ * The keys a site RAISES for a member of the whole workspace (AGL-4047): on a
+ * site where their access is wider than their workspace role, each
+ * `raisesPerSite` key they hold by that access's `hostRoleDefaults`. Only the
+ * keys it raises are in the answer, so a resolver spreads it over what the
+ * workspace already answered. A custom role or their own permissions deciding
+ * the key, or the key it follows, stands: a raise is a default, never a way
+ * round a decision someone wrote down.
+ */
+export function resolveSiteRaisedPermissions(
+  member: (Partial<AglynOrgMember> & { roleId?: string | null }) | null | undefined,
+  hostId: HostUid | null | undefined,
+  customRole?: Pick<AglynOrgCustomRole, 'permissions'> | null,
+): Record<string, boolean> {
+  const out: Record<string, boolean> = {}
+  if (!member || !hostId || !isOrgWideMember(member)) return out
+  const role = hostRoleFor(member, hostId)
+  if (!role || HOST_ROLE_RANK[role] <= HOST_ROLE_RANK[orgRoleTier(member.role) as HostAccessRole]) return out
+  const layers = [member.roleId ? customRole?.permissions : undefined, member.permissions]
+  const decided = (key: string | undefined): boolean =>
+    Boolean(key) && layers.some((layer) => typeof (layer as Record<string, unknown> | undefined)?.[key as string] === 'boolean')
+  for (const definition of ORG_PERMISSIONS) {
+    if (!definition.raisesPerSite || decided(definition.key) || decided(definition.follows)) continue
+    if (definition.hostRoleDefaults?.[role] === true) out[definition.key] = true
+  }
+  return out
 }
 
 /**

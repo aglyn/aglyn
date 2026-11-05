@@ -1732,7 +1732,8 @@ export const PLUGIN_TRANSFER_RESOURCES_DECLARED: readonly ResolvedTransferResour
       "maxRows": 50000
     },
     "instances": true,
-    "readableByMembers": true
+    "readPermission": "data.export",
+    "readPermissionOnly": true
   },
   {
     "pluginId": "email",

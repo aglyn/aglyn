@@ -15,7 +15,9 @@
  * limitations under the License.
  */
 
+import { permissionRefusalText } from '@aglyn/aglyn/app-utils/org-permissions'
 import { hostRoleFor, isOrgWideMember, memberCanSee } from '@aglyn/aglyn/app-utils/organizations'
+import { DATA_VIEW_RECORDS_PERMISSION } from '../model/dataset-access'
 import { visibleToHost } from '@aglyn/aglyn/app-utils/scope-tokens'
 import type { AglynOrgMember } from '@aglyn/aglyn/foundation/definitions/organization.types'
 import {
@@ -99,7 +101,7 @@ interface VisibleDataset {
  * narrowed to a site, only those shared with it, which is the site Data page's
  * rule (AGL-2891). With no member, only datasets shared with every site.
  */
-async function visibleDatasets(firestore: Firestore, request: PluginFigureRequest): Promise<VisibleDataset[]> {
+async function visibleDatasets(firestore: Firestore, request: PluginFigureRequest): Promise<VisibleDataset[] | null> {
   const orgRef = firestore.collection('orgs').doc(request.orgId)
   const [snapshot, memberSnapshot] = await Promise.all([
     orgRef.collection('datasets').limit(DATASET_FIGURE_DATASETS_READ_LIMIT).get(),
@@ -107,6 +109,14 @@ async function visibleDatasets(firestore: Firestore, request: PluginFigureReques
   ])
   const member = memberSnapshot?.exists ? (memberSnapshot.data() as Partial<AglynOrgMember>) : null
   if (request.uid && !member) return []
+  /*
+   * "View dataset records" (AGL-4047): these figures are a member's read of the
+   * records, asked through AI, so they answer as the rule answers the same
+   * member: the decision written on the stamp, every role's by default. A read
+   * with no member behind it (an automation's) is not a member's to refuse.
+   */
+  const stamps = member as { resolvedPermissions?: Record<string, unknown>; permissions?: Record<string, unknown> } | null
+  if ((stamps?.resolvedPermissions ?? stamps?.permissions)?.[DATA_VIEW_RECORDS_PERMISSION] === false) return null
   if (request.hostId && member && !isOrgWideMember(member) && hostRoleFor(member, request.hostId) === null) {
     return []
   }
@@ -182,6 +192,7 @@ export function datasetFigureReaders(firestore: DatasetFigureFirestore): PluginF
       read: async (request) => {
         const db = firestore()
         const datasets = await visibleDatasets(db, request)
+        if (!datasets) return refused(403, permissionRefusalText(DATA_VIEW_RECORDS_PERMISSION))
         const named = request.params['dataset']
         if (!named) {
           const counted = await Promise.all(
@@ -275,6 +286,7 @@ export function datasetFigureReaders(firestore: DatasetFigureFirestore): PluginF
       read: async (request) => {
         const db = firestore()
         const datasets = await visibleDatasets(db, request)
+        if (!datasets) return refused(403, permissionRefusalText(DATA_VIEW_RECORDS_PERMISSION))
         const named = request.params['dataset'] ?? ''
         const dataset = datasets.find((entry) => entry.id === named || entry.name.toLowerCase() === named.toLowerCase())
         if (!dataset) return refused(404, 'That dataset is not one you can read here')
