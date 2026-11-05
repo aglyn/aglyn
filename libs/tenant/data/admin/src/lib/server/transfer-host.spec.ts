@@ -166,6 +166,14 @@ jest.mock('./host-memberships', () => ({
     calls.push(`syncHostProjectionForMembers ${orgId} ${hostId}`)
   },
 }))
+/** Each sweep a move starts, with what was true when it started. */
+const sweeps: Array<{ orgId: string; reason: string; hostId?: string; hosts: unknown; callsSoFar: string[] }> = []
+jest.mock('./scope-sharing-sweep', () => ({
+  __esModule: true,
+  sweepScopeSharingAfterSiteChange: async (input: { orgId: string; reason: string; hostId?: string }) => {
+    sweeps.push({ ...input, hosts: store.get(`orgs/${input.orgId}`)?.['hosts'], callsSoFar: [...calls] })
+  },
+}))
 jest.mock('./host-sending-domain', () => ({ __esModule: true, SENDING_LABELS_COLLECTION: 'sendingLabels' }))
 jest.mock('./sending-domains', () => ({ __esModule: true, SENDING_DOMAINS_COLLECTION: 'sendingDomains' }))
 jest.mock('./tracking-hosts', () => ({ __esModule: true, TRACKING_HOSTS_COLLECTION: 'trackingHosts' }))
@@ -203,6 +211,7 @@ const seed = (entries: Record<string, Doc>) => {
 beforeEach(() => {
   store.clear()
   calls.length = 0
+  sweeps.length = 0
   seed({
     'hosts/h1': { displayName: 'Harbor', subdomain: 'harbor', orgId: 'from', screens: { s1: '/' } },
     'hostIndex/h1': { orgId: 'from', subdomain: 'harbor' },
@@ -310,6 +319,26 @@ describe('transferring a site', () => {
     // History and media stay where they were.
     expect(store.has('orgs/from/campaigns/c1')).toBe(true)
     expect(store.has('orgs/from/media/m1')).toBe(true)
+  })
+
+  it('sweeps both workspaces once the site has moved and its access list is rebuilt', async () => {
+    await transferHost({ hostId: 'h1', toOrgId: 'to' })
+    expect(sweeps.map(({ orgId, reason, hostId, hosts }) => ({ orgId, reason, hostId, hosts }))).toEqual([
+      { orgId: 'to', reason: 'site-added', hostId: 'h1', hosts: { h9: true, h1: true } },
+      { orgId: 'from', reason: 'site-removed', hostId: 'h1', hosts: { h2: true } },
+    ])
+    expect(sweeps[0].callsSoFar[0]).toBe('syncOrgAuthProjections to h1')
+  })
+
+  it('NEGATIVE CONTROL: a refused move sweeps nothing', async () => {
+    await expect(transferHost({ hostId: 'h1', toOrgId: 'from' })).rejects.toBeInstanceOf(HostTransferRefusedError)
+    expect(sweeps).toEqual([])
+  })
+
+  it('sweeps only the destination for a site that belonged to no organization', async () => {
+    seed({ 'hosts/h1': { displayName: 'Harbor', subdomain: 'harbor' } })
+    await transferHost({ hostId: 'h1', toOrgId: 'to' })
+    expect(sweeps.map(({ orgId }) => orgId)).toEqual(['to'])
   })
 
   it('moves a dedicated sending domain, its tracking host and its claim', async () => {

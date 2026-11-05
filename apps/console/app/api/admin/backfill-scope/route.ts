@@ -22,10 +22,15 @@ import {
   isImpersonationSession,
   notifyStaff,
 } from '@aglyn/tenant-data-admin'
+import {
+  runScopeSharingSweep,
+  scopeSharingDriftForOrg,
+} from '@aglyn/tenant-data-admin/server/scope-sharing-sweep'
 import { invalidIdTokenResponse } from '../../_lib/invalid-id-token-response'
 import { isCronAuthorized } from '../../../../utils/cron-auth'
 import { recordCronBeat } from '../../../../utils/cron-beat'
 import {
+  addAllExceptDrift,
   addPlan,
   describeScopeDrift,
   emptyTotals,
@@ -206,6 +211,15 @@ async function handler(request: Request): Promise<Response> {
           pending.push([orgRef.collection(collection).doc(write.id), data])
         }
       }
+
+      // Documents shared with all sites except some (AGL-4047), asked with
+      // the sweep's own helper, so this says what a sweep would do. The repair
+      // IS a sweep, and like the stamp below it needs a person.
+      const sharing = await scopeSharingDriftForOrg(orgRef, orgDoc.data())
+      addAllExceptDrift(totals, sharing)
+      if (!dryRun && sharing.stale) {
+        await runScopeSharingSweep({ orgId: orgDoc.id })
+      }
     }
 
     if (!dryRun) {
@@ -222,6 +236,12 @@ async function handler(request: Request): Promise<Response> {
     // document no scoped read can see (AGL-1478).
     const drift = dryRun ? scopeDrift(totals) : null
     const said = drift ? describeScopeDrift(drift) : ''
+    // Whether anything is missing its scope at all, as opposed to every finding
+    // being an all-except document that has fallen behind (AGL-4047).
+    const missingScope = Boolean(
+      drift &&
+        drift.total - drift.allExcept.stale - drift.allExcept.invalid > 0,
+    )
     if (scheduled && said) {
       // Notified, not repaired — and named down to the collection, because
       // which collection it is decides how much it costs: an unscoped
@@ -229,14 +249,19 @@ async function handler(request: Request): Promise<Response> {
       // duplicates on the next form submission.
       await notifyStaff({
         type: 'system.scopeDrift',
-        title: `${drift?.total} document(s) are missing their sharing scope`,
+        title: missingScope
+          ? `${drift?.total} document(s) are missing their sharing scope`
+          : `${drift?.total} document(s) shared with all sites except some have fallen behind`,
         // Opens with what is wrong, so the body reads without its title
         // (AGL-3432); `said` is only the counts.
-        body:
-          `These documents are missing their sharing scope: ${said}. No ` +
-          'site-scoped read can see them until they are stamped from the ' +
-          'Sharing-scope drift card on Staff → Health. This is a report; ' +
-          'nothing has been changed.',
+        body: missingScope
+          ? `These documents are missing their sharing scope: ${said}. No ` +
+            'site-scoped read can see them until they are stamped from the ' +
+            'Sharing-scope drift card on Staff → Health. This is a report; ' +
+            'nothing has been changed.'
+          : 'These documents no longer match the sites in their workspace: ' +
+            `${said}. A sweep brings them level (docs/SCOPE_DRIFT.md). This ` +
+            'is a report; nothing has been changed.',
         // The staff health page, because that is where the Sharing-scope
         // drift card scans and stamps (AGL-2062). The repair being a human
         // act is the design; an alert that opens a page with no way to
@@ -250,7 +275,7 @@ async function handler(request: Request): Promise<Response> {
       {
         dryRun,
         totals,
-        planned: pending.length,
+        planned: pending.length + totals.allExcept.stale,
         // What the scheduled run is FOR. Present on every dry run, so a
         // staff curl reads the same number the alert did.
         ...(drift ? { drift } : {}),

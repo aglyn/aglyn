@@ -47,6 +47,10 @@ import {
   registeredServerStepExecutor,
   resetServerStepExecutorsForTests,
 } from '@aglyn/aglyn/plugin-manager/plugin-server-steps'
+import {
+  listScopeSharingCollections,
+  scopeSharingPatchFor,
+} from '@aglyn/aglyn/plugin-manager/plugin-scope-sharing'
 import { resetPluginServicesForTests } from '@aglyn/aglyn/plugin-manager/plugin-services'
 import { readFileSync } from 'node:fs'
 import { join } from 'node:path'
@@ -148,6 +152,23 @@ describe('what the CRM declares at boot', () => {
     registerCrmServerDeclarations()
     expect(pluginRecordTimelineWriter()?.pluginId).toBe('crm')
     expect(typeof pluginRecordTimelineWriter()?.writer.prepareEmail).toBe('function')
+  })
+
+  it('restamps the scoped list fields on every collection that declares them, loaded with the first sweep (AGL-4047)', async () => {
+    registerCrmServerDeclarations()
+    const declared = listScopeSharingCollections().filter((row) => row.patch)
+    expect(declared.map((row) => row.name).sort()).toEqual(
+      ['companies', 'contacts', 'crmTasks', 'deals', 'leads'],
+    )
+    for (const { name } of declared) expect(scopeSharingPatchFor(name)).toEqual(expect.any(Function))
+    const patch = await scopeSharingPatchFor('contacts')?.('contacts', {
+      email: 'jordan@example.com',
+      name: 'Jordan Lee',
+      visibleTo: ['host:b', 'host:c'],
+    })
+    expect(patch?.['scopedSearchTokens']).toEqual(expect.arrayContaining(['host:b~jor', 'host:c~jor']))
+    expect(deferredImports).toContain('./server/scope-sharing-patch')
+    expect(staticImports).not.toContain('./server/scope-sharing-patch')
   })
 
   it('registers the workspace’s contact-capture writer, under this plugin', () => {

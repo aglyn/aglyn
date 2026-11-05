@@ -35,6 +35,7 @@ import {
   type AglynOrgMember,
   type ScopeToken,
 } from '@aglyn/aglyn/server'
+import type { ScopeSharingDrift } from '@aglyn/tenant-data-admin/server/scope-sharing-sweep'
 
 /** Collections whose docs get an org-wide `visibleTo` stamp. */
 export const SCOPED_COLLECTIONS = [
@@ -133,6 +134,8 @@ export interface ScopeBackfillTotals {
   mediaFolders: { written: number; skipped: number }
   contacts: { written: number; skipped: number }
   contactSegments: { written: number; skipped: number }
+  /** Documents shared with all sites except some (AGL-4047). */
+  allExcept: ScopeSharingDrift
 }
 
 export function emptyTotals(): ScopeBackfillTotals {
@@ -144,7 +147,19 @@ export function emptyTotals(): ScopeBackfillTotals {
     mediaFolders: { written: 0, skipped: 0 },
     contacts: { written: 0, skipped: 0 },
     contactSegments: { written: 0, skipped: 0 },
+    allExcept: { marked: 0, stale: 0, capped: 0, invalid: 0 },
   }
+}
+
+/** Folds one workspace's all-except drift into the running totals. */
+export function addAllExceptDrift(
+  totals: ScopeBackfillTotals,
+  drift: ScopeSharingDrift,
+): void {
+  totals.allExcept.marked += drift.marked
+  totals.allExcept.stale += drift.stale
+  totals.allExcept.capped += drift.capped
+  totals.allExcept.invalid += drift.invalid
 }
 
 /** Folds one collection's plan into the running totals. */
@@ -167,7 +182,14 @@ export interface ScopeDrift {
    * different repair: the reader is wrong, not the resource.
    */
   members: number
-  /** Everything above. Non-zero is the alert condition. */
+  /**
+   * Documents shared with all sites except some that have fallen behind the
+   * workspace's sites, or carry a marker nothing can act on (AGL-4047). Those
+   * at their collection's site limit are a known state: `capped` reports them
+   * and they do not count toward `total`.
+   */
+  allExcept: { stale: number; invalid: number; capped: number }
+  /** Everything above but `capped`. Non-zero is the alert condition. */
   total: number
 }
 
@@ -198,10 +220,19 @@ export function scopeDrift(totals: ScopeBackfillTotals): ScopeDrift {
   return {
     byCollection,
     members: totals.members.written,
+    allExcept: {
+      stale: totals.allExcept.stale,
+      invalid: totals.allExcept.invalid,
+      capped: totals.allExcept.capped,
+    },
     // A stale member projection counts toward the alert: the collaborator
     // reading with the wrong token set is the same failure seen from the
     // other end, and it is equally invisible from the console.
-    total: total + totals.members.written,
+    total:
+      total +
+      totals.members.written +
+      totals.allExcept.stale +
+      totals.allExcept.invalid,
   }
 }
 
@@ -217,6 +248,8 @@ export function describeScopeDrift(drift: ScopeDrift): string {
     .sort((a, b) => b[1] - a[1])
     .map(([collection, count]) => `${count} ${collection}`)
   if (drift.members) parts.push(`${drift.members} member scopeTokens`)
+  if (drift.allExcept.stale) parts.push(`${drift.allExcept.stale} all-except behind`)
+  if (drift.allExcept.invalid) parts.push(`${drift.allExcept.invalid} all-except unreadable`)
   if (!parts.length) return ''
   return `${parts.join(', ')} — see docs/SCOPE_DRIFT.md`
 }

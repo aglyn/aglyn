@@ -218,6 +218,15 @@ jest.mock('@aglyn/aglyn/server', () => ({
   __esModule: true,
   isBillingSubscription: () => false,
 }))
+/** Each sweep an erase starts, and what was true when it started. */
+const mockSweeps: Array<{ orgId: string; reason: string; hostId?: string; pluginErasersRun: number }> = []
+let mockPluginErasersRun = 0
+jest.mock('./scope-sharing-sweep', () => ({
+  __esModule: true,
+  sweepScopeSharingAfterSiteChange: async (input: { orgId: string; reason: string; hostId?: string }) => {
+    mockSweeps.push({ ...input, pluginErasersRun: mockPluginErasersRun })
+  },
+}))
 jest.mock('./dns-probe', () => ({
   __esModule: true,
   lookupTxt: async () => ({ answered: false, records: [] }),
@@ -373,6 +382,29 @@ describe('erasing a site releases its sending domain', () => {
 
     expect(result.sendingDomain).toBe('none')
     expect(tearDown).not.toHaveBeenCalled()
+  })
+})
+
+describe('erasing a site brings shared documents level (AGL-4047)', () => {
+  it('sweeps before a plugin decides what is the site’s own', async () => {
+    registerPluginSiteResourceEraser(
+      {
+        preview: async () => ({ noun: ['x', 'xs'], itemNoun: ['y', 'ys'], going: [], staying: 0 }),
+        erase: async () => {
+          mockPluginErasersRun += 1
+          return 0
+        },
+      },
+      { pluginId: 'scope-sweep-spec' },
+    )
+    mockSweeps.length = 0
+    mockPluginErasersRun = 0
+    seedProvisionedSite()
+    await eraseHost(HOST, { tearDownSendingDomain: async () => ({ outcome: 'removed' as const, detail: null }) })
+    expect(mockSweeps).toHaveLength(1)
+    expect(mockSweeps[0]).toMatchObject({ orgId: ORG, reason: 'site-removed', hostId: HOST, pluginErasersRun: 0 })
+    expect(mockPluginErasersRun).toBe(1)
+    resetPluginSiteResourceErasersForTests()
   })
 })
 

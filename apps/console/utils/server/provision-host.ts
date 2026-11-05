@@ -43,6 +43,7 @@ import {
   firebaseAdmin,
   registerOrgHost,
 } from '@aglyn/tenant-data-admin'
+import { sweepScopeSharingAfterSiteChange } from '@aglyn/tenant-data-admin/server/scope-sharing-sweep'
 import {
   queueSiteStarterWrites,
   siteStarterWrites,
@@ -605,6 +606,11 @@ export async function claimHostForOrg(
     if (claim.conflict === true) return { allowed: false, conflict: true }
     return { allowed: false, limit: claim.limit }
   }
+  // Documents shared with all sites except some include this site from now
+  // on. After the commit, so a sharing change that raced the claim is either
+  // seen here or read this site itself (AGL-4047). Before the registration,
+  // which can throw. This never does.
+  await sweepScopeSharingAfterSiteChange({ orgId, reason: 'site-added', hostId })
   // Org directory + hostIndex mirror + memberRoles projection (AGL-233).
   // The site EXISTS from here on, so a failure past this line must say so:
   // see `registerClaimedHost`.

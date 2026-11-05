@@ -220,6 +220,18 @@ const mockFirestore: any = {
   },
 }
 
+const mockSweeps: Array<{ orgId: string; reason: string; hostId: string; hosts: unknown; registered: number }> = []
+jest.mock('@aglyn/tenant-data-admin/server/scope-sharing-sweep', () => ({
+  __esModule: true,
+  sweepScopeSharingAfterSiteChange: async (input: { orgId: string; reason: string; hostId: string }) => {
+    mockSweeps.push({
+      ...input,
+      hosts: mockDocs.get(`orgs/${input.orgId}`)?.['hosts'],
+      registered: mockRegisterCalls.length,
+    })
+  },
+}))
+
 jest.mock('@aglyn/tenant-data-admin', () => ({
   /*
    * The site's sending-domain CLAIM, made at creation so the mail label is
@@ -289,6 +301,37 @@ async function provision(subdomain: string, displayName = 'Client Site') {
   if (claim.allowed) return { hostId: claim.hostId }
   return { refused: claim.conflict ? ('subdomain_taken' as const) : ('quota' as const) }
 }
+
+describe('a new site joins what is shared with all sites except some (AGL-4047)', () => {
+  beforeEach(() => {
+    mockSweeps.length = 0
+  })
+
+  it('sweeps once the claim has committed, with the site on the workspace', async () => {
+    const result = await provision(SUB)
+    expect(result.hostId).toBeTruthy()
+    expect(mockSweeps).toHaveLength(1)
+    expect(mockSweeps[0]).toMatchObject({ orgId: ORG, reason: 'site-added', hostId: result.hostId })
+    expect(Object.keys(mockSweeps[0].hosts as object)).toContain(result.hostId)
+    // Before the registration, which can throw and must not cost the sweep.
+    expect(mockSweeps[0].registered).toBe(0)
+  })
+
+  it('NEGATIVE CONTROL: a claim that was refused sweeps nothing', async () => {
+    await provision(SUB)
+    mockSweeps.length = 0
+    expect((await provision(SUB)).refused).toBe('subdomain_taken')
+    const raced = await claimHostForOrg({
+      firestore: mockFirestore,
+      orgId: ORG,
+      displayName: 'Client Site',
+      subdomain: SUB,
+      org: mockDocs.get(`orgs/${ORG}`),
+    })
+    expect(raced.allowed).toBe(false)
+    expect(mockSweeps).toEqual([])
+  })
+})
 
 describe('one caller, the ordinary path (AGL-2465)', () => {
   it('creates exactly one site, and it carries the subdomain', async () => {
