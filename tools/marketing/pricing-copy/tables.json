@@ -210,7 +210,7 @@
             }
           },
           {
-            "label": "Single sign-on (SAML/OIDC)",
+            "label": "Single sign-on (SSO, SAML/OIDC)",
             "duplicateOf": null,
             "values": {
               "free": "—",
