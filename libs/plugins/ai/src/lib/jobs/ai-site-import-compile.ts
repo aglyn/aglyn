@@ -1100,7 +1100,7 @@ function heroOf(
   index: number,
   answer: AiLayoutDesignSection | null,
   settled: AiLayoutSettlement[],
-  drawn: { band: SiteImportLayoutSection['band']; finish: AiSiteImportFinish },
+  drawn: { band: SiteImportLayoutSection['band']; finish: AiSiteImportFinish; planned?: AiLayoutImportHero },
 ): AiLayoutImportHero | undefined {
   if (index !== 0 || !section.hero?.picture) return undefined
   const place = section.hero.picture
@@ -1109,15 +1109,17 @@ function heroOf(
     if (answer?.hero && answer.hero !== 'none' && answer.hero !== own) settled.push({ at: 'sections[0]', what: `the ${answer.hero} hero set aside: the page keeps its source's own opening, a ${own} hero` })
     return own
   }
+  // A site's plan draws every page's opening alike (AGL-4152), whatever one page's answer asks.
+  const asked = drawn.planned ?? answer?.hero
   // An answer of "none" keeps the opening as the source lays it out.
-  if (answer?.hero === 'none') return undefined
+  if (asked === 'none') return undefined
   const own = HERO_FOR[place]
   // Dimmed words need a dark ground: the section's own, or on a page its owner asked improved, the answer's (AGL-4152).
-  if (answer?.hero && DIMMED_HEROES.has(answer.hero) && drawn.band !== 'dark' && place !== 'behind') {
-    settled.push({ at: 'sections[0]', what: `the ${answer.hero} hero set aside: the section keeps its own lighter ground` })
+  if (asked && DIMMED_HEROES.has(asked) && drawn.band !== 'dark' && place !== 'behind') {
+    settled.push({ at: 'sections[0]', what: `the ${asked} hero set aside: the section keeps its own lighter ground` })
     return own
   }
-  return answer?.hero ?? own
+  return asked ?? own
 }
 
 /** How a page is finished (AGL-4152): the finish asked of it, else its document's, else kept as it is. */
@@ -1176,7 +1178,7 @@ export function aiSiteImportMapScope(doc: AiSiteImportDocument, options: { formI
 export function aiSiteImportDesignedSections(
   doc: AiSiteImportDocument,
   answer?: AiLayoutDesignAnswer | null,
-  options: { formId?: string | null; finish?: AiSiteImportFinish | null } = {},
+  options: { formId?: string | null; finish?: AiSiteImportFinish | null; plannedHero?: AiLayoutImportHero } = {},
 ): AiSiteImportDesigned {
   const layout = aiSiteImportLayoutOf(doc)
   const finish = aiSiteImportFinishOf(doc, options.finish)
@@ -1208,7 +1210,7 @@ export function aiSiteImportDesignedSections(
     // Kept, its band against its page's ground (AGL-4152); improved, as its color alone reads.
     const own = improve ? (section.absoluteBand ?? section.band) : section.band
     const band = given?.band && (improve || (section.background === null && !section.backdrop)) ? given.band : own
-    const hero = heroOf(section, index, given, scope.settled, { band: improve ? band : section.band, finish })
+    const hero = heroOf(section, index, given, scope.settled, { band: improve ? band : section.band, finish, ...(options.plannedHero ? { planned: options.plannedHero } : {}) })
     // A long read is set at the start, as text is read, whatever its source centers.
     const reading = blocks.filter((block) => block.kind === 'text').length > READING_PARAGRAPHS
     const source = reading ? 'start' : section.align
@@ -1275,7 +1277,8 @@ export function aiCompileImportedPage(input: AiSiteImportCompileInput): AiSiteIm
   const { doc } = input
   const formId = input.targets.forms.length === 1 ? input.targets.forms[0].id : null
   const finish = aiSiteImportFinishOf(doc, input.finish)
-  const designed = input.given ?? aiSiteImportDesignedSections(doc, input.answer ?? null, { formId, finish })
+  const plannedHero = AI_LAYOUT_IMPORT_HEROES.find((hero) => hero === input.design?.planned?.hero)
+  const designed = input.given ?? aiSiteImportDesignedSections(doc, input.answer ?? null, { formId, finish, ...(plannedHero ? { plannedHero } : {}) })
   const compile = (sections: readonly AiLayoutSection[]) =>
     aiCompileLayoutPage(sections, input.plan, input.targets, {
       // A page brought in draws its repeats as its source does (AGL-4107).

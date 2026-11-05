@@ -52,6 +52,26 @@ export interface AiLayoutDesign {
   seed: number
   /** Whether this page is the site's home, which opens tallest. */
   home: boolean
+  /**
+   * What a site's plan chose for it (AGL-4152), so every page of every wave is
+   * drawn alike. Absent on every other site, whose choices are its seed's.
+   */
+  planned?: AiLayoutPlannedChoices
+}
+
+/** The choices a site's plan makes in place of its seed's (AGL-4152). */
+export type AiLayoutPlannedChoices = Partial<Pick<AiLayoutDesignChoices, 'hero' | 'group' | 'bandRhythm' | 'coverClose'>>
+
+/** A plan's choices as a job carries them, read defensively (AGL-4152); `null` for none. */
+export function aiLayoutPlannedChoicesOf(raw: unknown): AiLayoutPlannedChoices | null {
+  if (!raw || typeof raw !== 'object') return null
+  const value = raw as Record<string, unknown>
+  const hero = AI_LAYOUT_HERO_VARIANTS.find((entry) => entry === value['hero'])
+  const group = (['cards', 'ruled', 'icons'] as const).find((entry) => entry === value['group'])
+  const bandRhythm = (['alternate', 'plain'] as const).find((entry) => entry === value['bandRhythm'])
+  const coverClose = typeof value['coverClose'] === 'boolean' ? value['coverClose'] : null
+  const planned = { ...(hero ? { hero } : {}), ...(group ? { group } : {}), ...(bandRhythm ? { bandRhythm } : {}), ...(coverClose !== null ? { coverClose } : {}) }
+  return Object.keys(planned).length ? planned : null
 }
 
 /**
@@ -314,6 +334,8 @@ export function aiLayoutDesignChoices(design: AiLayoutDesign): AiLayoutDesignCho
     // Drawn after it (AGL-4065), so a seed's earlier choices stay too.
     headingCase: next() < (LABEL_TITLE_KINDS.has(design.kind) ? 0.3 : 0.1) ? 'caps' : 'sentence',
     bandRhythm: next() < (ONE_GROUND_FAMILIES.has(family) ? 0.5 : 0.35) ? 'plain' : 'alternate',
+    // A site's plan says these for every page of it (AGL-4152).
+    ...design.planned,
   }
 }
 

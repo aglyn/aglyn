@@ -108,10 +108,13 @@ describe('the flag (AGL-4152)', () => {
       ...choice,
     }) as unknown as AiSiteImportState
 
-  it('stamps a wave only under Improve it with copy on, and off the document is as it was', () => {
+  it('stamps a wave only under Improve it, and off the document is as it was', () => {
     const asked = { finish: 'improve' as const, wording: true }
     expect(aiSiteImportWaveStamped(state(asked), 1, { generative: true }).waves[0]?.generative).toBe(true)
-    expect(aiSiteImportWaveStamped(state({ finish: 'improve', wording: false }), 1, { generative: true }).waves[0]?.generative).toBeUndefined()
+    // New copy off: its site is still planned and its layout redesigned, its words kept: no page is redesigned from its ledger.
+    const noCopy = aiSiteImportWaveStamped(state({ finish: 'improve', wording: false }), 1, { generative: true })
+    expect(noCopy.waves[0]?.generative).toBe(true)
+    expect(aiSiteImportDocumentFor(noCopy, noCopy.pages[0] as AiSiteImportPage)?.generative).toBeUndefined()
     expect(aiSiteImportWaveStamped(state({ finish: 'keep', wording: false }), 1, { generative: true }).waves[0]?.generative).toBeUndefined()
 
     const off = aiSiteImportWaveStamped(state(asked), 1)

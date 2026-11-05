@@ -277,7 +277,8 @@ export function aiSiteImportImproveDestinations(doc: AiSiteImportDocument, ledge
     }
   }
   for (const page of doc.links) out.set(`page:${page.id}`, `page:${page.id}`)
-  const text = doc.blocks.map((block) => (block.kind === 'image' ? '' : block.text)).join(' \n ')
+  // A new page has no contact line of its own: it may send a visitor to what the site gives (AGL-4152).
+  const text = [...doc.blocks.map((block) => (block.kind === 'image' ? '' : block.text)), ...(doc.proposed ? (doc.siteLines ?? []) : [])].join(' \n ')
   const phone = /(?:\+\d{1,3}[\s.-]?)?(?:\(\d{2,4}\)[\s.-]?)?\d{2,4}[\s.-]\d{3,4}(?:[\s.-]\d{2,4})?/.exec(text)?.[0]
   if (phone && phone.replace(/\D/g, '').length >= 7) out.set('phone', `tel:${phone.replace(/[^\d+]/g, '')}`)
   const email = /[\p{L}\p{N}._%+-]+@[\p{L}\p{N}-]+(?:\.[\p{L}\p{N}-]+)+/u.exec(text)?.[0]
@@ -291,7 +292,7 @@ export function aiSiteImportImproveDestinations(doc: AiSiteImportDocument, ledge
 /** A redesign's user turn: the page, its kind of site, how its opening is drawn, and its ledger, fenced as the owner's data. */
 export function aiSiteImportImprovePrompt(input: {
   screen: { title: string; slug: string }
-  doc: Pick<AiSiteImportDocument, 'url' | 'blocks' | 'photos'>
+  doc: Pick<AiSiteImportDocument, 'url' | 'blocks' | 'photos' | 'proposed'>
   ledger: SiteImportLedger
   destinations: ReadonlyMap<string, string>
   kindLines: readonly string[]
@@ -299,6 +300,8 @@ export function aiSiteImportImprovePrompt(input: {
 }): string {
   return [
     `Page: "${input.screen.title}" at ${input.screen.slug}`,
+    // A page the site's plan proposed: there is no old page to keep, so it is written whole from what the site says.
+    ...(input.doc.proposed ? ['This page is new: the site has no such page yet. Its one line says what it tells a visitor. Write it from what the site says of itself and what this kind of business generally does, inventing no fact.'] : []),
     ...input.kindLines,
     "The page's ledger, what it holds and where it links:",
     fenceUntrustedText(`The owner's page ${input.doc.url}`, aiSiteImportLedgerText(input.ledger, input.doc, input.destinations), { maxChars: AI_SITE_IMPORT_LEDGER_MAX_CHARS }),

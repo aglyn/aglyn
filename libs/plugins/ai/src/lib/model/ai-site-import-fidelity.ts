@@ -297,6 +297,8 @@ export interface SiteImportImprovedOptions {
   forms?: number
   /** The site's header and footer, for the `frame` line. Absent, not measured. */
   frame?: SiteImportFidelityTree | null
+  /** A page the site's plan proposed: new, so no source's facts or meaning to hold, only what it says. */
+  proposed?: boolean
 }
 
 /** How a page was finished and its words kept (AGL-4152), and the theme it is drawn in. */
@@ -2184,7 +2186,8 @@ function improvedScore(source: SiteImportFidelitySource, built: Built, look: Loo
   const ownScope = siteImportFactScope(sourceTexts)
   // A label in title case, "Start Now", says no one's name: its capitals are its style.
   const titleCased = (text: string) => wordsOf(text).length >= 2 && wordsOf(text).every((word) => word.length < 3 || /^\p{Lu}/u.test(word))
-  const said = [...new Set(sourceTexts.filter((text) => !bareNumber(text)).flatMap((text) => siteImportFactTokens(text, ownScope, false).filter((token) => !token.startsWith('name:') || !titleCased(text))))]
+  // A page the site's plan proposed has no source to hold: only what it says is held (AGL-4152).
+  const said = options.proposed ? [] : [...new Set(sourceTexts.filter((text) => !bareNumber(text)).flatMap((text) => siteImportFactTokens(text, ownScope, false).filter((token) => !token.startsWith('name:') || !titleCased(text))))]
   const missingFacts = said.filter((token) => !onPage.has(token))
   // Invented: none that nothing the import read says.
   const allowed = new Set(anywhere.flatMap((text) => siteImportFactTokens(text, scope, false)))
@@ -2224,7 +2227,7 @@ function improvedScore(source: SiteImportFidelitySource, built: Built, look: Loo
   const sourceWords = contentOf(sourceTexts.join(' '))
   const pageWords = contentOf(pieces.map((piece) => piece.text).join(' '))
   const kept = [...sourceWords].filter((stem) => pageWords.has(stem)).length
-  const meaningOk = sourceWords.size === 0 || kept / sourceWords.size >= SITE_IMPORT_IMPROVED_MEANING
+  const meaningOk = options.proposed === true || sourceWords.size === 0 || kept / sourceWords.size >= SITE_IMPORT_IMPROVED_MEANING
   const ledgerLines = {
     facts: { ...line(said.length - missingFacts.length, said.length), missing: missingFacts.slice(0, 8) },
     invented: { ...line(found.length ? 0 : 1, 1), found: found.slice(0, 8) },

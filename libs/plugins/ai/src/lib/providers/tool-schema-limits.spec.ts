@@ -39,6 +39,7 @@ import { AI_JOB_EMAIL_TOOL } from '../jobs/ai-job-email-step'
 import { AI_JOB_FORM_TOOL } from '../jobs/ai-job-form-step'
 import { AI_PAGE_SECTION_TOOL } from '../jobs/ai-job-page-sections'
 import { AI_SITE_IMPORT_IMPROVE_TOOL } from '../jobs/ai-site-import-improve'
+import { AI_SITE_IMPORT_PLAN_TOOL } from '../jobs/ai-site-import-plan'
 import { AI_LAYOUT_DESIGN_TOOL, AI_LAYOUT_FRAME_TOOL, AI_LAYOUT_PAGE_TOOL } from '../layout-language/ai-layout-language'
 import { AI_BUILD_PLAN_TOOL } from '../model/ai-build-plan'
 import { AI_CRM_RECORD_KINDS } from '../model/ai-crm'
@@ -177,6 +178,7 @@ const TOOL_SETS: Record<string, Readonly<Record<string, () => AiTool[]>>> = {
     'page design': () => [AI_LAYOUT_DESIGN_TOOL],
     'page redesign': () => [AI_SITE_IMPORT_IMPROVE_TOOL],
   },
+  'jobs/ai-site-import-plan.ts': { 'site plan': () => [AI_SITE_IMPORT_PLAN_TOOL] },
   'jobs/ai-job-crm-step.ts': {
     ...Object.fromEntries(AI_CRM_RECORD_KINDS.map((kind) => [`${kind} record`, () => [aiCrmRecordTool(kind)]])),
     email: () => [AI_CRM_EMAIL_TOOL],

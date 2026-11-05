@@ -91,6 +91,12 @@ export interface AiSiteImportDocument {
   plan?: AiSiteImportPlan | null
   /** The theme's colors as its look drew them, where one was drawn (`SiteImportFidelityTheme`, AGL-4152). */
   theme?: Record<string, unknown> | null
+  /** The plan's proposed page (AGL-4152): new to the site, with no source to hold it to, and never kept as a fallback. */
+  proposed?: true
+  /** Source photos of the site's earlier pages that none of them placed, for a slot of this one (AGL-4152). */
+  sitePhotos?: AiSiteImportPhoto[]
+  /** A slot nothing else fills may take a generated picture: its owner said so, and it is quoted (AGL-4152). */
+  generatedPictures?: true
 }
 
 /** The most characters a text element holds (the palette's ceiling for body copy). */
@@ -219,12 +225,8 @@ export function aiSiteImportDocumentOf(inputs: Readonly<Record<string, unknown>>
   })
   const strings = (list: unknown) => (Array.isArray(list) ? list.filter((entry): entry is string => typeof entry === 'string') : [])
   const size = (value: unknown) => (typeof value === 'number' && Number.isFinite(value) && value > 0 ? Math.round(value) : 0)
-  return {
-    build,
-    title: typeof value['title'] === 'string' ? value['title'] : '',
-    url: typeof value['url'] === 'string' ? value['url'].slice(0, 2048) : '',
-    blocks,
-    photos: (Array.isArray(value['photos']) ? value['photos'] : []).flatMap((entry): AiSiteImportPhoto[] => {
+  const photosOf = (list: unknown) =>
+    (Array.isArray(list) ? list : []).flatMap((entry): AiSiteImportPhoto[] => {
       const photo = entry as Record<string, unknown> | null
       return photo && typeof photo['mediaId'] === 'string' && typeof photo['src'] === 'string'
         ? [
@@ -239,7 +241,13 @@ export function aiSiteImportDocumentOf(inputs: Readonly<Record<string, unknown>>
             },
           ]
         : []
-    }),
+    })
+  return {
+    build,
+    title: typeof value['title'] === 'string' ? value['title'] : '',
+    url: typeof value['url'] === 'string' ? value['url'].slice(0, 2048) : '',
+    blocks,
+    photos: photosOf(value['photos']),
     links: (Array.isArray(value['links']) ? value['links'] : []).flatMap((entry) => {
       const link = entry as Record<string, unknown> | null
       return link && typeof link['path'] === 'string' && typeof link['id'] === 'string' ? [{ path: link['path'], id: link['id'] }] : []
@@ -253,6 +261,9 @@ export function aiSiteImportDocumentOf(inputs: Readonly<Record<string, unknown>>
     ...(Array.isArray(value['scope']) ? { scope: strings(value['scope']) } : {}),
     ...(value['plan'] && typeof value['plan'] === 'object' ? { plan: value['plan'] as AiSiteImportPlan } : {}),
     ...(value['theme'] && typeof value['theme'] === 'object' ? { theme: value['theme'] as Record<string, unknown> } : {}),
+    ...(value['proposed'] === true ? { proposed: true as const } : {}),
+    ...(Array.isArray(value['sitePhotos']) ? { sitePhotos: photosOf(value['sitePhotos']) } : {}),
+    ...(value['generatedPictures'] === true ? { generatedPictures: true as const } : {}),
     ...(isLayout(value['layout']) ? { layout: value['layout'] } : {}),
     ...(Array.isArray(value['videos']) ? { videos: (value['videos'] as unknown[]).map(videoOf) } : {}),
   }

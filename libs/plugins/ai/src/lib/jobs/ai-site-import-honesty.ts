@@ -188,6 +188,12 @@ export function aiSiteImportHonesty(sections: readonly AiSiteImportImprovedSecti
   for (const item of input.ledger.items) {
     if (item.must && !placed.includes(item.ref)) out.push(dropped(`${item.ref} is not on the page. Place it with a keep block, exactly once.`))
   }
+  // The page's own opening picture outranks a new one: a picture asked for in words never takes its place.
+  const opening = input.ledger.items.find((item) => item.kind === 'picture' && item.section === 0)
+  const first = sections[0]?.blocks ?? []
+  if (opening && first.some((block) => block.kind === 'image' && !block.picture) && !first.some((block) => block.kind === 'keep' && block.ref === opening.ref)) {
+    out.push(dropped(`${opening.ref} is the page's own opening picture. Open with it, with a keep block, in place of a picture asked for in words.`))
+  }
   const kept = new Set(sections.flatMap((section) => section.blocks.flatMap((block) => (block.kind === 'keep' ? [block.ref] : []))))
   const keptLines = new Set(input.ledger.items.filter((item) => kept.has(item.ref)).flatMap((item) => item.lines))
   for (const link of input.ledger.links) {

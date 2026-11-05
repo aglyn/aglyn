@@ -78,12 +78,15 @@ import {
   AI_SITE_IMPORT_LEFT_OUT_COPY,
   AI_SITE_IMPORT_MAX_PAGES,
   AI_SITE_IMPORT_MIN_WORDS,
+  AI_SITE_IMPORT_PROPOSED_PAGE,
   AI_SITE_IMPORT_WAVE_PAGES,
   AI_SITE_IMPORT_WORDING_INPUT,
   aiSiteImportChoiceFromInputs,
   aiSiteImportChoiceOf,
   aiSiteImportFormsIn,
   aiSiteImportFrameIsRead,
+  aiSiteImportGeneratedPicturesOn,
+  aiSiteImportHasRoomForPage,
   aiSiteImportInventory,
   aiSiteImportItemOpen,
   aiSiteImportLedger,
@@ -92,6 +95,9 @@ import {
   aiSiteImportPageSettled,
   aiSiteImportPagesRead,
   aiSiteImportPhotosIn,
+  aiSiteImportPlanAccepted,
+  aiSiteImportPlanIn,
+  aiSiteImportPlanRow,
   aiSiteImportReadStops,
   aiSiteImportReadVerdict,
   aiSiteImportReadVerdictMessage,
@@ -112,6 +118,7 @@ import {
   type AiSiteImportLeftOutReason,
   type AiSiteImportPage,
   type AiSiteImportPageRead,
+  type AiSiteImportPlan,
   type AiSiteImportState,
   type AiSiteImportWave,
   type SiteImportLookFacts,
@@ -146,12 +153,13 @@ import { AI_LAYOUT_IMPORTED_SECTIONS_INPUT, type AiSiteImportDocument } from './
 import { aiImportedPageListingOwed, aiSiteImportSectionNames } from './ai-site-import-compile'
 import { aiRebuildImportedForms, type AiSiteImportFormsDeps } from './ai-site-import-forms'
 import { aiRunSiteImportLook, type AiSiteImportLookDeps } from './ai-site-import-look'
+import { AI_SITE_IMPORT_PLAN_BUDGET, aiRunSiteImportPlan, aiSiteImportPlanScopeLines } from './ai-site-import-plan'
 import { aiPublishImportedWave } from './ai-site-import-publish'
 import { aiUnitErrorRetryable, aiUnitFailure, aiUnitSpend } from './ai-build-unit-outcome'
 import { registerAiJobAdmission, type AiJobAdmission } from './ai-job-admission'
 import { AI_JOB_STEP_OVERHEAD_MS } from './ai-job-budget'
 import { readAiDraftNodes, readAiScreenRoom } from './ai-job-drafts'
-import { aiUnspentOutcome } from './ai-job-generation'
+import { aiGenerationSpent, aiUnspentOutcome } from './ai-job-generation'
 import { AI_LAYOUT_PAGE_PHOTOS_INPUT } from './ai-layout-owner-photos'
 import { AI_LAYOUT_SITE_PAGES_INPUT, AI_LAYOUT_SITE_PAGES_MAX, type AiLayoutSitePage } from './ai-job-layout-site-pages'
 import { AI_JOB_PAGE_STEP_MINIMUM_MS } from './ai-job-page-budget'
@@ -237,6 +245,8 @@ export const AI_SITE_IMPORT_COPY = {
   role: 'Your role does not include "Bring a site in" — ask an organization admin',
   /** Keep my site or Improve it (AGL-4152), asked with anything else. */
   finish: 'Choose Keep my site or Improve it, then read your site again.',
+  /** A plan is in and waits on its owner (AGL-4152). */
+  planned: 'Your new site is planned. Check its menu and its new page, then build it.',
 } as const
 
 /*------------------------------------------
@@ -268,6 +278,8 @@ export interface AiSiteImportStepDeps {
   pageWritten?: typeof aiSitePageWritten
   mintId?: () => string
   clock?: () => number
+  /** The one plan a generative Improve it asks for (AGL-4152). */
+  plan?: typeof aiRunSiteImportPlan
   /** The first wave's look pass (AGL-4084), and what it reads and writes through. */
   look?: typeof aiRunSiteImportLook
   lookDeps?: AiSiteImportLookDeps
@@ -379,11 +391,20 @@ export function aiSiteImportBrandName(given: string, own: string): string {
   return own && key(own) && key(own) === key(given) ? own : given
 }
 
-/** The design inputs every unit of an import is drawn with: the kind of site its own words say, and its look (AGL-4084). */
-function aiSiteImportDesignInputs(state: AiSiteImportState): Record<string, unknown> {
+/**
+ * The design inputs every unit of an import is drawn with: the kind of site its
+ * own words say, and its look (AGL-4084). Under a generative Improve it with a
+ * plan (AGL-4152), the plan's kind and design, so every page of every wave is
+ * drawn with one hero, one group style and one rhythm.
+ */
+export function aiSiteImportDesignInputs(state: AiSiteImportState, wave?: Pick<AiSiteImportWave, 'generative'> | null): Record<string, unknown> {
   const home = state.home
-  const kind = home ? aiSiteKindFor(`${home.siteName} ${home.description}`) : null
+  const planned = wave?.generative ? (state.plan ?? null) : null
+  const kind = planned ? { id: planned.site.kind } : home ? aiSiteKindFor(`${home.siteName} ${home.description}`) : null
   const look = state.look
+  const drawn = planned
+    ? { planned: { hero: planned.design.hero, group: planned.design.group, bandRhythm: planned.design.rhythm, coverClose: planned.design.cta === 'photo' } }
+    : {}
   return {
     ...(kind ? { siteKind: kind.id } : {}),
     ...(look && look.seed !== null
@@ -393,9 +414,12 @@ function aiSiteImportDesignInputs(state: AiSiteImportState): Record<string, unkn
             ...(look.style?.headerAlign ? { headerAlign: look.style.headerAlign } : {}),
             ...(look.style?.rhythm ? { rhythm: look.style.rhythm } : {}),
             ...(look.style?.motion ? { motion: look.style.motion } : {}),
+            ...drawn,
           },
         }
-      : {}),
+      : planned
+        ? { siteStyle: drawn }
+        : {}),
   }
 }
 
@@ -467,6 +491,8 @@ export function aiSiteImportHeaderGround(background: string | null, look: AiSite
  */
 export function aiSiteImportFrameSource(state: AiSiteImportState, wave: Pick<AiSiteImportWave, 'index' | 'generative'>): AiLayoutFrameSource | null {
   const home = state.home
+  // The site's plan (AGL-4152): its menu and footer, whatever the source's menu was.
+  if (wave.generative && state.plan && home) return aiSiteImportPlannedFrame(state, wave, state.plan, home)
   const nav = home?.nav
   if (!home || !nav || !aiSiteImportFrameIsRead(state)) return null
   const to = aiSiteImportFrameLinkTo(state, wave.index)
@@ -542,6 +568,107 @@ export function aiSiteImportFrameSource(state: AiSiteImportState, wave: Pick<AiS
   }
 }
 
+/** Where a plan's page goes: by its id once its wave is the header's or before it, else by its address on the new site, which it takes when its wave lands. */
+function plannedPageTo(state: Pick<AiSiteImportState, 'pages'>, wave: Pick<AiSiteImportWave, 'index'>, id: string): { label: string; to: AiLayoutFrameSourceTo } | null {
+  const page = state.pages.find((entry) => entry.draftId === id && !entry.refused)
+  if (!page) return null
+  return { label: page.title, to: page.slug === '/' || page.wave <= wave.index ? `page:${page.draftId}` : `/${page.slug}` }
+}
+
+/**
+ * A site's header and footer as its plan organizes them (AGL-4152), with no
+ * model: its menu's entries, each a link or a menu of pages, its one filled
+ * button, and its footer's columns; and from the source, what it says of itself
+ * in its footer, its profiles and how to reach it. A page the read left out, or
+ * a menu left with none, drops away. Where the plan writes no column the
+ * source's own stand, so a footer never comes out emptier than its source's.
+ */
+export function aiSiteImportPlannedFrame(state: AiSiteImportState, wave: Pick<AiSiteImportWave, 'index' | 'generative'>, plan: AiSiteImportPlan, home: AiSiteImportHome): AiLayoutFrameSource {
+  const to = aiSiteImportFrameLinkTo(state, wave.index)
+  const link = (label: string, href: string | null | undefined) => {
+    const target = to(href)
+    return label && target ? { label, to: target } : null
+  }
+  const present = <T,>(value: T | null): value is T => value !== null
+  const nav = plan.nav.groups.flatMap((group) => {
+    const entries = group.pages.map((id) => plannedPageTo(state, wave, id)).filter(present)
+    const [only] = entries
+    if (!only) return []
+    // One page is a link under the plan's label; several, a menu of them under it.
+    return [entries.length === 1 ? { label: group.label, to: only.to, items: [] } : { label: group.label, to: null, items: entries }]
+  })
+  const cta = plan.nav.primaryCta
+  const ctaTo = !cta
+    ? null
+    : cta.target === 'phone'
+      ? aiLayoutTelHref(home.facts.phones[0] ?? '')
+      : (plannedPageTo(state, wave, cta.target === 'form' ? (cta.page ?? '') : cta.target)?.to ?? null)
+  const planned = plan.nav.footer.flatMap((column) => {
+    const links = column.pages.map((id) => plannedPageTo(state, wave, id)).filter(present)
+    return links.length ? [{ heading: column.label, links }] : []
+  })
+  const footer = home.footer ?? null
+  const inColumns = new Set(planned.flatMap((column) => column.links.map((entry) => entry.to)))
+  const columns = planned.length ? planned : (footer?.columns ?? []).map((column) => ({ heading: column.heading, links: column.links.map((entry) => link(entry.label, entry.href)).filter(present) })).filter((column) => column.links.length)
+  return {
+    planned: true,
+    nav,
+    ctas: cta && ctaTo ? [{ label: cta.label, to: ctaTo, style: 'primary' }] : home.nav ? aiSiteImportImprovedCtas(home.nav, link) : [],
+    header: aiSiteImportHeaderGround(home.nav?.background ?? null, home.look ?? null),
+    footer: {
+      columns,
+      links: (footer?.links ?? []).map((entry) => link(entry.label, entry.href)).filter(present).filter((entry) => !inColumns.has(entry.to)),
+      text: footer?.text ?? [],
+      social: (footer?.social ?? []).map((entry) => (/^https:\/\//i.test(entry.href) ? { label: entry.label, to: entry.href, network: entry.network } : null)).filter(present),
+      // How to reach it, from anywhere the site says, so the footer's real content is there.
+      address: footer?.address ?? (home.facts.address || null),
+      phone: footer?.phone ?? home.facts.phones[0] ?? null,
+      email: footer?.email ?? home.facts.emails[0] ?? null,
+      copyright: footer?.copyright ?? (home.siteName ? `© ${home.siteName}` : null),
+    },
+  }
+}
+
+/** The pages the old menu reached, by id (AGL-4152): what a plan must keep reachable. */
+export function aiSiteImportMenuPageIds(state: AiSiteImportState): string[] {
+  const nav = state.home?.nav
+  if (!nav) return []
+  // Read as the frame of a wave past every other, so every page of the import reads by its id.
+  const to = aiSiteImportFrameLinkTo(state, Number.MAX_SAFE_INTEGER)
+  const hrefs = [...nav.items.flatMap((group) => [group.href, ...group.items.map((entry) => entry.href)]), ...nav.ctas.map((cta) => cta.href)]
+  return [...new Set(hrefs.flatMap((href) => {
+    const target = to(href)
+    return target?.startsWith('page:') ? [target.slice('page:'.length)] : []
+  }))]
+}
+
+/** How a menu's words read in a wide logo (AGL-4152): at this width over height a mark holds a wordmark. */
+const WORDMARK_ASPECT = 2
+
+/**
+ * Whether a logo holds the site's name (AGL-4152), which a header then does not
+ * print beside it: a wide mark is a wordmark, and a narrower one holds it where
+ * its own words name the site. A square mark is left its name.
+ */
+export function aiSiteImportLogoHoldsName(input: { aspect: number | null; alt: string; siteName: string }): boolean {
+  if (!input.aspect) return false
+  if (input.aspect >= WORDMARK_ASPECT) return true
+  const key = (text: string) => text.toLowerCase().replace(/[^\p{L}\p{N}]+/gu, '')
+  const name = key(input.siteName)
+  return input.aspect >= 1.4 && !!name && key(input.alt).includes(name)
+}
+
+/**
+ * The height a redesigned header draws its logo at (AGL-4152), a Besigner field
+ * like any: a mark about square a little taller, a wordmark held to a width the
+ * row has room for, and neither under what reads on a phone.
+ */
+export function aiSiteImportLogoHeight(aspect: number | null): string {
+  const WIDEST = 200
+  if (!aspect) return '40px'
+  return `${Math.round(Math.max(28, Math.min(aspect <= 1.25 ? 48 : 40, WIDEST / aspect)))}px`
+}
+
 /** A menu entry that asks a visitor to act, which a redesigned header's button may take where the source draws none (AGL-4152). */
 const ACTION_ENTRY = /\b(?:book|contact|estimate|quote|schedule|appointment|visit|reserve|get started|call)\b/i
 
@@ -610,12 +737,16 @@ export function aiSiteImportFrameJob(job: AiJob, state: AiSiteImportState, wave:
   const withLogo = !!logo && !!home && home.brand.kind !== 'name-only'
   const alt = home ? (home.brand.logo?.alt || home.siteName || home.brand.text).replace(/\s+/g, ' ').trim().slice(0, 120) : ''
   const aspect = logo?.width && logo.height ? Math.round((logo.width / logo.height) * 1000) / 1000 : null
+  // A redesigned header's logo (AGL-4152): at a size it reads at, and no name typed beside a logo that holds it.
+  const redrawn = wave.generative === true && withLogo
+  const holdsName = redrawn && aiSiteImportLogoHoldsName({ aspect, alt, siteName: home?.siteName || state.siteName })
   const brand = home
     ? {
         ...(withLogo ? { logo: { src: (logo as NonNullable<typeof logo>).src }, ...(alt ? { alt } : {}), ...(aspect ? { aspect } : {}) } : {}),
         // The footer opens with the logo too, where the source's does (AGL-4139).
         ...(withLogo && home.footer?.logo === true ? { footer: true } : {}),
-        name: !logo || home.brand.kind !== 'logo-only',
+        ...(redrawn ? { height: aiSiteImportLogoHeight(aspect) } : {}),
+        name: (!logo || home.brand.kind !== 'logo-only') && !holdsName,
       }
     : null
   // The source's own menu, buttons and footer, drawn with no model (AGL-4108).
@@ -634,7 +765,7 @@ export function aiSiteImportFrameJob(job: AiJob, state: AiSiteImportState, wave:
       businessName: aiSiteImportBrandName(state.siteName, home?.siteName ?? ''),
       [AI_LAYOUT_LANGUAGE_INPUT]: true,
       [AI_LAYOUT_SITE_PAGES_INPUT]: aiSiteImportLinkedPages(state, items, wave.index),
-      ...aiSiteImportDesignInputs(state),
+      ...aiSiteImportDesignInputs(state, wave),
       ...(brand ? { [AI_LAYOUT_SITE_BRAND_INPUT]: brand } : {}),
       ...(source ? { [AI_LAYOUT_SITE_FRAME_INPUT]: source } : {}),
       // The source's own header and footer words, fenced where the prompt shows them (AGL-4084).
@@ -691,6 +822,10 @@ export function aiSiteImportDocumentFor(state: AiSiteImportState, page: AiSiteIm
           scope: aiSiteImportWaveLines(state, page),
           ...(state.plan ? { plan: state.plan } : {}),
           ...(state.look?.drawn ? { theme: state.look.drawn } : {}),
+          // A page new to the site, and what its slots may take (AGL-4152).
+          ...(page.origin === 'proposed' ? { proposed: true as const } : {}),
+          ...(state.sitePhotos?.length ? { sitePhotos: state.sitePhotos } : {}),
+          ...(aiSiteImportGeneratedPicturesOn(state) ? { generatedPictures: true as const } : {}),
         }
       : {}),
     title: page.title,
@@ -764,7 +899,7 @@ export function aiSiteImportPageJob(
       businessName: aiSiteImportBrandName(state.siteName, state.home?.siteName ?? ''),
       [AI_LAYOUT_LANGUAGE_INPUT]: true,
       [AI_LAYOUT_SITE_PAGES_INPUT]: aiSiteImportLinkedPages(state, items, page.wave),
-      ...aiSiteImportDesignInputs(state),
+      ...aiSiteImportDesignInputs(state, state.waves.find((entry) => entry.index === page.wave)),
       // Every word as the source has it (AGL-4084); a read from before it was kept is the text the old page step had.
       ...(doc
         ? { [AI_LAYOUT_IMPORTED_SECTIONS_INPUT]: doc }
@@ -872,6 +1007,8 @@ export function aiSiteImportRunMinimumMs(job: AiJob, runnerFor: typeof aiJobStep
       return AI_SITE_IMPORT_PASS_MINIMUM_MS.wave
     case 'images':
       return work.page.read?.images.length ? AI_SITE_IMPORT_PASS_MINIMUM_MS.photos : 0
+    case 'plan':
+      return AI_SITE_IMPORT_PLAN_BUDGET.minimumMs
     case 'frame':
       return runnerFor('layout') && state ? aiJobStepRunMinimumMs(aiSiteImportFrameJob(job, state, work.wave, items)) : 0
     case 'page':
@@ -1013,6 +1150,7 @@ export function createAiJobImportStep(deps: AiSiteImportStepDeps = {}): AiJobSte
   const pageWritten = deps.pageWritten ?? aiSitePageWritten
   const mintId = deps.mintId ?? createResourceUid
   const clock = deps.clock ?? Date.now
+  const runPlan = deps.plan ?? aiRunSiteImportPlan
   const runLook = deps.look ?? aiRunSiteImportLook
   const publishWave = deps.publishWave ?? aiPublishImportedWave
   const draftWordsOf = deps.draftWords ?? readDraftWords
@@ -1140,7 +1278,9 @@ export function createAiJobImportStep(deps: AiSiteImportStepDeps = {}): AiJobSte
       const mainWords = new Map(
         crawled.pages.map((page) => [page.url, siteImportPageWords({ title: '', blocks: page.blocks.filter((block) => block.region === 'main') })]),
       )
-      const planned = { ...aiSiteImportWithBuilds(inventory, mainWords), home: aiSiteImportHomeOf(crawled), ...choice }
+      // What the import's page says of a generative Improve it, where the flag is on as it reads (AGL-4152).
+      const offered = await generativeOn(job.orgId).catch(() => false)
+      const planned = { ...aiSiteImportWithBuilds(inventory, mainWords), home: aiSiteImportHomeOf(crawled), ...choice, ...(offered ? { generative: true as const } : {}) }
       const ledger = aiSiteImportLedger(planned)
       return unspent({ items: ledger, siteImport: planned, review: waveReview(aiSiteImportWaveMessage(planned, ledger)) })
     }
@@ -1199,9 +1339,9 @@ export function createAiJobImportStep(deps: AiSiteImportStepDeps = {}): AiJobSte
         )
       }
       // Stamped with how it is built (AGL-4152): the choice now, which a later change never redraws.
-      // Asked only of a wave that could be redesigned; off or unread, it is built as it always was (AGL-4152).
+      // Asked only of a wave that could be planned or redesigned; off or unread, it is built as it always was (AGL-4152).
       const asked = aiSiteImportChoiceOf(state)
-      const generative = asked.finish === 'improve' && asked.wording && (await generativeOn(job.orgId).catch(() => false))
+      const generative = asked.finish === 'improve' && (await generativeOn(job.orgId).catch(() => false))
       const started = aiSiteImportWaveStamped(
         aiSiteImportWithBuilds(aiSiteImportWaveStarted(state, wave.index, nowIso, aiSiteImportReadsWithin({ ...job, items: ledger }, state, reads))),
         wave.index,
@@ -1229,6 +1369,39 @@ export function createAiJobImportStep(deps: AiSiteImportStepDeps = {}): AiJobSte
       const reads = siteImportWaveReads(work.pages, crawled, nowIso, { cutShort: crawled.stoppedBy === 'time' })
       const ledger = withLeftOutRows(items, reads)
       return closing(aiSiteImportWithBuilds(aiSiteImportPagesRead(state, aiSiteImportReadsWithin({ ...job, items: ledger }, state, reads))), ledger, wave, unspent({ items: ledger }))
+    }
+
+    // ── 2c. The site's plan, once, before its look (AGL-4152) ──
+    if (work.kind === 'plan') {
+      const room = await readRoom(firestore, { hostId, org: (context.org ?? null) as never })
+      const required = aiSiteImportMenuPageIds(state)
+      // A new page is words the owner asked to have written, and takes the plan's room.
+      const roomForPage = aiSiteImportChoiceOf(state).wording && aiSiteImportHasRoomForPage(state, room)
+      const scope = aiSiteImportPlanScopeLines(state, aiSiteImportSiteLines(state))
+      const fellBack = (rest: Partial<AiJobStepOutcome> = {}) => unspent({ siteImport: aiSiteImportPlanIn(state, wave, null, nowIso, ''), continue: true, ...rest })
+      let answered: Awaited<ReturnType<typeof runPlan>>
+      try {
+        answered = await runPlan({ state, scope, required, roomForPage, model, ...(signal ? { signal } : {}) })
+      } catch (error) {
+        if (aiUnitErrorRetryable(error) || (signal?.aborted ?? false)) throw error
+        console.error('ai site import: the site could not be planned, its own frame stands', { orgId: job.orgId, jobId: job.$id, error })
+        return fellBack()
+      }
+      const spent = aiGenerationSpent(answered)
+      if (answered.status !== 'ok') {
+        // Logged by its codes alone: an answer's words are the site's content.
+        console.info('ai site import: the plan did not pass, its own frame stands', { status: answered.status, codes: answered.status === 'needs_input' ? [...new Set(answered.violations.map((violation) => violation.code))] : [] })
+        return fellBack(spent)
+      }
+      const next = aiSiteImportPlanIn(state, wave, answered.value, nowIso, mintId())
+      // Shown before anything is built: the job waits here for the owner to start the build.
+      return { ...unspent(), ...spent, siteImport: next, items: aiSiteImportPlanRow(next, items), review: waveReview(AI_SITE_IMPORT_COPY.planned) }
+    }
+
+    // ── 2d. The owner started the build under the plan they saw (AGL-4152): no model ──
+    if (work.kind === 'plan-accepted') {
+      const accepted = aiSiteImportPlanAccepted(state, items)
+      return unspent({ siteImport: accepted.state, items: accepted.items, continue: true })
     }
 
     // ── 3. The look, before anything of the first wave is built (AGL-4084): no model ──

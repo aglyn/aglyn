@@ -66,7 +66,7 @@ import {
 import type { AiLoadEstimate } from '../runtime/ai-palette'
 import { aiSiteKindDesignLines, aiSiteKindOfInputs } from '../model/ai-site-kinds'
 import { aiSiteSeed } from '../model/ai-site-look'
-import type { AiLayoutDesign } from '../layout-language/ai-layout-design'
+import { aiLayoutPlannedChoicesOf, type AiLayoutDesign } from '../layout-language/ai-layout-design'
 import { aiOriginJobId } from './ai-job-draft-ids'
 import { aiPageSectionNodeId } from './ai-job-page-sections'
 import type { AiSystemBlock } from '../runtime/ai-runtime'
@@ -85,7 +85,7 @@ import {
   aiSiteImportSectionNames,
   type AiSiteImportDesigned,
 } from './ai-site-import-compile'
-import { aiSiteImportPageIsLegal, AI_SITE_IMPORT_LAYOUT_KEPT, type AiSiteImportAddedSection, type AiSiteImportPagePictures, type AiSiteImportRedesign, type AiSiteImportWords } from '../model/ai-site-import'
+import { aiSiteImportPageIsLegal, AI_SITE_IMPORT_LAYOUT_KEPT, AI_SITE_IMPORT_PROPOSED_NOT_WRITTEN, type AiSiteImportAddedSection, type AiSiteImportPagePictures, type AiSiteImportRedesign, type AiSiteImportWords } from '../model/ai-site-import'
 import { siteImportFidelity, type SiteImportFidelityTheme, type SiteImportFidelityTree } from '../model/ai-site-import-fidelity'
 import { aiGenerationMaxTokensWithin, aiGenerationWorstCaseMs } from './ai-job-budget'
 import {
@@ -605,7 +605,9 @@ export function aiLayoutDesignOf(job: Pick<AiJob, '$id' | 'inputs'>, slug: strin
   if (!kind) return null
   const style = job.inputs?.['siteStyle'] as Record<string, unknown> | undefined
   const seed = typeof style?.['seed'] === 'number' && Number.isFinite(style['seed']) ? (style['seed'] as number) >>> 0 : aiSiteSeed(aiOriginJobId(job))
-  return { kind: kind.id, seed, home: aiLayoutIsHomeSlug(slug) }
+  // What a site's plan chose for every page of it (AGL-4152).
+  const planned = aiLayoutPlannedChoicesOf(style?.['planned'])
+  return { kind: kind.id, seed, home: aiLayoutIsHomeSlug(slug), ...(planned ? { planned } : {}) }
 }
 
 /**
@@ -652,7 +654,7 @@ export interface AiLayoutPageBuilt {
    * answer, or its layout kept where the redesign did not pass; what it added
    * and what it shows. Absent on every other page.
    */
-  redesign?: { status: AiSiteImportRedesign; added: AiSiteImportAddedSection[]; pictures: AiSiteImportPagePictures | null }
+  redesign?: { status: AiSiteImportRedesign; added: AiSiteImportAddedSection[]; pictures: AiSiteImportPagePictures | null; names?: string[] }
 }
 
 export interface AiLayoutPageCheckInput {
@@ -1496,7 +1498,7 @@ async function aiRunImprovedPage(scope: {
           })(null),
         score: (built, destinations) => {
           const tree: SiteImportFidelityTree = { rootId: CANVAS_ROOT_ELEMENT_ID, nodes: built.nodes as unknown as SiteImportFidelityTree['nodes'] }
-          const report = siteImportFidelity(source, tree, { finish: 'improve', words: 'improved', theme, improved: { scope: facts, destinations, forms: savedForms } })
+          const report = siteImportFidelity(source, tree, { finish: 'improve', words: 'improved', theme, improved: { scope: facts, destinations, forms: savedForms, ...(doc.proposed ? { proposed: true } : {}) } })
           return aiSiteImportImprovedMisses(report)
         },
       }),
@@ -1510,6 +1512,8 @@ async function aiRunImprovedPage(scope: {
       status: answered.status,
       codes: answered.status === 'needs_input' ? [...new Set(answered.violations.map((violation) => violation.code))] : [],
     })
+    // A new page has no words of its own to fall back on: it is left out, and its row says why.
+    if (doc.proposed) return { ...spent, status: 'needs_input', violations: answered.status === 'needs_input' ? answered.violations : [], message: AI_SITE_IMPORT_PROPOSED_NOT_WRITTEN, answer: null }
     return {
       ...spent,
       status: 'ok',
@@ -1525,6 +1529,6 @@ async function aiRunImprovedPage(scope: {
   return {
     ...spent,
     status: 'ok',
-    value: { ...built, words: 'improved', redesign: { status: 'redesigned', added: page.added, pictures: page.pictures } },
+    value: { ...built, words: 'improved', redesign: { status: 'redesigned', added: page.added, pictures: page.pictures, names: page.names } },
   }
 }

@@ -323,6 +323,9 @@ export const AI_DOCTRINE_KIND_SCOPE: Readonly<Record<string, AiDoctrineScope>> =
   // A page brought in, redesigned from its ledger (AGL-4152): a layout-language
   // answer the compiler holds to the building rules, as a layout page's is.
   'page-improve': 'fields',
+  // A site brought in, planned once (AGL-4152): its menu and its words, which
+  // no doctrine rule reads as a tree. Held by its own check.
+  'site-import-plan': 'fields',
 }
 
 /** The scope for a kind; `documents` unless the kind names another. */
