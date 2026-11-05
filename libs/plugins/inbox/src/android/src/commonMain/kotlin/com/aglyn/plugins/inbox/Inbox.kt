@@ -290,13 +290,10 @@ fun sentReplyOf(doc: FirestoreDoc) = SentReply(
 fun sentRepliesQuery(hostId: String, submissionId: String) =
   FirestoreQuery(repliesPath(hostId, submissionId), orderBy = listOf(com.aglyn.core.FirestoreOrder("sentAtMs", descending = true)), limit = 10)
 
-/** What the member may do, by their role on the site: the console's own split. */
-data class InboxPermissions(val canWrite: Boolean, val canReply: Boolean) {
+/** What the member may do, by what they hold on the site: "Edit site content", "Reply from the inbox" and "Add people to lists from the inbox". */
+data class InboxPermissions(val canWrite: Boolean, val canReply: Boolean, val canAssign: Boolean) {
   companion object {
-    fun of(role: String?) = InboxPermissions(
-      canWrite = role in setOf("owner", "admin", "editor", "author"),
-      canReply = role in setOf("owner", "admin", "editor"),
-    )
+    fun of(can: (String) -> Boolean) = InboxPermissions(canWrite = can("site.edit"), canReply = can("inbox.reply"), canAssign = can("inbox.assign"))
   }
 }
 

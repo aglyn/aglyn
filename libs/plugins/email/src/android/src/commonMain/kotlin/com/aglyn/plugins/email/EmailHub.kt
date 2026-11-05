@@ -329,7 +329,7 @@ fun TemplatesSection(context: NativePluginContext, actions: EmailActions, startN
   val coroutines = rememberCoroutineScope()
   val hostId = actions.hostId ?: return
   val list = remember(hostId) { LiveQueryList(context.firestore, coroutines, 25, ::templateRowOf) }
-  val canEdit = rememberCanSend(context)
+  val canEdit = context.hostId != null && com.aglyn.pluginhost.rememberMemberPermissions(context).can("site.edit")
   var search by rememberSaveable { mutableStateOf("") }
   var asked by rememberSaveable { mutableStateOf("") }
   var creating by remember { mutableStateOf(startNew) }
@@ -347,7 +347,7 @@ fun TemplatesSection(context: NativePluginContext, actions: EmailActions, startN
   Column(Modifier.fillMaxSize()) {
     Row(Modifier.padding(horizontal = space(2f)), verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(space(1f))) {
       SearchField(search, { search = it; if (it.isBlank()) asked = "" }, placeholder = "Search templates", modifier = Modifier.weight(1f), onSearch = { asked = search })
-      if (canEdit) Button(onClick = { creating = true }, modifier = Modifier.testTag("template-new")) { Text("New design") }
+      Button(enabled = canEdit, onClick = { creating = true }, modifier = Modifier.testTag("template-new")) { Text("New design") }
     }
     notice?.let { NoticeBanner(it.first, it.second, Modifier.padding(space(2f))) }
     LiveListPane(

@@ -20,6 +20,7 @@ import kotlinx.serialization.json.longOrNull
 import java.io.File
 import kotlin.test.Test
 import kotlin.test.assertEquals
+import kotlin.test.assertFalse
 import kotlin.test.assertTrue
 
 /** Replays the console's own answers (function-cases.generated.json) through the CRM's ports, and checks the list plans. */
@@ -334,5 +335,38 @@ class CrmCasesTest {
     val chips = crmFilters(CrmKind.LEAD, owner)
     assertEquals(Contracts.nativeCrmLeadOpenStatuses.joinToString(","), chips.first().clauses.single().value)
     assertTrue(chips.any { it.clauses == listOf(ListFilterRequest("status", "equals", "nurturing")) })
+  }
+
+  private fun memberScope(member: Map<String, Any?>, hostId: String? = null) = crmScopeOf("o1", hostId, "u1", emptyMap(), member)
+
+  @Test
+  fun gatesAskTheirKeysOverTheRole() {
+    assertTrue(memberScope(mapOf("role" to "editor")).canWrite)
+    assertFalse(memberScope(mapOf("role" to "editor")).canManage)
+    assertTrue(memberScope(mapOf("role" to "admin")).canManage)
+    // A custom role's stamp decides, whichever role the row names.
+    val granted = memberScope(mapOf("role" to "viewer", "resolvedPermissions" to mapOf("crm.settings" to true, "data.manage" to true)))
+    assertTrue(granted.canManage)
+    assertTrue(granted.canWrite)
+    assertFalse(memberScope(mapOf("role" to "admin", "resolvedPermissions" to mapOf("crm.settings" to false))).canManage)
+  }
+
+  @Test
+  fun theWorkspaceCrmAsksForReachAndManageData() {
+    assertTrue(memberScope(mapOf("role" to "editor", "allHosts" to true)).opensWorkspaceCrm)
+    assertFalse(memberScope(mapOf("role" to "viewer", "allHosts" to true)).opensWorkspaceCrm)
+    assertFalse(memberScope(mapOf("role" to "editor", "allHosts" to false)).opensWorkspaceCrm)
+    assertFalse(memberScope(mapOf("role" to "editor", "allHosts" to false, "resolvedPermissions" to mapOf("data.manage" to true))).opensWorkspaceCrm)
+  }
+
+  @Test
+  fun stageMovesAskTheSiteOnASiteAndTheWorkspaceOffOne() {
+    val editor = memberScope(mapOf("role" to "editor"), "h1")
+    assertTrue(editor.movesStages(null))
+    assertFalse(editor.movesStages(mapOf("memberRoles" to mapOf("u1" to "author"))))
+    assertTrue(editor.movesStages(mapOf("memberRoles" to mapOf("u1" to "editor"))))
+    assertFalse(editor.movesStages(mapOf("memberRoles" to mapOf("u1" to "editor"), "memberPermissions" to mapOf("u1" to mapOf("crm.moveStages" to false)))))
+    assertTrue(memberScope(mapOf("role" to "editor")).movesStages(null))
+    assertFalse(memberScope(mapOf("role" to "editor", "resolvedPermissions" to mapOf("crm.moveStages" to false))).movesStages(null))
   }
 }

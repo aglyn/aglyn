@@ -3495,8 +3495,9 @@ public struct OrgPermissionEntry: Codable, Hashable, Sendable {
   public var pluginId: String?
   public var refines: String?
   public var scope: OrgPermissionScope?
+  public var sitePreset: [String: Bool]?
 
-  public init(description: String, follows: String? = nil, group: String? = nil, key: String, label: String, narrowable: Bool? = nil, pluginId: String? = nil, refines: String? = nil, scope: OrgPermissionScope? = nil) {
+  public init(description: String, follows: String? = nil, group: String? = nil, key: String, label: String, narrowable: Bool? = nil, pluginId: String? = nil, refines: String? = nil, scope: OrgPermissionScope? = nil, sitePreset: [String: Bool]? = nil) {
     self.description = description
     self.follows = follows
     self.group = group
@@ -3506,6 +3507,7 @@ public struct OrgPermissionEntry: Codable, Hashable, Sendable {
     self.pluginId = pluginId
     self.refines = refines
     self.scope = scope
+    self.sitePreset = sitePreset
   }
 }
 

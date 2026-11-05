@@ -14,7 +14,6 @@ struct SubmissionDetailView: View {
   let context: NativePluginContext
   let submissionID: String
   let runner: PluginActionRunner
-  let role: SiteRoleModel
   /// The site's name, the reply's default subject.
   var siteName: String?
   /// False beside the list, where the screen's own title stays.
@@ -34,6 +33,8 @@ struct SubmissionDetailView: View {
       SubmissionsAPI(api: context.api, writer: context.writer, firestore: context.firestore, hostID: $0)
     }
   }
+
+  private var permissions: InboxPermissions { InboxPermissions(holding: context.can) }
 
   var body: some View {
     Group {
@@ -60,7 +61,7 @@ struct SubmissionDetailView: View {
         }
       }
     }
-    .onChange(of: model.submission?.read == false && role.canEditContent, initial: true) { _, unread in markIfUnread(unread) }
+    .onChange(of: model.submission?.read == false && permissions.canWrite, initial: true) { _, unread in markIfUnread(unread) }
     .onDisappear {
       model.stop()
       replies.stop()
@@ -85,7 +86,7 @@ struct SubmissionDetailView: View {
 
   private func content(_ submission: Submission) -> some View {
     let now = Date()
-    let canEdit = role.canEditContent
+    let canEdit = permissions.canWrite
     return Form {
       if titled, let error = runner.error {
         Section { AglynNotice(error, tone: .error) { runner.clear() } }
@@ -123,7 +124,7 @@ struct SubmissionDetailView: View {
             AglynPrimaryHeaderButton("Reply", systemImage: InboxSymbols.reply, shortcut: .init("r", modifiers: [.command, .shift])) {
               reply(submission)
             }
-            .disabled(!canEdit)
+            .disabled(!permissions.canReply)
             .accessibilityIdentifier("submission-reply")
           }
         }
@@ -146,7 +147,7 @@ struct SubmissionDetailView: View {
         }
       }
       // What can be done with it, as plain rows in the accent color (a › on the one that opens another screen).
-      if submission.capturedKind != nil || (InboxPermissions(role: role.role).canReply && submission.sender.email != nil) {
+      if submission.capturedKind != nil || (permissions.canAssign && submission.sender.email != nil) {
         Section {
           if let kind = submission.capturedKind, let id = submission.capturedID {
             AglynActionRow(kind == "lead" ? "Open the lead in the CRM" : "Open the contact in the CRM", opens: true) {
@@ -154,7 +155,7 @@ struct SubmissionDetailView: View {
             }
             .accessibilityIdentifier("submission-open-crm")
           }
-          if InboxPermissions(role: role.role).canReply && submission.sender.email != nil {
+          if permissions.canAssign && submission.sender.email != nil {
             AglynActionRow("Add to a marketing list", systemImage: "list.bullet") { listSheet = true }
               .accessibilityIdentifier("submission-add-to-list")
           }

@@ -20,7 +20,6 @@ struct SubmissionsScreen: View {
     @Environment(\.horizontalSizeClass) private var sizeClass
   #endif
   @State private var model: SubmissionsModel
-  @State private var role = SiteRoleModel()
   @State private var runner = PluginActionRunner()
   @State private var selection: String?
   @State private var pushed: String?
@@ -65,11 +64,10 @@ struct SubmissionsScreen: View {
     return SubmissionsAPI(api: context.api, writer: context.writer, firestore: context.firestore, hostID: hostID)
   }
 
-  /// Whether the person may change a submission: on its own site, by their role there.
+  /// Whether the person may change a submission: "Edit site content" where they stand. The workspace's Inbox is for
+  /// members of the whole workspace, whose verdict answers there.
   private func canEdit(_ submission: Submission) -> Bool {
-    if !wholeWorkspace { return role.canEditContent }
-    let siteRole = submission.hostID.flatMap { id in context.sites.first { $0.id == id }?.role }
-    return ["admin", "editor", "author"].contains(siteRole ?? "") || ["owner", "admin", "editor"].contains(context.orgRole ?? "")
+    InboxPermissions(holding: context.can).canWrite
   }
 
   private var siteName: String? { site.document?.string("displayName") ?? site.document?.string("name") }
@@ -146,7 +144,6 @@ struct SubmissionsScreen: View {
       Text("It is removed for everyone. The form's counts are refreshed.")
     }
     .task(id: context.hostID ?? context.orgID) {
-      role.start(context)
       model.start(context.firestore, hostID: context.hostID, orgID: context.orgID)
       if let hostID = context.hostID {
         site.start(context.firestore, ["hosts", hostID])
@@ -159,7 +156,6 @@ struct SubmissionsScreen: View {
     }
     .onDisappear {
       model.stop()
-      role.stop()
       site.stop()
       forms.stop()
     }
@@ -361,21 +357,11 @@ struct SubmissionsScreen: View {
     }
   }
 
-  @ViewBuilder
   private func siteDetail(_ id: String, titled: Bool, context: NativePluginContext) -> some View {
-    if wholeWorkspace {
-      // On the workspace's Inbox each submission is read under the person's role on its own site.
-      SiteRoleScope(context: context) { siteRole in
-        SubmissionDetailView(
-          context: context, submissionID: id, runner: runner, role: siteRole,
-          siteName: context.siteName(context.hostID), titled: titled,
-          onRead: { model.patch($0, read: $1) }, toggleRead: toggleRead, reply: { replying = $0 }, delete: ask(delete:))
-      }
-    } else {
-      SubmissionDetailView(
-        context: context, submissionID: id, runner: runner, role: role, siteName: siteName, titled: titled,
-        onRead: { model.patch($0, read: $1) }, toggleRead: toggleRead, reply: { replying = $0 }, delete: ask(delete:))
-    }
+    SubmissionDetailView(
+      context: context, submissionID: id, runner: runner,
+      siteName: wholeWorkspace ? context.siteName(context.hostID) : siteName, titled: titled,
+      onRead: { model.patch($0, read: $1) }, toggleRead: toggleRead, reply: { replying = $0 }, delete: ask(delete:))
   }
 
   private func ask(delete submission: Submission) {
@@ -435,18 +421,5 @@ struct SubmissionListRow: View {
     .contentShape(Rectangle())
     .accessibilityElement(children: .combine)
     .accessibilityValue(row.read ? "Read" : "Unread")
-  }
-}
-
-/// The person's role on one site, live, for a view on a workspace-wide list that acts on that site.
-struct SiteRoleScope<Content: View>: View {
-  let context: NativePluginContext
-  @ViewBuilder let content: (SiteRoleModel) -> Content
-  @State private var role = SiteRoleModel()
-
-  var body: some View {
-    content(role)
-      .task(id: context.hostID) { role.start(context) }
-      .onDisappear { role.stop() }
   }
 }

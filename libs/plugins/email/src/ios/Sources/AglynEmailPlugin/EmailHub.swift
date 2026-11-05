@@ -223,16 +223,15 @@ func addressesIn(_ text: String) -> [String] {
 @Observable
 final class EmailRoleModel {
   @ObservationIgnored let doc = ObservedDocument()
-  private var uid = ""
+  private var context: NativePluginContext?
 
   func start(_ context: NativePluginContext) {
-    uid = context.uid
+    self.context = context
     if let hostID = context.hostID { doc.start(context.firestore, ["hosts", hostID]) }
   }
 
-  var role: String? { (doc.document?.data["memberRoles"] as? [String: Any])?[uid] as? String }
-  var canEdit: Bool { ["owner", "admin", "editor"].contains(role ?? "") }
-  var canManage: Bool { ["owner", "admin"].contains(role ?? "") }
+  /// "Edit site content": an email design is one of the site's screens.
+  var canEdit: Bool { context?.can("site.edit") == true }
 }
 
 /// The Emails hub: the console's sections as a bar over the chosen one.
@@ -341,7 +340,7 @@ struct TemplatesSection: View {
     }
     .aglynSearchable(text: $searchText, prompt: "Search templates", onSubmit: { search = searchText })
     .onChange(of: searchText) { _, text in if text.isEmpty { search = "" } }
-    .aglynPrimaryAction(id: "template-new", "New design", systemImage: "plus", enabled: role.canEdit, help: AglynRoleReason.site("creating email designs")) { creating = true }
+    .aglynPrimaryAction(id: "template-new", "New design", systemImage: "plus", enabled: role.canEdit, help: permissionRefusalText(ContractValues.shared.orgRoleGrants, key: "site.edit")) { creating = true }
     .task(id: search) {
       role.start(context)
       let search = search, hostID = actions.hostID

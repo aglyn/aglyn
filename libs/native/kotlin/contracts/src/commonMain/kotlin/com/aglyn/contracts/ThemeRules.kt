@@ -241,11 +241,18 @@ fun memberPermissions(member: Map<String, Any?>?, orgRole: String?, customRole: 
 }
 
 /**
- * The verdict on one site: the site's own stamp for this member (`hosts/{hostId}.memberPermissions[uid]`, which holds the
- * per-site keys and the keys a site can narrow, decided for that site) over their workspace verdict.
+ * The verdict on one site, from its document, as the doors read it (`hostStampedSitePermission`): the site's stamp for
+ * this member (`memberPermissions[uid]`, which holds the per-site keys and the keys a site can narrow, decided for that
+ * site), else a site key's preset for the role they have there (`memberRoles[uid]`), else their workspace verdict.
  */
-fun sitePermissions(workspace: Map<String, Boolean>, siteStamp: Map<String, Any?>?): Map<String, Boolean> =
-  workspace + booleansOf(siteStamp).orEmpty()
+fun sitePermissions(workspace: Map<String, Boolean>, site: Map<String, Any?>?, uid: String): Map<String, Boolean> {
+  // A workspace's owner projects as its top site role.
+  val role = ((site?.get("memberRoles") as? Map<*, *>)?.get(uid) as? String)?.let { if (it == "owner") "admin" else it }
+  val preset = if (role == null) emptyMap() else {
+    Contracts.orgRoleGrants.permissions.mapNotNull { entry -> entry.sitePreset?.let { entry.key to (it[role] == true) } }.toMap()
+  }
+  return workspace + preset + booleansOf((site?.get("memberPermissions") as? Map<*, *>)?.get(uid)).orEmpty()
+}
 
 /**
  * One row of a permission editor (`groupOrgPermissions`, `offeredOrgPermissions`): a key the workspace is offered, under its

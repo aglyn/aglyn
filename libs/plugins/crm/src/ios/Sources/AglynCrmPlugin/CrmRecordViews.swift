@@ -201,8 +201,12 @@ struct RecordDetail: View {
   @State private var action: RecordAction?
   @State private var notice: String?
   @State private var error: String?
+  @State private var site = LiveDoc()
 
   private var scope: CrmScope { doc.document.map { recordScope(listScope, $0.data) } ?? listScope }
+  /// "Move contacts and deals between stages", where this record's stage routes will ask it.
+  private var movesStages: Bool { scope.movesStages(on: site.doc?.data) }
+  private var hasStage: Bool { kind == .contact || (kind == .deal && (doc.document?.string("status") ?? "open") == "open") }
   private var api: CrmAPI { CrmAPI(api: listAPI.api, reader: listAPI.reader, scope: scope) }
 
   var body: some View {
@@ -219,8 +223,12 @@ struct RecordDetail: View {
       }
     }
     .task(id: id) { start() }
+    .task(id: scope.hostID) {
+      if !scope.hostID.isEmpty { site.start(context.firestore, ["hosts", scope.hostID]) }
+    }
     .onDisappear {
       doc.stop()
+      site.stop()
       tasks.stop()
       activity.stop()
       related.forEach { $0.1.stop() }
@@ -287,6 +295,10 @@ struct RecordDetail: View {
       Section {
         // The record's head (the calmer screens): the next step for this record as the one filled button, the rest in ⋯.
         let acts = scope.canWrite ? recordActions(row) : (primary: nil, more: [])
+        if scope.canWrite && hasStage && !movesStages {
+          AglynNotice(permissionRefusalText(ContractValues.shared.orgRoleGrants, key: crmMoveStagesKey), tone: .info)
+            .accessibilityIdentifier("crm-stage-refusal")
+        }
         AglynRecordHeader(
           row.title, subtitle: row.subtitle, systemImage: kind.symbol, status: row.chip.map { ($0, row.tone) },
           primary: acts.primary, more: acts.more)
@@ -407,11 +419,14 @@ struct RecordDetail: View {
       switch kind {
       case .lead: status == "qualified" && row.data["convertedContactId"] == nil ? .convert : .log
       case .contact: crmHasEmail(row.data) ? .email : .log
-      case .deal: (status ?? "open") == "open" ? .move : .log
+      case .deal: (status ?? "open") == "open" && movesStages ? .move : .log
       case .company: .log
       }
     let all = acts.map { title, symbol, act in
-      AglynRecordAction("crm-action-\(act.rawValue)", title, systemImage: symbol, destructive: act == .delete) { action = act }
+      AglynRecordAction(
+        "crm-action-\(act.rawValue)", title, systemImage: symbol, destructive: act == .delete,
+        enabled: movesStages || ![.stage, .move, .won, .lost].contains(act)
+      ) { action = act }
     }
     let primary = all.first { $0.id == "crm-action-\(next.rawValue)" }
     return (primary, all.filter { $0.id != primary?.id })
@@ -482,7 +497,7 @@ struct RecordDetail: View {
     case .edit:
       EditRecordSheet(
         title: "Edit \(kind.singular.lowercased())",
-        fields: kind == .contact ? withContactEmailHelp(fields.filter(\.editable), hasEmail: crmHasEmail(row.data)) : fields.filter(\.editable),
+        fields: kind == .contact ? withContactEmailHelp(fields.filter { $0.editable && (movesStages || $0.spec.key != "lifecycleStage") }, hasEmail: crmHasEmail(row.data)) : fields.filter(\.editable),
         initial: values
       ) { edited in
         let changes = changedFields(fields, before: values, after: edited)

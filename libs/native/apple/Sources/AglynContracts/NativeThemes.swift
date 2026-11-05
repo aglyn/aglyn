@@ -239,11 +239,21 @@ public func memberPermissions(
   return out
 }
 
-/// The verdict on one site: the site's own stamp for this member (`hosts/{hostId}.memberPermissions[uid]`, which holds
-/// the per-site keys and the keys a site can narrow, decided for that site) over their workspace verdict.
-public func sitePermissions(_ workspace: [String: Bool], siteStamp: [String: Any]?) -> [String: Bool] {
+/// The verdict on one site, from its document, as the doors read it (`hostStampedSitePermission`): the site's stamp for
+/// this member (`memberPermissions[uid]`, which holds the per-site keys and the keys a site can narrow, decided for that
+/// site), else a site key's preset for the role they have there (`memberRoles[uid]`), else their workspace verdict.
+public func sitePermissions(
+  _ catalog: OrgRoleGrants, workspace: [String: Bool], site: [String: Any]?, uid: String
+) -> [String: Bool] {
   var out = workspace
-  for (key, value) in siteStamp ?? [:] {
+  if let role = (site?["memberRoles"] as? [String: Any])?[uid] as? String {
+    // A workspace's owner projects as its top site role.
+    let siteRole = role == "owner" ? "admin" : role
+    for entry in catalog.permissions {
+      if let preset = entry.sitePreset { out[entry.key] = preset[siteRole] == true }
+    }
+  }
+  for (key, value) in (site?["memberPermissions"] as? [String: Any])?[uid] as? [String: Any] ?? [:] {
     if let flag = looseBool(value) { out[key] = flag }
   }
   return out

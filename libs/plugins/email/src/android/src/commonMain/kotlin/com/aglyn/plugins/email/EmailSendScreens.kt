@@ -93,13 +93,8 @@ fun sendTone(state: String): StatusTone = when (state) {
 
 /** Whether the member may send from this site: an admin or editor of it, as the route asks. */
 @Composable
-internal fun rememberCanSend(context: NativePluginContext): Boolean {
-  val hostId = context.hostId ?: return false
-  val live = remember(hostId, context.firestore) { context.firestore.observeDoc("hosts/$hostId") }.collectAsState(Live.Loading).value
-  @Suppress("UNCHECKED_CAST")
-  val role = ((live as? Live.Ready)?.value?.data?.get("memberRoles") as? Map<String, Any?>)?.get(context.uid)
-  return role == "admin" || role == "editor" || role == "owner"
-}
+internal fun rememberCanSend(context: NativePluginContext): Boolean =
+  context.hostId != null && com.aglyn.pluginhost.rememberMemberPermissions(context).can("marketing.campaigns")
 
 /** A site's emails: Status chips and a subject search, newest first; the picked email beside the list on wide windows. */
 @Composable
@@ -123,11 +118,10 @@ fun EmailsScreen(context: NativePluginContext, initial: String? = null, composeC
         Column(Modifier.padding(horizontal = space(2f), vertical = space(1f)), verticalArrangement = Arrangement.spacedBy(space(1f))) {
           Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(space(1f))) {
             SearchField(search, { search = it; if (it.isBlank()) asked = "" }, placeholder = "Search subjects", modifier = Modifier.weight(1f), onSearch = { asked = search })
-            if (canSend) {
-              FilledTonalButton(colors = com.aglyn.ui.aglynTonalButtonColors(), onClick = { composing = true }, modifier = Modifier.testTag("email-compose")) {
-                Icon(AglynIcons.named("edit"), contentDescription = null)
-                Text("Write", Modifier.padding(start = space(0.5f)))
-              }
+            // Shown to everyone, and off without "Run email campaigns".
+            FilledTonalButton(enabled = canSend, colors = com.aglyn.ui.aglynTonalButtonColors(), onClick = { composing = true }, modifier = Modifier.testTag("email-compose")) {
+              Icon(AglynIcons.named("edit"), contentDescription = null)
+              Text("Write", Modifier.padding(start = space(0.5f)))
             }
           }
           ChoiceChipRow(SEND_STATUS_FILTERS.map { ChipOption(it.first, it.second) }, status, { status = it })

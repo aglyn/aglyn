@@ -7737,28 +7737,52 @@
         "group": "sites",
         "key": "site.edit",
         "label": "Edit site content",
-        "scope": "site"
+        "scope": "site",
+        "sitePreset": {
+          "admin": true,
+          "author": true,
+          "editor": true,
+          "viewer": false
+        }
       },
       {
         "description": "Make pages and content live, take them down or schedule them, change redirects and change the site’s fonts.",
         "group": "sites",
         "key": "site.publish",
         "label": "Publish site content",
-        "scope": "site"
+        "scope": "site",
+        "sitePreset": {
+          "admin": true,
+          "author": false,
+          "editor": true,
+          "viewer": false
+        }
       },
       {
         "description": "Read a site’s orders, returns and sending address, and set up its webhooks.",
         "group": "sites",
         "key": "site.sensitive",
         "label": "See orders and webhooks",
-        "scope": "site"
+        "scope": "site",
+        "sitePreset": {
+          "admin": true,
+          "author": false,
+          "editor": true,
+          "viewer": false
+        }
       },
       {
         "description": "Manage a site’s people, domain, address and plugins, change its plugin settings (live chat, Zapier) and security allow-lists, import, export and delete it.",
         "group": "sites",
         "key": "site.manage",
         "label": "Manage site settings",
-        "scope": "site"
+        "scope": "site",
+        "sitePreset": {
+          "admin": true,
+          "author": false,
+          "editor": false,
+          "viewer": false
+        }
       },
       {
         "description": "Create, edit, and delete organization datasets, the CRM’s records, and marketing lists and topics.",
@@ -7795,14 +7819,26 @@
         "group": "ai",
         "key": "ai.use",
         "label": "Use AI assistance",
-        "scope": "site"
+        "scope": "site",
+        "sitePreset": {
+          "admin": true,
+          "author": true,
+          "editor": true,
+          "viewer": false
+        }
       },
       {
         "description": "Run AI generation jobs and AI edits: pages, components, emails, campaigns, products, CRM, insights, workflows.",
         "group": "ai",
         "key": "ai.generate",
         "label": "Generate with AI",
-        "scope": "site"
+        "scope": "site",
+        "sitePreset": {
+          "admin": true,
+          "author": true,
+          "editor": true,
+          "viewer": false
+        }
       },
       {
         "description": "Import an existing website into the workspace with Bring my site.",
@@ -7816,28 +7852,52 @@
         "group": "funnels",
         "key": "funnels.manage",
         "label": "Manage funnels",
-        "scope": "site"
+        "scope": "site",
+        "sitePreset": {
+          "admin": true,
+          "author": false,
+          "editor": true,
+          "viewer": false
+        }
       },
       {
         "description": "Take a booking’s payment at the desk on a card reader. Follows the site role unless a role or member sets it.",
         "group": "bookings",
         "key": "bookings.payments",
         "label": "Take booking payments in person",
-        "scope": "site"
+        "scope": "site",
+        "sitePreset": {
+          "admin": true,
+          "author": false,
+          "editor": true,
+          "viewer": false
+        }
       },
       {
         "description": "Refund a paid booking, in full or in part. Follows the site role unless a role or member sets it.",
         "group": "bookings",
         "key": "bookings.refunds",
         "label": "Refund bookings",
-        "scope": "site"
+        "scope": "site",
+        "sitePreset": {
+          "admin": true,
+          "author": false,
+          "editor": false,
+          "viewer": false
+        }
       },
       {
         "description": "Edit, cancel and check out stays, and add, change and remove what can be booked. Follows the site role unless a role or member sets it.",
         "group": "commerce",
         "key": "commerce.reservations",
         "label": "Manage reservations",
-        "scope": "site"
+        "scope": "site",
+        "sitePreset": {
+          "admin": true,
+          "author": true,
+          "editor": true,
+          "viewer": false
+        }
       },
       {
         "description": "Book a walk-in stay and change how many guests a stay is for. Follows \"Manage reservations\" unless a role or member sets it, and may be allowed without it.",
@@ -7845,49 +7905,91 @@
         "group": "commerce",
         "key": "commerce.walkIns",
         "label": "Book walk-ins and change guests",
-        "scope": "site"
+        "scope": "site",
+        "sitePreset": {
+          "admin": true,
+          "author": true,
+          "editor": true,
+          "viewer": false
+        }
       },
       {
         "description": "Fulfill, cancel and print orders, resend receipts, build draft orders, take returns and record shipments. Follows the site role unless a role or member sets it.",
         "group": "commerce",
         "key": "commerce.orders",
         "label": "Manage orders",
-        "scope": "site"
+        "scope": "site",
+        "sitePreset": {
+          "admin": true,
+          "author": false,
+          "editor": true,
+          "viewer": false
+        }
       },
       {
         "description": "Create, edit and delete quotes for customers. Follows the site role unless a role or member sets it.",
         "group": "commerce",
         "key": "commerce.quotes",
         "label": "Create and edit quotes",
-        "scope": "site"
+        "scope": "site",
+        "sitePreset": {
+          "admin": true,
+          "author": false,
+          "editor": true,
+          "viewer": false
+        }
       },
       {
         "description": "Copy a quote’s pay link to send to the customer, and replace it so the old link stops working. Follows the site role unless a role or member sets it.",
         "group": "commerce",
         "key": "commerce.quotes.send",
         "label": "Send quotes and invoices to customers",
-        "scope": "site"
+        "scope": "site",
+        "sitePreset": {
+          "admin": true,
+          "author": false,
+          "editor": true,
+          "viewer": false
+        }
       },
       {
         "description": "Issue, adjust and void the store’s gift cards. Follows the site role unless a role or member sets it.",
         "group": "commerce",
         "key": "commerce.giftCards",
         "label": "Issue gift cards",
-        "scope": "site"
+        "scope": "site",
+        "sitePreset": {
+          "admin": true,
+          "author": false,
+          "editor": true,
+          "viewer": false
+        }
       },
       {
         "description": "Turn the store’s payment methods on and off. Anyone with \"Manage orders\" sees them. Follows the site role unless a role or member sets it.",
         "group": "commerce",
         "key": "commerce.paymentMethods",
         "label": "Manage payment methods",
-        "scope": "site"
+        "scope": "site",
+        "sitePreset": {
+          "admin": true,
+          "author": false,
+          "editor": false,
+          "viewer": false
+        }
       },
       {
         "description": "Connect, sync and disconnect ShipStation and ShippingEasy, and show or replace their credentials. Anyone with \"Manage orders\" sees whether they are connected. Follows the site role unless a role or member sets it.",
         "group": "commerce",
         "key": "commerce.shippingConnections",
         "label": "Connect shipping apps",
-        "scope": "site"
+        "scope": "site",
+        "sitePreset": {
+          "admin": true,
+          "author": false,
+          "editor": false,
+          "viewer": false
+        }
       },
       {
         "description": "Refund any order, online or at the register, in full or in part, with no register limit. A member of the whole workspace who is the site’s admin holds it unless a role or member sets it; someone added to just this site holds it only when the site grants it.",
@@ -7983,14 +8085,26 @@
         "group": "marketplace",
         "key": "marketplace.siteInstall",
         "label": "Install marketplace items into a site",
-        "scope": "site"
+        "scope": "site",
+        "sitePreset": {
+          "admin": true,
+          "author": false,
+          "editor": true,
+          "viewer": false
+        }
       },
       {
         "description": "Publish a site’s templates, themes, layouts, components and email designs to the marketplace (with \"Publish to the marketplace\"). Follows the site role unless a role or member sets it.",
         "group": "marketplace",
         "key": "marketplace.sitePublish",
         "label": "Publish a site’s items to the marketplace",
-        "scope": "site"
+        "scope": "site",
+        "sitePreset": {
+          "admin": true,
+          "author": false,
+          "editor": true,
+          "viewer": false
+        }
       },
       {
         "description": "Change the workspace’s public marketplace profile (its handle, name, bio, logo, support contact and links), and ask for the Verified publisher badge or withdraw the ask.",
@@ -8022,7 +8136,13 @@
         "group": "crm",
         "key": "crm.moveStages",
         "label": "Move contacts and deals between stages",
-        "scope": "site"
+        "scope": "site",
+        "sitePreset": {
+          "admin": true,
+          "author": false,
+          "editor": true,
+          "viewer": false
+        }
       },
       {
         "description": "Change the CRM’s settings for every site: default sharing for new records, companies from email domains, default owners, assignment rules and the round-robin pool, sharing rules, and rotating the email capture address; and share records with other sites.",
@@ -8053,35 +8173,65 @@
         "group": "email",
         "key": "email.suppressions",
         "label": "Manage the site’s suppressions",
-        "scope": "site"
+        "scope": "site",
+        "sitePreset": {
+          "admin": true,
+          "author": false,
+          "editor": true,
+          "viewer": false
+        }
       },
       {
         "description": "Add and remove people on the organization’s marketing lists from a site (only for a member of the whole workspace who may write its lists, as the lists are the organization’s). Follows the site role unless a role or member sets it.",
         "group": "email",
         "key": "email.lists",
         "label": "Add people to marketing lists from a site",
-        "scope": "site"
+        "scope": "site",
+        "sitePreset": {
+          "admin": true,
+          "author": false,
+          "editor": true,
+          "viewer": false
+        }
       },
       {
         "description": "Reply by email to a form submission in the site’s inbox. Follows the site role unless a role or member sets it.",
         "group": "inbox",
         "key": "inbox.reply",
         "label": "Reply from the inbox",
-        "scope": "site"
+        "scope": "site",
+        "sitePreset": {
+          "admin": true,
+          "author": false,
+          "editor": true,
+          "viewer": false
+        }
       },
       {
         "description": "Add the person behind a form submission to the organization’s marketing lists (members of the whole workspace who may write its lists only). Follows the site role unless a role or member sets it.",
         "group": "inbox",
         "key": "inbox.assign",
         "label": "Add people to lists from the inbox",
-        "scope": "site"
+        "scope": "site",
+        "sitePreset": {
+          "admin": true,
+          "author": false,
+          "editor": true,
+          "viewer": false
+        }
       },
       {
         "description": "Draft, send, duplicate and manage email campaigns, and see who a send reached. Follows the site role on a site, and the workspace role in the organization hub, unless a role or member sets it.",
         "group": "marketing",
         "key": "marketing.campaigns",
         "label": "Run email campaigns",
-        "scope": "site"
+        "scope": "site",
+        "sitePreset": {
+          "admin": true,
+          "author": false,
+          "editor": true,
+          "viewer": false
+        }
       },
       {
         "description": "Create, change, switch on and off, remove and import the organization’s automations. Members of the whole workspace only.",
@@ -8095,7 +8245,13 @@
         "group": "workflows",
         "key": "workflows.sitePause",
         "label": "Pause org automations on a site",
-        "scope": "site"
+        "scope": "site",
+        "sitePreset": {
+          "admin": true,
+          "author": false,
+          "editor": true,
+          "viewer": false
+        }
       },
       {
         "description": "Connect QuickBooks Online, Xero or other accounting software through Codat, choose the accounts sales are posted to, and retry a sync.",

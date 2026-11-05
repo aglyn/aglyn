@@ -76,9 +76,11 @@ class InboxCasesTest {
   }
 
   @Test
-  fun permissionsFollowTheSiteRole() {
-    assertEquals(InboxPermissions(canWrite = true, canReply = true), InboxPermissions.of("admin"))
-    assertEquals(InboxPermissions(canWrite = true, canReply = false), InboxPermissions.of("author"))
-    assertEquals(InboxPermissions(canWrite = false, canReply = false), InboxPermissions.of("viewer"))
+  fun permissionsAskTheirKeys() {
+    assertEquals(InboxPermissions(canWrite = true, canReply = true, canAssign = true), InboxPermissions.of { true })
+    assertEquals(InboxPermissions(canWrite = true, canReply = false, canAssign = false), InboxPermissions.of { it == "site.edit" })
+    assertEquals(InboxPermissions(canWrite = false, canReply = true, canAssign = false), InboxPermissions.of { it == "inbox.reply" })
+    assertEquals(InboxPermissions(canWrite = false, canReply = false, canAssign = true), InboxPermissions.of { it == "inbox.assign" })
+    assertEquals(InboxPermissions(canWrite = false, canReply = false, canAssign = false), InboxPermissions.of { false })
   }
 }

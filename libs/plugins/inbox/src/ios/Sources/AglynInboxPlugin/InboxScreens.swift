@@ -87,21 +87,25 @@ struct PeopleScreen: View {
   @State private var tab = "members"
   @State private var members = LiveQueryList(pageSize: 25, map: siteMember)
   @State private var leads = LiveQueryList(pageSize: 25, map: leadRow)
-  @State private var site = SiteRoleModel()
+  @State private var member = ObservedDocument()
   @State private var searchText = ""
   @State private var search = ""
   @State private var removing: SiteMemberRow?
   @State private var error: String?
 
-  /// The workspace's Inbox: every site's leads (members sign up to one site each), for a role that manages data.
+  /// The workspace's Inbox: every site's leads (members sign up to one site each), for a member of the whole workspace
+  /// who holds "Manage data". The reach is its own question: no key grants a collaborator the sites they were not given.
   private var wholeWorkspace: Bool { context.hostID == nil }
-  private var managesData: Bool { ["owner", "admin", "editor"].contains(context.orgRole ?? "") }
+  private var managesData: Bool { context.can("data.manage") && OrgAccess.isOrgWideMember(member.document?.data) }
 
   var body: some View {
-    if wholeWorkspace && !managesData {
+    if wholeWorkspace && !member.ready {
+      List { SkeletonRows(count: 6) }.aglynListBackground()
+        .task(id: context.orgID) { if let orgID = context.orgID { member.start(context.firestore, ["orgs", orgID, "members", context.uid]) } }
+    } else if wholeWorkspace && !managesData {
       AglynEmptyState(
-        "Leads are for data managers", systemImage: "lock",
-        message: "Listing every site's leads needs a role that manages the workspace's data. Choose a site to see its members and leads.")
+        "Members & leads are kept per site", systemImage: "lock",
+        message: "Seeing every site's leads at once needs the Manage data permission on every site. Pick a site to see its own.")
         .navigationTitle("Members & leads")
         .aglynScreenTitle("Members & leads")
     } else {
@@ -141,12 +145,11 @@ struct PeopleScreen: View {
     .onDisappear {
       members.stop()
       leads.stop()
-      site.stop()
+      member.stop()
     }
     .aglynSearchable(text: $searchText, prompt: tab == "members" ? "Search members" : "Search leads", onSubmit: { search = searchText })
     .onChange(of: searchText) { _, text in if text.isEmpty { search = "" } }
     .task(id: "\(tab)|\(search)|\(context.hostID ?? "")") {
-      site.start(context)
       if wholeWorkspace { tab = "leads" }
       guard let hostID = context.hostID else {
         if let orgID = context.orgID, managesData {
@@ -181,7 +184,8 @@ struct PeopleScreen: View {
     }
   }
 
-  private var canRemove: Bool { ["owner", "admin"].contains(site.role ?? "") }
+  /// "Edit site content", which the removal route asks.
+  private var canRemove: Bool { context.can("site.edit") }
 
   @ViewBuilder
   private var membersList: some View {
