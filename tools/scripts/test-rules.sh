@@ -62,6 +62,7 @@ npx firebase emulators:exec --only firestore,database --project demo-rules-check
         cloud/rules-campaign-site-gain.spec.mjs \
         cloud/rules-dataset-access.spec.mjs \
         cloud/rules-scope-sweeps.spec.mjs \
+        cloud/rules-scope-marker.spec.mjs \
         cloud/marketplace-rules.spec.mjs \
         cloud/hosts-list-constraint.spec.mjs \
         cloud/override-merge.spec.mjs; do \

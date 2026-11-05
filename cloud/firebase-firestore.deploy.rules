@@ -1587,6 +1587,8 @@ orgNotSuspended();
 
 
 
+
+
 function canWriteDatasetOn(visibleTo) {
 return isOrgMember() && isVerified() && orgNotSuspended() &&
 ((memberKeyOrOverride('data.manage', ['owner', 'admin', 'editor']) &&
@@ -1622,6 +1624,7 @@ orgMember().get('permissions', {}).get('data.manage', null) != false));
 
 
 
+
 function crmWriteScope() {
 return resource.data.get('writeTo', resource.data.visibleTo);
 }
@@ -1639,10 +1642,11 @@ resource.data.get(['sharing', 'added'], []));
 }
 function crmSharingUnchanged() {
 return !request.resource.data.diff(resource.data).affectedKeys()
-.hasAny(['sharing', 'writeTo']);
+.hasAny(['sharing', 'writeTo', 'scopeMode', 'scopeExcept']);
 }
 function crmSharingAbsent() {
-return !request.resource.data.keys().hasAny(['sharing', 'writeTo']);
+return !request.resource.data.keys()
+.hasAny(['sharing', 'writeTo', 'scopeMode', 'scopeExcept']);
 }
 
 
@@ -1653,6 +1657,41 @@ return !request.resource.data.keys().hasAny(['sharing', 'writeTo']);
 function scopeUnchanged() {
 return !request.resource.data.diff(resource.data)
 .affectedKeys().hasAny(['visibleTo']);
+}
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+function scopeMarkerUnchanged() {
+return !request.resource.data.diff(resource.data).affectedKeys()
+.hasAny(['scopeMode', 'scopeExcept']);
+}
+function scopeMarkerAbsent() {
+return !request.resource.data.keys().hasAny(['scopeMode', 'scopeExcept']);
+}
+function scopeUnmarked(data) {
+return !data.keys().hasAny(['scopeMode', 'scopeExcept']);
+}
+
+
+
+
+
+
+
+
+function scopePlacement(data) {
+return scopeUnmarked(data) ? data.get('visibleTo', null) : null;
 }
 
 
@@ -1707,11 +1746,15 @@ allow create: if isStaff();
 
 
 
+
+
+
 allow update: if isStaff() ||
-(canReadScoped() && canWriteDatasetOn(resource.data.get('visibleTo', null)) && scopeUnchanged()) ||
+(scopeMarkerUnchanged() &&
+((canReadScoped() && scopeUnchanged() && canWriteDatasetOn(scopePlacement(resource.data))) ||
 (canWriteOrgDatasets() && isOrgWideMember() &&
-(canWriteDatasetOn(resource.data.get('visibleTo', null)) ||
-request.resource.data.diff(resource.data).affectedKeys().hasOnly(['visibleTo'])));
+(request.resource.data.diff(resource.data).affectedKeys().hasOnly(['visibleTo']) ||
+canWriteDatasetOn(scopePlacement(resource.data))))));
 allow delete: if isStaff();
 match /records/{recordId} {
 
@@ -1741,7 +1784,7 @@ allow create: if isStaff();
 allow update, delete: if isStaff() ||
 (parentDatasetVisible() &&
 ((canWriteOrgDatasets() && orgMember().get('hostAccess', {}).size() == 0) ||
-canWriteDatasetOn(get(/databases/$(database)/documents/orgs/$(orgId)/datasets/$(datasetId)).data.get('visibleTo', null))));
+canWriteDatasetOn(scopePlacement(get(/databases/$(database)/documents/orgs/$(orgId)/datasets/$(datasetId)).data))));
 }
 }
 
@@ -1821,6 +1864,7 @@ allow create, update, delete: if isStaff();
 
 
 
+
 match /leads/{leadId} {
 allow read: if isStaff() || canReadScopedPeople();
 allow create: if isStaff();
@@ -1832,8 +1876,9 @@ orgCarriesCrmSuite(orgId) &&
 allow delete: if isStaff() ||
 (canWriteScopedCrm() &&
 (isOrgWideMember() ||
+(scopeUnmarked(resource.data) &&
 crmHeldScope().hasOnly(
-orgMember().get('scopeTokens', ['org']))));
+orgMember().get('scopeTokens', ['org'])))));
 }
 
 
@@ -1969,10 +2014,10 @@ allow delete: if isStaff() || canWriteScopedCrm();
 match /crmTasks/{taskId} {
 allow read: if isStaff() || canReadScopedPeople();
 allow create: if isStaff() ||
-(canWriteOrgData() && canCreateScoped() && orgCarriesCrmSuite(orgId));
+(canWriteOrgData() && canCreateScoped() && scopeMarkerAbsent() && orgCarriesCrmSuite(orgId));
 allow update: if isStaff() ||
 (canWriteScopedOrgData() && (isOrgWideMember() || scopeUnchanged()) &&
-orgCarriesCrmSuite(orgId));
+scopeMarkerUnchanged() && orgCarriesCrmSuite(orgId));
 allow delete: if isStaff() || canWriteScopedOrgData();
 }
 
@@ -1980,10 +2025,10 @@ allow delete: if isStaff() || canWriteScopedOrgData();
 match /crmActivities/{activityId} {
 allow read: if isStaff() || canReadScopedPeople();
 allow create: if isStaff() ||
-(canWriteOrgData() && canCreateScoped() && orgCarriesCrmSuite(orgId));
+(canWriteOrgData() && canCreateScoped() && scopeMarkerAbsent() && orgCarriesCrmSuite(orgId));
 allow update: if isStaff() ||
 (canWriteScopedOrgData() && (isOrgWideMember() || scopeUnchanged()) &&
-orgCarriesCrmSuite(orgId));
+scopeMarkerUnchanged() && orgCarriesCrmSuite(orgId));
 allow delete: if isStaff() || canWriteScopedOrgData();
 }
 
@@ -2150,6 +2195,7 @@ allow delete: if isStaff();
 
 
 
+
 function canWriteCampaignContainers() {
 return isOrgMember() && isVerified() &&
 memberKeyOrOverride('marketing.campaigns', ['owner', 'admin', 'editor']) &&
@@ -2179,13 +2225,15 @@ hostSiteRoleKey(hostId, 'marketing.campaigns', ['admin', 'editor']);
 match /emailCampaigns/{campaignId} {
 allow read: if isStaff() || canReadScoped();
 allow create: if isStaff() ||
-(canWriteCampaignContainers() && canCreateScoped()) ||
-(canWriteOneSiteCampaign(request.resource.data.get('visibleTo', null)) && canCreateScoped());
+(scopeMarkerAbsent() &&
+((canWriteCampaignContainers() && canCreateScoped()) ||
+(canWriteOneSiteCampaign(request.resource.data.get('visibleTo', null)) && canCreateScoped())));
 allow update: if isStaff() ||
-(canWriteCampaignContainers() && canReadScoped() &&
+(scopeMarkerUnchanged() &&
+((canWriteCampaignContainers() && canReadScoped() &&
 (isOrgWideMember() || scopeUnchanged())) ||
-(canWriteOneSiteCampaign(resource.data.get('visibleTo', null)) && canReadScoped() &&
-scopeUnchanged());
+(canWriteOneSiteCampaign(scopePlacement(resource.data)) && canReadScoped() &&
+scopeUnchanged())));
 allow delete: if false;
 }
 
@@ -2420,10 +2468,10 @@ allow delete: if isStaff() ||
 match /media/{mediaId} {
 allow read: if isStaff() || canReadScoped();
 allow create: if isStaff() ||
-(canWriteOrgMedia() && canCreateScoped() && mediaObjectFieldsUnset());
+(canWriteOrgMedia() && canCreateScoped() && scopeMarkerAbsent() && mediaObjectFieldsUnset());
 allow update: if isStaff() ||
 (canWriteOrgMedia() && canReadScoped() && (isOrgWideMember() || scopeUnchanged()) &&
-mediaObjectFieldsUnchanged());
+scopeMarkerUnchanged() && mediaObjectFieldsUnchanged());
 allow delete: if isStaff() || (canWriteOrgMedia() && canReadScoped());
 }
 
@@ -2431,9 +2479,10 @@ allow delete: if isStaff() || (canWriteOrgMedia() && canReadScoped());
 
 match /mediaFolders/{folderId} {
 allow read: if isStaff() || canReadScoped();
-allow create: if isStaff() || (canWriteOrgMedia() && canCreateScoped());
+allow create: if isStaff() || (canWriteOrgMedia() && canCreateScoped() && scopeMarkerAbsent());
 allow update: if isStaff() ||
-(canWriteOrgMedia() && canReadScoped() && (isOrgWideMember() || scopeUnchanged()));
+(canWriteOrgMedia() && canReadScoped() && (isOrgWideMember() || scopeUnchanged()) &&
+scopeMarkerUnchanged());
 allow delete: if isStaff() || (canWriteOrgMedia() && canReadScoped());
 }
 
