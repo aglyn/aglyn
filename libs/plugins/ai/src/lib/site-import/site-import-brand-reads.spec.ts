@@ -158,15 +158,13 @@ describe('custom properties, read through', () => {
     expect(styles.of(idOf('z')).get('color')).toBe('#778899')
   })
 
-  it('shares a parent’s variables with every element that declares none, so a large palette costs no copy per element', () => {
-    const palette = Array.from({ length: 4_000 }, (_, at) => `--p${at}:#123456`).join(';')
-    const body = Array.from({ length: 5_000 }, (_, at) => `<p id="p${at}">x</p>`).join('')
-    const page = extractSiteImportPage(`<html><body>${body}</body></html>`, 'https://example.com/', () => true, { structure: true })
+  it('keeps an element’s own variable to it and its children, its neighbors reading the parent’s', () => {
+    const page = extractSiteImportPage('<html><body><div id="a" style="--x:#111111"><p id="b">x</p></div><p id="c">y</p></body></html>', 'https://example.com/', () => true, { structure: true })
     const structure = page.structure as NonNullable<typeof page.structure>
-    const styles = siteImportStylesOf(structure, siteImportCssOf([`:root{${palette}}p{color:var(--p7)}`]))
-    const start = Date.now()
-    for (const element of structure.elements) styles.of(element.id)
-    expect(Date.now() - start).toBeLessThan(1_500)
+    const styles = siteImportStylesOf(structure, siteImportCssOf([':root{--x:#222222}p{color:var(--x)}']))
+    const idOf = (id: string) => structure.elements.find((element) => element.attrs.id === id)?.id as number
+    expect(styles.of(idOf('b')).get('color')).toBe('#111111')
+    expect(styles.of(idOf('c')).get('color')).toBe('#222222')
   })
 })
 

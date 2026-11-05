@@ -63,6 +63,9 @@ function mockMakeFirestore() {
     set: async (data: Record<string, unknown>, options?: { merge?: boolean }) => {
       mockDocs.set(path, applyData(mockDocs.get(path), data, Boolean(options?.merge)))
     },
+    update: async (data: Record<string, unknown>) => {
+      mockDocs.set(path, applyData(mockDocs.get(path), data, true))
+    },
     delete: async () => {
       mockDocs.delete(path)
     },
@@ -141,6 +144,11 @@ function mockMakeFirestore() {
               ref.path,
               applyData(mockDocs.get(ref.path), data, Boolean(options?.merge)),
             )
+          })
+        },
+        update: (ref: { path: string }, data: Record<string, unknown>) => {
+          queued.push(() => {
+            mockDocs.set(ref.path, applyData(mockDocs.get(ref.path), data, true))
           })
         },
       }
@@ -3348,6 +3356,8 @@ describe('a site import brings a proved site in, wave by wave, each started by a
   let limited: Array<{ key: string; limit: number }>
 
   beforeEach(() => {
+    // The site exists: the look pass always draws it a theme (AGL-4152), even from a source with no color to read.
+    mockDocs.set('hosts/host-1', { displayName: 'Harbor Dental' })
     proof = { current: true, method: 'dns', provenAt: NOW.getTime(), detail: '_aglyn-challenge.harbor-dental.com' }
     allowed = true
     failing = new Set()
