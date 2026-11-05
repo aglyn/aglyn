@@ -35,7 +35,6 @@ let mockPermitted = true
 let mockPermissions: Record<string, unknown> = {
   orgId: ORG,
   role: 'editor',
-  isOwner: false,
   permissions: { 'data.manage': true },
   orgWide: true,
   hostRole: 'editor',
@@ -112,7 +111,6 @@ beforeEach(() => {
   mockPermissions = {
     orgId: ORG,
     role: 'editor',
-    isOwner: false,
     permissions: { 'data.manage': true },
     orgWide: true,
     hostRole: 'editor',
@@ -228,7 +226,7 @@ describe('crm/inbound-address', () => {
 
     it('rotates for an owner and refuses an editor', async () => {
       expect((await call({ orgId: ORG, rotate: true })).status).toBe(403)
-      mockPermissions = { ...mockPermissions, role: 'owner', isOwner: true }
+      mockPermissions = { ...mockPermissions, role: 'owner' }
       const { status, answer } = await call({ orgId: ORG, rotate: true })
       expect(status).toBe(200)
       expect(answer.rotated).toBe(true)
@@ -266,7 +264,7 @@ describe('the plan (AGL-2787)', () => {
 
   it('refuses a Free workspace at the organization level, for a read and an owner’s rotation alike', async () => {
     expectRefused(await call({ orgId: ORG }))
-    mockPermissions = { ...mockPermissions, role: 'owner', isOwner: true }
+    mockPermissions = { ...mockPermissions, role: 'owner' }
     expectRefused(await call({ orgId: ORG, rotate: true }))
     expect(mockEnsure).not.toHaveBeenCalled()
     expect(mockLogOrgActivity).not.toHaveBeenCalled()

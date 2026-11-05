@@ -34,7 +34,6 @@ let mockPermitted = true
 let mockPermissions: Record<string, unknown> = {
   orgId: ORG,
   role: 'editor',
-  isOwner: false,
   permissions: { 'data.manage': true },
   orgWide: true,
   hostRole: 'editor',
@@ -118,7 +117,6 @@ beforeEach(() => {
   mockPermissions = {
     orgId: ORG,
     role: 'editor',
-    isOwner: false,
     permissions: { 'data.manage': true },
     orgWide: true,
     hostRole: 'editor',

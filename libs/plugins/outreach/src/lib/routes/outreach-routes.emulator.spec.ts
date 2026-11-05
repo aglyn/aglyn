@@ -72,7 +72,6 @@ const deps = (): OutreachEnrollRouteDeps => ({
     resolveOrgPermissions: async (_uid, context) => ({
       orgId: context.orgId,
       role: 'admin',
-      isOwner: true,
       orgWide: true,
       permissions: { [OUTREACH_USE_PERMISSION]: true, 'outreach.manageAll': true },
     }),

@@ -100,7 +100,7 @@ function deps(): OutreachEnrollRouteDeps {
         ({ uid: 'member-1', email: 'casey.morgan@example.com', email_verified: true }) as never,
       resolveOrgPermissions: async (_uid, context) => {
         askedAbout.push(context.orgId)
-        return { orgId: context.orgId, role: null, isOwner: false, orgWide: false, permissions: {} }
+        return { orgId: context.orgId, role: null, orgWide: false, permissions: {} }
       },
       holdsOrgCatalogPermission: unused,
       readOrg: unused,

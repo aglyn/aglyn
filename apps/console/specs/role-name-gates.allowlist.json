@@ -223,10 +223,6 @@
       "count": 1,
       "kind": "not-a-gate",
       "note": "Picks who the weekly summary goes to."
-    },
-    "libs/tenant/runtime/src/lib/org-permissions.ts": {
-      "count": 1,
-      "kind": "pending"
     }
   }
 }

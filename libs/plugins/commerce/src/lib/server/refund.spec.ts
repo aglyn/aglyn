@@ -256,7 +256,6 @@ const mockVerifyIdToken = jest.fn(async () => ({ uid: 'admin-1' }))
 const mockResolveOrgPermissions = jest.fn(async () => ({
   orgId: 'org-1',
   role: 'admin',
-  isOwner: true,
   permissions: {} as Record<string, boolean>,
   orgWide: true,
   hostRole: 'admin',
@@ -552,7 +551,6 @@ beforeEach(() => {
   mockResolveOrgPermissions.mockResolvedValue({
     orgId: 'org-1',
     role: 'admin',
-    isOwner: true,
     permissions: {},
     orgWide: true,
     hostRole: 'admin',
@@ -1454,7 +1452,6 @@ describe('who may refund (AGL-2372)', () => {
     mockResolveOrgPermissions.mockResolvedValue({
       orgId: 'org-1',
       role: 'editor',
-      isOwner: false,
       permissions: {},
       // `isOrgWideMember` is false for a scoped collaborator (AGL-1026) —
       // this is the discriminator, and the only one there is.
@@ -1502,7 +1499,6 @@ describe('who may refund (AGL-2372)', () => {
     mockResolveOrgPermissions.mockResolvedValue({
       orgId: 'org-1',
       role: null,
-      isOwner: false,
       permissions: {},
       orgWide: false,
       hostRole: null,
@@ -1524,7 +1520,6 @@ describe('who may refund (AGL-2372)', () => {
     mockResolveOrgPermissions.mockResolvedValue({
       orgId: 'org-1',
       role: 'editor',
-      isOwner: false,
       permissions: {},
       orgWide: true,
       hostRole: 'editor',
@@ -1546,7 +1541,6 @@ describe('who may refund (AGL-2372)', () => {
       mockResolveOrgPermissions.mockResolvedValue({
         orgId: 'org-1',
         role: 'editor',
-        isOwner: false,
         permissions,
         orgWide: true,
         hostRole: 'editor',
@@ -1569,7 +1563,6 @@ describe('who may refund (AGL-2372)', () => {
     mockResolveOrgPermissions.mockResolvedValue({
       orgId: 'org-1',
       role: 'viewer',
-      isOwner: false,
       permissions: { managePos: true },
       orgWide: true,
       hostRole: 'viewer',
@@ -1598,7 +1591,6 @@ describe('who may refund (AGL-2372)', () => {
     mockResolveOrgPermissions.mockResolvedValue({
       orgId: 'org-1',
       role: 'admin',
-      isOwner: true,
       permissions: {},
       orgWide: true,
       hostRole: 'admin',

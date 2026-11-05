@@ -91,8 +91,10 @@ describe('resolveOrgPermissions — org-wide members', () => {
     members.set('org-1:owner', { role: 'owner', allHosts: true })
     const resolved = await resolveOrgPermissions('owner', { orgId: 'org-1' })
     expect(resolved.orgWide).toBe(true)
-    expect(resolved.isOwner).toBe(true)
     expect(resolved.permissions.manageMembers).toBe(true)
+    // The answer carries the role and the keys, never a flag derived from
+    // the role name: what an owner may do is read from `permissions`.
+    expect(resolved).not.toHaveProperty('isOwner')
   })
 
   it('treats an admin as org-wide even without the allHosts flag', async () => {
@@ -141,7 +143,6 @@ describe('resolveOrgPermissions — site collaborators (AGL-1026)', () => {
     // ...and never manage the org itself.
     expect(onTheirSite.permissions.manageMembers).toBe(false)
     expect(onTheirSite.permissions.editBilling).toBe(false)
-    expect(onTheirSite.isOwner).toBe(false)
   })
 
   it('denies a scoped member on a site they were not given', async () => {
@@ -186,10 +187,11 @@ describe('resolveOrgPermissions — site collaborators (AGL-1026)', () => {
     expect(resolved.hostRole).toBe('admin')
     expect(resolved.permissions.editHosts).toBe(true)
     expect(resolved.permissions.installPlugins).toBe(true)
-    // `isOwner` drives account-level control and stays false: admin of one
-    // site is not admin of the workspace.
-    expect(resolved.isOwner).toBe(false)
+    // Admin of one site is not admin of the workspace: the org-level keys
+    // stay off and the reach stays the site's.
+    expect(resolved.orgWide).toBe(false)
     expect(resolved.permissions.editBilling).toBe(false)
+    expect(resolved.permissions.manageMembers).toBe(false)
   })
 })
 
@@ -205,7 +207,6 @@ describe('resolveOrgPermissions — non-members and failures', () => {
     hostOrg = null
     const resolved = await resolveOrgPermissions('newcomer')
     expect(resolved.orgId).toBeNull()
-    expect(resolved.isOwner).toBe(true)
     expect(resolved.orgWide).toBe(true)
     expect(resolved.permissions.manageMembers).toBe(true)
   })
@@ -213,7 +214,7 @@ describe('resolveOrgPermissions — non-members and failures', () => {
   it('fails CLOSED when a lookup throws and an org was targeted', async () => {
     membershipThrows = true
     const resolved = await resolveOrgPermissions('someone', { orgId: 'org-1' })
-    expect(resolved.isOwner).toBe(false)
+    expect(resolved.orgWide).toBe(false)
     expect(resolved.permissions.publishToMarketplace).toBe(false)
     expect(resolved.permissions.manageMembers).toBe(false)
   })
@@ -227,14 +228,14 @@ describe('resolveOrgPermissions — non-members and failures', () => {
     const resolved = await resolveOrgPermissions('someone', {
       orgId: undefined,
     })
-    expect(resolved.isOwner).toBe(false)
+    expect(resolved.orgWide).toBe(false)
     expect(resolved.permissions.publishToMarketplace).toBe(false)
   })
 
   it('fails CLOSED for an empty-string org id too', async () => {
     membershipThrows = true
     const resolved = await resolveOrgPermissions('someone', { orgId: '' })
-    expect(resolved.isOwner).toBe(false)
+    expect(resolved.orgWide).toBe(false)
     expect(resolved.permissions.publishToMarketplace).toBe(false)
   })
 
@@ -243,7 +244,7 @@ describe('resolveOrgPermissions — non-members and failures', () => {
     // above and lock every brand-new account out of creating its first org.
     membershipThrows = true
     const resolved = await resolveOrgPermissions('newcomer')
-    expect(resolved.isOwner).toBe(true)
+    expect(resolved.orgWide).toBe(true)
     expect(resolved.permissions.manageMembers).toBe(true)
   })
 })

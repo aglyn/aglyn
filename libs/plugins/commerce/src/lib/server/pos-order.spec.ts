@@ -215,7 +215,6 @@ const mockVerifyIdToken = jest.fn(async () => ({ uid: 'cashier-1' }))
 const mockResolveOrgPermissions = jest.fn(async () => ({
   orgId: 'org-1',
   role: 'admin',
-  isOwner: true,
   permissions: { managePos: true } as Record<string, boolean>,
   orgWide: true,
   hostRole: 'admin',
@@ -432,7 +431,6 @@ beforeEach(() => {
     return {
       orgId: 'org-1',
       role: 'admin',
-      isOwner: onSite,
       permissions: { managePos: onSite },
       orgWide: onSite,
       hostRole: onSite ? 'admin' : null,
@@ -2276,7 +2274,6 @@ describe('the managePos permission gates the register (AGL-2474)', () => {
     mockResolveOrgPermissions.mockResolvedValue({
       orgId: 'org-1',
       role: 'admin',
-      isOwner: true,
       permissions: { managePos: false },
       orgWide: true,
       hostRole: 'admin',
@@ -2302,7 +2299,6 @@ describe('the managePos permission gates the register (AGL-2474)', () => {
       mockResolveOrgPermissions.mockResolvedValue({
         orgId: 'org-1',
         role: 'admin',
-        isOwner: true,
         permissions,
         orgWide: true,
         hostRole: 'admin',
@@ -2350,7 +2346,6 @@ describe('who may ring a sale (AGL-2262, AGL-4047)', () => {
     mockResolveOrgPermissions.mockResolvedValue({
       orgId: 'org-1',
       role: 'editor',
-      isOwner: false,
       permissions: { managePos: role ? (granted ?? TIER_DEFAULT[role] === true) : false },
       orgWide: Boolean(role),
       hostRole: role ?? null,
@@ -2832,7 +2827,6 @@ describe('a self-service kiosk opens a sale as the staff member who paired it (A
     mockResolveOrgPermissions.mockResolvedValue({
       orgId: 'org-1',
       role: 'editor',
-      isOwner: false,
       permissions: { managePos: false },
       orgWide: false,
       hostRole: 'editor',

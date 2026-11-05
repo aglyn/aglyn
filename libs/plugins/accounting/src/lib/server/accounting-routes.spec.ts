@@ -98,7 +98,6 @@ function setup(
       resolveOrgPermissions: async () => ({
         orgId: 'org-1',
         role: 'owner',
-        isOwner: true,
         orgWide: true,
         permissions: options.permissions ?? { 'accounting.manage': true },
       }),

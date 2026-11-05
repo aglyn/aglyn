@@ -44,8 +44,6 @@ export interface ResolvedOrgPermissions {
   /** Org the permissions were resolved in (null before the first org). */
   orgId: string | null
   role: OrgRole | null
-  /** Owner/admin of the org — full account-level control. */
-  isOwner: boolean
   /**
    * Widened past the legacy six (AGL-2474) so a route can read a
    * plugin-declared key such as `permissions.managePos` without a cast.
@@ -136,7 +134,6 @@ const ORG_LEVEL_PERMISSIONS = [
 const denied = (): ResolvedOrgPermissions => ({
   orgId: null,
   role: null,
-  isOwner: false,
   permissions: none(),
   orgWide: false,
   hostRole: null,
@@ -169,7 +166,6 @@ export async function resolveOrgPermissions(
         : {
             orgId: null,
             role: null,
-            isOwner: true,
             permissions: allTrue(),
             orgWide: true,
             hostRole: null,
@@ -195,7 +191,6 @@ export async function resolveOrgPermissions(
       return {
         orgId: membership.orgId,
         role,
-        isOwner: false,
         // With no host in context there is nothing to scope to, so a scoped
         // member gets the floor rather than their site role — the caller is
         // asking an org-wide question they have no standing to answer.
@@ -254,7 +249,6 @@ export async function resolveOrgPermissions(
     return {
       orgId: membership.orgId,
       role,
-      isOwner: role === 'owner' || role === 'admin',
       // Refined LAST (AGL-4047): the catalog resolved each refining key with
       // every layer, and the override spread below lays stored values back,
       // so the pass only holds each such key to the key it refines.
@@ -296,7 +290,6 @@ export async function resolveOrgPermissions(
     return {
       orgId: null,
       role: null,
-      isOwner: true,
       permissions: allTrue(),
       orgWide: true,
       hostRole: null,
