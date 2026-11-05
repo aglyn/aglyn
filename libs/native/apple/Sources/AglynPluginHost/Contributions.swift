@@ -137,6 +137,12 @@ public struct NativePluginContext {
     return memberPermissions(ContractValues.shared.orgRoleGrants, member: nil, orgRole: orgRole)[key] == true
   }
 
+  /// Whether the person holds a catalog key across the workspace, whichever site this context stands on.
+  @MainActor public func canInWorkspace(_ key: String) -> Bool {
+    if let permissionAction { return permissionAction(key, nil) }
+    return memberPermissions(ContractValues.shared.orgRoleGrants, member: nil, orgRole: orgRole)[key] == true
+  }
+
   /// The words a refusal shows for a key: the permission's name, never a role.
   public func refusal(_ key: String) -> String { permissionRefusalText(ContractValues.shared.orgRoleGrants, key: key) }
 

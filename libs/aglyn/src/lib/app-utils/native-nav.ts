@@ -713,8 +713,8 @@ export function assembleNativeNav(
 
 /** What a Create new item that cannot be used says, when its own reason does not apply. */
 export const NATIVE_CREATE_PERMISSION_REASON =
-  "Your role can't create this here. Ask an owner or admin of the workspace."
-export const NATIVE_CREATE_SITE_ROLE_REASON = "Your role on this site can't create this. Ask a site admin."
+  'Your role does not include this permission — ask an organization admin.'
+export const NATIVE_CREATE_SITE_ROLE_REASON = 'Your access to this site does not include this — ask an organization admin.'
 export const NATIVE_CREATE_PLAN_REASON = "Your plan doesn't include this. See the plans in Billing."
 
 /** A Create new item as one scope offers it. */

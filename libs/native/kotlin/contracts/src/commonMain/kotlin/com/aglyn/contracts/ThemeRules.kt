@@ -280,7 +280,7 @@ fun permissionEditorRows(catalog: OrgRoleGrants, enabledPlugins: List<String>?, 
 }
 
 /** What a refusal says when a member lacks a key (`permissionRefusalText`): it names the permission, never a role. */
-fun permissionRefusalText(key: String): String {
-  val label = Contracts.orgRoleGrants.permissions.firstOrNull { it.key == key }?.label ?: key
-  return "Your role does not include \"$label\" — ask an organization admin"
-}
+fun permissionRefusalText(key: String): String = "Your role does not include \"${orgPermissionLabel(key)}\" — ask an organization admin"
+
+/** A permission's name in the catalog (`orgPermissionLabel`), or the key when the catalog has none. */
+fun orgPermissionLabel(key: String): String = Contracts.orgRoleGrants.permissions.firstOrNull { it.key == key }?.label ?: key
