@@ -23,7 +23,6 @@ import { CrmGlanceCard } from './components/crm-glance-card'
 import { BUNDLE_ID } from './constants/bundle-common'
 import { registerCrmTransferResourceUis } from './transfer/ui'
 import { withCrmOrgMount } from './hooks/use-crm-org-mount'
-import { CRM_PERMISSIONS } from './model/crm-permissions'
 import { registerCrmRecordCounts } from './model/crm-record-counts'
 import { registerCrmRecordRoutes } from './model/crm-record-routes'
 import { registerCrmRecordLists } from './model/crm-record-lists'
@@ -78,9 +77,6 @@ const CRM_GLANCE_LOCKED_PREVIEW = {
  * address is a URL, not a stored id, and the nav item keeps redirecting it.
  */
 export function registerCrmConsole(): void {
-  // "Change CRM settings" (AGL-4047), registered here as well as in the
-  // declarations, so the settings cards resolve it before they first render.
-  Aglyn.registerPluginPermissions(CRM_PERMISSIONS)
   // How the Import & export hub names email templates in a workspace package (AGL-3535).
   registerPluginTransferResourceUi('crm.email-templates', { label: 'Email templates' }, { pluginId: BUNDLE_ID })
   registerCrmRecordRoutes()
