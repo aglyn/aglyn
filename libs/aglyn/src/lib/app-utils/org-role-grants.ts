@@ -293,7 +293,7 @@ export const CORE_ORG_PERMISSION_ENTRIES: readonly OrgPermissionEntry[] = [
     key: 'data.manage',
     group: 'datasets',
     label: 'Manage data',
-    description: 'Create, edit, and delete organization datasets, the CRM’s records, and marketing lists and topics.',
+    description: 'Create and edit organization datasets, add, change and delete their rows, and manage the CRM’s records and marketing lists and topics.',
   },
   // Workspace content that asked for the owner, admin or editor role
   // (AGL-4047), each a key whose default is exactly those roles.
@@ -307,7 +307,7 @@ export const CORE_ORG_PERMISSION_ENTRIES: readonly OrgPermissionEntry[] = [
     key: 'org.eraseRecords',
     group: 'datasets',
     label: 'Delete workspace records',
-    description: 'Delete records the whole workspace shares, such as dataset rows, contacts and lists.',
+    description: 'Delete a whole dataset or list the workspace shares, with everything in it. Deleting one row of a dataset asks “Manage data”.',
   },
   {
     key: 'marketplace.publish',
