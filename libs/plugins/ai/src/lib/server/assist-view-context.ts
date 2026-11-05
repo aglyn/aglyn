@@ -686,15 +686,15 @@ export const ASSIST_VIEWS: readonly AssistView[] = [
   {
     key: 'org-data',
     match: /^\/[^/]+\/data(\/|$)/,
-    screen: 'Data — datasets shared across the whole workspace.',
+    screen: 'Data — datasets shared across the workspace.',
     plain: [
-      'Structured lists defined once here can be used by any site in the workspace.',
+      'Structured lists defined once here can be used by the sites they are shared with: all sites, the sites you choose, or all sites except the ones you leave out.',
       'If a list only belongs to one site, define it on that site’s own Data page instead.',
       'Define the fields before building the page that displays them — pages bind to fields that already exist.',
     ],
     technical: [
       'Route: /[orgSlug]/data. The per-site view is /[orgSlug]/hosts/[host]/data.',
-      'Workspace datasets are visible to every site in the workspace, so a field change here reaches all of them.',
+      'A field change here reaches every site the dataset is shared with. Shared with all sites except some, it reaches a new site automatically.',
     ],
     actions: [
       orgAction(

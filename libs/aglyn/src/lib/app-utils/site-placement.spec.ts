@@ -32,6 +32,8 @@ import {
 
 const PRESET = { admin: true, editor: true, author: false, viewer: false } as const
 const member = (shape: Record<string, unknown>) => shape as Partial<AglynOrgMember>
+/** Shared with all sites except b, and a is the only site left that it reaches. */
+const DOWN_TO_ONE = { visibleTo: ['host:a'], scopeMode: 'allExcept', scopeExcept: ['host:b'] }
 
 describe('oneSitePlacement', () => {
   it.each([
@@ -45,7 +47,23 @@ describe('oneSitePlacement', () => {
     ['host:a', null],
     [[1], null],
   ])('%j → %j', (visibleTo, site) => {
-    expect(oneSitePlacement(visibleTo)).toBe(site)
+    expect(oneSitePlacement({ visibleTo })).toBe(site)
+  })
+
+  it('answers nothing for a document shared with all sites except some, however few it reaches', () => {
+    expect(oneSitePlacement(DOWN_TO_ONE)).toBeNull()
+  })
+
+  it('reads either key present as marked, as the rule does, so damage fails closed', () => {
+    expect(oneSitePlacement({ visibleTo: ['host:a'], scopeMode: null })).toBeNull()
+    expect(oneSitePlacement({ visibleTo: ['host:a'], scopeExcept: null })).toBeNull()
+    expect(oneSitePlacement({ visibleTo: ['host:a'], scopeMode: 'allExcept' })).toBeNull()
+    expect(oneSitePlacement({ visibleTo: ['host:a'], scopeExcept: ['host:b'] })).toBeNull()
+  })
+
+  it('answers nothing for no document at all', () => {
+    expect(oneSitePlacement(undefined)).toBeNull()
+    expect(oneSitePlacement(null)).toBeNull()
   })
 })
 
@@ -56,25 +74,31 @@ describe('placementVerdict', () => {
   const narrowed = member({ role: 'editor', allHosts: true, hostAccess: { a: 'viewer' } })
 
   it('asks the workspace key alone on every site or several, and never the site', () => {
-    expect(placementVerdict({ member: editor, visibleTo: ['org'], workspace: true, site })).toBe(true)
-    expect(placementVerdict({ member: editor, visibleTo: ['host:a', 'host:b'], workspace: false, site })).toBe(false)
+    expect(placementVerdict({ member: editor, placed: { visibleTo: ['org'] }, workspace: true, site })).toBe(true)
+    expect(placementVerdict({ member: editor, placed: { visibleTo: ['host:a', 'host:b'] }, workspace: false, site })).toBe(false)
     expect(site).not.toHaveBeenCalled()
   })
 
   it('reads no site for a holder the site does not narrow', () => {
-    expect(placementVerdict({ member: editor, visibleTo: ['host:a'], workspace: true, site })).toBe(true)
+    expect(placementVerdict({ member: editor, placed: { visibleTo: ['host:a'] }, workspace: true, site })).toBe(true)
     expect(site).not.toHaveBeenCalled()
   })
 
   it('asks the site for a holder it narrows, and for a member without the key', () => {
-    expect(placementVerdict({ member: narrowed, visibleTo: ['host:a'], workspace: true, site })).toBe(true)
-    expect(placementVerdict({ member: member({ role: 'viewer' }), visibleTo: ['host:a'], workspace: false, site })).toBe(true)
+    expect(placementVerdict({ member: narrowed, placed: { visibleTo: ['host:a'] }, workspace: true, site })).toBe(true)
+    expect(placementVerdict({ member: member({ role: 'viewer' }), placed: { visibleTo: ['host:a'] }, workspace: false, site })).toBe(true)
     expect(site).toHaveBeenCalledTimes(2)
     expect(site).toHaveBeenLastCalledWith('a')
   })
 
+  it('never asks the site about a marked document: a holder keeps it, a site Admin doesn’t gain it', () => {
+    expect(placementVerdict({ member: narrowed, placed: DOWN_TO_ONE, workspace: true, site })).toBe(true)
+    expect(placementVerdict({ member: member({ role: 'viewer' }), placed: DOWN_TO_ONE, workspace: false, site })).toBe(false)
+    expect(site).not.toHaveBeenCalled()
+  })
+
   it('a site that narrows them elsewhere is no concern here', () => {
-    expect(placementVerdict({ member: narrowed, visibleTo: ['host:b'], workspace: true, site })).toBe(true)
+    expect(placementVerdict({ member: narrowed, placed: { visibleTo: ['host:b'] }, workspace: true, site })).toBe(true)
     expect(site).not.toHaveBeenCalled()
   })
 })
@@ -105,14 +129,19 @@ describe('deleteBeyondReach', () => {
   const whole = member({ role: 'editor', allHosts: true })
 
   it('holds a member who reaches only some sites to one site', () => {
-    expect(deleteBeyondReach(siteOnly, ['org'])).toBe(true)
-    expect(deleteBeyondReach(siteOnly, ['host:a', 'host:b'])).toBe(true)
+    expect(deleteBeyondReach(siteOnly, { visibleTo: ['org'] })).toBe(true)
+    expect(deleteBeyondReach(siteOnly, { visibleTo: ['host:a', 'host:b'] })).toBe(true)
     expect(deleteBeyondReach(siteOnly, undefined)).toBe(true)
-    expect(deleteBeyondReach(siteOnly, ['host:a'])).toBe(false)
+    expect(deleteBeyondReach(siteOnly, { visibleTo: ['host:a'] })).toBe(false)
+  })
+
+  it('counts a marked document as shared beyond one site, though it names only theirs', () => {
+    expect(deleteBeyondReach(siteOnly, DOWN_TO_ONE)).toBe(true)
   })
 
   it('leaves a member of the whole workspace alone', () => {
-    expect(deleteBeyondReach(whole, ['org'])).toBe(false)
+    expect(deleteBeyondReach(whole, { visibleTo: ['org'] })).toBe(false)
+    expect(deleteBeyondReach(whole, DOWN_TO_ONE)).toBe(false)
   })
 
   it('names the reach it takes, in the kind’s own word', () => {

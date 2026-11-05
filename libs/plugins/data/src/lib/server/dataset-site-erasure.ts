@@ -17,7 +17,7 @@
 
 import type { Firestore, QueryDocumentSnapshot } from 'firebase-admin/firestore'
 import { FieldValue } from 'firebase-admin/firestore'
-import { hostScopeToken } from '@aglyn/aglyn/app-utils/scope-tokens'
+import { hostScopeToken, isSiteOnlyScope } from '@aglyn/aglyn/app-utils/scope-tokens'
 import type {
   PluginSiteResourceGoing,
   PluginSiteResourcePreview,
@@ -38,6 +38,8 @@ import { firebaseAdmin } from '@aglyn/tenant-data-admin'
  *   admits exactly this case);
  * - shared with this site and others, it stays, and this site comes off its
  *   sharing so it names no site that is gone;
+ * - shared with all sites except some, it stays even when this site is the last
+ *   it reaches: it is the workspace's, and the next new site joins it;
  * - shared with every site (`['org']`), it does not name the site and is not
  *   read.
  *
@@ -45,16 +47,6 @@ import { firebaseAdmin } from '@aglyn/tenant-data-admin'
  * (`plugin-site-resources.ts`): the delete asks, the Delete site card shows
  * the preview first.
  */
-
-/** Whether a dataset's sharing names this site and nothing else. */
-export function datasetIsSiteOnly(visibleTo: unknown, hostId: string): boolean {
-  const token = hostScopeToken(hostId)
-  return (
-    Array.isArray(visibleTo) &&
-    visibleTo.length > 0 &&
-    visibleTo.every((entry) => entry === token)
-  )
-}
 
 export interface DatasetSiteErasureDeps {
   /** The Admin SDK handle; specs hand in a double. */
@@ -74,8 +66,9 @@ async function siteDatasets(
     .collection('datasets')
     .where('visibleTo', 'array-contains', hostScopeToken(request.hostId))
     .get()
-  const only = rows.docs.filter((doc) => datasetIsSiteOnly(doc.get('visibleTo'), request.hostId))
-  const shared = rows.docs.filter((doc) => !datasetIsSiteOnly(doc.get('visibleTo'), request.hostId))
+  const siteOnly = (doc: QueryDocumentSnapshot) => isSiteOnlyScope(doc.data(), request.hostId)
+  const only = rows.docs.filter(siteOnly)
+  const shared = rows.docs.filter((doc) => !siteOnly(doc))
   return { only, shared }
 }
 

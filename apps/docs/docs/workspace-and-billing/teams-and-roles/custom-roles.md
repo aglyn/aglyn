@@ -156,8 +156,9 @@ records**, or **Delete this site's datasets** on that site. So:
   override doesn't get them back from their site role. Those decisions stand.
 
 A dataset shared with every site or with several answers to **Manage data** and **Delete
-workspace records** alone, because no one site speaks for it. That has two consequences
-worth knowing:
+workspace records** alone, because no one site speaks for it. So does one shared with all
+sites except some, however few sites it reaches today: it belongs to the workspace, and the
+next new site joins it. That has two consequences worth knowing:
 
 - A member who reaches only some sites can't delete a dataset shared with every site or with
   several, whatever they hold. It takes access to every site.

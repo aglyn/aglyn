@@ -163,7 +163,9 @@ private struct RecordsBody: View {
     _model = State(initialValue: RecordsModel(dataset: dataset))
   }
 
-  private var canWrite: Bool { context.can("data.manage") }
+  @State private var placement = DatasetPlacement()
+  private var verdict: DatasetAccess { placement.access(context, visibleTo: dataset.visibleTo) }
+  private var canWrite: Bool { verdict.canWrite }
   private var noun: String { dataset.singular.trimmingCharacters(in: .whitespaces).isEmpty ? "record" : dataset.singular.lowercased() }
   private var api: DataAPI { DataAPI(api: context.api, writer: context.writer, orgID: orgID) }
 
@@ -177,7 +179,10 @@ private struct RecordsBody: View {
 
   var body: some View {
     WideLayoutReader { wide in
-      if wide {
+      if !verdict.canRead {
+        AglynEmptyState(
+          dataset.name, systemImage: "lock", message: context.refusal("data.viewRecords"))
+      } else if wide {
         AglynListDetailColumns(listWidth: 360) {
           list(selectable: true)
         } detail: {
@@ -204,7 +209,7 @@ private struct RecordsBody: View {
       AglynSecondaryActions {
         Button {
           guard canWrite else {
-            runner.error = context.refusal("data.manage")
+            runner.error = verdict.writeRefusal
             return
           }
           context.navigate(dataImportScreen, datasetImportParams(id: dataset.id, name: dataset.name))
@@ -213,6 +218,10 @@ private struct RecordsBody: View {
         }
         .accessibilityIdentifier("import-records")
         Button {
+          guard verdict.canExport else {
+            runner.error = context.refusal("data.export")
+            return
+          }
           exportRecords()
         } label: {
           Label("Export records", systemImage: "square.and.arrow.down")
@@ -236,6 +245,7 @@ private struct RecordsBody: View {
         if let message { runner.notice = message }
       }
     }
+    .task(id: dataset.visibleTo) { placement.start(context, visibleTo: dataset.visibleTo) }
     .task(id: dataset.model) {
       model.use(dataset)
       model.start(context.firestore, orgID: orgID)

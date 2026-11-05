@@ -18,11 +18,11 @@
 import type { AglynOrgMember } from '@aglyn/aglyn/server'
 import {
   describeScope,
-  hostScopeToken,
   isOrgWideScope,
   memberCanSee,
 } from '@aglyn/aglyn/server'
-import { deleteBeyondReach, deleteBeyondReachRefusal } from '@aglyn/aglyn/app-utils/site-placement'
+import { isSiteOnlyScope, scopeSharingOf } from '@aglyn/aglyn/app-utils/scope-tokens'
+import { deleteBeyondReach, deleteBeyondReachRefusal, type ScopePlaced } from '@aglyn/aglyn/app-utils/site-placement'
 
 /**
  * Whether a caller may recursively delete an org-scoped resource, and
@@ -34,8 +34,12 @@ import { deleteBeyondReach, deleteBeyondReachRefusal } from '@aglyn/aglyn/app-ut
  * (`feedback_verify_control_is_wired`). Pure — the route does the reads.
  */
 export interface EraseScopeInput {
-  /** The target's `visibleTo`; undefined means the legacy org-wide case. */
-  visibleTo: readonly string[] | undefined
+  /**
+   * The target document, or the part of it that places it: `visibleTo`, and
+   * the marker of a resource shared with all sites except some. A missing
+   * `visibleTo` means the legacy org-wide case.
+   */
+  target: (ScopePlaced & { visibleTo?: readonly string[] }) | undefined
   /** The caller's org member doc. */
   member: Partial<AglynOrgMember> | undefined
   /** Site the delete was issued from, if any. A hint, not a credential. */
@@ -82,8 +86,9 @@ export interface EraseScopeDenial {
 export function eraseScopeDenial(
   input: EraseScopeInput,
 ): EraseScopeDenial | null {
-  const { visibleTo, member, fromHostId, label, exists, protectsShared } = input
+  const { target, member, fromHostId, label, exists, protectsShared } = input
   if (!exists) return null
+  const visibleTo = target?.visibleTo
 
   // 404, not 403: a scoped collaborator learning that a resource EXISTS is
   // the leak this project closes (feedback_role_gate_admits_site_collaborators).
@@ -91,16 +96,22 @@ export function eraseScopeDenial(
     return { error: `${label} not found`, status: 404 }
   }
 
-  if (protectsShared && deleteBeyondReach(member, visibleTo)) {
+  if (protectsShared && deleteBeyondReach(member, target)) {
     return { error: deleteBeyondReachRefusal(label), status: 403 }
   }
 
   if (!fromHostId) return null
-  const thisSiteOnly =
-    visibleTo?.length === 1 && visibleTo[0] === hostScopeToken(fromHostId)
-  if (thisSiteOnly) return null
+  // Never true of a resource shared with all sites except some, even one down to
+  // this site alone: it is the workspace's, and the next new site joins it.
+  if (isSiteOnlyScope(target, fromHostId)) return null
 
   const noun = label.toLowerCase()
+  if (scopeSharingOf(target).mode === 'allExcept') {
+    return {
+      status: 409,
+      error: `This ${noun} is shared with all sites except some, so it belongs to the workspace. Delete it from the workspace Data page, or leave this site out of its sharing.`,
+    }
+  }
   return {
     status: 409,
     error: isOrgWideScope(visibleTo)

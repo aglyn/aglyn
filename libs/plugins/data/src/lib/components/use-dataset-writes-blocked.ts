@@ -29,6 +29,7 @@ import {
   oneSitePlacement,
   placementVerdict,
   resolvedPlacementKey,
+  type ScopePlaced,
 } from '@aglyn/aglyn/app-utils/site-placement'
 import type { AglynOrgMember } from '@aglyn/aglyn/foundation/definitions/organization.types'
 import type {
@@ -112,31 +113,31 @@ const NOTHING_BLOCKED: DatasetAccessBlocked = {
 }
 
 /**
- * The verdict for a member and a dataset placed at `visibleTo`, as the rule's
+ * The verdict for a member and a dataset, as its document places it, as the rule's
  * `canWriteDatasetOn` and the routes' `memberMayActOnDataset` give it, resolved
  * from what the site's stamp is written from. `customRole` is the member's custom
  * role when they carry one and it was read.
  */
 export function datasetAccessBlocked(
   member: DatasetWriter,
-  visibleTo: unknown,
+  placed: ScopePlaced | null | undefined,
   customRole?: AglynOrgCustomRole | null,
 ): DatasetAccessBlocked {
   const seat = member as Partial<AglynOrgMember>
-  const site = oneSitePlacement(visibleTo)
+  const site = oneSitePlacement(placed)
   const writes = placementVerdict<boolean>({
     member: seat,
-    visibleTo,
+    placed,
     workspace: holdsDatasetPermission(member, DATA_MANAGE_PERMISSION),
     site: (hostId) => resolvedPlacementKey(seat, hostId, DATA_SITE_MANAGE_PERMISSION, customRole),
   })
   const deletes = placementVerdict<boolean>({
     member: seat,
-    visibleTo,
+    placed,
     workspace: holdsDatasetPermission(member, DATA_ERASE_PERMISSION),
     site: (hostId) => resolvedPlacementKey(seat, hostId, DATA_SITE_DELETE_PERMISSION, customRole),
   })
-  const beyond = deleteBeyondReach(seat, visibleTo)
+  const beyond = deleteBeyondReach(seat, placed)
   const holdsManage = holdsDatasetPermission(member, DATA_MANAGE_PERMISSION)
   return {
     known: true,
@@ -162,7 +163,7 @@ export function datasetAccessBlocked(
 export function datasetInstanceImportAccess(subject: TransferInstanceImportSubject): TransferInstanceImportAnswer {
   const blocked = datasetAccessBlocked(
     subject.member as DatasetWriter,
-    subject.record.facts?.['visibleTo'],
+    subject.record.facts,
     subject.customRole as AglynOrgCustomRole | null,
   )
   return { allowed: !blocked.writes, reason: blocked.writesReason }
@@ -170,7 +171,7 @@ export function datasetInstanceImportAccess(subject: TransferInstanceImportSubje
 
 /**
  * Which dataset controls switch off with the reason named rather than failing on
- * save, for the dataset placed at `visibleTo`. Nothing is blocked until the reads
+ * save, for this dataset, as its document places it. Nothing is blocked until the reads
  * land, nor for a reader with no membership, who is staff. Not a security
  * boundary: the rules and routes refuse regardless.
  *
@@ -179,7 +180,7 @@ export function datasetInstanceImportAccess(subject: TransferInstanceImportSubje
  */
 export function useDatasetWritesBlocked(
   orgId: string | null | undefined,
-  visibleTo?: unknown,
+  placed?: ScopePlaced | null,
 ): DatasetAccessBlocked {
   const firestore = useFirestore()
   const { data: user } = useUser()
@@ -189,7 +190,7 @@ export function useDatasetWritesBlocked(
     [firestore, orgId, uid],
   )
   const seat = (status === 'success' ? member : null) as (DatasetWriter & { roleId?: unknown }) | null | undefined
-  const site = oneSitePlacement(visibleTo)
+  const site = oneSitePlacement(placed)
   // Only someone the site decides: narrowed on it, or on a role wider or narrower here.
   const siteDecides =
     Boolean(seat && site) &&
@@ -201,5 +202,5 @@ export function useDatasetWritesBlocked(
     [firestore, orgId, roleId],
   )
   if (!seat || (roleId && role.status === 'loading')) return NOTHING_BLOCKED
-  return datasetAccessBlocked(seat, visibleTo, roleId && role.status === 'success' ? (role.data ?? null) : null)
+  return datasetAccessBlocked(seat, placed, roleId && role.status === 'success' ? (role.data ?? null) : null)
 }

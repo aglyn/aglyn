@@ -353,10 +353,19 @@ describe('readSiteInventory — what is listed', () => {
     docs.set(`orgs/${ORG}/datasets/ds-org`, { displayName: 'Coaches', fields: ['name'], visibleTo: ['org'] })
     docs.set(`orgs/${ORG}/datasets/ds-two`, { displayName: 'Classes', fields: ['name'], visibleTo: [`host:${HOST}`, 'host:host-2'] })
     docs.set(`orgs/${ORG}/datasets/ds-own`, { displayName: 'Menu', fields: ['name'], visibleTo: [`host:${HOST}`] })
+    // Shared with all sites except some, with this one the last it reaches: the workspace's (AGL-4047).
+    docs.set(`orgs/${ORG}/datasets/ds-rest`, {
+      displayName: 'Price list',
+      fields: ['name'],
+      visibleTo: [`host:${HOST}`],
+      scopeMode: 'allExcept',
+      scopeExcept: ['host:host-2'],
+    })
     const { datasets } = await readSiteInventory(ORG, HOST, { firestore })
     expect(datasets.map((row) => [row.id, row.siteOnly])).toEqual([
       ['ds-org', undefined],
       ['ds-own', true],
+      ['ds-rest', undefined],
       ['ds-two', undefined],
     ])
   })

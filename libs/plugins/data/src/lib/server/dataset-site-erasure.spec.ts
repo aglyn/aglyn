@@ -89,6 +89,7 @@ function collectionRef(path: string) {
         id: key.split('/').pop(),
         ref: docRef(key),
         get: (field: string) => store.get(key)?.[field],
+        data: () => store.get(key),
       }))
       return { docs, size: docs.length }
     },
@@ -105,7 +106,7 @@ const firestore = {
   },
 }
 
-import { datasetIsSiteOnly, eraseSiteDatasets, previewSiteDatasets } from './dataset-site-erasure'
+import { eraseSiteDatasets, previewSiteDatasets } from './dataset-site-erasure'
 
 const deps = { firestore: () => firestore as never }
 const REQUEST = { orgId: 'org-1', hostId: 'host-1' }
@@ -134,13 +135,20 @@ beforeEach(() => {
 afterEach(() => jest.restoreAllMocks())
 
 describe('a deleted site’s own datasets (AGL-4003)', () => {
-  it('reads a dataset as the site’s only when its sharing names that site alone', () => {
-    expect(datasetIsSiteOnly(['host:host-1'], 'host-1')).toBe(true)
-    expect(datasetIsSiteOnly(['host:host-1', 'host:host-1'], 'host-1')).toBe(true)
-    expect(datasetIsSiteOnly(['host:host-1', 'host:host-2'], 'host-1')).toBe(false)
-    expect(datasetIsSiteOnly(['org'], 'host-1')).toBe(false)
-    expect(datasetIsSiteOnly([], 'host-1')).toBe(false)
-    expect(datasetIsSiteOnly(undefined, 'host-1')).toBe(false)
+  it('keeps a dataset shared with all sites except some, even one this site is the last on', async () => {
+    const MARKED = 'orgs/org-1/datasets/marked'
+    store.set(MARKED, { displayName: 'Price list', visibleTo: ['host:host-1'], scopeMode: 'allExcept', scopeExcept: ['host:host-2'] })
+    store.set(`${MARKED}/records/r1`, { values: { name: 'Kept' } })
+
+    const preview = await previewSiteDatasets(REQUEST, deps)
+    expect(preview.going.map((row) => row.id)).not.toContain('marked')
+    expect(preview.staying).toBe(2)
+
+    await eraseSiteDatasets(REQUEST, deps)
+
+    expect(store.has(`${MARKED}/records/r1`)).toBe(true)
+    // The marker stays, so the next new site joins it. It reaches none until then.
+    expect(store.get(MARKED)).toMatchObject({ visibleTo: [], scopeMode: 'allExcept', scopeExcept: ['host:host-2'] })
   })
 
   it('erases the datasets shared with the site alone, with their records', async () => {

@@ -127,7 +127,8 @@ private fun SchemaEditor(context: NativePluginContext, orgId: String, dataset: D
   val scope = rememberCoroutineScope()
   val api = remember(orgId, context.api, context.writer) { DataApi(context.api, context.writer, orgId) }
   val runner = remember(dataset.id) { ActionRunner(scope) }
-  val canWrite = rememberMemberPermissions(context).can("data.manage")
+  val datasetVerdict = rememberDatasetAccess(context, orgId, dataset.visibleTo)
+  val canWrite = datasetVerdict.canWrite
   var model by remember(dataset.id) { mutableStateOf(dataset.model) }
   var singular by remember(dataset.id) { mutableStateOf(dataset.singular) }
   var plural by remember(dataset.id) { mutableStateOf(dataset.plural) }
@@ -153,8 +154,9 @@ private fun SchemaEditor(context: NativePluginContext, orgId: String, dataset: D
       runner.error = scopeWrite.second
       return
     }
-    runner.run("Schema saved.", onDone = { context.back() }) {
-      api.saveSchema(dataset, model, singular, plural, scopeWrite?.first)
+    runner.run(if (canWrite) "Schema saved." else "Sharing saved.", onDone = { context.back() }) {
+      // A site's narrowing takes the schema, not the sharing, and one write carrying both would be refused whole.
+      if (canWrite) api.saveSchema(dataset, model, singular, plural, scopeWrite?.first) else api.saveSharing(dataset, scopeWrite?.first.orEmpty())
     }
   }
 
@@ -166,7 +168,7 @@ private fun SchemaEditor(context: NativePluginContext, orgId: String, dataset: D
     if (dialog == null) {
       runner.error?.let { NoticeBanner(it, StatusTone.ERROR) }
     }
-    if (!canWrite) NoticeBanner("Changing a schema needs the editor role.", StatusTone.WARNING)
+    if (!canWrite) NoticeBanner(datasetVerdict.writeRefusal, StatusTone.WARNING)
     SectionCard("Names") {
       OutlinedTextField(singular, { singular = it }, label = { Text("Singular name") }, supportingText = { Text("e.g. Product") }, singleLine = true, modifier = Modifier.fillMaxWidth())
       OutlinedTextField(plural, { plural = it }, label = { Text("Plural name") }, supportingText = { Text("e.g. Products (shown as the title)") }, singleLine = true, modifier = Modifier.fillMaxWidth())
@@ -244,7 +246,7 @@ private fun SchemaEditor(context: NativePluginContext, orgId: String, dataset: D
             save()
           }
         },
-        enabled = canWrite && !runner.busy,
+        enabled = (canWrite || (datasetVerdict.sharingOnly && scopeChanged)) && !runner.busy,
         modifier = Modifier.testTag("schema-save"),
       ) { Text("Save schema") }
     }

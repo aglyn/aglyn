@@ -12,6 +12,8 @@ for the how-to.
 
 ## November 2026 — Aglyn 1.0 (newest)
 
+- **Share a dataset with all sites except some.** [Datasets](content-and-data/datasets/overview.md#who-a-dataset-is-shared-with)
+  — tick the sites to leave out, and every other site shares it, including any site you add later.
 - **Four plans: Free, Starter, Pro and Custom.** [Billing & plans](workspace-and-billing/billing-and-plans/overview.md#tiers--entitlements)
   — Pro is now the full platform: everything that was on Business, including the API
   and webhooks, A/B testing, multilingual sites, scheduled publishing, recurring billing,
