@@ -64,6 +64,22 @@ class OrderInvoiceTest {
   }
 
   @Test
+  fun anOfflineSaleSaysWhenAndWhatToCheck() {
+    assertNull(orderOfflineNotice(order()))
+    val base = """"saleKey":"k","soldAtMs":1793000000000,"syncedAtMs":1793000600000,"syncedBy":"u1""""
+    val quiet = orderOfflineNotice(order(""""offline":{"flags":[],$base}"""), "UTC")!!
+    assertFalse(quiet.needsCheck)
+    assertTrue(quiet.text.startsWith("Rung while the register was offline\nRung "))
+    val conflict = """{"applied":1,"name":"Mug","productId":"p","requested":3,"shortUnits":2}"""
+    val loud = orderOfflineNotice(order(""""offline":{"flags":["stock-short","late-sync"],"stockConflicts":[$conflict],$base}"""), "UTC")!!
+    assertTrue(loud.needsCheck)
+    val lines = loud.text.split("\n")
+    assertEquals("2 of 3× Mug not in stock", lines[2])
+    assertEquals(4, lines.size)
+    assertEquals(com.aglyn.contracts.Contracts.posOfflineFlagLabels["late-sync"], lines[3])
+  }
+
+  @Test
   fun theSmallPrintSaysWhereRepliesGo() {
     assertTrue(invoiceSendNote(true, "hi@example.test").endsWith("Replies go to hi@example.test."))
     assertTrue(invoiceSendNote(false, null).endsWith("Replies go to your email."))

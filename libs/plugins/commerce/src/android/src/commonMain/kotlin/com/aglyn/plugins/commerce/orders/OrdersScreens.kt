@@ -552,6 +552,13 @@ private fun OrderDetailContent(
       NoticeBanner(message, StatusTone.SUCCESS, action = { TextButton(onClick = { actions.done = null }) { Text("Dismiss") } })
     }
     if (actions.dialog == null) actions.error?.let { NoticeBanner(it, StatusTone.ERROR) }
+    orderOfflineNotice(order)?.let { offline ->
+      NoticeBanner(
+        offline.text,
+        if (offline.needsCheck) StatusTone.WARNING else StatusTone.INFO,
+        Modifier.fillMaxWidth().testTag("order-offline"),
+      )
+    }
     printing.problem?.let { NoticeBanner(it, StatusTone.ERROR) }
     RecordHeader(
       detail.label,
