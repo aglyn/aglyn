@@ -743,6 +743,15 @@
                   "initial": "{item.units}"
                 },
                 {
+                  "key": "capacity",
+                  "label": "Sleeps",
+                  "kind": "number",
+                  "integer": true,
+                  "min": 1,
+                  "help": "Guests per unit, for display",
+                  "initial": "{item.capacity}"
+                },
+                {
                   "key": "fewLeftAt",
                   "label": "Show “Only N left” at",
                   "kind": "number",
@@ -754,15 +763,6 @@
                   "mismatch": "A whole number from 0 to 500",
                   "when": "form.units > 1",
                   "initial": "{item.fewLeftAt}"
-                },
-                {
-                  "key": "capacity",
-                  "label": "Sleeps",
-                  "kind": "number",
-                  "integer": true,
-                  "min": 1,
-                  "help": "Guests per unit, for display",
-                  "initial": "{item.capacity}"
                 },
                 {
                   "key": "nightlyRateUsd",
@@ -867,6 +867,14 @@
                   "mismatch": "A whole number from 1 to 500"
                 },
                 {
+                  "key": "capacity",
+                  "label": "Sleeps",
+                  "kind": "number",
+                  "integer": true,
+                  "min": 1,
+                  "help": "Guests per unit, for display"
+                },
+                {
                   "key": "fewLeftAt",
                   "label": "Show “Only N left” at",
                   "kind": "number",
@@ -877,14 +885,6 @@
                   "help": "The booking widget says “Only 2 left” once this many or fewer are free on a night. 0 never shows it.",
                   "mismatch": "A whole number from 0 to 500",
                   "when": "form.units > 1"
-                },
-                {
-                  "key": "capacity",
-                  "label": "Sleeps",
-                  "kind": "number",
-                  "integer": true,
-                  "min": 1,
-                  "help": "Guests per unit, for display"
                 },
                 {
                   "key": "nightlyRateUsd",

@@ -472,7 +472,7 @@ describe('AGL-3761 · what the create would refuse is said first', () => {
     mockCan = false
     render(<CreateHostDialog open onClose={() => undefined} />)
     await flush()
-    expect(screen.getByText(/does not allow creating sites/)).toBeTruthy()
+    expect(screen.getByText(/Your role does not include "Create sites"/)).toBeTruthy()
     expect(screen.queryByTestId('start-zone')).toBeNull()
     expect(screen.queryByLabelText('Site name')).toBeNull()
   })

@@ -41,7 +41,7 @@ import { useOrgScope } from '../../../../../../hooks/use-org-scope'
  */
 const SettingsData: NextPageWithLayout<Record<string, never>> = () => {
   const [imported, setImported] = useState(0)
-  const permissions = useOrgPermissions()
+  const { can, loaded: permissionsLoaded } = useOrgPermissions()
   const { data: user } = useUser()
   const { currentOrg } = useOrgScope()
   return (
@@ -50,10 +50,10 @@ const SettingsData: NextPageWithLayout<Record<string, never>> = () => {
       <DataExportCard
         user={user as never}
         orgId={currentOrg?.$id}
-        held={!permissions.loaded}
-        refusal={permissions.loaded && !permissions.can('org.export') ? permissionRefusalText('org.export') : undefined}
+        held={!permissionsLoaded}
+        refusal={permissionsLoaded && !can('org.export') ? permissionRefusalText('org.export') : undefined}
       />
-      {permissions.loaded && permissions.can('data.manage') ? <OrgTransferHistoryCard refreshKey={imported} /> : null}
+      {permissionsLoaded && can('data.manage') ? <OrgTransferHistoryCard refreshKey={imported} /> : null}
     </Stack>
   )
 }

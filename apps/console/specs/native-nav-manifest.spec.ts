@@ -353,7 +353,11 @@ describe('every row opens something real', () => {
         'libs/native/kotlin/site/src/commonMain/kotlin/com/aglyn/site/setup/SetupScreens.kt',
         'libs/native/kotlin/site/src/commonMain/kotlin/com/aglyn/site/content/ContentScreens.kt',
         'libs/native/kotlin/site/src/commonMain/kotlin/com/aglyn/site/artifacts/Artifacts.kt',
-      ].flatMap((path) => [...read(path).matchAll(/"(site\.[a-z]+)"/g)].map((match) => match[1])),
+        // A declaration, as a constant or an artifact kind: `can("site.edit")` in these
+        // files is the permission key that names a gate, never a screen (AGL-4047).
+      ].flatMap((path) =>
+        [...read(path).matchAll(/(?:const val \w+_SCREEN = |^\s*[A-Z]+\()"(site\.[a-z]+)"/gm)].map((match) => match[1]),
+      ),
     )
     const apple = read('libs/native/apple/Sources/AglynSite/SitePlatform.swift')
     return { kotlin, apple }
@@ -393,6 +397,9 @@ describe('every row opens something real', () => {
   })
 
   it('the site platform screens are Apple’s too', () => {
+    // The reader finds the screens, and does not take a permission key for one.
+    expect([...siteScreens.kotlin]).toEqual(expect.arrayContaining(['site.sites', 'site.pages', 'site.components']))
+    expect(siteScreens.kotlin.has('site.edit')).toBe(false)
     for (const screen of siteScreens.kotlin) {
       if (screen === 'site.components' || screen === 'site.layouts' || screen === 'site.templates') continue
       expect([screen, siteScreens.apple.includes(`"${screen}"`)]).toEqual([screen, true])

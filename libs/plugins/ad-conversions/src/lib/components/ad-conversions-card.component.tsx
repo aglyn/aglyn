@@ -125,7 +125,12 @@ export function AdConversionsCard(props: AdConversionsCardProps) {
   if (state.loading || !state.setup) return null
   if (viewRefused) {
     return (
-      <CardDisplay header="Ad conversions" contentGutterX contentGutterY>
+      <CardDisplay
+        header="Ad conversions"
+        help={pluginDocsHelp('adConversions', { anchor: '#conversions-api' })}
+        contentGutterX
+        contentGutterY
+      >
         <Typography variant="body2" color="text.secondary">
           {permissionRefusalText('adConversions.view')}
         </Typography>

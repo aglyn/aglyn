@@ -136,7 +136,16 @@ export function MarketingPlatformsCard(props: MarketingPlatformsCardProps) {
 
   if (viewRefused) {
     return (
-      <CardDisplay header="Email platforms" subheader="Keep your own email platform in step with this site: who may be sent marketing, and who unsubscribed on either side." contentGutterX contentGutterY>
+      <CardDisplay
+        header="Email platforms"
+        subheader="Keep your own email platform in step with this site: who may be sent marketing, and who unsubscribed on either side."
+        help={help(
+          'Connect your own Mailchimp, Klaviyo, Omnisend or Attentive account, so contacts, unsubscribes and orders stay in step with this site.',
+          '#connect',
+        )}
+        contentGutterX
+        contentGutterY
+      >
         <Typography variant="body2" color="text.secondary">
           {permissionRefusalText('marketingPlatforms.view')}
         </Typography>

@@ -140,7 +140,12 @@ export function InventorySyncCard(props: InventorySyncCardProps) {
 
   if (viewRefused) {
     return (
-      <CardDisplay header="Inventory sync" contentGutterX contentGutterY>
+      <CardDisplay
+        header="Inventory sync"
+        help={help('Connect your own inventory system to keep stock, products and orders in step.', '#connect-a-system')}
+        contentGutterX
+        contentGutterY
+      >
         <Typography variant="body2" color="text.secondary">
           {permissionRefusalText('inventorySync.view')}
         </Typography>

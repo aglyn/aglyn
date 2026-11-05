@@ -18,7 +18,7 @@
  */
 
 /**
- * A 403 names the roles its guard actually admits.
+ * A 403 names what its guard actually asks.
  *
  * Twelve site-role doors refused with "Not a site admin" while admitting
  * editors as well, so the one thing a refused editor could read was a reason
@@ -26,10 +26,10 @@
  * costs more than a blank one: the reader believes the check, asks for the
  * role it names, and is refused again for reasons nobody has told them.
  *
- * The pairing is what this guard holds — not the wording. It reads the
- * condition immediately above each refusal and requires the two to agree in
- * both directions, so tightening a door to admin-only is red until the
- * message follows, exactly as widening one is.
+ * These doors now ask a permission key and refuse by naming it (AGL-4047), so
+ * the pairing is held on that shape: the key in the condition and the key in
+ * the refusal must be the same. The role-worded shape is held to staying gone,
+ * and its reader is proved on a fixture because the tree has none left to read.
  */
 
 import { existsSync, readdirSync, readFileSync } from 'fs'
@@ -90,8 +90,8 @@ interface Refusal {
  * comment describes a door without opening it, and a guard that counted prose
  * would report a contradiction that is not in the code.
  */
-function refusalsIn(path: string): Refusal[] {
-  const lines = readFileSync(path, 'utf8').split('\n')
+function refusalsIn(file: string, source: string): Refusal[] {
+  const lines = source.split('\n')
   const found: Refusal[] = []
   lines.forEach((line, index) => {
     const message = line.includes(ADMIN_OR_EDITOR)
@@ -102,7 +102,7 @@ function refusalsIn(path: string): Refusal[] {
     if (!message) return
     const condition = lines.slice(Math.max(0, index - 4), index).join('\n')
     found.push({
-      file: path.replace(`${REPO}/`, ''),
+      file,
       line: index + 1,
       message,
       admitsEditor: condition.includes(`'editor'`),
@@ -111,24 +111,77 @@ function refusalsIn(path: string): Refusal[] {
   return found
 }
 
-const refusals = repoRootFound
-  ? DOOR_DIRS.flatMap((dir) => sourcesUnder(join(REPO, dir))).flatMap(
-      refusalsIn,
-    )
-  : []
+interface KeyRefusal {
+  file: string
+  line: number
+  /** The argument of `siteKeyRefusal(…)`, as written. */
+  names: string
+  /** The key argument of each `holdsSiteKey(…)` in the condition, as written. */
+  asks: string[]
+}
 
-describe('a site-role 403 names the roles it admits', () => {
-  it('THE CONTROL: the sweep reads real directories and finds the shapes left', () => {
-    // A wrong repo depth, a moved directory or a renamed message would
+/**
+ * Each `siteKeyRefusal(…)` written at its door, with the key the door asks.
+ *
+ * Arguments compare as written, so a door asking a variable (`roleKey`) pairs
+ * with a refusal naming that variable. A refusal exported as a named constant
+ * sits apart from its doors and is not read here.
+ */
+function keyRefusalsIn(file: string, source: string): KeyRefusal[] {
+  const lines = source.split('\n')
+  const found: KeyRefusal[] = []
+  lines.forEach((line, index) => {
+    const names = /\bsiteKeyRefusal\(([^)]+)\)/.exec(line)?.[1]?.trim()
+    if (!names || /^\s*(export |import |\/\/|\*)/.test(line)) return
+    const condition = lines.slice(Math.max(0, index - 4), index + 1).join('\n')
+    found.push({
+      file,
+      line: index + 1,
+      names,
+      asks: [...condition.matchAll(/\bholdsSiteKey\([^,]+,[^,]+,\s*([^,)]+?)\s*\)/g)].map(
+        (match) => match[1],
+      ),
+    })
+  })
+  return found
+}
+
+const sources = repoRootFound
+  ? DOOR_DIRS.flatMap((dir) => sourcesUnder(join(REPO, dir))).map((path) => ({
+      file: path.replace(`${REPO}/`, ''),
+      source: readFileSync(path, 'utf8'),
+    }))
+  : []
+const refusals = sources.flatMap(({ file, source }) => refusalsIn(file, source))
+const keyRefusals = sources.flatMap(({ file, source }) => keyRefusalsIn(file, source))
+
+describe('a site door’s 403 names what it asks', () => {
+  it('THE CONTROL: the sweep reads real directories and finds the doors', () => {
+    // A wrong repo depth, a moved directory or a renamed helper would
     // otherwise let every assertion below pass by finding nothing to check.
     expect({ REPO, repoRootFound }).toEqual({ REPO, repoRootFound: true })
-    // Most of these doors now ask a key and refuse in its words (AGL-4047),
-    // so few role-worded refusals are left to pair; the ones that are still
-    // must agree with their conditions.
-    expect(refusals.length).toBeGreaterThan(0)
-    // The admin-or-editor doors all ask keys now (AGL-4047); the admin-only
-    // shape is what is left to pair.
-    expect(refusals.some((refusal) => !refusal.admitsEditor)).toBe(true)
+    expect(keyRefusals.length).toBeGreaterThan(15)
+    // And the readers tell a pair that agrees from one that does not.
+    expect(
+      keyRefusalsIn(
+        'fixture',
+        `if (!holdsSiteKey(host, uid, 'site.edit')) {\n  return { error: siteKeyRefusal('site.manage') }\n}`,
+      ),
+    ).toEqual([{ file: 'fixture', line: 2, names: `'site.manage'`, asks: [`'site.edit'`] }])
+    expect(
+      refusalsIn('fixture', `if (role !== 'admin' && role !== 'editor') {\n  throw new Error(${ADMIN_ONLY})\n}`),
+    ).toEqual([{ file: 'fixture', line: 2, message: ADMIN_ONLY, admitsEditor: true }])
+  })
+
+  it('a door refuses by the key it asks', () => {
+    const wrong = keyRefusals
+      .filter((refusal) => !refusal.asks.includes(refusal.names))
+      .map((refusal) => `${refusal.file}:${refusal.line} names ${refusal.names}, asks ${refusal.asks.join(', ') || 'nothing beside it'}`)
+    expect(wrong).toEqual([])
+  })
+
+  it('no door refuses in a role’s words any more', () => {
+    expect(refusals.map((refusal) => `${refusal.file}:${refusal.line}`)).toEqual([])
   })
 
   it('a door that admits editors says so', () => {

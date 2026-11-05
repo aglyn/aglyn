@@ -44,6 +44,9 @@ export const PLUGIN_DOCS_SECTION_EXCERPTS: {
   actionsBuilder: {
     '#create-an-action': 'Open the actions builder from Automation → Actions. That\'s it — no multi-step logic to manage.',
   },
+  adConversions: {
+    '#conversions-api': 'Site → Setup → Ad conversions. Each vendor has its own card there.',
+  },
   aglynAssist: {
     '#what-it-can-do': 'Answer how-to questions about building sites, publishing, domains, commerce, bookings, workflows, datasets, team roles, and billing.',
   },
@@ -433,6 +436,9 @@ export const PLUGIN_DOCS_SECTION_EXCERPTS: {
     '#site-plugins': 'A site can run fewer plugins than the workspace enables. Site Admin → Plugins lists the workspace-enabled plugins in two groups, Built in and Installed from the marketplace; turn a switch off and press Save site…',
     '#step-3-reviews': 'Ratings on a listing come only from people with a verified email whose organization actually installed it.',
     '#where-a-plugin-runs': 'The Where it runs card on a plugin\'s page answers which of your sites have it.',
+  },
+  inventorySync: {
+    '#connect-a-system': 'Connecting, changing or disconnecting a system takes Manage the inventory connection, which a site\'s admins hold by default (custom roles).',
   },
   inviteTeammates: {
     '#activity-log': 'The organization\'s Team page shows a Recent Activity log: what happened at organization level — renames, workspace URL changes, ownership transfers, members added/removed or re-roled, and invites sent, revoked, or…',

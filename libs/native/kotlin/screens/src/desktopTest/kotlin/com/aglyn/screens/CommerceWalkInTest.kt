@@ -206,8 +206,8 @@ class CommerceWalkInTest : SpecTestBase() {
       val sleeps = action.prompt.first { it.key == "capacity" }
       assertEquals("Sleeps", sleeps.label)
       assertEquals("Guests per unit, for display", sleeps.help)
-      // Units sit beside Sleeps, right after the name, as the console's dialog has them.
-      assertEquals(listOf("name", "units", "capacity"), action.prompt.take(3).map { it.key })
+      // Units sit beside Sleeps, right after the name, and "Only N left" follows, as the console's dialog has them.
+      assertEquals(listOf("name", "units", "capacity", "fewLeftAt"), action.prompt.take(4).map { it.key })
     }
     val item = """{"${'$'}id":"r1","name":"RV hookups","nightlyRateUsd":60,"units":12}"""
     val units = Regex("units=([0-9.]+)")

@@ -353,7 +353,7 @@ describe('every advertised org permission is enforced server-side (AGL-2444)', (
     expect([...CATALOG].sort()).toEqual(
       Object.keys(ENFORCED_AS).sort(),
     )
-    expect(CATALOG.length).toBe(96)
+    expect(CATALOG.length).toBe(97)
   })
 
   it('the search really searches — a key nobody uses finds nothing', () => {
