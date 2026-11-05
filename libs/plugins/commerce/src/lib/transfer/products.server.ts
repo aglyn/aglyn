@@ -49,6 +49,7 @@ import {
   productSearchFields,
   productStockFields,
   validateProduct,
+  variantMatrixProblem,
   type HostProduct,
   type SmartCollectionRules,
 } from '../model/commerce'
@@ -171,6 +172,9 @@ const PRODUCT_DOC_KEYS = [
   'taxExempt',
   'oversellPolicy',
   'lowStockThreshold',
+  'posQuickKey',
+  'checkIn',
+  'modifierGroups',
 ] as const
 
 /** The record keys an undo entry keeps: the product's writable fields and its variants. */
@@ -492,6 +496,11 @@ export async function applyProducts(
         const next = applyProductRow(current, changes, categoryIdsOf)
         const invalid = validateProduct(next)
         if (invalid) throw new RowRefusal('refusedValue', invalid)
+        // What the product editor's Save asks too, of the options as stored.
+        if (next.modifierGroups?.length && PRODUCT_FIELD.modifierGroups in changes.product) {
+          const matrix = variantMatrixProblem(next.options)
+          if (matrix) throw new RowRefusal('refusedValue', matrix)
+        }
         const patch: Record<string, unknown> = {}
         for (const key of PRODUCT_DOC_KEYS) {
           const value = (next as unknown as Record<string, unknown>)[key]
@@ -589,7 +598,11 @@ export async function revertProducts(
           }
           const variantId = key.slice('$variant:'.length)
           if (value === null) next = { ...next, variants: next.variants.filter((variant) => variant.id !== variantId) }
-          else next = applyProductRow(next, { variant: { id: variantId, isNew: false, values: value as Record<string, unknown> } }, categoryIdsOf)
+          else {
+            // A record holds a variant's own check-in only when it has one, so its absence here is a blank to put back.
+            const restored = { [PRODUCT_FIELD.variantCheckIn]: null, ...(value as Record<string, unknown>) }
+            next = applyProductRow(next, { variant: { id: variantId, isNew: false, values: restored } }, categoryIdsOf)
+          }
         }
         next = applyProductRow(next, { product: productValues }, categoryIdsOf)
         const patch: Record<string, unknown> = {}

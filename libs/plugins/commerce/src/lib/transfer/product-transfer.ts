@@ -45,12 +45,24 @@ import {
   productInventory,
   productPriceRange,
   validateProduct,
+  variantMatrixProblem,
   type HostProduct,
   type ProductOption,
   type ProductStatus,
   type ProductType,
   type ProductVariant,
 } from '../model/commerce'
+import {
+  addOnCellOf,
+  addOnVariantIds,
+  checkInCellOf,
+  checkInFromCell,
+  modifierGroupsFromAddOnCell,
+  readAddOnCell,
+  readCheckInCell,
+  writeAddOnCell,
+  writeCheckInCell,
+} from './product-register-cells'
 
 /*
  * PRODUCTS ON THE TRANSFER FRAMEWORK (AGL-3531).
@@ -82,6 +94,13 @@ import {
  * finds what it already wrote — the variant's, and for a new product the
  * whole document.
  *
+ * ## Add-ons, check-in and quick keys
+ *
+ * The register's settings travel as plain cells (`product-register-cells.ts`).
+ * A file without their columns never touches them, and an add-ons cell is
+ * asked the questions the product editor's Save asks: `validateProduct` and
+ * the 100-combination rule, `variantMatrixProblem`.
+ *
  * ## What a file never sets
  *
  * Option names already on a product (renaming one moves every variant, which
@@ -112,6 +131,9 @@ export const PRODUCT_FIELD = {
   taxExempt: 'taxExempt',
   oversellPolicy: 'oversellPolicy',
   lowStockThreshold: 'lowStockThreshold',
+  posQuickKey: 'posQuickKey',
+  checkIn: 'checkIn',
+  modifierGroups: 'modifierGroups',
   option1Value: 'option1Value',
   option2Value: 'option2Value',
   option3Value: 'option3Value',
@@ -122,6 +144,7 @@ export const PRODUCT_FIELD = {
   inventory: 'inventory',
   weightGrams: 'weightGrams',
   variantImage: 'variantImage',
+  variantCheckIn: 'variantCheckIn',
   priceFrom: 'priceFrom',
   totalInventory: 'totalInventory',
   soldOut: 'soldOut',
@@ -215,7 +238,17 @@ export const PRODUCT_LEVEL_FIELDS: readonly string[] = [
   F.taxExempt,
   F.oversellPolicy,
   F.lowStockThreshold,
+  F.posQuickKey,
+  F.checkIn,
+  F.modifierGroups,
 ]
+
+/**
+ * The product fields a file may give on any of a product's rows: one value
+ * for the product, the first row's if it has one. A different value further
+ * down is reported, never dropped without a word.
+ */
+const REGISTER_PRODUCT_FIELDS: readonly string[] = [F.posQuickKey, F.checkIn, F.modifierGroups]
 
 /** The fields every row carries for its own variant. */
 export const VARIANT_LEVEL_FIELDS: readonly string[] = [
@@ -229,6 +262,7 @@ export const VARIANT_LEVEL_FIELDS: readonly string[] = [
   F.inventory,
   F.weightGrams,
   F.variantImage,
+  F.variantCheckIn,
 ]
 
 const OPTION_NAME_FIELDS = [F.option1Name, F.option2Name, F.option3Name] as const
@@ -362,6 +396,14 @@ export const PRODUCT_STANDARD_FIELDS: readonly TransferField[] = [
     aliases: ['variant image url'],
   },
   {
+    id: F.variantCheckIn,
+    label: 'Variant check-in',
+    group: 'variant',
+    type: 'text',
+    aliases: ['variant needs check-in', 'variant check in'],
+    description: 'This variant’s own check-in, in the words of Check-in. Blank follows the product.',
+  },
+  {
     id: F.image,
     label: 'Image',
     group: 'media',
@@ -405,6 +447,30 @@ export const PRODUCT_STANDARD_FIELDS: readonly TransferField[] = [
     group: 'selling',
     type: 'integer',
     aliases: ['low stock threshold', 'reorder point'],
+  },
+  {
+    id: F.posQuickKey,
+    label: 'Quick key',
+    group: 'selling',
+    type: 'boolean',
+    aliases: ['quick key at the register', 'pos quick key', 'register quick key'],
+    description: 'Yes shows the product under Quick keys on the register’s first screen.',
+  },
+  {
+    id: F.checkIn,
+    label: 'Check-in',
+    group: 'selling',
+    type: 'text',
+    aliases: ['needs check-in', 'check in', 'checkin'],
+    description: 'No or Yes. Yes can add how many people one item admits and asking the day: Yes, 4 people, ask which day.',
+  },
+  {
+    id: F.modifierGroups,
+    label: 'Add-ons',
+    group: 'selling',
+    type: 'longText',
+    aliases: ['add ons', 'addons', 'modifiers', 'modifier groups'],
+    description: 'Groups split by semicolons: Milk (at least 1): Whole, Oat +$0.75; Extras (at most 3, register only): Extra shot +$1.00.',
   },
 ]
 
@@ -582,6 +648,9 @@ export function variantRecord(variant: ProductVariant, options: readonly Product
     values[fieldId] = name ? (variant.options?.[name] ?? null) : null
   })
   if (variant.inventoryByLocation && Object.keys(variant.inventoryByLocation).length) values.$byLocation = true
+  // Only when set: an undo snapshot written before this column compares equal.
+  const checkIn = checkInCellOf(variant.checkIn)
+  if (checkIn) values[F.variantCheckIn] = checkIn
   return values
 }
 
@@ -615,6 +684,9 @@ export function productRecord(
     [F.taxExempt]: product.taxExempt ?? null,
     [F.oversellPolicy]: fixedListLabel(PRODUCT_OVERSELL_PICKLIST, product.oversellPolicy ?? 'deny'),
     [F.lowStockThreshold]: product.lowStockThreshold ?? null,
+    [F.posQuickKey]: product.posQuickKey ?? null,
+    [F.checkIn]: checkInCellOf(product.checkIn),
+    [F.modifierGroups]: addOnCellOf(product.modifierGroups, variants),
     [F.priceFrom]: low,
     [F.totalInventory]: total,
     [F.soldOut]: total !== null && total <= 0 && product.oversellPolicy !== 'backorder',
@@ -696,6 +768,11 @@ export interface ProductRowPlan {
   }
   /** Why the product this row belongs to cannot be stored, when it cannot. */
   problem?: string
+  /**
+   * On a first row whose add-ons are priced by variant: the variants by name
+   * once every row is written, since a later row may be what adds one.
+   */
+  addOnVariants?: Record<string, string[]>
 }
 
 /** A planned row with what the apply needs. */
@@ -778,6 +855,17 @@ function normalizeRow(row: TransferPlanRow): TransferPlanRow {
     const slug = commerceSlug(text(values[F.handle]))
     if (slug) values[F.handle] = slug
     else drop(F.handle, 'invalidUrl', `"${text(values[F.handle])}" has no letters or numbers to make a handle from.`)
+  }
+  for (const fieldId of [F.checkIn, F.variantCheckIn]) {
+    if (isBlankTransferValue(values[fieldId])) continue
+    const read = readCheckInCell(values[fieldId])
+    if ('message' in read) drop(fieldId, 'invalidJson', read.message)
+    else values[fieldId] = writeCheckInCell(read.value)
+  }
+  if (!isBlankTransferValue(values[F.modifierGroups])) {
+    const read = readAddOnCell(values[F.modifierGroups])
+    if ('message' in read) drop(F.modifierGroups, 'invalidJson', read.message)
+    else values[F.modifierGroups] = writeAddOnCell(read.value)
   }
   if (F.published in values) {
     if (isBlankTransferValue(values[F.status]) && typeof values[F.published] === 'boolean') {
@@ -903,12 +991,14 @@ export function productFromRecord(
     }
     options.push({ name, values: seen })
   })
+  const checkIn = isBlankTransferValue(values[F.checkIn]) ? undefined : checkInFromCell(values[F.checkIn])
   return {
     name: text(values[F.title]),
     slug: text(values[F.handle]),
     type: (fixedListId(PRODUCT_KIND_PICKLIST, values[F.kind]) ?? 'physical') as ProductType,
     status: (fixedListId(PRODUCT_STATUS_PICKLIST, values[F.status]) ?? 'active') as ProductStatus,
     ...(options.length ? { options } : {}),
+    ...(checkIn ? { checkIn } : {}),
     variants: variants.map((variant) => variantFromRecord(variant.id, variant.values, names)),
   }
 }
@@ -930,6 +1020,7 @@ export function variantFromRecord(
     return raw === null || raw === undefined || raw === '' || !Number.isFinite(Number(raw)) ? undefined : Number(raw)
   }
   const inventory = number(F.inventory)
+  const checkIn = isBlankTransferValue(values[F.variantCheckIn]) ? undefined : checkInFromCell(values[F.variantCheckIn])
   return {
     id,
     ...(Object.keys(options).length ? { options } : {}),
@@ -940,6 +1031,7 @@ export function variantFromRecord(
     ...(number(F.weightGrams) !== undefined ? { weightGrams: number(F.weightGrams) } : {}),
     ...(text(values[F.variantImage]) ? { imageUrl: text(values[F.variantImage]) } : {}),
     inventory: inventory === undefined ? null : Math.max(0, Math.round(inventory)),
+    ...(checkIn ? { checkIn } : {}),
   }
 }
 
@@ -992,6 +1084,22 @@ export function planProductTransfer(input: BuildTransferPlanInput, context: Prod
         }
       }
     })
+    for (const fieldId of REGISTER_PRODUCT_FIELDS) {
+      for (const position of group.positions.slice(1)) {
+        const row = rows[position] as TransferPlanRow
+        const cell = row.values[fieldId]
+        if (isBlankTransferValue(cell)) continue
+        if (isBlankTransferValue(values[fieldId])) values[fieldId] = cell
+        else if (cell !== values[fieldId]) {
+          tally.add('droppedCell', {
+            row: row.index,
+            fieldId,
+            value: text(cell),
+            detail: 'A product holds one of these, and an earlier row of this product already gives it.',
+          })
+        }
+      }
+    }
     return { ...first, values }
   })
   const leaderMatches = ordered.map(
@@ -1096,6 +1204,15 @@ export function planProductTransfer(input: BuildTransferPlanInput, context: Prod
         lineMatches.push({ kind: 'new' })
       }
     }
+    // A cell a row could not have read, on a row no variant plan reports it for.
+    for (const position of group.positions) {
+      if (position === leaderPosition || linePositions.includes(position)) continue
+      const row = rows[position] as TransferPlanRow
+      for (const problem of row.problems ?? []) {
+        if (!REGISTER_PRODUCT_FIELDS.includes(problem.fieldId)) continue
+        tally.add('droppedCell', { row: row.index, fieldId: problem.fieldId, value: problem.raw, detail: problem.message })
+      }
+    }
     const variantPlan = buildTransferPlan({
       fields: variantFields,
       rows: lineRows,
@@ -1187,10 +1304,24 @@ export function planProductTransfer(input: BuildTransferPlanInput, context: Prod
       }
       for (const change of verdict.diff) entry.values[change.fieldId] = change.after
     }
+    let addOnVariants: Record<string, string[]> | undefined
     if (finalVariants.length > COMMERCE_MAX_VARIANTS) {
       problem = `A product holds at most ${COMMERCE_MAX_VARIANTS} variants; this file gives it ${finalVariants.length}.`
     } else {
-      const check = validateProduct(productFromRecord(productValues, finalVariants))
+      const candidate = productFromRecord(productValues, finalVariants)
+      let check = validateProduct(candidate)
+      const addOns = planned.diff.find((change) => change.fieldId === F.modifierGroups)?.after
+      if (!check && !isBlankTransferValue(addOns)) {
+        const variantIds = addOnVariantIds(candidate.variants)
+        const resolved = modifierGroupsFromAddOnCell(addOns, [], variantIds)
+        check =
+          resolved.problem ??
+          validateProduct({ ...candidate, modifierGroups: resolved.groups ?? [] }) ??
+          variantMatrixProblem(candidate.options)
+        if (resolved.groups?.some((entry) => entry.options.some((option) => option.priceCentsByVariant))) {
+          addOnVariants = variantIds
+        }
+      }
       if (check) problem = check
     }
 
@@ -1252,6 +1383,7 @@ export function planProductTransfer(input: BuildTransferPlanInput, context: Prod
         ...(target && lineDiff.length ? { variant: { id: target.id, isNew: target.isNew } } : {}),
         ...(isLeader && create ? { create } : {}),
         ...(problem ? { problem } : {}),
+        ...(isLeader && addOnVariants ? { addOnVariants } : {}),
       }
       if (lineFailed && (!isLeader || !(productDiff.length || creating))) {
         out[position] = {
@@ -1342,6 +1474,8 @@ function productFieldPatch(
     const threshold = Number(value(F.lowStockThreshold))
     patch.lowStockThreshold = value(F.lowStockThreshold) === null || !Number.isFinite(threshold) ? undefined : Math.max(0, Math.round(threshold))
   }
+  if (has(F.posQuickKey)) patch.posQuickKey = value(F.posQuickKey) === null ? undefined : value(F.posQuickKey) === true
+  if (has(F.checkIn)) patch.checkIn = isBlankTransferValue(value(F.checkIn)) ? undefined : checkInFromCell(value(F.checkIn))
   return patch
 }
 
@@ -1351,6 +1485,8 @@ export function applyProductRow(
   changes: {
     product?: Readonly<Record<string, unknown>>
     variant?: { id: string; isNew: boolean; values: Readonly<Record<string, unknown>> }
+    /** The variants an add-ons cell's prices name, when the plan knows more than the product holds yet. */
+    addOnVariants?: Readonly<Record<string, string[]>>
   },
   categoryIdsOf: CategoryIdsOf,
 ): HostProduct {
@@ -1366,6 +1502,17 @@ export function applyProductRow(
     if (F.seoTitle in product) seo.title = text(product[F.seoTitle]) || undefined
     if (F.seoDescription in product) seo.description = text(product[F.seoDescription]) || undefined
     next.seo = Object.fromEntries(Object.entries(seo).filter(([, entry]) => entry !== undefined))
+  }
+  if (F.modifierGroups in product) {
+    const { groups } = isBlankTransferValue(product[F.modifierGroups])
+      ? { groups: [] }
+      : modifierGroupsFromAddOnCell(
+          product[F.modifierGroups],
+          current.modifierGroups,
+          changes.addOnVariants ?? addOnVariantIds(next.variants),
+        )
+    if (groups?.length) next.modifierGroups = groups
+    else if (groups) delete next.modifierGroups
   }
   // An option the product does not have yet takes its name.
   const options = next.options as ProductOption[]
@@ -1391,6 +1538,9 @@ export function applyProductRow(
     for (const key of ['sku', 'barcode', 'compareAtPriceUsd', 'weightGrams', 'imageUrl'] as const) {
       if (merged[key] === undefined) delete written[key]
     }
+    // Its check-in moves only when the file names it, and stays exactly as stored when not.
+    if (F.variantCheckIn in variant.values ? merged.checkIn === undefined : existing?.checkIn === undefined) delete written.checkIn
+    else if (!(F.variantCheckIn in variant.values)) written.checkIn = existing?.checkIn
     if (at >= 0) next.variants[at] = written
     else next.variants.push(written)
     // Each option value the variant holds is one its option offers.
@@ -1421,6 +1571,7 @@ export function createProductDocument(
 export function productRowChanges(row: ProductPlannedRow): {
   product: Record<string, unknown>
   variant?: { id: string; isNew: boolean; values: Record<string, unknown> }
+  addOnVariants?: Record<string, string[]>
 } {
   const product: Record<string, unknown> = {}
   const variant: Record<string, unknown> = {}
@@ -1429,5 +1580,6 @@ export function productRowChanges(row: ProductPlannedRow): {
     else if (PRODUCT_LEVEL_FIELDS.includes(change.fieldId)) product[change.fieldId] = change.after
   }
   const target = row.commerce?.variant
-  return { product, ...(target ? { variant: { ...target, values: variant } } : {}) }
+  const addOnVariants = row.commerce?.addOnVariants
+  return { product, ...(target ? { variant: { ...target, values: variant } } : {}), ...(addOnVariants ? { addOnVariants } : {}) }
 }
