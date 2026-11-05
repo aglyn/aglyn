@@ -109,6 +109,7 @@ beforeAll(() => {
       {
         key: 'data.siteDelete',
         label: 'Delete this site’s datasets',
+        description: 'Delete a dataset on this site.',
         roleDefaults: { owner: true, admin: true, editor: true, viewer: false },
         hostRoleDefaults: { admin: true, editor: true, author: false, viewer: false },
         follows: 'org.eraseRecords',

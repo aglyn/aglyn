@@ -372,10 +372,11 @@ describe('a site raises a key that says so (AGL-4047)', () => {
     registerPluginEntitlements({
       pluginId: 'acme-raise',
       orgPermissions: [
-        { key: FOLLOWED, label: 'Followed', roleDefaults: { owner: true, admin: true, editor: true, viewer: false } },
+        { key: FOLLOWED, label: 'Followed', description: 'Followed.', roleDefaults: { owner: true, admin: true, editor: true, viewer: false } },
         {
           key: RAISES,
           label: 'Raised',
+          description: 'Raised.',
           roleDefaults: { owner: true, admin: true, editor: true, viewer: false },
           hostRoleDefaults: ON,
           follows: FOLLOWED,
