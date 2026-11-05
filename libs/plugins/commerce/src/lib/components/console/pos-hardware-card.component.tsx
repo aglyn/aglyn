@@ -396,7 +396,7 @@ export function PosHardwareCard({
     <CardDisplay
       id={POS_HARDWARE_ANCHOR}
       header={'Hardware'}
-      subheader={'Card readers from Stripe, shipped straight to you'}
+      subheader={'Card readers and accessories, shipped to you'}
       help={pluginDocsHelp('posHardware', { anchor: '#buy-a-reader-from-aglyn' })}
       HeaderProps={{
         action: (
@@ -426,7 +426,7 @@ export function PosHardwareCard({
           </Alert>
         ) : null}
         <Typography variant="body2" color="text.secondary">
-          {'Choose the readers and accessories you need. Stripe ships them to the address you enter at checkout, and you add each reader to a register on the POS devices card when it arrives.'}
+          {'Choose the readers and accessories you need. They ship to the address you enter at checkout, and you add each reader to a register on the POS devices card when it arrives.'}
         </Typography>
         <Box
           sx={{

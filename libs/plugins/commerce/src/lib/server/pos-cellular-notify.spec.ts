@@ -101,7 +101,7 @@ describe('the notice that 4G was turned off (AGL-4038)', () => {
       'org.name': 'Acme Builders',
       'cellular.month': 'October 2026',
       'cellular.amount': '$10.61',
-      'cellular.readers': '1 Stripe Reader S710',
+      'cellular.readers': '1 S710 reader',
       'cellular.openedOn': 'November 2, 2026',
       'cellular.turnedOffOn': 'November 16, 2026',
       'cellular.stores': 'Main Street',
@@ -148,7 +148,7 @@ describe('the warning the day a 4G charge is left open (AGL-4038)', () => {
       'org.name': 'Acme Builders',
       'cellular.month': 'October 2026',
       'cellular.amount': '$10.61',
-      'cellular.readers': '2 Stripe Reader S710s',
+      'cellular.readers': '2 S710 readers',
       'cellular.openedOn': 'November 2, 2026',
       'cellular.turnsOffOn': 'November 16, 2026',
       // A store deleted since is left out.

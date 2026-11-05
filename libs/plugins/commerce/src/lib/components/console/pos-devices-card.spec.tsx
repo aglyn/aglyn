@@ -218,7 +218,7 @@ describe('the POS devices card', () => {
       withCellular(false)
       render(<PosDevicesCard hostId="host-1" canManagePos />)
       fireEvent.click(await screen.findByRole('button', { name: 'Turn on 4G' }))
-      expect(screen.getByText(/Every Stripe Reader S710 at this store gets Stripe's 4G service/)).toBeTruthy()
+      expect(screen.getByText(/Every S710 reader at this store gets 4G service/)).toBeTruthy()
       expect(screen.getByText(/Each S710 is charged \$10\.61 a month/)).toBeTruthy()
       const confirm = screen.getAllByRole('button', { name: 'Turn on 4G' }).pop() as HTMLButtonElement
       expect(confirm.disabled).toBe(true)
@@ -237,7 +237,7 @@ describe('the POS devices card', () => {
     it('turns off where it is on', async () => {
       withCellular(true)
       render(<PosDevicesCard hostId="host-1" canManagePos />)
-      expect(await screen.findByText(/On for every Stripe Reader S710 at this store/)).toBeTruthy()
+      expect(await screen.findByText(/On for every S710 reader at this store/)).toBeTruthy()
       fireEvent.click(screen.getByRole('button', { name: 'Turn off 4G' }))
       fireEvent.click(screen.getAllByRole('button', { name: 'Turn off 4G' }).pop() as HTMLButtonElement)
       await waitFor(() =>
