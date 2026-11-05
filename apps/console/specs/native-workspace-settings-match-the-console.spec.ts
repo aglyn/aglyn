@@ -311,7 +311,7 @@ describe('native workspace settings', () => {
         'Deletion canceled — your organization is safe.',
       ])
       sentences(exportCard, native, [
-        'A machine-readable JSON copy of everything this workspace holds — its sites and their content, datasets, contacts, orders, form submissions, members, support threads and billing identifiers. Owners and admins only.',
+        'A machine-readable JSON copy of everything this workspace holds — its sites and their content, datasets, contacts, orders, form submissions, members, support threads and billing identifiers.',
         'Your data is downloading.',
       ])
     })
