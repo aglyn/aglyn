@@ -45,6 +45,7 @@ import {
   DEFAULT_BRAND,
   resolveBrand,
 } from './lib/demo-brands.mjs'
+import { isHandBuiltDemoHost } from './lib/hand-built-demo-sites.mjs'
 import {
   pruneSeedFixtures,
   seedBrand,
@@ -113,6 +114,16 @@ if (!(await hostRef.get()).exists) {
     process.exit(1)
   }
   hostRef = bySubdomain.docs[0].ref
+}
+
+// The demo workspace's sites are designed by hand (AGL-4166). This seed
+// deletes every `seed-*` page and rewrites the home page, theme and name, so
+// it would undo them: it refuses, with --reset included.
+if (isHandBuiltDemoHost(hostRef.id)) {
+  console.error(
+    `${hostRef.id} is a hand-built demo site (AGL-4166): this seed would delete its pages and rewrite its theme. Refusing.`,
+  )
+  process.exit(1)
 }
 
 const log = (message) => console.log(message)
