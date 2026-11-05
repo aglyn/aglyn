@@ -152,6 +152,7 @@ jest.mock('@aglyn/tenant-feature-instance', () => {
   }
   return {
     useFirestore: () => FIRESTORE,
+    useFirestoreDoc: () => ({ data: undefined, status: 'loading' }),
     useOrgDataScope: () => DATA_SCOPE,
     useScopeTokens: () => ({ tokens: ['org'], orgWide: true, loaded: true }),
     useUser: () => ({ data: { uid: 'uid-test' } }),

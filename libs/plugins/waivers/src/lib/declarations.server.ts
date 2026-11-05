@@ -17,6 +17,7 @@
 
 import { registerPluginPermissions } from '@aglyn/aglyn/plugin-manager/plugin-permissions'
 import { registerPluginPersonEraser } from '@aglyn/aglyn/plugin-manager/plugin-person-erasure'
+import { registerPersonErasureNoteSource } from '@aglyn/aglyn/plugin-manager/plugin-person-erasure-notes'
 import { WAIVERS_PLUGIN_ID } from './constants/bundle-common'
 import { WAIVERS_PERMISSION_DECLARATIONS } from './constants/permissions'
 
@@ -25,13 +26,14 @@ import { WAIVERS_PERMISSION_DECLARATIONS } from './constants/permissions'
  * before any handler runs:
  *
  * - its two permissions, so a route's `resolveOrgPermissions` carries them;
- * - the person eraser, so erasing a customer erases what they signed.
+ * - the person eraser, so erasing a customer erases what they signed;
+ * - the note the Erase a person card prints, saying what that eraser keeps.
  *
  * Its CRM capture door, `waiver`, is declared from `declarations`, which
  * both servers load too, so the console's browser labels it as well.
  *
- * The eraser reaches its module through a dynamic import, so nothing here
- * loads the data layer in an app's boot.
+ * The eraser and the note reach their modules through a dynamic import, so
+ * nothing here loads the data layer in an app's boot.
  */
 export function registerWaiversServerDeclarations(): void {
   const owner = { pluginId: WAIVERS_PLUGIN_ID }
@@ -40,6 +42,13 @@ export function registerWaiversServerDeclarations(): void {
     const { eraseWaiversPerson } = await import('./server/person-eraser')
     return eraseWaiversPerson(request)
   }, owner)
+  registerPersonErasureNoteSource(
+    {
+      notes: async (request) =>
+        (await import('./server/person-erasure-notes')).waiversPersonErasureNotes(request),
+    },
+    owner,
+  )
 }
 
 registerWaiversServerDeclarations()

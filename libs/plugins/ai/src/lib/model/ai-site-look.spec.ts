@@ -468,14 +468,14 @@ describe('Keep my site keeps the source’s grounds, button case and button fill
     expect(dark?.primary?.main).toBe('#00b0ff')
     expect(dark?.primary?.contrastText).toBe('#0b1b2b')
     // An outlined button keeps the brand where the cyan would not read on the page.
-    expect(variants(style).some((variant) => variant.props['variant'] === 'outlined')).toBe(false)
+    expect(variants(style).filter((variant) => variant.props['variant'] === 'outlined').map((variant) => variant.sx?.['color'])).toEqual(['primary.main'])
   })
 
   it('takes the fill for outlined buttons too, where it reads on both pages', () => {
-    // A mid red its own white words read on at 4.0:1, which reads on both pages.
+    // A mid red its own white words read on at 4.0:1, which reads on both pages: the words cross to black, the red stays.
     const style = kept({ brand: '#e53935', page: '#ffffff', buttonFill: '#e53935', buttonText: '#ffffff', darkPage: '#2b2f36' })
-    // White words have no lighter shade, so nothing is pinned; near-white ones step to white.
-    expect(aiSiteOwnButton(style)).toBeNull()
+    expect(aiSiteOwnButton(style)).toEqual({ label: 'common.black', outlined: true })
+    expect(aiSiteColors(style).light.primary?.main).toBe('#e53935')
     // Indigo buttons on a green brand's site: their own under white, and too deep for the dark page's outlines.
     const indigo = kept({ brand: '#0b6e4f', page: '#ffffff', buttonFill: '#3949ab', buttonText: '#eeeeee' })
     expect(aiSiteOwnButton(indigo)).toEqual({ label: 'common.white', outlined: false })
@@ -488,7 +488,7 @@ describe('Keep my site keeps the source’s grounds, button case and button fill
     expect(contrastRatio('#ffffff', colors.dark.primary?.light)).toBeGreaterThanOrEqual(4.5)
     const grey = kept({ brand: '#0b6e4f', page: '#ffffff', buttonFill: '#7a7a7a', buttonText: '#000000' })
     expect(aiSiteOwnButton(grey)).toEqual({ label: 'common.black', outlined: true })
-    expect(variants(grey).find((variant) => variant.props['variant'] === 'outlined')?.sx).toEqual({ color: 'primary.light', borderColor: 'primary.light' })
+    expect(variants(grey).filter((variant) => variant.props['variant'] === 'outlined').pop()?.sx).toEqual({ color: 'primary.light', borderColor: 'primary.light' })
     // The links stay the brand's green.
     expect(aiHueGap(aiHexOklch(aiSiteColors(grey).light.primary?.main as string).h, aiHexOklch('#0b6e4f').h)).toBeLessThanOrEqual(4)
   })
@@ -496,18 +496,87 @@ describe('Keep my site keeps the source’s grounds, button case and button fill
   it('keeps the base’s own button styles before the fill’s', () => {
     const style = kept({ buttonFill: '#00b0ff', buttonText: '#0b1b2b' })
     const own = (aiSiteTheme(style, BUTTON_BASE).components?.['MuiButton']?.variants ?? []) as Array<{ props: Record<string, unknown> }>
-    expect(own.map((variant) => variant.props)).toEqual([{ variant: 'outlined' }, { variant: 'contained', color: 'primary' }])
+    expect(own.map((variant) => variant.props)).toEqual([
+      { variant: 'outlined' },
+      { variant: 'outlined', color: 'primary' },
+      { variant: 'text', color: 'primary' },
+      { variant: 'contained', color: 'primary' },
+    ])
   })
 
-  it('draws no fill of its own that sits on the page like the page, and leaves white words on a light fill to the brand’s deeper shade', () => {
+  it('draws no fill of its own that sits on the page like the page', () => {
     expect(aiSiteOwnButton(kept({ buttonFill: '#f4f4f4', buttonText: '#111111' }))).toBeNull()
+  })
+
+  it('keeps a light fill whose white words cannot be read on it, under black in both schemes', () => {
     // aglyn.com’s recorded white words on its light cyan read at 2.4:1, and have no lighter shade.
     const recorded = kept({ buttonFill: '#00b0ff', buttonText: '#ffffff', darkPage: '#161c21' })
-    expect(aiSiteOwnButton(recorded)).toBeNull()
+    expect(aiSiteOwnButton(recorded)).toEqual({ label: 'common.black', outlined: false })
     const colors = aiSiteColors(recorded)
+    expect(colors.light.primary?.light).toBe('#00b0ff')
+    expect(colors.dark.primary?.light).toBe('#00b0ff')
+    // The filled buttons are the only thing the fill colors: links stay the deeper shade white reads on.
     expect(contrastRatio('#ffffff', colors.light.primary?.main)).toBeGreaterThanOrEqual(4.5)
     // Its dark bands still carry the cyan itself.
     expect(colors.dark.primary?.main).toBe('#00b0ff')
+    const contained = variants(recorded).find((variant) => variant.props['variant'] === 'contained')
+    expect(contained?.sx).toMatchObject({ bgcolor: 'primary.light', color: 'common.black' })
+  })
+
+  it('draws a fill on the dark bands too where the dark brand cannot be it: terracotta on a dark green', () => {
+    const style = kept({ brand: '#c4622d', page: '#ffffff', buttonFill: '#c4622d', buttonText: '#ffffff', darkPage: '#1d2b2a' })
+    const colors = aiSiteColors(style)
+    expect(colors.light.primary?.main).toBe('#c4622d')
+    // Words and links on the dark bands take a lighter shade; the filled buttons keep the fill.
+    expect(colors.dark.primary?.main).not.toBe('#c4622d')
+    expect(colors.dark.primary?.light).toBe('#c4622d')
+    expect(aiSiteOwnButton(style)?.label).toBe('common.black')
+  })
+
+  it('keeps the band’s own fill as the paper, in light and in the dark scheme where it is read', () => {
+    expect(aiSiteColors(kept({ page: '#f5f5f5', paper: '#ffffff' })).light.background).toEqual({ default: '#f5f5f5', paper: '#ffffff' })
+    expect(aiSiteColors(kept({ page: '#ffffff', paper: '#f4efe8' })).light.background).toEqual({ default: '#ffffff', paper: '#f4efe8' })
+    // Too dark for the words to read on: the ground's own paper.
+    expect(aiSiteColors(kept({ page: '#ffffff', paper: '#5b6168' })).light.background?.paper).not.toBe('#5b6168')
+    expect(aiSiteColors(kept({ darkPage: '#161c21', darkPaper: '#2a3440' })).dark.background).toEqual({ default: '#161c21', paper: '#2a3440' })
+    // Unread, a step above the dark page: lighter, as the light page's paper is.
+    const stepped = aiSiteColors(kept({ darkPage: '#161c21' })).dark.background
+    expect(aiHexOklch(stepped?.paper as string).L).toBeGreaterThan(aiHexOklch(stepped?.default as string).L)
+    // Under Improve it the source's paper is not read.
+    expect(aiSiteColors({ ...kept({ paper: '#f4efe8' }), finish: 'improve' }).light.background?.paper).not.toBe('#f4efe8')
+  })
+
+  it('holds its outlined and text buttons over whatever the base draws: no fill, the primary, each style’s own case', () => {
+    // A base that draws an outlined button on the paper with a grey border and the page's words, and a text button in those words.
+    const base = {
+      ...DEFAULT_SITE_THEME,
+      components: {
+        MuiButton: {
+          variants: [
+            { props: { variant: 'outlined', color: 'primary' }, sx: { bgcolor: 'background.paper', borderColor: 'divider', color: 'text.primary' } },
+            { props: { variant: 'text', color: 'primary' }, sx: { color: 'text.primary' } },
+          ],
+        },
+      },
+    } as typeof DEFAULT_SITE_THEME
+    const style = kept({ buttonFill: '#00b0ff', buttonText: '#ffffff', buttonCase: 'upper', outlinedCase: 'upper', textCase: 'none', buttonOutline: '#0077ad' })
+    const all = (aiSiteTheme(style, base).components?.['MuiButton']?.variants ?? []) as Array<{ props: Record<string, unknown>; sx?: Record<string, unknown> }>
+    const last = (variant: string) => all.filter((entry) => entry.props['variant'] === variant).pop()?.sx
+    expect(last('outlined')).toMatchObject({ color: 'primary.main', borderColor: 'primary.main', bgcolor: 'transparent' })
+    expect(last('outlined')).not.toHaveProperty('textTransform')
+    expect(last('text')).toMatchObject({ color: 'primary.main', bgcolor: 'transparent', textTransform: 'none' })
+    expect(JSON.stringify(all)).not.toMatch(/#[0-9a-f]{3,6}/i)
+    // Their own filled case on a page whose text buttons are in capitals too sets nothing more.
+    const same = (aiSiteTheme(kept({ buttonCase: 'upper', textCase: 'upper' }), base).components?.['MuiButton']?.variants ?? []) as Array<{ props: Record<string, unknown>; sx?: Record<string, unknown> }>
+    expect(same.filter((entry) => entry.props['variant'] === 'text').pop()?.sx).not.toHaveProperty('textTransform')
+    // Outlined buttons drawn in the page's words draw in the theme's, never the brand.
+    const inked = (aiSiteTheme(kept({ buttonOutline: '#000000' }), base).components?.['MuiButton']?.variants ?? []) as Array<{ props: Record<string, unknown>; sx?: Record<string, unknown> }>
+    expect(inked.filter((entry) => entry.props['variant'] === 'outlined').pop()?.sx).toMatchObject({ color: 'text.primary', borderColor: 'text.primary' })
+    // A site's own fill for them leaves the base's color alone; Improve it adds nothing at all.
+    const filled = (aiSiteTheme(kept({ outlinedFill: '#ffffff' }), base).components?.['MuiButton']?.variants ?? []) as Array<{ props: Record<string, unknown>; sx?: Record<string, unknown> }>
+    expect(filled.filter((entry) => entry.props['variant'] === 'outlined').pop()?.sx).not.toHaveProperty('bgcolor')
+    const improved = aiSiteTheme({ ...style, finish: 'improve' }, base).components?.['MuiButton']?.variants ?? []
+    expect(improved).toHaveLength(2)
   })
 
   it('never draws a kept theme that fails the reading checks, over every fill and words a source may give', () => {

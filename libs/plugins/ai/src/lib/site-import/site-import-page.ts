@@ -311,9 +311,14 @@ export function siteImportLeftOutReason(reason: SiteImportSkipReason, status?: n
     case 'off-origin-redirect':
       return 'off-site'
     case 'http-error':
+      if (status === 404 || status === 410) return 'missing'
       return status !== undefined && AI_SITE_IMPORT_BLOCKED_STATUSES.has(status) ? 'blocked' : 'unreadable'
     case 'not-reached':
       return 'not-reached'
+    case 'duplicate':
+      return 'duplicate'
+    case 'system-page':
+      return 'system-page'
     case 'not-html':
       return 'file'
     default:

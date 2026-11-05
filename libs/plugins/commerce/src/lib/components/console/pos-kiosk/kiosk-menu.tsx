@@ -27,6 +27,7 @@ import Divider from '@mui/material/Divider'
 import Drawer from '@mui/material/Drawer'
 import IconButton from '@mui/material/IconButton'
 import Stack from '@mui/material/Stack'
+import TextField from '@mui/material/TextField'
 import Typography from '@mui/material/Typography'
 import * as CommerceModel from '../../../model'
 import { displayMoney } from '../pos-display/pos-display-api'
@@ -55,12 +56,17 @@ export function kioskProductSoldOut(product: CommerceModel.PosKioskProduct): boo
 
 /**
  * The menu (AGL-3623): category chips, the product tiles, and the cart bar.
- * A category chip asks the server for that category; nothing is filtered
- * out of a list already loaded.
+ * A category chip asks the server for that category, and a word typed in the
+ * search asks the server for that word across the whole catalog. The search
+ * shows only when the catalog is longer than the menu can list.
  */
 export function KioskMenu({
   catalog,
+  products,
   loading,
+  search,
+  onSearch,
+  searching,
   categoryId,
   onCategory,
   onProduct,
@@ -73,7 +79,13 @@ export function KioskMenu({
   busy,
 }: {
   catalog: CommerceModel.PosKioskCatalog | null
+  /** What to list: the catalog, or what answers the word typed. */
+  products: CommerceModel.PosKioskProduct[]
   loading: boolean
+  search: string
+  onSearch: (search: string) => void
+  /** The server hasn't answered the word typed yet. */
+  searching: boolean
   categoryId: string | null
   onCategory: (categoryId: string | null) => void
   onProduct: (product: CommerceModel.PosKioskProduct) => void
@@ -88,9 +100,20 @@ export function KioskMenu({
   const count = lines.reduce((sum, line) => sum + line.quantity, 0)
   const estimate = lines.reduce((sum, line) => sum + line.unitCents * line.quantity, 0)
   const money = (cents: number) => displayMoney(cents, currency)
-  const products = catalog?.products ?? []
   return (
     <Box sx={{ minHeight: '100dvh', display: 'flex', flexDirection: 'column' }}>
+      {search || catalog?.truncated ? (
+        <Box sx={{ px: 2, pt: 2 }}>
+          <TextField
+            fullWidth
+            type="search"
+            label="Search the menu"
+            value={search}
+            onChange={(event) => onSearch(event.target.value)}
+            slotProps={{ htmlInput: { autoComplete: 'off', spellCheck: false, maxLength: 120 } }}
+          />
+        </Box>
+      ) : null}
       <Box
         component="nav"
         aria-label="Categories"
@@ -117,13 +140,13 @@ export function KioskMenu({
         ))}
       </Box>
       <Box sx={{ flex: 1, p: 2, pb: 14 }}>
-        {loading ? (
+        {loading || (searching && products.length === 0) ? (
           <Box sx={{ display: 'grid', placeItems: 'center', py: 8 }}>
             <CircularProgress aria-label="Loading the menu" />
           </Box>
         ) : products.length === 0 ? (
           <Typography variant="h6" color="text.secondary" sx={{ textAlign: 'center', py: 8 }}>
-            {'Nothing here yet. Try another category.'}
+            {search.trim() ? 'Nothing on the menu matches that.' : 'Nothing here yet. Try another category.'}
           </Typography>
         ) : (
           <Box

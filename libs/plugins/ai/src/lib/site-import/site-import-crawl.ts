@@ -60,6 +60,11 @@
  * - **No sign-in pages.** A page with a password field is refused and
  *   reported; forms with payment fields, scripts, iframes and embeds never
  *   reach the inventory (site-import-html.ts).
+ * - **Pages, not addresses (AGL-4152).** Another address of a page already
+ *   found, and a platform's own cart or account screen, are reported and
+ *   take nothing from the page budget (site-import-same-page.ts). Addresses a
+ *   link adds a query to wait for the rest. The home page is always a page,
+ *   and a wave's read is exactly the pages it asks for.
  *=========================================*/
 
 import { lookalikeBrandForHost } from '@aglyn/shared-util-email/outbound-phishing-screen'
@@ -95,6 +100,13 @@ import {
 } from './site-import-robots'
 import { NO_SITE_IMPORT_HEADERS, siteImportEdgeHeadersFor, type SiteImportHeadersFor } from './site-import-edge'
 import { siteImportLayout, siteImportLookOf } from './site-import-layout'
+import {
+  siteImportAddressOf,
+  siteImportCanonicalBelieved,
+  siteImportCanonicalClaim,
+  siteImportContentSignature,
+  siteImportIsSystemScreen,
+} from './site-import-same-page'
 import { siteImportFooterColumns, siteImportNavTree } from './site-import-nav'
 
 /**
@@ -169,6 +181,10 @@ export type SiteImportSkipReason =
   | 'unreachable'
   /** Never asked for: a stop (time, bytes, the page budget) came first (AGL-4083). */
   | 'not-reached'
+  /** Another address of a page already found (AGL-4152). */
+  | 'duplicate'
+  /** The cart, checkout or account screen the site's platform makes (AGL-4152). */
+  | 'system-page'
 
 export interface SiteImportSkipped {
   url: string
@@ -178,6 +194,8 @@ export interface SiteImportSkipped {
   location?: string
   /** Whose edge turned an error answer away, when it said (AGL-4083). */
   edge?: PublicFetchEdge
+  /** The page a `duplicate` is another address of (AGL-4152). */
+  sameAs?: string
 }
 
 export interface SiteImportPage {
@@ -411,7 +429,10 @@ export async function crawlSiteForImport(
       redirectAllowed: (_from, to) => sameSite(to),
       refuseOver: true,
     })
+  /** Addresses taken in, read or not: one a page is waiting on that is here and is no page will never be. */
+  const takenIn = new Set<string>()
   const skip = (entry: SiteImportSkipped) => {
+    takenIn.add(siteImportAddressOf(entry.url))
     if (inventory.skipped.length < SITE_IMPORT_DEFAULTS.maxSkipped) inventory.skipped.push(entry)
     else inventory.skippedOverflow += 1
   }
@@ -511,6 +532,8 @@ export async function crawlSiteForImport(
     const queue: { key: string; foundBy: SiteImportPage['foundBy'] }[] = only
       ? only.map((key) => ({ key, foundBy: (new URL(key).pathname === '/' ? 'home' : 'link') as SiteImportPage['foundBy'] }))
       : [{ key: home, foundBy: 'home' }]
+    /** Addresses a link adds a query to, which wait for every other (AGL-4152): a gallery's hundred never starve a page. */
+    const later: typeof queue = []
     const queued = new Set<string>(only ?? [home])
     for (const key of fromSitemap) {
       if (queued.has(key)) continue
@@ -551,6 +574,44 @@ export async function crawlSiteForImport(
       if (remainingBytes() - reserved <= 0) return 'wait'
       return null
     }
+    /** The page each address is, its other addresses included. */
+    const pageAt = new Map<string, SiteImportPage>()
+    /** The first page found with each main content. */
+    const pageWith = new Map<string, SiteImportPage>()
+    /** Pages whose canonical names an address not yet taken in. */
+    const waiting: Array<{ page: SiteImportPage; claim: string; signature: string | null }> = []
+    const place = (page: SiteImportPage, signature: string | null) => {
+      inventory.pages.push(page)
+      pageAt.set(siteImportAddressOf(page.url), page)
+      if (signature && !pageWith.has(signature)) pageWith.set(signature, page)
+    }
+    const leaveSameAs = (url: string, page: SiteImportPage) => {
+      pageAt.set(siteImportAddressOf(url), page)
+      skip({ url, reason: 'duplicate', sameAs: page.url })
+    }
+    /** The page this address is another address of; `wait` for the one its canonical names; or `null`, its own page. */
+    const sameAs = (url: string, claim: string | null, signature: string | null): SiteImportPage | 'wait' | null => {
+      const same = signature ? pageWith.get(signature) : undefined
+      if (same) return same
+      if (!claim) return null
+      const named = pageAt.get(siteImportAddressOf(claim))
+      if (named) return siteImportCanonicalBelieved(url, claim) ? named : null
+      return takenIn.has(siteImportAddressOf(claim)) ? null : 'wait'
+    }
+    /** The waiting pages whose answer is in; `last`, all of them: what they named never came, so each stands. */
+    const settle = (last = false) => {
+      for (const entry of [...waiting]) {
+        const verdict = sameAs(entry.page.url, entry.claim, entry.signature)
+        if (verdict === 'wait' && !last) continue
+        waiting.splice(waiting.indexOf(entry), 1)
+        if (verdict && verdict !== 'wait') leaveSameAs(entry.page.url, verdict)
+        else if (inventory.pages.length < maxPages) place(entry.page, entry.signature)
+        else {
+          stop ??= 'page-budget'
+          skip({ url: entry.page.url, reason: 'not-reached' })
+        }
+      }
+    }
     const readLayout = options.layout ?? !!only
     /** Linked stylesheets, each asked once a crawl. */
     const sheets = new Map<string, Promise<string | null>>()
@@ -576,6 +637,7 @@ export async function crawlSiteForImport(
     const takeIn = async ({ next, key, cap, page }: Asked): Promise<SiteImportStop | null> => {
       const foundBy = next.foundBy
       if (foundBy === 'home') homeIn = true
+      takenIn.add(siteImportAddressOf(key))
       if (!page.ok) {
         if (page.refusal === 'too-large' && cap < maxPageBytes) {
           cutOff.push(key)
@@ -599,6 +661,7 @@ export async function crawlSiteForImport(
       inventory.bytesRead += page.bytes
       if (foundBy === 'home') preferred = new URL(page.url).origin
       const finalKey = canon(siteImportPageKey(new URL(page.url), origins) ?? page.url)
+      takenIn.add(siteImportAddressOf(finalKey))
       if (finalKey !== key) {
         if (read.has(finalKey)) return null
         read.add(finalKey)
@@ -621,8 +684,23 @@ export async function crawlSiteForImport(
         links.push(linkKey)
         if (!only && !queued.has(linkKey)) {
           queued.add(linkKey)
-          queue.push({ key: linkKey, foundBy: 'link' })
+          ;(new URL(linkKey).search ? later : queue).push({ key: linkKey, foundBy: 'link' })
         }
+      }
+      // Whether it is a page of its own (AGL-4152). What is not takes nothing from the budget.
+      const own = !only && !isHome
+      if (own && siteImportIsSystemScreen(new URL(finalKey).pathname, extract)) {
+        attempts = Math.max(0, attempts - 1)
+        skip({ url: finalKey, reason: 'system-page' })
+        return null
+      }
+      const signature = only ? null : siteImportContentSignature(extract)
+      const claim = own ? siteImportCanonicalClaim(extract.canonical, finalKey, (url) => siteImportPageKey(url, origins)) : null
+      const verdict = own ? sameAs(finalKey, claim, signature) : null
+      if (verdict && verdict !== 'wait') {
+        attempts = Math.max(0, attempts - 1)
+        leaveSameAs(finalKey, verdict)
+        return null
       }
       // How the page is built (AGL-4106), through its own stylesheets.
       let built: Pick<SiteImportPage, 'layout' | 'nav' | 'footer' | 'look'> = {}
@@ -640,7 +718,7 @@ export async function crawlSiteForImport(
           console.warn('[site-import] the layout could not be read', { url: page.url, error })
         }
       }
-      inventory.pages.push({
+      const taken: SiteImportPage = {
         ...built,
         url: finalKey,
         path: new URL(finalKey).pathname,
@@ -661,19 +739,30 @@ export async function crawlSiteForImport(
         forms: extract.forms,
         ...(extract.videos ? { videos: extract.videos } : {}),
         bytes: page.bytes,
-      })
+      }
+      if (verdict === 'wait' && claim) {
+        // The page it names comes next, even if nothing else links it.
+        attempts = Math.max(0, attempts - 1)
+        waiting.push({ page: taken, claim, signature })
+        if (!queued.has(claim) && !read.has(canon(claim))) {
+          queued.add(claim)
+          queue.unshift({ key: claim, foundBy: 'link' })
+        }
+        return null
+      }
+      place(taken, signature)
       return null
     }
     for (;;) {
       const width = homeIn ? SITE_IMPORT_DEFAULTS.concurrency : 1
-      while (!stop && queue.length && window.length < width) {
+      while (!stop && (queue.length || later.length) && window.length < width) {
         const why = held()
         if (why === 'wait') break
         if (why) {
           stop = why
           break
         }
-        const next = queue.shift() as (typeof queue)[number]
+        const next = (queue.shift() ?? later.shift()) as (typeof queue)[number]
         const key = canon(next.key)
         if (read.has(key)) continue
         if (!allowed(key)) {
@@ -693,13 +782,15 @@ export async function crawlSiteForImport(
       const asked = await (window.shift() as Promise<Asked>)
       reserved -= asked.cap
       stop = (await takeIn(asked)) ?? stop
+      settle()
     }
+    settle(true)
     inventory.stoppedBy = stop
     // Whatever a stop left unread is said, never dropped; a wave's own read
     // leaves its unread pages for its next pass instead.
     if (stop && !only) {
       const unread = [...cutOff]
-      for (const next of queue) {
+      for (const next of [...queue, ...later]) {
         const key = canon(next.key)
         if (!read.has(key) && !unread.includes(key)) unread.push(key)
       }

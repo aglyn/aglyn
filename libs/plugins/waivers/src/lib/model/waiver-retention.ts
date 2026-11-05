@@ -106,3 +106,25 @@ export function waiverRetentionStampMoved(
 ): boolean {
   return stored.retainUntilMs !== stamp.retainUntilMs || stored.retentionYears !== stamp.retentionYears
 }
+
+/**
+ * What the workspace's Erase a person card says this plugin keeps, in one
+ * sentence that is true for a person who signed nothing as well. `years` is
+ * the period each of the workspace's sites applies now, as the eraser reads
+ * it, or `null` when there were too many sites to read.
+ */
+export function waiverErasureKeptLine(years: readonly number[] | null): string {
+  const low = years?.length ? Math.min(...years) : null
+  const high = years?.length ? Math.max(...years) : null
+  const period =
+    low === null || high === null
+      ? 'set per site'
+      : low === high
+        ? `now ${low} ${low === 1 ? 'year' : 'years'}`
+        : `now ${low} to ${high} years, depending on the site`
+  return (
+    `Any waiver signed with this address stays as signed, with the person’s name on it, for your ` +
+    `waiver retention period (${period}) after the last day it covers, or after the youngest minor ` +
+    'on it reaches the waiver’s adult age if that is later, and is then deleted'
+  )
+}

@@ -310,7 +310,7 @@ adult age, if that's later.
 
 When you [erase a person](../../workspace-and-billing/signing-in-and-sessions.md#erasing-a-person)
 from your workspace, the waivers they signed are kept for the same period, not
-erased:
+erased. The **Erase a person** card says so, with your period, before you file:
 
 - its link to the person's contact is removed, because the contact is erased;
 - on the **Signatures** card its status reads **Kept until** and the date it will be

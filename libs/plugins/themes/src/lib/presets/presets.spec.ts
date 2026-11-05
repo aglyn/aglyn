@@ -130,3 +130,12 @@ describe('the Themes plugin (AGL-3405)', () => {
     expect(listConsoleThemePresets([])).toEqual([])
   })
 })
+
+describe('segmented Tabs stay inside the page on a phone (AGL-4181)', () => {
+  it.each(THEME_PRESETS.map((preset) => [preset.id, preset] as const))('%s', (_id, preset) => {
+    const root = (preset as any).theme?.components?.MuiTabs?.styleOverrides?.root
+    if (root?.display !== 'inline-flex') return
+    expect(root.maxWidth).toBe('100%')
+    expect(root.boxSizing).toBe('border-box')
+  })
+})

@@ -20,9 +20,10 @@
  * menu and stylesheet readers, and for the compile and fidelity specs that
  * read what they find.
  *
- * `site-layout/` holds five pages of aglyn.com as AglynBot read them on
- * 2026-10-28 and 2026-10-29 (home, product, pricing, contact, one blog post),
- * its pricing page again as it read on 2026-11-01, which a live import fell
+ * `site-layout/` holds four pages of aglyn.com as AglynBot read them on
+ * 2026-10-28 and 2026-10-29 (product, pricing, contact, one blog post), its
+ * home page as it read on 2026-11-05, which the 11/5 Keep my site import fell
+ * short on (AGL-4152), its pricing page again as it read on 2026-11-01, which a live import fell
  * short on (`livePricing`), its blog listing as it read on 2026-11-03, whose
  * cards crop their pictures to a height of their own (`blog`, AGL-4138), and
  * one page in the markup a Squarespace site is built with, written for these

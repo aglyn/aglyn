@@ -78,6 +78,7 @@ const ORG = { $id: 'org-1', plan: 'scale' }
 const useOrgDataScopeSpy = jest.fn((_options: unknown) => DATA_SCOPE)
 
 jest.mock('@aglyn/tenant-feature-instance', () => ({
+  useFirestoreDoc: () => ({ data: undefined, status: 'loading' }),
   useFirestore: () => FIRESTORE,
   useOrgDataScope: (options: unknown) => useOrgDataScopeSpy(options),
   useScopeTokens: () => ({ tokens: ['org'], orgWide: true, loaded: true }),

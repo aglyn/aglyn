@@ -186,6 +186,17 @@ export const PERSON_ERASURE_NOT_REACHED: readonly string[] = [
 ]
 
 /**
+ * The heading over what plugins say they keep whole
+ * (`plugin-person-erasure-notes`): unlike {@link PERSON_ERASURE_RETAINS}, these
+ * records keep the person on them.
+ */
+export const PERSON_ERASURE_NOTES_HEADING = 'Kept as they are, with the person still on them'
+
+/** What the card says when a plugin's note could not be read. */
+export const PERSON_ERASURE_NOTES_UNAVAILABLE =
+  'Some details of what this keeps could not be checked right now. Try again in a moment before you confirm.'
+
+/**
  * Whether the typed confirmation names the record's address.
  *
  * Normalized on both sides, so `Jane@Example.com` confirms `jane@example.com`

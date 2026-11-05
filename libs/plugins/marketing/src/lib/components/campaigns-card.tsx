@@ -241,8 +241,9 @@ export function HostCampaignsCard(props: {
   const orgMount = useMarketingOrgMount()
   const { orgId } = useMarketingOrgId(hostId)
   // "Run email campaigns" (AGL-4047): the container's create is client-direct,
-  // so the rule asks it, and the button says so before the save does.
-  const containersBlocked = useCampaignContainersBlocked(orgId)
+  // so the rule asks it, and the button says so before the save does. Created
+  // here it is placed on this site, so the site's verdict counts.
+  const containersBlocked = useCampaignContainersBlocked(orgId, hostId)
   // A container is the org's, so deleting one from the org hub names the org.
   const manageApi = useCampaignManageApi(hostId, orgId)
 

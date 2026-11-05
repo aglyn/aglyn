@@ -31,7 +31,7 @@ import { DEFAULT_SITE_THEME } from '@aglyn/aglyn/app-utils/default-site'
 import { readThemeOverride, resolveSiteTheme } from '@aglyn/aglyn/app-utils/site-theme'
 import type { AiJobItemLedger } from './ai-jobs.types'
 import type { AiSiteImportFinish, AiSiteImportWords } from './ai-site-import'
-import { SITE_IMPORT_GROUND_DELTA, siteImportFidelityThemeOf, siteImportOklabDelta, type SiteImportFidelityTheme } from './ai-site-import-fidelity'
+import { SITE_IMPORT_GROUND_DELTA, siteImportFidelityThemeOf, siteImportOklabDelta, siteImportOutlinedColorOf, type SiteImportFidelityTheme } from './ai-site-import-fidelity'
 import { aiSiteTheme, type AiSiteStyle } from './ai-site-look'
 
 type Dict = Record<string, any>
@@ -107,6 +107,13 @@ export interface SiteImportLookPins {
   buttonFill: SiteImportLookPin
   buttonText: SiteImportLookPin
   buttonCase: SiteImportLookPin
+  /** The soft bands' fill, in the light and the dark scheme; the dark's source `null` where its stylesheets say none. */
+  paper: SiteImportLookPin
+  darkPaper: SiteImportLookPin
+  /** An outlined button's words' color. */
+  buttonOutline: SiteImportLookPin
+  /** The case its text buttons, and the links drawn as them, are set in. */
+  textCase: SiteImportLookPin
   /** Where the theme's side was read: the site's theme as stored, or computed from its site style. */
   from: SiteImportFidelityTheme['from'] | null
 }
@@ -157,6 +164,10 @@ export function siteImportLookPins(host: Dict, state: Dict | null | undefined): 
     buttonFill: colorPin(facts['buttonFill'], theme ? (theme.button.fill ?? theme.light.brand) : null),
     buttonText: colorPin(facts['buttonText'], theme ? (theme.button.label ?? theme.light.onBrand) : null),
     buttonCase: { source: wanted, theme: drawn, delta: null },
+    paper: colorPin(facts['paperBackground'], theme?.light.paper ?? null),
+    darkPaper: colorPin(facts['darkPaper'], theme?.dark?.paper ?? null),
+    buttonOutline: colorPin(facts['buttonOutline'], theme ? siteImportOutlinedColorOf(theme) : null),
+    textCase: { source: facts['textCase'] === 'upper' || facts['textCase'] === 'none' ? (facts['textCase'] as string) : null, theme: theme?.button.text?.case ?? drawn, delta: null },
     from: theme?.from ?? null,
   }
 }
@@ -169,7 +180,7 @@ export function siteImportLookPinsLine(pins: SiteImportLookPins): string {
     return pin.source && pin.theme ? `${said} (${pin.source === pin.theme ? 'kept' : 'moved'})` : said
   }
   const where = pins.from === 'style' ? ', the theme computed from the site style' : pins.from === null ? ', no theme to read' : ''
-  return `pins ${[one('ground', pins.ground), one('darkGround', pins.darkGround), one('buttonFill', pins.buttonFill), one('buttonText', pins.buttonText), one('buttonCase', pins.buttonCase)].join(', ')}${where}`
+  return `pins ${[one('ground', pins.ground), one('darkGround', pins.darkGround), one('buttonFill', pins.buttonFill), one('buttonText', pins.buttonText), one('buttonCase', pins.buttonCase), one('paper', pins.paper), one('darkPaper', pins.darkPaper), one('buttonOutline', pins.buttonOutline), one('textCase', pins.textCase)].join(', ')}${where}`
 }
 
 /**

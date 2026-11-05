@@ -179,13 +179,13 @@ const TILE_MAX_PX = 64
 export function siteImportLayout(page: SiteImportLayoutSource, stylesheets: readonly string[] = []): SiteImportLayout | null {
   const { structure, blocks } = page
   if (!structure) return null
-  const { css, styles, sections } = readSections(page, stylesheets)
+  const { css, styles, darkStyles, sections } = readSections(page, stylesheets)
   if (!sections.length) return null
   return {
     v: 1,
     sections,
     icons: structure.icons.map((icon) => ({ ...icon })),
-    look: siteImportLookFacts(structure, styles, css.fontFaces, blocks, sections),
+    look: siteImportLookFacts(structure, styles, css.fontFaces, blocks, sections, darkStyles),
   }
 }
 
@@ -195,6 +195,7 @@ function readSections(page: SiteImportLayoutSource, stylesheets: readonly string
   const sheets = [...structure.styles, ...stylesheets]
   const css = siteImportCssOf(sheets)
   const styles = siteImportStylesOf(structure, css)
+  const darkStyles = siteImportDarkStylesOf(structure, sheets)
   const reader = new LayoutReader(
     structure,
     blocks,
@@ -202,8 +203,24 @@ function readSections(page: SiteImportLayoutSource, stylesheets: readonly string
     () => siteImportStylesOf(structure, siteImportCssOf(sheets, SITE_IMPORT_CSS_WIDE_WIDTH)),
     () => siteImportStylesOf(structure, siteImportCssOf(sheets, TABLET_WIDTH)),
     page.videos ?? [],
+    darkStyles,
   )
-  return { css, styles, sections: reader.sections() }
+  return { css, styles, darkStyles, sections: reader.sections() }
+}
+
+/** A page's styles in its dark scheme (AGL-4152), `null` where its stylesheets say nothing of one. */
+function siteImportDarkStylesOf(structure: SiteImportStructure, sheets: readonly string[]): SiteImportStyles | null {
+  if (!sheets.some((sheet) => /dark/i.test(sheet))) return null
+  const css = siteImportCssOf(sheets, undefined, { scheme: 'dark' })
+  return css.darkRules ? siteImportStylesOf(structure, css) : null
+}
+
+/** A section's fill as the reader finds it: its band, what its color alone would call it, and the fill. */
+interface ReadBand {
+  band: SiteImportBand
+  absolute?: SiteImportBand
+  background: string | null
+  backdrop?: SiteImportLayoutSection['backdrop']
 }
 
 class LayoutReader {
@@ -219,6 +236,8 @@ class LayoutReader {
   private bodySize = 16
   private wideStyles: SiteImportStyles | null = null
   private tabletStyles: SiteImportStyles | null = null
+  /** The page's own ground, which a light band is read against (AGL-4152). */
+  private readonly pageGround: SiteImportRgba | null
 
   constructor(
     private readonly structure: SiteImportStructure,
@@ -227,6 +246,7 @@ class LayoutReader {
     private readonly wideStylesOf: () => SiteImportStyles,
     private readonly tabletStylesOf: () => SiteImportStyles = () => styles,
     private readonly videos: NonNullable<SiteImportExtract['videos']> = [],
+    private readonly darkStyles: SiteImportStyles | null = null,
   ) {
     this.elements = structure.elements
     this.mainIndex = []
@@ -247,6 +267,8 @@ class LayoutReader {
     }
     const body = structure.body >= 0 ? structure.body : -2
     this.bodySize = siteImportFontSizePx(styles.of(body)) ?? 16
+    const ground = siteImportBackgroundOf(styles.of(body)).color ?? siteImportBackgroundOf(styles.of(-2)).color
+    this.pageGround = ground && ground.a >= 0.5 ? ground : null
   }
 
   /*---------------- leaves and parts ----------------*/
@@ -430,6 +452,8 @@ class LayoutReader {
       nodes = withoutVideo(nodes, behind.video)
       band = { band: 'dark', background: band.background, backdrop: { kind: 'video', video: behind.video, ...(behind.poster !== undefined ? { poster: behind.poster } : {}) } }
     }
+    // Its fill in the page's dark scheme, read as its fill is, where that scheme changes it.
+    const dark = this.darkStyles ? (cut.anchor !== null ? this.bandOf(cut.anchor, false, this.darkStyles) : this.bandOf(container, true, this.darkStyles)) : null
     const lines = behind?.poster !== undefined ? [behind.poster, ...this.linesOf(nodes)] : this.linesOf(nodes)
     if (!lines.length && !behind && !nodes.some((node) => node.kind === 'icon' || node.kind === 'form' || node.kind === 'video')) return null
     const width = this.widthOf(cut.anchor ?? container)
@@ -439,7 +463,9 @@ class LayoutReader {
       name,
       from,
       band: band.band,
+      ...(band.absolute && band.absolute !== band.band ? { absoluteBand: band.absolute } : {}),
       background: band.background,
+      ...(dark?.background && dark.background !== band.background ? { darkBackground: dark.background } : {}),
       ...(band.backdrop ? { backdrop: band.backdrop } : {}),
       align,
       ...(width !== null ? { width } : {}),
@@ -490,23 +516,23 @@ class LayoutReader {
     return chain
   }
 
-  private bandOf(element: number, inherited: boolean): { band: SiteImportBand; background: string | null; backdrop?: SiteImportLayoutSection['backdrop'] } {
+  private bandOf(element: number, inherited: boolean, styles: SiteImportStyles = this.styles): ReadBand {
     // The section's own background, else the one wrapper inside it that covers it.
     const chain = inherited ? [] : this.wrappersOf(element)
     for (const at of chain) {
-      const found = this.backgroundBand(at)
+      const found = this.backgroundBand(at, styles)
       if (found) return found
     }
     // None of its own: the page's, under it.
     for (let at = inherited ? element : (this.elements[element]?.parent ?? -1); at >= 0; at = this.elements[at]?.parent ?? -1) {
-      const found = this.backgroundBand(at)
+      const found = this.backgroundBand(at, styles)
       if (found) return found
     }
-    return this.backgroundBand(-2) ?? { band: 'plain', background: null }
+    return this.backgroundBand(-2, styles) ?? { band: 'plain', background: null }
   }
 
-  private backgroundBand(element: number): { band: SiteImportBand; background: string | null; backdrop?: SiteImportLayoutSection['backdrop'] } | null {
-    const style = this.style(element)
+  private backgroundBand(element: number, styles: SiteImportStyles): ReadBand | null {
+    const style = styles.of(element)
     const background = siteImportBackgroundOf(style)
     const hex = background.color && background.color.a >= 0.5 ? siteImportHex(background.color) : null
     if (background.image && !/\.svg(?:$|\?)/i.test(background.image)) {
@@ -517,7 +543,7 @@ class LayoutReader {
       const light = stops.length ? stops.reduce((sum, stop) => sum + siteImportLuminance(stop), 0) / stops.length : 1
       return { band: light < 0.55 ? 'dark' : 'soft', background: hex, backdrop: { kind: 'gradient' } }
     }
-    if (background.color && background.color.a >= 0.5) return { band: siteImportBandOfColor(background.color), background: hex }
+    if (background.color && background.color.a >= 0.5) return { band: siteImportBandOn(background.color, this.pageGround), absolute: siteImportBandOfColor(background.color), background: hex }
     const theme = this.elements[element]?.attrs.theme
     if (theme) {
       if (/^(?:dark|black)/.test(theme)) return { band: 'dark', background: null }
@@ -1726,6 +1752,21 @@ function mode(values: readonly number[]): number {
   return [...counts.entries()].sort((a, b) => b[1] - a[1] || b[0] - a[0])[0]?.[0] ?? 0
 }
 
+/** How far a light fill may sit from the page's ground and still be that ground (AGL-4152), in OKLab. */
+const SAME_GROUND = 0.02
+
+/**
+ * A section's fill as a band of its page (AGL-4152): a light fill is `plain`
+ * on the page's own ground (white, where the page sets none) and `soft`
+ * anywhere else, so a page on light grey with white bands draws those bands
+ * apart from it in both color schemes. A strong color or a dark one is what it is.
+ */
+export function siteImportBandOn(color: SiteImportRgba, page: SiteImportRgba | null): SiteImportBand {
+  const band = siteImportBandOfColor(color)
+  if (band !== 'plain' && band !== 'soft') return band
+  return siteImportColorDistance(color, page ?? { r: 255, g: 255, b: 255, a: 1 }) <= SAME_GROUND ? 'plain' : 'soft'
+}
+
 /** A solid background's band: near white is the page, light or tinted is soft, a strong color is the brand's, dark is dark. */
 export function siteImportBandOfColor(color: { r: number; g: number; b: number; a: number }): SiteImportBand {
   const light = siteImportLuminance(color)
@@ -1794,8 +1835,8 @@ export function siteImportLookOf(
 ): SiteImportLookFacts | null {
   if (!page.structure) return null
   if (page.blocks?.length) {
-    const { css, styles, sections } = readSections({ structure: page.structure, blocks: [...page.blocks], ...(page.videos ? { videos: page.videos } : {}) }, stylesheets)
-    return siteImportLookFacts(page.structure, styles, css.fontFaces, page.blocks, sections)
+    const { css, styles, darkStyles, sections } = readSections({ structure: page.structure, blocks: [...page.blocks], ...(page.videos ? { videos: page.videos } : {}) }, stylesheets)
+    return siteImportLookFacts(page.structure, styles, css.fontFaces, page.blocks, sections, darkStyles)
   }
   const css = siteImportCssOf([...page.structure.styles, ...stylesheets])
   return siteImportLookFacts(page.structure, siteImportStylesOf(page.structure, css), css.fontFaces, [])
@@ -1857,16 +1898,24 @@ function eyebrowColorOf(structure: SiteImportStructure, styles: SiteImportStyles
 
 /** The fill most of a page's dark sections sit on (AGL-4152), the first of them on a tie; `null` where none has one. */
 function darkBackgroundOf(sections: readonly SiteImportLayoutSection[]): string | null {
+  return mostUsedFill(sections.filter((section) => section.band === 'dark').map((section) => section.background))
+}
+
+/** The fill most of these are, the first of them on a tie; `null` where none is a solid color. */
+function mostUsedFill(fills: ReadonlyArray<string | null | undefined>): string | null {
   const counts = new Map<string, number>()
-  for (const section of sections) {
-    if (section.band === 'dark' && section.background && /^#[0-9a-f]{6}$/i.test(section.background)) {
-      const hex = section.background.toLowerCase()
+  for (const fill of fills) {
+    if (fill && /^#[0-9a-f]{6}$/i.test(fill)) {
+      const hex = fill.toLowerCase()
       counts.set(hex, (counts.get(hex) ?? 0) + 1)
     }
   }
   // A map keeps the order its keys came in, and a stable sort keeps the first of a tie first.
   return [...counts.entries()].sort((a, b) => b[1] - a[1])[0]?.[0] ?? null
 }
+
+/** The case most of a page's buttons of one style are set in; `null` for a page with none. */
+const caseOf = ({ upper, lower }: { upper: number; lower: number }): 'upper' | 'none' | null => (upper + lower ? (upper > lower ? 'upper' : 'none') : null)
 
 /** Whether a button's words are written in capitals: three letters or more, none of them lower case. */
 function writtenInCapitals(text: string): boolean {
@@ -1887,6 +1936,7 @@ export function siteImportLookFacts(
   fontFaces: readonly string[] = [],
   blocks: readonly SiteImportBlock[] = [],
   sections: readonly SiteImportLayoutSection[] = [],
+  darkStyles: SiteImportStyles | null = null,
 ): SiteImportLookFacts {
   const { elements } = structure
   const body = structure.body >= 0 ? structure.body : -2
@@ -1904,9 +1954,12 @@ export function siteImportLookFacts(
   const background = siteImportBackgroundOf(bodyStyle).color ?? siteImportBackgroundOf(styles.of(-2)).color
   // Buttons, the page's own and its header's: the most used fill.
   const fills = new Map<string, { count: number; text: string | null; radius: number[] }>()
-  // Its filled buttons' case (AGL-4152): set in capitals, or written in them.
-  let upper = 0
-  let lower = 0
+  // Each style's case (AGL-4152): set in capitals, or written in them.
+  const filledCase = { upper: 0, lower: 0 }
+  const outlinedCase = { upper: 0, lower: 0 }
+  const textCase = { upper: 0, lower: 0 }
+  const outlines: string[] = []
+  const outlinedFills: string[] = []
   const wordsOf = (element: SiteImportElement): string => {
     const own: number[] = []
     const visit = (at: number, depth: number) => {
@@ -1920,6 +1973,10 @@ export function siteImportLookFacts(
       const block = blocks[index]
       return block && block.kind !== 'image' ? block.text : ''
     }).join(' ')
+  }
+  const count = (tally: { upper: number; lower: number }, element: SiteImportElement, style: SiteImportComputedStyle) => {
+    if (style.get('text-transform') === 'uppercase' || writtenInCapitals(wordsOf(element))) tally.upper += 1
+    else tally.lower += 1
   }
   const linkColors = new Map<string, number>()
   for (const element of elements) {
@@ -1944,9 +2001,18 @@ export function siteImportLookFacts(
       const radius = siteImportRadiusPx(style)
       if (radius !== null) entry.radius.push(radius)
       fills.set(hex, entry)
-      if (style.get('text-transform') === 'uppercase' || writtenInCapitals(wordsOf(element))) upper += 1
-      else lower += 1
+      count(filledCase, element, style)
+      // An outlined button that fills itself is read as a filled one, and its fill said apart.
+      if (OUTLINED_CLASS.test(element.attrs.class ?? '')) outlinedFills.push(hex)
+    } else if (kind === 'secondary') {
+      count(outlinedCase, element, style)
+      const color = hexOf(style.get('color'))
+      if (color) outlines.push(color)
+    } else if (kind === 'quiet') {
+      count(textCase, element, style)
     } else if (!kind && element.tag === 'a' && element.region === 'main') {
+      // A page draws a link standing on its own as a text button (the compile's `quiet`).
+      count(textCase, element, style)
       const color = hexOf(style.get('color'))
       if (color) linkColors.set(color, (linkColors.get(color) ?? 0) + 1)
     }
@@ -1967,6 +2033,9 @@ export function siteImportLookFacts(
     const children: number[] = elements[at]?.children ?? []
     at = children.length === 1 ? (children[0] as number) : -1
   }
+  // The page's own fill in its dark scheme, where its stylesheets change it.
+  const darkFill = darkStyles ? (siteImportBackgroundOf(darkStyles.of(body)).color ?? siteImportBackgroundOf(darkStyles.of(-2)).color) : null
+  const darkGround = darkFill && darkFill.a >= 0.5 && (!background || siteImportHex(darkFill) !== siteImportHex(background)) ? siteImportHex(darkFill) : null
   return {
     fonts: { body: known(bodyFamily), headings: known(headingFamily), google },
     background: background ? siteImportHex(background) : null,
@@ -1976,9 +2045,15 @@ export function siteImportLookFacts(
     buttonRadius: radii.length ? (radii.sort((a, b) => a - b)[Math.floor(radii.length / 2)] as number) : null,
     link,
     header: headerFill,
-    darkBackground: darkBackgroundOf(sections),
-    // Most of its filled buttons decide; none, and the case is no fact of the source's.
-    buttonCase: upper + lower ? (upper > lower ? 'upper' : 'none') : null,
+    darkBackground: darkGround ?? darkBackgroundOf(sections),
+    paperBackground: mostUsedFill(sections.filter((section) => section.band === 'soft').map((section) => section.background)),
+    darkPaper: mostUsedFill(sections.filter((section) => section.band === 'soft').map((section) => section.darkBackground)),
+    // Most of each style's buttons decide; none, and its case is no fact of the source's.
+    buttonCase: caseOf(filledCase),
+    outlinedCase: caseOf(outlinedCase),
+    textCase: caseOf(textCase),
+    buttonOutline: mostUsedFill(outlines),
+    outlinedFill: mostUsedFill(outlinedFills),
     // Its eyebrows' own color: none of its words', its buttons' or its links', which the theme draws already.
     eyebrow: blocks.length ? eyebrowColorOf(structure, styles, blocks, [text, topFill?.[0] ?? null, link]) : null,
   }

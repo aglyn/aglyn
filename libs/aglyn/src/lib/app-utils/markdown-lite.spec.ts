@@ -51,6 +51,15 @@ describe('markdown-lite', () => {
     expect((blocks[3] as any).src).toBe('https://cdn.example.com/logo.png')
   })
 
+  it('reads _italic_ as a whole word, and leaves snake_case_names alone (AGL-4182)', () => {
+    expect(parseMarkdownInlines('_Last updated November 1_')).toEqual([
+      { type: 'italic', text: 'Last updated November 1' },
+    ])
+    expect(parseMarkdownInlines('see snake_case_name and file_v2_final.pdf')).toEqual([
+      { type: 'text', text: 'see snake_case_name and file_v2_final.pdf' },
+    ])
+  })
+
   it('parses inline bold/italic/links with plain text between', () => {
     const inlines = parseMarkdownInlines(
       'go **bold**, then [docs](https://example.com) end',

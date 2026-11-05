@@ -549,7 +549,10 @@ describe('what a design answer may change (AGL-4083)', () => {
     const doc = docOf('pottery')
     const names = aiSiteImportSectionNames(doc)
     expect((doc.layout as NonNullable<AiSiteImportDocument['layout']>).sections[0]).toMatchObject({ band: 'dark', hero: { picture: 'behind' } })
-    expect(aiSiteImportDesignedSections(doc, aiReadLayoutDesign({ sections: [{ hero: 'poster', band: 'source', align: 'source', groups: [] }] }, names.length)).sections[0]?.hero).toBe('poster')
+    const answer = aiReadLayoutDesign({ sections: [{ hero: 'poster', band: 'source', align: 'source', groups: [] }] }, names.length)
+    // Its source sets those words at the start: kept, a cover; improved, the poster it asked.
+    expect(aiSiteImportDesignedSections(doc, answer).sections[0]?.hero).toBe('cover')
+    expect(aiSiteImportDesignedSections(doc, answer, { finish: 'improve' }).sections[0]?.hero).toBe('poster')
   })
 
   it('keeps a dark source’s ground under a hero of words on a card, and a guided start’s as it was', () => {
@@ -732,7 +735,7 @@ describe('the design answer: choices only, over the structure it is shown', () =
     expect(nodes.some((node) => node.componentId === 'muiGrid' && node.props?.['size'] === 'xs:12 md:6')).toBe(false)
     const designed = aiSiteImportDesignedSections(doc, aiReadLayoutDesign(answer, doc.layout?.sections.length ?? 0))
     expect(designed.sections[0]?.hero).toBe('column')
-    expect(designed.settled.map((entry) => entry.what)).toContain('the split hero set aside: the source lays its picture below its words')
+    expect(designed.settled.map((entry) => entry.what)).toContain("the split hero set aside: the page keeps its source's own opening, a column hero")
   })
 
   it('keeps a band the source drew whatever the answer says, and a style the group cannot be drawn in falls back to the source’s', () => {
@@ -919,28 +922,67 @@ describe('Home’s hero as its source draws it, whatever the answer says (AGL-41
   const asked = (hero: string) => ({ sections: [{ hero, band: 'source', align: 'start', groups: [] }] })
   const designedWith = (doc: AiSiteImportDocument, hero: string) => aiSiteImportDesignedSections(doc, aiReadLayoutDesign(asked(hero), doc.layout?.sections.length ?? 0))
 
-  it('opens as a centered column with its picture under its words for any answer that would move it; editorial keeps it there', () => {
+  it('opens as a centered column with its picture under its words for any answer: the 11/5 editorial moved its words to the start (AGL-4152)', () => {
     const doc = docOf('home')
-    for (const hero of ['split', 'bleed', 'cover', 'poster', 'panel']) expect(designedWith(doc, hero).sections[0]?.hero).toBe('column')
-    expect(designedWith(doc, 'editorial').sections[0]?.hero).toBe('editorial')
-    expect(designedWith(doc, 'editorial').settled).toEqual([])
+    for (const hero of ['split', 'bleed', 'cover', 'poster', 'panel', 'editorial']) expect(designedWith(doc, hero).sections[0]?.hero).toBe('column')
+    expect(designedWith(doc, 'editorial').sections[0]?.measure).toBe('md')
+    expect(designedWith(doc, 'editorial').settled.map((entry) => entry.what)).toEqual(["the editorial hero set aside: the page keeps its source's own opening, a column hero"])
+    expect(designedWith(doc, 'column').settled).toEqual([])
+    // An answer of none asks nothing of it: the same opening, its measure held.
+    expect(designedWith(doc, 'none').sections[0]).toMatchObject({ hero: 'column', measure: 'md' })
+    expect(designedWith(doc, 'none').settled).toEqual([])
     const { stored } = build('home', asked('split'))
     // Its words held to the width step the source's 920 px heading measure maps to (AGL-4152).
     const measure = Object.values(stored).find((node) => node.componentId === 'muiBox' && JSON.stringify(node.sx) === JSON.stringify({ maxWidth: { xs: '100%', md: 'md' }, mx: 'auto' }))
     expect(measure).toBeDefined()
   })
 
-  it('keeps a hero beside its picture, or behind it, among the heroes that keep it there', () => {
+  it('opens as the source’s own: its picture’s place, refined by how it sets its words (AGL-4152)', () => {
     const home = docOf('home')
     const layout = home.layout as NonNullable<AiSiteImportDocument['layout']>
-    const beside = { ...home, layout: { ...layout, sections: layout.sections.map((section, index) => (index === 0 ? { ...section, hero: { picture: 'beside' as const } } : section)) } }
-    expect(designedWith(beside, 'split').sections[0]?.hero).toBe('split')
-    expect(designedWith(beside, 'bleed').sections[0]?.hero).toBe('bleed')
-    expect(designedWith(beside, 'column').sections[0]?.hero).toBe('split')
-    expect(designedWith(beside, 'column').settled.map((entry) => entry.what)).toEqual(['the column hero set aside: the source lays its picture beside its words'])
+    const opening = (picture: 'beside' | 'behind' | 'below' | 'above', align: 'start' | 'center') => ({
+      ...home,
+      layout: { ...layout, sections: layout.sections.map((section, index) => (index === 0 ? { ...section, align, hero: { picture, measure: 920 } } : section)) },
+    })
+    // Any answer: the same opening.
+    for (const hero of ['split', 'bleed', 'panel', 'column', 'editorial', 'cover', 'poster']) {
+      expect(designedWith(opening('below', 'center'), hero).sections[0]?.hero).toBe('column')
+      expect(designedWith(opening('above', 'center'), hero).sections[0]?.hero).toBe('column')
+      expect(designedWith(opening('below', 'start'), hero).sections[0]?.hero).toBe('editorial')
+      expect(designedWith(opening('beside', 'start'), hero).sections[0]?.hero).toBe('split')
+      expect(designedWith(opening('beside', 'center'), hero).sections[0]?.hero).toBe('split')
+      expect(designedWith(opening('behind', 'center'), hero).sections[0]?.hero).toBe('poster')
+      expect(designedWith(opening('behind', 'start'), hero).sections[0]?.hero).toBe('cover')
+    }
+    expect(designedWith(opening('below', 'start'), 'column').sections[0]?.measure).toBe('md')
+    expect(designedWith(opening('below', 'start'), 'editorial').settled).toEqual([])
     const pottery = docOf('pottery')
-    expect(designedWith(pottery, 'poster').sections[0]?.hero).toBe('poster')
     expect(designedWith(pottery, 'split').sections[0]?.hero).toBe('cover')
+  })
+
+  it('holds a start-aligned opening’s heading to the source’s measure, as its centered one', () => {
+    const home = docOf('home')
+    const layout = home.layout as NonNullable<AiSiteImportDocument['layout']>
+    const start = { ...home, layout: { ...layout, sections: layout.sections.map((section, index) => (index === 0 ? { ...section, align: 'start' as const } : section)) } }
+    const { nodes } = aiCompileImportedPage({ doc: start, sectionIds: aiSiteImportSectionNames(start).map((_, index) => `sec-${index}`), plan: { title: start.title, sections: aiSiteImportSectionNames(start).map((name) => ({ name, uses: [], items: 0 })) } as never, targets: { pageId: 'p0', pages: [], homeIds: [], forms: [], formPageId: null, components: [], facts: '' } as never, design: { kind: 'business', seed: 7, home: true } as never }).tree
+    expect(Object.values(nodes).some((node) => (node as Node).componentId === 'muiBox' && JSON.stringify((node as Node).sx) === JSON.stringify({ maxWidth: { xs: '100%', md: 'md' } }))).toBe(true)
+  })
+
+  it('leaves the answer’s opening to an improved page: the 11/5 answer’s editorial, and any hero it asks', () => {
+    const doc = docOf('home')
+    const improved = (hero: string) => aiSiteImportDesignedSections(doc, aiReadLayoutDesign(asked(hero), doc.layout?.sections.length ?? 0), { finish: 'improve' })
+    expect(improved('editorial').sections[0]?.hero).toBe('editorial')
+    expect(improved('editorial').sections[0]).not.toHaveProperty('measure')
+    expect(improved('split').sections[0]?.hero).toBe('split')
+  })
+
+  it('keeps a band against the page’s ground when kept, and by its color alone when improved', () => {
+    const doc = docOf('home')
+    const bands = (finish: 'keep' | 'improve') => aiSiteImportDesignedSections(doc, null, { finish }).sections.slice(0, 2).map((section) => section.band)
+    expect(bands('keep')).toEqual(['soft', 'plain'])
+    expect(bands('improve')).toEqual(['plain', 'soft'])
+    // What the design answer is shown is as it was: its text is the page's structure, unchanged.
+    expect(aiSiteImportDesignText(doc).split('\n')[0]).toContain('plain band')
   })
 
   it('sets its eyebrow in an outlined pill in the muted words’ grey, and the two lines under it as the source does', () => {
