@@ -188,6 +188,16 @@ decision stays with that route.
   and it stamps exactly what that scan reported. Run a scan again afterwards to confirm
   it now reports none.
 
+The scan also reports documents shared with all sites except some, which keep the sites
+they reach in a list a sweep has to keep up:
+
+- **Fallen behind**: the list no longer matches the workspace's sites. Stamping runs the
+  sweep for those workspaces and brings them level.
+- **An all-except marker the sweep can't act on**: stamping leaves these alone, because
+  either guess moves who can see the document. `docs/SCOPE_DRIFT.md` has the repair.
+- **Reached the most sites they can hold**: a known state, for a resource whose fields
+  multiply by site. New sites no longer join them. Reported, and no alarm.
+
 Three things the report says that are easy to skim past:
 
 - **"No drift" is only as wide as the pages it read.** The count is per scan, not a

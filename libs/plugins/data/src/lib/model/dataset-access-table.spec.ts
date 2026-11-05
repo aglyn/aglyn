@@ -96,12 +96,12 @@ const routeSays = (row: Row, placement: string, act: 'write' | 'delete') =>
     orgId: ORG,
     uid: row.uid,
     member: asMember(row) as never,
-    visibleTo: PLACEMENTS[placement],
+    dataset: { visibleTo: PLACEMENTS[placement] },
     act,
   })
 
 const consoleSays = (row: Row, placement: string) =>
-  datasetAccessBlocked(asMember(row) as never, PLACEMENTS[placement], (row.customRole ?? null) as never)
+  datasetAccessBlocked(asMember(row) as never, { visibleTo: PLACEMENTS[placement] }, (row.customRole ?? null) as never)
 
 /** Is this member narrowed on the site, the key following the site role? */
 const narrowedHere = (row: Row, hostId: string, key: string) =>
@@ -209,9 +209,9 @@ describe('the routes answer as the rule does', () => {
 
   it.each(named)('%s: a site-only member never deletes what is shared beyond one site', (_name, row) => {
     const beyond = !isOrgWideMember(asMember(row) as never)
-    expect(deleteBeyondReach(asMember(row) as never, PLACEMENTS['Org'])).toBe(beyond)
-    expect(deleteBeyondReach(asMember(row) as never, PLACEMENTS['Two'])).toBe(beyond)
-    expect(deleteBeyondReach(asMember(row) as never, PLACEMENTS['Here'])).toBe(false)
+    expect(deleteBeyondReach(asMember(row) as never, { visibleTo: PLACEMENTS['Org'] })).toBe(beyond)
+    expect(deleteBeyondReach(asMember(row) as never, { visibleTo: PLACEMENTS['Two'] })).toBe(beyond)
+    expect(deleteBeyondReach(asMember(row) as never, { visibleTo: PLACEMENTS['Here'] })).toBe(false)
   })
 })
 
@@ -230,7 +230,7 @@ describe('the console reads the table as the rule and the route do', () => {
     for (const placement of Object.keys(PLACEMENTS)) {
       const blocked = consoleSays(row, placement)
       expect(!blocked.writes).toBe(await routeSays(row, placement, 'write'))
-      const beyond = deleteBeyondReach(asMember(row) as never, PLACEMENTS[placement])
+      const beyond = deleteBeyondReach(asMember(row) as never, { visibleTo: PLACEMENTS[placement] })
       expect(!blocked.deletes).toBe(!beyond && (await routeSays(row, placement, 'delete')))
     }
   })
@@ -243,7 +243,7 @@ describe('the console reads the table as the rule and the route do', () => {
         customRole: row.customRole ?? null,
       })
       expect(answer.allowed).toBe(await routeSays(row, placement, 'write'))
-      expect(answer.reason).toContain(siteOf(PLACEMENTS[placement]) ? 'Manage this site’s data' : 'Manage data')
+      expect(answer.reason).toContain(siteOf({ visibleTo: PLACEMENTS[placement] }) ? 'Manage this site’s data' : 'Manage data')
     }
   })
 
@@ -258,12 +258,63 @@ describe('the console reads the table as the rule and the route do', () => {
 
 describe('the placement test', () => {
   it('finds exactly one site, as the rule does', () => {
-    expect(siteOf([`host:${HERE}`])).toBe(HERE)
-    expect(siteOf(['org'])).toBeNull()
-    expect(siteOf([`host:${HERE}`, `host:${OTHER}`])).toBeNull()
-    expect(siteOf(['host:a:b'])).toBeNull()
-    expect(siteOf(['host:a/b'])).toBeNull()
-    expect(siteOf([])).toBeNull()
-    expect(siteOf(undefined)).toBeNull()
+    expect(siteOf({ visibleTo: [`host:${HERE}`] })).toBe(HERE)
+    expect(siteOf({ visibleTo: ['org'] })).toBeNull()
+    expect(siteOf({ visibleTo: [`host:${HERE}`, `host:${OTHER}`] })).toBeNull()
+    expect(siteOf({ visibleTo: ['host:a:b'] })).toBeNull()
+    expect(siteOf({ visibleTo: ['host:a/b'] })).toBeNull()
+    expect(siteOf({ visibleTo: [] })).toBeNull()
+    expect(siteOf({ visibleTo: undefined })).toBeNull()
+  })
+})
+
+/**
+ * A dataset shared with all sites except some, down to one site (AGL-4047). Each
+ * member answers as they do on a dataset on several sites, never as on one on that
+ * site: the rule's `scopePlacement` asks no site about it, so a door that did would
+ * let a site Admin write through the route what the rule refuses, and a site-only
+ * member delete what the workspace shares.
+ */
+describe('marked down to one site, every member answers as on several sites', () => {
+  const DOWN_TO_HERE = {
+    visibleTo: [`host:${HERE}`],
+    scopeMode: 'allExcept',
+    scopeExcept: [`host:${OTHER}`],
+  }
+  const routeOn = (row: Row, dataset: Record<string, unknown>, act: 'write' | 'delete') =>
+    memberMayActOnDataset({ firestore, orgId: ORG, uid: row.uid, member: asMember(row) as never, dataset, act })
+  const SEVERAL = { visibleTo: PLACEMENTS['Two'] }
+
+  it.each(named)('%s: the route', async (_name, row) => {
+    expect(await routeOn(row, DOWN_TO_HERE, 'write')).toBe(await routeOn(row, SEVERAL, 'write'))
+    expect(await routeOn(row, DOWN_TO_HERE, 'delete')).toBe(await routeOn(row, SEVERAL, 'delete'))
+  })
+
+  it.each(named)('%s: the console, and the Import & export hub', (_name, row) => {
+    const customRole = (row.customRole ?? null) as never
+    const marked = datasetAccessBlocked(asMember(row) as never, DOWN_TO_HERE, customRole)
+    const several = datasetAccessBlocked(asMember(row) as never, SEVERAL, customRole)
+    expect(marked).toEqual(several)
+    const answer = datasetInstanceImportAccess({
+      record: { id: 'ds', name: 'Trails', facts: DOWN_TO_HERE },
+      member: asMember(row),
+      customRole,
+    })
+    expect(answer).toEqual({ allowed: !several.writes, reason: several.writesReason })
+  })
+
+  it.each(named)('%s: deleting stays with a member of the whole workspace', (_name, row) => {
+    expect(deleteBeyondReach(asMember(row) as never, DOWN_TO_HERE)).toBe(!isOrgWideMember(asMember(row) as never))
+  })
+
+  it('THE CONTROL: the table holds someone these rows would catch, a site Editor on the viewer role', async () => {
+    const raised = named.map(([, row]) => row).filter((row) => !row.resolved[DATA_MANAGE_PERMISSION])
+    const gained = await Promise.all(
+      raised.map(async (row) => ({
+        unmarked: await routeOn(row, { visibleTo: [`host:${HERE}`] }, 'write'),
+        marked: await routeOn(row, DOWN_TO_HERE, 'write'),
+      })),
+    )
+    expect(gained.some((row) => row.unmarked && !row.marked)).toBe(true)
   })
 })

@@ -212,7 +212,7 @@ async function handler(request: Request): Promise<Response> {
         .doc(id)
         .get()
       const denial = eraseScopeDenial({
-        visibleTo: target.get('visibleTo') as string[] | undefined,
+        target: target.data() as { visibleTo?: string[] } | undefined,
         member,
         // A caller-supplied hint, treated as one: omitting it skips the
         // shared-resource rail but not the boundary check, which is the
@@ -226,20 +226,20 @@ async function handler(request: Request): Promise<Response> {
         return Response.json({ error: denial.error }, { status: denial.status })
       }
       if (placed) {
-        const visibleTo = target.get('visibleTo') as string[] | undefined
+        const placedOn = target.data()
         const allowed = await memberMayActOnPlaced({
           firestore: firestore as never,
           orgId: scopeId,
           uid: decoded.uid,
           member,
-          visibleTo,
+          placed: placedOn,
           workspace: await memberHasOrgPermission(scopeId, member, 'org.eraseRecords'),
           workspaceKey: 'org.eraseRecords',
           siteKey: placed.siteKey,
           sitePreset: placed.sitePreset,
         })
         if (!allowed) {
-          return permissionRefusal(placedRefusalPermission(visibleTo, 'org.eraseRecords', placed.siteKey) as never)
+          return permissionRefusal(placedRefusalPermission(placedOn, 'org.eraseRecords', placed.siteKey) as never)
         }
       }
     } else if (!isStaff) {

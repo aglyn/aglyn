@@ -53,6 +53,10 @@ export function datasetIndexedRecord(
         ...(model.fields[fieldId]?.customType ? { customType: String(model.fields[fieldId]?.customType) } : {}),
       })),
       visibleTo: Array.isArray(data['visibleTo']) ? (data['visibleTo'] as string[]) : [],
+      // Shared with all sites except some: what a reader of `visibleTo` needs in
+      // order not to take it for a dataset on those sites alone (AGL-4047).
+      ...(data['scopeMode'] !== undefined ? { scopeMode: data['scopeMode'] } : {}),
+      ...(data['scopeExcept'] !== undefined ? { scopeExcept: data['scopeExcept'] } : {}),
       installedFrom: installedFrom(data['source']),
     },
   }

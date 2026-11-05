@@ -57,25 +57,25 @@ describe('what the workspace shares is the workspace’s to delete (AGL-4047)', 
     ['several sites', ['host:client-1', 'host:client-2']],
   ])('%s: refused with no hint, and with one', (_placement, visibleTo) => {
     const refused = { error: SHARED_REFUSAL, status: 403 }
-    expect(eraseScopeDenial({ ...base, visibleTo, member: SITE_ONLY_HOLDER, protectsShared: true })).toEqual(refused)
-    expect(eraseScopeDenial({ ...base, visibleTo, member: SITE_ONLY_HOLDER, protectsShared: true, fromHostId: 'client-1' })).toEqual(refused)
+    expect(eraseScopeDenial({ ...base, target: { visibleTo }, member: SITE_ONLY_HOLDER, protectsShared: true })).toEqual(refused)
+    expect(eraseScopeDenial({ ...base, target: { visibleTo }, member: SITE_ONLY_HOLDER, protectsShared: true, fromHostId: 'client-1' })).toEqual(refused)
   })
 
   it('leaves a dataset placed on their own site to them', () => {
-    expect(eraseScopeDenial({ ...base, visibleTo: ['host:client-1'], member: SITE_ONLY_HOLDER, protectsShared: true })).toBeNull()
+    expect(eraseScopeDenial({ ...base, target: { visibleTo: ['host:client-1'] }, member: SITE_ONLY_HOLDER, protectsShared: true })).toBeNull()
   })
 
   it('still answers 404 on one they cannot see', () => {
-    expect(eraseScopeDenial({ ...base, visibleTo: ['host:other'], member: SITE_ONLY_HOLDER, protectsShared: true })?.status).toBe(404)
+    expect(eraseScopeDenial({ ...base, target: { visibleTo: ['host:other'] }, member: SITE_ONLY_HOLDER, protectsShared: true })?.status).toBe(404)
   })
 
   it('leaves a member of the whole workspace as they were', () => {
-    expect(eraseScopeDenial({ ...base, visibleTo: ['org'], member: ORG_EDITOR, protectsShared: true })).toBeNull()
-    expect(eraseScopeDenial({ ...base, visibleTo: ['host:a', 'host:b'], member: OWNER, protectsShared: true })).toBeNull()
+    expect(eraseScopeDenial({ ...base, target: { visibleTo: ['org'] }, member: ORG_EDITOR, protectsShared: true })).toBeNull()
+    expect(eraseScopeDenial({ ...base, target: { visibleTo: ['host:a', 'host:b'] }, member: OWNER, protectsShared: true })).toBeNull()
   })
 
   it('touches no other kind', () => {
-    expect(eraseScopeDenial({ label: 'List', exists: true, visibleTo: ['org'], member: SITE_ONLY_HOLDER })).toBeNull()
+    expect(eraseScopeDenial({ label: 'List', exists: true, target: { visibleTo: ['org'] }, member: SITE_ONLY_HOLDER })).toBeNull()
   })
 })
 
@@ -87,7 +87,7 @@ describe('eraseScopeDenial (AGL-1046)', () => {
       // the agency's internal dataset on request.
       const denial = eraseScopeDenial({
         ...base,
-        visibleTo: ['host:internal-1'],
+        target: { visibleTo: ['host:internal-1'] },
         member: COLLABORATOR,
       })
       expect(denial?.status).toBe(404)
@@ -96,13 +96,13 @@ describe('eraseScopeDenial (AGL-1046)', () => {
     it('reports 404, not 403 — a denial must not confirm the id exists', () => {
       const hidden = eraseScopeDenial({
         ...base,
-        visibleTo: ['host:internal-1'],
+        target: { visibleTo: ['host:internal-1'] },
         member: COLLABORATOR,
       })
       const missing = eraseScopeDenial({
         ...base,
         exists: false,
-        visibleTo: undefined,
+        target: { visibleTo: undefined },
         member: COLLABORATOR,
       })
       // Indistinguishable to the caller: one denies, one is a no-op that
@@ -115,7 +115,7 @@ describe('eraseScopeDenial (AGL-1046)', () => {
       expect(
         eraseScopeDenial({
           ...base,
-          visibleTo: ['host:client-1'],
+          target: { visibleTo: ['host:client-1'] },
           member: COLLABORATOR,
           fromHostId: 'client-1',
         }),
@@ -125,7 +125,7 @@ describe('eraseScopeDenial (AGL-1046)', () => {
     it('does not restrict org-wide members', () => {
       for (const member of [OWNER, ORG_EDITOR, LEGACY]) {
         expect(
-          eraseScopeDenial({ ...base, visibleTo: ['host:internal-1'], member }),
+          eraseScopeDenial({ ...base, target: { visibleTo: ['host:internal-1'] }, member }),
         ).toBeNull()
       }
     })
@@ -139,7 +139,7 @@ describe('eraseScopeDenial (AGL-1046)', () => {
      */
     it('treats a missing visibleTo as visible to nobody, and says only "not found"', () => {
       expect(
-        eraseScopeDenial({ ...base, visibleTo: undefined, member: COLLABORATOR }),
+        eraseScopeDenial({ ...base, target: { visibleTo: undefined }, member: COLLABORATOR }),
       ).toMatchObject({ status: 404 })
       // ANTI-VACUITY: a scope the collaborator holds is still admitted, so
       // this is the absent field being refused and not the rail refusing
@@ -147,7 +147,7 @@ describe('eraseScopeDenial (AGL-1046)', () => {
       expect(
         eraseScopeDenial({
           ...base,
-          visibleTo: ['host:client-1'],
+          target: { visibleTo: ['host:client-1'] },
           member: COLLABORATOR,
         }),
       ).toBeNull()
@@ -158,7 +158,7 @@ describe('eraseScopeDenial (AGL-1046)', () => {
     it('refuses to destroy an org-wide dataset from a site page', () => {
       const denial = eraseScopeDenial({
         ...base,
-        visibleTo: ['org'],
+        target: { visibleTo: ['org'] },
         member: OWNER,
         fromHostId: 'client-1',
       })
@@ -169,7 +169,7 @@ describe('eraseScopeDenial (AGL-1046)', () => {
     it('refuses to destroy a multi-host dataset from one of those hosts', () => {
       const denial = eraseScopeDenial({
         ...base,
-        visibleTo: ['host:internal-1', 'host:internal-2', 'host:internal-3'],
+        target: { visibleTo: ['host:internal-1', 'host:internal-2', 'host:internal-3'] },
         member: OWNER,
         fromHostId: 'internal-1',
       })
@@ -179,7 +179,7 @@ describe('eraseScopeDenial (AGL-1046)', () => {
 
     it('allows the same delete from the workspace page, which sends no host', () => {
       expect(
-        eraseScopeDenial({ ...base, visibleTo: ['org'], member: OWNER }),
+        eraseScopeDenial({ ...base, target: { visibleTo: ['org'] }, member: OWNER }),
       ).toBeNull()
     })
 
@@ -188,7 +188,7 @@ describe('eraseScopeDenial (AGL-1046)', () => {
       // page must not be the one place it reads as "mine to delete".
       const denial = eraseScopeDenial({
         ...base,
-        visibleTo: undefined,
+        target: { visibleTo: undefined },
         member: OWNER,
         fromHostId: 'client-1',
       })
@@ -198,7 +198,7 @@ describe('eraseScopeDenial (AGL-1046)', () => {
     it('is not fooled by a scope that merely includes this host', () => {
       const denial = eraseScopeDenial({
         ...base,
-        visibleTo: ['host:client-1', 'host:client-2'],
+        target: { visibleTo: ['host:client-1', 'host:client-2'] },
         member: OWNER,
         fromHostId: 'client-1',
       })
@@ -210,10 +210,60 @@ describe('eraseScopeDenial (AGL-1046)', () => {
     const denial = eraseScopeDenial({
       ...base,
       label: 'List',
-      visibleTo: ['org'],
+      target: { visibleTo: ['org'] },
       member: OWNER,
       fromHostId: 'client-1',
     })
     expect(denial?.error).toContain('This list is shared')
+  })
+})
+
+/**
+ * A dataset shared with all sites except some is the workspace's however few sites
+ * it reaches today (AGL-4047). Read as a one-site dataset, the delete of its last
+ * included site's page would be admitted, and a site-only member would delete what
+ * the whole workspace shares.
+ */
+describe('a document shared with all sites except some', () => {
+  const DOWN_TO_ONE = { visibleTo: ['host:client-1'], scopeMode: 'allExcept', scopeExcept: ['host:client-2'] }
+
+  it('a site-only holder cannot delete it, with or without the hint, though it names only their site', () => {
+    const refused = { status: 403, error: expect.stringContaining('shared beyond one site') }
+    expect(eraseScopeDenial({ ...base, target: DOWN_TO_ONE, member: SITE_ONLY_HOLDER, protectsShared: true })).toEqual(refused)
+    expect(
+      eraseScopeDenial({ ...base, target: DOWN_TO_ONE, member: SITE_ONLY_HOLDER, protectsShared: true, fromHostId: 'client-1' }),
+    ).toEqual(refused)
+  })
+
+  it('THE CONTROL: the same member deletes the same list when it has no marker', () => {
+    expect(
+      eraseScopeDenial({ ...base, target: { visibleTo: ['host:client-1'] }, member: SITE_ONLY_HOLDER, protectsShared: true, fromHostId: 'client-1' }),
+    ).toBeNull()
+  })
+
+  it('a stored null or half a marker fails closed, as the rule does', () => {
+    for (const target of [
+      { visibleTo: ['host:client-1'], scopeMode: null },
+      { visibleTo: ['host:client-1'], scopeExcept: ['host:client-2'] },
+    ]) {
+      expect(eraseScopeDenial({ ...base, target, member: SITE_ONLY_HOLDER, protectsShared: true })?.status).toBe(403)
+    }
+  })
+
+  it('from its last site’s own page, a member of the whole workspace is sent to the workspace page', () => {
+    const denial = eraseScopeDenial({ ...base, target: DOWN_TO_ONE, member: OWNER, fromHostId: 'client-1' })
+    expect(denial?.status).toBe(409)
+    expect(denial?.error).toContain('all sites except some')
+    expect(denial?.error).toContain('workspace Data page')
+  })
+
+  it('from the workspace page, that member deletes it', () => {
+    expect(eraseScopeDenial({ ...base, target: DOWN_TO_ONE, member: OWNER })).toBeNull()
+  })
+
+  it('a member it hides from gets the same 404 as ever', () => {
+    expect(
+      eraseScopeDenial({ ...base, target: { ...DOWN_TO_ONE, visibleTo: ['host:internal-1'] }, member: COLLABORATOR })?.status,
+    ).toBe(404)
   })
 })

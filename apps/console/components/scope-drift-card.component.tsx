@@ -60,6 +60,14 @@ interface DriftReport {
   byCollection: Record<string, number>
   /** Member docs whose `scopeTokens` projection is stale. */
   members: number
+  /**
+   * Documents shared with all sites except some (AGL-4047): `stale` ones have
+   * fallen behind the workspace's sites and are part of `planned`, since a
+   * stamp's sweep brings them level; `invalid` ones carry a marker nothing can
+   * act on and no stamp touches; `capped` ones are at their site limit, which is
+   * a known state and no alarm.
+   */
+  allExcept: { stale: number; invalid: number; capped: number }
   /** Pages actually fetched. */
   pages: number
   /** True when {@link MAX_PAGES} stopped the loop before `done`. */
@@ -70,6 +78,7 @@ const EMPTY: DriftReport = {
   planned: 0,
   byCollection: {},
   members: 0,
+  allExcept: { stale: 0, invalid: 0, capped: 0 },
   pages: 0,
   bounded: false,
 }
@@ -91,7 +100,7 @@ export function ScopeDriftCard() {
    */
   const run = useCallback(
     async (dryRun: boolean): Promise<DriftReport> => {
-      const totals: DriftReport = { ...EMPTY, byCollection: {} }
+      const totals: DriftReport = { ...EMPTY, byCollection: {}, allExcept: { ...EMPTY.allExcept } }
       let cursor: string | null = null
       for (let page = 0; page < MAX_PAGES; page += 1) {
         const response = await authorizedFetch(
@@ -112,6 +121,9 @@ export function ScopeDriftCard() {
         totals.pages += 1
         totals.planned += Number(payload?.planned ?? 0)
         totals.members += Number(payload?.drift?.members ?? 0)
+        totals.allExcept.stale += Number(payload?.drift?.allExcept?.stale ?? 0)
+        totals.allExcept.invalid += Number(payload?.drift?.allExcept?.invalid ?? 0)
+        totals.allExcept.capped += Number(payload?.drift?.allExcept?.capped ?? 0)
         for (const [collection, count] of Object.entries(
           (payload?.drift?.byCollection ?? {}) as Record<string, number>,
         )) {
@@ -160,6 +172,8 @@ export function ScopeDriftCard() {
   }, [run])
 
   const rows = report ? Object.entries(report.byCollection) : []
+  // What `planned` holds besides documents with no scope at all.
+  const missing = report ? report.planned - report.allExcept.stale : 0
 
   return (
     <CardDisplay
@@ -218,17 +232,33 @@ export function ScopeDriftCard() {
         ) : null}
 
         {report ? (
-          report.planned === 0 ? (
+          report.planned === 0 && report.allExcept.invalid === 0 ? (
             <Alert severity="success">
               {`No drift — every scoped document across ${report.pages} ` +
                 `page(s) carries a sharing scope.`}
             </Alert>
           ) : (
             <Stack spacing={1}>
-              <Alert severity="warning">
-                {`${report.planned} document(s) are missing their sharing ` +
-                  'scope. Nothing has been changed.'}
-              </Alert>
+              {missing > 0 ? (
+                <Alert severity="warning">
+                  {`${missing} document(s) are missing their sharing ` +
+                    'scope. Nothing has been changed.'}
+                </Alert>
+              ) : null}
+              {report.allExcept.stale > 0 ? (
+                <Alert severity="warning">
+                  {`${report.allExcept.stale} document(s) shared with all ` +
+                    'sites except some have fallen behind their workspace’s ' +
+                    'sites. Nothing has been changed; stamping brings them level.'}
+                </Alert>
+              ) : null}
+              {report.allExcept.invalid > 0 ? (
+                <Alert severity="error">
+                  {`${report.allExcept.invalid} document(s) carry an all-except ` +
+                    'marker the sweep can’t act on. Stamping leaves them alone, ' +
+                    'because either guess moves who can see them.'}
+                </Alert>
+              ) : null}
               {rows.map(([collection, count]) => (
                 <Typography key={collection} variant="body2">
                   {`${collection}: ${count}`}
@@ -241,6 +271,14 @@ export function ScopeDriftCard() {
               ) : null}
             </Stack>
           )
+        ) : null}
+
+        {report && report.allExcept.capped > 0 ? (
+          <Alert severity="info">
+            {`${report.allExcept.capped} document(s) shared with all sites ` +
+              'except some have reached the most sites they can hold, so new ' +
+              'sites no longer join them.'}
+          </Alert>
         ) : null}
 
         {report?.bounded ? (

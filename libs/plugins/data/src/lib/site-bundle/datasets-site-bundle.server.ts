@@ -47,7 +47,8 @@ export const DATASET_BUNDLE_RECORD_LIMIT = 1000
  * left off is ERASED. `visibleTo` is never on it — the restore assigns a fresh
  * scope for the site it restores into, since a bundle is portable and an
  * embedded `['org']` would publish one organization's data across another's
- * whole client roster.
+ * whole client roster. Nor is the all-sites-except marker, `scopeMode` and
+ * `scopeExcept` (AGL-4047), which names sites of the workspace it came from.
  */
 export const DATASET_RESTORE_FIELDS: readonly string[] = [
   'displayName',
@@ -105,7 +106,8 @@ const datasetsOf = (orgId: string) =>
  *
  * `visibleTo` is stripped on the way out. Its `host:` tokens name sites of
  * THIS organization, so they are noise at best and a dangling reference once
- * the bundle is restored elsewhere; the restore assigns a fresh scope.
+ * the bundle is restored elsewhere; the restore assigns a fresh scope. The
+ * all-sites-except marker goes with it, for the same reason (AGL-4047).
  */
 export async function exportSiteDatasets({
   hostId,
@@ -117,7 +119,7 @@ export async function exportSiteDatasets({
   const live = snapshot.docs.filter((doc) => !doc.get('deletedAt'))
   return Promise.all(
     live.map(async (doc) => {
-      const { visibleTo: _visibleTo, ...data } = doc.data()
+      const { visibleTo: _visibleTo, scopeMode: _scopeMode, scopeExcept: _scopeExcept, ...data } = doc.data()
       const records = await doc.ref.collection('records').limit(DATASET_BUNDLE_RECORD_LIMIT).get()
       return {
         $id: doc.id,

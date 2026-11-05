@@ -921,6 +921,8 @@ const SEEDS: Array<{
     path: 'orgs/org-1/datasets',
     id: 'dataset-1',
     doc: {
+      scopeMode: 'allExcept',
+      scopeExcept: ['host:host-2'],
       displayName: 'Roasts',
       name: 'Roasts',
       fields: ['roast'],
@@ -979,6 +981,8 @@ const SEEDS: Array<{
     path: 'orgs/org-1/media',
     id: 'media-1',
     doc: {
+      scopeMode: 'allExcept',
+      scopeExcept: ['host:host-2'],
       fileName: 'hero.png',
       contentType: 'image/png',
       sizeBytes: 20480,
@@ -1370,6 +1374,24 @@ describe('the export/import round trip is lossless (AGL-1382)', () => {
     expect(storedAt('orgs/org-1/datasets/dataset-1')['visibleTo']).toEqual([
       'host:host-1',
     ])
+  })
+
+  it('takes the all-sites-except marker off on the way out, and writes none on the way in', async () => {
+    // It names sites of the workspace it came from, and only the server sets one (AGL-4047).
+    const bundle = await runExport()
+    for (const item of [bundle.media[0], bundle.mediaFolders[0], bundle.datasets[0]]) {
+      expect(item).not.toHaveProperty('scopeMode')
+      expect(item).not.toHaveProperty('scopeExcept')
+    }
+    for (const item of [bundle.media[0], bundle.mediaFolders[0], bundle.datasets[0]]) {
+      item.scopeMode = 'allExcept'
+      item.scopeExcept = ['host:elsewhere']
+    }
+    await runImport(bundle)
+    for (const path of ['orgs/org-1/media/media-1', 'orgs/org-1/datasets/dataset-1']) {
+      expect(storedAt(path)).not.toHaveProperty('scopeMode')
+      expect(storedAt(path)).not.toHaveProperty('scopeExcept')
+    }
   })
 })
 

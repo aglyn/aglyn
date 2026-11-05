@@ -29,6 +29,15 @@ import {
 import { doc, updateDoc } from 'firebase/firestore'
 import { DatasetSchemaDialog } from './dataset-schema-dialog.component'
 
+const mockFetch = jest.fn()
+jest.mock('@aglyn/shared-util-http/authorized-token', () => ({
+  authorizedFetch: (...args: unknown[]) => mockFetch(...args),
+}))
+
+/** What the route was asked, one body per call. */
+const sharingCalls = () =>
+  mockFetch.mock.calls.map((call) => JSON.parse(call[2].body))
+
 let mockOrgHosts: Array<{ $id: string; name?: string }> = []
 
 jest.mock('firebase/firestore', () => ({
@@ -208,7 +217,10 @@ describe('DatasetSchemaDialog field names & descriptions (AGL-560)', () => {
  * control, all of them running through the real guard).
  */
 describe('DatasetSchemaDialog refuses a stale seed (AGL-1358)', () => {
-  beforeEach(() => jest.clearAllMocks())
+  beforeEach(() => {
+    jest.clearAllMocks()
+    mockFetch.mockResolvedValue({ ok: true, json: async () => ({ ok: true }) })
+  })
 
   const dataset = {
     $id: 'products',
@@ -268,91 +280,41 @@ describe('DatasetSchemaDialog shows the stored scope (AGL-1484)', () => {
     'utf8',
   )
 
-  /**
-   * The two expressions, lifted from the component's own source.
-   *
-   * Both are single-line `const` declarations with nothing but the
-   * expression after the `=`, and each name occurs once in the file — so a
-   * comment cannot stand in for either. The assertion below is on the
-   * VALUES they produce, which is the only form that catches the trap.
-   */
-  const expressionAfter = (declaration: string): string => {
-    const start = SOURCE.indexOf(declaration)
-    expect(start).toBeGreaterThan(-1)
-    return SOURCE.slice(start + declaration.length, SOURCE.indexOf('\n', start))
-  }
-
-  /**
-   * The trap in fixing this at all, and the reason the two call sites move
-   * in ONE commit.
-   *
-   * Today an untouched dialog writes no scope only because the seed and
-   * `previousScope` substituted the SAME `['org']`, so `scopeChanged` came
-   * out false. Correct one and not the other and a display bug becomes a
-   * WRITE — on every unset collection anyone merely opens, from a control
-   * they never touched, and one the AGL-1041 rules then reject for any
-   * member who is not org-wide, failing the whole schema save with it.
-   *
-   * So: both expressions are evaluated against the same document across the
-   * shapes a dataset actually arrives in, and required to agree. If they
-   * agree, `scopeChanged` is false however either is spelled.
-   */
-  it('opens without making the save gate think the scope changed', () => {
-    const seed = expressionAfter('const storedDatasetScope =')
-    const previous = expressionAfter('const previousScope: string[] =')
-    expect(seed.trim()).toBeTruthy()
-    expect(previous.trim()).toBeTruthy()
-
-    /**
-     * The lifted expression, run against a document.
-     *
-     * The only edit is erasing the `as { visibleTo?: string[] }` assertions
-     * — `new Function` parses JavaScript, and an assertion is precisely the
-     * part of the text that has no runtime meaning, so removing it is what
-     * the compiler does rather than a simplification of what is asserted.
-     * Both sides are checked below to still read the field through the
-     * helper afterwards, so an erasure that ate the expression would not
-     * pass quietly.
-     */
-    const evaluate = (expression: string, document: unknown) => {
-      const runtime = expression
-        .replace(/\s+as\s+\{[^}]*\}/g, '')
-        .replace(/,\s*$/, '')
-      expect(runtime).toMatch(/storedScope\(\(?dataset\)?\.visibleTo\)/)
-      return new Function(
-        'storedScope',
-        'dataset',
-        `return (${runtime})`,
-      )(Aglyn.storedScope, document)
-    }
-
-    for (const document of [
-      {},
-      { visibleTo: undefined },
-      // A stored empty array is a written "visible to nobody". The dialog
-      // must not read that as org-wide either.
-      { visibleTo: [] },
-      { visibleTo: ['org'] },
-      { visibleTo: ['host:a', 'host:b'] },
-    ]) {
-      expect(evaluate(`${seed} ?? []`, document)).toEqual(
-        evaluate(previous, document),
-      )
-    }
+  /** Neither side re-derives the reading; both ask the one helper. */
+  it('reads the stored sharing through the one helper, at both sites', () => {
+    expect(SOURCE.match(/sharingChoiceOf\(dataset\)/g) ?? []).toHaveLength(2)
   })
 
-  /** Neither side re-derives the reading; both ask the one helper. */
-  it('reads the stored scope through the one helper, at both sites', () => {
-    expect(SOURCE.match(/storedScope\(\(dataset as/g) ?? []).toHaveLength(2)
+  /**
+   * The trap in this at all. An untouched dialog writes no sharing only because
+   * the seed and the save read the same answer. Let them differ and a display
+   * fix becomes a WRITE, on every dataset anyone merely opens, from a control
+   * they never touched. So: saved untouched across the shapes a dataset arrives
+   * in, a marked one included, and it asks the route for nothing.
+   */
+  it.each([
+    [{}],
+    [{ visibleTo: undefined }],
+    [{ visibleTo: [] }],
+    [{ visibleTo: ['org'] }],
+    [{ visibleTo: ['host:a', 'host:b'] }],
+    [{ visibleTo: ['host:a'], scopeMode: 'allExcept', scopeExcept: ['host:b'] }],
+    [{ visibleTo: [], scopeMode: 'allExcept', scopeExcept: ['host:a', 'host:b'] }],
+  ])('saves %j without touching its sharing', async (shape) => {
+    renderDialog({ ...unsetDataset, ...shape } as never)
+
+    fireEvent.click(screen.getByRole('button', { name: 'Save schema' }))
+
+    await waitFor(() => expect(updateDoc).toHaveBeenCalledTimes(1))
+    const [, payload] = (updateDoc as jest.Mock).mock.calls[0]
+    expect(Object.keys(payload)).not.toContain('visibleTo')
+    expect(mockFetch).not.toHaveBeenCalled()
   })
 
   /** The write is still gated on that comparison, and only on it. */
-  it('still writes the scope only when it changed', () => {
+  it('still writes the sharing only when it changed', () => {
     expect(SOURCE).toMatch(
-      /const scopeWrite =\s*orgId && viewerOrgWide && canChangeSharing && scopeChanged \?/,
-    )
-    expect(SOURCE).toMatch(
-      /\.\.\.\(scopeWrite\?\.scope \? \{ visibleTo: scopeWrite\.scope \} : \{\}\)/,
+      /const sharingWrite = orgId && viewerOrgWide && canChangeSharing && scopeChanged \?/,
     )
   })
 
@@ -370,18 +332,19 @@ describe('DatasetSchemaDialog shows the stored scope (AGL-1484)', () => {
 
     expect(screen.getByText(/never been shared/i)).toBeTruthy()
     expect(screen.getByText(/hidden from every site/i)).toBeTruthy()
-    // A real sentinel, never '' — MUI cannot hold an empty string as a
-    // selected value and a corpus spec forbids one.
-    expect(screen.getByText('Not shared with any site')).toBeTruthy()
-    expect(screen.queryByText('All sites')).toBeNull()
+    // Offered, and not picked: nothing says All sites about a collection no
+    // site can see.
+    expect((screen.getByRole('radio', { name: 'All sites' }) as HTMLInputElement).checked).toBe(false)
+    for (const radio of screen.getAllByRole('radio')) {
+      expect((radio as HTMLInputElement).checked).toBe(false)
+    }
   })
 
   it('still reads "All sites" for a collection that stores the org token', () => {
     renderDialog({ ...unsetDataset, visibleTo: ['org'] } as never)
 
     expect(screen.queryByText(/never been shared/i)).toBeNull()
-    expect(screen.queryByText('Not shared with any site')).toBeNull()
-    expect(screen.getByText('All sites')).toBeTruthy()
+    expect((screen.getByRole('radio', { name: 'All sites' }) as HTMLInputElement).checked).toBe(true)
   })
 
   /** Opening the dialog is not a write. */
@@ -395,32 +358,23 @@ describe('DatasetSchemaDialog shows the stored scope (AGL-1484)', () => {
     expect(doc).not.toHaveBeenCalled()
   })
 
-  /**
-   * And saving an untouched dialog does not smuggle a scope in with the
-   * schema. `visibleTo` is absent from the payload entirely — which is the
-   * difference between this and the cascading write the pairing prevents.
-   */
-  it('saves the schema without stamping a scope nobody chose', async () => {
-    renderDialog(unsetDataset)
-
-    fireEvent.click(screen.getByRole('button', { name: 'Save schema' }))
-
-    await waitFor(() => expect(updateDoc).toHaveBeenCalledTimes(1))
-    const [, payload] = (updateDoc as jest.Mock).mock.calls[0]
-    expect(Object.keys(payload)).not.toContain('visibleTo')
-  })
-
   /** Choosing ends the unset state, and THAT save writes the scope. */
   it('writes the scope once somebody chooses one', async () => {
     renderDialog(unsetDataset)
 
-    fireEvent.mouseDown(screen.getByRole('combobox'))
-    fireEvent.click(screen.getByRole('option', { name: 'All sites' }))
+    fireEvent.click(screen.getByRole('radio', { name: 'All sites' }))
 
     fireEvent.click(screen.getByRole('button', { name: 'Save schema' }))
-    await waitFor(() => expect(updateDoc).toHaveBeenCalledTimes(1))
+    await waitFor(() => expect(mockFetch).toHaveBeenCalledTimes(1))
+    expect(sharingCalls()[0]).toEqual({
+      orgId: 'org-1',
+      action: 'set-sharing',
+      datasetId: 'products',
+      choice: { mode: 'all' },
+    })
+    // Through the route alone: a client's write of `visibleTo` is what strands a marker.
     const [, payload] = (updateDoc as jest.Mock).mock.calls[0]
-    expect(payload.visibleTo).toEqual(['org'])
+    expect(Object.keys(payload)).not.toContain('visibleTo')
   })
 })
 
@@ -446,6 +400,7 @@ describe('DatasetSchemaDialog refuses a scope it cannot store (AGL-2773)', () =>
 
   beforeEach(() => {
     jest.clearAllMocks()
+    mockFetch.mockResolvedValue({ ok: true, json: async () => ({ ok: true }) })
     mockOrgHosts = []
   })
   afterEach(() => {
@@ -465,12 +420,12 @@ describe('DatasetSchemaDialog refuses a scope it cannot store (AGL-2773)', () =>
   it('does not save "Selected sites…" with no site picked as All sites', async () => {
     renderDialog({ ...dataset, visibleTo: ['org'] } as never)
 
-    fireEvent.mouseDown(screen.getByRole('combobox'))
-    fireEvent.click(screen.getByRole('option', { name: 'Selected sites…' }))
+    fireEvent.click(screen.getByRole('radio', { name: /^Selected sites/ }))
     fireEvent.click(screen.getByRole('button', { name: 'Save schema' }))
     await settle()
 
     expect(updateDoc).not.toHaveBeenCalled()
+    expect(mockFetch).not.toHaveBeenCalled()
     expect(screen.getByText(/at least one site/i)).toBeTruthy()
   })
 
@@ -488,6 +443,7 @@ describe('DatasetSchemaDialog refuses a scope it cannot store (AGL-2773)', () =>
     await settle()
 
     expect(updateDoc).not.toHaveBeenCalled()
+    expect(mockFetch).not.toHaveBeenCalled()
     expect(
       screen.getByText(
         new RegExp(`${Aglyn.MAX_SCOPE_HOSTS} sites or fewer`, 'i'),
@@ -505,8 +461,167 @@ describe('DatasetSchemaDialog refuses a scope it cannot store (AGL-2773)', () =>
     fireEvent.click(screen.getByText('Site 2'))
     fireEvent.click(screen.getByRole('button', { name: 'Save schema' }))
 
-    await waitFor(() => expect(updateDoc).toHaveBeenCalledTimes(1))
+    await waitFor(() => expect(mockFetch).toHaveBeenCalledTimes(1))
+    expect(sharingCalls()[0].choice).toEqual({ mode: 'selected', hostIds: ['h1', 'h2'] })
+  })
+})
+
+/**
+ * "All sites except…" (AGL-4047). A dataset's sharing is written by the route,
+ * which alone may set or remove the marker, and the dialog says what the route
+ * would.
+ */
+describe('DatasetSchemaDialog shares with all sites except some (AGL-4047)', () => {
+  const dataset = {
+    $id: 'products',
+    displayName: 'Products',
+    model: {
+      fields: { title: { name: 'Title', type: 'text' as const } },
+      order: ['title'],
+    },
+  }
+  const THREE_SITES = [
+    { $id: 'h1', name: 'Site 1' },
+    { $id: 'h2', name: 'Site 2' },
+    { $id: 'h3', name: 'Site 3' },
+  ]
+  const exceptRadio = () => screen.getByRole('radio', { name: /^All sites except/ }) as HTMLInputElement
+  const settle = () =>
+    act(async () => {
+      await new Promise((resolve) => setTimeout(resolve, 25))
+    })
+
+  beforeEach(() => {
+    jest.clearAllMocks()
+    mockFetch.mockResolvedValue({ ok: true, json: async () => ({ ok: true }) })
+    mockOrgHosts = THREE_SITES
+  })
+  afterEach(() => {
+    mockOrgHosts = []
+  })
+
+  it('from All sites, starts with nothing left out and refuses to save that', async () => {
+    renderDialog({ ...dataset, visibleTo: ['org'] } as never)
+
+    fireEvent.click(exceptRadio())
+    fireEvent.click(screen.getByRole('button', { name: 'Save schema' }))
+    await settle()
+
+    expect(screen.getByText(/at least one site to leave out/i)).toBeTruthy()
+    expect(updateDoc).not.toHaveBeenCalled()
+    expect(mockFetch).not.toHaveBeenCalled()
+  })
+
+  it('saves the sites left out, through the route and never in the schema write', async () => {
+    renderDialog({ ...dataset, visibleTo: ['org'] } as never)
+
+    fireEvent.click(exceptRadio())
+    fireEvent.click(screen.getByRole('checkbox', { name: 'Site 2' }))
+    fireEvent.click(screen.getByRole('button', { name: 'Save schema' }))
+
+    await waitFor(() => expect(mockFetch).toHaveBeenCalledTimes(1))
+    expect(sharingCalls()[0].choice).toEqual({ mode: 'allExcept', exceptHostIds: ['h2'] })
     const [, payload] = (updateDoc as jest.Mock).mock.calls[0]
-    expect(payload.visibleTo).toEqual(['host:h1', 'host:h2'])
+    expect(Object.keys(payload).sort()).toEqual(['displayName', 'fields', 'model', 'names'])
+  })
+
+  it('from chosen sites, leaves out the ones not chosen', () => {
+    renderDialog({ ...dataset, visibleTo: ['host:h1', 'host:h3'] } as never)
+
+    fireEvent.click(exceptRadio())
+
+    expect((screen.getByRole('checkbox', { name: 'Site 2' }) as HTMLInputElement).checked).toBe(true)
+    expect((screen.getByRole('checkbox', { name: 'Site 1' }) as HTMLInputElement).checked).toBe(false)
+  })
+
+  it('a marked dataset opens as what it is, and back to All sites goes through the route', async () => {
+    renderDialog({ ...dataset, visibleTo: ['host:h1', 'host:h3'], scopeMode: 'allExcept', scopeExcept: ['host:h2'] } as never)
+
+    expect(exceptRadio().checked).toBe(true)
+    expect((screen.getByRole('checkbox', { name: 'Site 2' }) as HTMLInputElement).checked).toBe(true)
+
+    fireEvent.click(screen.getByRole('radio', { name: 'All sites' }))
+    fireEvent.click(screen.getByRole('button', { name: 'Save schema' }))
+
+    await waitFor(() => expect(mockFetch).toHaveBeenCalledTimes(1))
+    expect(sharingCalls()[0].choice).toEqual({ mode: 'all' })
+  })
+
+  it('says the route’s refusal, and stays open', async () => {
+    mockFetch.mockResolvedValue({ ok: false, json: async () => ({ error: 'Not yours to share.' }) })
+    renderDialog({ ...dataset, visibleTo: ['org'] } as never)
+
+    fireEvent.click(exceptRadio())
+    fireEvent.click(screen.getByRole('checkbox', { name: 'Site 2' }))
+    fireEvent.click(screen.getByRole('button', { name: 'Save schema' }))
+    await settle()
+
+    expect(screen.getByRole('button', { name: 'Save schema' })).toBeTruthy()
+  })
+
+  it('a member who can only change the sharing writes no schema', async () => {
+    render(
+      <DatasetSchemaDialog
+        orgId="org-1"
+        dataset={{ ...dataset, visibleTo: ['org'] } as never}
+        datasets={[]}
+        recordCount={0}
+        seedFromCache={false}
+        sharingOnlyReason="This site narrows you."
+        onClose={jest.fn()}
+      />,
+    )
+
+    fireEvent.click(exceptRadio())
+    fireEvent.click(screen.getByRole('checkbox', { name: 'Site 2' }))
+    fireEvent.click(screen.getByRole('button', { name: 'Save sharing' }))
+
+    await waitFor(() => expect(mockFetch).toHaveBeenCalledTimes(1))
+    expect(updateDoc).not.toHaveBeenCalled()
+  })
+
+  it('a reader who can’t change it reads the all-except sentence', () => {
+    render(
+      <DatasetSchemaDialog
+        orgId="org-1"
+        dataset={{ ...dataset, visibleTo: ['host:h1', 'host:h3'], scopeMode: 'allExcept', scopeExcept: ['host:h2'] } as never}
+        datasets={[]}
+        recordCount={0}
+        seedFromCache={false}
+        canChangeSharing={false}
+        onClose={jest.fn()}
+      />,
+    )
+
+    expect(screen.getByText('All sites except Site 2')).toBeTruthy()
+    expect(screen.queryByRole('radio')).toBeNull()
+  })
+
+  it('does not offer as a reference target a dataset chosen sites hold, for one a new site joins', () => {
+    render(
+      <DatasetSchemaDialog
+        orgId="org-1"
+        dataset={{
+          ...dataset,
+          visibleTo: ['host:h1', 'host:h3'],
+          scopeMode: 'allExcept',
+          scopeExcept: ['host:h2'],
+          model: { fields: { link: { name: 'Link', type: 'reference' } }, order: ['link'] },
+        } as never}
+        datasets={[
+          { $id: 'chosen', displayName: 'Chosen sites', visibleTo: ['host:h1', 'host:h3'] },
+          { $id: 'every', displayName: 'Every site', visibleTo: ['org'] },
+        ] as never}
+        recordCount={0}
+        seedFromCache={false}
+        onClose={jest.fn()}
+      />,
+    )
+
+    fireEvent.click(screen.getByRole('button', { name: 'Edit' }))
+    fireEvent.mouseDown(screen.getByLabelText(/Target|Dataset|Collection/))
+    const offered = screen.getAllByRole('option').map((option) => option.textContent)
+    expect(offered).toContain('Every site')
+    expect(offered).not.toContain('Chosen sites')
   })
 })
