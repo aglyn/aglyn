@@ -164,6 +164,29 @@ describe('contactListColumns', () => {
     }
   })
 
+  /*
+   * THE SOURCES HEADER (AGL-3680). `sources` is one holder's map on a facet,
+   * so no stored field can order the query, and the header sorts the page as
+   * Owner and Tags do. It sorts by the words on the chips: `order` reads
+   * "Customer", so it has to sort with the Cs.
+   */
+  it('reads the sources by the words on the chips, and does not switch the header off', () => {
+    expect(column('sources').sortable).not.toBe(false)
+    expect(column('sources').filterable).toBe(false)
+    expect(value('sources', row({ sources: { order: true, manual: true } }))).toBe(
+      'Customer, Added by hand',
+    )
+    expect(value('sources', row({ sources: {} }))).toBe('')
+    const declared = { kiosk: true } as ContactRecord['sources']
+    expect(value('sources', row({ sources: declared }))).toBe('kiosk')
+    registerPluginContactSource({ source: 'kiosk', label: 'Guest book' }, { pluginId: 'kiosk' })
+    try {
+      expect(value('sources', row({ sources: declared }))).toBe('Guest book')
+    } finally {
+      unregisterPluginServices('kiosk')
+    }
+  })
+
   it('names the owner through the roster, and never offers the column as a query', () => {
     expect(value('ownerUid', row({ ownerUid: 'owner-1' }))).toBe('Grace Hopper')
     // Somebody the roster no longer lists is still identified, by uid.

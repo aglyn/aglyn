@@ -18,6 +18,8 @@
 import { consentGroupForHost, soloConsentGroup } from './consent-groups'
 import type { ContactInteraction } from './contacts'
 import { ORG_CLIENT_WRITABLE_FIELDS } from '../foundation'
+import { registerPluginContactSource } from '../plugin-manager/plugin-contact-capture'
+import { unregisterPluginServices } from '../plugin-manager/plugin-services'
 import {
   activityKindHasOutcome,
   activityTimeLabel,
@@ -302,6 +304,31 @@ describe('a saved view', () => {
       crmViewSegmentFilters([{ field: 'source', op: 'equals', value: 'carrier-pigeon' }]),
     ).toBeNull()
     expect(crmViewFiltersFromSegment({})).toEqual([])
+  })
+
+  /*
+   * A plugin's source can be picked in the contacts filter (AGL-3680), so
+   * "Save as segment" has to keep it. Dropping it would save a segment broader
+   * than the list on screen: the tag alone, here, selects everyone with it.
+   */
+  it('keeps a source a plugin declared, both ways, and still drops an unknown word', () => {
+    const filters = [
+      { field: 'tags', op: 'contains', value: 'vip' },
+      { field: 'source', op: 'equals', value: 'kiosk' },
+    ]
+    expect(crmViewSegmentFilters(filters)).toEqual({ tags: ['vip'] })
+    registerPluginContactSource({ source: 'kiosk', label: 'Guest book' }, { pluginId: 'kiosk' })
+    try {
+      const segment = crmViewSegmentFilters(filters)
+      expect(segment).toEqual({ tags: ['vip'], sources: ['kiosk'] })
+      expect(crmViewFiltersFromSegment(segment as never)).toEqual(filters)
+      expect(
+        crmViewSegmentFilters([{ field: 'source', op: 'isAnyOf', value: 'form,kiosk,carrier-pigeon' }]),
+      ).toEqual({ sources: ['form', 'kiosk'] })
+      expect(crmViewFiltersFromSegment({ sources: ['carrier-pigeon' as never] })).toEqual([])
+    } finally {
+      unregisterPluginServices('kiosk')
+    }
   })
 
   it('reads and writes the default view on the profile, per org and section', () => {

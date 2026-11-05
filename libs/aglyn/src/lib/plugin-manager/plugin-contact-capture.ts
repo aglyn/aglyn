@@ -411,3 +411,34 @@ export function labelContactSource(source: unknown, fallback?: string): string {
   }
   return pluginContactSource(word)?.label || (fallback ?? word)
 }
+
+/**
+ * Whether a word is a source this process can name: one of the core's, or a
+ * door a plugin declared. What keeps a saved filter from carrying a word
+ * nothing answers to, without closing the list against a plugin's door.
+ */
+export function isKnownContactSource(source: unknown): boolean {
+  const word = typeof source === 'string' ? source.trim() : ''
+  if (!word) return false
+  return Object.hasOwn(CONTACT_SOURCE_LABELS, word) || pluginContactSource(word) !== null
+}
+
+/** One source a filter offers: the stored word, and how it reads. */
+export interface ContactSourceOption {
+  value: string
+  label: string
+}
+
+/**
+ * Every source a filter can offer: the core's, then each door a plugin
+ * declared, each reading as {@link labelContactSource} reads it, so a filter's
+ * choice and a row's chip cannot disagree. A plugin that declares a core word
+ * adds no second entry and does not change its label.
+ */
+export function listContactSourceOptions(): ContactSourceOption[] {
+  const words = new Set([
+    ...Object.keys(CONTACT_SOURCE_LABELS),
+    ...listPluginContactSources().map((door) => door.source),
+  ])
+  return [...words].map((value) => ({ value, label: labelContactSource(value) }))
+}

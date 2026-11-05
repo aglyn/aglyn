@@ -207,7 +207,8 @@ owner, stage, company, tags, sources, dates, purchases and custom fields —
 always apply, the way a segment's do. Only views whose filters can be an
 audience are offered: a view filtered by a name or an email, or by the updated
 date, describes a list on a screen rather than a set of people, and is left
-out. A view that is deleted, or edited past what an audience can express after
+out. So is a view filtered by a source a plugin adds, such as **Waiver signed**;
+save that filter as a segment to send to those people. A view that is deleted, or edited past what an audience can express after
 a rule named it, makes that audience select nobody rather than everybody.
 
 ## Who sees what
