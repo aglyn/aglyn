@@ -1885,6 +1885,21 @@ service cloud.firestore {
       }
       // A deal names the contact and company it is with, an amount and a
       // stage — the most commercially sensitive row in the CRM.
+      //
+      // WHERE A DEAL STANDS IS THE SERVER'S ONCE IT EXISTS (AGL-4047). A move
+      // goes through `crm/deal-stage`, which asks "Move contacts and deals
+      // between stages" (`crm.moveStages`) and "Manage data", tells the
+      // automations, and stamps the fields below together; every console and
+      // app surface already calls it. A client update may not change them, so
+      // a hand-written write cannot get past that key. A create still sets
+      // the deal's first stage. The probability and the forecast category
+      // stay client-direct: the route resets them on a move, and the deal
+      // page may set either again afterwards.
+      function dealStageUnchanged() {
+        return !request.resource.data.diff(resource.data).affectedKeys()
+          .hasAny(['pipelineId', 'stageId', 'status', 'stageChangedAtMs',
+                   'closedAtMs', 'lostReason']);
+      }
       match /deals/{dealId} {
         allow read: if isStaff() || canReadScopedPeople();
         allow create: if isStaff() ||
@@ -1892,7 +1907,7 @@ service cloud.firestore {
             crmMediaIdsOk() && orgCarriesCrmSuite(orgId));
         allow update: if isStaff() ||
           (canWriteScopedCrm() && (isOrgWideMember() || scopeUnchanged()) &&
-            crmSharingUnchanged() &&
+            crmSharingUnchanged() && dealStageUnchanged() &&
             crmMediaIdsOk() && orgCarriesCrmSuite(orgId));
         allow delete: if isStaff() || canWriteScopedCrm();
       }
