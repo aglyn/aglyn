@@ -27,7 +27,7 @@ import {
   isPrivateListing,
   listingArtifactType,
 } from '../model/marketplace'
-import { isPublisherMember } from './publisher-profile'
+import { ownsListingHere } from './own-listing'
 import { requirePurchase } from './purchase-entitlement'
 import { hasDivergedFromBase, recordInstallProvenance } from './provenance'
 import { recordVersionMove } from './version-stats'
@@ -206,11 +206,13 @@ export const installThemeHandler: PluginApiHandler = async (req, res) => {
     }
 
     const priceUsd = Number(listing.priceUsd ?? 0)
-    const ownsListing = await isPublisherMember(
-      firestore,
-      decoded.uid,
-      listing.profileId,
-    )
+    // Free for the publisher's members on its OWN sites only (AGL-2484,
+    // AGL-4047); into another workspace they are buyers like anyone else.
+    const ownsListing = await ownsListingHere(firestore, {
+      uid: decoded.uid,
+      publisherOrgId: listing.profileId,
+      targetOrgId: membership.orgId,
+    })
     // Private listings install ONLY for the owning org (AGL-2290).
     //
     // `install-plugin.ts` has carried this since AGL-968; the other six never

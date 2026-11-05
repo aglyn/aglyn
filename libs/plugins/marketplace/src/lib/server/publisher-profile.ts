@@ -118,11 +118,15 @@ export async function resolvePublisherProfile(
  * (AGL-652, AGL-4047).
  *
  * A FACT ABOUT OWNERSHIP, NOT A PERMISSION. It answers the questions that
- * turn on who published the listing: its own workspace installs it free (and
- * may try a private or unreviewed one), and nobody in that workspace may buy
- * it or review it. A key could be refused to an admin, and the admin would
- * still be part of the workspace that published it, so a permission here
- * would let them pay themselves or rate their own work. What a member may DO
+ * turn on who published the listing: nobody in that workspace may buy it or
+ * review it, and, on the workspace's OWN sites only, its members install it
+ * free (and may try a private or unreviewed one). The install doors ask that
+ * last one through `ownsListingHere` (`own-listing.ts`), which adds the
+ * "lands in the publishing workspace" half; off those sites they are buyers.
+ *
+ * A key could be refused to an admin, and the admin would still be part of
+ * the workspace that published it, so a permission here would let them pay
+ * themselves or rate their own work. What a member may DO
  * for the publisher (its profile, its listings, its payouts, the Verified
  * badge) asks a key instead: `publisherPermissionVerdict`.
  *

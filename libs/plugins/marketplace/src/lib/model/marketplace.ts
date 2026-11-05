@@ -30,6 +30,7 @@ import {
   MEDIA_REF_PREFIX,
 } from '@aglyn/aglyn/app-utils/media-ref'
 import { marketplaceMinPriceUsd } from './listing-price-floor'
+import { landsInPublisherWorkspace } from './own-listing'
 import type { InstallableArtifactType as MarketplaceArtifactType } from '@aglyn/aglyn/app-utils/artifact-provenance'
 import type { ListingVerificationRequest } from './listing-verification'
 import {
@@ -503,7 +504,7 @@ export function installsUnreviewedFallback(
 ): boolean {
   if (!listing?.profileId || !viewerOrgId) return false
   // Only the publishing org gets the fallback; everyone else is refused.
-  if (listing.profileId !== viewerOrgId) return false
+  if (!landsInPublisherWorkspace(listing.profileId, viewerOrgId)) return false
   // An INSTALLABLE version exists → the route serves THAT, however much newer
   // the pending one is. Not an unreviewed install. Reading approval alone got
   // this backwards for a revoked listing: the route would fall back to
