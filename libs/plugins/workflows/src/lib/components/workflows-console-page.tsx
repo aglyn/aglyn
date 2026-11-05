@@ -24,7 +24,7 @@ import HostActionsCard from './host-actions-card.component'
 import HostWebhooksCard from './host-webhooks-card.component'
 import HostWorkflowsCard from './host-workflows-card.component'
 import OrgAutomationsCard from './org-automations-card.component'
-import OrgSiteAutomationList from './org-site-automation-list.component'
+import OrgSiteAutomationList, { OrgSiteWebhookList } from './org-site-automation-list.component'
 import RunQuotaLine from './run-quota-line.component'
 import SiteOrgAutomationsPanel from './site-org-automations-panel.component'
 import type { WorkflowsConsoleSectionId } from './workflows-console-sections'
@@ -114,15 +114,13 @@ function orgSectionBody(
             org={org}
             counter={section === 'workflows' ? 'workflowRuns' : 'actionRuns'}
           />
-          <OrgSiteAutomationList mount={mount} kind={section} canRead />
+          <OrgSiteAutomationList mount={mount} kind={section} />
         </Stack>
       )
     case 'webhooks':
-      // A webhook holds its site's secret: the rules admit a site's admins
-      // and editors, which every org-wide member but a viewer is.
-      return (
-        <OrgSiteAutomationList mount={mount} kind="webhooks" canRead={canEdit} />
-      )
+      // A webhook holds its site's secret: it asks what the rules ask of each
+      // site, "See orders and webhooks" (`site.sensitive`).
+      return <OrgSiteWebhookList mount={mount} />
     default:
       return null
   }
