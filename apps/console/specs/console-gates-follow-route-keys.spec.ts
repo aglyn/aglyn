@@ -281,8 +281,13 @@ describe('the publisher keys: one key for the control, the route and the rule (A
     // The search searches: the plugin has sources, and the membership fact is found.
     expect(sources.length).toBeGreaterThan(50)
     expect(sources.filter((file) => /\bcanActAsPublisher\b/.test(read(`../../${file}`)))).toEqual([])
-    // Free own installs, no buying your own listing, no rating it.
-    const MEMBERSHIP = [
+    // No buying your own listing, no rating it: membership alone.
+    for (const file of ['sale.ts', 'reviews.ts', 'own-listing.ts']) {
+      expect([file, read(`${MARKETPLACE}/server/${file}`).includes('isPublisherMember(')]).toEqual([file, true])
+    }
+    // Free own installs: membership AND the install landing in the publishing
+    // workspace (AGL-2484, AGL-4047), one definition every door asks.
+    const OWN_SITES = [
       'install.ts',
       'install-plugin.ts',
       'install-theme.ts',
@@ -293,12 +298,14 @@ describe('the publisher keys: one key for the control, the route and the rule (A
       'install-dataset-schema.ts',
       'update-artifact.ts',
       'site-starter-source.ts',
-      'sale.ts',
-      'reviews.ts',
     ]
-    for (const file of MEMBERSHIP) {
-      expect([file, read(`${MARKETPLACE}/server/${file}`).includes('isPublisherMember(')]).toEqual([file, true])
+    for (const file of OWN_SITES) {
+      const source = read(`${MARKETPLACE}/server/${file}`)
+      expect([file, source.includes('ownsListingHere('), /\bisPublisherMember\(/.test(source)]).toEqual([file, true, false])
     }
+    const waiver = /export function isOwnListingInstall\([\s\S]*?\n}\n/.exec(read(`${MARKETPLACE}/model/own-listing.ts`))?.[0] ?? ''
+    expect(waiver).toContain('landsInPublisherWorkspace(facts.publisherOrgId, facts.targetOrgId)')
+    expect(waiver).not.toMatch(/memberHasOrgPermission|permissions|'owner'|'admin'/)
     // The fact asks the members collection and nothing else: no key, no role.
     const fact = /export async function isPublisherMember\([\s\S]*?\n}\n/.exec(read(`${MARKETPLACE}/server/publisher-profile.ts`))?.[0] ?? ''
     expect(fact).toContain('member.exists')

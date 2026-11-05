@@ -462,6 +462,16 @@ describe('resolve (AGL-4049)', () => {
     expect(await source.resolve({ listingId: 'a' }, { orgId: 'elsewhere', uid: 'owner-1' })).toMatchObject({
       status: 402,
     })
+    // And a licence that workspace holds covers it, as for any buyer (AGL-4047).
+    state.docs.set('marketplacePurchases/p1', { buyerOrgId: 'elsewhere', buyerUid: 'someone', listingId: 'a' })
+    expect(await source.resolve({ listingId: 'a' }, { orgId: 'elsewhere', uid: 'owner-1' })).toEqual(payload())
+  })
+
+  it('hands a free starter to the publisher’s member in any workspace (AGL-4047)', async () => {
+    listing('a')
+    state.publisherMembers.add(`owner-1@${PUBLISHER}`)
+    expect(await source.resolve({ listingId: 'a' }, { orgId: PUBLISHER, uid: 'owner-1' })).toEqual(payload())
+    expect(await source.resolve({ listingId: 'a' }, { orgId: 'elsewhere', uid: 'owner-1' })).toEqual(payload())
   })
 
   it('resolves a pinned version, and is gone when that version is not stored', async () => {

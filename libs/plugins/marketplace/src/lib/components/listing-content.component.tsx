@@ -37,6 +37,7 @@ import {
   type InstallTargeting,
   type UninstallTarget,
 } from '../model/marketplace'
+import { landsInPublisherWorkspace } from '../model/own-listing'
 import UninstallImpactDialog from './uninstall-impact-dialog.component'
 import { ListingImage } from './listing-image.component'
 import {
@@ -1099,8 +1100,16 @@ export function MarketplaceListingContent({
     ],
   )
   const priceUsd = Number(listing?.priceUsd ?? 0)
+  // Free without a purchase only where the install routes waive it: the
+  // publisher's own listing on a site of the publisher's own workspace
+  // (AGL-2484, AGL-4047). `viewerOrgId` is the acting site's workspace, the
+  // one the install lands in, so a publisher's member acting on a client's
+  // site is asked to buy, as the route would ask.
   const mustBuy =
-    priceUsd > 0 && !purchased && listing?.profileId !== viewerOrgId && !installed
+    priceUsd > 0 &&
+    !purchased &&
+    !landsInPublisherWorkspace(listing?.profileId, viewerOrgId) &&
+    !installed
   // Updating an installed plugin stays at its current scope; a fresh install
   // uses the picker (plugins) or the artifact's only target (everything else).
   const installTargetScope: 'org' | 'host' | undefined =
