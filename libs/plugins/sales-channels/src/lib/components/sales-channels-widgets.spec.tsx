@@ -300,7 +300,7 @@ describe('the card follows the keys its routes ask (AGL-4047)', () => {
     await screen.findByTestId('sales-channels-card')
     const replace = screen.getByRole('button', { name: 'Replace address' }) as HTMLButtonElement
     expect(replace.disabled).toBe(true)
-    expect(replace.parentElement?.getAttribute('aria-label')).toContain('Replace a feed address')
+    expect(replace.parentElement?.getAttribute('aria-label')).toContain('does not include')
     expect((screen.getByLabelText('Meta feed') as HTMLInputElement).disabled).toBe(true)
   })
 
