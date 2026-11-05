@@ -117,7 +117,7 @@ jest.mock('../components/host-id-provider', () => ({
   __esModule: true,
   useHostId: () => undefined,
   useHostReady: () => true,
-  useIsHostAdmin: () => false,
+  useCanManageSite: () => false,
 }))
 jest.mock('../components/console-plugins-gate.component', () => ({
   __esModule: true,

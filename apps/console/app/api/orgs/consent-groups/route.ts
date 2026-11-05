@@ -15,6 +15,7 @@
  * limitations under the License.
  */
 
+import { permissionRefusalText } from '@aglyn/aglyn/app-utils/org-permissions'
 import { pluginRequestFromWeb } from '@aglyn/aglyn/server'
 import {
   advanceConsentGroupChange,
@@ -100,7 +101,7 @@ async function handler(request: Request): Promise<Response> {
     const staff = decoded['staff'] === true
     const membership = await resolveOrgMembership(decoded.uid, orgId)
     if (!staff && !(await memberHasOrgPermission(orgId, membership?.member, 'org.settings'))) {
-      return Response.json({ error: 'Org settings require the admin role' }, { status: 403 })
+      return Response.json({ error: permissionRefusalText('org.settings') }, { status: 403 })
     }
 
     const org = await getOrgDoc(orgId)

@@ -201,7 +201,7 @@ export function SignaturesCard(props: SignaturesCardProps) {
       <Stack spacing={2}>
         {!canCollect ? (
           <Alert severity="info">
-            {'Signatures hold signers’ personal details, so they are for site admins and editors whose Collect waivers permission is on.'}
+            {'Signatures hold signers’ personal details, so they take the Collect waivers permission, which site admins and editors hold by default.'}
           </Alert>
         ) : null}
         <LocalizationProvider dateAdapter={AdapterDayjs}>

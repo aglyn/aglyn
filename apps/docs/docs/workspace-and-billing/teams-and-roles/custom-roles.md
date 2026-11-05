@@ -119,6 +119,13 @@ don't, so a custom role or a per-member override can let a viewer do this work, 
 an editor from doing so. Lists and topics belong to the whole workspace, so a collaborator
 added to particular sites doesn't change them, even when granted this permission.
 
+A member invited to one site who holds **Manage data** can add, change and delete records
+shared with the whole workspace, such as a company, a deal or a dataset's rows, because a
+record shared with every site is shared with theirs too. They can't change what a record is
+shared with, and records shared only with other sites stay out of their reach. To keep
+someone to their own site's records, share the rest with the sites that need them rather
+than with the whole workspace, or take **Manage data** away from them.
+
 ### Site permissions {#site-permissions}
 
 Four permissions decide what someone may do on a site:

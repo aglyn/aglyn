@@ -224,7 +224,7 @@ jest.mock('../components/host-id-provider', () => ({
   useHostSubdomain: () => 'shop',
   useHostEnabledPlugins: () => [],
   useHostDisabledPlugins: () => [],
-  useIsHostAdmin: () => true,
+  useCanManageSite: () => true,
   useHostReady: () => true,
   useHostError: () => undefined,
 }))

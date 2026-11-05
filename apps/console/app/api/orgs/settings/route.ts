@@ -24,6 +24,7 @@ import {
   nameSearchReversed,
   nameSearchTokens,
 } from '@aglyn/aglyn/app-utils/name-search'
+import { permissionRefusalText } from '@aglyn/aglyn/app-utils/org-permissions'
 import { isSupportedTimeZone } from '@aglyn/aglyn/app-utils/collection-entry-date'
 import { CONSENT_GROUPS_AWAIT_CONFIRMATION_FIELD } from '@aglyn/aglyn/app-utils/consent-groups'
 import type { AglynOrgBilling } from '@aglyn/aglyn/server'
@@ -92,7 +93,7 @@ async function handler(request: Request): Promise<Response> {
       decoded['staff'] !== true &&
       !(await memberHasOrgPermission(orgId, membership?.member, 'org.settings'))
     ) {
-      return Response.json({ error: 'Org settings require the admin role' }, { status: 403 })
+      return Response.json({ error: permissionRefusalText('org.settings') }, { status: 403 })
     }
 
     // Lockdown verdict (AGL-1506): platform/org/user scopes — only some

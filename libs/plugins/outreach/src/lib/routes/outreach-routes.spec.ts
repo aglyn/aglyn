@@ -2630,7 +2630,7 @@ describe('outreach/enrollments/thread and outreach/enrollments/reply (AGL-4020)'
     expect(stored().inboundMessages).toHaveLength(1)
     const other = await post(reply(), 'uid-reader', { enrollmentId: ENROLLMENT, body: 'Hi' })
     expect(other).toMatchObject({ status: 403, body: { reason: 'permission' } })
-    expect(other.body.error).toBe('Only the member who connected rep@example.com, or an organization owner or admin, can answer from it.')
+    expect(other.body.error).toBe('Only the member who connected rep@example.com, or a member holding "Manage everyone’s Sequences", can answer from it.')
     expect(gmail.sent).toHaveLength(0)
     expect((await post(reply(), OWNER, { enrollmentId: ENROLLMENT, body: 'Hi' })).status).toBe(200)
   })

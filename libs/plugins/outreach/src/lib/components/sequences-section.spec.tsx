@@ -195,7 +195,7 @@ describe('the sequence list (AGL-2980)', () => {
     renderSection()
     expect(
       screen.getByText(
-        /Ask an organization owner or admin for the Use Sequences permission/,
+        /Your role does not include "Use Sequences"/,
       ),
     ).toBeTruthy()
   })

@@ -31,9 +31,9 @@
  * A section missing from the rail is hidden, not withheld; the URL is still
  * typeable and a bookmark still resolves. So the assertions below render the
  * real `admin/(sections)` layout with the real Error pages page as its
- * children and drive `useIsHostAdmin` — the same context the host doc's
- * `memberRoles[uid] === 'admin'` feeds — rather than reading either file for
- * the word `isAdmin`.
+ * children and drive `useCanManageSite` — the same context the host doc's
+ * "Manage site settings" stamp feeds — rather than reading either file for the
+ * name of a variable.
  *
  * Every refusal is paired with a control that drives the SAME render to the
  * card, because a gate that admits nobody would satisfy a deny on its own.
@@ -55,6 +55,7 @@ const HOST_ID = 'host-1'
 
 /** The signed-in reader's standing on this site, per test. */
 let mockIsHostAdmin = true
+let mockHostAdminKnown = true
 /** The host document the card reads its current settings from. */
 let mockHostDoc: Record<string, unknown> = {}
 
@@ -127,7 +128,8 @@ jest.mock('../components/host-display-name.component', () => ({
 jest.mock('../components/host-id-provider', () => ({
   useHostId: () => HOST_ID,
   useHostSubdomain: () => 'acme',
-  useIsHostAdmin: () => mockIsHostAdmin,
+  useCanManageSite: () => mockIsHostAdmin,
+  useCanManageSiteKnown: () => mockHostAdminKnown,
 }))
 jest.mock('../hooks/use-org-scope', () => ({
   useOrgSlug: () => 'acme',
@@ -165,6 +167,8 @@ const SETUP_DETAILS =
 const ADMIN_ERROR_PAGES =
   'apps/console/app/(app)/[orgSlug]/hosts/[host]/admin/(sections)/error-pages/page.tsx'
 
+const SITE_MANAGE_REFUSAL =
+  'Your role does not include "Manage site settings" — ask an organization admin'
 const MAINTENANCE_LABEL =
   'Maintenance mode — show the 503 page at every address'
 
@@ -182,6 +186,7 @@ const maintenanceSwitch = () =>
 beforeEach(() => {
   jest.clearAllMocks()
   mockIsHostAdmin = true
+  mockHostAdminKnown = true
   mockHostDoc = { $id: HOST_ID }
   mockRevalidateLivePages.mockResolvedValue({ reason: 'ok' })
 })
@@ -215,12 +220,10 @@ describe('where the card is mounted (AGL-3178)', () => {
 })
 
 describe('the admin route withholds it, rather than the rail hiding it', () => {
-  it('shows a non-admin the refusal and none of the card', () => {
+  it('shows a member without the key the refusal and none of the card', () => {
     mockIsHostAdmin = false
     openTheSection()
-    expect(document.body.textContent).toContain(
-      'Only site admins can open this area.',
-    )
+    expect(document.body.textContent).toContain(SITE_MANAGE_REFUSAL)
     // Not merely "the rail has no link": the section's own page rendered
     // nothing, which is what a typed URL or a held bookmark reaches.
     expect(document.body.textContent).not.toContain('Error pages')
@@ -233,9 +236,16 @@ describe('the admin route withholds it, rather than the rail hiding it', () => {
     expect(document.body.textContent).toContain('Error pages')
     expect(document.body.textContent).toContain(MAINTENANCE_LABEL)
     expect(maintenanceSwitch()).toBeTruthy()
-    expect(document.body.textContent).not.toContain(
-      'Only site admins can open this area.',
-    )
+    expect(document.body.textContent).not.toContain(SITE_MANAGE_REFUSAL)
+  })
+
+  it('refuses nobody while the host document loads, and shows none of the card', () => {
+    mockIsHostAdmin = false
+    mockHostAdminKnown = false
+    openTheSection()
+    expect(document.body.textContent).not.toContain(SITE_MANAGE_REFUSAL)
+    expect(document.body.textContent).not.toContain(MAINTENANCE_LABEL)
+    expect(maintenanceSwitch()).toBeNull()
   })
 
   it('reflects a site already in maintenance, for the admin who can end it', () => {

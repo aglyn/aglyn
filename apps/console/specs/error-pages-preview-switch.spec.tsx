@@ -114,7 +114,8 @@ jest.mock('../components/host-display-name.component', () => ({
 jest.mock('../components/host-id-provider', () => ({
   useHostId: () => HOST_ID,
   useHostSubdomain: () => 'acme',
-  useIsHostAdmin: () => mockIsHostAdmin,
+  useCanManageSite: () => mockIsHostAdmin,
+  useCanManageSiteKnown: () => true,
 }))
 jest.mock('../hooks/use-org-scope', () => ({
   useOrgSlug: () => 'acme',

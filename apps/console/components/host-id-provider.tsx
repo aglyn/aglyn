@@ -112,21 +112,21 @@ export const HostEnabledPluginsContext = createContext<readonly string[]>([])
  * AGL-4047) on the current host, false off host routes or while loading. Gates
  * the host Admin tab and page; the rules ask the same key of the same document.
  */
-export const HostAdminContext = createContext<boolean>(false)
+export const CanManageSiteContext = createContext<boolean>(false)
 /**
  * Whether the answer above is an answer yet (AGL-4047): the host document has
  * been read and the session is known. False while it loads and after a failed
  * read, when `false` above means "not yet" rather than a refusal, so a surface
  * that tells someone they lack the key asks this first.
  */
-export const HostAdminKnownContext = createContext<boolean>(false)
+export const CanManageSiteKnownContext = createContext<boolean>(false)
 
 export const useHostId = () => useContext(HostIdContext)
 export const useHostEnabledPlugins = () => useContext(HostEnabledPluginsContext)
 export const useHostDisabledPlugins = () =>
   useContext(HostDisabledPluginsContext)
-export const useIsHostAdmin = () => useContext(HostAdminContext)
-export const useHostAdminKnown = () => useContext(HostAdminKnownContext)
+export const useCanManageSite = () => useContext(CanManageSiteContext)
+export const useCanManageSiteKnown = () => useContext(CanManageSiteKnownContext)
 export const useHostSubdomain = () => useContext(HostSubdomainContext)
 export const useHostReady = () => useContext(HostReadyContext)
 /** Whether host resolution gave up after retries (AGL-813). */
@@ -141,7 +141,7 @@ export const useHostAuthError = () => useContext(HostAuthErrorContext)
 /**
  * Reads the resolved host's doc and provides its plugin policy (AGL-1014):
  * the per-site `disabledPlugins` deny-list and whether the signed-in user
- * is a site admin. Mounted only once a hostId exists — `useHost` needs a
+ * holds "Manage site settings". Mounted only once a hostId exists — `useHost` needs a
  * real doc path, and off host routes the contexts' defaults ([] / false)
  * are already the right answer.
  *
@@ -192,10 +192,10 @@ function HostPluginPolicyBridge({
   )
   // "Manage site settings" (`site.manage`, AGL-4047) on this site, read as
   // the rules read it: the site's stamp, else the preset of the site Admin.
-  const isAdmin = Boolean(
+  const canManageSite = Boolean(
     uid && hostStampedSitePermission(host, uid, 'site.manage', CORE_SITE_ROLE_PRESETS['site.manage']),
   )
-  const adminKnown = status === 'success' && !serverDenied && Boolean(uid && host)
+  const canManageSiteKnown = status === 'success' && !serverDenied && Boolean(uid && host)
   /**
    * Which site every themed surface below is showing (AGL-3068).
    *
@@ -210,13 +210,13 @@ function HostPluginPolicyBridge({
   return (
     <HostDisabledPluginsContext.Provider value={disabledPlugins}>
       <HostEnabledPluginsContext.Provider value={optedInPlugins}>
-        <HostAdminContext.Provider value={isAdmin}>
-          <HostAdminKnownContext.Provider value={adminKnown}>
+        <CanManageSiteContext.Provider value={canManageSite}>
+          <CanManageSiteKnownContext.Provider value={canManageSiteKnown}>
             <HostSiteKeyContext.Provider value={siteKey}>
               {children}
             </HostSiteKeyContext.Provider>
-          </HostAdminKnownContext.Provider>
-        </HostAdminContext.Provider>
+          </CanManageSiteKnownContext.Provider>
+        </CanManageSiteContext.Provider>
       </HostEnabledPluginsContext.Provider>
     </HostDisabledPluginsContext.Provider>
   )

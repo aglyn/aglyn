@@ -179,7 +179,7 @@ export function LiveChatCard(props: LiveChatCardProps) {
           </Alert>
         ) : null}
         {!canManage ? (
-          <Alert severity="info">Live chat is set up by a site admin.</Alert>
+          <Alert severity="info">Setting up live chat takes the "Manage site settings" permission, which site admins hold by default.</Alert>
         ) : null}
         <FormControlLabel
           control={

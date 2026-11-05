@@ -149,7 +149,7 @@ export function composeExtensionPermissions(
  */
 export function refusedExtensionNotice(surfaceTitle: string): string {
   return (
-    `You don't have permission to open ${surfaceTitle}. An organization ` +
-    'owner or admin can grant it from Team.'
+    `You don't have permission to open ${surfaceTitle}. A member holding ` +
+    '"Manage members" can grant it from Team.'
   )
 }

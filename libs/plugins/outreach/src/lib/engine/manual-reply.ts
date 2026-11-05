@@ -387,7 +387,7 @@ export function outreachManualReplyRefusal(input: {
   if (!input.mayUseMailbox) {
     return {
       code: 'permission',
-      message: `Only the member who connected ${address}, or an organization owner or admin, can answer from it.`,
+      message: `Only the member who connected ${address}, or a member holding "Manage everyone’s Sequences", can answer from it.`,
     }
   }
   return null

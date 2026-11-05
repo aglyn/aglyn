@@ -277,7 +277,6 @@ describe('native workspace settings', () => {
     const card = read('apps/console/components/settings/org-general-card.component.tsx')
     it('says what the console says', () => {
       sentences(card, nativeText('core.settings.general'), [
-        'Changing these settings requires the admin role.',
         'Every site in this workspace dates its posts and pages in this zone, unless the site sets its own under Admin',
         'The old URL keeps redirecting, but share the new one going forward.',
         'Only the organization owner can change the URL.',

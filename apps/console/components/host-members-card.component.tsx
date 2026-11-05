@@ -58,6 +58,7 @@ import {
   where,
 } from 'firebase/firestore'
 import { useCallback, useEffect, useMemo, useState } from 'react'
+import { permissionRefusalText } from '@aglyn/aglyn/app-utils/org-permissions'
 import { nameSearchNormalizers } from '@aglyn/aglyn/app-utils/name-search'
 import { useFirestore, useUser } from '@aglyn/tenant-feature-instance'
 import { useListQuery } from '@aglyn/tenant-feature-instance/hooks/use-list-query'
@@ -665,7 +666,7 @@ export function HostMembersCard(props: HostMembersCardProps) {
                   reason={
                     member.status === 'invited'
                       ? 'Permissions can be set once the invite is accepted'
-                      : 'Only site admins and members who manage people can see and set permissions'
+                      : permissionRefusalText('members.manage')
                   }
                 >
                   <Button size="small" onClick={() => setPermissionsFor(member)}>

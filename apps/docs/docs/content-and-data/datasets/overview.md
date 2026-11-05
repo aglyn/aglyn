@@ -211,6 +211,12 @@ the Data page, the pickers, or anywhere else.
 Sharing is enforced on the **server**, not just in the console. A site cannot render a
 dataset it hasn't been shared with even if a page explicitly asks for it by name.
 
+Sharing decides who sees a dataset, not who may change it. A member invited to one site who
+holds **Manage data** can change the records of a dataset shared with the whole workspace,
+because it is shared with their site too; see
+[Custom roles & permissions](../../workspace-and-billing/teams-and-roles/custom-roles.md).
+They can't change what the dataset is shared with.
+
 A few consequences worth knowing:
 
 - **Narrowing sharing can empty a live page.** If a published page repeats over a dataset
