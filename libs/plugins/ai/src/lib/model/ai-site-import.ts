@@ -423,6 +423,8 @@ export interface SiteImportLayoutGroup {
    * a plan's name, words and button, or a label and its value (AGL-4083).
    */
   inline?: true
+  /** Its items are photos, not marks (AGL-4152): a gallery, drawn as its pictures in its columns. Only on a `logos` group. */
+  gallery?: true
   items: SiteImportLayoutItem[]
 }
 

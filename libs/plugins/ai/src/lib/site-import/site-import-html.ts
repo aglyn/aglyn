@@ -244,6 +244,8 @@ export interface SiteImportElementAttrs {
   lazy?: true
   /** A picture sized to nothing, or to a tracking pixel (AGL-4152). */
   tiny?: true
+  /** The share of the screen's width a picture's `sizes` says it is drawn at on a wide screen, in percent (AGL-4152). */
+  share?: number
   /** `data-section-theme` or `data-theme`: a site builder's name for a band's look. */
   theme?: string
   type?: string
@@ -1489,6 +1491,14 @@ function isLazyPicture(attributes: Record<string, string>): boolean {
   return [...LAZY_SOURCES, 'data-srcset'].some((name) => !!attributes[name]) && (!attributes['src'] || PLACEHOLDER_SRC.test(attributes['src']))
 }
 
+/** The share of the screen a picture's `sizes` gives it on the widest screen it names: its last entry's `vw`, or `null`. */
+function sizesShare(sizes: string | undefined): number | null {
+  const last = String(sizes ?? '').split(',').map((entry) => entry.trim()).filter((entry) => entry && entry !== 'auto').pop() ?? ''
+  const match = /^(?:\([^)]*\)\s*)?(\d+(?:\.\d+)?)vw$/i.exec(last)
+  const share = match ? Number(match[1]) : NaN
+  return share > 0 && share <= 100 ? Math.round(share * 100) / 100 : null
+}
+
 /** The address a picture shows: its own, else what a lazy loader holds, else the first of its `srcset`. */
 function pictureAddress(attributes: Record<string, string>): string | undefined {
   const own = attributes['src'] && !(isLazyPicture(attributes) && PLACEHOLDER_SRC.test(attributes['src'])) ? attributes['src'] : undefined
@@ -1528,6 +1538,8 @@ function elementAttrs(attributes: Record<string, string>, tag = ''): SiteImportE
       attrs.height = height
     }
     if (tag === 'img') {
+      const share = sizesShare(attributes['sizes'])
+      if (share !== null) attrs.share = share
       if (isLazyPicture(attributes)) attrs.lazy = true
       if ((width <= 1 && /^\s*[01](?:px)?\s*$/.test(attributes['width'] ?? '')) || (height <= 1 && /^\s*[01](?:px)?\s*$/.test(attributes['height'] ?? ''))) attrs.tiny = true
     }

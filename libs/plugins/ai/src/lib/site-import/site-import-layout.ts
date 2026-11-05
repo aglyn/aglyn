@@ -181,6 +181,16 @@ const WIDTH_CLASSES: ReadonlyArray<readonly [RegExp, number]> = [
 ]
 const STEP_NUMBER = /^(?:step\s*)?(?:0?\d{1,2}|[ivx]{1,4})[.):]?$/i
 const FIGURE = /^[^\s]{0,3}[\d][\d.,:/x×+%kmb$€£-]*\s?[^\s]{0,12}$|^\d+-[a-z]+$/i
+/** A picture drawn at this share of the screen or more is a photo (AGL-4152), in percent. */
+const GALLERY_MIN_SHARE = 15
+/** A picture this wide or wider, by its own size, is a photo where no sheet holds it to a mark's height. */
+const GALLERY_MIN_PX = 400
+const GALLERY_MAX_RATIO = 2.4
+/** The tallest a sheet draws a mark. */
+const MARK_MAX_PX = 100
+/** A gallery's columns where nothing says them, and the most it is drawn in. */
+const GALLERY_COLUMNS = 3
+const GALLERY_COLUMNS_MAX = 4
 /** The width a page is read at for its tablet columns (AGL-4138): between a framework's `sm` and `md`. */
 const TABLET_WIDTH = 768
 /** A paragraph set this much larger than the body, and bold, is a statement (AGL-4138), not a lede. */
@@ -1281,7 +1291,8 @@ class LayoutReader {
     const items = parts.map((part) => this.item(part.element, range))
     const chips = parts.length >= 4 && this.isRow(container) && parts.every((part) => this.isChip(part.element, range))
     const kind = chips ? 'logos' : this.groupKind(parts.map((part) => part.element), items, range)
-    const columns = this.columnsOf(container, parts)
+    const gallery = !chips && kind === 'logos' && this.isGallery(items)
+    const columns = gallery ? this.galleryColumns(container, parts, items) : this.columnsOf(container, parts)
     const frames = parts.map((part) => this.frameOf(part.element))
     const half = Math.ceil(parts.length / 2)
     const boxed = parts.length > 0 && frames.filter((frame) => frame.box).length >= half
@@ -1347,6 +1358,7 @@ class LayoutReader {
       columns,
       ...(columnsSm !== null ? { columnsSm } : {}),
       boxed,
+      ...(gallery ? { gallery: true as const } : {}),
       ...(ruled ? { rule: ruled } : {}),
       ...(align ? { align } : {}),
       ...(inline ? { inline: true as const } : {}),
@@ -1584,7 +1596,8 @@ class LayoutReader {
     const first = (item: SiteImportLayoutItem) => this.lineText(item.lines[0] ?? -1).trim()
     const blockKinds = (item: SiteImportLayoutItem) => item.lines.map((ref) => this.mainBlocks()[ref]?.kind)
     if (elements.some((element) => this.elements[element]?.tag === 'details')) return 'faq'
-    if (share((item) => item.lines.length === 0 || blockKinds(item).every((kind) => kind === 'image')) === 1 && items.some((item) => item.lines.length) && count >= 4) return 'logos'
+    // Pictures alone, two or more, are marks or a gallery (AGL-4152): `group` says which.
+    if (share((item) => item.lines.length === 0 || blockKinds(item).every((kind) => kind === 'image')) === 1 && items.some((item) => item.lines.length) && count >= 2) return 'logos'
     if (share((item) => blockKinds(item).includes('quote') || /^[“"«]/.test(first(item))) >= 0.6) return 'quotes'
     if (share((item) => item.lines.some((ref) => PRICE.test(this.lineText(ref)) && this.lineText(ref).length <= 24) && (item.lines.some((ref) => PERIOD.test(this.lineText(ref))) || !!item.link)) >= 0.6 && count >= 2) {
       return 'pricing'
@@ -1600,6 +1613,42 @@ class LayoutReader {
     if (titled >= 0.6) return 'cards'
     void range
     return 'text'
+  }
+
+  /**
+   * Whether a group of pictures alone is photos (AGL-4152), not marks: each
+   * picture drawn at a good share of the screen by its `sizes`, or its own size
+   * a photo's (400 px wide or more, no banner's shape) and no sheet holding it
+   * to a mark's height.
+   */
+  private isGallery(items: readonly SiteImportLayoutItem[]): boolean {
+    return items.every((item) => {
+      const pictures = this.pictureElements(item)
+      return pictures.length > 0 && pictures.every((node) => {
+        if ((node.attrs.share ?? 0) >= GALLERY_MIN_SHARE) return true
+        const { width, height } = node.attrs
+        if (!width || !height || width < GALLERY_MIN_PX || width / height > GALLERY_MAX_RATIO || height / width > GALLERY_MAX_RATIO) return false
+        const held = siteImportLengthPx(this.style(node.id).get('height') ?? '')
+        return held === null || held > MARK_MAX_PX
+      })
+    })
+  }
+
+  private pictureElements(item: SiteImportLayoutItem): SiteImportElement[] {
+    const mainBlocks = this.mainBlocks()
+    return item.lines.filter((ref) => mainBlocks[ref]?.kind === 'image').flatMap((ref) => {
+      const element = this.elements.find((node) => node.blocks.some((index) => this.mainIndex[index] === ref))
+      return element ? [element] : []
+    })
+  }
+
+  /** A gallery's columns: its container's, else as many as its pictures' share of the screen fits, else three at most. */
+  private galleryColumns(container: number, parts: Array<{ element: number }>, items: readonly SiteImportLayoutItem[]): number {
+    const read = this.columnsOf(container, parts)
+    if (read > 1) return read
+    const share = this.pictureElements(items[0] as SiteImportLayoutItem)[0]?.attrs.share
+    const fits = share ? Math.floor(100 / share) : GALLERY_COLUMNS
+    return Math.max(1, Math.min(parts.length, GALLERY_COLUMNS_MAX, fits))
   }
 
   /** How many columns a group's items sit in on a wide screen. */

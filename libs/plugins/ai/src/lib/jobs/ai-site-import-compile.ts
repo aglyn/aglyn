@@ -862,7 +862,8 @@ function groupBlocks(scope: MapScope, group: SiteImportLayoutGroup): AiLayoutBlo
       const to = picture ? undefined : linkTo(scope, item.to)
       return words.length ? [{ title: words.join(' '), text: '', ...(picture ? { picture } : {}), ...(to ? { to } : {}) }] : picture ? [{ title: '', text: '', picture }] : []
     })
-    return items.length ? [{ kind: 'logos', items }] : []
+    // A gallery is its photos in the source's columns (AGL-4152), not a strip of marks.
+    return items.length ? [{ kind: 'logos', items, ...(group.gallery ? { variant: 'pictures' as const, columns } : {}) }] : []
   }
   const items = group.items.map((item) => itemOf(scope, group, item, kind))
   // Whether the items are boxed: the source's, or on a page its owner asked improved, the answer's style (AGL-4152).
