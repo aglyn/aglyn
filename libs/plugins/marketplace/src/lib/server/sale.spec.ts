@@ -179,6 +179,14 @@ describe('every refusal', () => {
     expect((await refusalOf()).status).toBe(400)
   })
 
+  it('still refuses a member of the publisher buying for another workspace, in its own words (AGL-4047)', async () => {
+    // The console switching Buy off is not the guard: this is.
+    mockSellerMember.current = true
+    const refusal = await refusalOf()
+    expect(refusal.status).toBe(400)
+    expect(refusal.body['error']).toBe('Your organization published this listing')
+  })
+
   it('a workspace that owns it is told so', async () => {
     mockOwned.current = true
     const refusal = await refusalOf()

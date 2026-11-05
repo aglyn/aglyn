@@ -312,6 +312,7 @@ function LayoutBesignerPage(props) {
     saveWorkingDraft,
     workingDraftSaved,
     refuseOverUnopenedDraft,
+    saveBlockedReason,
     markOwnWrite,
     jsonOpen,
     openJsonEditor,
@@ -887,6 +888,7 @@ function LayoutBesignerPage(props) {
                           onSaveAndPublish={handleSaveAndPublish}
                           // Live only when the parent's pointer names THIS version.
                           livePublished={livePublished}
+                          saveBlockedReason={saveBlockedReason}
                           saveAvailable={saveAvailable}
                           // Save draft writes the draft document, not
                           // this version, so the canvas never reads

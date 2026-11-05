@@ -53,6 +53,14 @@ export const DRAFT_WRITE_MAX_WAIT_MS = 15_000
  * Why a recovered draft may not be put back on the canvas (AGL-2486). Null
  * when restoring is a private act and safe to offer.
  */
+/**
+ * How long saving waits on the read of a saved draft (AGL-4174). A read can sit
+ * behind another tab's Firestore lease for about a minute (AGL-3806), and an
+ * editor nobody can save from for that long is its own way to lose work. Past
+ * this the draft counts as unread: saving opens up, and no save deletes it.
+ */
+export const SHARED_DRAFT_READ_DEADLINE_MS = 15_000
+
 export type BesignerDraftRestoreBlock =
   /**
    * Someone else SAVED this document after the draft was taken, so the draft
@@ -133,6 +141,17 @@ export interface BesignerDraftState {
    */
   sharedDraftUnopened: boolean
   /**
+   * The editor cannot yet say whether a saved draft exists, or one a link asked
+   * for is still on its way to the canvas.
+   *
+   * The read answers after the canvas is ready, and until it does
+   * {@link sharedDraftUnopened} is false for want of an answer rather than for
+   * want of a draft. Publishing in that gap put the stored tree live, an empty
+   * one on a new page, and then cleared the draft as published. So saving waits
+   * for this to go false.
+   */
+  sharedDraftLoading: boolean
+  /**
    * A link asked for the saved draft to open on arrival (AGL-4116), and
    * someone else's work on this page is keeping it closed. True while that
    * holds; it opens by itself once the room clears.
@@ -151,6 +170,7 @@ const EMPTY_STATE: BesignerDraftState = {
   origin: 'browser',
   restoreBlockedBy: null,
   sharedDraftUnopened: false,
+  sharedDraftLoading: false,
   openWithheld: false,
   restore: () => undefined,
   discard: () => undefined,
@@ -321,6 +341,13 @@ export function useBesignerDraft(
    * between the draft and a save that overwrites it.
    */
   const serverReadKeyRef = useRef<string | null>(null)
+  /** The document whose shared draft has answered, draft or no draft. */
+  const [serverAnsweredKey, setServerAnsweredKey] = useState<string | null>(null)
+  /**
+   * The document whose shared draft could not be read. Nobody knows what is
+   * there, so nothing this session saves may delete it.
+   */
+  const [serverUnreadKey, setServerUnreadKey] = useState<string | null>(null)
   const idsRef = useRef(ids)
   idsRef.current = ids
   const storedStampRef = useRef(storedStamp)
@@ -401,10 +428,18 @@ export function useBesignerDraft(
     serverReadKeyRef.current = key
     let live = true
     let answered = false
+    const deadline = setTimeout(() => {
+      setServerUnreadKey(key)
+      setServerAnsweredKey(key)
+    }, SHARED_DRAFT_READ_DEADLINE_MS)
     void readServerDraft(firestore, currentIds)
       .then((server) => {
         answered = true
-        if (!live || !server) return
+        clearTimeout(deadline)
+        if (!live) return
+        setServerUnreadKey(null)
+        setServerAnsweredKey(key)
+        if (!server) return
         setOfferOrigin('shared')
         setOffer({
           nodes: server.nodes,
@@ -417,9 +452,14 @@ export function useBesignerDraft(
       })
       .catch(() => {
         answered = true
+        clearTimeout(deadline)
+        if (!live) return
+        setServerUnreadKey(key)
+        setServerAnsweredKey(key)
       })
     return () => {
       live = false
+      clearTimeout(deadline)
       // A read torn down before it answered never happened, so the next run
       // asks again rather than finding the latch already taken.
       if (!answered) serverReadKeyRef.current = null
@@ -631,7 +671,9 @@ export function useBesignerDraft(
     if (firestore) void clearServerDraft(firestore, currentIds)
   }, [firestore])
 
-  const sharedDraftUnopened = Boolean(offer && offerOrigin === 'shared')
+  const sharedDraftUnopened =
+    Boolean(offer && offerOrigin === 'shared') ||
+    (key !== null && serverUnreadKey === key)
 
   // The draft a link asked for (AGL-4116), on the document the link opened:
   // an editor that stays mounted across a version switch must not open the
@@ -640,7 +682,10 @@ export function useBesignerDraft(
   const askedKeyRef = useRef<string | null>(null)
   if (options.openShared && askedKeyRef.current === null) askedKeyRef.current = key
   const openRequested =
-    key !== null && askedKeyRef.current === key && sharedDraftUnopened && !restoreBlockedBy
+    key !== null &&
+    askedKeyRef.current === key &&
+    Boolean(offer && offerOrigin === 'shared') &&
+    !restoreBlockedBy
   const openRoomClear = roomPeople === 0 && !canvasHasRemoteEdits
   useEffect(() => {
     if (!openRequested || !openRoomClear || !offer) return
@@ -648,16 +693,23 @@ export function useBesignerDraft(
     setOffer(null)
   }, [openRequested, openRoomClear, offer])
   const openWithheld = openRequested && roomPeople !== null && !openRoomClear
+  const sharedDraftLoading =
+    (key !== null && Boolean(firestore) && serverAnsweredKey !== key) ||
+    (openRequested && roomPeople === null)
 
   return useMemo(() => {
-    if (!key || !offer) return EMPTY_STATE
+    if (!key || !offer) {
+      return sharedDraftLoading || sharedDraftUnopened
+        ? { ...EMPTY_STATE, sharedDraftLoading, sharedDraftUnopened }
+        : EMPTY_STATE
+    }
     // No prompt at all in a shared room — not a re-worded one. The draft is
     // deliberately LEFT ON DISK: nothing about the room makes this browser's
     // snapshot wrong, only unofferable, and reaping it here would take away
     // the crash net of the very tab that is still holding the work.
     if (roomIsShared) {
-      return sharedDraftUnopened
-        ? { ...EMPTY_STATE, sharedDraftUnopened, openWithheld }
+      return sharedDraftUnopened || sharedDraftLoading
+        ? { ...EMPTY_STATE, sharedDraftUnopened, sharedDraftLoading, openWithheld }
         : EMPTY_STATE
     }
     return {
@@ -667,6 +719,7 @@ export function useBesignerDraft(
       origin: offerOrigin,
       restoreBlockedBy,
       sharedDraftUnopened,
+      sharedDraftLoading,
       openWithheld: false,
       restore,
       discard,
@@ -679,6 +732,7 @@ export function useBesignerDraft(
     staleAgainstDocument,
     restoreBlockedBy,
     sharedDraftUnopened,
+    sharedDraftLoading,
     openWithheld,
     restore,
     discard,

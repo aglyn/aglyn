@@ -18,7 +18,7 @@
 /**
  * The Email capture card (AGL-2657): the workspace's address, read from the
  * inbound-address route once the scope is known, copied to the clipboard,
- * and rotated only by an owner or admin who confirmed.
+ * and rotated only by a member holding "Change CRM settings" who confirmed.
  */
 
 import { fireEvent, render, screen, waitFor } from '@testing-library/react'
@@ -129,7 +129,7 @@ describe('EmailCaptureCard (AGL-2657)', () => {
     render(<EmailCaptureCard hostId="site-1" canManage={false} ready />)
     await screen.findByLabelText('Capture address')
     expect((screen.getByRole('button', { name: 'Rotate address' }) as HTMLButtonElement).disabled).toBe(true)
-    expect(screen.getByText('Only a workspace owner or admin can rotate the address.')).toBeTruthy()
+    expect(screen.getByText('Your role does not include "Change CRM settings" — ask an organization admin')).toBeTruthy()
   })
 
   it('prints the route’s refusal rather than an empty field', async () => {

@@ -64,7 +64,8 @@ function HostDashboard() {
     [firestore, hostId],
     { idField: '$id' },
   )
-  const inPreview = isHostInPreview(hostDoc)
+  const entersAsTeam =
+    isHostInPreview(hostDoc) || Boolean((hostDoc as { maintenance?: unknown } | null | undefined)?.maintenance)
   const showAnalytics =
     prefsReady && !isDashboardWidgetHidden(prefs, HOST_ANALYTICS_WIDGET_ID)
 
@@ -91,12 +92,12 @@ function HostDashboard() {
           {/* Site Care (AGL-3959): disabled with the reason when the workspace lacks it. */}
           <SiteCareRequestButton hostId={hostId ?? null} />
           {host ? (
-            // While the site is in preview (AGL-4086) the button enters it as
+            // While the site is in preview (AGL-4086) or maintenance the button enters it as
             // the team, on whatever address it has.
             <SiteVisitButton
               newTab
               hostId={hostId}
-              inPreview={inPreview}
+              inPreview={entersAsTeam}
               variant="contained"
               color="primary"
               href={`https://${host}.${TENANT_APEX}/?aglyn-edit`}

@@ -70,7 +70,10 @@ export const HOST_SEEDED_COLLECTIONS = [
   'coupons',
   'giftCards',
   'reviews',
+  // Nothing reads `bookableUnits`; the reservation widget and console read
+  // `resources`. Still listed so a re-seed clears what older seeds wrote.
   'bookableUnits',
+  'resources',
   'reservations',
   'overlays',
   'experiments',
@@ -404,7 +407,16 @@ export async function seedBrand({ firestore, hostRef, brand, log, prune = true }
       })
     }
     for (const order of c.orders ?? []) {
-      const { id, ...fields } = order
+      const { id, items, ...rest } = order
+      // Orders are read through `lineItems` and `unitAmountCents`
+      // (`HostOrder`); a brand's shorthand `items` would show as an empty order.
+      const fields = {
+        ...rest,
+        lineItems: (items ?? []).map(({ unitPriceCents, ...line }) => ({
+          ...line,
+          unitAmountCents: unitPriceCents,
+        })),
+      }
       await put(hostRef.collection('orders').doc(id), {
         ...fields,
         // The fields the orders list queries by (AGL-3321).
@@ -420,6 +432,7 @@ export async function seedBrand({ firestore, hostRef, brand, log, prune = true }
         createdAt: now,
       })
     }
+    // Checkout reads `coupons/{code}`, so a coupon's id IS its code.
     for (const coupon of c.coupons ?? []) {
       const { id, ...fields } = coupon
       await put(hostRef.collection('coupons').doc(id), { ...fields, createdAt: now })
@@ -450,7 +463,7 @@ export async function seedBrand({ firestore, hostRef, brand, log, prune = true }
   if (brand.reservations) {
     for (const unit of brand.reservations.units ?? []) {
       const { id, ...fields } = unit
-      await put(hostRef.collection('bookableUnits').doc(id), {
+      await put(hostRef.collection('resources').doc(id), {
         ...fields,
         createdAt: now,
       })

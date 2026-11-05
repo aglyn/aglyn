@@ -71,6 +71,12 @@ jest.mock('@aglyn/shared-ui-snackstack', () => ({
   useSnackbar: () => ({ enqueueSnackbar: jest.fn() }),
 }))
 
+// The holder's answer; the gate itself is `plugin-config-org-settings-gate.spec.tsx`.
+jest.mock('../hooks/use-org-permissions', () => ({
+  __esModule: true,
+  default: () => ({ loaded: true, can: () => true }),
+}))
+
 jest.mock('../constants/docs-links', () => ({
   __esModule: true,
   // Echoes the topic and anchor, so a spec can read which heading a card links.

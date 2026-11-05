@@ -18,7 +18,9 @@
 // The seam from its own module, not the plugin-manager barrel: both apps load
 // this at boot, and the barrel reaches the client contexts.
 import { registerInteractionRecipes } from '@aglyn/aglyn/plugin-manager/interaction-recipes'
+import { registerPluginPermissions } from '@aglyn/aglyn/plugin-manager/plugin-permissions'
 import { BUNDLE_ID } from './constants/bundle-common'
+import { CRM_PERMISSIONS } from './model/crm-permissions'
 import { CRM_ACTION_RECIPES } from './model/crm-recipes'
 
 /**
@@ -27,9 +29,13 @@ import { CRM_ACTION_RECIPES } from './model/crm-recipes'
  *
  * Its recipes (AGL-2626), so the automation editor's Recipes menu offers
  * "Welcome a new lead" on a site whose CRM pages were never opened, and the
- * automation it builds names the recipe it began as. Light by construction:
- * the recipes are definitions, and nothing here reaches Firestore or React.
+ * automation it builds names the recipe it began as. And its workspace key,
+ * "Change CRM settings" (AGL-4047), so the role editor offers it, a custom
+ * role or a per-member override keeps it, and the routes and the projection
+ * resolve it before any CRM surface loads. Light by construction: both are
+ * definitions, and nothing here reaches Firestore or React.
  */
 export function registerCrmDeclarations(): void {
   registerInteractionRecipes(CRM_ACTION_RECIPES, { pluginId: BUNDLE_ID })
+  registerPluginPermissions(CRM_PERMISSIONS)
 }

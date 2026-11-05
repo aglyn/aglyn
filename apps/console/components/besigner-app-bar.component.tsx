@@ -92,6 +92,7 @@ function SaveControl(props: {
   onSave: ButtonProps['onClick']
   onSaveAndPublish?: () => void
   publishBlockedReason?: string
+  saveBlockedReason?: string
   saveAvailable?: boolean
   draftSaved?: boolean
   livePublished?: boolean
@@ -101,6 +102,7 @@ function SaveControl(props: {
     onSave,
     onSaveAndPublish,
     publishBlockedReason,
+    saveBlockedReason,
     saveAvailable,
     draftSaved,
     livePublished,
@@ -108,7 +110,9 @@ function SaveControl(props: {
   } = props
   const copy = SAVE_MENU_COPY[publishTarget]
   const [menuAnchor, setMenuAnchor] = useState<HTMLElement | null>(null)
-  // NEVER DISABLED, however up to date the editor believes it is (AGL-1262).
+  // NEVER DISABLED, however up to date the editor believes it is (AGL-1262),
+  // with one exception: `saveBlockedReason` (AGL-4174), where a save would run
+  // over a draft that has not loaded yet. It says why and clears by itself.
   // A disabled Save is a dead control: the one time it matters — the editor's
   // idea of "saved" has drifted from the document — the author clicks it,
   // nothing happens, nothing is said, and they close the tab believing the
@@ -154,13 +158,15 @@ function SaveControl(props: {
    * publish, and publishing does both — `handleSaveAndPublish` saves before
    * it promotes.
    */
-  const label = publishPending
-    ? 'Publish'
-    : saveAvailable
-      ? onSaveAndPublish
-        ? 'Save draft'
-        : 'Save'
-      : 'Up to date'
+  const label = saveBlockedReason
+    ? 'Loading draft'
+    : publishPending
+      ? 'Publish'
+      : saveAvailable
+        ? onSaveAndPublish
+          ? 'Save draft'
+          : 'Save'
+        : 'Up to date'
   const icon = (
     <MdiIcon
       path={
@@ -174,12 +180,14 @@ function SaveControl(props: {
   // the disk of an unsaved one — and the words stay its accessible name and
   // tooltip, which gives the leading tools back the ~75px they scrolled for.
   // Publish keeps its word: it is the one state that asks for a tap.
-  const labelSx = publishPending
-    ? undefined
-    : { display: { xs: 'none', sm: 'inline' } }
-  const iconOnlySx = publishPending
-    ? {}
-    : { '& .MuiButton-endIcon': { ml: { xs: 0, sm: 1 } } }
+  const labelSx =
+    publishPending || saveBlockedReason
+      ? undefined
+      : { display: { xs: 'none', sm: 'inline' } }
+  const iconOnlySx =
+    publishPending || saveBlockedReason
+      ? {}
+      : { '& .MuiButton-endIcon': { ml: { xs: 0, sm: 1 } } }
   // The primary click follows the label. A button that says Publish and saves
   // a draft is the same misdirection one layer down.
   const primaryClick: ButtonProps['onClick'] = publishPending
@@ -189,10 +197,11 @@ function SaveControl(props: {
     return (
       <Button
         onClick={primaryClick}
+        disabled={Boolean(saveBlockedReason)}
         size="small"
         endIcon={icon}
         aria-label={label}
-        title={label}
+        title={saveBlockedReason ?? label}
         sx={(theme) => ({
           mr: `${theme.spacing(-1)} !important`,
           flexShrink: 0,
@@ -229,9 +238,10 @@ function SaveControl(props: {
       >
         <Button
           onClick={primaryClick}
+          disabled={Boolean(saveBlockedReason)}
           endIcon={icon}
           aria-label={label}
-          title={label}
+          title={saveBlockedReason ?? label}
           sx={{ pr: 0.75, ...iconOnlySx }}
         >
           <Box component="span" sx={labelSx}>
@@ -254,6 +264,7 @@ function SaveControl(props: {
         onClose={() => setMenuAnchor(null)}
       >
         <MenuItem
+          disabled={Boolean(saveBlockedReason)}
           onClick={(event) => {
             setMenuAnchor(null)
             onSave?.(event as never)
@@ -261,11 +272,11 @@ function SaveControl(props: {
         >
           <ListItemText
             primary="Save draft"
-            secondary={copy.draft}
+            secondary={saveBlockedReason ?? copy.draft}
           />
         </MenuItem>
         <MenuItem
-          disabled={Boolean(publishBlockedReason)}
+          disabled={Boolean(saveBlockedReason || publishBlockedReason)}
           onClick={() => {
             setMenuAnchor(null)
             onSaveAndPublish()
@@ -273,7 +284,9 @@ function SaveControl(props: {
         >
           <ListItemText
             primary="Save & publish"
-            secondary={publishBlockedReason ?? copy.publish}
+            secondary={
+              saveBlockedReason ?? publishBlockedReason ?? copy.publish
+            }
           />
         </MenuItem>
       </Menu>
@@ -308,6 +321,12 @@ export interface BesignerAppBarProps extends SecondaryAppBarProps {
   onSaveAndPublish?: () => void
   /** Why publishing is unavailable, shown on the disabled menu item. */
   publishBlockedReason?: string
+  /**
+   * Why saving is closed for now (AGL-4174): the editor is still loading a
+   * saved draft, so a save could run over it. Closes every save control and
+   * shows the reason, and clears by itself when the draft has loaded.
+   */
+  saveBlockedReason?: string
   /**
    * Does the LIVE site already serve this version? (AGL-1152)
    *
@@ -455,6 +474,7 @@ export const BesignerAppBarComponent = forwardRef<any, BesignerAppBarProps>(
       onSave,
       onSaveAndPublish,
       publishBlockedReason,
+      saveBlockedReason,
       draftSaved,
       saveAvailable,
       livePublished,
@@ -472,6 +492,7 @@ export const BesignerAppBarComponent = forwardRef<any, BesignerAppBarProps>(
         onSave={onSave}
         onSaveAndPublish={onSaveAndPublish}
         publishBlockedReason={publishBlockedReason}
+        saveBlockedReason={saveBlockedReason}
         draftSaved={draftSaved}
         saveAvailable={saveAvailable}
         livePublished={livePublished}
@@ -504,7 +525,11 @@ export const BesignerAppBarComponent = forwardRef<any, BesignerAppBarProps>(
               <HistoryControlsComponent />
               <DevicePreviewControlsComponent iconOnly />
               <PanelControlsComponent compact />
-              {presence ? <Box sx={{ display: { xs: 'none', sm: 'flex' } }}>{presence}</Box> : null}
+              {presence ? (
+                <Box sx={{ display: { xs: 'none', sm: 'flex' } }}>
+                  {presence}
+                </Box>
+              ) : null}
             </Stack>
             {saveControl}
             <Box sx={{ pl: 1 }}>
@@ -543,10 +568,11 @@ export const BesignerAppBarComponent = forwardRef<any, BesignerAppBarProps>(
           direction="row"
           spacing={1}
           sx={{
-            alignItems: "center",
-            justifyContent: "space-between",
-            flexGrow: 1
-          }}>
+            alignItems: 'center',
+            justifyContent: 'space-between',
+            flexGrow: 1,
+          }}
+        >
           <AddControlsComponent />
           {/* The document switcher is NOT here. It belongs to the
               primary app bar — `MainLayout`'s `centerPrefix`, where the
@@ -579,7 +605,11 @@ export const BesignerAppBarComponent = forwardRef<any, BesignerAppBarProps>(
             })}
             flexItem
           />
-          <Tooltip title={!liveUrl && liveUnavailableReason ? liveUnavailableReason : ''}>
+          <Tooltip
+            title={
+              !liveUrl && liveUnavailableReason ? liveUnavailableReason : ''
+            }
+          >
             {/* span: a disabled control emits no events for the tooltip */}
             <span>
               <AppLink
@@ -619,7 +649,7 @@ export const BesignerAppBarComponent = forwardRef<any, BesignerAppBarProps>(
           {saveControl}
         </Stack>
       </SecondaryAppBarComponent>
-    );
+    )
   },
 )
 BesignerAppBarComponent.displayName = 'BesignerAppBarComponent'

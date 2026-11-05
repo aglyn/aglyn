@@ -347,8 +347,8 @@ const lockdownVerdicts = new Map<
  * The same address, asked again by this middleware: the marker sends that
  * request down the plain rewrite, so the page comes from the cached catch-all
  * exactly as a 200 would. The cookie and the color-scheme hint are the two
- * things the route is chosen by, so a member of the team reads the same route
- * they would have been sent to.
+ * things the route is chosen by, so the visitor reads the same route they
+ * would have been sent to.
  *
  * Only `null` means "no page to send", and the caller serves the plain rewrite
  * then: the notice with a 200, which is a wrong status on the right page. A
@@ -1308,18 +1308,19 @@ export const middleware: NextMiddleware = async (req, event) => {
    */
   const previewing = Boolean(req.nextUrl.searchParams.get(ENTRY_PREVIEW_PARAM))
   /**
-   * A SITE IN PREVIEW, ASKED FOR BY ITS TEAM, GOES THERE TOO (AGL-4086).
+   * A SITE IN PREVIEW OR MAINTENANCE, ASKED FOR BY ITS TEAM, GOES THERE TOO
+   * (AGL-4086).
    *
-   * While a site — or the page at this address — is in preview, the public is
-   * answered from the cached catch-all, whose loader renders the 503 page or
-   * the "Coming soon" notice. A request that carries a team cookie is sent to
+   * While a site is in maintenance or preview, or the page at this address is
+   * in preview, the public is answered from the cached catch-all, whose loader
+   * renders the 503 page or the built-in notice. A request that carries a team cookie is sent to
    * the same uncached route an entry preview uses, which checks the cookie in
    * Node and renders the whole site for the team, or the public answer for
    * anyone it does not believe. The team's render is never written to a cache
    * the public reads: the route is `force-dynamic` and this response says
    * `no-store` below.
    *
-   * Only while the verdict says preview. A public site's pages keep their
+   * Only while the verdict says so. A public site's pages keep their
    * cache for every visitor, team members included.
    */
   const teamPreview =
@@ -1327,7 +1328,13 @@ export const middleware: NextMiddleware = async (req, event) => {
     isSitePreviewRequest(verdict, req.nextUrl.pathname) &&
     carriesSitePreviewCookie(req)
   const uncached = previewing || teamPreview
-  const routePrefix = uncached ? `/${ENTRY_PREVIEW_ROUTE_SEGMENT}` : ''
+  // The site's search has a route of its own, dynamic already, which verifies
+  // the team itself: under the preview route `/search` would be a page lookup
+  // that finds nothing.
+  const teamSearch =
+    teamPreview && req.nextUrl.pathname.replace(/\/+$/, '') === '/search'
+  const routePrefix =
+    uncached && !teamSearch ? `/${ENTRY_PREVIEW_ROUTE_SEGMENT}` : ''
   const rewrite = `/${tenantHost}/${scheme}${routePrefix}${req.nextUrl.pathname}${req.nextUrl.search}`
   console.debug(
     'Tenant Host Switch=',
@@ -1456,9 +1463,9 @@ export const middleware: NextMiddleware = async (req, event) => {
    * middleware reads the page and sends it ({@link siteNoticePage}).
    *
    * The cache is split the way it already was. The team's view of a site in
-   * preview is the uncached route (`no-store` below) and never answers 503;
-   * the public's answer is the cached catch-all, whose body is the 503 page for
-   * as long as the site is in preview. Their keys never meet, so neither
+   * maintenance or preview is the uncached route (`no-store` below) and never
+   * answers 503; the public's answer is the cached catch-all, whose body is the
+   * 503 page for as long as the site is closed. Their keys never meet, so neither
    * population can be served the other's page, and the status is decided per
    * request, never read back from a cache.
    */

@@ -208,12 +208,14 @@ const orgAdminDenied = memoize(() => {
     1,
     'expected exactly one `allow … update` under match /orgs/{orgId}',
   )
+  // The member branch: the one that asks each changed field's key through
+  // `mayChangeOrgFields` (AGL-4047; it asked `canManageOrg()` before).
   const branches = updates[0]
     .split('||')
-    .filter((branch) => branch.includes('canManageOrg()'))
-  assert.equal(branches.length, 1, 'expected one canManageOrg() update branch')
+    .filter((branch) => branch.includes('mayChangeOrgFields('))
+  assert.equal(branches.length, 1, 'expected one mayChangeOrgFields() update branch')
   const list = branches[0].match(/hasAny\(\s*\[([^\]]*)\]/)
-  assert.ok(list, 'the canManageOrg() branch has no hasAny([…]) key diff')
+  assert.ok(list, 'the mayChangeOrgFields() branch has no hasAny([…]) key diff')
   return [...list[1].matchAll(/'([^']+)'/g)].map((entry) => entry[1])
 })
 
@@ -8502,7 +8504,7 @@ describe('the org suspended* additions are on both deny branches (AGL-1507)', ()
     for (const key of NEW_ORG_KEYS) {
       assert.ok(
         orgAdminDenied().includes(key),
-        `\`${key}\` fell off the canManageOrg() deny list — an org admin ` +
+        `\`${key}\` fell off the member branch's deny list — an org admin ` +
           `with the client SDK could now ${key === 'suspendedUntilMs'
             ? 'shorten their own suspension'
             : 'rewrite their own suspension record'} (AGL-1501).`,
@@ -8675,7 +8677,7 @@ describe('the org suspended* family is Admin-SDK-only — even for super staff (
  * validates the reason with `normalizeOrgOverrideReason` and commits the org
  * document and its `adminAudit` row with the Admin SDK in one batch. That made
  * it the last client writer of these three keys — what is left on this document
- * from a browser is the org rename (`canManageOrg()`, which already excluded
+ * from a browser is the org rename (the member branch, which already excluded
  * them) and the erasure toggle's `erasureRequestedAt`.
  *
  * So this narrowing is what turns the reason gate into a boundary. It has to

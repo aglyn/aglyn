@@ -139,6 +139,18 @@ describe('commerceSitePageEnricher (AGL-659)', () => {
     )
   })
 
+  it('follows the path as the tenant sends it, with no leading slash (AGL-4177)', async () => {
+    await run(page(grid('g', { source: 'collection' })), 'collections/beans')
+    expect(mockQuery).toHaveBeenCalledWith(
+      expect.objectContaining({ collectionSlug: 'beans' }),
+    )
+  })
+
+  it('leaves a page that only ends in the word alone (AGL-4177)', async () => {
+    await run(page(grid('g', { source: 'collection' })), 'my-collections/beans')
+    expect(mockQuery.mock.calls[0][0]).not.toHaveProperty('collectionSlug')
+  })
+
   it('ignores collection and category props when source is all', async () => {
     await run(page(grid('g', { source: 'all', collectionId: 'c1', tag: 't' })))
     const call = mockQuery.mock.calls[0][0]

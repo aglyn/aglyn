@@ -39,7 +39,7 @@
  * that has no site.
  */
 
-import { type AglynOrganization, canManageOrg, type PluginApiRequest } from '@aglyn/aglyn/server'
+import type { AglynOrganization, PluginApiRequest } from '@aglyn/aglyn/server'
 import {
   firebaseAdmin,
   getOrgDoc,
@@ -126,8 +126,13 @@ export interface OrgCallerRefusal {
 export type OrgCallerRequirement =
   /** `data.manage`, org-wide — the key the CRM is gated on. Staff pass. */
   | 'data.manage'
-  /** A workspace owner or admin, org-wide. Staff acting alone do NOT pass. */
-  | 'manage-org'
+  /**
+   * "Change CRM settings" (`crm.settings`, AGL-4047), org-wide — who may
+   * share records across sites, change the sharing rules and rotate the
+   * capture address. On for owners and admins by default, the role list this
+   * asked before it was a key. Staff acting alone do NOT pass.
+   */
+  | 'crm.settings'
   /**
    * "Privacy requests" (`org.privacy`, AGL-4047), org-wide — who may file a
    * person's erasure. On for owners and admins by default. Staff acting
@@ -143,7 +148,7 @@ export type OrgCallerRequirement =
 export async function holdsOrgPermission(
   orgId: string | null | undefined,
   uid: string,
-  permission: 'org.privacy',
+  permission: 'org.privacy' | 'crm.settings',
 ): Promise<boolean> {
   if (!orgId) return false
   try {
@@ -162,7 +167,7 @@ export async function holdsOrgPermission(
  * every org variant needs for the plan and the consent groups.
  *
  * Staff are admitted to the `data.manage` requirement as every CRM route
- * admits them, and refused the `manage-org` and `org.privacy` ones as the
+ * admits them, and refused the `crm.settings` and `org.privacy` ones as the
  * erasure route refuses them: the workspace is the controller of its
  * people's data and the instruction to erase has to come from it.
  */
@@ -195,9 +200,7 @@ export async function authorizeOrgCaller(
   const admitted =
     options.needs === 'data.manage'
       ? staff || (orgWide && (await holdsDataManage(orgId, decoded.uid)))
-      : options.needs === 'org.privacy'
-        ? orgWide && (await holdsOrgPermission(orgId, decoded.uid, 'org.privacy'))
-        : orgWide && canManageOrg(membership?.role ?? null)
+      : orgWide && (await holdsOrgPermission(orgId, decoded.uid, options.needs))
   if (!admitted) return { ok: false, status: 403, error: options.refusal }
   const org = await getOrgDoc(orgId).catch(() => null)
   if (!org) return { ok: false, status: 404, error: 'Unknown organization' }

@@ -17,6 +17,7 @@
 
 import {
   isOwnListingInstall,
+  isPublisherMemberElsewhere,
   landsInPublisherWorkspace,
 } from '../model/own-listing'
 import { isPublisherMember } from './publisher-profile'
@@ -48,5 +49,29 @@ export async function ownsListingHere(
     publisherOrgId,
     targetOrgId,
     publisherMember: await isPublisherMember(firestore, uid, String(publisherOrgId)),
+  })
+}
+
+/**
+ * Whether the sale would refuse this person because they belong to the
+ * publisher (AGL-3365, AGL-4047), asked before they press Buy so a surface can
+ * say so. The refusal itself stays with `sale.ts`. On the publisher's own sites
+ * the listing is free instead, so the membership is not read.
+ */
+export async function memberOfPublisherElsewhere(
+  firestore: FirebaseFirestore.Firestore,
+  facts: {
+    /** The authenticated caller, never a value from the request body. */
+    uid: string
+    publisherOrgId: unknown
+    targetOrgId: unknown
+  },
+): Promise<boolean> {
+  const { uid, publisherOrgId, targetOrgId } = facts
+  if (landsInPublisherWorkspace(publisherOrgId, targetOrgId)) return false
+  return isPublisherMemberElsewhere({
+    publisherOrgId,
+    targetOrgId,
+    publisherMember: await isPublisherMember(firestore, uid, String(publisherOrgId ?? '')),
   })
 }

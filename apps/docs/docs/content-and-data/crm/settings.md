@@ -15,9 +15,10 @@ wherever a contact is captured. The section lives in the CRM hub at
 `…/{organization}/crm/settings`, where it also holds the
 [Recipes](#recipes) card.
 
-Only a workspace **owner or admin** can change a setting. Everyone who can
+Changing a setting takes the [**Change CRM settings**](../../workspace-and-billing/teams-and-roles/custom-roles.md#crm-settings-permission)
+permission, which owners and admins hold by default. Everyone who can
 open the CRM can read the page; a member who cannot change a switch sees it
-disabled, with a note saying why. Two cards are exceptions: the
+disabled, with a note naming the permission. Two cards are exceptions: the
 [Email templates](#email-templates) card, which every CRM editor may write
 to, because a template is working material, not policy; and
 [Your sending addresses](#your-sending-addresses), which is each member's
@@ -161,8 +162,8 @@ which timeline the message lands on. It is minted the first time somebody
 opens the card or the **Send email** dialog, and everybody who can open the
 CRM can copy it.
 
-**Rotate address** replaces it, behind a confirmation, and only a workspace
-owner or admin may. The moment the new address is written the old one goes
+**Rotate address** replaces it, behind a confirmation, and takes the
+**Change CRM settings** permission. The moment the new address is written the old one goes
 quiet: mail sent to it afterwards is dropped without a trace, so a mailbox
 rule or a saved shortcut that carried the old address has to be updated.
 Rotate when the address has leaked outside the team — anybody who holds it

@@ -81,11 +81,6 @@
       "kind": "not-a-gate",
       "note": "Validates a site role read back from a membership row."
     },
-    "apps/console/hooks/use-org-permissions.tsx": {
-      "count": 1,
-      "kind": "not-a-gate",
-      "note": "An exported `isOwner` flag nothing decides access with."
-    },
     "apps/console/utils/over-limit-summary.ts": {
       "count": 2,
       "kind": "not-a-gate",
@@ -102,7 +97,7 @@
       "note": "The health probe picks a member of its own test site."
     },
     "cloud/firebase-firestore.deploy.rules": {
-      "count": 30,
+      "count": 22,
       "kind": "pending"
     },
     "libs/plugins/ai/src/lib/jobs/ai-layout-stock-photos.ts": {
@@ -135,10 +130,6 @@
       "kind": "not-a-gate",
       "note": "Platform staff roles (super, billing) on a staff page, not a member’s role."
     },
-    "libs/plugins/crm/src/lib/components/settings-section.tsx": {
-      "count": 1,
-      "kind": "pending"
-    },
     "libs/plugins/crm/src/lib/server-deal-stage.ts": {
       "count": 1,
       "kind": "pending"
@@ -152,14 +143,6 @@
       "kind": "pending"
     },
     "libs/plugins/crm/src/lib/server/email-template-duplicate.ts": {
-      "count": 1,
-      "kind": "pending"
-    },
-    "libs/plugins/crm/src/lib/server/inbound-address.ts": {
-      "count": 1,
-      "kind": "pending"
-    },
-    "libs/plugins/crm/src/lib/server/org-caller.ts": {
       "count": 1,
       "kind": "pending"
     },

@@ -7440,6 +7440,7 @@
         "marketplace.publisherProfile",
         "marketplace.manageListings",
         "marketplace.payouts",
+        "crm.settings",
         "outreach.use",
         "outreach.manageAll",
         "email.suppressions",
@@ -7544,6 +7545,7 @@
         "marketplace.publisherProfile",
         "marketplace.manageListings",
         "marketplace.payouts",
+        "crm.settings",
         "outreach.use",
         "outreach.manageAll",
         "email.suppressions",
@@ -7606,6 +7608,11 @@
         "id": "marketplace",
         "label": "Marketplace",
         "pluginId": "marketplace"
+      },
+      {
+        "id": "crm",
+        "label": "CRM",
+        "pluginId": "crm"
       },
       {
         "id": "outreach",
@@ -7998,6 +8005,14 @@
         "key": "marketplace.payouts",
         "label": "Manage marketplace payouts",
         "pluginId": "marketplace",
+        "scope": "org"
+      },
+      {
+        "description": "Change the CRM’s settings for every site: default sharing for new records, companies from email domains, default owners, assignment rules and the round-robin pool, sharing rules, and rotating the email capture address; and share records with other sites.",
+        "group": "crm",
+        "key": "crm.settings",
+        "label": "Change CRM settings",
+        "pluginId": "crm",
         "scope": "org"
       },
       {

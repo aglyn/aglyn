@@ -19,6 +19,7 @@
 import { pluginDocsHelp } from '@aglyn/aglyn'
 import { mdiClose } from '@aglyn/shared-data-mdi'
 import { CardDisplay, MdiIcon, SrOnly } from '@aglyn/shared-ui-jsx'
+import { BlockedControl } from '@aglyn/shared-ui-jsx/components/blocked-control.component'
 import { useSnackbar } from '@aglyn/shared-ui-snackstack'
 import { useUser } from '@aglyn/tenant-feature-instance'
 import { Button, Chip, IconButton, Stack, Typography } from '@mui/material'
@@ -34,6 +35,7 @@ import {
   describeRecordSharing,
   describeShareTargets,
 } from '../model/crm-sharing'
+import { crmSettingsPermissionRefusal } from '../model/crm-permissions'
 import { callCrmSharing } from '../model/crm-sharing-api'
 import { crmTaskCallScope } from '../model/task-routes'
 import { useCanManageCrmSettings } from './settings-section'
@@ -84,10 +86,10 @@ const when = (atMs: number) => (atMs > 0 ? new Date(atMs).toLocaleDateString() :
  * unshare: visibility a site holds is not the sharing's to take away. A
  * rule's line is removed by editing the rule, in Settings.
  *
- * The header's "Share with sites…" is an org manager's, and so is the
- * unshare; every other reader sees the lines and nothing to press. For a
- * reader on a site that sees the record only through a read-only share,
- * the card says so, since the page's edits will be refused.
+ * The header's "Share with sites…" asks "Change CRM settings", and so does the
+ * unshare; every other reader sees both switched off, with the permission
+ * named. For a reader on a site that sees the record only through a read-only
+ * share, the card says so, since the page's edits will be refused.
  */
 export function RecordSharingCard(props: RecordSharingCardProps) {
   const { object, id, record, hostId, orgId, org, viewingHostIds = [] } = props
@@ -103,7 +105,7 @@ export function RecordSharingCard(props: RecordSharingCardProps) {
   const scope = crmTaskCallScope(hostId, orgId)
   const label = CRM_SHARING_OBJECT_LABELS[object]
   const shared = lines.some((line) => line.kind !== 'held')
-  if (!record || (!shared && !(roleReady && canManage))) return null
+  if (!record || (!shared && !roleReady)) return null
 
   const unshare = async (key: string, token: string) => {
     if (!scope) return
@@ -131,12 +133,13 @@ export function RecordSharingCard(props: RecordSharingCardProps) {
       contentGutterX
       contentGutterY
       HeaderProps={{
-        action:
-          roleReady && canManage ? (
+        action: roleReady ? (
+          <BlockedControl blocked={!canManage} reason={crmSettingsPermissionRefusal()}>
             <Button variant="contained" size="small" onClick={() => setSharing(true)}>
               {'Share with sites…'}
             </Button>
-          ) : null,
+          </BlockedControl>
+        ) : null,
       }}
     >
       <Stack spacing={1.5}>
@@ -169,15 +172,17 @@ export function RecordSharingCard(props: RecordSharingCardProps) {
                     line.atMs ? ` on ${when(line.atMs)}` : ''
                   }, ${line.access === 'edit' ? 'read and edit' : 'read-only'}`}
                 </Typography>
-                {canManage ? (
-                  <IconButton
-                    size="small"
-                    disabled={busyKey !== null}
-                    onClick={() => void unshare(line.key, line.token)}
-                  >
-                    <MdiIcon path={mdiClose.path} size={0.7} />
-                    <SrOnly>{`Stop sharing with ${target}`}</SrOnly>
-                  </IconButton>
+                {roleReady ? (
+                  <BlockedControl blocked={!canManage} reason={crmSettingsPermissionRefusal()}>
+                    <IconButton
+                      size="small"
+                      disabled={busyKey !== null}
+                      onClick={() => void unshare(line.key, line.token)}
+                    >
+                      <MdiIcon path={mdiClose.path} size={0.7} />
+                      <SrOnly>{`Stop sharing with ${target}`}</SrOnly>
+                    </IconButton>
+                  </BlockedControl>
                 ) : null}
               </Stack>
             )
@@ -214,7 +219,8 @@ RecordSharingCard.displayName = 'RecordSharingCard'
 
 /**
  * "Share with sites…" on a list's bulk bar (AGL-3336): the same dialog as
- * the record page, over the selection. Drawn for an org manager only.
+ * the record page, over the selection. It asks "Change CRM settings"; a member
+ * without it sees the button switched off, with the permission named.
  */
 export function CrmBulkShareButton(props: {
   object: CrmSharingObject
@@ -227,12 +233,14 @@ export function CrmBulkShareButton(props: {
   const { canManage, ready } = useCanManageCrmSettings(orgId ?? undefined)
   const sites = useCrmSharingSites({ hostId, orgId, enabled: canManage })
   const [open, setOpen] = useState(false)
-  if (!ready || !canManage) return null
+  if (!ready) return null
   return (
     <>
-      <Button size="small" disabled={disabled || !ids.length} onClick={() => setOpen(true)}>
-        {'Share with sites…'}
-      </Button>
+      <BlockedControl blocked={!canManage} reason={crmSettingsPermissionRefusal()}>
+        <Button size="small" disabled={disabled || !ids.length} onClick={() => setOpen(true)}>
+          {'Share with sites…'}
+        </Button>
+      </BlockedControl>
       <ShareRecordsDialog
         open={open}
         onClose={() => setOpen(false)}
