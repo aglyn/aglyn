@@ -209,7 +209,7 @@ describe('the cards follow the keys their routes ask (AGL-4047)', () => {
     render(<LoyaltyProgramCard hostId="host-1" />)
     const save = (await screen.findByRole('button', { name: 'Save' })) as HTMLButtonElement
     expect(save.disabled).toBe(true)
-    expect(save.parentElement?.getAttribute('aria-label')).toContain('Change the rewards program')
+    expect(save.parentElement?.getAttribute('aria-label')).toContain('does not include')
     expect((screen.getByLabelText('Customers earn and spend rewards') as HTMLInputElement).disabled).toBe(true)
   })
 
