@@ -49,7 +49,6 @@ export interface AccountingGateDeps {
   ): Promise<{
     orgId: string | null
     role: string | null
-    isOwner: boolean
     orgWide: boolean
     permissions: Partial<Record<string, boolean | undefined>>
   }>
