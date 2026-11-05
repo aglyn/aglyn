@@ -18,6 +18,7 @@
 import { aiSiteKind } from './ai-site-kinds'
 import { parseAiSiteDetails, type AiSiteDetails } from './ai-site-details'
 import { parseAiSiteInspiration } from './ai-site-inspiration'
+import { aiSiteStarterLookRefusal } from './ai-site-starter-look'
 import {
   AI_BUILD_PLAN_CREATION_NOUNS,
   aiPlanFormDatasetNames,
@@ -866,6 +867,9 @@ export function parseAiSiteJobInputs(
   // plan's own limit (`aiSiteInspirationRefusal`).
   const inspiration = parseAiSiteInspiration(inputs)
   if (typeof inspiration === 'string') return inspiration
+  // An AI starter's look (AGL-4049): text, which the look unit reads strictly.
+  const starterLook = aiSiteStarterLookRefusal(inputs)
+  if (starterLook) return starterLook
   return {
     ...details,
     businessType,

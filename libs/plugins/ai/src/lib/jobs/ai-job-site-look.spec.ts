@@ -22,7 +22,9 @@ import type { AiJob } from '../model/ai-jobs.types'
 import { aiSiteKind } from '../model/ai-site-kinds'
 import { aiSiteLookSignature, aiSiteSeed, aiSiteStyleFor, type AiSiteLookAnswer, type AiSiteStyle } from '../model/ai-site-look'
 import { AI_SITE_MOTION_STYLE_RANGES, aiSiteMotionStylesFor } from '../layout-language/ai-layout-motion'
+import { AI_SITE_STARTER_LOOK_INPUT } from '../model/ai-site-starter-look'
 import { aiRunSiteLook, aiSiteLookPrompt, aiSiteThemeUntouched } from './ai-job-site-look'
+import { AI_SITE_INSPIRATION_SIGNALS_INPUT } from './ai-site-inspiration'
 
 const trades = aiSiteKind('trades') as NonNullable<ReturnType<typeof aiSiteKind>>
 
@@ -115,6 +117,52 @@ describe('the look unit (AGL-3660)', () => {
     await run({})
     expect(models[0]).toBe('claude-opus-5')
     expect(models[1]).not.toBe('claude-opus-5')
+  })
+
+  describe('an AI starter’s look (AGL-4049)', () => {
+    const STARTER = { base: 'bootstrap', fonts: 'editorial', ground: 'warm', corners: 'soft', buttons: 'pill' }
+    /** Runs the unit on a job whose inputs carry these, and returns what it saved and output. */
+    async function lookOf(inputs: Record<string, unknown>, answer: AiSiteLookAnswer = { base: 'carbon', fonts: 'oswald', ground: 'cool', corners: 'sharp', buttons: 'square' }) {
+      let saved: AiSiteStyle | null = null
+      const unit = job({ inputs: { businessType: 'a bistro', siteKind: 'restaurant', originJobId: 'job-1', ...inputs } })
+      const outcome = await aiRunSiteLook({ job: unit, stepIndex: 0, now: new Date(), firestore: {} as never }, unit, {
+        generate: (async () => ({ status: 'ok', value: answer, ...spent })) as never,
+        others: async () => [],
+        save: async (_firestore, input) => {
+          saved = input.style
+          return { write: 'applied', baseName: 'Bootstrap' }
+        },
+      })
+      return { style: saved as unknown as AiSiteStyle, proposal: outcome.outputs?.[0]?.proposal as Record<string, unknown> }
+    }
+
+    it('wears the base, fonts and style tokens the starter’s listing promised', async () => {
+      const { style, proposal } = await lookOf({ [AI_SITE_STARTER_LOOK_INPUT]: JSON.stringify(STARTER) })
+      // Red before: the model's carbon, oswald, cool, sharp and square stood.
+      expect(style).toMatchObject(STARTER)
+      expect(proposal['starter']).toEqual(Object.keys(STARTER))
+    })
+
+    it('keeps the person’s own brand color over a pinned hue, and the starter’s pins over the sites they like', async () => {
+      const inspiration = { sites: [{ colors: ['#1d4ed8'], ground: 'cool', corners: 'sharp', buttons: 'square', cards: 'outlined' }] }
+      const inputs = { [AI_SITE_INSPIRATION_SIGNALS_INPUT]: inspiration, brand: '#8a3b12' }
+      const { style, proposal } = await lookOf({ ...inputs, [AI_SITE_STARTER_LOOK_INPUT]: JSON.stringify({ ...STARTER, hue: 20 }) })
+      expect(style).toMatchObject({ ...STARTER, brand: '#8a3b12', cards: 'outlined' })
+      // The hue the starter pinned gives way to the person's own brand, as an inspired one does.
+      const unhued = await lookOf({ ...inputs, [AI_SITE_STARTER_LOOK_INPUT]: JSON.stringify(STARTER) })
+      expect(style.hue).toBe(unhued.style.hue)
+      // What the sites they like still pinned, and nothing the starter took.
+      expect(proposal['inspired']).toEqual(['brand', 'cards'])
+    })
+
+    it('reads the input strictly: anything but a look in the vocabulary pins nothing', async () => {
+      const bare = await lookOf({})
+      for (const value of ['bootstrap', '{"base":"Bootstrap"}', JSON.stringify({ base: 'windows-95', fonts: 'comic' }), 7]) {
+        const { style, proposal } = await lookOf({ [AI_SITE_STARTER_LOOK_INPUT]: value })
+        expect(style).toEqual(bare.style)
+        expect(proposal).not.toHaveProperty('starter')
+      }
+    })
   })
 
   it('replaces only the theme a site was born with', () => {

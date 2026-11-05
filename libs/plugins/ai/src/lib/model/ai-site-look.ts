@@ -39,6 +39,7 @@ import {
 import type { AiTool } from '../runtime/ai-runtime'
 import {
   AI_SITE_BASES,
+  AI_SITE_BUTTONS,
   AI_SITE_CORNERS,
   AI_SITE_FONT_PAIRINGS,
   AI_SITE_GROUNDS,
@@ -95,8 +96,8 @@ export type AiSiteEyebrow = (typeof AI_SITE_EYEBROWS)[number]
 /** What sets a plain header bar off the page. */
 export const AI_SITE_HEADERS = ['line', 'shadow', 'flat'] as const
 export type AiSiteHeader = (typeof AI_SITE_HEADERS)[number]
-/** Button shapes and casing; `link` draws quiet buttons as underlined links. */
-export const AI_SITE_BUTTONS: readonly AiSiteButtons[] = ['rounded', 'pill', 'square', 'caps', 'link']
+/** Button shapes and casing, from the kinds' own vocabulary (`ai-site-kinds.ts`). */
+export { AI_SITE_BUTTONS }
 const DENSITIES: readonly AiSiteDensity[] = ['compact', 'regular', 'airy']
 
 /**
@@ -248,7 +249,8 @@ export type AiSiteLookAnswer = Partial<
 
 /**
  * The dimensions the sites a person likes pin (AGL-3975,
- * `jobs/ai-site-inspiration.ts`): each one present is KEPT, whatever the
+ * `jobs/ai-site-inspiration.ts`), and an AI starter's look (AGL-4049,
+ * `model/ai-site-starter-look.ts`): each one present is KEPT, whatever the
  * model or the seed would choose, and every other dimension is chosen as it
  * always is. A brand the person gave in the brief still wins over a pinned
  * brand color, and the hue pinned with it.
@@ -256,6 +258,8 @@ export type AiSiteLookAnswer = Partial<
 export type AiSiteLookPins = Partial<
   Pick<
     AiSiteStyle,
+    // The base theme an AI starter is set in (AGL-4049).
+    | 'base'
     | 'brand'
     | 'hue'
     | 'accent'

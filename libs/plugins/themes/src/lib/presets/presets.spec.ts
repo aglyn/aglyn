@@ -16,6 +16,7 @@
  */
 
 import { listConsoleThemePresets } from '@aglyn/aglyn'
+import { SITE_THEME_BASE_NAMES, type SiteThemeBase } from '@aglyn/aglyn/app-utils/site-starter'
 import { validateThemeForPublish } from '@aglyn/aglyn/app-utils/site-theme'
 import {
   createResponsiveTheme,
@@ -128,6 +129,13 @@ describe('the Themes plugin (AGL-3405)', () => {
     expect(new Set(listed.map((preset) => preset.pluginId))).toEqual(new Set(['theme-presets']))
     // Off for a site, it contributes nothing.
     expect(listConsoleThemePresets([])).toEqual([])
+  })
+
+  it('names each built-in theme as a starter’s look line does (AGL-4049)', () => {
+    for (const preset of THEME_PRESETS) {
+      const base = preset.id.slice('theme-presets.'.length) as SiteThemeBase
+      expect([base, SITE_THEME_BASE_NAMES[base]]).toEqual([base, preset.name])
+    }
   })
 })
 

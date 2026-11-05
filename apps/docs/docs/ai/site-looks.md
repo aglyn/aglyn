@@ -85,11 +85,20 @@ still written for your business.
 
 **AI starters are rolling out**, and your workspace may not have them yet. When you
 [start from an AI starter](./start-with-ai.md#start-from-an-ai-starter), its style arrives
-chosen on the **Style** step, and its card says which starter it came from. Its brand
-color arrives picked under **More details** on the same step, as **Chosen color**. Choose
-another style card or another brand color, or **Let the style choose**, to change them.
-Your site's look is then made from them as for any start: its own variation of the
-style, with its fonts chosen within the style, in the brand color you kept.
+chosen on the **Style** step. Its card says which starter it came from and what its look
+is set in, such as **Set in Bootstrap with Fraunces and Inter; pick another style to change
+it.** The **Style** line on **Review** says the same. Its brand color arrives picked under
+**More details** on the same step, as **Chosen color**.
+
+Your site then wears the look the starter shows: its built-in base theme, its fonts, and
+its page background, corners and buttons, in your brand color. The rest of the look, such
+as its cards and how its pages move, is chosen within the style as for any start. If you
+gave sites you like, the starter's look comes first, and what those sites suggest fills in
+the rest.
+
+To change it, choose another style card. The starter's base theme and fonts go with it,
+and your site gets that style's own look. Choose the starter's card again to have them
+back. Choose another brand color, or **Let the style choose**, to change the color.
 
 ![The Style step opened from an AI starter: the Restaurant & café card chosen, saying From Restaurant & café with AI. Change it if you like., among Pick for me and the other style cards](/img/ai/start-with-ai-from-starter-style.png)
 

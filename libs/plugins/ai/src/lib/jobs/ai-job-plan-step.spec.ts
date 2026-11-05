@@ -80,6 +80,7 @@ import {
   aiJobBudgetTier,
 } from './ai-job-budget'
 import type { AiJob } from '../model/ai-jobs.types'
+import { AI_SITE_STARTER_LOOK_INPUT } from '../model/ai-site-starter-look'
 import {
   AI_PLAN_NO_FORM_SENTENCE,
   aiPlanCapabilitiesForJob,
@@ -743,6 +744,11 @@ describe('aiJobPlanPrompt', () => {
     expect(aiJobPlanPrompt(job({ brief: 'x'.repeat(5_000), inputs: {} }))).toHaveLength(
       'Job kind: page\nBrief: '.length + 4_000,
     )
+  })
+
+  it('never shows an AI starter’s look, which code reads (AGL-4049)', () => {
+    const look = { [AI_SITE_STARTER_LOOK_INPUT]: JSON.stringify({ base: 'bootstrap', fonts: 'editorial' }) }
+    expect(aiJobPlanPrompt(job({ inputs: { tone: 'plain', ...look } }))).toBe(aiJobPlanPrompt(job()))
   })
 
   it('tells a template job what its fields are, and charges no other kind for it (AGL-3143 §11)', () => {
