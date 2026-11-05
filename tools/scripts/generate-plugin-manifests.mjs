@@ -612,6 +612,9 @@ function tenantEmailsContent(entries) {
  *  - A QUERY core can build: each parameter is a constant `value`, or an
  *    `option` core knows with an `on` or `off` spelling; either may name the
  *    media id as `{id}`, which core fills in after the id passed its checks.
+ *  - A CLOSED STILL (AGL-4140): `posterOrigin` and `posterPath` together or
+ *    not at all, held as the player's origin and path are, because the
+ *    origin reaches every published page's `img-src` where the flag is on.
  */
 /**
  * The video hosts' own file (AGL-4140), read by core `video-embed-provider.ts`
@@ -671,7 +674,7 @@ async function pluginVideoEmbedProviders() {
       throw new Error(`${where} declares no host — drop the entry, or declare one`)
     }
     for (const declaration of answer) {
-      const { id, label, domains: declaredDomains, mediaIdPaths, mediaIdLinks = [], mediaIdPattern, playerOrigin, playerPath, playerQuery = [] } =
+      const { id, label, domains: declaredDomains, mediaIdPaths, mediaIdLinks = [], mediaIdPattern, playerOrigin, playerPath, playerQuery = [], posterOrigin, posterPath } =
         declaration ?? {}
       const what = `${where} "${id ?? ''}"`
       if (typeof id !== 'string' || !/^[a-z][a-z0-9-]*$/.test(id)) throw new Error(`${where}: a host needs an "id" of lowercase letters, digits and dashes`)
@@ -745,6 +748,29 @@ async function pluginVideoEmbedProviders() {
         const spellings = ['on', 'off'].filter((state) => entry[state] !== undefined)
         if (!spellings.length || spellings.some((state) => typeof entry[state] !== 'string')) {
           throw new Error(`${param}: an option spells "on", "off" or both as strings`)
+        }
+      }
+      // A host's own still (AGL-4140): both or neither, closed as the player is.
+      if ((posterOrigin === undefined) !== (posterPath === undefined)) {
+        throw new Error(`${what}: "posterOrigin" and "posterPath" are declared together or not at all`)
+      }
+      if (posterOrigin !== undefined) {
+        let still
+        try {
+          still = new URL(posterOrigin).origin
+        } catch {
+          still = undefined
+        }
+        if (still !== posterOrigin || !posterOrigin.startsWith('https://')) {
+          throw new Error(`${what}: "posterOrigin" is an https origin with no path, e.g. https://stills.example.net`)
+        }
+        if (
+          typeof posterPath !== 'string' ||
+          !posterPath.startsWith('/') ||
+          /[?#]/.test(posterPath) ||
+          posterPath.split('{id}').length !== 2
+        ) {
+          throw new Error(`${what}: "posterPath" begins with "/", names "{id}" once, and carries no query or fragment`)
         }
       }
       rows.push({ pluginId: plugin.id, ...declaration })

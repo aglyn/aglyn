@@ -100,6 +100,12 @@ export interface AiSiteImportDocument {
   sitePhotos?: AiSiteImportPhoto[]
   /** A slot nothing else fills may take a generated picture: its owner said so, and it is quoted (AGL-4152). */
   generatedPictures?: true
+  /**
+   * Its wave was stamped with `release_video_embed_posters` (AGL-4140): a
+   * YouTube film whose poster the library could not hold is placed with no
+   * poster, and the published page draws YouTube's own still for it.
+   */
+  videoPosters?: true
 }
 
 /** The most characters a text element holds (the palette's ceiling for body copy). */
@@ -267,6 +273,7 @@ export function aiSiteImportDocumentOf(inputs: Readonly<Record<string, unknown>>
     ...(value['proposed'] === true ? { proposed: true as const } : {}),
     ...(Array.isArray(value['sitePhotos']) ? { sitePhotos: photosOf(value['sitePhotos']) } : {}),
     ...(value['generatedPictures'] === true ? { generatedPictures: true as const } : {}),
+    ...(value['videoPosters'] === true ? { videoPosters: true as const } : {}),
     ...(isLayout(value['layout']) ? { layout: value['layout'] } : {}),
     ...(Array.isArray(value['videos']) ? { videos: (value['videos'] as unknown[]).map(videoOf) } : {}),
   }

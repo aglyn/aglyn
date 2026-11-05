@@ -1202,6 +1202,69 @@ describe('a video on a page brought in is a video on the new page (AGL-4140)', (
     expect(designed.settled.map((entry) => entry.what)).toContain('a video left out: it has no poster picture')
   })
 
+  describe("a YouTube film with no poster the library holds plays from YouTube's own still where its wave was stamped so", () => {
+    const YT = 'https://www.youtube.com/watch?v=dQw4w9WgXcQ'
+    /** The bakery's card film on YouTube, its poster picture one the library could not hold. */
+    const posterless = (videoPosters: boolean): AiSiteImportDocument => {
+      const doc = docOf('bakery')
+      const poster = (doc.videos ?? [])[1]?.poster
+      return {
+        ...doc,
+        videos: (doc.videos ?? []).map((video, index) => (index === 1 ? { ...video, embed: YT } : video)),
+        photos: doc.photos.filter((photo) => photo.from !== poster),
+        ...(videoPosters ? { videoPosters: true as const } : {}),
+      }
+    }
+
+    it('draws it as the Video element with no poster, and leaves nothing out', () => {
+      const designed = aiSiteImportDesignedSections(posterless(true))
+      const film = (designed.sections[1]?.blocks ?? []).find((block) => block.kind === 'video')
+      expect(film?.video?.src).toBe(YT)
+      expect(film?.picture).toBeUndefined()
+      expect(designed.settled.map((entry) => entry.what)).not.toContain('a video left out: it has no poster picture')
+    })
+
+    it('stores a Video node that names the link and no poster, so the page draws the still', () => {
+      const doc = posterless(true)
+      const names = aiSiteImportSectionNames(doc)
+      const compiled = aiCompileImportedPage({
+        doc,
+        sectionIds: names.map((_, index) => `sec-${index}`),
+        plan: { title: doc.title, sections: names.map((name) => ({ name, uses: [], items: 0 })) },
+        targets: { ...TARGETS, forms: [] },
+        design: { kind: 'business', seed: 7, home: false } as never,
+      })
+      const placed = Object.values(compiled.tree.nodes).filter((node) => node.componentId === 'video' && node.props?.['src'] === YT)
+      expect(placed).toHaveLength(1)
+      expect(placed[0].props?.['poster']).toBeUndefined()
+      // And the page's own checks pass it, as they pass a film with a poster.
+      const screen = { title: doc.title, slug: '/bakery', sections: names.map((name) => ({ name, uses: [], items: 0 })) }
+      const checked = aiImportedPageCheck({
+        screen: screen as never,
+        sectionIds: names.map((_, index) => `sec-${index}`),
+        targets: { ...TARGETS, forms: [] },
+        context: { screenIds: doc.links.map((link) => link.id), formIds: [], componentIds: [], codeBuilt: true },
+        design: { kind: 'business', seed: 7, home: false },
+        doc,
+      })(null)
+      expect(checked.violations).toEqual([])
+      expect(Object.values((checked.value?.nodes ?? {}) as Record<string, Node>).some((node) => node.componentId === 'video' && node.props?.['src'] === YT)).toBe(true)
+    })
+
+    it('still leaves it out, as before, where the wave was not stamped', () => {
+      const designed = aiSiteImportDesignedSections(posterless(false))
+      expect((designed.sections[1]?.blocks ?? []).some((block) => block.kind === 'video')).toBe(false)
+      expect(designed.settled.map((entry) => entry.what)).toContain('a video left out: it has no poster picture')
+    })
+
+    it('never plays a Vimeo film that way: Vimeo publishes no still', () => {
+      const doc = posterless(true)
+      const vimeo = { ...doc, videos: (doc.videos ?? []).map((video, index) => (index === 1 ? { ...video, embed: 'https://vimeo.com/76979871' } : video)) }
+      const designed = aiSiteImportDesignedSections(vimeo)
+      expect((designed.sections[1]?.blocks ?? []).some((block) => block.kind === 'video')).toBe(false)
+    })
+  })
+
   it('keeps a button that says it plays a film as its words where no film is drawn', () => {
     const doc = docOf('home')
     const designed = aiSiteImportDesignedSections({ ...doc, videos: [] })

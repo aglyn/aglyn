@@ -20,7 +20,10 @@
  * limitations under the License.
  */
 
-import { videoEmbedPlayerOrigins } from '@aglyn/aglyn/plugin-manager/video-embed-provider'
+import {
+  videoEmbedPlayerOrigins,
+  videoEmbedPosterOrigins,
+} from '@aglyn/aglyn/plugin-manager/video-embed-provider'
 
 /*
   MODULE, not a script (AGL-2718).
@@ -187,6 +190,26 @@ describe('owner-widened tenant CSP directives (AGL-1152)', () => {
     expect(videoEmbedPlayerOrigins().length).toBeGreaterThan(0)
     const sources = tenantFrameSrcDirective(true, [], SITE, videoEmbedPlayerOrigins()).split(' ')
     for (const origin of videoEmbedPlayerOrigins()) expect(sources).toContain(origin)
+  })
+
+  it('admits a declared host’s film stills only when it is handed them (AGL-4140)', () => {
+    // A YouTube film with no poster shows YouTube's own still, which the
+    // visitor's browser loads from Google's image host. The middleware hands
+    // the origins over only where `release_video_embed_posters` is on for the
+    // site's workspace, so with the flag off no published page may load one.
+    // Each is held to an https origin, as the players are.
+    expect(videoEmbedPosterOrigins()).toEqual(['https://i.ytimg.com'])
+    const on = tenantImgSrcDirective(true, [], false, SITE, [
+      ...videoEmbedPosterOrigins(),
+      'http://insecure.example.net',
+      'not a url; img-src *',
+    ]).split(' ')
+    expect(on).toContain('https://i.ytimg.com')
+    expect(on.join(' ')).not.toContain('insecure.example.net')
+    expect(on.join(' ')).not.toContain(';')
+    expect(on).not.toContain('*')
+    expect(tenantImgSrcDirective(true, [], false, SITE)).not.toContain('ytimg')
+    expect(tenantImgSrcDirective(true, [], false, SITE, [])).not.toContain('ytimg')
   })
 
   it('pins the payment frames, so in-page checkout still renders a card field', () => {

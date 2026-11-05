@@ -57,6 +57,7 @@
  * here, from its lines, one section at each second-level heading.
  *=========================================*/
 
+import { videoEmbedPosterSrc } from '@aglyn/aglyn/plugin-manager/video-embed-provider'
 import {
   aiCompileLayoutPage,
   type AiLayoutCompiledPage,
@@ -970,19 +971,23 @@ export function aiSiteImportNodeBlocks(scope: MapScope, nodes: readonly SiteImpo
  * A video of the source, where it sat (AGL-4140): the Video element, its
  * poster the library's copy of the source's, where the Video element can play
  * the film. One on a host it cannot play is its poster, linking to where the
- * film plays; with no poster either, nothing of it can be shown.
+ * film plays; with no poster either, nothing of it can be shown. A film on a
+ * host that publishes its own still (YouTube) needs no poster where the
+ * page's wave was stamped so: the page draws the host's still.
  */
 function videoBlocks(scope: MapScope, node: Pick<SiteImportLayoutVideo, 'video' | 'poster' | 'fit' | 'shadow'>): AiLayoutBlock[] {
   const film = scope.films.get(node.video)
   if (film) {
     // A film is pressed to play from its poster: with none, the Video element has nothing to show, and it is left out.
     const picture = filmPlaces(scope, node.video, node.poster) ? aiSiteImportTakePicture(scope, node.poster, undefined, node.fit) : null
-    if (!picture) {
-      scope.settled.push({ at: scope.at, what: 'a video left out: it has no poster picture' })
-      return []
-    }
     const video: AiLayoutVideo = { ...film, ...(node.shadow ? { shadow: true } : {}) }
-    return [{ kind: 'video', video, picture }]
+    if (picture) return [{ kind: 'video', video, picture }]
+    if (filmShowsHostStill(scope, node.video)) {
+      scope.settled.push({ at: scope.at, what: 'a video placed with its host’s own still as its poster' })
+      return [{ kind: 'video', video }]
+    }
+    scope.settled.push({ at: scope.at, what: 'a video left out: it has no poster picture' })
+    return []
   }
   const source = scope.doc.videos?.[node.video]
   const where = source?.embed ?? source?.src
@@ -1024,12 +1029,25 @@ function filmPlaces(scope: Pick<MapScope, 'films' | 'doc' | 'photos'>, video: nu
   return scope.films.has(video) && block?.kind === 'image' && scope.photos.has(block.url)
 }
 
+/**
+ * Whether a film the library holds no poster for is still drawn as the Video
+ * element (AGL-4140): the page's wave was stamped with
+ * `release_video_embed_posters`, and the film plays on a host that publishes
+ * its own still of it (YouTube's, from its media id), which the published
+ * page draws as the poster. Only where the film stands alone: an item's film
+ * plays from the item's picture.
+ */
+function filmShowsHostStill(scope: Pick<MapScope, 'films' | 'doc'>, video: number): boolean {
+  const film = scope.films.get(video)
+  return scope.doc.videoPosters === true && !!film && !!videoEmbedPosterSrc(film.src)
+}
+
 /** The first film of a list of nodes drawn as the Video element, rows, tabs and items opened. */
 function firstFilm(scope: Pick<MapScope, 'films' | 'doc' | 'photos'>, nodes: readonly SiteImportLayoutNode[]): number | null {
   for (const node of nodes) {
     const found =
       node.kind === 'video'
-        ? filmPlaces(scope, node.video, node.poster)
+        ? filmPlaces(scope, node.video, node.poster) || filmShowsHostStill(scope, node.video)
           ? node.video
           : null
         : node.kind === 'row'

@@ -546,8 +546,10 @@ const CatchAllPage = observer(function CatchAllPage(props: Props) {
     () => ({
       hostId: host?.$id,
       pageData: props.pageData as Record<string, unknown> | undefined,
+      // A YouTube film with no poster shows YouTube's own still (AGL-4140).
+      ...(props.videoEmbedPosters ? { videoEmbedPosters: true } : {}),
     }),
-    [host?.$id, props.pageData],
+    [host?.$id, props.pageData, props.videoEmbedPosters],
   )
 
   // Password-protected screens render an unlock form; the composed nodes

@@ -23,6 +23,7 @@ import {
 import {
   videoEmbedOf,
   videoEmbedPlayerSrc,
+  videoEmbedPosterSrc,
 } from '@aglyn/aglyn/plugin-manager/video-embed-provider'
 import { mdiPlay, mdiVideo } from '@aglyn/shared-data-mdi'
 import { MdiIcon } from '@aglyn/shared-ui-jsx'
@@ -347,7 +348,7 @@ const Video = forwardRef<HTMLElement, VideoProps>((allProps, ref) => {
   // Resolving here is not optional: the picker hands back one string for
   // whichever attribute asked for it, so every field it can write to has to
   // understand the same value.
-  const { hostId } = Aglyn.useSite()
+  const { hostId, videoEmbedPosters } = Aglyn.useSite()
   /**
    * The delivery copy, not the master (AGL-2753).
    *
@@ -376,10 +377,19 @@ const Video = forwardRef<HTMLElement, VideoProps>((allProps, ref) => {
       generated: posterFromSource,
       width,
     })
+  /**
+   * The host's own still, for a hosted film with neither poster (AGL-4140):
+   * YouTube's thumbnail, rebuilt from the media id alone. Only where the
+   * site's workspace has `release_video_embed_posters` on, which is also the
+   * only place the published page's `img-src` admits the host's image
+   * origin; everywhere else the element keeps asking for a poster.
+   */
+  const hostStill =
+    videoEmbedPosters && !posterFor() ? videoEmbedPosterSrc(storedSrc) : undefined
   /** Full size — what an `<img>` wants beside a `srcSet` of widths. */
-  const posterBase = posterFor()
+  const posterBase = posterFor() ?? hostStill
   /** One width — what `<video poster>` and a `thumbnailUrl` have to take. */
-  const poster = posterFor(POSTER_REQUEST_WIDTH)
+  const poster = posterFor(POSTER_REQUEST_WIDTH) ?? hostStill
   const captions = Aglyn.resolveMediaSrc(captionsSrc, { hostId })
   /**
    * The lightbox's two pieces of state, and they are deliberately two.
@@ -800,6 +810,9 @@ const Video = forwardRef<HTMLElement, VideoProps>((allProps, ref) => {
             // read the same thing twice, once as a control and once as a
             // picture.
             alt=""
+            // The host's still asks Google for the picture and nothing else:
+            // no page address rides along as a referrer (AGL-4140).
+            referrerPolicy={hostStill ? 'no-referrer' : undefined}
             // No `loading` hint, deliberately — see `deferred-images.spec`,
             // where this element is exempt. A poster is the entire visual of
             // a media element an author placed on purpose, and a browser

@@ -1642,11 +1642,23 @@ function approvedImageHostSources(approved) {
  * references, so an owner who deleted it would blank their own free-tier
  * images while paying customers' sites kept working.
  */
+/**
+ * `posterOrigins` are the declared video hosts' still origins (AGL-4140),
+ * such as YouTube's `i.ytimg.com`, which the Video element shows as the
+ * poster of a hosted film that has none. Like the players in `frame-src`,
+ * no video host is named in this file: the tenant middleware passes
+ * `videoEmbedPosterOrigins()`, and only for a site whose workspace has
+ * `release_video_embed_posters` on, because the still is a request every
+ * visitor's browser makes to the host with the page. Each is held to an
+ * https origin, so a malformed one drops out rather than widening the
+ * directive.
+ */
 function tenantImgSrcDirective(
   isProduction,
   approvedImageHosts,
   runsMeasurement,
   siteOrigins,
+  posterOrigins = [],
 ) {
   const development = isProduction
     ? []
@@ -1668,6 +1680,11 @@ function tenantImgSrcDirective(
     // analytics has no reason to permit an ad network's beacon, and a policy
     // that permits one anyway is documenting our convenience, not its needs.
     .concat(runsMeasurement ? MEASUREMENT_IMAGE_ORIGINS : [])
+    .concat(
+      (Array.isArray(posterOrigins) ? posterOrigins : [])
+        .map((origin) => configuredOrigin(origin))
+        .filter((origin) => origin && origin.startsWith('https://')),
+    )
     .concat(approvedImageHostSources(approvedImageHosts))
     .concat(development)
   return `img-src ${sources.join(' ')}`

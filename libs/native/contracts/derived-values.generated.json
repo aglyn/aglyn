@@ -2733,6 +2733,11 @@
       "enabled": false,
       "rolloutPercent": 0,
       "plans": []
+    },
+    "release_video_embed_posters": {
+      "enabled": false,
+      "rolloutPercent": 0,
+      "plans": []
     }
   },
   "flagCases": [

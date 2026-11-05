@@ -1119,6 +1119,12 @@ export interface AiSiteImportWave {
    * its improved pages are redesigned from a ledger. Absent, today's Improve it.
    */
   generative?: true
+  /**
+   * `SITE_IMPORT_VIDEO_POSTERS_RELEASE_FLAG` was on for the organization when
+   * the wave started (AGL-4140): its pages place a YouTube film with no
+   * poster the library holds, for the page to draw YouTube's own still in.
+   */
+  videoPosters?: true
 }
 
 export interface AiSiteImportState {
@@ -2230,7 +2236,7 @@ export function aiSiteImportWaveChoice(state: Pick<AiSiteImportState, 'finish' |
  * wave once, when it starts, so a change made before a later wave reaches only
  * the waves that have not started.
  */
-export function aiSiteImportWaveStamped(state: AiSiteImportState, index: number, options: { generative?: boolean } = {}): AiSiteImportState {
+export function aiSiteImportWaveStamped(state: AiSiteImportState, index: number, options: { generative?: boolean; videoPosters?: boolean } = {}): AiSiteImportState {
   const wave = state.waves.find((entry) => entry.index === index)
   if (!wave) return state
   const choice = aiSiteImportChoiceOf(state)
@@ -2240,7 +2246,18 @@ export function aiSiteImportWaveStamped(state: AiSiteImportState, index: number,
   const generative = options.generative === true && choice.finish === 'improve'
   return {
     ...state,
-    waves: state.waves.map((entry) => (entry.index === index ? { ...entry, finish: choice.finish, wording: choice.wording, ...(generative ? { generative: true as const } : {}) } : entry)),
+    waves: state.waves.map((entry) =>
+      entry.index === index
+        ? {
+            ...entry,
+            finish: choice.finish,
+            wording: choice.wording,
+            ...(generative ? { generative: true as const } : {}),
+            // YouTube's own still for a film with no poster (AGL-4140), whatever the finish.
+            ...(options.videoPosters === true ? { videoPosters: true as const } : {}),
+          }
+        : entry,
+    ),
     pages: state.pages.map((page) => (slots.has(page.slot) ? { ...page, wording: aiSiteImportPageWording(page, choice) } : page)),
   }
 }
