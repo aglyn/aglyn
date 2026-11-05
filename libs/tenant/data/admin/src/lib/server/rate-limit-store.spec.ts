@@ -836,7 +836,9 @@ describe('AGL-2404 · a contended counter refuses instead of hanging', () => {
         return (firestore.runTransaction as any)(...args)
       },
     }
-    const result = await consumeRateLimit('apiv1:k', opts(wrapped))
+    // A wide budget: this case is about the transaction, and `opts`' 25 ms is a
+    // real deadline that a busy CI runner can miss even against this fake.
+    const result = await consumeRateLimit('apiv1:k', opts(wrapped, { budgetMs: 10_000 }))
 
     expect(result.allowed).toBe(true)
     expect(opened).toHaveLength(0)
