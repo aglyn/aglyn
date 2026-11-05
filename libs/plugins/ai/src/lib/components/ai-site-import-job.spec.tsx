@@ -355,12 +355,13 @@ describe('Improve it, generative (AGL-4152)', () => {
     const page = screen.getByRole('switch', { name: 'Add this new page: Common questions' }) as HTMLInputElement
     const pictures = screen.getByRole('switch', { name: 'Create pictures with AI where needed' }) as HTMLInputElement
     expect(page.checked).toBe(true)
-    expect(pictures.checked).toBe(false)
+    // On unless its owner turns them off (AGL-4152).
+    expect(pictures.checked).toBe(true)
     expect(screen.queryByRole('button', { name: 'Start every remaining wave' })).toBeNull()
     fireEvent.click(page)
     fireEvent.click(pictures)
     fireEvent.click(screen.getByRole('button', { name: 'Build my new site' }))
-    expect(onResume).toHaveBeenCalledWith(undefined, { addPage: false, pictures: true })
+    expect(onResume).toHaveBeenCalledWith(undefined, { addPage: false, pictures: false })
   })
 
   it('quotes as its switches stand, before they are saved', () => {
@@ -369,9 +370,9 @@ describe('Improve it, generative (AGL-4152)', () => {
     expect(quote()).toContain('3 pages redesigned by Aglyn AI')
     fireEvent.click(screen.getByRole('switch', { name: 'Add this new page: Common questions' }))
     expect(quote()).toContain('2 pages redesigned by Aglyn AI')
-    expect(quote()).not.toContain('generated pictures')
-    fireEvent.click(screen.getByRole('switch', { name: 'Create pictures with AI where needed' }))
     expect(quote()).toContain('up to 4 generated pictures')
+    fireEvent.click(screen.getByRole('switch', { name: 'Create pictures with AI where needed' }))
+    expect(quote()).not.toContain('generated pictures')
   })
 
   it('rows the proposed page with no old page to open', () => {
