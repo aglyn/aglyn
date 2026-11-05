@@ -987,6 +987,39 @@ describe('useBesignerDocument', () => {
      * with the server's document. The first answer must never read as "not
      * found"; only the server saying the document is absent may.
      */
+    it('takes the server’s copy over an untouched cached canvas, with no conflict (AGL-4183)', () => {
+      setCanvasDirty(false)
+      const { result, rerender } = setup({
+        nodes: NODES,
+        updatedAt: stamp(1),
+        fromCache: true,
+      })
+      mockCanvas.didSetInitial = true
+      const NEWER = { root: { $id: 'root', componentId: 'div', nodes: [] } }
+      rerender({ nodes: NEWER, updatedAt: stamp(2), fromCache: false })
+      expect(result.current.remoteChanged).toBe(false)
+      expect(mockCanvas.setNodes).toHaveBeenLastCalledWith(
+        expect.objectContaining({ root: NEWER.root }),
+      )
+    })
+
+    it('still reports it when the author already typed over the cached copy (AGL-4183)', () => {
+      setCanvasDirty(false)
+      const { result, rerender } = setup({
+        nodes: NODES,
+        updatedAt: stamp(1),
+        fromCache: true,
+      })
+      mockCanvas.didSetInitial = true
+      setCanvasDirty(true)
+      rerender({
+        nodes: { root: { $id: 'root', componentId: 'div', nodes: [] } },
+        updatedAt: stamp(2),
+        fromCache: false,
+      })
+      expect(result.current.remoteChanged).toBe(true)
+    })
+
     it('never reports notFound for an empty cached snapshot the server then fills', () => {
       const { result, rerender } = setup({
         nodes: undefined,
@@ -1431,6 +1464,29 @@ describe('useBesignerDocument', () => {
           await act(async () => {
             await Promise.resolve()
           })
+          expect(result.current.saveBlockedReason).toBeUndefined()
+        })
+
+        it('waits for the server’s copy before reading the draft (AGL-4183)', async () => {
+          mockReadServerDraft.mockClear()
+          mockReadServerDraft.mockResolvedValue(SAVED)
+          const { result, rerender } = setup({
+            draft: DRAFT,
+            firestore,
+            updatedAt: stamp(7),
+            fromCache: true,
+          })
+          await act(async () => {
+            await Promise.resolve()
+          })
+          expect(mockReadServerDraft).not.toHaveBeenCalled()
+          expect(result.current.saveBlockedReason).toMatch(/saved draft/)
+
+          rerender({ fromCache: false })
+          await act(async () => {
+            await Promise.resolve()
+          })
+          expect(mockReadServerDraft).toHaveBeenCalled()
           expect(result.current.saveBlockedReason).toBeUndefined()
         })
 
