@@ -30,7 +30,7 @@
  * real middleware with the verdict route and the page read stubbed, one site
  * per verdict (the middleware memoizes verdicts per host):
  *
- *  - maintenance: 503 + `Retry-After` for everyone, the team included, with
+ *  - maintenance: 503 + `Retry-After` for the public, not the team, with
  *    the page in the body;
  *  - preview: the same for the public; the team's cookie goes to the uncached
  *    preview route and gets the site with a 200;
@@ -265,17 +265,26 @@ describe('maintenance mode answers 503 at every address (AGL-4110)', () => {
     }
   })
 
-  it('the team as well: maintenance is the switch that means nobody', async () => {
-    await expectUnavailable(await run('maint-team-site', '/about', HINT_COOKIE))
+  it('not the team: their cookie goes around the cache to the site, with no 503', async () => {
+    const response = await run('maint-team-site', '/about', HINT_COOKIE)
+    expect(response.status).not.toBe(503)
+    expect(rewriteTarget(response)).toContain('/aglyn-preview/about')
+    // Their view is never written to a shared cache.
+    expect(response.headers.get('cache-control')).toContain('no-store')
   })
 
-  it('a site in BOTH modes: the team goes around the cache and still gets 503', async () => {
-    const response = await run('both-site', '/about', PREVIEW_COOKIE)
-    await expectUnavailable(response)
-    // Their view is still never written to a shared cache.
+  it('their search goes to the search route, which verifies them itself', async () => {
+    const response = await run('maint-team-site', '/search?q=menu', HINT_COOKIE)
+    expect(response.status).not.toBe(503)
+    expect(rewriteTarget(response)).toMatch(/^\/maint-team-site\/(light|dark)\/search/)
     expect(response.headers.get('cache-control')).toContain('no-store')
-    const read = await runNoticeRead('both-site', '/about', PREVIEW_COOKIE)
-    expect(rewriteTarget(read)).toContain('/aglyn-preview/about')
+  })
+
+  it('a site in BOTH modes: the team still goes around the cache, with no 503', async () => {
+    const response = await run('both-site', '/about', PREVIEW_COOKIE)
+    expect(response.status).not.toBe(503)
+    expect(rewriteTarget(response)).toContain('/aglyn-preview/about')
+    expect(response.headers.get('cache-control')).toContain('no-store')
   })
 
   it('an entry preview link is left to its route, which redirects to a 503 address', async () => {
@@ -343,14 +352,14 @@ describe('reading the page for the 503 (AGL-4110)', () => {
   })
 
   it('asks the same address, marked, carrying what the route is chosen by', async () => {
-    await run('read-self-site', '/about?a=1', HINT_COOKIE, {
+    await run('read-self-site', '/about?a=1', 'visitor=1', {
       'sec-ch-prefers-color-scheme': 'dark',
     })
     expect(pageReads).toHaveLength(1)
     const [read] = pageReads
     expect(read.url).toBe('http://read-self-site.localhost:4500/about?a=1')
     expect(read.headers.get(SITE_NOTICE_REQUEST_HEADER)).toBe('1')
-    expect(read.headers.get('cookie')).toBe(HINT_COOKIE)
+    expect(read.headers.get('cookie')).toBe('visitor=1')
     expect(read.headers.get('sec-ch-prefers-color-scheme')).toBe('dark')
     // A redirect is the render's answer, and the visitor must get it, not us.
     expect(read.redirect).toBe('manual')

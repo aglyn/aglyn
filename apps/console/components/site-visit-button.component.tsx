@@ -41,8 +41,8 @@ export interface SiteVisitButtonProps {
 /**
  * "Visit" / "Visit site" (AGL-4086): the console's way onto the live site.
  *
- * A public site opens at its address, as it always has. A site in preview
- * opens through a console-minted enter link instead, which recognizes the
+ * A public site opens at its address, as it always has. A site in preview or
+ * maintenance (`inPreview`, from the caller) opens through a console-minted enter link instead, which recognizes the
  * person as the site's team on whatever address the site has — the
  * `.aglyn.app` subdomain or the customer's own domain, where no console cookie
  * can reach — so one click shows the team the whole site in both places.
