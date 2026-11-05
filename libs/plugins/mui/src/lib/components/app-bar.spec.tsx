@@ -151,14 +151,14 @@ describe('App Bar scroll reactions: shrink and hide', () => {
  * back to the very top for every visitor without one.
  */
 describe('App Bar over a photo hero sits below the admin bar (AGL-3660)', () => {
-  it('offsets its top by --aglyn-admin-bar-height, 0 when absent', () => {
+  it('offsets its top by the admin and announcement bars, 0 when absent', () => {
     const rules = overHeroSx(createTheme()) as Record<
       string,
       Record<string, unknown>
     >
     expect(rules['body:has([data-aglyn-under-header]) &']).toMatchObject({
       position: 'absolute',
-      top: 'var(--aglyn-admin-bar-height, 0px)',
+      top: 'calc(var(--aglyn-admin-bar-height, 0px) + var(--aglyn-announcement-bar-height, 0px))',
     })
   })
 })
