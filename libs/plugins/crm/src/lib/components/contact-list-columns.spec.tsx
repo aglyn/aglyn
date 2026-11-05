@@ -218,7 +218,8 @@ describe('contactListColumns', () => {
     const knownBy = orgLevel.find((definition) => definition.field === 'capturedByHostIds')
     expect(knownBy?.headerName).toBe('Known by')
     expect(knownBy?.filterable).toBe(false)
-    expect(knownBy?.sortable).toBe(false)
+    // Every header sorts (AGL-3680); `columnSort` decides, so the column says nothing.
+    expect(knownBy?.sortable).not.toBe(false)
     // Between Stage and Sources, where the row's who-knows-them belongs.
     expect(orgLevel.slice(0, 5).map((definition) => definition.field)).toEqual([
       'name',
@@ -234,6 +235,11 @@ describe('contactListColumns', () => {
     expect(
       JSON.stringify((knownBy?.renderCell as any)({ row: row({ capturedByHostIds: [] }) })),
     ).toContain('No site recorded')
+  })
+
+  it('leaves the Tags header to the list, which sorts the page by its text', () => {
+    expect(column('tags').sortable).not.toBe(false)
+    expect(value('tags', row({ tags: ['vip', 'wholesale'] }))).toBe('vip, wholesale')
   })
 
   it('still lets the name column reach the query grammar', () => {

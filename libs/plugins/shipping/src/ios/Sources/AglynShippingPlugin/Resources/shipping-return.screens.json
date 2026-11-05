@@ -33,6 +33,13 @@
       "blocks": [
         {
           "type": "notice",
+          "id": "keyRefusal",
+          "tone": "info",
+          "when": "!site.can[shipping.labels]",
+          "text": "{app.permissionRefusal[shipping.labels]}. You can read what is set here."
+        },
+        {
+          "type": "notice",
           "id": "off",
           "tone": "info",
           "when": "data.avail.available == false",
@@ -61,7 +68,7 @@
               "id": "buy",
               "label": "Buy return label",
               "icon": "printer|print",
-              "when": "data.avail.available != false && data.order.shippingAddress",
+              "when": "site.can[shipping.labels] && data.avail.available != false && data.order.shippingAddress",
               "prompt": [
                 {
                   "fieldsFrom": {

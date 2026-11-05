@@ -151,6 +151,13 @@
       "blocks": [
         {
           "type": "notice",
+          "id": "keyRefusal",
+          "tone": "info",
+          "when": "!site.can[marketingPlatforms.manage]",
+          "text": "{app.permissionRefusal[marketingPlatforms.manage]}. You can read what is set here."
+        },
+        {
+          "type": "notice",
           "id": "summary",
           "tone": "info",
           "text": "{const.providers[id=params.provider].reads}"
@@ -245,7 +252,7 @@
               "id": "connectKey",
               "label": "Connect with an API key",
               "icon": "key|key",
-              "when": "!data.conn.connections[provider=params.provider] && data.conn.available[id=params.provider].apiKey && const.providers[id=params.provider].hasKey",
+              "when": "site.can[marketingPlatforms.manage] && !data.conn.connections[provider=params.provider] && data.conn.available[id=params.provider].apiKey && const.providers[id=params.provider].hasKey",
               "url": "/api/marketing-platforms/connections",
               "prompt": [
                 {
@@ -267,7 +274,7 @@
               "id": "connectOAuth",
               "label": "Connect with {const.providers[id=params.provider].label}",
               "icon": "link|link",
-              "when": "!data.conn.connections[provider=params.provider] && data.conn.available[id=params.provider].oauth",
+              "when": "site.can[marketingPlatforms.manage] && !data.conn.connections[provider=params.provider] && data.conn.available[id=params.provider].oauth",
               "url": "/api/marketing-platforms/oauth/start",
               "body": {
                 "hostId": "{site.id}",
@@ -281,7 +288,7 @@
               "id": "reconnectKey",
               "label": "Connect again with an API key",
               "icon": "key|key",
-              "when": "data.conn.connections[provider=params.provider].status == reconnect && data.conn.available[id=params.provider].apiKey && const.providers[id=params.provider].hasKey",
+              "when": "site.can[marketingPlatforms.manage] && data.conn.connections[provider=params.provider].status == reconnect && data.conn.available[id=params.provider].apiKey && const.providers[id=params.provider].hasKey",
               "url": "/api/marketing-platforms/connections",
               "prompt": [
                 {
@@ -303,7 +310,7 @@
               "id": "reconnectOAuth",
               "label": "Connect again with {const.providers[id=params.provider].label}",
               "icon": "link|link",
-              "when": "data.conn.connections[provider=params.provider].status == reconnect && data.conn.available[id=params.provider].oauth",
+              "when": "site.can[marketingPlatforms.manage] && data.conn.connections[provider=params.provider].status == reconnect && data.conn.available[id=params.provider].oauth",
               "url": "/api/marketing-platforms/oauth/start",
               "body": {
                 "hostId": "{site.id}",
@@ -317,7 +324,7 @@
               "id": "sync",
               "label": "Sync now",
               "icon": "arrow.triangle.2.circlepath|sync",
-              "when": "data.conn.connections[provider=params.provider].status == active,error",
+              "when": "site.can[marketingPlatforms.manage] && data.conn.connections[provider=params.provider].status == active,error",
               "url": "/api/marketing-platforms/sync-now",
               "body": {
                 "hostId": "{site.id}",
@@ -329,7 +336,7 @@
               "id": "pause",
               "label": "Pause",
               "icon": "pause.circle|pause_circle",
-              "when": "data.conn.connections[provider=params.provider].status == active",
+              "when": "site.can[marketingPlatforms.manage] && data.conn.connections[provider=params.provider].status == active",
               "method": "PATCH",
               "url": "/api/marketing-platforms/connection",
               "body": {
@@ -343,7 +350,7 @@
               "id": "resume",
               "label": "Resume",
               "icon": "play.circle|play_circle",
-              "when": "data.conn.connections[provider=params.provider].status == paused",
+              "when": "site.can[marketingPlatforms.manage] && data.conn.connections[provider=params.provider].status == paused",
               "method": "PATCH",
               "url": "/api/marketing-platforms/connection",
               "body": {
@@ -358,7 +365,7 @@
               "label": "Disconnect",
               "icon": "xmark.circle|link_off",
               "destructive": true,
-              "when": "data.conn.connections[provider=params.provider]",
+              "when": "site.can[marketingPlatforms.manage] && data.conn.connections[provider=params.provider]",
               "confirm": "Disconnect {const.providers[id=params.provider].label}? Nothing more is sent to it, and the stored key, the sync log and any orders not yet sent are deleted. Contacts already in {const.providers[id=params.provider].label} stay there, and unsubscribes already read back stay on this site's list.",
               "method": "DELETE",
               "url": "/api/marketing-platforms/connection",
@@ -404,7 +411,8 @@
               "provider": "{params.provider}",
               "listId": "{form.listId}"
             },
-            "success": "Saved. Everyone is copied to it on the next sync."
+            "success": "Saved. Everyone is copied to it on the next sync.",
+            "disabledWhen": "!site.can[marketingPlatforms.manage]"
           }
         },
         {
@@ -445,7 +453,8 @@
               "syncContacts": "{form.syncContacts}",
               "syncEvents": "{form.syncEvents}"
             },
-            "success": "Saved."
+            "success": "Saved.",
+            "disabledWhen": "!site.can[marketingPlatforms.manage]"
           }
         },
         {

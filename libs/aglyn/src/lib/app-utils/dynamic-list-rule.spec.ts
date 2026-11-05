@@ -21,6 +21,8 @@
  * members created after Z.
  */
 
+import { registerPluginContactSource } from '../plugin-manager/plugin-contact-capture'
+import { unregisterPluginServices } from '../plugin-manager/plugin-services'
 import {
   candidateMatchesDynamicListRule,
   dynamicListDimensionsForCrmView,
@@ -944,6 +946,37 @@ describe('a saved view is translated whole or not at all', () => {
         { key: 'churned', op: 'unset' },
       ],
     })
+  })
+
+  /*
+   * A view filtered by a plugin's source (AGL-4042). Its word is on the list's
+   * filter, so it is on the audience too, and a word nothing declares still
+   * refuses: dropping it would make the audience wider than the view.
+   */
+  it('carries a source a plugin declared, and still names one nothing declared', () => {
+    const clause = { field: 'source', op: 'equals', value: 'kiosk' }
+    expect(dynamicListDimensionsForCrmView([clause]).unsupported).toEqual([clause])
+    registerPluginContactSource({ source: 'kiosk', label: 'Guest book' }, { pluginId: 'kiosk' })
+    try {
+      expect(dynamicListDimensionsForCrmView([clause])).toEqual({
+        dimensions: { captureSources: ['kiosk'] },
+        unsupported: [],
+      })
+      const mixed = { field: 'source', op: 'isAnyOf', value: 'form,kiosk,carrier-pigeon' }
+      expect(dynamicListDimensionsForCrmView([mixed]).unsupported).toEqual([mixed])
+    } finally {
+      unregisterPluginServices('kiosk')
+    }
+  })
+
+  it('asks the facet for a plugin\'s source and not for one of the core\'s', () => {
+    const needs = (captureSources: string[]) =>
+      dynamicListRuleNeedsContactFacet(
+        normalizeDynamicListRule({ sources: ['contacts'], captureSources }),
+      )
+    expect(needs(['kiosk'])).toBe(true)
+    expect(needs(['form', 'kiosk'])).toBe(true)
+    expect(needs(['form', 'order'])).toBe(false)
   })
 
   it('names every clause it has no dimension for, and carries the rest', () => {

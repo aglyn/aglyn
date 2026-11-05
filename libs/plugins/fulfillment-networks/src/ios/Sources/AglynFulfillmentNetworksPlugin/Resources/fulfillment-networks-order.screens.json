@@ -120,7 +120,7 @@
               "id": "send",
               "label": "Send to {const.providers[id=item.provider].short}",
               "icon": "send|send",
-              "when": "item.status != reconnect && data.order.shippable && data.order.status == paid,partially_fulfilled && !data.view.routings[provider=item.provider] || item.status != reconnect && data.order.shippable && data.order.status == paid,partially_fulfilled && data.view.routings[provider=item.provider].status == canceled,failed,skipped",
+              "when": "site.can[fulfillmentNetworks.orders] && item.status != reconnect && data.order.shippable && data.order.status == paid,partially_fulfilled && !data.view.routings[provider=item.provider] || site.can[fulfillmentNetworks.orders] && item.status != reconnect && data.order.shippable && data.order.status == paid,partially_fulfilled && data.view.routings[provider=item.provider].status == canceled,failed,skipped",
               "url": "/api/fulfillment-networks/order/send",
               "body": {
                 "hostId": "{site.id}",
@@ -163,7 +163,7 @@
               "label": "Cancel at {const.providers[id=item.provider].short}",
               "icon": "xmark.circle|cancel",
               "destructive": true,
-              "when": "item.status == queued,accepted,partially_shipped && !item.cancelRequested",
+              "when": "site.can[fulfillmentNetworks.orders] && item.status == queued,accepted,partially_shipped && !item.cancelRequested",
               "confirm": "Cancel at {const.providers[id=item.provider].label}? {const.providers[id=item.provider].label} is asked to stop this order. If it has already started packing it may be too late, and anything that ships still comes back to the order.",
               "url": "/api/fulfillment-networks/order/cancel",
               "body": {

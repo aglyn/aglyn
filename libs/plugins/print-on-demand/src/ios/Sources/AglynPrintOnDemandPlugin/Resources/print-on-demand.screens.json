@@ -84,6 +84,13 @@
       "blocks": [
         {
           "type": "notice",
+          "id": "keyRefusal",
+          "tone": "info",
+          "when": "!site.can[printOnDemand.manage]",
+          "text": "{app.permissionRefusal[printOnDemand.manage]}. You can read what is set here."
+        },
+        {
+          "type": "notice",
           "id": "unavailable",
           "tone": "info",
           "when": "!data.conn.available",
@@ -139,7 +146,7 @@
               "id": "connectPrintful",
               "label": "Connect Printful",
               "icon": "link|link",
-              "when": "data.conn.providers[id=const.ids.printful] && !data.conn.connections[provider=const.ids.printful]",
+              "when": "site.can[printOnDemand.manage] && data.conn.providers[id=const.ids.printful] && !data.conn.connections[provider=const.ids.printful]",
               "url": "/api/print-on-demand/connect",
               "prompt": [
                 {
@@ -196,7 +203,7 @@
               "id": "connectPrintify",
               "label": "Connect Printify",
               "icon": "link|link",
-              "when": "data.conn.providers[id=const.ids.printify] && !data.conn.connections[provider=const.ids.printify]",
+              "when": "site.can[printOnDemand.manage] && data.conn.providers[id=const.ids.printify] && !data.conn.connections[provider=const.ids.printify]",
               "url": "/api/print-on-demand/connect",
               "prompt": [
                 {
@@ -349,6 +356,13 @@
       "blocks": [
         {
           "type": "notice",
+          "id": "keyRefusal",
+          "tone": "info",
+          "when": "!site.can[printOnDemand.manage]",
+          "text": "{app.permissionRefusal[printOnDemand.manage]}. You can read what is set here."
+        },
+        {
+          "type": "notice",
           "id": "currency",
           "tone": "warning",
           "when": "data.conn.connections[provider=params.provider] && data.conn.connections[provider=params.provider].currency != @data.conn.storeCurrency",
@@ -450,7 +464,8 @@
               "submitMode": "{form.submitMode}",
               "syncPrices": "{form.syncPrices}"
             },
-            "success": "Saved"
+            "success": "Saved",
+            "disabledWhen": "!site.can[printOnDemand.manage]"
           }
         },
         {
@@ -471,7 +486,8 @@
                 "provider": "{params.provider}"
               },
               "back": true,
-              "success": "Disconnected."
+              "success": "Disconnected.",
+              "when": "site.can[printOnDemand.manage]"
             }
           ]
         }
@@ -559,6 +575,13 @@
       "blocks": [
         {
           "type": "notice",
+          "id": "keyRefusal",
+          "tone": "info",
+          "when": "!site.can[printOnDemand.products]",
+          "text": "{app.permissionRefusal[printOnDemand.products]}. You can read what is set here."
+        },
+        {
+          "type": "notice",
           "id": "intro",
           "tone": "info",
           "text": "Choose a product to import. It comes in with its variants, the retail prices you set at the service and its photos. Importing one you already imported updates it."
@@ -624,7 +647,8 @@
                 "status": "{form.status}",
                 "content": "{form.content}"
               },
-              "success": "{item.name}: {response.results.0.outcome}. {response.results.0.message}"
+              "success": "{item.name}: {response.results.0.outcome}. {response.results.0.message}",
+              "when": "site.can[printOnDemand.products]"
             }
           ],
           "empty": "No products at the service yet. Create a product there, then come back to import it."
@@ -647,6 +671,13 @@
         "conn": "/api/print-on-demand/connections?hostId={site.id}"
       },
       "blocks": [
+        {
+          "type": "notice",
+          "id": "keyRefusal",
+          "tone": "info",
+          "when": "!site.can[printOnDemand.products]",
+          "text": "{app.permissionRefusal[printOnDemand.products]}. You can read what is set here."
+        },
         {
           "type": "list",
           "id": "links",
@@ -678,7 +709,8 @@
                 ],
                 "content": true
               },
-              "success": "{item.name}: {response.results.0.outcome}. {response.results.0.message}"
+              "success": "{item.name}: {response.results.0.outcome}. {response.results.0.message}",
+              "when": "site.can[printOnDemand.products]"
             },
             {
               "id": "unlink",
@@ -691,7 +723,8 @@
                 "hostId": "{site.id}",
                 "linkId": "{item.id}"
               },
-              "success": "{item.name} is no longer filled by {item.providerLabel}."
+              "success": "{item.name} is no longer filled by {item.providerLabel}.",
+              "when": "site.can[printOnDemand.products]"
             }
           ],
           "empty": "No products imported yet. Use Import products on a connection to choose what to sell."

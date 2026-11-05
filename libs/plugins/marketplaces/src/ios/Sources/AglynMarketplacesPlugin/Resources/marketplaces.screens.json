@@ -166,6 +166,13 @@
       "blocks": [
         {
           "type": "notice",
+          "id": "keyRefusal",
+          "tone": "info",
+          "when": "!site.can[marketplaces.manage]",
+          "text": "{app.permissionRefusal[marketplaces.manage]}. You can read what is set here."
+        },
+        {
+          "type": "notice",
           "id": "hint",
           "tone": "info",
           "when": "!data.conn.connections[marketplace=params.marketplace]",
@@ -264,7 +271,7 @@
               "id": "connect",
               "label": "Connect {const.marketplaces[id=params.marketplace].label}",
               "icon": "link|link",
-              "when": "!data.conn.connections[marketplace=params.marketplace]",
+              "when": "site.can[marketplaces.manage] && !data.conn.connections[marketplace=params.marketplace]",
               "url": "/api/marketplaces/connect",
               "body": {
                 "hostId": "{site.id}",
@@ -278,7 +285,7 @@
               "id": "reconnect",
               "label": "Connect again",
               "icon": "link|link",
-              "when": "data.conn.connections[marketplace=params.marketplace].status == reconnect",
+              "when": "site.can[marketplaces.manage] && data.conn.connections[marketplace=params.marketplace].status == reconnect",
               "url": "/api/marketplaces/connect",
               "body": {
                 "hostId": "{site.id}",
@@ -292,7 +299,7 @@
               "id": "sync",
               "label": "Sync now",
               "icon": "arrow.triangle.2.circlepath|sync",
-              "when": "data.conn.connections[marketplace=params.marketplace].status == active",
+              "when": "site.can[marketplaces.manage] && data.conn.connections[marketplace=params.marketplace].status == active",
               "url": "/api/marketplaces/sync-now",
               "body": {
                 "hostId": "{site.id}",
@@ -304,7 +311,7 @@
               "id": "pause",
               "label": "Pause",
               "icon": "pause.circle|pause_circle",
-              "when": "data.conn.connections[marketplace=params.marketplace].status == active",
+              "when": "site.can[marketplaces.manage] && data.conn.connections[marketplace=params.marketplace].status == active",
               "method": "PATCH",
               "url": "/api/marketplaces/connection",
               "body": {
@@ -318,7 +325,7 @@
               "id": "resume",
               "label": "Resume",
               "icon": "play.circle|play_circle",
-              "when": "data.conn.connections[marketplace=params.marketplace].status == paused",
+              "when": "site.can[marketplaces.manage] && data.conn.connections[marketplace=params.marketplace].status == paused",
               "method": "PATCH",
               "url": "/api/marketplaces/connection",
               "body": {
@@ -333,7 +340,7 @@
               "label": "Disconnect",
               "icon": "xmark.circle|link_off",
               "destructive": true,
-              "when": "data.conn.connections[marketplace=params.marketplace]",
+              "when": "site.can[marketplaces.manage] && data.conn.connections[marketplace=params.marketplace]",
               "confirm": "Disconnect {const.marketplaces[id=params.marketplace].label}? Orders stop coming in, listings stop following your stock, and the stored access is deleted. Orders already imported stay in your store. Your listings stay on {const.marketplaces[id=params.marketplace].label} with the stock they last showed, so end or update them there.",
               "method": "DELETE",
               "url": "/api/marketplaces/connection",
@@ -463,7 +470,8 @@
               "syncPrices": "{form.syncPrices}",
               "priceAdjustPercent": "{form.priceAdjustPercent}"
             },
-            "success": "Saved."
+            "success": "Saved.",
+            "disabledWhen": "!site.can[marketplaces.manage]"
           }
         },
         {

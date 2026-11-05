@@ -311,6 +311,16 @@ holds it, because it acts on the whole workspace. Everyone who can open the CRM 
 read the settings, and a member without the permission sees each control switched off with
 the permission named beside it.
 
+### Colleagues' email templates {#crm-colleague-templates-permission}
+
+| Permission | What it opens | Owner | Admin | Editor | Viewer |
+|---|---|---|---|---|---|
+| **Change colleagues' email templates** (`crm.colleagueTemplates`) | Change or delete a [personal email template](../../content-and-data/crm/email-templates.md#shared-or-personal) someone else keeps, or re-file any template | Yes | Yes | Yes | Yes |
+
+It also asks **Manage data** over the whole workspace, which a Viewer doesn't hold by
+default, so a Viewer reaches it only once granted that. A site collaborator never holds it.
+A custom role or a per-member override can refuse it.
+
 ### Moving contacts and deals between stages {#crm-move-stages-permission}
 
 | Permission | What it opens | Admin | Editor | Author | Viewer |
