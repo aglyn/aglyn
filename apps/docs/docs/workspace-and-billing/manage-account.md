@@ -341,8 +341,8 @@ offers, each from its own page:
 - **Media.** Choose **Delete** on a file in the
   [Media library](../content-and-data/media/overview.md#organize). The message that
   confirms it carries an **Undo** button.
-- **A site.** A site admin can use
-  [**Delete site**](billing-and-plans/downgrading-and-canceling.md#deleting-a-single-site)
+- **A site.** A member holding **Manage site settings** on the site and **Delete sites**
+  can use [**Delete site**](billing-and-plans/downgrading-and-canceling.md#deleting-a-single-site)
   in its Admin → Danger zone. It takes effect immediately.
 - **A whole workspace.** An owner can
   [delete the organization](billing-and-plans/downgrading-and-canceling.md#deleting-your-organization)

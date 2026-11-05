@@ -158,7 +158,7 @@ are saved.
   instead.
 
 CRM setup needs the CRM on your plan (Starter and up) and, like setting it up yourself, the
-**Manage data** permission as an owner, admin or editor. A custom field belongs to the whole
+**Manage data** permission, which owners, admins and editors hold by default. A custom field belongs to the whole
 organization, so adding one needs access to every site. It uses no AI credits.
 
 ## Who can use it {#who-can-use-it}

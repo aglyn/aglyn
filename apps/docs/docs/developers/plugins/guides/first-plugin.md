@@ -103,7 +103,7 @@ publish cap.
 
 ## 6. Install, enable, load
 
-A workspace admin installs from the marketplace: the install pins your
+A member holding **Install plugins** installs from the marketplace: the install pins your
 exact `{version, sha256}`, enables the plugin on the org switchboard, and
 it loads on the next visit — sandboxed by default, or into the app realm
 once staff have signed the version (`trust: 'realm'`). Upgrades are

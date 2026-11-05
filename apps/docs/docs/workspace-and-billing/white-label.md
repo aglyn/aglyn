@@ -206,7 +206,7 @@ These two get confused constantly, and they are unrelated mechanisms:
 
 | | White-label brand | Platform brand |
 | --- | --- | --- |
-| Who sets it | An organization admin, in the console | Whoever runs the deployment, in its environment |
+| Who sets it | A member holding **Organization settings**, in the console | Whoever runs the deployment, in its environment |
 | Scope | That one organization | The entire installation, every organization on it |
 | How | The card on this page | `NEXT_PUBLIC_PLATFORM_BRAND_NAME` and friends |
 | Gated on | The `whiteLabel` entitlement | Nothing — it is deployment configuration |

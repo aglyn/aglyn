@@ -16,8 +16,8 @@ same way for every plugin.
 | Layer | Where it lives | Who sets it |
 | --- | --- | --- |
 | Schema defaults | Your code | You, the plugin author |
-| Workspace value | `orgs/{orgId}/pluginSettings/{pluginId}` | An org manager, in **Plugins & add-ons** |
-| Site override | `hosts/{hostId}/pluginSettings/{pluginId}` | A site admin, in that site's plugin settings |
+| Workspace value | `orgs/{orgId}/pluginSettings/{pluginId}` | A member holding **Organization settings**, in **Plugins & add-ons** |
+| Site override | `hosts/{hostId}/pluginSettings/{pluginId}` | A member holding **Manage site settings**, in that site's plugin settings |
 
 Each layer narrows the one before it, **per key**. A workspace sets a value once
 and every site it enabled the plugin on follows it; a site that needs a
@@ -88,7 +88,7 @@ the schema.
 Return an error string to block the save, or `null` to allow it.
 
 :::warning Values are not trusted
-The settings documents are client-writable by org managers and site admins, so
+The settings documents are client-writable by members holding those permissions, so
 every read coerces defensively. A value of the wrong type falls back rather than
 reaching your code — and **keys your schema does not declare are dropped
 entirely**, so a field left behind by an older version of your plugin cannot
@@ -169,8 +169,8 @@ settings UI without writing one. At site scope the same form marks each field
 override.
 
 Who may write which document is enforced by security rules, not by the form: the
-workspace document takes an org manager, the site document takes a **site
-admin**. Writes to either are frozen while the organization is suspended or the
+workspace document takes **Organization settings**, the site document takes **Manage
+site settings**. Writes to either are frozen while the organization is suspended or the
 site's writes are frozen.
 
 :::danger Never put a secret in plugin config

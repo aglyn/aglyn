@@ -28,7 +28,8 @@ pages** for each status.
 2. **Assign it.** Go to **Admin → Error pages**. Each status has its own picker —
    **404 · Not found**, **401 · Members only**, **403 · Forbidden**, **503 · Maintenance**
    — listing every page on the site. Choose your page in the matching picker. The
-   Admin area is limited to **site admins**, so that is who assigns these.
+   Admin area takes the **Manage site settings** permission, which a site's admins hold by
+   default, so that is who assigns these.
 
 Step 2 is the one that's easy to miss: designing a page does **not** make it an error
 page on its own. Until it's picked in the **Error pages** card, the status renders the

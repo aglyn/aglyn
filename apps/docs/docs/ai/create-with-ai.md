@@ -67,7 +67,7 @@ your theme and reuses what the site already has, following
 On every paid plan, **Create with AI** runs on the AI credits your plan includes each
 month; nothing else needs to be bought.
 [Blocks of AI credits](./ai-credits.md#the-aglyn-ai-add-on) add more on top when you need
-them, and an owner or admin adds them in **Billing**.
+them, and a member holding **Manage billing** adds them in **Billing**.
 
 A Free workspace's buttons work from the [300 AI credits](./ai-credits.md#free-plan) it
 gets each month.
@@ -75,7 +75,8 @@ gets each month.
 If Create with AI is switched off for your workspace, the button is still there and
 opens a short window saying what it would make:
 
-- an owner or admin sees **Add Aglyn AI**, which opens **Billing** to choose a tier, or
+- a member holding **Manage billing** sees **Add Aglyn AI**, which opens **Billing** to
+  choose a tier, or
   **Not now**;
 - anyone else is asked to have a workspace owner or admin choose one.
 

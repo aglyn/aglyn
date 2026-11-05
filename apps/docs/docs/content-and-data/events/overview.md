@@ -153,9 +153,10 @@ end in your business's time zone, a place, an organizer and a description, and a
 [stock photo](../../ai/stock-photos.md) as its cover, copied into your media library. A page
 section that shows them gets the **Event List**.
 
-Events Aglyn AI adds are **published**, the same as **Set published**, when you have the
-admin or editor role on the site, so they show on your site straight away. With the author
-role they are saved as drafts, and the job says so. Edit, unpublish or delete them on the
+Events Aglyn AI adds are **published**, the same as **Set published**, when you hold the
+**Publish site content** permission on the site, which its admins and editors hold by
+default, so they show on your site straight away. Without it, as with the author role,
+they are saved as drafts, and the job says so. Edit, unpublish or delete them on the
 **Events** page like any other event. Adding events needs the Event Calendar add-on.
 
 ## Search engines

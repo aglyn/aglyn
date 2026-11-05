@@ -492,8 +492,9 @@ country it serves.
 | Stablecoins | A crypto wallet holding USDC or another supported stablecoin | USD only, up to $10,000 |
 
 The card only lists the methods the platform offers. A method missing from
-your card is not available for storefronts yet. Anyone who manages the store
-can read the card; only a site admin can change it.
+your card is not available for storefronts yet. Anyone holding **Manage orders**
+can read the card; changing it takes **Manage payment methods**, which a site's admins
+hold by default.
 
 Until Stripe is connected, each method you have on reads **Connect Stripe
 first**, and a note at the top of the card links to the **Payments** card
@@ -572,8 +573,8 @@ confirm the plan:
 - Lodging and service tax rates are left as they are. Avalara and TaxJar need your account
   details, so you connect them yourself.
 - It costs no AI credits.
-- Only an admin or editor on the site can ask Aglyn AI for these changes. An author can
-  still make them on the card.
+- Asking Aglyn AI for these changes takes the **Publish site content** permission, which a
+  site's admins and editors hold by default. An author can still make them on the card.
 
 ### Lodging tax on reservations
 
