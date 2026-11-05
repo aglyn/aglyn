@@ -40,7 +40,7 @@ import com.aglyn.core.nowMillis
 import com.aglyn.core.relativeTime
 import com.aglyn.pluginhost.ActionRunner
 import com.aglyn.pluginhost.NativePluginContext
-import com.aglyn.pluginhost.ORG_WRITER_ROLES
+import com.aglyn.pluginhost.rememberMemberPermissions
 import com.aglyn.pluginhost.TransferExportDialog
 import com.aglyn.pluginhost.describeScope
 import com.aglyn.pluginhost.listScopeTokens
@@ -131,7 +131,7 @@ fun DatasetsScreen(context: NativePluginContext, initialDatasetId: String? = nul
   val api = remember(orgId, context.api, context.writer) { DataApi(context.api, context.writer, orgId) }
   val runner = remember(orgId) { ActionRunner(scope) }
   var dialog by remember { mutableStateOf<DatasetDialog?>(null) }
-  val canWrite = context.orgRole in ORG_WRITER_ROLES
+  val canWrite = rememberMemberPermissions(context).can("data.manage")
   val (access, datasets) = rememberDatasets(context, orgId)
 
   AglynListDetail(

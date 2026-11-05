@@ -258,7 +258,7 @@ class RedirectsEditor(private val api: RedirectsWriteApi, private val uid: Strin
         error = when {
           failure is ConsoleApiError && failure.status != 0 -> failure.message
           failure.message.orEmpty().contains("permission", ignoreCase = true) ->
-            "Changing a redirect needs a publishing role — ask an editor or admin"
+            "Your role does not include \"Publish site content\" — ask an organization admin"
           else -> "That did not go through. Check the connection and try again."
         }
       } finally {

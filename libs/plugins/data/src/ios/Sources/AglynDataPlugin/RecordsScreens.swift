@@ -163,7 +163,7 @@ private struct RecordsBody: View {
     _model = State(initialValue: RecordsModel(dataset: dataset))
   }
 
-  private var canWrite: Bool { orgWriterRoles.contains(context.orgRole ?? "") }
+  private var canWrite: Bool { context.can("data.manage") }
   private var noun: String { dataset.singular.trimmingCharacters(in: .whitespaces).isEmpty ? "record" : dataset.singular.lowercased() }
   private var api: DataAPI { DataAPI(api: context.api, writer: context.writer, orgID: orgID) }
 

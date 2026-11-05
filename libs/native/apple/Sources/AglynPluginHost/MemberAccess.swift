@@ -11,9 +11,6 @@ import Foundation
  * replay the console's answers.
  */
 
-/// Roles that may change org data (`canWriteOrgData()` in the rules).
-public let orgWriterRoles: Set<String> = ["owner", "admin", "editor"]
-
 private func hostIDs(_ visibleTo: [String]?) -> [String] {
   (visibleTo ?? []).filter { $0.hasPrefix("host:") && $0.count > 5 }.map { String($0.dropFirst(5)) }
 }

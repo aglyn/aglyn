@@ -182,7 +182,7 @@ struct DatasetsScreen: View {
   @State private var sheet: DatasetSheet?
   @State private var exporting: TransferExportRequest?
 
-  private var canWrite: Bool { orgWriterRoles.contains(context.orgRole ?? "") }
+  private var canWrite: Bool { context.can("data.manage") }
 
   private var api: DataAPI? {
     context.orgID.map { DataAPI(api: context.api, writer: context.writer, orgID: $0) }
