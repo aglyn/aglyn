@@ -222,7 +222,7 @@ export function transferResourcesSpec({ plugins, planLabelFor, featureKeys, impo
     subtitle: 'Export what each plugin keeps, or move a package',
     icon: 'tablecells|view_agenda',
     scope: 'org',
-    requires: 'org.manager',
+    requires: 'org.can[data.manage]',
     load: {
       sw: { switchboard: 'org' },
       ent: { url: '/api/orgs/entitlements?orgId={org.id}', optional: true },
@@ -246,7 +246,7 @@ export function transferResourcesSpec({ plugins, planLabelFor, featureKeys, impo
     scope: 'site',
     group: 'site',
     order: 61,
-    requires: 'org.manager',
+    requires: 'org.can[data.manage]',
     load: {
       sw: { switchboard: 'site' },
       ent: { url: '/api/orgs/entitlements?orgId={org.id}', optional: true },
