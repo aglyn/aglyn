@@ -162,7 +162,8 @@ and notifies. An agency can give every client site the same share, so one site r
 out never touches another. See [AI allotments](overview.md#ai-allotments).
 
 **Can I keep it off for one site?** Yes, but it is a site setting rather than a billing
-one. A site admin switches AI off for that site under **Admin → Plugins → AI**, which
+one. A member holding **Manage site settings**, which a site's admins hold by default,
+switches AI off for that site under **Admin → Plugins → AI**, which
 removes the assistant and every **Create with AI** door from it while the rest of the
 workspace carries on. It does not pause your blocks or their charge — see
 [Switch AI off for one site](../../ai/overview.md#switch-ai-off-for-one-site).

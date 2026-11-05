@@ -582,8 +582,8 @@ carries a `resource`. `listPluginHostResources()` / `pluginHostResource(kind)`
 
 ### In the site backup — `siteExport`, and `plugin-site-export`
 
-A site admin on a plan with site export downloads the site as one site
-package (`aglyn-package` v2) and imports it later, into the same site or
+A member holding **Manage site settings**, on a plan with site export, downloads the
+site as one site package (`aglyn-package` v2) and imports it later, into the same site or
 another. The platform's own documents are always in it. A plugin collection
 is in it only when the collection says so, beside its `resource`:
 
@@ -1819,6 +1819,7 @@ if (captured?.ok === false) log.warn(captured.reason, captured.error)
 | `registerPluginContactSource({ source, label, openLabel?, recordKind? }, { pluginId? })` | One source word has one owner. `openLabel` is what a link from a timeline entry says, and a door with nothing to open declares none. `recordKind` is the kind `plugin-record-routes` addresses the silo's own document by. |
 | `pluginContactCaptureWriter()` / `listPluginContactSources()` / `pluginContactSource(source)` | The writer with its owner, every declared door, and one by its word. |
 | `labelContactSource(source, fallback?)` | How a contact's source word reads on screen: the core's own label, else the `label` its plugin declared, else `fallback` (or the word itself). A plugin cannot relabel a core source. It answers from what this process registered, so declare a door from your `declarations` entry when the console's browser should label it. |
+| `listContactSourceOptions()` / `isKnownContactSource(source)` | Every source a filter can offer, as `{ value, label }`: the core's, then each declared door, labeled as `labelContactSource` labels it. A declared door is a choice in the CRM's contact **Source** filter with no other work. `isKnownContactSource` is whether a word is one of those. |
 
 **A refusal is returned, never thrown.** Each of these silos has already
 accepted the submission or taken the money, so a throw would cost it the thing

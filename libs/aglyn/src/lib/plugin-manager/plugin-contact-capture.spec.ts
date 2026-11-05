@@ -18,7 +18,9 @@
 import { setRegisteringPluginId } from '../app-utils/registering-plugin'
 import {
   capturePluginContact,
+  isKnownContactSource,
   labelContactSource,
+  listContactSourceOptions,
   listPluginContactSources,
   pluginContactCaptureWriter,
   pluginContactSource,
@@ -283,5 +285,54 @@ describe('labelContactSource: how a source word reads on screen', () => {
     expect(labelContactSource('', 'Capture')).toBe('Capture')
     expect(labelContactSource('kiosk', 'Capture')).toBe('Guest book')
     expect(labelContactSource('booking', 'Capture')).toBe('Booking')
+  })
+})
+
+describe('listContactSourceOptions: what a source filter offers', () => {
+  it('offers the core’s sources in their own words when no plugin declared a door', () => {
+    const options = listContactSourceOptions()
+    expect(options).toContainEqual({ value: 'order', label: 'Customer' })
+    expect(options).toContainEqual({ value: 'manual', label: 'Added by hand' })
+    expect(options.map((option) => option.value)).not.toContain('kiosk')
+  })
+
+  it('adds each declared door after the core’s, by the label it declared', () => {
+    const before = listContactSourceOptions().length
+    declareSilos()
+    const options = listContactSourceOptions()
+    expect(options).toHaveLength(before + 2)
+    expect(options.slice(-2)).toEqual([
+      { value: 'kiosk', label: 'Guest book' },
+      { value: 'mailer', label: 'Newsletter box' },
+    ])
+  })
+
+  it('reads a word the way a chip does, and goes when its plugin goes', () => {
+    declareSilos()
+    for (const option of listContactSourceOptions()) {
+      expect(option.label).toBe(labelContactSource(option.value))
+    }
+    unregisterPluginServices('kiosk')
+    expect(listContactSourceOptions().map((option) => option.value)).not.toContain('kiosk')
+  })
+
+  it('gives a core word one entry and its own label, even if a plugin declares it', () => {
+    registerPluginContactSource({ source: 'form', label: 'Not a form' }, { pluginId: 'kiosk' })
+    const forms = listContactSourceOptions().filter((option) => option.value === 'form')
+    expect(forms).toEqual([{ value: 'form', label: 'Form' }])
+  })
+})
+
+describe('isKnownContactSource', () => {
+  it('knows the core’s words and a declared door, and nothing else', () => {
+    expect(isKnownContactSource('order')).toBe(true)
+    expect(isKnownContactSource('kiosk')).toBe(false)
+    declareSilos()
+    expect(isKnownContactSource('kiosk')).toBe(true)
+    expect(isKnownContactSource(' kiosk ')).toBe(true)
+    expect(isKnownContactSource('carrier-pigeon')).toBe(false)
+    expect(isKnownContactSource('toString')).toBe(false)
+    expect(isKnownContactSource('')).toBe(false)
+    expect(isKnownContactSource(undefined)).toBe(false)
   })
 })

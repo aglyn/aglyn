@@ -1885,6 +1885,21 @@ allow delete: if isStaff() || canWriteScopedOrgData();
 }
 
 
+
+
+
+
+
+
+
+
+
+
+function dealStageUnchanged() {
+return !request.resource.data.diff(resource.data).affectedKeys()
+.hasAny(['pipelineId', 'stageId', 'status', 'stageChangedAtMs',
+'closedAtMs', 'lostReason']);
+}
 match /deals/{dealId} {
 allow read: if isStaff() || canReadScopedPeople();
 allow create: if isStaff() ||
@@ -1892,7 +1907,7 @@ allow create: if isStaff() ||
 crmMediaIdsOk() && orgCarriesCrmSuite(orgId));
 allow update: if isStaff() ||
 (canWriteScopedCrm() && (isOrgWideMember() || scopeUnchanged()) &&
-crmSharingUnchanged() &&
+crmSharingUnchanged() && dealStageUnchanged() &&
 crmMediaIdsOk() && orgCarriesCrmSuite(orgId));
 allow delete: if isStaff() || canWriteScopedCrm();
 }

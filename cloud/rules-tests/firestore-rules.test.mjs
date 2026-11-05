@@ -14094,7 +14094,8 @@ describe('CRM sharing: a share is read where it lands and written only as grante
     await mustAllow('the owner’s update of the read-only share', updateDoc(lead(OWNER, 'shared-read'), { status: 'working' }))
     await mustDeny(
       'a read-only deal share’s update',
-      updateDoc(doc(authed(EDITOR), 'orgs', ORG, 'deals', 'deal-shared-read'), { stageId: 's2' }),
+      // The title, because a stage is refused to every client update whatever the share.
+      updateDoc(doc(authed(EDITOR), 'orgs', ORG, 'deals', 'deal-shared-read'), { title: 'Renamed' }),
     )
     await mustAllow(
       'an edit company share’s update',

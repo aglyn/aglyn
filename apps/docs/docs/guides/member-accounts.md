@@ -185,7 +185,8 @@ Click a member to open the **member drawer**:
   canceled orders excluded).
 - **Orders** — the member's payment history, newest first: order number,
   status, total, date, any refunded amount, and the Stripe payment reference.
-  Needs the editor or admin role on the site.
+  Needs the **See orders and webhooks** permission on the site, which its admins and
+  editors hold by default.
 - **Subscriptions** — each with its renewal date and status chip.
 - **Addresses** — the member's saved addresses.
 
@@ -221,8 +222,8 @@ new-password field with a Generate button](/img/guides/member-drawer-password.pn
   yourself. The member is signed out on every device and is emailed to say an administrator
   changed their password.
 
-Both need the admin role on the site (or an organization role that manages members), and
-both are recorded in the site's activity log — never the password itself.
+Both need the **Manage site settings** permission on the site, which its admins hold by
+default, or **Manage members** for the workspace, and both are recorded in the site's activity log — never the password itself.
 
 ## Related
 
