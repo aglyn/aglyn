@@ -19,6 +19,8 @@
 
 import {
   PERSON_ERASURE_NOT_REACHED,
+  PERSON_ERASURE_NOTES_HEADING,
+  PERSON_ERASURE_NOTES_UNAVAILABLE,
   PERSON_ERASURE_REMOVES,
   PERSON_ERASURE_RETAINS,
 } from '@aglyn/aglyn'
@@ -27,7 +29,8 @@ import { CardDisplay } from '@aglyn/shared-ui-jsx'
 import { useSnackbar } from '@aglyn/shared-ui-snackstack'
 import { authorizedFetch } from '@aglyn/shared-util-http/authorized-token'
 import { useUser } from '@aglyn/tenant-feature-instance'
-import { Box, Button, Stack, TextField, Typography } from '@mui/material'
+import { usePersonErasureNotes } from '@aglyn/tenant-feature-instance/hooks/use-person-erasure-notes'
+import { Alert, Box, Button, Stack, TextField, Typography } from '@mui/material'
 import { useCallback, useState } from 'react'
 import { docsHelp } from '../../constants/docs-links'
 import { useOrgScope } from '../../hooks/use-org-scope'
@@ -78,6 +81,9 @@ function ErasureList(props: { heading: string; lines: readonly string[] }) {
  * - The erasure is filed by address alone, typed twice, so it reaches a
  *   person whether or not any page shows them. The route decides who may file
  *   one — a workspace owner or admin — and the section is offered to them.
+ * - What a plugin keeps through the erasure is the plugin's to say
+ *   (`plugin-person-erasure-notes`, AGL-4042): the card prints each sentence,
+ *   and says so when one could not be read. It never holds the button back.
  */
 export function OrgPrivacyCard() {
   const { currentOrg } = useOrgScope()
@@ -88,6 +94,7 @@ export function OrgPrivacyCard() {
   const [email, setEmail] = useState('')
   const [confirmEmail, setConfirmEmail] = useState('')
   const [filing, setFiling] = useState(false)
+  const erasureNotes = usePersonErasureNotes(user, orgId)
 
   const typed = email.trim().toLowerCase()
   const confirmed = typed.includes('@') && typed === confirmEmail.trim().toLowerCase()
@@ -177,10 +184,16 @@ export function OrgPrivacyCard() {
           </Typography>
           <ErasureList heading="Removed across the workspace" lines={PERSON_ERASURE_REMOVES} />
           <ErasureList heading="Kept, with the person taken off" lines={PERSON_ERASURE_RETAINS} />
+          {erasureNotes.lines.length ? (
+            <ErasureList heading={PERSON_ERASURE_NOTES_HEADING} lines={erasureNotes.lines} />
+          ) : null}
           <ErasureList
             heading="Not reached — finish these by hand"
             lines={PERSON_ERASURE_NOT_REACHED}
           />
+          {erasureNotes.unavailable ? (
+            <Alert severity="info">{PERSON_ERASURE_NOTES_UNAVAILABLE}</Alert>
+          ) : null}
           <TextField
             label="Email address"
             type="email"
