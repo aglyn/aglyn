@@ -139,7 +139,7 @@ struct SetupDetail: View {
 
 // MARK: - Shared cards
 
-@MainActor private func newRunner() -> ActionRunner { ActionRunner(roleHint: "an author, editor or admin") }
+@MainActor private func newRunner() -> ActionRunner { ActionRunner() }
 
 /// A text card over host fields: each path's text, saved through `settingsPayload`.
 private struct HostTextCard<Content: View>: View {

@@ -53,7 +53,9 @@ import com.aglyn.contracts.summarizeSellerLedger
 import com.aglyn.core.ConsoleApiError
 import com.aglyn.core.Live
 import com.aglyn.pluginhost.ActionRunner
+import com.aglyn.contracts.permissionRefusalText
 import com.aglyn.pluginhost.NativePluginContext
+import com.aglyn.pluginhost.rememberMemberPermissions
 import com.aglyn.ui.ActionDialog
 import com.aglyn.ui.AglynIcons
 import com.aglyn.ui.AglynListItem
@@ -104,19 +106,18 @@ fun SellScreen(context: NativePluginContext, initialSection: String? = null) {
   var section by remember { mutableStateOf(initialSection?.takeIf { s -> SELL_SECTIONS.any { it.key == s } } ?: "profile") }
   val profile by remember(orgId, context.firestore) { context.firestore.observeDoc(publisherProfilePath(orgId)) }.collectAsState(Live.Loading)
   var retry by remember { mutableStateOf(0) }
-  // `publishToMarketplace` is the admin tier\u2019s and the editor\u2019s (a per-person override is the server\u2019s to enforce).
-  val canManage = context.orgRole in INSTALL_ROLES
+  // Each section asks its own permission, and says which when it is missing.
+  val held = rememberMemberPermissions(context)
   Column(Modifier.fillMaxSize()) {
     ListHeader("Selling")
     Column(Modifier.padding(horizontal = space(2f)), verticalArrangement = Arrangement.spacedBy(space(1f))) {
       ChoiceChipRow(SELL_SECTIONS, section, { section = it }, wrap = true)
     }
     Column(Modifier.fillMaxSize().verticalScroll(rememberScrollState()).padding(space(2f)).testTag("sell-$section"), verticalArrangement = Arrangement.spacedBy(space(2f))) {
-      if (!canManage) NoticeBanner("Selling is for a workspace owner, admin or editor. You can see how it stands.", StatusTone.INFO)
       when (section) {
-        "profile" -> ProfileSection(context, orgId, (profile as? Live.Ready)?.value?.data, profile is Live.Ready, canManage)
-        "listings" -> ListingsSection(context, orgId, canManage)
-        "payouts" -> PayoutsSection(context, orgId, profile, canManage, retry = { retry += 1 })
+        "profile" -> ProfileSection(context, orgId, (profile as? Live.Ready)?.value?.data, profile is Live.Ready, held.can(PUBLISHER_PROFILE_KEY))
+        "listings" -> ListingsSection(context, orgId, held.can(MANAGE_LISTINGS_KEY), held.can(PUBLISH_KEY))
+        "payouts" -> PayoutsSection(context, orgId, profile, held.can(PAYOUTS_KEY), retry = { retry += 1 })
         else -> SalesSection(context, orgId, (profile as? Live.Ready)?.value?.data)
       }
     }
@@ -126,7 +127,7 @@ fun SellScreen(context: NativePluginContext, initialSection: String? = null) {
 @Composable
 private fun ProfileSection(context: NativePluginContext, orgId: String, stored: Map<String, Any?>?, loaded: Boolean, canManage: Boolean) {
   val scope = rememberCoroutineScope()
-  val runner = remember(orgId) { ActionRunner(scope, roleHint = "an owner, admin or editor") }
+  val runner = remember(orgId) { ActionRunner(scope) }
   val api = remember(context.api, orgId) { SellerApi(context.api, orgId) }
   val initial = remember(stored) { (listOf("handle") + PROFILE_FIELDS.map { it.first }).associateWith { (stored?.get(it) as? String).orEmpty() } }
   var fields by remember(initial) { mutableStateOf(initial) }
@@ -166,6 +167,9 @@ private fun ProfileSection(context: NativePluginContext, orgId: String, stored: 
       enabled = canManage && loaded && valid && fields != initial && agreed && !runner.busy,
       modifier = Modifier.testTag("seller-save"),
     ) { Text("Save profile") }
+    if (!canManage) {
+      Text(permissionRefusalText(PUBLISHER_PROFILE_KEY), style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurfaceVariant, modifier = Modifier.testTag("seller-save-refusal"))
+    }
   }
   val accepted = ((stored?.get("publisherAgreement") as? Map<*, *>)?.get("version") as? String)
   SectionCard("Marketplace Publisher Agreement") {
@@ -178,9 +182,9 @@ private fun ProfileSection(context: NativePluginContext, orgId: String, stored: 
 }
 
 @Composable
-private fun ListingsSection(context: NativePluginContext, orgId: String, canManage: Boolean) {
+private fun ListingsSection(context: NativePluginContext, orgId: String, canManage: Boolean, canPublish: Boolean) {
   val scope = rememberCoroutineScope()
-  val runner = remember(orgId) { ActionRunner(scope, roleHint = "an owner, admin or editor") }
+  val runner = remember(orgId) { ActionRunner(scope) }
   val api = remember(context.api, orgId) { SellerApi(context.api, orgId) }
   val live by remember(orgId, context.firestore) { context.firestore.observe(sellerListingsQuery(orgId)) }.collectAsState(Live.Loading)
   var editing by remember { mutableStateOf<SellerListing?>(null) }
@@ -211,7 +215,7 @@ private fun ListingsSection(context: NativePluginContext, orgId: String, canMana
                   MenuAction("view-${listing.id}", "View", "info") { context.navigate(MARKETPLACE_LISTING_SCREEN, mapOf("listing" to listing.id)) },
                   MenuAction("edit-${listing.id}", "Edit listing", "edit", enabled = canManage) { runner.clear(); editing = listing },
                   if (listing.isPlugin) {
-                    MenuAction("version-${listing.id}", "Publish new version", "upload", enabled = canManage) { context.navigate("marketplace.publishPlugin", mapOf("listing" to listing.id)) }
+                    MenuAction("version-${listing.id}", "Publish new version", "upload", enabled = canPublish) { context.navigate("marketplace.publishPlugin", mapOf("listing" to listing.id)) }
                   } else {
                     null
                   },
@@ -232,6 +236,9 @@ private fun ListingsSection(context: NativePluginContext, orgId: String, canMana
           onClick = { context.navigate(MARKETPLACE_LISTING_SCREEN, mapOf("listing" to listing.id)) },
           modifier = Modifier.testTag("seller-listing-${listing.id}"),
         )
+      }
+      if (!canManage) {
+        Text(permissionRefusalText(MANAGE_LISTINGS_KEY), style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurfaceVariant, modifier = Modifier.testTag("seller-listings-refusal"))
       }
     }
   }
@@ -396,7 +403,7 @@ internal fun EditListingDialog(context: NativePluginContext, listing: SellerList
 @Composable
 private fun PayoutsSection(context: NativePluginContext, orgId: String, profile: Live<com.aglyn.core.FirestoreDoc?>, canManage: Boolean, retry: () -> Unit) {
   val scope = rememberCoroutineScope()
-  val runner = remember(orgId) { ActionRunner(scope, roleHint = "an owner, admin or editor") }
+  val runner = remember(orgId) { ActionRunner(scope) }
   val api = remember(context.api, orgId) { SellerApi(context.api, orgId) }
   val uri = LocalUriHandler.current
   var dashboard by remember { mutableStateOf<String?>(null) }
@@ -453,6 +460,9 @@ private fun PayoutsSection(context: NativePluginContext, orgId: String, profile:
           OutlinedButton(onClick = action, enabled = canManage && !runner.busy, modifier = Modifier.testTag("seller-payouts")) { Text(if (runner.busy) "Opening Stripe…" else payoutsButton(readiness)) }
         } else {
           Button(onClick = action, enabled = canManage && !runner.busy, modifier = Modifier.testTag("seller-payouts")) { Text(if (runner.busy) "Opening Stripe…" else payoutsButton(readiness)) }
+        }
+        if (!canManage) {
+          Text(permissionRefusalText(PAYOUTS_KEY), style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurfaceVariant, modifier = Modifier.testTag("seller-payouts-refusal"))
         }
         dashboard?.let { url -> TextButton(onClick = { uri.openUri(url) }) { Text("View payouts in Stripe") } }
       }

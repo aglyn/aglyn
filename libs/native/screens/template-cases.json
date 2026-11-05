@@ -5,7 +5,11 @@
       "id": "org1",
       "name": "Acme",
       "role": "admin",
-      "manager": true
+      "manager": true,
+      "can": {
+        "data.manage": true,
+        "commerce.quotes.send": false
+      }
     },
     "staff": {
       "is": false,
@@ -1540,6 +1544,26 @@
     },
     {
       "when": "org.manager",
+      "expect": true
+    },
+    {
+      "when": "org.can[data.manage]",
+      "expect": true
+    },
+    {
+      "when": "!org.can[data.manage]",
+      "expect": false
+    },
+    {
+      "when": "org.can[commerce.quotes.send]",
+      "expect": false
+    },
+    {
+      "when": "org.can[not.in.the.catalog]",
+      "expect": false
+    },
+    {
+      "when": "org.can[data.manage] && params.uid == u2",
       "expect": true
     },
     {

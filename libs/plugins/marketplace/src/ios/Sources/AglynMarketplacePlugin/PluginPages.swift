@@ -273,14 +273,14 @@ struct PluginInstallationCard: View {
   let context: NativePluginContext
   @Environment(\.aglynSlotParams) private var slot
   @State private var model = ListingInstallsModel()
-  @State private var runner = PluginActionRunner(roleHint: "an owner, admin or editor")
+  @State private var runner = PluginActionRunner()
   @State private var addHostIDs: Set<String> = []
   @State private var updating: PendingUpdate?
   @State private var removing: PendingRemoval?
 
   private var listingID: String { slot["pluginId"] ?? "" }
   private var api: MarketplaceAPI { MarketplaceAPI(api: context.api) }
-  private var canChange: Bool { installRoles.contains(context.orgRole ?? "") }
+  private var canChange: Bool { context.can(installPluginsKey) }
   /// The site an org-scope route is asked through: the console passes the first site.
   private var actingHostID: String { model.sites.first?.id ?? "" }
 

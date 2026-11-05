@@ -739,6 +739,10 @@ object ScreenValues {
     return out.toString()
   }
 
+  /** The catalog key a `requires` asks (`org.can[data.manage]`, `site.can[managePos]`), so a refusal can name it. */
+  fun requiredKey(expression: String?): String? =
+    expression?.substringAfter(".can[", "")?.takeIf { it.contains(']') }?.substringBefore(']')
+
   fun condition(expression: String?, context: JsonElement): Boolean {
     val e = expression?.trim().orEmpty()
     if (e.isEmpty()) return true

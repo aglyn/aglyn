@@ -90,7 +90,7 @@ private struct SchemaEditor: View {
   let datasets: [DatasetRow]
   let access: OrgAccessModel.State
 
-  @State private var runner = PluginActionRunner(roleHint: "an owner, admin or editor")
+  @State private var runner = PluginActionRunner()
   @State private var model: DatasetModel
   @State private var singular: String
   @State private var plural: String

@@ -1,6 +1,7 @@
 // Copyright 2026 Aglyn LLC
 // SPDX-License-Identifier: Apache-2.0
 
+import AglynContracts
 import AglynCore
 import SwiftUI
 
@@ -93,6 +94,7 @@ public struct NativePluginContext {
   private let backAction: (@MainActor () -> Void)?
   private let slotWidgetsAction: (@MainActor (String) -> [NativeWidget])?
   private let openLinkAction: (@MainActor (String) -> Void)?
+  private let permissionAction: (@MainActor (String, String?) -> Bool)?
 
   public init(
     uid: String, orgID: String?, hostID: String?, orgSlug: String?, hostSlug: String?,
@@ -104,7 +106,8 @@ public struct NativePluginContext {
     selectSite: (@MainActor (String) -> Void)? = nil,
     back: (@MainActor () -> Void)? = nil,
     slotWidgets: (@MainActor (String) -> [NativeWidget])? = nil,
-    openLink: (@MainActor (String) -> Void)? = nil
+    openLink: (@MainActor (String) -> Void)? = nil,
+    permission: (@MainActor (String, String?) -> Bool)? = nil
   ) {
     self.uid = uid
     self.orgID = orgID
@@ -123,7 +126,19 @@ public struct NativePluginContext {
     self.backAction = back
     self.slotWidgetsAction = slotWidgets
     self.openLinkAction = openLink
+    self.permissionAction = permission
   }
+
+  /// Whether the person holds a catalog key here (`marketplace.payouts`), read live when a view's body asks: on this
+  /// context's site, that site's verdict, else the workspace's. For what to show only: the routes and rules decide. A key
+  /// is what a gate asks; a role is only a preset of keys.
+  @MainActor public func can(_ key: String) -> Bool {
+    if let permissionAction { return permissionAction(key, hostID) }
+    return memberPermissions(ContractValues.shared.orgRoleGrants, member: nil, orgRole: orgRole)[key] == true
+  }
+
+  /// The words a refusal shows for a key: the permission's name, never a role.
+  public func refusal(_ key: String) -> String { permissionRefusalText(ContractValues.shared.orgRoleGrants, key: key) }
 
   /// The widgets other plugins put in a core page's named slot
   /// (`commerceSettings`, `hostAnalytics`), in order. A screen that hosts a

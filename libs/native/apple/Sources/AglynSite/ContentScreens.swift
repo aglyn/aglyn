@@ -69,7 +69,7 @@ struct ContentScreen: View {
   var initialEntry: String?
   @State private var collectionsLive = LiveQuery()
   @State private var host = LiveDocument()
-  @State private var runner = ActionRunner(roleHint: "an author, editor or admin")
+  @State private var runner = ActionRunner()
   @State private var dialog: ContentDialog?
   @State private var picked: String?
   @State private var selection: String?
@@ -321,7 +321,7 @@ private struct EntryForm: View {
   let model: EntryListModel
   let openURL: (URL) -> Void
   @State private var draft: EntryDraft
-  @State private var saver = ActionRunner(roleHint: "an author, editor or admin")
+  @State private var saver = ActionRunner()
 
   init(
     env: ContentEnv, collection: ContentCollection, entry: ContentEntry, authors: [ContentAuthor], model: EntryListModel,

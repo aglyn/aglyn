@@ -126,7 +126,7 @@ fun SchemaScreen(context: NativePluginContext, datasetId: String) {
 private fun SchemaEditor(context: NativePluginContext, orgId: String, dataset: DatasetRow, datasets: List<DatasetRow>, access: OrgAccess?) {
   val scope = rememberCoroutineScope()
   val api = remember(orgId, context.api, context.writer) { DataApi(context.api, context.writer, orgId) }
-  val runner = remember(dataset.id) { ActionRunner(scope, roleHint = "an owner, admin or editor") }
+  val runner = remember(dataset.id) { ActionRunner(scope) }
   val canWrite = context.orgRole in ORG_WRITER_ROLES
   var model by remember(dataset.id) { mutableStateOf(dataset.model) }
   var singular by remember(dataset.id) { mutableStateOf(dataset.singular) }
