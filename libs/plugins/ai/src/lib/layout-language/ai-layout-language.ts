@@ -498,6 +498,8 @@ export function aiReadLayoutBlock(
   raw: unknown,
   at: string,
   settled: AiLayoutSettlement[],
+  /** The most items a group keeps, where a door sets its own (AGL-4152): a page brought in keeps every item its owner has. */
+  options: { mostItems?: number } = {},
 ): AiLayoutBlock | null {
   if (!isRecord(raw)) {
     settled.push({ at, what: 'not a block; left out' })
@@ -535,7 +537,7 @@ export function aiReadLayoutBlock(
         ? AI_LAYOUT_MAX_QUOTES
         : kind === 'component'
           ? Infinity
-          : AI_LAYOUT_MAX_ITEMS
+          : (options.mostItems ?? AI_LAYOUT_MAX_ITEMS)
     if (items.length > most)
       settled.push({
         at,

@@ -93,6 +93,8 @@ export interface AiSiteImportDocument {
   theme?: Record<string, unknown> | null
   /** The plan's proposed page (AGL-4152): new to the site, with no source to hold it to, and never kept as a fallback. */
   proposed?: true
+  /** What the page is for in the planned site (AGL-4152), as its plan says; absent, read from its address and what it holds. */
+  role?: AiSiteImportPageRole
   /** Source photos of the site's earlier pages that none of them placed, for a slot of this one (AGL-4152). */
   sitePhotos?: AiSiteImportPhoto[]
   /** A slot nothing else fills may take a generated picture: its owner said so, and it is quoted (AGL-4152). */

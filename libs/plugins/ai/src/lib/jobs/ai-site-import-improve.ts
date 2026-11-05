@@ -55,7 +55,8 @@ import {
   type AiLayoutSettlement,
 } from '../layout-language/ai-layout-language'
 import { AI_ICON_WORDS } from '../runtime/ai-icon-library'
-import type { AiSiteImportAddedSection, AiSiteImportPagePictures, AiSiteImportPlan } from '../model/ai-site-import'
+import type { AiSiteImportAddedSection, AiSiteImportPagePictures, AiSiteImportPageRole, AiSiteImportPlan } from '../model/ai-site-import'
+import { aiSiteHomeArc } from '../model/ai-site-home-arcs'
 import { siteImportContentKept, type SiteImportFidelityTheme, type SiteImportPageFidelity } from '../model/ai-site-import-fidelity'
 import { siteImportLedger, type SiteImportLedger, type SiteImportLedgerItem } from '../model/ai-site-import-ledger'
 import type { AiSystemBlock, AiTool } from '../providers/contract'
@@ -63,7 +64,7 @@ import type { AiGenerationCheck } from '../runtime/ai-doctrine'
 import type { AiCopyFraming, AiDoctrineViolation } from '../runtime/ai-doctrine-validators'
 import type { SiteImportBlock } from '../site-import/site-import-html'
 import { siteImportLabel } from '../site-import/site-import-page'
-import { aiSiteImportHonesty, type AiSiteImportImprovedBlock, type AiSiteImportImprovedSection } from './ai-site-import-honesty'
+import { aiSiteImportHonesty, aiSiteImportImprovedPlaced, type AiSiteImportImprovedBlock, type AiSiteImportImprovedSection } from './ai-site-import-honesty'
 import {
   aiSiteImportLayoutOf,
   aiSiteImportLinkTo,
@@ -82,6 +83,13 @@ const clean = (text: unknown): string => (typeof text === 'string' ? text.replac
 
 /** The answer's kind of generation: the name its re-ask and its doctrine scope go by. */
 export const AI_SITE_IMPORT_IMPROVE_KIND = 'page-improve'
+
+/**
+ * The most items a redesign's group keeps (AGL-4152): every item its owner's
+ * page has, where the layout language's own pages stop at seven. A page
+ * brought in is compiled as its source lays it out, with no such limit.
+ */
+export const AI_SITE_IMPORT_IMPROVE_MAX_ITEMS = 24
 
 /** What a block may be: the layout language's words and groups, and `keep`. A customer's quote and a figure only ever arrive by `keep`. */
 export const AI_SITE_IMPORT_IMPROVE_BLOCK_KINDS = ['eyebrow', 'heading', 'lede', 'text', 'note', 'list', 'button', 'image', 'cards', 'steps', 'faq', 'keep'] as const
@@ -145,10 +153,10 @@ export const AI_SITE_IMPORT_IMPROVE_TOOL: AiTool = {
 
 /** What a redesign is told, cached: every page of every site shares these bytes. */
 export const AI_SITE_IMPORT_IMPROVE_TEXT = [
-  "You redesign one page of a small business's existing website so it looks like a professional designer built it and reads like a strong copywriter wrote it. The old page is usually plain: one column, flat grounds, a text link for a call to action. Plan the page again from what a visitor needs, in the order they need it. The platform turns your design into the page in the site's own theme, so never describe styling beyond the words below.",
+  "You redesign one page of a small business's existing website the way a professional web designer and copywriter would, so the new page looks far better than the old one: polished, organized and inviting, never the old page restyled. The old page is usually plain: one column, flat grounds, a text link for a call to action, its sections in the order someone typed them. Plan the page again from what a visitor needs, in the order they need it, add the sections it lacks, and write every word. The platform turns your design into the page in the site's own theme, so never describe styling beyond the words below.",
   '',
   'Answer with submit_improved_page. A page is a list of sections, top to bottom, and you decide how many and what each one is. A section has:',
-  '- band: plain (the page), soft (a set-apart ground), brand (the brand color) or dark. Neighboring sections never share a ground: alternate plain and soft, and keep brand and dark to one or two sections a page, usually the closing call to action.',
+  '- band: plain (the page), soft (a set-apart ground), brand (the brand color) or dark.',
   '- cols: relative column widths for a row: [1, 1] for halves, [7, 5] for a wide and a narrow column, [1, 1, 1]; at most 4. [] for one column.',
   '- align: start or center. Center only a short section: an opening, a closing call to action, a heading over a group.',
   '- blocks: what it shows, top to bottom. A block with col 0 or more goes in that column of the row; col -1 spans the section, above the row when it comes first and below it when it comes last.',
@@ -157,20 +165,34 @@ export const AI_SITE_IMPORT_IMPROVE_TEXT = [
   'Block kinds:',
   '- eyebrow: a short label over a heading. heading: the first heading of the first section is the page title; the first heading of any other section is its heading. lede: the larger sentence under a heading. text: a paragraph. note: small print.',
   '- button: text is its label, to where it goes, style primary (filled), secondary (outlined) or quiet. Two in a row read as a pair.',
-  '- cards, steps, faq: a group of items, each a title and a text. cards are services or reasons; steps are numbered and in order; faq items are a question and its answer. An item may carry an icon, a to, and ref naming a picture of the page, shown on the card.',
+  '- cards, steps, faq: a group of items, each a title and a text. cards are services, features or reasons; steps are numbered and in order; faq items are a question and its answer. An item may carry an icon, a to, and ref naming a picture of the page, shown on the card.',
   '- list: short lines, title only.',
-  '- image: text describes a picture the page should have where none of its own fits; the platform finds it, or leaves it out. Ask for one only where a picture truly helps, at most one or two a page.',
-  '- keep: ref names one thing the page must keep, listed in its ledger: a picture, form, plan, table, quote, video or contact line. It is drawn exactly as the owner has it, so write nothing for it. Place every thing the ledger marks as must, exactly once, wherever it serves the page best, in a column if that helps.',
+  '- image: text describes a picture the page should have where none of its own fits; the platform finds one, or leaves it out.',
+  '- keep: ref names one thing of the ledger, drawn exactly as the owner has it, so write nothing for it: a picture, form, plan, table, quote, video, contact line, figures, logos, tabs, or a group. Place every thing the ledger marks must, exactly once, wherever it serves the page best, in a column if that helps.',
+  '- A group:n of the ledger is a set of like items the old page shows (its cards, steps, questions or list). keep it to draw it whole as the owner has it, with the pictures and links it holds; or write its items again as a group of your own, every link and fact of it kept. A page too long to show whole has its groups folded: each is shown by its titles, marked must, and kept whole, and you write only what is around them.',
   'icon (on a block or an item) is one of: ' + AI_ICON_WORDS.join(', ') + '.',
   '',
   'Where a link goes (to): page:<id> for a page the ledger names, #<n> for section n of this page, form for the form on this page, phone or email for the number or address the page gives, or an https: address the ledger lists. Every link the ledger lists must go somewhere on the page, as a button or an item.',
   '',
-  'Design it as a designer would, with what this language offers:',
-  '- A strong opening: a short, specific page title that says what the visitor gets, a lede, a filled primary button with a real destination, and, where one fits, a second quieter button. The opening section places its one picture (by keep, or an image block), and the platform draws it as the site\'s hero.',
-  '- Vary the section vocabulary. No two neighboring sections share a shape: follow words beside a picture with a row of cards, steps with a faq, a list beside a keep. Never stack pictures one under another: set a picture beside its words in columns, or put each on its card.',
-  '- Plan the grid for the content: three or four short services are cards across, a long answer list is a faq, a sequence is steps, a picture and a paragraph are two columns.',
-  '- Add the sections a visitor of this kind of business looks for that the page lacks, each serving them: what you do, why this business, how it works, common questions. Only what you can write without inventing a fact.',
-  '- End on a closing call to action: its own section on a strong band, one sentence and a filled button.',
+  "A designer's page is made of sections like these; choose and order the ones this page needs:",
+  '- Hero: the page title, a lede, a filled primary button and a quieter second one, beside a picture (cols [7, 5]: the words in col 0, the picture in col 1) or with the picture behind the words (one column, the picture first). Every opening places a picture: the page\'s own by keep, else an image block.',
+  '- Offer as a card grid: a heading, a lede, then cards, one item for each service or thing offered, each with an icon; three or four across.',
+  '- Figures or badges: figures the ledger holds, kept (keep stats:n); plain facts the page states, such as how long the business has run or that it is licensed, as cards of two to four items with icons, each saying the fact exactly as the page does.',
+  '- How it works: a heading and steps of three or four items, from first asking to done.',
+  '- Why choose it: cards of three with icons, each a reason the site supports.',
+  '- A quote drawn as a quote: its own section on a soft or dark ground, centered: a short heading and the kept quote alone.',
+  '- Pictures in a row: cols [1, 1, 1] or [1, 1], one picture kept in each column with a one-line caption under it. Pictures are never stacked one under another.',
+  '- Words beside a picture: cols [1, 1] or [5, 7]: a heading, a lede, a paragraph and a button in one column and a picture in the other, the side alternating down the page.',
+  '- Questions: a heading and a faq of three to six questions a visitor of this kind of business asks, each answered only with what the site says.',
+  '- Contact: the kept form on a framed ground (a soft band, cols [5, 7]): beside it a heading, a welcoming line, the kept contact line and a call or email button.',
+  '- Closing band: the last section, on a brand or dark ground, centered: a heading that says what the visitor gets, one line, and a filled primary button.',
+  '',
+  'Plan it as a designer would:',
+  '- Give the page the sections its role asks for. The request names its role and how many new sections it needs: a new section is one the old page has nowhere, such as how it works, why choose it or the questions people ask, written from what the site says and what this kind of business generally does.',
+  '- Draw like things as a group: three or more services, reasons or steps are cards or steps, never headings and paragraphs one under another; a set of questions is a faq; two or three pictures are a row.',
+  '- Vary it: no two neighboring sections share a shape or a ground. Alternate plain and soft, and keep brand and dark to one or two sections a page, usually the closing band.',
+  '- Each heading says what the visitor gets, in a few specific words; never "Welcome", "Our services" or "Ready when you are" alone.',
+  '- Put the phone or email the page gives on a button (to phone, to email) where a visitor would call or write, beside the kept contact line.',
   '',
   "Writing: plain, specific and in the owner's voice, each heading a clear promise, each paragraph leading with the benefit, nothing that does not earn its place. Headings and card titles are in sentence case, so a capital reads as a name. Say what the page says, in stronger words, keeping every fact it gives; and you may say what this kind of business generally does.",
   'Never write a name, number, price, date, testimonial, client, award, credential, address or guarantee the page or the site does not give. A fact you do not have is left out, never a gap or a placeholder. Say a figure, a price, a phone or a name exactly as the page does.',
@@ -238,6 +260,14 @@ function shownItem(item: SiteImportLedgerItem, doc: Pick<AiSiteImportDocument, '
       return `${item.ref}${must} (a strip of logos)`
     case 'tabs':
       return `${item.ref}${must} (tabs: ${short(words.slice(0, 4).join(', '), 120)})`
+    case 'group': {
+      const node = item.node?.kind === 'group' ? item.node : null
+      const titles = (node?.items ?? []).map((entry) => textOf(doc.blocks[entry.lines.find((ref) => doc.blocks[ref]?.kind !== 'image') as number])).filter(Boolean)
+      const linked = (node?.items ?? []).filter((entry) => entry.to || entry.lines.some((ref) => doc.blocks[ref]?.kind === 'link')).length
+      const kind = node?.group === 'text' || !node ? 'like items' : node.group
+      const shown = titles.slice(0, item.folded ? 16 : 6).map((title) => `"${short(title, 40)}"`).join(', ')
+      return `${item.ref}${must} (${node?.items.length ?? 0} ${kind}${linked ? `, ${linked} linked` : ''}: ${shown}${titles.length > (item.folded ? 16 : 6) ? ', …' : ''}${item.holds?.length ? `; holds ${item.holds.join(', ')}` : ''})`
+    }
     default:
       return `${item.ref}${must} (${short(words.join(' '), 160)})`
   }
@@ -253,7 +283,10 @@ export function aiSiteImportLedgerText(ledger: SiteImportLedger, doc: Pick<AiSit
     const to = destinations.get(link.ref)
     return to ? [`${link.ref} → ${to} ("${short(link.text, 60)}")`] : []
   })
+  // A long page shows each group by its titles alone, kept whole: what is around them is written (AGL-4152).
+  const lines = ledger.folded ? ledger.lines.filter((line) => !line.group) : ledger.lines
   return [
+    ...(ledger.folded ? ['This page is long: its groups are folded, each shown by its titles and kept whole with keep.'] : []),
     'Things to place with keep, each once; "must" may not be left out:',
     ...(ledger.items.length ? ledger.items.map((item) => shownItem(item, doc)) : ['(none)']),
     '',
@@ -261,7 +294,7 @@ export function aiSiteImportLedgerText(ledger: SiteImportLedger, doc: Pick<AiSit
     ...(links.length ? links : ['(none)']),
     '',
     'The lines of the old page, by section, which you rewrite as the page needs:',
-    ...ledger.lines.map((line) => `[${line.line}] section ${line.section + 1}, ${line.kind}: ${line.text}`),
+    ...lines.map((line) => `[${line.line}] section ${line.section + 1}, ${line.kind}${line.group && !ledger.folded ? ` in ${line.group}` : ''}: ${line.text}`),
   ].join('\n')
 }
 
@@ -297,11 +330,14 @@ export function aiSiteImportImprovePrompt(input: {
   destinations: ReadonlyMap<string, string>
   kindLines: readonly string[]
   seed: string
+  /** What the page is for and what it needs (`aiSiteImportImproveRoleLines`). */
+  roleLines?: readonly string[]
 }): string {
   return [
     `Page: "${input.screen.title}" at ${input.screen.slug}`,
     // A page the site's plan proposed: there is no old page to keep, so it is written whole from what the site says.
     ...(input.doc.proposed ? ['This page is new: the site has no such page yet. Its one line says what it tells a visitor. Write it from what the site says of itself and what this kind of business generally does, inventing no fact.'] : []),
+    ...(input.roleLines ?? []),
     ...input.kindLines,
     "The page's ledger, what it holds and where it links:",
     fenceUntrustedText(`The owner's page ${input.doc.url}`, aiSiteImportLedgerText(input.ledger, input.doc, input.destinations), { maxChars: AI_SITE_IMPORT_LEDGER_MAX_CHARS }),
@@ -332,7 +368,7 @@ export function aiReadImprovedPage(raw: unknown, settled: AiLayoutSettlement[] =
         if (ref) blocks.push({ kind: 'keep', ref, ...(col !== undefined ? { col } : {}) })
         return
       }
-      const block = aiReadLayoutBlock(entry, `sections[${index}].blocks[${position}]`, settled)
+      const block = aiReadLayoutBlock(entry, `sections[${index}].blocks[${position}]`, settled, { mostItems: AI_SITE_IMPORT_IMPROVE_MAX_ITEMS })
       if (!block) return
       const { col: _col, ...rest } = block
       blocks.push({ ...rest, ...(col !== undefined ? { col } : {}) })
@@ -491,15 +527,11 @@ export function aiSiteImportImprovedPage(answer: readonly AiSiteImportImprovedSe
     }
   })
   const names = sectionNames(sections, doc.title)
-  const source = ledger.lines.map((line) => line.text).join(' ')
-  const added: AiSiteImportAddedSection[] = answer.flatMap((section, index) => {
-    if (section.blocks.some((block) => block.kind === 'keep')) return []
-    const said = (sections[index]?.blocks ?? []).flatMap((block) => [block.text ?? '', ...(block.items ?? []).flatMap((item) => [item.title, item.text])]).join(' ')
-    if (index === 0 || !said || siteImportContentKept(said, source) >= 0.5) return []
+  const added: AiSiteImportAddedSection[] = aiSiteImportImproveNewSections(answer, ledger).map((index) => {
     const group = sections[index]?.blocks.find((block) => block.items?.length)
-    return [{ heading: names[index] as string, ...(group?.items?.length ? { items: group.items.length } : {}) }]
+    return { heading: names[index] as string, ...(group?.items?.length ? { items: group.items.length } : {}) }
   })
-  const placed = new Set(answer.flatMap((section) => section.blocks.flatMap((block) => (block.kind === 'keep' ? [block.ref] : (block.items ?? []).flatMap((item) => (item.ref ? [item.ref] : []))))))
+  const placed = new Set(aiSiteImportImprovedPlaced(answer, ledger))
   const allPictures = ledger.items.filter((item) => item.kind === 'picture')
   const unplaced = allPictures.filter((item) => !placed.has(item.ref)).flatMap((item) => {
     const block = doc.blocks[item.lines[0] as number]

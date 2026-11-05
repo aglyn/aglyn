@@ -30,7 +30,7 @@
 import type { SiteImportBlock } from '../site-import/site-import-html'
 import type { SiteImportLayout, SiteImportLayoutNode, SiteImportLineRef, SiteImportPictureFit } from './ai-site-import'
 
-export type SiteImportLedgerKind = 'picture' | 'form' | 'plan' | 'table' | 'quote' | 'video' | 'contact' | 'stats' | 'logos' | 'tabs'
+export type SiteImportLedgerKind = 'picture' | 'form' | 'plan' | 'table' | 'quote' | 'video' | 'contact' | 'stats' | 'logos' | 'tabs' | 'group'
 
 /** One thing of the source a `keep` block places. */
 export interface SiteImportLedgerItem {
@@ -47,6 +47,10 @@ export interface SiteImportLedgerItem {
   node?: SiteImportLayoutNode
   /** How the source frames a picture. */
   fit?: SiteImportPictureFit
+  /** A group's: the refs of the things it holds (its pictures, a contact line), placed with it when it is kept whole. */
+  holds?: string[]
+  /** A group's on a long page: shown by its items' titles alone, and kept whole. */
+  folded?: true
 }
 
 /** A link of the source, each destination once. */
@@ -63,13 +67,28 @@ export interface SiteImportLedgerLine {
   section: number
   kind: SiteImportBlock['kind']
   text: string
+  /** The group of like items it is a line of, by its ref. */
+  group?: string
 }
 
 export interface SiteImportLedger {
   items: SiteImportLedgerItem[]
   links: SiteImportLedgerLink[]
   lines: SiteImportLedgerLine[]
+  /**
+   * A long page (AGL-4152): its lines run past `SITE_IMPORT_LEDGER_FOLD_CHARS`,
+   * so each of its groups is shown by its titles and kept whole, and an
+   * answer writes only what is around them. One answer then fits a page's
+   * ceiling however many like items the page has.
+   */
+  folded: boolean
 }
+
+/** The fewest like items a group of the source is a ledger item at (AGL-4152): a `keep` places it whole. */
+export const SITE_IMPORT_LEDGER_GROUP_ITEMS = 3
+
+/** The most characters of lines a page's ledger shows in full: past it, the page is long and its groups fold (AGL-4152). */
+export const SITE_IMPORT_LEDGER_FOLD_CHARS = 4_500
 
 const clean = (text: unknown): string => (typeof text === 'string' ? text.replace(/\s+/g, ' ').trim() : '')
 
@@ -120,6 +139,9 @@ export function siteImportLedger(source: { layout: SiteImportLayout; blocks: rea
     const text = clean(block.text)
     if (!text || (block.kind === 'link' && block.inline)) return
     seen.add(ref)
+    // A paragraph that is only the words of the link after it is that link's label, read twice: the link is its line.
+    const next = blocks[ref + 1]
+    if (block.kind === 'paragraph' && next?.kind === 'link' && clean(next.text) === text) return
     const contact = (block.kind === 'link' && /^(?:mailto|tel):/i.test(block.href)) || siteImportLineIsContact(text)
     if (block.kind === 'quote') add('quote', [ref], { node: node ?? { kind: 'line', line: ref } })
     else if (contact) add('contact', [ref], { node: node ?? { kind: 'line', line: ref } })
@@ -155,7 +177,16 @@ export function siteImportLedger(source: { layout: SiteImportLayout; blocks: rea
             add(whole, node.items.flatMap((item) => item.lines), { node })
             break
           }
+          const before = items.length
+          const from = lines.length
           for (const item of node.items) for (const ref of item.lines) line(ref)
+          // Three or more like items are one thing a `keep` may place whole, with what they hold (AGL-4152).
+          if (node.items.length >= SITE_IMPORT_LEDGER_GROUP_ITEMS) {
+            const holds = items.slice(before).map((item) => item.ref)
+            add('group', node.items.flatMap((item) => item.lines), { node, ...(holds.length ? { holds } : {}) })
+            const ref = items[items.length - 1]?.ref as string
+            for (const entry of lines.slice(from)) entry.group = ref
+          }
           break
         }
         default:
@@ -182,7 +213,16 @@ export function siteImportLedger(source: { layout: SiteImportLayout; blocks: rea
     hrefs.add(href)
     links.push({ ref: `link:${links.length + 1}`, line: ref, href: block.href, text: clean(block.text) })
   })
-  return { items, links, lines }
+  // A long page folds its groups: each is shown by its titles, and kept whole (AGL-4152).
+  const folded = lines.reduce((sum, entry) => sum + entry.text.length, 0) > SITE_IMPORT_LEDGER_FOLD_CHARS
+  if (folded) {
+    for (const item of items) {
+      if (item.kind !== 'group') continue
+      item.folded = true
+      item.must = true
+    }
+  }
+  return { items, links, lines, folded }
 }
 
 /** Every line a list of layout nodes holds, rows, groups, tables and tabs opened. */

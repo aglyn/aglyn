@@ -824,6 +824,7 @@ export function aiSiteImportDocumentFor(state: AiSiteImportState, page: AiSiteIm
           ...(state.look?.drawn ? { theme: state.look.drawn } : {}),
           // A page new to the site, and what its slots may take (AGL-4152).
           ...(page.origin === 'proposed' ? { proposed: true as const } : {}),
+          ...(state.plan?.roles?.[page.draftId] ? { role: state.plan.roles[page.draftId] } : {}),
           ...(state.sitePhotos?.length ? { sitePhotos: state.sitePhotos } : {}),
           ...(aiSiteImportGeneratedPicturesOn(state) ? { generatedPictures: true as const } : {}),
         }

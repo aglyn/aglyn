@@ -141,11 +141,16 @@ function writtenLines(block: AiLayoutBlock, at: string): Array<{ at: string; tex
 /** Where a block sends a visitor, its own and its items'. */
 const linksOf = (block: AiLayoutBlock): string[] => [...(block.to ? [block.to] : []), ...(block.items ?? []).flatMap((item) => (item.to ? [item.to] : []))]
 
-/** Every picture ref an answer's blocks place. */
-const placedOf = (sections: readonly AiSiteImportImprovedSection[]): string[] =>
-  sections.flatMap((section) =>
-    section.blocks.flatMap((block) => (block.kind === 'keep' ? [block.ref] : (block.items ?? []).flatMap((item) => (item.ref ? [item.ref] : [])))),
+/**
+ * Every ledger ref an answer places, as often as it places it: each `keep`,
+ * each picture on an item, and what a group kept whole holds (AGL-4152).
+ */
+export function aiSiteImportImprovedPlaced(sections: readonly AiSiteImportImprovedSection[], ledger: Pick<SiteImportLedger, 'items'>): string[] {
+  const holds = new Map(ledger.items.map((item) => [item.ref, item.holds ?? []]))
+  return sections.flatMap((section) =>
+    section.blocks.flatMap((block) => (block.kind === 'keep' ? [block.ref, ...(holds.get(block.ref) ?? [])] : (block.items ?? []).flatMap((item) => (item.ref ? [item.ref] : [])))),
   )
+}
 
 const invented = (message: string, detail?: string): AiDoctrineViolation => ({ rule: 14, code: AI_SITE_IMPORT_INVENTED_FACT_CODE, message, ...(detail ? { detail } : {}) })
 const dropped = (message: string): AiDoctrineViolation => ({ rule: null, code: AI_SITE_IMPORT_DROPPED_ITEM_CODE, message })
@@ -159,7 +164,7 @@ export function aiSiteImportHonesty(sections: readonly AiSiteImportImprovedSecti
   const contacts = input.scope.join(' \n ')
   const out: AiDoctrineViolation[] = []
   const refs = new Map(input.ledger.items.map((item) => [item.ref, item]))
-  const placed = placedOf(sections)
+  const placed = aiSiteImportImprovedPlaced(sections, input.ledger)
   const links = new Set<string>()
   sections.forEach((section, index) => {
     section.blocks.forEach((raw, position) => {
@@ -181,12 +186,16 @@ export function aiSiteImportHonesty(sections: readonly AiSiteImportImprovedSecti
     })
   })
   // What the ledger holds: each thing that must land, once; no ref twice, and none it does not hold.
+  const inGroup = new Map(input.ledger.items.flatMap((item) => (item.holds ?? []).map((held) => [held, item.ref] as const)))
   for (const ref of new Set(placed)) {
     if (!refs.has(ref)) out.push(dropped(`keep "${ref.slice(0, 40)}" names nothing on this page. Use only the refs the page lists.`))
-    else if (placed.filter((entry) => entry === ref).length > 1) out.push(dropped(`${ref} is placed ${placed.filter((entry) => entry === ref).length} times. Place it once.`))
+    else if (placed.filter((entry) => entry === ref).length > 1) {
+      const group = inGroup.get(ref)
+      out.push(dropped(`${ref} is placed ${placed.filter((entry) => entry === ref).length} times${group && placed.includes(group) ? `: keeping ${group} whole places it already` : ''}. Place it once.`))
+    }
   }
   for (const item of input.ledger.items) {
-    if (item.must && !placed.includes(item.ref)) out.push(dropped(`${item.ref} is not on the page. Place it with a keep block, exactly once.`))
+    if (item.must && !placed.includes(item.ref)) out.push(dropped(`${item.ref} is not on the page. Place it with a keep block, exactly once${item.folded ? ': this page is long, so its groups are kept whole' : ''}.`))
   }
   // The page's own opening picture outranks a new one: a picture asked for in words never takes its place.
   const opening = input.ledger.items.find((item) => item.kind === 'picture' && item.section === 0)
@@ -194,7 +203,7 @@ export function aiSiteImportHonesty(sections: readonly AiSiteImportImprovedSecti
   if (opening && first.some((block) => block.kind === 'image' && !block.picture) && !first.some((block) => block.kind === 'keep' && block.ref === opening.ref)) {
     out.push(dropped(`${opening.ref} is the page's own opening picture. Open with it, with a keep block, in place of a picture asked for in words.`))
   }
-  const kept = new Set(sections.flatMap((section) => section.blocks.flatMap((block) => (block.kind === 'keep' ? [block.ref] : []))))
+  const kept = new Set(placed)
   const keptLines = new Set(input.ledger.items.filter((item) => kept.has(item.ref)).flatMap((item) => item.lines))
   for (const link of input.ledger.links) {
     const to = input.destinations.get(link.ref)

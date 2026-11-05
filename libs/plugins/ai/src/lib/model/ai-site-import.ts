@@ -1206,7 +1206,18 @@ export interface AiSiteImportPlan {
   design: AiSiteImportPlanDesign
   /** At most one new page, on by default, with a switch (`AiSiteImportPage.origin`). `draftId` names its page once the plan is in. */
   proposed: { title: string; slug: string; purpose: string; on: boolean; draftId?: string } | null
+  /**
+   * What each page is for in the new site, by its draft id (AGL-4152): what
+   * its redesign plans it as, and how many new sections it has room for. A
+   * plan made before roles reads each page's from its address and what it holds.
+   */
+  roles?: Record<string, AiSiteImportPageRole>
 }
+
+/** What a page is for in a planned site (AGL-4152): what its redesign plans it as. */
+export type AiSiteImportPageRole = 'home' | 'service' | 'about' | 'contact' | 'gallery' | 'pricing' | 'faq' | 'other'
+
+export const AI_SITE_IMPORT_PAGE_ROLES: readonly AiSiteImportPageRole[] = ['home', 'service', 'about', 'contact', 'gallery', 'pricing', 'faq', 'other']
 
 /** How a plan draws the site: the hero, each group, the bands' rhythm and the closing call to action. */
 export interface AiSiteImportPlanDesign {
@@ -1223,8 +1234,12 @@ export interface AiSiteImportPlanChoice {
   pictures?: boolean
 }
 
-/** Whether generated pictures are on where the owner has not said (AGL-4152): a picture costs credits, so they are asked for. */
-export const AI_SITE_IMPORT_GENERATED_PICTURES_DEFAULT = false
+/**
+ * Whether generated pictures are on where the owner has not said (AGL-4152):
+ * on, with a switch. A picture costs credits, so a wave that may take them
+ * quotes them in its ceiling before it starts, and the switch turns them off.
+ */
+export const AI_SITE_IMPORT_GENERATED_PICTURES_DEFAULT = true
 
 /** What a plan's row and panel say where it did not pass (AGL-4152). */
 export const AI_SITE_IMPORT_PLAN_FELL_BACK = 'Your menu and footer stay as your site has them: the plan for your new site did not pass.'
