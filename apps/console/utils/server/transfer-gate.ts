@@ -15,15 +15,14 @@
  * limitations under the License.
  */
 
+import { permissionRefusalText } from '@aglyn/aglyn/app-utils/org-permissions'
 import { randomUUID } from 'node:crypto'
-import { hostRoleFor, hostScopeToken, isOrgWideMember, memberCanSee, pluginRequestFromWeb } from '@aglyn/aglyn/server'
+import { hostScopeToken, isOrgWideMember, memberCanSee, pluginRequestFromWeb } from '@aglyn/aglyn/server'
 import {
   parseTransferResourceKey,
   transferAccessPermissions,
-  transferImportRoleAllowed,
-  transferImportRoleRefusal,
+  transferImportPermission,
   transferRouteIntent,
-  transferWorkspaceRole,
   type TransferApiRoute,
   type TransferErrorCode,
   type TransferErrorResponse,
@@ -75,7 +74,7 @@ import { FieldValue } from 'firebase-admin/firestore'
  *     named site), a `readPermission` admits its holders, and otherwise
  *     `data.manage` stays the key. The route and the resource's `readPage`
  *     then read only what the member's scope sees. A resource that names
- *     `importRoles` (AGL-3554) is imported only by a member in one of
+ *     `importPermission` (AGL-4047) is imported only by a member holding it,
  *     them where the records are (gift cards: a site's admins). Staff pass.
  *  5. the resource's plugin runs for the request (AGL-3548): switched on
  *     for the named site, or for the workspace without one, and released to
@@ -178,9 +177,8 @@ async function requestSubject(
  * The refusal for a member without the route's access, or `null` when they
  * have it. An export needs no permission unless its resource declares one,
  * but always a membership, and a collaborator must reach the named site. An
- * import of a resource that names `importRoles` also needs one of those
- * roles where the records are (AGL-3554) — the resource is the body's, or
- * the job's.
+ * import of a resource that names `importPermission` also needs that key
+ * where the records are (AGL-4047) — the resource is the body's, or the job's.
  */
 async function accessRefusal(
   route: TransferApiRoute,
@@ -214,9 +212,12 @@ async function accessRefusal(
       needed.length === 1 ? `${verb} needs the “Manage data” permission` : `${verb} these records needs a permission your role does not include`,
     )
   }
-  const role = hostId ? hostRoleFor(member as never, hostId as never) : transferWorkspaceRole(member.role)
-  if (declared && !transferImportRoleAllowed(intent, declared, role)) {
-    return transferRefusal(403, 'forbidden', transferImportRoleRefusal(declared))
+  const stricter = transferImportPermission(intent, declared)
+  if (stricter) {
+    const held = hostId
+      ? await memberHasPermissionOnHost(orgId, hostId, member, stricter)
+      : await memberHasOrgPermission(orgId, member, stricter)
+    if (!held) return transferRefusal(403, 'forbidden', permissionRefusalText(stricter))
   }
   return null
 }

@@ -27,6 +27,9 @@ import { registerPluginDeclarations } from './plugins.declarations.generated'
  * holds the first paint on this rather than reading an empty catalog.
  */
 export const pluginDeclarationsReady: Promise<void> = registerPluginDeclarations()
+// Whoever waits on it answers a failure (`ConsolePluginsGate` logs it); a module
+// that only imported this must not bring the process down with the rejection.
+pluginDeclarationsReady.catch(() => undefined)
 
 /**
  * The console's plugin loader (AGL-417): activates the org-enabled plugins

@@ -103,9 +103,9 @@ flickering away.
   on every plan (`"featureFlagExempt": ["export"]`), which a workspace is
   owed whether or not your plugin is on.
 
-- **A role**, when your resource is stricter than **Manage data**: declare
-  `"importRoles"` (say `["admin"]`) and only a member in one of those roles
-  where the records are may import them. Don't check the role in your own
+- **A permission**, when your resource is stricter than **Manage data**: declare
+  `"importPermission"` (a catalog key your plugin declares) and only a member
+  holding it where the records are may import them. Don't check it in your own
   hook for the button — `can('import')` already answers it.
 
 Ask `can` for every Import and Export button you draw, and draw neither

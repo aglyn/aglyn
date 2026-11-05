@@ -18,6 +18,7 @@
  * limitations under the License.
  */
 
+import { MARKETING_PLATFORMS_SITE_PRESETS } from '../model/marketing-platforms-permissions'
 import { randomBytes } from 'node:crypto'
 import { createSecretBoxKey, type SecretBoxKeyring } from '@aglyn/shared-util-tools/secret-box'
 import { ProviderError } from '../providers/http'
@@ -26,7 +27,7 @@ import { createMemoryStore, mockFetch } from '../testing/memory-store'
 import { openCredential, readMarketingPlatformsConfig, type MarketingPlatformsConfig } from './config'
 import { createCredentialOpener } from './credentials'
 import { readOAuthState, sha256 } from './oauth'
-import { createMarketingRoutes, fail, type MarketingRole, type MarketingRouteDeps } from './routes'
+import { createMarketingRoutes, fail, type MarketingRouteDeps } from './routes'
 import { emptyConnection } from './store'
 
 const HOST = 'host-1'
@@ -34,7 +35,7 @@ const NOW = Date.UTC(2026, 9, 7, 12)
 const key = createSecretBoxKey(randomBytes(32))
 const keyring: SecretBoxKeyring = { current: key, keys: [key] }
 
-function setup(options: { config?: Partial<MarketingPlatformsConfig>; role?: MarketingRole | null; verify?: MarketingProvider['verify'] } = {}) {
+function setup(options: { config?: Partial<MarketingPlatformsConfig>; role?: 'admin' | 'editor' | null; verify?: MarketingProvider['verify'] } = {}) {
   const memory = createMemoryStore()
   const activity: string[] = []
   const syncs: string[] = []
@@ -58,10 +59,12 @@ function setup(options: { config?: Partial<MarketingPlatformsConfig>; role?: Mar
       pullConsent: async () => null,
     }),
     http: exchange.http,
-    gate: async (request, role) => {
+    // The gate as the routes climb it: the key each names, read off its preset,
+    // so a route asking the wrong key shows as the wrong role getting through.
+    gate: async (request, permission) => {
       const granted = options.role === undefined ? 'admin' : options.role
       if (!granted) return fail(401, 'Unauthenticated')
-      if (granted === 'editor' && role === 'admin') return fail(403, 'Not permitted')
+      if (permission && !MARKETING_PLATFORMS_SITE_PRESETS[permission][granted]) return fail(403, 'Not permitted')
       const body = request.method === 'GET' ? {} : ((await request.json().catch(() => ({}))) as Record<string, unknown>)
       return { orgId: 'org-1', hostId: HOST, uid: 'u1', body }
     },

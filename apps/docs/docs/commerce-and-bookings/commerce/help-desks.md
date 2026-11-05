@@ -20,8 +20,11 @@ Aglyn does not sell one and never asks for your password.
 
 ## Before you start {#before-you-start}
 
-- **Role:** you need to be an **admin** of the site to connect, change or
-  disconnect a help desk. Editors can see the card and the sync log.
+- **Permission:** connecting, changing or disconnecting a help desk takes **Manage
+  help desk connections**, which a site's admins hold by default. Seeing the card and
+  the sync log takes **See help desk connections**, which a site's admins and editors
+  hold by default. See
+  [custom roles](../../workspace-and-billing/teams-and-roles/custom-roles.md#integration-permissions).
 - **Verified email:** verify your email address first.
 - **A plan that includes your store.** Help desks carry your buyers and their
   orders, so they come with the plans that include selling.

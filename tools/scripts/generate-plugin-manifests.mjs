@@ -2132,8 +2132,8 @@ function siteBundleSectionRows() {
  * who may export it (AGL-3546): `readableByMembers: true`, or a `readPermission`
  * that is a permission key, never both; the plan feature that moves it
  * (AGL-3555), `featureFlag`, with the intents `featureFlagExempt` keeps open
- * on every plan; and the only roles that may import it, where its records
- * are (AGL-3554), `importRoles`, on a resource that imports. And the two
+ * on every plan; and the catalog key an import also asks, where its records
+ * are (AGL-4047), `importPermission`, on a resource that imports. And the two
  * places the halves are registered from: a `serverDeclarations` or
  * `consoleServerDeclarations` entry for the server half, and a console
  * registrar that loads at the `transferResources` slot for the client half.
@@ -2142,9 +2142,8 @@ const TRANSFER_RESOURCE_KEY = /^[a-z][a-z0-9]*(?:[.-][a-z0-9]+)*$/
 const TRANSFER_SCOPES = ['org', 'host']
 const TRANSFER_KINDS = ['records', 'package']
 const TRANSFER_FORMATS = ['csv', 'json', 'ndjson']
-const TRANSFER_RESOURCE_FIELDS = ['key', 'label', 'singularLabel', 'scope', 'kinds', 'formats', 'limits', 'description', 'instances', 'readableByMembers', 'readPermission', 'exportOnly', 'featureFlag', 'featureFlagExempt', 'importRoles']
+const TRANSFER_RESOURCE_FIELDS = ['key', 'label', 'singularLabel', 'scope', 'kinds', 'formats', 'limits', 'description', 'instances', 'readableByMembers', 'readPermission', 'exportOnly', 'featureFlag', 'featureFlagExempt', 'importPermission']
 const TRANSFER_INTENTS = ['import', 'export']
-const TRANSFER_IMPORT_ROLES = ['admin', 'editor', 'author', 'viewer']
 const FEATURE_FLAG_KEY = /^[a-z][A-Za-z0-9]*$/
 const PERMISSION_KEY = /^[A-Za-z][A-Za-z0-9]*(?:\.[A-Za-z0-9]+)*$/
 const TRANSFER_RESOURCES_LOAD_POINT = 'transferResources'
@@ -2173,7 +2172,7 @@ function transferResourceRows() {
     }
     for (const entry of declared) {
       const { $comment: _note, ...resource } = entry ?? {}
-      const { key, label, singularLabel, scope, kinds, formats, limits, description, instances, readableByMembers, readPermission, exportOnly, featureFlag, featureFlagExempt, importRoles } = resource
+      const { key, label, singularLabel, scope, kinds, formats, limits, description, instances, readableByMembers, readPermission, exportOnly, featureFlag, featureFlagExempt, importPermission } = resource
       const what = `${where} "${key ?? ''}"`
       const unknown = Object.keys(resource).filter((field) => !TRANSFER_RESOURCE_FIELDS.includes(field))
       if (unknown.length) throw new Error(`${what}: ${unknown.join(', ')} is not a resource field`)
@@ -2208,15 +2207,10 @@ function transferResourceRows() {
       if (featureFlag !== undefined && (typeof featureFlag !== 'string' || !FEATURE_FLAG_KEY.test(featureFlag))) {
         throw new Error(`${what}: "featureFlag" is the plan feature that moves the records ("crm") when present`)
       }
-      if (importRoles !== undefined) {
-        if (exportOnly === true) throw new Error(`${what}: "importRoles" names who may import a resource that is never imported`)
-        if (
-          !Array.isArray(importRoles) ||
-          !importRoles.length ||
-          new Set(importRoles).size !== importRoles.length ||
-          importRoles.some((one) => !TRANSFER_IMPORT_ROLES.includes(one))
-        ) {
-          throw new Error(`${what}: "importRoles" lists one or more of ${TRANSFER_IMPORT_ROLES.join(', ')}, each once`)
+      if (importPermission !== undefined) {
+        if (exportOnly === true) throw new Error(`${what}: "importPermission" names who may import a resource that is never imported`)
+        if (typeof importPermission !== 'string' || !importPermission.trim()) {
+          throw new Error(`${what}: "importPermission" is the catalog key an import also asks ("commerce.giftCards.import") when present`)
         }
       }
       if (featureFlagExempt !== undefined) {

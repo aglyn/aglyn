@@ -31,6 +31,10 @@ import { ProductShippingFields } from './product-shipping-fields.component'
 let available = false
 const request = jest.fn()
 
+jest.mock('@aglyn/tenant-feature-instance/hooks/use-site-keys', () => ({
+  useSiteKeys: () => ({ blocked: (key: string) => mockBlockedKeys.has(key) }),
+}))
+const mockBlockedKeys = new Set<string>()
 jest.mock('./shipping-api', () => ({
   ...jest.requireActual('./shipping-api'),
   useShippingAvailability: () => ({ loading: false, available, provider: 'Shippo', testMode: false }),
@@ -244,5 +248,23 @@ describe('once a provider is configured', () => {
     expect(container.innerHTML).toBe('')
     rerender(<OrdersBatchWidget hostId="host-1" selectedOrderIds={['order-1', 'order-2']} />)
     expect(container.innerHTML).not.toBe('')
+  })
+})
+
+describe('the order’s label controls follow the keys their routes ask (AGL-4047)', () => {
+  afterEach(() => mockBlockedKeys.clear())
+
+  it('switches Buy label off with the permission named, leaving a holder’s on', async () => {
+    available = true
+    request.mockResolvedValue({ labels: [] })
+    mockBlockedKeys.add('shipping.buyLabels')
+    const view = render(<OrderLabelsWidget hostId="host-1" order={ORDER} />)
+    const buy = (await screen.findByRole('button', { name: 'Buy label' })) as HTMLButtonElement
+    expect(buy.disabled).toBe(true)
+    expect(buy.parentElement?.getAttribute('aria-label')).toContain('Buy shipping labels')
+    view.unmount()
+    mockBlockedKeys.clear()
+    render(<OrderLabelsWidget hostId="host-1" order={ORDER} />)
+    expect(((await screen.findByRole('button', { name: 'Buy label' })) as HTMLButtonElement).disabled).toBe(false)
   })
 })

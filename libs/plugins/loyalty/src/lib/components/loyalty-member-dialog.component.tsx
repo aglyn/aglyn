@@ -16,6 +16,10 @@
  */
 'use client'
 
+import { permissionRefusalText } from '@aglyn/aglyn/app-utils/org-permissions'
+import { BlockedControl } from '@aglyn/shared-ui-jsx/components/blocked-control.component'
+import { useSiteKeys } from '@aglyn/tenant-feature-instance/hooks/use-site-keys'
+import { LOYALTY_SITE_PRESETS } from '../model/loyalty-permissions'
 import { useSnackbar } from '@aglyn/shared-ui-snackstack'
 import {
   Alert,
@@ -67,6 +71,7 @@ export function LoyaltyMemberDialog(props: {
   onChanged: () => void
 }) {
   const { hostId, memberId, onClose, onChanged } = props
+  const refused = useSiteKeys(hostId).blocked('loyalty.adjustBalances', LOYALTY_SITE_PRESETS['loyalty.adjustBalances'])
   const request = useLoyaltyFetch()
   const [answer, setAnswer] = useState<MemberAnswer | null>(null)
   const [error, setError] = useState<string | null>(null)
@@ -141,7 +146,11 @@ export function LoyaltyMemberDialog(props: {
         ) : null}
       </DialogContent>
       <DialogActions>
-        {props.canEdit && member ? <Button onClick={() => setAdjusting(true)}>{'Adjust'}</Button> : null}
+        {props.canEdit && member ? (
+          <BlockedControl blocked={refused} reason={permissionRefusalText('loyalty.adjustBalances')}>
+            <Button onClick={() => setAdjusting(true)}>{'Adjust'}</Button>
+          </BlockedControl>
+        ) : null}
         <Button onClick={onClose}>{'Close'}</Button>
       </DialogActions>
       {adjusting && member ? (

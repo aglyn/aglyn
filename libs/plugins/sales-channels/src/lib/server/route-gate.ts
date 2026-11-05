@@ -15,11 +15,14 @@
  * limitations under the License.
  */
 
+import { holdsStampedSiteKey } from '@aglyn/aglyn/app-utils/host-permissions'
+import { permissionRefusalText } from '@aglyn/aglyn/app-utils/org-permissions'
 import { checkEntitlement } from '@aglyn/aglyn/app-utils/plan-entitlements'
 import { firebaseAdmin, getOrgForHost } from '@aglyn/tenant-data-admin'
 import { isEmailVerified, isImpersonationSession } from '@aglyn/tenant-data-admin/server/firebase-admin'
 import { isRefusedIdToken } from '@aglyn/tenant-data-admin/server/id-token-refusal'
 import { SALES_CHANNELS_ENTITLEMENT } from '../constants/bundle-common'
+import { SALES_CHANNELS_SITE_PRESETS, type SalesChannelsSitePermission } from '../model/sales-channels-permissions'
 import { firestore, isDocumentId } from './feed-store'
 
 /**
@@ -32,7 +35,7 @@ import { firestore, isDocumentId } from './feed-store'
  *   403  an unverified address (an impersonation session is exempt)
  *   400  no site named
  *   404  no such site
- *   403  not a collaborator with the role the route needs
+ *   403  not on the site, or without the key the route asks
  *   403  a plan that does not sell (`commerce`)
  */
 
@@ -45,10 +48,6 @@ export function routeJson(body: unknown, status = 200): Response {
 export function routeError(status: number, error: string): Response {
   return Response.json({ error }, { status, headers: NO_STORE })
 }
-
-export type ChannelRole = 'viewer' | 'editor' | 'admin'
-
-const ROLE_RANK: Record<string, number> = { viewer: 1, author: 1, editor: 2, admin: 3 }
 
 export interface RouteActor {
   uid: string
@@ -66,7 +65,7 @@ export async function readJsonBody(request: Request): Promise<Record<string, unk
 
 export async function channelsGate(
   request: Request,
-  options: { role: ChannelRole; body?: Record<string, unknown> },
+  options: { permission: SalesChannelsSitePermission | null; body?: Record<string, unknown> },
 ): Promise<RouteActor | Response> {
   const authorization = request.headers.get('authorization') ?? ''
   if (!authorization.startsWith('Bearer ')) return routeError(401, 'Unauthenticated')
@@ -92,9 +91,13 @@ export async function channelsGate(
   if (!hostSnapshot.exists || !resolved) return routeError(404, 'Site not found')
   const host = hostSnapshot.data() ?? {}
   const staff = decoded['staff'] === true
-  const role = String((host['memberRoles'] as Record<string, unknown> | undefined)?.[decoded.uid] ?? '')
-  if (!staff && (ROLE_RANK[role] ?? 0) < ROLE_RANK[options.role]) {
+  // No key named: anyone on the site's roster reads it.
+  if (!staff && !(host['memberRoles'] as Record<string, unknown> | undefined)?.[decoded.uid]) {
     return routeError(403, 'Not permitted')
+  }
+  const { permission } = options
+  if (!staff && permission && !holdsStampedSiteKey(host, decoded.uid, permission, SALES_CHANNELS_SITE_PRESETS[permission])) {
+    return routeError(403, permissionRefusalText(permission))
   }
   if (!checkEntitlement(resolved.org as never, SALES_CHANNELS_ENTITLEMENT)) {
     return routeError(403, 'Sales channels come with the plans that include commerce.')

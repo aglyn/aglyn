@@ -1025,7 +1025,7 @@
           "key": "commerce.gift-cards",
           "featureFlag": "giftCards",
           "featureFlagExempt": ["export"],
-          "importRoles": ["admin"],
+          "importPermission": "commerce.giftCards.import",
           "label": "Gift cards",
           "singularLabel": "Gift card",
           "scope": "host",
@@ -3106,6 +3106,7 @@
       "package": "@aglyn/plugins-shipping",
       "uses": ["commerce"],
       "register": {
+        "consoleDeclarations": "registerShippingConsoleDeclarations",
         "console": "registerShippingConsole",
         "consoleApi": "registerShippingConsoleApi",
         "serverDeclarations": "registerShippingServerDeclarations",
@@ -3275,6 +3276,7 @@
       "package": "@aglyn/plugins-loyalty",
       "uses": ["commerce"],
       "register": {
+        "consoleDeclarations": "registerLoyaltyConsoleDeclarations",
         "console": "registerLoyaltyConsole",
         "consoleApi": "registerLoyaltyConsoleApi",
         "serverDeclarations": "registerLoyaltyServerDeclarations",
@@ -3476,6 +3478,7 @@
       "package": "@aglyn/plugins-marketing-platforms",
       "uses": ["commerce"],
       "register": {
+        "consoleDeclarations": "registerMarketingPlatformsConsoleDeclarations",
         "console": "registerMarketingPlatformsConsole",
         "consoleApi": "registerMarketingPlatformsConsoleApi",
         "serverDeclarations": "registerMarketingPlatformsServerDeclarations",
@@ -3522,6 +3525,7 @@
       "package": "@aglyn/plugins-help-desks",
       "uses": ["commerce"],
       "register": {
+        "consoleDeclarations": "registerHelpDesksConsoleDeclarations",
         "console": "registerHelpDesksConsole",
         "consoleApi": "registerHelpDesksConsoleApi",
         "serverDeclarations": "registerHelpDesksServerDeclarations",
@@ -4116,6 +4120,7 @@
       },
       "package": "@aglyn/plugins-sales-channels",
       "register": {
+        "consoleDeclarations": "registerSalesChannelsConsoleDeclarations",
         "console": "registerSalesChannelsConsole",
         "tenantApi": "registerSalesChannelsApi",
         "consoleApi": "registerSalesChannelsConsoleApi",

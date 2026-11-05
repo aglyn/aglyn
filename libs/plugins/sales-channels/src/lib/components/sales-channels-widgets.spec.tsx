@@ -36,6 +36,10 @@ const render = (ui: ReactElement) => renderBare(<ConfirmationProviderComponent>{
 const request = jest.fn()
 const enqueueSnackbar = jest.fn()
 
+jest.mock('@aglyn/tenant-feature-instance/hooks/use-site-keys', () => ({
+  useSiteKeys: () => ({ blocked: (key: string) => mockBlockedKeys.has(key) }),
+}))
+const mockBlockedKeys = new Set<string>()
 jest.mock('./sales-channels-api', () => ({
   ...jest.requireActual('./sales-channels-api'),
   useSalesChannelsFetch: () => request,
@@ -283,5 +287,27 @@ describe('ProductChannelFields', () => {
       <ProductChannelFields hostId="host-1" product={{ id: 'p1', type: 'service' }} proposeValues={jest.fn()} />,
     )
     expect(container.innerHTML).toBe('')
+  })
+})
+
+describe('the card follows the keys its routes ask (AGL-4047)', () => {
+  afterEach(() => mockBlockedKeys.clear())
+
+  it('switches Replace address and the feed switch off with the permission named', async () => {
+    mockBlockedKeys.add('salesChannels.replaceAddress').add('salesChannels.feeds')
+    request.mockResolvedValueOnce(state())
+    render(<SalesChannelsCard hostId="host-1" />)
+    await screen.findByTestId('sales-channels-card')
+    const replace = screen.getByRole('button', { name: 'Replace address' }) as HTMLButtonElement
+    expect(replace.disabled).toBe(true)
+    expect(replace.parentElement?.getAttribute('aria-label')).toContain('Replace a feed address')
+    expect((screen.getByLabelText('Meta feed') as HTMLInputElement).disabled).toBe(true)
+  })
+
+  it('leaves them on for a holder', async () => {
+    request.mockResolvedValueOnce(state())
+    render(<SalesChannelsCard hostId="host-1" />)
+    await screen.findByTestId('sales-channels-card')
+    expect((screen.getByRole('button', { name: 'Replace address' }) as HTMLButtonElement).disabled).toBe(false)
   })
 })

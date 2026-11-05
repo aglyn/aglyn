@@ -81,6 +81,8 @@ export const TS_ROLE_GATE = [
   String.raw`\[\s*'(owner|admin|editor|author)',\s*'(owner|admin|editor|author|viewer)'`,
   String.raw`(ROLES|Roles)\.(includes|has)\(`,
   String.raw`\b(role|Role)\s+in\s+\[`,
+  // A rank table asked for the member's role: `ROLE_RANK[memberRole] < ROLE_RANK[role]`.
+  String.raw`\bROLE_RANK\[(memberRole|role|options\.role)\b`,
   // A projection read inline: `memberRoles[uid] === 'admin'`.
   String.raw`memberRoles\b[^;=!]{0,60}(===|!==)\s*'(owner|admin|editor|author|viewer)'`,
 ].join('|')

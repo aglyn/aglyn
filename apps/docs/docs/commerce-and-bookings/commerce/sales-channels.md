@@ -70,7 +70,8 @@ domain — and it is always on your store's own domain.
 Each feed's address carries a long random code, different for every channel,
 and the feed answers only that address. Anyone holding it can read what your
 storefront already shows publicly, nothing more. If an address is shared by
-mistake, select **Replace address** (site admins): the old address stops at
+mistake, select **Replace address** (it takes **Replace a feed address**, which a site's
+admins hold by default): the old address stops at
 once and the card shows the new one to paste into the channel.
 
 Switching a feed **Off** stops it answering; switching it back on keeps the

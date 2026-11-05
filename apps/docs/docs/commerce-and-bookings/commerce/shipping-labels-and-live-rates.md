@@ -35,12 +35,19 @@ account, or price checkout with ShipperHQ, see
   billed to you by that carrier. See [Paying for labels](#paying-for-labels).
 - **Who can do what:**
 
-  | Task | Who |
-  | --- | --- |
-  | See the **Shipping labels** card, get rates, buy, print and void labels, buy batch and return labels, check addresses | An **editor** or **admin** of the site |
-  | Save the **Shipping labels** card, see **Paying for labels** and the **Carrier accounts** card | An **admin** of the site |
-  | Turn Stripe balance payments on or off, switch a carrier on or off, connect a carrier account | An **admin** of the site who also has the workspace's **Manage billing** permission |
-  | See the **Shipping labels** card on **Billing → Usage** | A workspace member with **View billing** |
+  | Task | Permission | Who holds it by default |
+  | --- | --- | --- |
+  | See the **Shipping labels** card | **See shipping settings** | A site's admins and editors |
+  | Get rates, check addresses, see an order's labels | **Check rates and see labels** | A site's admins and editors |
+  | Buy a label, a batch of labels or a return label | **Buy shipping labels** | A site's admins and editors |
+  | Void a label | **Void shipping labels** | A site's admins and editors |
+  | Save the **Shipping labels** card | **Change shipping settings** | A site's admins |
+  | See **Paying for labels** | **Manage label charges** | A site's admins |
+  | See the **Carrier accounts** card | **Manage carrier accounts** | A site's admins |
+  | Turn Stripe balance payments on or off | **Manage label charges**, and the workspace's **Manage billing** | A site's admins who also hold **Manage billing** |
+  | Switch a carrier on or off, connect a carrier account | **Manage carrier accounts**, and the workspace's **Manage billing** | A site's admins who also hold **Manage billing** |
+  | Connect or disconnect your own shipping account | **Manage your own shipping accounts**, and the workspace's **Manage billing** | A site's admins who also hold **Manage billing** |
+  | See the **Shipping labels** card on **Billing → Usage** | **View billing** | Workspace members holding it |
 
 ## Set up labels {#shipping-labels-settings}
 
@@ -93,7 +100,7 @@ label for any quoted service from the order.
 
 ### Paying for labels {#paying-for-labels}
 
-Admins see how labels are charged here. To have each label's cost taken from
+Anyone holding **Manage label charges** sees how labels are charged here. To have each label's cost taken from
 your store's Stripe balance, tick the box that starts **I authorize Aglyn to
 take the cost of each shipping label I buy from my store’s Stripe balance**.
 Only a member who manages billing can change it.
@@ -173,7 +180,8 @@ quotes are offered, the fallback rate is hidden.
 Checkout falls back when no carrier answers within a few seconds, and until
 labels are ready for your workspace: an address to ship from, and your
 workspace set up with the carrier platform, which happens the first time
-someone gets label rates or an admin opens the **Carrier accounts** card. If
+someone gets label rates or someone holding **Manage carrier accounts** opens the
+**Carrier accounts** card. If
 live rates aren't available on your site, a **Carrier rates** rate says so and
 checkout offers the fallback rate.
 

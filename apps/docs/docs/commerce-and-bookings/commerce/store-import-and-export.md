@@ -23,8 +23,8 @@ asks how to handle every conflict before anything is written.
 | Tracking numbers | **Orders** tab, **Import tracking** | Yes, by shipping each order | Yes |
 
 You need permission to manage the site's data to import or undo an import.
-Importing gift cards also needs you to be an owner or admin of the workspace,
-or an admin of the site. Exporting needs read access to the site.
+Importing gift cards also takes **Import gift cards**, which the workspace's owners and
+admins, and a site's admins, hold by default. Exporting needs read access to the site.
 
 ## Export
 

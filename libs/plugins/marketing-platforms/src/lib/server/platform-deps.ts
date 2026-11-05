@@ -15,6 +15,9 @@
  * limitations under the License.
  */
 
+import { holdsStampedSiteKey } from '@aglyn/aglyn/app-utils/host-permissions'
+import { permissionRefusalText } from '@aglyn/aglyn/app-utils/org-permissions'
+import { MARKETING_PLATFORMS_SITE_PRESETS, type MarketingPlatformsSitePermission } from '../model/marketing-platforms-permissions'
 import { checkEntitlement } from '@aglyn/aglyn/app-utils/plan-entitlements'
 import { resolveHostEnabledPlugins } from '@aglyn/aglyn/plugin-manager/enabled-plugins'
 import { findPluginPerson, pluginPeopleChangedSince } from '@aglyn/aglyn/plugin-manager/plugin-person-records'
@@ -41,7 +44,7 @@ import { readMarketingPlatformsConfig } from './config'
 import { createCredentialOpener } from './credentials'
 import type { IntakeDeps } from './intake'
 import { marketingOAuthRedirectUri } from './oauth'
-import { fail, type MarketingGateResult, type MarketingRole, type MarketingRouteDeps } from './routes'
+import { fail, type MarketingGateResult, type MarketingRouteDeps } from './routes'
 import { createFirestoreConnectionStore, type ConnectionStore } from './store'
 import { runConnectionSync, type SyncRunDeps } from './sync-engine'
 
@@ -66,8 +69,6 @@ const http = (): ProviderHttp => httpOverride ?? defaultProviderHttp()
 
 let store: ConnectionStore | null = null
 export const platformConnectionStore = (): ConnectionStore => (store ??= createFirestoreConnectionStore(firestore))
-
-const ROLE_RANK: Record<string, number> = { viewer: 1, author: 1, editor: 2, admin: 3 }
 
 const HOST_ID = /^[A-Za-z0-9_-]{1,128}$/
 
@@ -104,7 +105,7 @@ async function readBody(request: Request): Promise<Record<string, unknown>> {
 /** Who may use a route: a verified member of the site at `role`, the site entitled and not locked. */
 export async function marketingPlatformsGate(
   request: Request,
-  role: MarketingRole,
+  permission: MarketingPlatformsSitePermission | null,
 ): Promise<MarketingGateResult | Response> {
   const authorization = request.headers.get('authorization') ?? ''
   if (!authorization.startsWith('Bearer ')) return fail(401, 'Unauthenticated')
@@ -124,8 +125,12 @@ export async function marketingPlatformsGate(
   const site = await siteContext(hostId)
   if (!site) return fail(404, 'That site was not found')
   const staff = decoded['staff'] === true
-  const memberRole = String((site.host['memberRoles'] as Record<string, unknown> | undefined)?.[decoded.uid] ?? '')
-  if (!staff && (ROLE_RANK[memberRole] ?? 0) < ROLE_RANK[role]) return fail(403, 'Not permitted')
+  const memberRoles = (site.host['memberRoles'] ?? {}) as Record<string, unknown>
+  // No key named: anyone on the site's roster reads it.
+  if (!staff && !memberRoles[decoded.uid]) return fail(403, 'Not permitted')
+  if (!staff && permission && !holdsStampedSiteKey(site.host, decoded.uid, permission, MARKETING_PLATFORMS_SITE_PRESETS[permission])) {
+    return fail(403, permissionRefusalText(permission))
+  }
   if (!site.entitled) return fail(403, 'Email platform connections come with the plans that include the CRM')
   const locked = await lockdownRefusal({
     request,
