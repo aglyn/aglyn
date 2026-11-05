@@ -31,7 +31,7 @@ import { AI_STEP_TIERS, type AiStepKind } from '../providers/catalog'
 import { AI_ROUTING_TABLE, aiModelForStep } from '../providers/routing'
 import { aiDevEffortFor } from '../runtime/ai-dev-env'
 import { runAiRequest, type AiEffort, type AiSystemBlock } from '../runtime/ai-runtime'
-import type { AssistTokenUsage } from '../usage/assist-usage'
+import type { AssistReservation, AssistTokenUsage } from '../usage/assist-usage'
 import type { AiSiteImportAddedSection, AiSiteImportPagePictures, AiSiteImportRedesign, AiSiteImportState, AiSiteImportWords } from '../model/ai-site-import'
 import type { AiSitePhotos } from '../model/ai-site-photos'
 import { aiJobStepBudget } from './ai-job-budget'
@@ -211,6 +211,8 @@ export interface AiJobStepContext {
   firestore: FirebaseFirestore.Firestore
   /** The org document the machine read for the step's reservation. */
   org?: Partial<AglynOrgBilling> | null
+  /** The reservation the machine made for this pass, for a step that spends beside its answer: a generated picture (AGL-4152). */
+  reservation?: AssistReservation
   /**
    * The model a step of this kind runs on for THIS job (AGL-2942): the
    * creator's pick where the plan and the allotment allowlists allow it,

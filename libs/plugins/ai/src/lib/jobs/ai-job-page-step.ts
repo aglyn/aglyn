@@ -101,6 +101,8 @@ import { aiResolveLayoutPictures, type AiLayoutPicturePhoto, type AiLayoutPictur
 import { pluginMediaIngest } from '@aglyn/aglyn/plugin-manager/plugin-media-ingest'
 import type { AiImageProvider } from '../providers/image-contract'
 import { vertexImageProvider } from '../providers/vertex-image'
+import { assistBandRefuses } from '../usage/assist-credits'
+import { publicAssistQuota } from '../usage/assist-usage'
 import { aiSiteImportPagePicturesOf, aiSiteImportPictureMaker, aiSiteImportPictureSource, aiSiteImportPictureTally } from './ai-site-import-pictures'
 import type { AiSiteStarterSlot } from '../model/ai-site-photos'
 import { aiLayoutPagePhotosOf, aiLayoutSitePhotoSource } from './ai-layout-owner-photos'
@@ -951,6 +953,9 @@ export function createAiJobPageStep(deps: AiJobPageStepDeps = {}): AiJobStepRunn
       const pictureTally = aiSiteImportPictureTally()
       const redesignPhotoSource = (siteSource: AiLayoutPictureSource | null): AiLayoutPictureSource | null => {
         const unplaced = new Set(redesigned?.pictures?.unplaced ?? [])
+        // A walled workspace with too little left takes no picture, as the Media door tells it.
+        const quota = stepContext.reservation ? publicAssistQuota(stepContext.reservation).credits : null
+        const walled = !!quota && assistBandRefuses(org)
         return aiSiteImportPictureSource({
           photos: [...(imported?.photos ?? []).filter((photo) => !!photo.from && unplaced.has(photo.from)), ...(imported?.sitePhotos ?? [])],
           next: siteSource
@@ -961,7 +966,7 @@ export function createAiJobPageStep(deps: AiJobPageStepDeps = {}): AiJobStepRunn
               }
             : null,
           make: imported?.generatedPictures
-            ? (deps.pictureMaker ?? aiSiteImportPictureMaker)({ provider: deps.imageProvider ? deps.imageProvider() : vertexImageProvider, ingest: (deps.ingest ?? pluginMediaIngest)(), firestore, orgId: job.orgId, hostId, uid: job.createdBy, about: aiSiteWords(job.inputs).about })
+            ? (deps.pictureMaker ?? aiSiteImportPictureMaker)({ provider: deps.imageProvider ? deps.imageProvider() : vertexImageProvider, ingest: (deps.ingest ?? pluginMediaIngest)(), firestore, orgId: job.orgId, hostId, uid: job.createdBy, about: aiSiteWords(job.inputs).about, ...(walled ? { roomFor: (credits: number) => (quota?.remaining ?? 0) >= credits } : {}) })
             : null,
           nodes: result.value.nodes,
           tally: pictureTally,

@@ -42,6 +42,7 @@ import {
   aiSiteImportLedger,
   type AiSiteImportFinish,
   type AiSiteImportPage,
+  type AiSiteImportPlan,
   type AiSiteImportState,
   type AiSiteImportWords,
   type SiteImportFooter,
@@ -397,8 +398,8 @@ export interface SiteImportReplayFrame {
 }
 
 /** A recorded home page's header and footer, drawn with no model as the layout step stores them (AGL-4108). */
-export function siteImportReplayFrame(name: SiteImportReplayHome, options: { generative?: boolean } = {}): SiteImportReplayFrame {
-  const base = replayState(name)
+export function siteImportReplayFrame(name: SiteImportReplayHome, options: { generative?: boolean; plan?: AiSiteImportPlan } = {}): SiteImportReplayFrame {
+  const base = options.plan ? { ...siteImportReplayPlanState(name), plan: options.plan, planAccepted: true as const } : replayState(name)
   const state = options.generative ? { ...base, waves: base.waves.map((wave) => ({ ...wave, generative: true as const })) } : base
   const job = {
     $id: 'importJob',

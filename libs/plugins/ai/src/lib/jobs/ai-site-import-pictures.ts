@@ -101,7 +101,9 @@ export function aiSiteImportPictureSource(input: {
   /** The most generated pictures this page may take. */
   cap?: number
 }): AiLayoutPictureSource | null {
-  const { photos, next, make, tally } = input
+  const { next, make, tally } = input
+  // A photo the library holds no size for cannot be framed.
+  const photos = input.photos.filter((photo) => photo.width && photo.height)
   if (!photos.length && !next && !make) return null
   const froms = new Map(photos.map((photo) => [photo.src, photo.from ?? '']))
   const cap = input.cap ?? AI_SITE_IMPORT_GENERATED_PICTURES_PER_PAGE
@@ -143,7 +145,7 @@ export function aiSiteImportPictureShape(aspect: number): AiImageAspectRatio {
   return [...shapes].sort((a, b) => Math.abs(a[1] - wanted) - Math.abs(b[1] - wanted))[0]?.[0] ?? '4:3'
 }
 
-/** Whether a walled workspace has credits for a picture: a paid workspace past its band is told no as the Media door tells it. */
+/** What a generated picture is made through, and whether the workspace's meter has room for it. */
 export interface AiSiteImportPictureMakerInput {
   provider: AiImageProvider | null
   ingest: PluginMediaIngest | null

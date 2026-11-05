@@ -77,7 +77,7 @@ import {
   aiSiteImportWaveRows,
   aiSiteImportWhatsNew,
 } from '../model/ai-site-import-view'
-import { siteImportReplayDocument } from '../site-import/fixtures/site-import-fidelity-replay'
+import { siteImportReplayDocument, siteImportReplayFrame, siteImportReplayPlanState } from '../site-import/fixtures/site-import-fidelity-replay'
 import { SITE_IMPORT_IMPROVE_ANSWERS } from '../site-import/fixtures/site-import-improve-answers'
 import {
   aiSiteImportDesignInputs,
@@ -601,6 +601,31 @@ describe('the frame a plan draws', () => {
     const today = aiLayoutSiteBrandOf(aiSiteImportFrameJob(importJob(state, []), state, { ...wave, generative: undefined } as never, []).inputs)
     expect(today).toMatchObject({ name: true })
     expect(today).not.toHaveProperty('height')
+  })
+
+  it.each(['tax-firm', 'contractor', 'salon', 'clinic', 'pottery'] as const)('passes every check a stored layout is held to, on %s', (name) => {
+    const state = siteImportReplayPlanState(name)
+    const pages = state.pages.filter((entry) => entry.slug !== '/')
+    const held = aiSiteImportPlanRead(
+      {
+        site: { what: 'Plain words.', audience: 'visitors', kind: 'business', voice: 'plain' },
+        nav: {
+          groups: [{ label: 'What we do', pages: pages.map((entry) => entry.draftId) }],
+          cta: { label: 'Start', target: (pages[0] as AiSiteImportPage).draftId },
+          footer: [{ label: 'Pages', pages: pages.map((entry) => entry.draftId) }],
+        },
+        design: { hero: 'split', group: 'cards', rhythm: 'alternate', cta: 'band' },
+        proposed: { title: '', slug: '', purpose: '' },
+      },
+      { state, scope: ['Plain words. visitors plain what we do start pages', ...pages.map((entry) => entry.title)], required: aiSiteImportMenuPageIds(state), roomForPage: true },
+    )
+    expect(held.violations).toEqual([])
+    const frame = siteImportReplayFrame(name, { generative: true, plan: held.plan as AiSiteImportPlan })
+    expect(frame.violations).toEqual([])
+    const nodes = Object.values(frame.tree.nodes) as Array<{ componentId?: string; props?: Record<string, unknown> }>
+    expect(nodes.some((node) => node.componentId === 'muiNavMenu' || node.componentId === 'muiMegaMenu' || node.props?.['children'] === 'What we do')).toBe(true)
+    expect(nodes.filter((node) => node.componentId === 'muiButton').every((node) => node.props?.['variant'] === 'contained')).toBe(true)
+    expect(nodes.some((node) => node.props?.['children'] === 'Pages')).toBe(true)
   })
 
   it('leaves the source’s own frame as it was with the flag off', () => {
