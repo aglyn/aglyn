@@ -301,8 +301,11 @@ const ENFORCED_AS: Record<OrgPermission, readonly string[]> = {
   // a site", the inbox's reply "Reply from the inbox" and its list assignment
   // "Add people to lists from the inbox".
   // The CRM (AGL-4047): `authorizeOrgCaller` asks "Change CRM settings", and
-  // both stage routes "Move contacts and deals between stages".
+  // both stage routes "Move contacts and deals between stages". "Change
+  // colleagues' email templates" is enforced by the `crmEmailTemplates` rule,
+  // which no route shares: the writes are client-direct.
   'crm.settings': ["'crm.settings'"],
+  'crm.colleagueTemplates': ["'crm.colleagueTemplates'"],
   'crm.moveStages': ["'crm.moveStages'"],
   'email.suppressions': ["'email.suppressions'"],
   'email.lists': ["'email.lists'"],
