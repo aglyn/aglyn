@@ -894,11 +894,12 @@ allow write: if false;
 
 
 
+
+
+
 function canReadOutreach() {
 return isOrgWideMember() &&
-(memberStamps('outreach.use') ||
-(orgMember().role in ['owner', 'admin'] &&
-memberResolves('outreach.use'))) &&
+memberKeyOrOverride('outreach.use', ['owner', 'admin']) &&
 orgCarriesOutreach(orgId);
 }
 
@@ -5153,16 +5154,43 @@ allow update: if profileOwner() && profileFieldsValid() &&
 
 
 
+
+
+
+
+
+
+
+
+
+function orgMemberKeyOrOverride(orgId, permission, presetRoles) {
+return isSignedIn() &&
+exists(/databases/$(database)/documents/orgs/$(orgId)/members/$(request.auth.uid)) &&
+memberDocKeyOrOverride(
+get(/databases/$(database)/documents/orgs/$(orgId)/members/$(request.auth.uid)).data,
+permission, presetRoles);
+}
+function memberDocKeyOrOverride(member, permission, presetRoles) {
+let stamped = member
+.get('resolvedPermissions', member.get('permissions', {}))
+.get(permission, null);
+return stamped is bool ? stamped == true : member.get('role', '') in presetRoles;
+}
+
+
+
+
+
+
+
 match /publisherProfiles/{orgId} {
 allow read: if true;
 
 
 
 function publisherManager() {
-return isStaff() || (isSignedIn() &&
-exists(/databases/$(database)/documents/orgs/$(orgId)/members/$(request.auth.uid)) &&
-get(/databases/$(database)/documents/orgs/$(orgId)/members/$(request.auth.uid))
-.data.role in ['owner', 'admin']);
+return isStaff() ||
+orgMemberKeyOrOverride(orgId, 'marketplace.publisherProfile', ['owner', 'admin']);
 }
 function publisherFieldsValid() {
 return request.resource.data.handle is string &&
@@ -5227,11 +5255,10 @@ allow create: if false;
 
 
 
+
 function listingManager() {
-return isSignedIn() &&
-exists(/databases/$(database)/documents/orgs/$(resource.data.profileId)/members/$(request.auth.uid)) &&
-get(/databases/$(database)/documents/orgs/$(resource.data.profileId)/members/$(request.auth.uid))
-.data.role in ['owner', 'admin'];
+return orgMemberKeyOrOverride(resource.data.profileId,
+'marketplace.manageListings', ['owner', 'admin']);
 }
 
 
@@ -5315,6 +5342,7 @@ allow update: if isStaff() ||
 'publisherOrgId', 'sourceComponentId', 'sourceHostId',
 'versionHistory', 'screenCount', 'previewImageUrl',
 'createdAt', 'updatedAt',
+
 
 
 

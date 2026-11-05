@@ -866,23 +866,26 @@ service cloud.firestore {
        * WHO MAY READ OUTREACH (AGL-2974): the reach, the permission and the
        * entitlement. All three.
        *
-       * THE PERMISSION is `outreach.use`, the Outreach plugin's own key —
-       * declared through `registerPluginPermissions`, not in the built-in
-       * dotted catalog — whose tier defaults grant it to admins alone, the
-       * tier the owner role resolves onto. Read the way `canReadScopedPeople`
-       * reads `data.manage`, and for the same reasons:
+       * THE PERMISSION is `outreach.use`, "Use Sequences", the Outreach
+       * plugin's own key, whose default is the owner and admins (the owner on
+       * the admin tier). Asked the way every converted rule asks a key
+       * (AGL-4047), through `memberKeyOrOverride`, and nothing about the role:
        *
-       *  - `memberStamps('outreach.use')` admits anyone a custom role or a
-       *    per-member override explicitly GRANTED it, whatever their role;
-       *  - `memberResolves('outreach.use')` refuses an owner or admin whose
-       *    grant was explicitly REVOKED, because the stamped `false` is read
-       *    before the role list gets a say;
-       *  - an absent key falls through to that role list, which is the
-       *    plugin's tier default: owners and admins in, editors and viewers
-       *    out. Tier defaults are not stamped, so every member no custom role
-       *    or override has touched lands here — and the role list is the only
-       *    reading of that absence that neither locks every workspace's
-       *    managers out nor admits every editor.
+       *  - the key as stamped on `resolvedPermissions` decides when it is
+       *    there, so a custom role or a per-member override that GRANTED it
+       *    admits any role, and one that REVOKED it refuses an owner or admin;
+       *  - a member whose map does not carry the key gets its default. That
+       *    is most members: the stamp carries a plugin key's default only
+       *    when the process that projected it had loaded the plugin's
+       *    declarations, and carries only the explicit custom-role and
+       *    override decisions otherwise (`projectMemberResolvedPermissions`),
+       *    and a member projected before the key existed carries nothing.
+       *
+       * It read `memberStamps('outreach.use') || (role in [owner, admin] &&
+       * memberResolves('outreach.use'))`, which is the same three answers
+       * spelled with the role name: the role arm was the default for an
+       * absent key, written out. Passing the default as the key's preset
+       * gives every member the verdict they had.
        *
        * THE REACH is org-wide only. A scoped site collaborator is refused even
        * holding the stamp, because these documents describe the org's selling
@@ -896,9 +899,7 @@ service cloud.firestore {
        */
       function canReadOutreach() {
         return isOrgWideMember() &&
-          (memberStamps('outreach.use') ||
-           (orgMember().role in ['owner', 'admin'] &&
-            memberResolves('outreach.use'))) &&
+          memberKeyOrOverride('outreach.use', ['owner', 'admin']) &&
           orgCarriesOutreach(orgId);
       }
 
@@ -5147,22 +5148,49 @@ service cloud.firestore {
                    'stripeAccountLivemode', 'stripePayoutsEnabled']);
     }
 
+    /**
+     * Does the signed-in person, as a member of this workspace, hold a
+     * workspace key (AGL-4047)? `memberKeyOrOverride` for a block outside
+     * `match /orgs/{orgId}`, whose helpers are scoped to it, so the org is an
+     * argument:
+     *
+     *   - the key as written on the member's `resolvedPermissions` (every
+     *     layer applied), or, for a member the projection has never stamped,
+     *     on their own `permissions` override;
+     *   - else their role in `presetRoles`, the key's default, exactly the
+     *     rule a role gate asked before it was a key.
+     *
+     * `exists()` first: reading `.data` off a missing member doc errors
+     * rather than denying cleanly. One read, the member document.
+     */
+    function orgMemberKeyOrOverride(orgId, permission, presetRoles) {
+      return isSignedIn() &&
+        exists(/databases/$(database)/documents/orgs/$(orgId)/members/$(request.auth.uid)) &&
+        memberDocKeyOrOverride(
+          get(/databases/$(database)/documents/orgs/$(orgId)/members/$(request.auth.uid)).data,
+          permission, presetRoles);
+    }
+    function memberDocKeyOrOverride(member, permission, presetRoles) {
+      let stamped = member
+        .get('resolvedPermissions', member.get('permissions', {}))
+        .get(permission, null);
+      return stamped is bool ? stamped == true : member.get('role', '') in presetRoles;
+    }
+
     // Org publisher identity (AGL-652). Publishing is ORG-ONLY: this is the
-    // org's public marketplace presence, keyed by org id so authorization is
-    // a plain role check with no ownership indirection. Public read — buyers
-    // see who they are installing from. `profiles/{uid}` above stays as the
-    // personal identity (the support forum renders author names from it) and
-    // is no longer a publisher.
+    // org's public marketplace presence, keyed by org id so authorization
+    // needs no ownership indirection. Public read — buyers see who they are
+    // installing from. `profiles/{uid}` above stays as the personal identity
+    // (the support forum renders author names from it) and is no longer a
+    // publisher.
     match /publisherProfiles/{orgId} {
       allow read: if true;
-      // The org rules' helpers are scoped to `match /orgs/{orgId}`, so this
-      // block resolves membership itself. `exists()` first: reading `.data`
-      // off a missing member doc errors rather than denying cleanly.
+      // "Edit the publisher profile" (`marketplace.publisherProfile`,
+      // AGL-4047), the key the save route asks, whose default is the owner
+      // and admins this asked for by role before. Staff as before.
       function publisherManager() {
-        return isStaff() || (isSignedIn() &&
-          exists(/databases/$(database)/documents/orgs/$(orgId)/members/$(request.auth.uid)) &&
-          get(/databases/$(database)/documents/orgs/$(orgId)/members/$(request.auth.uid))
-            .data.role in ['owner', 'admin']);
+        return isStaff() ||
+          orgMemberKeyOrOverride(orgId, 'marketplace.publisherProfile', ['owner', 'admin']);
       }
       function publisherFieldsValid() {
         return request.resource.data.handle is string &&
@@ -5224,14 +5252,13 @@ service cloud.firestore {
       // Listings are ORG-owned since AGL-652, so `profileId` holds an org
       // id. The owner check used to compare it to `request.auth.uid`, which
       // a uid can never satisfy — it did not error, it just silently denied
-      // every publisher access to their own listing. Same shape as the
-      // publisherProfiles block above; `exists()` first because reading
-      // `.data` off a missing member doc errors rather than denying.
+      // every publisher access to their own listing. A member of that org
+      // holding "Manage published listings" (`marketplace.manageListings`,
+      // AGL-4047), the key the listing routes ask, whose default is the
+      // owner and admins this asked for by role before.
       function listingManager() {
-        return isSignedIn() &&
-          exists(/databases/$(database)/documents/orgs/$(resource.data.profileId)/members/$(request.auth.uid)) &&
-          get(/databases/$(database)/documents/orgs/$(resource.data.profileId)/members/$(request.auth.uid))
-            .data.role in ['owner', 'admin'];
+        return orgMemberKeyOrOverride(resource.data.profileId,
+          'marketplace.manageListings', ['owner', 'admin']);
       }
       // Owners may write their listing's copy client-side, but
       // must NOT touch server-managed fields (AGL-503): installCount is
@@ -5327,9 +5354,10 @@ service cloud.firestore {
                      // first-party media, which is the actual fix; this line
                      // is what makes that fix load-bearing rather than
                      // advisory. `marketplaceListings` is `allow read: if
-                     // true` and a listingManager is any org owner/admin, so
-                     // while these keys were writable here the API was one
-                     // way to set them, not the way — a publisher could put
+                     // true` and a listingManager is any member holding
+                     // "Manage published listings", so while these keys
+                     // were writable here the API was one way to set them,
+                     // not the way — a publisher could put
                      // an arbitrary beacon host in either field with a direct
                      // client write and never touch the route that validates.
                      'logoUrl', 'screenshots',

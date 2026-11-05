@@ -24,6 +24,16 @@
  * and as the buyer. The staff review and report queues read through Admin-SDK
  * routes, which the rules do not see. `FIRESTORE_EMULATOR_PORT` points it at
  * an emulator on another port.
+ *
+ * The publisher's own writes (AGL-4047) close it: a client update of the
+ * workspace's publisher profile asks "Edit the publisher profile"
+ * (`marketplace.publisherProfile`) and one of a published listing's copy asks
+ * "Manage published listings" (`marketplace.manageListings`), of a member of
+ * the publishing workspace, read off their stamped permissions with the
+ * owner and admin roles as the default — exactly who the role lists let in
+ * before. Half the rows are lockout controls: the owner and admin with no
+ * stamp, and the admin whose stamp was written without the key, are what
+ * every publisher looks like today.
  */
 import { readFileSync } from 'node:fs'
 import {
@@ -41,6 +51,7 @@ import {
   orderBy,
   query,
   setDoc,
+  updateDoc,
   where,
 } from 'firebase/firestore'
 
@@ -53,6 +64,33 @@ const env = await initializeTestEnvironment({
     rules: readFileSync('cloud/firebase-firestore.deploy.rules', 'utf8'),
   },
 })
+
+/** The publishing workspace's members (AGL-4047), each as the projection writes them. */
+const PUBLISHER_ORG = 'pub-org'
+const PROFILE_KEY = 'marketplace.publisherProfile'
+const LISTINGS_KEY = 'marketplace.manageListings'
+const PUBLISHER_MEMBERS = {
+  'pub-owner': { role: 'owner', allHosts: true },
+  'pub-admin': { role: 'admin', allHosts: true },
+  // Stamped before the keys existed: the map carries others, not these.
+  'pub-admin-stamped': { role: 'admin', allHosts: true, resolvedPermissions: { 'data.manage': true } },
+  'pub-editor': { role: 'editor', allHosts: true },
+  'pub-viewer': { role: 'viewer', allHosts: true },
+  // A custom role granted both: the projection stamped them.
+  'pub-editor-granted': {
+    role: 'editor',
+    allHosts: true,
+    resolvedPermissions: { [PROFILE_KEY]: true, [LISTINGS_KEY]: true },
+  },
+  // A member's own override, on a member the projection never stamped.
+  'pub-viewer-override': { role: 'viewer', allHosts: true, permissions: { [LISTINGS_KEY]: true } },
+  // An admin a custom role took both from.
+  'pub-admin-revoked': {
+    role: 'admin',
+    allHosts: true,
+    resolvedPermissions: { [PROFILE_KEY]: false, [LISTINGS_KEY]: false },
+  },
+}
 
 const results = []
 const check = async (label, fn) => {
@@ -78,6 +116,13 @@ await env.withSecurityRulesDisabled(async (c) => {
     sellerOrgId: 'seller1',
     refundedAt: null,
   })
+  // The publishing workspace (AGL-4047), its profile and one listing.
+  for (const [uid, member] of Object.entries(PUBLISHER_MEMBERS)) {
+    await setDoc(doc(db, 'orgs', PUBLISHER_ORG, 'members', uid), member)
+  }
+  await setDoc(doc(db, 'orgs', 'other-org', 'members', 'pub-outsider'), { role: 'owner', allHosts: true })
+  await setDoc(doc(db, 'publisherProfiles', PUBLISHER_ORG), { handle: 'pub-test', displayName: 'Pub Test' })
+  await setDoc(doc(db, 'marketplaceListings', 'l-pub'), { profileId: PUBLISHER_ORG, displayName: 'Pub listing' })
   await setDoc(doc(db, 'marketplacePurchases', 'cs_2'), {
     listingId: 'l1',
     buyerUid: 'member1',
@@ -214,6 +259,42 @@ await check('a stranger cannot list someone else’s receipts', () =>
     ),
   ),
 )
+
+// THE PUBLISHER'S OWN WRITES (AGL-4047).
+const as = (uid) => env.authenticatedContext(uid, { email_verified: true }).firestore()
+const profileEdit = (db) =>
+  updateDoc(doc(db, 'publisherProfiles', PUBLISHER_ORG), { accentNote: 'blue' })
+const listingEdit = (db) => updateDoc(doc(db, 'marketplaceListings', 'l-pub'), { tags: ['forms'] })
+const PUBLISHER_CASES = [
+  // [uid, may edit the profile, may edit the listing, why]
+  ['pub-owner', true, true, 'the owner, no stamp: the default'],
+  ['pub-admin', true, true, 'an admin, no stamp: the default'],
+  ['pub-admin-stamped', true, true, 'an admin stamped without the keys: the default'],
+  ['pub-editor', false, false, 'an editor, no stamp: the default refuses'],
+  ['pub-viewer', false, false, 'a viewer, no stamp: the default refuses'],
+  ['pub-editor-granted', true, true, 'an editor a custom role granted both'],
+  ['pub-viewer-override', false, true, 'a viewer whose own override grants the listings'],
+  ['pub-admin-revoked', false, false, 'an admin a custom role took both from'],
+  ['pub-outsider', false, false, 'the owner of another workspace'],
+]
+for (const [uid, profile, listing, why] of PUBLISHER_CASES) {
+  await check(`${why}: ${profile ? 'edits' : 'cannot edit'} the publisher profile`, () =>
+    (profile ? assertSucceeds : assertFails)(profileEdit(as(uid))),
+  )
+  await check(`${why}: ${listing ? 'edits' : 'cannot edit'} the listing's copy`, () =>
+    (listing ? assertSucceeds : assertFails)(listingEdit(as(uid))),
+  )
+}
+await check('the key opens no server-owned field: a granted editor cannot rename the handle', () =>
+  assertFails(updateDoc(doc(as('pub-editor-granted'), 'publisherProfiles', PUBLISHER_ORG), { handle: 'taken-over' })),
+)
+await check('the key opens no server-owned field: a granted editor cannot set the price', () =>
+  assertFails(updateDoc(doc(as('pub-editor-granted'), 'marketplaceListings', 'l-pub'), { priceUsd: 0 })),
+)
+await check('a stranger signed out edits neither', async () => {
+  await assertFails(profileEdit(anon))
+  await assertFails(listingEdit(anon))
+})
 
 await env.cleanup()
 for (const [status, label, detail] of results) {
