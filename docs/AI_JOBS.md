@@ -2594,6 +2594,9 @@ whose passes each do one unit (`aiSiteImportNextWork`):
    declaring `:root` custom properties first, to 3 MB in all, so a page's read
    costs at most 3.8 MB; `:is()`, `:where()` and `var()` chains and triples are
    read through), and its VIDEOS (AGL-4140,
+   own stylesheets (`site-import-css.ts`), a grid whose children name their
+   places (`grid-area`, `grid-row`, `grid-column`) read in the rows, columns and
+   pairing a visitor sees rather than the markup's order (AGL-4152), and its VIDEOS (AGL-4140,
    `readVideos`, at most 10 a page, `AiSiteImportPageRead.videos`): a
    `<video>`, an `<iframe>` of a host a `videoEmbedProviders` declaration
    names, a facade (a `lite-youtube`/`lite-vimeo`, a `data-*-id` element, a

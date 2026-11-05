@@ -82,6 +82,17 @@ const KEPT_PROPERTIES = new Set([
   'display',
   'grid-template-columns',
   'grid-column',
+  // Where a grid places its children, and the order a row shows them in (AGL-4152).
+  'grid-template-rows',
+  'grid-template-areas',
+  'grid-auto-flow',
+  'grid-area',
+  'grid-row',
+  'grid-row-start',
+  'grid-row-end',
+  'grid-column-start',
+  'grid-column-end',
+  'order',
   'flex',
   'flex-direction',
   'flex-wrap',
@@ -109,6 +120,9 @@ const KEPT_PROPERTIES = new Set([
   'justify-content',
   'align-items',
 ])
+
+/** What a rule says of a child's place in its grid, which a breakpoint nested in the rule may say again (AGL-4152). */
+const GRID_PLACEMENT = /^(?:grid-area|grid-row|grid-row-start|grid-row-end|grid-column|grid-column-start|grid-column-end|order)$/
 
 /** What an element takes from its parent when it says nothing itself. */
 const INHERITED = new Set(['color', 'font-family', 'font-size', 'font-weight', 'text-transform', 'letter-spacing', 'text-align', 'visibility'])
@@ -486,7 +500,11 @@ export function siteImportCssOf(sheets: readonly string[], viewport: number = SI
         if (family && !css.fontFaces.includes(family)) css.fontFaces.push(family)
       } else if (!prelude.startsWith('@') && applies && prelude) {
         // A rule nested inside a rule (`&:hover`) is a state: only the outer declarations are read.
-        addRule(prelude, body.replace(/[^;{}]*\{[^{}]*\}/g, ''))
+        // A breakpoint nested inside one that holds at this width places its child as a top-level one does.
+        const placed = [...body.matchAll(/@media([^{};]*)\{([^{}]*)\}/g)]
+          .filter((match) => mediaHolds(match[1] as string, viewport, scheme))
+          .flatMap((match) => (match[2] as string).split(';').filter((part) => GRID_PLACEMENT.test(part.slice(0, part.indexOf(':')).trim().toLowerCase())))
+        addRule(prelude, [body.replace(/[^;{}]*\{[^{}]*\}/g, ''), ...placed].join(';'))
       }
       start = at = end
     }
@@ -1057,6 +1075,199 @@ export function siteImportGridColumns(template: string | undefined): number[] | 
       return 1
     })
   return weights.length ? weights : null
+}
+
+/** A template's top-level words: a track, a `repeat()` or a `[line name]`. */
+function gridTemplateWords(template: string): string[] {
+  const words: string[] = []
+  let depth = 0
+  let word = ''
+  for (const char of template) {
+    if (char === '(' || char === '[') depth += 1
+    if (char === ')' || char === ']') depth -= 1
+    if (/\s/.test(char) && depth === 0) {
+      if (word) words.push(word)
+      word = ''
+    } else word += char
+  }
+  if (word) words.push(word)
+  return words
+}
+
+/**
+ * How many tracks a grid template draws (AGL-4152), each `repeat()` opened at
+ * its whole count; `null` for none, or where the screen decides (`auto-fill`).
+ */
+export function siteImportGridTrackCount(template: string | undefined): number | null {
+  const text = template?.trim() ?? ''
+  if (!text || /^(?:none|subgrid|masonry|inherit|initial|unset)$/.test(text)) return null
+  let count = 0
+  for (const word of gridTemplateWords(text)) {
+    if (word.startsWith('[')) continue
+    const repeat = /^repeat\(([\s\S]*)\)$/.exec(word)
+    if (!repeat) {
+      count += 1
+      continue
+    }
+    const [times, ...tracks] = splitList(repeat[1] as string)
+    const inner = siteImportGridTrackCount(tracks.join(','))
+    if (!/^\d+$/.test(times ?? '') || inner === null) return null
+    count += Number(times) * inner
+  }
+  return count || null
+}
+
+/** The cells a child of a grid covers, by grid line: `rowEnd` and `columnEnd` are the lines after its last row and column. */
+export interface SiteImportGridBox {
+  rowStart: number
+  rowEnd: number
+  columnStart: number
+  columnEnd: number
+}
+
+/** A child's place along one axis: the line it starts at, `null` where the grid's flow decides, and how many tracks it covers. */
+interface GridAxis {
+  start: number | null
+  span: number
+}
+
+/** One written line of a placement: a line number, a span, or nothing a reader can place (`auto`, a named line). */
+function gridLineOf(value: string | undefined, tracks: number | null): { line?: number; span?: number } {
+  const text = value?.trim() ?? ''
+  const span = /^span\s+(\d+)$/.exec(text)
+  if (span) return { span: Math.max(1, Number(span[1])) }
+  if (!/^-?\d+$/.test(text)) return {}
+  const line = Number(text)
+  if (line > 0) return { line }
+  // A line counted from the end: the last there is, where the template does not say how many.
+  if (line < 0) return { line: tracks === null ? Number.POSITIVE_INFINITY : Math.max(1, tracks + 2 + line) }
+  return {}
+}
+
+function gridAxisOf(startValue: string | undefined, endValue: string | undefined, tracks: number | null): GridAxis {
+  const start = gridLineOf(startValue, tracks)
+  const end = gridLineOf(endValue, tracks)
+  if (start.line === Number.POSITIVE_INFINITY) return { start: null, span: 1 }
+  if (start.line !== undefined && end.line !== undefined) {
+    const from = Math.min(start.line, end.line)
+    return { start: from, span: Math.max(1, Math.max(start.line, end.line) - from) }
+  }
+  if (start.line !== undefined) return { start: start.line, span: end.span ?? 1 }
+  if (end.line !== undefined && end.line !== Number.POSITIVE_INFINITY) {
+    const span = start.span ?? 1
+    return { start: Math.max(1, end.line - span), span }
+  }
+  return { start: null, span: start.span ?? end.span ?? 1 }
+}
+
+/** The boxes a `grid-template-areas` names, by name. */
+function gridAreasOf(template: string | undefined): Map<string, SiteImportGridBox> {
+  const areas = new Map<string, SiteImportGridBox>()
+  const rows = [...(template ?? '').matchAll(/"([^"]*)"|'([^']*)'/g)].map((match) => (match[1] ?? match[2] ?? '').trim().split(/\s+/))
+  rows.forEach((names, row) => {
+    names.forEach((name, column) => {
+      if (!name || /^\.+$/.test(name)) return
+      const held = areas.get(name)
+      if (!held) areas.set(name, { rowStart: row + 1, rowEnd: row + 2, columnStart: column + 1, columnEnd: column + 2 })
+      else {
+        held.rowEnd = Math.max(held.rowEnd, row + 2)
+        held.columnEnd = Math.max(held.columnEnd, column + 2)
+      }
+    })
+  })
+  return areas
+}
+
+/** A flex or grid child's `order`, 0 where it sets none. */
+export function siteImportOrderOf(style: SiteImportComputedStyle): number {
+  const order = Number.parseInt(style.get('order') ?? '', 10)
+  return Number.isNaN(order) ? 0 : order
+}
+
+/**
+ * Where a grid places its children (AGL-4152), each child's cells by grid
+ * line, as a browser lays them out: the lines each child names (by
+ * `grid-area`, a named area, `grid-row` or `grid-column`, a longhand over the
+ * shorthand; lines from the end read from the template), then the children it
+ * leaves to the grid's flow, in `order`, each in the first cells free.
+ *
+ * `null` where it cannot say, or there is nothing to say: no child names a
+ * place (a `span` says how wide, and `1 / -1` the whole row, not where), the
+ * rest of the children flow by columns, or through tracks the screen decides.
+ */
+export function siteImportGridBoxes(container: SiteImportComputedStyle, items: readonly SiteImportComputedStyle[]): SiteImportGridBox[] | null {
+  const areas = gridAreasOf(container.get('grid-template-areas'))
+  const named = [...areas.values()]
+  const columns = siteImportGridTrackCount(container.get('grid-template-columns')) ?? (named.length ? Math.max(...named.map((area) => area.columnEnd)) - 1 : null)
+  const rows = siteImportGridTrackCount(container.get('grid-template-rows')) ?? (named.length ? Math.max(...named.map((area) => area.rowEnd)) - 1 : null)
+  const places = items.map((item) => {
+    const [rowStart, columnStart, rowEnd, columnEnd] = (item.get('grid-area') ?? '').split('/').map((part) => part.trim())
+    const area = rowStart && columnStart === undefined ? areas.get(rowStart) : undefined
+    const row = item.get('grid-row')?.split('/') ?? [rowStart, rowEnd]
+    const column = item.get('grid-column')?.split('/') ?? [columnStart, columnEnd]
+    return {
+      row: area ? { start: area.rowStart, span: area.rowEnd - area.rowStart } : gridAxisOf(item.get('grid-row-start') ?? row[0], item.get('grid-row-end') ?? row[1], rows),
+      column: area ? { start: area.columnStart, span: area.columnEnd - area.columnStart } : gridAxisOf(item.get('grid-column-start') ?? column[0], item.get('grid-column-end') ?? column[1], columns),
+    }
+  })
+  const wholeRow = (axis: GridAxis) => axis.start === 1 && (axis.span === Number.POSITIVE_INFINITY || (columns !== null && axis.span >= columns))
+  if (!places.some((place) => place.row.start !== null || (place.column.start !== null && !wholeRow(place.column)))) return null
+  const flows = places.some((place) => place.row.start === null || place.column.start === null)
+  if (flows && (columns === null || /\bcolumn\b/.test(container.get('grid-auto-flow') ?? ''))) return null
+
+  const finite = (value: number) => (Number.isFinite(value) ? value : 0)
+  const lastRow = Math.max(rows === null ? 1 : rows + 1, ...places.map((place) => (place.row.start ?? 0) + finite(place.row.span)))
+  const lastColumn = columns === null ? Math.max(...places.map((place) => (place.column.start ?? 0) + finite(place.column.span))) : columns + 1
+  const boxes: Array<SiteImportGridBox | null> = places.map(() => null)
+  const free = (row: number, column: number, height: number, width: number) =>
+    boxes.every((box) => !box || box.rowEnd <= row || box.rowStart >= row + height || box.columnEnd <= column || box.columnStart >= column + width)
+  const put = (at: number, row: number, column: number, height: number, width: number) => {
+    boxes[at] = { rowStart: row, rowEnd: row + height, columnStart: column, columnEnd: column + width }
+  }
+  const heightOf = (axis: GridAxis, row: number) => (Number.isFinite(axis.span) ? axis.span : Math.max(1, lastRow - row))
+  const widthOf = (axis: GridAxis, column: number) => Math.max(1, Math.min(axis.span, lastColumn - column))
+  const inOrder = places.map((_, at) => at).sort((a, b) => siteImportOrderOf(items[a] as SiteImportComputedStyle) - siteImportOrderOf(items[b] as SiteImportComputedStyle) || a - b)
+  // Rows and columns both named first, whatever their order: nothing flows into them.
+  for (const at of inOrder) {
+    const { row, column } = places[at] as (typeof places)[number]
+    if (row.start !== null && column.start !== null) put(at, row.start, column.start, heightOf(row, row.start), widthOf(column, column.start))
+  }
+  // A row named and its column not: the first cells free in that row.
+  for (const at of inOrder) {
+    const { row, column } = places[at] as (typeof places)[number]
+    if (row.start === null || column.start !== null) continue
+    const height = heightOf(row, row.start)
+    const width = widthOf(column, 1)
+    let left = 1
+    while (left + width < lastColumn && !free(row.start, left, height, width)) left += 1
+    put(at, row.start, left, height, width)
+  }
+  // The rest, in the order they flow: a cursor down the grid, never back.
+  let cursorRow = 1
+  let cursorColumn = 1
+  for (const at of inOrder) {
+    if (boxes[at]) continue
+    const { row, column } = places[at] as (typeof places)[number]
+    const height = heightOf(row, 1)
+    if (column.start !== null) {
+      const width = widthOf(column, column.start)
+      if (column.start < cursorColumn) cursorRow += 1
+      cursorColumn = column.start
+      while (!free(cursorRow, cursorColumn, height, width)) cursorRow += 1
+      put(at, cursorRow, cursorColumn, height, width)
+      continue
+    }
+    const width = widthOf(column, 1)
+    while (cursorColumn + width > lastColumn || !free(cursorRow, cursorColumn, height, width)) {
+      cursorColumn += 1
+      if (cursorColumn + width > lastColumn) {
+        cursorColumn = 1
+        cursorRow += 1
+      }
+    }
+    put(at, cursorRow, cursorColumn, height, width)
+  }
+  return boxes as SiteImportGridBox[]
 }
 
 /** Weights scaled to twelfths, each at least 1: `[420, 788]` is `[4, 8]`. */

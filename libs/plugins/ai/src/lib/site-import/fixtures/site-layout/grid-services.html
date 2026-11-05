@@ -1,0 +1,93 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<title>Fern and Stone Gardens</title>
+<meta name="description" content="Garden design, planting and seasonal care for homes and small businesses.">
+<style>
+.band-open { background-color: #ffffff; }
+.band-services { background-color: #f4f1ea; }
+.band-gallery { background-color: #ffffff; }
+</style>
+</head>
+<body>
+<header><a href="/"><img src="https://www.fern-and-stone.example/media/logo.png" alt="Fern and Stone Gardens"></a><nav><a href="/services">Services</a><a href="/contact">Contact</a></nav></header>
+<main>
+<section class="band-open">
+<style>
+.plan-a1 { display: grid; --gutter: calc(var(--page-gutter, 4vw) - 11px); grid-template-rows: repeat(6, minmax(24px, auto)); grid-template-columns: minmax(var(--gutter), 1fr) repeat(8, minmax(0, var(--cell, 80px))) minmax(var(--gutter), 1fr); }
+.spot-a1 { grid-area: 1/2/3/10; }
+.spot-a2 { grid-area: 3/2/5/10; }
+.spot-a3 { grid-area: 5/2/6/10; }
+@media (min-width: 768px) {
+  .plan-a1 { grid-template-rows: repeat(10, minmax(24px, auto)); grid-template-columns: minmax(var(--gutter), 1fr) repeat(24, minmax(0, calc((var(--page-width, 1500px) - (11px * 23)) / 24))) minmax(var(--gutter), 1fr); }
+  .spot-a1 { grid-area: 2/2/5/26; }
+  .spot-a2 { grid-area: 5/2/7/26; }
+  .spot-a3 { grid-area: 7/2/9/8; }
+}
+</style>
+<div class="plan-a1">
+<div class="spot-a1"><h1>Gardens that grow with you</h1></div>
+<div class="spot-a2"><p>Design, planting and care for the spaces you use every day, from a first sketch to the last leaf of autumn.</p></div>
+<div class="spot-a3"><a class="action" href="/contact">Book a visit</a></div>
+</div>
+</section>
+<section class="band-services">
+<style>
+.plan-b1 { display: grid; --gutter: calc(var(--page-gutter, 4vw) - 11px); grid-template-rows: repeat(40, minmax(24px, auto)); grid-template-columns: minmax(var(--gutter), 1fr) repeat(8, minmax(0, var(--cell, 80px))) minmax(var(--gutter), 1fr); }
+.spot-b0 { grid-area: 1/2/3/10; }
+.spot-b1 { grid-area: 3/2/9/10; }
+.spot-b2 { grid-area: 9/2/11/10; }
+.spot-b3 { grid-area: 11/2/13/10; }
+.spot-b4 { grid-area: 13/2/19/10; }
+.spot-b5 { grid-area: 19/2/21/10; }
+.spot-b6 { grid-area: 21/2/23/10; }
+.spot-b7 { grid-area: 23/2/29/10; }
+.spot-b8 { grid-area: 29/2/31/10; }
+.spot-b9 { grid-area: 31/2/33/10; }
+@media (min-width: 768px) {
+  .plan-b1 { grid-template-rows: repeat(25, minmax(24px, auto)); grid-template-columns: minmax(var(--gutter), 1fr) repeat(24, minmax(0, calc((var(--page-width, 1500px) - (11px * 23)) / 24))) minmax(var(--gutter), 1fr); }
+  .spot-b0 { grid-area: 1/2/3/20; }
+  .spot-b1 { grid-area: 4/2/14/10; }
+  .spot-b2 { grid-area: 15/2/17/9; }
+  .spot-b3 { grid-area: 17/2/20/10; }
+  .spot-b4 { grid-area: 4/10/14/18; }
+  .spot-b5 { grid-area: 15/10/17/17; }
+  .spot-b6 { grid-area: 17/10/20/18; }
+  .spot-b7 { grid-area: 4/18/14/26; }
+  .spot-b8 { grid-area: 15/18/17/25; }
+  .spot-b9 { grid-area: 17/18/21/26; }
+}
+</style>
+<div class="plan-b1">
+<div class="spot-b0"><h2>What we do</h2></div>
+<div class="spot-b1"><img src="https://www.fern-and-stone.example/media/design.jpg" alt="A sketched garden plan" width="1600" height="1200"></div>
+<div class="spot-b2"><h3>Garden design</h3></div>
+<div class="spot-b3"><p>A plan drawn for your light, your soil and the way you live outside.</p><p><a href="/services/design">Plan a garden</a></p></div>
+<div class="spot-b4"><img src="https://www.fern-and-stone.example/media/planting.jpg" alt="Young plants in a raised bed" width="1600" height="1200"></div>
+<div class="spot-b5"><h3>Planting</h3></div>
+<div class="spot-b6"><p>Native shrubs and perennials set out by a crew that stays until they settle.</p><p><a href="/services/planting">Start planting</a></p></div>
+<div class="spot-b7"><img src="https://www.fern-and-stone.example/media/care.jpg" alt="Pruning shears on a stone wall" width="1600" height="1200"></div>
+<div class="spot-b8"><h3>Seasonal care</h3></div>
+<div class="spot-b9"><p>Pruning, feeding and clean-up four times a year, on a calendar you can see.</p><p><a href="/services/care">Book a season</a></p></div>
+</div>
+</section>
+<section class="band-gallery">
+<style>
+.plan-c1 { display: grid; grid-template-rows: repeat(12, minmax(24px, auto)); grid-template-columns: repeat(12, minmax(0, 1fr)); }
+.spot-c1 { grid-area: 1/1/5/13; }
+.spot-c2 { grid-area: 5/1/9/13; }
+@media (min-width: 992px) {
+  .spot-c1 { grid-area: 1/1/8/7; }
+  .spot-c2 { grid-area: 1/7/8/13; }
+}
+</style>
+<div class="plan-c1">
+<div class="spot-c1"><img src="https://www.fern-and-stone.example/media/patio.jpg" alt="A stone patio at dusk" width="1200" height="1200"></div>
+<div class="spot-c2"><img src="https://www.fern-and-stone.example/media/border.jpg" alt="A long border in flower" width="1200" height="1200"></div>
+</div>
+</section>
+</main>
+<footer><p>© 2026 Fern and Stone Gardens</p></footer>
+</body>
+</html>

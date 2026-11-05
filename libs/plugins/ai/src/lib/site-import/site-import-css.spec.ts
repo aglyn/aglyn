@@ -31,7 +31,9 @@ import {
   SITE_IMPORT_CSS_WIDE_WIDTH,
   siteImportCssOf,
   siteImportFontFamilies,
+  siteImportGridBoxes,
   siteImportGridColumns,
+  siteImportGridTrackCount,
   siteImportHasBorder,
   siteImportHex,
   siteImportStylesOf,
@@ -264,5 +266,63 @@ describe('a page’s dark scheme (AGL-4152)', () => {
   it('finds none in aglyn.com’s Home: its dark palette is in its script', () => {
     const page = extractSiteImportPage(siteLayoutRecording('home'), SITE_LAYOUT_PAGES.home.url, siteLayoutSameSite('home'), { structure: true })
     expect(siteImportCssOf(page.structure?.styles ?? [], undefined, { scheme: 'dark' }).darkRules).toBe(0)
+  })
+})
+
+describe('where a grid places its children (AGL-4152)', () => {
+  const style = (entries: Record<string, string>) => new Map(Object.entries(entries))
+  const grid = (entries: Record<string, string> = {}) => style({ display: 'grid', 'grid-template-columns': 'repeat(3, 1fr)', ...entries })
+  const box = (rowStart: number, columnStart: number, rowEnd: number, columnEnd: number) => ({ rowStart, columnStart, rowEnd, columnEnd })
+
+  it('counts a template’s tracks, a repeat of a calculation opened, the screen’s own count unknown', () => {
+    expect(siteImportGridTrackCount('minmax(calc(4vw - 11px), 1fr) repeat(24, minmax(0, calc((1500px - (11px * 23)) / 24))) minmax(calc(4vw - 11px), 1fr)')).toBe(26)
+    expect(siteImportGridTrackCount('[full-start] 1fr [mid] repeat(2, 1fr 2fr) [full-end]')).toBe(5)
+    expect(siteImportGridTrackCount('repeat(auto-fill, minmax(240px, 1fr))')).toBeNull()
+    expect(siteImportGridTrackCount(undefined)).toBeNull()
+    expect(siteImportGridTrackCount('none')).toBeNull()
+  })
+
+  it('reads every way a child is placed, lines from the end included', () => {
+    const boxes = siteImportGridBoxes(grid({ 'grid-template-rows': 'repeat(4, auto)' }), [
+      style({ 'grid-area': '1 / 2 / 3 / 4' }),
+      style({ 'grid-row': '3', 'grid-column': '1' }),
+      style({ 'grid-row-start': '3', 'grid-row-end': 'span 2', 'grid-column-start': '2', 'grid-column-end': '-1' }),
+      style({ 'grid-row': '1 / -1', 'grid-column': '1 / span 1' }),
+    ])
+    expect(boxes).toEqual([box(1, 2, 3, 4), box(3, 1, 4, 2), box(3, 2, 5, 4), box(1, 1, 5, 2)])
+  })
+
+  it('reads named areas from the container’s own template', () => {
+    const container = style({ display: 'grid', 'grid-template-areas': '"a a b" "c c b"' })
+    expect(siteImportGridBoxes(container, [style({ 'grid-area': 'b' }), style({ 'grid-area': 'a' }), style({ 'grid-area': 'c' })])).toEqual([box(1, 3, 3, 4), box(1, 1, 2, 3), box(2, 1, 3, 3)])
+  })
+
+  it('places the children it does not name as a browser would, `order` first', () => {
+    expect(siteImportGridBoxes(grid(), [style({}), style({ 'grid-column': '2 / 4', 'grid-row': '1' }), style({}), style({ order: '-1' })])).toEqual([box(2, 1, 3, 2), box(1, 2, 2, 4), box(2, 2, 3, 3), box(1, 1, 2, 2)])
+    expect(siteImportGridBoxes(grid(), [style({ 'grid-column': '2' }), style({ 'grid-column': '1' })])).toEqual([box(1, 2, 2, 3), box(2, 1, 3, 2)])
+  })
+
+  it('says nothing where no child says where it goes: a width alone, or the whole row, places nothing', () => {
+    expect(siteImportGridBoxes(grid(), [style({ 'grid-column': '1 / -1' }), style({}), style({})])).toBeNull()
+    expect(siteImportGridBoxes(grid(), [style({ 'grid-column': 'span 2' }), style({ 'grid-column': 'span 1' })])).toBeNull()
+    expect(siteImportGridBoxes(grid(), [style({}), style({})])).toBeNull()
+  })
+
+  it('says nothing where it cannot place the rest as a browser would', () => {
+    expect(siteImportGridBoxes(grid({ 'grid-template-columns': 'repeat(auto-fill, 100px)' }), [style({ 'grid-row': '2' }), style({})])).toBeNull()
+    expect(siteImportGridBoxes(grid({ 'grid-auto-flow': 'column' }), [style({ 'grid-row': '2' }), style({})])).toBeNull()
+    expect(siteImportGridBoxes(grid(), [style({ 'grid-row': 'content-start' }), style({ 'grid-column': 'main' })])).toBeNull()
+  })
+
+  it('keeps the placement properties through the cascade, as a wide screen reads them', () => {
+    const read = styled(
+      '<div id="box"><p id="a">One</p></div>',
+      ['#a { grid-area: 3/2/5/10; order: 2 } @media (min-width: 768px) { #a { grid-area: 2/2/6/26; order: 1 } } #box { grid-template-rows: repeat(2, auto); grid-template-areas: "x"; grid-auto-flow: row }'],
+    )
+    expect(read('a').get('grid-area')).toBe('2/2/6/26')
+    expect(read('a').get('order')).toBe('1')
+    expect(read('box').get('grid-template-rows')).toBe('repeat(2, auto)')
+    expect(read('box').get('grid-template-areas')).toBe('"x"')
+    expect(read('box').get('grid-auto-flow')).toBe('row')
   })
 })

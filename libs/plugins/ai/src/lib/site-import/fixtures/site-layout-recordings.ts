@@ -34,6 +34,11 @@
  * `<video>` playing behind its opening, a YouTube frame, a `lite-youtube`
  * facade, a card's picture linking a Vimeo page, and an `og:video` in its
  * head.
+ * A garden firm that does not exist either, in the markup a visual grid builder
+ * writes (AGL-4152), places every block with a rule of its own on a 24-column
+ * grid, inside a `min-width` query: `grid-services` shows three cards and a row
+ * of pictures, `swapped-grid` a page whose written order is not the order a
+ * visitor reads, so each card's words sit after the next card's heading.
  *
  * The aglyn.com recordings keep what the `aglyn-com/` ones dropped and the
  * layout is made of: class names, inline icons and the page's own stylesheet.
@@ -60,6 +65,7 @@ const DIR = join(__dirname, 'site-layout')
 export const SITE_LAYOUT_AGLYN_ORIGIN = 'https://aglyn.com'
 export const SITE_LAYOUT_POTTERY_ORIGIN = 'https://www.tidewater-pottery.example'
 export const SITE_LAYOUT_BAKERY_ORIGIN = 'https://www.hearth-bakery.example'
+export const SITE_LAYOUT_GARDEN_ORIGIN = 'https://www.fern-and-stone.example'
 
 /** The recorded pages, by name: the file and the address it was read from. */
 export const SITE_LAYOUT_PAGES = {
@@ -72,6 +78,8 @@ export const SITE_LAYOUT_PAGES = {
   blog: { file: 'aglyn-blog.html', url: `${SITE_LAYOUT_AGLYN_ORIGIN}/blog` },
   pottery: { file: 'squarespace-pottery.html', url: `${SITE_LAYOUT_POTTERY_ORIGIN}/` },
   bakery: { file: 'video-bakery.html', url: `${SITE_LAYOUT_BAKERY_ORIGIN}/` },
+  gridServices: { file: 'grid-services.html', url: `${SITE_LAYOUT_GARDEN_ORIGIN}/` },
+  swappedGrid: { file: 'swapped-grid.html', url: `${SITE_LAYOUT_GARDEN_ORIGIN}/plans` },
 } as const
 
 export type SiteLayoutPageName = keyof typeof SITE_LAYOUT_PAGES
