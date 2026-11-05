@@ -562,6 +562,10 @@
       "why": "The marketplace plugin's site keys (install into a site, publish from one) and their site-role preset, assembled into the contracts' ORG_ROLE_GRANTS (AGL-4047); type-only imports."
     },
     {
+      "path": "libs/plugins/marketplace/src/lib/model/marketplace-publisher-permissions.ts",
+      "why": "The marketplace plugin's publisher keys (edit the publisher profile, manage published listings) and their tier defaults, assembled into the contracts' ORG_ROLE_GRANTS (AGL-4047); type-only imports."
+    },
+    {
       "path": "libs/plugins/workflows/src/lib/model/workflows-permissions.ts",
       "why": "The workflows plugin's keys (manage the organization's automations, pause one on a site) and their presets, assembled into the contracts' ORG_ROLE_GRANTS (AGL-4047); type-only imports."
     },

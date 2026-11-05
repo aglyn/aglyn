@@ -102,7 +102,7 @@
       "note": "The health probe picks a member of its own test site."
     },
     "cloud/firebase-firestore.deploy.rules": {
-      "count": 71,
+      "count": 53,
       "kind": "pending"
     },
     "libs/plugins/ai/src/lib/jobs/ai-layout-stock-photos.ts": {

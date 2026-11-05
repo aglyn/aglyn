@@ -275,7 +275,12 @@ export function MarketplaceHub(props: ConsolePluginPageProps) {
           section === 'listings' ||
           section === 'payouts' ||
           section === 'sales' ? (
-          <OrgSellerPanel orgId={orgId} section={section} basePath={mount} />
+          <OrgSellerPanel
+            orgId={orgId}
+            section={section}
+            basePath={mount}
+            permissions={permissions}
+          />
         ) : null}
       </HubSections>
     </Stack>

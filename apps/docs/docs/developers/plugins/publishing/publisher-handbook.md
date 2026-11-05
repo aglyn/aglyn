@@ -34,6 +34,11 @@ your [publisher page](../publish-a-plugin.md#your-publisher-profile). The same c
 takes optional support contacts — a support email and URL — and links to your website,
 GitHub, X and LinkedIn, so buyers know where to ask for help.
 
+Saving the profile needs the **Edit the publisher profile** permission, which the
+workspace's owners and admins hold by default. Without it, **Save profile** stays off
+and the card names the permission to ask an organization admin for. See
+[Marketplace publisher permissions](../../../workspace-and-billing/teams-and-roles/custom-roles.md#marketplace-publisher-permissions).
+
 ## The publisher agreement
 
 Your **organization** — not you personally — is the publishing party, and
@@ -543,13 +548,19 @@ editor for what buyers see: name, summary, rich-text body and media. Tick the
 and the listing changes at once — no new version, and no new review, because review is
 about the bundle's bytes rather than the words around them.
 
+Editing a listing needs the **Manage published listings** permission, which the
+workspace's owners and admins hold by default. Without it, **Edit listing** stays off,
+and hovering it names the permission to ask an organization admin for.
+
 ### Your listings {#your-listings}
 
 **Marketplace → Listings** lists everything your organization has published, with its
 preview image; a row's menu is where you **Publish new version…**, **Edit listing**,
 switch a plugin between private and public, or **Unpublish…** (and later
 **Republish…**) a listing. Each of those saves asks for the
-[publisher agreement](#the-publisher-agreement) first. Private plugins never appear in
+[publisher agreement](#the-publisher-agreement) first. All but
+**Publish new version…** need **Manage published listings**; without it they stay off
+and the card says which permission to ask for. Private plugins never appear in
 Browse, so this list — and **View** on a row — is where you find them.
 
 ### The Links card {#listing-links}

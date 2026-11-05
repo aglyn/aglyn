@@ -32,10 +32,8 @@ import {
   notifyStaff,
 } from '@aglyn/tenant-data-admin'
 import { resolveOrgPermissions } from '@aglyn/tenant-runtime/org-permissions'
-import {
-  canActAsPublisher,
-  resolvePublisherProfile,
-} from './publisher-profile'
+import { resolvePublisherProfile } from './publisher-profile'
+import { manageListingsRefusal } from './publisher-permissions'
 import { publishPreconditionRefusal } from './publish-preconditions'
 import { recordPublisherAgreementAcceptance } from './publisher-agreement-acceptance'
 import { listingSubmissionRefusal } from './listing-screen'
@@ -118,14 +116,11 @@ const updateListingContent: PluginApiHandler = async (req, res) => {
     }
     // Org-owned listings (AGL-652): a uid never equals an org id, so the
     // old identity comparison would lock publishers out of their own listing.
-    const isPublisher = await canActAsPublisher(
-      firestore,
-      decoded.uid,
-      listing.profileId,
-    )
-    if (!isPublisher && decoded['staff'] !== true) {
-      return res.status(403).json({ error: 'Not your listing' })
-    }
+    // "Manage published listings" (AGL-4047), the key the listing rules ask.
+    const keyRefusal = await manageListingsRefusal(decoded, listing.profileId, {
+      staffMayModerate: true,
+    })
+    if (keyRefusal) return res.status(keyRefusal.status).json(keyRefusal.body)
     // A site starter's category is its own `category`, one of the kinds of
     // site or the one it has (AGL-4049); the first of `categories` is read the
     // same way, as the native editors send it. Everything else keeps the
@@ -254,14 +249,11 @@ const setListingVisibility: PluginApiHandler = async (req, res) => {
     if (!listing || listing.deletedAt) {
       return res.status(404).json({ error: 'Unknown listing' })
     }
-    const isPublisher = await canActAsPublisher(
-      firestore,
-      decoded.uid,
-      listing.profileId,
-    )
-    if (!isPublisher && decoded['staff'] !== true) {
-      return res.status(403).json({ error: 'Not your listing' })
-    }
+    // "Manage published listings" (AGL-4047), as editing the listing asks.
+    const keyRefusal = await manageListingsRefusal(decoded, listing.profileId, {
+      staffMayModerate: true,
+    })
+    if (keyRefusal) return res.status(keyRefusal.status).json(keyRefusal.body)
     if (visibility === 'public') {
       const missing = missingPublicListingContent(listing)
       if (missing.length) {
@@ -341,14 +333,11 @@ const setListingPublished: PluginApiHandler = async (req, res) => {
     const listingRef = firestore.collection('marketplaceListings').doc(listingId)
     const listing = (await listingRef.get()).data()
     if (!listing) return res.status(404).json({ error: 'Unknown listing' })
-    const isPublisher = await canActAsPublisher(
-      firestore,
-      decoded.uid,
-      listing.profileId,
-    )
-    if (!isPublisher && decoded['staff'] !== true) {
-      return res.status(403).json({ error: 'Not your listing' })
-    }
+    // "Manage published listings" (AGL-4047), as editing the listing asks.
+    const keyRefusal = await manageListingsRefusal(decoded, listing.profileId, {
+      staffMayModerate: true,
+    })
+    if (keyRefusal) return res.status(keyRefusal.status).json(keyRefusal.body)
     // The agreement this save was sent with, recorded before it writes
     // (AGL-4105).
     await recordPublisherAgreementAcceptance({

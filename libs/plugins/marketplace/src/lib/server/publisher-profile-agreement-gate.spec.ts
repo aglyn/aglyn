@@ -50,9 +50,12 @@ jest.mock('../model/publisher-agreement', () => {
 
 jest.mock('./publisher-profile', () => ({
   PUBLISHER_PROFILES: 'publisherProfiles',
-  canActAsPublisher: async () => true,
   claimPublisherHandle: async () => undefined,
   PublisherHandleTakenError: class PublisherHandleTakenError extends Error {},
+}))
+// The member holds "Edit the publisher profile" (AGL-4047).
+jest.mock('./publisher-permissions', () => ({
+  publisherPermissionVerdict: async () => 'granted',
 }))
 
 jest.mock('@aglyn/tenant-data-admin', () => {

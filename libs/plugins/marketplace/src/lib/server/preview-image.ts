@@ -27,7 +27,7 @@ import {
 import { inspectUploadBytes, type PluginApiHandler } from '@aglyn/aglyn/server'
 import { firebaseAdmin, isImpersonationSession } from '@aglyn/tenant-data-admin'
 import { randomUUID } from 'crypto'
-import { canActAsPublisher } from './publisher-profile'
+import { manageListingsRefusal } from './publisher-permissions'
 import { recordPublisherAgreementAcceptance } from './publisher-agreement-acceptance'
 import { publisherAgreementConsentRefusal } from '../model/publisher-agreement'
 import { isRefusedIdToken } from '@aglyn/tenant-data-admin/server/id-token-refusal'
@@ -100,14 +100,13 @@ export const previewImageHandler: PluginApiHandler = async (req, res) => {
     // Listings are org-owned since AGL-652, so `profileId` holds an ORG id.
     // Comparing it to a uid can never be true — it silently 403'd every
     // publisher rather than erroring, which is why this survived the sweep.
-    const canEdit = await canActAsPublisher(
-      firestore,
-      decoded.uid,
-      listingSnapshot.get('profileId') as string | undefined,
-    )
-    if (!canEdit) {
-      return res.status(403).json({ error: 'Not your listing' })
-    }
+    // The picture is part of editing the listing, so it asks "Manage
+    // published listings" (AGL-4047), as the listing's own save does; staff
+    // were never let in here and still are not.
+    const keyRefusal = await manageListingsRefusal(decoded, listingSnapshot.get('profileId'), {
+      staffMayModerate: false,
+    })
+    if (keyRefusal) return res.status(keyRefusal.status).json(keyRefusal.body)
     // The agreement this save was sent with, recorded before the picture
     // changes (AGL-4105). One record for whichever of the three ways in this
     // is: removed, picked from the library, or uploaded.

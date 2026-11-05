@@ -39,9 +39,13 @@ jest.mock('./publisher-agreement-acceptance', () => ({
 }))
 jest.mock('./publisher-profile', () => ({
   PUBLISHER_PROFILES: 'publisherProfiles',
-  canActAsPublisher: async () => true,
   claimPublisherHandle: async () => undefined,
   PublisherHandleTakenError: class PublisherHandleTakenError extends Error {},
+}))
+// "Edit the publisher profile" (AGL-4047): granted unless a case says not.
+const mockVerdict = { value: 'granted' as 'granted' | 'refused' | 'not-a-member' }
+jest.mock('./publisher-permissions', () => ({
+  publisherPermissionVerdict: jest.fn(async () => mockVerdict.value),
 }))
 
 jest.mock('@aglyn/tenant-data-admin', () => {
@@ -267,4 +271,53 @@ describe('publisherProfileSaveHandler and the publisher agreement (AGL-4105)', (
     expect(writes()).toHaveLength(0)
     expect(acceptanceMock.recordPublisherAgreementAcceptance).not.toHaveBeenCalled()
   })
+})
+
+/**
+ * "Edit the publisher profile" (AGL-4047). The save asked
+ * `canActAsPublisher`, the owner or admin role; it asks the key whose default
+ * is those roles, the same key the profile rules ask, and its refusal names
+ * the permission rather than a role.
+ */
+describe('publisherProfileSaveHandler and "Edit the publisher profile" (AGL-4047)', () => {
+  const verdictMock = jest.requireMock('./publisher-permissions') as {
+    publisherPermissionVerdict: jest.Mock
+  }
+
+  beforeEach(() => {
+    writes().length = 0
+    acceptanceMock.recordPublisherAgreementAcceptance.mockClear()
+    verdictMock.publisherPermissionVerdict.mockClear()
+    mockVerdict.value = 'granted'
+  })
+
+  it('asks the key of the workspace being saved, for the signed-in member', async () => {
+    const res = makeRes()
+    await publisherProfileSaveHandler(makeReq({}), res)
+    expect(res.statusCode).toBe(200)
+    expect(verdictMock.publisherPermissionVerdict).toHaveBeenCalledWith(
+      'user-1',
+      'acme',
+      'marketplace.publisherProfile',
+    )
+  })
+
+  it.each(['refused', 'not-a-member'] as const)(
+    'refuses a %s caller with the permission named, before any record or write',
+    async (verdict) => {
+      mockVerdict.value = verdict
+      const res = makeRes()
+      await publisherProfileSaveHandler(makeReq({}), res)
+      expect(res.statusCode).toBe(403)
+      expect(res.body).toEqual({
+        error:
+          'Your role does not include "Edit the publisher profile" — ask an organization admin',
+        reason: 'permission',
+        permission: 'marketplace.publisherProfile',
+      })
+      expect(String(res.body.error)).not.toMatch(/owner|admin role/i)
+      expect(writes()).toHaveLength(0)
+      expect(acceptanceMock.recordPublisherAgreementAcceptance).not.toHaveBeenCalled()
+    },
+  )
 })

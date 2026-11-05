@@ -7437,6 +7437,8 @@
         "posBuyHardware",
         "marketplace.siteInstall",
         "marketplace.sitePublish",
+        "marketplace.publisherProfile",
+        "marketplace.manageListings",
         "outreach.use",
         "outreach.manageAll",
         "email.suppressions",
@@ -7538,6 +7540,8 @@
         "posBuyHardware",
         "marketplace.siteInstall",
         "marketplace.sitePublish",
+        "marketplace.publisherProfile",
+        "marketplace.manageListings",
         "outreach.use",
         "outreach.manageAll",
         "email.suppressions",
@@ -7598,7 +7602,8 @@
       },
       {
         "id": "marketplace",
-        "label": "Marketplace"
+        "label": "Marketplace",
+        "pluginId": "marketplace"
       },
       {
         "id": "outreach",
@@ -7968,6 +7973,22 @@
         "key": "marketplace.sitePublish",
         "label": "Publish a site’s items to the marketplace",
         "scope": "site"
+      },
+      {
+        "description": "Change the workspace’s public marketplace profile: its handle, name, bio, logo, support contact and links.",
+        "group": "marketplace",
+        "key": "marketplace.publisherProfile",
+        "label": "Edit the publisher profile",
+        "pluginId": "marketplace",
+        "scope": "org"
+      },
+      {
+        "description": "Edit the listings the workspace has published (their words, pictures and category), make a plugin public or private, and unpublish or republish a listing.",
+        "group": "marketplace",
+        "key": "marketplace.manageListings",
+        "label": "Manage published listings",
+        "pluginId": "marketplace",
+        "scope": "org"
       },
       {
         "description": "Open Sequences, and work its email sequences and connected mailboxes.",
