@@ -81,11 +81,6 @@
       "kind": "not-a-gate",
       "note": "Validates a site role read back from a membership row."
     },
-    "apps/console/hooks/use-org-permissions.tsx": {
-      "count": 1,
-      "kind": "not-a-gate",
-      "note": "An exported `isOwner` flag nothing decides access with."
-    },
     "apps/console/utils/over-limit-summary.ts": {
       "count": 2,
       "kind": "not-a-gate",

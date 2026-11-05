@@ -92,7 +92,6 @@ jest.mock('../hooks/use-org-permissions', () => ({
     permissions: {},
     can: () => true,
     granted: {},
-    isOwner: true,
     orgId: 'org-1',
     role: 'owner',
     loaded: true,

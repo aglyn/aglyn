@@ -180,13 +180,13 @@ describe('THE HOOK: a failed member read denies, and says it failed', () => {
   it('does not answer as an owner', async () => {
     render(<Probe />)
     await waitFor(() => expect(verdict.errored).toBe(true))
-    // The four spellings the console actually gates on. `can()` is the
-    // granular one; `permissions` is the legacy/plugin map; `isOwner` is read
-    // as an authorization answer in its own right and was seeded TRUE.
+    // What the console actually gates on. `can()` is the granular one;
+    // `permissions` is the legacy/plugin map; `loaded` is what the gates hold
+    // on while there is no answer.
     expect(verdict.can('billing.view')).toBe(false)
     expect(verdict.can('org.auditLog')).toBe(false)
     expect(verdict.permissions.editBilling).toBe(false)
-    expect(verdict.isOwner).toBe(false)
+    expect(verdict.loaded).toBe(false)
   })
 
   it('leaves every plugin-declared key false, not undefined', async () => {
@@ -236,7 +236,10 @@ describe('NEGATIVE CONTROLS: a read that LANDS still answers', () => {
     expect(verdict.can('billing.view')).toBe(true)
     expect(verdict.permissions.editBilling).toBe(true)
     expect(verdict.permissions.managePos).toBe(true)
-    expect(verdict.isOwner).toBe(true)
+    // The answer carries the role and the keys, never a flag derived from
+    // the role name: what a member may do is read from the keys.
+    expect(verdict.role).toBe('admin')
+    expect(verdict).not.toHaveProperty('isOwner')
   })
 
   it('a viewer whose read succeeds is refused on the merits, not by error', async () => {
