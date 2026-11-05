@@ -69,6 +69,12 @@ export interface PosKioskCatalog {
   categories: PosKioskCategory[]
   /** The store's currency, lower case (`usd`). */
   currency: string
+  /**
+   * Set when the store has more to offer than this answer lists, so the menu
+   * offers a search that reaches the rest. Absent on an answer that lists
+   * everything, which is every catalog the menu can show whole.
+   */
+  truncated?: boolean
 }
 
 /** What the kiosk offers, resolved on the server for one paired register. */
@@ -156,7 +162,7 @@ export const POS_KIOSK_MAX_LINES = 40
 /** Most of one line a customer may order at a kiosk. */
 export const POS_KIOSK_MAX_QUANTITY = 20
 
-/** Most products the kiosk grid lists in one category. */
+/** Most products the kiosk grid lists at once, for the whole menu, a category or a search. */
 export const POS_KIOSK_CATALOG_LIMIT = 200
 
 /** Wrong staff PINs a kiosk takes before it locks its unlock screen. */

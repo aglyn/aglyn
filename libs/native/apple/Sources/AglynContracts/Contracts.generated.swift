@@ -4088,11 +4088,13 @@ public struct PosKioskCatalog: Codable, Hashable, Sendable {
   public var categories: [PosKioskCategory]
   public var currency: String
   public var products: [PosKioskProduct]
+  public var truncated: Bool?
 
-  public init(categories: [PosKioskCategory], currency: String, products: [PosKioskProduct]) {
+  public init(categories: [PosKioskCategory], currency: String, products: [PosKioskProduct], truncated: Bool? = nil) {
     self.categories = categories
     self.currency = currency
     self.products = products
+    self.truncated = truncated
   }
 }
 

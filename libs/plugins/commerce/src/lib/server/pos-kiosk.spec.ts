@@ -27,7 +27,9 @@
  * idempotency key, as in the register's own payment spec.
  */
 
+import { nameSearchTokens } from '@aglyn/aglyn/app-utils/name-search'
 import type { PluginApiRequest, PluginApiResponse } from '@aglyn/aglyn/server'
+import { POS_KIOSK_CATALOG_LIMIT } from '../model/commerce-pos-kiosk'
 import { fakeDocs, resetFakeFirestore } from '../testing/fake-firestore'
 
 const mockSalesOpened: Array<{ body: any; principal: any; key: string }> = []
@@ -465,6 +467,126 @@ describe('what the kiosk reads', () => {
     const token = await pair()
     const result = await kiosk({ action: 'catalog', categoryId: 'food' }, { token, method: 'GET' })
     expect(result.body.products.map((item: any) => item.name)).toEqual(['Muffin'])
+  })
+
+  describe('a catalog longer than the menu (AGL-4060)', () => {
+    /** `count` products named `<prefix> 0000…`, each stamped as every product writer stamps it. */
+    function stock(prefix: string, count: number, overrides: Record<string, unknown> = {}) {
+      for (let index = 0; index < count; index += 1) {
+        const name = `${prefix} ${String(index).padStart(4, '0')}`
+        fakeDocs.set(
+          `hosts/host-1/products/${prefix.toLowerCase()}-${index}`,
+          product({ name, nameLower: name.toLowerCase(), nameTokens: nameSearchTokens(name), ...overrides }),
+        )
+      }
+    }
+    const reads = async (body: Record<string, unknown>) =>
+      await kiosk({ action: 'catalog', ...body }, { token: await pair(), method: 'GET' })
+
+    beforeEach(() => {
+      fakeDocs.delete('hosts/host-1/products/flat-white')
+    })
+
+    it('a catalog the menu lists whole says nothing more is there', async () => {
+      stock('Item', POS_KIOSK_CATALOG_LIMIT - 1)
+      const result = await reads({})
+      expect(result.body.products).toHaveLength(POS_KIOSK_CATALOG_LIMIT - 1)
+      expect(result.body.truncated).toBeUndefined()
+    })
+
+    it('a longer one lists a menu in name order and says there is more', async () => {
+      stock('Item', POS_KIOSK_CATALOG_LIMIT + 50)
+      const result = await reads({})
+      expect(result.body.products).toHaveLength(POS_KIOSK_CATALOG_LIMIT)
+      expect(result.body.products[0].name).toBe('Item 0000')
+      expect(result.body.truncated).toBe(true)
+    })
+
+    it('a search finds a product past everything a menu read could reach, by the start of any word, in any case', async () => {
+      // Further than the read's page ceiling: only a clause on the query finds it.
+      stock('Item', POS_KIOSK_CATALOG_LIMIT * 6)
+      fakeDocs.set(
+        'hosts/host-1/products/zebra',
+        product({ name: 'Zebra Latte', nameLower: 'zebra latte', nameTokens: nameSearchTokens('Zebra Latte') }),
+      )
+      for (const search of ['zebra', 'LAT', ' latte ']) {
+        const result = await reads({ search })
+        expect(result.body.products.map((item: any) => item.name)).toEqual(['Zebra Latte'])
+        expect(result.body.truncated).toBeUndefined()
+      }
+      expect((await reads({ search: 'ebra' })).body.products).toEqual([])
+    })
+
+    it('every word typed narrows, though the query holds only the first', async () => {
+      stock('Item', 3)
+      for (const name of ['Iced tea', 'Iced coffee']) {
+        fakeDocs.set(`hosts/host-1/products/${name}`, product({ name, nameLower: name.toLowerCase(), nameTokens: nameSearchTokens(name) }))
+      }
+      const result = await reads({ search: 'iced cof' })
+      expect(result.body.products.map((item: any) => item.name)).toEqual(['Iced coffee'])
+    })
+
+    it('a search still sells only what the kiosk sells, and answers no chips', async () => {
+      fakeDocs.set('hosts/host-1/productCategories/drinks', { name: 'Drinks' })
+      const stamped = (name: string, overrides: Record<string, unknown>) =>
+        product({ name, nameLower: name.toLowerCase(), nameTokens: nameSearchTokens(name), ...overrides })
+      fakeDocs.set('hosts/host-1/products/a', stamped('Tea held back', { offerOnKiosk: false }))
+      fakeDocs.set('hosts/host-1/products/b', stamped('Tea draft', { status: 'draft' }))
+      fakeDocs.set('hosts/host-1/products/c', stamped('Tea deleted', { deletedAt: 123 }))
+      fakeDocs.set('hosts/host-1/products/d', stamped('Tea gift', { giftCard: true }))
+      fakeDocs.set('hosts/host-1/products/e', stamped('Tea sold here', {}))
+      const result = await reads({ search: 'tea' })
+      expect(result.body.products.map((item: any) => item.name)).toEqual(['Tea sold here'])
+      expect(result.body.categories).toEqual([])
+      expect((await reads({})).body.categories).toEqual([{ id: 'drinks', name: 'Drinks' }])
+    })
+
+    it('a page of products the kiosk does not sell does not cost the store the ones after it', async () => {
+      stock('Aaa', POS_KIOSK_CATALOG_LIMIT + 10, { offerOnKiosk: false })
+      stock('Zzz', 5)
+      const result = await reads({})
+      expect(result.body.products.map((item: any) => item.name)).toEqual([
+        'Zzz 0000',
+        'Zzz 0001',
+        'Zzz 0002',
+        'Zzz 0003',
+        'Zzz 0004',
+      ])
+      expect(result.body.truncated).toBeUndefined()
+    })
+
+    it('stops reading at its ceiling and says there is more', async () => {
+      stock('Aaa', POS_KIOSK_CATALOG_LIMIT * 6, { offerOnKiosk: false })
+      const result = await reads({})
+      expect(result.body.products).toEqual([])
+      expect(result.body.truncated).toBe(true)
+    })
+
+    it('fills the menu across pages and stops at its length', async () => {
+      stock('Aaa', POS_KIOSK_CATALOG_LIMIT - 10)
+      stock('Bbb', 5, { offerOnKiosk: false })
+      stock('Ccc', 40)
+      const result = await reads({})
+      expect(result.body.products).toHaveLength(POS_KIOSK_CATALOG_LIMIT)
+      expect(result.body.truncated).toBe(true)
+    })
+
+    it('a search answers over a category when both are asked', async () => {
+      fakeDocs.set(
+        'hosts/host-1/products/muffin',
+        product({ name: 'Muffin', nameLower: 'muffin', nameTokens: nameSearchTokens('Muffin'), categoryIds: ['food'] }),
+      )
+      const result = await reads({ search: 'muffin', categoryId: 'drinks' })
+      expect(result.body.products.map((item: any) => item.name)).toEqual(['Muffin'])
+    })
+
+    it('a kiosk past its search budget is refused, and its menu is not', async () => {
+      const token = await pair()
+      mockState.rateAllowed = false
+      expect((await kiosk({ action: 'catalog', search: 'tea' }, { token, method: 'GET' })).status).toBe(429)
+      expect((await kiosk({ action: 'catalog' }, { token, method: 'GET' })).status).toBe(200)
+      mockState.rateAllowed = true
+    })
   })
 })
 
