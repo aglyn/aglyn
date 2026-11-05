@@ -774,7 +774,9 @@ export function useBesignerDocument<TData = unknown>(
    */
   const saveBlockedReason = draft.sharedDraftLoading
     ? `Loading this ${noun}'s saved draft`
-    : undefined
+    : draftIds && !canvas.didSetInitial
+      ? `Loading this ${noun}`
+      : undefined
 
   const unopenedDraftOnOffer =
     draft.available &&
