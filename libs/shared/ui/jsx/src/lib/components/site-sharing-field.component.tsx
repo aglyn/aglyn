@@ -232,7 +232,7 @@ export function SiteSharingField(props: SiteSharingFieldProps) {
                     label={
                       <ModeLabel
                         title={site.name}
-                        detail={locked ? 'At least one site has to stay in. To reach fewer, choose the sites.' : null}
+                        detail={locked ? 'At least one site has to stay in.' : null}
                       />
                     }
                   />
