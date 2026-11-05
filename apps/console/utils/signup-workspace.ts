@@ -275,6 +275,75 @@ export async function claimSignUpWorkspace(
   }
 }
 
+/**
+ * How long the browser's claim may run before the server is asked to
+ * provision instead (AGL-4117).
+ *
+ * The claim is a client transaction against `users/{uid}`. With two console
+ * tabs open, the durable cache's multi-tab lease can leave it waiting on a
+ * tab the phone has frozen (the AGL-3806 shape), and a claim that never
+ * answers never reaches `/api/orgs/create`: production left a verified
+ * account with its typed name held and no workspace at all (2026-11-04). A
+ * claim answers in well under a second when it answers, so this only ever
+ * decides the stuck case.
+ */
+export const SIGN_UP_CLAIM_DEADLINE_MS = 6_000
+
+/**
+ * `claimSignUpWorkspace`, or `'late'` when it has not answered in time.
+ *
+ * The transaction is not abandoned: it may still commit, and if it does after
+ * the server has provisioned it finds a fresh claim stamp and writes nothing.
+ */
+export async function claimSignUpWorkspaceWithin(
+  firestore: Firestore,
+  account: SignUpWorkspaceAccount,
+  options: { backstop?: boolean } = {},
+  deadlineMs = SIGN_UP_CLAIM_DEADLINE_MS,
+): Promise<SignUpWorkspaceClaim | 'late'> {
+  let timer: ReturnType<typeof setTimeout> | undefined
+  const late = new Promise<'late'>((resolve) => {
+    timer = setTimeout(() => resolve('late'), deadlineMs)
+  })
+  try {
+    return await Promise.race([
+      claimSignUpWorkspace(firestore, account, options),
+      late,
+    ])
+  } finally {
+    clearTimeout(timer)
+  }
+}
+
+/** Where a tab records that it handed provisioning to the server. */
+const SERVER_PROVISION_KEY = 'aglyn:sign-up-server-provision:'
+
+/**
+ * May this tab hand the account's provisioning to the server (AGL-4117)?
+ *
+ * Once per account per browser inside the claim window. Two console tabs are
+ * exactly the case that stalls the claim, and both would otherwise time out
+ * and each ask the server, which with no held name left creates a second,
+ * derived workspace. `localStorage` is shared by the tabs of one origin, and
+ * the first tab to ask writes before it asks.
+ */
+export function takeServerProvisioning(
+  uid: string,
+  nowMs = Date.now(),
+): boolean {
+  try {
+    const key = SERVER_PROVISION_KEY + uid
+    const at = Number(window.localStorage.getItem(key) ?? 0)
+    if (at && nowMs - at < SIGN_UP_WORKSPACE_CLAIM_MS) return false
+    window.localStorage.setItem(key, String(nowMs))
+    return true
+  } catch {
+    // No storage (a private window that refuses it): one tab is the common
+    // case, and an account with no workspace is the worse outcome.
+    return true
+  }
+}
+
 /** The held record's window and provider binding; see the module note. */
 function judgePendingSignUpWorkspace(
   stored: Partial<StoredPendingSignUpWorkspace> | null,

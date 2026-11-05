@@ -30,6 +30,7 @@ import {
   subscribeSessionReauth,
   type SessionReauthState,
 } from '../../utils/session-reauth'
+import { useSessionRestorePending } from '../../utils/session-restore-pending'
 import { recordSignInBounce } from '../../utils/signin-bounce'
 import ImpersonationBanner from '../impersonation-banner.component'
 import SessionHealthBanner from '../session-health-banner.component'
@@ -91,6 +92,8 @@ function AuthenticatedLayout(props: AuthenticatedLayoutProps) {
   // exactly as before; only a session lost MID-USE holds here. Triggered
   // solely by the console's own auth-state signals — never by anything
   // read out of fetched content.
+  // The shared cookie may be about to sign this tab in (AGL-4117).
+  const restoringSession = useSessionRestorePending()
   const [reauth, setReauth] = useState<SessionReauthState>(getSessionReauth)
   useEffect(() => subscribeSessionReauth(setReauth), [])
   /** One app → `/signin` round trip is one MOUNT (AGL-2486). */
@@ -126,6 +129,14 @@ function AuthenticatedLayout(props: AuthenticatedLayoutProps) {
        * actually started holds here.
        */
       if (restoreSessionReauthRedirect()) return void 0
+      /*
+       * …and while the load-time restore from the shared cookie is still out
+       * (AGL-4117). A phone that verified on the auth host reaches this
+       * origin with no local user and a good cookie; bouncing it to /signin
+       * before the restore answers tore down the page that provisions its
+       * workspace. The splash holds instead, for at most the restore's cap.
+       */
+      if (restoringSession) return void 0
       // …and stop bouncing once this tab has made the round trip too many
       // times without settling (AGL-2486). `AuthenticatingLayout` pushes
       // back here the moment the session returns, so a session that flaps
@@ -170,6 +181,7 @@ function AuthenticatedLayout(props: AuthenticatedLayoutProps) {
     impersonating,
     queueLoading,
     reauthActive,
+    restoringSession,
     router,
     signedIn,
   ])

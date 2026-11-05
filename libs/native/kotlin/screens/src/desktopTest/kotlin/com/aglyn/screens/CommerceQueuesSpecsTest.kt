@@ -190,7 +190,20 @@ class CommerceQueuesSpecsTest : SpecTestBase() {
 
   private fun offered(vararg stay: String): List<String> {
     val model = stays(RecordingWriter(), *stay)
+    // The status moves only: `guests` is the walk-ins permission's action, which an owner always has (AGL-4047), and is
+    // asserted on its own below.
     return model.rowActions("stays").filter { ScreenValues.condition(it.whenCondition, model.row("data.stays.items")) }.map { it.id }
+      .filter { it != "guests" }
+  }
+
+  @Test
+  fun anOwnerCanSeatGuestsOnAnOpenStayButNotAClosedOne() {
+    fun guests(status: String): Boolean {
+      val model = stays(RecordingWriter(), stay(status))
+      return model.rowActions("stays").filter { ScreenValues.condition(it.whenCondition, model.row("data.stays.items")) }.any { it.id == "guests" }
+    }
+    assertTrue(guests("confirmed") && guests("pending") && guests("checked_in"))
+    assertTrue(!guests("checked_out"))
   }
 
   @Test

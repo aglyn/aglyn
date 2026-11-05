@@ -77,7 +77,7 @@ class CommerceServiceSpecsTest {
       .first { it.id == id }
 
   private fun screen(spec: ScreenSpec, params: Map<String, String>, data: String): ScreenModel {
-    val session = ScreenSession(orgName = "Acme", orgRole = "owner", siteName = "Shop", origin = "https://console.test")
+    val session = ScreenSession(orgName = "Acme", orgRole = "owner", siteName = "Shop", origin = "https://console.test", orgPermissions = OWNER, sitePermissions = OWNER)
     val model = ScreenModel(spec, session.context(Site(), params), null)
     model.seed(Json.parseToJsonElement(data))
     return model
@@ -485,7 +485,7 @@ class CommerceServiceSpecsTest {
       { "t" },
     )
     val spec = spec("print-on-demand", "print-on-demand.service")
-    val session = ScreenSession(orgName = "Acme", orgRole = "owner", siteName = "Shop", origin = "https://console.test")
+    val session = ScreenSession(orgName = "Acme", orgRole = "owner", siteName = "Shop", origin = "https://console.test", orgPermissions = OWNER, sitePermissions = OWNER)
     val model = ScreenModel(spec, session.context(Site(), emptyMap()), api)
     model.seed(Json.parseToJsonElement("""{"conn":{"available":true,"storeCurrency":"USD","providers":$podProviders,"connections":[]}}"""))
     val connect = model.action("connect", "connectPrintful")

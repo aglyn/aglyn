@@ -104,6 +104,17 @@ export async function rememberOnboardingPlanIntent(
 }
 
 /**
+ * How long a page may wait on `consumeOnboardingPlanIntent` before it treats
+ * the answer as "no plan" (AGL-4117).
+ *
+ * The workspace chooser holds a new account's provisioning on this read, and
+ * on a console with two tabs the read and its clearing write can wait on the
+ * other tab's frozen lease indefinitely. A plan that answers late still
+ * reaches the page's links; it only stops holding the workspace hostage.
+ */
+export const PLAN_INTENT_DEADLINE_MS = 4_000
+
+/**
  * Read the remembered intent and clear it, so the upsell landing happens once
  * rather than on every future visit to the org jump.
  *

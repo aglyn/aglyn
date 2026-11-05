@@ -72,12 +72,16 @@ import {
 import { useWorkspacePage } from '../../../hooks/use-workspace-page'
 import { readOutcome } from '@aglyn/shared-ui-jsx/utils/read-outcome'
 import { usePendingInvites } from '../../../hooks/use-pending-invites'
-import { consumeOnboardingPlanIntent } from '../../../utils/onboarding-plan-intent'
 import {
-  claimSignUpWorkspace,
+  consumeOnboardingPlanIntent,
+  PLAN_INTENT_DEADLINE_MS,
+} from '../../../utils/onboarding-plan-intent'
+import {
+  claimSignUpWorkspaceWithin,
   createSignUpWorkspace,
   needsBackstopWorkspace,
   personalWorkspaceName,
+  takeServerProvisioning,
 } from '../../../utils/signup-workspace'
 import {
   holdSignUpLanding,
@@ -117,6 +121,24 @@ function WorkspacePlansReader(props: {
   const plans = useOrgPlans(orgIds)
   useEffect(() => onPlans(plans), [plans, onPlans])
   return null
+}
+
+/**
+ * Resolves `true` once this document is visible, at once when it already is
+ * (AGL-4117). A frozen background tab resolves when the person comes back to
+ * it, which is the moment its answer can matter. `false` without a document.
+ */
+function whenVisible(): Promise<boolean> {
+  if (typeof document === 'undefined') return Promise.resolve(false)
+  if (document.visibilityState !== 'hidden') return Promise.resolve(true)
+  return new Promise((resolve) => {
+    const onChange = () => {
+      if (document.visibilityState === 'hidden') return
+      document.removeEventListener('visibilitychange', onChange)
+      resolve(true)
+    }
+    document.addEventListener('visibilitychange', onChange)
+  })
 }
 
 /**
@@ -307,7 +329,15 @@ function OrgJump() {
     // was in flight did that, and React's development StrictMode re-runs
     // every effect once on mount, so locally it happened every time. The only
     // result to discard is one for an account no longer signed in here.
+    // …and NOT waited on forever either (AGL-4117). With two console tabs the
+    // read can sit behind a frozen tab's lease, and provisioning holds on it.
+    // Past the deadline it reads as "no plan"; a late answer still lands.
+    const deadline = setTimeout(() => {
+      if (currentUidRef.current !== uid) return
+      setStoredIntent((current) => (current === undefined ? null : current))
+    }, PLAN_INTENT_DEADLINE_MS)
     void consumeOnboardingPlanIntent(firestore, uid).then((intent) => {
+      clearTimeout(deadline)
       if (currentUidRef.current === uid) setStoredIntent(intent)
     })
     return undefined
@@ -409,6 +439,10 @@ function OrgJump() {
    */
   const [provisionSettled, setProvisionSettled] = useState(false)
   const provisionedForRef = useRef<string | null>(null)
+  // Read live by the server hand-off above, which runs after an await: a
+  // workspace that arrived meanwhile (another tab made it) stands it down.
+  const orgCountRef = useRef(orgs.length)
+  orgCountRef.current = orgs.length
   useEffect(() => {
     if (!user || !uid || loading || !confirmed || orgs.length !== 0) return
     // The remembered plan decides where the new workspace LANDS, and it is
@@ -441,11 +475,34 @@ function OrgJump() {
       // created, instead of an empty chooser — unless another tab claimed
       // provisioning moments ago and is creating it now (AGL-4079).
       const backstop = invites.length === 0 && needsBackstopWorkspace(user)
-      const { pending, claimedElsewhere } = await claimSignUpWorkspace(
-        firestore,
-        user,
-        { backstop },
-      )
+      const claim = await claimSignUpWorkspaceWithin(firestore, user, {
+        backstop,
+      })
+      /*
+       * THE CLAIM NEVER ANSWERED (AGL-4117). Two console tabs on a phone: the
+       * claim's transaction waited on the other tab's frozen lease and this
+       * page never reached the create, leaving a verified account with its
+       * typed name held and no workspace. A young account with no invite
+       * hands provisioning to the server instead: a `derived` create makes
+       * the workspace under the held TYPED name when there is one (AGL-4117,
+       * #2237) and spends the hold, so the person still lands in the
+       * workspace they named. Only from a tab the person is looking at, and
+       * only once per browser, so a second stalled tab cannot make a second.
+       */
+      const late = claim === 'late'
+      if (
+        late &&
+        (!backstop ||
+          !(await whenVisible()) ||
+          orgCountRef.current !== 0 ||
+          !takeServerProvisioning(uid))
+      ) {
+        releaseSignUpLanding(PROVISION_HOLD_KEY)
+        if (active) setProvisionSettled(true)
+        return
+      }
+      const pending = late ? null : claim.pending
+      const claimedElsewhere = late ? false : claim.claimedElsewhere
       const name =
         pending?.name ??
         (backstop && !claimedElsewhere ? personalWorkspaceName(user) : '')
