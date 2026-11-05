@@ -81,6 +81,20 @@ describe('console gates ask the key their route checks (AGL-4047)', () => {
     }
   })
 
+  it('the workspace plugin settings card asks the key the rules ask of its document', () => {
+    // A client-direct write, so the rule is the enforcer and no route is. The
+    // card's behavior is `plugin-config-org-settings-gate.spec.tsx`.
+    const surface = read('components/plugin-config-card.component.tsx')
+    expect(surface).toContain("can('org.settings')")
+    expect(surface).toMatch(/loaded/)
+    expect(surface).not.toContain('canManageOrg(')
+    const rules = read('../../cloud/firebase-firestore.rules')
+    const block = rules.slice(rules.indexOf('match /pluginSettings/{pluginId}'))
+    expect(block.slice(0, block.indexOf('\n      }'))).toContain(
+      "memberKeyOrOverride('org.settings', ['owner', 'admin'])",
+    )
+  })
+
   it('the holds surfaces and the CRM’s erase item ask the same keys as their routes', () => {
     // A held page offers "Request a review" on the route's own answer, which
     // now asks `org.holds`, as the review route does.
