@@ -129,7 +129,7 @@ fun DatasetsScreen(context: NativePluginContext, initialDatasetId: String? = nul
   val orgId = context.orgId ?: return EmptyState("Pick a workspace to see its data", icon = AglynIcons.named("dataset"))
   val scope = rememberCoroutineScope()
   val api = remember(orgId, context.api, context.writer) { DataApi(context.api, context.writer, orgId) }
-  val runner = remember(orgId) { ActionRunner(scope, roleHint = "an owner, admin or editor") }
+  val runner = remember(orgId) { ActionRunner(scope) }
   var dialog by remember { mutableStateOf<DatasetDialog?>(null) }
   val canWrite = context.orgRole in ORG_WRITER_ROLES
   val (access, datasets) = rememberDatasets(context, orgId)

@@ -155,7 +155,7 @@ fun PluginInstallationCard(context: NativePluginContext) {
   val listingId = LocalSlotParams.current["pluginId"].orEmpty()
   val scope = rememberCoroutineScope()
   val api = remember(context.api) { MarketplaceApi(context.api) }
-  val runner = remember(listingId) { ActionRunner(scope, roleHint = "an owner, admin or editor") }
+  val runner = remember(listingId) { ActionRunner(scope) }
   val orgId = context.orgId
   val orgPinLive by remember(orgId, listingId, context.firestore) {
     if (orgId != null && listingId.isNotEmpty()) context.firestore.observeDoc("orgs/$orgId/installs/$listingId") else flowOf(Live.Ready(null))
@@ -181,7 +181,7 @@ fun PluginInstallationCard(context: NativePluginContext) {
   var updating by remember { mutableStateOf<PendingUpdate?>(null) }
   var removing by remember { mutableStateOf<PendingRemoval?>(null) }
   val addHostIds = remember(listingId) { mutableStateListOf<String>() }
-  val canChange = context.orgRole in INSTALL_ROLES
+  val canChange = com.aglyn.pluginhost.rememberMemberPermissions(context).can(INSTALL_PLUGINS_KEY)
   val actingHostId = sites.firstOrNull()?.id.orEmpty()
 
   val pins = hostPins

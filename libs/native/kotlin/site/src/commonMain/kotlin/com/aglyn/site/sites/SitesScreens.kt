@@ -311,7 +311,7 @@ private suspend fun siteStartersOffered(context: NativePluginContext, orgId: Str
 @Composable
 private fun CreateSiteDialog(context: NativePluginContext, orgId: String, close: () -> Unit) {
   val scope = rememberCoroutineScope()
-  val runner = remember { ActionRunner(scope, roleHint = "a workspace owner or admin") }
+  val runner = remember { ActionRunner(scope) }
   var name by remember { mutableStateOf("") }
   var subdomain by remember { mutableStateOf("") }
   var edited by remember { mutableStateOf(false) }

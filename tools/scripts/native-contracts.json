@@ -29042,6 +29042,73 @@
               "hosts.delete": false
             }
           }
+        ],
+        [
+          "viewer",
+          null,
+          {
+            "permissions": {
+              "posSell": true
+            }
+          }
+        ],
+        [
+          "viewer",
+          null,
+          {
+            "permissions": {
+              "managePos": true
+            }
+          }
+        ],
+        [
+          "editor",
+          {
+            "permissions": {
+              "managePos": false
+            }
+          },
+          null
+        ],
+        [
+          "editor",
+          null,
+          {
+            "permissions": {
+              "posRefund": false
+            }
+          }
+        ],
+        [
+          "viewer",
+          null,
+          {
+            "permissions": {
+              "posBuyHardware": true
+            }
+          }
+        ],
+        [
+          "editor",
+          {
+            "permissions": {
+              "commerce.reservations": false
+            }
+          },
+          null
+        ],
+        [
+          "editor",
+          {
+            "permissions": {
+              "commerce.reservations": false
+            }
+          },
+          {
+            "permissions": {
+              "commerce.walkIns": true
+            }
+          }
         ]
       ]
     },

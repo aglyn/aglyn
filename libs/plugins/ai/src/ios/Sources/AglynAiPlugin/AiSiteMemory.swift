@@ -54,7 +54,7 @@ public func aiSitePreferenceSeen(_ count: Int) -> String { count == 1 ? "Seen in
 struct AiSiteMemoryCard: View {
   let context: NativePluginContext
   @State private var live = LiveQuery()
-  @State private var runner = ActionRunner(roleHint: "an author, editor or admin")
+  @State private var runner = ActionRunner()
   @State private var clearing = false
 
   private var preferences: [AiSitePreference] { aiSitePreferences(live.state.value ?? []) }

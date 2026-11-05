@@ -1,6 +1,7 @@
 // Copyright 2026 Aglyn LLC
 // SPDX-License-Identifier: Apache-2.0
 
+import AglynContracts
 import AglynCore
 import AglynPluginHost
 import AglynUI
@@ -53,7 +54,8 @@ public struct SpecScreenView: View {
           spec.scope == "staff" ? "Staff only" : "Not available to your role", systemImage: "lock",
           message: spec.scope == "staff"
             ? "This page is for Aglyn staff."
-            : "Ask an owner or admin of this workspace for access.")
+            : ScreenValues.requiredKey(spec.requires).map { permissionRefusalText(ContractValues.shared.orgRoleGrants, key: $0) }
+              ?? "Ask an owner or admin of this workspace for access.")
       } else if let model {
         if !embedded, splitBlock != nil {
           WideLayoutReader { wide in

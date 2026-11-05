@@ -93,7 +93,7 @@ private fun tone(finding: SeoFinding) = when (finding.severity) {
 @Composable
 fun SeoCheckCard(context: NativePluginContext, hostId: String, host: Map<String, Any?>, onChecked: (keywords: String) -> Unit = {}) {
   val scope = rememberCoroutineScope()
-  val runner = remember(hostId) { ActionRunner(scope, roleHint = "an author, editor or admin") }
+  val runner = remember(hostId) { ActionRunner(scope) }
   var rows by remember { mutableStateOf<List<SeoTargetKeywordRow>>(emptyList()) }
   var report by remember { mutableStateOf<SeoAuditReport?>(null) }
   var busy by remember { mutableStateOf(false) }

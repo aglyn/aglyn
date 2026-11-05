@@ -8,8 +8,9 @@ import AglynUI
 import Observation
 import SwiftUI
 
-private func canInstall(_ context: NativePluginContext) -> Bool {
-  installRoles.contains(context.orgRole ?? "") && siteInstallRoles.contains(context.siteRole ?? "")
+/// Installing asks the workspace's key and, on the site in hand, the site's (`marketplace-site-permissions.ts`), as the routes do.
+@MainActor private func canInstall(_ context: NativePluginContext) -> Bool {
+  context.can(installPluginsKey) && context.can(siteInstallKey)
 }
 
 /// The marketplace's sections, as the console's hub tabs them.
@@ -298,10 +299,10 @@ private struct ListingDetail: View {
   @State private var listing = ObservedDocument()
   @State private var hostPin = ObservedDocument()
   @State private var orgPin = ObservedDocument()
-  @State private var runner = PluginActionRunner(roleHint: "an owner, admin or editor")
+  @State private var runner = PluginActionRunner()
   @State private var sheet: ListingSheet?
   @State private var editing: SellerListing?
-  @State private var editRunner = ActionRunner(roleHint: "an owner, admin or editor")
+  @State private var editRunner = ActionRunner()
 
   /// Listings are the workspace's (`profileId` is the org id), so the owner is a workspace comparison, as the console's is.
   private var owned: SellerListing? {
@@ -333,13 +334,15 @@ private struct ListingDetail: View {
     }
     .aglynScreenToolbar(id: "listing") {
       // The owner's actions on the listing itself: a plugin ships a new version from here, and any listing is edited here.
-      if let owned, installRoles.contains(context.orgRole ?? "") {
+      if let owned {
         if owned.isPlugin {
           Button {
             context.navigate("marketplace.publishPlugin", ["listing": owned.id])
           } label: {
             Label("Publish new version", systemImage: "square.and.arrow.up")
           }
+          .disabled(!context.can(publishKey))
+          .help(context.can(publishKey) ? "" : context.refusal(publishKey))
           .accessibilityIdentifier("listing-publish-version")
         }
         Button {
@@ -348,6 +351,8 @@ private struct ListingDetail: View {
         } label: {
           Label("Edit listing", systemImage: "pencil")
         }
+        .disabled(!context.can(manageListingsKey))
+        .help(context.can(manageListingsKey) ? "" : context.refusal(manageListingsKey))
         .accessibilityIdentifier("listing-edit")
       }
     }
@@ -436,7 +441,7 @@ private struct ListingBody: View {
         }
         actions(state, targets, offered)
         if plugin, offered == nil { AglynNotice("No reviewed version yet: it can be installed once one passes review.", tone: .warning) }
-        if !installable { AglynNotice("Installing needs the editor role in the workspace and on the picked site.", tone: .neutral) }
+        if !installable { AglynNotice(context.refusal(context.can(installPluginsKey) ? siteInstallKey : installPluginsKey), tone: .neutral) }
       }
       Section {
         HStack(spacing: AglynSpace.one) {
@@ -666,7 +671,7 @@ struct InstalledScreen: View {
   let context: NativePluginContext
   @State private var sitePins = LiveQuery()
   @State private var orgPins = LiveQuery()
-  @State private var runner = PluginActionRunner(roleHint: "an owner, admin or editor")
+  @State private var runner = PluginActionRunner()
   @State private var removing: InstallPinRow?
 
   var body: some View {

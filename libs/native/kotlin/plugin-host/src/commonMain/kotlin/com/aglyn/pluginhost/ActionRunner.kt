@@ -14,9 +14,9 @@ import androidx.compose.ui.platform.testTag
  * one failed, and what the last one did. A screen's dialogs read [busy] and
  * [error]; its banner reads [notice]. The console's own words come through:
  * a route's refusal is shown as the route wrote it, and a rules refusal reads
- * as the role it needs.
+ * as the permission it lacks.
  */
-class ActionRunner(private val scope: CoroutineScope, private val roleHint: String = "an editor or admin") {
+class ActionRunner(private val scope: CoroutineScope) {
   var busy by mutableStateOf(false)
     private set
   var error by mutableStateOf<String?>(null)
@@ -53,7 +53,7 @@ class ActionRunner(private val scope: CoroutineScope, private val roleHint: Stri
     failure is ConsoleApiError && failure.status != 0 -> failure.message
     failure is ConsoleApiError -> failure.message
     failure.message.orEmpty().contains("permission", ignoreCase = true) ->
-      "That change needs a different role — ask $roleHint"
+      "Your role does not include this permission — ask an organization admin."
     else -> "That did not go through. Check the connection and try again."
   }
 }

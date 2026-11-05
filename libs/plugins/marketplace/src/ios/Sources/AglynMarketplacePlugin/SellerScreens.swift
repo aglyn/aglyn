@@ -37,9 +37,6 @@ struct SellScreen: View {
   @State private var section = SellSection.profile
   @State private var profile = LiveDocument()
 
-  // `publishToMarketplace` is the admin tier's and the editor's (a per-person override is the server's to enforce).
-  private var canManage: Bool { installRoles.contains(context.orgRole ?? "") }
-
   var body: some View {
     Group {
       if let orgID = context.orgID {
@@ -53,13 +50,11 @@ struct SellScreen: View {
           .padding(.vertical, AglynSpace.one)
           .accessibilityIdentifier("sell-sections")
           Form {
-            if !canManage {
-              Section { AglynNotice("Selling is for a workspace owner, admin or editor. You can see how it stands.", tone: .info) }
-            }
+            // Each section asks its own permission, and says which when it is missing.
             switch section {
-            case .profile: ProfileSection(context: context, orgID: orgID, profile: profile, canManage: canManage)
-            case .listings: ListingsSection(context: context, orgID: orgID, canManage: canManage)
-            case .payouts: PayoutsSection(context: context, orgID: orgID, profile: profile, canManage: canManage) { profile.start(context.firestore, publisherProfilePath(orgID: orgID)) }
+            case .profile: ProfileSection(context: context, orgID: orgID, profile: profile, canManage: context.can(publisherProfileKey))
+            case .listings: ListingsSection(context: context, orgID: orgID, canManage: context.can(manageListingsKey), canPublish: context.can(publishKey))
+            case .payouts: PayoutsSection(context: context, orgID: orgID, profile: profile, canManage: context.can(payoutsKey)) { profile.start(context.firestore, publisherProfilePath(orgID: orgID)) }
             case .sales: SalesSection(context: context, orgID: orgID, profile: profile)
             }
           }
@@ -85,7 +80,7 @@ private struct ProfileSection: View {
   let canManage: Bool
   @State private var fields: [String: String] = [:]
   @State private var seeded: [String: String] = [:]
-  @State private var runner = ActionRunner(roleHint: "an owner, admin or editor")
+  @State private var runner = ActionRunner()
   /// The publisher agreement, agreed to on this save (AGL-4105): unticked again after each one.
   @State private var agreed = false
 
@@ -131,6 +126,9 @@ private struct ProfileSection: View {
       .buttonStyle(.aglynProminent)
       .disabled(!canManage || !loaded || !valid || fields == seeded || !agreed || runner.busy)
       .accessibilityIdentifier("seller-save")
+      if !canManage {
+        Text(context.refusal(publisherProfileKey)).font(.caption).foregroundStyle(.secondary).accessibilityIdentifier("seller-save-refusal")
+      }
     } header: {
       Text("Public profile")
     } footer: {
@@ -155,8 +153,9 @@ private struct ListingsSection: View {
   let context: NativePluginContext
   let orgID: String
   let canManage: Bool
+  let canPublish: Bool
   @State private var live = LiveQuery()
-  @State private var runner = ActionRunner(roleHint: "an owner, admin or editor")
+  @State private var runner = ActionRunner()
   @State private var editing: SellerListing?
   /// Making a plugin private or public, or unpublishing or republishing a listing: asked first, with the agreement (AGL-4105).
   @State private var change: SellerListingChange?
@@ -190,7 +189,7 @@ private struct ListingsSection: View {
                         Button {
                           context.navigate("marketplace.publishPlugin", ["listing": listing.id])
                         } label: { Label("Publish new version", systemImage: "square.and.arrow.up") }
-                        .disabled(!canManage)
+                        .disabled(!canPublish)
                         Button {
                           runner.clear()
                           change = SellerListingChange(listing: listing, kind: .visibility)
@@ -214,6 +213,7 @@ private struct ListingsSection: View {
           } header: {
             Text("Your listings")
           } footer: {
+            if !canManage { Text(context.refusal(manageListingsKey)).accessibilityIdentifier("seller-listings-refusal") }
             // Private plugins never show in Browse, so this is the only door to them.
             if listings.contains(where: \.isPrivate) {
               Text("Private plugins never appear in the marketplace — open one with View to install it on your sites.")
@@ -428,7 +428,7 @@ private struct PayoutsSection: View {
   let canManage: Bool
   let retry: () -> Void
   @Environment(\.openURL) private var openURL
-  @State private var runner = ActionRunner(roleHint: "an owner, admin or editor")
+  @State private var runner = ActionRunner()
   @State private var dashboard: String?
 
   private var readiness: PayoutReadiness {
@@ -479,6 +479,9 @@ private struct PayoutsSection: View {
             .buttonStyle(.aglynProminent)
             .disabled(!canManage || runner.busy)
             .accessibilityIdentifier("seller-payouts")
+        }
+        if !canManage {
+          Text(context.refusal(payoutsKey)).font(.caption).foregroundStyle(.secondary).accessibilityIdentifier("seller-payouts-refusal")
         }
         if let dashboard, let url = URL(string: dashboard) { Button("View payouts in Stripe") { openURL(url) } }
       }

@@ -42,7 +42,10 @@ import com.aglyn.core.mediaPreviewUrl
 import com.aglyn.core.nowMillis
 import com.aglyn.core.relativeTime
 import com.aglyn.pluginhost.ActionRunner
+import com.aglyn.contracts.permissionRefusalText
+import com.aglyn.pluginhost.MemberPermissions
 import com.aglyn.pluginhost.NativePluginContext
+import com.aglyn.pluginhost.rememberMemberPermissions
 import com.aglyn.ui.ActionDialog
 import com.aglyn.ui.AglynIcons
 import com.aglyn.ui.AglynListDetail
@@ -82,13 +85,16 @@ const val MARKETPLACE_PLUGIN_SETTINGS_SCREEN = "marketplace.plugin-settings"
 /** Publishing to the marketplace is a spec screen (marketplace.screens.json): what this site and the workspace can publish. */
 const val MARKETPLACE_PUBLISH_SCREEN = "marketplace.publish"
 
-/** Workspace roles with `plugins.install` (`installPlugins`): the admin tier and editors. */
-internal val INSTALL_ROLES = setOf("owner", "admin", "editor")
+/** The keys the seller's controls ask (`marketplace-publisher-permissions.ts`), as their routes and rules do. */
+internal const val PUBLISHER_PROFILE_KEY = "marketplace.publisherProfile"
+internal const val MANAGE_LISTINGS_KEY = "marketplace.manageListings"
+internal const val PAYOUTS_KEY = "marketplace.payouts"
+internal const val PUBLISH_KEY = "marketplace.publish"
+internal const val INSTALL_PLUGINS_KEY = "plugins.install"
+internal const val SITE_INSTALL_KEY = "marketplace.siteInstall"
 
-/** Site roles every host install route admits. */
-internal val SITE_INSTALL_ROLES = setOf("admin", "editor")
-
-private fun canInstall(context: NativePluginContext) = context.orgRole in INSTALL_ROLES && context.siteRole in SITE_INSTALL_ROLES
+/** Installing asks the workspace's key and, on the site in hand, the site's (`marketplace-site-permissions.ts`), as the routes do. */
+private fun canInstall(held: MemberPermissions) = held.can(INSTALL_PLUGINS_KEY) && held.can(SITE_INSTALL_KEY)
 
 private sealed interface ListingDialog {
   data class Install(val scope: InstallTarget?) : ListingDialog
@@ -205,7 +211,7 @@ fun ListingScreen(context: NativePluginContext, listingId: String) = ListingDeta
 private fun ListingDetail(context: NativePluginContext, listingId: String, startInstall: Boolean = false, onInstallAsked: () -> Unit = {}) {
   val scope = rememberCoroutineScope()
   val api = remember(context.api) { MarketplaceApi(context.api) }
-  val runner = remember(listingId) { ActionRunner(scope, roleHint = "an owner, admin or editor") }
+  val runner = remember(listingId) { ActionRunner(scope) }
   var dialog by remember(listingId) { mutableStateOf<ListingDialog?>(null) }
   val live by remember(listingId, context.firestore) { context.firestore.observeDoc("$LISTINGS/$listingId") }.collectAsState(Live.Loading)
   when (val value = live) {
@@ -235,11 +241,12 @@ private fun ListingDetail(context: NativePluginContext, listingId: String, start
       )
       val plugin = listing.artifactType == "plugin"
       val mine = listing.profileId != null && listing.profileId == orgId
+      val held = rememberMemberPermissions(context)
       LaunchedEffect(startInstall, listing.id) {
         if (!startInstall) return@LaunchedEffect
         onInstallAsked()
         val targets = installTargets(listing.artifactType)
-        if (state.installedVersion == null && canInstall(context) && context.hostId != null && (!plugin || listing.offeredVersion != null)) {
+        if (state.installedVersion == null && canInstall(held) && context.hostId != null && (!plugin || listing.offeredVersion != null)) {
           dialog = ListingDialog.Install(if (InstallTarget.HOST in targets) InstallTarget.HOST else targets.firstOrNull())
         }
       }
@@ -270,7 +277,8 @@ private fun ListingBody(
   }.collectAsState(Live.Loading)
   val handle = (publisher as? Live.Ready)?.value?.let { it.string("handle") ?: it.string("displayName") }
   val now = remember(listing.id) { nowMillis() }
-  val installable = canInstall(context) && context.hostId != null
+  val held = rememberMemberPermissions(context)
+  val installable = canInstall(held) && context.hostId != null
   val targets = installTargets(listing.artifactType)
   val offered = listing.offeredVersion
   Column(
@@ -298,7 +306,7 @@ private fun ListingBody(
         )
       }
       // The owner's actions on the listing itself: a plugin ships a new version from here, and any listing is edited here.
-      if (mine && context.orgRole in INSTALL_ROLES) OwnerActions(context, listing.id, plugin)
+      if (mine) OwnerActions(context, listing.id, plugin)
       FlowRow(horizontalArrangement = Arrangement.spacedBy(space(1f)), verticalArrangement = Arrangement.spacedBy(space(0.5f))) {
         StatusChip(priceLabel(listing.priceUsd), if (listing.paid) StatusTone.INFO else StatusTone.SUCCESS)
         if (listing.verified) StatusChip("Verified publisher", StatusTone.SUCCESS)
@@ -343,7 +351,7 @@ private fun ListingBody(
         }
       }
       if (plugin && offered == null) NoticeBanner("No reviewed version yet: it can be installed once one passes review.", StatusTone.WARNING)
-      if (!installable) NoticeBanner("Installing needs the editor role in the workspace and on the picked site.", StatusTone.NEUTRAL)
+      if (!installable) NoticeBanner(permissionRefusalText(if (held.can(INSTALL_PLUGINS_KEY)) SITE_INSTALL_KEY else INSTALL_PLUGINS_KEY), StatusTone.NEUTRAL)
     }
     StatRow {
       StatTile("Rating", if (listing.ratingCount > 0 && listing.ratingAverage != null) com.aglyn.pluginhost.jsNumber(listing.ratingAverage) + " ★" else "—", Modifier.weight(1f), if (listing.ratingCount > 0) "${listing.ratingCount} ratings" else "Not yet rated")
@@ -482,13 +490,13 @@ fun InstalledScreen(context: NativePluginContext) {
   val orgId = context.orgId
   val scope = rememberCoroutineScope()
   val api = remember(context.api) { MarketplaceApi(context.api) }
-  val runner = remember(hostId) { ActionRunner(scope, roleHint = "an owner, admin or editor") }
+  val runner = remember(hostId) { ActionRunner(scope) }
   val sitePins by remember(hostId, context.firestore) { context.firestore.observe(FirestoreQuery("hosts/$hostId/installs", limit = 50)) }.collectAsState(Live.Loading)
   val orgPins by remember(orgId, context.firestore) {
     if (orgId != null) context.firestore.observe(FirestoreQuery("orgs/$orgId/installs", limit = 50)) else kotlinx.coroutines.flow.flowOf(Live.Ready(emptyList()))
   }.collectAsState(Live.Loading)
   var removing by remember { mutableStateOf<InstallPinRow?>(null) }
-  val installable = canInstall(context)
+  val installable = canInstall(rememberMemberPermissions(context))
   Column(Modifier.fillMaxSize()) {
     ListHeader("Installed")
     Column(Modifier.padding(horizontal = space(2f)), verticalArrangement = Arrangement.spacedBy(space(1f))) {
@@ -622,19 +630,23 @@ fun LicencesScreen(context: NativePluginContext) {
 private fun OwnerActions(context: NativePluginContext, listingId: String, plugin: Boolean) {
   val orgId = context.orgId ?: return
   val scope = rememberCoroutineScope()
-  val runner = remember(listingId) { ActionRunner(scope, roleHint = "an owner, admin or editor") }
+  val runner = remember(listingId) { ActionRunner(scope) }
   val api = remember(context.api, orgId) { SellerApi(context.api, orgId) }
   val doc by remember(listingId, context.firestore) { context.firestore.observeDoc("$LISTINGS/$listingId") }.collectAsState(Live.Loading)
   var editing by remember(listingId) { mutableStateOf<SellerListing?>(null) }
+  val held = rememberMemberPermissions(context)
   FlowRow(horizontalArrangement = Arrangement.spacedBy(space(1f)), verticalArrangement = Arrangement.spacedBy(space(0.5f))) {
     if (plugin) {
-      Button(onClick = { context.navigate("marketplace.publishPlugin", mapOf("listing" to listingId)) }, modifier = Modifier.testTag("listing-publish-version")) { Text("Publish new version") }
+      Button(onClick = { context.navigate("marketplace.publishPlugin", mapOf("listing" to listingId)) }, enabled = held.can(PUBLISH_KEY), modifier = Modifier.testTag("listing-publish-version")) { Text("Publish new version") }
     }
     OutlinedButton(
       onClick = { runner.clear(); editing = (doc as? Live.Ready)?.value?.let(SellerListing::from) },
-      enabled = doc is Live.Ready,
+      enabled = doc is Live.Ready && held.can(MANAGE_LISTINGS_KEY),
       modifier = Modifier.testTag("listing-edit"),
     ) { Text("Edit listing") }
+  }
+  if (!held.can(MANAGE_LISTINGS_KEY)) {
+    Text(permissionRefusalText(MANAGE_LISTINGS_KEY), style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurfaceVariant, modifier = Modifier.testTag("listing-edit-refusal"))
   }
   editing?.let { listing -> EditListingDialog(context, listing, runner, api) { editing = null } }
 }

@@ -74,7 +74,7 @@ fun AiSeoAuditCard(context: NativePluginContext) {
   val hostId = context.hostId ?: return
   val orgId = context.orgId ?: return
   val scope = rememberCoroutineScope()
-  val runner = remember(hostId) { ActionRunner(scope, roleHint = "an author, editor or admin") }
+  val runner = remember(hostId) { ActionRunner(scope) }
   var verdict by remember(hostId) { mutableStateOf("checking") }
   var job by remember(hostId) { mutableStateOf<JsonObject?>(null) }
   var notice by remember(hostId) { mutableStateOf<String?>(null) }

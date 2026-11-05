@@ -74,7 +74,7 @@ fun AiSiteMemoryCard(context: NativePluginContext) {
   val flow = remember(hostId, context.firestore) { context.firestore.observe(FirestoreQuery("hosts/$hostId/$AI_SITE_MEMORY_SUBCOLLECTION", limit = AI_SITE_MEMORY_MAX * 2)) }
   val live by flow.collectAsState(Live.Loading)
   val scope = rememberCoroutineScope()
-  val runner = remember { ActionRunner(scope, roleHint = "an author, editor or admin") }
+  val runner = remember { ActionRunner(scope) }
   var clearing by remember { mutableStateOf(false) }
   val preferences = (live as? Live.Ready)?.value?.let(::aiSitePreferences).orEmpty()
 

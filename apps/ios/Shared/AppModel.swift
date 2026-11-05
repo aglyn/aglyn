@@ -201,7 +201,9 @@ final class AppModel {
           await self?.refreshClaims(force: true)
         },
         message: { passwordChangeMessage($0) }),
-      googleConfigured: config?.google != nil, passkeyRelyingParty: config?.passkeyRelyingParty)
+      googleConfigured: config?.google != nil, passkeyRelyingParty: config?.passkeyRelyingParty,
+      orgPermissions: orgAccess.workspacePermissions, sitePermissions: orgAccess.pickedSitePermissions,
+      permissionsSiteID: orgAccess.pickedSiteID)
   }
 
   func signOut() async {
@@ -292,7 +294,8 @@ final class AppModel {
       openLink: { [weak self, weak navigation] link in
         guard let self, let navigation else { return }
         self.open(link, in: navigation)
-      })
+      },
+      permission: { [weak self] key, hostID in self?.orgAccess.holds(key, onSite: hostID) ?? false })
     context.sites = (workspace?.sites ?? []).map {
       NativeSiteRef(id: $0.id, name: $0.name, subdomain: $0.subdomain, role: $0.role)
     }
