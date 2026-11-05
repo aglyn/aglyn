@@ -513,10 +513,10 @@ function sectionScope(page: PageScope, raw: AiLayoutSection, index: number): Sec
       from: index,
       formSection: page.formSection,
     },
-    heading: raw.blocks.find((block) => block.kind === 'heading')?.text,
+    heading: inRows(raw.blocks).find((block) => block.kind === 'heading')?.text,
     words: [
       page.plan.sections[index]?.name ?? '',
-      ...raw.blocks.filter((block) => block.kind === 'heading' || block.kind === 'eyebrow').map((block) => block.text ?? ''),
+      ...inRows(raw.blocks).filter((block) => block.kind === 'heading' || block.kind === 'eyebrow').map((block) => block.text ?? ''),
     ].join(' '),
   }
 }
@@ -646,7 +646,7 @@ function drawSection(
     for (let at = list.length - 1; at >= 0; at -= 1)
       if (list[at].kind === 'heading' && !speaks(list[at])) list.splice(at, 1)
   }
-  if (index === 0 && !inOrder().some(speaks)) {
+  if (index === 0 && !inRows(inOrder()).some(speaks)) {
     head.unshift({ kind: 'heading', text: page.plan.title })
     page.settled.push({
       at,
@@ -804,7 +804,7 @@ function isItemGroup(block: AiLayoutBlock): boolean {
 
 /** Whether a block spans more than a reading column: a row of several items, or a table, tabs or logos of a page brought in. */
 function isWideGroup(block: AiLayoutBlock): boolean {
-  if (block.kind === 'table' || block.kind === 'tabs' || block.kind === 'logos') return true
+  if (block.kind === 'table' || block.kind === 'tabs' || block.kind === 'logos' || block.kind === 'row') return true
   return (
     (block.kind === 'cards' ||
       block.kind === 'steps' ||
@@ -1188,9 +1188,27 @@ function compileBlock(
       return logos(scope, block)
     case 'video':
       return block.video ? video(scope, block.video, block.picture) : null
+    case 'row':
+      return columnsRow(scope, block, room)
     default:
       return null
   }
+}
+
+/** Blocks and the blocks of the rows among them (AGL-4152), top to bottom: what a section says, whichever row says it. */
+function inRows(blocks: readonly AiLayoutBlock[]): AiLayoutBlock[] {
+  return blocks.flatMap((block) => (block.kind === 'row' ? inRows((block.row ?? []).flatMap((column) => column.blocks)) : [block]))
+}
+
+/**
+ * A row of a page brought in past its section's first (AGL-4152), in its
+ * columns as `compileRow` sets them. Where the room is a column too narrow to
+ * split, or only one column has anything in it, one under another.
+ */
+function columnsRow(scope: SectionScope, block: AiLayoutBlock, room: Room): string | null {
+  const filled = (block.row ?? []).filter((column) => column.blocks.length)
+  if (filled.length < 2 || room === 'narrow') return compileFlow(scope, filled.flatMap((column) => column.blocks), room)
+  return compileRow(scope, filled.map((column) => ({ column: column.blocks, weight: column.weight })))
 }
 
 /** Secondary words' color: muted text, or the band's own on a brand band. */
@@ -2549,8 +2567,11 @@ function hero(
   if (variant === 'panel') return panelHero(scope, flow, picture, home)
   if (variant === 'portrait') return portraitHero(scope, flow, picture)
   const band = scope.band
+  // A page kept as it is (AGL-4152) keeps a centered opening's words centered beside its picture.
+  const keptCentered = scope.page.options.verbatim === true && scope.page.options.finish !== 'improve' && scope.centered
   scope.centered = false
   if (variant === 'split') {
+    scope.centered = keptCentered
     const words = compileFlow(scope, flow, 'half') as string
     const photo = designPicture(
       scope,
@@ -4065,11 +4086,13 @@ function importedItem(scope: SectionScope, block: AiLayoutBlock, item: AiLayoutI
     parts.push(tree.add(AI_ICON_COMPONENT_ID, { iconId: AI_ICON_LIBRARY.quote.id, size: '32' }, { color: 'primary.main' }, null, 'quoteMark'))
     parts.push(...paragraphs(scope, [item.text, ...(item.more ?? [])], 'body1', null, 'quote'))
     if (title) parts.push(tree.add('muiTypography', { children: title, variant: 'subtitle2', component: 'p', ...align(scope) }, null, null, 'attribution'))
+    if (item.links?.length) parts.push(itemLinks(scope, item.links))
   } else if (kind === 'stats') {
     const lead = figure || title
     if (lead) parts.push(tree.add('muiTypography', { children: lead, variant: 'h2', component: 'p', ...align(scope) }, accent(scope), null, 'figure'))
     if (figure && title) parts.push(titleNode())
     parts.push(...paragraphs(scope, [item.text, ...(item.more ?? [])], 'body2', muted(scope), 'label'))
+    if (item.links?.length) parts.push(itemLinks(scope, item.links))
   } else {
     if (item.picture) parts.push(itemPicture(scope, item.picture))
     const { lead, mark } = leadRow(scope, item, style)

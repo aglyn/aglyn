@@ -1,0 +1,12 @@
+.backdrop-picture { visibility: hidden; }
+@media (prefers-reduced-motion: reduce) { .backdrop-picture { visibility: visible; } }
+img[data-src]:not([src]):not([srcset]) { visibility: hidden; }
+.section-backdrop, .backdrop-inner { position: absolute; top: 0; right: 0; bottom: 0; left: 0; }
+.for-phone { display: none; }
+@media (max-width: 767px) { .for-desktop { display: none; } .for-phone { display: block; } }
+.quiet-label { position: absolute !important; clip: rect(1px, 1px, 1px, 1px); padding: 0 !important; border: 0 !important; height: 1px !important; width: 1px !important; overflow: hidden; }
+.on-dark { color: #ffffff; }
+.button { display: inline-block; padding: 12px 20px; }
+.button--primary { background-color: #1420e0; color: #ffffff; }
+.button--secondary { border: 1px solid #1420e0; color: #1420e0; }
+.ticker-measure { position: absolute; visibility: hidden; display: inline-flex; }

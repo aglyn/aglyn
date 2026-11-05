@@ -251,9 +251,10 @@ export interface AiLayoutVideo {
  * The block kinds only a page brought in draws (AGL-4107), never in a tool
  * schema: a TABLE of rows of cells, TABS whose panels hold blocks, a strip
  * of LOGOS — pictures, or short words as chips — and a VIDEO, the source's
- * film poster first (AGL-4140).
+ * film poster first (AGL-4140), and a ROW of columns past a section's first
+ * (AGL-4152), which is the one `cols` names.
  */
-export const AI_LAYOUT_IMPORT_BLOCK_KINDS = ['table', 'tabs', 'logos', 'video'] as const
+export const AI_LAYOUT_IMPORT_BLOCK_KINDS = ['table', 'tabs', 'logos', 'video', 'row'] as const
 export type AiLayoutImportBlockKind = (typeof AI_LAYOUT_IMPORT_BLOCK_KINDS)[number]
 
 /** A tab of a page brought in: its label and the blocks its panel shows. */
@@ -305,6 +306,8 @@ export interface AiLayoutBlock {
   rule?: { side: 'top' | 'right' | 'bottom' | 'left'; width: 1 | 2 | 3; color: AiLayoutColorRole | null }
   /** A video block's film (AGL-4140); its `picture` is the poster. */
   video?: AiLayoutVideo
+  /** A row block's columns (AGL-4152), by relative width, each its blocks top to bottom. */
+  row?: Array<{ weight: number; blocks: AiLayoutBlock[] }>
 }
 
 /** How a group of a page brought in is drawn (AGL-4107): the compiler's group variants a source can show. */

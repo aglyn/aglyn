@@ -786,11 +786,13 @@ async function hostReportFrom(db: Dict, load: (file: string) => Promise<Dict>, a
       left.push({ page: page.path, why: 'the read has no layout to score against (too large to keep)' })
       continue
     }
-    const photos = page.photos?.assets?.length ? page.photos.assets : library(read.blocks ?? [], tree)
+    // A picture the source hides from a visitor (AGL-4152) is looked for in the library too: an older build may draw it.
+    const hidden = (read.concealed?.pictures ?? []).map((url: string) => ({ kind: 'image', url, alt: '', region: 'main' }))
+    const photos = page.photos?.assets?.length ? page.photos.assets : library([...(read.blocks ?? []), ...hidden], tree)
     const how = siteImportPageFinish(state, page, { finish: args.finish, words: args.words })
     const said = `${how.finish}, words ${how.words} (${how.from === 'asked' ? 'asked here' : how.from === 'wave' ? 'its wave' : how.from === 'import' ? 'the import' : 'none named: keep'})`
     finishes.set(said, (finishes.get(said) ?? 0) + 1)
-    rows.push({ name: page.path, report: fidelity.siteImportFidelity({ layout: read.layout, blocks: read.blocks ?? [], photos }, tree, { finish: how.finish, words: how.words, theme, ...(args.generative ? { improved: {} } : {}) }) })
+    rows.push({ name: page.path, report: fidelity.siteImportFidelity({ layout: read.layout, blocks: read.blocks ?? [], photos, ...(read.concealed ? { concealed: read.concealed } : {}) }, tree, { finish: how.finish, words: how.words, theme, ...(args.generative ? { improved: {} } : {}) }) })
   }
   const themeNote = theme
     ? theme.from === 'style'
