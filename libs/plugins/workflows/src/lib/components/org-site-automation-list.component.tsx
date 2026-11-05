@@ -20,7 +20,6 @@ import type { ConsolePluginOrgHost } from '@aglyn/aglyn'
 import { hostEventLabel, pluginDocsHelp } from '@aglyn/aglyn'
 import { orgPermissionLabel } from '@aglyn/aglyn/app-utils/org-permissions'
 import { AppLink, CardDisplay } from '@aglyn/shared-ui-jsx'
-import { BlockedControl } from '@aglyn/shared-ui-jsx/components/blocked-control.component'
 import { ScrollTable } from '@aglyn/shared-ui-jsx/components/scroll-table.component'
 import {
   useFirestore,
@@ -153,9 +152,6 @@ export function OrgSiteAutomationList(props: {
   const linkable = mount.hosts.filter((host) =>
     orgSiteAutomationPath(mount, host.id, kind),
   )
-  const addable = linkable.filter((host) => readable.includes(host))
-  // The answer is in, and no site is one this reader may add a webhook to.
-  const addRefused = Boolean(access?.known) && !addable.length
   return (
     <CardDisplay
       header={copy.header}
@@ -228,17 +224,14 @@ export function OrgSiteAutomationList(props: {
         )}
         {linkable.length ? (
           <Stack direction="row" spacing={1} sx={{ alignSelf: 'flex-start' }}>
-            <BlockedControl blocked={addRefused} reason={WEBHOOKS_REFUSAL}>
-              <Button
-                size="small"
-                color="primary"
-                aria-haspopup="menu"
-                disabled={Boolean(access) && !access?.known}
-                onClick={(event) => setAddAnchor(event.currentTarget)}
-              >
-                {`Add ${copy.noun} on a site`}
-              </Button>
-            </BlockedControl>
+            <Button
+              size="small"
+              color="primary"
+              aria-haspopup="menu"
+              onClick={(event) => setAddAnchor(event.currentTarget)}
+            >
+              {`Add ${copy.noun} on a site`}
+            </Button>
           </Stack>
         ) : null}
       </Stack>
@@ -247,7 +240,7 @@ export function OrgSiteAutomationList(props: {
         open={Boolean(addAnchor)}
         onClose={() => setAddAnchor(null)}
       >
-        {addable.map((host) => (
+        {linkable.map((host) => (
           <MenuItem
             key={host.id}
             component={AppLink as any}

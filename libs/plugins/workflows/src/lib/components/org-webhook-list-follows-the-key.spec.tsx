@@ -171,22 +171,25 @@ describe('which sites the list reads, member kind by member kind', () => {
 })
 
 describe('what the reader is told', () => {
-  it('names the permission when no site holds it, and switches Add off with it', () => {
+  it('names the permission when no site holds it', () => {
     answered({ role: 'viewer', allHosts: true })
     render(<OrgSiteWebhookList mount={mount()} />)
     expect(screen.getByText(REFUSAL)).toBeTruthy()
-    expect(addButton().disabled).toBe(true)
-    expect(addButton().closest('[aria-label]')?.getAttribute('aria-label')).toBe(REFUSAL)
   })
 
-  it('says some sites are left out when only some hold it, and offers Add on those alone', () => {
+  it('says some sites are left out when only some hold it', () => {
     answered({ role: 'editor', allHosts: true, hostAccess: { a: 'viewer' } })
     render(<OrgSiteWebhookList mount={mount()} />)
     expect(screen.getByText(PARTIAL)).toBeTruthy()
     expect(screen.queryByText(REFUSAL)).toBeNull()
+  })
+
+  it('leaves Add on a site alone: it only opens the site, and the create route asks its own key', () => {
+    answered({ role: 'viewer', allHosts: true })
+    render(<OrgSiteWebhookList mount={mount()} />)
     expect(addButton().disabled).toBe(false)
     fireEvent.click(addButton())
-    expect(screen.getAllByRole('menuitem').map((item) => item.textContent)).toEqual(['Site b'])
+    expect(screen.getAllByRole('menuitem').map((item) => item.textContent)).toEqual(['Site a', 'Site b'])
   })
 
   it('says nothing for a member who holds it everywhere (negative control)', () => {
@@ -194,13 +197,11 @@ describe('what the reader is told', () => {
     render(<OrgSiteWebhookList mount={mount()} />)
     expect(screen.queryByText(REFUSAL)).toBeNull()
     expect(screen.queryByText(PARTIAL)).toBeNull()
-    expect(addButton().closest('[aria-label]')).toBeNull()
   })
 
   it('never refuses while the member read is out, and says so when it failed', () => {
     const { unmount } = render(<OrgSiteWebhookList mount={mount()} />)
     expect(screen.queryByText(REFUSAL)).toBeNull()
-    expect(addButton().disabled).toBe(true)
     unmount()
     mockDocs.set(MEMBER, { data: undefined, status: 'error', fromCache: false })
     render(<OrgSiteWebhookList mount={mount()} />)
