@@ -440,8 +440,9 @@ export function isMediaCdnPath(value: unknown): value is string {
  * Rewrites an org scope so it names the site doing the rendering — the
  * scope-segment twin of `hostQualifiedCdnPath` (AGL-1043).
  *
- * `org:{orgId}` serves ORG-WIDE assets only; an asset restricted to
- * particular sites has to be asked for through `org:{orgId}:{hostId}`,
+ * `org:{orgId}` serves org-wide assets, and assets shared with all sites
+ * except some; an asset shared with chosen sites has to be asked for through
+ * `org:{orgId}:{hostId}`,
  * because the CDN is unauthenticated and the URL is the only thing it can
  * decide from. The qualified form is a superset — it also serves org-wide
  * assets, since `visibleToHost` is true for `['org']` — so qualifying
