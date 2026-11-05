@@ -582,8 +582,8 @@ carries a `resource`. `listPluginHostResources()` / `pluginHostResource(kind)`
 
 ### In the site backup — `siteExport`, and `plugin-site-export`
 
-A site admin on a plan with site export downloads the site as one site
-package (`aglyn-package` v2) and imports it later, into the same site or
+A member holding **Manage site settings**, on a plan with site export, downloads the
+site as one site package (`aglyn-package` v2) and imports it later, into the same site or
 another. The platform's own documents are always in it. A plugin collection
 is in it only when the collection says so, beside its `resource`:
 

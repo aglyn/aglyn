@@ -21,8 +21,8 @@ happens: each paid order, each refund, the Aglyn fee on each sale, and each
 Stripe payout to your bank. You choose the accounts; Aglyn never creates
 accounts in your chart.
 
-Only an organization **owner or admin** (anyone whose role includes **Manage
-accounting**) can connect or change it. For QuickBooks Online or Xero, use
+Connecting or changing it takes the **Manage accounting** permission, which organization
+owners and admins hold by default. For QuickBooks Online or Xero, use
 [Connect QuickBooks Online](./connect-quickbooks-online.md) or
 [Connect Xero](./connect-xero.md) instead.
 

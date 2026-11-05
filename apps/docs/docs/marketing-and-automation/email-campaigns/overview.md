@@ -416,17 +416,19 @@ That site stops sending altogether, receipts included, until you choose another 
 way to fail. Removing the domain **we set up** is the gentler case: receipts go back to
 the shared address, where campaigns are held to the tighter complaint and bounce limits.
 
-Adding a domain and choosing what a site sends as need the organization admin role.
+Adding a domain takes the **Sending domains** permission, and choosing what a site sends as
+takes **Organization settings**. Owners and admins hold both by default.
 
 #### A domain on your organization's Emails page {#org-sending-domain}
 
 Opened from your organization's **Emails → Sending**, a domain's page shows the same
 records to publish and the same **Request records** and **Check DNS**, and lists the
 sites sending as it, each with **Stop sending as this domain**. Once the domain is
-verified, an owner or admin picks another site and chooses **Send as this domain** to
-move it onto the domain.
+verified, a member holding **Organization settings** picks another site and chooses **Send
+as this domain** to move it onto the domain.
 
-The records come back only for an organization owner or admin. Anyone else still sees
+The records come back only for a member holding **Sending domains**, which owners and
+admins hold by default. Anyone else still sees
 the domain's state and the sites sending as it, and is told why the records are not
 shown. **Remove domain** is in the card's menu (⋮).
 
@@ -468,7 +470,8 @@ honored on the shared address exactly as they are on a domain of your own. A mai
 set before this site has its own domain is kept and takes effect the day it does, and the
 Sending page says as much rather than showing you a setting that is quietly doing nothing.
 
-Adding, editing and removing senders needs the organization admin role. Picking one for a
+Adding, editing and removing senders needs the **Organization settings** permission, which
+owners and admins hold by default. Picking one for a
 particular email does not — anyone who can write a campaign can choose among them.
 
 ### Send a test {#send-a-test}

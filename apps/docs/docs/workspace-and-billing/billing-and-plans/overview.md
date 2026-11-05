@@ -553,8 +553,9 @@ Two things do not depend on the plan:
   routing is on — the same on Free as on a paid plan. Those records are kept and count
   against the [band](#crm-records); on Free the CRM that shows them is locked, and they
   are there when the plan includes it.
-- **Privacy requests.** Workspace owners and admins export every contact and every lead
-  the workspace holds, and erase a person by email address, from **Settings → Privacy**
+- **Privacy requests.** Members holding **Privacy requests**, which workspace owners and
+  admins hold by default, export every contact and every lead the workspace holds, and
+  erase a person by email address, from **Settings → Privacy**
   — see [Privacy requests](../signing-in-and-sessions.md#privacy-requests).
 
 ### One-to-one email {#one-to-one-email}
