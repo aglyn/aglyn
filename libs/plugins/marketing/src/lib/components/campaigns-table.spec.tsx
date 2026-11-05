@@ -236,8 +236,9 @@ let postAnswer = { ok: true, body: {} as Record<string, unknown> }
 import { nameSearchNormalizers } from '@aglyn/aglyn/app-utils/name-search'
 import { planListQuery } from '@aglyn/shared-ui-jsx/const/list-query-plan'
 let containersBlocked = false
+let rowDeleteBlocked = false
 jest.mock('./use-campaign-containers-blocked', () => ({
-  useCampaignContainersBlocked: () => containersBlocked,
+  useCampaignListAccess: () => ({ createBlocked: containersBlocked, deleteBlocked: rowDeleteBlocked }),
 }))
 
 import HostCampaignsCard from './campaigns-card'
@@ -802,6 +803,49 @@ describe('a campaign whose email is still going out', () => {
 describe('without "Run email campaigns" (AGL-4047)', () => {
   afterEach(() => {
     containersBlocked = false
+    rowDeleteBlocked = false
+  })
+  const REFUSAL = 'Your role does not include "Run email campaigns" — ask an organization admin'
+
+  it('switches the empty list’s Create campaign off with the permission named', async () => {
+    containersBlocked = true
+    served.emailCampaigns = []
+    render(<HostCampaignsCard hostId="host-1" basePath="/acme/hosts/store/marketing" />)
+    await waitFor(() => expect(screen.getAllByRole('button', { name: 'Create campaign' })).toHaveLength(2))
+    for (const button of screen.getAllByRole('button', { name: 'Create campaign' })) {
+      expect((button as HTMLButtonElement).disabled).toBe(true)
+    }
+    expect(screen.getAllByLabelText(REFUSAL)).toHaveLength(2)
+  })
+
+  it('leaves the empty list’s Create campaign on for a holder (negative control)', async () => {
+    served.emailCampaigns = []
+    render(<HostCampaignsCard hostId="host-1" basePath="/acme/hosts/store/marketing" />)
+    await waitFor(() => expect(screen.getAllByRole('button', { name: 'Create campaign' })).toHaveLength(2))
+    for (const button of screen.getAllByRole('button', { name: 'Create campaign' })) {
+      expect((button as HTMLButtonElement).disabled).toBe(false)
+    }
+    expect(screen.queryByLabelText(REFUSAL)).toBeNull()
+  })
+
+  it('switches a row’s Delete campaign off with the permission named', async () => {
+    rowDeleteBlocked = true
+    served.emailCampaigns = [{ $id: 'camp-1', name: 'Spring sale', visibleTo: ['org'], listIds: [] }]
+    render(<HostCampaignsCard hostId="host-1" basePath="/acme/hosts/store/marketing" />)
+    await waitFor(() => expect(cells()).toContain('Spring sale'))
+    openMenuFor('Spring sale')
+    const item = screen.getAllByRole('menuitem').find((one) => one.textContent === 'Delete campaign') as HTMLElement
+    expect(item.getAttribute('aria-disabled')).toBe('true')
+    expect(screen.getByLabelText(REFUSAL).contains(item)).toBe(true)
+  })
+
+  it('leaves a row’s Delete campaign on for a holder (negative control)', async () => {
+    served.emailCampaigns = [{ $id: 'camp-1', name: 'Spring sale', visibleTo: ['org'], listIds: [] }]
+    render(<HostCampaignsCard hostId="host-1" basePath="/acme/hosts/store/marketing" />)
+    await waitFor(() => expect(cells()).toContain('Spring sale'))
+    openMenuFor('Spring sale')
+    const item = screen.getAllByRole('menuitem').find((one) => one.textContent === 'Delete campaign') as HTMLElement
+    expect(item.getAttribute('aria-disabled')).toBeNull()
   })
 
   it('switches Create campaign off with the permission named', async () => {

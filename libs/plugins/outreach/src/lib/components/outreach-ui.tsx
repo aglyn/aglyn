@@ -147,7 +147,7 @@ export function OutreachLoading(props: { label: string }) {
 
 /** The words a refused read shows when the route gave none of its own. */
 export const OUTREACH_REFUSED_MESSAGE =
-  "You don't have access to this in Sequences. Ask an organization owner or admin for the Use Sequences permission."
+  'Your role does not include "Use Sequences" — ask an organization admin'
 
 /**
  * What a failed or refused read shows. A refusal is a statement about the

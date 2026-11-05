@@ -348,7 +348,8 @@ struct ListRow: View {
           .accessibilityHidden(true)
       }
       VStack(alignment: .leading, spacing: 3) {
-        Text(primary.isEmpty ? "—" : primary).font(AglynFont.body).lineLimit(wide ? 1 : 2)
+        // `wrap`: a row that is a whole sentence to read, never cut short.
+        Text(primary.isEmpty ? "—" : primary).font(AglynFont.body).lineLimit(block["wrap"] == .bool(true) ? nil : wide ? 1 : 2)
         if let secondary, !secondary.isEmpty {
           Text(secondary).font(AglynFont.subheadline).foregroundStyle(.secondary).lineLimit(wide ? 1 : 2)
         }

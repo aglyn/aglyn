@@ -89,6 +89,7 @@ import kotlinx.serialization.json.JsonElement
 import kotlinx.serialization.json.JsonNull
 import kotlinx.serialization.json.JsonObject
 import kotlinx.serialization.json.JsonPrimitive
+import kotlinx.serialization.json.booleanOrNull
 
 internal fun tone(name: String?): StatusTone = when (name) {
   "success" -> StatusTone.SUCCESS
@@ -436,8 +437,12 @@ private fun SpecBodyContent(
         onRefresh = { scope.launch { refreshing = true; model.load(); refreshing = false } },
         modifier = Modifier.fillMaxSize().testTag("spec-${model.spec.id}"),
       ) {
+        // The notice is the list's first row: bring it into view, or a save at the foot of a long form says nothing.
+        val listState = androidx.compose.foundation.lazy.rememberLazyListState()
+        LaunchedEffect(notice) { if (notice != null) listState.animateScrollToItem(0) }
         LazyColumn(
           Modifier.fillMaxSize(),
+          state = listState,
           verticalArrangement = Arrangement.spacedBy(space(1.5f)),
           // The whole content area, on the content edge E (Zach 10/19: no capped column).
           contentPadding = androidx.compose.foundation.layout.PaddingValues(horizontal = com.aglyn.ui.paneInset(), vertical = space(2f)),
@@ -1040,6 +1045,8 @@ private fun ListRow(
   Column {
     AglynListItem(
       title = primary,
+      // `wrap`: a row that is a whole sentence to read, never cut short.
+      titleWraps = (block["wrap"] as? JsonPrimitive)?.booleanOrNull == true,
       supporting = supporting,
       icon = block.string("icon")?.let { AglynIcons.named(materialIcon(ScreenValues.render(it, scope))) },
       // `avatar`: the row is a person, drawn with their photo (the console's avatar), their initials when they have none

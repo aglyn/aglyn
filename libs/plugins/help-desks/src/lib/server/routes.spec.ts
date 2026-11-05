@@ -18,6 +18,7 @@
  * limitations under the License.
  */
 
+import { HELP_DESKS_SITE_PRESETS } from '../model/help-desks-permissions'
 import { randomBytes } from 'node:crypto'
 import { createSecretBoxKey, type SecretBoxKeyring } from '@aglyn/shared-util-tools/secret-box'
 import { ProviderError } from '../providers/http'
@@ -25,7 +26,7 @@ import type { HelpDeskCredential, HelpDeskProvider } from '../providers/provider
 import { createMemoryStore } from '../testing/memory-store'
 import { openCredential, readHelpDesksConfig, type HelpDesksConfig } from './config'
 import { createCredentialOpener } from './credentials'
-import { createHelpDeskRoutes, fail, type HelpDeskRole, type HelpDeskRouteDeps } from './routes'
+import { createHelpDeskRoutes, fail, type HelpDeskRouteDeps } from './routes'
 import { customerDocId } from './store'
 
 const HOST = 'host-1'
@@ -36,7 +37,7 @@ const keyring: SecretBoxKeyring = { current: key, keys: [key] }
 function setup(
   options: {
     config?: Partial<HelpDesksConfig>
-    role?: HelpDeskRole | null
+    role?: 'admin' | 'editor' | null
     verify?: HelpDeskProvider['verify']
   } = {},
 ) {
@@ -59,10 +60,12 @@ function setup(
       pushOrder: async () => undefined,
       createTicket: async () => undefined,
     }),
-    gate: async (request, role) => {
+    // The gate as the routes climb it: the key each names, read off its preset,
+    // so a route asking the wrong key shows as the wrong role getting through.
+    gate: async (request, permission) => {
       const granted = options.role === undefined ? 'admin' : options.role
       if (!granted) return fail(401, 'Unauthenticated')
-      if (granted === 'editor' && role === 'admin') return fail(403, 'Not permitted')
+      if (permission && !HELP_DESKS_SITE_PRESETS[permission][granted]) return fail(403, 'Not permitted')
       const body = request.method === 'GET' ? {} : ((await request.json().catch(() => ({}))) as Record<string, unknown>)
       return { orgId: 'org-1', hostId: HOST, uid: 'u1', body }
     },

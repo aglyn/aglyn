@@ -125,7 +125,7 @@ private struct MediaChooserGrid: View {
   @State private var runner = ActionRunner()
 
   private var canUpload: Bool {
-    scope.isOrg ? mediaOrgRoles.contains(context.orgRole ?? "") : mediaSiteRoles.contains(context.siteRole ?? "")
+    scope.isOrg ? context.can("org.media") : context.can("site.edit")
   }
 
   private var listedIDs: [String] {

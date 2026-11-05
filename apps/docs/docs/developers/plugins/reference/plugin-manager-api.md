@@ -713,11 +713,12 @@ owns the records declares the resource and answers for it. Declare it in
 | `formats` | `csv`, `json`, `ndjson`. |
 | `limits` | `maxRows` (and optional `maxBytes`) one file may carry. |
 | `instances` | `true` for a resource moved one instance at a time — one dataset's records, not every dataset's. Every key that reaches it names the instance as `<key>:<instance>` (`transferResourceInstanceKey`, `data.dataset:<datasetId>`), so a job, the person's remembered choices and the one running import are each kept per instance; the hooks read which one with `transferResourceInstanceOf(ctx)`. |
-| `readableByMembers` | `true` when every member may read the records, so any member may export what their scope lets them see (a collaborator only on a site they reach) and open the export dialog. A dataset's records are declared this way. |
+| `readableByMembers` | `true` when every member may read the records, so any member may export what their scope lets them see (a collaborator only on a site they reach) and open the export dialog. |
 | `readPermission` | The permission that admits a member to export the records, beside **Manage data** (`data.manage`), which always admits. A resource that declares neither this nor `readableByMembers` exports for Manage data alone; importing needs Manage data either way. The launcher's `can('import' \| 'export', target)` answers the same rule for a list's buttons. |
+| `readPermissionOnly` | `true` when `readPermission` alone decides an export, and **Manage data** doesn't also admit. A dataset's records are declared this way. |
 | `featureFlag` | The plan feature (`crm`) a workspace's plan must carry to move the records — the flag your console surfaces are gated by. Without it every transfer route refuses with 403 `{ error, reason: 'plan_required', code: <feature> }`, staff included, and `can` answers `false`. Register a `planGate(subject, intent)` with the server half to refuse in your plugin's own words; without one the core's sentence names the plan that includes the feature. |
 | `featureFlagExempt` | The intents (`import`, `export`) that stay open on every plan despite `featureFlag` — an obligation rather than a feature, like the CRM's contacts and leads exports. |
-| `importRoles` | The only roles (`admin`, `editor`, `author`, `viewer`) that may import the records, where they are: the member's role on the named site (a workspace owner or admin is every site's admin), or on the workspace for a workspace's records. Asked on top of **Manage data**, for a resource stricter than it, like gift cards (`["admin"]`). The transfer gate refuses anyone else on every import step, `can('import')` answers `false` for them, and the Import & export page offers them no Import. Not on an `exportOnly` resource. |
+| `importPermission` | A catalog key a member must also hold to import the records, where they are: on the named site, or on the workspace for a workspace's records. Asked on top of **Manage data**, for a resource stricter than it, like gift cards (`"commerce.giftCards.import"`). The transfer gate refuses anyone else on every import step, `can('import')` answers `false` for them, and the Import & export page offers them no Import. Not on an `exportOnly` resource. |
 
 The plugin also lists `transferResources` among its `contributes.console.slots`
 (`TRANSFER_RESOURCES_LOAD_POINT`), so the wizard loads its console registrar,
@@ -1043,6 +1044,24 @@ picker from them on the panel's first render. `pluginEntityPickers()`,
 declares `products`, `collections` (catalog collections only) and
 `categories`, Forms declares `forms`, and Data declares `datasets` with
 their fields.
+
+## Shared with all sites except some — `plugin-scope-sharing` (`/server`)
+
+A document in an org collection can be shared with every site but a few. It keeps the sites it reaches in `visibleTo`, so that list has to change when a site joins or leaves the workspace. One sweep does that for every collection, and it walks what plugins declare in the `scopeSharingCollections` block of `plugins.config.json`, compiled with no runtime door.
+
+| Declaration field | Semantics |
+| -- | -- |
+| `name` | The subcollection under `orgs/{orgId}`. One collection has one owner. |
+| `patch` | `true` when stored fields follow `visibleTo`, such as scoped search tokens. The sweep writes nothing to the collection until the patch is registered. |
+| `maxIncluded` | The most sites one document may reach. Past it the document stops gaining sites, still loses sites that left, and shows in the weekly drift report. |
+| `keepSiteFields` | Fields naming sites that stay included though they are excluded, such as the site that captured a person. |
+
+| API | Semantics |
+| -- | -- |
+| `listScopeSharingCollections()` | Every collection the sweep walks, with its owner, in a stable order. |
+| `registerPluginScopeSharingPatch(collections, patch, { pluginId? })` | Registers the function that recomputes those fields. It receives the collection and the whole document as it will be stored, and its answer is merged into the write. Refuses a collection the plugin did not declare with `patch: true`. |
+
+Register a patch from `serverDeclarations`, deferring what it needs behind an `await import`: it registers in every server process, and only a sweep that finds a marked document calls it.
 
 ## Container kinds — `plugin-containers`
 

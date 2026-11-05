@@ -296,9 +296,10 @@ something you expected is missing, that section is where to check first.
 
 ### Downloading a whole workspace
 
-The workspace owner can export an entire workspace from **Settings → Delete → Download
-workspace data**: its sites and their content, datasets, contacts, leads, orders, form
-submissions, members, support threads, custom domains and billing identifiers.
+Anyone who holds the **Export workspace data** permission can export an entire workspace
+from **Settings → Import & export → Download workspace data**: its sites and their content,
+datasets, contacts, leads, orders, form submissions, members, support threads, custom
+domains and billing identifiers. Owners and admins hold it by default.
 
 Do this **before** deleting a workspace. Deletion keeps no copy, and the 7-day hold is
 the window in which this export is still possible.
@@ -361,7 +362,7 @@ the menu of a contact's or a lead's page — see
 [Deleting and erasing](../content-and-data/crm/contact-record.md#deleting-and-erasing).
 
 To take everything the workspace holds rather than only its people, use
-**Settings → Delete → Download workspace data**, described
+**Settings → Import & export → Download workspace data**, described
 [above](#downloading-a-whole-workspace).
 
 ## Product updates

@@ -84,10 +84,6 @@ object NavKeys {
   }
 }
 
-/** Whether the person runs this site as the console's Admin tab requires: an owner or admin of it or its workspace. */
-fun isHostAdmin(siteRole: String?, orgRole: String?): Boolean =
-  siteRole in setOf("owner", "admin") || orgRole in setOf("owner", "admin")
-
 /**
  * The plugins the platform has released to the workspace: a plugin whose catalog entry names a release flag stays only
  * while that flag is on for it (`isReleaseFlagOnForOrg`: its override, the plan targeting, the published value, the

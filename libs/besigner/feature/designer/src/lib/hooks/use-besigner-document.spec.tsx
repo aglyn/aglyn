@@ -1162,6 +1162,7 @@ describe('useBesignerDocument', () => {
     beforeEach(() => window.localStorage.clear())
 
     it('destroys the draft when a save succeeds', async () => {
+        mockCanvas.didSetInitial = true
       writeBesignerDraft(DRAFT, { nodes: NODES, baseStamp: null })
       expect(window.localStorage.getItem(besignerDraftKey(DRAFT))).not.toBeNull()
 
@@ -1454,6 +1455,20 @@ describe('useBesignerDocument', () => {
             expect.stringMatching(/saved draft.*Try again in a moment/),
             expect.objectContaining({ variant: 'info' }),
           )
+        })
+
+        it('keeps saving closed until the page is in the canvas (AGL-4174)', async () => {
+          mockCanvas.didSetInitial = false
+          mockReadServerDraft.mockResolvedValue(null)
+          const { result, rerender } = setup({
+            draft: DRAFT,
+            nodes: undefined,
+            updatedAt: stamp(7),
+          })
+          expect(result.current.saveBlockedReason).toMatch(/^Loading this /)
+          mockCanvas.didSetInitial = true
+          rerender({ nodes: NODES })
+          expect(result.current.saveBlockedReason).toBeUndefined()
         })
 
         it('opens saving again once the read has answered (AGL-4174)', async () => {

@@ -9,6 +9,23 @@ import AglynSite
 import AglynUI
 import SwiftUI
 
+/// The register, for a person who holds "Use the point of sale" (`managePos`) on this store. The routes hold it too;
+/// this says so before a sale is rung up.
+struct RegisterGate: View {
+  let context: NativePluginContext
+
+  var body: some View {
+    if context.can(registerPermission) {
+      RegisterScreen(context: context)
+    } else {
+      AglynEmptyState("Point of sale is off for you here", systemImage: "lock", message: context.refusal(registerPermission))
+        .accessibilityIdentifier("pos-register-refused")
+    }
+  }
+}
+
+let registerPermission = "managePos"
+
 /// The register: the item grid beside the basket on iPad and Mac, the grid
 /// with a basket bar on iPhone; checkout opens over it.
 struct RegisterScreen: View {
@@ -381,8 +398,9 @@ struct ItemSheetView: View {
                   HStack {
                     Text(option.name)
                     Spacer()
-                    if option.priceCents > 0 {
-                      Text("+\(model.money(Int(option.priceCents)))").foregroundStyle(.secondary).monospacedDigit()
+                    let extra = modifierOptionPriceCents(option, variantID: sheet.variant.id)
+                    if extra > 0 {
+                      Text("+\(model.money(extra))").foregroundStyle(.secondary).monospacedDigit()
                     }
                     Image(systemName: chosen ? (group.isSingle ? "largecircle.fill.circle" : "checkmark.square.fill") : (group.isSingle ? "circle" : "square"))
                       .foregroundStyle(chosen ? AglynColor.tint : .secondary)

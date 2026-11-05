@@ -99,6 +99,12 @@ export interface TransferResourceDescriptor {
    */
   readPermission?: string
   /**
+   * `readPermission` alone decides an export (AGL-4047): `data.manage` does
+   * not also admit, so taking the permission away from someone who may write
+   * the records stops the export too. Needs `readPermission`.
+   */
+  readPermissionOnly?: boolean
+  /**
    * The resource is exported and never imported — a record of work done (a
    * CRM's logged activities) or a setup edited on its own page. The upload
    * refuses it, its plugin registers no `apply` or `revert`, and a surface
@@ -121,24 +127,15 @@ export interface TransferResourceDescriptor {
    */
   featureFlagExempt?: readonly ('import' | 'export')[]
   /**
-   * The only roles that may IMPORT the records, where the records are —
-   * the member's role on the named site (`hostRoleFor`: a workspace owner or
-   * admin is every site's admin), or on the workspace for a workspace's
-   * records — on top of `data.manage`, for a resource stricter than the
-   * permission: gift cards, which an import issues as spendable money, are
-   * imported by `["admin"]` alone (AGL-3554). The transfer gate refuses
-   * anyone else on every import step, the console's `can('import')` answers
-   * `false` for them, and the hub offers them no Import. See
-   * `data-transfer/access.ts`.
+   * A catalog key a member must also hold to IMPORT the records, where the
+   * records are, on top of `data.manage`, for a resource stricter than that
+   * permission: gift cards, which an import issues as spendable money, ask
+   * "Import gift cards" (AGL-4047). The transfer gate refuses anyone else on
+   * every import step, the console's `can('import')` answers `false` for
+   * them, and the hub offers them no Import. See `data-transfer/access.ts`.
    */
-  importRoles?: readonly TransferImportRole[]
+  importPermission?: string
 }
-
-/** A role {@link TransferResourceDescriptor.importRoles} names: a site role. */
-export type TransferImportRole = 'admin' | 'editor' | 'author' | 'viewer'
-
-/** Every {@link TransferImportRole}, strongest first. */
-export const TRANSFER_IMPORT_ROLES: readonly TransferImportRole[] = ['admin', 'editor', 'author', 'viewer']
 
 /** Whether a file may be imported into the resource. */
 export function transferResourceImports(descriptor: Pick<TransferResourceDescriptor, 'exportOnly'>): boolean {
@@ -324,17 +321,22 @@ export function transferResourceProblems(descriptor: TransferResourceDescriptor)
   if (descriptor.readableByMembers === true && descriptor.readPermission !== undefined) {
     problems.push(`${descriptor.key} is readable by every member and names a read permission; say one.`)
   }
+  if (descriptor.readPermissionOnly !== undefined && typeof descriptor.readPermissionOnly !== 'boolean') {
+    problems.push(`${descriptor.key} says "readPermissionOnly" with something other than true or false.`)
+  }
+  if (descriptor.readPermissionOnly === true && descriptor.readPermission === undefined) {
+    problems.push(`${descriptor.key} says "readPermissionOnly" and names no read permission.`)
+  }
   if (descriptor.exportOnly !== undefined && typeof descriptor.exportOnly !== 'boolean') {
     problems.push(`${descriptor.key} says "exportOnly" with something other than true or false.`)
   }
   if (descriptor.featureFlag !== undefined && !String(descriptor.featureFlag).trim()) {
     problems.push(`${descriptor.key} names an empty plan feature.`)
   }
-  if (descriptor.importRoles !== undefined) {
-    const roles = descriptor.importRoles
+  if (descriptor.importPermission !== undefined) {
     if (descriptor.exportOnly === true) problems.push(`${descriptor.key} names who may import records it never imports.`)
-    if (!Array.isArray(roles) || !roles.length || roles.some((role) => !TRANSFER_IMPORT_ROLES.includes(role))) {
-      problems.push(`${descriptor.key} names an import role that is not ${TRANSFER_IMPORT_ROLES.join(', ')}.`)
+    if (typeof descriptor.importPermission !== 'string' || !descriptor.importPermission.trim()) {
+      problems.push(`${descriptor.key} names an empty import permission.`)
     }
   }
   if (descriptor.featureFlagExempt !== undefined) {

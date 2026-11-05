@@ -21,6 +21,7 @@ import {
   deleteVisitorUpload,
   deleteVisitorUploads,
   finalizeVisitorUpload,
+  keepVisitorUploadCopy,
   mintVisitorUploadTicket,
   readVisitorUpload,
   sendVisitorUploadFile,
@@ -36,6 +37,8 @@ import {
 export interface QuoteUploadCalls {
   mint(input: Parameters<typeof mintVisitorUploadTicket>[1]): ReturnType<typeof mintVisitorUploadTicket>
   finalize(input: Parameters<typeof finalizeVisitorUpload>[1]): ReturnType<typeof finalizeVisitorUpload>
+  /** A copy of a file already in Storage, through the same checks an upload meets. */
+  keepCopy(input: Parameters<typeof keepVisitorUploadCopy>[1]): ReturnType<typeof keepVisitorUploadCopy>
   read(scope: VisitorUploadScope, id: string): Promise<VisitorUploadFile | null>
   remove(path: string): Promise<void>
   removeAll(scope: VisitorUploadScope): Promise<void>
@@ -47,6 +50,7 @@ export function quoteUploadCalls(): QuoteUploadCalls {
   return {
     mint: (input) => mintVisitorUploadTicket(deps, input),
     finalize: (input) => finalizeVisitorUpload(deps, input),
+    keepCopy: (input) => keepVisitorUploadCopy(deps, input),
     read: (scope, id) => readVisitorUpload(deps, scope, id),
     remove: (path) => deleteVisitorUpload(deps, path),
     removeAll: (scope) => deleteVisitorUploads(deps, scope),

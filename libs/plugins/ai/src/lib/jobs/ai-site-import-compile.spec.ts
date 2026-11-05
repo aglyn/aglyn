@@ -1403,6 +1403,8 @@ describe('Keep my site asks the design answer exactly what it asked before (AGL-
     blog: { prompt: 'c1f377a23fc3df4d155cbeaf429109191d89884fece926bb23e75fb894401cb4', text: '846955ead3d1603f553b6ee7bb4451227103ba1526dc51c62d8fd2d44055dccc' },
     pottery: { prompt: '9fc5893fa82bcda9e92ae7995c3bdccd65ced1db798faca6b8e96d22872350a6', text: '82071847c6f3017142ac35f03c0961df58ad1d9d8e199889b1e221896dca6235' },
     bakery: { prompt: 'f4cde60dad094b9ff6cf7ec2028e4c1d5ca6c1c04b02bd4888c7ad53bdf5a1e5', text: '780d4382764f90f6be7ae70f7998ca221e35b85e02e435d7b8883f75bd74b422' },
+    gridServices: { prompt: '8ea8d223687e8a0eaf395e85e75834d9c60c93db98494f76b377e8a07725f43f', text: 'b20665f7172cbada329190833b985fc4560a77aab3bdef06aa19cdd315383146' },
+    swappedGrid: { prompt: '46e914c634d49f0257386756854bf69874eadd84e7af789007cc594797cc4551', text: '1f8a3ad71300cdcac53f63f814a51fb3ada1c8a7a1d4f157d5a6726f1a0248b2' },
   }
   const digest = (text: string) => createHash('sha256').update(text).digest('hex')
   const promptOf = (name: SiteLayoutPageName, finish: Finish | null) => {

@@ -123,6 +123,7 @@
  */
 
 import { holdsSiteKey, siteKeyRefusal } from '@aglyn/aglyn/app-utils/host-permissions'
+import { permissionRefusalText } from '@aglyn/aglyn/app-utils/org-permissions'
 import { checkEntitlement, pluginRequestFromWeb } from '@aglyn/aglyn/server'
 import {
   emailUnverifiedResponse,
@@ -602,6 +603,17 @@ async function handler(request: Request): Promise<Response> {
         lastIssueError: record.lastIssueError ?? null,
       })),
       canManage,
+      // The domains route's own key, not this route's (AGL-4047): Check DNS,
+      // Request records, Add and Remove go there. Asked on the read only, which
+      // is the one verb that reports it.
+      canManageDomains:
+        staff ||
+        (Boolean(orgId) &&
+          (await memberHasOrgPermission(
+            orgId,
+            membership?.member,
+            'org.sendingDomains',
+          ).catch(() => false))),
       entitled,
       dedicated,
     })
@@ -610,9 +622,7 @@ async function handler(request: Request): Promise<Response> {
   if (!canManage) {
     return Response.json(
       {
-        error:
-          'Changing the address this site sends from needs the organization ' +
-          'admin role.',
+        error: permissionRefusalText('org.settings'),
       },
       { status: 403 },
     )

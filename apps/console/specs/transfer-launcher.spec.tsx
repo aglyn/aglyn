@@ -56,7 +56,7 @@ jest.mock('next/dynamic', () => ({
 
 let mockOrg: { $id: string; role?: string; orgWide?: boolean } | null = { $id: 'org-1' }
 const mockFirestore = {}
-let mockGranted = new Set<string>(['data.manage'])
+let mockGranted = new Set<string>(['data.manage', 'data.export'])
 let mockPermissionsLoaded = true
 let mockMemberDoc: Record<string, unknown> | null = null
 
@@ -137,7 +137,7 @@ jest.mock('@aglyn/shared-util-http/authorized-token', () => ({
   },
 }))
 
-import TransferLauncherProvider from '../components/transfer-launcher-provider.component'
+import TransferLauncherProvider, { transferRefusedPermission } from '../components/transfer-launcher-provider.component'
 
 let launcher: TransferLauncher | null = null
 let accessTarget: TransferAccessTarget = { resource: 'data.dataset:ds-1', scope: 'org' }
@@ -155,7 +155,7 @@ function PluginList() {
 beforeEach(() => {
   mockKit.length = 0
   mockOrg = { $id: 'org-1' }
-  mockGranted = new Set(['data.manage'])
+  mockGranted = new Set(['data.manage', 'data.export'])
   mockPermissionsLoaded = true
   mockMemberDoc = null
   mockBilling = { org: { plan: 'starter' }, ready: true }
@@ -238,13 +238,21 @@ describe('the transfer launcher', () => {
       </TransferLauncherProvider>,
     )
     expect(access).toEqual({ import: true, export: true })
-    mockGranted = new Set()
+    mockGranted = new Set(['data.export'])
     view.rerender(
       <TransferLauncherProvider>
         <PluginList />
       </TransferLauncherProvider>,
     )
     expect(access).toEqual({ import: false, export: true })
+    // "Export data" alone decides a dataset's export (AGL-4047), Manage data or not.
+    mockGranted = new Set(['data.manage'])
+    view.rerender(
+      <TransferLauncherProvider>
+        <PluginList />
+      </TransferLauncherProvider>,
+    )
+    expect(access).toEqual({ import: true, export: false })
   })
 
   it('answers false for both until the permissions answer, and off a workspace', () => {
@@ -267,7 +275,7 @@ describe('the transfer launcher', () => {
 
   it('decides a collaborator on the site named: export where they reach, never import', async () => {
     mockOrg = { $id: 'org-1', role: 'editor', orgWide: false }
-    mockGranted = new Set()
+    mockGranted = new Set(['data.export'])
     mockMemberDoc = { role: 'editor', allHosts: false, hostAccess: { 'host-a': 'editor' } }
     accessTarget = { resource: 'data.dataset:ds-1', scope: 'org', hostId: 'host-a' }
     const view = render(
@@ -343,18 +351,19 @@ describe('the transfer launcher', () => {
     expect(answers()['email.suppressions']).toEqual({ import: true, export: true })
   })
 
-  it('offers gift cards’ Import only to a site’s admins, as the declaration’s importRoles say (AGL-3554)', () => {
+  it('offers gift cards’ Import only to a holder of "Import gift cards" (AGL-4047)', () => {
     mockBilling = { org: { plan: 'business' }, ready: true }
     accessTarget = { resource: 'commerce.gift-cards', scope: 'host', hostId: 'host-a' }
+    mockOrg = { $id: 'org-1', role: 'admin', orgWide: true }
     const view = render(
       <TransferLauncherProvider>
         <PluginList />
       </TransferLauncherProvider>,
     )
-    // No role read yet on the workspace: an org-wide member with no role is no admin.
+    // Manage data alone is not enough, whatever the role.
     expect(access).toEqual({ import: false, export: true })
 
-    mockOrg = { $id: 'org-1', role: 'admin' }
+    mockGranted = new Set(['data.manage', 'commerce.giftCards.import'])
     view.rerender(
       <TransferLauncherProvider>
         <PluginList />
@@ -362,13 +371,48 @@ describe('the transfer launcher', () => {
     )
     expect(access).toEqual({ import: true, export: true })
 
-    mockOrg = { $id: 'org-1', role: 'editor', orgWide: true }
+    mockGranted = new Set(['commerce.giftCards.import'])
     view.rerender(
       <TransferLauncherProvider>
         <PluginList />
       </TransferLauncherProvider>,
     )
-    expect(access).toEqual({ import: false, export: true })
+    expect(access).toEqual({ import: false, export: false })
+  })
+
+  it('names the permission refusing an action only once it is known to be one (AGL-4047)', () => {
+    const inputs = {
+      permissionsLoaded: true,
+      can: () => false,
+      orgWide: true,
+      member: null,
+      entitled: () => true,
+    }
+    const gift = { resource: 'commerce.gift-cards', scope: 'host' as const, hostId: 'host-a' }
+    const anything = { resource: 'crm.contacts', scope: 'org' as const }
+    expect(transferRefusedPermission(inputs, 'import', anything)).toBe('data.manage')
+    // Not yet known.
+    expect(transferRefusedPermission({ ...inputs, permissionsLoaded: false }, 'import', anything)).toBeNull()
+    // The plan's to refuse, in its own words.
+    expect(transferRefusedPermission({ ...inputs, entitled: () => false }, 'import', anything)).toBeNull()
+    // A resource's own key, once "Manage data" is held.
+    expect(transferRefusedPermission({ ...inputs, can: (key) => key === 'data.manage' }, 'import', gift)).toBe(
+      'commerce.giftCards.import',
+    )
+    // Held: nothing refuses.
+    expect(transferRefusedPermission({ ...inputs, can: () => true }, 'import', gift)).toBeNull()
+    // A collaborator whose document is still being read, or could not be.
+    const site = { ...inputs, orgWide: false }
+    expect(transferRefusedPermission({ ...site, member: undefined }, 'import', gift)).toBeNull()
+    expect(transferRefusedPermission({ ...site, member: null }, 'import', gift)).toBeNull()
+    // A collaborator on the site, and a site they do not reach.
+    const member = { role: 'viewer', allHosts: false, hostAccess: { 'host-a': 'viewer' } } as never
+    expect(transferRefusedPermission({ ...site, member }, 'import', gift)).toBe('data.manage')
+    expect(transferRefusedPermission({ ...site, member }, 'import', { ...gift, hostId: 'host-z' })).toBeNull()
+    // The surface's own answer on an instance.
+    const instance = { resource: 'data.dataset:ds-1', scope: 'org' as const }
+    expect(transferRefusedPermission(inputs, 'import', { ...instance, importAllowed: false })).toBe('data.manage')
+    expect(transferRefusedPermission(inputs, 'import', { ...instance, importAllowed: true })).toBeNull()
   })
 
   it('keeps one launcher while the answers stand, so a list is not re-rendered for nothing', () => {

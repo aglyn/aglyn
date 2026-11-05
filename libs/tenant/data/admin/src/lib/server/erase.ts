@@ -18,6 +18,7 @@
 import { FieldValue } from 'firebase-admin/firestore'
 import { firebaseAdmin } from './firebase-admin'
 import { eraseMediaDeliveryScope } from './media-delivery'
+import { sweepScopeSharingAfterSiteChange } from './scope-sharing-sweep'
 import {
   deleteHostProjectionForAllMembers,
   deleteHostProjectionForUids,
@@ -435,6 +436,10 @@ export async function eraseHost(
       console.error(`eraseHost: projection cleanup failed for ${hostId}`, error)
     })
     await eraseHostOwnedOrgDocuments(orgId, hostId)
+    // Before the plugins decide what is this site's own: a document shared with
+    // all sites except some and reaching only this site comes off it here, so
+    // it reads as the workspace's and stays (AGL-4047). Never throws.
+    await sweepScopeSharingAfterSiteChange({ orgId, reason: 'site-removed', hostId })
     // What plugins share with this site alone — a dataset and its records —
     // and this site's place in the sharing of what it shares with others
     // (AGL-4003). Each plugin's share is isolated and never throws here.

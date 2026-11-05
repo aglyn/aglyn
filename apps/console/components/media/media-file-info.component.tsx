@@ -29,6 +29,7 @@ import {
   type MediaEmbeddedMetadata,
 } from '@aglyn/aglyn/app-utils/media-embedded-fields'
 import { useConfirmationContext } from '@aglyn/shared-ui-jsx'
+import { BlockedControl } from '@aglyn/shared-ui-jsx/components/blocked-control.component'
 import { useSnackbar } from '@aglyn/shared-ui-snackstack'
 import { authorizedFetch } from '@aglyn/shared-util-http/authorized-token'
 import AddIcon from '@mui/icons-material/Add'
@@ -62,6 +63,10 @@ export interface MediaFileInfoProps {
   /** `{ orgId }` or `{ hostId }` — which library the asset lives in. */
   scopeBody: Record<string, string | undefined>
   user: unknown
+  /** Reading and saving wait while the reader's permissions load. */
+  writeHeld?: boolean
+  /** Why reading and saving the file are off for this reader, when they are. */
+  writeRefusal?: string
   /**
    * The bytes changed under the asset — its digests, size, raw URL and
    * embedded record, as the write answered them. The drawer merges them
@@ -121,7 +126,7 @@ export function MediaFactRows({ facts }: { facts: readonly MediaFileFact[] }) {
  * drawer's Save beside the folder and the tags.
  */
 export function MediaFileInfo(props: MediaFileInfoProps) {
-  const { mediaId, media, scopeBody, user, onFileChanged } = props
+  const { mediaId, media, scopeBody, user, onFileChanged, writeHeld, writeRefusal } = props
   const { enqueueSnackbar } = useSnackbar()
   const { confirm } = useConfirmationContext()
   const contentType = String(media?.['contentType'] ?? '')
@@ -166,13 +171,15 @@ export function MediaFileInfo(props: MediaFileInfoProps) {
   // typed elsewhere in the drawer, so it reaches `post` through a ref.
   const postRef = useRef(post)
   postRef.current = post
-  const loading = record === undefined
+  // Reading the file takes the library's own key at its door, as saving does
+  // (AGL-4047): without it, what the drawer already holds is all there is to show.
+  const loading = record === undefined && !writeRefusal
   const signedIn = Boolean(user)
 
   // The backfill: an asset with no current record is read the first time
   // its drawer opens, and the server keeps what it read.
   useEffect(() => {
-    if (!loading || !signedIn) return
+    if (!loading || !signedIn || writeHeld) return
     let cancelled = false
     postRef
       .current({ action: 'read' })
@@ -187,7 +194,7 @@ export function MediaFileInfo(props: MediaFileInfoProps) {
     return () => {
       cancelled = true
     }
-  }, [loading, signedIn, mediaId])
+  }, [loading, signedIn, writeHeld, mediaId])
 
   const facts = useMemo(
     () => mediaStoredFacts({ ...media, $id: mediaId }),
@@ -361,7 +368,7 @@ export function MediaFileInfo(props: MediaFileInfoProps) {
       </Typography>
       <MediaFactRows facts={facts} />
 
-      {record === undefined ? (
+      {loading ? (
         <Box sx={{ mt: 1.5 }}>
           <Typography variant="caption" color="text.secondary">
             {'Reading the details inside the file…'}
@@ -385,14 +392,16 @@ export function MediaFileInfo(props: MediaFileInfoProps) {
               {'Inside the file'}
             </Typography>
             {canEdit && !editing ? (
-              <Button
-                size="small"
-                startIcon={<EditOutlinedIcon fontSize="small" />}
-                onClick={startEditing}
-                disabled={saving}
-              >
-                {fields.length ? 'Edit' : 'Add details'}
-              </Button>
+              <BlockedControl blocked={Boolean(writeRefusal)} reason={writeRefusal ?? ''}>
+                <Button
+                  size="small"
+                  startIcon={<EditOutlinedIcon fontSize="small" />}
+                  onClick={startEditing}
+                  disabled={saving || writeHeld}
+                >
+                  {fields.length ? 'Edit' : 'Add details'}
+                </Button>
+              </BlockedControl>
             ) : null}
           </Stack>
 
@@ -485,7 +494,7 @@ export function MediaFileInfo(props: MediaFileInfoProps) {
                   size="small"
                   variant="contained"
                   onClick={saveEdits}
-                  disabled={saving}
+                  disabled={saving || writeHeld || Boolean(writeRefusal)}
                 >
                   {saving ? 'Saving…' : 'Save to file'}
                 </Button>
@@ -514,14 +523,16 @@ export function MediaFileInfo(props: MediaFileInfoProps) {
           )}
 
           {!editing && gps && gps.editable ? (
-            <Button
-              size="small"
-              color="warning"
-              onClick={() => void removeLocation()}
-              disabled={saving}
-            >
-              {'Remove location from file'}
-            </Button>
+            <BlockedControl blocked={Boolean(writeRefusal)} reason={writeRefusal ?? ''}>
+              <Button
+                size="small"
+                color="warning"
+                onClick={() => void removeLocation()}
+                disabled={saving || writeHeld}
+              >
+                {'Remove location from file'}
+              </Button>
+            </BlockedControl>
           ) : null}
           {record.readOnlyReason ? (
             <Typography variant="caption" color="text.secondary" component="div">

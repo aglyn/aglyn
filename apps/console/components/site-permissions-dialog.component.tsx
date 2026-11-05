@@ -17,6 +17,7 @@
 
 'use client'
 
+import { permissionRefusalText } from '@aglyn/aglyn/app-utils/org-permissions'
 import { ORG_PERMISSIONS } from '@aglyn/aglyn'
 import {
   groupOrgPermissions,
@@ -152,7 +153,7 @@ export function SitePermissionsDialog(props: {
             source: choice === 'inherit' ? `from the ${roleWord} site access` : 'set for this site',
           },
           inheritHint: `Inherit: ${fallback ? 'allowed' : 'not allowed'} for ${roleWord} site access`,
-          lockedReason: canManage ? undefined : 'Only site admins can change permissions',
+          lockedReason: canManage ? undefined : permissionRefusalText('site.manage'),
         }
       }),
     }),

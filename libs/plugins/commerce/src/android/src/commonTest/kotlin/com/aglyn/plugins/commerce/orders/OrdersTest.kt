@@ -1,6 +1,7 @@
 package com.aglyn.plugins.commerce.orders
 
 import com.aglyn.contracts.OrderStatus
+import com.aglyn.contracts.OrderTimelineEvent
 import com.aglyn.core.ConsoleApiError
 import com.aglyn.core.FilterOp
 import com.aglyn.core.FirestoreDoc
@@ -65,6 +66,11 @@ private class RecordingApi(var failWith: Throwable? = null, var verdict: String 
   override suspend fun receiptChannels() = setOf(ReceiptChannel.EMAIL, ReceiptChannel.SMS)
   override suspend fun sendReceipt(orderId: String, channel: ReceiptChannel, to: String) = record("receipt $orderId ${channel.raw} $to")
   override suspend fun addNote(orderId: String, note: String) = record("note $orderId $note")
+  override suspend fun invoiceSite() = InvoiceSite("Test Shop", "hello@example.test")
+  override suspend fun sendInvoice(orderId: String, to: String, subject: String, message: String, attemptKey: String): String {
+    record("invoice $orderId $to $subject $message $attemptKey")
+    return to
+  }
   override suspend fun answerRestock(orderId: String, resolution: RestockAnswerChoice, flaggedAtMs: Double): String {
     record("restock $orderId ${resolution.raw} ${flaggedAtMs.toLong()}")
     return verdict
@@ -323,6 +329,10 @@ class OrdersTest {
     assertEquals(listOf("note", "paid"), detail.timeline.map { it.event })
     assertTrue(timelineLine(detail.timeline[0]).endsWith(" — note: Customer called"))
     assertTrue(timelineLine(detail.timeline[1]).endsWith(" — paid"))
+    // The screen shows the device's time, not UTC.
+    val at = OrderTimelineEvent(atMs = 1_793_962_380_000.0, event = "paid")
+    assertTrue(timelineLine(at, "America/Chicago").startsWith("Nov 6, 2026, 4:53 AM"), timelineLine(at, "America/Chicago"))
+    assertTrue(timelineLine(at, "UTC").startsWith("Nov 6, 2026, 10:53 AM"), timelineLine(at, "UTC"))
   }
 
   @Test

@@ -15,6 +15,10 @@ struct FeedNotification: Identifiable, Equatable {
   let level: String?
   /// The catalog type (`content.order`, `billing.invoice`, …), which picks the row's glyph.
   let type: String?
+  /// What it calls itself where its emitter named it ("Proof approved"), over its type's label.
+  var label: String? = nil
+  /// What its open button says, where its emitter named what the link opens.
+  var actionLabel: String? = nil
   let createdAt: Date?
   /// The workspace and site it is about, which opening it switches to.
   var orgID: String? = nil
@@ -31,6 +35,12 @@ struct FeedNotification: Identifiable, Equatable {
     read = doc.bool("read") == true || (doc.data["readAt"] != nil && !(doc.data["readAt"] is NSNull))
     level = doc.string("level")
     type = doc.string("type")
+    func named(_ field: String) -> String? {
+      let text = doc.string(field)?.trimmingCharacters(in: .whitespacesAndNewlines) ?? ""
+      return text.isEmpty ? nil : text
+    }
+    label = named("label")
+    actionLabel = named("actionLabel")
     createdAt = doc.date("createdAt")
     orgID = doc.string("orgId")
     hostID = doc.string("hostId")
@@ -380,7 +390,7 @@ struct NotificationsView: View {
         }
       }
       if row.link != nil || row.inviteID != nil {
-        Button("Open", systemImage: "arrow.up.forward") { openNotification(row, model: model, navigation: navigation) }
+        Button(row.actionLabel ?? "Open", systemImage: "arrow.up.forward") { openNotification(row, model: model, navigation: navigation) }
       }
     }
   }
@@ -403,7 +413,7 @@ struct NotificationDetail: View {
       VStack(alignment: .leading, spacing: AglynSpace.two) {
         HStack(spacing: AglynSpace.one) {
           StatusChip(catalog.levels.first { $0.id == row.resolvedLevel }?.label ?? "Info", tone: row.tone)
-          if let label = catalog.entry(row.type)?.label { StatusChip(label) }
+          if let label = row.label ?? catalog.entry(row.type)?.label { StatusChip(label) }
           if !row.read { StatusChip("New", tone: .info) }
         }
         Text(row.title).font(AglynFont.title).accessibilityAddTraits(.isHeader)
@@ -416,7 +426,7 @@ struct NotificationDetail: View {
         if row.inviteID != nil, row.orgID != nil {
           Button("Open") { navigation.pendingInvite = row }.buttonStyle(.aglynProminent)
         } else if row.link != nil {
-          Button("Open") { openNotification(row, model: model, navigation: navigation) }
+          Button(row.actionLabel ?? "Open") { openNotification(row, model: model, navigation: navigation) }
             .buttonStyle(.aglynProminent)
             .accessibilityIdentifier("notification-open")
         } else {

@@ -38,6 +38,7 @@ import androidx.compose.ui.semantics.heading
 import androidx.compose.ui.semantics.semantics
 import androidx.compose.ui.unit.dp
 import com.aglyn.contracts.Contracts
+import com.aglyn.contracts.deviceTimeZone
 import com.aglyn.contracts.formatReceiptTime
 import com.aglyn.core.Live
 import com.aglyn.core.nowMillis
@@ -80,21 +81,27 @@ const val INBOX_SCREEN = "inbox.submissions"
 const val INBOX_PEOPLE_SCREEN = "inbox.people"
 const val INBOX_SUBMISSION_SCREEN = "inbox.submission"
 
-/** The site's own document: its name (the reply's default subject) and the member's role on it. */
-data class InboxSite(val name: String?, val role: String?)
+/** The site's own document: its name (the reply's default subject). */
+data class InboxSite(val name: String?)
 
 @Composable
 private fun rememberInboxSite(context: NativePluginContext, siteId: String? = context.hostId): Live<InboxSite> {
-  val hostId = siteId ?: return Live.Ready(InboxSite(null, null))
+  val hostId = siteId ?: return Live.Ready(InboxSite(null))
   val flow = remember(hostId, context.firestore) { context.firestore.observeDoc("hosts/$hostId") }
   return when (val live = flow.collectAsState(Live.Loading).value) {
     Live.Loading -> Live.Loading
-    is Live.Failed -> Live.Ready(InboxSite(null, null))
+    is Live.Failed -> Live.Ready(InboxSite(null))
     is Live.Ready -> {
-      @Suppress("UNCHECKED_CAST") val roles = live.value?.data?.get("memberRoles") as? Map<String, Any?>
-      Live.Ready(InboxSite(live.value?.string("displayName") ?: live.value?.string("name"), roles?.get(context.uid) as? String))
+      Live.Ready(InboxSite(live.value?.string("displayName") ?: live.value?.string("name")))
     }
   }
+}
+
+/** [InboxPermissions] on [siteId], live: that site's verdict for this member. */
+@Composable
+private fun rememberInboxPermissions(context: NativePluginContext, siteId: String? = context.hostId): InboxPermissions {
+  val held = com.aglyn.pluginhost.rememberMemberPermissions(context.firestore, context.orgId, siteId, context.uid, context.orgRole)
+  return InboxPermissions.of(held::can)
 }
 
 private fun messageError(error: Throwable): String = error.message?.takeIf { it.isNotBlank() } ?: "Something went wrong. Try again."
@@ -126,7 +133,7 @@ fun SubmissionsScreen(context: NativePluginContext, initialSubmission: String? =
   }.collectAsState(Live.Loading).value
   val formOptions = (forms as? Live.Ready)?.value.orEmpty().map { ChipOption(it.id, formName(it)) }.sortedBy { it.label.lowercase() }
   val site = rememberInboxSite(context)
-  val permissions = InboxPermissions.of((site as? Live.Ready)?.value?.role)
+  val permissions = rememberInboxPermissions(context)
 
   AglynListDetail(
     initialSelected = initialSubmission,
@@ -229,7 +236,7 @@ fun SubmissionScreen(context: NativePluginContext, submissionId: String?) {
     return
   }
   val site = rememberInboxSite(context)
-  SubmissionDetail(context, hostId, submissionId, (site as? Live.Ready)?.value, InboxPermissions.of((site as? Live.Ready)?.value?.role))
+  SubmissionDetail(context, hostId, submissionId, (site as? Live.Ready)?.value, rememberInboxPermissions(context))
 }
 
 /** One message: who sent it, every field, what the site did with it, the reply and the list add. Opening it marks it read. */
@@ -272,7 +279,7 @@ fun SubmissionDetail(context: NativePluginContext, hostId: String, submissionId:
           Text(row.sender.label, Modifier.semantics { heading() }, style = MaterialTheme.typography.headlineSmall)
           row.sender.email?.takeIf { it != row.sender.label }?.let { Text(it, style = MaterialTheme.typography.bodyLarge) }
           Text(
-            listOfNotNull(row.formName, row.receivedAtMs?.let { formatReceiptTime(it) }).joinToString(" · "),
+            listOfNotNull(row.formName, row.receivedAtMs?.let { formatReceiptTime(it, deviceTimeZone()) }).joinToString(" · "),
             style = MaterialTheme.typography.bodyMedium,
             color = MaterialTheme.colorScheme.onSurfaceVariant,
           )
@@ -292,6 +299,7 @@ fun SubmissionDetail(context: NativePluginContext, hostId: String, submissionId:
             }
           }
         }
+        row.requestLabel?.let { StatusChip(it, StatusTone.INFO, Modifier.testTag("submission-request")) }
         SectionCard("Message", Modifier.fillMaxWidth()) {
           if (row.fields.isEmpty()) Text("This message has no fields.", color = MaterialTheme.colorScheme.onSurfaceVariant)
           row.fields.forEach { (key, value) -> PropertyRow(key, value) }
@@ -313,10 +321,9 @@ fun SubmissionDetail(context: NativePluginContext, hostId: String, submissionId:
             ) { Text(if (row.capturedKind == "lead") "Open the lead in the CRM" else "Open the contact in the CRM") }
           }
         }
-        if (permissions.canReply) {
-          ReplyCard(context, hostId, row, site, actions) { notice = it }
-          ListAssignmentCard(row, actions) { notice = it }
-        }
+        if (row.files.isNotEmpty()) SubmissionFilesCard(row, actions)
+        if (permissions.canReply) ReplyCard(context, hostId, row, site, actions) { notice = it }
+        if (permissions.canAssign) ListAssignmentCard(row, actions) { notice = it }
       }
       if (confirmDelete) {
         ActionDialog(
@@ -348,6 +355,39 @@ fun SubmissionDetail(context: NativePluginContext, hostId: String, submissionId:
   }
 }
 
+@Composable
+private fun SubmissionFilesCard(row: Submission, actions: InboxActions) {
+  val exporter = com.aglyn.ui.LocalFileExporter.current
+  val scope = rememberCoroutineScope()
+  var downloading by remember(row.id) { mutableStateOf<String?>(null) }
+  var error by remember(row.id) { mutableStateOf<String?>(null) }
+  SectionCard(if (row.files.size == 1) "File" else "Files (${row.files.size})", Modifier.fillMaxWidth()) {
+    error?.let { NoticeBanner(it, StatusTone.ERROR) }
+    row.files.forEach { file ->
+      TextButton(
+        enabled = downloading == null,
+        onClick = {
+          downloading = file.id
+          error = null
+          scope.launch {
+            try {
+              val answer = actions.downloadFile(row.id, file.id)
+              exporter?.export(answer.name ?: file.name, file.contentType.ifEmpty { "application/octet-stream" }, answer.bytes)
+            } catch (failure: Throwable) {
+              if (failure is kotlinx.coroutines.CancellationException) throw failure
+              error = (failure as? com.aglyn.core.ConsoleApiError)?.message ?: "${file.name} could not be downloaded."
+            } finally {
+              downloading = null
+            }
+          }
+        },
+        modifier = Modifier.testTag("submission-file-${file.id}"),
+      ) { Text("${file.name} · ${submissionFileSize(file.size)}") }
+    }
+  }
+}
+
+/** Reply to the sender. */
 @Composable
 private fun ReplyCard(
   context: NativePluginContext,
@@ -418,7 +458,7 @@ private fun ReplyCard(
       sent.forEach { reply ->
         AglynListItem(
           title = reply.subject.ifBlank { "Reply" },
-          supporting = listOfNotNull(reply.to.ifBlank { null }, reply.sentAtMs?.let { formatReceiptTime(it) }, reply.message.take(140).ifBlank { null }).joinToString(" · "),
+          supporting = listOfNotNull(reply.to.ifBlank { null }, reply.sentAtMs?.let { formatReceiptTime(it, deviceTimeZone()) }, reply.message.take(140).ifBlank { null }).joinToString(" · "),
           icon = AglynIcons.named("reply"),
         )
       }
@@ -516,8 +556,8 @@ fun PeopleScreen(context: NativePluginContext) {
     if (tab == "members") members.show { siteMembersQuery(hostId, asked, it) }
     else leads.show { limit -> orgId?.let { siteLeadsQuery(it, hostId, asked, limit) } }
   }
-  val site = rememberInboxSite(context)
-  val canRemove = (site as? Live.Ready)?.value?.role in setOf("owner", "admin")
+  // "Edit site content", which the removal route asks.
+  val canRemove = rememberInboxPermissions(context).canWrite
   val actions = remember(hostId, context.api, context.writer) { ConsoleInboxActions(context.api, context.writer, hostId) }
   var removing by remember { mutableStateOf<SiteMemberRow?>(null) }
   var busy by remember { mutableStateOf(false) }
@@ -667,7 +707,7 @@ fun WorkspaceSubmissionsScreen(context: NativePluginContext) {
         SelectionPlaceholder("Pick a message to read it here", icon = AglynIcons.named("inbox"))
       } else {
         val site = rememberInboxSite(context, siteId)
-        SubmissionDetail(context, siteId, id, (site as? Live.Ready)?.value, InboxPermissions.of((site as? Live.Ready)?.value?.role ?: context.orgRole))
+        SubmissionDetail(context, siteId, id, (site as? Live.Ready)?.value, rememberInboxPermissions(context, siteId))
       }
     },
   )
@@ -686,8 +726,8 @@ fun WorkspaceLeadsScreen(context: NativePluginContext) {
     if (access is Live.Failed) EmptyState("Could not load your access", body = messageError(access.error), icon = AglynIcons.named("error")) else com.aglyn.ui.SkeletonList(rows = 4)
     return
   }
-  // Manage data (owners, admins and editors by default) across every site the member reaches.
-  if (!ready.orgWide || ready.role !in setOf(com.aglyn.core.OrgRole.OWNER, com.aglyn.core.OrgRole.ADMIN, com.aglyn.core.OrgRole.EDITOR)) {
+  // Manage data, and the reach of every site: no key grants a collaborator the sites they were not given.
+  if (!ready.orgWide || !com.aglyn.pluginhost.rememberMemberPermissions(context).can("data.manage")) {
     EmptyState(
       "Members & leads are kept per site",
       body = "Seeing every site's leads at once needs the Manage data permission on every site. Pick a site to see its own.",

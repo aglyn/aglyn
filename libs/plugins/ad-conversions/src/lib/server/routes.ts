@@ -15,6 +15,7 @@
  * limitations under the License.
  */
 
+import type { AdConversionsSitePermission } from '../model/ad-conversions-permissions'
 import { advertisingEventId, mintAdvertisingLeadKey } from '@aglyn/aglyn/app-utils/advertising-events'
 import {
   hostAsksAboutAdvertising,
@@ -43,13 +44,12 @@ import { connectionView, emptyConnection, type AdConversionStore, type StoredCon
 
 /**
  * The console routes of the card (AGL-3694). Every route is behind
- * {@link AdRouteDeps.gate}: a signed-in, verified member of the site, at
- * `editor` to read and `admin` to change anything, with the plugin on for the
+ * {@link AdRouteDeps.gate}: a signed-in, verified member of the site, holding
+ * "See ad conversion connections" to read and "Manage ad conversion
+ * connections" to change anything, with the plugin on for the
  * site, the site not locked. No answer ever carries a token: the card sees
  * {@link connectionView}.
  */
-
-export type AdRole = 'editor' | 'admin'
 
 export interface AdGateResult {
   orgId: string
@@ -63,7 +63,7 @@ export interface AdRouteDeps {
   keyring(): SecretBoxKeyring | null
   store: AdConversionStore
   http: ProviderHttp
-  gate(request: Request, role: AdRole): Promise<AdGateResult | Response>
+  gate(request: Request, permission: AdConversionsSitePermission | null): Promise<AdGateResult | Response>
   host(hostId: string): Promise<VisitorConsentHost | null>
   /** Records a connect or a disconnect on the workspace's activity log. Must not throw. */
   logActivity(input: { orgId: string; uid: string; action: 'connected' | 'disconnected'; provider: AdProviderId; hostId: string }): Promise<void>
@@ -92,7 +92,7 @@ export function createAdConversionRoutes(deps: AdRouteDeps) {
     /** GET ?hostId — whether this deployment can hold a token, the site's setup, and its connections. */
     async list(request: Request): Promise<Response> {
       if (request.method !== 'GET') return fail(405, 'Method not allowed')
-      const gate = await deps.gate(request, 'editor')
+      const gate = await deps.gate(request, 'adConversions.view')
       if (gate instanceof Response) return gate
       const [connections, host] = await Promise.all([
         deps.store.listConnectionsForHost(gate.hostId),
@@ -108,7 +108,7 @@ export function createAdConversionRoutes(deps: AdRouteDeps) {
     /** POST { hostId, provider, accessToken, adAccountId?, testEventCode? } — connect, or replace the token. */
     async connect(request: Request): Promise<Response> {
       if (request.method !== 'POST') return fail(405, 'Method not allowed')
-      const gate = await deps.gate(request, 'admin')
+      const gate = await deps.gate(request, 'adConversions.manage')
       if (gate instanceof Response) return gate
       const provider = readProvider(gate.body, request)
       if (!provider) return fail(400, 'Choose a platform')
@@ -156,7 +156,7 @@ export function createAdConversionRoutes(deps: AdRouteDeps) {
     /** PATCH { hostId, provider, testEventCode?, adAccountId?, paused? } · DELETE { hostId, provider } */
     async connection(request: Request): Promise<Response> {
       if (request.method !== 'PATCH' && request.method !== 'DELETE') return fail(405, 'Method not allowed')
-      const gate = await deps.gate(request, 'admin')
+      const gate = await deps.gate(request, 'adConversions.manage')
       if (gate instanceof Response) return gate
       const provider = readProvider(gate.body, request)
       if (!provider) return fail(400, 'Choose a platform')
@@ -195,7 +195,7 @@ export function createAdConversionRoutes(deps: AdRouteDeps) {
      */
     async testEvent(request: Request): Promise<Response> {
       if (request.method !== 'POST') return fail(405, 'Method not allowed')
-      const gate = await deps.gate(request, 'admin')
+      const gate = await deps.gate(request, 'adConversions.manage')
       if (gate instanceof Response) return gate
       const provider = readProvider(gate.body, request)
       if (!provider) return fail(400, 'Choose a platform')

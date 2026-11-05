@@ -93,7 +93,7 @@ jest.mock('../components/plugin-widget-slot.component', () => ({
 jest.mock('../components/host-id-provider', () => ({
   useHostId: () => 'host-1',
   useHostSubdomain: () => 'acme',
-  useIsHostAdmin: () => true,
+  useCanManageSite: () => true,
 }))
 jest.mock('../hooks/use-org-scope', () => ({ useOrgSlug: () => 'acme-org' }))
 jest.mock('../hooks/use-current-org', () => {

@@ -80,6 +80,7 @@ import {
 } from './enabled-plugins'
 import { PLUGIN_TRANSFER_RESOURCES_DECLARED } from './first-party-plugins.generated'
 import { runPluginDeclarationsRepair } from './plugin-declarations-repair'
+import type { PluginIndexedRecord } from './plugin-record-index'
 
 /**
  * WHAT A PLUGIN CAN IMPORT AND EXPORT (AGL-3523), the extension point every
@@ -641,6 +642,7 @@ export interface TransferPackageHooks<T = unknown> {
  * registration.
  */
 export type PluginTransferResource = Partial<TransferRecordsHooks> &
+  TransferImportAccessHooks &
   Partial<TransferPackageHooks> &
   TransferPlanGateHooks
 
@@ -688,6 +690,51 @@ export interface TransferPlanGateHooks {
     subject: TransferPlanSubject,
     intent: TransferAccessIntent,
   ): Promise<TransferPlanRefusal | null> | TransferPlanRefusal | null
+}
+
+/** Who is asking to import into a resource, as the gate read them. */
+export interface TransferImportAccessSubject {
+  /** The resource key, naming the instance for one declared with `instances`. */
+  resource: string
+  orgId: string
+  uid: string
+  /** The caller's workspace membership. */
+  member: Readonly<Record<string, unknown>>
+}
+
+/** The import hook a resource may answer with, beside its kind's. */
+export interface TransferImportAccessHooks {
+  /**
+   * Whether this member may import into THIS instance of the resource
+   * (AGL-4047), in place of `data.manage` on the workspace: for records whose
+   * answer depends on where the instance is placed, which the declaration
+   * cannot say. Answers the refusal's permission key when it refuses, so the
+   * gate names the right one. May read the database and load its module with
+   * its first call.
+   */
+  importAccess?(
+    subject: TransferImportAccessSubject,
+  ): Promise<TransferImportAccessVerdict> | TransferImportAccessVerdict
+}
+
+/** A resource's own answer on importing: allowed, or the permission that is missing. */
+export type TransferImportAccessVerdict = { allowed: true } | { allowed: false; permission: string }
+
+/**
+ * The resource's own answer on importing into this instance, or `null` when
+ * it has none (or its server half cannot be reached, which the route that
+ * needs it answers) and the gate's `data.manage` stands.
+ */
+export async function transferImportAccess(
+  subject: TransferImportAccessSubject,
+): Promise<TransferImportAccessVerdict | null> {
+  let hook: TransferImportAccessHooks['importAccess']
+  try {
+    hook = (await resolveTransferResource(subject.resource)).impl.importAccess
+  } catch {
+    hook = undefined
+  }
+  return hook ? hook(subject) : null
 }
 
 /** "Companies" → "companies", "CRM fields" unchanged: the label inside a sentence. */
@@ -1150,6 +1197,28 @@ export interface PluginTransferResourceUi {
    * resource to the plugin's own surface.
    */
   instancesFrom?: string
+  /**
+   * For a resource whose server half answers `importAccess`: that answer for one
+   * instance the hub lists, from what the browser already holds, so its Import
+   * says what the route will. Not a security boundary: the route still decides.
+   */
+  instanceImportAccess?(subject: TransferInstanceImportSubject): TransferInstanceImportAnswer
+}
+
+/** What a resource is asked about one listed instance. */
+export interface TransferInstanceImportSubject {
+  /** The instance, as its record list reads it. */
+  record: PluginIndexedRecord
+  /** The signed-in member's document. */
+  member: Readonly<Record<string, unknown>>
+  /** Their custom role, when they carry one and it could be read. */
+  customRole: Readonly<Record<string, unknown>> | null
+}
+
+/** The answer, and the refusal to show beside a switched-off Import. */
+export interface TransferInstanceImportAnswer {
+  allowed: boolean
+  reason: string
 }
 
 interface RegisteredUi {

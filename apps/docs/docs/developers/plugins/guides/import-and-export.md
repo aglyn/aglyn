@@ -82,9 +82,24 @@ flickering away.
     collaborator only on a site they reach. Your `readPage` and `count` keep
     a scoped reader to their own records through `scopeTokens`.
   - `"readPermission": "<key>"` — whoever holds that permission (a key your
-    plugin declared, say) may export, beside **Manage data**.
+    plugin declared, say) may export, beside **Manage data**. Add
+    `"readPermissionOnly": true` for that key alone to decide, so taking it
+    away stops the export whoever may write the records. A dataset's records
+    are declared this way, with **Export data**.
   - Neither — **Manage data**, the same as importing. This is the default
     because a resource's records may be ones only managers read.
+- **Import** can answer per instance: register `importAccess` with the server
+  half when who may import depends on the instance, as a dataset's does on where
+  it is shared. It answers in place of **Manage data** on the workspace, every
+  transfer route asks it, and your surface passes the same answer to `can` as
+  `importAllowed` on the target. Register `instanceImportAccess` with your
+  resource's UI as well, and the **Import & export** page asks it for each
+  instance it lists from `instancesFrom`.
+- **Switched off, not hidden.** `transfer.refusedPermission('import' | 'export',
+  target)` names the permission refusing the person, for a control you show
+  switched off with `permissionRefusalText`. It reads `null` when `can` says yes,
+  until the answer is in, and for what no permission decides: the plan, or a site
+  they don't reach.
 - **The plan** comes before either, when your resource declares a
   `"featureFlag"` (the flag your console surfaces are gated by): on a plan
   without it, `can` answers `false` for every intent your resource doesn't
@@ -103,9 +118,9 @@ flickering away.
   on every plan (`"featureFlagExempt": ["export"]`), which a workspace is
   owed whether or not your plugin is on.
 
-- **A role**, when your resource is stricter than **Manage data**: declare
-  `"importRoles"` (say `["admin"]`) and only a member in one of those roles
-  where the records are may import them. Don't check the role in your own
+- **A permission**, when your resource is stricter than **Manage data**: declare
+  `"importPermission"` (a catalog key your plugin declares) and only a member
+  holding it where the records are may import them. Don't check it in your own
   hook for the button — `can('import')` already answers it.
 
 Ask `can` for every Import and Export button you draw, and draw neither

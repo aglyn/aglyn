@@ -33,6 +33,7 @@ import {
   syncHostProjectionForMembers,
 } from './host-memberships'
 import { syncOrgAuthProjections } from './organizations'
+import { sweepScopeSharingAfterSiteChange } from './scope-sharing-sweep'
 import { SENDING_LABELS_COLLECTION } from './host-sending-domain'
 import { SENDING_DOMAINS_COLLECTION } from './sending-domains'
 import { TRACKING_HOSTS_COLLECTION } from './tracking-hosts'
@@ -376,6 +377,14 @@ export async function transferHost(input: PlanHostTransferInput): Promise<HostTr
   await syncOrgAuthProjections(toOrgId, hostId)
   // Routing names the new owner.
   await db.collection('hostIndex').doc(hostId).set({ orgId: toOrgId }, { merge: true })
+
+  // Documents shared with all sites except some name their sites, and this
+  // site just moved between the two lists they are worked out from. Both never
+  // throw, and come before anything below that could.
+  await sweepScopeSharingAfterSiteChange({ orgId: toOrgId, reason: 'site-added', hostId })
+  if (fromOrgId) {
+    await sweepScopeSharingAfterSiteChange({ orgId: fromOrgId, reason: 'site-removed', hostId })
+  }
 
   if (fromRef && fromOrgId) {
     // The old roster's per-site grants on this site, then its projections.

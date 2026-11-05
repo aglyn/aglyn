@@ -40,8 +40,16 @@ const mockOpenImport = jest.fn()
 const mockDiscard = jest.fn(async (): Promise<void> => undefined)
 
 jest.mock('@aglyn/aglyn/app-utils/transfer-launcher-context', () => {
-  const { transferAccessVerdict } = jest.requireActual('../components/transfer-launcher-provider.component')
+  const { transferAccessVerdict, transferRefusedPermission } = jest.requireActual('../components/transfer-launcher-provider.component')
   const plans = jest.requireActual('@aglyn/aglyn/app-utils/plan-entitlements')
+  const inputs = () => ({
+    permissionsLoaded: true,
+    can: () => mockManages,
+    orgWide: true,
+    orgRole: mockManages ? 'admin' : 'viewer',
+    member: null,
+    entitled: (feature: string) => plans.checkEntitlement(mockOrg, feature),
+  })
   return {
     useTransferLauncher: () => ({
       openImport: mockOpenImport,
@@ -49,19 +57,8 @@ jest.mock('@aglyn/aglyn/app-utils/transfer-launcher-context', () => {
       discard: mockDiscard,
       openExport: jest.fn(),
       close: jest.fn(),
-      can: (action: string, target: unknown) =>
-        transferAccessVerdict(
-          {
-            permissionsLoaded: true,
-            can: () => mockManages,
-            orgWide: true,
-            orgRole: mockManages ? 'admin' : 'viewer',
-            member: null,
-            entitled: (feature: string) => plans.checkEntitlement(mockOrg, feature),
-          },
-          action,
-          target,
-        ),
+      can: (action: string, target: unknown) => transferAccessVerdict(inputs(), action, target),
+      refusedPermission: (action: string, target: unknown) => transferRefusedPermission(inputs(), action, target),
     }),
   }
 })
@@ -140,19 +137,35 @@ describe('the hub on Starter', () => {
 
 /*
  * The hub is open to whoever may export something (AGL-3554), so it must
- * offer a member without "Manage data" nothing the routes refuse them: no
- * Import, no package, and an Export only where the resource lets them read.
+ * offer a member without "Manage data" nothing the routes refuse them: Import
+ * switched off naming the permission (AGL-4047), no package, and an Export only
+ * where the resource lets them read.
  */
 describe('the hub for a member without Manage data (AGL-3554)', () => {
-  it('offers no Import, no package and no Export the resource keeps for managers', () => {
+  it('switches Import off naming the permission, with no package and no Export kept for managers', () => {
     mockOrg = { plan: 'starter', enabledPlugins: ['crm'] }
     mockManages = false
     render(<OrgDataTransferCard />)
-    for (const label of ['Contacts', 'Leads', 'Companies', 'Deals', 'Tasks', 'Email templates', 'Activities']) {
-      expect([label, buttonsOf(label)]).toEqual([label, []])
+    for (const label of ['Contacts', 'Leads', 'Companies', 'Deals', 'Tasks', 'Email templates']) {
+      expect([label, buttonsOf(label)]).toEqual([label, ['Import']])
     }
+    for (const button of screen.getAllByRole('button', { name: 'Import' })) {
+      expect((button as HTMLButtonElement).disabled).toBe(true)
+      expect(button.closest('[aria-label]')?.getAttribute('aria-label')).toBe(
+        'Your role does not include "Manage data" — ask an organization admin',
+      )
+    }
+    // Takes no file: there is no Import to switch off.
+    expect(buttonsOf('Activities')).toEqual([])
     expect(screen.queryByText('Export package')).toBeNull()
     expect(screen.queryByText('Import package')).toBeNull()
+  })
+
+  it('does not blame the permission for what the plan refuses', () => {
+    mockManages = false
+    render(<OrgDataTransferCard />)
+    expect(screen.queryByRole('button', { name: 'Import' })).toBeNull()
+    expect(screen.getAllByText('Not included in your current plan. Included from Starter.')).toHaveLength(7)
   })
 })
 

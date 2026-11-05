@@ -102,6 +102,11 @@ describe('the besigner toolbar after a draft save', () => {
     expect(onSaveAndPublish).not.toHaveBeenCalled()
   })
 
+  it('says Loading, not Loading draft, while the page itself loads (AGL-4174)', () => {
+    renderBar({ saveAvailable: false, livePublished: false, saveBlockedReason: 'Loading this page' })
+    expect((screen.getByRole('button', { name: 'Loading' }) as HTMLButtonElement).disabled).toBe(true)
+  })
+
   it('says Publish once the canvas is in the working draft', () => {
     // The canvas still differs from the VERSION document, and always will
     // until the draft is published — that is what the draft is.

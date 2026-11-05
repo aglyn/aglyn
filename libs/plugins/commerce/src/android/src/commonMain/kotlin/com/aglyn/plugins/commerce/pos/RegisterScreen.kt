@@ -130,12 +130,24 @@ internal fun NoticeTone.status() = when (this) {
 
 @Composable
 fun RegisterScreen(context: NativePluginContext) {
+  // "Use the point of sale", on this store. The routes hold it too; this says so before a sale is rung up.
+  if (!com.aglyn.pluginhost.rememberMemberPermissions(context).can(REGISTER_PERMISSION)) {
+    com.aglyn.ui.EmptyState(
+      "Point of sale is off for you here",
+      body = com.aglyn.contracts.permissionRefusalText(REGISTER_PERMISSION),
+      icon = com.aglyn.ui.AglynIcons.named("lock"),
+      modifier = Modifier.testTag("pos-register-refused"),
+    )
+    return
+  }
   // A product's picture is a media reference (`media:<scope>/<id>`) or a path on the console: both read through the console.
   val pictures = remember(context.api.origin, context.hostId) {
     { value: String? -> value?.let { mediaPreviewUrl(it, context.api.origin, context.hostId) } }
   }
   CompositionLocalProvider(LocalPosPictures provides pictures) { RegisterScreenBody(context) }
 }
+
+const val REGISTER_PERMISSION = "managePos"
 
 @Composable
 private fun RegisterScreenBody(context: NativePluginContext) {
@@ -610,7 +622,7 @@ private fun ItemSheetContent(model: RegisterModel, sheet: ItemSheet) {
                 }
                 model.sheet = sheet.copy(picks = others + mine.map { ModifierSelection(group.id, it) }, problem = null)
               },
-              label = { Text(if (option.priceCents > 0) "${option.name} +${money(option.priceCents.toLong(), model.currency)}" else option.name) },
+              label = { Text(if (modifierOptionPriceCents(option, variant.id) > 0) "${option.name} +${money(modifierOptionPriceCents(option, variant.id), model.currency)}" else option.name) },
               leadingIcon = if (on) ({ Icon(AglynIcons.named("check"), null, Modifier.size(18.dp)) }) else null,
               modifier = Modifier.heightIn(min = 40.dp).testTag("option-${group.id}-${option.id}"),
             )

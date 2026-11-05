@@ -7423,6 +7423,7 @@
         "commerce.quotes",
         "commerce.quotes.send",
         "commerce.giftCards",
+        "commerce.giftCards.import",
         "commerce.paymentMethods",
         "commerce.shippingConnections",
         "commerce.refunds",
@@ -7444,6 +7445,10 @@
         "crm.settings",
         "outreach.use",
         "outreach.manageAll",
+        "data.siteManage",
+        "data.siteDelete",
+        "data.viewRecords",
+        "data.export",
         "email.suppressions",
         "email.lists",
         "inbox.reply",
@@ -7452,8 +7457,52 @@
         "workflows.orgAutomations",
         "workflows.sitePause",
         "accounting.manage",
+        "shipping.viewSettings",
+        "shipping.settings",
+        "shipping.labelCharges",
+        "shipping.carrierAccounts",
+        "shipping.ownAccounts",
+        "shipping.labels",
+        "shipping.buyLabels",
+        "shipping.voidLabels",
+        "taxEngines.manage",
+        "taxEngines.exemptions",
+        "taxEngines.productCodes",
+        "taxEngines.addresses",
+        "taxEngines.orders",
+        "salesChannels.feeds",
+        "salesChannels.settings",
+        "salesChannels.replaceAddress",
+        "salesChannels.connect",
+        "salesChannels.sync",
+        "marketingPlatforms.view",
+        "marketingPlatforms.manage",
+        "postPurchase.manage",
+        "fulfillmentNetworks.view",
+        "fulfillmentNetworks.manage",
+        "fulfillmentNetworks.orders",
+        "marketplaces.view",
+        "marketplaces.manage",
+        "marketplaces.orders",
+        "printOnDemand.manage",
+        "printOnDemand.products",
+        "printOnDemand.orders",
+        "inventorySync.view",
+        "inventorySync.manage",
+        "inventorySync.orders",
+        "loyalty.program",
+        "loyalty.connection",
+        "loyalty.adjustBalances",
+        "couriers.view",
+        "couriers.manage",
+        "couriers.dispatch",
+        "reviewPlatforms.manage",
+        "helpDesks.view",
+        "helpDesks.manage",
         "manageWaivers",
         "collectWaivers",
+        "adConversions.view",
+        "adConversions.manage",
         "domains.manage"
       ],
       "editor": [
@@ -7485,6 +7534,10 @@
         "marketplace.siteInstall",
         "marketplace.sitePublish",
         "crm.moveStages",
+        "data.siteManage",
+        "data.siteDelete",
+        "data.viewRecords",
+        "data.export",
         "email.suppressions",
         "email.lists",
         "inbox.reply",
@@ -7492,8 +7545,33 @@
         "marketing.campaigns",
         "workflows.orgAutomations",
         "workflows.sitePause",
+        "shipping.viewSettings",
+        "shipping.labels",
+        "shipping.buyLabels",
+        "shipping.voidLabels",
+        "taxEngines.exemptions",
+        "taxEngines.productCodes",
+        "taxEngines.addresses",
+        "taxEngines.orders",
+        "salesChannels.feeds",
+        "salesChannels.settings",
+        "salesChannels.sync",
+        "marketingPlatforms.view",
+        "fulfillmentNetworks.view",
+        "fulfillmentNetworks.orders",
+        "marketplaces.view",
+        "marketplaces.orders",
+        "printOnDemand.products",
+        "printOnDemand.orders",
+        "inventorySync.view",
+        "inventorySync.orders",
+        "loyalty.adjustBalances",
+        "couriers.view",
+        "couriers.dispatch",
+        "helpDesks.view",
         "manageWaivers",
-        "collectWaivers"
+        "collectWaivers",
+        "adConversions.view"
       ],
       "owner": [
         "org.settings",
@@ -7530,6 +7608,7 @@
         "commerce.quotes",
         "commerce.quotes.send",
         "commerce.giftCards",
+        "commerce.giftCards.import",
         "commerce.paymentMethods",
         "commerce.shippingConnections",
         "commerce.refunds",
@@ -7551,6 +7630,10 @@
         "crm.settings",
         "outreach.use",
         "outreach.manageAll",
+        "data.siteManage",
+        "data.siteDelete",
+        "data.viewRecords",
+        "data.export",
         "email.suppressions",
         "email.lists",
         "inbox.reply",
@@ -7559,11 +7642,58 @@
         "workflows.orgAutomations",
         "workflows.sitePause",
         "accounting.manage",
+        "shipping.viewSettings",
+        "shipping.settings",
+        "shipping.labelCharges",
+        "shipping.carrierAccounts",
+        "shipping.ownAccounts",
+        "shipping.labels",
+        "shipping.buyLabels",
+        "shipping.voidLabels",
+        "taxEngines.manage",
+        "taxEngines.exemptions",
+        "taxEngines.productCodes",
+        "taxEngines.addresses",
+        "taxEngines.orders",
+        "salesChannels.feeds",
+        "salesChannels.settings",
+        "salesChannels.replaceAddress",
+        "salesChannels.connect",
+        "salesChannels.sync",
+        "marketingPlatforms.view",
+        "marketingPlatforms.manage",
+        "postPurchase.manage",
+        "fulfillmentNetworks.view",
+        "fulfillmentNetworks.manage",
+        "fulfillmentNetworks.orders",
+        "marketplaces.view",
+        "marketplaces.manage",
+        "marketplaces.orders",
+        "printOnDemand.manage",
+        "printOnDemand.products",
+        "printOnDemand.orders",
+        "inventorySync.view",
+        "inventorySync.manage",
+        "inventorySync.orders",
+        "loyalty.program",
+        "loyalty.connection",
+        "loyalty.adjustBalances",
+        "couriers.view",
+        "couriers.manage",
+        "couriers.dispatch",
+        "reviewPlatforms.manage",
+        "helpDesks.view",
+        "helpDesks.manage",
         "manageWaivers",
         "collectWaivers",
+        "adConversions.view",
+        "adConversions.manage",
         "domains.manage"
       ],
-      "viewer": []
+      "viewer": [
+        "data.viewRecords",
+        "data.export"
+      ]
     },
     "groups": [
       {
@@ -7644,9 +7774,65 @@
         "pluginId": "accounting"
       },
       {
+        "id": "shipping",
+        "label": "Shipping"
+      },
+      {
+        "id": "tax-engines",
+        "label": "Tax engines"
+      },
+      {
+        "id": "sales-channels",
+        "label": "Sales channels"
+      },
+      {
+        "id": "marketing-platforms",
+        "label": "Email platforms"
+      },
+      {
+        "id": "post-purchase",
+        "label": "After the sale"
+      },
+      {
+        "id": "fulfillment-networks",
+        "label": "Fulfillment networks"
+      },
+      {
+        "id": "marketplaces",
+        "label": "Online marketplaces"
+      },
+      {
+        "id": "print-on-demand",
+        "label": "Print on demand"
+      },
+      {
+        "id": "inventory-sync",
+        "label": "Inventory sync"
+      },
+      {
+        "id": "loyalty",
+        "label": "Rewards"
+      },
+      {
+        "id": "couriers",
+        "label": "Local delivery couriers"
+      },
+      {
+        "id": "review-platforms",
+        "label": "Review platforms"
+      },
+      {
+        "id": "help-desks",
+        "label": "Help desks"
+      },
+      {
         "id": "waivers",
         "label": "Waivers",
         "pluginId": "waivers"
+      },
+      {
+        "id": "ad-conversions",
+        "label": "Ad conversions"
       },
       {
         "id": "domains",
@@ -7737,31 +7923,55 @@
         "group": "sites",
         "key": "site.edit",
         "label": "Edit site content",
-        "scope": "site"
+        "scope": "site",
+        "sitePreset": {
+          "admin": true,
+          "author": true,
+          "editor": true,
+          "viewer": false
+        }
       },
       {
         "description": "Make pages and content live, take them down or schedule them, change redirects and change the site’s fonts.",
         "group": "sites",
         "key": "site.publish",
         "label": "Publish site content",
-        "scope": "site"
+        "scope": "site",
+        "sitePreset": {
+          "admin": true,
+          "author": false,
+          "editor": true,
+          "viewer": false
+        }
       },
       {
         "description": "Read a site’s orders, returns and sending address, and set up its webhooks.",
         "group": "sites",
         "key": "site.sensitive",
         "label": "See orders and webhooks",
-        "scope": "site"
+        "scope": "site",
+        "sitePreset": {
+          "admin": true,
+          "author": false,
+          "editor": true,
+          "viewer": false
+        }
       },
       {
         "description": "Manage a site’s people, domain, address and plugins, change its plugin settings (live chat, Zapier) and security allow-lists, import, export and delete it.",
         "group": "sites",
         "key": "site.manage",
         "label": "Manage site settings",
-        "scope": "site"
+        "scope": "site",
+        "sitePreset": {
+          "admin": true,
+          "author": false,
+          "editor": false,
+          "viewer": false
+        }
       },
       {
-        "description": "Create, edit, and delete organization datasets, the CRM’s records, and marketing lists and topics.",
+        "description": "Create and edit organization datasets, add, change and delete their rows, and manage the CRM’s records and marketing lists and topics.",
         "group": "datasets",
         "key": "data.manage",
         "label": "Manage data"
@@ -7773,7 +7983,7 @@
         "label": "Edit the workspace media library"
       },
       {
-        "description": "Delete records the whole workspace shares, such as dataset rows, contacts and lists.",
+        "description": "Delete a whole dataset or list the workspace shares, with everything in it. Deleting one row of a dataset asks “Manage data”.",
         "group": "datasets",
         "key": "org.eraseRecords",
         "label": "Delete workspace records"
@@ -7795,14 +8005,26 @@
         "group": "ai",
         "key": "ai.use",
         "label": "Use AI assistance",
-        "scope": "site"
+        "scope": "site",
+        "sitePreset": {
+          "admin": true,
+          "author": true,
+          "editor": true,
+          "viewer": false
+        }
       },
       {
         "description": "Run AI generation jobs and AI edits: pages, components, emails, campaigns, products, CRM, insights, workflows.",
         "group": "ai",
         "key": "ai.generate",
         "label": "Generate with AI",
-        "scope": "site"
+        "scope": "site",
+        "sitePreset": {
+          "admin": true,
+          "author": true,
+          "editor": true,
+          "viewer": false
+        }
       },
       {
         "description": "Import an existing website into the workspace with Bring my site.",
@@ -7816,28 +8038,52 @@
         "group": "funnels",
         "key": "funnels.manage",
         "label": "Manage funnels",
-        "scope": "site"
+        "scope": "site",
+        "sitePreset": {
+          "admin": true,
+          "author": false,
+          "editor": true,
+          "viewer": false
+        }
       },
       {
         "description": "Take a booking’s payment at the desk on a card reader. Follows the site role unless a role or member sets it.",
         "group": "bookings",
         "key": "bookings.payments",
         "label": "Take booking payments in person",
-        "scope": "site"
+        "scope": "site",
+        "sitePreset": {
+          "admin": true,
+          "author": false,
+          "editor": true,
+          "viewer": false
+        }
       },
       {
         "description": "Refund a paid booking, in full or in part. Follows the site role unless a role or member sets it.",
         "group": "bookings",
         "key": "bookings.refunds",
         "label": "Refund bookings",
-        "scope": "site"
+        "scope": "site",
+        "sitePreset": {
+          "admin": true,
+          "author": false,
+          "editor": false,
+          "viewer": false
+        }
       },
       {
         "description": "Edit, cancel and check out stays, and add, change and remove what can be booked. Follows the site role unless a role or member sets it.",
         "group": "commerce",
         "key": "commerce.reservations",
         "label": "Manage reservations",
-        "scope": "site"
+        "scope": "site",
+        "sitePreset": {
+          "admin": true,
+          "author": true,
+          "editor": true,
+          "viewer": false
+        }
       },
       {
         "description": "Book a walk-in stay and change how many guests a stay is for. Follows \"Manage reservations\" unless a role or member sets it, and may be allowed without it.",
@@ -7845,49 +8091,104 @@
         "group": "commerce",
         "key": "commerce.walkIns",
         "label": "Book walk-ins and change guests",
-        "scope": "site"
+        "scope": "site",
+        "sitePreset": {
+          "admin": true,
+          "author": true,
+          "editor": true,
+          "viewer": false
+        }
       },
       {
         "description": "Fulfill, cancel and print orders, resend receipts, build draft orders, take returns and record shipments. Follows the site role unless a role or member sets it.",
         "group": "commerce",
         "key": "commerce.orders",
         "label": "Manage orders",
-        "scope": "site"
+        "scope": "site",
+        "sitePreset": {
+          "admin": true,
+          "author": false,
+          "editor": true,
+          "viewer": false
+        }
       },
       {
         "description": "Create, edit and delete quotes for customers. Follows the site role unless a role or member sets it.",
         "group": "commerce",
         "key": "commerce.quotes",
         "label": "Create and edit quotes",
-        "scope": "site"
+        "scope": "site",
+        "sitePreset": {
+          "admin": true,
+          "author": false,
+          "editor": true,
+          "viewer": false
+        }
       },
       {
         "description": "Copy a quote’s pay link to send to the customer, and replace it so the old link stops working. Follows the site role unless a role or member sets it.",
         "group": "commerce",
         "key": "commerce.quotes.send",
         "label": "Send quotes and invoices to customers",
-        "scope": "site"
+        "scope": "site",
+        "sitePreset": {
+          "admin": true,
+          "author": false,
+          "editor": true,
+          "viewer": false
+        }
       },
       {
         "description": "Issue, adjust and void the store’s gift cards. Follows the site role unless a role or member sets it.",
         "group": "commerce",
         "key": "commerce.giftCards",
         "label": "Issue gift cards",
-        "scope": "site"
+        "scope": "site",
+        "sitePreset": {
+          "admin": true,
+          "author": false,
+          "editor": true,
+          "viewer": false
+        }
+      },
+      {
+        "description": "Import gift cards from a file, which issues each one as spendable money. Also takes \"Manage data\". Follows the site role unless a role or member sets it.",
+        "group": "commerce",
+        "key": "commerce.giftCards.import",
+        "label": "Import gift cards",
+        "scope": "site",
+        "sitePreset": {
+          "admin": true,
+          "author": false,
+          "editor": false,
+          "viewer": false
+        }
       },
       {
         "description": "Turn the store’s payment methods on and off. Anyone with \"Manage orders\" sees them. Follows the site role unless a role or member sets it.",
         "group": "commerce",
         "key": "commerce.paymentMethods",
         "label": "Manage payment methods",
-        "scope": "site"
+        "scope": "site",
+        "sitePreset": {
+          "admin": true,
+          "author": false,
+          "editor": false,
+          "viewer": false
+        }
       },
       {
         "description": "Connect, sync and disconnect ShipStation and ShippingEasy, and show or replace their credentials. Anyone with \"Manage orders\" sees whether they are connected. Follows the site role unless a role or member sets it.",
         "group": "commerce",
         "key": "commerce.shippingConnections",
         "label": "Connect shipping apps",
-        "scope": "site"
+        "scope": "site",
+        "sitePreset": {
+          "admin": true,
+          "author": false,
+          "editor": false,
+          "viewer": false
+        }
       },
       {
         "description": "Refund any order, online or at the register, in full or in part, with no register limit. A member of the whole workspace who is the site’s admin holds it unless a role or member sets it; someone added to just this site holds it only when the site grants it.",
@@ -7983,14 +8284,26 @@
         "group": "marketplace",
         "key": "marketplace.siteInstall",
         "label": "Install marketplace items into a site",
-        "scope": "site"
+        "scope": "site",
+        "sitePreset": {
+          "admin": true,
+          "author": false,
+          "editor": true,
+          "viewer": false
+        }
       },
       {
         "description": "Publish a site’s templates, themes, layouts, components and email designs to the marketplace (with \"Publish to the marketplace\"). Follows the site role unless a role or member sets it.",
         "group": "marketplace",
         "key": "marketplace.sitePublish",
         "label": "Publish a site’s items to the marketplace",
-        "scope": "site"
+        "scope": "site",
+        "sitePreset": {
+          "admin": true,
+          "author": false,
+          "editor": true,
+          "viewer": false
+        }
       },
       {
         "description": "Change the workspace’s public marketplace profile (its handle, name, bio, logo, support contact and links), and ask for the Verified publisher badge or withdraw the ask.",
@@ -8022,7 +8335,13 @@
         "group": "crm",
         "key": "crm.moveStages",
         "label": "Move contacts and deals between stages",
-        "scope": "site"
+        "scope": "site",
+        "sitePreset": {
+          "admin": true,
+          "author": false,
+          "editor": true,
+          "viewer": false
+        }
       },
       {
         "description": "Change the CRM’s settings for every site: default sharing for new records, companies from email domains, default owners, assignment rules and the round-robin pool, sharing rules, and rotating the email capture address; and share records with other sites.",
@@ -8049,39 +8368,114 @@
         "scope": "org"
       },
       {
+        "description": "Change the schema and records of a dataset placed on this site alone, and import into it. Follows “Manage data” for a member of the whole workspace.",
+        "follows": "data.manage",
+        "group": "datasets",
+        "key": "data.siteManage",
+        "label": "Manage this site’s data",
+        "narrowable": true,
+        "scope": "site",
+        "sitePreset": {
+          "admin": true,
+          "author": false,
+          "editor": true,
+          "viewer": false
+        }
+      },
+      {
+        "description": "Delete a dataset placed on this site alone, with its records. Follows “Delete workspace records” for a member of the whole workspace.",
+        "follows": "org.eraseRecords",
+        "group": "datasets",
+        "key": "data.siteDelete",
+        "label": "Delete this site’s datasets",
+        "narrowable": true,
+        "scope": "site",
+        "sitePreset": {
+          "admin": true,
+          "author": false,
+          "editor": true,
+          "viewer": false
+        }
+      },
+      {
+        "description": "Read the records of the datasets this member can see. Published sites show records either way.",
+        "group": "datasets",
+        "key": "data.viewRecords",
+        "label": "View dataset records",
+        "scope": "org"
+      },
+      {
+        "description": "Take the records of the datasets this member can see out as a file. Needs “View dataset records”.",
+        "group": "datasets",
+        "key": "data.export",
+        "label": "Export data",
+        "refines": "data.viewRecords",
+        "scope": "org"
+      },
+      {
         "description": "Add addresses to the site’s suppression list and check addresses against it. Follows the site role unless a role or member sets it.",
         "group": "email",
         "key": "email.suppressions",
         "label": "Manage the site’s suppressions",
-        "scope": "site"
+        "scope": "site",
+        "sitePreset": {
+          "admin": true,
+          "author": false,
+          "editor": true,
+          "viewer": false
+        }
       },
       {
         "description": "Add and remove people on the organization’s marketing lists from a site (only for a member of the whole workspace who may write its lists, as the lists are the organization’s). Follows the site role unless a role or member sets it.",
         "group": "email",
         "key": "email.lists",
         "label": "Add people to marketing lists from a site",
-        "scope": "site"
+        "scope": "site",
+        "sitePreset": {
+          "admin": true,
+          "author": false,
+          "editor": true,
+          "viewer": false
+        }
       },
       {
         "description": "Reply by email to a form submission in the site’s inbox. Follows the site role unless a role or member sets it.",
         "group": "inbox",
         "key": "inbox.reply",
         "label": "Reply from the inbox",
-        "scope": "site"
+        "scope": "site",
+        "sitePreset": {
+          "admin": true,
+          "author": false,
+          "editor": true,
+          "viewer": false
+        }
       },
       {
         "description": "Add the person behind a form submission to the organization’s marketing lists (members of the whole workspace who may write its lists only). Follows the site role unless a role or member sets it.",
         "group": "inbox",
         "key": "inbox.assign",
         "label": "Add people to lists from the inbox",
-        "scope": "site"
+        "scope": "site",
+        "sitePreset": {
+          "admin": true,
+          "author": false,
+          "editor": true,
+          "viewer": false
+        }
       },
       {
         "description": "Draft, send, duplicate and manage email campaigns, and see who a send reached. Follows the site role on a site, and the workspace role in the organization hub, unless a role or member sets it.",
         "group": "marketing",
         "key": "marketing.campaigns",
         "label": "Run email campaigns",
-        "scope": "site"
+        "scope": "site",
+        "sitePreset": {
+          "admin": true,
+          "author": false,
+          "editor": true,
+          "viewer": false
+        }
       },
       {
         "description": "Create, change, switch on and off, remove and import the organization’s automations. Members of the whole workspace only.",
@@ -8095,7 +8489,13 @@
         "group": "workflows",
         "key": "workflows.sitePause",
         "label": "Pause org automations on a site",
-        "scope": "site"
+        "scope": "site",
+        "sitePreset": {
+          "admin": true,
+          "author": false,
+          "editor": true,
+          "viewer": false
+        }
       },
       {
         "description": "Connect QuickBooks Online, Xero or other accounting software through Codat, choose the accounts sales are posted to, and retry a sync.",
@@ -8104,6 +8504,552 @@
         "label": "Manage accounting",
         "pluginId": "accounting",
         "scope": "org"
+      },
+      {
+        "description": "See where parcels ship from, the boxes and the label settings. Follows the site role unless a role or member sets it.",
+        "group": "shipping",
+        "key": "shipping.viewSettings",
+        "label": "See shipping settings",
+        "scope": "site",
+        "sitePreset": {
+          "admin": true,
+          "author": false,
+          "editor": true,
+          "viewer": false
+        }
+      },
+      {
+        "description": "Change where parcels ship from, the boxes, the label settings and the services offered at checkout. Follows the site role unless a role or member sets it.",
+        "group": "shipping",
+        "key": "shipping.settings",
+        "label": "Change shipping settings",
+        "scope": "site",
+        "sitePreset": {
+          "admin": true,
+          "author": false,
+          "editor": false,
+          "viewer": false
+        }
+      },
+      {
+        "description": "See how labels are paid for, and agree to the charges. Agreeing also takes \"Manage billing\". Follows the site role unless a role or member sets it.",
+        "group": "shipping",
+        "key": "shipping.labelCharges",
+        "label": "Manage label charges",
+        "scope": "site",
+        "sitePreset": {
+          "admin": true,
+          "author": false,
+          "editor": false,
+          "viewer": false
+        }
+      },
+      {
+        "description": "See the carrier accounts, connect one and switch them on and off. Changing them also takes \"Manage billing\". Follows the site role unless a role or member sets it.",
+        "group": "shipping",
+        "key": "shipping.carrierAccounts",
+        "label": "Manage carrier accounts",
+        "scope": "site",
+        "sitePreset": {
+          "admin": true,
+          "author": false,
+          "editor": false,
+          "viewer": false
+        }
+      },
+      {
+        "description": "See and connect your own Easyship, Sendcloud or ShipperHQ account. Changing them also takes \"Manage billing\". Follows the site role unless a role or member sets it.",
+        "group": "shipping",
+        "key": "shipping.ownAccounts",
+        "label": "Manage your own shipping accounts",
+        "scope": "site",
+        "sitePreset": {
+          "admin": true,
+          "author": false,
+          "editor": false,
+          "viewer": false
+        }
+      },
+      {
+        "description": "Check an address, compare rates and see the labels bought for an order. Follows the site role unless a role or member sets it.",
+        "group": "shipping",
+        "key": "shipping.labels",
+        "label": "Check rates and see labels",
+        "scope": "site",
+        "sitePreset": {
+          "admin": true,
+          "author": false,
+          "editor": true,
+          "viewer": false
+        }
+      },
+      {
+        "description": "Buy a label for an order, or for a batch of orders, which charges the workspace. Follows the site role unless a role or member sets it.",
+        "group": "shipping",
+        "key": "shipping.buyLabels",
+        "label": "Buy shipping labels",
+        "scope": "site",
+        "sitePreset": {
+          "admin": true,
+          "author": false,
+          "editor": true,
+          "viewer": false
+        }
+      },
+      {
+        "description": "Void a label that has not been used. Follows the site role unless a role or member sets it.",
+        "group": "shipping",
+        "key": "shipping.voidLabels",
+        "label": "Void shipping labels",
+        "scope": "site",
+        "sitePreset": {
+          "admin": true,
+          "author": false,
+          "editor": true,
+          "viewer": false
+        }
+      },
+      {
+        "description": "Connect, test and disconnect a tax engine, and change its ship-from address, default tax code and recording. Follows the site role unless a role or member sets it.",
+        "group": "tax-engines",
+        "key": "taxEngines.manage",
+        "label": "Manage the tax engine connection",
+        "scope": "site",
+        "sitePreset": {
+          "admin": true,
+          "author": false,
+          "editor": false,
+          "viewer": false
+        }
+      },
+      {
+        "description": "See, save and remove the customers exempt from tax. Follows the site role unless a role or member sets it.",
+        "group": "tax-engines",
+        "key": "taxEngines.exemptions",
+        "label": "Manage exempt customers",
+        "scope": "site",
+        "sitePreset": {
+          "admin": true,
+          "author": false,
+          "editor": true,
+          "viewer": false
+        }
+      },
+      {
+        "description": "Set the tax code a product is taxed under. Follows the site role unless a role or member sets it.",
+        "group": "tax-engines",
+        "key": "taxEngines.productCodes",
+        "label": "Set product tax codes",
+        "scope": "site",
+        "sitePreset": {
+          "admin": true,
+          "author": false,
+          "editor": true,
+          "viewer": false
+        }
+      },
+      {
+        "description": "Ask the tax engine how it reads an address. Follows the site role unless a role or member sets it.",
+        "group": "tax-engines",
+        "key": "taxEngines.addresses",
+        "label": "Check addresses with the tax engine",
+        "scope": "site",
+        "sitePreset": {
+          "admin": true,
+          "author": false,
+          "editor": true,
+          "viewer": false
+        }
+      },
+      {
+        "description": "See how an order stands with the tax engine, and send it again. Follows the site role unless a role or member sets it.",
+        "group": "tax-engines",
+        "key": "taxEngines.orders",
+        "label": "See and resend orders to the tax engine",
+        "scope": "site",
+        "sitePreset": {
+          "admin": true,
+          "author": false,
+          "editor": true,
+          "viewer": false
+        }
+      },
+      {
+        "description": "Turn each shopping channel’s product feed on or off. Follows the site role unless a role or member sets it.",
+        "group": "sales-channels",
+        "key": "salesChannels.feeds",
+        "label": "Turn product feeds on and off",
+        "scope": "site",
+        "sitePreset": {
+          "admin": true,
+          "author": false,
+          "editor": true,
+          "viewer": false
+        }
+      },
+      {
+        "description": "Change the store defaults the product feeds use. Follows the site role unless a role or member sets it.",
+        "group": "sales-channels",
+        "key": "salesChannels.settings",
+        "label": "Change sales channel defaults",
+        "scope": "site",
+        "sitePreset": {
+          "admin": true,
+          "author": false,
+          "editor": true,
+          "viewer": false
+        }
+      },
+      {
+        "description": "Replace a product feed’s address, which stops the old one working, and turn off an earlier Google address. Follows the site role unless a role or member sets it.",
+        "group": "sales-channels",
+        "key": "salesChannels.replaceAddress",
+        "label": "Replace a feed address",
+        "scope": "site",
+        "sitePreset": {
+          "admin": true,
+          "author": false,
+          "editor": false,
+          "viewer": false
+        }
+      },
+      {
+        "description": "Connect and disconnect a Google Merchant Center or Meta catalog, and choose the account the catalog goes to. Follows the site role unless a role or member sets it.",
+        "group": "sales-channels",
+        "key": "salesChannels.connect",
+        "label": "Connect Google and Meta",
+        "scope": "site",
+        "sitePreset": {
+          "admin": true,
+          "author": false,
+          "editor": false,
+          "viewer": false
+        }
+      },
+      {
+        "description": "Send the catalog to a connected Google Merchant Center or Meta catalog now. Follows the site role unless a role or member sets it.",
+        "group": "sales-channels",
+        "key": "salesChannels.sync",
+        "label": "Push the catalog to a channel",
+        "scope": "site",
+        "sitePreset": {
+          "admin": true,
+          "author": false,
+          "editor": true,
+          "viewer": false
+        }
+      },
+      {
+        "description": "See which email platforms this site is connected to, and each connection’s activity. Follows the site role unless a role or member sets it.",
+        "group": "marketing-platforms",
+        "key": "marketingPlatforms.view",
+        "label": "See email platform connections",
+        "scope": "site",
+        "sitePreset": {
+          "admin": true,
+          "author": false,
+          "editor": true,
+          "viewer": false
+        }
+      },
+      {
+        "description": "Connect and disconnect Mailchimp, Klaviyo, Omnisend and Attentive, choose what is synced, pause a connection and run its sync. Follows the site role unless a role or member sets it.",
+        "group": "marketing-platforms",
+        "key": "marketingPlatforms.manage",
+        "label": "Manage email platform connections",
+        "scope": "site",
+        "sitePreset": {
+          "admin": true,
+          "author": false,
+          "editor": false,
+          "viewer": false
+        }
+      },
+      {
+        "description": "Connect, change and disconnect the services that follow an order after it is placed. Follows the site role unless a role or member sets it.",
+        "group": "post-purchase",
+        "key": "postPurchase.manage",
+        "label": "Change after-the-sale services",
+        "scope": "site",
+        "sitePreset": {
+          "admin": true,
+          "author": false,
+          "editor": false,
+          "viewer": false
+        }
+      },
+      {
+        "description": "See which fulfillment networks this site is connected to, and each connection’s activity. Follows the site role unless a role or member sets it.",
+        "group": "fulfillment-networks",
+        "key": "fulfillmentNetworks.view",
+        "label": "See fulfillment network connections",
+        "scope": "site",
+        "sitePreset": {
+          "admin": true,
+          "author": false,
+          "editor": true,
+          "viewer": false
+        }
+      },
+      {
+        "description": "Connect and disconnect a network, change its settings and webhook secret, and run its sync. Follows the site role unless a role or member sets it.",
+        "group": "fulfillment-networks",
+        "key": "fulfillmentNetworks.manage",
+        "label": "Manage fulfillment network connections",
+        "scope": "site",
+        "sitePreset": {
+          "admin": true,
+          "author": false,
+          "editor": false,
+          "viewer": false
+        }
+      },
+      {
+        "description": "Send an order’s lines to a network, or ask the network to cancel them. Follows the site role unless a role or member sets it.",
+        "group": "fulfillment-networks",
+        "key": "fulfillmentNetworks.orders",
+        "label": "Send orders to a fulfillment network",
+        "scope": "site",
+        "sitePreset": {
+          "admin": true,
+          "author": false,
+          "editor": true,
+          "viewer": false
+        }
+      },
+      {
+        "description": "See which online marketplaces this site sells on, each connection’s activity and the listings to look at. Follows the site role unless a role or member sets it.",
+        "group": "marketplaces",
+        "key": "marketplaces.view",
+        "label": "See online marketplace connections",
+        "scope": "site",
+        "sitePreset": {
+          "admin": true,
+          "author": false,
+          "editor": true,
+          "viewer": false
+        }
+      },
+      {
+        "description": "Connect and disconnect a marketplace seller account, change its settings and run its sync. Follows the site role unless a role or member sets it.",
+        "group": "marketplaces",
+        "key": "marketplaces.manage",
+        "label": "Manage online marketplace connections",
+        "scope": "site",
+        "sitePreset": {
+          "admin": true,
+          "author": false,
+          "editor": false,
+          "viewer": false
+        }
+      },
+      {
+        "description": "Send an order’s refused or failed shipments to its marketplace again. Follows the site role unless a role or member sets it.",
+        "group": "marketplaces",
+        "key": "marketplaces.orders",
+        "label": "Resend marketplace shipments",
+        "scope": "site",
+        "sitePreset": {
+          "admin": true,
+          "author": false,
+          "editor": true,
+          "viewer": false
+        }
+      },
+      {
+        "description": "Connect and disconnect a print-on-demand service, and choose how paid orders are sent to it. Follows the site role unless a role or member sets it.",
+        "group": "print-on-demand",
+        "key": "printOnDemand.manage",
+        "label": "Manage print-on-demand connections",
+        "scope": "site",
+        "sitePreset": {
+          "admin": true,
+          "author": false,
+          "editor": false,
+          "viewer": false
+        }
+      },
+      {
+        "description": "Browse a service’s products, import or re-sync them, and stop filling a product through it. Follows the site role unless a role or member sets it.",
+        "group": "print-on-demand",
+        "key": "printOnDemand.products",
+        "label": "Import print-on-demand products",
+        "scope": "site",
+        "sitePreset": {
+          "admin": true,
+          "author": false,
+          "editor": true,
+          "viewer": false
+        }
+      },
+      {
+        "description": "See the service orders, and send, confirm, refresh or cancel one, which a service may charge for. Follows the site role unless a role or member sets it.",
+        "group": "print-on-demand",
+        "key": "printOnDemand.orders",
+        "label": "Work print-on-demand orders",
+        "scope": "site",
+        "sitePreset": {
+          "admin": true,
+          "author": false,
+          "editor": true,
+          "viewer": false
+        }
+      },
+      {
+        "description": "See which inventory system this site is connected to, its activity and the orders that could not be sent. Follows the site role unless a role or member sets it.",
+        "group": "inventory-sync",
+        "key": "inventorySync.view",
+        "label": "See the inventory connection",
+        "scope": "site",
+        "sitePreset": {
+          "admin": true,
+          "author": false,
+          "editor": true,
+          "viewer": false
+        }
+      },
+      {
+        "description": "Connect and disconnect an inventory system, change its settings and locations, and run its sync. Follows the site role unless a role or member sets it.",
+        "group": "inventory-sync",
+        "key": "inventorySync.manage",
+        "label": "Manage the inventory connection",
+        "scope": "site",
+        "sitePreset": {
+          "admin": true,
+          "author": false,
+          "editor": false,
+          "viewer": false
+        }
+      },
+      {
+        "description": "Send an order that could not be sent to the inventory system again. Follows the site role unless a role or member sets it.",
+        "group": "inventory-sync",
+        "key": "inventorySync.orders",
+        "label": "Send orders to the inventory system",
+        "scope": "site",
+        "sitePreset": {
+          "admin": true,
+          "author": false,
+          "editor": true,
+          "viewer": false
+        }
+      },
+      {
+        "description": "Change how rewards are earned and spent, the referral offer and the rewards emails. Follows the site role unless a role or member sets it.",
+        "group": "loyalty",
+        "key": "loyalty.program",
+        "label": "Change the rewards program",
+        "scope": "site",
+        "sitePreset": {
+          "admin": true,
+          "author": false,
+          "editor": false,
+          "viewer": false
+        }
+      },
+      {
+        "description": "Connect and disconnect Smile.io or Yotpo Loyalty, and bring its balances in. Follows the site role unless a role or member sets it.",
+        "group": "loyalty",
+        "key": "loyalty.connection",
+        "label": "Connect a rewards service",
+        "scope": "site",
+        "sitePreset": {
+          "admin": true,
+          "author": false,
+          "editor": false,
+          "viewer": false
+        }
+      },
+      {
+        "description": "Add or take away a member’s points or credit by hand. Follows the site role unless a role or member sets it.",
+        "group": "loyalty",
+        "key": "loyalty.adjustBalances",
+        "label": "Adjust rewards balances",
+        "scope": "site",
+        "sitePreset": {
+          "admin": true,
+          "author": false,
+          "editor": true,
+          "viewer": false
+        }
+      },
+      {
+        "description": "See which courier this site is connected to, and an order’s delivery. Follows the site role unless a role or member sets it.",
+        "group": "couriers",
+        "key": "couriers.view",
+        "label": "See the courier connection",
+        "scope": "site",
+        "sitePreset": {
+          "admin": true,
+          "author": false,
+          "editor": true,
+          "viewer": false
+        }
+      },
+      {
+        "description": "Connect and disconnect a courier, test it, change its settings and its webhook token. Follows the site role unless a role or member sets it.",
+        "group": "couriers",
+        "key": "couriers.manage",
+        "label": "Manage the courier connection",
+        "scope": "site",
+        "sitePreset": {
+          "admin": true,
+          "author": false,
+          "editor": false,
+          "viewer": false
+        }
+      },
+      {
+        "description": "Get a quote, send a courier for an order, cancel one and refresh where it is. A courier’s charge is the store’s. Follows the site role unless a role or member sets it.",
+        "group": "couriers",
+        "key": "couriers.dispatch",
+        "label": "Dispatch couriers",
+        "scope": "site",
+        "sitePreset": {
+          "admin": true,
+          "author": false,
+          "editor": true,
+          "viewer": false
+        }
+      },
+      {
+        "description": "Connect, change and disconnect the services that ask buyers for reviews. Follows the site role unless a role or member sets it.",
+        "group": "review-platforms",
+        "key": "reviewPlatforms.manage",
+        "label": "Change review services",
+        "scope": "site",
+        "sitePreset": {
+          "admin": true,
+          "author": false,
+          "editor": false,
+          "viewer": false
+        }
+      },
+      {
+        "description": "See which help desks this site is connected to, and each connection’s activity. Follows the site role unless a role or member sets it.",
+        "group": "help-desks",
+        "key": "helpDesks.view",
+        "label": "See help desk connections",
+        "scope": "site",
+        "sitePreset": {
+          "admin": true,
+          "author": false,
+          "editor": true,
+          "viewer": false
+        }
+      },
+      {
+        "description": "Connect and disconnect Gorgias, Re:amaze, Kustomer, Gladly and Richpanel, choose what is sent, pause a connection and run its sync. Follows the site role unless a role or member sets it.",
+        "group": "help-desks",
+        "key": "helpDesks.manage",
+        "label": "Manage help desk connections",
+        "scope": "site",
+        "sitePreset": {
+          "admin": true,
+          "author": false,
+          "editor": false,
+          "viewer": false
+        }
       },
       {
         "description": "Write, publish and retire waivers, and void a signature.",
@@ -8122,6 +9068,32 @@
         "narrowable": true,
         "pluginId": "waivers",
         "scope": "org"
+      },
+      {
+        "description": "See which ad accounts this site sends conversions to. Follows the site role unless a role or member sets it.",
+        "group": "ad-conversions",
+        "key": "adConversions.view",
+        "label": "See ad conversion connections",
+        "scope": "site",
+        "sitePreset": {
+          "admin": true,
+          "author": false,
+          "editor": true,
+          "viewer": false
+        }
+      },
+      {
+        "description": "Connect and disconnect an ad account, change its settings, pause it and send a test event. Follows the site role unless a role or member sets it.",
+        "group": "ad-conversions",
+        "key": "adConversions.manage",
+        "label": "Manage ad conversion connections",
+        "scope": "site",
+        "sitePreset": {
+          "admin": true,
+          "author": false,
+          "editor": false,
+          "viewer": false
+        }
       },
       {
         "description": "Buy, transfer in, unlock and renew the workspace’s domains, and change their contacts and DNS. Paying for one also needs \"Manage billing\".",
@@ -10341,7 +11313,7 @@
       "defaultBody": [
         {
           "block": "text",
-          "text": "{{host.businessName}} · Quote {{quote.number}}",
+          "text": "{{host.businessName}} · {{quote.label}} {{quote.number}}",
           "variant": "eyebrow"
         },
         {
@@ -10361,7 +11333,7 @@
         },
         {
           "block": "text",
-          "text": "Quote: {{quote.number}}\nRevision: {{quote.revision}}\nTotal: {{quote.total}}",
+          "text": "{{quote.label}}: {{quote.number}}\nRevision: {{quote.revision}}\nTotal: {{quote.total}}",
           "variant": "details"
         },
         {
@@ -10390,14 +11362,19 @@
         }
       ],
       "defaultSubject": "{{quote.subject}}",
-      "description": "Sends a quote to the customer when you choose Send quote: your message, the proof, the quote as a PDF and a button to approve or pay it on your site. Later sends, such as a new revision, arrive in the same conversation.",
-      "footerReason": "You’re receiving this because {{host.businessName}} prepared a quote for you.",
+      "description": "Sends a quote to the customer when you choose Send quote: your message, the proof, the quote as a PDF and a button to approve or pay it on your site. A proof with no price yet goes out as a proof, with no total and no PDF. Later sends, such as a new revision, arrive in the same conversation.",
+      "footerReason": "You’re receiving this because {{host.businessName}} prepared a quote or proof for you.",
       "key": "quote-sent",
       "mergeTokens": [
         {
           "description": "The subject typed when sending; it stays the same for every email about the quote",
           "name": "quote.subject",
           "sample": "Quote #1042 from Northwind Signs"
+        },
+        {
+          "description": "“Quote”, or “Proof” for a proof with no price yet",
+          "name": "quote.label",
+          "sample": "Quote"
         },
         {
           "description": "The quote number",
@@ -10410,12 +11387,12 @@
           "sample": "2"
         },
         {
-          "description": "The quote total; “before tax” when tax is added at payment",
+          "description": "The quote total; “before tax” when tax is added at payment; empty for a proof with no price yet",
           "name": "quote.total",
           "sample": "$1,250.00"
         },
         {
-          "description": "“Your quote from …”, or “Your updated quote” from the second revision on",
+          "description": "“Your quote from …”, or “Your updated quote” from the second revision on; “proof” for a proof with no price yet",
           "name": "quote.heading",
           "sample": "Your quote from Northwind Signs"
         },
@@ -10440,12 +11417,12 @@
           "sample": "Also with this revision: banner.ai. See it on your quote page."
         },
         {
-          "description": "What to do next: approve the proof first, or pay when ready",
+          "description": "What to do next: approve the proof first, or pay when ready; for a proof with no price yet, approve it or ask for changes",
           "name": "quote.nextStep",
           "sample": "Look over the proof, then approve it on your quote page. Once you approve it, you can pay there."
         },
         {
-          "description": "“Review and approve” while an approval is needed first, else “View and pay” with the total",
+          "description": "“Review and approve” while an approval is needed first, “Review the proof” for a proof with no price yet, else “View and pay” with the total",
           "name": "quote.buttonLabel",
           "sample": "View and pay $1,250.00"
         },

@@ -15,6 +15,9 @@
  * limitations under the License.
  */
 
+import { holdsStampedSiteKey } from '@aglyn/aglyn/app-utils/host-permissions'
+import { permissionRefusalText } from '@aglyn/aglyn/app-utils/org-permissions'
+import { MARKETPLACES_SITE_PRESETS, type MarketplacesSitePermission } from '../model/marketplaces-permissions'
 import { checkEntitlement } from '@aglyn/aglyn/app-utils/plan-entitlements'
 import { resolveHostEnabledPlugins } from '@aglyn/aglyn/plugin-manager/enabled-plugins'
 import { pluginChannelOrders } from '@aglyn/aglyn/plugin-manager/plugin-channel-orders'
@@ -38,7 +41,7 @@ import { offeredMarketplaces, readMarketplacesConfig } from './config'
 import { createCredentialOpener } from './credentials'
 import { createEngine, type EngineDeps } from './engine'
 import { consoleAddress } from './oauth'
-import { createMarketplaceRoutes, fail, type MarketplaceGateResult, type MarketplaceRole, type MarketplaceRouteDeps } from './routes'
+import { createMarketplaceRoutes, fail, type MarketplaceGateResult, type MarketplaceRouteDeps } from './routes'
 import { createFirestoreMarketplaceStore, type MarketplaceStore } from './store'
 
 /**
@@ -80,8 +83,6 @@ export function platformProvider(id: MarketplaceId): MarketplaceProvider {
   }
 }
 
-const ROLE_RANK: Record<string, number> = { viewer: 1, author: 1, editor: 2, admin: 3 }
-
 const HOST_ID = /^[A-Za-z0-9_-]{1,128}$/
 
 /** A site's org, and whether it may run this plugin: a plan that sells, commerce and this plugin on. */
@@ -116,10 +117,10 @@ async function readBody(request: Request): Promise<Record<string, unknown>> {
 }
 
 /**
- * Who may use a route: a verified member of the site at `role`, the site
+ * Who may use a route: a verified member of the site holding the key named, the site
  * entitled and not locked, on a deployment that offers a marketplace.
  */
-export async function marketplacesGate(request: Request, role: MarketplaceRole): Promise<MarketplaceGateResult | Response> {
+export async function marketplacesGate(request: Request, permission: MarketplacesSitePermission | null): Promise<MarketplaceGateResult | Response> {
   if (!offeredMarketplaces(readMarketplacesConfig()).length) return fail(404, 'Not found')
   const authorization = request.headers.get('authorization') ?? ''
   if (!authorization.startsWith('Bearer ')) return fail(401, 'Unauthenticated')
@@ -137,8 +138,11 @@ export async function marketplacesGate(request: Request, role: MarketplaceRole):
   const site = await siteContext(hostId)
   if (!site) return fail(404, 'That site was not found')
   const staff = decoded['staff'] === true
-  const memberRole = String((site.host['memberRoles'] as Record<string, unknown> | undefined)?.[decoded.uid] ?? '')
-  if (!staff && (ROLE_RANK[memberRole] ?? 0) < ROLE_RANK[role]) return fail(403, 'Not permitted')
+  // No key named: anyone on the site's roster reads it.
+  if (!staff && !((site.host['memberRoles'] ?? {}) as Record<string, unknown>)[decoded.uid]) return fail(403, 'Not permitted')
+  if (!staff && permission && !holdsStampedSiteKey(site.host, decoded.uid, permission, MARKETPLACES_SITE_PRESETS[permission])) {
+    return fail(403, permissionRefusalText(permission))
+  }
   if (!site.entitled) return fail(404, 'Marketplaces are not available for this site')
   const locked = await lockdownRefusal({ request, staff, uid: decoded.uid, org: site.org as never, host: site.host as never })
   if (locked) return locked

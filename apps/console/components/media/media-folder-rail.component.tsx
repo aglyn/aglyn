@@ -19,6 +19,7 @@
 import type * as Aglyn from '@aglyn/aglyn'
 import { useDraggable, useDroppable } from '@dnd-kit/core'
 import MoreVertIcon from '@mui/icons-material/MoreVert'
+import { BlockedControl } from '@aglyn/shared-ui-jsx/components/blocked-control.component'
 import {
   Box,
   Button,
@@ -50,6 +51,10 @@ export interface MediaFolderRailProps {
   onDelete: (folder: MediaFolder) => Promise<void>
   /** Picker mode renders without DnD hooks and without folder actions. */
   readOnly?: boolean
+  /** New folder, New subfolder, Rename, Delete and dragging stay off while permissions load. */
+  writeHeld?: boolean
+  /** Why New folder, New subfolder, Rename, Delete and dragging are switched off for this reader. */
+  writeRefusal?: string
 }
 
 /** Droppable + draggable rail row; DnD ids are `folder:{id}`. */
@@ -59,10 +64,12 @@ function FolderRow(props: {
   selected: boolean
   count: number
   readOnly?: boolean
+  /** A folder that may be seen and not moved: no drag, and the menu stays. */
+  dragOff?: boolean
   onSelect: () => void
   onMenu: (event: MouseEvent<HTMLElement>, folder: MediaFolder) => void
 }) {
-  const { folder, depth, selected, count, readOnly, onSelect, onMenu } = props
+  const { folder, depth, selected, count, readOnly, dragOff, onSelect, onMenu } = props
   const { setNodeRef: setDropRef, isOver } = useDroppable({
     id: `folder:${folder.$id}`,
     disabled: readOnly,
@@ -71,7 +78,7 @@ function FolderRow(props: {
     setNodeRef: setDragRef,
     attributes,
     listeners,
-  } = useDraggable({ id: `folderdrag:${folder.$id}`, disabled: readOnly })
+  } = useDraggable({ id: `folderdrag:${folder.$id}`, disabled: readOnly || dragOff })
 
   return (
     <Stack
@@ -140,8 +147,17 @@ FolderRow.displayName = 'FolderRow'
  * row menu — DnD is an enhancement, not the only path.
  */
 export function MediaFolderRail(props: MediaFolderRailProps) {
-  const { folders, current, onSelect, counts, onCreate, onRename, onDelete } =
-    props
+  const {
+    folders,
+    current,
+    onSelect,
+    counts,
+    onCreate,
+    onRename,
+    onDelete,
+    writeHeld,
+    writeRefusal,
+  } = props
   const readOnly = props.readOnly
 
   const [menu, setMenu] = useState<{
@@ -182,6 +198,7 @@ export function MediaFolderRail(props: MediaFolderRailProps) {
             selected={current === folder.$id}
             count={counts[folder.$id] ?? 0}
             readOnly={readOnly}
+            dragOff={writeHeld || Boolean(writeRefusal)}
             onSelect={() => onSelect(folder.$id)}
             onMenu={(event, target) =>
               setMenu({ anchor: event.currentTarget, folder: target })
@@ -241,66 +258,90 @@ export function MediaFolderRail(props: MediaFolderRailProps) {
       </Stack>
       {renderChildren(null, 0)}
       {readOnly ? null : (
-        <Button
-          size="small"
-          sx={{ alignSelf: 'flex-start' }}
-          onClick={() =>
-            setPrompt({
-              title: 'New folder',
-              value: '',
-              action: async (name) => {
-                await onCreate(name, null)
-              },
-            })
-          }
-        >
-          {'New folder'}
-        </Button>
+        <BlockedControl blocked={Boolean(writeRefusal)} reason={writeRefusal ?? ''}>
+          <Button
+            size="small"
+            disabled={writeHeld}
+            sx={{ alignSelf: 'flex-start' }}
+            onClick={() =>
+              setPrompt({
+                title: 'New folder',
+                value: '',
+                action: async (name) => {
+                  await onCreate(name, null)
+                },
+              })
+            }
+          >
+            {'New folder'}
+          </Button>
+        </BlockedControl>
       )}
       <Menu
         anchorEl={menu?.anchor}
         open={Boolean(menu)}
         onClose={() => setMenu(null)}
       >
-        <MenuItem
-          onClick={() => {
-            const folder = menu?.folder
-            setMenu(null)
-            if (!folder) return
-            setPrompt({
-              title: `New folder in "${folder.name}"`,
-              value: '',
-              action: async (name) => {
-                await onCreate(name, folder.$id)
-              },
-            })
-          }}
+        <BlockedControl
+          blocked={Boolean(writeRefusal)}
+          reason={writeRefusal ?? ''}
+          fullWidth
         >
-          {'New subfolder'}
-        </MenuItem>
-        <MenuItem
-          onClick={() => {
-            const folder = menu?.folder
-            setMenu(null)
-            if (!folder) return
-            setPrompt({
-              title: 'Rename folder',
-              value: folder.name,
-              action: (name) => onRename(folder, name),
-            })
-          }}
+          <MenuItem
+            disabled={writeHeld}
+            onClick={() => {
+              const folder = menu?.folder
+              setMenu(null)
+              if (!folder) return
+              setPrompt({
+                title: `New folder in "${folder.name}"`,
+                value: '',
+                action: async (name) => {
+                  await onCreate(name, folder.$id)
+                },
+              })
+            }}
+          >
+            {'New subfolder'}
+          </MenuItem>
+        </BlockedControl>
+        <BlockedControl
+          blocked={Boolean(writeRefusal)}
+          reason={writeRefusal ?? ''}
+          fullWidth
         >
-          {'Rename'}
-        </MenuItem>
-        <MenuItem
-          onClick={() => {
-            const folder = menu?.folder
-            setMenu(null)
-            if (folder) void onDelete(folder)
-          }}
+          <MenuItem
+            disabled={writeHeld}
+            onClick={() => {
+              const folder = menu?.folder
+              setMenu(null)
+              if (!folder) return
+              setPrompt({
+                title: 'Rename folder',
+                value: folder.name,
+                action: (name) => onRename(folder, name),
+              })
+            }}
+          >
+            {'Rename'}
+          </MenuItem>
+        </BlockedControl>
+        <BlockedControl
+          blocked={Boolean(writeRefusal)}
+          reason={writeRefusal ?? ''}
+          fullWidth
         >
-          {'Delete'}
-        </MenuItem>
+          <MenuItem
+            disabled={writeHeld}
+            onClick={() => {
+              const folder = menu?.folder
+              setMenu(null)
+              if (folder) void onDelete(folder)
+            }}
+          >
+            {'Delete'}
+          </MenuItem>
+        </BlockedControl>
       </Menu>
       <Dialog
         open={Boolean(prompt)}

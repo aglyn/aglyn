@@ -629,7 +629,13 @@ export function renderEmailHtml(options: EmailRenderOptions): RenderedEmail {
         // notification with no detail line, AGL-3367) draws nothing, rather
         // than an empty row and a blank paragraph in the text part.
         if (!text.trim()) return ''
-        textParts.push(text)
+        // The text part of a details panel leaves out what the panel does: a
+        // line whose value a token left blank ("Total:").
+        textParts.push(
+          props.variant === 'details'
+            ? text.split('\n').filter((line) => !line.trim().endsWith(':')).join('\n')
+            : text,
+        )
         const variant = TEXT_STYLES[props.variant as string] ? (props.variant as string) : 'body'
         const style = TEXT_STYLES[variant]
         // Unpicked, secondary words take the theme's muted text, and an

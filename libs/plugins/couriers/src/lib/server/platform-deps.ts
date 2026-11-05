@@ -15,6 +15,9 @@
  * limitations under the License.
  */
 
+import { holdsStampedSiteKey } from '@aglyn/aglyn/app-utils/host-permissions'
+import { permissionRefusalText } from '@aglyn/aglyn/app-utils/org-permissions'
+import { COURIERS_SITE_PRESETS, type CouriersSitePermission } from '../model/couriers-permissions'
 import { checkEntitlement } from '@aglyn/aglyn/app-utils/plan-entitlements'
 import { resolveHostEnabledPlugins } from '@aglyn/aglyn/plugin-manager/enabled-plugins'
 import { pluginLocalDeliveryRecords } from '@aglyn/aglyn/plugin-manager/plugin-local-deliveries'
@@ -34,7 +37,7 @@ import { defaultProviderHttp, type ProviderHttp } from '../providers/http'
 import type { CourierProvider } from '../providers/provider'
 import { consoleAddress, COURIERS_NOT_CONFIGURED_MESSAGE, readCouriersKeyring } from './config'
 import { createEngine, type EngineDeps } from './engine'
-import { createCourierRoutes, fail, type CourierGateResult, type CourierRole, type CourierRouteDeps } from './routes'
+import { createCourierRoutes, fail, type CourierGateResult, type CourierRouteDeps } from './routes'
 import { createFirestoreCourierStore, type CourierStore } from './store'
 
 /**
@@ -64,8 +67,6 @@ export function platformProvider(id: CourierProviderId): CourierProvider {
       return createDoordashDriveProvider({ http: http() })
   }
 }
-
-const ROLE_RANK: Record<string, number> = { viewer: 1, author: 1, editor: 2, admin: 3 }
 
 const HOST_ID = /^[A-Za-z0-9_-]{1,128}$/
 
@@ -101,16 +102,16 @@ async function readBody(request: Request): Promise<Record<string, unknown>> {
 }
 
 /**
- * Who may use a route: a verified member of the site at `role`, the site
+ * Who may use a route: a verified member of the site holding the key named, the site
  * entitled and not locked, on a deployment that holds the sealing key.
  *
  *   404  no sealing key — the surface does not exist
  *   401  no bearer token, or one the verifier refused
- *   403  unverified address (impersonation exempt), or below the role
+ *   403  unverified address (impersonation exempt), or without the key
  *   400  no site named
  *   404  the site does not sell, or has couriers or commerce switched off
  */
-export async function couriersGate(request: Request, role: CourierRole): Promise<CourierGateResult | Response> {
+export async function couriersGate(request: Request, permission: CouriersSitePermission): Promise<CourierGateResult | Response> {
   if (!readCouriersKeyring()) return fail(404, COURIERS_NOT_CONFIGURED_MESSAGE)
   const authorization = request.headers.get('authorization') ?? ''
   if (!authorization.startsWith('Bearer ')) return fail(401, 'Unauthenticated')
@@ -130,8 +131,11 @@ export async function couriersGate(request: Request, role: CourierRole): Promise
   const site = await siteContext(hostId)
   if (!site) return fail(404, 'That site was not found')
   const staff = decoded['staff'] === true
-  const memberRole = String((site.host['memberRoles'] as Record<string, unknown> | undefined)?.[decoded.uid] ?? '')
-  if (!staff && (ROLE_RANK[memberRole] ?? 0) < ROLE_RANK[role]) return fail(403, 'Not permitted')
+  // No key named: anyone on the site's roster reads it.
+  if (!staff && !((site.host['memberRoles'] ?? {}) as Record<string, unknown>)[decoded.uid]) return fail(403, 'Not permitted')
+  if (!staff && permission && !holdsStampedSiteKey(site.host, decoded.uid, permission, COURIERS_SITE_PRESETS[permission])) {
+    return fail(403, permissionRefusalText(permission))
+  }
   if (!site.entitled) return fail(404, 'Couriers are not available for this site')
   const locked = await lockdownRefusal({
     request,

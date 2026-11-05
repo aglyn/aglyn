@@ -250,7 +250,7 @@ describe('the enrollments table: what it shows (AGL-2980)', () => {
     ).toBeTruthy()
     failed.unmount()
     const refused = renderTable(loaded([], { status: 'refused' }))
-    expect(screen.getByText(/Use Sequences permission/)).toBeTruthy()
+    expect(screen.getByText(/Your role does not include "Use Sequences"/)).toBeTruthy()
     refused.unmount()
     renderTable(loaded([]))
     expect(screen.getByText('Nobody is enrolled yet')).toBeTruthy()

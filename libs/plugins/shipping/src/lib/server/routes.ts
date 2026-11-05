@@ -181,7 +181,7 @@ export const availabilityRoute: Handler = methods(['GET'], async (request) => {
 })
 
 export const settingsRoute: Handler = methods(['GET', 'POST'], async (request) => {
-  const gate = await shippingGate(request, { role: request.method === 'GET' ? 'editor' : 'admin' })
+  const gate = await shippingGate(request, { permission: request.method === 'GET' ? 'shipping.viewSettings' : 'shipping.settings' })
   if (gate instanceof Response) return gate
   const { actor, config, body } = gate
   try {
@@ -206,7 +206,7 @@ export const settingsRoute: Handler = methods(['GET', 'POST'], async (request) =
 
 export const accountRoute: Handler = methods(['GET', 'POST'], async (request) => {
   const gate = await shippingGate(request, {
-    role: 'admin',
+    permission: 'shipping.labelCharges',
     ...(request.method === 'POST' ? { orgPermission: 'billing.manage' } : {}),
   })
   if (gate instanceof Response) return gate
@@ -245,7 +245,7 @@ async function openedAccount(gate: Exclude<Awaited<ReturnType<typeof shippingGat
 }
 
 export const carrierAccountsRoute: Handler = methods(['GET'], async (request) => {
-  const gate = await shippingGate(request, { role: 'admin' })
+  const gate = await shippingGate(request, { permission: 'shipping.carrierAccounts' })
   if (gate instanceof Response) return gate
   try {
     const account = await openedAccount(gate)
@@ -283,7 +283,7 @@ async function connectableFor(
 }
 
 export const carrierAccountsConnectRoute: Handler = methods(['POST'], async (request) => {
-  const gate = await shippingGate(request, { role: 'admin', orgPermission: 'billing.manage' })
+  const gate = await shippingGate(request, { permission: 'shipping.carrierAccounts', orgPermission: 'billing.manage' })
   if (gate instanceof Response) return gate
   const { body, config } = gate
   if (!config.provider.connectCarrierAccount) {
@@ -337,7 +337,7 @@ export const carrierAccountsConnectRoute: Handler = methods(['POST'], async (req
 })
 
 export const carrierAccountsActiveRoute: Handler = methods(['POST'], async (request) => {
-  const gate = await shippingGate(request, { role: 'admin', orgPermission: 'billing.manage' })
+  const gate = await shippingGate(request, { permission: 'shipping.carrierAccounts', orgPermission: 'billing.manage' })
   if (gate instanceof Response) return gate
   const carrierAccountId = String(gate.body['carrierAccountId'] ?? '')
   if (!isDocumentId(carrierAccountId)) return shippingError(400, 'Missing carrierAccountId')
@@ -385,7 +385,7 @@ function readPackage(value: unknown) {
 }
 
 export const ratesRoute: Handler = methods(['POST'], async (request) => {
-  const gate = await shippingGate(request, { role: 'editor' })
+  const gate = await shippingGate(request, { permission: 'shipping.labels' })
   if (gate instanceof Response) return gate
   const recordId = String(gate.body['recordId'] ?? '')
   if (!isDocumentId(recordId)) return shippingError(400, 'Missing recordId')
@@ -415,7 +415,7 @@ export const ratesRoute: Handler = methods(['POST'], async (request) => {
 })
 
 export const labelsRoute: Handler = methods(['GET'], async (request) => {
-  const gate = await shippingGate(request, { role: 'editor' })
+  const gate = await shippingGate(request, { permission: 'shipping.labels' })
   if (gate instanceof Response) return gate
   const recordId = new URL(request.url).searchParams.get('recordId') ?? ''
   if (!isDocumentId(recordId)) return shippingError(400, 'Missing recordId')
@@ -441,7 +441,7 @@ export const labelsRoute: Handler = methods(['GET'], async (request) => {
 })
 
 export const labelsBuyRoute: Handler = methods(['POST'], async (request) => {
-  const gate = await shippingGate(request, { role: 'editor' })
+  const gate = await shippingGate(request, { permission: 'shipping.buyLabels' })
   if (gate instanceof Response) return gate
   const recordId = String(gate.body['recordId'] ?? '')
   const shipmentId = String(gate.body['shipmentId'] ?? '')
@@ -463,7 +463,7 @@ export const labelsBuyRoute: Handler = methods(['POST'], async (request) => {
 })
 
 export const labelsVoidRoute: Handler = methods(['POST'], async (request) => {
-  const gate = await shippingGate(request, { role: 'editor' })
+  const gate = await shippingGate(request, { permission: 'shipping.voidLabels' })
   if (gate instanceof Response) return gate
   const labelId = String(gate.body['labelId'] ?? '')
   if (!isDocumentId(labelId)) return shippingError(400, 'Missing labelId')
@@ -481,7 +481,7 @@ export const labelsVoidRoute: Handler = methods(['POST'], async (request) => {
 })
 
 export const addressValidateRoute: Handler = methods(['POST'], async (request) => {
-  const gate = await shippingGate(request, { role: 'editor' })
+  const gate = await shippingGate(request, { permission: 'shipping.labels' })
   if (gate instanceof Response) return gate
   try {
     let address = normalizeShippingAddress(gate.body['address'])
@@ -531,7 +531,7 @@ export function pickBatchRate(rates: QuotedRate[], policy: string): QuotedRate |
 export const MAX_BATCH = 50
 
 export const batchRatesRoute: Handler = methods(['POST'], async (request) => {
-  const gate = await shippingGate(request, { role: 'editor' })
+  const gate = await shippingGate(request, { permission: 'shipping.labels' })
   if (gate instanceof Response) return gate
   const recordIds = (Array.isArray(gate.body['recordIds']) ? gate.body['recordIds'] : [])
     .map(String)
@@ -587,7 +587,7 @@ export const batchRatesRoute: Handler = methods(['POST'], async (request) => {
 })
 
 export const batchBuyRoute: Handler = methods(['POST'], async (request) => {
-  const gate = await shippingGate(request, { role: 'editor' })
+  const gate = await shippingGate(request, { permission: 'shipping.buyLabels' })
   if (gate instanceof Response) return gate
   const batchKey = String(gate.body['batchKey'] ?? '')
   if (!/^[A-Za-z0-9_-]{8,80}$/.test(batchKey)) return shippingError(400, 'Missing batchKey')
@@ -686,7 +686,7 @@ export const spendRoute: Handler = methods(['GET'], async (request) => {
  * `billing.manage` as well, like a carrier account does.
  */
 export const ownAccountsRoute: Handler = methods(['GET'], async (request) => {
-  const gate = await shippingMemberGate(request, { role: 'admin' })
+  const gate = await shippingMemberGate(request, { permission: 'shipping.ownAccounts' })
   if (gate instanceof Response) return gate
   try {
     const offered = readOwnAccountKinds()
@@ -714,7 +714,7 @@ function ownAccountRefusal(error: unknown): Response {
 }
 
 export const ownAccountsConnectRoute: Handler = methods(['POST'], async (request) => {
-  const gate = await shippingMemberGate(request, { role: 'admin', orgPermission: 'billing.manage' })
+  const gate = await shippingMemberGate(request, { permission: 'shipping.ownAccounts', orgPermission: 'billing.manage' })
   if (gate instanceof Response) return gate
   const kind = gate.body['kind']
   if (!isOwnAccountKind(kind)) return shippingError(400, 'Name the service to connect.')
@@ -734,7 +734,7 @@ export const ownAccountsConnectRoute: Handler = methods(['POST'], async (request
 })
 
 export const ownAccountsDisconnectRoute: Handler = methods(['POST'], async (request) => {
-  const gate = await shippingMemberGate(request, { role: 'admin', orgPermission: 'billing.manage' })
+  const gate = await shippingMemberGate(request, { permission: 'shipping.ownAccounts', orgPermission: 'billing.manage' })
   if (gate instanceof Response) return gate
   const kind = gate.body['kind']
   if (!isOwnAccountKind(kind)) return shippingError(400, 'Name the service to disconnect.')

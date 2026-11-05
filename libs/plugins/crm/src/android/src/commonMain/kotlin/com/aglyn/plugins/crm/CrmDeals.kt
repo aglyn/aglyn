@@ -1,5 +1,6 @@
 package com.aglyn.plugins.crm
 
+import com.aglyn.contracts.permissionRefusalText
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
@@ -101,11 +102,15 @@ fun DealsBoard(context: NativePluginContext, scope: CrmScope, api: CrmApi, refer
     }
   }
   var error by remember { mutableStateOf<String?>(null) }
+  val movesStages = rememberMovesStages(context, scope)
   Column(Modifier.fillMaxSize()) {
     if (reference.activePipelines.size > 1) {
       ChoiceChipRow(reference.activePipelines.map { ChipOption(it.id, it.name) }, pipeline.id, { pipelineId = it }, modifier = Modifier.padding(horizontal = space(2f), vertical = space(0.5f)))
     }
     error?.let { NoticeBanner(it, StatusTone.ERROR, Modifier.padding(horizontal = space(2f))) }
+    if (scope.canWrite && !movesStages) {
+      NoticeBanner(permissionRefusalText(CRM_MOVE_STAGES_KEY), StatusTone.INFO, Modifier.padding(horizontal = space(2f)).testTag("crm-stage-refusal"))
+    }
     when (val rows = list.rows) {
       Live.Loading -> SkeletonList(rows = 6)
       is Live.Failed -> EmptyState("Could not load the pipeline", body = rows.error.message, icon = AglynIcons.named("error"), tone = EmptyTone.ERROR)
@@ -113,7 +118,7 @@ fun DealsBoard(context: NativePluginContext, scope: CrmScope, api: CrmApi, refer
         EmptyState("No deals in ${pipeline.name} yet", body = "Add a deal from the list, or convert a lead with one.", icon = AglynIcons.named("handshake"))
       } else {
         Board(boardColumns(pipeline, rows.value), itemKey = { it.id }, emptyColumn = "No deals") { column, deal ->
-          DealCard(deal, pipeline, column.key, canMove = scope.canWrite, onOpen = { context.navigate(CrmKind.DEAL.detailScreen, mapOf("deal" to deal.id)) }) { stageId ->
+          DealCard(deal, pipeline, column.key, canMove = scope.canWrite, movesStages = movesStages, onOpen = { context.navigate(CrmKind.DEAL.detailScreen, mapOf("deal" to deal.id)) }) { stageId ->
             error = null
             coroutines.launch {
               try {
@@ -136,7 +141,7 @@ fun DealsBoard(context: NativePluginContext, scope: CrmScope, api: CrmApi, refer
 }
 
 @Composable
-private fun DealCard(deal: CrmRow, pipeline: Pipeline, columnKey: String, canMove: Boolean, onOpen: () -> Unit, onMove: (String) -> Unit) {
+private fun DealCard(deal: CrmRow, pipeline: Pipeline, columnKey: String, canMove: Boolean, movesStages: Boolean, onOpen: () -> Unit, onMove: (String) -> Unit) {
   var menu by remember { mutableStateOf(false) }
   Surface(
     onClick = onOpen,
@@ -159,8 +164,9 @@ private fun DealCard(deal: CrmRow, pipeline: Pipeline, columnKey: String, canMov
             Icon(AglynIcons.named("more_vert"), contentDescription = null, Modifier.size(20.dp))
           } }
           DropdownMenu(expanded = menu, onDismissRequest = { menu = false }) {
+            // The moves stay in view, switched off, under the board's notice naming the permission.
             pipeline.stages.filter { it.id != columnKey }.forEach { stage ->
-              DropdownMenuItem(text = { Text("Move to ${stage.name}") }, onClick = { menu = false; onMove(stage.id) })
+              DropdownMenuItem(text = { Text("Move to ${stage.name}") }, enabled = movesStages, onClick = { menu = false; onMove(stage.id) })
             }
           }
         }

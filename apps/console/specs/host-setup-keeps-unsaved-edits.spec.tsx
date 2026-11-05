@@ -122,6 +122,12 @@ jest.mock('@aglyn/aglyn', () => ({
   ...jest.requireActual('../../../libs/aglyn/src/lib/app-utils/release-flags'),
   HostEntityType: { ORGANIZATION: 'Organization', PERSON: 'Person' },
   /*
+    The REAL registry subscription (AGL-4047). The media library now asks
+    `useOrgPermissions`, whose module subscribes to this as it loads, so a mock
+    without it throws before any case runs.
+  */
+  subscribePluginEntitlements: jest.requireActual('@aglyn/aglyn').subscribePluginEntitlements,
+  /*
     The REAL patterns, not stand-ins (AGL-2486). The Tracking tab's schema
     reads `.source` off both at module scope, so a mock missing them throws
     before a single case runs — which is this mock earning its keep rather
@@ -364,7 +370,8 @@ jest.mock('../components/host-id-provider', () => ({
   // The Admin sections layout draws its rail only for a site admin, and the
   // Basic details form is behind it. A non-admin gets the refusal notice, and
   // there would be no form to type into.
-  useIsHostAdmin: () => true,
+  useCanManageSite: () => true,
+  useCanManageSiteKnown: () => true,
 }))
 jest.mock('../hooks/use-org-scope', () => ({ useOrgSlug: () => 'acme' }))
 // The SEO section hands its `hostSeo` plugin zone the org the site belongs to

@@ -79,7 +79,7 @@ describe('the Live chat card (AGL-3698)', () => {
 
   it('shows a member who is not a site admin how it is set, with nothing to change', async () => {
     render(<LiveChatCard hostId="h1" api={api({ enabled: true, publicKey: TIDIO_KEY }, false)} />)
-    expect(await screen.findByText('Live chat is set up by a site admin.')).toBeTruthy()
+    expect(await screen.findByText('Setting up live chat takes the "Manage site settings" permission, which site admins hold by default.')).toBeTruthy()
     expect(screen.queryByRole('button', { name: 'Save' })).toBeNull()
     expect((screen.getByLabelText('Public key') as HTMLInputElement).disabled).toBe(true)
   })

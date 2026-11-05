@@ -73,6 +73,7 @@ import com.aglyn.contracts.describeRestockCheck
 import com.aglyn.contracts.OrderStatus
 import com.aglyn.contracts.OrderStatusColorValue
 import com.aglyn.contracts.formatOrderMoney
+import com.aglyn.contracts.deviceTimeZone
 import com.aglyn.contracts.formatReceiptTime
 import com.aglyn.contracts.orderChannelLabel
 import com.aglyn.contracts.orderRefundSummary
@@ -464,8 +465,36 @@ fun OrderDetailPane(context: NativePluginContext, orderId: String, onChanged: ()
           null
         }
         val customerLink = customerCrmLink(context.orgSlug, context.hostSlug, detail.order.customerEmail)
+        val exporter = com.aglyn.ui.LocalFileExporter.current
+        val onDownloadInvoice: () -> Unit = {
+          scope.launch {
+            printing.busy = "invoice-pdf"
+            printing.problem = null
+            try {
+              val file = downloadOrderInvoicePdf(context.api, hostId, orderId)
+              exporter?.export(file.name ?: "${detail.label}.pdf", "application/pdf", file.bytes)
+            } catch (failure: Throwable) {
+              if (failure is kotlinx.coroutines.CancellationException) throw failure
+              printing.problem = (failure as? com.aglyn.core.ConsoleApiError)?.takeIf { it.status > 0 }?.message
+                ?: "The invoice PDF could not be downloaded. Check the connection and try again."
+            } finally {
+              printing.busy = null
+            }
+          }
+        }
+        // Asks "Send quotes and invoices to customers"; a role without it is told so on the press.
+        val holds = com.aglyn.pluginhost.rememberMemberPermissions(context)
+        val onSendInvoice: () -> Unit = {
+          if (holds.can(INVOICE_SEND_PERMISSION)) {
+            actions.open(OrderDialog.INVOICE)
+          } else {
+            printing.problem = com.aglyn.contracts.permissionRefusalText(INVOICE_SEND_PERMISSION)
+          }
+        }
         OrderDetailContent(
           detail, actions, printing, onPrint, onPrintLabel, registerReceipt,
+          onDownloadInvoice = onDownloadInvoice,
+          onSendInvoice = onSendInvoice,
           openCustomer = customerLink?.let { link -> { context.openLink(link) } },
         ) {
           context.navigate(COMMERCE_ORDER_SERVICES_SCREEN, mapOf("orderId" to orderId))
@@ -490,6 +519,8 @@ private fun OrderDetailContent(
   onPrint: (OrderPrintKind) -> Unit,
   onPrintLabel: (Shipment) -> Unit,
   registerReceipt: (@Composable () -> Unit)?,
+  onDownloadInvoice: () -> Unit,
+  onSendInvoice: () -> Unit,
   openCustomer: (() -> Unit)? = null,
   openServices: () -> Unit,
 ) {
@@ -506,6 +537,8 @@ private fun OrderDetailContent(
   val more = buildList {
     if (offer.resendReceipt) add(RecordAction("order-action-receipt", "Send receipt", "mail") { actions.open(OrderDialog.RECEIPT) })
     OrderPrintKind.entries.forEach { kind -> add(RecordAction("order-print-${kind.raw}", kind.title, kind.icon, enabled = printing.busy == null) { onPrint(kind) }) }
+    add(RecordAction("order-invoice-pdf", "Download invoice PDF", "download", enabled = printing.busy == null, run = onDownloadInvoice))
+    add(RecordAction("order-invoice-send", "Send invoice", "send", run = onSendInvoice))
     add(RecordAction("order-add-note", "Add a note", "edit_note") { actions.open(OrderDialog.NOTE) })
     openCustomer?.let { add(RecordAction("order-customer-crm", "View customer in CRM", "contact_mail", run = it)) }
     add(RecordAction("order-more", "Pickup, returns and services", "extension", run = openServices))
@@ -520,6 +553,13 @@ private fun OrderDetailContent(
       NoticeBanner(message, StatusTone.SUCCESS, action = { TextButton(onClick = { actions.done = null }) { Text("Dismiss") } })
     }
     if (actions.dialog == null) actions.error?.let { NoticeBanner(it, StatusTone.ERROR) }
+    orderOfflineNotice(order)?.let { offline ->
+      NoticeBanner(
+        offline.text,
+        if (offline.needsCheck) StatusTone.WARNING else StatusTone.INFO,
+        Modifier.fillMaxWidth().testTag("order-offline"),
+      )
+    }
     printing.problem?.let { NoticeBanner(it, StatusTone.ERROR) }
     RecordHeader(
       detail.label,
@@ -552,7 +592,7 @@ private fun OrderDetailContent(
       listOfNotNull(
         order.customerName?.takeIf { it.isNotBlank() } ?: order.customerEmail?.takeIf { it.isNotBlank() } ?: "Guest",
         orderChannelLabel(order.channel?.raw),
-        order.createdAtMs?.let { formatReceiptTime(it.toLong()) },
+        order.createdAtMs?.let { formatReceiptTime(it.toLong(), deviceTimeZone()) },
       ).joinToString(" · "),
       style = MaterialTheme.typography.bodyLarge,
       color = MaterialTheme.colorScheme.onSurfaceVariant,
@@ -658,6 +698,14 @@ private fun OrderDetailContent(
 
     registerReceipt?.invoke()
     detail.restock?.let { check -> RestockCard(detail, check, actions) }
+    invoiceSentLine(order)?.let { line ->
+      Text(
+        line,
+        style = MaterialTheme.typography.bodySmall,
+        color = MaterialTheme.colorScheme.onSurfaceVariant,
+        modifier = Modifier.testTag("order-invoice-sent"),
+      )
+    }
 
     Column {
       FoldedSection("Customer details", tag = "order-fold-customer") {
@@ -678,7 +726,7 @@ private fun OrderDetailContent(
               AglynListItem(
                 title = shipment.summary,
                 supporting = listOf(
-                  formatReceiptTime(shipment.atMs),
+                  formatReceiptTime(shipment.atMs, deviceTimeZone()),
                   shipment.trackingNumber.takeIf { it.isNotBlank() }?.let { "${shipment.carrier.ifBlank { "Tracking" }} $it" }.orEmpty(),
                   shipment.trackingStatus,
                 ).filter { it.isNotBlank() }.joinToString(" · "),
@@ -871,6 +919,76 @@ private fun OrderDialogs(detail: OrderDetail, actions: OrderActionsModel) {
           supportingText = { Text("${note.length}/$ORDER_NOTE_MAX_LENGTH") },
           minLines = 3,
           modifier = Modifier.fillMaxWidth().testTag("order-note-text"),
+        )
+      }
+    }
+    OrderDialog.INVOICE -> {
+      val order = detail.order
+      val number = formatInvoiceNumber(order, orderId)
+      var to by rememberSaveable { mutableStateOf(invoiceSendPrefill(order)) }
+      var subject by rememberSaveable { mutableStateOf(invoiceEmailDefaultSubject(order, "", orderId)) }
+      var message by rememberSaveable { mutableStateOf("") }
+      var contact by rememberSaveable { mutableStateOf<String?>(null) }
+      LaunchedEffect(Unit) {
+        val site = actions.invoiceSite()
+        // Filled once per opening; edits after that are the member's.
+        if (subject == invoiceEmailDefaultSubject(order, "", orderId)) {
+          subject = invoiceEmailDefaultSubject(order, site.businessName, orderId)
+        }
+        contact = site.contact
+      }
+      val address = to.trim()
+      ActionDialog(
+        title = "Send invoice: $number",
+        icon = "send",
+        confirmLabel = "Send",
+        confirmEnabled = address.isNotEmpty(),
+        busy = actions.busy,
+        error = actions.error,
+        onDismiss = actions::close,
+        onConfirm = {
+          actions.runFor { key -> "$number sent to ${sendInvoice(orderId, address, subject, message, key)}" }
+        },
+      ) {
+        OutlinedTextField(
+          to,
+          {
+            to = it
+            actions.formChanged()
+          },
+          label = { Text("To") },
+          singleLine = true,
+          keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Email),
+          modifier = Modifier.fillMaxWidth().testTag("order-invoice-to"),
+        )
+        OutlinedTextField(
+          subject,
+          {
+            subject = it.take(INVOICE_SUBJECT_LIMIT)
+            actions.formChanged()
+          },
+          label = { Text("Subject") },
+          singleLine = true,
+          supportingText = invoiceEmailThread(order)?.let {
+            { Text("Keep the subject the same to keep these emails in one conversation in your customer’s inbox.") }
+          },
+          modifier = Modifier.fillMaxWidth().testTag("order-invoice-subject"),
+        )
+        OutlinedTextField(
+          message,
+          {
+            message = it.take(INVOICE_MESSAGE_LIMIT)
+            actions.formChanged()
+          },
+          label = { Text("Message") },
+          minLines = 4,
+          supportingText = { Text("Shown at the top of the email, in your words.") },
+          modifier = Modifier.fillMaxWidth().testTag("order-invoice-message"),
+        )
+        Text(
+          invoiceSendNote(invoiceIsPaid(order), contact),
+          style = MaterialTheme.typography.bodySmall,
+          color = MaterialTheme.colorScheme.onSurfaceVariant,
         )
       }
     }

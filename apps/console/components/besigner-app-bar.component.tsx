@@ -159,7 +159,9 @@ function SaveControl(props: {
    * it promotes.
    */
   const label = saveBlockedReason
-    ? 'Loading draft'
+    ? /draft/.test(saveBlockedReason)
+      ? 'Loading draft'
+      : 'Loading'
     : publishPending
       ? 'Publish'
       : saveAvailable

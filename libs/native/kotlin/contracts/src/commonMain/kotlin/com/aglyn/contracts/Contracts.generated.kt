@@ -2300,6 +2300,7 @@ data class OrgPermissionEntry(
     val pluginId: String? = null,
     val refines: String? = null,
     val scope: OrgPermissionScope? = null,
+    val sitePreset: Map<String, Boolean>? = null,
 )
 
 @Serializable

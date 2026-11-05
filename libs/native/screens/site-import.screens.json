@@ -6,7 +6,7 @@
       "title": "Import a site package",
       "icon": "square.and.arrow.down|upload",
       "scope": "site",
-      "requires": "org.manager",
+      "requires": "site.can[site.manage]",
       "blocks": [
         {
           "type": "notice",
@@ -123,11 +123,12 @@
       ]
     },
     {
+
       "id": "core.site.import.review",
       "title": "Review the import",
       "icon": "checklist|inventory_2",
       "scope": "site",
-      "requires": "org.manager",
+      "requires": "site.can[site.manage]",
       "constants": {
         "status": {
           "new": "New",
@@ -542,11 +543,12 @@
       ]
     },
     {
+
       "id": "core.site.import.deps",
       "title": "Missing items",
       "icon": "link.badge.plus|link",
       "scope": "site",
-      "requires": "org.manager",
+      "requires": "site.can[site.manage]",
       "constants": {
         "code": {
           "danglingReference": "Points at nothing",
@@ -811,11 +813,12 @@
       ]
     },
     {
+
       "id": "core.site.import.pick",
       "title": "Use an item this site has",
       "icon": "arrow.triangle.swap|swap_horiz",
       "scope": "site",
-      "requires": "org.manager",
+      "requires": "site.can[site.manage]",
       "load": {
         "catalog": {
           "url": "/api/hosts/export",
@@ -900,11 +903,12 @@
       ]
     },
     {
+
       "id": "core.site.import.changes",
       "title": "What changes",
       "icon": "arrow.left.arrow.right|swap_horiz",
       "scope": "site",
-      "requires": "org.manager",
+      "requires": "site.can[site.manage]",
       "constants": {
         "decision": {
           "create": "Add",
@@ -956,11 +960,12 @@
       ]
     },
     {
+
       "id": "core.site.import.item",
       "title": "{params.key}",
       "icon": "doc.text.magnifyingglass|search",
       "scope": "site",
-      "requires": "org.manager",
+      "requires": "site.can[site.manage]",
       "constants": {
         "decision": {
           "create": "Add",
@@ -1132,11 +1137,12 @@
       ]
     },
     {
+
       "id": "core.site.import.apply",
       "title": "Import the package",
       "icon": "square.and.arrow.down|upload",
       "scope": "site",
-      "requires": "org.manager",
+      "requires": "site.can[site.manage]",
       "constants": {
         "ack": [
           {
@@ -1315,11 +1321,12 @@
       ]
     },
     {
+
       "id": "core.site.import.done",
       "title": "Imported",
       "icon": "checkmark.circle|check_circle",
       "scope": "site",
-      "requires": "org.manager",
+      "requires": "site.can[site.manage]",
       "blocks": [
         {
           "type": "notice",
@@ -1366,11 +1373,12 @@
       ]
     },
     {
+
       "id": "core.site.import.undo",
       "title": "Undo the import",
       "icon": "arrow.uturn.backward|undo",
       "scope": "site",
-      "requires": "org.manager",
+      "requires": "site.can[site.manage]",
       "load": {
         "undo": {
           "url": "/api/hosts/import",

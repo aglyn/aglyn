@@ -220,21 +220,24 @@ export function quoteMailer(deps: QuoteMailerDeps = defaultQuoteMailerDeps()): Q
         store: CommerceModel.payLinkStoreOf(input.store),
       })
 
-      // The PDF is what the email says is attached; without it nothing goes.
-      let pdf: CommercePdfFile
-      try {
-        pdf = await deps.quotePdf({
-          hostId,
-          quoteId,
-          order,
-          host,
-          store: input.store,
-          owner: input.owner,
-          payUrl: input.payUrl,
-        })
-      } catch (error) {
-        console.error('[commerce/quote-email] the PDF could not be made', { hostId, quoteId, error })
-        return { sent: false, status: 500, error: 'The quote’s PDF could not be made, so nothing was sent. Try again.' }
+      // The PDF is what the email says is attached; without it nothing goes. A
+      // proof with no price yet says no such thing: its proof is the whole of it.
+      let pdf: CommercePdfFile | null = null
+      if (!content.proofOnly) {
+        try {
+          pdf = await deps.quotePdf({
+            hostId,
+            quoteId,
+            order,
+            host,
+            store: input.store,
+            owner: input.owner,
+            payUrl: input.payUrl,
+          })
+        } catch (error) {
+          console.error('[commerce/quote-email] the PDF could not be made', { hostId, quoteId, error })
+          return { sent: false, status: 500, error: 'The quote’s PDF could not be made, so nothing was sent. Try again.' }
+        }
       }
 
       const rendered = await deps.render(hostId, QUOTE_EMAIL_KEY, content.tokens)
@@ -259,13 +262,17 @@ export function quoteMailer(deps: QuoteMailerDeps = defaultQuoteMailerDeps()): Q
         sendingIdentity: identity,
         audience: 'tenant',
         context: 'quote',
-        attachments: [
-          {
-            filename: pdf.filename,
-            contentType: 'application/pdf',
-            content: Buffer.from(pdf.bytes).toString('base64'),
-          },
-        ],
+        ...(pdf
+          ? {
+              attachments: [
+                {
+                  filename: pdf.filename,
+                  contentType: 'application/pdf',
+                  content: Buffer.from(pdf.bytes).toString('base64'),
+                },
+              ],
+            }
+          : {}),
       })
       if (!result.sent) return { sent: false, ...refusalOf(result as Extract<SendEmailResult, { sent: false }>) }
       // Cost meter (AGL-1438), as every transactional site email.

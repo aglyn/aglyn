@@ -45,6 +45,16 @@ for the how-to.
   yet keeps its **Rolling out** note in the docs, and its tab stays hidden in the
   console until it is released.
 
+## November 2026 — integrations and gift card import are permissions
+
+- **Grant or deny each integration by permission.** Email platforms, help desks, rewards,
+  sales channels, shipping labels, ad conversions, couriers, fulfillment networks, inventory
+  sync, online marketplaces, after-the-sale and review services, print on demand, tax
+  engines and gift card import each have
+  [their own permissions](workspace-and-billing/teams-and-roles/custom-roles.md#integration-permissions),
+  starting from the member's role on the site, so nobody's access changed. A control a
+  member can't use is switched off and names the permission it takes.
+
 ## November 2026 — the publisher profile, published listings and payouts are permissions
 
 - **[Marketplace publisher permissions](workspace-and-billing/teams-and-roles/custom-roles.md#marketplace-publisher-permissions)**

@@ -100,6 +100,7 @@ private struct KioskBody: View {
         KioskStaffControl(model: model, onExit: onExit)
       }
     }
+    .task(id: "\(model.token ?? "")|\(model.typed)") { await model.runSearch() }
     .task(id: CatalogKey(token: model.token, categoryID: model.categoryID, turn: model.turn)) {
       await model.loadCatalog()
     }
@@ -208,34 +209,58 @@ private struct KioskMenuView: View {
   let origin: String
   let onProduct: (PosKioskProduct) -> Void
   let onCart: () -> Void
+  @Bindable private var bound: PosKioskModel
+
+  init(model: PosKioskModel, origin: String, onProduct: @escaping (PosKioskProduct) -> Void, onCart: @escaping () -> Void) {
+    self.model = model
+    self.origin = origin
+    self.onProduct = onProduct
+    self.onCart = onCart
+    self.bound = model
+  }
+
+  /// A category chip asks the server for that category, and clears a word typed.
+  private func pick(_ categoryID: String?) {
+    model.search = ""
+    model.categoryID = categoryID
+  }
 
   var body: some View {
     VStack(spacing: 0) {
+      if model.showsSearch {
+        TextField("Search the menu", text: $bound.search)
+          .textFieldStyle(.roundedBorder)
+          .autocorrectionDisabled()
+          .onChange(of: model.search) { _, text in if text.count > 120 { model.search = String(text.prefix(120)) } }
+          .padding(.horizontal, AglynSpace.two)
+          .padding(.top, AglynSpace.two + kioskStaffClearance)
+          .accessibilityIdentifier("kiosk-search")
+      }
       ScrollView(.horizontal, showsIndicators: false) {
         HStack {
-          AglynChoiceChip("All", selected: model.categoryID == nil) { model.categoryID = nil }
+          AglynChoiceChip("All", selected: model.typed.isEmpty && model.categoryID == nil) { pick(nil) }
           ForEach(model.catalog?.categories ?? [], id: \.id) { category in
-            AglynChoiceChip(category.name, selected: model.categoryID == category.id) { model.categoryID = category.id }
+            AglynChoiceChip(category.name, selected: model.typed.isEmpty && model.categoryID == category.id) { pick(category.id) }
           }
         }
         .padding(AglynSpace.two)
         // The faint Staff control sits in the top-leading corner; the chips start on the line below it, as on Android.
-        .padding(.top, kioskStaffClearance)
+        .padding(.top, model.showsSearch ? 0 : kioskStaffClearance)
       }
       Divider()
       if let notice = model.notice { AglynNotice(notice, tone: .warning) { model.notice = nil }.padding(AglynSpace.two) }
       ScrollView {
-        if model.catalogLoading && model.catalog == nil {
+        if (model.catalogLoading && model.catalog == nil) || (model.searching && model.menuProducts.isEmpty) {
           ProgressView().padding(AglynSpace.four)
-        } else if (model.catalog?.products ?? []).isEmpty {
-          Text("Nothing here yet. Try another category.").font(AglynFont.title2).foregroundStyle(.secondary).padding(AglynSpace.four)
+        } else if model.menuProducts.isEmpty {
+          Text(model.typed.isEmpty ? "Nothing here yet. Try another category." : "Nothing on the menu matches that.").font(AglynFont.title2).foregroundStyle(.secondary).padding(AglynSpace.four)
         } else {
           // The register's tile, so every tile keeps the same picture band (the photo, or the product's initial) and a
           // two-line name: a row with one photo, or one long name, stays even, as on Android (AGL-3925).
           LazyVGrid(
             columns: [GridItem(.adaptive(minimum: 170), spacing: AglynSpace.two, alignment: .top)], spacing: AglynSpace.two
           ) {
-            ForEach(model.catalog?.products ?? [], id: \.id) { product in
+            ForEach(model.menuProducts, id: \.id) { product in
               let soldOut = kioskProductSoldOut(product)
               AglynItemTile(
                 product.name,
@@ -320,7 +345,8 @@ private struct KioskItemSheet: View {
                 HStack {
                   Text(option.name)
                   Spacer()
-                  if option.priceCents > 0 { Text("+\(model.money(Int(option.priceCents)))").foregroundStyle(.secondary).monospacedDigit() }
+                  let extra = modifierOptionPriceCents(option, variantID: variantID)
+                  if extra > 0 { Text("+\(model.money(extra))").foregroundStyle(.secondary).monospacedDigit() }
                   Image(
                     systemName: chosen
                       ? (group.isSingle ? "largecircle.fill.circle" : "checkmark.square.fill") : (group.isSingle ? "circle" : "square")

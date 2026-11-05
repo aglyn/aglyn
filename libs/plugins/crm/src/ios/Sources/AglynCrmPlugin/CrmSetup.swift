@@ -215,7 +215,7 @@ struct SettingsSection: View {
     let pool = (crm["roundRobin"] as? [String: Any])?["memberUids"] as? [String] ?? []
     Form {
       if let error { AglynNotice(error, tone: .error) { self.error = nil } }
-      if !scope.canManage { AglynNotice("Only the workspace's owners and admins change these.", tone: .info) }
+      if !scope.canManage { AglynNotice(permissionRefusalText(ContractValues.shared.orgRoleGrants, key: crmSettingsKey), tone: .info) }
       Section {
         Text("New contacts, companies, deals and tasks are shared with").font(AglynFont.subheadline).foregroundStyle(.secondary)
         Picker(

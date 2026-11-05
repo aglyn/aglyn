@@ -24,6 +24,7 @@ import com.aglyn.contracts.ContractJsonFormat
 import com.aglyn.contracts.PosShift
 import com.aglyn.contracts.PosShiftCsvRow
 import com.aglyn.contracts.PosShiftStatus
+import com.aglyn.contracts.deviceTimeZone
 import com.aglyn.contracts.formatReceiptTime
 import com.aglyn.contracts.posShiftsCsv
 import com.aglyn.core.FirestoreDoc
@@ -176,8 +177,8 @@ fun ShiftHistoryPane(context: NativePluginContext, registers: List<PosRegister>,
 @Composable
 private fun ShiftHistoryRow(row: PosShiftCsvRow, money: (Double?) -> String, onClick: () -> Unit) {
   val shift = row.shift
-  val opened = formatReceiptTime(shift.openedAtMs.toLong(), null)
-  val closed = if (shift.status == PosShiftStatus.OPEN) "Open" else shift.closedAtMs?.let { formatReceiptTime(it.toLong(), null) } ?: "—"
+  val opened = formatReceiptTime(shift.openedAtMs.toLong(), deviceTimeZone())
+  val closed = if (shift.status == PosShiftStatus.OPEN) "Open" else shift.closedAtMs?.let { formatReceiptTime(it.toLong(), deviceTimeZone()) } ?: "—"
   com.aglyn.ui.ScaffoldListRow(
     title = shift.openedByName ?: "Shift",
     detail = "$opened – $closed",

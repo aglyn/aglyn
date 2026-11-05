@@ -178,7 +178,7 @@ describe('the POS devices card', () => {
     render(<PosDevicesCard hostId="host-1" />)
     const pair = await screen.findByRole('button', { name: 'Pair display to Front counter' })
     expect((pair as HTMLButtonElement).disabled).toBe(true)
-    expect(screen.getByText(/Only an admin or editor/)).toBeTruthy()
+    expect(screen.getByText(/takes the "Use the point of sale" permission/)).toBeTruthy()
   })
 
   it('disables setting devices up, with the reason, for someone without the devices key (AGL-4047)', async () => {

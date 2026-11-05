@@ -17,7 +17,7 @@
 
 'use client'
 
-import { CardDisplay } from '@aglyn/shared-ui-jsx'
+import { AppLink, CardDisplay } from '@aglyn/shared-ui-jsx'
 import { Alert, Button, Stack, TextField, Typography } from '@mui/material'
 import { useSnackbar } from '@aglyn/shared-ui-snackstack'
 import { useState } from 'react'
@@ -26,12 +26,12 @@ import { isLiveSubscriptionStatus } from '@aglyn/aglyn'
 import { overLimitSummary } from '../../utils/over-limit-summary'
 import { type OrgPlan } from '@aglyn/aglyn'
 import { authorizedFetch } from '@aglyn/shared-util-http/authorized-token'
-import DataExportCard from '../data-export-card.component'
 import ClosureNotices from '../closure-notices.component'
 import { RetentionFunnelDialog } from '../billing/retention-funnel.dialog'
+import { buildRoute, Route } from '../../constants/route-links'
 import { docsHelp } from '../../constants/docs-links'
 import useCurrentOrg from '../../hooks/use-current-org'
-import { useOrgScope } from '../../hooks/use-org-scope'
+import { useOrgScope, useOrgSlug } from '../../hooks/use-org-scope'
 
 /**
  * Self-serve organization deletion — owner-only (AGL-485).
@@ -46,6 +46,7 @@ import { useOrgScope } from '../../hooks/use-org-scope'
  */
 export function OrgDeleteCard() {
   const { currentOrg } = useOrgScope()
+  const orgSlug = useOrgSlug()
   const { org, ready: orgReady } = useCurrentOrg()
   const { data: user } = useUser()
   const firestore = useFirestore()
@@ -183,11 +184,6 @@ export function OrgDeleteCard() {
   return (
     <>
   <Stack spacing={3}>
-    {/* AGL-1974. This tab has told owners to "export anything you want
-        to keep first" since it existed, and there was nothing to export
-        with — one of six surfaces giving that instruction. The answer
-        now sits in the same panel as the instruction. */}
-    <DataExportCard user={user as never} orgId={currentOrg?.$id} />
     <CardDisplay
       header={'Delete organization'}
       help={docsHelp('downgradingAndCanceling', {
@@ -223,6 +219,19 @@ export function OrgDeleteCard() {
               'irreversible and we keep no copy of it. Export ' +
               'anything you want to keep first.'}
           </Typography>
+          {/*
+            AGL-1974: this tab told owners to export first when there was
+            nothing to export with, so the way to do it stays one click from
+            the instruction. The card itself lives in Import & export
+            (AGL-4047), where everyone who holds its key can reach it.
+          */}
+          <AppLink
+            href={buildRoute(Route.ORG_SETTINGS_DATA, { orgSlug })}
+            variant="body2"
+            sx={{ alignSelf: 'flex-start' }}
+          >
+            {'Download workspace data'}
+          </AppLink>
           {/*
             WHAT DELETING IT WILL CHANGE, before the confirm (AGL-4038): each
             plugin says what it will cancel or refund, in its own words. It

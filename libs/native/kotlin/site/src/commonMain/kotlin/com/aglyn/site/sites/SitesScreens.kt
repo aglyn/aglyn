@@ -131,7 +131,7 @@ fun SitesScreen(context: NativePluginContext, initialSiteId: String? = null, sta
   val scope = rememberCoroutineScope()
   val model = remember(orgId, context.uid) { SitesListModel(context.uid, orgId, context.firestore, scope) }
   LaunchedEffect(model) { model.reload() }
-  val canCreate = context.orgRole in setOf("owner", "admin")
+  val canCreate = com.aglyn.pluginhost.rememberMemberPermissions(context).can("hosts.create")
   // Opened from Create new: the new-site form comes up at once (for those who may make one).
   var creating by remember { mutableStateOf(startNew && canCreate) }
 

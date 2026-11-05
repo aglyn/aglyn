@@ -97,10 +97,23 @@ class ThemeRulesCasesTest {
   @Test
   fun aSiteStampNarrowsTheWorkspaceVerdict() {
     val workspace = mapOf("managePos" to true, "data.manage" to true)
-    val site = sitePermissions(workspace, mapOf("managePos" to false))
+    val site = sitePermissions(workspace, mapOf("memberPermissions" to mapOf("u" to mapOf("managePos" to false))), "u")
     assertEquals(false, site["managePos"])
     assertEquals(true, site["data.manage"])
-    assertEquals(workspace, sitePermissions(workspace, null))
+    assertEquals(workspace, sitePermissions(workspace, null, "u"))
+  }
+
+  @Test
+  fun aSiteKeyFollowsTheSiteRoleUntilAStampDecidesIt() {
+    fun held(site: Map<String, Any?>) = sitePermissions(mapOf("crm.moveStages" to true), site, "u")
+    assertEquals(false, held(mapOf("memberRoles" to mapOf("u" to "author")))["crm.moveStages"])
+    assertEquals(true, held(mapOf("memberRoles" to mapOf("u" to "editor")))["crm.moveStages"])
+    assertEquals(true, held(mapOf("memberRoles" to mapOf("u" to "owner")))["site.manage"])
+    assertEquals(false, held(mapOf("memberRoles" to mapOf("u" to "editor")))["site.manage"])
+    assertEquals(true, held(mapOf("memberRoles" to mapOf("u" to "author")))["site.edit"])
+    assertEquals(true, held(mapOf("memberRoles" to mapOf("u" to "author"), "memberPermissions" to mapOf("u" to mapOf("crm.moveStages" to true))))["crm.moveStages"])
+    assertEquals(false, held(mapOf("memberRoles" to mapOf("u" to "editor"), "memberPermissions" to mapOf("u" to mapOf("crm.moveStages" to false))))["crm.moveStages"])
+    assertEquals(true, held(mapOf("memberRoles" to mapOf("other" to "viewer")))["crm.moveStages"])
   }
 
   @Test

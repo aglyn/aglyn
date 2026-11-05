@@ -39,6 +39,7 @@ import {
   type PluginRecordTimelineWriter,
 } from '@aglyn/aglyn/plugin-manager/plugin-record-timeline'
 import { registerPluginRecordWrittenListener } from '@aglyn/aglyn/plugin-manager/plugin-record-written'
+import { registerPluginScopeSharingPatch } from '@aglyn/aglyn/plugin-manager/plugin-scope-sharing'
 import { registerServerStepExecutor } from '@aglyn/aglyn/plugin-manager/plugin-server-steps'
 import { registerPluginUsageMeter } from '@aglyn/aglyn/plugin-manager/plugin-usage-meters'
 import { BUNDLE_ID, CRM_RECORDS_METER_ID, CRM_STEP_TYPES } from './constants/bundle-common'
@@ -202,6 +203,17 @@ export function registerCrmServerDeclarations(): void {
   // a flow email's consent read, a refund, an automation filing somebody
   // under a campaign — and never opens the CRM's collections itself.
   registerPluginPersonRecords(crmPersonRecordsService, { pluginId: BUNDLE_ID })
+  // A record's scoped list fields follow its sites, so the sweep that keeps
+  // "all sites except" current restamps them in the same write (AGL-4047).
+  // Deferred like the capture.
+  registerPluginScopeSharingPatch(
+    ['contacts', 'leads', 'companies', 'deals', 'crmTasks'],
+    async (collection, next) => {
+      const { crmScopeSharingPatch } = await import('./server/scope-sharing-patch')
+      return crmScopeSharingPatch(collection, next)
+    },
+    { pluginId: BUNDLE_ID },
+  )
   // The CRM's own share of a lead conversion (AGL-3254): the lead's
   // campaigns go onto the contact's facet. Through the seam every door
   // that converts a lead reaches, and deferred like the capture: the

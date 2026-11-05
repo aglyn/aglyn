@@ -172,6 +172,7 @@ const baseIdentity = (overrides: Record<string, unknown>) => ({
     },
   ],
   canManage: true,
+  canManageDomains: true,
   entitled: true,
   ...overrides,
 })
@@ -305,20 +306,45 @@ describe('every site, read through its own route', () => {
 describe('what a reader may do is what the route says they may do', () => {
   it('shows an editor the state, read-only, and says why', async () => {
     identities = {
-      'host-1': baseIdentity({ canManage: false }),
-      'host-2': baseIdentity({ canManage: false }),
+      'host-1': baseIdentity({ canManage: false, canManageDomains: false }),
+      'host-2': baseIdentity({ canManage: false, canManageDomains: false }),
     }
     await mount()
 
-    expect(screen.queryByText('Add domain')).toBeNull()
+    expect((screen.getByText('Add domain') as HTMLButtonElement).disabled).toBe(true)
     expect(screen.queryByText('Edit sender')).toBeNull()
-    expect(screen.getByText(/need the organization admin role/i)).toBeTruthy()
+    expect(screen.getByText(/does not include "Organization settings"/)).toBeTruthy()
     // The domain is still listed, which the owner-or-admin domains route
     // would have refused an editor outright.
     expect(screen.getByText('acme.com')).toBeTruthy()
     const remove = screen.getByText('Remove domain') as HTMLButtonElement
     expect(remove.disabled).toBe(true)
-    expect(remove.title).toMatch(/organization admin role/)
+    expect(remove.title).toMatch(/does not include "Sending domains"/)
+  })
+
+  it('asks the domains route’s key of the domain’s actions, the identity route’s of send-as', async () => {
+    identities = {
+      'host-1': baseIdentity({ canManage: true, canManageDomains: false }),
+      'host-2': baseIdentity({ canManage: true, canManageDomains: false }),
+    }
+    await mount()
+
+    expect((screen.getByText('Add domain') as HTMLButtonElement).disabled).toBe(true)
+    expect((screen.getByText('Remove domain') as HTMLButtonElement).disabled).toBe(true)
+    expect((screen.getByText('Check DNS') as HTMLButtonElement).disabled).toBe(true)
+    expect((screen.getByText(/Send a site’s email as this domain/) as HTMLButtonElement).disabled).toBe(false)
+  })
+
+  it('opens the domain’s actions to a holder of its key without the settings key', async () => {
+    identities = {
+      'host-1': baseIdentity({ canManage: false, canManageDomains: true }),
+      'host-2': baseIdentity({ canManage: false, canManageDomains: true }),
+    }
+    await mount()
+
+    expect((screen.getByText('Add domain') as HTMLButtonElement).disabled).toBe(false)
+    expect((screen.getByText('Remove domain') as HTMLButtonElement).disabled).toBe(false)
+    expect((screen.getByText(/Send a site’s email as this domain/) as HTMLButtonElement).disabled).toBe(true)
   })
 
   it('opens one site’s sender in the drawer the site’s page uses', async () => {

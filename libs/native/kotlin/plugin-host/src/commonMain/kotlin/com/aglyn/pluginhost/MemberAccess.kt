@@ -51,11 +51,10 @@ fun rememberMemberPermissions(firestore: com.aglyn.core.FirestoreReader, orgId: 
   val customRole by remember(orgId, roleId, firestore) { read(if (orgId != null && roleId != null) "orgs/$orgId/roles/$roleId" else null) }.collectAsState(Live.Loading)
   val site by remember(hostId, firestore) { read(hostId?.let { "hosts/$it" }) }.collectAsState(Live.Loading)
   val customRoleData = (customRole as? Live.Ready)?.value?.data
-  val siteStamp = ((site as? Live.Ready)?.value?.data?.get("memberPermissions") as? Map<*, *>)?.get(uid) as? Map<*, *>
-  return remember(memberData, orgRole, customRoleData, siteStamp) {
+  val siteData = (site as? Live.Ready)?.value?.data
+  return remember(memberData, orgRole, customRoleData, siteData, uid) {
     val workspace = memberPermissions(memberData, orgRole, customRoleData)
-    @Suppress("UNCHECKED_CAST")
-    MemberPermissions(workspace, sitePermissions(workspace, siteStamp as Map<String, Any?>?))
+    MemberPermissions(workspace, sitePermissions(workspace, siteData, uid))
   }
 }
 

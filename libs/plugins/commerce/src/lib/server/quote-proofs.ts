@@ -222,6 +222,7 @@ function noticeOf(input: {
   const revision = response.revision
   const files = response.files ?? []
   const approving = response.action === 'approve'
+  const proofOnly = CommerceModel.quoteIsProofOnly(order)
   const money = CommerceModel.formatOrderMoney(Number(order.totals?.totalCents ?? 0), input.currency)
   // The tax the customer is charged (AGL-4162). The saved total stands whichever
   // basis that is: a basis taken from the store's choice now adds no tax here.
@@ -231,7 +232,8 @@ function noticeOf(input: {
     { label: 'Quote', value: number },
     { label: 'Customer', value: [quote.customer?.name, quote.customer?.company, quote.customer?.email].filter(Boolean).join(', ') },
     { label: 'Revision', value: String(revision) },
-    { label: 'Total', value: total },
+    // A proof only quote has no price to name yet (AGL-4184).
+    ...(proofOnly ? [] : [{ label: 'Total', value: total }]),
     ...(approving
       ? [{ label: 'Approved as', value: response.name ?? '' }]
       : [
@@ -251,9 +253,11 @@ function noticeOf(input: {
         ? `${customer} approved the proof for ${number} on {site}`
         : `${customer} asked for changes to ${number} on {site}`,
       body: approving
-        ? (quote.requireProofApproval === true
-            ? `Revision ${revision} is approved, so they can pay the quote now. It becomes an order when they do.`
-            : `Revision ${revision} is approved. The quote becomes an order when they pay.`) +
+        ? (proofOnly
+            ? `Revision ${revision} is approved. It has no price yet: add items to the quote when you’re ready, and send it.`
+            : quote.requireProofApproval === true
+              ? `Revision ${revision} is approved, so they can pay the quote now. It becomes an order when they do.`
+              : `Revision ${revision} is approved. The quote becomes an order when they pay.`) +
           ' The approval, with the name, time and address it was given from, is on the quote.'
         : files.length
           ? `What they want changed on revision ${revision}, and the ${filesSent} they sent, are on the quote. ` +

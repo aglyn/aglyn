@@ -16,12 +16,12 @@
           "items": [
             { "title": "General", "subtitle": "Name, workspace URL, time zone", "icon": "slider.horizontal.3|tune", "screen": "core.settings.general" },
             { "title": "Profile", "subtitle": "Logo, contact details, billing address and business profile", "icon": "building.2|business", "screen": "core.settings.profile" },
-            { "title": "Branding", "subtitle": "White-label product name, colors, console domain", "icon": "paintpalette|palette", "screen": "core.settings.branding", "when": "org.manager" },
-            { "title": "API keys", "subtitle": "Keys for integrations", "icon": "key|key", "screen": "core.settings.apiKeys", "when": "org.manager" },
-            { "title": "Single sign-on", "subtitle": "SAML, verified domains, enforcement", "icon": "lock.shield|security", "screen": "core.settings.sso", "when": "org.manager" },
-            { "title": "Holds and reviews", "subtitle": "Anything paused on this workspace", "icon": "exclamationmark.shield|policy", "screen": "core.settings.holds", "when": "org.manager" },
-            { "title": "Imports and exports", "subtitle": "Transfer history", "icon": "arrow.up.arrow.down|sync", "screen": "core.settings.data", "when": "org.manager" },
-            { "title": "Privacy requests", "subtitle": "Erase a person's data", "icon": "hand.raised|privacy_tip", "screen": "core.settings.privacy", "when": "org.manager" },
+            { "title": "Branding", "subtitle": "White-label product name, colors, console domain", "icon": "paintpalette|palette", "screen": "core.settings.branding", "when": "org.can[org.settings]" },
+            { "title": "API keys", "subtitle": "Keys for integrations", "icon": "key|key", "screen": "core.settings.apiKeys", "when": "org.can[org.apiKeys]" },
+            { "title": "Single sign-on", "subtitle": "SAML, verified domains, enforcement", "icon": "lock.shield|security", "screen": "core.settings.sso", "when": "org.can[org.settings]" },
+            { "title": "Holds and reviews", "subtitle": "Anything paused on this workspace", "icon": "exclamationmark.shield|policy", "screen": "core.settings.holds", "when": "org.can[org.holds]" },
+            { "title": "Imports and exports", "subtitle": "Transfer history", "icon": "arrow.up.arrow.down|sync", "screen": "core.settings.data", "when": "org.can[data.manage]" },
+            { "title": "Privacy requests", "subtitle": "Erase a person's data", "icon": "hand.raised|privacy_tip", "screen": "core.settings.privacy", "when": "org.can[org.privacy]" },
             { "title": "Ownership", "subtitle": "Transfer the workspace", "icon": "person.badge.key|manage_accounts", "screen": "core.settings.ownership", "when": "org.owner || staff.is" },
             { "title": "Delete workspace", "subtitle": "Close the workspace for good", "icon": "trash|delete_forever", "screen": "core.settings.delete", "when": "org.owner || staff.is" }
           ]
@@ -29,6 +29,7 @@
       ]
     },
     {
+
       "id": "core.settings.general",
       "title": "General",
       "icon": "slider.horizontal.3|tune",
@@ -48,7 +49,7 @@
         {
           "type": "notice",
           "tone": "info",
-          "when": "!org.manager",
+          "when": "!org.can[org.settings]",
           "text": "Changing these settings requires the admin role."
         },
         {
@@ -66,7 +67,7 @@
           ],
           "submit": {
             "label": "Save name",
-            "when": "org.manager",
+            "when": "org.can[org.settings]",
             "url": "/api/orgs/settings",
             "body": {
               "orgId": "{org.id}",
@@ -124,7 +125,7 @@
           ],
           "submit": {
             "label": "Save time zone",
-            "when": "org.manager",
+            "when": "org.can[org.settings]",
             "url": "/api/orgs/settings",
             "body": {
               "orgId": "{org.id}",
@@ -138,7 +139,7 @@
           "type": "form",
           "title": "Defaults for new things",
           "id": "scope",
-          "when": "org.manager",
+          "when": "org.can[org.settings]",
           "fields": [
             {
               "key": "media",
@@ -171,7 +172,7 @@
         {
           "type": "form",
           "id": "datasets",
-          "when": "org.manager",
+          "when": "org.can[org.settings]",
           "fields": [
             {
               "key": "resource",
@@ -209,6 +210,7 @@
       ]
     },
     {
+
       "id": "core.settings.profile",
       "title": "Profile",
       "icon": "building.2|business",
@@ -265,7 +267,7 @@
           ],
           "submit": {
             "label": "Save profile",
-            "when": "org.manager",
+            "when": "org.can[org.settings]",
             "url": "/api/orgs/settings",
             "body": {
               "orgId": "{org.id}",
@@ -422,7 +424,7 @@
           ],
           "submit": {
             "label": "Save defaults",
-            "when": "org.manager",
+            "when": "org.can[org.settings]",
             "businessProfile": {
               "doc": "orgs/{org.id}/businessProfile/defaults",
               "current": "data.business",
@@ -442,11 +444,12 @@
       "subtitle": "Logo, contact details, billing address and business profile"
     },
     {
+
       "id": "core.settings.branding",
       "title": "Branding",
       "icon": "paintpalette|palette",
       "scope": "org",
-      "requires": "org.manager",
+      "requires": "org.can[org.settings]",
       "links": [
         "/settings/branding"
       ],
@@ -577,12 +580,13 @@
       "subtitle": "Replace the platform brand across the console, your sites and email"
     },
     {
+
       "id": "core.settings.apiKeys",
       "title": "API keys",
       "subtitle": "Programmatic access to your datasets, contacts, sites and form submissions",
       "icon": "key|key",
       "scope": "org",
-      "requires": "org.manager",
+      "requires": "org.can[org.apiKeys]",
       "links": [
         "/settings/api-keys"
       ],
@@ -799,12 +803,13 @@
       ]
     },
     {
+
       "id": "core.settings.sso",
       "title": "Single sign-on",
       "subtitle": "Verify your domain, connect your identity provider, then turn it on",
       "icon": "lock.shield|security",
       "scope": "org",
-      "requires": "org.manager",
+      "requires": "org.can[org.settings]",
       "links": [
         "/settings/sso"
       ],
@@ -1135,7 +1140,7 @@
           ],
           "submit": {
             "label": "Save provider",
-            "when": "org.manager",
+            "when": "org.can[org.settings]",
             "url": "/api/orgs/sso",
             "body": {
               "orgId": "{org.id}",
@@ -1261,12 +1266,13 @@
       ]
     },
     {
+
       "id": "core.settings.sso.enforcement",
       "title": "Enforce single sign-on",
       "subtitle": "Rehearse, choose break-glass accounts, then enforce",
       "icon": "lock.shield|security",
       "scope": "org",
-      "requires": "org.manager",
+      "requires": "org.can[org.settings]",
       "load": {
         "ent": {
           "url": "/api/orgs/entitlements?orgId={org.id}",
@@ -1467,12 +1473,13 @@
       ]
     },
     {
+
       "id": "core.settings.holds",
       "title": "Holds & reviews",
       "subtitle": "Anything on this workspace that was held, flagged or locked, and what to do about it",
       "icon": "exclamationmark.shield|policy",
       "scope": "org",
-      "requires": "org.manager",
+      "requires": "org.can[org.holds]",
       "links": [
         "/settings/holds"
       ],
@@ -1591,12 +1598,13 @@
       ]
     },
     {
+
       "id": "core.settings.holds.notice",
       "title": "{data.notices.notices[noticeId=params.noticeId].title|'Hold'}",
       "subtitle": "{data.notices.notices[noticeId=params.noticeId].occurredAtMs:datetime}",
       "icon": "exclamationmark.shield|policy",
       "scope": "org",
-      "requires": "org.manager",
+      "requires": "org.can[org.holds]",
       "load": {
         "notices": "/api/orgs/risk-notices?orgId={org.id}"
       },
@@ -1795,15 +1803,22 @@
       ]
     },
     {
+
       "id": "core.settings.privacy",
       "title": "Privacy requests",
       "subtitle": "Export the people you hold, and erase one on request",
       "icon": "hand.raised|privacy_tip",
       "scope": "org",
-      "requires": "org.manager",
+      "requires": "org.can[org.privacy]",
       "links": [
         "/settings/privacy"
       ],
+      "load": {
+        "erasureNotes": {
+          "url": "/api/person-erasure-notes?orgId={org.id}",
+          "optional": true
+        }
+      },
       "blocks": [
         {
           "type": "notice",
@@ -1855,6 +1870,22 @@
           "text": "Not reached — finish these by hand\n• Form submissions — delete them from the Inbox\n• A site member account — close it from the site’s Members page"
         },
         {
+          "type": "list",
+          "id": "erasureNotes",
+          "title": "Kept as they are, with the person still on them",
+          "when": "data.erasureNotes.notes",
+          "items": "data.erasureNotes.notes",
+          "count": false,
+          "wrap": true,
+          "primary": "{item.text}"
+        },
+        {
+          "type": "notice",
+          "tone": "info",
+          "when": "!data.erasureNotes || data.erasureNotes.unavailable",
+          "text": "Some details of what this keeps could not be checked right now. Try again in a moment before you confirm."
+        },
+        {
           "type": "actions",
           "title": "Erase a person",
           "items": [
@@ -1895,6 +1926,7 @@
       ]
     },
     {
+
       "id": "core.settings.integrations",
       "title": "Integrations",
       "subtitle": "What the plugins you run connect this organization to",
@@ -1916,6 +1948,7 @@
       ]
     },
     {
+
       "id": "core.settings.ownership",
       "title": "Ownership",
       "icon": "person.badge.key|manage_accounts",
@@ -1963,6 +1996,7 @@
       "subtitle": "Hand the organization to another member"
     },
     {
+
       "id": "core.settings.delete",
       "title": "Delete organization",
       "icon": "trash|delete_forever",
@@ -2049,6 +2083,7 @@
       "subtitle": "Download your data, then delete the organization"
     },
     {
+
       "id": "core.plugins",
       "title": "Plugins",
       "subtitle": "Built-in plugins on or off for every site",
@@ -2077,8 +2112,8 @@
         {
           "type": "notice",
           "tone": "info",
-          "when": "!org.manager",
-          "text": "Only owners and admins can switch plugins. You can see what this workspace runs."
+          "when": "!org.can[org.settings]",
+          "text": "{app.permissionRefusal[org.settings]}. You can see what this workspace runs."
         },
         {
           "type": "zone",
@@ -2107,7 +2142,7 @@
           },
           "toggle": {
             "value": "{item.on}",
-            "disabled": "item.locked || !org.manager",
+            "disabled": "item.locked || !org.can[org.settings]",
             "label": "{item.label} for every site",
             "on": {
               "id": "on",
@@ -2143,6 +2178,7 @@
       ]
     },
     {
+
       "id": "core.plugin",
       "title": "{data.plugins.rows[id=params.pluginId].label|data.pin.displayName|params.pluginId}",
       "label": "Plugin",
@@ -2210,12 +2246,12 @@
         {
           "type": "notice",
           "tone": "warning",
-          "when": "org.manager && data.plugins.rows[id=params.pluginId].on && data.plugins.rows[id=params.pluginId].cascade",
+          "when": "org.can[org.settings] && data.plugins.rows[id=params.pluginId].on && data.plugins.rows[id=params.pluginId].cascade",
           "text": "Turning it off also turns off {data.plugins.rows[id=params.pluginId].cascade}, which need it."
         },
         {
           "type": "actions",
-          "when": "data.plugins.rows[id=params.pluginId] && org.manager && !data.plugins.rows[id=params.pluginId].locked",
+          "when": "data.plugins.rows[id=params.pluginId] && org.can[org.settings] && !data.plugins.rows[id=params.pluginId].locked",
           "items": [
             {
               "id": "on",
@@ -2257,21 +2293,21 @@
               "subtitle": "Provider and the model for each kind of step",
               "icon": "gearshape|settings",
               "screen": "core.pluginSettings.ai",
-              "when": "org.manager && params.pluginId == ai"
+              "when": "org.can[org.settings] && params.pluginId == ai"
             },
             {
               "title": "Commerce settings",
               "subtitle": "Register discounts, tipping, receipts and the customer display",
               "icon": "gearshape|settings",
               "screen": "core.pluginSettings.commerce",
-              "when": "org.manager && params.pluginId == commerce"
+              "when": "org.can[org.settings] && params.pluginId == commerce"
             },
             {
               "title": "Bookings settings",
               "subtitle": "Booking horizon and the booking page",
               "icon": "gearshape|settings",
               "screen": "core.pluginSettings.bookings",
-              "when": "org.manager && params.pluginId == bookings"
+              "when": "org.can[org.settings] && params.pluginId == bookings"
             }
           ]
         },

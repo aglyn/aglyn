@@ -14,7 +14,6 @@ struct SubmissionDetailView: View {
   let context: NativePluginContext
   let submissionID: String
   let runner: PluginActionRunner
-  let role: SiteRoleModel
   /// The site's name, the reply's default subject.
   var siteName: String?
   /// False beside the list, where the screen's own title stays.
@@ -28,6 +27,9 @@ struct SubmissionDetailView: View {
   @State private var markedRead = false
   @State private var replies = LiveQueryList(pageSize: 10, map: sentReply)
   @State private var listSheet = false
+  @State private var downloading: String?
+  @State private var downloaded: DownloadedSubmissionFile?
+  @State private var fileError: String?
 
   private var api: SubmissionsAPI? {
     context.hostID.map {
@@ -35,7 +37,45 @@ struct SubmissionDetailView: View {
     }
   }
 
+  private var permissions: InboxPermissions { InboxPermissions(holding: context.can) }
+
+  /// Brings a file down and hands it to the share sheet, as the web Inbox saves it.
+  private func download(_ file: SubmissionFile, of submission: Submission) {
+    guard let hostID = context.hostID ?? submission.hostID else { return }
+    downloading = file.id
+    fileError = nil
+    Task {
+      defer { downloading = nil }
+      do {
+        let answer = try await SubmissionsAPI(api: context.api, writer: context.writer, firestore: context.firestore, hostID: hostID)
+          .download(file, of: submission.id)
+        let url = FileManager.default.temporaryDirectory.appendingPathComponent(answer.name ?? file.name)
+        try answer.data.write(to: url)
+        downloaded = DownloadedSubmissionFile(url: url)
+      } catch {
+        fileError = (error as? ConsoleAPIError)?.message ?? "\(file.name) could not be downloaded."
+      }
+    }
+  }
+
   var body: some View {
+    bodyContent
+      .sheet(item: $downloaded) { file in
+        NavigationStack {
+          VStack(spacing: AglynSpace.two) {
+            Label(file.url.lastPathComponent, systemImage: "doc").font(AglynFont.body)
+            ShareLink(item: file.url) { Label("Share…", systemImage: "square.and.arrow.up") }
+              .buttonStyle(.aglynProminent)
+              .accessibilityIdentifier("submission-file-share")
+          }
+          .padding(AglynSpace.two)
+          .toolbar { ToolbarItem(placement: .cancellationAction) { Button("Done") { downloaded = nil } } }
+        }
+        .presentationDetents([.medium])
+      }
+  }
+
+  private var bodyContent: some View {
     Group {
       if !model.ready {
         List { SkeletonRows(count: 6) }.aglynListBackground()
@@ -60,7 +100,7 @@ struct SubmissionDetailView: View {
         }
       }
     }
-    .onChange(of: model.submission?.read == false && role.canEditContent, initial: true) { _, unread in markIfUnread(unread) }
+    .onChange(of: model.submission?.read == false && permissions.canWrite, initial: true) { _, unread in markIfUnread(unread) }
     .onDisappear {
       model.stop()
       replies.stop()
@@ -85,7 +125,7 @@ struct SubmissionDetailView: View {
 
   private func content(_ submission: Submission) -> some View {
     let now = Date()
-    let canEdit = role.canEditContent
+    let canEdit = permissions.canWrite
     return Form {
       if titled, let error = runner.error {
         Section { AglynNotice(error, tone: .error) { runner.clear() } }
@@ -123,12 +163,13 @@ struct SubmissionDetailView: View {
             AglynPrimaryHeaderButton("Reply", systemImage: InboxSymbols.reply, shortcut: .init("r", modifiers: [.command, .shift])) {
               reply(submission)
             }
-            .disabled(!canEdit)
+            .disabled(!permissions.canReply)
             .accessibilityIdentifier("submission-reply")
           }
         }
         AglynWrapRow(spacing: AglynSpace.one, lineSpacing: AglynSpace.half) {
           StatusChip(submission.formName, tone: .info)
+          if let request = submission.requestLabel { StatusChip(request, tone: .info) }
           if submission.repliedAt != nil { StatusChip("Replied", tone: .success) }
           if let kind = submission.capturedKind { StatusChip(kind == "lead" ? "Became a lead" : "Became a contact") }
           if !submission.read { StatusChip("Unread", tone: .warning) }
@@ -146,7 +187,7 @@ struct SubmissionDetailView: View {
         }
       }
       // What can be done with it, as plain rows in the accent color (a › on the one that opens another screen).
-      if submission.capturedKind != nil || (InboxPermissions(role: role.role).canReply && submission.sender.email != nil) {
+      if submission.capturedKind != nil || (permissions.canAssign && submission.sender.email != nil) {
         Section {
           if let kind = submission.capturedKind, let id = submission.capturedID {
             AglynActionRow(kind == "lead" ? "Open the lead in the CRM" : "Open the contact in the CRM", opens: true) {
@@ -154,7 +195,7 @@ struct SubmissionDetailView: View {
             }
             .accessibilityIdentifier("submission-open-crm")
           }
-          if InboxPermissions(role: role.role).canReply && submission.sender.email != nil {
+          if permissions.canAssign && submission.sender.email != nil {
             AglynActionRow("Add to a marketing list", systemImage: "list.bullet") { listSheet = true }
               .accessibilityIdentifier("submission-add-to-list")
           }
@@ -169,6 +210,22 @@ struct SubmissionDetailView: View {
             Text(field.text.isEmpty ? "—" : field.text).textSelection(.enabled).multilineTextAlignment(.trailing)
           }
           .accessibilityIdentifier("submission-field-\(field.key)")
+        }
+      }
+      if !submission.files.isEmpty {
+        Section(submission.files.count == 1 ? "File" : "Files (\(submission.files.count))") {
+          if let fileError { AglynNotice(fileError, tone: .error) { self.fileError = nil } }
+          ForEach(submission.files) { file in
+            Button {
+              download(file, of: submission)
+            } label: {
+              LabeledContent(file.name) {
+                if downloading == file.id { ProgressView() } else { Text(submissionFileSize(file.size)) }
+              }
+            }
+            .disabled(downloading != nil)
+            .accessibilityIdentifier("submission-file-\(file.id)")
+          }
         }
       }
       if !replies.rows.isEmpty {
@@ -262,4 +319,10 @@ struct ReplySheet: View {
     }
     .aglynSheetMinimumSize(width: 460, height: 420)
   }
+}
+
+/// A file brought down, ready to share.
+struct DownloadedSubmissionFile: Identifiable {
+  let url: URL
+  var id: URL { url }
 }

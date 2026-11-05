@@ -16,6 +16,9 @@
  */
 'use client'
 
+import { permissionRefusalText } from '@aglyn/aglyn/app-utils/org-permissions'
+import { useSiteKeys } from '@aglyn/tenant-feature-instance/hooks/use-site-keys'
+import { SHIPPING_SITE_PRESETS } from '../model/shipping-permissions'
 import type { PluginShippingAddress, PluginShippingAddressCheck } from '@aglyn/aglyn/plugin-manager/plugin-shipping-rates'
 import { useSnackbar } from '@aglyn/shared-ui-snackstack'
 import {
@@ -161,6 +164,10 @@ function toAddress(address: OrderLabelsWidgetProps['order']['shippingAddress']):
 export function OrderLabelsWidget(props: OrderLabelsWidgetProps) {
   const { hostId, order } = props
   const availability = useShippingAvailability(hostId)
+  const { blocked } = useSiteKeys(hostId)
+  const buyRefused = blocked('shipping.buyLabels', SHIPPING_SITE_PRESETS['shipping.buyLabels'])
+  const voidRefused = blocked('shipping.voidLabels', SHIPPING_SITE_PRESETS['shipping.voidLabels'])
+  const buyReason = buyRefused ? permissionRefusalText('shipping.buyLabels') : NO_SHIP_FROM
   const request = useShippingFetch()
   const { enqueueSnackbar } = useSnackbar()
   const [labels, setLabels] = useState<PublicLabel[]>([])
@@ -215,11 +222,11 @@ export function OrderLabelsWidget(props: OrderLabelsWidgetProps) {
           {'Shipping labels'}
         </Typography>
         {returnable ? (
-          <BlockedControl blocked={noShipFrom} reason={NO_SHIP_FROM}>
+          <BlockedControl blocked={noShipFrom || buyRefused} reason={buyReason}>
             <Button onClick={() => setDialog('return')}>{'Return label'}</Button>
           </BlockedControl>
         ) : null}
-        <BlockedControl blocked={noShipFrom} reason={NO_SHIP_FROM}>
+        <BlockedControl blocked={noShipFrom || buyRefused} reason={buyReason}>
           <Button variant="contained" disabled={!shippable || !order.shippingAddress} onClick={() => setDialog('outbound')}>
             {'Buy label'}
           </Button>
@@ -261,9 +268,11 @@ export function OrderLabelsWidget(props: OrderLabelsWidgetProps) {
               </Button>
             ) : null}
             {label.status === 'purchased' || label.status === 'void_rejected' ? (
+              <BlockedControl blocked={voidRefused} reason={permissionRefusalText('shipping.voidLabels')}>
               <Button size="small" color="error" onClick={() => handleVoid(label)}>
                 {'Void'}
               </Button>
+              </BlockedControl>
             ) : null}
             {label.recordShipmentRefusal ? (
               <Alert severity="warning" sx={{ width: '100%' }}>

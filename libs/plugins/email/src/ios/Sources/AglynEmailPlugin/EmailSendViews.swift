@@ -31,20 +31,19 @@ func sendTone(_ state: String) -> AglynTone {
   }
 }
 
-/// Whether the member may send from this site: an admin or editor of it, as the route asks.
+/// The site's name, and whether the member may send from it ("Run email campaigns"), as the route asks.
 @MainActor
 @Observable
 final class SiteRoleModel {
   @ObservationIgnored let doc = ObservedDocument()
-  private var uid = ""
+  private var context: NativePluginContext?
 
   func start(_ context: NativePluginContext) {
-    uid = context.uid
+    self.context = context
     if let hostID = context.hostID { doc.start(context.firestore, ["hosts", hostID]) }
   }
 
-  var role: String? { (doc.document?.data["memberRoles"] as? [String: Any])?[uid] as? String }
-  var canSend: Bool { ["owner", "admin", "editor"].contains(role ?? "") }
+  var canSend: Bool { context?.can("marketing.campaigns") == true }
   var siteName: String? { doc.document?.string("displayName") ?? doc.document?.string("name") }
 }
 

@@ -189,6 +189,7 @@ beforeEach(() => {
     options: [],
     domains: [],
     canManage: true,
+    canManageDomains: true,
     entitled: true,
     dedicated: { available: true, proposed: 'acme.mail.aglyn.app' },
   }
@@ -321,13 +322,15 @@ describe('what a reader may do is what the server says they may do', () => {
     expect(screen.getByText('Add domain')).toBeTruthy()
   })
 
-  it('hides Add domain from somebody who cannot manage, and says so', async () => {
-    identity = { ...identity, canManage: false }
+  it('switches Add domain off for somebody without its key, naming it', async () => {
+    identity = { ...identity, canManage: false, canManageDomains: false }
 
     await mount()
 
-    expect(screen.queryByText('Add domain')).toBeNull()
-    expect(screen.getByText(/needs the organization admin role/i)).toBeTruthy()
+    expect((screen.getByText('Add domain') as HTMLButtonElement).disabled).toBe(true)
+    expect(screen.getByLabelText(/does not include "Sending domains"/)).toBeTruthy()
+    expect(screen.queryByText('Add sender')).toBeNull()
+    expect(screen.getByText(/does not include "Organization settings"/)).toBeTruthy()
   })
 
   it('explains the plan gate rather than offering an action that 403s', async () => {
@@ -395,8 +398,8 @@ describe('navigating to one domain', () => {
  *
  * The table had no per-row control at all, so every operation on a domain
  * meant opening its page first. What it must not gain instead is a menu of
- * actions that 403 — the routes behind these gate on the organization admin
- * role and on the own-domain entitlement, and both are already in the view
+ * actions that 403 — the routes behind these gate on an organization key
+ * and on the own-domain entitlement, and both are already in the view
  * this card holds. So an item the reader cannot use is present and INERT with
  * the reason on it, which is the one of the three states that says something:
  * an absent control and an inapplicable one look identical to a reader.
@@ -479,8 +482,9 @@ describe('the row menu offers only what the routes will accept', () => {
    * than a shorter menu that leaves them wondering whether the console can do
    * these things at all.
    */
-  it('inerts the domains-route actions for somebody who cannot manage', async () => {
-    identity.canManage = false
+  it('inerts the domains-route actions for somebody without their key', async () => {
+    identity.canManage = true
+    identity.canManageDomains = false
     identity.domains = [
       { domain: 'acme.com', status: 'verified', records: [] },
     ]
@@ -489,8 +493,10 @@ describe('the row menu offers only what the routes will accept', () => {
     expect(menuItem(/Check DNS/i).disabled).toBe(true)
     expect(menuItem(/Remove domain/i).disabled).toBe(true)
     expect(menuItem(/Remove domain/i).getAttribute('title')).toMatch(
-      /organization admin role/i,
+      /does not include "Sending domains"/,
     )
+    // The identity route's own action follows its own key.
+    expect(menuItem(/Send this site/i).disabled).toBe(false)
     // Opening it is still offered — reading a domain's records needs nothing.
     expect(
       screen.getByRole('link', { name: 'Open domain' }),
@@ -636,7 +642,7 @@ describe('the offer of an Aglyn sending domain', () => {
 
     // The notice about who CAN is what they get instead.
     expect(screen.queryByRole('button', { name: /Ask for/i })).toBeNull()
-    expect(screen.getByText(/needs the organization admin role/i)).toBeTruthy()
+    expect(screen.getByText(/does not include "Organization settings"/)).toBeTruthy()
   })
 
   /**

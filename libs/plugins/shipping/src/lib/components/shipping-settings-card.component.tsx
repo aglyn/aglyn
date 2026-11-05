@@ -16,6 +16,10 @@
  */
 'use client'
 
+import { permissionRefusalText } from '@aglyn/aglyn/app-utils/org-permissions'
+import { BlockedControl } from '@aglyn/shared-ui-jsx/components/blocked-control.component'
+import { useSiteKeys } from '@aglyn/tenant-feature-instance/hooks/use-site-keys'
+import { SHIPPING_SITE_PRESETS } from '../model/shipping-permissions'
 import type { PluginShippingAddress, PluginShippingService } from '@aglyn/aglyn/plugin-manager/plugin-shipping-rates'
 import { mdiDeleteOutline } from '@aglyn/shared-data-mdi'
 import { pluginDocsHelp } from '@aglyn/aglyn/app-utils/docs-help'
@@ -80,6 +84,9 @@ const newPresetId = () => `box_${Math.random().toString(36).slice(2, 10)}`
  */
 export function ShippingSettingsCard(props: ShippingSettingsWidgetProps) {
   const { hostId } = props
+  const { blocked } = useSiteKeys(hostId)
+  const settingsRefused = blocked('shipping.settings', SHIPPING_SITE_PRESETS['shipping.settings'])
+  const chargesRefused = blocked('shipping.labelCharges', SHIPPING_SITE_PRESETS['shipping.labelCharges'])
   const availability = useShippingAvailability(hostId)
   const request = useShippingFetch()
   const { enqueueSnackbar } = useSnackbar()
@@ -155,9 +162,11 @@ export function ShippingSettingsCard(props: ShippingSettingsWidgetProps) {
       subheader={`Buy carrier labels from your orders through ${availability.provider ?? 'your carrier platform'}.`}
       HeaderProps={{
         action: (
-          <Button variant="contained" onClick={handleSave} disabled={!draft || saving}>
-            {saving ? 'Saving…' : 'Save'}
-          </Button>
+          <BlockedControl blocked={settingsRefused} reason={permissionRefusalText('shipping.settings')}>
+            <Button variant="contained" onClick={handleSave} disabled={!draft || saving}>
+              {saving ? 'Saving…' : 'Save'}
+            </Button>
+          </BlockedControl>
         ),
       }}
       contentGutterX
@@ -358,7 +367,9 @@ export function ShippingSettingsCard(props: ShippingSettingsWidgetProps) {
               </Typography>
               <FormControlLabel
                 control={
-                  <Checkbox checked={Boolean(account.consent)} onChange={(event) => handleConsent(event.target.checked)} />
+                  <BlockedControl blocked={chargesRefused} reason={permissionRefusalText('shipping.labelCharges')}>
+                    <Checkbox checked={Boolean(account.consent)} onChange={(event) => handleConsent(event.target.checked)} />
+                  </BlockedControl>
                 }
                 label={account.consentText}
               />

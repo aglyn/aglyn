@@ -44,6 +44,7 @@
 const mockState: {
   hostRole: string
   canManage: boolean
+  canManageDomains: boolean
   /**
    * The owning org's PLAN, not a pre-answered entitlement.
    *
@@ -59,6 +60,7 @@ const mockState: {
 } = {
   hostRole: 'admin',
   canManage: true,
+  canManageDomains: true,
   plan: 'pro',
   domains: [],
   written: null,
@@ -208,7 +210,8 @@ jest.mock('@aglyn/tenant-data-admin', () => ({
       error: domain ? null : 'no-label',
     }
   },
-  memberHasOrgPermission: async () => mockState.canManage,
+  memberHasOrgPermission: async (_orgId: string, _member: unknown, key: string) =>
+    key === 'org.sendingDomains' ? mockState.canManageDomains : mockState.canManage,
   resolveOrgMembership: async () => ({ member: { role: 'admin' } }),
   /*
    * The REAL decision. The route's whole job on the read is to report what a
@@ -277,6 +280,7 @@ afterAll(() => {
 beforeEach(() => {
   mockState.hostRole = 'admin'
   mockState.canManage = true
+  mockState.canManageDomains = true
   mockState.plan = 'pro'
   mockState.written = null
   mockState.claims = []
@@ -307,6 +311,20 @@ describe('reading is open to anyone who may compose', () => {
 
     expect(body.identity).toContain('news@acme.com')
     expect(body.canManage).toBe(false)
+  })
+
+  it('reports the domains route’s key apart from its own', async () => {
+    mockState.canManage = true
+    mockState.canManageDomains = false
+    const body = await (await read()).json()
+    expect(body.canManage).toBe(true)
+    expect(body.canManageDomains).toBe(false)
+
+    mockState.canManage = false
+    mockState.canManageDomains = true
+    const other = await (await read()).json()
+    expect(other.canManage).toBe(false)
+    expect(other.canManageDomains).toBe(true)
   })
 
   it('refuses somebody with no role on the site', async () => {

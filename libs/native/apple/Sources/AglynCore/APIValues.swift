@@ -15,10 +15,8 @@ extension JSONValue {
     case nil: return .null
     case let json as JSONValue: return json
     case is NSNull: return .null
-    case let flag as Bool: return .bool(flag)
-    case let number as Int: return .number(Double(number))
-    case let number as Int64: return .number(Double(number))
-    case let number as Double: return .number(number)
+    // Before anything else that takes a number: `as Bool` also matches an NSNumber holding 0 or 1, so a stored
+    // integer 1 would read as true. A real Bool bridges to the CFBoolean this asks for.
     case let number as NSNumber:
       return CFGetTypeID(number) == CFBooleanGetTypeID() ? .bool(number.boolValue) : .number(number.doubleValue)
     case let text as String: return .string(text)

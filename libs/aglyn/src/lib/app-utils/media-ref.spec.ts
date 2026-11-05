@@ -161,9 +161,42 @@ describe('media references (AGL-1215)', () => {
       }
     })
 
-    it('passes a legacy CDN path through untouched', () => {
+    it('names the rendering site on a legacy bare org path', () => {
       const legacy = '/api/media/cdn/org:acme/med123'
-      expect(resolveMediaSrc(legacy, { hostId: 'site-b' })).toBe(legacy)
+      expect(resolveMediaSrc(legacy, { hostId: 'site-b' })).toBe(
+        '/api/media/cdn/org:acme:site-b/med123',
+      )
+      expect(
+        resolveMediaSrc(legacy, { hostId: 'site-b', version: 'abc123def4567890' }),
+      ).toBe(
+        `/api/media/cdn/org:acme:site-b/med123?v=abc123def4567890.${MEDIA_VARIANT_ENCODER_VERSION}`,
+      )
+    })
+
+    it('leaves a legacy path alone where no site is known', () => {
+      const legacy = '/api/media/cdn/org:acme/med123'
+      expect(resolveMediaSrc(legacy)).toBe(legacy)
+      expect(resolveMediaSrc(legacy, { hostId: null })).toBe(legacy)
+      expect(resolveMediaSrc(legacy, { hostId: 'not a segment' })).toBe(legacy)
+    })
+
+    it('keeps the site a legacy path already names', () => {
+      // A reference moves to the rendering site. This URL serves today on any
+      // page placing it, so moving it could break a page that works.
+      const baked = '/api/media/cdn/org:acme:site-a/med123'
+      expect(resolveMediaSrc(baked, { hostId: 'site-b' })).toBe(baked)
+    })
+
+    it('qualifies nothing else that merely looks like a legacy path', () => {
+      for (const value of [
+        '/api/media/cdn/site-a/med123',
+        '/api/media/cdn/org:acme/med123/abc123',
+        '/api/media/cdn/org:acme/med123?exp=99&sig=deadbeef',
+        '/api/media/cdn/org:acme/med123?poster=1',
+        'https://acme.example/api/media/cdn/org:acme/med123',
+      ]) {
+        expect(resolveMediaSrc(value, { hostId: 'site-b' })).toBe(value)
+      }
     })
 
     it('passes an author-typed external URL through untouched', () => {

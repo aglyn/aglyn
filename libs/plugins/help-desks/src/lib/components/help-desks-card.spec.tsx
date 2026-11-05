@@ -20,6 +20,10 @@ import type { HelpDeskConnectionView, HelpDeskProviderId } from '../model/connec
 import type { HelpDesksApi } from './help-desks-api'
 import { HelpDesksCard } from './help-desks-card.component'
 
+const mockBlocked = jest.fn((_key: string) => false)
+jest.mock('@aglyn/tenant-feature-instance/hooks/use-site-keys', () => ({
+  useSiteKeys: () => ({ blocked: (key: string) => mockBlocked(key) }),
+}))
 jest.mock('./help-desks-api', () => ({ useHelpDesksApi: () => null }))
 const mockSnack = jest.fn()
 jest.mock('@aglyn/shared-ui-snackstack', () => ({ useSnackbar: () => ({ enqueueSnackbar: mockSnack }) }))
@@ -137,5 +141,29 @@ describe('the help desks card', () => {
     fireEvent.click(within(row).getByRole('button', { name: 'Disconnect' }))
     await waitFor(() => expect(routes.disconnect).toHaveBeenCalledWith('reamaze'))
     expect(mockConfirm).toHaveBeenCalled()
+  })
+})
+
+describe('the card follows the keys its routes ask (AGL-4047)', () => {
+  beforeEach(() => mockBlocked.mockReset().mockReturnValue(false))
+
+  it('switches Connect off with the permission named for a member without "helpDesks.manage"', async () => {
+    mockBlocked.mockImplementation((key) => key === 'helpDesks.manage')
+    render(<HelpDesksCard hostId="h" api={api()} />)
+    expect((await screen.findAllByRole('button', { name: 'Connect' }))[0]).toHaveProperty('disabled', true)
+    expect(screen.getByText(/does not include/).textContent).toContain('ask an organization admin')
+  })
+
+  it('names "helpDesks.view" rather than drawing nothing for a member without it', async () => {
+    mockBlocked.mockImplementation((key) => key === 'helpDesks.view')
+    render(<HelpDesksCard hostId="h" api={api()} />)
+    expect((await screen.findByText(/does not include/)).textContent).toContain('ask an organization admin')
+    expect(screen.queryByRole('button', { name: 'Connect' })).toBeNull()
+  })
+
+  it('leaves everything on for a holder, and while the answer loads (blocked is false)', async () => {
+    render(<HelpDesksCard hostId="h" api={api()} />)
+    expect((await screen.findAllByRole('button', { name: 'Connect' }))[0]).toHaveProperty('disabled', false)
+    expect(screen.queryByText(/does not include/)).toBeNull()
   })
 })

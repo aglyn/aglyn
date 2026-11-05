@@ -8,8 +8,6 @@ import AglynUI
 import SwiftUI
 
 /// Roles that may write entries and collections (`hostRoleCanWrite`); publishing needs `contentPublishRoles`.
-private let contentWriteRoles: Set<String> = ["admin", "editor", "author"]
-private let contentPublishRoles: Set<String> = ["admin", "editor"]
 
 /// A moment in UTC, the way the entry editor states times.
 func formatUTC(_ date: Date) -> String {
@@ -134,7 +132,7 @@ struct ContentScreen: View {
     ContentEnv(
       context: context, hostID: hostID,
       api: ContentAPI(api: context.api, writer: context.writer, reader: context.firestore, hostID: hostID), runner: runner,
-      canWrite: contentWriteRoles.contains(context.siteRole ?? ""), canPublish: contentPublishRoles.contains(context.siteRole ?? ""),
+      canWrite: context.can("site.edit"), canPublish: context.can("site.publish"),
       routing: SiteRouting(host: host.state.value ?? nil), open: { dialog = $0 })
   }
 }
@@ -156,7 +154,7 @@ private struct CollectionEntries: View {
   @State private var model = EntryListModel()
   @State private var searchText = ""
 
-  private var isAdmin: Bool { env.context.siteRole == "admin" }
+  private var isAdmin: Bool { env.context.can("site.manage") }
 
   var body: some View {
     WideLayoutReader { wide in
@@ -184,7 +182,7 @@ private struct CollectionEntries: View {
       try? await Task.sleep(nanoseconds: 300_000_000)
       if !Task.isCancelled { model.search = searchText }
     }
-    .aglynPrimaryAction(id: "add-entry", "New entry", systemImage: "plus", enabled: env.canWrite, shortcut: KeyboardShortcut("n", modifiers: .command), help: AglynRoleReason.site("adding entries")) {
+    .aglynPrimaryAction(id: "add-entry", "New entry", systemImage: "plus", enabled: env.canWrite, shortcut: KeyboardShortcut("n", modifiers: .command), help: permissionRefusalText(ContractValues.shared.orgRoleGrants, key: "site.edit")) {
       env.open(.newEntry(collection.id))
     }
     .aglynScreenToolbar(id: "collection") {

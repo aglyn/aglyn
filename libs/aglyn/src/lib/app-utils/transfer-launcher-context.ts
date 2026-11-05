@@ -103,6 +103,13 @@ export interface TransferAccessTarget {
   scope: TransferLaunchScope
   /** The site, for a `host` resource or a workspace resource read through one site. */
   hostId?: string | null
+  /**
+   * The surface's own verdict on importing into this instance (AGL-4047), for
+   * a resource whose server half answers `importAccess`, in place of "Manage
+   * data" on the workspace. The plan is still asked. The routes stay the
+   * enforcement.
+   */
+  importAllowed?: boolean
 }
 
 /**
@@ -124,9 +131,18 @@ export interface TransferLauncher {
    * permissions have answered. Importing needs "Manage data" (on the named
    * site, for a site's records); exporting needs only access to the
    * records — membership, and reaching the named site — unless the resource
-   * declares a `readPermission`. The routes stay the enforcement.
+   * declares a `readPermission`, or the target carries the resource's own
+   * `importAllowed`. The routes stay the enforcement.
    */
   can(action: TransferAction, target: TransferAccessTarget): boolean
+  /**
+   * The permission to name beside a switched-off Import or Export (AGL-4047),
+   * once it is known to be a permission that refuses them. `null` when `can`
+   * says yes, while its reads are out or failed, and for what no permission
+   * decides: the plan, which a surface has its own words for, or a site the
+   * person does not reach.
+   */
+  refusedPermission?(action: TransferAction, target: TransferAccessTarget): string | null
   /**
    * The person's own unfinished imports (AGL-3549), newest first: of the
    * target's resource — the exact key, so one dataset's are not another's —

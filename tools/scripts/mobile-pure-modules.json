@@ -562,6 +562,62 @@
       "why": "The commerce plugin's keys for members of the whole workspace only (refunds, the register's approvals, order webhooks), assembled into the contracts' ORG_ROLE_GRANTS (AGL-4047); type-only imports."
     },
     {
+      "path": "libs/plugins/help-desks/src/lib/model/help-desks-permissions.ts",
+      "why": "The help desks plugin's site keys and their site-role presets, assembled into the contracts' ORG_ROLE_GRANTS (AGL-4047); type-only imports."
+    },
+    {
+      "path": "libs/plugins/loyalty/src/lib/model/loyalty-permissions.ts",
+      "why": "The rewards plugin's site keys and their site-role presets, assembled into the contracts' ORG_ROLE_GRANTS (AGL-4047); type-only imports."
+    },
+    {
+      "path": "libs/plugins/marketing-platforms/src/lib/model/marketing-platforms-permissions.ts",
+      "why": "The email platforms plugin's site keys and their site-role presets, assembled into the contracts' ORG_ROLE_GRANTS (AGL-4047); type-only imports."
+    },
+    {
+      "path": "libs/plugins/sales-channels/src/lib/model/sales-channels-permissions.ts",
+      "why": "The sales channels plugin's site keys and their site-role presets, assembled into the contracts' ORG_ROLE_GRANTS (AGL-4047); type-only imports."
+    },
+    {
+      "path": "libs/plugins/shipping/src/lib/model/shipping-permissions.ts",
+      "why": "The shipping plugin's site keys and their site-role presets, assembled into the contracts' ORG_ROLE_GRANTS (AGL-4047); type-only imports."
+    },
+    {
+      "path": "libs/plugins/tax-engines/src/lib/model/tax-engines-permissions.ts",
+      "why": "The tax engines plugin's site keys and their site-role presets, assembled into the contracts' ORG_ROLE_GRANTS (AGL-4047); type-only imports."
+    },
+    {
+      "path": "libs/plugins/post-purchase/src/lib/model/post-purchase-permissions.ts",
+      "why": "The after-the-sale services plugin's site keys and their site-role presets, assembled into the contracts' ORG_ROLE_GRANTS (AGL-4047); type-only imports."
+    },
+    {
+      "path": "libs/plugins/fulfillment-networks/src/lib/model/fulfillment-networks-permissions.ts",
+      "why": "The fulfillment networks plugin's site keys and their site-role presets, assembled into the contracts' ORG_ROLE_GRANTS (AGL-4047); type-only imports."
+    },
+    {
+      "path": "libs/plugins/marketplaces/src/lib/model/marketplaces-permissions.ts",
+      "why": "The online marketplaces plugin's site keys and their site-role presets, assembled into the contracts' ORG_ROLE_GRANTS (AGL-4047); type-only imports."
+    },
+    {
+      "path": "libs/plugins/print-on-demand/src/lib/model/print-on-demand-permissions.ts",
+      "why": "The print on demand plugin's site keys and their site-role presets, assembled into the contracts' ORG_ROLE_GRANTS (AGL-4047); type-only imports."
+    },
+    {
+      "path": "libs/plugins/inventory-sync/src/lib/model/inventory-sync-permissions.ts",
+      "why": "The inventory sync plugin's site keys and their site-role presets, assembled into the contracts' ORG_ROLE_GRANTS (AGL-4047); type-only imports."
+    },
+    {
+      "path": "libs/plugins/couriers/src/lib/model/couriers-permissions.ts",
+      "why": "The couriers plugin's site keys and their site-role presets, assembled into the contracts' ORG_ROLE_GRANTS (AGL-4047); type-only imports."
+    },
+    {
+      "path": "libs/plugins/review-platforms/src/lib/model/review-platforms-permissions.ts",
+      "why": "The review platforms plugin's site keys and their site-role presets, assembled into the contracts' ORG_ROLE_GRANTS (AGL-4047); type-only imports."
+    },
+    {
+      "path": "libs/plugins/ad-conversions/src/lib/model/ad-conversions-permissions.ts",
+      "why": "The ad conversions plugin's site keys and their site-role presets, assembled into the contracts' ORG_ROLE_GRANTS (AGL-4047); type-only imports."
+    },
+    {
       "path": "libs/plugins/funnels/src/lib/model/funnels-permissions.ts",
       "why": "The funnels plugin's site key (Manage funnels) and its site-role preset, assembled into the contracts' ORG_ROLE_GRANTS (AGL-4047); type-only imports."
     },
@@ -708,6 +764,10 @@
     {
       "path": "libs/plugins/data/src/lib/components/dataset-record-filter.ts",
       "why": "The records table query a dataset model plans (`planDatasetRecordQuery`): the native records list asks the same Firestore query for a filter or a search (AGL-3668); type-only imports beside the pure planner and dataset-model-core."
+    },
+    {
+      "path": "libs/plugins/data/src/lib/model/data-permissions.ts",
+      "why": "The data plugin's dataset keys and their site-role preset, assembled into the contracts' ORG_ROLE_GRANTS (AGL-4047); type-only imports."
     },
     {
       "path": "libs/plugins/data/src/lib/model/dataset-model-core.ts",

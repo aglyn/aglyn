@@ -53,8 +53,9 @@ sandbox first, place a test order, then connect your production account.
    you ship or sell from. Aglyn checks it with the service. It is the origin of
    every sale and the place an in-person sale is taxed.
 
-Only an **admin** of the site can connect, test or disconnect a service and
-change its address. **Test connection** checks the stored credentials again
+Connecting, testing or disconnecting a service and changing its address takes **Manage
+the tax engine connection**, which a site's admins hold by default
+([custom roles](../../workspace-and-billing/teams-and-roles/custom-roles.md#integration-permissions)). **Test connection** checks the stored credentials again
 whenever you like; the card shows the answer.
 
 ## When the service is not used

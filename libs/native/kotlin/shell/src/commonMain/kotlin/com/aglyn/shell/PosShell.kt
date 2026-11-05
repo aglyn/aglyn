@@ -56,10 +56,6 @@ import com.aglyn.ui.WithTooltip
 import com.aglyn.ui.space
 import kotlinx.coroutines.launch
 
-/** Roles that may ring up a sale; the routes hold the rest (`managePos`, the `pos` entitlement). */
-fun sitesThatCanSell(sites: List<WorkspaceSite>): List<WorkspaceSite> =
-  sites.filter { it.role == "admin" || it.role == "editor" }
-
 internal fun posStoreKey(uid: String) = "aglyn.pos.store.$uid"
 
 /** The screen this tablet was set up as instead of a register (a customer display or a kiosk), remembered so it comes back with nobody signed in. */
@@ -139,11 +135,10 @@ private fun PosSignedIn(services: ShellServices, uid: String) {
   var confirmed by remember(uid) { mutableStateOf(services.prefs.get(posStoreKey(uid))) }
   val scope = rememberCoroutineScope()
   val site = workspace.site
-  val sellable = site != null && sitesThatCanSell(listOf(site)).isNotEmpty()
 
   when {
     !workspace.ready -> Loading()
-    site == null || !sellable || confirmed != site.id -> StorePicker(
+    site == null || confirmed != site.id -> StorePicker(
       services,
       workspace,
       onChosen = { chosen ->
@@ -168,7 +163,8 @@ internal fun StorePicker(
   onChosen: (WorkspaceSite) -> Unit,
   onSignOut: () -> Unit,
 ) {
-  val sellable = sitesThatCanSell(workspace.sites)
+  // Every store they can open; the register asks "Use the point of sale" on the one picked, as the routes do.
+  val stores = workspace.sites
   Scaffold(
     containerColor = MaterialTheme.colorScheme.background,
     topBar = {
@@ -211,16 +207,16 @@ internal fun StorePicker(
           SkeletonList(rows = 3)
         } else if (workspace.orgs.isEmpty()) {
           FirstRunContent(services)
-        } else if (sellable.isEmpty()) {
+        } else if (stores.isEmpty()) {
           EmptyState(
             "No store you can sell on",
-            body = "Ask the workspace owner for the Admin or Editor role on a site with Point of sale.",
+            body = "Ask an organization admin to give you a site with Point of sale.",
             icon = AglynIcons.named("storefront"),
             action = { OutlinedButton(onClick = onSignOut) { Text("Sign out") } },
           )
         } else {
           LazyColumn {
-            items(sellable, key = { it.id }) { store ->
+            items(stores, key = { it.id }) { store ->
               AglynListItem(
                 title = store.name,
                 supporting = store.address,

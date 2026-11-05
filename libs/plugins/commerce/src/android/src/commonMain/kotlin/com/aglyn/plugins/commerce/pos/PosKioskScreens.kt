@@ -68,6 +68,7 @@ import com.aglyn.contracts.PosKioskSale
 import com.aglyn.contracts.PosKioskSaleStatus
 import com.aglyn.pluginhost.NativePluginContext
 import com.aglyn.core.mediaPreviewUrl
+import com.aglyn.ui.SearchField
 import com.aglyn.ui.AglynIcons
 import com.aglyn.ui.ChipOption
 import com.aglyn.ui.KeepScreenOn
@@ -168,6 +169,7 @@ private fun KioskBody(model: PosKioskModel, origin: String, onExit: () -> Unit) 
   val scope = rememberCoroutineScope()
   var itemSheet by remember { mutableStateOf<PosKioskProduct?>(null) }
   var cartOpen by remember { mutableStateOf(false) }
+  LaunchedEffect(model.token, model.typed) { model.runSearch() }
   LaunchedEffect(model.token, model.categoryId, model.turn) { model.loadCatalog() }
   // The card in flight, asked after until it is paid or fails.
   LaunchedEffect(model.phase) {
@@ -260,22 +262,34 @@ private fun KioskScreen(model: PosKioskModel, origin: String, onProduct: (PosKio
 private fun KioskMenu(model: PosKioskModel, onProduct: (PosKioskProduct) -> Unit, onCart: () -> Unit) {
   val scope = rememberCoroutineScope()
   val categories = model.catalog?.categories ?: emptyList()
-  val products = model.catalog?.products ?: emptyList()
+  val products = model.menuProducts
   Column(Modifier.fillMaxSize()) {
-    Box(Modifier.padding(start = space(2f), end = space(2f), top = space(5f), bottom = space(1f))) {
+    if (model.showsSearch) {
+      SearchField(
+        model.search,
+        { model.search = it.take(120) },
+        placeholder = "Search the menu",
+        modifier = Modifier.fillMaxWidth().padding(start = space(2f), end = space(2f), top = space(5f)).testTag("kiosk-search"),
+      )
+    }
+    Box(Modifier.padding(start = space(2f), end = space(2f), top = if (model.showsSearch) space(1f) else space(5f), bottom = space(1f))) {
       ChoiceChipRow(
         listOf(ChipOption("all", "All")) + categories.map { ChipOption(it.id, it.name) },
-        model.categoryId ?: "all",
-        { key -> model.categoryId = key.takeIf { it != "all" } },
+        if (model.typed.isEmpty()) model.categoryId ?: "all" else "",
+        { key ->
+          // A category chip asks the server for that category, and clears a word typed.
+          model.search = ""
+          model.categoryId = key.takeIf { it != "all" }
+        },
       )
     }
     HorizontalDivider()
     model.notice?.let { NoticeBanner(it, StatusTone.WARNING, Modifier.fillMaxWidth().padding(space(2f))) }
     Box(Modifier.weight(1f).fillMaxWidth()) {
       when {
-        model.catalogLoading && model.catalog == null -> CircularProgressIndicator(Modifier.align(Alignment.Center))
+        (model.catalogLoading && model.catalog == null) || (model.searching && products.isEmpty()) -> CircularProgressIndicator(Modifier.align(Alignment.Center))
         products.isEmpty() -> Text(
-          "Nothing here yet. Try another category.",
+          if (model.typed.isEmpty()) "Nothing here yet. Try another category." else "Nothing on the menu matches that.",
           Modifier.align(Alignment.Center).padding(space(4f)),
           style = MaterialTheme.typography.titleLarge,
           color = MaterialTheme.colorScheme.onSurfaceVariant,
@@ -381,7 +395,7 @@ private fun KioskItemSheet(model: PosKioskModel, product: PosKioskProduct, close
                     picks = others + mine.map { ModifierSelection(group.id, it) }
                     problem = null
                   },
-                  label = { Text(if (option.priceCents > 0) "${option.name} +${model.money(option.priceCents.toLong())}" else option.name) },
+                  label = { Text(if (modifierOptionPriceCents(option, variantId) > 0) "${option.name} +${model.money(modifierOptionPriceCents(option, variantId))}" else option.name) },
                   leadingIcon = if (on) ({ Icon(AglynIcons.named("check"), null, Modifier.size(18.dp)) }) else null,
                   modifier = Modifier.heightIn(min = 48.dp).testTag("kiosk-option-${group.id}-${option.id}"),
                 )

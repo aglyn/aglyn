@@ -235,4 +235,13 @@ final class FirestoreLoadsTests: XCTestCase {
     XCTAssertEqual(rowCount(grown), 6, "an action that reloads does not shrink the list the person grew")
     XCTAssertEqual(reader.limits, [3, 6, 6])
   }
+
+  /// A stored 0 or 1 stays a number: `as Bool` also matches an NSNumber holding either.
+  func testAStoredZeroOrOneStaysANumber() {
+    XCTAssertEqual(FirestoreLoads.json(NSNumber(value: 1)), .number(1))
+    XCTAssertEqual(FirestoreLoads.json(NSNumber(value: 0)), .number(0))
+    XCTAssertEqual(FirestoreLoads.json(NSNumber(value: true)), .bool(true))
+    XCTAssertEqual(FirestoreLoads.json(false), .bool(false))
+    XCTAssertEqual(FirestoreLoads.json(["minNights": NSNumber(value: 1)]), .object(["minNights": .number(1)]))
+  }
 }

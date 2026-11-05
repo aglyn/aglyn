@@ -527,4 +527,38 @@ final class CrmContactByEmailTests: XCTestCase {
     XCTAssertNil(contactEmailFilter(nil))
     XCTAssertNil(contactEmailFilter("not an address"))
   }
+
+  func testGatesAskTheirKeysOverTheRole() {
+    func scope(_ member: [String: Any], host: String = "") -> CrmScope { CrmScope(orgID: "o1", hostID: host, uid: "u1", org: [:], member: member) }
+    XCTAssertTrue(scope(["role": "editor"]).canWrite)
+    XCTAssertFalse(scope(["role": "editor"]).canManage)
+    XCTAssertTrue(scope(["role": "admin"]).canManage)
+    // A custom role's stamp decides, whichever role the row names.
+    let granted = scope(["role": "viewer", "resolvedPermissions": ["crm.settings": true, "data.manage": true]])
+    XCTAssertTrue(granted.canManage)
+    XCTAssertTrue(granted.canWrite)
+    XCTAssertFalse(scope(["role": "admin", "resolvedPermissions": ["crm.settings": false]]).canManage)
+  }
+
+  func testTheWorkspaceCrmAsksForReachAndManageData() {
+    func scope(_ member: [String: Any]) -> CrmScope { CrmScope(orgID: "o1", hostID: "", uid: "u1", org: [:], member: member, orgLevel: true) }
+    XCTAssertTrue(scope(["role": "editor", "allHosts": true]).opensWorkspaceCrm)
+    XCTAssertFalse(scope(["role": "viewer", "allHosts": true]).opensWorkspaceCrm)
+    XCTAssertFalse(scope(["role": "editor", "allHosts": false]).opensWorkspaceCrm)
+    XCTAssertFalse(scope(["role": "editor", "allHosts": false, "resolvedPermissions": ["data.manage": true]]).opensWorkspaceCrm)
+  }
+
+  func testStageMovesAskTheSiteOnASiteAndTheWorkspaceOffOne() {
+    let editor = CrmScope(orgID: "o1", hostID: "h1", uid: "u1", org: [:], member: ["role": "editor"])
+    XCTAssertTrue(editor.movesStages(on: nil), "nothing is switched off until the site is read")
+    XCTAssertFalse(editor.movesStages(on: ["memberRoles": ["u1": "author"]]))
+    XCTAssertTrue(editor.movesStages(on: ["memberRoles": ["u1": "editor"]]))
+    XCTAssertFalse(editor.movesStages(on: ["memberRoles": ["u1": "editor"], "memberPermissions": ["u1": ["crm.moveStages": false]]]))
+    let hub = CrmScope(orgID: "o1", hostID: "", uid: "u1", org: [:], member: ["role": "editor"], orgLevel: true)
+    XCTAssertTrue(hub.movesStages(on: nil))
+    let refused = CrmScope(orgID: "o1", hostID: "", uid: "u1", org: [:], member: ["role": "editor", "resolvedPermissions": ["crm.moveStages": false]], orgLevel: true)
+    XCTAssertFalse(refused.movesStages(on: nil))
+    // Off a site it follows "Manage data" until something sets it.
+    XCTAssertFalse(CrmScope(orgID: "o1", hostID: "", uid: "u1", org: [:], member: ["role": "editor", "resolvedPermissions": ["data.manage": false]], orgLevel: true).canWrite)
+  }
 }

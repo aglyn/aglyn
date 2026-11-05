@@ -16,6 +16,8 @@
  */
 'use client'
 
+import { permissionRefusalText } from '@aglyn/aglyn/app-utils/org-permissions'
+import { BlockedControl } from '@aglyn/shared-ui-jsx/components/blocked-control.component'
 import { pluginDocsHelp } from '@aglyn/aglyn'
 import { ICON_VARIANT_CLOSE } from '@aglyn/shared-data-enums'
 import {
@@ -114,7 +116,7 @@ function identityChip(view: SendingIdentityView): {
  * so far say, and the removal confirmation counts the sites not yet read.
  *
  * Managing — adding a domain, checking it, choosing what a site sends as, or
- * editing a sender — needs the organization admin role, exactly as on a
+ * editing a sender — asks "Organization settings" (`org.settings`), exactly as on a
  * site's page, and the page says so to anybody else rather than offering
  * controls that would refuse.
  */
@@ -141,6 +143,8 @@ function OrgSendingTables(props: { mount: EmailOrgMount; basePath: string }) {
   const { sites } = sitePage
   const { views, errors, loading, reload, first } = useOrgSendingViews(sites)
   const canManage = first?.canManage === true
+  // The domains route's key (AGL-4047); `canManage` is the identity route's.
+  const canManageDomains = first?.canManageDomains === true
   const entitled = first?.entitled === true
   const domains = first?.domains ?? []
 
@@ -301,8 +305,8 @@ function OrgSendingTables(props: { mount: EmailOrgMount; basePath: string }) {
     record: SendingIdentityView['domains'][number],
   ): RowActionsMenuItem[] => {
     const working = Boolean(domainBusy)
-    const domainRouteReason = !canManage
-      ? 'Managing sending domains needs the organization admin role.'
+    const domainRouteReason = !canManageDomains
+      ? permissionRefusalText('org.sendingDomains')
       : !entitled
         ? 'Managing sending domains needs a plan that carries sending as ' +
           'your own domain.'
@@ -339,8 +343,7 @@ function OrgSendingTables(props: { mount: EmailOrgMount; basePath: string }) {
             ? 'Only a verified domain can be sent as. Publish its records and ' +
               'check DNS first.'
             : !canManage
-              ? 'Choosing what a site sends as needs the organization admin ' +
-                'role.'
+              ? permissionRefusalText('org.settings')
               : undefined,
         onClick: () => {
           if (mount.hosts.length === 1) {
@@ -375,15 +378,20 @@ function OrgSendingTables(props: { mount: EmailOrgMount; basePath: string }) {
       contentGutterY
       contentBordered="all"
       HeaderProps={{
-        action: canManage ? (
-          <Button
-            size="small"
-            variant="contained"
-            disabled={!entitled}
-            onClick={() => setAdding(true)}
+        action: first ? (
+          <BlockedControl
+            blocked={!canManageDomains}
+            reason={permissionRefusalText('org.sendingDomains')}
           >
-            {'Add domain'}
-          </Button>
+            <Button
+              size="small"
+              variant="contained"
+              disabled={!entitled}
+              onClick={() => setAdding(true)}
+            >
+              {'Add domain'}
+            </Button>
+          </BlockedControl>
         ) : null,
       }}
     >
@@ -398,9 +406,7 @@ function OrgSendingTables(props: { mount: EmailOrgMount; basePath: string }) {
 
         {first && !canManage ? (
           <Alert severity="info">
-            {'Adding a domain, choosing what a site sends as and editing its ' +
-              'senders need the organization admin role. You can see the ' +
-              'current state here.'}
+            {`${permissionRefusalText('org.settings')}. You can see the current state here.`}
           </Alert>
         ) : null}
 

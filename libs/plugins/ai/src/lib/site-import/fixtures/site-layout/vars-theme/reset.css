@@ -1,0 +1,4 @@
+*,*::before,*::after{box-sizing:border-box}
+html{font-family:sans-serif;line-height:1.15}
+body{margin:0}
+img{max-width:100%;height:auto}

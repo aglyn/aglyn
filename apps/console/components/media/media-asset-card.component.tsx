@@ -18,6 +18,7 @@
 
 import type * as Aglyn from '@aglyn/aglyn'
 import { describeScope, isOrgWideScope } from '@aglyn/aglyn'
+import { BlockedControl } from '@aglyn/shared-ui-jsx/components/blocked-control.component'
 import BlockOutlinedIcon from '@mui/icons-material/BlockOutlined'
 import CheckCircleIcon from '@mui/icons-material/CheckCircle'
 import LockOutlinedIcon from '@mui/icons-material/LockOutlined'
@@ -84,6 +85,10 @@ export interface MediaAssetCardProps {
   onDelete?: () => void
   /** Toggle the AGL-1051 private flag; omitted where the caller can't. */
   onSetPrivate?: (makePrivate: boolean) => void
+  /** Make private, Replace file and Delete stay off while permissions load. */
+  writeHeld?: boolean
+  /** Why Make private, Replace file and Delete are switched off for this reader. */
+  writeRefusal?: string
   /**
    * The owner-facing notice when this file has been DISABLED by staff
    * (AGL-1612), or absent when it has not.
@@ -126,6 +131,8 @@ export function MediaAssetCard(props: MediaAssetCardProps) {
     onDetails,
     onDelete,
     onSetPrivate,
+    writeHeld,
+    writeRefusal,
     quarantine,
   } = props
   const [menuAnchor, setMenuAnchor] = useState<HTMLElement | null>(null)
@@ -415,9 +422,18 @@ export function MediaAssetCard(props: MediaAssetCardProps) {
           </MenuItem>
         ) : null}
         {onSetPrivate ? (
-          <MenuItem onClick={runAction(() => onSetPrivate(!media.private))}>
-            {media.private ? 'Publish file' : 'Make private'}
-          </MenuItem>
+          <BlockedControl
+            blocked={Boolean(writeRefusal)}
+            reason={writeRefusal ?? ''}
+            fullWidth
+          >
+            <MenuItem
+              disabled={writeHeld}
+              onClick={runAction(() => onSetPrivate(!media.private))}
+            >
+              {media.private ? 'Publish file' : 'Make private'}
+            </MenuItem>
+          </BlockedControl>
         ) : null}
         {/* Offered for public AND private assets, unlike the two link items:
             the handler mints a signed URL for a private file, which is the
@@ -428,18 +444,33 @@ export function MediaAssetCard(props: MediaAssetCardProps) {
           </MenuItem>
         ) : null}
         {onReplace ? (
-          <MenuItem onClick={runAction(onReplace)}>{'Replace file'}</MenuItem>
+          <BlockedControl
+            blocked={Boolean(writeRefusal)}
+            reason={writeRefusal ?? ''}
+            fullWidth
+          >
+            <MenuItem disabled={writeHeld} onClick={runAction(onReplace)}>
+              {'Replace file'}
+            </MenuItem>
+          </BlockedControl>
         ) : null}
         {onDetails ? (
           <MenuItem onClick={runAction(onDetails)}>{'Details'}</MenuItem>
         ) : null}
         {onDelete ? (
-          <MenuItem
-            onClick={runAction(onDelete)}
-            sx={{ color: 'error.main' }}
+          <BlockedControl
+            blocked={Boolean(writeRefusal)}
+            reason={writeRefusal ?? ''}
+            fullWidth
           >
-            {'Delete'}
-          </MenuItem>
+            <MenuItem
+              disabled={writeHeld}
+              onClick={runAction(onDelete)}
+              sx={{ color: 'error.main' }}
+            >
+              {'Delete'}
+            </MenuItem>
+          </BlockedControl>
         ) : null}
       </Menu>
     </Card>

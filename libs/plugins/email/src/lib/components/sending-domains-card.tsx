@@ -16,6 +16,8 @@
  */
 'use client'
 
+import { permissionRefusalText } from '@aglyn/aglyn/app-utils/org-permissions'
+import { BlockedControl } from '@aglyn/shared-ui-jsx/components/blocked-control.component'
 import { pluginDocsHelp } from '@aglyn/aglyn'
 import { ICON_VARIANT_CLOSE } from '@aglyn/shared-data-enums'
 import {
@@ -421,9 +423,9 @@ export function SendingDomainsCard(props: SendingDomainsCardProps) {
    * The gates are not one gate, because the routes are not one route:
    *
    *   - Open is navigation and needs nothing.
-   *   - Check DNS and Remove go to the DOMAINS route, which is owner/admin on
-   *     the org AND carries the own-domain entitlement across the whole
-   *     handler — so both conditions are read here.
+   *   - Check DNS and Remove go to the DOMAINS route, which asks
+   *     `org.sendingDomains` on the org AND carries the own-domain entitlement
+   *     across the whole handler — so both conditions are read here.
    *   - Sending as a domain goes to the IDENTITY route, whose write gate is
    *     `org.settings` alone. It also refuses an unverified domain, which is
    *     a state this list can already see, so it is named rather than
@@ -435,10 +437,8 @@ export function SendingDomainsCard(props: SendingDomainsCardProps) {
       const manage = view?.canManage === true
       const entitled = view?.entitled === true
       const selected = view?.selected === record.domain
-      const orgAdminReason =
-        'Managing sending domains needs the organization admin role.'
-      const domainRouteReason = !manage
-        ? orgAdminReason
+      const domainRouteReason = view?.canManageDomains !== true
+        ? permissionRefusalText('org.sendingDomains')
         : !entitled
           ? 'Managing sending domains needs a plan that carries sending as ' +
             'your own domain.'
@@ -478,8 +478,7 @@ export function SendingDomainsCard(props: SendingDomainsCardProps) {
               ? 'Only a verified domain can be sent as. Publish its records ' +
                 'and check DNS first.'
               : !manage
-                ? 'Choosing what this site sends as needs the organization ' +
-                  'admin role.'
+                ? permissionRefusalText('org.settings')
                 : undefined,
           onClick: () => void handleUseDomain(record.domain),
         },
@@ -498,6 +497,7 @@ export function SendingDomainsCard(props: SendingDomainsCardProps) {
       domainBusy,
       domainPath,
       view?.canManage,
+      view?.canManageDomains,
       view?.entitled,
       view?.selected,
       handleVerifyDomain,
@@ -526,7 +526,7 @@ export function SendingDomainsCard(props: SendingDomainsCardProps) {
       contentGutterY
       contentBordered="all"
       HeaderProps={{
-        action: view?.canManage ? (
+        action: view ? (
           <Stack direction="row" spacing={1}>
             {/*
               THE ACTION SITS IN THE HEADER, not above the list it adds to.
@@ -544,22 +544,31 @@ export function SendingDomainsCard(props: SendingDomainsCardProps) {
               SECOND sender is a different matter and is disabled on the pool,
               because the mailbox that would distinguish it is fixed there.
              */}
-            <Button
-              size="small"
-              variant="outlined"
-              disabled={!view || !canAddSender}
-              onClick={() => setSenderEditor({ senderId: null })}
+            {view.canManage ? (
+              <Button
+                size="small"
+                variant="outlined"
+                disabled={!canAddSender}
+                onClick={() => setSenderEditor({ senderId: null })}
+              >
+                {'Add sender'}
+              </Button>
+            ) : null}
+            {/* The domains route's key, so its own control: off with the
+                permission named rather than offered and refused. */}
+            <BlockedControl
+              blocked={!view.canManageDomains}
+              reason={permissionRefusalText('org.sendingDomains')}
             >
-              {'Add sender'}
-            </Button>
-            <Button
-              size="small"
-              variant="contained"
-              disabled={!view?.entitled || !view?.orgId}
-              onClick={() => setAdding(true)}
-            >
-              {'Add domain'}
-            </Button>
+              <Button
+                size="small"
+                variant="contained"
+                disabled={!view.entitled || !view.orgId}
+                onClick={() => setAdding(true)}
+              >
+                {'Add domain'}
+              </Button>
+            </BlockedControl>
           </Stack>
         ) : null,
       }}
@@ -966,8 +975,7 @@ export function SendingDomainsCard(props: SendingDomainsCardProps) {
          */}
         {view && !view.canManage ? (
           <Alert severity="info">
-            {'Adding a domain and choosing what this site sends as needs the ' +
-              'organization admin role. You can see the current state here.'}
+            {`${permissionRefusalText('org.settings')}. You can see the current state here.`}
           </Alert>
         ) : null}
 

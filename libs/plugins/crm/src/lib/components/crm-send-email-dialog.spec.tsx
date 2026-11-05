@@ -241,7 +241,7 @@ describe('CrmSendEmailDialog', () => {
     open()
     await screen.findByText('Verify mail.acme.com before sending.')
     expect(screen.queryByText('Set up sending')).toBeNull()
-    expect(screen.getByText('An admin sets this up under Emails › Sending.')).toBeTruthy()
+    expect(screen.getByText('A member holding "Organization settings" sets this up under Emails › Sending.')).toBeTruthy()
   })
 
   it('posts the record and the draft, then closes with a toast', async () => {

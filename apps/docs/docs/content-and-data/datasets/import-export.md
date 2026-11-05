@@ -12,9 +12,12 @@ the server: a large dataset is never loaded into your browser, and nothing is wr
 until you have seen what an import will do.
 
 :::info Plan availability
-**Starter** and above (datasets need the data store). Importing needs the **Manage data**
-permission. Exporting needs only access to the dataset: any member who can see it can
-export it, and **Export** is shown to them while **Import** is not.
+**Starter** and above (datasets need the data store). Importing takes what writing the
+dataset takes: **Manage data**, or **Manage this site's data** on a dataset shared with that
+site alone. Exporting takes **Export data**, which every role holds by default, and access
+to the dataset. Whichever a member doesn't hold is switched off for them, naming the
+permission. See
+[Dataset permissions](../../workspace-and-billing/teams-and-roles/custom-roles.md#dataset-permissions).
 :::
 
 ![The data page toolbar carries import and export](/img/datasets/data-page.png)

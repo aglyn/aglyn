@@ -238,7 +238,7 @@ describe('the build step (AGL-3616)', () => {
         versionId: null,
         facts: { status: 'draft' },
         live: false,
-        notice: 'Kept as a draft: publishing takes the editor role.',
+        notice: 'Kept as a draft: publishing takes the "Publish site content" permission.',
       }),
     })
     const outcome = await createAiJobBuildStep({
@@ -249,7 +249,7 @@ describe('the build step (AGL-3616)', () => {
       readNodes: readNodes as never,
     })(context(job()))
     expect(outcome).toMatchObject({
-      outputs: [{ note: 'A draft, in Events. Kept as a draft: publishing takes the editor role.' }],
+      outputs: [{ note: 'A draft, in Events. Kept as a draft: publishing takes the "Publish site content" permission.' }],
     })
   })
 

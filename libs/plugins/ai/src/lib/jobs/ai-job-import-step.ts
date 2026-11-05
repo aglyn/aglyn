@@ -737,6 +737,8 @@ export function aiSiteImportHomeOf(crawled: Pick<SiteImportInventory, 'pages'>):
     const text = (line ?? '').replace(/\s+/g, ' ').trim()
     if (text && !lines.some((entry) => entry.includes(text))) lines.push(text)
   }
+  // The picture its opening shows, for a look with no color of its own (AGL-4152).
+  const hero = (page.images ?? []).find((image) => image.region === 'main' && image.url !== brand.logo?.url)
   return {
     url: page.url,
     title: siteImportLabel(page.title ?? '', 160),
@@ -759,6 +761,7 @@ export function aiSiteImportHomeOf(crawled: Pick<SiteImportInventory, 'pages'>):
     ...(page.nav ? { nav: page.nav } : {}),
     ...(page.footer ? { footer: page.footer } : {}),
     ...(page.look ? { look: page.look } : {}),
+    ...(hero ? { hero: { url: hero.url, alt: siteImportLabel(hero.alt, 250) } } : {}),
     // The site's icon its head names, for a site with none of its own (AGL-4139).
     ...(aiSiteImportFaviconOf(page.icons ?? []) ? { favicon: aiSiteImportFaviconOf(page.icons ?? []) } : {}),
   }

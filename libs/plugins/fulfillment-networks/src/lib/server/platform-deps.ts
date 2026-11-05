@@ -15,6 +15,9 @@
  * limitations under the License.
  */
 
+import { holdsStampedSiteKey } from '@aglyn/aglyn/app-utils/host-permissions'
+import { permissionRefusalText } from '@aglyn/aglyn/app-utils/org-permissions'
+import { FULFILLMENT_NETWORKS_SITE_PRESETS, type FulfillmentNetworksSitePermission } from '../model/fulfillment-networks-permissions'
 import { checkEntitlement } from '@aglyn/aglyn/app-utils/plan-entitlements'
 import { resolveHostEnabledPlugins } from '@aglyn/aglyn/plugin-manager/enabled-plugins'
 import { pluginFulfillmentHolds } from '@aglyn/aglyn/plugin-manager/plugin-fulfillment-providers'
@@ -42,7 +45,7 @@ import { createCredentialOpener } from './credentials'
 import { createEngine, type EngineDeps } from './engine'
 import type { IntakeDeps } from './intake'
 import { consoleAddress } from './oauth'
-import { createNetworkRoutes, fail, type NetworkGateResult, type NetworkRole, type NetworkRouteDeps } from './routes'
+import { createNetworkRoutes, fail, type NetworkGateResult, type NetworkRouteDeps } from './routes'
 import { createFirestoreNetworkStore, type NetworkStore } from './store'
 
 /**
@@ -80,8 +83,6 @@ export function platformProvider(id: NetworkProviderId): FulfillmentNetworkProvi
       })
 }
 
-const ROLE_RANK: Record<string, number> = { viewer: 1, author: 1, editor: 2, admin: 3 }
-
 const HOST_ID = /^[A-Za-z0-9_-]{1,128}$/
 
 /** A site's org, and whether it may run this plugin: a plan that sells, commerce and this plugin on. */
@@ -116,12 +117,12 @@ async function readBody(request: Request): Promise<Record<string, unknown>> {
 }
 
 /**
- * Who may use a route: a verified member of the site at `role`, the site
+ * Who may use a route: a verified member of the site holding the key named, the site
  * entitled and not locked, on a deployment that offers a network.
  */
 export async function fulfillmentNetworksGate(
   request: Request,
-  role: NetworkRole,
+  permission: FulfillmentNetworksSitePermission | null,
 ): Promise<NetworkGateResult | Response> {
   if (!offeredNetworks(readFulfillmentNetworksConfig()).length) return fail(404, 'Not found')
   const authorization = request.headers.get('authorization') ?? ''
@@ -142,8 +143,11 @@ export async function fulfillmentNetworksGate(
   const site = await siteContext(hostId)
   if (!site) return fail(404, 'That site was not found')
   const staff = decoded['staff'] === true
-  const memberRole = String((site.host['memberRoles'] as Record<string, unknown> | undefined)?.[decoded.uid] ?? '')
-  if (!staff && (ROLE_RANK[memberRole] ?? 0) < ROLE_RANK[role]) return fail(403, 'Not permitted')
+  // No key named: anyone on the site's roster reads it.
+  if (!staff && !((site.host['memberRoles'] ?? {}) as Record<string, unknown>)[decoded.uid]) return fail(403, 'Not permitted')
+  if (!staff && permission && !holdsStampedSiteKey(site.host, decoded.uid, permission, FULFILLMENT_NETWORKS_SITE_PRESETS[permission])) {
+    return fail(403, permissionRefusalText(permission))
+  }
   if (!site.entitled) return fail(404, 'Fulfillment networks are not available for this site')
   const locked = await lockdownRefusal({
     request,

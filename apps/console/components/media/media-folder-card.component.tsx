@@ -17,6 +17,7 @@
 'use client'
 
 import type * as Aglyn from '@aglyn/aglyn'
+import { BlockedControl } from '@aglyn/shared-ui-jsx/components/blocked-control.component'
 import { useDraggable, useDroppable } from '@dnd-kit/core'
 import FolderIcon from '@mui/icons-material/Folder'
 import MoreVertIcon from '@mui/icons-material/MoreVert'
@@ -49,6 +50,10 @@ export interface MediaFolderCardProps {
    * org-wide member, who is the only principal the rules let write a scope.
    */
   onSetScope?: () => void
+  /** New subfolder, Rename, Shared with… and Delete stay off while permissions load. */
+  writeHeld?: boolean
+  /** Why New subfolder, Rename, Shared with… and Delete are switched off for this reader. */
+  writeRefusal?: string
   /** Current sharing, rendered under the name when it is restricted. */
   scopeLabel?: string
 }
@@ -74,6 +79,8 @@ export function MediaFolderCard(props: MediaFolderCardProps) {
     onRename,
     onDelete,
     onSetScope,
+    writeHeld,
+    writeRefusal,
     scopeLabel,
   } = props
   const [menuAnchor, setMenuAnchor] = useState<HTMLElement | null>(null)
@@ -97,7 +104,10 @@ export function MediaFolderCard(props: MediaFolderCardProps) {
     attributes,
     listeners,
     isDragging,
-  } = useDraggable({ id: `gridfolderdrag:${folder.$id}`, disabled: readOnly })
+  } = useDraggable({
+    id: `gridfolderdrag:${folder.$id}`,
+    disabled: readOnly || writeHeld || Boolean(writeRefusal),
+  })
   const setCardRef = useCallback(
     (node: HTMLElement | null) => {
       setDropRef(node)
@@ -208,20 +218,52 @@ export function MediaFolderCard(props: MediaFolderCardProps) {
 
       <Menu anchorEl={menuAnchor} open={Boolean(menuAnchor)} onClose={closeMenu}>
         {onNewSubfolder ? (
-          <MenuItem onClick={runAction(onNewSubfolder)}>
-            {'New subfolder'}
-          </MenuItem>
+          <BlockedControl
+            blocked={Boolean(writeRefusal)}
+            reason={writeRefusal ?? ''}
+            fullWidth
+          >
+            <MenuItem disabled={writeHeld} onClick={runAction(onNewSubfolder)}>
+              {'New subfolder'}
+            </MenuItem>
+          </BlockedControl>
         ) : null}
         {onRename ? (
-          <MenuItem onClick={runAction(onRename)}>{'Rename'}</MenuItem>
+          <BlockedControl
+            blocked={Boolean(writeRefusal)}
+            reason={writeRefusal ?? ''}
+            fullWidth
+          >
+            <MenuItem disabled={writeHeld} onClick={runAction(onRename)}>
+              {'Rename'}
+            </MenuItem>
+          </BlockedControl>
         ) : null}
         {onSetScope ? (
-          <MenuItem onClick={runAction(onSetScope)}>{'Shared with…'}</MenuItem>
+          <BlockedControl
+            blocked={Boolean(writeRefusal)}
+            reason={writeRefusal ?? ''}
+            fullWidth
+          >
+            <MenuItem disabled={writeHeld} onClick={runAction(onSetScope)}>
+              {'Shared with…'}
+            </MenuItem>
+          </BlockedControl>
         ) : null}
         {onDelete ? (
-          <MenuItem onClick={runAction(onDelete)} sx={{ color: 'error.main' }}>
-            {'Delete'}
-          </MenuItem>
+          <BlockedControl
+            blocked={Boolean(writeRefusal)}
+            reason={writeRefusal ?? ''}
+            fullWidth
+          >
+            <MenuItem
+              disabled={writeHeld}
+              onClick={runAction(onDelete)}
+              sx={{ color: 'error.main' }}
+            >
+              {'Delete'}
+            </MenuItem>
+          </BlockedControl>
         ) : null}
       </Menu>
     </Card>

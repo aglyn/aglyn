@@ -711,11 +711,12 @@ public struct FieldSpec: Sendable, Identifiable {
   /// (a service that names its own credential fields): `items` is the path to the rows; `key`, `label` and `help`
   /// are templates over `item`; `kinds` maps a row flag to a field kind (first set flag wins, else text), `yesno`
   /// being a No/Yes pick that sends "" or "true"; `options` names the row field holding `{value,label}` choices,
-  /// which make a select; `required` names the row flag.
+  /// which make a select; `required` names the row flag; `only` is the path to a list of keys, keeping just those rows
+  /// (`key`) and marking each group's first (`group`, `first`) anew, so a filtered catalog keeps its headings.
   static func parseAll(_ items: [JSONValue], in context: JSONValue) -> [FieldSpec] {
     items.flatMap { entry -> [FieldSpec] in
       guard let from = entry["fieldsFrom"] else { return FieldSpec(entry).map { [$0] } ?? [] }
-      let rows = ScreenValues.rows(ScreenValues.lookup(from["items"]?.stringValue ?? "", in: context))
+      let rows = fieldRows(from, in: context)
       let perRow = from["each"].array
       if !perRow.isEmpty {
         // `each`: a field template per entry, drawn for every row, so one row's fields sit together.
@@ -752,6 +753,19 @@ public struct FieldSpec: Sendable, Identifiable {
           required: from["required"]?.stringValue.map { ScreenValues.truthy(ScreenValues.lookup($0, in: row)) } ?? false,
           options: yesno ? [("", "No"), ("true", "Yes")] : choices)
       }
+    }
+  }
+
+  /// The rows a `fieldsFrom` draws: `items`, narrowed to `only` when it names a list of keys.
+  private static func fieldRows(_ from: JSONValue, in context: JSONValue) -> [JSONValue] {
+    let rows = ScreenValues.rows(ScreenValues.lookup(from["items"]?.stringValue ?? "", in: context))
+    guard let only = from["only"]?.stringValue else { return rows }
+    let keep = Set(ScreenValues.rows(ScreenValues.lookup(only, in: context)).map { ScreenValues.text($0) })
+    var seen = Set<String>()
+    return rows.filter { keep.contains(ScreenValues.text($0["key"])) }.map { row in
+      guard case .object(var record) = row else { return row }
+      record["first"] = .bool(seen.insert(ScreenValues.text(row["group"])).inserted)
+      return .object(record)
     }
   }
 

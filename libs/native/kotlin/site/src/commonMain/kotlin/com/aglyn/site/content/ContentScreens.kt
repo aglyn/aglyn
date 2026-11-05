@@ -90,8 +90,6 @@ import com.aglyn.ui.space
 const val SITE_CONTENT_SCREEN = "site.content"
 
 /** Roles that may write entries and collections (`hostRoleCanWrite`); publishing needs [PUBLISH_ROLES]. */
-private val WRITE_ROLES = setOf("admin", "editor", "author")
-private val PUBLISH_ROLES = setOf("admin", "editor")
 
 /** What the content screen's dialog is asking for. */
 private sealed interface ContentDialog {
@@ -123,8 +121,8 @@ fun ContentScreen(context: NativePluginContext, initialCollection: String? = nul
   var dialog by remember { mutableStateOf<ContentDialog?>(null) }
   var picked by rememberSaveable(initialCollection) { mutableStateOf(initialCollection) }
   var entriesVersion by remember { mutableStateOf(0) }
-  val canWrite = context.siteRole in WRITE_ROLES
-  val canPublish = context.siteRole in PUBLISH_ROLES
+  val canWrite = com.aglyn.pluginhost.rememberMemberPermissions(context).can("site.edit")
+  val canPublish = com.aglyn.pluginhost.rememberMemberPermissions(context).can("site.publish")
 
   when (val live = collectionsLive) {
     Live.Loading -> SkeletonList(rows = 8, modifier = Modifier.padding(space(2f)))
@@ -169,7 +167,7 @@ private fun CollectionEntries(
   val model = remember(hostId, collection.id) { EntryListModel(hostId, collection.id, context.firestore, scope) }
   LaunchedEffect(model) { model.reload() }
   LaunchedEffect(model, entriesVersion) { if (entriesVersion > 0) model.reload(keep = true) }
-  val isAdmin = context.siteRole == "admin"
+  val isAdmin = com.aglyn.pluginhost.rememberMemberPermissions(context).can("site.manage")
   AglynListDetail(
     initialSelected = initialEntry,
     onItemRemoved = { model.reload(keep = true) },

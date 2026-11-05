@@ -15,6 +15,9 @@
  * limitations under the License.
  */
 
+import { permissionRefusalText } from '@aglyn/aglyn/app-utils/org-permissions'
+import { useSiteKeys } from '@aglyn/tenant-feature-instance/hooks/use-site-keys'
+import { COURIERS_SITE_PRESETS } from '../model/couriers-permissions'
 import { Stack, Typography } from '@mui/material'
 import { useCouriersApi, useCourierConnection, type CouriersApi } from './couriers-api'
 import { CourierPanel } from './courier-panel.component'
@@ -59,6 +62,7 @@ const OPEN_ORDER = new Set(['paid', 'partially_fulfilled', 'fulfilled', 'deliver
  */
 export function OrderCourierWidget(props: OrderCourierWidgetProps) {
   const { hostId, order } = props
+  const locked = useSiteKeys(hostId).blocked('couriers.dispatch', COURIERS_SITE_PRESETS['couriers.dispatch'])
   const routes = useCouriersApi(hostId)
   const api = props.api ?? routes
   const isDelivery = order.fulfillmentMethod === 'local_delivery' && Boolean(order.localDelivery)
@@ -68,7 +72,12 @@ export function OrderCourierWidget(props: OrderCourierWidgetProps) {
   return (
     <Stack spacing={1}>
       <Typography variant="subtitle2">{'Courier'}</Typography>
-      <CourierPanel orderId={order.id} api={api} connection={answer.connection} testMode={order.testMode} />
+      {locked ? (
+        <Typography variant="body2" color="text.secondary">
+          {permissionRefusalText('couriers.dispatch')}
+        </Typography>
+      ) : null}
+      <CourierPanel locked={locked} orderId={order.id} api={api} connection={answer.connection} testMode={order.testMode} />
     </Stack>
   )
 }

@@ -18,6 +18,7 @@
 'use client'
 
 import { pluginDocsHelp } from '@aglyn/aglyn/app-utils/docs-help'
+import { permissionRefusalText } from '@aglyn/aglyn/app-utils/org-permissions'
 import { PLATFORM_BRAND_NAME } from '@aglyn/aglyn/app-utils/platform-brand'
 import { CardDisplay, useConfirmationContext } from '@aglyn/shared-ui-jsx'
 import EmptyStateComponent from '@aglyn/shared-ui-jsx/components/empty-state.component'
@@ -25,6 +26,7 @@ import { ListPagination } from '@aglyn/shared-ui-jsx/components/list-pagination.
 import { StatusChip, type StatusTone } from '@aglyn/shared-ui-jsx/components/status-chip.component'
 import { useClientPagination } from '@aglyn/shared-ui-jsx/hooks/use-client-pagination'
 import { useSnackbar } from '@aglyn/shared-ui-snackstack'
+import { useSiteKeys } from '@aglyn/tenant-feature-instance/hooks/use-site-keys'
 import {
   Alert,
   Box,
@@ -49,6 +51,7 @@ import {
   type MarketingConnectionView,
   type MarketingProviderId,
 } from '../model/connections'
+import { MARKETING_PLATFORMS_SITE_PRESETS } from '../model/marketing-platforms-permissions'
 import { useMarketingPlatformsApi, type MarketingPlatformsApi, type MarketingProviderOffer } from './marketing-platforms-api'
 
 /** What the `hostSettings` zone hands a widget. */
@@ -98,6 +101,11 @@ const help = (excerpt: string, anchor: '#connect' | '#settings' | '#sync-log' | 
 export function MarketingPlatformsCard(props: MarketingPlatformsCardProps) {
   const routesApi = useMarketingPlatformsApi(props.hostId)
   const api = props.api ?? routesApi
+  // What the routes ask, read as they read it (AGL-4047): a member who can't
+  // sees the card with the permission named, and its controls switched off.
+  const { blocked } = useSiteKeys(props.hostId)
+  const viewRefused = blocked('marketingPlatforms.view', MARKETING_PLATFORMS_SITE_PRESETS['marketingPlatforms.view'])
+  const manageRefused = blocked('marketingPlatforms.manage', MARKETING_PLATFORMS_SITE_PRESETS['marketingPlatforms.manage'])
   const [state, setState] = useState<{
     loading: boolean
     available: MarketingProviderOffer[]
@@ -126,6 +134,24 @@ export function MarketingPlatformsCard(props: MarketingPlatformsCardProps) {
     }))
   }, [])
 
+  if (viewRefused) {
+    return (
+      <CardDisplay
+        header="Email platforms"
+        subheader="Keep your own email platform in step with this site: who may be sent marketing, and who unsubscribed on either side."
+        help={help(
+          'Connect your own Mailchimp, Klaviyo, Omnisend or Attentive account, so contacts, unsubscribes and orders stay in step with this site.',
+          '#connect',
+        )}
+        contentGutterX
+        contentGutterY
+      >
+        <Typography variant="body2" color="text.secondary">
+          {permissionRefusalText('marketingPlatforms.view')}
+        </Typography>
+      </CardDisplay>
+    )
+  }
   if (state.loading) return null
   // A connection whose provider is no longer offered (its app was removed)
   // is still shown, so it can be disconnected.
@@ -145,10 +171,16 @@ export function MarketingPlatformsCard(props: MarketingPlatformsCardProps) {
       contentGutterX
       contentGutterY
     >
+      {manageRefused ? (
+        <Typography variant="body2" color="text.secondary" sx={{ mb: 2 }}>
+          {permissionRefusalText('marketingPlatforms.manage')}
+        </Typography>
+      ) : null}
       <Stack divider={<Divider flexItem />} spacing={2}>
         {shown.map((provider) => (
           <ProviderRow
             key={provider}
+            locked={manageRefused}
             api={api}
             provider={provider}
             offer={state.available.find((offer) => offer.id === provider) ?? null}
@@ -163,6 +195,7 @@ export function MarketingPlatformsCard(props: MarketingPlatformsCardProps) {
 MarketingPlatformsCard.displayName = 'MarketingPlatformsCard'
 
 function ProviderRow(props: {
+  locked: boolean
   api: MarketingPlatformsApi
   provider: MarketingProviderId
   offer: MarketingProviderOffer | null
@@ -173,7 +206,9 @@ function ProviderRow(props: {
   const info = MARKETING_PROVIDERS[provider]
   const { enqueueSnackbar } = useSnackbar()
   const { confirm } = useConfirmationContext()
-  const [busy, setBusy] = useState(false)
+  const [working, setBusy] = useState(false)
+  // Off for a member without the key, the same way as while a change runs.
+  const busy = working || props.locked
   const [error, setError] = useState<string | null>(null)
   const [apiKey, setApiKey] = useState('')
   const [connecting, setConnecting] = useState(false)

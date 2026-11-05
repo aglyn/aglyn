@@ -182,11 +182,11 @@ fun CrmGate(context: NativePluginContext, content: @Composable (CrmScope, CrmApi
         )
         return
       }
-      if (scope.workspaceWide && !scope.orgWide) {
-        // Only a member who reaches every site reads every record; anyone else reads them a site at a time.
+      if (scope.workspaceWide && !scope.opensWorkspaceCrm) {
+        // Only a member who reaches every site and holds "Manage data" reads every record; anyone else reads them a site at a time.
         EmptyState(
           "Pick a site to see its records",
-          body = "The whole workspace's CRM is for owners, admins and members with every site. Your records are on the sites you belong to.",
+          body = "The whole workspace's CRM needs the Manage data permission on every site. Your records are on the sites you belong to.",
           icon = AglynIcons.named("public"),
           modifier = Modifier.testTag("crm-workspace-reach"),
         )
@@ -283,3 +283,12 @@ internal fun NotAllowed(text: String) {
 }
 
 internal fun noFlow(): Flow<Live<List<com.aglyn.core.FirestoreDoc>>> = flowOf(Live.Ready(emptyList()))
+
+/** [CrmScope.movesStages], live: the site the scope's routes name is read for its own verdict. */
+@Composable
+internal fun rememberMovesStages(context: NativePluginContext, scope: CrmScope): Boolean {
+  val hostId = scope.hostId
+  val site = remember(hostId, context.firestore) { hostId?.let { context.firestore.observeDoc("hosts/$it") } ?: kotlinx.coroutines.flow.flowOf(Live.Loading) }
+    .collectAsState(Live.Loading).value
+  return scope.movesStages((site as? Live.Ready)?.value?.data)
+}

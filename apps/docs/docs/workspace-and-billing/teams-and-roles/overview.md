@@ -121,12 +121,17 @@ a chip above the table. The filter and the search add up. The search matches the
 of the address, because the list holds addresses rather than names. See
 [Filter and search a list](../../getting-started/console-tour.md#filter-and-search).
 
+Adding a collaborator, changing their **Site access** and removing them take **Manage site
+settings** on that site or **Manage members** on the workspace. Without either, those
+controls are switched off and name the permission.
+
 ![A site's Users card: the add-by-email row with its Site access picker, then the collaborators table with the owner first, an Editor and an invited Viewer, their AI access and credits, under the table's Columns, Filters, Export and Search controls](/img/teams-and-roles/site-collaborators.png)
 
 ### AI access for collaborators {#collaborator-ai-access}
 
 A site collaborator's AI access is decided **per site**, on the site's **Users**
-card: choose **Permissions** beside a collaborator to see every permission that is
+card: choose **Permissions** beside a collaborator (it takes **Manage site settings** on
+that site or **Manage members** on the workspace) to see every permission that is
 set per site, AI's two among them — **Use AI assistance** (the assistant, copy
 rewrites, generating a section) and **Generate with AI** (AI generation jobs and AI
 edits). The site role sets the default — Admin, Editor and Author get both,

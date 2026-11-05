@@ -76,6 +76,13 @@ export interface OrgPermissionEntry {
    * for a key a site cannot narrow.
    */
   narrowable?: boolean
+  /**
+   * For a site key, who holds it by the role they have on that site, read
+   * where the site has no stamp for them (`hostStampedSitePermission`, AGL-4047).
+   * Absent for a key with no such preset, and for one that holds for members of
+   * the whole workspace only, which a site's roles alone cannot answer.
+   */
+  sitePreset?: Record<string, boolean>
 }
 
 /** A heading the role editor groups keys under. */
@@ -286,7 +293,7 @@ export const CORE_ORG_PERMISSION_ENTRIES: readonly OrgPermissionEntry[] = [
     key: 'data.manage',
     group: 'datasets',
     label: 'Manage data',
-    description: 'Create, edit, and delete organization datasets, the CRM’s records, and marketing lists and topics.',
+    description: 'Create and edit organization datasets, add, change and delete their rows, and manage the CRM’s records and marketing lists and topics.',
   },
   // Workspace content that asked for the owner, admin or editor role
   // (AGL-4047), each a key whose default is exactly those roles.
@@ -300,7 +307,7 @@ export const CORE_ORG_PERMISSION_ENTRIES: readonly OrgPermissionEntry[] = [
     key: 'org.eraseRecords',
     group: 'datasets',
     label: 'Delete workspace records',
-    description: 'Delete records the whole workspace shares, such as dataset rows, contacts and lists.',
+    description: 'Delete a whole dataset or list the workspace shares, with everything in it. Deleting one row of a dataset asks “Manage data”.',
   },
   {
     key: 'marketplace.publish',
@@ -376,7 +383,9 @@ export function assembleOrgRoleGrants(
   core: OrgRoleGrants,
   ...declarationLists: ReadonlyArray<readonly OrgPermissionDeclaration[]>
 ): OrgRoleGrants {
-  const permissions = [...core.permissions]
+  const permissions = core.permissions.map((entry) =>
+    CORE_SITE_ROLE_PRESETS[entry.key] ? { ...entry, sitePreset: { ...CORE_SITE_ROLE_PRESETS[entry.key] } } : entry,
+  )
   const groups = [...(core.groups ?? [])]
   const grants = Object.fromEntries(ORG_ROLE_NAMES.map((role) => [role, [...core.grants[role]]])) as Record<
     OrgRoleName,
@@ -401,6 +410,9 @@ export function assembleOrgRoleGrants(
         : {}),
       // A plugin's own declaration carries `narrowsPerSite` (a flag or one per role); only whether it is set matters here.
       ...((declaration as { narrowsPerSite?: unknown }).narrowsPerSite ? { narrowable: true } : {}),
+      ...(declaration.hostRoleDefaults && !(declaration as { workspaceMembersOnly?: unknown }).workspaceMembersOnly
+        ? { sitePreset: { ...declaration.hostRoleDefaults } }
+        : {}),
     })
     if (group && !groupIds.has(group)) {
       groupIds.add(group)

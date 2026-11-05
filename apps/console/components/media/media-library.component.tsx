@@ -49,7 +49,10 @@ import {
   pluginHostCollectionRouteSlug,
 } from '@aglyn/aglyn/plugin-manager/plugin-host-collections'
 import { hostDisplayDomain } from '../../constants/tenant-links'
+import { holdsSiteKey } from '@aglyn/aglyn/app-utils/host-permissions'
+import { permissionRefusalText } from '@aglyn/aglyn/app-utils/org-permissions'
 import { AppLink, useConfirmationContext } from '@aglyn/shared-ui-jsx'
+import { BlockedControl } from '@aglyn/shared-ui-jsx/components/blocked-control.component'
 import ListFilterChips from '@aglyn/shared-ui-jsx/components/list-filter-chips.component'
 import ListQueryNotices from '@aglyn/shared-ui-jsx/components/list-query-notices.component'
 import { ListTable } from '@aglyn/shared-ui-jsx/components/list-table.component'
@@ -149,6 +152,7 @@ import useFirestoreCollection from '../../hooks/use-firestore-collection'
 import useFirestoreDoc from '../../hooks/use-firestore-doc'
 import useHostActivityLogger from '../../hooks/use-host-activity-logger'
 import useOrgHosts from '../../hooks/use-org-hosts'
+import useOrgPermissions from '../../hooks/use-org-permissions'
 import firestoreOneShotRetry from '../../utils/firestore-one-shot-retry'
 import {
   getDocBounded,
@@ -309,6 +313,11 @@ const PICKER_KIND_COPY: Readonly<
 
 /** Page size for cursor pagination (AGL-174). */
 const MEDIA_PAGE_SIZE = 60
+
+/** What a member is told beside a control the workspace library's key opens. */
+const ORG_MEDIA_REFUSAL = permissionRefusalText('org.media')
+/** The same in a site's own library, which answers to the site's key. */
+const SITE_MEDIA_REFUSAL = permissionRefusalText('site.edit')
 
 /**
  * Docs per request in the folder sharing cascade (AGL-1045). Small enough
@@ -1043,10 +1052,42 @@ export function MediaLibraryComponent(props: MediaLibraryComponentProps) {
   // Nothing is lost by holding: `assetOrigin` below already discards this
   // document unless `hostId` is truthy, so the read could only ever have been
   // waste even had it been allowed.
-  const { data: hostDoc } = useFirestoreDoc<any>(
+  const { data: hostDoc, status: hostDocStatus } = useFirestoreDoc<any>(
     () => (hostId ? doc(firestore, 'hosts', hostId) : null),
     [firestore, hostId],
   )
+  /*
+   * Who may change this library (AGL-4047). Every door that writes or scans it
+   * goes through `resolveMediaScope`, or asks the same key at the rules, so the
+   * library's controls answer to one key:
+   *
+   *   - the workspace library: "Edit the workspace media library" (`org.media`,
+   *     the rules' `canWriteOrgMedia`);
+   *   - a site's own library: "Edit site content" on that site (`site.edit`, the
+   *     rules' `canWriteHostContent`), read as the door reads it: the site's
+   *     stamp, else the preset of the member's role there. A reader not on the
+   *     site's roster is staff, whom the server answers.
+   *
+   * That covers Upload, New folder, Replace file, Edit image, File info,
+   * "Find where this is used" and every write the drawer, the menus and a
+   * selection offer. A member without the key sees them switched off with the
+   * permission named, instead of a request that fails. Held while the answer
+   * loads; the reason is said only once it is in.
+   *
+   * Not Copy temporary link: `/api/media/sign` is read-level and asks only that
+   * the member can see the file. Not Download or Copy URL either.
+   */
+  const orgPermissions = useOrgPermissions()
+  const hostDocKnown = hostDocStatus === 'success'
+  const mediaWriteHeld = orgId ? !orgPermissions.loaded : !hostDocKnown
+  const mediaWriteRefused = orgId
+    ? orgPermissions.loaded && !orgPermissions.can('org.media')
+    : hostDocKnown &&
+      Boolean(user?.uid && hostDoc?.memberRoles?.[user.uid]) &&
+      !holdsSiteKey(hostDoc, user?.uid as string, 'site.edit')
+  const mediaWriteReason = orgId ? ORG_MEDIA_REFUSAL : SITE_MEDIA_REFUSAL
+  /** Off for either reason: a field or a drag that has no reason of its own. */
+  const mediaWriteOff = mediaWriteHeld || mediaWriteRefused
   const assetOrigin = useMemo(() => {
     if (hostId && hostDoc) {
       // hostDisplayDomain covers both branches and reads the configured apex
@@ -3548,17 +3589,23 @@ export function MediaLibraryComponent(props: MediaLibraryComponentProps) {
   const dropDepthRef = useRef(0)
   const isFileDrag = (event: React.DragEvent) =>
     Array.from(event.dataTransfer?.types ?? []).includes('Files')
-  const handleFileDragEnter = useCallback((event: React.DragEvent) => {
-    if (!isFileDrag(event)) return
-    event.preventDefault()
-    dropDepthRef.current += 1
-    setIsFileDropActive(true)
-  }, [])
-  const handleFileDragOver = useCallback((event: React.DragEvent) => {
-    if (!isFileDrag(event)) return
-    event.preventDefault()
-    event.dataTransfer.dropEffect = 'copy'
-  }, [])
+  const handleFileDragEnter = useCallback(
+    (event: React.DragEvent) => {
+      if (!isFileDrag(event)) return
+      event.preventDefault()
+      dropDepthRef.current += 1
+      if (!mediaWriteOff) setIsFileDropActive(true)
+    },
+    [mediaWriteOff],
+  )
+  const handleFileDragOver = useCallback(
+    (event: React.DragEvent) => {
+      if (!isFileDrag(event)) return
+      event.preventDefault()
+      event.dataTransfer.dropEffect = mediaWriteOff ? 'none' : 'copy'
+    },
+    [mediaWriteOff],
+  )
   const handleFileDragLeave = useCallback((event: React.DragEvent) => {
     if (!isFileDrag(event)) return
     dropDepthRef.current -= 1
@@ -3573,10 +3620,17 @@ export function MediaLibraryComponent(props: MediaLibraryComponentProps) {
       event.preventDefault()
       dropDepthRef.current = 0
       setIsFileDropActive(false)
+      // The drop takes the Upload button's door, so it answers as the button does.
+      if (mediaWriteOff) {
+        if (mediaWriteRefused) {
+          enqueueSnackbar(mediaWriteReason, { variant: 'warning', persist: false })
+        }
+        return
+      }
       const files = Array.from(event.dataTransfer?.files ?? [])
       void handleFiles(files)
     },
-    [handleFiles],
+    [handleFiles, mediaWriteOff, mediaWriteRefused, mediaWriteReason, enqueueSnackbar],
   )
 
   const handleCopyUrl = useCallback(
@@ -3924,7 +3978,7 @@ export function MediaLibraryComponent(props: MediaLibraryComponentProps) {
               ? (folderPathById[media.folderId] ?? '')
               : String(media.folder ?? ''),
           uploaderLabel,
-          draggable: onSelect
+          draggable: onSelect || mediaWriteOff
             ? undefined
             : (media, children) => (
                 <DraggableCard mediaId={media.$id as string}>
@@ -3938,10 +3992,10 @@ export function MediaLibraryComponent(props: MediaLibraryComponentProps) {
                 const run = () => rowActionsRef.current
                 return {
                   onCopyUrl: () => run().handleCopyUrl(media)(),
-                  onCopySignedLink:
-                    orgId && viewerOrgWide
-                      ? () => void run().handleCopySignedLink(media)()
-                      : undefined,
+                  // Whoever can see the file: its route asks no more (AGL-4047).
+                  onCopySignedLink: orgId
+                    ? () => void run().handleCopySignedLink(media)()
+                    : undefined,
                   onSetPrivate:
                     orgId && viewerOrgWide
                       ? (makePrivate) =>
@@ -3954,6 +4008,8 @@ export function MediaLibraryComponent(props: MediaLibraryComponentProps) {
                   onReplace: () => run().requestCardReplace(media),
                   onDetails: () => run().openDetails(media),
                   onDelete: () => void run().handleDelete(media)(),
+                  writeHeld: mediaWriteHeld,
+                  writeRefusal: mediaWriteRefused ? mediaWriteReason : undefined,
                 }
               },
         }),
@@ -3974,6 +4030,10 @@ export function MediaLibraryComponent(props: MediaLibraryComponentProps) {
       quarantined,
       orgId,
       viewerOrgWide,
+      mediaWriteHeld,
+      mediaWriteRefused,
+      mediaWriteReason,
+      mediaWriteOff,
       panelFields,
       filterOptions,
     ],
@@ -4249,6 +4309,8 @@ export function MediaLibraryComponent(props: MediaLibraryComponentProps) {
           onRename={handleFolderRename}
           onDelete={handleFolderDelete}
           readOnly={Boolean(onSelect)}
+          writeHeld={mediaWriteHeld}
+          writeRefusal={mediaWriteRefused ? mediaWriteReason : undefined}
         />
         <Stack spacing={2} sx={{ flex: 1, minWidth: 0 }}>
       <Stack
@@ -4257,33 +4319,38 @@ export function MediaLibraryComponent(props: MediaLibraryComponentProps) {
         useFlexGap
         sx={{ alignItems: 'center', flexWrap: 'wrap', rowGap: 1 }}
       >
-        <Button
-          variant="contained"
-          color="primary"
-          disabled={busy}
-          onClick={() => inputRef.current?.click()}
-          sx={{ whiteSpace: 'nowrap' }}
-        >
-          {'Upload media'}
-        </Button>
-        {onSelect ? null : (
+        <BlockedControl blocked={mediaWriteRefused} reason={mediaWriteReason}>
           <Button
-            variant="outlined"
+            variant="contained"
             color="primary"
+            disabled={busy || mediaWriteHeld}
+            onClick={() => inputRef.current?.click()}
             sx={{ whiteSpace: 'nowrap' }}
-            onClick={() =>
-              setFolderPrompt({
-                title: folderParentContext
-                  ? `New folder in "${folderNameById[folderParentContext] ?? ''}"`
-                  : 'New folder',
-                value: '',
-                action: async (name) =>
-                  Boolean(await handleFolderCreate(name, folderParentContext)),
-              })
-            }
           >
-            {'New folder'}
+            {'Upload media'}
           </Button>
+        </BlockedControl>
+        {onSelect ? null : (
+          <BlockedControl blocked={mediaWriteRefused} reason={mediaWriteReason}>
+            <Button
+              variant="outlined"
+              color="primary"
+              disabled={mediaWriteHeld}
+              sx={{ whiteSpace: 'nowrap' }}
+              onClick={() =>
+                setFolderPrompt({
+                  title: folderParentContext
+                    ? `New folder in "${folderNameById[folderParentContext] ?? ''}"`
+                    : 'New folder',
+                  value: '',
+                  action: async (name) =>
+                    Boolean(await handleFolderCreate(name, folderParentContext)),
+                })
+              }
+            >
+              {'New folder'}
+            </Button>
+          </BlockedControl>
         )}
         {/* Other ways to add a file, from plugins (AGL-3602). */}
         {mediaLibraryZone}
@@ -4518,32 +4585,54 @@ export function MediaLibraryComponent(props: MediaLibraryComponentProps) {
           <Typography variant="body2">
             {`${selected.size} selected`}
           </Typography>
-          <Button
-            size="small"
-            onClick={(event) => setMoveAnchor(event.currentTarget)}
-          >
-            {'Move to folder…'}
-          </Button>
-          <Button
-            size="small"
-            onClick={() => setBulkTag({ mode: 'add', value: '' })}
-          >
-            {'Add tag…'}
-          </Button>
-          <Button
-            size="small"
-            onClick={() => setBulkTag({ mode: 'remove', value: '' })}
-          >
-            {'Remove tag…'}
-          </Button>
-          {canShareScope ? (
-            <Button size="small" onClick={openSelectionScope}>
-              {'Shared with…'}
+          <BlockedControl blocked={mediaWriteRefused} reason={mediaWriteReason}>
+            <Button
+              size="small"
+              disabled={mediaWriteHeld}
+              onClick={(event) => setMoveAnchor(event.currentTarget)}
+            >
+              {'Move to folder…'}
             </Button>
+          </BlockedControl>
+          <BlockedControl blocked={mediaWriteRefused} reason={mediaWriteReason}>
+            <Button
+              size="small"
+              disabled={mediaWriteHeld}
+              onClick={() => setBulkTag({ mode: 'add', value: '' })}
+            >
+              {'Add tag…'}
+            </Button>
+          </BlockedControl>
+          <BlockedControl blocked={mediaWriteRefused} reason={mediaWriteReason}>
+            <Button
+              size="small"
+              disabled={mediaWriteHeld}
+              onClick={() => setBulkTag({ mode: 'remove', value: '' })}
+            >
+              {'Remove tag…'}
+            </Button>
+          </BlockedControl>
+          {canShareScope ? (
+            <BlockedControl blocked={mediaWriteRefused} reason={mediaWriteReason}>
+              <Button
+                size="small"
+                disabled={mediaWriteHeld}
+                onClick={openSelectionScope}
+              >
+                {'Shared with…'}
+              </Button>
+            </BlockedControl>
           ) : null}
-          <Button size="small" color="error" onClick={handleBulkDelete}>
-            {'Delete…'}
-          </Button>
+          <BlockedControl blocked={mediaWriteRefused} reason={mediaWriteReason}>
+            <Button
+              size="small"
+              color="error"
+              disabled={mediaWriteHeld}
+              onClick={handleBulkDelete}
+            >
+              {'Delete…'}
+            </Button>
+          </BlockedControl>
           <Button size="small" onClick={clearSelection}>
             {'Clear'}
           </Button>
@@ -4656,13 +4745,16 @@ export function MediaLibraryComponent(props: MediaLibraryComponentProps) {
               </Button>
             ) : (
               <Stack direction="row" spacing={1} sx={{ justifyContent: 'center' }}>
-                <Button
-                  size="small"
-                  variant="contained"
-                  onClick={() => inputRef.current?.click()}
-                >
-                  {'Upload media'}
-                </Button>
+                <BlockedControl blocked={mediaWriteRefused} reason={mediaWriteReason}>
+                  <Button
+                    size="small"
+                    variant="contained"
+                    disabled={mediaWriteHeld}
+                    onClick={() => inputRef.current?.click()}
+                  >
+                    {'Upload media'}
+                  </Button>
+                </BlockedControl>
                 {mediaLibraryZone}
               </Stack>
             )
@@ -4731,6 +4823,8 @@ export function MediaLibraryComponent(props: MediaLibraryComponentProps) {
                 onSetScope={
                   canShareScope ? () => openFolderScope(folder) : undefined
                 }
+                writeHeld={mediaWriteHeld}
+                writeRefusal={mediaWriteRefused ? mediaWriteReason : undefined}
                 scopeLabel={
                   orgId &&
                   Array.isArray((folder as any).visibleTo) &&
@@ -4745,7 +4839,7 @@ export function MediaLibraryComponent(props: MediaLibraryComponentProps) {
             <Box key={media.$id} sx={{ minWidth: 0 }}>
               <DraggableCard
                 mediaId={media.$id as string}
-                disabled={Boolean(onSelect)}
+                disabled={Boolean(onSelect) || mediaWriteOff}
               >
                 <MediaAssetCard
                   media={media}
@@ -4775,18 +4869,17 @@ export function MediaLibraryComponent(props: MediaLibraryComponentProps) {
                     )
                   }
                   onCopyUrl={handleCopyUrl(media)}
-                  // AGL-2143. Not gated on `viewerOrgWide` like the signed
-                  // link is: a public asset needs no route at all, and the
-                  // private branch inside the handler carries the same orgId
-                  // guard the sign route enforces anyway.
+                  // AGL-2143. Not gated at all: a public asset needs no route,
+                  // and the private branch inside the handler carries the same
+                  // orgId guard the sign route enforces anyway.
                   onDownload={onSelect ? undefined : handleDownload(media)}
-                  // Same gate as `onSetPrivate` below — the route signs an
-                  // `org:` scope only, and the card hides the item unless
-                  // the asset is actually private (AGL-2055).
+                  // The route signs an `org:` scope only, and the card hides
+                  // the item unless the asset is actually private (AGL-2055).
+                  // For whoever can see the file, which is all that route asks
+                  // (AGL-4047): a site's collaborator too, and without the
+                  // media key.
                   onCopySignedLink={
-                    orgId && viewerOrgWide && !onSelect
-                      ? handleCopySignedLink(media)
-                      : undefined
+                    orgId && !onSelect ? handleCopySignedLink(media) : undefined
                   }
                   // Every family, not only images (AGL-2732). This prop was
                   // gated on `image/`, which is why an audit run against a
@@ -4807,6 +4900,8 @@ export function MediaLibraryComponent(props: MediaLibraryComponentProps) {
                           void setAssetPrivate(media.$id as string, makePrivate)
                       : undefined
                   }
+                  writeHeld={mediaWriteHeld}
+                  writeRefusal={mediaWriteRefused ? mediaWriteReason : undefined}
                 />
               </DraggableCard>
             </Box>
@@ -4829,9 +4924,15 @@ export function MediaLibraryComponent(props: MediaLibraryComponentProps) {
         onClose={() => setEditor(null)}
       >
         <Stack spacing={2} sx={{ width: 340, maxWidth: '100vw', p: 2 }}>
+          {/* Every field below reaches the file through a door that refuses
+              without the key: one sentence for all of them. */}
+          {mediaWriteRefused ? (
+            <Alert severity="info">{mediaWriteReason}</Alert>
+          ) : null}
           <TextField
             size="small"
             label="File name"
+            disabled={mediaWriteOff}
             value={editor?.fileName ?? ''}
             onChange={(event) =>
               setEditor((prev) =>
@@ -4911,26 +5012,36 @@ export function MediaLibraryComponent(props: MediaLibraryComponentProps) {
                 rotate about a PDF — so the two split here rather than
                 sharing one `image/` test. */}
             {editor?.media ? (
-              <Button
-                size="small"
-                onClick={() => {
-                  if (replaceIsPaused(editor.media)) {
-                    enqueueSnackbar(VIDEO_UPLOADS_PAUSED_MESSAGE, {
-                      variant: 'warning',
-                      persist: false,
-                    })
-                    return
-                  }
-                  replaceInputRef.current?.click()
-                }}
-              >
-                {'Replace file'}
-              </Button>
+              <BlockedControl blocked={mediaWriteRefused} reason={mediaWriteReason}>
+                <Button
+                  size="small"
+                  disabled={mediaWriteHeld}
+                  onClick={() => {
+                    if (replaceIsPaused(editor.media)) {
+                      enqueueSnackbar(VIDEO_UPLOADS_PAUSED_MESSAGE, {
+                        variant: 'warning',
+                        persist: false,
+                      })
+                      return
+                    }
+                    replaceInputRef.current?.click()
+                  }}
+                >
+                  {'Replace file'}
+                </Button>
+              </BlockedControl>
             ) : null}
+            {/* Either of its saves is a write: the replace door, or a new file. */}
             {String(editor?.media?.contentType ?? '').startsWith('image/') ? (
-              <Button size="small" onClick={() => setImageEditorOpen(true)}>
-                {'Edit image'}
-              </Button>
+              <BlockedControl blocked={mediaWriteRefused} reason={mediaWriteReason}>
+                <Button
+                  size="small"
+                  disabled={mediaWriteHeld}
+                  onClick={() => setImageEditorOpen(true)}
+                >
+                  {'Edit image'}
+                </Button>
+              </BlockedControl>
             ) : null}
           </Stack>
           <Box
@@ -4996,6 +5107,7 @@ export function MediaLibraryComponent(props: MediaLibraryComponentProps) {
             select
             size="small"
             label="Folder"
+            disabled={mediaWriteOff}
             value={editor?.folderId ?? ''}
             onChange={(event) =>
               setEditor((prev) =>
@@ -5048,6 +5160,7 @@ export function MediaLibraryComponent(props: MediaLibraryComponentProps) {
                     key={tag}
                     size="small"
                     label={tag}
+                    disabled={mediaWriteOff}
                     onDelete={() =>
                       setEditor((prev) =>
                         prev
@@ -5070,6 +5183,7 @@ export function MediaLibraryComponent(props: MediaLibraryComponentProps) {
               size="small"
               fullWidth
               label="Add a tag"
+              disabled={mediaWriteOff}
               value={tagDraft}
               onChange={(event) => setTagDraft(event.target.value)}
               onKeyDown={(event) => {
@@ -5095,6 +5209,7 @@ export function MediaLibraryComponent(props: MediaLibraryComponentProps) {
           <TextField
             size="small"
             label="Alt text"
+            disabled={mediaWriteOff}
             value={editor?.alt ?? ''}
             onChange={(event) =>
               setEditor((prev) =>
@@ -5116,6 +5231,7 @@ export function MediaLibraryComponent(props: MediaLibraryComponentProps) {
           <TextField
             size="small"
             label="Description"
+            disabled={mediaWriteOff}
             value={editor?.description ?? ''}
             onChange={(event) =>
               setEditor((prev) =>
@@ -5157,51 +5273,58 @@ export function MediaLibraryComponent(props: MediaLibraryComponentProps) {
                         'with to fix that.'}
                     </Alert>
                   ) : null}
-                  <Select
-                    size="small"
+                  <BlockedControl
+                    blocked={mediaWriteRefused}
+                    reason={mediaWriteReason}
                     fullWidth
-                    value={
-                      (editor?.visibleTo ?? []).includes(ORG_SCOPE_TOKEN)
-                        ? 'org'
-                        : editor?.scopeUnset
-                          ? 'unset'
-                          : 'hosts'
-                    }
-                    onChange={(event) =>
-                      setEditor((prev) =>
-                        prev
-                          ? {
-                              ...prev,
-                              // Any choice ends the unset state — from here
-                              // the control shows what was picked, not what
-                              // was (not) stored.
-                              scopeUnset: false,
-                              visibleTo:
-                                event.target.value === 'org'
-                                  ? [ORG_SCOPE_TOKEN]
-                                  : // Default the narrowed case to the site
-                                    // being browsed, or none — never a guess
-                                    // at which sites the author meant.
-                                    [],
-                            }
-                          : prev,
-                      )
-                    }
                   >
-                    {/*
-                      A real sentinel, never '' — MUI cannot hold an empty
-                      string as a selected value. Rendered only while unset
-                      and disabled, so the control cannot be set back into
-                      "nobody has decided".
-                    */}
-                    {editor?.scopeUnset ? (
-                      <MenuItem value="unset" disabled>
-                        {'Not shared with any site'}
-                      </MenuItem>
-                    ) : null}
-                    <MenuItem value="org">{'All sites'}</MenuItem>
-                    <MenuItem value="hosts">{'Selected sites…'}</MenuItem>
-                  </Select>
+                    <Select
+                      size="small"
+                      fullWidth
+                      disabled={mediaWriteHeld}
+                      value={
+                        (editor?.visibleTo ?? []).includes(ORG_SCOPE_TOKEN)
+                          ? 'org'
+                          : editor?.scopeUnset
+                            ? 'unset'
+                            : 'hosts'
+                      }
+                      onChange={(event) =>
+                        setEditor((prev) =>
+                          prev
+                            ? {
+                                ...prev,
+                                // Any choice ends the unset state — from here
+                                // the control shows what was picked, not what
+                                // was (not) stored.
+                                scopeUnset: false,
+                                visibleTo:
+                                  event.target.value === 'org'
+                                    ? [ORG_SCOPE_TOKEN]
+                                    : // Default the narrowed case to the site
+                                      // being browsed, or none — never a guess
+                                      // at which sites the author meant.
+                                      [],
+                              }
+                            : prev,
+                        )
+                      }
+                    >
+                      {/*
+                        A real sentinel, never '' — MUI cannot hold an empty
+                        string as a selected value. Rendered only while unset
+                        and disabled, so the control cannot be set back into
+                        "nobody has decided".
+                      */}
+                      {editor?.scopeUnset ? (
+                        <MenuItem value="unset" disabled>
+                          {'Not shared with any site'}
+                        </MenuItem>
+                      ) : null}
+                      <MenuItem value="org">{'All sites'}</MenuItem>
+                      <MenuItem value="hosts">{'Selected sites…'}</MenuItem>
+                    </Select>
+                  </BlockedControl>
                   {!editor?.scopeUnset &&
                   !(editor?.visibleTo ?? []).includes(ORG_SCOPE_TOKEN) ? (
                     <Box sx={{ mt: 1, display: 'flex', flexWrap: 'wrap', gap: 0.5 }}>
@@ -5215,6 +5338,7 @@ export function MediaLibraryComponent(props: MediaLibraryComponentProps) {
                             label={host.name ?? host.subdomain ?? host.$id}
                             color={on ? 'primary' : 'default'}
                             variant={on ? 'filled' : 'outlined'}
+                            disabled={mediaWriteOff}
                             onClick={() =>
                               setEditor((prev) =>
                                 prev
@@ -5276,6 +5400,7 @@ export function MediaLibraryComponent(props: MediaLibraryComponentProps) {
                   <TextField
                     size="small"
                     label="Key"
+                    disabled={mediaWriteOff}
                     value={row.key}
                     onChange={(event) =>
                       setEditor((prev) =>
@@ -5296,6 +5421,7 @@ export function MediaLibraryComponent(props: MediaLibraryComponentProps) {
                   <TextField
                     size="small"
                     label="Value"
+                    disabled={mediaWriteOff}
                     value={row.value}
                     onChange={(event) =>
                       setEditor((prev) =>
@@ -5317,6 +5443,7 @@ export function MediaLibraryComponent(props: MediaLibraryComponentProps) {
                     <IconButton
                       size="small"
                       aria-label="Remove field"
+                      disabled={mediaWriteOff}
                       onClick={() =>
                         setEditor((prev) =>
                           prev
@@ -5338,6 +5465,7 @@ export function MediaLibraryComponent(props: MediaLibraryComponentProps) {
               <Button
                 size="small"
                 startIcon={<AddIcon />}
+                disabled={mediaWriteOff}
                 onClick={() =>
                   setEditor((prev) =>
                     prev
@@ -5371,6 +5499,8 @@ export function MediaLibraryComponent(props: MediaLibraryComponentProps) {
               media={editor.media}
               scopeBody={scopeBody}
               user={user}
+              writeHeld={mediaWriteHeld}
+              writeRefusal={mediaWriteRefused ? mediaWriteReason : undefined}
               onFileChanged={(update) => {
                 setEditor((prev) =>
                   prev ? { ...prev, media: { ...prev.media, ...update } } : prev,
@@ -5405,20 +5535,24 @@ export function MediaLibraryComponent(props: MediaLibraryComponentProps) {
                 {'Used on'}
               </Typography>
               {refsAudit.status === 'done' ? (
-                <Button size="small" onClick={runReferenceAudit}>
+                <Button size="small" disabled={mediaWriteOff} onClick={runReferenceAudit}>
                   {'Rescan'}
                 </Button>
               ) : null}
             </Stack>
             {refsAudit.status === 'idle' ? (
-              <Button
-                size="small"
-                variant="outlined"
-                onClick={runReferenceAudit}
-                sx={{ alignSelf: 'flex-start' }}
-              >
-                {'Find where this is used'}
-              </Button>
+              // The scan's door is the library's own (`/api/media/references`).
+              <BlockedControl blocked={mediaWriteRefused} reason={mediaWriteReason}>
+                <Button
+                  size="small"
+                  variant="outlined"
+                  disabled={mediaWriteHeld}
+                  onClick={runReferenceAudit}
+                  sx={{ alignSelf: 'flex-start' }}
+                >
+                  {'Find where this is used'}
+                </Button>
+              </BlockedControl>
             ) : refsAudit.status === 'loading' ? (
               <Typography variant="body2" color="text.secondary">
                 {'Scanning pages, layouts, and content…'}
@@ -5429,7 +5563,7 @@ export function MediaLibraryComponent(props: MediaLibraryComponentProps) {
                   {'Could not scan for usage — this is not the same as ' +
                     'nothing using it. Try again before deleting.'}
                 </Typography>
-                <Button size="small" onClick={runReferenceAudit}>
+                <Button size="small" disabled={mediaWriteOff} onClick={runReferenceAudit}>
                   {'Try again'}
                 </Button>
               </Stack>
@@ -5524,33 +5658,39 @@ export function MediaLibraryComponent(props: MediaLibraryComponentProps) {
             sx={{ justifyContent: 'space-between', alignItems: 'center' }}
           >
             {editor?.media ? (
-              <Button
-                size="small"
-                color="error"
-                startIcon={<DeleteOutlineIcon fontSize="small" />}
-                onClick={async () => {
-                  // Same handler as the grid card: one confirmation, one
-                  // reference scan, one activity entry. A second delete
-                  // implementation here is how the two surfaces drift.
-                  const deleted = await handleDelete(editor.media)()
-                  // The drawer describes a file that no longer exists.
-                  if (deleted) setEditor(null)
-                }}
-              >
-                {'Delete file'}
-              </Button>
+              <BlockedControl blocked={mediaWriteRefused} reason={mediaWriteReason}>
+                <Button
+                  size="small"
+                  color="error"
+                  disabled={mediaWriteHeld}
+                  startIcon={<DeleteOutlineIcon fontSize="small" />}
+                  onClick={async () => {
+                    // Same handler as the grid card: one confirmation, one
+                    // reference scan, one activity entry. A second delete
+                    // implementation here is how the two surfaces drift.
+                    const deleted = await handleDelete(editor.media)()
+                    // The drawer describes a file that no longer exists.
+                    if (deleted) setEditor(null)
+                  }}
+                >
+                  {'Delete file'}
+                </Button>
+              </BlockedControl>
             ) : (
               <span />
             )}
             <Stack direction="row" spacing={1}>
               <Button onClick={() => setEditor(null)}>{'Cancel'}</Button>
-              <Button
-                variant="contained"
-                color="primary"
-                onClick={handleEditorSave}
-              >
-                {'Save'}
-              </Button>
+              <BlockedControl blocked={mediaWriteRefused} reason={mediaWriteReason}>
+                <Button
+                  variant="contained"
+                  color="primary"
+                  disabled={mediaWriteHeld}
+                  onClick={handleEditorSave}
+                >
+                  {'Save'}
+                </Button>
+              </BlockedControl>
             </Stack>
           </Stack>
         </Stack>

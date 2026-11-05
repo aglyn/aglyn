@@ -20,6 +20,7 @@ import com.aglyn.contracts.OrderStatus
 import com.aglyn.contracts.OrderTimelineEvent
 import com.aglyn.contracts.canTransitionOrder
 import com.aglyn.contracts.formatOrderNumber
+import com.aglyn.contracts.deviceTimeZone
 import com.aglyn.contracts.formatReceiptTime
 import com.aglyn.contracts.fulfillmentIsActive
 import com.aglyn.contracts.liftLegacyOrder
@@ -256,8 +257,8 @@ fun orderDetail(doc: FirestoreDoc): OrderDetail {
 }
 
 /** One timeline line as the console's dialog prints it: `time — event: detail`. */
-fun timelineLine(event: OrderTimelineEvent): String =
-  "${formatReceiptTime(event.atMs.toLong())} — ${event.event}" + (event.detail?.takeIf { it.isNotEmpty() }?.let { ": $it" } ?: "")
+fun timelineLine(event: OrderTimelineEvent, timeZone: String = deviceTimeZone()): String =
+  "${formatReceiptTime(event.atMs.toLong(), timeZone)} — ${event.event}" + (event.detail?.takeIf { it.isNotEmpty() }?.let { ": $it" } ?: "")
 
 /** Why a note cannot be sent, or null. The route checks again. */
 fun checkOrderNote(text: String): String? = if (text.isBlank()) "Write a note first" else null
@@ -349,6 +350,12 @@ interface OrderActionsApi {
   suspend fun sendReceipt(orderId: String, channel: ReceiptChannel, to: String)
   suspend fun addNote(orderId: String, note: String)
 
+  /** The business name and contact address the invoice form shows. */
+  suspend fun invoiceSite(): InvoiceSite
+
+  /** Emails the invoice and answers the address it went to. */
+  suspend fun sendInvoice(orderId: String, to: String, subject: String, message: String, attemptKey: String): String
+
   /** Answers the open restock question; the route's verdict says whether it landed (`recorded`, `answered`, `changed`). */
   suspend fun answerRestock(orderId: String, resolution: RestockAnswerChoice, flaggedAtMs: Double): String
 }
@@ -439,6 +446,18 @@ class ConsoleOrderActionsApi(
     if (error is kotlinx.coroutines.CancellationException) throw error
     // As the console's dialog: offer email, which the route re-checks.
     setOf(ReceiptChannel.EMAIL)
+  }
+
+  override suspend fun invoiceSite(): InvoiceSite = invoiceSiteDetails(firestore?.get("hosts/$hostId")?.data)
+
+  override suspend fun sendInvoice(orderId: String, to: String, subject: String, message: String, attemptKey: String): String {
+    val answer = api.request(
+      ORDER_INVOICE_SEND_ROUTE,
+      ApiMethod.POST,
+      body("orderId" to orderId, "to" to to, "subject" to subject, "message" to message),
+      idempotencyKey = attemptKey,
+    )
+    return (answer?.jsonObject?.get("to") as? kotlinx.serialization.json.JsonPrimitive)?.takeIf { it.isString }?.content ?: to
   }
 
   override suspend fun sendReceipt(orderId: String, channel: ReceiptChannel, to: String) {

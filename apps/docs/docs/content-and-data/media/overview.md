@@ -85,13 +85,22 @@ to the assets [shared with that site](#who-an-asset-is-shared-with).
   - **Copy URL** — public files only. **Copy temporary link** replaces it on a private
     file, because a private file has no permanent URL to copy.
   - **Make private** / **Publish file** — only in the organization library, and only for
-    members with organization-wide access.
+    members with organization-wide access who hold the **Edit the workspace media library**
+    permission. **Copy temporary link** doesn't ask for that permission, and anyone who can
+    see the file can use it, a site collaborator included.
   - **Download file** — always, public or private. See
     [Download the original file](#download-file).
   - **Replace file** — for any file, not only images. The new file has to be the same
     kind as the one it replaces (a picture for a picture, a video for a video, a
     document for a document), because every page that uses it keeps the same link.
   - **Details** and **Delete**.
+- Changing a library takes a permission: **Edit the workspace media library** in the
+  organization library, which workspace owners, admins and editors hold by default, and
+  **Edit site content** in a site's own library, which its admins, editors and authors hold
+  by default. That covers uploading, new folders, replacing a file, editing an image,
+  renaming, moving, tagging and deleting, the details inside a file under **File info**, and
+  **Find where this is used**. Without it those controls are switched off, each naming the
+  permission, and you can still open a file's details and download it.
 
   **Copy URL** gives you a full absolute URL on the site's own domain, ready to paste
   anywhere — including outside Aglyn. The whole menu is hidden when the library opens as
@@ -725,7 +734,7 @@ A private file:
 
 Two menu items do that last part, and they are not interchangeable:
 
-- **Copy temporary link** (organization library, organization-wide members) puts a
+- **Copy temporary link** (organization library, anyone who can see the file) puts a
   fifteen-minute link on your clipboard — for handing to one person, once, now. Nothing
   in Aglyn renews it, so it is a trap in a document or a page: what you paste stops
   working while the page still looks fine.

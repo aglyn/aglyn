@@ -52,6 +52,7 @@
  *=========================================*/
 
 import { videoEmbedOf } from '@aglyn/aglyn/plugin-manager/video-embed-provider'
+import { siteImportDataForms } from './site-import-data-forms'
 
 /** One run of a page's content, in the order the page draws it. */
 export type SiteImportBlock =
@@ -333,7 +334,8 @@ export const SITE_IMPORT_PAGE_LIMITS = {
   svgIcons: 200,
   anchors: 800,
   styleChars: 1_500_000,
-  stylesheets: 4,
+  /** The links listed (AGL-4152); how much of them is read is a byte budget's to say (`SITE_IMPORT_SHEET_LIMITS`). */
+  stylesheets: 24,
   /** A page's videos (AGL-4140). */
   videos: 10,
 } as const
@@ -634,9 +636,9 @@ function formContents(form: string): SiteImportForm {
   return { fields, ...(submit ? { submit } : {}), ...(leftOut.length ? { leftOut } : {}) }
 }
 
-/** Forms with a payment field go whole; the rest are summarized, then go. */
-function takeForms(html: string): { html: string; kept: SiteImportForm[]; removed: number } {
-  const kept: SiteImportForm[] = []
+/** Forms with a payment field go whole; the rest are summarized, then go. `first` are the forms the page's data held, whose markers are in place. */
+function takeForms(html: string, first: readonly SiteImportForm[] = []): { html: string; kept: SiteImportForm[]; removed: number } {
+  const kept: SiteImportForm[] = [...first]
   let removed = 0
   const out = html.replace(/<form\b(?:[^>"']|"[^"]*"|'[^']*')*>[\s\S]*?(?:<\/form\s*>|$)/gi, (form) => {
     if (PAYMENT_FIELD.test(form)) {
@@ -1332,6 +1334,15 @@ function readStyleSheets(html: string, pageUrl: string): { styles: string[]; sty
   return { styles, stylesheets }
 }
 
+/**
+ * The stylesheets a page links (AGL-4152), to read: every one, on its own host
+ * or a CDN's, print ones and comments left out, Google Fonts' read by its
+ * address alone (`siteImportGoogleFamilies`).
+ */
+export function siteImportStylesheetLinks(html: string, pageUrl: string): string[] {
+  return readStyleSheets(html.replace(/<!--[\s\S]*?(?:-->|$)/g, ' '), pageUrl).stylesheets.filter((url) => !/fonts\.googleapis\.com/i.test(url))
+}
+
 /** Elements with no content and no end tag. */
 const VOID_TAGS = new Set(['area', 'base', 'br', 'col', 'embed', 'hr', 'img', 'input', 'link', 'meta', 'param', 'source', 'track', 'wbr', 'aglyn-svg', 'aglyn-form'])
 
@@ -1456,6 +1467,9 @@ export function extractSiteImportPage(
   const icons = readIcons(source, pageUrl)
   const keep = options.structure === true
   const sheets = keep ? readStyleSheets(source, pageUrl) : { styles: [], stylesheets: [] }
+  // A form defined in data (AGL-4152), read before scripts go: a marker at its place, its fields from the data.
+  const dataForms = siteImportDataForms(source, formWords, SITE_IMPORT_PAGE_LIMITS)
+  source = dataForms.html
   // A video is a marker at its place (AGL-4140), read before scripts and
   // players go: its structured data is a script's body.
   const film = readVideos(source, pageUrl, isSameSite)
@@ -1466,7 +1480,7 @@ export function extractSiteImportPage(
   source = readSvgIcons(source, svgIcons)
   source = removeElements(readPictures(source), REMOVED_WITH_CONTENT).replace(REMOVED_VOID, ' ')
   // Forms next, so a field list is read before the controls go.
-  const forms = takeForms(source)
+  const forms = takeForms(source, dataForms.kept)
   source = removeElements(forms.html, FORM_CONTROLS)
 
   const metas = metaTags(source)
@@ -1866,7 +1880,7 @@ export function extractSiteImportPage(
     images,
     navLinks,
     links,
-    forms: { kept: forms.kept, removed: forms.removed },
+    forms: { kept: forms.kept, removed: forms.removed + dataForms.removed },
     ...(videos.length ? { videos } : {}),
     loginForm: false,
     ...(keep

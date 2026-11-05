@@ -291,10 +291,10 @@ describe('an event’s pass', () => {
   })
 
   it('keeps the plan’s zone where the site names none, and says why an event stayed a draft', async () => {
-    const { impl, requests } = writer({ live: false, notice: 'Kept as a draft: publishing takes the editor role.' } as never)
+    const { impl, requests } = writer({ live: false, notice: 'Kept as a draft: publishing takes the "Publish site content" permission.' } as never)
     const outcome = await createAiSiteEventRunner({ writerFor: () => impl, capability: () => EVENT })(context(derived(), null))
     expect(requests[0]?.content['timezone']).toBe('Europe/Paris')
-    expect(outcome.outputs[0]?.note).toBe('A draft, in Events. Kept as a draft: publishing takes the editor role.')
+    expect(outcome.outputs[0]?.note).toBe('A draft, in Events. Kept as a draft: publishing takes the "Publish site content" permission.')
   })
 
   it('fails the event with the owner’s sentence where its check or its writer refuses, and with one of its own where events are not here', async () => {

@@ -105,11 +105,11 @@ final class FunnelsTests: XCTestCase {
 
   func testAccessFollowsTheRoleAndThePaidTier() {
     let pro: [String: Any] = ["plan": "pro"]
-    XCTAssertTrue(FunnelsAccessState(role: "admin", org: pro, orgReady: true).canManage)
-    XCTAssertTrue(FunnelsAccessState(role: "editor", org: pro, orgReady: true).entitled)
-    XCTAssertFalse(FunnelsAccessState(role: "author", org: pro, orgReady: true).canManage)
-    XCTAssertFalse(FunnelsAccessState(role: "admin", org: ["plan": "starter"], orgReady: true).entitled)
-    XCTAssertFalse(FunnelsAccessState(role: "admin", org: pro, orgReady: false).entitled)
+    XCTAssertTrue(FunnelsAccessState(canManage: true, org: pro, orgReady: true).canManage)
+    XCTAssertTrue(FunnelsAccessState(canManage: true, org: pro, orgReady: true).entitled)
+    XCTAssertFalse(FunnelsAccessState(canManage: false, org: pro, orgReady: true).canManage)
+    XCTAssertFalse(FunnelsAccessState(canManage: true, org: ["plan": "starter"], orgReady: true).entitled)
+    XCTAssertFalse(FunnelsAccessState(canManage: true, org: pro, orgReady: false).entitled)
   }
 
   func testANewFunnelOpensOnTheSitesFirstPageThenAnyForm() async {

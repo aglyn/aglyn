@@ -387,9 +387,9 @@ export function scopeCovers(
  * Rewrites an org media CDN path so it names the site using the asset
  * (AGL-1043/1045).
  *
- * `/api/media/cdn/org:{orgId}/{mediaId}` serves ORG-WIDE assets only. A
- * restricted asset has to be requested through the form that names the
- * site — `org:{orgId}:{hostId}` — because the CDN is unauthenticated and
+ * `/api/media/cdn/org:{orgId}/{mediaId}` serves org-wide assets, and assets
+ * shared with all sites except some. An asset shared with chosen sites has to
+ * be requested through the form that names the site — `org:{orgId}:{hostId}` — because the CDN is unauthenticated and
  * the URL is the only thing it can decide from.
  *
  * Returns the path untouched when there is nothing to do: an org-wide
@@ -504,4 +504,331 @@ export function seenOnlyThroughGrant(
   hostId: string,
 ): boolean {
   return grantedScopeTokens(doc).length > 0 && !heldByHost(doc, hostId)
+}
+
+/*==========================================
+ * ALL SITES EXCEPT… (AGL-4047).
+ *
+ * A third way to share, beside "All sites" and "these sites". Neither
+ * enforcement layer can read an exclusion: Firestore has no "does not
+ * contain", `not-in` cannot sit beside `array-contains-any`, and a rule that
+ * refused on one would fail every scoped member's whole list. So what readers
+ * enforce stays what it has always been, a flat `visibleTo` of the sites that
+ * ARE included, and the choice that produced it sits beside it as a marker:
+ *
+ *   visibleTo:   ['host:b', 'host:c']   the only field a reader looks at
+ *   scopeMode:   'allExcept'            says new sites join
+ *   scopeExcept: ['host:a']             the sites that stay out
+ *
+ * `visibleTo` is therefore a list that has to be kept up: a new site joins it
+ * and a deleted one leaves it. {@link reconcileAllExcept} is the one answer to
+ * what it should hold; the sweep (`scope-sharing-sweep.ts`) applies it.
+ *
+ * `visibleTo` always wins over the marker when they disagree, because it is
+ * what the database enforces. A helper describing a document some other way
+ * would be describing something no reader does.
+ *=========================================*/
+
+/** The `scopeMode` a document kept up by the sweep carries. */
+export const SCOPE_MODE_ALL_EXCEPT = 'allExcept' as const
+
+/**
+ * What a sharing choice writes. A `null` marker field means the document must
+ * not carry it, which a server write spells as a field delete, so a document
+ * moved back to All sites or to chosen sites keeps no stale marker.
+ */
+export interface ScopeSharingFields {
+  visibleTo: ScopeToken[]
+  scopeMode: typeof SCOPE_MODE_ALL_EXCEPT | null
+  scopeExcept: ScopeToken[] | null
+}
+
+/** How a document is shared, as a person would choose it. */
+export type ScopeSharing =
+  | { mode: 'all' }
+  | { mode: 'selected'; hostIds: string[] }
+  | { mode: 'allExcept'; exceptHostIds: string[]; includedHostIds: string[] }
+  | { mode: 'none' }
+
+/** What a person picked: the input to {@link sharingFromChoice}. */
+export type ScopeSharingChoice =
+  | { mode: 'all' }
+  | { mode: 'selected'; hostIds: readonly string[] }
+  | { mode: 'allExcept'; exceptHostIds: readonly string[] }
+
+const uniqueStrings = (values: readonly string[]): string[] => [
+  ...new Set(values.filter((value) => typeof value === 'string' && value)),
+]
+
+/**
+ * The excluded sites a marker names, or null when the marker is not one this
+ * module can act on: anything but an array of host tokens. Null is what keeps
+ * a damaged marker from being read as "except nothing", which means All sites.
+ */
+function markerExceptHostIds(
+  doc: Readonly<Record<string, unknown>> | null | undefined,
+): string[] | null {
+  if (doc?.['scopeMode'] !== SCOPE_MODE_ALL_EXCEPT) return null
+  const except = doc['scopeExcept']
+  if (!Array.isArray(except)) return null
+  const ids: string[] = []
+  for (const token of except) {
+    const parsed = typeof token === 'string' ? parseScopeToken(token) : null
+    if (parsed?.kind !== 'host') return null
+    ids.push(parsed.hostId)
+  }
+  return uniqueStrings(ids)
+}
+
+/**
+ * How a document is shared. Reads the marker only where it agrees with what
+ * readers enforce: a document carrying `'org'` is shared with all sites
+ * whatever a marker beside it says, and a damaged marker reads as the chosen
+ * sites `visibleTo` names.
+ */
+export function scopeSharingOf(
+  doc: Readonly<Record<string, unknown>> | null | undefined,
+): ScopeSharing {
+  const visibleTo = doc?.['visibleTo']
+  const tokens = Array.isArray(visibleTo)
+    ? visibleTo.filter((token): token is string => typeof token === 'string')
+    : null
+  if (tokens?.includes(ORG_SCOPE_TOKEN)) return { mode: 'all' }
+  const included = uniqueStrings(hostIdsFromScope(tokens ?? []))
+  const except = tokens ? markerExceptHostIds(doc) : null
+  if (except) {
+    return { mode: 'allExcept', exceptHostIds: except, includedHostIds: included }
+  }
+  return included.length ? { mode: 'selected', hostIds: included } : { mode: 'none' }
+}
+
+/**
+ * What a sharing choice writes, or why it cannot be written.
+ *
+ * `orgHostIds` is the workspace's sites as the writer read them. An exclusion
+ * naming a site that is no longer there is dropped, not refused: the person
+ * asked for that site to stay out, and it is out. Excluding nothing is
+ * refused, since that choice is All sites; excluding everything is refused,
+ * since it would hide the document from every site.
+ *
+ * An all-except list is not held to `MAX_SCOPE_HOSTS`, which limits what a
+ * QUERY can ask for and never what a document stores. A collection whose
+ * stored fields multiply by site passes its own `maxIncluded`. `keepHostIds`
+ * are sites that stay on the list even if excluded, such as a site that
+ * captured the person a record is about.
+ */
+export function sharingFromChoice(
+  choice: ScopeSharingChoice,
+  orgHostIds: readonly string[],
+  options: { maxIncluded?: number | null; keepHostIds?: readonly string[] } = {},
+): { fields: ScopeSharingFields; problem: null } | { fields: null; problem: string } {
+  if (choice.mode === 'all') {
+    return {
+      fields: { visibleTo: [ORG_SCOPE_TOKEN], scopeMode: null, scopeExcept: null },
+      problem: null,
+    }
+  }
+  if (choice.mode === 'selected') {
+    const stored = scopeToStore(choice.hostIds.map(hostScopeToken))
+    return stored.scope
+      ? { fields: { visibleTo: stored.scope, scopeMode: null, scopeExcept: null }, problem: null }
+      : { fields: null, problem: stored.problem }
+  }
+  const org = uniqueStrings(orgHostIds)
+  const except = uniqueStrings(choice.exceptHostIds).filter((id) => org.includes(id))
+  if (!except.length) {
+    return {
+      fields: null,
+      problem: 'Choose at least one site to leave out, or share with All sites.',
+    }
+  }
+  const included = includedHostIds(org, except, options.keepHostIds)
+  if (!included.length) {
+    return { fields: null, problem: 'Keep at least one site in, or choose the sites.' }
+  }
+  if (options.maxIncluded != null && included.length > options.maxIncluded) {
+    return {
+      fields: null,
+      problem: `This can reach ${options.maxIncluded === 1 ? '1 site' : `${options.maxIncluded} sites`} at most. Leave out more sites, or choose the sites.`,
+    }
+  }
+  return {
+    fields: {
+      visibleTo: included.map(hostScopeToken),
+      scopeMode: SCOPE_MODE_ALL_EXCEPT,
+      scopeExcept: except.map(hostScopeToken),
+    },
+    problem: null,
+  }
+}
+
+/** The workspace's sites minus the excluded ones, plus the kept, sorted. */
+function includedHostIds(
+  org: readonly string[],
+  except: readonly string[],
+  keep: readonly string[] | undefined,
+): string[] {
+  const out = new Set(except)
+  const kept = new Set(keep ?? [])
+  return org.filter((id) => !out.has(id) || kept.has(id)).sort()
+}
+
+/** What keeping an all-except document up to date came to. */
+export interface AllExceptReconcile {
+  /**
+   * - `unmarked`: not an all-except document; nothing to do.
+   * - `current`: already says what it should.
+   * - `changed`: write `fields`.
+   * - `capped`: it should reach more sites than `maxIncluded`, so it stopped
+   *   widening. Any `fields` only take away sites that are gone.
+   * - `invalid`: a marker this module cannot act on, or one beside `'org'`.
+   *   Left alone and reported, because either guess moves who can see it.
+   */
+  status: 'unmarked' | 'current' | 'changed' | 'capped' | 'invalid'
+  fields: ScopeSharingFields | null
+}
+
+/**
+ * What an all-except document should say, given the workspace's sites today.
+ *
+ * Pure and idempotent, which is what lets every trigger and the drift report
+ * ask the same question: a second run over its own answer says `current`.
+ *
+ * - A new site joins `visibleTo`, unless it is excluded.
+ * - A site that left the workspace leaves `visibleTo` and `scopeExcept`.
+ * - Once no exclusion is left the document IS All sites, so it collapses to
+ *   `['org']` and drops its marker.
+ * - When every remaining site is excluded `visibleTo` is empty and the marker
+ *   stays: no site sees it until a new one joins. The data is kept, which is
+ *   why {@link isSiteOnlyScope} answers false for a marked document.
+ * - A site in `sharing.added` stays, since a person shared the document with
+ *   it. So do `keepHostIds`. Both only while the site is in the workspace.
+ */
+export function reconcileAllExcept(
+  doc: Readonly<Record<string, unknown>> | null | undefined,
+  orgHostIds: readonly string[],
+  options: { maxIncluded?: number | null; keepHostIds?: readonly string[] } = {},
+): AllExceptReconcile {
+  if (doc?.['scopeMode'] === undefined || doc['scopeMode'] === null) {
+    return { status: 'unmarked', fields: null }
+  }
+  const storedExcept = markerExceptHostIds(doc)
+  const visibleTo = doc['visibleTo']
+  if (
+    !storedExcept ||
+    !Array.isArray(visibleTo) ||
+    visibleTo.includes(ORG_SCOPE_TOKEN)
+  ) {
+    return { status: 'invalid', fields: null }
+  }
+  const org = uniqueStrings(orgHostIds)
+  const except = storedExcept.filter((id) => org.includes(id))
+  if (!except.length) {
+    return {
+      status: 'changed',
+      fields: { visibleTo: [ORG_SCOPE_TOKEN], scopeMode: null, scopeExcept: null },
+    }
+  }
+  const current = uniqueStrings(hostIdsFromScope(visibleTo as string[]))
+  const keep = [
+    ...(options.keepHostIds ?? []),
+    ...hostIdsFromScope(grantedScopeTokens(doc)),
+  ]
+  let included = includedHostIds(org, except, keep)
+  let capped = false
+  if (
+    options.maxIncluded != null &&
+    included.length > options.maxIncluded &&
+    included.some((id) => !current.includes(id))
+  ) {
+    capped = true
+    included = current.filter((id) => org.includes(id)).sort()
+  }
+  const same =
+    included.length === current.length &&
+    included.every((id) => current.includes(id)) &&
+    except.length === storedExcept.length
+  const fields: ScopeSharingFields | null = same
+    ? null
+    : {
+        visibleTo: included.map(hostScopeToken),
+        scopeMode: SCOPE_MODE_ALL_EXCEPT,
+        scopeExcept: except.map(hostScopeToken),
+      }
+  if (capped) return { status: 'capped', fields }
+  return fields ? { status: 'changed', fields } : { status: 'current', fields: null }
+}
+
+/**
+ * The sentence the console shows for how a document is shared:
+ * {@link describeScope}, plus the all-except wording. Sites are named only
+ * where `hostNames` has them, so a reader who cannot see a site's name is told
+ * how many sites, never an id.
+ */
+export function describeSharing(
+  doc: Readonly<Record<string, unknown>> | null | undefined,
+  hostNames: Readonly<Record<string, string>> = {},
+): string {
+  const sharing = scopeSharingOf(doc)
+  if (sharing.mode !== 'allExcept') {
+    return describeScope(doc?.['visibleTo'] as readonly string[] | undefined, hostNames)
+  }
+  if (!sharing.includedHostIds.length) return 'No sites'
+  const names = sharing.exceptHostIds.map((id) => hostNames[id])
+  const count = names.length
+  if (count === 1) return `All sites except ${names[0] || '1 site'}`
+  if (count === 2 && names.every(Boolean)) {
+    return `All sites except ${names[0]} and ${names[1]}`
+  }
+  return `All sites except ${count} sites`
+}
+
+/**
+ * Whether a document belongs to this site alone: what deciding to erase it
+ * with the site asks, so the three copies of that question share one answer.
+ *
+ * FALSE FOR ANY MARKED DOCUMENT, and that is the reason this exists. A site
+ * can be the last one an all-except document still reaches, with `visibleTo`
+ * naming it and nothing else, and the document is still the workspace's.
+ * Reading that as "this site's own" would erase the data with the site.
+ */
+export function isSiteOnlyScope(
+  doc: Readonly<Record<string, unknown>> | null | undefined,
+  hostId: string,
+): boolean {
+  if (doc?.['scopeMode'] !== undefined && doc?.['scopeMode'] !== null) return false
+  const visibleTo = doc?.['visibleTo']
+  const token = hostScopeToken(hostId)
+  return (
+    Array.isArray(visibleTo) &&
+    visibleTo.length > 0 &&
+    visibleTo.every((entry) => entry === token)
+  )
+}
+
+/**
+ * {@link scopeCovers} for whole documents: whether `target` stays visible
+ * everywhere `source` is, which a cross-dataset reference needs.
+ *
+ * Today's tokens are not enough once either side is all-except, because the
+ * two lists move when a site is added: a chosen-sites target cannot cover an
+ * all-except source however it looks today (the next new site gets the source
+ * and not the target), and an all-except target covers an all-except source
+ * only when it leaves out no site the source includes.
+ */
+export function sharingCovers(
+  target: Readonly<Record<string, unknown>> | null | undefined,
+  source: Readonly<Record<string, unknown>> | null | undefined,
+): boolean {
+  const targetTokens = target?.['visibleTo'] as readonly string[] | undefined
+  const sourceTokens = source?.['visibleTo'] as readonly string[] | undefined
+  const targetSharing = scopeSharingOf(target)
+  const sourceSharing = scopeSharingOf(source)
+  if (sourceSharing.mode === 'allExcept') {
+    if (targetSharing.mode === 'all') return true
+    if (targetSharing.mode !== 'allExcept') return false
+    const sourceExcept = new Set(sourceSharing.exceptHostIds)
+    if (!targetSharing.exceptHostIds.every((id) => sourceExcept.has(id))) return false
+  }
+  return scopeCovers(targetTokens, sourceTokens)
 }

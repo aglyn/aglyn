@@ -256,8 +256,8 @@ and internal notes:
   fulfilled and the buyer's account page shows the tracking. **Mark
   delivered** closes the loop, and **Packing slip** prints one.
 - **Refund** — confirms *"Refund this order?"*, then refunds the buyer through
-  Stripe (full or partial) and reverses the platform fee. Site-**admin** role
-  only.
+  Stripe (full or partial) and reverses the platform fee. It takes the **Refund
+  orders** permission, which site admins hold by default.
 - **Cancel order** — for orders that shouldn't proceed (does not auto-refund).
 
 ![The order detail dialog with line items, totals, timeline, and the Fulfill and Refund actions](/img/guides/commerce-order-detail.png)

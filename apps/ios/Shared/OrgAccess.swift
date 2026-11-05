@@ -14,8 +14,9 @@ final class OrgAccess {
   @ObservationIgnored private let member = ObservedDocument()
   @ObservationIgnored private let role = ObservedDocument()
   @ObservationIgnored private let site = ObservedDocument()
-  @ObservationIgnored private var uid: String?
-  @ObservationIgnored private var siteID: String?
+  // Observed: a view that asked for a key before `follow` set these read the workspace's verdict, and it must ask again.
+  private var uid: String?
+  private var siteID: String?
   /// The role the membership index names, which answers until the member row is read.
   private var indexRole: String?
   @ObservationIgnored private var orgID: String?
@@ -80,11 +81,10 @@ final class OrgAccess {
       ContractValues.shared.orgRoleGrants, member: member.document?.data, orgRole: indexRole, customRole: role.document?.data)
   }
 
-  /// The same on the site `follow` was given, with the site's own stamp for this member applied.
+  /// The same on the site `follow` was given, as that site's own document answers for this member.
   var pickedSitePermissions: [String: Bool] {
     sitePermissions(
-      workspacePermissions,
-      siteStamp: uid.flatMap { (site.document?.data["memberPermissions"] as? [String: Any])?[$0] as? [String: Any] })
+      ContractValues.shared.orgRoleGrants, workspace: workspacePermissions, site: site.document?.data, uid: uid ?? "")
   }
 
   /// The site `pickedSitePermissions` answers for.

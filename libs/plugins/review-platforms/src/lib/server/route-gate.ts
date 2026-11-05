@@ -15,6 +15,9 @@
  * limitations under the License.
  */
 
+import { holdsStampedSiteKey } from '@aglyn/aglyn/app-utils/host-permissions'
+import { permissionRefusalText } from '@aglyn/aglyn/app-utils/org-permissions'
+import { REVIEW_PLATFORMS_SITE_PRESETS, type ReviewPlatformsSitePermission } from '../model/review-platforms-permissions'
 import { firebaseAdmin } from '@aglyn/tenant-data-admin'
 import { isEmailVerified, isImpersonationSession } from '@aglyn/tenant-data-admin/server/firebase-admin'
 import { isRefusedIdToken } from '@aglyn/tenant-data-admin/server/id-token-refusal'
@@ -32,7 +35,7 @@ import { resolveReviewPlatformsSite } from './site-context'
  *   403  unverified address (impersonation exempt)
  *   400  no site named
  *   404  the site does not sell, or has review platforms switched off
- *   403  not a collaborator with the role the route needs
+ *   403  not on the site, or without the key the route asks (AGL-4047)
  */
 
 const NO_STORE = { 'Cache-Control': 'no-store' }
@@ -44,10 +47,6 @@ export function json(body: unknown, status = 200): Response {
 export function refuse(status: number, error: string): Response {
   return Response.json({ error }, { status, headers: NO_STORE })
 }
-
-export type ReviewPlatformsRole = 'viewer' | 'editor' | 'admin'
-
-const ROLE_RANK: Record<string, number> = { viewer: 1, author: 1, editor: 2, admin: 3 }
 
 export interface ReviewPlatformsGateResult {
   orgId: string
@@ -68,7 +67,7 @@ export function setReviewPlatformsTokenVerifierForTests(verifier: TokenVerifier 
 
 export async function reviewPlatformsGate(
   request: Request,
-  options: { role: ReviewPlatformsRole },
+  options: { permission: ReviewPlatformsSitePermission | null },
 ): Promise<ReviewPlatformsGateResult | Response> {
   const authorization = request.headers.get('authorization') ?? ''
   if (!authorization.startsWith('Bearer ')) return refuse(401, 'Unauthenticated')
@@ -94,9 +93,14 @@ export async function reviewPlatformsGate(
   if (!isDocumentId(hostId)) return refuse(400, 'Missing hostId')
   const site = await resolveReviewPlatformsSite(hostId)
   if (!site) return refuse(404, 'Review platforms are not available for this site')
-  const memberRole = String((site.host['memberRoles'] as Record<string, unknown> | undefined)?.[decoded.uid] ?? '')
-  if (decoded['staff'] !== true && (ROLE_RANK[memberRole] ?? 0) < ROLE_RANK[options.role]) {
+  const staff = decoded['staff'] === true
+  // No key named: anyone on the site's roster reads it.
+  if (!staff && !(site.host['memberRoles'] as Record<string, unknown> | undefined)?.[decoded.uid]) {
     return refuse(403, 'Not permitted')
+  }
+  const { permission } = options
+  if (!staff && permission && !holdsStampedSiteKey(site.host, decoded.uid, permission, REVIEW_PLATFORMS_SITE_PRESETS[permission])) {
+    return refuse(403, permissionRefusalText(permission))
   }
   return { orgId: site.orgId, hostId, uid: decoded.uid, config: readReviewPlatformsConfig(), body }
 }

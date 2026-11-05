@@ -1461,9 +1461,7 @@ export const PLUGIN_TRANSFER_RESOURCES_DECLARED: readonly ResolvedTransferResour
     "featureFlagExempt": [
       "export"
     ],
-    "importRoles": [
-      "admin"
-    ],
+    "importPermission": "commerce.giftCards.import",
     "label": "Gift cards",
     "singularLabel": "Gift card",
     "scope": "host",
@@ -1732,7 +1730,8 @@ export const PLUGIN_TRANSFER_RESOURCES_DECLARED: readonly ResolvedTransferResour
       "maxRows": 50000
     },
     "instances": true,
-    "readableByMembers": true
+    "readPermission": "data.export",
+    "readPermissionOnly": true
   },
   {
     "pluginId": "email",

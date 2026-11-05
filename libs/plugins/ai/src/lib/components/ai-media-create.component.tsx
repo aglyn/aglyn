@@ -224,7 +224,7 @@ export function AiMediaCreateButton(props: AiMediaCreateButtonProps) {
             <Typography>
               {upgrade.canManageBilling
                 ? 'Creating pictures and illustrations comes with the AI add-on.'
-                : 'Creating pictures and illustrations comes with the AI add-on. Ask an owner or admin of this workspace to add it.'}
+                : 'Creating pictures and illustrations comes with the AI add-on. Ask a member holding "Manage billing" to add it.'}
             </Typography>
           </DialogContent>
           <DialogActions>

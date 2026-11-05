@@ -100,7 +100,7 @@ private fun FunctionEditor(context: NativePluginContext, hostId: String, functio
   val scope = rememberCoroutineScope()
   val api = remember(hostId, context.api, context.writer) { LogicApi(context.api, context.writer, hostId) }
   val runner = remember(hostId, functionId) { ActionRunner(scope) }
-  val canEdit = context.siteRole in LOGIC_WRITE_ROLES
+  val canEdit = com.aglyn.pluginhost.rememberMemberPermissions(context).can("site.publish")
   var draft by remember(functionId) { mutableStateOf(start) }
   val others by remember(hostId, context.firestore) { context.firestore.observe(ceilingQuery(functionsPath(hostId))) }.collectAsState(Live.Loading)
   val taken = ((others as? Live.Ready)?.value).orEmpty().filter { it.id != functionId && it.data["deletedAt"] == null }.mapNotNull { it.string("name")?.lowercase() }

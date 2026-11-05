@@ -270,7 +270,7 @@ fun SettingsSection(context: NativePluginContext, scope: CrmScope, reference: Cr
       verticalArrangement = Arrangement.spacedBy(space(2f)),
     ) {
       error?.let { NoticeBanner(it, StatusTone.ERROR) }
-      if (!scope.canManage) NoticeBanner("Only the workspace's owners and admins change these.", StatusTone.INFO)
+      if (!scope.canManage) NoticeBanner(com.aglyn.contracts.permissionRefusalText(CRM_SETTINGS_KEY), StatusTone.INFO)
       SectionCard("Default sharing for new records", Modifier.fillMaxWidth()) {
         FieldEditor(
           FieldSpec(

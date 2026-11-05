@@ -133,6 +133,12 @@ struct CrmGate<Content: View>: View {
           }
           .asScreen()
           .accessibilityIdentifier("crm-suite-locked")
+        } else if scope.orgLevel && !scope.opensWorkspaceCrm {
+          // Only a member who reaches every site and holds "Manage data" reads every record; anyone else reads them a site at a time.
+          AglynEmptyState(
+            "Pick a site to see its records", systemImage: "globe",
+            message: "The whole workspace's CRM needs the Manage data permission on every site. Your records are on the sites you belong to.")
+            .accessibilityIdentifier("crm-workspace-reach")
         } else {
           let api = CrmAPI(api: context.api, reader: context.firestore, scope: scope)
           content(scope, api, reference)

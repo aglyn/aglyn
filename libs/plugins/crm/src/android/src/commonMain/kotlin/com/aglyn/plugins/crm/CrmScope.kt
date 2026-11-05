@@ -1,5 +1,7 @@
 package com.aglyn.plugins.crm
 
+import com.aglyn.contracts.memberPermissions
+import com.aglyn.contracts.sitePermissions
 import com.aglyn.core.FirestoreDoc
 import com.aglyn.core.FirestoreReader
 import com.aglyn.core.Live
@@ -174,12 +176,35 @@ data class CrmScope(
   /** The same member's CRM on one site: what a record is created under, and a record's own site. */
   fun forSite(siteId: String): CrmScope = crmScopeOf(orgId, siteId, uid, org, member)
 
-  /** `canWriteOrgData`: an owner, admin or editor of the workspace. */
-  val canWrite: Boolean get() = role in setOf("owner", "admin", "editor")
-  val canManage: Boolean get() = role in setOf("owner", "admin")
+  /** What the member holds across the workspace, off their own row (its `resolvedPermissions` stamp over their role). */
+  val permissions: Map<String, Boolean> by lazy { memberPermissions(member, role) }
+
+  /** "Manage data": what every write to the CRM's records asks (`canWriteOrgData`). */
+  val canWrite: Boolean get() = permissions["data.manage"] == true
+  /** "Change CRM settings": the settings that hold for every site. */
+  val canManage: Boolean get() = permissions[CRM_SETTINGS_KEY] == true
+  /** The workspace's own CRM reads every site's records at once: it asks for the reach and for "Manage data". */
+  val opensWorkspaceCrm: Boolean get() = orgWide && canWrite
+
+  /**
+   * "Move contacts and deals between stages", where the stage route will ask it: on the site it is called for ([site],
+   * that site's document), with no site the workspace's verdict. Until the site is read nothing is switched off, and the
+   * route answers. For what to show only.
+   */
+  fun movesStages(site: Map<String, Any?>?): Boolean {
+    if (hostId == null) return permissions[CRM_MOVE_STAGES_KEY] == true
+    if (site == null) return true
+    return sitePermissions(permissions, site, uid)[CRM_MOVE_STAGES_KEY] == true
+  }
   /** The scope the CRM routes take: the site, as the console's site hub sends it; the workspace alone from its own page. */
   val routeScope: Map<String, Any?> get() = if (hostId != null) mapOf("hostId" to hostId, "orgId" to orgId) else mapOf("orgId" to orgId)
 }
+
+/** "Change CRM settings". */
+internal const val CRM_SETTINGS_KEY = "crm.settings"
+
+/** "Move contacts and deals between stages". */
+internal const val CRM_MOVE_STAGES_KEY = "crm.moveStages"
 
 /** The member's reach on a declared group: the group's tokens they hold, or all of them org-wide. */
 fun narrowToReach(tokens: List<String>, member: Map<String, Any?>?, orgWide: Boolean): List<String> {
@@ -193,6 +218,7 @@ fun crmScopeOf(orgId: String, hostId: String?, uid: String, org: FirestoreDoc?, 
 
 fun crmScopeOf(orgId: String, hostId: String?, uid: String, orgData: Map<String, Any?>, member: Map<String, Any?>?): CrmScope {
   val role = member?.get("role") as? String
+  // Reach, not a permission: no key grants a collaborator the sites they were not given (`isOrgWideMember`).
   val orgWide = role in setOf("owner", "admin") || member?.get("allHosts") == true
   if (hostId == null) {
     // The workspace's own CRM: every record, its shared fields, a new one the whole workspace's unless a site is named.

@@ -52,6 +52,13 @@ const OTHER_HOST = 'host-crm-audience-other'
 const SITE_TOKEN = `host:${HOST}`
 const OTHER_TOKEN = `host:${OTHER_HOST}`
 const ORG_TOKEN = 'org'
+/**
+ * A site collaborator's `scopeTokens` as `projectMemberScopeTokens` writes them
+ * (`libs/aglyn/src/lib/app-utils/organizations.ts`): `'org'`, and each named
+ * site. `'org'` is what lets a collaborator read what the whole workspace
+ * shares, and it is why the writes below reach those records too.
+ */
+const COLLABORATOR_TOKENS = [ORG_TOKEN, SITE_TOKEN]
 
 /** The roster, each as the projection writes them, with what they may do. */
 const MEMBERS = {
@@ -101,20 +108,20 @@ const MEMBERS = {
   },
   editorOverrideRefused: { role: 'editor', allHosts: true, permissions: { 'data.manage': false, 'marketing.campaigns': false } },
   // Site collaborators: a workspace role, a reach of one site.
-  collabEditor: { role: 'editor', allHosts: false, hostAccess: { [HOST]: 'editor' }, scopeTokens: [SITE_TOKEN] },
-  collabViewer: { role: 'viewer', allHosts: false, hostAccess: { [HOST]: 'admin' }, scopeTokens: [SITE_TOKEN] },
+  collabEditor: { role: 'editor', allHosts: false, hostAccess: { [HOST]: 'editor' }, scopeTokens: COLLABORATOR_TOKENS },
+  collabViewer: { role: 'viewer', allHosts: false, hostAccess: { [HOST]: 'admin' }, scopeTokens: COLLABORATOR_TOKENS },
   collabViewerGranted: {
     role: 'viewer',
     allHosts: false,
     hostAccess: { [HOST]: 'editor' },
-    scopeTokens: [SITE_TOKEN],
+    scopeTokens: COLLABORATOR_TOKENS,
     resolvedPermissions: { 'data.manage': true, 'marketing.campaigns': true },
   },
   collabEditorRefused: {
     role: 'editor',
     allHosts: false,
     hostAccess: { [HOST]: 'editor' },
-    scopeTokens: [SITE_TOKEN],
+    scopeTokens: COLLABORATOR_TOKENS,
     resolvedPermissions: { 'data.manage': false, 'marketing.campaigns': false },
   },
   // Every key held, and still stopped by something that is not the role.
@@ -179,6 +186,7 @@ const seed = (db, ...path) => {
 
 const SITE_RECORD = { name: 'Seed', visibleTo: [SITE_TOKEN] }
 const OTHER_RECORD = { name: 'Elsewhere', visibleTo: [OTHER_TOKEN] }
+const WHOLE_WORKSPACE_RECORD = { name: 'Everyone', visibleTo: [ORG_TOKEN] }
 /** A deal as a create leaves it, in a stage of a pipeline. */
 const DEAL_IN_A_STAGE = {
   title: 'Seed',
@@ -203,6 +211,10 @@ await env.withSecurityRulesDisabled(async (context) => {
   await setDoc(seed(db, 'orgs', ORG, 'emailTopics', 'topic-1'), { name: 'Seed topic' })
   await setDoc(seed(db, 'orgs', ORG, 'contactSegments', 'segment-site'), SITE_RECORD)
   await setDoc(seed(db, 'orgs', ORG, 'contactSegments', 'segment-other'), OTHER_RECORD)
+  await setDoc(seed(db, 'orgs', ORG, 'contactSegments', 'segment-org'), WHOLE_WORKSPACE_RECORD)
+  await setDoc(seed(db, 'orgs', ORG, 'contactSegments', 'segment-org-delete'), WHOLE_WORKSPACE_RECORD)
+  await setDoc(seed(db, 'orgs', ORG, 'companies', 'company-org'), WHOLE_WORKSPACE_RECORD)
+  await setDoc(seed(db, 'orgs', ORG, 'companies', 'company-org-delete'), WHOLE_WORKSPACE_RECORD)
   await setDoc(seed(db, 'orgs', ORG, 'companies', 'company-site'), SITE_RECORD)
   await setDoc(seed(db, 'orgs', ORG, 'companies', 'company-other'), OTHER_RECORD)
   await setDoc(seed(db, 'orgs', ORG, 'companies', 'company-shared'), {
@@ -327,8 +339,23 @@ await deny('a stranger creates no campaign', () =>
   setDoc(doc(as('uid-ca-stranger'), 'orgs', ORG, 'emailCampaigns', 'stranger'), { name: 'New', visibleTo: [ORG_TOKEN] }),
 )
 
-// The scope: a collaborator holding the key reaches their own site, and no further.
+// The scope: a collaborator holding the key reaches their own site and what the
+// whole workspace shares, and no further. Reaching the whole workspace's records
+// is the documented behavior (`custom-roles.md`, the sharing pages): nothing a
+// collaborator writes there changes what a record is shared with.
 for (const name of ['collabEditor', 'collabViewerGranted']) {
+  await allow(`${name} may update a segment shared with the whole workspace`, () =>
+    updateDoc(ref(name, 'contactSegments', 'segment-org'), { name: `Reached by ${name}` }),
+  )
+  await allow(`${name} may update a company shared with the whole workspace`, () =>
+    updateDoc(ref(name, 'companies', 'company-org'), { name: `Reached by ${name}` }),
+  )
+  await allow(`${name} may update a campaign placed on the whole workspace`, () =>
+    updateDoc(ref(name, 'emailCampaigns', 'campaign-org'), { name: `Reached by ${name}` }),
+  )
+  await deny(`${name} cannot narrow a company shared with the whole workspace`, () =>
+    updateDoc(ref(name, 'companies', 'company-org'), { visibleTo: [SITE_TOKEN] }),
+  )
   await deny(`${name} cannot update a segment on another site`, () =>
     updateDoc(ref(name, 'contactSegments', 'segment-other'), { name: 'Reached' }),
   )
@@ -338,7 +365,7 @@ for (const name of ['collabEditor', 'collabViewerGranted']) {
   await deny(`${name} cannot update a company only shared to this site to read`, () =>
     updateDoc(ref(name, 'companies', 'company-shared'), { name: 'Reached' }),
   )
-  await deny(`${name} cannot create a segment for the whole org`, () =>
+  await allow(`${name} may create a segment for the whole workspace`, () =>
     setDoc(ref(name, 'contactSegments', `org-${name}`), { name: 'Wide', visibleTo: [ORG_TOKEN] }),
   )
   await deny(`${name} cannot create a campaign for another site`, () =>
@@ -346,6 +373,22 @@ for (const name of ['collabEditor', 'collabViewerGranted']) {
   )
   await deny(`${name} cannot re-scope a campaign`, () =>
     updateDoc(ref(name, 'emailCampaigns', 'campaign-site'), { visibleTo: [SITE_TOKEN, OTHER_TOKEN] }),
+  )
+}
+// One delete each, so the second collaborator isn't asked about a document gone.
+await allow('a collaborator holding the key may delete a segment shared with the whole workspace', () =>
+  deleteDoc(ref('collabEditor', 'contactSegments', 'segment-org-delete')),
+)
+await allow('a collaborator granted the key may delete a company shared with the whole workspace', () =>
+  deleteDoc(ref('collabViewerGranted', 'companies', 'company-org-delete')),
+)
+// The key still decides it: the reach alone writes nothing.
+for (const name of ['collabViewer', 'collabEditorRefused']) {
+  await deny(`${name}, without the key, cannot update a company shared with the whole workspace`, () =>
+    updateDoc(ref(name, 'companies', 'company-org'), { name: 'Reached' }),
+  )
+  await deny(`${name}, without the key, cannot delete a company shared with the whole workspace`, () =>
+    deleteDoc(ref(name, 'companies', 'company-org')),
   )
 }
 await allow('an org-wide editor may re-scope a campaign', () =>

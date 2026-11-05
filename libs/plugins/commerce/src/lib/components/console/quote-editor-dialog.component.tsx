@@ -20,6 +20,7 @@
 import * as CommerceModel from '../../model'
 import { posMoney } from '../../model/commerce-pos-ops'
 import { commerceSitePermissionRefusal } from '../../model/plugin-permissions'
+import { useMediaPicker, type PickedMedia } from '@aglyn/aglyn/app-utils/media-picker-context'
 import { BlockedControl } from '@aglyn/shared-ui-jsx/components/blocked-control.component'
 import { useSnackbar } from '@aglyn/shared-ui-snackstack'
 import { authorizedFetch } from '@aglyn/shared-util-http/authorized-token'
@@ -273,6 +274,8 @@ function addressBody(address: AddressForm): Partial<AddressForm> | null {
 /** What the server is sent: choices, never what a product costs. */
 function quoteBody(form: QuoteForm): Record<string, unknown> {
   const discountCents = centsOf(form.discountValue)
+  // With no lines there is nothing to discount or ship (AGL-4184).
+  const priced = form.lines.length > 0
   return {
     lines: form.lines.map(lineRequest),
     customer: {
@@ -284,13 +287,14 @@ function quoteBody(form: QuoteForm): Record<string, unknown> {
     },
     shipTo: addressBody(form.shipTo),
     billTo: addressBody(form.billTo),
-    discount:
-      form.discountKind === 'amount'
+    discount: !priced
+      ? null
+      : form.discountKind === 'amount'
         ? { kind: 'amount', amountCents: discountCents ?? Number.NaN }
         : form.discountKind === 'percent'
           ? { kind: 'percent', pct: Number(form.discountValue || 0) }
           : null,
-    shipping: form.shipping.trim() ? { amountCents: centsOf(form.shipping) ?? Number.NaN } : null,
+    shipping: priced && form.shipping.trim() ? { amountCents: centsOf(form.shipping) ?? Number.NaN } : null,
     notes: form.notes,
     terms: form.terms,
     requireProofApproval: form.requireProofApproval,
@@ -313,6 +317,11 @@ interface FoundCustomer {
  * over the same inputs, and a connected tax service's figure arrives on save.
  * A saved quote left as it is shows what its customer's page shows instead
  * (AGL-4162): that is what the customer is charged until a save re-prices it.
+ *
+ * A quote may be saved with no items when it has a proof (AGL-4184), which is
+ * how a design goes out before it has a price: the editor then has no money to
+ * show, and an item added later makes it a normal quote. A new quote has
+ * nothing to upload a proof for yet, so it takes its first from the media library.
  */
 export function QuoteEditorDialog(props: QuoteEditorDialogProps) {
   const { hostId, quote, products, canEdit, canSend, onClose } = props
@@ -320,6 +329,9 @@ export function QuoteEditorDialog(props: QuoteEditorDialogProps) {
   const firestore = useFirestore()
   const { data: user } = useUser()
   const { enqueueSnackbar } = useSnackbar()
+  const { pickMedia } = useMediaPicker()
+  /** A new quote's proofs, chosen from the media library and kept when it is created. */
+  const [libraryProofs, setLibraryProofs] = useState<PickedMedia[]>([])
   const { data: store } = useFirestoreDoc<any>(
     () => doc(firestore, 'hosts', hostId, 'settings', 'store'),
     [firestore, hostId],
@@ -363,7 +375,21 @@ export function QuoteEditorDialog(props: QuoteEditorDialogProps) {
   const attemptKey = useRef('')
   useEffect(() => {
     attemptKey.current = ''
-  }, [form])
+  }, [form, libraryProofs])
+
+  const proofOnly =
+    form.lines.length === 0 && (libraryProofs.length > 0 || CommerceModel.currentQuoteProofs(quote?.quote).length > 0)
+
+  const chooseLibraryProof = useCallback(async () => {
+    const picked = await pickMedia?.({ allowPrivate: true })
+    if (!picked) return
+    const problem = CommerceModel.quoteLibraryProofProblem(picked)
+    if (problem) return void enqueueSnackbar(problem, { variant: 'error', allowDuplicate: true })
+    setEdited(true)
+    setLibraryProofs((prev) =>
+      prev.some((entry) => entry.mediaId === picked.mediaId && entry.mediaScope === picked.mediaScope) ? prev : [...prev, picked],
+    )
+  }, [pickMedia, enqueueSnackbar])
 
   const productsById = useMemo(
     () => new Map(products.map((product) => [String(product.$id), product])),
@@ -435,6 +461,9 @@ export function QuoteEditorDialog(props: QuoteEditorDialogProps) {
           // A request's parts are read again by the server from here (AGL-4098).
           ...(!quote && start?.from ? { from: start.from } : {}),
           quote: quoteBody({ ...form, requireProofApproval }),
+          ...(!quote && libraryProofs.length
+            ? { libraryProofs: libraryProofs.map(({ mediaScope, mediaId }) => ({ mediaScope, mediaId })) }
+            : {}),
         }),
       })
       const payload = await response.json().catch(() => ({}))
@@ -449,7 +478,7 @@ export function QuoteEditorDialog(props: QuoteEditorDialogProps) {
     } finally {
       setBusy(false)
     }
-  }, [user, quote, hostId, baseUpdatedAtMs, start, form, requireProofApproval, enqueueSnackbar, onClose])
+  }, [user, quote, hostId, baseUpdatedAtMs, start, form, requireProofApproval, libraryProofs, enqueueSnackbar, onClose])
 
   const remove = useCallback(async () => {
     if (!quote) return
@@ -507,6 +536,7 @@ export function QuoteEditorDialog(props: QuoteEditorDialogProps) {
           {status ? (
             <Chip size="small" variant="outlined" label={status.label} color={CommerceModel.QUOTE_STATUS_COLOR[status.key]} />
           ) : null}
+          {proofOnly ? <Chip size="small" variant="outlined" label="Proof only" /> : null}
         </Stack>
       </DialogTitle>
       <DialogContent dividers>
@@ -548,7 +578,7 @@ export function QuoteEditorDialog(props: QuoteEditorDialogProps) {
             <QuoteRequestFilesSection hostId={hostId} quoteId={quote.$id} quote={quote} />
           ) : null}
           {/* A saved quote's notice sits with its pay link, above; a new one's here. */}
-          {quote ? null : <PayLinkReadinessNoticeFor hostId={hostId} order={null} noun="quote" />}
+          {quote || proofOnly ? null : <PayLinkReadinessNoticeFor hostId={hostId} order={null} noun="quote" />}
 
           <QuoteCustomerSection
             hostId={hostId}
@@ -556,6 +586,40 @@ export function QuoteEditorDialog(props: QuoteEditorDialogProps) {
             disabled={readOnly || paid}
             onChange={(customer) => update({ customer })}
           />
+
+          {!quote && pickMedia ? (
+            <Stack spacing={1}>
+              <Typography variant="subtitle2">{'Proofs'}</Typography>
+              <Typography variant="body2" color="text.secondary">
+                {'Sending a design before it has a price? Choose a proof and leave the items empty. ' +
+                  'Your customer sees the proof with no prices, and can approve it or ask for changes. Add items whenever you’re ready.'}
+              </Typography>
+              {libraryProofs.length ? (
+                <Stack direction="row" spacing={1} useFlexGap sx={{ flexWrap: 'wrap' }}>
+                  {libraryProofs.map((proof) => (
+                    <Chip
+                      key={`${proof.mediaScope}-${proof.mediaId}`}
+                      size="small"
+                      variant="outlined"
+                      label={proof.fileName || 'Proof'}
+                      onDelete={readOnly ? undefined : () => setLibraryProofs((prev) => prev.filter((entry) => entry !== proof))}
+                    />
+                  ))}
+                </Stack>
+              ) : null}
+              <BlockedControl blocked={!canEdit} reason={REFUSAL}>
+                <Button
+                  size="small"
+                  variant="outlined"
+                  disabled={busy || libraryProofs.length >= CommerceModel.QUOTE_MAX_PROOFS}
+                  onClick={() => void chooseLibraryProof()}
+                  sx={{ alignSelf: 'flex-start' }}
+                >
+                  {'From media library'}
+                </Button>
+              </BlockedControl>
+            </Stack>
+          ) : null}
 
           <Stack spacing={1.5}>
             <Typography variant="subtitle2">{'Items'}</Typography>
@@ -607,42 +671,44 @@ export function QuoteEditorDialog(props: QuoteEditorDialogProps) {
             </Stack>
           </Stack>
 
-          <Stack direction={{ xs: 'column', sm: 'row' }} spacing={2}>
-            <TextField
-              label="Discount"
-              select
-              size="small"
-              value={form.discountKind}
-              disabled={readOnly || paid}
-              onChange={(event) => update({ discountKind: event.target.value as QuoteForm['discountKind'] })}
-              sx={mediumField}
-            >
-              <MenuItem value="none">{'None'}</MenuItem>
-              <MenuItem value="amount">{'Amount off'}</MenuItem>
-              <MenuItem value="percent">{'Percent off'}</MenuItem>
-            </TextField>
-            {form.discountKind !== 'none' ? (
+          {proofOnly ? null : (
+            <Stack direction={{ xs: 'column', sm: 'row' }} spacing={2}>
               <TextField
-                label={form.discountKind === 'amount' ? 'Amount ($)' : 'Percent (%)'}
+                label="Discount"
+                select
                 size="small"
-                value={form.discountValue}
+                value={form.discountKind}
                 disabled={readOnly || paid}
-                onChange={(event) => update({ discountValue: event.target.value })}
+                onChange={(event) => update({ discountKind: event.target.value as QuoteForm['discountKind'] })}
+                sx={mediumField}
+              >
+                <MenuItem value="none">{'None'}</MenuItem>
+                <MenuItem value="amount">{'Amount off'}</MenuItem>
+                <MenuItem value="percent">{'Percent off'}</MenuItem>
+              </TextField>
+              {form.discountKind !== 'none' ? (
+                <TextField
+                  label={form.discountKind === 'amount' ? 'Amount ($)' : 'Percent (%)'}
+                  size="small"
+                  value={form.discountValue}
+                  disabled={readOnly || paid}
+                  onChange={(event) => update({ discountValue: event.target.value })}
+                  slotProps={{ htmlInput: { inputMode: 'decimal' } }}
+                  error={form.discountKind === 'amount' ? centsOf(form.discountValue) === null : !(Number(form.discountValue) >= 0 && Number(form.discountValue) <= 100)}
+                />
+              ) : null}
+              <TextField
+                label="Shipping ($)"
+                size="small"
+                value={form.shipping}
+                disabled={readOnly || paid}
+                onChange={(event) => update({ shipping: event.target.value })}
                 slotProps={{ htmlInput: { inputMode: 'decimal' } }}
-                error={form.discountKind === 'amount' ? centsOf(form.discountValue) === null : !(Number(form.discountValue) >= 0 && Number(form.discountValue) <= 100)}
+                error={centsOf(form.shipping) === null}
+                helperText="Leave empty when nothing ships."
               />
-            ) : null}
-            <TextField
-              label="Shipping ($)"
-              size="small"
-              value={form.shipping}
-              disabled={readOnly || paid}
-              onChange={(event) => update({ shipping: event.target.value })}
-              slotProps={{ htmlInput: { inputMode: 'decimal' } }}
-              error={centsOf(form.shipping) === null}
-              helperText="Leave empty when nothing ships."
-            />
-          </Stack>
+            </Stack>
+          )}
 
           <QuoteAddressFields
             label="Ship to"
@@ -675,24 +741,30 @@ export function QuoteEditorDialog(props: QuoteEditorDialogProps) {
               disabled={readOnly || paid}
               onChange={(event) => update({ terms: event.target.value })}
             />
-            <FormControlLabel
-              control={
-                <Switch
-                  checked={requireProofApproval}
-                  disabled={readOnly || paid}
-                  onChange={(event) => update({ requireProofApproval: event.target.checked })}
-                />
-              }
-              label="Customers approve the proof before they can pay"
-            />
+            {proofOnly ? null : (
+              <FormControlLabel
+                control={
+                  <Switch
+                    checked={requireProofApproval}
+                    disabled={readOnly || paid}
+                    onChange={(event) => update({ requireProofApproval: event.target.checked })}
+                  />
+                }
+                label="Customers approve the proof before they can pay"
+              />
+            )}
           </Stack>
 
-          <Divider />
-          <QuoteTotalsSummary
-            totals={asSaved?.totals ?? totals}
-            taxLabel={asSaved?.taxLabel ?? CommerceModel.describeQuoteTax(taxBasis)}
-            taxAtPayment={asSaved?.taxAtPayment ?? totals.taxAtPayment}
-          />
+          {proofOnly ? null : (
+            <>
+              <Divider />
+              <QuoteTotalsSummary
+                totals={asSaved?.totals ?? totals}
+                taxLabel={asSaved?.taxLabel ?? CommerceModel.describeQuoteTax(taxBasis)}
+                taxAtPayment={asSaved?.taxAtPayment ?? totals.taxAtPayment}
+              />
+            </>
+          )}
         </Stack>
       </DialogContent>
       <DialogActions sx={{ flexWrap: 'wrap', rowGap: 1 }}>
@@ -703,7 +775,7 @@ export function QuoteEditorDialog(props: QuoteEditorDialogProps) {
             </Button>
           </BlockedControl>
         ) : null}
-        {quote ? (
+        {quote && !proofOnly ? (
           <BlockedControl
             blocked={!canEdit || edited}
             reason={edited ? 'Save your changes first: the PDF shows the quote as it was last saved.' : REFUSAL}
@@ -720,10 +792,10 @@ export function QuoteEditorDialog(props: QuoteEditorDialogProps) {
           <BlockedControl blocked={!canEdit} reason={REFUSAL}>
             <Button
               variant="contained"
-              disabled={busy || form.lines.length === 0 || problems}
+              disabled={busy || (form.lines.length === 0 && !proofOnly) || problems}
               onClick={() => void save()}
             >
-              {quote ? 'Save' : 'Create quote'}
+              {quote ? 'Save' : proofOnly ? 'Create proof' : 'Create quote'}
             </Button>
           </BlockedControl>
         )}

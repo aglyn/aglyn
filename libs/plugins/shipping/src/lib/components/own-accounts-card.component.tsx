@@ -16,6 +16,10 @@
  */
 'use client'
 
+import { permissionRefusalText } from '@aglyn/aglyn/app-utils/org-permissions'
+import { BlockedControl } from '@aglyn/shared-ui-jsx/components/blocked-control.component'
+import { useSiteKeys } from '@aglyn/tenant-feature-instance/hooks/use-site-keys'
+import { SHIPPING_SITE_PRESETS } from '../model/shipping-permissions'
 import { pluginDocsHelp } from '@aglyn/aglyn/app-utils/docs-help'
 import { CardDisplay } from '@aglyn/shared-ui-jsx'
 import { CopyField } from '@aglyn/shared-ui-jsx/components/copy-field.component'
@@ -59,6 +63,8 @@ interface OwnAccountsAnswer {
  */
 export function OwnAccountsCard(props: ShippingSettingsWidgetProps) {
   const { hostId } = props
+  const refused = useSiteKeys(hostId).blocked('shipping.ownAccounts', SHIPPING_SITE_PRESETS['shipping.ownAccounts'])
+  const refusal = permissionRefusalText('shipping.ownAccounts')
   const availability = useShippingAvailability(hostId)
   const request = useShippingFetch()
   const { enqueueSnackbar } = useSnackbar()
@@ -146,7 +152,13 @@ export function OwnAccountsCard(props: ShippingSettingsWidgetProps) {
       })}
       HeaderProps={
         connectable.length
-          ? { action: <Button onClick={openConnect}>{'Connect an account'}</Button> }
+          ? {
+              action: (
+                <BlockedControl blocked={refused} reason={refusal}>
+                  <Button onClick={openConnect}>{'Connect an account'}</Button>
+                </BlockedControl>
+              ),
+            }
           : undefined
       }
       contentGutterX
@@ -168,9 +180,11 @@ export function OwnAccountsCard(props: ShippingSettingsWidgetProps) {
               {connection.webhookUrl && !connection.followsParcels ? (
                 <Chip size="small" color="warning" label="Tracking not set up" />
               ) : null}
+              <BlockedControl blocked={refused} reason={refusal}>
               <Button size="small" color="error" onClick={() => setDisconnecting(connection)}>
                 {'Disconnect'}
               </Button>
+              </BlockedControl>
             </Stack>
             <Typography variant="body2" color="text.secondary">
               {connection.role === 'labels'

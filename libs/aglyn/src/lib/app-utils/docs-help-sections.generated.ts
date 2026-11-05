@@ -44,6 +44,9 @@ export const PLUGIN_DOCS_SECTION_EXCERPTS: {
   actionsBuilder: {
     '#create-an-action': 'Open the actions builder from Automation → Actions. That\'s it — no multi-step logic to manage.',
   },
+  adConversions: {
+    '#conversions-api': 'Site → Setup → Ad conversions. Each vendor has its own card there.',
+  },
   aglynAssist: {
     '#what-it-can-do': 'Answer how-to questions about building sites, publishing, domains, commerce, bookings, workflows, datasets, team roles, and billing.',
   },
@@ -434,6 +437,9 @@ export const PLUGIN_DOCS_SECTION_EXCERPTS: {
     '#step-3-reviews': 'Ratings on a listing come only from people with a verified email whose organization actually installed it.',
     '#where-a-plugin-runs': 'The Where it runs card on a plugin\'s page answers which of your sites have it.',
   },
+  inventorySync: {
+    '#connect-a-system': 'Connecting, changing or disconnecting a system takes Manage the inventory connection, which a site\'s admins hold by default (custom roles).',
+  },
   inviteTeammates: {
     '#activity-log': 'The organization\'s Team page shows a Recent Activity log: what happened at organization level — renames, workspace URL changes, ownership transfers, members added/removed or re-roled, and invites sent, revoked, or…',
     '#ai-usage': 'Each member\'s page carries an AI usage card: their AI credits this month and last, their share of the workspace\'s pool, their requests, the kinds of request they mostly made, and the split by site.',
@@ -563,7 +569,7 @@ export const PLUGIN_DOCS_SECTION_EXCERPTS: {
     '#your-listings': 'Marketplace → Listings lists everything your organization has published, with its preview image; a row\'s menu is where you Publish new version…, Edit listing, switch a plugin between private and public, or Unpublish……',
   },
   quotes: {
-    '#make-a-quote': 'On the Orders tab, choose New quote in the Quotes card. The quote gets the next number from your store\'s order numbers and is listed as Quote #1042, for example.',
+    '#make-a-quote': 'On the Orders tab, choose New quote in the Quotes card. Sending a design before it has a price?',
     '#quote-defaults': 'The Quotes card on the Checkout settings page sets what every new quote starts with: whether customers approve the proof before they can pay.',
   },
   redirects: {
@@ -699,7 +705,7 @@ export const PLUGIN_DOCS_SECTION_EXCERPTS: {
     '#users-admin': 'Staff-claim management and disabling users, with gated listing; a whole email address typed in the search box looks the account up directly.',
   },
   taxServices: {
-    '#connect': 'Open Products → Taxes and find the Tax service card. Only an admin of the site can connect, test or disconnect a service and change its address.',
+    '#connect': 'Open Products → Taxes and find the Tax service card. Connecting, testing or disconnecting a service and changing its address takes Manage the tax engine connection, which a site\'s admins hold by default (custom roles).',
     '#how-sales-are-taxed': 'A product you marked tax-exempt is sent as non-taxable and charged no tax.',
   },
   waivers: {

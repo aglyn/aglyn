@@ -1103,11 +1103,18 @@ final class ScreenSpecTests: XCTestCase {
     XCTAssertTrue(sources["audience"] is FirestoreSentinel)  // no source: the key is removed
   }
 
+  func testARefusalInASpecNamesThePermission() {
+    let context: JSONValue = ["app": ["permissionRefusal": ["org.settings": "Your role does not include \"Organization settings\" — ask an organization admin"]]]
+    XCTAssertEqual(
+      ScreenValues.render("{app.permissionRefusal[org.settings]}. You can see what this workspace runs.", in: context),
+      "Your role does not include \"Organization settings\" — ask an organization admin. You can see what this workspace runs.")
+  }
+
   @MainActor
   func testASitePluginScreenWritesOnlyTheFieldsTheSiteOverrides() throws {
     let spec = try XCTUnwrap(CoreScreens.specs.first { $0.id == "core.sitePluginSettings.ai" })
     XCTAssertEqual(spec.zones, ["sitePluginSettings"])
-    XCTAssertEqual(spec.requires, "org.manager && params.pluginId == ai")
+    XCTAssertEqual(spec.requires, "site.can[site.manage] && params.pluginId == ai")
     let form = try XCTUnwrap(spec.blocks.first { $0.type == "form" })
     let submit = try XCTUnwrap(form["submit"].flatMap(ActionSpec.init))
     let fields = try XCTUnwrap(submit.write?["fields"])
@@ -1181,7 +1188,7 @@ final class ScreenSpecTests: XCTestCase {
     let set = try XCTUnwrap(actions.first { $0.id == "set" })
     let turnOn = try XCTUnwrap(actions.first { $0.id == "on" })
     let base: JSONValue = [
-      "org": ["id": "o1", "manager": true],
+      "org": ["id": "o1", "manager": true, "can": ["billing.manage": true]],
       "const": spec.raw["constants"] ?? .null,
       "data": ["addons": [
         "hasSubscription": true, "plan": "pro", "interval": "month", "quantities": ["aiAddon": 3],
@@ -1616,7 +1623,7 @@ final class ScreenSpecTests: XCTestCase {
     let consts = try XCTUnwrap(records.raw["constants"])
     func context(crm: Bool, running: [String]) -> JSONValue {
       [
-        "org": ["id": "o1", "manager": true], "const": consts,
+        "org": ["id": "o1", "manager": true, "can": ["billing.manage": true]], "const": consts,
         "data": [
           "sw": ["rows": .array(running.map { ["id": .string($0), "on": true] })],
           "ent": ["features": ["crm": .bool(crm)]],
@@ -1703,6 +1710,34 @@ final class ScreenSpecTests: XCTestCase {
     XCTAssertEqual(fields[2].options.map(\.value), ["", "true"])
     XCTAssertEqual(fields[3].options.map(\.label), ["Kilograms", "Pounds"])
     XCTAssertEqual(fields[3].initial, "kg")
+  }
+
+  /// `only` keeps a route's subset of a catalog, with each group's heading on its first kept row.
+  func testFieldsFromOnlyKeepsTheRoutesKeysAndTheirHeadings() {
+    let context: JSONValue = [
+      "app": ["catalog": [
+        ["key": "a", "label": "A", "group": "g1", "groupLabel": "One", "first": true],
+        ["key": "b", "label": "B", "group": "g1", "groupLabel": "One", "first": false],
+        ["key": "c", "label": "C", "group": "g2", "groupLabel": "Two", "first": true],
+      ]],
+      "data": ["perms": ["keys": ["b", "c"], "defaults": ["b": true, "c": false], "stored": ["c": true]]],
+    ]
+    let entry: JSONValue = [
+      "fieldsFrom": [
+        "items": "app.catalog", "only": "data.perms.keys",
+        "each": [
+          ["if": "item.first", "key": "h.{item.group}", "label": "{item.groupLabel}", "kind": "heading"],
+          ["if": "data.perms.defaults[@item.key]", "key": "p.{item.key}", "label": "{item.label}", "help": "allowed",
+            "initial": "{data.perms.stored[@item.key]}"],
+          ["if": "!data.perms.defaults[@item.key]", "key": "p.{item.key}", "label": "{item.label}", "help": "not allowed",
+            "initial": "{data.perms.stored[@item.key]}"],
+        ],
+      ]
+    ]
+    let fields = FieldSpec.parseAll([entry], in: context)
+    XCTAssertEqual(fields.map(\.key), ["h.g1", "p.b", "h.g2", "p.c"])
+    XCTAssertEqual(fields.map(\.help), [nil, "allowed", nil, "not allowed"])
+    XCTAssertEqual(fields[3].initial, "true")
   }
 
   /// `where` keeps only the rows a condition holds for; a row's field of every row projects with `*`.
@@ -1871,5 +1906,5 @@ final class RoutedTransport: HTTPTransport, @unchecked Sendable {
 
 extension JSONValue {
   /// A copy whose org is a manager, as `org.manager` reads.
-  fileprivate func withManager() -> JSONValue { ScreenContext.with(self, "org", ["manager": true]) }
+  fileprivate func withManager() -> JSONValue { ScreenContext.with(self, "org", ["manager": true, "can": ["billing.manage": true]]) }
 }

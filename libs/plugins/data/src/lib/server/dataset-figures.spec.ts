@@ -177,3 +177,27 @@ describe('datasets', () => {
     expect(await ask({ dataset: 'orders', group: 'state' })).toMatchObject({ ok: true })
   })
 })
+
+describe('a member without "View dataset records" reads no figures of them (AGL-4047)', () => {
+  const docs = (member: Data): Record<string, Data> => ({
+    'orgs/org-1/members/uid-1': member,
+    'orgs/org-1/datasets/d-1': { displayName: 'Menu', visibleTo: ['org'], model: { order: ['kind'], fields: { kind: { name: 'Kind', type: 'text' } } } },
+    'orgs/org-1/datasets/d-1/records/r-1': { values: { kind: 'Soup' } },
+  })
+  const ask = (id: string, member: Data, params: Record<string, string> = {}) =>
+    readerOf(docs(member), id).read({ orgId: 'org-1', uid: 'uid-1', hostId: null, params, now: NOW } as never)
+
+  it.each(['datasets.summary', 'datasets.breakdown'])('%s refuses with the permission named', async (id) => {
+    const refused = (await ask(id, { role: 'editor', allHosts: true, resolvedPermissions: { 'data.viewRecords': false } }, {
+      dataset: 'Menu',
+      group: 'kind',
+    })) as { ok: boolean; status: number; error: string }
+    expect(refused).toMatchObject({ ok: false, status: 403 })
+    expect(refused.error).toContain('View dataset records')
+  })
+
+  it('answers a member nobody refused, stamped or not', async () => {
+    expect(await ask('datasets.summary', { role: 'viewer', allHosts: true })).toMatchObject({ ok: true })
+    expect(await ask('datasets.summary', { role: 'viewer', allHosts: true, resolvedPermissions: { 'data.viewRecords': true } })).toMatchObject({ ok: true })
+  })
+})

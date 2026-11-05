@@ -49,6 +49,7 @@ import androidx.compose.ui.unit.dp
 import androidx.compose.ui.window.Dialog
 import androidx.compose.ui.window.DialogProperties
 import com.aglyn.contracts.Contracts
+import com.aglyn.contracts.deviceTimeZone
 import com.aglyn.contracts.formatReceiptTime
 import com.aglyn.core.FilterOp
 import com.aglyn.core.FirestoreFilter
@@ -241,6 +242,8 @@ fun RecordDetail(context: NativePluginContext, kind: CrmKind, id: String, listSc
       }
       val scope = remember(listScope, crmRecordSite(doc.data)) { recordScope(listScope, doc) }
       val api = remember(scope, listApi) { if (scope == listScope) listApi else CrmApi(context.api, context.writer, scope, context.firestore) }
+      // "Move contacts and deals between stages", where this record's stage routes will ask it.
+      val movesStages = rememberMovesStages(context, scope)
       val stages = reference.pipeline(doc.string("pipelineId")).stages.associate { it.id to it.name }
       val row = crmRow(kind, doc, scope, stages)
       val fields = reference.fields(kind)
@@ -252,7 +255,11 @@ fun RecordDetail(context: NativePluginContext, kind: CrmKind, id: String, listSc
         ) {
           notice?.let { NoticeBanner(it, StatusTone.SUCCESS, action = { TextButton(onClick = { notice = null }) { Text("Dismiss") } }) }
           // One filled button, the next step for this record; the rest in ⋯.
-          val (primary, more) = if (scope.canWrite) recordActions(kind, row) { dialog = it } else (null to emptyList())
+          val (primary, more) = if (scope.canWrite) recordActions(kind, row, movesStages) { dialog = it } else (null to emptyList())
+          val hasStage = kind == CrmKind.CONTACT || (kind == CrmKind.DEAL && (row.data["status"] == "open" || row.data["status"] == null))
+          if (scope.canWrite && hasStage && !movesStages) {
+            NoticeBanner(com.aglyn.contracts.permissionRefusalText(CRM_MOVE_STAGES_KEY), StatusTone.INFO, Modifier.testTag("crm-stage-refusal"))
+          }
           com.aglyn.ui.RecordHeader(
             row.title,
             status = {
@@ -278,7 +285,7 @@ fun RecordDetail(context: NativePluginContext, kind: CrmKind, id: String, listSc
             if (shown.size < fields.size) {
               Text("${fields.size - shown.size} more fields are empty. Edit to fill them in.", style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurfaceVariant)
             }
-            (row.data["createdAt"]?.let(::millisOf))?.let { PropertyRow("Created", formatReceiptTime(it)) }
+            (row.data["createdAt"]?.let(::millisOf))?.let { PropertyRow("Created", formatReceiptTime(it, deviceTimeZone())) }
           }
           RelatedCard(context, kind, id, row, scope, reference)
           if (kind == CrmKind.DEAL || kind == CrmKind.COMPANY) ContactRolesCard(context, kind, id, doc.data, scope, api, reference) { notice = it }
@@ -286,7 +293,7 @@ fun RecordDetail(context: NativePluginContext, kind: CrmKind, id: String, listSc
           TimelineCard(context, kind, id, scope, api)
         }
       }
-      RecordDialogs(context, kind, id, row, fields, values, scope, api, reference, dialog, onClose = { dialog = null }, onNotice = { notice = it })
+      RecordDialogs(context, kind, id, row, fields, values, scope, api, reference, dialog, movesStages, onClose = { dialog = null }, onNotice = { notice = it })
     }
   }
 }
@@ -295,9 +302,9 @@ fun RecordDetail(context: NativePluginContext, kind: CrmKind, id: String, listSc
  * What a record's header offers: the next step for its state as the one filled button (Convert a qualified lead, Email a
  * contact, Move an open deal's stage), and every other act in ⋯, Remove or Delete last.
  */
-private fun recordActions(kind: CrmKind, row: CrmRow, open: (RecordDialog) -> Unit): Pair<com.aglyn.ui.RecordAction?, List<com.aglyn.ui.RecordAction>> {
+private fun recordActions(kind: CrmKind, row: CrmRow, movesStages: Boolean, open: (RecordDialog) -> Unit): Pair<com.aglyn.ui.RecordAction?, List<com.aglyn.ui.RecordAction>> {
   fun act(label: String, icon: String, dialog: RecordDialog) =
-    com.aglyn.ui.RecordAction("crm-action-${dialog.name.lowercase()}", label, icon, destructive = dialog == RecordDialog.DELETE) { open(dialog) }
+    com.aglyn.ui.RecordAction("crm-action-${dialog.name.lowercase()}", label, icon, destructive = dialog == RecordDialog.DELETE, enabled = movesStages || dialog !in setOf(RecordDialog.STAGE, RecordDialog.MOVE, RecordDialog.WON, RecordDialog.LOST)) { open(dialog) }
   val all = buildList {
     add(act("Edit", "edit", RecordDialog.EDIT))
     add(act("Log activity", "sticky_note", RecordDialog.LOG))
@@ -322,7 +329,7 @@ private fun recordActions(kind: CrmKind, row: CrmRow, open: (RecordDialog) -> Un
   val next = when (kind) {
     CrmKind.LEAD -> if (row.data["status"] == "qualified" && row.data["convertedContactId"] == null) RecordDialog.CONVERT else RecordDialog.LOG
     CrmKind.CONTACT -> if (crmHasEmail(row.data)) RecordDialog.EMAIL else RecordDialog.LOG
-    CrmKind.DEAL -> if (row.data["status"] == "open" || row.data["status"] == null) RecordDialog.MOVE else RecordDialog.LOG
+    CrmKind.DEAL -> if ((row.data["status"] == "open" || row.data["status"] == null) && movesStages) RecordDialog.MOVE else RecordDialog.LOG
     CrmKind.COMPANY -> RecordDialog.LOG
   }
   val primary = all.firstOrNull { it.id == "crm-action-${next.name.lowercase()}" }
@@ -516,6 +523,7 @@ private fun RecordDialogs(
   api: CrmApi,
   reference: CrmReference,
   dialog: RecordDialog?,
+  movesStages: Boolean,
   onClose: () -> Unit,
   onNotice: (String) -> Unit,
 ) {
@@ -525,7 +533,7 @@ private fun RecordDialogs(
     null -> Unit
     RecordDialog.EDIT -> EditSheet(
       title = "Edit ${kind.singular.lowercase()}",
-      fields = fields.filter { it.editable }.let { if (kind == CrmKind.CONTACT) withContactEmailHelp(it, crmHasEmail(row.data)) else it },
+      fields = fields.filter { it.editable && (movesStages || it.spec.key != "lifecycleStage") }.let { if (kind == CrmKind.CONTACT) withContactEmailHelp(it, crmHasEmail(row.data)) else it },
       initial = values,
       busy = busy,
       onDismiss = onClose,

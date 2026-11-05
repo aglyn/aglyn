@@ -36,11 +36,14 @@
  * plan. A resource whose plan carries none of it (the CRM's on Free,
  * AGL-3555) says so instead, naming the plan that does. The page is shown
  * to whoever may export something (AGL-3554), so a member who may only
- * read sees Export alone, and only where they may.
+ * read sees Export where they may, and Import switched off with the permission
+ * it takes named (AGL-4047). A dataset's row asks that dataset's own answer,
+ * by where it is placed, as its route does.
  */
 
 import {
   parseTransferResourceKey,
+  TRANSFER_MANAGE_PERMISSION,
   transferPlanFeature,
   transferResourceImports,
   transferResourceInstanceKey,
@@ -48,13 +51,18 @@ import {
 } from '@aglyn/aglyn/data-transfer'
 import { listDeclaredTransferResources, listTransferResourcesFor, pluginTransferResourceUi, TRANSFER_RESOURCES_LOAD_POINT, type ResolvedTransferResourceDeclaration } from '@aglyn/aglyn/plugin-manager/plugin-transfer-resources'
 import { pluginRecordListQuery, pluginRecordsFromRows } from '@aglyn/aglyn/plugin-manager/plugin-record-lists'
+import type { PluginIndexedRecord } from '@aglyn/aglyn/plugin-manager/plugin-record-index'
 import { useTransferLauncher, type TransferLauncher } from '@aglyn/aglyn/app-utils/transfer-launcher-context'
+import { permissionRefusalText } from '@aglyn/aglyn/app-utils/org-permissions'
+import { isOrgWideMember, memberScopeTokens } from '@aglyn/aglyn/app-utils/organizations'
+import type { AglynOrgMember } from '@aglyn/aglyn/foundation/definitions/organization.types'
 import { planLabelGrantingFeature } from '@aglyn/aglyn'
 import { AppLink, CardDisplay } from '@aglyn/shared-ui-jsx'
+import { BlockedControl } from '@aglyn/shared-ui-jsx/components/blocked-control.component'
 import { authorizedFetch } from '@aglyn/shared-util-http/authorized-token'
-import { useFirestore, useUser } from '@aglyn/tenant-feature-instance'
+import { useFirestore, useFirestoreDoc, useUser } from '@aglyn/tenant-feature-instance'
 import { Alert, Box, Button, Chip, Divider, MenuItem, Stack, TextField, Typography } from '@mui/material'
-import { getDocs, type Firestore } from 'firebase/firestore'
+import { doc, getDocs, type Firestore } from 'firebase/firestore'
 import { useEffect, useMemo, useState } from 'react'
 import { buildRoute, Route } from '../../constants/route-links'
 import { PLUGIN_SURFACE_TITLES } from '../../constants/plugins.titles.generated'
@@ -101,11 +109,37 @@ function InstanceRows(props: {
   launcher: TransferLauncher
 }) {
   const { resource, firestore, orgId, hostId, launcher } = props
-  const kind = pluginTransferResourceUi(resource.key)?.instancesFrom ?? null
-  const [instances, setInstances] = useState<Array<{ id: string; name: string }> | null>(null)
+  const ui = pluginTransferResourceUi(resource.key)
+  const kind = ui?.instancesFrom ?? null
+  const [instances, setInstances] = useState<readonly PluginIndexedRecord[] | null>(null)
+
+  // Who is asking (AGL-4047). A member who does not reach every site must ask
+  // for what they reach, or the rules refuse the list, and a row's own answer
+  // reads the same document. One listener, which every other reader of it shares.
+  const { data: user } = useUser()
+  const uid = (user as { uid?: string } | undefined)?.uid ?? ''
+  const memberRead = useFirestoreDoc<Partial<AglynOrgMember> & { roleId?: unknown }>(
+    () => (uid ? doc(firestore, 'orgs', orgId, 'members', uid) : null),
+    [firestore, orgId, uid],
+  )
+  const member = memberRead.status === 'success' ? (memberRead.data ?? null) : null
+  const memberSettled = memberRead.status !== 'loading'
+  const orgWide = isOrgWideMember(member)
+  const scope = member && !orgWide ? memberScopeTokens(member).join(',') : ''
+  // A custom role decides what a site gives a member of the whole workspace.
+  const roleId = ui?.instanceImportAccess && orgWide && typeof member?.roleId === 'string' ? member.roleId : ''
+  const roleRead = useFirestoreDoc<Readonly<Record<string, unknown>>>(
+    () => (roleId ? doc(firestore, 'orgs', orgId, 'roles', roleId) : null),
+    [firestore, orgId, roleId],
+  )
+  const settled = memberSettled && (!roleId || roleRead.status !== 'loading')
+
   useEffect(() => {
+    // Not before the member's reach is known: an unfiltered list is refused whole.
+    if (!memberSettled) return undefined
     let active = true
-    const query = kind ? pluginRecordListQuery(kind, firestore, { orgId, hostId, limit: INSTANCES_SHOWN }) : null
+    const memberScope = scope ? scope.split(',') : null
+    const query = kind ? pluginRecordListQuery(kind, firestore, { orgId, hostId, memberScope, limit: INSTANCES_SHOWN }) : null
     if (!kind || !query) {
       setInstances([])
       return undefined
@@ -113,14 +147,13 @@ function InstanceRows(props: {
     getDocs(query)
       .then((snapshot) => {
         if (!active) return
-        const records = pluginRecordsFromRows(kind, snapshot.docs.map((doc) => ({ ...doc.data(), $id: doc.id })))
-        setInstances(records.map((record) => ({ id: record.id, name: record.name || record.id })))
+        setInstances(pluginRecordsFromRows(kind, snapshot.docs.map((row) => ({ ...row.data(), $id: row.id }))))
       })
       .catch(() => active && setInstances([]))
     return () => {
       active = false
     }
-  }, [kind, firestore, orgId, hostId])
+  }, [kind, firestore, orgId, hostId, scope, memberSettled])
 
   if (!kind) {
     return (
@@ -138,25 +171,46 @@ function InstanceRows(props: {
   }
   return (
     <Stack sx={{ pl: 2 }}>
-      {(instances ?? []).map((instance) => {
+      {(settled ? (instances ?? []) : []).map((instance) => {
         const launch = {
           resource: transferResourceInstanceKey(resource.key, instance.id),
           scope: resource.scope,
           ...(hostId ? { hostId } : {}),
-          title: `${labelOf(resource)}: ${instance.name}`,
+          title: `${labelOf(resource)}: ${instance.name || instance.id}`,
         }
         // Each only for whom the route takes it (AGL-3554): an instance asks
-        // under its own key, as its route does.
-        const imports = transferResourceImports(resource) && launcher.can('import', launch)
+        // under its own key, as its route does, and answers for itself when
+        // its resource can, as its route does (AGL-4047).
+        const own =
+          ui?.instanceImportAccess && member
+            ? ui.instanceImportAccess({
+                record: instance,
+                member,
+                customRole: roleId && roleRead.status === 'success' ? (roleRead.data ?? null) : null,
+              })
+            : null
+        const target = own ? { ...launch, importAllowed: own.allowed } : launch
+        const takesFile = transferResourceImports(resource)
+        const imports = takesFile && launcher.can('import', target)
         const exports = launcher.can('export', launch)
+        // Off with the permission named, not hidden, once an answer is known to
+        // be about the permission: `can` also says no while its reads are out,
+        // and for the plan, which this row has its own words for.
+        const refused = takesFile && !imports ? (launcher.refusedPermission?.('import', target) ?? null) : null
+        const importRefused = Boolean(refused)
         return (
           <Stack key={instance.id} direction="row" spacing={1} sx={{ alignItems: 'center', justifyContent: 'space-between' }}>
-            <Typography variant="body2">{instance.name}</Typography>
+            <Typography variant="body2">{instance.name || instance.id}</Typography>
             <Stack direction="row" spacing={1}>
-              {imports ? (
-                <Button size="small" onClick={() => launcher.openImport(launch)}>
-                  {'Import'}
-                </Button>
+              {imports || importRefused ? (
+                <BlockedControl
+                  blocked={importRefused}
+                  reason={own && !own.allowed ? own.reason : permissionRefusalText(refused ?? TRANSFER_MANAGE_PERMISSION)}
+                >
+                  <Button size="small" onClick={() => launcher.openImport(launch)}>
+                    {'Import'}
+                  </Button>
+                </BlockedControl>
               ) : null}
               {exports ? (
                 <Button size="small" onClick={() => launcher.openExport(launch)}>
@@ -307,6 +361,18 @@ export function OrgDataTransferCard(props: { onImported?(): void }) {
     const base = { resource: resource.key, scope, ...(siteId ? { hostId: siteId } : {}) }
     const records = resource.kinds.includes('records') && launcher
     const packages = resource.kinds.includes('package') && client && managesData
+    // Off with the permission named, not hidden (AGL-4047), once it is known to
+    // be a permission that refuses: the launcher says so for records, and a
+    // package's route asks "Manage data".
+    const recordsRefusal =
+      records && transferResourceImports(resource) && !launcher.can('import', base)
+        ? (launcher.refusedPermission?.('import', base) ?? null)
+        : null
+    const packageRefusal =
+      resource.kinds.includes('package') && client && permissions.loaded && !managesData && planAllows(resource, 'import')
+        ? TRANSFER_MANAGE_PERMISSION
+        : null
+    const importRefusal = recordsRefusal ?? packageRefusal
     const offers = {
       // A resource only exported (a log, a setup) takes no file (AGL-3528).
       recordsImport: Boolean(records && transferResourceImports(resource) && launcher.can('import', base)),
@@ -326,6 +392,11 @@ export function OrgDataTransferCard(props: { onImported?(): void }) {
     }
     return (
       <Stack direction="row" spacing={1}>
+        {importRefusal && !offers.recordsImport && !offers.packageImport ? (
+          <BlockedControl blocked reason={permissionRefusalText(importRefusal)}>
+            <Button size="small">{'Import'}</Button>
+          </BlockedControl>
+        ) : null}
         {offers.recordsImport && launcher ? (
           <Button size="small" onClick={() => launcher.openImport(base)}>
             {'Import'}

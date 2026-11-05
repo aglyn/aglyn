@@ -84,7 +84,6 @@ const val FORMS_FORM_SCREEN = "forms.form"
 /** The submissions screens the Inbox plugin contributes; opened by id, never imported. */
 private const val INBOX_SUBMISSIONS_SCREEN = "inbox.submissions"
 
-private val CONTENT_ROLES = setOf("admin", "editor", "author")
 private val PUBLISH_ROLES = setOf("admin", "editor")
 
 private sealed interface FormDialog {
@@ -109,7 +108,7 @@ fun FormsScreen(context: NativePluginContext, initialFormId: String? = null, sta
   LaunchedEffect(model) { model.reload() }
   val api = remember(hostId, context.api, context.writer) { FormsApi(context.api, context.writer, hostId) }
   val runner = remember(hostId) { ActionRunner(scope) }
-  val canEdit = context.siteRole in CONTENT_ROLES
+  val canEdit = com.aglyn.pluginhost.rememberMemberPermissions(context).can("site.edit")
   // Opened from Create new: the new-form question comes up at once (for those who may add one).
   var dialog by remember { mutableStateOf<FormDialog?>(if (startNew && canEdit) FormDialog.Create else null) }
 

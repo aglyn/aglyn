@@ -58,11 +58,25 @@ const fakeSnapshot = (collection: string) => ({
 
 const orgRef = {
   id: 'org-1',
+  data: () => ({}),
   collection: (name: string) => ({
     get: async () => fakeSnapshot(name),
     doc: (id: string) => ({ id, collection: name }),
   }),
 }
+
+const mockAllExceptDrift = jest.fn(async (_orgRef: unknown, _org: unknown) => ({
+  marked: 0,
+  stale: 0,
+  capped: 0,
+  invalid: 0,
+}))
+const mockRunSweep = jest.fn(async (_input: unknown) => ({}))
+
+jest.mock('@aglyn/tenant-data-admin/server/scope-sharing-sweep', () => ({
+  scopeSharingDriftForOrg: (orgRef: unknown, org: unknown) => mockAllExceptDrift(orgRef, org),
+  runScopeSharingSweep: (input: unknown) => mockRunSweep(input),
+}))
 
 jest.mock('@aglyn/aglyn/server', () => {
   const actual = jest.requireActual('@aglyn/aglyn/server')
@@ -235,6 +249,63 @@ describe('the scope-drift detector (AGL-1478)', () => {
     )
     expect(payload.dryRun).toBe(false)
     expect(mockCommit).toHaveBeenCalled()
+  })
+  describe('documents shared with all sites except some (AGL-4047)', () => {
+    const staleOnce = () =>
+      mockAllExceptDrift.mockResolvedValueOnce({ marked: 3, stale: 2, capped: 1, invalid: 0 })
+
+    it('costs nothing and says nothing when nothing is marked', async () => {
+      const { status, payload } = await call(CRON)
+      expect(status).toBe(200)
+      expect(payload.totals.allExcept).toEqual({ marked: 0, stale: 0, capped: 0, invalid: 0 })
+      expect(mockNotifyStaff).not.toHaveBeenCalled()
+      expect(mockRunSweep).not.toHaveBeenCalled()
+    })
+
+    it('alarms the way any drift does, in words about what is wrong', async () => {
+      staleOnce()
+      const { status, payload } = await call(CRON)
+      expect(status).toBe(207)
+      expect(payload.drift.allExcept).toEqual({ stale: 2, invalid: 0, capped: 1 })
+      expect(payload.drift.total).toBe(2)
+      const notification = mockNotifyStaff.mock.calls[0][0] as { title: string; body: string }
+      expect(notification.title).toContain('all sites except some')
+      expect(notification.title).not.toContain('missing')
+      expect(notification.body).toContain('2 all-except behind')
+    })
+
+    it('still says missing when documents are missing a scope as well', async () => {
+      staleOnce()
+      seeded.datasets = [{ id: 'forked', data: { displayName: 'Survey' } }]
+      await call(CRON)
+      const notification = mockNotifyStaff.mock.calls[0][0] as { title: string }
+      expect(notification.title).toContain('missing their sharing scope')
+    })
+
+    it('stays green for documents at their limit alone', async () => {
+      mockAllExceptDrift.mockResolvedValueOnce({ marked: 1, stale: 0, capped: 1, invalid: 0 })
+      const { status, payload } = await call(CRON)
+      expect(status).toBe(200)
+      expect(payload.drift.allExcept.capped).toBe(1)
+      expect(mockNotifyStaff).not.toHaveBeenCalled()
+    })
+
+    it('never sweeps for the cron, whatever it asks', async () => {
+      staleOnce()
+      await call(CRON, { dryRun: false })
+      expect(mockRunSweep).not.toHaveBeenCalled()
+    })
+
+    it('sweeps for a staff repair, only where something is behind', async () => {
+      mockVerifyIdToken.mockResolvedValue({ email_verified: true, staff: true })
+      staleOnce()
+      const repaired = await call({ authorization: 'Bearer staff' }, { dryRun: false })
+      expect(repaired.status).toBe(200)
+      expect(mockRunSweep).toHaveBeenCalledWith({ orgId: 'org-1' })
+      mockRunSweep.mockClear()
+      await call({ authorization: 'Bearer staff' }, { dryRun: false })
+      expect(mockRunSweep).not.toHaveBeenCalled()
+    })
   })
 })
 

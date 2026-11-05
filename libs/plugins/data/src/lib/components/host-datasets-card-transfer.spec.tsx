@@ -47,8 +47,11 @@ const FIRESTORE = {}
 const DATA_SCOPE = { scope: ['orgs', 'org-1'], orgId: 'org-1' }
 const logActivity = jest.fn()
 
+/** The signed-in member's document, or the read still out. */
+let mockMember: { data: unknown; status: string } = { data: undefined, status: 'loading' }
+
 jest.mock('@aglyn/tenant-feature-instance', () => ({
-  useFirestoreDoc: () => ({ data: undefined, status: 'loading' }),
+  useFirestoreDoc: () => mockMember,
   useFirestore: () => FIRESTORE,
   useOrgDataScope: () => DATA_SCOPE,
   useScopeTokens: () => ({ tokens: ['org'], orgWide: true, loaded: true }),
@@ -115,7 +118,10 @@ const mount = (transfer: TransferLauncher | null) =>
     </TransferLauncherContext.Provider>,
   )
 
-beforeEach(() => jest.clearAllMocks())
+beforeEach(() => {
+  jest.clearAllMocks()
+  mockMember = { data: undefined, status: 'loading' }
+})
 
 describe('the Data card opens the transfer framework on the selected dataset', () => {
   it('Import opens the wizard on the dataset, and Done refreshes the count and logs it', () => {
@@ -149,13 +155,34 @@ describe('the Data card opens the transfer framework on the selected dataset', (
     expect(screen.queryByText('Import records')).toBeNull()
   })
 
-  it('offers a member who can read the dataset Export alone, and asks about the dataset in view', () => {
+  it('switches Import off with "Manage data" named for a member known not to hold it, never hidden', () => {
+    mockMember = { data: { role: 'viewer' }, status: 'success' }
+    const transfer = launcher(['export'])
+    mount(transfer)
+    const button = textButton('Import') as HTMLButtonElement
+    expect(button.disabled).toBe(true)
+    expect(button.closest('[aria-label]')?.getAttribute('aria-label')).toBe(
+      'Your role does not include "Manage data" — ask an organization admin',
+    )
+    fireEvent.click(button)
+    expect(transfer.openImport).not.toHaveBeenCalled()
+  })
+
+  it('leaves Import on for a holder, with no reason on it (negative control)', () => {
+    mockMember = { data: { role: 'editor' }, status: 'success' }
+    mount(launcher())
+    const button = textButton('Import') as HTMLButtonElement
+    expect(button.disabled).toBe(false)
+    expect(button.closest('[aria-label]')).toBeNull()
+  })
+
+  it('offers a member who can read the dataset Export, and asks about the dataset in view', () => {
     const transfer = launcher(['export'])
     mount(transfer)
     expect(textButton('Import')).toBeNull()
     expect(textButton('Export')).not.toBeNull()
-    expect(transfer.can).toHaveBeenCalledWith('import', { resource: 'data.dataset:ds-1', scope: 'org' })
-    expect(transfer.can).toHaveBeenCalledWith('export', { resource: 'data.dataset:ds-1', scope: 'org' })
+    expect(transfer.can).toHaveBeenCalledWith('import', expect.objectContaining({ resource: 'data.dataset:ds-1', scope: 'org' }))
+    expect(transfer.can).toHaveBeenCalledWith('export', expect.objectContaining({ resource: 'data.dataset:ds-1', scope: 'org' }))
   })
 
   it('offers neither while the answer is out, or to a member who may do neither', () => {

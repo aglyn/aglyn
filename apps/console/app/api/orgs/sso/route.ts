@@ -15,6 +15,7 @@
  * limitations under the License.
  */
 
+import { permissionRefusalText } from '@aglyn/aglyn/app-utils/org-permissions'
 import { checkEntitlement, pluginRequestFromWeb } from '@aglyn/aglyn/server'
 import {
   SSO_LOCKOUT_REFUSAL,
@@ -105,7 +106,7 @@ async function handler(request: Request): Promise<Response> {
       !(await memberHasOrgPermission(orgId, membership?.member, 'org.settings'))
     ) {
       return Response.json(
-        { error: 'Single sign-on requires the admin role' },
+        { error: permissionRefusalText('org.settings') },
         { status: 403 },
       )
     }

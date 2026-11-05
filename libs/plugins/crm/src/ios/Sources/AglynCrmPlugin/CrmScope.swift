@@ -1,6 +1,7 @@
 // Copyright 2026 Aglyn LLC
 // SPDX-License-Identifier: Apache-2.0
 
+import AglynContracts
 import AglynCore
 import Foundation
 import Observation
@@ -12,6 +13,10 @@ import Observation
  */
 
 let orgScopeToken = "org"
+/// "Change CRM settings".
+let crmSettingsKey = "crm.settings"
+/// "Move contacts and deals between stages".
+let crmMoveStagesKey = "crm.moveStages"
 let maxScopeHosts = 30
 
 func hostScopeToken(_ hostID: String) -> String { "host:\(hostID)" }
@@ -145,8 +150,24 @@ struct CrmScope: Equatable {
   /// The member's own row, which `forSite` narrows a declared group's reach by.
   let member: [String: Any]?
 
-  var canWrite: Bool { ["owner", "admin", "editor"].contains(role ?? "") }
-  var canManage: Bool { ["owner", "admin"].contains(role ?? "") }
+  /// What the member holds across the workspace, off their own row (its `resolvedPermissions` stamp over their role).
+  let permissions: [String: Bool]
+
+  /// "Manage data": what every write to the CRM's records asks.
+  var canWrite: Bool { permissions["data.manage"] == true }
+  /// "Change CRM settings": the settings that hold for every site.
+  var canManage: Bool { permissions[crmSettingsKey] == true }
+  /// The workspace's own CRM reads every site's records at once: it asks for the reach and for "Manage data".
+  var opensWorkspaceCrm: Bool { orgWide && canWrite }
+
+  /// "Move contacts and deals between stages", where the stage route will ask it: on the site it is called for (`site`,
+  /// that site's document), with no site the workspace's verdict. Until the site is read nothing is switched off, and
+  /// the route answers. For what to show only.
+  func movesStages(on site: [String: Any]?) -> Bool {
+    if hostID.isEmpty { return permissions[crmMoveStagesKey] == true }
+    guard let site else { return true }
+    return sitePermissions(ContractValues.shared.orgRoleGrants, workspace: permissions, site: site, uid: uid)[crmMoveStagesKey] == true
+  }
   /// The site a new record names as its source; nil for a record from no site.
   var createHostID: String? { hostID.isEmpty ? nil : hostID }
   /// Whether a create must name a site: the workspace keeps each site's records apart, so the site decides who sees it.
@@ -157,7 +178,8 @@ struct CrmScope: Equatable {
   var taskScope: [String: Any?] { orgLevel ? ["orgId": orgID] : ["hostId": hostID] }
 
   static func == (a: CrmScope, b: CrmScope) -> Bool {
-    a.orgID == b.orgID && a.hostID == b.hostID && a.orgLevel == b.orgLevel && a.uid == b.uid && a.role == b.role && a.readTokens == b.readTokens
+    a.orgID == b.orgID && a.hostID == b.hostID && a.orgLevel == b.orgLevel && a.uid == b.uid && a.role == b.role
+      && a.permissions == b.permissions && a.readTokens == b.readTokens
       && a.createTokens == b.createTokens && a.suite == b.suite && a.orgWide == b.orgWide
   }
 
@@ -167,6 +189,7 @@ struct CrmScope: Equatable {
     orgID: String, hostID: String, uid: String, org: [String: Any]?, member: [String: Any]?, orgLevel: Bool = false
   ) {
     let role = member?["role"] as? String
+    // Reach, not a permission: no key grants a collaborator the sites they were not given (`isOrgWideMember`).
     let orgWide = ["owner", "admin"].contains(role ?? "") || member?["allHosts"] as? Bool == true
     let group = consentGroupForHost(org, hostID)
     var read = crmReadTokens(group)
@@ -182,6 +205,7 @@ struct CrmScope: Equatable {
     self.groupID = orgLevel ? "" : group.groupID
     self.uid = uid
     self.role = role
+    self.permissions = memberPermissions(ContractValues.shared.orgRoleGrants, member: member, orgRole: role)
     self.orgWide = orgWide
     self.readTokens = read
     self.createTokens = crmCreateTokens(org, hostID)

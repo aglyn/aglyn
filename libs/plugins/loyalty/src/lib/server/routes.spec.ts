@@ -56,6 +56,7 @@ jest.mock('@aglyn/shared-util-email', () => ({ isEmailConfigured: () => true, se
 const ORG = 'org-candles'
 const HOST = 'host-candles'
 let db: MemoryFirestore
+let stamps: Record<string, Record<string, boolean>> = {}
 let sent: LoyaltyEmail[]
 let byte = 0
 
@@ -116,6 +117,7 @@ async function seedMember(email: string, fields: Record<string, unknown> = {}) {
 }
 
 beforeEach(async () => {
+  stamps = {}
   db = createMemoryFirestore()
   sent = []
   activity.length = 0
@@ -136,7 +138,10 @@ beforeEach(async () => {
       ? {
           orgId: ORG,
           org: { name: 'Candles' },
-          host: { memberRoles: { 'uid-admin': 'admin', 'uid-editor': 'editor', 'uid-viewer': 'viewer' } },
+          host: {
+            memberRoles: { 'uid-admin': 'admin', 'uid-editor': 'editor', 'uid-viewer': 'viewer' },
+            memberPermissions: stamps,
+          },
         }
       : null,
   )
@@ -159,6 +164,14 @@ afterEach(() => {
 })
 
 describe('the gate (AGL-3640)', () => {
+  it('reads the site’s stamp before the preset, and names the permission (AGL-4047)', async () => {
+    stamps = { 'uid-editor': { 'loyalty.program': true }, 'uid-admin': { 'loyalty.program': false } }
+    expect((await call(programRoute, 'POST', { token: 'tok-editor', body: { program: { enabled: true } } })).status).toBe(200)
+    const refused = await call(programRoute, 'POST', { token: 'tok-admin', body: { program: { enabled: true } } })
+    expect(refused.status).toBe(403)
+    expect((await refused.json()).error).toContain('does not include')
+  })
+
   it('refuses no token, an unverified address, an outsider and a site without rewards', async () => {
     expect((await call(programRoute, 'GET', { token: '' })).status).toBe(401)
     expect((await call(programRoute, 'GET', { token: 'tok-bogus' })).status).toBe(401)

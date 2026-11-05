@@ -371,6 +371,6 @@ extension AppModel {
     guard let org = workspace?.org, let plan = workspace?.orgLogos[org.id]?.plan,
       registry.screen("core.billing") != nil
     else { return false }
-    return OnboardingPlanIntent.upgradablePlans.contains(plan) && ["owner", "admin"].contains(org.role)
+    return OnboardingPlanIntent.upgradablePlans.contains(plan) && orgAccess.holds("billing.manage", onSite: nil)
   }
 }

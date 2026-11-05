@@ -35,6 +35,10 @@ const render = (ui: ReactElement) => renderBare(<ConfirmationProviderComponent>{
 const request = jest.fn()
 const enqueueSnackbar = jest.fn()
 
+jest.mock('@aglyn/tenant-feature-instance/hooks/use-site-keys', () => ({
+  useSiteKeys: () => ({ blocked: (key: string) => mockBlockedKeys.has(key) }),
+}))
+const mockBlockedKeys = new Set<string>()
 jest.mock('./sales-channels-api', () => ({
   ...jest.requireActual('./sales-channels-api'),
   useSalesChannelsFetch: () => request,

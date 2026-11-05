@@ -241,7 +241,9 @@ struct SpecScreenBody: View {
     content
       .safeAreaInset(edge: .top) {
         if let notice {
+          // Opaque beneath its tint: the list scrolls under this inset, and its text must not show through.
           AglynNotice(notice.text, tone: notice.tone) { self.notice = nil }
+            .background(AglynColor.paper, in: RoundedRectangle(cornerRadius: AglynRadius.control, style: .continuous))
             .aglynContentEdges().padding(.top, AglynSpace.one)
             .transition(.move(edge: .top).combined(with: .opacity))
         }
@@ -722,6 +724,7 @@ struct SpecScreenBody: View {
       }
       return
     }
+    notice = nil
     running = action.id
     let outcome = await model.run(action, in: scope)
     running = nil
@@ -809,6 +812,8 @@ struct SpecScreenBody: View {
 
   private func show(_ text: String, _ tone: AglynTone) {
     notice = (text, tone)
+    // A success reads and goes; a refusal or a warning has to be read, so it stays until dismissed or replaced.
+    if tone == .error || tone == .warning { return }
     let shown = text
     Task {
       try? await Task.sleep(nanoseconds: 4_000_000_000)

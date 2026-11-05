@@ -24,12 +24,14 @@
  * filled button. This is a small cascade, enough for that and no more:
  *
  * - **The sheets.** The page's own `<style>` sheets and the ones it links,
- *   read in order. `@media` rules apply as a 1280-pixel screen in light mode
+ *   every one to a byte budget (`siteImportReadStylesheets`, AGL-4152), read
+ *   in order. `@media` rules apply as a 1280-pixel screen in light mode
  *   sees them, so a grid's desktop columns win over its phone ones;
  *   `@layer`, `@supports` and `@container` are read through; keyframes, font
  *   faces (their families noted) and page rules are skipped.
  * - **Selectors.** Tags, classes (escaped ones too, as utility frameworks
- *   write them), ids and attributes, joined by any combinator. A rule that
+ *   write them), ids and attributes, joined by any combinator, and `:is()`
+ *   and `:where()` spelled out (AGL-4152). A rule that
  *   only applies on hover, focus or to a generated part (`::before`) is a
  *   state the page is not in and is not read.
  * - **The cascade.** Specificity, then order, `!important` over both, and the
@@ -80,6 +82,17 @@ const KEPT_PROPERTIES = new Set([
   'display',
   'grid-template-columns',
   'grid-column',
+  // Where a grid places its children, and the order a row shows them in (AGL-4152).
+  'grid-template-rows',
+  'grid-template-areas',
+  'grid-auto-flow',
+  'grid-area',
+  'grid-row',
+  'grid-row-start',
+  'grid-row-end',
+  'grid-column-start',
+  'grid-column-end',
+  'order',
   'flex',
   'flex-direction',
   'flex-wrap',
@@ -107,6 +120,9 @@ const KEPT_PROPERTIES = new Set([
   'justify-content',
   'align-items',
 ])
+
+/** What a rule says of a child's place in its grid, which a breakpoint nested in the rule may say again (AGL-4152). */
+const GRID_PLACEMENT = /^(?:grid-area|grid-row|grid-row-start|grid-row-end|grid-column|grid-column-start|grid-column-end|order)$/
 
 /** What an element takes from its parent when it says nothing itself. */
 const INHERITED = new Set(['color', 'font-family', 'font-size', 'font-weight', 'text-transform', 'letter-spacing', 'text-align', 'visibility'])
@@ -143,6 +159,8 @@ export interface SiteImportCss {
   fontFaces: string[]
   /** Read for its dark scheme (AGL-4152): the rules that scheme alone selects, by a media query or a class on the page. */
   darkRules: number
+  /** How many declarations read each custom property (AGL-4152): what its palette uses most. */
+  variableUses: Map<string, number>
 }
 
 /** Which of a page's color schemes a read of its stylesheets answers for. */
@@ -223,6 +241,42 @@ function parseSelector(text: string): ComplexSelector | null {
     if (compound.tag) tags += 1
   }
   return { compounds, combinators, specificity: ids * 1_000_000 + classes * 1_000 + tags }
+}
+
+/** The most selectors one written with `:is()` or `:where()` is spelled out into. */
+const SELECTOR_VARIANTS = 24
+
+/**
+ * A selector with its `:is()` and `:where()` spelled out (AGL-4152), each with
+ * the weight to take off for a `:where()`, which counts for nothing. A variant
+ * two compounds cannot be joined into (`.x:is(div)`, `.x:is(.a .b)`) is left out.
+ */
+function spelledOut(text: string): Array<{ text: string; discount: number }> {
+  const match = /:(?:is|where)\(/i.exec(text)
+  if (!match) return [{ text, discount: 0 }]
+  const inner = match.index + match[0].length
+  let depth = 1
+  let end = inner
+  while (end < text.length && depth > 0) {
+    if (text[end] === '(') depth += 1
+    else if (text[end] === ')') depth -= 1
+    end += 1
+  }
+  if (depth) return [{ text, discount: 0 }]
+  const head = text.slice(0, match.index)
+  const tail = text.slice(end)
+  const zeroed = /where/i.test(match[0])
+  const joined = !head || /[\s>+~]$/.test(head)
+  const out: Array<{ text: string; discount: number }> = []
+  for (const option of splitList(text.slice(inner, end - 1))) {
+    if (!joined && (/\s/.test(option) || /^[\w*]/.test(option))) continue
+    const discount = zeroed ? (parseSelector(option.replace(/:(?:is|where)\([^()]*\)/gi, ''))?.specificity ?? 0) : 0
+    for (const variant of spelledOut(`${head}${option}${tail}`)) {
+      if (out.length >= SELECTOR_VARIANTS) return out
+      out.push({ text: variant.text, discount: discount + variant.discount })
+    }
+  }
+  return out
 }
 
 /** Splits at top-level commas: none inside brackets or parentheses. */
@@ -358,7 +412,7 @@ function keyOf(selector: ComplexSelector): string {
  * it makes sense, as a browser would; nothing throws.
  */
 export function siteImportCssOf(sheets: readonly string[], viewport: number = SITE_IMPORT_CSS_VIEWPORT.width, options: SiteImportCssOptions = {}): SiteImportCss {
-  const css: SiteImportCss = { rules: [], index: new Map(), fontFaces: [], darkRules: 0 }
+  const css: SiteImportCss = { rules: [], index: new Map(), fontFaces: [], darkRules: 0, variableUses: new Map() }
   const scheme = options.scheme ?? 'light'
   let order = 0
   /** For each open group: whether only a dark scheme's media query opens it. */
@@ -366,19 +420,26 @@ export function siteImportCssOf(sheets: readonly string[], viewport: number = SI
   const addRule = (prelude: string, body: string) => {
     const decls = declarationsOf(body)
     if (!decls.length) return
+    for (const [, value] of decls) {
+      if (!value.includes('var(')) continue
+      for (const use of value.matchAll(/var\(\s*(--[\w-]+)/g)) css.variableUses.set(use[1] as string, (css.variableUses.get(use[1] as string) ?? 0) + 1)
+    }
     for (const text of splitList(prelude)) {
       const lifted = scheme === 'dark' ? withoutDarkScope(text) : null
-      const selector = parseSelector(lifted ?? text)
-      if (!selector) continue
-      if (scheme === 'dark' && (lifted !== null || darkGroups.includes(true))) css.darkRules += 1
-      // The mark it lost still counts: a dark rule outranks the same rule of the light scheme.
-      if (lifted !== null) selector.specificity += 1_000
-      const rule: CssRule = { selector, order: order++, decls }
-      css.rules.push(rule)
-      const key = keyOf(selector)
-      const list = css.index.get(key)
-      if (list) list.push(rule)
-      else css.index.set(key, [rule])
+      for (const variant of spelledOut(lifted ?? text)) {
+        const selector = parseSelector(variant.text)
+        if (!selector) continue
+        selector.specificity = Math.max(0, selector.specificity - variant.discount)
+        if (scheme === 'dark' && (lifted !== null || darkGroups.includes(true))) css.darkRules += 1
+        // The mark it lost still counts: a dark rule outranks the same rule of the light scheme.
+        if (lifted !== null) selector.specificity += 1_000
+        const rule: CssRule = { selector, order: order++, decls }
+        css.rules.push(rule)
+        const key = keyOf(selector)
+        const list = css.index.get(key)
+        if (list) list.push(rule)
+        else css.index.set(key, [rule])
+      }
     }
   }
   for (const sheet of sheets) {
@@ -439,7 +500,11 @@ export function siteImportCssOf(sheets: readonly string[], viewport: number = SI
         if (family && !css.fontFaces.includes(family)) css.fontFaces.push(family)
       } else if (!prelude.startsWith('@') && applies && prelude) {
         // A rule nested inside a rule (`&:hover`) is a state: only the outer declarations are read.
-        addRule(prelude, body.replace(/[^;{}]*\{[^{}]*\}/g, ''))
+        // A breakpoint nested inside one that holds at this width places its child as a top-level one does.
+        const placed = [...body.matchAll(/@media([^{};]*)\{([^{}]*)\}/g)]
+          .filter((match) => mediaHolds(match[1] as string, viewport, scheme))
+          .flatMap((match) => (match[2] as string).split(';').filter((part) => GRID_PLACEMENT.test(part.slice(0, part.indexOf(':')).trim().toLowerCase())))
+        addRule(prelude, [body.replace(/[^;{}]*\{[^{}]*\}/g, ''), ...placed].join(';'))
       }
       start = at = end
     }
@@ -557,14 +622,19 @@ export interface SiteImportStyles {
   of(element: number): SiteImportComputedStyle
   /** The root's (`<html>`) element id, which `:root` matches; -1 for none. */
   readonly root: number
+  /** The custom properties the root declares (AGL-4152), each read through to what it holds. */
+  rootVariables(): ReadonlyMap<string, string>
 }
 
 const EMPTY_STYLE: SiteImportComputedStyle = new Map()
 
+/** How far a variable that names a variable is followed: a site builder's palette goes several deep. */
+const VARIABLE_DEPTH = 8
+
 /** Replaces each `var(--x, fallback)` with what the custom properties hold, to a few levels. */
 function withVariables(value: string, custom: ReadonlyMap<string, string>): string {
   let out = value
-  for (let pass = 0; pass < 4 && out.includes('var('); pass += 1) {
+  for (let pass = 0; pass < VARIABLE_DEPTH && out.includes('var('); pass += 1) {
     out = out.replace(/var\(\s*(--[\w-]+)\s*(?:,\s*((?:[^()]|\([^()]*\))*))?\)/g, (_, name: string, fallback?: string) => custom.get(name) ?? fallback?.trim() ?? '')
   }
   return out
@@ -625,8 +695,11 @@ export function siteImportStylesOf(structure: Pick<SiteImportStructure, 'element
     if (element.attrs.id) candidates.push(...(css.index.get(`#${element.attrs.id}`) ?? []))
     const matched = candidates.filter((rule) => selectorMatches(rule.selector, element, elements, rootStyle.element))
     const own = new Map<string, string>()
-    const custom = new Map(parent.custom)
-    apply(matched, inlineDeclarations(element.attrs.style), own, custom)
+    const inline = inlineDeclarations(element.attrs.style)
+    // A palette can be thousands of properties: only an element that declares one takes a copy of them.
+    const declares = inline.some(([property]) => property.startsWith('--')) || matched.some((rule) => rule.decls.some(([property]) => property.startsWith('--')))
+    const custom = declares ? new Map(parent.custom) : parent.custom
+    apply(matched, inline, own, custom)
     const style = new Map<string, string>()
     for (const property of INHERITED) {
       const value = parent.style.get(property)
@@ -659,6 +732,9 @@ export function siteImportStylesOf(structure: Pick<SiteImportStructure, 'element
     of(element: number): SiteImportComputedStyle {
       if (element === -2) return rootStyle.style
       return elements[element] ? resolve(element).style : EMPTY_STYLE
+    },
+    rootVariables() {
+      return new Map([...rootStyle.custom].map(([name, value]) => [name, withVariables(value, rootStyle.custom)]))
     },
   }
 }
@@ -711,7 +787,7 @@ export function siteImportColorOf(value: string | undefined): SiteImportRgba | n
   const text = value.toLowerCase()
   const hex = /#([0-9a-f]{8}|[0-9a-f]{6}|[0-9a-f]{4}|[0-9a-f]{3})\b/.exec(text)
   const rgb = /rgba?\(\s*(-?[\d.]+%?)\s*[,\s]\s*(-?[\d.]+%?)\s*[,\s]\s*(-?[\d.]+%?)\s*(?:[,/]\s*(-?[\d.]+%?)\s*)?\)/.exec(text)
-  const hsl = /hsla?\(\s*(-?[\d.]+)(?:deg)?\s*[,\s]\s*([\d.]+)%\s*[,\s]\s*([\d.]+)%\s*(?:[,/]\s*([\d.]+%?)\s*)?\)/.exec(text)
+  const hsl = /hsla?\(\s*(-?[\d.]+)(?:deg)?\s*[,\s]\s*([\d.]+)%?\s*[,\s]\s*([\d.]+)%?\s*(?:[,/]\s*([\d.]+%?)\s*)?\)/.exec(text)
   const named = /\b(transparent|[a-z]+)\b/.exec(text.replace(/[a-z-]+\(/g, ' ('))
   const first = [hex, rgb, hsl].filter((match): match is RegExpExecArray => !!match).sort((a, b) => a.index - b.index)[0]
   const alphaOf = (raw: string | undefined) => (raw === undefined ? 1 : raw.endsWith('%') ? Number(raw.slice(0, -1)) / 100 : Number(raw))
@@ -750,6 +826,41 @@ export function siteImportColorOf(value: string | undefined): SiteImportRgba | n
     if (known) return siteImportColorOf(known)
   }
   return null
+}
+
+/** A variable's name that says it holds a brand's color. */
+const BRAND_VARIABLE = /primary|secondary|brand|accent|highlight/i
+
+/** A custom property's whole value as a color: a color function, or the triple a color function reads through `var()`. */
+function colorOfVariable(value: string): SiteImportRgba | null {
+  const text = value.trim()
+  if (/^(?:#[0-9a-f]{3,8}|(?:rgb|hsl)a?\([^()]*\))$/i.test(text)) return siteImportColorOf(text)
+  if (/^-?[\d.]+(?:deg)?[\s,]+[\d.]+%[\s,]+[\d.]+%$/.test(text)) return siteImportColorOf(`hsl(${text})`)
+  if (/^\d{1,3}[\s,]+\d{1,3}[\s,]+\d{1,3}$/.test(text)) return siteImportColorOf(`rgb(${text})`)
+  return null
+}
+
+/** The most colors of a palette kept. */
+const PALETTE_COLORS = 6
+
+/**
+ * The brand colors a page's root declares (AGL-4152): the custom properties
+ * named for a brand that hold a color, a triple included, none too pale, dark
+ * or grey to carry one, the most read first. What the page says its brand is,
+ * even where nothing on this page happens to draw it.
+ */
+export function siteImportPaletteOf(styles: Pick<SiteImportStyles, 'rootVariables'>, uses: ReadonlyMap<string, number>): string[] {
+  const tally = new Map<string, number>()
+  for (const [name, value] of styles.rootVariables()) {
+    if (!BRAND_VARIABLE.test(name)) continue
+    const color = colorOfVariable(value)
+    if (!color || color.a < 0.5 || siteImportSaturation(color) < 0.2) continue
+    const light = siteImportLuminance(color)
+    if (light < 0.01 || light > 0.9) continue
+    const hex = siteImportHex(color)
+    tally.set(hex, (tally.get(hex) ?? 0) + (uses.get(name) ?? 0))
+  }
+  return [...tally.entries()].sort((a, b) => b[1] - a[1]).slice(0, PALETTE_COLORS).map(([hex]) => hex)
 }
 
 /** `#rrggbb` of a color, its strength ignored. */
@@ -966,6 +1077,199 @@ export function siteImportGridColumns(template: string | undefined): number[] | 
   return weights.length ? weights : null
 }
 
+/** A template's top-level words: a track, a `repeat()` or a `[line name]`. */
+function gridTemplateWords(template: string): string[] {
+  const words: string[] = []
+  let depth = 0
+  let word = ''
+  for (const char of template) {
+    if (char === '(' || char === '[') depth += 1
+    if (char === ')' || char === ']') depth -= 1
+    if (/\s/.test(char) && depth === 0) {
+      if (word) words.push(word)
+      word = ''
+    } else word += char
+  }
+  if (word) words.push(word)
+  return words
+}
+
+/**
+ * How many tracks a grid template draws (AGL-4152), each `repeat()` opened at
+ * its whole count; `null` for none, or where the screen decides (`auto-fill`).
+ */
+export function siteImportGridTrackCount(template: string | undefined): number | null {
+  const text = template?.trim() ?? ''
+  if (!text || /^(?:none|subgrid|masonry|inherit|initial|unset)$/.test(text)) return null
+  let count = 0
+  for (const word of gridTemplateWords(text)) {
+    if (word.startsWith('[')) continue
+    const repeat = /^repeat\(([\s\S]*)\)$/.exec(word)
+    if (!repeat) {
+      count += 1
+      continue
+    }
+    const [times, ...tracks] = splitList(repeat[1] as string)
+    const inner = siteImportGridTrackCount(tracks.join(','))
+    if (!/^\d+$/.test(times ?? '') || inner === null) return null
+    count += Number(times) * inner
+  }
+  return count || null
+}
+
+/** The cells a child of a grid covers, by grid line: `rowEnd` and `columnEnd` are the lines after its last row and column. */
+export interface SiteImportGridBox {
+  rowStart: number
+  rowEnd: number
+  columnStart: number
+  columnEnd: number
+}
+
+/** A child's place along one axis: the line it starts at, `null` where the grid's flow decides, and how many tracks it covers. */
+interface GridAxis {
+  start: number | null
+  span: number
+}
+
+/** One written line of a placement: a line number, a span, or nothing a reader can place (`auto`, a named line). */
+function gridLineOf(value: string | undefined, tracks: number | null): { line?: number; span?: number } {
+  const text = value?.trim() ?? ''
+  const span = /^span\s+(\d+)$/.exec(text)
+  if (span) return { span: Math.max(1, Number(span[1])) }
+  if (!/^-?\d+$/.test(text)) return {}
+  const line = Number(text)
+  if (line > 0) return { line }
+  // A line counted from the end: the last there is, where the template does not say how many.
+  if (line < 0) return { line: tracks === null ? Number.POSITIVE_INFINITY : Math.max(1, tracks + 2 + line) }
+  return {}
+}
+
+function gridAxisOf(startValue: string | undefined, endValue: string | undefined, tracks: number | null): GridAxis {
+  const start = gridLineOf(startValue, tracks)
+  const end = gridLineOf(endValue, tracks)
+  if (start.line === Number.POSITIVE_INFINITY) return { start: null, span: 1 }
+  if (start.line !== undefined && end.line !== undefined) {
+    const from = Math.min(start.line, end.line)
+    return { start: from, span: Math.max(1, Math.max(start.line, end.line) - from) }
+  }
+  if (start.line !== undefined) return { start: start.line, span: end.span ?? 1 }
+  if (end.line !== undefined && end.line !== Number.POSITIVE_INFINITY) {
+    const span = start.span ?? 1
+    return { start: Math.max(1, end.line - span), span }
+  }
+  return { start: null, span: start.span ?? end.span ?? 1 }
+}
+
+/** The boxes a `grid-template-areas` names, by name. */
+function gridAreasOf(template: string | undefined): Map<string, SiteImportGridBox> {
+  const areas = new Map<string, SiteImportGridBox>()
+  const rows = [...(template ?? '').matchAll(/"([^"]*)"|'([^']*)'/g)].map((match) => (match[1] ?? match[2] ?? '').trim().split(/\s+/))
+  rows.forEach((names, row) => {
+    names.forEach((name, column) => {
+      if (!name || /^\.+$/.test(name)) return
+      const held = areas.get(name)
+      if (!held) areas.set(name, { rowStart: row + 1, rowEnd: row + 2, columnStart: column + 1, columnEnd: column + 2 })
+      else {
+        held.rowEnd = Math.max(held.rowEnd, row + 2)
+        held.columnEnd = Math.max(held.columnEnd, column + 2)
+      }
+    })
+  })
+  return areas
+}
+
+/** A flex or grid child's `order`, 0 where it sets none. */
+export function siteImportOrderOf(style: SiteImportComputedStyle): number {
+  const order = Number.parseInt(style.get('order') ?? '', 10)
+  return Number.isNaN(order) ? 0 : order
+}
+
+/**
+ * Where a grid places its children (AGL-4152), each child's cells by grid
+ * line, as a browser lays them out: the lines each child names (by
+ * `grid-area`, a named area, `grid-row` or `grid-column`, a longhand over the
+ * shorthand; lines from the end read from the template), then the children it
+ * leaves to the grid's flow, in `order`, each in the first cells free.
+ *
+ * `null` where it cannot say, or there is nothing to say: no child names a
+ * place (a `span` says how wide, and `1 / -1` the whole row, not where), the
+ * rest of the children flow by columns, or through tracks the screen decides.
+ */
+export function siteImportGridBoxes(container: SiteImportComputedStyle, items: readonly SiteImportComputedStyle[]): SiteImportGridBox[] | null {
+  const areas = gridAreasOf(container.get('grid-template-areas'))
+  const named = [...areas.values()]
+  const columns = siteImportGridTrackCount(container.get('grid-template-columns')) ?? (named.length ? Math.max(...named.map((area) => area.columnEnd)) - 1 : null)
+  const rows = siteImportGridTrackCount(container.get('grid-template-rows')) ?? (named.length ? Math.max(...named.map((area) => area.rowEnd)) - 1 : null)
+  const places = items.map((item) => {
+    const [rowStart, columnStart, rowEnd, columnEnd] = (item.get('grid-area') ?? '').split('/').map((part) => part.trim())
+    const area = rowStart && columnStart === undefined ? areas.get(rowStart) : undefined
+    const row = item.get('grid-row')?.split('/') ?? [rowStart, rowEnd]
+    const column = item.get('grid-column')?.split('/') ?? [columnStart, columnEnd]
+    return {
+      row: area ? { start: area.rowStart, span: area.rowEnd - area.rowStart } : gridAxisOf(item.get('grid-row-start') ?? row[0], item.get('grid-row-end') ?? row[1], rows),
+      column: area ? { start: area.columnStart, span: area.columnEnd - area.columnStart } : gridAxisOf(item.get('grid-column-start') ?? column[0], item.get('grid-column-end') ?? column[1], columns),
+    }
+  })
+  const wholeRow = (axis: GridAxis) => axis.start === 1 && (axis.span === Number.POSITIVE_INFINITY || (columns !== null && axis.span >= columns))
+  if (!places.some((place) => place.row.start !== null || (place.column.start !== null && !wholeRow(place.column)))) return null
+  const flows = places.some((place) => place.row.start === null || place.column.start === null)
+  if (flows && (columns === null || /\bcolumn\b/.test(container.get('grid-auto-flow') ?? ''))) return null
+
+  const finite = (value: number) => (Number.isFinite(value) ? value : 0)
+  const lastRow = Math.max(rows === null ? 1 : rows + 1, ...places.map((place) => (place.row.start ?? 0) + finite(place.row.span)))
+  const lastColumn = columns === null ? Math.max(...places.map((place) => (place.column.start ?? 0) + finite(place.column.span))) : columns + 1
+  const boxes: Array<SiteImportGridBox | null> = places.map(() => null)
+  const free = (row: number, column: number, height: number, width: number) =>
+    boxes.every((box) => !box || box.rowEnd <= row || box.rowStart >= row + height || box.columnEnd <= column || box.columnStart >= column + width)
+  const put = (at: number, row: number, column: number, height: number, width: number) => {
+    boxes[at] = { rowStart: row, rowEnd: row + height, columnStart: column, columnEnd: column + width }
+  }
+  const heightOf = (axis: GridAxis, row: number) => (Number.isFinite(axis.span) ? axis.span : Math.max(1, lastRow - row))
+  const widthOf = (axis: GridAxis, column: number) => Math.max(1, Math.min(axis.span, lastColumn - column))
+  const inOrder = places.map((_, at) => at).sort((a, b) => siteImportOrderOf(items[a] as SiteImportComputedStyle) - siteImportOrderOf(items[b] as SiteImportComputedStyle) || a - b)
+  // Rows and columns both named first, whatever their order: nothing flows into them.
+  for (const at of inOrder) {
+    const { row, column } = places[at] as (typeof places)[number]
+    if (row.start !== null && column.start !== null) put(at, row.start, column.start, heightOf(row, row.start), widthOf(column, column.start))
+  }
+  // A row named and its column not: the first cells free in that row.
+  for (const at of inOrder) {
+    const { row, column } = places[at] as (typeof places)[number]
+    if (row.start === null || column.start !== null) continue
+    const height = heightOf(row, row.start)
+    const width = widthOf(column, 1)
+    let left = 1
+    while (left + width < lastColumn && !free(row.start, left, height, width)) left += 1
+    put(at, row.start, left, height, width)
+  }
+  // The rest, in the order they flow: a cursor down the grid, never back.
+  let cursorRow = 1
+  let cursorColumn = 1
+  for (const at of inOrder) {
+    if (boxes[at]) continue
+    const { row, column } = places[at] as (typeof places)[number]
+    const height = heightOf(row, 1)
+    if (column.start !== null) {
+      const width = widthOf(column, column.start)
+      if (column.start < cursorColumn) cursorRow += 1
+      cursorColumn = column.start
+      while (!free(cursorRow, cursorColumn, height, width)) cursorRow += 1
+      put(at, cursorRow, cursorColumn, height, width)
+      continue
+    }
+    const width = widthOf(column, 1)
+    while (cursorColumn + width > lastColumn || !free(cursorRow, cursorColumn, height, width)) {
+      cursorColumn += 1
+      if (cursorColumn + width > lastColumn) {
+        cursorColumn = 1
+        cursorRow += 1
+      }
+    }
+    put(at, cursorRow, cursorColumn, height, width)
+  }
+  return boxes as SiteImportGridBox[]
+}
+
 /** Weights scaled to twelfths, each at least 1: `[420, 788]` is `[4, 8]`. */
 export function siteImportTwelfths(weights: readonly number[]): number[] {
   const total = weights.reduce((sum, weight) => sum + Math.max(0, weight), 0)
@@ -983,4 +1287,89 @@ export function siteImportFontFamilies(value: string | undefined): string[] {
   return splitList(value)
     .map((family) => family.replace(/^["']|["']$/g, '').trim())
     .filter((family) => family && !/^(?:serif|sans-serif|monospace|cursive|fantasy|system-ui|ui-[\w-]+|-apple-system|blinkmacsystemfont|inherit|initial|emoji|math|var\(.*)$/i.test(family))
+}
+
+/*------------------------------------------
+ * Reading a page's stylesheets
+ *-----------------------------------------*/
+
+/**
+ * How much of a page's stylesheets is read (AGL-4152). A site builder's own
+ * sheet can be its fifth link and 1.3 MB, with half a megabyte more behind it,
+ * and every color and font of the site is in it. So:
+ *
+ * - `firstLookBytes`: every link is first read this far. Most sheets end
+ *   inside it, and those are done; a larger one shows here whether it declares
+ *   `:root` custom properties, which they do at their top.
+ * - `budgetBytes`: what all the page's sheets may hold together, first looks
+ *   included. Three times the sheet that set it, with room for what comes with
+ *   it. What does not fit is cut, and a cut sheet is read as far as it goes.
+ * - `atOnce`: first looks asked together, so twenty links are not twenty
+ *   connections to one host.
+ *
+ * So one page's read costs at most its links' first looks and the budget:
+ * 3.8 MB at the most links a page lists, however large its sheets are.
+ */
+export const SITE_IMPORT_SHEET_LIMITS = {
+  firstLookBytes: 32 * 1024,
+  budgetBytes: 3 * 1024 * 1024,
+  atOnce: 6,
+} as const
+
+/** What a read of a stylesheet gives back. */
+export interface SiteImportSheetAnswer {
+  ok: boolean
+  text: string
+  /** Bytes read. */
+  bytes: number
+  /** Whether the sheet goes on past `maxBytes`. */
+  truncated: boolean
+}
+
+/** Reads a stylesheet to a number of bytes; `null` where it cannot. */
+export type SiteImportSheetRead = (url: string, maxBytes: number) => Promise<SiteImportSheetAnswer | null>
+
+/** Whether a sheet declares custom properties on the page's root: its theme, not a widget's. */
+const ROOT_VARIABLES = /(?:^|[},;\s])(?::root|html)\b[^{}]*\{[^{}]*--[\w-]+\s*:/
+
+/**
+ * Every stylesheet a page links, to a byte budget (AGL-4152), in link order,
+ * as the cascade needs them. Each is read a first look; then the ones that go
+ * on are read whole, the ones declaring `:root` custom properties first, then
+ * the rest in link order, each to what is left of the budget. A read that fails
+ * leaves its sheet out, and never the page.
+ */
+export async function siteImportReadStylesheets(
+  urls: readonly string[],
+  read: SiteImportSheetRead,
+  options: { budgetBytes?: number; outOfTime?: () => boolean } = {},
+): Promise<string[]> {
+  const budget = options.budgetBytes ?? SITE_IMPORT_SHEET_LIMITS.budgetBytes
+  const outOfTime = options.outOfTime ?? (() => false)
+  const unique = [...new Set(urls)]
+  const looks: Array<SiteImportSheetAnswer | null> = unique.map(() => null)
+  const ask = (url: string, maxBytes: number) => read(url, maxBytes).then((answer) => (answer?.ok ? answer : null), () => null)
+  let next = 0
+  await Promise.all(
+    Array.from({ length: Math.min(SITE_IMPORT_SHEET_LIMITS.atOnce, unique.length) }, async () => {
+      while (next < unique.length && !outOfTime()) {
+        const at = next
+        next += 1
+        looks[at] = await ask(unique[at] as string, SITE_IMPORT_SHEET_LIMITS.firstLookBytes)
+      }
+    }),
+  )
+  let room = budget - looks.reduce((sum, look) => sum + (look?.bytes ?? 0), 0)
+  const rest = unique.map((_, at) => at).filter((at) => looks[at]?.truncated)
+  const theme = (at: number) => (ROOT_VARIABLES.test((looks[at] as SiteImportSheetAnswer).text) ? 0 : 1)
+  rest.sort((a, b) => theme(a) - theme(b) || a - b)
+  for (const at of rest) {
+    if (room <= 0 || outOfTime()) break
+    const look = looks[at] as SiteImportSheetAnswer
+    const whole = await ask(unique[at] as string, look.bytes + room)
+    if (!whole) continue
+    room -= whole.bytes - look.bytes
+    looks[at] = whole
+  }
+  return looks.flatMap((look) => (look ? [look.text] : []))
 }

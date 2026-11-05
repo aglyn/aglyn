@@ -46,6 +46,12 @@ const members = new Map<string, Record<string, unknown>>()
 const mockActivity = jest.fn(async (..._args: unknown[]) => undefined)
 const mockSent: Array<Record<string, unknown>> = []
 
+jest.mock('@aglyn/tenant-data-admin/server/organizations', () => ({
+  // "Import gift cards" as its preset reads it: the member's role on the site.
+  memberHasPermissionOnHost: async (_orgId: string, hostId: string, member: unknown) =>
+    jest.requireActual('@aglyn/aglyn/app-utils/organizations').hostRoleFor(member, hostId) === 'admin',
+}))
+
 jest.mock('@aglyn/tenant-data-admin', () => ({
   firebaseAdmin: {
     app: () => ({ firestore: () => fake }),

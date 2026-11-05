@@ -15,6 +15,9 @@
  * limitations under the License.
  */
 
+import { holdsStampedSiteKey } from '@aglyn/aglyn/app-utils/host-permissions'
+import { permissionRefusalText } from '@aglyn/aglyn/app-utils/org-permissions'
+import { SHIPPING_SITE_PRESETS, type ShippingSitePermission } from '../model/shipping-permissions'
 import {
   firebaseAdmin,
   memberHasOrgPermission,
@@ -40,8 +43,8 @@ import { isRefusedIdToken } from '@aglyn/tenant-data-admin/server/id-token-refus
  *   403  unverified address (impersonation exempt)
  *   400  no site named
  *   404  the site does not sell, or has shipping switched off
- *   403  not a collaborator with the role the route needs — or, for a
- *        workspace-level change, without the org permission it names
+ *   403  not on the site, or without the key the route asks (AGL-4047) — or,
+ *        for a workspace-level change, without the org permission it names
  */
 
 const NO_STORE = { 'Cache-Control': 'no-store' }
@@ -60,10 +63,6 @@ export async function readJsonBody(request: Request): Promise<Record<string, unk
   return body && typeof body === 'object' && !Array.isArray(body) ? (body as Record<string, unknown>) : {}
 }
 
-export type ShippingRole = 'viewer' | 'editor' | 'admin'
-
-const ROLE_RANK: Record<string, number> = { viewer: 1, author: 1, editor: 2, admin: 3 }
-
 export interface ShippingGateResult {
   actor: ShippingActor
   config: ShippingConfig
@@ -80,7 +79,7 @@ export type ShippingMemberGateResult = Omit<ShippingGateResult, 'config'>
  */
 export async function shippingGate(
   request: Request,
-  options: { role: ShippingRole; orgPermission?: string },
+  options: { permission: ShippingSitePermission; orgPermission?: string },
 ): Promise<ShippingGateResult | Response> {
   const member = await shippingMemberGate(request, options)
   if (member instanceof Response) return member
@@ -97,7 +96,7 @@ export async function shippingGate(
  */
 export async function shippingMemberGate(
   request: Request,
-  options: { role: ShippingRole; orgPermission?: string },
+  options: { permission: ShippingSitePermission; orgPermission?: string },
 ): Promise<ShippingMemberGateResult | Response> {
   if (!isShippingSurfaceConfigured()) return shippingError(404, SHIPPING_NOT_CONFIGURED_MESSAGE)
   const authorization = request.headers.get('authorization') ?? ''
@@ -117,15 +116,17 @@ export async function shippingMemberGate(
   if (!isDocumentId(hostId)) return shippingError(400, 'Missing hostId')
   const site = await resolveShippingSite(hostId)
   if (!site) return shippingError(404, 'Shipping is not available for this site')
-  const memberRole = String((site.host['memberRoles'] as Record<string, unknown> | undefined)?.[decoded.uid] ?? '')
   const staff = decoded['staff'] === true
-  if (!staff && (ROLE_RANK[memberRole] ?? 0) < ROLE_RANK[options.role]) {
+  if (!staff && !(site.host['memberRoles'] as Record<string, unknown> | undefined)?.[decoded.uid]) {
     return shippingError(403, 'Not permitted')
+  }
+  if (!staff && !holdsStampedSiteKey(site.host, decoded.uid, options.permission, SHIPPING_SITE_PRESETS[options.permission])) {
+    return shippingError(403, permissionRefusalText(options.permission))
   }
   if (options.orgPermission && !staff) {
     const membership = await resolveOrgMembership(decoded.uid, site.orgId)
     if (!membership || !(await memberHasOrgPermission(site.orgId, membership.member, options.orgPermission as never))) {
-      return shippingError(403, 'Only a workspace member who manages billing can change this')
+      return shippingError(403, permissionRefusalText(options.orgPermission as never))
     }
   }
   return {

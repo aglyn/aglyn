@@ -104,6 +104,9 @@ function OrgSendingDomainPage(
     loading: viewsLoading,
   } = useOrgSendingViews(sites)
   const canManage = first?.canManage === true
+  // The domains route's key (AGL-4047): what this page asks that route to do.
+  // `canManage` is the identity route's, for which sites send as the domain.
+  const canManageDomains = first?.canManageDomains === true
 
   const [record, setRecord] = useState<SendingDomainView | null>(null)
   const [refusal, setRefusal] = useState('')
@@ -269,7 +272,7 @@ function OrgSendingDomainPage(
     : null
   const missing = new Set(record?.lastMissing ?? [])
   const actions: RowActionsMenuItem[] =
-    canManage && record
+    canManageDomains && record
       ? [
           {
             key: 'release',
@@ -422,10 +425,11 @@ function OrgSendingDomainPage(
           <Divider />
           {refusal ? (
             <Alert severity="info">
-              {canManage
+              {canManageDomains
                 ? refusal
                 : 'The records to publish, and the checks that verify them, ' +
-                  'are shown to the organization’s owners and admins.'}
+                  'are shown to members holding "Sending domains", which owners ' +
+                  'and admins hold by default.'}
             </Alert>
           ) : record ? (
             <>
@@ -480,7 +484,7 @@ function OrgSendingDomainPage(
                 spacing={1}
                 sx={{ flexWrap: 'wrap', gap: 1 }}
               >
-                {record.status === 'requested' && canManage ? (
+                {record.status === 'requested' && canManageDomains ? (
                   <Button
                     variant="contained"
                     disabled={busy}
