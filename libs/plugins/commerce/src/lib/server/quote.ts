@@ -44,6 +44,7 @@ import type { quotePdfFile } from './commerce-pdf'
 import { sendPdf, type CommercePdfFile } from './pdf-response'
 import { quotePayLinkUrl, quoteProofLinkUrl } from './quote-link-token'
 import type { QuoteMailer } from './quote-email'
+import type { QuoteProofMediaAnswer, QuoteProofMediaRequest } from './quote-proof-media'
 import type { QuoteUploadCalls } from './quote-uploads'
 
 /*==========================================
@@ -64,10 +65,24 @@ import type { QuoteUploadCalls } from './quote-uploads'
  *   { action: 'proof-ticket', hostId, quoteId, file: { name, contentType, size } }
  *                                                             → { ticket, upload: { url, fields }, file }
  *   { action: 'proof-finalize', hostId, quoteId, ticket }     → { proof, updatedAtMs }
+ *   { action: 'proof-from-media', hostId, quoteId, media: { mediaScope, mediaId } }
+ *                                                             → { proof, updatedAtMs }
  *   { action: 'proof-remove', hostId, quoteId, proofId }      → { removed: true, updatedAtMs }
  *   { action: 'start-revision', hostId, quoteId }             → { revision, updatedAtMs }
  *   { action: 'revisions', hostId, quoteId }                  → { revisions: QuoteRevisionView[] }
  *   { action: 'file', hostId, quoteId, fileId, revision? }    → the file (a proof, the customer's, or the request's)
+ *
+ * A proof from the media library (AGL-4184) is a copy: the member must be able
+ * to read the file, in this site's library or its workspace's
+ * (`quote-proof-media.ts`), and its bytes go through what an upload's go through
+ * to the same private folder, so nothing done in the library afterward changes
+ * what the customer sees.
+ *
+ * A quote with no lines is PROOF ONLY (`quoteIsProofOnly`, AGL-4184): a save
+ * with none is taken only when it has a proof. On an update that is a proof on
+ * the current revision; on a create it is `libraryProofs: [{ mediaScope, mediaId }]`,
+ * files from the media library kept with the new quote, since nothing can be
+ * uploaded for a quote that does not exist yet. Adding a line makes it a normal quote.
  *
  * A quote from a request (AGL-4098), under "Create and edit quotes":
  *
@@ -131,6 +146,8 @@ export interface QuoteDeps {
   quotePdf(input: Parameters<typeof quotePdfFile>[0]): Promise<CommercePdfFile>
   /** The upload pipeline, loaded only by the proof actions. */
   uploads(): Promise<QuoteUploadCalls>
+  /** Where a media library file chosen for a proof is, for this member on this site, or why they may not have it. */
+  proofMedia(request: QuoteProofMediaRequest): Promise<QuoteProofMediaAnswer>
   /** The quote email (AGL-4097): the renderer, the PDF and sharp, loaded only by the send. */
   mailer(): Promise<QuoteMailer>
   /**
@@ -156,6 +173,7 @@ export function defaultQuoteDeps(): QuoteDeps {
     proofLinkUrl: (host, hostId, quoteId, version, proofId) => quoteProofLinkUrl(host, hostId, quoteId, version, proofId),
     quotePdf: async (input) => (await import('./commerce-pdf')).quotePdfFile(input),
     uploads: async () => (await import('./quote-uploads')).quoteUploadCalls(),
+    proofMedia: async (request) => (await import('./quote-proof-media')).locateQuoteProofMedia(request),
     mailer: async () => (await import('./quote-email')).quoteMailer(),
     requestFacts: async (request) =>
       (await pluginRecordFactsReader(CommerceModel.QUOTE_REQUEST_FACTS_RESOURCE)?.reader.read(request)) ?? null,
@@ -556,9 +574,16 @@ export async function handleQuote(deps: QuoteDeps, req: PluginApiRequest): Promi
   const owner = await deps.orgForHost(hostId)
   if (!checkEntitlement(owner?.org as never, 'commerce')) return refuse(403, 'Selling is not enabled')
 
-  const parsed = CommerceModel.parseQuoteInput(body['quote'])
+  // Whether a quote with no lines has its proof is answered below, per action.
+  const parsed = CommerceModel.parseQuoteInput(body['quote'], { allowNoLines: true })
   if ('error' in parsed) return refuse(400, parsed.error)
   const input = parsed.input
+  const libraryProofs = action === 'create' ? CommerceModel.parseQuoteLibraryProofs(body['libraryProofs']) : null
+  if (libraryProofs && 'error' in libraryProofs) return refuse(400, libraryProofs.error)
+  const chosenProofs = libraryProofs && 'proofs' in libraryProofs ? libraryProofs.proofs : []
+  if (action === 'create' && !input.lines.length && !chosenProofs.length) {
+    return refuse(400, CommerceModel.QUOTE_NEEDS_LINE_OR_PROOF)
+  }
   /*
    * A new quote from a request (AGL-4098): the request is read again, here,
    * for the member saving, and what the quote takes from it — which request,
@@ -592,6 +617,8 @@ export async function handleQuote(deps: QuoteDeps, req: PluginApiRequest): Promi
   }
   const claim = claimed.claim
   const now = deps.now()
+  // The quote whose kept proofs a failed save must take back.
+  let keptFor = ''
 
   try {
     let outcome: Outcome
@@ -599,6 +626,23 @@ export async function handleQuote(deps: QuoteDeps, req: PluginApiRequest): Promi
       const orderRef = hostRef.collection('orders').doc(createResourceUid())
       const counterRef = hostRef.collection('counters').doc('orders')
       let number = 0
+      const keptProofs: QuoteProofFile[] = []
+      if (chosenProofs.length) keptFor = orderRef.id
+      for (const media of chosenProofs) {
+        const kept = await keepLibraryProof(deps, {
+          hostId,
+          quoteId: orderRef.id,
+          orgId: String(owner?.id ?? ''),
+          uid: decoded.uid,
+          media,
+        })
+        if ('outcome' in kept) {
+          await removeQuoteFiles(deps, hostId, orderRef.id)
+          await claim.release()
+          return kept.outcome
+        }
+        keptProofs.push(kept.file)
+      }
       await firestore.runTransaction(async (transaction) => {
         const counter = await transaction.get(counterRef)
         number = Number(counter.get('next') ?? 1)
@@ -623,7 +667,7 @@ export async function handleQuote(deps: QuoteDeps, req: PluginApiRequest): Promi
         }
         // No `createdAtMs`, list fields or customer fields at the top: an
         // unpaid quote is not an order any list counts (`commerce-quotes.ts`).
-        transaction.set(orderRef, {
+        let order = {
           number,
           status: 'pending',
           channel: 'quote',
@@ -640,7 +684,13 @@ export async function handleQuote(deps: QuoteDeps, req: PluginApiRequest): Promi
             },
           ],
           quote,
-        })
+        } as CommerceModel.HostOrder
+        for (const file of keptProofs) {
+          const added = CommerceModel.withQuoteProofAdded(order, quoteProofOf(file), { atMs: now, by: actor })
+          if ('reason' in added) throw new Error(`a new quote refused its proof: ${added.reason}`)
+          order = added.order
+        }
+        transaction.set(orderRef, order)
       })
       outcome = { status: 200, body: { quoteId: orderRef.id, number, updatedAtMs: now } }
     } else {
@@ -659,6 +709,9 @@ export async function handleQuote(deps: QuoteDeps, req: PluginApiRequest): Promi
         }
         if (Number(existing.quote.updatedAtMs) !== baseUpdatedAtMs) {
           return refuse(409, 'Someone else changed this quote. Close it and open it again to see their changes.')
+        }
+        if (!priced.lineItems.length && !CommerceModel.currentQuoteProofs(existing.quote).length) {
+          return refuse(400, CommerceModel.QUOTE_NEEDS_LINE_OR_PROOF)
         }
         // The tax mode is restated from this pricing, and dropped when it has
         // none. The pay page's open session was priced from the quote before
@@ -692,6 +745,7 @@ export async function handleQuote(deps: QuoteDeps, req: PluginApiRequest): Promi
     return outcome
   } catch (error) {
     console.error('commerce quote save failed', error)
+    if (keptFor) await removeQuoteFiles(deps, hostId, keptFor)
     await claim.release()
     return refuse(500, 'The quote could not be saved')
   }
@@ -701,7 +755,48 @@ export async function handleQuote(deps: QuoteDeps, req: PluginApiRequest): Promi
  * PROOFS AND REVISIONS (AGL-4096)
  *=========================================*/
 
-const PROOF_ACTIONS = new Set(['proof-ticket', 'proof-finalize', 'proof-remove', 'start-revision', 'revisions', 'file'])
+const PROOF_ACTIONS = new Set([
+  'proof-ticket',
+  'proof-finalize',
+  'proof-from-media',
+  'proof-remove',
+  'start-revision',
+  'revisions',
+  'file',
+])
+
+/** A kept file, as `uploads` answers it. */
+type QuoteProofFile = Extract<Awaited<ReturnType<QuoteUploadCalls['finalize']>>, { ok: true }>['file']
+
+/** A kept file as a quote's proof takes it. */
+const quoteProofOf = (file: QuoteProofFile) => ({
+  id: file.id,
+  name: file.name,
+  contentType: file.contentType,
+  size: file.size,
+  path: file.path,
+})
+
+/**
+ * A copy of a media library file in the quote's private proofs (AGL-4184), once
+ * the member is found able to read it. The caller puts it on the quote.
+ */
+async function keepLibraryProof(
+  deps: QuoteDeps,
+  input: { hostId: string; quoteId: string; orgId: string; uid: string; media: CommerceModel.QuoteLibraryProof },
+): Promise<{ file: QuoteProofFile } | { outcome: Outcome }> {
+  const { hostId, quoteId, orgId, uid, media } = input
+  const located = await deps.proofMedia({ hostId, orgId, uid, mediaScope: media.mediaScope, mediaId: media.mediaId })
+  if ('error' in located) return { outcome: refuse(located.status, located.error) }
+  const uploads = await deps.uploads()
+  const kept = await uploads.keepCopy({
+    scope: { hostId, purpose: CommerceModel.QUOTE_PROOF_PURPOSE, purposeId: quoteId },
+    source: { path: located.path, name: located.name },
+    caller: { uid },
+  })
+  if ('error' in kept) return { outcome: refuse(kept.status, kept.error) }
+  return { file: kept.file }
+}
 
 /** Deletes a quote's kept files, its proofs and the customer's artwork; never throws. */
 async function removeQuoteFiles(deps: QuoteDeps, hostId: string, quoteId: string): Promise<void> {
@@ -815,10 +910,34 @@ async function handleProofAction(
     return { status: 200, body: { ticket: minted.ticket, upload: minted.upload, file: minted.file } }
   }
 
-  if (action === 'proof-finalize') {
+  if (action === 'proof-finalize' || action === 'proof-from-media') {
     const uploads = await deps.uploads()
-    const kept = await uploads.finalize({ scope: proofScope, ticket: body['ticket'], caller: { uid } })
-    if ('error' in kept) return refuse(kept.status, kept.error)
+    let kept: { file: QuoteProofFile }
+    if (action === 'proof-from-media') {
+      const media = (body['media'] ?? {}) as Partial<CommerceModel.QuoteLibraryProof>
+      const snapshot = await ref.get()
+      const refused = CommerceModel.quoteProofChangeRefusal(
+        snapshot.exists ? (snapshot.data() as CommerceModel.HostOrder) : null,
+        'add',
+      )
+      if (refused) return refuse(refused === 'not-a-quote' ? 404 : 409, CommerceModel.quoteProofRefusalMessage(refused))
+      // Storage is spent here, so the plan must sell, as a ticket's must.
+      const owner = await deps.orgForHost(hostId)
+      if (!checkEntitlement(owner?.org as never, 'commerce')) return refuse(403, 'Selling is not enabled')
+      const copied = await keepLibraryProof(deps, {
+        hostId,
+        quoteId,
+        orgId: String(owner?.id ?? ''),
+        uid,
+        media: { mediaScope: String(media.mediaScope ?? ''), mediaId: String(media.mediaId ?? '') },
+      })
+      if ('outcome' in copied) return copied.outcome
+      kept = copied
+    } else {
+      const finalized = await uploads.finalize({ scope: proofScope, ticket: body['ticket'], caller: { uid } })
+      if ('error' in finalized) return refuse(finalized.status, finalized.error)
+      kept = finalized
+    }
     const now = deps.now()
     const answer = await firestore.runTransaction(
       async (transaction): Promise<{ outcome: Outcome; closeSession?: string }> => {
@@ -830,17 +949,7 @@ async function handleProofAction(
         if (already) {
           return { outcome: { status: 200, body: { proof: fileView(already), updatedAtMs: order.quote?.updatedAtMs ?? null } } }
         }
-        const added = CommerceModel.withQuoteProofAdded(
-          order,
-          {
-            id: kept.file.id,
-            name: kept.file.name,
-            contentType: kept.file.contentType,
-            size: kept.file.size,
-            path: kept.file.path,
-          },
-          { atMs: now, by: actor },
-        )
+        const added = CommerceModel.withQuoteProofAdded(order, quoteProofOf(kept.file), { atMs: now, by: actor })
         if ('reason' in added) {
           return {
             outcome: refuse(added.reason === 'not-a-quote' ? 404 : 409, CommerceModel.quoteProofRefusalMessage(added.reason)),
@@ -959,7 +1068,10 @@ async function handleSendAction(
   const to = CommerceModel.quoteSendRecipient(stored, parsed.input.to)
   const refused = CommerceModel.quoteSendRefusal(stored, to)
   if (refused) {
-    return refuse(refused === 'not-a-quote' ? 404 : refused === 'paid' ? 409 : 400, CommerceModel.quoteSendRefusalMessage(refused))
+    return refuse(
+      refused === 'not-a-quote' ? 404 : refused === 'paid' || refused === 'nothing-to-send' ? 409 : 400,
+      CommerceModel.quoteSendRefusalMessage(refused),
+    )
   }
   if (!deps.payLinkUrl(host, hostId, quoteId, CommerceModel.quoteLinkVersion(stored?.quote))) {
     return refuse(409, 'This site has no web address yet, so its quotes have no pay link. Publish the site first.')

@@ -236,15 +236,18 @@ export async function loadLinkedQuote(
   const current = CommerceModel.orderPayLinkVersion(order)
   if (version > current) return { outcome: notFound }
   if (version < current && !options.history) {
+    // What the customer was sent, in their words: a proof with no price says proof (AGL-4184).
+    const noun = kind === 'quote' && CommerceModel.quoteIsProofOnly(order) ? 'proof' : nounOf(kind)
     return {
       outcome: {
         status: 410,
         body: {
           state: 'replaced',
           kind,
+          noun,
           storeName,
           replaced: true,
-          error: `This ${nounOf(kind)} was updated, and ${storeName || 'the business'} sent you a newer link.`,
+          error: `This ${noun} was updated, and ${storeName || 'the business'} sent you a newer link.`,
         },
       },
     }
@@ -335,8 +338,12 @@ export async function handleQuoteView(deps: QuotePayDeps, req: PluginApiRequest)
   if ('outcome' in linked) {
     // The replaced page is a page, not a failure: answered as data.
     if (linked.outcome.status === 410) {
-      const { storeName, kind } = linked.outcome.body as { storeName: string; kind: CommerceModel.OrderPayLinkKind }
-      return { status: 200, body: { state: 'replaced', kind, storeName } }
+      const { storeName, kind, noun } = linked.outcome.body as {
+        storeName: string
+        kind: CommerceModel.OrderPayLinkKind
+        noun: string
+      }
+      return { status: 200, body: { state: 'replaced', kind, noun, storeName } }
     }
     return linked.outcome
   }

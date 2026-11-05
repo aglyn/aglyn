@@ -36,6 +36,7 @@ import {
   VISITOR_UPLOAD_COUNTER_FILES,
   VISITOR_UPLOAD_MAX_BYTES,
   VISITOR_UPLOAD_TICKET_TTL_MS,
+  type CheckedVisitorUpload,
   type VisitorUploadFile,
   type VisitorUploadKind,
   type VisitorUploadScope,
@@ -61,6 +62,10 @@ import { consumeRateLimit } from './rate-limit-store'
  *                               bytes (`inspectUploadBytes`), strips script
  *                               from an SVG, moves it to the record's private
  *                               folder and answers its {@link VisitorUploadFile}.
+ *
+ * {@link keepVisitorUploadCopy} does both for a file already in Storage: a
+ * member's media library file chosen for a quote's proof, whose bytes go
+ * through the same checks a browser's do.
  *
  * And three for afterwards: {@link readVisitorUpload} (a kept file's record,
  * by id, so a later submit names files by id and nothing else),
@@ -138,6 +143,7 @@ export interface VisitorUploadObject {
   download(options?: { start?: number; end?: number }): Promise<[Buffer] | Buffer[]>
   save(data: Buffer, options: Record<string, unknown>): Promise<unknown>
   move(destination: string): Promise<unknown>
+  copy(destination: string, options?: { contentType?: string; metadata?: Record<string, string | null> }): Promise<unknown>
   setMetadata(metadata: Record<string, unknown>): Promise<unknown>
   delete(options?: { ignoreNotFound?: boolean }): Promise<unknown>
   createReadStream(): NodeJS.ReadableStream
@@ -346,6 +352,49 @@ function readTicket(secret: string, ticket: unknown): TicketPayload | null {
  * Mint
  *-----------------------------------------*/
 
+/**
+ * What every file meets before any bytes move: the request's type and size,
+ * the platform's uploads pause, a member's storage band, and the rate limits.
+ */
+async function admitVisitorUpload(
+  deps: VisitorUploadDeps,
+  input: {
+    scope: VisitorUploadScope
+    request: unknown
+    caller: VisitorUploadCaller
+    limits?: VisitorUploadLimits
+    maxBytes?: number
+    kinds?: readonly VisitorUploadKind[]
+  },
+): Promise<{ upload: CheckedVisitorUpload } | VisitorUploadRefusal> {
+  const { scope } = input
+  if (!isVisitorUploadScope(scope)) return refusal(400, 'scope', 'This upload is missing what it is for.')
+  const checked = checkVisitorUploadRequest(input.request, { maxBytes: input.maxBytes, kinds: input.kinds })
+  if ('error' in checked) return refusal(checked.code === 'size' ? 413 : 400, checked.code, checked.error)
+  if (await deps.uploadsPaused()) {
+    return refusal(423, 'paused', 'Uploads are paused for a moment. Try again a little later.')
+  }
+  // A member's file meets the storage band a library upload meets; a
+  // visitor's is never refused for the business's storage (see STORAGE).
+  if ('uid' in input.caller && deps.storageGate) {
+    const full = await deps.storageGate({ hostId: scope.hostId, bytes: checked.upload.size })
+    if (full) return refusal(full.status, 'storage', full.error)
+  }
+  const limits = input.limits ?? VISITOR_UPLOAD_LIMITS
+  for (const [key, rate] of [
+    [`visitor-upload:${scope.hostId}:${callerKey(input.caller)}`, limits.perCaller],
+    [`visitor-upload-site:${scope.hostId}`, limits.perSite],
+  ] as const) {
+    const spent = await deps.consumeRateLimit(key, rate)
+    if (!spent.allowed) {
+      return refusal(429, 'rate', 'Too many files at once. Wait a few minutes and try again.', {
+        retryAfterSeconds: Math.max(1, Math.ceil((spent.resetMs - deps.now()) / 1000)),
+      })
+    }
+  }
+  return { upload: checked.upload }
+}
+
 export interface VisitorUploadTicket {
   ok: true
   /** Handed back to finalize. */
@@ -376,32 +425,9 @@ export async function mintVisitorUploadTicket(
   },
 ): Promise<VisitorUploadTicket | VisitorUploadRefusal> {
   const { scope } = input
-  if (!isVisitorUploadScope(scope)) return refusal(400, 'scope', 'This upload is missing what it is for.')
-  const checked = checkVisitorUploadRequest(input.request, { maxBytes: input.maxBytes, kinds: input.kinds })
-  if ('error' in checked) return refusal(checked.code === 'size' ? 413 : 400, checked.code, checked.error)
-  if (await deps.uploadsPaused()) {
-    return refusal(423, 'paused', 'Uploads are paused for a moment. Try again a little later.')
-  }
-  // A member's file meets the storage band a library upload meets; a
-  // visitor's is never refused for the business's storage (see STORAGE).
-  if ('uid' in input.caller && deps.storageGate) {
-    const full = await deps.storageGate({ hostId: scope.hostId, bytes: checked.upload.size })
-    if (full) return refusal(full.status, 'storage', full.error)
-  }
-  const limits = input.limits ?? VISITOR_UPLOAD_LIMITS
-  for (const [key, rate] of [
-    [`visitor-upload:${scope.hostId}:${callerKey(input.caller)}`, limits.perCaller],
-    [`visitor-upload-site:${scope.hostId}`, limits.perSite],
-  ] as const) {
-    const spent = await deps.consumeRateLimit(key, rate)
-    if (!spent.allowed) {
-      return refusal(429, 'rate', 'Too many files at once. Wait a few minutes and try again.', {
-        retryAfterSeconds: Math.max(1, Math.ceil((spent.resetMs - deps.now()) / 1000)),
-      })
-    }
-  }
-
-  const { upload } = checked
+  const admitted = await admitVisitorUpload(deps, input)
+  if ('error' in admitted) return admitted
+  const { upload } = admitted
   const id = deps.newId()
   const expiresAtMs = deps.now() + VISITOR_UPLOAD_TICKET_TTL_MS
   const answer = await deps
@@ -594,6 +620,67 @@ export async function finalizeVisitorUpload(
   })
   await countKept(deps, scope.hostId, size, kept)
   return { ok: true, file: { id: ticket.u, name: ticket.n, contentType, size, path: finalPath, uploadedAtMs } }
+}
+
+/*------------------------------------------
+ * Keeping a copy of a file already in Storage
+ *-----------------------------------------*/
+
+/**
+ * Keeps a COPY of an object already in this bucket as a kept file of `scope`:
+ * a member choosing a media library file for a quote's proof, say, after the
+ * caller's route has decided they may read it and may attach it.
+ *
+ * It is an upload in every way but who sends the bytes. The object's real name,
+ * type and size meet what a ticket meets ({@link mintVisitorUploadTicket}), the
+ * bytes are copied to the same pending path a browser posts to, and
+ * {@link finalizeVisitorUpload} inspects, sanitizes, keeps and counts them. The
+ * copy carries none of the source's metadata, and a finalize that refuses it
+ * deletes it. From then on the kept file owes the source nothing: changing or
+ * deleting the source does not touch it.
+ */
+export async function keepVisitorUploadCopy(
+  deps: VisitorUploadDeps,
+  input: {
+    scope: VisitorUploadScope
+    source: { path: string; name: string }
+    caller: VisitorUploadCaller
+  },
+): Promise<{ ok: true; file: VisitorUploadFile } | VisitorUploadRefusal> {
+  const { scope, source, caller } = input
+  const bucket = deps.bucket()
+  const original = bucket.file(source.path)
+  let metadata: VisitorUploadObjectMetadata
+  try {
+    metadata = first(await original.getMetadata())
+  } catch (error) {
+    if (!isNotFound(error)) throw error
+    return refusal(409, 'missing', `We couldn’t find ${source.name}. Choose it again.`)
+  }
+  const admitted = await admitVisitorUpload(deps, {
+    scope,
+    request: { name: source.name, contentType: String(metadata.contentType ?? ''), size: Number(metadata.size) },
+    caller,
+  })
+  if ('error' in admitted) return admitted
+  const { upload } = admitted
+  const id = deps.newId()
+  await original.copy(visitorUploadPendingPath(scope, id), {
+    // Written out, so the copy takes none of the source's metadata: no download token.
+    contentType: upload.type.contentType,
+    metadata: {},
+  })
+  const ticket = mintTicket(deps.secret(), {
+    h: scope.hostId,
+    p: scope.purpose,
+    i: scope.purposeId,
+    u: id,
+    t: upload.type.contentType,
+    s: upload.size,
+    n: upload.name,
+    e: deps.now() + VISITOR_UPLOAD_TICKET_TTL_MS,
+  })
+  return finalizeVisitorUpload(deps, { scope, ticket, caller })
 }
 
 /*------------------------------------------

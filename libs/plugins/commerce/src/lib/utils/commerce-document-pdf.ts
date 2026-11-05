@@ -210,7 +210,8 @@ function quoteDocument(input: QuotePdfInput): CommerceDocument {
   const shipTo = quoteAddressLines(view.shipTo)
   if (shipTo.length) parties.push({ label: 'Ship to', lines: shipTo })
 
-  const summary: SummaryRow[] = [{ label: 'Subtotal', value: money(view.totals.itemsCents) }]
+  // A proof only quote has no price section at all (AGL-4184).
+  const summary: SummaryRow[] = view.proofOnly ? [] : [{ label: 'Subtotal', value: money(view.totals.itemsCents) }]
   if (view.totals.discountCents > 0) {
     summary.push({
       label: view.discountLabel ? `Discount (${view.discountLabel})` : 'Discount',
@@ -221,7 +222,9 @@ function quoteDocument(input: QuotePdfInput): CommerceDocument {
   if (view.taxAtPayment) summary.push({ label: 'Tax is added at payment', value: '', note: true })
   else if (view.totals.taxCents > 0) summary.push({ label: view.taxLabel || 'Tax', value: money(view.totals.taxCents) })
   else if (view.taxLabel && view.taxLabel !== 'Tax') summary.push({ label: view.taxLabel, value: '', note: true })
-  summary.push({ label: view.taxAtPayment ? 'Total before tax' : 'Total', value: money(view.totals.totalCents), emphasis: true })
+  if (!view.proofOnly) {
+    summary.push({ label: view.taxAtPayment ? 'Total before tax' : 'Total', value: money(view.totals.totalCents), emphasis: true })
+  }
 
   const stamp =
     view.status === 'paid'
@@ -239,9 +242,9 @@ function quoteDocument(input: QuotePdfInput): CommerceDocument {
   if (view.notes) sections.push({ heading: 'Notes', text: view.notes })
   if (view.terms) sections.push({ heading: 'Terms', text: view.terms })
 
-  const payUrl = view.status === 'unpaid' && input.payUrl ? input.payUrl : null
+  const payUrl = view.status === 'unpaid' && !view.proofOnly && input.payUrl ? input.payUrl : null
   return {
-    kind: 'QUOTE',
+    kind: view.proofOnly ? 'PROOF' : 'QUOTE',
     title: view.number,
     facts,
     stamp,
@@ -439,7 +442,7 @@ function renderCommerceDocument(brand: CommercePdfBrand, document: CommerceDocum
     line.unit,
     line.amount,
   ])
-  writer.table({
+  if (rows.length) writer.table({
     columns: [
       { header: 'Item', width: 0 },
       { header: 'Qty', width: 48, align: 'right' },

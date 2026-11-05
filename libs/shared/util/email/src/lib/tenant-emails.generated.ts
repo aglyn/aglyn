@@ -887,7 +887,7 @@ export const PLUGIN_TENANT_EMAILS: readonly TenantEmailEntry[] = [
   {
     "key": "quote-sent",
     "name": "Quote",
-    "description": "Sends a quote to the customer when you choose Send quote: your message, the proof, the quote as a PDF and a button to approve or pay it on your site. Later sends, such as a new revision, arrive in the same conversation.",
+    "description": "Sends a quote to the customer when you choose Send quote: your message, the proof, the quote as a PDF and a button to approve or pay it on your site. A proof with no price yet goes out as a proof, with no total and no PDF. Later sends, such as a new revision, arrive in the same conversation.",
     "pluginId": "commerce",
     "plugin": "Commerce",
     "control": "besigner",
@@ -897,6 +897,11 @@ export const PLUGIN_TENANT_EMAILS: readonly TenantEmailEntry[] = [
         "name": "quote.subject",
         "description": "The subject typed when sending; it stays the same for every email about the quote",
         "sample": "Quote #1042 from Northwind Signs"
+      },
+      {
+        "name": "quote.label",
+        "description": "“Quote”, or “Proof” for a proof with no price yet",
+        "sample": "Quote"
       },
       {
         "name": "quote.number",
@@ -910,12 +915,12 @@ export const PLUGIN_TENANT_EMAILS: readonly TenantEmailEntry[] = [
       },
       {
         "name": "quote.total",
-        "description": "The quote total; “before tax” when tax is added at payment",
+        "description": "The quote total; “before tax” when tax is added at payment; empty for a proof with no price yet",
         "sample": "$1,250.00"
       },
       {
         "name": "quote.heading",
-        "description": "“Your quote from …”, or “Your updated quote” from the second revision on",
+        "description": "“Your quote from …”, or “Your updated quote” from the second revision on; “proof” for a proof with no price yet",
         "sample": "Your quote from Northwind Signs"
       },
       {
@@ -940,12 +945,12 @@ export const PLUGIN_TENANT_EMAILS: readonly TenantEmailEntry[] = [
       },
       {
         "name": "quote.nextStep",
-        "description": "What to do next: approve the proof first, or pay when ready",
+        "description": "What to do next: approve the proof first, or pay when ready; for a proof with no price yet, approve it or ask for changes",
         "sample": "Look over the proof, then approve it on your quote page. Once you approve it, you can pay there."
       },
       {
         "name": "quote.buttonLabel",
-        "description": "“Review and approve” while an approval is needed first, else “View and pay” with the total",
+        "description": "“Review and approve” while an approval is needed first, “Review the proof” for a proof with no price yet, else “View and pay” with the total",
         "sample": "View and pay $1,250.00"
       },
       {
@@ -957,7 +962,7 @@ export const PLUGIN_TENANT_EMAILS: readonly TenantEmailEntry[] = [
     "defaultBody": [
       {
         "block": "text",
-        "text": "{{host.businessName}} · Quote {{quote.number}}",
+        "text": "{{host.businessName}} · {{quote.label}} {{quote.number}}",
         "variant": "eyebrow"
       },
       {
@@ -977,7 +982,7 @@ export const PLUGIN_TENANT_EMAILS: readonly TenantEmailEntry[] = [
       },
       {
         "block": "text",
-        "text": "Quote: {{quote.number}}\nRevision: {{quote.revision}}\nTotal: {{quote.total}}",
+        "text": "{{quote.label}}: {{quote.number}}\nRevision: {{quote.revision}}\nTotal: {{quote.total}}",
         "variant": "details"
       },
       {
@@ -1005,7 +1010,7 @@ export const PLUGIN_TENANT_EMAILS: readonly TenantEmailEntry[] = [
         "variant": "caption"
       }
     ],
-    "footerReason": "You’re receiving this because {{host.businessName}} prepared a quote for you."
+    "footerReason": "You’re receiving this because {{host.businessName}} prepared a quote or proof for you."
   },
   {
     "key": "order-invoice",

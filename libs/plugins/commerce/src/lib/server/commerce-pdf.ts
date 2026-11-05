@@ -200,7 +200,7 @@ export async function loadCommercePdfBrand(
 }
 
 /** `acme-signs-quote-1042.pdf`: the business, the document and its number, in ASCII. */
-export function commercePdfFilename(businessName: string, document: 'quote' | 'invoice', number: unknown, docId: string): string {
+export function commercePdfFilename(businessName: string, document: 'quote' | 'proof' | 'invoice', number: unknown, docId: string): string {
   const slug = (value: string) =>
     value
       .normalize('NFKD')
@@ -238,7 +238,7 @@ export async function quotePdfFile(
   })
   return {
     bytes: renderQuotePdf({ brand, view, revision: Number(input.order.quote?.revision) || 1, payUrl: input.payUrl }),
-    filename: commercePdfFilename(brand.businessName, 'quote', input.order.number, input.quoteId),
+    filename: commercePdfFilename(brand.businessName, view.proofOnly ? 'proof' : 'quote', input.order.number, input.quoteId),
   }
 }
 

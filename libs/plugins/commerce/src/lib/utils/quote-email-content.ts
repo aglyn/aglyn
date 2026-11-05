@@ -19,6 +19,7 @@ import {
   currentQuoteProofs,
   formatOrderMoney,
   formatQuoteNumber,
+  quoteIsProofOnly,
   quotePaymentBlockedByApproval,
   quotePayTax,
   quoteSendIsNewRevision,
@@ -42,6 +43,11 @@ import { escapeHtml } from './escape-html'
  * proof first, the button is "Review and approve"; otherwise it is "View and
  * pay" with the total. Both go to the quote's pay link, where the customer
  * does either.
+ *
+ * A PROOF ONLY quote (no lines, AGL-4184) says so in the same tokens: "Your
+ * proof from …", what to do with the proof, "Review the proof", `quote.label`
+ * "Proof", and an empty `quote.total`, whose row a details panel then does not
+ * draw. No PDF goes with it (`quote-email.ts`): its proof is the whole of it.
  *
  * Prices appear only in the tokens the catalog names for them
  * (`quote.total`, `quote.buttonLabel`); the composed markup
@@ -109,6 +115,8 @@ export interface QuoteEmailContent {
   text: string
   /** The customer approves the proof before they can pay: the button reads "Review and approve". */
   approvalFirst: boolean
+  /** A proof with no price yet: nothing to pay, and no PDF goes with it. */
+  proofOnly: boolean
 }
 
 /** `a`, `a and b`, `a, b and c`. */
@@ -126,10 +134,13 @@ export function quoteEmailContent(input: QuoteEmailContentInput): QuoteEmailCont
   const business = businessName.trim() || 'the business'
   const revision = Math.max(1, Math.floor(Number(quote.revision ?? 1)) || 1)
   const number = formatQuoteNumber(order, input.quoteId).replace(/^Quote\s+/, '')
+  const proofOnly = quoteIsProofOnly(order)
+  const noun = proofOnly ? 'proof' : 'quote'
+  const label = proofOnly ? 'Proof' : 'Quote'
   const taxAtPayment = quotePayTax(quote, input.store).basis.kind === 'at-payment'
   const money = formatOrderMoney(Number(order.totals?.totalCents ?? 0), input.currency)
-  const total = taxAtPayment ? `${money} before tax` : money
-  const approvalFirst = quotePaymentBlockedByApproval(quote)
+  const total = proofOnly ? '' : taxAtPayment ? `${money} before tax` : money
+  const approvalFirst = !proofOnly && quotePaymentBlockedByApproval(quote)
 
   // The proofs: pictures an inbox draws, up to three, then every other file by name.
   const proofs = currentQuoteProofs(quote)
@@ -146,34 +157,45 @@ export function quoteEmailContent(input: QuoteEmailContentInput): QuoteEmailCont
   const overflow = named.length - listed.length + morePictures
   const parts = [...listed, ...(overflow > 0 ? [`${plural(overflow, 'more file', 'more files')}`] : [])]
   const lead = pictured.length ? 'Also with this revision' : named.length === 1 ? 'Proof' : 'Proofs'
-  const seeIt = named.length + morePictures === 1 ? 'See it on your quote page.' : 'See them on your quote page.'
+  const seeIt = named.length + morePictures === 1 ? `See it on your ${noun} page.` : `See them on your ${noun} page.`
   const proofFiles = parts.length ? `${lead}: ${joinNames(parts)}. ${seeIt}` : ''
 
   const radius = Math.max(0, Math.round(Number(input.radius ?? 4)) || 0)
   const proofImages = proofImagesHtml(pictured, input.payUrl, input.colors, radius)
 
   const updated = quoteSendIsNewRevision(quote)
-  const heading = updated ? 'Your updated quote' : businessName.trim() ? `Your quote from ${businessName.trim()}` : 'Your quote'
+  const heading = updated ? `Your updated ${noun}` : businessName.trim() ? `Your ${noun} from ${businessName.trim()}` : `Your ${noun}`
   const intro = updated
-    ? `${capitalize(business)} updated your quote. This is revision ${revision}, and it replaces the one sent before.` +
-      (input.linkReplaced ? ' The link in the earlier email no longer opens the quote, so use the button below.' : '') +
-      ' The new version is attached as a PDF.'
-    : `${capitalize(business)} put together a quote for you. The details are below, and the quote is attached as a PDF.`
+    ? `${capitalize(business)} updated your ${noun}. This is revision ${revision}, and it replaces the one sent before.` +
+      (input.linkReplaced ? ` The link in the earlier email no longer opens the ${noun}, so use the button below.` : '') +
+      (proofOnly ? '' : ' The new version is attached as a PDF.')
+    : proofOnly
+      ? `${capitalize(business)} sent you a proof to look over.`
+      : `${capitalize(business)} put together a quote for you. The details are below, and the quote is attached as a PDF.`
 
   const proofed = proofs.length > 0
   const approved = proofed && Number(quote.approvedRevision) === revision
-  const nextStep = approvalFirst
+  const nextStep = proofOnly
+    ? approved
+      ? 'You approved this proof. You can still ask for changes on your proof page.'
+      : 'Look over the proof, then approve it or ask for changes on your proof page.'
+    : approvalFirst
     ? 'Look over the proof, then approve it on your quote page. Once you approve it, you can pay there.'
     : approved
       ? 'You approved the proof. Pay on your quote page whenever you’re ready.'
       : proofed
         ? 'Look over your quote and the proof. On your quote page you can approve the proof or ask for changes, and pay whenever you’re ready.'
         : 'Look over your quote, and pay it on your quote page whenever you’re ready.'
-  const buttonLabel = approvalFirst ? 'Review and approve' : `View and pay ${money}${taxAtPayment ? ' plus tax' : ''}`
+  const buttonLabel = proofOnly
+    ? 'Review the proof'
+    : approvalFirst
+      ? 'Review and approve'
+      : `View and pay ${money}${taxAtPayment ? ' plus tax' : ''}`
   const message = input.message.trim()
 
   const tokens: Record<string, string> = {
     'quote.subject': input.subject,
+    'quote.label': label,
     'quote.number': number,
     'quote.revision': String(revision),
     'quote.total': total,
@@ -191,7 +213,7 @@ export function quoteEmailContent(input: QuoteEmailContentInput): QuoteEmailCont
     heading,
     intro,
     message,
-    `Quote: ${number}\nRevision: ${revision}\nTotal: ${total}`,
+    `${label}: ${number}\nRevision: ${revision}${total ? `\nTotal: ${total}` : ''}`,
     pictured.length ? `Proof: ${joinNames(pictured.map((proof) => proof.name))}` : '',
     proofFiles,
     nextStep,
@@ -201,7 +223,7 @@ export function quoteEmailContent(input: QuoteEmailContentInput): QuoteEmailCont
     .filter(Boolean)
     .join('\n\n')
 
-  return { tokens, text, approvalFirst }
+  return { tokens, text, approvalFirst, proofOnly }
 }
 
 /** The space between two pictures side by side, in px. */

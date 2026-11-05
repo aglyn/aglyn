@@ -83,10 +83,13 @@ export function QuoteSendSection(props: QuoteSendSectionProps) {
   const unpaid = CommerceModel.isUnpaidQuote(quote)
   const last = CommerceModel.lastQuoteSend(section)
   const revision = Number(section?.revision ?? 1)
-  const label = CommerceModel.quoteSendLabel(section)
+  // A proof with no price yet (AGL-4184) goes out as a proof, and only with one on it.
+  const proofOnly = CommerceModel.quoteIsProofOnly(quote)
+  const label = CommerceModel.quoteSendLabel(section, proofOnly)
   const replacesLink = CommerceModel.quoteSendReplacesLink(section)
   const approvalFirst = CommerceModel.quotePaymentBlockedByApproval(section)
   const proofCount = CommerceModel.currentQuoteProofs(section).length
+  const nothingToSend = proofOnly && proofCount === 0
   const listed = siteContactEmail(host as never)
   const contact = listed && /^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(listed) ? listed : null
 
@@ -146,7 +149,9 @@ export function QuoteSendSection(props: QuoteSendSectionProps) {
     ? `Sent ${sentAt(Number(last.atMs))} to ${last.to || 'the customer'}` +
       (Number(last.revision) < revision ? ` (revision ${last.revision})` : '') +
       '.'
-    : 'Not sent yet. Email it with your message, the proof and the PDF, or copy the pay link below and send it yourself.'
+    : proofOnly
+      ? 'Not sent yet. Email it with your message and the proof, or copy the proof link below and send it yourself.'
+      : 'Not sent yet. Email it with your message, the proof and the PDF, or copy the pay link below and send it yourself.'
 
   return (
     <Stack spacing={1.5}>
@@ -174,22 +179,27 @@ export function QuoteSendSection(props: QuoteSendSectionProps) {
       {!closed ? (
         <Stack direction="row" spacing={1}>
           {unpaid ? (
-            <BlockedControl blocked={!canSend} reason={SEND_REFUSAL}>
+            <BlockedControl
+              blocked={!canSend || nothingToSend}
+              reason={!canSend ? SEND_REFUSAL : CommerceModel.quoteSendRefusalMessage('nothing-to-send')}
+            >
               <Button variant="contained" size="small" disabled={busy || edited} onClick={openForm}>
                 {label}
               </Button>
             </BlockedControl>
           ) : null}
-          <BlockedControl blocked={!canSend} reason={SEND_REFUSAL}>
-            <Button
-              variant={unpaid ? 'outlined' : 'contained'}
-              size="small"
-              disabled={busy || (unpaid && edited)}
-              onClick={() => setInvoicing(true)}
-            >
-              {'Send invoice'}
-            </Button>
-          </BlockedControl>
+          {proofOnly ? null : (
+            <BlockedControl blocked={!canSend} reason={SEND_REFUSAL}>
+              <Button
+                variant={unpaid ? 'outlined' : 'contained'}
+                size="small"
+                disabled={busy || (unpaid && edited)}
+                onClick={() => setInvoicing(true)}
+              >
+                {'Send invoice'}
+              </Button>
+            </BlockedControl>
+          )}
         </Stack>
       ) : null}
       <InvoiceSendDialog
@@ -238,9 +248,11 @@ export function QuoteSendSection(props: QuoteSendSectionProps) {
               helperText="Shown at the top of the email, in your words."
             />
             <Typography variant="body2" color="text.secondary">
-              {`The email shows the quote number, revision ${revision} and total` +
-                (proofCount ? ', the proof' : '') +
-                `, with the quote attached as a PDF and a button to ${approvalFirst ? 'approve the proof' : 'pay'} on your site. ` +
+              {(proofOnly
+                ? `The email shows the proof and revision ${revision}, with no price, and a button to review it on your site. `
+                : `The email shows the quote number, revision ${revision} and total` +
+                  (proofCount ? ', the proof' : '') +
+                  `, with the quote attached as a PDF and a button to ${approvalFirst ? 'approve the proof' : 'pay'} on your site. `) +
                 `Replies go to ${contact || 'your email'}.`}
             </Typography>
             {replacesLink ? (
