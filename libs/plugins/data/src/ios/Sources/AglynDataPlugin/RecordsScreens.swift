@@ -202,7 +202,7 @@ private struct RecordsBody: View {
     }
     .aglynScreenToolbar(id: "records") {
       AglynSecondaryActions {
-        if canImportDatasetRecords(orgRole: context.orgRole) {
+        if canWrite {
           Button {
             context.navigate(dataImportScreen, datasetImportParams(id: dataset.id, name: dataset.name))
           } label: {

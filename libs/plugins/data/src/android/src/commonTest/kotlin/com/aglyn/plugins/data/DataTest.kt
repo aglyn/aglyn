@@ -155,9 +155,15 @@ class DataTest {
     assertEquals("core.settings.data.import", DATA_IMPORT_SCREEN)
     assertEquals(mapOf("resource" to "data.dataset:ds1", "title" to "Import into Menu items"), datasetImportParams("ds1", "Menu items"))
     assertEquals("Import records", datasetImportParams("ds1", "")["title"])
-    assertTrue(canImportDatasetRecords("owner"))
-    assertTrue(canImportDatasetRecords("admin"))
-    assertFalse(canImportDatasetRecords("editor"))
-    assertFalse(canImportDatasetRecords(null))
+  }
+
+  @Test
+  fun aSiteDecidesWhichDatasetsItLists() {
+    // On a site, the site decides, even for an owner who reaches everything.
+    assertEquals(listOf("org", "host:h1"), datasetListScope("h1", null))
+    assertEquals(listOf("org", "host:h1"), datasetListScope("h1", listOf("host:h2")))
+    // With no site, the member's own reach decides.
+    assertEquals(null, datasetListScope(null, null))
+    assertEquals(listOf("host:h2"), datasetListScope(null, listOf("host:h2")))
   }
 }

@@ -116,6 +116,12 @@ struct RecordRow: Identifiable {
   }
 }
 
+/// The `visibleTo` tokens a list of datasets asks for, or nil for no filter (`datasetListScope`). On a site, the site decides,
+/// whoever is looking: that site's datasets and the workspace-wide ones. With no site, the member's own reach decides.
+func datasetListScope(hostID: String?, memberScope: [String]?) -> [String]? {
+  hostID.map { [OrgAccess.orgScopeToken, OrgAccess.hostScopeToken($0)] } ?? memberScope
+}
+
 /// The datasets a member can list: everything for an org-wide member, their scope's otherwise (the rules refuse an unfiltered list).
 func datasetsQuery(_ orgID: String, scopeTokens: [String]?) -> FirestoreQuery {
   FirestoreQuery(
