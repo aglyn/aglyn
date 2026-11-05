@@ -136,6 +136,14 @@ export interface TransferLauncher {
    */
   can(action: TransferAction, target: TransferAccessTarget): boolean
   /**
+   * The permission to name beside a switched-off Import or Export (AGL-4047),
+   * once it is known to be a permission that refuses them. `null` when `can`
+   * says yes, while its reads are out or failed, and for what no permission
+   * decides: the plan, which a surface has its own words for, or a site the
+   * person does not reach.
+   */
+  refusedPermission?(action: TransferAction, target: TransferAccessTarget): string | null
+  /**
    * The person's own unfinished imports (AGL-3549), newest first: of the
    * target's resource — the exact key, so one dataset's are not another's —
    * on the target's site when it names one, when a target is given; every

@@ -31,6 +31,10 @@ import {
   resolvedPlacementKey,
 } from '@aglyn/aglyn/app-utils/site-placement'
 import type { AglynOrgMember } from '@aglyn/aglyn/foundation/definitions/organization.types'
+import type {
+  TransferInstanceImportAnswer,
+  TransferInstanceImportSubject,
+} from '@aglyn/aglyn/plugin-manager/plugin-transfer-resources'
 import { useFirestore, useFirestoreDoc, useUser } from '@aglyn/tenant-feature-instance'
 import { doc } from 'firebase/firestore'
 import {
@@ -149,6 +153,19 @@ export function datasetAccessBlocked(
     records: !holdsDatasetPermission(member, DATA_VIEW_RECORDS_PERMISSION),
     exports: !holdsDatasetPermission(member, DATA_EXPORT_PERMISSION),
   }
+}
+
+/**
+ * Importing into one dataset, for the Import & export hub's row (AGL-4047): the
+ * same verdict the Data page's Import reads, and the transfer routes' `importAccess`.
+ */
+export function datasetInstanceImportAccess(subject: TransferInstanceImportSubject): TransferInstanceImportAnswer {
+  const blocked = datasetAccessBlocked(
+    subject.member as DatasetWriter,
+    subject.record.facts?.['visibleTo'],
+    subject.customRole as AglynOrgCustomRole | null,
+  )
+  return { allowed: !blocked.writes, reason: blocked.writesReason }
 }
 
 /**

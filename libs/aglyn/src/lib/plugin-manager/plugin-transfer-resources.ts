@@ -80,6 +80,7 @@ import {
 } from './enabled-plugins'
 import { PLUGIN_TRANSFER_RESOURCES_DECLARED } from './first-party-plugins.generated'
 import { runPluginDeclarationsRepair } from './plugin-declarations-repair'
+import type { PluginIndexedRecord } from './plugin-record-index'
 
 /**
  * WHAT A PLUGIN CAN IMPORT AND EXPORT (AGL-3523), the extension point every
@@ -1196,6 +1197,28 @@ export interface PluginTransferResourceUi {
    * resource to the plugin's own surface.
    */
   instancesFrom?: string
+  /**
+   * For a resource whose server half answers `importAccess`: that answer for one
+   * instance the hub lists, from what the browser already holds, so its Import
+   * says what the route will. Not a security boundary: the route still decides.
+   */
+  instanceImportAccess?(subject: TransferInstanceImportSubject): TransferInstanceImportAnswer
+}
+
+/** What a resource is asked about one listed instance. */
+export interface TransferInstanceImportSubject {
+  /** The instance, as its record list reads it. */
+  record: PluginIndexedRecord
+  /** The signed-in member's document. */
+  member: Readonly<Record<string, unknown>>
+  /** Their custom role, when they carry one and it could be read. */
+  customRole: Readonly<Record<string, unknown>> | null
+}
+
+/** The answer, and the refusal to show beside a switched-off Import. */
+export interface TransferInstanceImportAnswer {
+  allowed: boolean
+  reason: string
 }
 
 interface RegisteredUi {
