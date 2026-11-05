@@ -65,6 +65,11 @@ private class RecordingApi(var failWith: Throwable? = null, var verdict: String 
   override suspend fun receiptChannels() = setOf(ReceiptChannel.EMAIL, ReceiptChannel.SMS)
   override suspend fun sendReceipt(orderId: String, channel: ReceiptChannel, to: String) = record("receipt $orderId ${channel.raw} $to")
   override suspend fun addNote(orderId: String, note: String) = record("note $orderId $note")
+  override suspend fun invoiceSite() = InvoiceSite("Test Shop", "hello@example.test")
+  override suspend fun sendInvoice(orderId: String, to: String, subject: String, message: String, attemptKey: String): String {
+    record("invoice $orderId $to $subject $message $attemptKey")
+    return to
+  }
   override suspend fun answerRestock(orderId: String, resolution: RestockAnswerChoice, flaggedAtMs: Double): String {
     record("restock $orderId ${resolution.raw} ${flaggedAtMs.toLong()}")
     return verdict

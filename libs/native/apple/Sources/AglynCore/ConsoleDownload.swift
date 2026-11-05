@@ -42,13 +42,15 @@ extension ConsoleAPIClient {
   /// Calls a route that answers with a file (the export route; a POST with `body` unless the route
   /// is a GET), as the signed-in person, and hands back the bytes. A refusal throws the route's own
   /// words, as `request` does; nothing is retried, since an export is a fresh read each time.
-  public func download(_ path: String, method: HTTPMethod = .post, body: JSONValue? = nil) async throws -> DownloadedFile {
+  public func download(
+    _ path: String, method: HTTPMethod = .post, query: [(String, String?)] = [], body: JSONValue? = nil
+  ) async throws -> DownloadedFile {
     var forceRefresh = false
     while true {
       guard let token = try await getIDToken(forceRefresh) else {
         throw ConsoleAPIError(status: 401, message: "Sign in to continue.")
       }
-      var request = URLRequest(url: try url(for: path))
+      var request = URLRequest(url: try url(for: path, query: query))
       request.httpMethod = method.rawValue
       request.setValue("Bearer \(token)", forHTTPHeaderField: "Authorization")
       if let body {

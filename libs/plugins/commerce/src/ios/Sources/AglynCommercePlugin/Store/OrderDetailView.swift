@@ -28,6 +28,8 @@ struct OrderDetailView: View {
   @State private var refundingSheet = false
   @State private var refundKey: String?
   @State private var receiptSheet = false
+  @State private var invoiceSheet = false
+  @State private var downloadedInvoice: DownloadedInvoice?
   @State private var printing: String?
   @State private var fulfilling = false
   @State private var editingShipment: OrderFulfillment?
@@ -229,6 +231,12 @@ struct OrderDetailView: View {
         }
       }
 
+      if let line = invoiceSentLine(order) {
+        Section {
+          Text(line).font(AglynFont.caption).foregroundStyle(.secondary).accessibilityIdentifier("order-invoice-sent")
+        }
+      }
+
       // Figma 13:483's folded rows: Customer details, then Timeline and notes. The console's order has no payments
       // section; its refunds are captions under the totals (above).
       AglynFoldedSection("Customer details", identifier: "order-fold-customer") {
@@ -282,6 +290,12 @@ struct OrderDetailView: View {
     .sheet(isPresented: $receiptSheet) {
       ReceiptSheet(context: context, order: order, orderID: orderID, number: row.number) { done = "The receipt is on its way." }
     }
+    .sheet(isPresented: $invoiceSheet) {
+      InvoiceSendSheet(context: context, order: order, orderID: orderID) { done = $0 }
+    }
+    .sheet(item: $downloadedInvoice) { file in
+      DownloadedInvoiceSheet(file: file) { downloadedInvoice = nil }
+    }
   }
 
   /// The one filled button: the order's next step (Fulfill, then Mark delivered), none once it has none.
@@ -317,6 +331,20 @@ struct OrderDetailView: View {
           busy: printing == kind.rawValue
         ) { Task { await printPage(kind) } })
     }
+    out.append(
+      AglynRecordAction(
+        "order-invoice-pdf", "Download invoice PDF", systemImage: "arrow.down.doc", enabled: printing == nil,
+        busy: printing == "invoice-pdf"
+      ) { Task { await downloadInvoice(number: row.number) } })
+    // Asks "Send quotes and invoices to customers"; a role without it is told so on the press.
+    out.append(
+      AglynRecordAction("order-invoice-send", "Send invoice", systemImage: "paperplane") {
+        if context.can(invoiceSendPermission) {
+          invoiceSheet = true
+        } else {
+          problem = context.refusal(invoiceSendPermission)
+        }
+      })
     out.append(AglynRecordAction("order-add-note", "Add a note", systemImage: "square.and.pencil") { noting = true })
     // Their CRM record, which the order fed (the console's "View customer in CRM").
     if let link = customerCrmLink(orgSlug: context.orgSlug, hostSlug: context.hostSlug, email: order.customerEmail) {
@@ -472,6 +500,21 @@ struct OrderDetailView: View {
     problem = nil
     defer { printing = nil }
     if let message = await printOrderPage(api: context.api, hostID: hostID, orderID: orderID, kind: kind) { problem = message }
+  }
+
+  private func downloadInvoice(number: String) async {
+    guard let hostID = context.hostID else { return }
+    printing = "invoice-pdf"
+    problem = nil
+    defer { printing = nil }
+    do {
+      let url = try await downloadOrderInvoicePDF(api: context.api, hostID: hostID, orderID: orderID, number: number)
+      downloadedInvoice = DownloadedInvoice(url: url)
+    } catch let error as ConsoleAPIError where error.status > 0 {
+      problem = error.message.isEmpty ? "The invoice PDF could not be made." : error.message
+    } catch {
+      problem = "The invoice PDF could not be downloaded. Check the connection and try again."
+    }
   }
 
   private func printLabel(_ link: String, shipmentID: String, number: String) async {
