@@ -69,7 +69,8 @@ answers and a look for one kind of site, never ready-made pages.
 
 **Start your site** opens on **Your site** with its questions filled in from the starter,
 and says so above the first question. The starter's style is chosen on the
-[Style](#style) step, and its card says which starter it came from. Its brand color is
+[Style](#style) step, and its card says which starter it came from and the
+[look](./site-looks.md#an-ai-starters-look) it is set in. Its brand color is
 picked under that step's **More details**, as **Chosen color**. When the starter says what
 the site is for, that answer is filled in too. Otherwise you say it, as you would for any
 start. Change any answer you like, then choose **Plan my site** on **Review**. It works as

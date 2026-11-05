@@ -417,7 +417,8 @@ export function AiSiteStartCard({
   // An AI starter picked in "Choose your starter" (AGL-4049): its answers
   // fill the questions, read once, and the start opens on the first one.
   // The style it names arrives chosen — the person chose it by picking the
-  // starter — and every answer is theirs to change.
+  // starter — with the look its listing promised, which travels to the job
+  // while that card stays chosen. Every answer is theirs to change.
   const [starterAnswers] = useState(() =>
     starter && !initialAnswers && !clientBuild ? aiSiteStartAnswersFromStarter(starter.answers) : null,
   )
