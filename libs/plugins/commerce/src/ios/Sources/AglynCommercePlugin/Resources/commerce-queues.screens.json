@@ -743,6 +743,19 @@
                   "initial": "{item.units}"
                 },
                 {
+                  "key": "fewLeftAt",
+                  "label": "Show “Only N left” at",
+                  "kind": "number",
+                  "integer": true,
+                  "min": 0,
+                  "max": 500,
+                  "placeholder": "3",
+                  "help": "The booking widget says “Only 2 left” once this many or fewer are free on a night. 0 never shows it.",
+                  "mismatch": "A whole number from 0 to 500",
+                  "when": "form.units > 1",
+                  "initial": "{item.fewLeftAt}"
+                },
+                {
                   "key": "capacity",
                   "label": "Sleeps",
                   "kind": "number",
@@ -800,6 +813,9 @@
                   "units": {
                     "$number": "{form.units ?? '1'}"
                   },
+                  "fewLeftAt": {
+                    "$number": "{form.fewLeftAt ?? '3'}"
+                  },
                   "capacity": "{form.capacity}",
                   "nightlyRateUsd": "{form.nightlyRateUsd}",
                   "weekendMultiplier": "{form.weekendMultiplier}",
@@ -849,6 +865,18 @@
                   "placeholder": "1",
                   "help": "How many identical ones you have, like 12 RV hookups",
                   "mismatch": "A whole number from 1 to 500"
+                },
+                {
+                  "key": "fewLeftAt",
+                  "label": "Show “Only N left” at",
+                  "kind": "number",
+                  "integer": true,
+                  "min": 0,
+                  "max": 500,
+                  "placeholder": "3",
+                  "help": "The booking widget says “Only 2 left” once this many or fewer are free on a night. 0 never shows it.",
+                  "mismatch": "A whole number from 0 to 500",
+                  "when": "form.units > 1"
                 },
                 {
                   "key": "capacity",
@@ -903,6 +931,9 @@
                 "fields": {
                   "name": "{form.name:take/120}",
                   "units": "{form.units}",
+                  "fewLeftAt": {
+                    "$number": "{form.fewLeftAt ?? '3'}"
+                  },
                   "capacity": "{form.capacity}",
                   "nightlyRateUsd": "{form.nightlyRateUsd}",
                   "weekendMultiplier": "{form.weekendMultiplier}",
@@ -1005,6 +1036,37 @@
             }
           ],
           "actions": [
+            {
+              "id": "guests",
+              "label": "Guests",
+              "icon": "person.2|group",
+              "when": "site.can[commerce.walkIns] && item.status == pending,confirmed,checked_in",
+              "promptTitle": "Guests",
+              "submitLabel": "Save",
+              "prompt": [
+                {
+                  "key": "guests",
+                  "label": "Guests",
+                  "kind": "number",
+                  "integer": true,
+                  "min": 1,
+                  "required": true,
+                  "initial": "{item.guests|'1'}",
+                  "help": "When the stay is checked in one guest at a time, today’s check-ins follow: an added guest gets their own, and a guest already checked in stays.",
+                  "mismatch": "At least 1"
+                }
+              ],
+              "method": "POST",
+              "url": "/api/commerce/reservations/guests",
+              "body": {
+                "hostId": "{site.id}",
+                "reservationId": "{item.$id}",
+                "guests": {
+                  "$number": "{form.guests}"
+                }
+              },
+              "success": "Guests saved: {response.guests}"
+            },
             {
               "id": "checkIn",
               "label": "Check in",
