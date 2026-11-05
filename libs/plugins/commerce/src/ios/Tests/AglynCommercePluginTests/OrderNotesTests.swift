@@ -48,6 +48,11 @@ final class OrderNotesTests: XCTestCase {
     XCTAssertEqual(events.map(\.event), ["note", "paid"])
     XCTAssertTrue(timelineLine(events[0]).hasSuffix(" — note: Customer called"))
     XCTAssertTrue(timelineLine(events[1]).hasSuffix(" — paid"))
+    // The screen shows the device's time, not UTC.
+    var at = events[1]
+    at.atMs = 1_793_962_380_000
+    XCTAssertTrue(timelineLine(at, timeZone: "America/Chicago").hasPrefix("Nov 6, 2026, 4:53 AM"))
+    XCTAssertTrue(timelineLine(at, timeZone: "UTC").hasPrefix("Nov 6, 2026, 10:53 AM"))
   }
 
   func testAnAnsweredRestockQuestionIsNotOfferedAgain() throws {
