@@ -213,7 +213,7 @@ const LOGO_TYPES = /^image\/(png|jpeg|webp|gif|avif|svg\+xml)$/
  * run here. Either way an answer that does not come is a logo whose colors
  * could not be read.
  */
-async function readLogoColors(
+export async function readLogoColors(
   firestore: FirebaseFirestore.Firestore,
   location: AiThemeLogoLocation,
   hostId: string,
