@@ -3026,8 +3026,12 @@ built page against what the reader read of its source.
   source this platform serves needs `SITE_IMPORT_EDGE_TOKEN` for that, as a
   crawl does), or from saved files with `--source <path>=<file>`.
   `--page <path>` narrows it, `--job <id>` names the import, `--json <file>`
-  keeps every number. Pages it could not score are listed with why. It exits 1
-  when anything is below the bar.
+  keeps every number. `--finish keep|improve` scores every page as that finish
+  (default: each page's wave stamp, else the import's own, else keep), and
+  `--words kept|improved` scores every page's words so (default: the page's own
+  stamp, else improved where its wave improved them); either also works without
+  `--host`, over the recorded pages. Pages it could not score are listed with
+  why. It exits 1 when anything is below the bar.
 
 ## The theme kind
 

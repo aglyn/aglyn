@@ -133,12 +133,21 @@ export const AI_MEASURED_IMPORT_CREDITS = {
   frame: AI_MEASURED_PAID_SITE_CREDITS.layout,
   /** A main page, its one design answer on the balanced tier over the page's read structure: 77 pages, mean 9.5, median 10, p90 12. */
   arranged: { median: 10, p90: 12 },
+  /**
+   * A main page arranged and reworded under Also improve my wording (AGL-4152),
+   * its design answer and its wording together: 10 pages of the 11/5 live wave
+   * (`AI_MEASURED_REWORDED_AT`), mean 35.8, median 34.5, p90 50, most 70.
+   */
+  reworded: { median: 35, p90: 50 },
   /** A page copied as it is: no model. It spends only where its source left its listing empty, which the 1 at the p90 covers. */
   copied: { median: 0, p90: 1 },
 } as const satisfies Record<string, AiMeasuredCredits>
 
 /** When `AI_MEASURED_IMPORT_CREDITS` was read, from which import, over how many pages of each build. */
 export const AI_MEASURED_IMPORT_AT = { read: '2026-11-01', job: 'mxOkjt2ff7', arranged: 77, copied: 266 } as const
+
+/** When the `reworded` row of `AI_MEASURED_IMPORT_CREDITS` was read, from which import, over how many pages. */
+export const AI_MEASURED_REWORDED_AT = { read: '2026-11-05', job: 'S_JkQp-XbT', reworded: 10 } as const
 
 /**
  * When the table above was read, and from when its jobs ran. Both tables
