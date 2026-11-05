@@ -2561,7 +2561,12 @@ org, its owner or an admin, a paid plan (`resolveEffectivePlan` is not
   before any request. `site-import/site-import-html.ts` extracts each page's
   title, description, headings and text in order, images and menu links; it
   drops scripts, iframes, embeds and any form with a payment field, and a
-  page with a password field is refused as `login-form`.
+  page with a password field is refused as `login-form`. A page with no `<form>`
+  (a search box aside) has its form read from data (AGL-4152,
+  `site-import-data-forms.ts`): an array of objects with a form field's `type`, a
+  `title` or `label` and a `required`, in a script block, a `data-*` attribute or
+  inline JavaScript, read as text and never run, placed in the nearest element
+  whose class says it is a form, and left out with no such element.
 - **To a model, only fenced.** `siteImportPagePromptText` wraps a page with
   `fenceUntrustedText` (`@aglyn/shared-util-tools/untrusted-text`), and the
   prompt that reads it carries `UNTRUSTED_TEXT_RULE`.
@@ -2583,7 +2588,12 @@ whose passes each do one unit (`aiSiteImportNextWork`):
    (`site-import/site-import-layout.ts`, no model): its sections and bands,
    rows, groups by kind, tables, tabs, pictures, icons and buttons over the
    read's blocks by index (`AiSiteImportPageRead.layout`), through the page's
-   own stylesheets (`site-import-css.ts`), and its VIDEOS (AGL-4140,
+   own stylesheets (`site-import-css.ts`: every link to a byte budget, AGL-4152,
+   `siteImportReadStylesheets`, `SITE_IMPORT_SHEET_LIMITS`: a 32 KB first look
+   at each, at most 24 links and 6 at once, then the sheets that go on, those
+   declaring `:root` custom properties first, to 3 MB in all, so a page's read
+   costs at most 3.8 MB; `:is()`, `:where()` and `var()` chains and triples are
+   read through), and its VIDEOS (AGL-4140,
    `readVideos`, at most 10 a page, `AiSiteImportPageRead.videos`): a
    `<video>`, an `<iframe>` of a host a `videoEmbedProviders` declaration
    names, a facade (a `lite-youtube`/`lite-vimeo`, a `data-*-id` element, a
@@ -2618,7 +2628,7 @@ whose passes each do one unit (`aiSiteImportNextWork`):
    "About"), the home page "Home".
 3. **The look** (no model, AGL-4084), before anything of the first wave is
    built (`jobs/ai-site-import-look.ts`): the owner's home page is read once
-   more as AglynBot, and its first stylesheets. Its edge headers are the
+   more as AglynBot, and its stylesheets (below). Its edge headers are the
    caller's `headersFor` where one is handed in, else the edge's own
    (`aiSiteImportLookHeaders` → `siteImportEdgeHeadersFor(siteImportOrigins(domain))`,
    exactly as the crawl asks it; AGL-4108: production registers the step with
@@ -2635,7 +2645,17 @@ whose passes each do one unit (`aiSiteImportNextWork`):
    where the theme font catalog has them (`themeFontFacts`, the fonts plugin's
    Google Fonts catalog) or the page loads them from Google Fonts
    (`AiSiteStyle.sourceFonts`, `aiSiteImportSourceFonts`), else the pairing of
-   its type mood. `aiSiteColors` still holds every color to the reading
+   its type mood. A bare read never leaves the stock theme (AGL-4152): a look
+   with no colorful button, link or declared palette (`look.palette`, the
+   brand-named colors its root's custom properties hold) takes its brand from
+   its logo's dominant colorful color, its accent from the logo's second, then
+   from its `home.hero` photo's, then its share picture's, each read from the
+   library's copy (`readLogoColors`, `dominantColorsFromPixels`); with no picture
+   to read, what its stylesheets use most decides, and with none of that the
+   seed's own look for its kind of site is drawn and saved, as a guided start
+   with no answer gets. `siteImport.look.from` says which: `source`, `logo`,
+   `photo` or `seed`, and `theme` is `applied` or the owner's `kept`, never
+   `unread` on a new pass. `aiSiteColors` still holds every color to the reading
    checks: a brand too light for white words is drawn at its nearest shade
    that reads. The look is drawn and saved as a guided start's
    (`aiSiteStyleFor`, `aiSaveSiteTheme`, which keeps a theme the owner chose). The header's logo
