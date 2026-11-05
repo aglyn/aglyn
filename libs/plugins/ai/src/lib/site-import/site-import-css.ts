@@ -119,13 +119,23 @@ const KEPT_PROPERTIES = new Set([
   'object-fit',
   'justify-content',
   'align-items',
+  // What says a visitor cannot see an element (AGL-4152): clipped, off-screen, its words pushed away; and how its lines break.
+  'clip',
+  'clip-path',
+  'overflow',
+  'left',
+  'right',
+  'top',
+  'transform',
+  'text-indent',
+  'white-space',
 ])
 
 /** What a rule says of a child's place in its grid, which a breakpoint nested in the rule may say again (AGL-4152). */
 const GRID_PLACEMENT = /^(?:grid-area|grid-row|grid-row-start|grid-row-end|grid-column|grid-column-start|grid-column-end|order)$/
 
 /** What an element takes from its parent when it says nothing itself. */
-const INHERITED = new Set(['color', 'font-family', 'font-size', 'font-weight', 'text-transform', 'letter-spacing', 'text-align', 'visibility'])
+const INHERITED = new Set(['color', 'font-family', 'font-size', 'font-weight', 'text-transform', 'letter-spacing', 'text-align', 'visibility', 'white-space'])
 
 interface Compound {
   tag: string | null

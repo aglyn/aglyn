@@ -81,6 +81,7 @@ import {
   readMetaValues,
   type SiteImportBlock,
   type SiteImportBrandMark,
+  type SiteImportConcealedParts,
   type SiteImportForm,
   type SiteImportVideo,
   type SiteImportIcon,
@@ -200,6 +201,8 @@ export interface SiteImportSkipped {
 }
 
 export interface SiteImportPage {
+  /** What the page holds that a visitor cannot see (AGL-4152), which a build is held to not drawing. */
+  concealed?: SiteImportConcealedParts
   /** The address the page was read from, after any same-site redirect. */
   url: string
   path: string
@@ -668,7 +671,7 @@ export async function crawlSiteForImport(
       }
       const isHome = foundBy === 'home'
       const structured = readLayout || isHome
-      const extract = extractSiteImportPage(page.text, page.url, sameSite, { structure: structured })
+      let extract = extractSiteImportPage(page.text, page.url, sameSite, { structure: structured })
       if (extract.loginForm) {
         skip({ url: finalKey, reason: 'login-form' })
         return null
@@ -702,6 +705,8 @@ export async function crawlSiteForImport(
       let built: Pick<SiteImportPage, 'layout' | 'nav' | 'footer' | 'look'> = {}
       if (extract.structure) {
         const css = await siteImportReadStylesheets(extract.structure.stylesheets.filter((url) => !/fonts\.googleapis\.com/i.test(url)), stylesheet, { outOfTime })
+        // Read again through them (AGL-4152): what a visitor cannot see is often only their rule's to say.
+        if (css.length) extract = extractSiteImportPage(page.text, page.url, sameSite, { structure: structured, stylesheets: css })
         const source = { blocks: extract.blocks, organization: extract.organization, structure: extract.structure, ...(extract.videos ? { videos: extract.videos } : {}) }
         try {
           built = {
@@ -733,6 +738,7 @@ export async function crawlSiteForImport(
         links: [...new Set(links.map(canon))],
         forms: extract.forms,
         ...(extract.videos ? { videos: extract.videos } : {}),
+        ...(extract.concealed ? { concealed: extract.concealed } : {}),
         bytes: page.bytes,
       }
       if (verdict === 'wait' && claim) {
