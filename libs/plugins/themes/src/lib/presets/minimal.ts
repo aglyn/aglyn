@@ -186,7 +186,7 @@ export const MINIMAL_THEME: HostTheme = {
     },
     MuiTabs: {
       styleOverrides: {
-        root: { minHeight: 0, padding: 4, borderRadius: 8, display: 'inline-flex' },
+        root: { minHeight: 0, padding: 4, borderRadius: 8, display: 'inline-flex', maxWidth: '100%', boxSizing: 'border-box' },
         indicator: { display: 'none' },
       },
       sx: { root: { bgcolor: 'surface.main' } },
