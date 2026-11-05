@@ -24,7 +24,14 @@
 
 import { fireEvent, render, screen, waitFor } from '@testing-library/react'
 import type { ReactNode } from 'react'
-import { RecordSharingCard } from './record-sharing-card'
+import { registerPluginPermissions } from '@aglyn/aglyn/plugin-manager/plugin-permissions'
+import { CRM_PERMISSIONS } from '../model/crm-permissions'
+import { CrmBulkShareButton, RecordSharingCard } from './record-sharing-card'
+
+// The CRM's key, as the declarations register it in every process.
+registerPluginPermissions(CRM_PERMISSIONS)
+
+const REFUSAL = 'Your role does not include "Change CRM settings" — ask an organization admin'
 
 let role: string | undefined = 'owner'
 jest.mock('@aglyn/tenant-feature-instance', () => ({
@@ -111,13 +118,14 @@ describe('the Sharing card (AGL-3336)', () => {
     )
   })
 
-  it('offers no share and no unshare to a member who is not an owner or admin', () => {
+  it('switches off the share and the unshare, naming the permission, for a member without "Change CRM settings"', () => {
     role = 'editor'
     render(
       <RecordSharingCard object="leads" id="l1" record={shared} hostId="site-a" orgId="org-1" org={org} />,
     )
-    expect(screen.queryByRole('button', { name: 'Share with sites…' })).toBeNull()
-    expect(screen.queryByRole('button', { name: /Stop sharing/ })).toBeNull()
+    expect(screen.getByRole<HTMLButtonElement>('button', { name: 'Share with sites…' }).disabled).toBe(true)
+    expect(screen.getByRole<HTMLButtonElement>('button', { name: /Stop sharing/ }).disabled).toBe(true)
+    expect(screen.getAllByLabelText(REFUSAL).length).toBe(2)
     // …and never asks for the org's sites.
     expect(calls.some((call) => call.action === 'sites')).toBe(false)
   })
@@ -139,9 +147,9 @@ describe('the Sharing card (AGL-3336)', () => {
     expect(screen.getByText(/Shared by Dana\./)).toBeTruthy()
   })
 
-  it('draws nothing for a record nobody shared, to a member who cannot share it', () => {
+  it('shows a record nobody shared to a member who cannot share it, with the share switched off', () => {
     role = 'editor'
-    const { container } = render(
+    render(
       <RecordSharingCard
         object="deals"
         id="d1"
@@ -151,6 +159,24 @@ describe('the Sharing card (AGL-3336)', () => {
         org={org}
       />,
     )
-    expect(container.innerHTML).toBe('')
+    expect(screen.getByText(/Not shared with any other site/)).toBeTruthy()
+    expect(screen.getByRole<HTMLButtonElement>('button', { name: 'Share with sites…' }).disabled).toBe(true)
+    expect(screen.getByLabelText(REFUSAL)).toBeTruthy()
+  })
+})
+
+describe('"Share with sites…" on a bulk bar (AGL-4047)', () => {
+  it('opens for a member holding "Change CRM settings"', () => {
+    render(<CrmBulkShareButton object="leads" ids={['l1']} hostId="site-a" orgId="org-1" />)
+    expect(screen.getByRole<HTMLButtonElement>('button', { name: 'Share with sites…' }).disabled).toBe(false)
+    expect(screen.queryByLabelText(REFUSAL)).toBeNull()
+  })
+
+  it('is switched off, naming the permission, for a member without it', () => {
+    role = 'editor'
+    render(<CrmBulkShareButton object="leads" ids={['l1']} hostId="site-a" orgId="org-1" />)
+    expect(screen.getByRole<HTMLButtonElement>('button', { name: 'Share with sites…' }).disabled).toBe(true)
+    expect(screen.getByLabelText(REFUSAL)).toBeTruthy()
+    expect(calls.some((call) => call.action === 'sites')).toBe(false)
   })
 })
