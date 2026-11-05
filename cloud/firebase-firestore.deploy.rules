@@ -2087,17 +2087,52 @@ allow delete: if isStaff();
 
 
 
+
+
+
+
+
+
+
+
+
+
 function canWriteCampaignContainers() {
 return isOrgMember() && isVerified() &&
 memberKeyOrOverride('marketing.campaigns', ['owner', 'admin', 'editor']) &&
 orgNotSuspended();
 }
+
+
+
+
+
+
+
+
+
+
+function canWriteOneSiteCampaign(visibleTo) {
+return isOrgMember() && isVerified() && orgNotSuspended() &&
+visibleTo is list && visibleTo.size() == 1 &&
+visibleTo[0].matches('host:[^:/]+') &&
+siteHoldsCampaigns(visibleTo[0].split(':')[1]);
+}
+function siteHoldsCampaigns(hostId) {
+return get(/databases/$(database)/documents/hosts/$(hostId)).data.get('orgId', '') == orgId &&
+isHostMember(hostId) && !hostSuspended(hostId) &&
+hostSiteRoleKey(hostId, 'marketing.campaigns', ['admin', 'editor']);
+}
 match /emailCampaigns/{campaignId} {
 allow read: if isStaff() || canReadScoped();
-allow create: if isStaff() || (canWriteCampaignContainers() && canCreateScoped());
+allow create: if isStaff() ||
+(canWriteCampaignContainers() && canCreateScoped()) ||
+(canWriteOneSiteCampaign(request.resource.data.get('visibleTo', null)) && canCreateScoped());
 allow update: if isStaff() ||
 (canWriteCampaignContainers() && canReadScoped() &&
-(isOrgWideMember() || scopeUnchanged()));
+(isOrgWideMember() || scopeUnchanged())) ||
+(canWriteOneSiteCampaign(resource.data.get('visibleTo', null)) && canReadScoped() &&
+scopeUnchanged());
 allow delete: if false;
 }
 
