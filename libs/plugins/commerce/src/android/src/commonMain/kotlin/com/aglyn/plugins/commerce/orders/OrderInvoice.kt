@@ -1,8 +1,10 @@
 package com.aglyn.plugins.commerce.orders
 
+import com.aglyn.contracts.Contracts
 import com.aglyn.contracts.HostOrder
 import com.aglyn.contracts.OrderInvoiceSendRecord
 import com.aglyn.contracts.OrderStatus
+import com.aglyn.contracts.PosOfflineFlag
 import com.aglyn.contracts.QuoteEmailThread
 import com.aglyn.contracts.deviceTimeZone
 import com.aglyn.contracts.formatOrderNumber
@@ -58,6 +60,22 @@ fun invoiceSentLine(order: HostOrder, timeZone: String = deviceTimeZone()): Stri
   val last = lastInvoiceSend(order) ?: return null
   val to = last.to.ifEmpty { "the customer" }
   return "${if (last.paid) "Paid invoice" else "Invoice"} sent ${formatReceiptTime(last.atMs.toLong(), timeZone)} to $to."
+}
+
+/** What [orderOfflineNotice] says, and whether it asks the merchant to check something. */
+data class OrderOfflineNotice(val text: String, val needsCheck: Boolean)
+
+/**
+ * A register sale rung offline, said on its order: when it was rung and synced, and what the sync found to check.
+ * Null on any other order (the console's `OrderOfflineNotice`).
+ */
+fun orderOfflineNotice(order: HostOrder, timeZone: String = deviceTimeZone()): OrderOfflineNotice? {
+  val stamp = order.offline ?: return null
+  fun at(ms: Double) = formatReceiptTime(ms.toLong(), timeZone)
+  val checks = stamp.stockConflicts.orEmpty().map { "${it.shortUnits.toLong()} of ${it.requested.toLong()}× ${it.name} not in stock" } +
+    stamp.flags.filter { it != PosOfflineFlag.STOCK_SHORT }.map { Contracts.posOfflineFlagLabels[it.raw] ?: it.raw }
+  val lines = listOf("Rung while the register was offline", "Rung ${at(stamp.soldAtMs)}, synced ${at(stamp.syncedAtMs)}.") + checks
+  return OrderOfflineNotice(lines.joinToString("\n"), checks.isNotEmpty())
 }
 
 /** What the form's small print says about the email, and where replies go. */

@@ -58,6 +58,18 @@ func invoiceSentLine(_ order: HostOrder, timeZone: String = TimeZone.current.ide
   return "\(last.paid ? "Paid invoice" : "Invoice") sent \(formatReceiptTime(Int64(last.atMs), timeZone: timeZone)) to \(to)."
 }
 
+/// A register sale rung offline, said on its order: when it was rung and synced, and what the sync found to check.
+/// Nil on any other order (the console's `OrderOfflineNotice`).
+func orderOfflineNotice(_ order: HostOrder, timeZone: String = TimeZone.current.identifier) -> (text: String, needsCheck: Bool)? {
+  guard let stamp = order.offline else { return nil }
+  func at(_ ms: Double) -> String { formatReceiptTime(Int64(ms), timeZone: timeZone) }
+  let checks =
+    (stamp.stockConflicts ?? []).map { "\(Int64($0.shortUnits)) of \(Int64($0.requested))× \($0.name) not in stock" }
+    + stamp.flags.filter { $0 != .stockShort }.map { ContractValues.shared.posOfflineFlagLabels[$0.rawValue] ?? $0.rawValue }
+  let lines = ["Rung while the register was offline", "Rung \(at(stamp.soldAtMs)), synced \(at(stamp.syncedAtMs))."] + checks
+  return (lines.joined(separator: "\n"), !checks.isEmpty)
+}
+
 /// What the form's small print says about the email, and where replies go.
 func invoiceSendNote(paid: Bool, contact: String?) -> String {
   let what =

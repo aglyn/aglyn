@@ -85,6 +85,23 @@ final class OrderInvoiceTests: XCTestCase {
       invoiceSentLine(try order(["invoiceSends": [send(to: "")]]))?.hasSuffix("to the customer.") == true)
   }
 
+  func testAnOfflineSaleSaysWhenAndWhatToCheck() throws {
+    XCTAssertNil(orderOfflineNotice(try order([:])))
+    let plain: [String: Any] = ["flags": [], "saleKey": "k", "soldAtMs": 1_793_000_000_000, "syncedAtMs": 1_793_000_600_000, "syncedBy": "u1"]
+    let quiet = try XCTUnwrap(orderOfflineNotice(try order(["offline": plain]), timeZone: "UTC"))
+    XCTAssertFalse(quiet.needsCheck)
+    XCTAssertTrue(quiet.text.hasPrefix("Rung while the register was offline\nRung "))
+    var flagged = plain
+    flagged["flags"] = ["stock-short", "late-sync"]
+    flagged["stockConflicts"] = [["applied": 1, "name": "Mug", "productId": "p", "requested": 3, "shortUnits": 2]]
+    let loud = try XCTUnwrap(orderOfflineNotice(try order(["offline": flagged]), timeZone: "UTC"))
+    XCTAssertTrue(loud.needsCheck)
+    let lines = loud.text.components(separatedBy: "\n")
+    XCTAssertEqual(lines[2], "2 of 3× Mug not in stock")
+    XCTAssertEqual(lines.count, 4, "the stock flag is said by its conflict, not twice")
+    XCTAssertEqual(lines[3], ContractValues.shared.posOfflineFlagLabels["late-sync"])
+  }
+
   func testTheSmallPrintSaysWhereRepliesGo() {
     XCTAssertTrue(invoiceSendNote(paid: true, contact: "hi@example.test").hasSuffix("Replies go to hi@example.test."))
     XCTAssertTrue(invoiceSendNote(paid: false, contact: nil).hasSuffix("Replies go to your email."))

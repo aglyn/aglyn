@@ -92,6 +92,9 @@ struct OrderDetailView: View {
         if canTransitionOrder(from: row.status, to: .refunded), orderDisputeBlocksRefund(order) {
           AglynNotice(ContractValues.shared.refundBlockedByDispute, tone: .info)
         }
+        if let offline = orderOfflineNotice(row.order) {
+          AglynNotice(offline.text, tone: offline.needsCheck ? .warning : .info).accessibilityIdentifier("order-offline")
+        }
         if let problem { AglynNotice(problem, tone: .error) { self.problem = nil } }
         if let done { AglynNotice(done, tone: .success) { self.done = nil } }
       }
