@@ -372,8 +372,8 @@ per workspace — how features ship dark and roll out gradually.
 
 ### Plugin config
 
-A plugin's declared settings schema, edited by workspace admins in a
-generated form and read back typed with defaults merged.
+A plugin's declared settings schema, edited by members holding **Organization
+settings** in a generated form and read back typed with defaults merged.
 → [Plugin manager API](../developers/plugins/reference/plugin-manager-api.md)
 
 ### Plugin permission

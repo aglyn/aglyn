@@ -202,7 +202,7 @@ marked *Not enabled on this site* sends nothing until that feature is switched o
 
 ## Site Admin {#site-admin}
 
-**Site Admin** holds the controls only a site's owners and admins should touch, kept
+**Site Admin** holds the controls that take the **Manage site settings** permission, kept
 apart from Setup so a collaborator never trips over them. Open it from the site
 navigation; its sections are:
 
@@ -218,10 +218,11 @@ navigation; its sections are:
 
 ### Who can open Site Admin {#who-can-open-site-admin}
 
-Only a site's **admins** can open Site Admin; anyone else who follows a link to it is
-told so instead of seeing the sections. To get in, ask a site admin or a workspace owner
-to raise your role on this site — see
-[Teams & roles](../workspace-and-billing/teams-and-roles/overview.md).
+Opening Site Admin takes the **Manage site settings** permission on the site, which the
+site's admins hold by default, and workspace owners and admins are admins of every site.
+Anyone else who follows a link to it is told so instead of seeing the sections. To get in,
+ask a site admin or a workspace owner to raise your role on this site or grant you the
+permission — see [Site permissions](../workspace-and-billing/teams-and-roles/custom-roles.md#site-permissions).
 
 ## Switching between sites
 

@@ -61,7 +61,8 @@ never overwrites one you wrote, and a field you cleared stays clear.
 
 **Settings → Profile** has a **Business profile defaults** card. A site uses
 those values wherever its own profile is empty, so a workspace that runs many
-sites for one business writes them once. Only managers can change them. The
+sites for one business writes them once. Changing them takes the **Business profile**
+permission, which workspace owners and admins hold by default. The
 year founded is set on each site's own card. The default **Area served** is used
 only by a site whose **Areas served** on Setup → SEO → Local business is empty.
 

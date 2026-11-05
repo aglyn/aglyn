@@ -155,8 +155,8 @@ the captions*. The plan card lists the change, and **Confirm plan** saves it.
   alt text; images placed from then on take the new one.
 - It changes this site's library only, never the organization library, and it never
   uploads, copies, replaces, deletes or shares a file.
-- It needs the admin, editor or author role on the site, works as soon as it is saved, and
-  costs no AI credits.
+- It needs the **Edit site content** permission on the site, which its admins, editors and
+  authors hold by default, works as soon as it is saved, and costs no AI credits.
 
 ### Filter and search {#filter-and-search}
 
@@ -390,8 +390,8 @@ folder named **From the owner**, filed as the business's own photos.
   wider than 2560 pixels, and the GPS position, camera details and other data inside
   the file are stripped before it is stored. JPEG, PNG and WebP are accepted; an
   iPhone's HEIC photo is converted on the phone where its browser can open it.
-- **Who can make a link.** Admins, editors and authors who can upload to the site's
-  library. The organization library has no photo link.
+- **Who can make a link.** Anyone holding **Edit site content** on the site, which its
+  admins, editors and authors hold by default. The organization library has no photo link.
 - **Storage counts as usual.** Each photo is stored as if the member who made the
   link had uploaded it, and counts toward your [storage](#storage) like any upload.
 
@@ -661,7 +661,9 @@ narrows that, with the same two choices as datasets — **All sites** or
 A folder applies its sharing **when you save it** — files keep their own setting
 afterwards, so moving a file into a "Client A" folder later does not re-share it. Narrowing
 a file that sites are already using names those sites first and asks you to confirm.
-Only workspace owners and admins can change sharing.
+Changing sharing takes the **Edit the workspace media library** permission, which workspace
+owners, admins and editors hold by default, and access to every site in the workspace:
+someone added to particular sites can't change it.
 
 A new folder or file starts shared with **All sites**, so it appears everywhere the moment
 you create it — or with the site you were working in, if your workspace has been set to
@@ -680,8 +682,9 @@ and save to fix it.
 
 **Default sharing for new media**, at the top of the workspace's **Media** page, decides
 what a newly uploaded file or new folder is shared with: **All sites**, or only the site
-it was created in. It changes nothing that already exists, and only workspace owners and
-admins can set it.
+it was created in. It changes nothing that already exists. Setting it takes the
+**Organization settings** permission, which workspace owners and admins hold by default;
+without it the control stays off.
 
 In the media picker's **Organization (shared)** tab, a site sees only the assets it may
 use. An agency's internal artwork stays out of the client sites' pickers entirely.

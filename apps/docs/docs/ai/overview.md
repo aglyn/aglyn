@@ -147,8 +147,9 @@ Nobody can raise their own allotment.
 
 ## Switch AI off for one site {#switch-ai-off-for-one-site}
 
-AI is **on for every site** in a workspace. A site admin can switch it off for one site
-on that site's **Admin → Plugins → AI** page, and the page says, beside the switch, what
+AI is **on for every site** in a workspace. A member holding **Manage site settings**, which
+a site's admins hold by default, can switch it off for one site on that site's
+**Admin → Plugins → AI** page, and the page says, beside the switch, what
 switching it off stops and what it leaves running.
 
 With AI off for a site:

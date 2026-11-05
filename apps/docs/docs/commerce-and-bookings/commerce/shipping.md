@@ -63,8 +63,8 @@ plan** saves it.
   **Coverage** line does.
 - Changes work as soon as they are saved, like a save on this card. They cost no AI
   credits.
-- Only an admin or editor on the site can ask Aglyn AI for these changes. An author can
-  still make them on the card.
+- Asking Aglyn AI for these changes takes the **Publish site content** permission, which a
+  site's admins and editors hold by default. An author can still make them on the card.
 
 ## Where parcels ship from
 

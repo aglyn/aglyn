@@ -172,7 +172,8 @@ editor or viewer, which sites they can reach. Roles are **Admin**, **Editor** an
 so they see only those. **Save** applies the change; **Remove from organization** takes
 them off the team and frees their seat.
 
-Editing a member needs the admin role. The owner's role is not edited here — ownership
+Editing a member needs the **Manage members** permission, which owners and admins hold by
+default. The owner's role is not edited here — ownership
 moves under **Settings → Transfer ownership**.
 
 ### One member's activity {#member-activity}

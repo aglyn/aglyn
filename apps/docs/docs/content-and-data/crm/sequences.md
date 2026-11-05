@@ -232,7 +232,7 @@ It is the same `links.` host your campaign email's click tracking uses on a
 [sending domain](../../marketing-and-automation/email-campaigns/overview.md#sending-domains),
 set up the same way — one DNS record, then a check:
 
-1. An owner or admin selects **Set up** beside the domain. The app adds
+1. A member holding **Manage everyone's Sequences** selects **Set up** beside the domain. The app adds
    `links.yourcompany.com` to itself.
 2. Publish the record the card shows — a **CNAME** from
    `links.yourcompany.com` to the address it names — at whoever hosts your
@@ -401,11 +401,11 @@ rows. See
 
 Select **New sequence**, name it, and choose the **site** whose CRM the people
 you enroll are contacts of and the **mailbox** it sends from. A sequence sends
-as the member who connected its mailbox, so only that member, or an
-organization owner or admin, can edit or activate it.
+as the member who connected its mailbox, so only that member, or a member
+holding **Manage everyone's Sequences**, can edit or activate it.
 
-The **Mailbox** list offers the mailboxes you connected, and an owner or admin
-every mailbox in the organization. A disconnected mailbox is never offered.
+The **Mailbox** list offers the mailboxes you connected, and a member holding
+that permission every mailbox in the organization. A disconnected mailbox is never offered.
 When exactly one of your own mailboxes is active, a new sequence starts on it.
 With none, [connect one](#connect-a-mailbox) first.
 
@@ -559,8 +559,8 @@ counters, and files nothing on anyone's record; the Mailboxes card shows how
 many tests the mailbox sent today. It is a real send from your Google
 account, so it spends Google's own limits, and a mailbox that is paused or
 needs reconnecting refuses it and says why. A mailbox can send 20 tests an
-hour. Only the member who connected the mailbox, or an organization owner or
-admin, can send one from it.
+hour. Only the member who connected the mailbox, or a member holding **Manage
+everyone's Sequences**, can send one from it.
 
 In the enroll dialog, **Send me this as a test** beside a person sends their
 first email — their record and the personal line you wrote — to you the same
@@ -967,7 +967,8 @@ anything:
   or admin of the organization, can answer from it.
 
 A reply that arrived before Sequences kept what people wrote back is read from
-the mailbox the first time the mailbox's member — or an owner or admin — opens
+the mailbox the first time the mailbox's member — or a member holding **Manage
+everyone's Sequences** — opens
 the person's page or **Reply in thread**, and is kept from then on.
 
 ## Unsubscribe {#unsubscribe}
