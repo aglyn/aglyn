@@ -37,6 +37,7 @@ import androidx.compose.ui.semantics.heading
 import androidx.compose.ui.semantics.semantics
 import androidx.compose.ui.text.input.KeyboardType
 import androidx.compose.ui.unit.dp
+import com.aglyn.contracts.permissionRefusalText
 import com.aglyn.contracts.DatasetFieldDefinition
 import com.aglyn.contracts.DatasetFieldType
 import com.aglyn.contracts.DatasetModel
@@ -168,9 +169,7 @@ private fun Records(context: NativePluginContext, orgId: String, dataset: Datase
         ListHeader(dataset.plural.ifBlank { dataset.name }) {
           OverflowMenu(
             buildList {
-              if (canWrite) {
-                add(MenuAction("import", "Import records", "upload") { context.navigate(DATA_IMPORT_SCREEN, datasetImportParams(dataset.id, dataset.name)) })
-              }
+              add(MenuAction("import", "Import records", "upload") { if (canWrite) context.navigate(DATA_IMPORT_SCREEN, datasetImportParams(dataset.id, dataset.name)) else runner.error = permissionRefusalText("data.manage") })
               add(MenuAction("export", "Export records", "download") { dialog = RecordDialog.Export })
             },
           )

@@ -127,7 +127,16 @@ export function HelpDesksCard(props: HelpDesksCardProps) {
 
   if (viewRefused) {
     return (
-      <CardDisplay header="Help desks" subheader="Show your support team each buyer's recent orders beside their tickets, and, if you choose, send contact form messages there as new tickets." contentGutterX contentGutterY>
+      <CardDisplay
+        header="Help desks"
+        subheader="Show your support team each buyer's recent orders beside their tickets, and, if you choose, send contact form messages there as new tickets."
+        help={help(
+          'Connect your own Gorgias, Re:amaze, Kustomer, Gladly or Richpanel account, so agents see each buyer’s orders beside their tickets.',
+          '#connect',
+        )}
+        contentGutterX
+        contentGutterY
+      >
         <Typography variant="body2" color="text.secondary">
           {permissionRefusalText('helpDesks.view')}
         </Typography>

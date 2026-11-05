@@ -132,7 +132,8 @@ describe('each remaining kind names the ONE thing that reader can do', () => {
 
   it('an unadmitted account is told who to ask', () => {
     const notice = presenceFaultNotice(fault({ kind: 'not-allowed' }))
-    expect(notice.remedy).toMatch(/admin/i)
+    // By the permission that can check it, never by a role (AGL-4047).
+    expect(notice.remedy).toMatch(/Ask a member holding "Manage members"/)
     // And reassured about the thing they will otherwise assume they lost.
     expect(notice.remedy).toMatch(/editing permissions are unchanged/i)
   })

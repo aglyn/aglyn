@@ -4260,9 +4260,9 @@
     "evangelist",
     "other"
   ],
-  "NATIVE_CREATE_PERMISSION_REASON": "Your role can't create this here. Ask an owner or admin of the workspace.",
+  "NATIVE_CREATE_PERMISSION_REASON": "Your role does not include this permission — ask an organization admin.",
   "NATIVE_CREATE_PLAN_REASON": "Your plan doesn't include this. See the plans in Billing.",
-  "NATIVE_CREATE_SITE_ROLE_REASON": "Your role on this site can't create this. Ask a site admin.",
+  "NATIVE_CREATE_SITE_ROLE_REASON": "Your access to this site does not include this — ask an organization admin.",
   "NATIVE_CRM_ACTIVITY_DIRECTIONS": {
     "call": [
       "outbound",
@@ -7445,6 +7445,10 @@
         "crm.settings",
         "outreach.use",
         "outreach.manageAll",
+        "data.siteManage",
+        "data.siteDelete",
+        "data.viewRecords",
+        "data.export",
         "email.suppressions",
         "email.lists",
         "inbox.reply",
@@ -7530,6 +7534,10 @@
         "marketplace.siteInstall",
         "marketplace.sitePublish",
         "crm.moveStages",
+        "data.siteManage",
+        "data.siteDelete",
+        "data.viewRecords",
+        "data.export",
         "email.suppressions",
         "email.lists",
         "inbox.reply",
@@ -7622,6 +7630,10 @@
         "crm.settings",
         "outreach.use",
         "outreach.manageAll",
+        "data.siteManage",
+        "data.siteDelete",
+        "data.viewRecords",
+        "data.export",
         "email.suppressions",
         "email.lists",
         "inbox.reply",
@@ -7678,7 +7690,10 @@
         "adConversions.manage",
         "domains.manage"
       ],
-      "viewer": []
+      "viewer": [
+        "data.viewRecords",
+        "data.export"
+      ]
     },
     "groups": [
       {
@@ -8350,6 +8365,51 @@
         "key": "outreach.manageAll",
         "label": "Manage everyone’s Sequences",
         "pluginId": "outreach",
+        "scope": "org"
+      },
+      {
+        "description": "Change the schema and records of a dataset placed on this site alone, and import into it. Follows “Manage data” for a member of the whole workspace.",
+        "follows": "data.manage",
+        "group": "datasets",
+        "key": "data.siteManage",
+        "label": "Manage this site’s data",
+        "narrowable": true,
+        "scope": "site",
+        "sitePreset": {
+          "admin": true,
+          "author": false,
+          "editor": true,
+          "viewer": false
+        }
+      },
+      {
+        "description": "Delete a dataset placed on this site alone, with its records. Follows “Delete workspace records” for a member of the whole workspace.",
+        "follows": "org.eraseRecords",
+        "group": "datasets",
+        "key": "data.siteDelete",
+        "label": "Delete this site’s datasets",
+        "narrowable": true,
+        "scope": "site",
+        "sitePreset": {
+          "admin": true,
+          "author": false,
+          "editor": true,
+          "viewer": false
+        }
+      },
+      {
+        "description": "Read the records of the datasets this member can see. Published sites show records either way.",
+        "group": "datasets",
+        "key": "data.viewRecords",
+        "label": "View dataset records",
+        "scope": "org"
+      },
+      {
+        "description": "Take the records of the datasets this member can see out as a file. Needs “View dataset records”.",
+        "group": "datasets",
+        "key": "data.export",
+        "label": "Export data",
+        "refines": "data.viewRecords",
         "scope": "org"
       },
       {

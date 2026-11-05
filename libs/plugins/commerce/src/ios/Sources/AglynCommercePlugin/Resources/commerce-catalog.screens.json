@@ -607,7 +607,7 @@
               "destructive": true,
               "url": "/api/resources/erase",
               "back": true,
-              "confirm": "Delete {data.col.name}? Storefront blocks pointing at it go empty. The delete is refused while the collection still has entries, or while a page uses it as a list or entry template. It also takes the site admin role.",
+              "confirm": "Delete {data.col.name}? Storefront blocks pointing at it go empty. The delete is refused while the collection still has entries, or while a page uses it as a list or entry template. It also takes the \"Manage site settings\" permission.",
               "body": {
                 "scope": "hosts",
                 "scopeId": "{site.id}",

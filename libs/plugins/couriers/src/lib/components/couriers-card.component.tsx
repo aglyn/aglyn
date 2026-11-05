@@ -153,7 +153,12 @@ export function CouriersCard(props: CouriersCardProps) {
 
   if (viewRefused) {
     return (
-      <CardDisplay header="Couriers" contentGutterX contentGutterY>
+      <CardDisplay
+        header="Couriers"
+        help={pluginDocsHelp('couriers', { anchor: '#connect-doordash-drive' })}
+        contentGutterX
+        contentGutterY
+      >
         <Typography variant="body2" color="text.secondary">
           {permissionRefusalText('couriers.view')}
         </Typography>

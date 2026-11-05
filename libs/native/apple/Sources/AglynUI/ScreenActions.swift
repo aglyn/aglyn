@@ -143,18 +143,3 @@ private struct AglynOptionalPrimaryActionModifier: ViewModifier {
     }
   }
 }
-
-/// Why an action is off for the person's role, in the console's words (its Create site dialog: "Your role in this
-/// workspace does not allow creating sites. Ask a workspace owner or admin to create it, or to change your role."), for a
-/// primary action's `help`, which the button shows instead of going silently dead.
-public enum AglynRoleReason {
-  /// A site role: `doing` is what the role does not allow ("creating forms").
-  public static func site(_ doing: String) -> String {
-    "Your role on this site does not allow \(doing). Ask a site admin to do it, or to change your role."
-  }
-
-  /// A workspace role.
-  public static func workspace(_ doing: String) -> String {
-    "Your role in this workspace does not allow \(doing). Ask a workspace owner or admin to do it, or to change your role."
-  }
-}
