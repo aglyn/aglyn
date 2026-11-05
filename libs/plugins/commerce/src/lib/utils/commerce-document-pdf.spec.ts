@@ -342,3 +342,21 @@ it('gives dates the American way in the site’s zone', () => {
   expect(formatPdfDate(LATE, 'Not/AZone')).toBe('October 29, 2026')
   expect(formatPdfDate(0, 'UTC')).toBe('')
 })
+
+describe('a proof with no price yet (AGL-4184)', () => {
+  const noPrice = () =>
+    viewOf({ ...quoteOrder(), lineItems: [], totals: { itemsCents: 0, discountCents: 0, shippingCents: 0, taxCents: 0, feeCents: 0, totalCents: 0 } } as never)
+
+  it('has no price section: no table of lines, no totals, no way to pay', () => {
+    const pdf = text(renderQuotePdf({ brand: BRAND, view: noPrice(), revision: 1, payUrl: PAY }))
+    expectWellFormed(pdf)
+    const strings = drawn(pdf)
+    expect(strings).toContain('PROOF')
+    expect(strings).toContain('Proof #1042')
+    for (const gone of ['Item', 'Qty', 'Unit price', 'Amount', 'Subtotal', 'Total', 'Pay online', 'Pay this quote']) {
+      expect(strings).not.toContain(gone)
+    }
+    expect(strings.join(' ')).not.toContain('$')
+    expect(pdf).not.toContain(PAY)
+  })
+})

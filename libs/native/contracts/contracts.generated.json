@@ -11313,7 +11313,7 @@
       "defaultBody": [
         {
           "block": "text",
-          "text": "{{host.businessName}} · Quote {{quote.number}}",
+          "text": "{{host.businessName}} · {{quote.label}} {{quote.number}}",
           "variant": "eyebrow"
         },
         {
@@ -11333,7 +11333,7 @@
         },
         {
           "block": "text",
-          "text": "Quote: {{quote.number}}\nRevision: {{quote.revision}}\nTotal: {{quote.total}}",
+          "text": "{{quote.label}}: {{quote.number}}\nRevision: {{quote.revision}}\nTotal: {{quote.total}}",
           "variant": "details"
         },
         {
@@ -11362,14 +11362,19 @@
         }
       ],
       "defaultSubject": "{{quote.subject}}",
-      "description": "Sends a quote to the customer when you choose Send quote: your message, the proof, the quote as a PDF and a button to approve or pay it on your site. Later sends, such as a new revision, arrive in the same conversation.",
-      "footerReason": "You’re receiving this because {{host.businessName}} prepared a quote for you.",
+      "description": "Sends a quote to the customer when you choose Send quote: your message, the proof, the quote as a PDF and a button to approve or pay it on your site. A proof with no price yet goes out as a proof, with no total and no PDF. Later sends, such as a new revision, arrive in the same conversation.",
+      "footerReason": "You’re receiving this because {{host.businessName}} prepared a quote or proof for you.",
       "key": "quote-sent",
       "mergeTokens": [
         {
           "description": "The subject typed when sending; it stays the same for every email about the quote",
           "name": "quote.subject",
           "sample": "Quote #1042 from Northwind Signs"
+        },
+        {
+          "description": "“Quote”, or “Proof” for a proof with no price yet",
+          "name": "quote.label",
+          "sample": "Quote"
         },
         {
           "description": "The quote number",
@@ -11382,12 +11387,12 @@
           "sample": "2"
         },
         {
-          "description": "The quote total; “before tax” when tax is added at payment",
+          "description": "The quote total; “before tax” when tax is added at payment; empty for a proof with no price yet",
           "name": "quote.total",
           "sample": "$1,250.00"
         },
         {
-          "description": "“Your quote from …”, or “Your updated quote” from the second revision on",
+          "description": "“Your quote from …”, or “Your updated quote” from the second revision on; “proof” for a proof with no price yet",
           "name": "quote.heading",
           "sample": "Your quote from Northwind Signs"
         },
@@ -11412,12 +11417,12 @@
           "sample": "Also with this revision: banner.ai. See it on your quote page."
         },
         {
-          "description": "What to do next: approve the proof first, or pay when ready",
+          "description": "What to do next: approve the proof first, or pay when ready; for a proof with no price yet, approve it or ask for changes",
           "name": "quote.nextStep",
           "sample": "Look over the proof, then approve it on your quote page. Once you approve it, you can pay there."
         },
         {
-          "description": "“Review and approve” while an approval is needed first, else “View and pay” with the total",
+          "description": "“Review and approve” while an approval is needed first, “Review the proof” for a proof with no price yet, else “View and pay” with the total",
           "name": "quote.buttonLabel",
           "sample": "View and pay $1,250.00"
         },

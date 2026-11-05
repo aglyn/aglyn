@@ -118,6 +118,7 @@ jest.mock('@aglyn/shared-ui-jsx', () => ({
   ),
 }))
 
+import { MediaPickerContext, type PickedMedia } from '@aglyn/aglyn/app-utils/media-picker-context'
 import { HostQuotesCard } from './host-quotes-card.component'
 
 const QUOTE = {
@@ -977,5 +978,135 @@ describe('telling the business what customers’ Pay waits on (AGL-4162)', () =>
     expect(within(form).queryByText(/Sales tax isn’t set up/)).toBeNull()
     expect((within(form).getByRole('button', { name: 'Send' }) as HTMLButtonElement).disabled).toBe(true)
     expect(within(form).getByLabelText(/Sales tax isn’t set up for this store yet/)).toBeTruthy()
+  })
+})
+
+describe('proofs from the media library, and a proof with no price yet (AGL-4184)', () => {
+  const PICKED: PickedMedia = { url: 'org:o', fileName: 'Banner.png', contentType: 'image/png', mediaId: 'm1', mediaScope: 'org:org-1' }
+  const PROOF = { id: 'p1', revision: 1, name: 'Banner.png', contentType: 'image/png', size: 2_048, path: 'x', addedAtMs: 1, addedBy: 'a' }
+  const pickMedia = jest.fn(async (): Promise<PickedMedia | null> => PICKED)
+  const realFetch = globalThis.fetch
+
+  beforeEach(() => {
+    pickMedia.mockClear()
+    pickMedia.mockImplementation(async () => PICKED)
+    Object.assign(URL, { createObjectURL: jest.fn(() => 'blob:proof'), revokeObjectURL: jest.fn() })
+  })
+  afterEach(() => {
+    Object.assign(globalThis, { fetch: realFetch })
+    mockFetch.mockImplementation(async () => ({ ok: true, json: async () => ({ quoteId: 'q-new', number: 1043, updatedAtMs: 5 }) }))
+  })
+
+  const renderCard = (canEdit = true) =>
+    render(
+      <MediaPickerContext.Provider value={{ pickMedia }}>
+        <HostQuotesCard hostId="site1" canEdit={canEdit} canSend />
+      </MediaPickerContext.Provider>,
+    )
+  const posted = (action: string) =>
+    mockFetch.mock.calls
+      .map((call) => JSON.parse(String((call[2] as { body?: string } | undefined)?.body ?? '{}')) as Record<string, unknown>)
+      .filter((body) => body['action'] === action)
+  const openQuote = async (over: Record<string, unknown> = {}, section: Record<string, unknown> = {}, canEdit = true) => {
+    mockQuotes = [{ ...QUOTE, ...over, quote: { ...QUOTE.quote, ...section } }]
+    renderCard(canEdit)
+    fireEvent.click(screen.getByText('Quote #1042'))
+    return screen.findByRole('dialog')
+  }
+  const PROOF_ONLY = { lineItems: [], totals: { itemsCents: 0, discountCents: 0, shippingCents: 0, taxCents: 0, feeCents: 0, totalCents: 0 } }
+
+  it('offers the media picker beside Add proof, private files included, and sends only the file’s name', async () => {
+    const dialog = await openQuote()
+    fireEvent.click(within(dialog).getByRole('button', { name: 'From media library' }))
+    await waitFor(() => expect(posted('proof-from-media')).toHaveLength(1))
+    expect(pickMedia).toHaveBeenCalledWith({ allowPrivate: true })
+    expect(posted('proof-from-media')[0]).toEqual({
+      action: 'proof-from-media',
+      hostId: 'site1',
+      quoteId: 'q-1',
+      media: { mediaScope: 'org:org-1', mediaId: 'm1' },
+    })
+  })
+
+  it('sends nothing when the picker is closed, or for a kind of file a proof can’t be', async () => {
+    pickMedia.mockImplementationOnce(async () => null)
+    pickMedia.mockImplementationOnce(async () => ({ ...PICKED, fileName: 'clip.mp4', contentType: 'video/mp4' }))
+    const dialog = await openQuote()
+    const button = within(dialog).getByRole('button', { name: 'From media library' })
+    fireEvent.click(button)
+    await waitFor(() => expect(pickMedia).toHaveBeenCalledTimes(1))
+    fireEvent.click(button)
+    await waitFor(() => expect(pickMedia).toHaveBeenCalledTimes(2))
+    await new Promise((resolve) => setTimeout(resolve))
+    expect(posted('proof-from-media')).toEqual([])
+  })
+
+  it('holds it behind "Create and edit quotes", and on a revision that can’t take one', async () => {
+    const dialog = await openQuote({}, {}, false)
+    expect((within(dialog).getByRole('button', { name: 'From media library' }) as HTMLButtonElement).disabled).toBe(true)
+    cleanup()
+    const answered = await openQuote({}, { responses: [{ action: 'changes', revision: 1, atMs: 1, comment: 'x' }] })
+    expect((within(answered).getByRole('button', { name: 'From media library' }) as HTMLButtonElement).disabled).toBe(true)
+  })
+
+  it('offers no library button where no picker is mounted', async () => {
+    mockQuotes = [QUOTE]
+    render(<HostQuotesCard hostId="site1" canEdit canSend />)
+    fireEvent.click(screen.getByText('Quote #1042'))
+    const dialog = await screen.findByRole('dialog')
+    expect(within(dialog).queryByRole('button', { name: 'From media library' })).toBeNull()
+  })
+
+  it('creates a proof with no items from the media library, with nothing about money on the form', async () => {
+    mockQuotes = []
+    renderCard()
+    fireEvent.click(screen.getByRole('button', { name: 'New quote' }))
+    const dialog = await screen.findByRole('dialog')
+    expect((within(dialog).getByRole('button', { name: 'Create quote' }) as HTMLButtonElement).disabled).toBe(true)
+    fireEvent.click(within(dialog).getByRole('button', { name: 'From media library' }))
+    expect(await within(dialog).findByText('Banner.png')).toBeTruthy()
+    expect(within(dialog).getByText('Proof only')).toBeTruthy()
+    expect(within(dialog).queryByLabelText('Shipping ($)')).toBeNull()
+    expect(within(dialog).queryByText('Customers approve the proof before they can pay')).toBeNull()
+    fireEvent.click(within(dialog).getByRole('button', { name: 'Create proof' }))
+    await waitFor(() => expect(posted('create')).toHaveLength(1))
+    expect(posted('create')[0]).toMatchObject({
+      libraryProofs: [{ mediaScope: 'org:org-1', mediaId: 'm1' }],
+      quote: { lines: [], discount: null, shipping: null },
+    })
+  })
+
+  it('lists one as proof only, with no price', async () => {
+    mockQuotes = [{ ...QUOTE, ...PROOF_ONLY, quote: { ...QUOTE.quote, proofs: [PROOF] } }]
+    renderCard()
+    expect(screen.getByText('Proof only')).toBeTruthy()
+    expect(screen.getByText('—')).toBeTruthy()
+    expect(screen.queryByText('$0.00')).toBeNull()
+  })
+
+  it('calls its link and email what they carry, and offers no invoice, PDF or way to lose its only proof', async () => {
+    const dialog = await openQuote(PROOF_ONLY, { proofs: [PROOF] })
+    expect(within(dialog).getByText('Proof link')).toBeTruthy()
+    expect(within(dialog).getByRole('button', { name: 'Copy proof link' })).toBeTruthy()
+    expect(within(dialog).getByRole('button', { name: 'Send proof' })).toBeTruthy()
+    expect(within(dialog).queryByRole('button', { name: 'Send invoice' })).toBeNull()
+    expect(within(dialog).queryByRole('button', { name: 'Download PDF' })).toBeNull()
+    expect(within(dialog).queryByRole('button', { name: 'Remove Banner.png' })).toBeNull()
+    expect(within(dialog).queryByText('Total')).toBeNull()
+    expect(within(dialog).queryByText(/can’t pay/)).toBeNull()
+  })
+
+  it('holds Send while a new revision has no proof, and Save too', async () => {
+    const dialog = await openQuote(PROOF_ONLY, { revision: 2, proofs: [PROOF] })
+    expect((within(dialog).getByRole('button', { name: 'Send proof' }) as HTMLButtonElement).disabled).toBe(true)
+    expect((within(dialog).getByRole('button', { name: 'Save' }) as HTMLButtonElement).disabled).toBe(true)
+  })
+
+  it('goes back to a quote’s words with a line', async () => {
+    const dialog = await openQuote({}, { proofs: [PROOF] })
+    expect(within(dialog).getByText('Pay link')).toBeTruthy()
+    expect(within(dialog).getByRole('button', { name: 'Send invoice' })).toBeTruthy()
+    expect(within(dialog).getByRole('button', { name: 'Download PDF' })).toBeTruthy()
+    expect(within(dialog).getByRole('button', { name: 'Remove Banner.png' })).toBeTruthy()
   })
 })

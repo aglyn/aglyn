@@ -375,6 +375,24 @@ export function formatQuoteNumber(order: Pick<HostOrder, 'number'>, docId?: stri
   return docId ? `Quote #${docId.slice(-6).toUpperCase()}` : 'Quote'
 }
 
+/**
+ * Whether a quote is PROOF ONLY (AGL-4184): it has no lines, so it shows its
+ * customer a proof to answer and no price. A design proof often goes out before
+ * pricing. This is read off the lines rather than stored, so there is nothing
+ * to switch: the save that adds a line makes it a normal quote, and removing
+ * every line from a quote with a proof makes it proof only again.
+ *
+ * Only a stored quote says this, one whose lines are an empty list. Pass a quote.
+ */
+export function quoteIsProofOnly(order: Partial<Pick<HostOrder, 'lineItems'>> | null | undefined): boolean {
+  return Array.isArray(order?.lineItems) && order.lineItems.length === 0
+}
+
+/** `Proof #1042`: {@link formatQuoteNumber} for a proof only quote. */
+export function formatProofNumber(order: Pick<HostOrder, 'number'>, docId?: string): string {
+  return formatQuoteNumber(order, docId).replace(/^Quote\b/, 'Proof')
+}
+
 /** A quote's status as its list shows it: its stage until it is paid. */
 export function quoteDisplayStatus(order: {
   status?: OrderStatus | string
@@ -695,14 +713,25 @@ function parseLine(raw: unknown, index: number): QuoteLineRequest | string {
   return `${at}: add a product or type an item.`
 }
 
+/** What a save with no lines and no proof is told: a quote needs one or the other. */
+export const QUOTE_NEEDS_LINE_OR_PROOF = 'Add at least one line, or a proof, to the quote.'
+
 /**
  * The console's quote, checked and trimmed, or what to fix. Prices on product
  * lines are not read from here: the server prices them from the product.
+ *
+ * No lines is refused unless the caller will check for a proof itself
+ * (`allowNoLines`, AGL-4184). With no lines there is nothing to discount or
+ * ship, so a discount or shipping sent with none is not kept: a quote with no
+ * lines always totals nothing.
  */
-export function parseQuoteInput(raw: unknown): { ok: true; input: QuoteInput } | { ok: false; error: string } {
+export function parseQuoteInput(
+  raw: unknown,
+  options: { allowNoLines?: boolean } = {},
+): { ok: true; input: QuoteInput } | { ok: false; error: string } {
   const source = (raw && typeof raw === 'object' ? raw : {}) as Record<string, unknown>
   const rawLines = Array.isArray(source['lines']) ? (source['lines'] as unknown[]) : []
-  if (rawLines.length === 0) return { ok: false, error: 'Add at least one line to the quote.' }
+  if (rawLines.length === 0 && !options.allowNoLines) return { ok: false, error: QUOTE_NEEDS_LINE_OR_PROOF }
   if (rawLines.length > QUOTE_MAX_LINES) {
     return { ok: false, error: `A quote holds up to ${QUOTE_MAX_LINES} lines.` }
   }
@@ -730,7 +759,7 @@ export function parseQuoteInput(raw: unknown): { ok: true; input: QuoteInput } |
   }
 
   let discount: QuoteDiscount | null = null
-  const discountSource = (source['discount'] ?? null) as Record<string, unknown> | null
+  const discountSource = (lines.length ? source['discount'] ?? null : null) as Record<string, unknown> | null
   if (discountSource?.['kind'] === 'amount') {
     const amountCents = intIn(discountSource['amountCents'], 0, QUOTE_MAX_UNIT_CENTS)
     if (amountCents === null) return { ok: false, error: 'Enter a discount from $0 to $1,000,000.' }
@@ -744,7 +773,7 @@ export function parseQuoteInput(raw: unknown): { ok: true; input: QuoteInput } |
   }
 
   let shipping: QuoteShipping | null = null
-  const shippingSource = (source['shipping'] ?? null) as Record<string, unknown> | null
+  const shippingSource = (lines.length ? source['shipping'] ?? null : null) as Record<string, unknown> | null
   if (shippingSource) {
     const amountCents = intIn(shippingSource['amountCents'], 0, QUOTE_MAX_UNIT_CENTS)
     if (amountCents === null) return { ok: false, error: 'Enter shipping from $0 to $1,000,000.' }

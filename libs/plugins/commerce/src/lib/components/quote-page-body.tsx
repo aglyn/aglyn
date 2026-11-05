@@ -165,7 +165,7 @@ const QuotePageBody = forwardRef<HTMLDivElement, QuotePageProps>((props, ref) =>
         return { kind: 'missing', message: String(payload?.error ?? 'We could not find that quote or invoice.') }
       }
       if (payload?.state === 'replaced') {
-        return { kind: 'replaced', storeName: String(payload.storeName ?? ''), noun: nounOf(payload.kind) }
+        return { kind: 'replaced', storeName: String(payload.storeName ?? ''), noun: String(payload.noun ?? nounOf(payload.kind)) }
       }
       return { kind: 'ready', view: payload as QuotePageView }
     } catch {
@@ -342,7 +342,9 @@ const QuotePageBody = forwardRef<HTMLDivElement, QuotePageProps>((props, ref) =>
     `/api/commerce/quote-pdf?hostId=${encodeURIComponent(hostId)}` +
     `&q=${encodeURIComponent(link.current.quoteId)}&t=${encodeURIComponent(link.current.token)}`
   const unpaid = quote.status === 'unpaid'
-  const noun = nounOf(quote.kind)
+  // A proof with no price yet (AGL-4184): the proof and its answer, and nothing about money.
+  const proofOnly = quote.proofOnly === true
+  const noun = proofOnly ? 'proof' : nounOf(quote.kind)
   const later = addedAtPayment(quote)
   const addresses = [
     quote.customerName || quote.company
@@ -379,25 +381,29 @@ const QuotePageBody = forwardRef<HTMLDivElement, QuotePageProps>((props, ref) =>
           ) : null}
           <Stack direction="row" spacing={1.5} sx={{ alignItems: 'center', flexWrap: 'wrap', rowGap: 1 }}>
             <Typography variant="h4" component="h1">
-              {/* The element's own heading is a quote's; an invoice always says its number. */}
-              {(quote.kind !== 'invoice' && heading) || quote.number}
+              {/* The element's own heading is a quote's; an invoice or a proof always says its number. */}
+              {(quote.kind !== 'invoice' && !proofOnly && heading) || quote.number}
             </Typography>
-            <Chip
-              label={quote.statusLabel}
-              color={quote.status === 'paid' ? 'success' : unpaid ? 'primary' : 'default'}
-              size="small"
-            />
+            {proofOnly ? null : (
+              <Chip
+                label={quote.statusLabel}
+                color={quote.status === 'paid' ? 'success' : unpaid ? 'primary' : 'default'}
+                size="small"
+              />
+            )}
           </Stack>
           {quote.dateMs ? (
             <Typography variant="body2" color="text.secondary">
               {`Dated ${dateLabel(quote.dateMs)}`}
             </Typography>
           ) : null}
-          <Box>
-            <Button variant="outlined" size="small" href={pdfHref} download>
-              {'Download PDF'}
-            </Button>
-          </Box>
+          {proofOnly ? null : (
+            <Box>
+              <Button variant="outlined" size="small" href={pdfHref} download>
+                {'Download PDF'}
+              </Button>
+            </Box>
+          )}
         </Stack>
 
         {addresses.length ? (
@@ -408,42 +414,44 @@ const QuotePageBody = forwardRef<HTMLDivElement, QuotePageProps>((props, ref) =>
           </Stack>
         ) : null}
 
-        <Stack spacing={1.5}>
-          <Typography variant="h6" component="h2">
-            {'Items'}
-          </Typography>
-          {quote.lines.map((line, index) => (
-            <Stack key={index} direction="row" spacing={2} sx={{ justifyContent: 'space-between' }}>
-              <Stack spacing={0.25} sx={{ minWidth: 0 }}>
-                <Typography variant="body2">
-                  {line.name}
-                  {line.variantLabel ? ` (${line.variantLabel})` : ''}
-                </Typography>
-                {line.description ? (
-                  <Typography variant="body2" color="text.secondary" sx={{ whiteSpace: 'pre-line' }}>
-                    {line.description}
+        {proofOnly ? null : (
+          <Stack spacing={1.5}>
+            <Typography variant="h6" component="h2">
+              {'Items'}
+            </Typography>
+            {quote.lines.map((line, index) => (
+              <Stack key={index} direction="row" spacing={2} sx={{ justifyContent: 'space-between' }}>
+                <Stack spacing={0.25} sx={{ minWidth: 0 }}>
+                  <Typography variant="body2">
+                    {line.name}
+                    {line.variantLabel ? ` (${line.variantLabel})` : ''}
                   </Typography>
-                ) : null}
-                <Typography variant="caption" color="text.secondary">
-                  {[
-                    line.included ? `${line.quantity} included` : `${line.quantity} × ${money(line.unitAmountCents)}`,
-                    line.sku ? `SKU ${line.sku}` : '',
-                  ]
-                    .filter(Boolean)
-                    .join(' · ')}
+                  {line.description ? (
+                    <Typography variant="body2" color="text.secondary" sx={{ whiteSpace: 'pre-line' }}>
+                      {line.description}
+                    </Typography>
+                  ) : null}
+                  <Typography variant="caption" color="text.secondary">
+                    {[
+                      line.included ? `${line.quantity} included` : `${line.quantity} × ${money(line.unitAmountCents)}`,
+                      line.sku ? `SKU ${line.sku}` : '',
+                    ]
+                      .filter(Boolean)
+                      .join(' · ')}
+                  </Typography>
+                </Stack>
+                <Typography variant="body2" sx={{ flexShrink: 0 }}>
+                  {line.included ? 'Included' : money(line.amountCents)}
                 </Typography>
               </Stack>
-              <Typography variant="body2" sx={{ flexShrink: 0 }}>
-                {line.included ? 'Included' : money(line.amountCents)}
-              </Typography>
-            </Stack>
-          ))}
-          <Divider />
-          {totalRows.map(([label, value]) => (
-            <TotalRow key={`${label}-${value}`} label={label} value={value} />
-          ))}
-          <TotalRow label="Total" value={money(quote.totals.totalCents)} strong />
-        </Stack>
+            ))}
+            <Divider />
+            {totalRows.map(([label, value]) => (
+              <TotalRow key={`${label}-${value}`} label={label} value={value} />
+            ))}
+            <TotalRow label="Total" value={money(quote.totals.totalCents)} strong />
+          </Stack>
+        )}
 
         {quote.notes ? (
           <Stack spacing={0.5}>
@@ -466,6 +474,12 @@ const QuotePageBody = forwardRef<HTMLDivElement, QuotePageProps>((props, ref) =>
           </Stack>
         ) : null}
 
+        {proofOnly && !quote.proofs.length ? (
+          <Alert severity="info">
+            {`${quote.storeName || 'The business'} is working on the next version of your proof, and will send it when it’s ready.`}
+          </Alert>
+        ) : null}
+
         <QuoteProofPanel
           view={quote}
           hostId={hostId}
@@ -477,7 +491,7 @@ const QuotePageBody = forwardRef<HTMLDivElement, QuotePageProps>((props, ref) =>
           onReplaced={() => setState({ kind: 'replaced', storeName: quote.storeName, noun })}
         />
 
-        {unpaid ? (
+        {proofOnly ? null : unpaid ? (
           <Paper variant="outlined" sx={{ p: { xs: 2, sm: 3 } }}>
             <Stack spacing={2}>
               {returned === 'confirming' ? (

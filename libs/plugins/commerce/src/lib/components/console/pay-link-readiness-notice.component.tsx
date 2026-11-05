@@ -32,7 +32,7 @@ import { doc } from 'firebase/firestore'
 
 /** An order the pay link may charge: a quote or a draft order; null for a quote not saved yet. */
 export type PayLinkNoticeOrder =
-  | (Pick<CommerceModel.HostOrder, 'status' | 'channel'> & Partial<Pick<CommerceModel.HostOrder, 'quote'>>)
+  | (Pick<CommerceModel.HostOrder, 'status' | 'channel'> & Partial<Pick<CommerceModel.HostOrder, 'quote' | 'lineItems'>>)
   | null
 
 /** Where a pay link stands with the business's setup, as the console reads it. */

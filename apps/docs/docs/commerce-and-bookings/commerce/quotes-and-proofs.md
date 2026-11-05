@@ -55,6 +55,8 @@ the quote.
 4. Add a discount, shipping, the addresses, notes and terms as you need them.
 5. Choose **Create quote**.
 
+Sending a design before it has a price? See [Send a proof before it has a price](#proof-only).
+
 The quote gets the next number from your store's order numbers and is listed as
 **Quote #1042**, for example. Choose a quote in the list to open it again; change
 anything and choose **Save**. A draft quote you no longer need can be deleted.
@@ -176,12 +178,16 @@ The button opens the quote's [pay link](#pay-link). Replies go to the **Email** 
 site's [Business details](../../getting-started/create-a-site.md#business-details), and to
 your own email when your site has none. The email ends with a line saying so.
 
+A [proof with no price yet](#proof-only) goes out as a proof: **Your proof from** your
+business name as its heading, no total, no PDF, and a **Review the proof** button.
+
 The email is the **Quote** email under **Emails**, where you can change its wording
 and colors like your other site emails. It can use these tokens:
 
 | Token | Value |
 | -- | -- |
-| `{{quote.number}}`, `{{quote.revision}}`, `{{quote.total}}` | The quote number, like #1042, its revision, and its total (with "before tax" when Stripe Tax adds the tax at payment) |
+| `{{quote.label}}` | **Quote**, or **Proof** for a proof with no price yet |
+| `{{quote.number}}`, `{{quote.revision}}`, `{{quote.total}}` | The quote number, like #1042, its revision, and its total (with "before tax" when Stripe Tax adds the tax at payment; empty for a proof with no price yet) |
 | `{{quote.heading}}`, `{{quote.intro}}` | The heading, and one sentence on whether this is a new quote or an updated revision |
 | `{{quote.message}}` | The message you typed; empty when you typed none |
 | `{{quote.proofImages}}`, `{{quote.proofFiles}}` | Up to three proof images, and the other proof files by name |
@@ -256,7 +262,15 @@ their logo on it, the sign laid out at size. Attach proofs to a saved quote, and
 customer sees them on the quote page, where they approve them or ask for changes.
 
 1. Open the quote and find **Proofs** in the editor.
-2. Choose **Add proof** and pick one or more files.
+2. Choose **Add proof** and pick one or more files from your device, or choose
+   **From media library** and pick a file you keep there.
+
+**From media library** offers the files you can read in this site's library and in your
+workspace's shared library, including private ones. The quote keeps its own private copy,
+made the moment you choose the file, so changing or deleting the file in the library
+afterward doesn't change what your customer sees or approved. A library file that isn't
+private still has its own public address in the library. To keep a design off the web
+entirely, turn on **Private** for it there too.
 
 A proof can be a PNG, JPEG, WebP, GIF, PDF, SVG, AI, EPS, PSD or TIFF file, up to
 25 MB each, and a revision holds up to 10. Images show as pictures, and the other files
@@ -269,7 +283,8 @@ run. Proofs are kept privately with the quote. Only your team and the holder of 
 quote's link can open them, and never through a public address.
 
 To take a proof off, choose **Remove** under it. You can add and remove proofs until
-your customer answers. After that, start a new revision to send different proofs.
+your customer answers. After that, start a new revision to send different proofs. A
+[proof with no price yet](#proof-only) keeps its last proof until it has another.
 
 Proofs, and the files your customer sends with an answer, count toward your workspace's
 [storage](../../workspace-and-billing/billing-and-plans/overview.md#files-on-quotes-and-forms)
@@ -280,6 +295,32 @@ always taken.
 
 Adding or removing a proof changes what your customer sees, so it counts as an edit:
 a customer who has the page open is asked to look again before they answer or pay.
+
+## Send a proof before it has a price {#proof-only}
+
+A design often goes out before it's priced. A quote with a proof and no items is **Proof
+only**: you send your customer a link to the proof, and only someone with that link can
+open it, with no account.
+
+1. On the **Orders** tab, choose **New quote** in the **Quotes** card, and fill in the
+   customer.
+2. Under **Proofs**, choose **From media library** and pick the design. Add more if you
+   have them.
+3. Leave the items empty, and choose **Create proof**.
+4. Open it in the list, then choose **Send proof**, or **Copy proof link** to send the
+   link yourself.
+
+Your customer sees the proof with **Approve this proof** and **Request changes**, and no
+items, totals, **Pay** or PDF. The email they get says the same.
+
+Add an item and choose **Save** whenever you're ready to price it. It's then a normal
+quote on the same link, with its total and **Pay**, and an approval they already gave
+still stands. Taking every item off a quote with a proof makes it proof only again; a
+quote with no items and no proof can't be saved.
+
+A proof only quote has no invoice and no **Download PDF**, and [starting a new
+revision](#revisions) works as it does for any quote. Until the new revision has a proof,
+it can't be emailed, and the link tells your customer the next version is on its way.
 
 ## What your customer sees of the proofs {#customer-proofs}
 
@@ -299,8 +340,8 @@ approve, and one who approved can still ask for changes, which withdraws the app
 The page tells them what they last said.
 
 You're notified of every answer, in the console and by email, as **Proof approved** or
-**Changes requested**, with the quote, the customer, the revision, the quote's total and
-what they said. **View quote** opens the quote, and replying to the email reaches your
+**Changes requested**, with the quote, the customer, the revision, the quote's total (if
+it has one) and what they said. **View quote** opens the quote, and replying to the email reaches your
 customer. These notices follow your settings for order notifications.
 
 A paid quote still shows its proofs, with nothing to press. A link you replaced shows
@@ -437,7 +478,8 @@ tools and the customer's account page.
 
 Making, editing and deleting quotes, adding and removing proofs, starting a revision,
 seeing earlier revisions and your customer's files, and downloading a quote's PDF, takes
-the **Create and edit quotes** permission. Emailing a quote or its invoice, and copying and replacing
+the **Create and edit quotes** permission. A proof from the media library also takes being
+able to read that file in the library. Emailing a quote or its invoice, and copying and replacing
 its pay link, takes **Send quotes and invoices to customers**, and so does a PDF that
 carries the pay link. Everyone who can manage orders on the site has both to start with; a
 custom role or a per-member override can grant or deny each one. See

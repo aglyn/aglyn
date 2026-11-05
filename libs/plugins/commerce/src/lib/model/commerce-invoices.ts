@@ -43,6 +43,7 @@ import {
 import { lastQuoteSend } from './commerce-quote-email'
 import {
   isQuote,
+  quoteIsProofOnly,
   type OrderInvoiceSendRecord,
   type QuoteEmailThread,
   type QuoteTaxBasis,
@@ -300,7 +301,7 @@ export type PayLinkGap = 'payments' | 'tax-undecided' | 'tax-save'
  * is said where it is decided, not here.
  */
 export function payLinkGaps(input: {
-  order: (Pick<HostOrder, 'status' | 'channel'> & Partial<Pick<HostOrder, 'quote'>>) | null
+  order: (Pick<HostOrder, 'status' | 'channel'> & Partial<Pick<HostOrder, 'quote' | 'lineItems'>>) | null
   /** The workspace can take card payments; null while that is unknown. */
   paymentsReady: boolean | null
   /** The store's sales tax choice; undefined while it is being read. */
@@ -309,6 +310,8 @@ export function payLinkGaps(input: {
   const { order, store } = input
   if (input.paymentsReady === null || store === undefined) return null
   if (order && (order.status !== 'pending' || orderPayLinkKind(order) === null)) return []
+  // A proof only quote charges nothing until it has lines (AGL-4184).
+  if (order?.quote && quoteIsProofOnly(order)) return []
   const gaps: PayLinkGap[] = []
   if (!input.paymentsReady) gaps.push('payments')
   if (storefrontTaxDecision({ settings: store.tax }).kind === 'undecided') gaps.push('tax-undecided')
@@ -382,6 +385,7 @@ export function buildInvoicePageView(input: {
   return {
     state: 'quote',
     kind: 'invoice',
+    proofOnly: false,
     storeName: input.storeName,
     number: formatInvoiceNumber(order, input.orderId),
     dateMs: created > 0 ? created : null,

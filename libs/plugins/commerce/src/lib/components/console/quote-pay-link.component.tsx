@@ -42,7 +42,7 @@ const SEND_REFUSAL = commerceSitePermissionRefusal('commerce.quotes.send')
 export interface QuotePayLinkSectionProps {
   hostId: string
   quoteId: string
-  quote: Pick<CommerceModel.HostOrder, 'status' | 'channel' | 'number' | 'quote'>
+  quote: Pick<CommerceModel.HostOrder, 'status' | 'channel' | 'number' | 'quote' | 'lineItems'>
   /** Holds "Send quotes and invoices to customers" (`commerce.quotes.send`). */
   canSend: boolean
   /** The editor holds changes not saved yet, which the link does not show. */
@@ -65,6 +65,9 @@ export interface QuotePayLinkSectionProps {
  *
  * Above it, what the customer's Pay waits on, if anything (AGL-4162): the
  * link can still be copied and sent.
+ *
+ * It is the same link on a proof only quote (AGL-4184), called what it opens
+ * there: the proof, for whoever holds the link, with nothing to pay.
  */
 export function QuotePayLinkSection(props: QuotePayLinkSectionProps) {
   const { hostId, quoteId, quote, canSend, edited } = props
@@ -75,6 +78,10 @@ export function QuotePayLinkSection(props: QuotePayLinkSectionProps) {
   const [confirmingReplace, setConfirmingReplace] = useState(false)
   const unpaid = CommerceModel.isUnpaidQuote(quote)
   const version = CommerceModel.quoteLinkVersion(quote.quote)
+  const proofOnly = CommerceModel.quoteIsProofOnly(quote)
+  const linkName = proofOnly ? 'proof link' : 'pay link'
+  const LinkName = proofOnly ? 'Proof link' : 'Pay link'
+  const opens = proofOnly ? 'proof' : 'quote'
   // A link the server made at a version the stored quote has not caught up to yet is the newest one.
   const url = signed && signed.version >= version ? signed.url : ''
 
@@ -89,7 +96,7 @@ export function QuotePayLinkSection(props: QuotePayLinkSectionProps) {
         })
         const payload = await response.json().catch(() => ({}))
         if (!response.ok || !payload?.url) {
-          enqueueSnackbar(payload?.error ?? 'The pay link could not be made', { variant: 'error', allowDuplicate: true })
+          enqueueSnackbar(payload?.error ?? `The ${linkName} could not be made`, { variant: 'error', allowDuplicate: true })
           return null
         }
         const made = Math.floor(Number(payload.linkVersion))
@@ -99,7 +106,7 @@ export function QuotePayLinkSection(props: QuotePayLinkSectionProps) {
         setBusy(false)
       }
     },
-    [user, hostId, quoteId, version, enqueueSnackbar],
+    [user, hostId, quoteId, version, linkName, enqueueSnackbar],
   )
 
   // The quote's link moved on (a revision was emailed, or the link replaced):
@@ -126,34 +133,36 @@ export function QuotePayLinkSection(props: QuotePayLinkSectionProps) {
 
   const copyLink = useCallback(async () => {
     const link = url || (await ask('pay-link'))
-    if (link) await copy(link, 'Pay link copied')
-  }, [url, ask, copy])
+    if (link) await copy(link, `${LinkName} copied`)
+  }, [url, ask, copy, LinkName])
 
   const replaceLink = useCallback(async () => {
     const link = await ask('replace-link')
     setConfirmingReplace(false)
-    if (link) await copy(link, 'New pay link copied. The earlier link no longer opens the quote.')
-  }, [ask, copy])
+    if (link) await copy(link, `New ${linkName} copied. The earlier link no longer opens the ${opens}.`)
+  }, [ask, copy, linkName, opens])
 
   return (
     <Stack spacing={1.5}>
       <Stack spacing={0.5}>
-        <Typography variant="subtitle2">{'Pay link'}</Typography>
+        <Typography variant="subtitle2">{LinkName}</Typography>
         <Typography variant="body2" color="text.secondary">
-          {unpaid
-            ? 'Send this link to the customer. It opens the quote on your site, where they can pay it.'
-            : 'The link opens the paid quote and the customer’s order.'}
+          {proofOnly
+            ? 'Send this link to the customer. It opens the proof on your site, with no prices, where they can approve it or ask for changes. Only someone with the link can open it.'
+            : unpaid
+              ? 'Send this link to the customer. It opens the quote on your site, where they can pay it.'
+              : 'The link opens the paid quote and the customer’s order.'}
         </Typography>
         {edited && unpaid ? (
           <Typography variant="body2" color="text.secondary">
-            {'Save your changes first: the link opens the quote as it was last saved.'}
+            {`Save your changes first: the link opens the ${opens} as it was last saved.`}
           </Typography>
         ) : null}
       </Stack>
       {unpaid ? <PayLinkReadinessNoticeFor hostId={hostId} order={quote} noun="quote" /> : null}
       {url ? (
         <TextField
-          label="Pay link"
+          label={LinkName}
           value={url}
           size="small"
           fullWidth
@@ -164,7 +173,7 @@ export function QuotePayLinkSection(props: QuotePayLinkSectionProps) {
       <Stack direction="row" spacing={1} sx={{ flexWrap: 'wrap', rowGap: 1 }}>
         <BlockedControl blocked={!canSend} reason={SEND_REFUSAL}>
           <Button variant="outlined" size="small" disabled={busy} onClick={() => void copyLink()}>
-            {'Copy pay link'}
+            {`Copy ${linkName}`}
           </Button>
         </BlockedControl>
         {unpaid ? (
@@ -176,10 +185,10 @@ export function QuotePayLinkSection(props: QuotePayLinkSectionProps) {
         ) : null}
       </Stack>
       <Dialog open={confirmingReplace} onClose={() => setConfirmingReplace(false)} maxWidth="xs" fullWidth>
-        <DialogTitle>{'Replace the pay link?'}</DialogTitle>
+        <DialogTitle>{`Replace the ${linkName}?`}</DialogTitle>
         <DialogContent>
           <DialogContentText>
-            {'The link you sent before will stop working: it will tell the customer the quote was updated, ' +
+            {`The link you sent before will stop working: it will tell the customer the ${opens} was updated, ` +
               'and show nothing of it. Send them the new link.'}
           </DialogContentText>
         </DialogContent>
