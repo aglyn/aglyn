@@ -25,7 +25,7 @@
 
 jest.mock('@aglyn/tenant-data-admin', () => ({ firebaseAdmin: {} }))
 
-import { ownsListingHere } from './own-listing'
+import { memberOfPublisherElsewhere, ownsListingHere } from './own-listing'
 
 /** A Firestore double holding member documents, counting what it reads. */
 function firestoreWith(members: readonly string[]) {
@@ -81,5 +81,34 @@ describe('ownsListingHere (AGL-4047)', () => {
       ownsListingHere(firestore, { uid: '', publisherOrgId: 'pub', targetOrgId: 'pub' }),
     ).resolves.toBe(false)
     expect(reads).toEqual([])
+  })
+})
+
+describe('memberOfPublisherElsewhere (AGL-4047)', () => {
+  it('is true for a member of the publisher buying for another workspace', async () => {
+    const { firestore, reads } = firestoreWith(['orgs/pub/members/u1'])
+    await expect(
+      memberOfPublisherElsewhere(firestore, { uid: 'u1', publisherOrgId: 'pub', targetOrgId: 'client' }),
+    ).resolves.toBe(true)
+    expect(reads).toEqual(['orgs/pub/members/u1'])
+  })
+
+  it('is false on the publisher’s own site, without reading membership', async () => {
+    const { firestore, reads } = firestoreWith(['orgs/pub/members/u1'])
+    await expect(
+      memberOfPublisherElsewhere(firestore, { uid: 'u1', publisherOrgId: 'pub', targetOrgId: 'pub' }),
+    ).resolves.toBe(false)
+    expect(reads).toEqual([])
+  })
+
+  it('is false for someone outside the publisher, and for a listing with no publisher', async () => {
+    const { firestore, reads } = firestoreWith(['orgs/pub/members/u1'])
+    await expect(
+      memberOfPublisherElsewhere(firestore, { uid: 'u2', publisherOrgId: 'pub', targetOrgId: 'client' }),
+    ).resolves.toBe(false)
+    await expect(
+      memberOfPublisherElsewhere(firestore, { uid: 'u1', publisherOrgId: undefined, targetOrgId: 'client' }),
+    ).resolves.toBe(false)
+    expect(reads).toEqual(['orgs/pub/members/u2'])
   })
 })

@@ -218,6 +218,9 @@ export function readStarterSummary(value: unknown): SiteStarterSummary | null {
     category: idOrNull(value['category']),
     // Only where the answer says: absent is "the search does not know".
     ...(typeof value['owned'] === 'boolean' ? { owned: value['owned'] } : {}),
+    ...(typeof value['buyBlockedReason'] === 'string' && value['buyBlockedReason']
+      ? { buyBlockedReason: value['buyBlockedReason'] }
+      : {}),
   }
 }
 
