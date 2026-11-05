@@ -174,6 +174,12 @@ jest.mock('../../hooks/use-release-flags', () => ({
 // renders it.
 jest.mock('../plugin-widget-slot.component', () => ({ __esModule: true, default: () => null }))
 
+// The sharing controls read the key (AGL-4047); this reader holds it.
+jest.mock('../../hooks/use-org-permissions', () => {
+  const value = { loaded: true, can: () => true, permissions: {}, granted: {} }
+  return { __esModule: true, default: () => value, useOrgPermissions: () => value }
+})
+
 jest.mock('../../hooks/use-org-scope', () => ({
   __esModule: true,
   useOrgSlug: () => 'aglyn-org',

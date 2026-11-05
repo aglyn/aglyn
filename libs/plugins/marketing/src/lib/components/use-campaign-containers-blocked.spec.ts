@@ -36,7 +36,7 @@ import { registerMarketingDeclarations } from '../declarations'
 import {
   holdsCampaignContainers,
   useCampaignContainerAccess,
-  useCampaignContainersBlocked,
+  useCampaignListAccess,
 } from './use-campaign-containers-blocked'
 
 /** The console's half of `cloud/rules-crm-audience-writes.spec.mjs`, row for row (AGL-4047): the workspace's verdict. */
@@ -78,7 +78,9 @@ describe('the page asks the verdict the rule and the route ask, off the membersh
   const toggledOn = { role: 'viewer', allHosts: true, hostPermissions: { site1: { 'marketing.campaigns': true } } }
   const otherSite = { role: 'viewer', allHosts: false, hostAccess: { site2: 'admin' } }
   const created = (hostId: string | null) =>
-    renderHook(() => useCampaignContainersBlocked('org1', hostId)).result.current
+    renderHook(() => useCampaignListAccess('org1', hostId)).result.current.createBlocked
+  const listed = (hostId: string | null) =>
+    renderHook(() => useCampaignListAccess('org1', hostId)).result.current.deleteBlocked
   const opened = (hostId: string | null, campaign: { visibleTo: string[] } | undefined) =>
     renderHook(() => useCampaignContainerAccess('org1', hostId, campaign)).result.current
 
@@ -138,9 +140,15 @@ describe('the page asks the verdict the rule and the route ask, off the membersh
       expect(created('site1')).toBe(true)
     })
 
-    it('a member the workspace admits never reads it for Create', () => {
+    it('a member the workspace admits still pays it under a site, where a row’s Delete asks the site', () => {
       mockDocs.set(MEMBER, on({ role: 'viewer', allHosts: true, roleId: 'r1', resolvedPermissions: { 'marketing.campaigns': true } }))
       expect(created('site1')).toBe(false)
+      expect(mockReads).toContain(ROLE)
+    })
+
+    it('on a workspace page there is no site to ask, so no role read', () => {
+      mockDocs.set(MEMBER, on(onRole))
+      listed(null)
       expect(mockReads).not.toContain(ROLE)
     })
 
@@ -154,6 +162,39 @@ describe('the page asks the verdict the rule and the route ask, off the membersh
       mockDocs.set(MEMBER, on(onRole))
       opened('site1', undefined)
       expect(mockReads).not.toContain(ROLE)
+    })
+  })
+
+  describe('a row’s Delete campaign answers the manage route, as the campaign’s own page does', () => {
+    it.each([
+      ['a member the workspace admits', workspaceEditor, false],
+      ['the whole workspace’s viewer, Editor here', raisedViewer, false],
+      ['a collaborator, Editor here', siteEditor, false],
+      ['a site that turned the key off, though the workspace admits them', toggledOff, true],
+      ['a collaborator, Author here', siteAuthor, true],
+      ['the whole workspace’s viewer, nothing here', workspaceViewer, true],
+      ['a collaborator on another site', otherSite, true],
+    ])('under a site: %s', (_name, member, blocked) => {
+      mockDocs.set(MEMBER, on(member))
+      expect(listed('site1')).toBe(blocked)
+      expect(opened('site1', here).deleteBlocked).toBe(blocked)
+    })
+
+    it.each([
+      ['a member of the whole workspace holding the key', workspaceEditor, false],
+      ['a member of the whole workspace without it', raisedViewer, true],
+      ['a collaborator, even holding it', { role: 'editor', allHosts: false }, true],
+    ])('on a workspace page: %s', (_name, member, blocked) => {
+      mockDocs.set(MEMBER, on(member))
+      expect(listed(null)).toBe(blocked)
+      expect(opened(null, here).deleteBlocked).toBe(blocked)
+    })
+
+    it('stays on while the membership is out, and for a reader with none', () => {
+      expect(listed('site1')).toBe(false)
+      mockDocs.set(MEMBER, on(undefined))
+      expect(listed('site1')).toBe(false)
+      expect(listed(null)).toBe(false)
     })
   })
 

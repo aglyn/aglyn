@@ -14,7 +14,7 @@ until you have seen what an import will do.
 :::info Plan availability
 **Starter** and above (datasets need the data store). Importing needs the **Manage data**
 permission. Exporting needs only access to the dataset: any member who can see it can
-export it, and **Export** is shown to them while **Import** is not.
+export it, and **Import** is switched off for them, naming the permission.
 :::
 
 ![The data page toolbar carries import and export](/img/datasets/data-page.png)
