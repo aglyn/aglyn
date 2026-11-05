@@ -49,7 +49,7 @@ export interface ContactStageResult {
  * the signed-in user.
  *
  * Throws with the route's own message on a refusal, so a control can show
- * "Not a site admin or editor" rather than a generic failure; a network
+ * why the permission refused it rather than a generic failure; a network
  * failure throws as `fetch` would.
  */
 export async function setContactStage(

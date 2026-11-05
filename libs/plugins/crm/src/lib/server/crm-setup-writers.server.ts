@@ -101,21 +101,17 @@ import { crmSuiteRefusalMessage } from './suite-gate'
 type Firestore = FirebaseFirestore.Firestore
 
 /** The refusals, in the console's and the routes' words. */
-export const CRM_SETUP_ROLE_REFUSAL = 'Editing the CRM requires the editor role'
-export const CRM_SETUP_PERMISSION_REFUSAL = 'Your organization role does not allow editing organization data'
+export const CRM_SETUP_PERMISSION_REFUSAL = 'Your role does not include "Manage data" — ask an organization admin'
 export const CRM_SETUP_SCOPE_REFUSAL = 'Your access to this organization does not reach that site'
 export const CRM_SETUP_FIELD_SCOPE_REFUSAL = 'Custom fields are organization-wide, and your access reaches only some sites'
 export const CRM_SETUP_PICKLIST_SCOPE_REFUSAL = 'Picklists are organization-wide, and your access reaches only some sites'
-
-/** Roles allowed to write the CRM's setup — the rules' `canWriteOrgData()`. */
-const WRITER_ROLES = new Set(['owner', 'admin', 'editor'])
 
 /** The most pipelines one site's read returns, as the board reads them. */
 const PIPELINE_READ_LIMIT = 50
 
 /** Who the member is in the org, as the writers ask. */
 export interface CrmSetupMember {
-  role: string
+  /** "Manage data" (`data.manage`, AGL-4047), the rules' `canWriteOrgData()`. */
   canManageData: boolean
   /** The membership itself, for its reach and whether it is suspended. */
   member: Readonly<Record<string, unknown>>
@@ -176,7 +172,6 @@ async function platformMember(uid: string, orgId: string): Promise<CrmSetupMembe
   const member = membership?.member
   if (!member) return null
   return {
-    role: String(member.role ?? ''),
     canManageData: await memberHasOrgPermission(orgId, member, 'data.manage'),
     member: member as unknown as Readonly<Record<string, unknown>>,
   }
@@ -293,17 +288,16 @@ function fieldRecord(field: CrmFieldDefinitionDoc): PluginDraftRecord {
 function createCrmSetupGate(deps: CrmSetupWriterDeps) {
   const orgIdForHost = deps.orgIdForHost ?? ((hostId: string) => resolveOrgIdForHost(hostId))
   const memberOf = deps.member ?? platformMember
-  /** Everything but the scope: the site is the org's, the plan, the member's role and permission. */
+  /** Everything but the scope: the site is the org's, the plan, the member's permission. */
   return async (context: PluginDraftContext, scope: readonly string[], scopeRefusal: string): Promise<PluginDraftRefusal | null> => {
     if ((await orgIdForHost(context.hostId)) !== context.orgId) return { status: 404, error: 'Unknown site' }
     if (!checkEntitlement(context.org as never, 'crm')) {
       return { status: 403, error: crmSuiteRefusalMessage('Setting up the CRM') }
     }
     const member = await memberOf(context.uid, context.orgId)
-    if (!member || !WRITER_ROLES.has(member.role) || member.member['orgSuspended'] === true) {
-      return { status: 403, error: CRM_SETUP_ROLE_REFUSAL }
+    if (!member || member.member['orgSuspended'] === true || !member.canManageData) {
+      return { status: 403, error: CRM_SETUP_PERMISSION_REFUSAL }
     }
-    if (!member.canManageData) return { status: 403, error: CRM_SETUP_PERMISSION_REFUSAL }
     if (!memberCanSee(member.member as never, scope)) return { status: 403, error: scopeRefusal }
     return null
   }

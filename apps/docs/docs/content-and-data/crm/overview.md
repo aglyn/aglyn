@@ -295,6 +295,11 @@ scoped to one site sees that site's people, deals and tasks and no others. The
 rule is the same in every section, so no section can show a record the reader
 could not open as a contact.
 
+Changing a record takes the same **manage data** permission. Moving a contact or a deal
+between stages also takes [**Move contacts and deals between
+stages**](../../workspace-and-billing/teams-and-roles/custom-roles.md#crm-move-stages-permission),
+which starts from the reader's role on the site: its admins and editors by default.
+
 ### One sender, one CRM {#one-sender-one-crm}
 
 Sites your organization has declared [one

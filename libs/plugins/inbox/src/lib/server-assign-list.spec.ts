@@ -179,6 +179,10 @@ const firestoreHandle: any = {
 }
 
 jest.mock('@aglyn/tenant-data-admin', () => ({
+  // The catalog's own answer for "Manage data", the list writer's key (AGL-4047).
+  memberHasOrgPermission: async (_orgId: string, member: Record<string, unknown> | null, key: string) =>
+    Boolean(member) &&
+    jest.requireActual('@aglyn/aglyn/app-utils/org-permissions').resolveOrgPermissions(member, null)[key] === true,
   /*
    * The site's own sending identity, which every tenant send now resolves.
    *
@@ -586,6 +590,25 @@ describe('who may do it', () => {
   it('refuses an org viewer even with an editor role on the site', async () => {
     seedContact(grantedHere())
     membership = { orgId: ORG_ID, member: { role: 'viewer', allHosts: true } }
+    expect((await assign()).code).toBe(403)
+  })
+
+  it('a grant of "Manage data" admits an org viewer, and a refusal stops an admin (AGL-4047)', async () => {
+    seedContact(grantedHere())
+    membership = { orgId: ORG_ID, member: { role: 'viewer', allHosts: true, permissions: { 'data.manage': true } } }
+    expect((await assign()).code).toBe(200)
+    membership = { orgId: ORG_ID, member: { role: 'admin', allHosts: true, permissions: { 'data.manage': false } } }
+    expect((await assign()).code).toBe(403)
+  })
+
+  it('a grant of "Manage data" does not restore the reach, and a suspended member stays out (AGL-4047)', async () => {
+    seedContact(grantedHere())
+    membership = {
+      orgId: ORG_ID,
+      member: { role: 'editor', allHosts: false, hostAccess: { [HOST_ID]: 'editor' }, permissions: { 'data.manage': true } },
+    }
+    expect((await assign()).code).toBe(403)
+    membership = { orgId: ORG_ID, member: { role: 'owner', allHosts: true, orgSuspended: true } }
     expect((await assign()).code).toBe(403)
   })
 

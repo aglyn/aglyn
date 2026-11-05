@@ -9,7 +9,8 @@
  * key to a viewer opens the client-direct writes, as `/api/orgs/datasets`
  * opens creates for them; one that takes it from an editor closes them.
  *
- * `canWriteOrgData()` read the raw `role` field against a hardcoded list.
+ * `canWriteOrgData()` read the raw `role` field against a hardcoded list (it
+ * asks the key too now, `cloud/rules-crm-audience-writes.spec.mjs`).
  * `/api/orgs/datasets` resolves all three permission layers and refuses a
  * member whose `data.manage` a custom role revoked. So the same principal got
  * two different answers, and the RULES were the permissive one.
@@ -258,11 +259,9 @@ for (const principal of principals) {
 }
 
 // ── Controls: what `data.manage` must NOT have taken away ───────────────────
-// `data.manage` is scoped to datasets — "Create, edit, and delete organization
-// datasets". Folding it into `canWriteOrgData` would have applied it to the
-// media library, which no server route stands in front of, and refused
-// members the product permits there. That is the same disagreement this file
-// closes, pointed the other way. (A contact takes no client write at all since
+// The media library has its own key, "Edit the workspace media library"
+// (`org.media`), so refusing `data.manage` leaves it alone.
+// (A contact takes no client write at all since
 // AGL-3338: letting one go is `crm/contact-remove`'s.)
 
 await check('CONTROL — the revoked editor may still update org MEDIA', () =>

@@ -149,11 +149,10 @@ export function registerCrmConsole(): void {
      * `data.manage` rather than a key of this plugin's own, because it is
      * the catalog key whose subject is exactly this data. The Firestore
      * rules place contacts in the org-shared data block with datasets and
-     * gate writes on `canWriteOrgData()` — owner, admin, editor — which is
-     * the population `data.manage` defaults to, so the console gate and the
-     * rules agree on the built-in roles by construction. A custom role or a
-     * per-member override then narrows the console further, and the rules
-     * stay the boundary for the data itself.
+     * gate writes on `canWriteOrgData()`, which asks this key, so the console
+     * gate and the rules agree by construction. A custom role or a per-member
+     * override decides both, and the rules stay the boundary for the data
+     * itself.
      *
      * Minting a `contacts.*` key instead would advertise a control that does
      * not exist. Console contact writes are client-direct against the rules,

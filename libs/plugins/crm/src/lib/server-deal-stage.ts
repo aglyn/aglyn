@@ -37,8 +37,10 @@
  *
  *  1. A verified Firebase session — the console's `authorizedFetch` puts the
  *     id token on every call.
- *  2. An admin or editor role ON THIS SITE, resolved by `hostRoleFor` from
- *     the org member document, which is the same projection the rules read.
+ *  2. "Move contacts and deals between stages" (`crm.moveStages`, AGL-4047)
+ *     ON THIS SITE: its preset is the member's role on the site, the Admin and
+ *     Editor this asked for, and a custom role, the member's own permissions
+ *     or the site's toggle can then decide it.
  *  3. The `data.manage` permission in the org — the key the whole CRM is
  *     gated on, resolved through the custom-role and per-member layers by
  *     `memberHasOrgPermission`, because a member document alone cannot say
@@ -53,7 +55,8 @@
  *
  * `{ orgId, dealId, … }` instead of a site: the org-level hub's board. The
  * caller is authorized by the ORG — an org-wide member holding
- * `data.manage`, the org hub's own gate — and no visibility check is made,
+ * `data.manage`, the org hub's own gate, and `crm.moveStages`, which follows
+ * it until someone decides it — and no visibility check is made,
  * because an org-wide member reads every row the org holds. The event
  * still goes to the deal's own capturing site, which is where the
  * automations that listen for it live; a deal no site captured has none to
@@ -94,7 +97,6 @@ import {
   type CrmPipeline,
   dealStageById,
   dealStageMoveFields,
-  hostRoleFor,
   hostScopeToken,
   ORG_SCOPE_TOKEN,
   type PluginApiHandler,
@@ -105,6 +107,7 @@ import {
   getOrgForHost,
   logOrgActivity,
   memberHasOrgPermission,
+  memberHasPermissionOnHost,
   resolveOrgMembership,
 } from '@aglyn/tenant-data-admin'
 import { isRefusedIdToken } from '@aglyn/tenant-data-admin/server/id-token-refusal'
@@ -119,7 +122,8 @@ import {
   dealEventName,
   dealEventPayload,
 } from './model/deal-board-model'
-import { authorizeOrgCaller, readCrmRouteScope } from './server/org-caller'
+import { CRM_MOVE_STAGES_REFUSAL } from './model/crm-permissions'
+import { authorizeOrgStageMover, readCrmRouteScope } from './server/org-caller'
 import { crmSuiteRefusal } from './server/suite-gate'
 
 /** The most a lost reason may carry — a sentence or two, not a post-mortem. */
@@ -162,12 +166,12 @@ export const crmDealStageHandler: PluginApiHandler = async (req, res) => {
   // Who moved the deal, at either level, for the runs it sets off (AGL-3376).
   let eventActor: { uid: string; email: string | null }
   if (routeScope.level === 'org') {
-    const caller = await authorizeOrgCaller(req, routeScope.orgId, {
-      needs: 'data.manage',
-      refusal:
-        'Moving a deal at the organization level requires the "Manage data" ' +
+    const caller = await authorizeOrgStageMover(
+      req,
+      routeScope.orgId,
+      'Moving a deal at the organization level requires the "Manage data" ' +
         'permission across the whole workspace.',
-    })
+    )
     if (caller.ok === false) {
       return res.status(caller.status).json({ error: caller.error })
     }
@@ -209,11 +213,8 @@ export const crmDealStageHandler: PluginApiHandler = async (req, res) => {
       () => null,
     )
     const member = membership?.member
-    const hostRole = hostRoleFor(member, routeScope.hostId)
-    if (!member || (hostRole !== 'admin' && hostRole !== 'editor')) {
-      return res.status(403).json({
-        error: 'Moving a deal needs an admin or editor role on this site.',
-      })
+    if (!(await memberHasPermissionOnHost(owner.orgId, routeScope.hostId, member, 'crm.moveStages' as never))) {
+      return res.status(403).json({ error: CRM_MOVE_STAGES_REFUSAL })
     }
     if (!(await memberHasOrgPermission(owner.orgId, member, 'data.manage'))) {
       return res.status(403).json({

@@ -7440,6 +7440,7 @@
         "marketplace.publisherProfile",
         "marketplace.manageListings",
         "marketplace.payouts",
+        "crm.moveStages",
         "crm.settings",
         "outreach.use",
         "outreach.manageAll",
@@ -7483,6 +7484,7 @@
         "posBuyHardware",
         "marketplace.siteInstall",
         "marketplace.sitePublish",
+        "crm.moveStages",
         "email.suppressions",
         "email.lists",
         "inbox.reply",
@@ -7545,6 +7547,7 @@
         "marketplace.publisherProfile",
         "marketplace.manageListings",
         "marketplace.payouts",
+        "crm.moveStages",
         "crm.settings",
         "outreach.use",
         "outreach.manageAll",
@@ -7758,7 +7761,7 @@
         "scope": "site"
       },
       {
-        "description": "Create, edit, and delete organization datasets.",
+        "description": "Create, edit, and delete organization datasets, the CRM’s records, and marketing lists and topics.",
         "group": "datasets",
         "key": "data.manage",
         "label": "Manage data"
@@ -8006,6 +8009,14 @@
         "label": "Manage marketplace payouts",
         "pluginId": "marketplace",
         "scope": "org"
+      },
+      {
+        "description": "Change a contact’s lifecycle stage and move a deal through its pipeline, including winning, losing and reopening it. Follows the site role on a site, and “Manage data” in the organization hub, unless a role or member sets it.",
+        "follows": "data.manage",
+        "group": "crm",
+        "key": "crm.moveStages",
+        "label": "Move contacts and deals between stages",
+        "scope": "site"
       },
       {
         "description": "Change the CRM’s settings for every site: default sharing for new records, companies from email domains, default owners, assignment rules and the round-robin pool, sharing rules, and rotating the email capture address; and share records with other sites.",

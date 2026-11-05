@@ -113,6 +113,17 @@ describe('the record insights zone', () => {
     expect(drawerProps).toBeNull()
   })
 
+  it('names the permission and asks nothing, without "Move contacts and deals between stages" (AGL-4047)', async () => {
+    const deal = { pipeline: PIPELINE as never, ref: { $id: 'd-1', hostId: 'site-1' }, stageId: 'qualified', status: 'open', api: { ...api, moveBlocked: true } as never }
+    inShell(<CrmRecordInsightsZone hostId={null} kind="deal" recordId="d-1" name="Re-roof" taskLink={{ dealId: 'd-1' }} deal={deal} />)
+    await act(async () => {
+      zone?.proposeStage?.('proposal')
+    })
+    expect(confirm).not.toHaveBeenCalled()
+    expect(moveToStage).not.toHaveBeenCalled()
+    expect(enqueueSnackbar).toHaveBeenCalledWith('Your role does not include "Move contacts and deals between stages" — ask an organization admin', { variant: 'warning' })
+  })
+
   it('moves a deal to an open stage through its stage route, once the member confirms', async () => {
     const deal = { pipeline: PIPELINE as never, ref: { $id: 'd-1', hostId: 'site-1' }, stageId: 'qualified', status: 'open', api: api as never }
     inShell(<CrmRecordInsightsZone hostId={null} kind="deal" recordId="d-1" name="Re-roof" taskLink={{ dealId: 'd-1' }} deal={deal} />)

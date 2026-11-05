@@ -1345,8 +1345,9 @@ service cloud.firestore {
 
       // Org-shared data (AGL-237): datasets (records included), contacts
       // and segments are shared across every host in the org. Any member
-      // reads; editors and up write; viewers stay read-only. Suspension
-      // rides the member doc like org renames.
+      // reads; a holder of "Manage data" writes (the owner, admins and
+      // editors by default); viewers stay read-only unless granted it.
+      // Suspension rides the member doc like org renames.
       //
       // AGL-1026 split this block. Contacts, segments and lists moved to
       // org-wide readers (they are people, see below). Datasets, media and
@@ -1364,9 +1365,15 @@ service cloud.firestore {
       // `isVerified()` (AGL-2589) is the first conjunct on every write helper
       // in this file: the CRM, the audiences and the shared datasets are the
       // audience half of a campaign send, and they are written client-direct.
+      //
+      // The authority is "Manage data" alone (`data.manage`, AGL-4047),
+      // through `memberKeyOrOverride`, whose default is the owner, admins and
+      // editors this asked by name: with nothing decided every member answers
+      // as before, and a custom role or a per-member override now decides it,
+      // as the CRM's routes (`memberHasOrgPermission`) already let it.
       function canWriteOrgData() {
         return isOrgMember() && isVerified() &&
-          orgMember().role in ['owner', 'admin', 'editor'] &&
+          memberKeyOrOverride('data.manage', ['owner', 'admin', 'editor']) &&
           orgNotSuspended();
       }
       /**
@@ -1450,9 +1457,9 @@ service cloud.firestore {
        * update or delete), where these rules are the only gate, and a grant
        * to a viewer now opens them as the route opens creates.
        *
-       * NOT folded into `canWriteOrgData`, deliberately. That helper also
-       * gates contacts, segments and lists, and `data.manage` is scoped to
-       * datasets — "Create, edit, and delete organization datasets".
+       * Kept beside `canWriteOrgData`, which now asks the same key: the
+       * CRM's records and the datasets are one permission today and two
+       * subjects, and the name at each rule says which one it is about.
        */
       function canWriteOrgDatasets() {
         return isOrgMember() && isVerified() &&
@@ -1471,10 +1478,13 @@ service cloud.firestore {
        * could still WRITE the contacts and lists the read rules now deny
        * them — write-only access to other people's customer data, which is a
        * stranger position than either allowing or denying both.
+       *
+       * Org-wide reach, then "Manage data" (AGL-4047). No grant restores the
+       * reach: a site collaborator handed the key writes nothing here.
        */
       function canWriteOrgWideData() {
         return isOrgWideMember() && isVerified() &&
-          orgMember().role in ['owner', 'admin', 'editor'] &&
+          memberKeyOrOverride('data.manage', ['owner', 'admin', 'editor']) &&
           orgNotSuspended();
       }
       /**
@@ -1562,12 +1572,9 @@ service cloud.firestore {
           orgNotSuspended();
       }
       /**
-       * The dataset-only twin. Same scoping, plus `data.manage`.
-       *
-       * Separate from `canWriteScopedOrgData` because that helper also gates
-       * contacts, segments, media and media folders — surfaces no server
-       * route gates on `data.manage`, so requiring it there would refuse
-       * members the API permits and invent the disagreement this closes.
+       * The dataset-only twin of `canWriteScopedOrgData`: the same scoping
+       * and the same key, kept apart for the reason `canWriteOrgDatasets`
+       * gives.
        */
       function canWriteScopedOrgDatasets() {
         return canWriteOrgDatasets() && canReadScoped();
@@ -1579,6 +1586,8 @@ service cloud.firestore {
       function crmWriteScope() {
         return resource.data.get('writeTo', resource.data.visibleTo);
       }
+      // "Manage data" (through `canWriteOrgData`, AGL-4047) and a write scope
+      // the member holds.
       function canWriteScopedCrm() {
         return canWriteOrgData() &&
           (isOrgWideMember() ||
@@ -1699,12 +1708,11 @@ service cloud.firestore {
        * outright rather than quietly returning the collection. The authority
        * half is `data.manage`, the key the Contacts console itself gates on.
        *
-       * READ IS NARROWER THAN WRITE HERE, and the asymmetry is deliberate.
-       * The writes stay on `canWriteOrgData()`, whose role list already
-       * excludes the viewer this read is about; adding the capability to them
-       * as well would apply it to the media library through the shared
-       * helper, where no surface asks for it. Disclosure is the risk this
-       * collection carries, and disclosure is the read.
+       * Both halves now ask one key: the reads `canReadScopedPeople()`, and
+       * the writes (a lead's update and delete, every companion collection)
+       * `canWriteOrgData()`, "Manage data" (AGL-4047). Disclosure is still
+       * the risk this collection carries, which is why its read names the
+       * reach and the key rather than the reach alone.
        *
        * LETTING A CONTACT GO IS THE SERVER'S (AGL-3338). Removing a contact
        * from one site's CRM is a DETACH — drop that holder's facet, its
@@ -2056,12 +2064,25 @@ service cloud.firestore {
        * campaign from every form, screen, lead, contact and sequence that
        * names it — a client delete would leave all of them pointing at
        * nothing.
+       *
+       * The authority is "Run email campaigns" (`marketing.campaigns`,
+       * AGL-4047), whose workspace default is the owner, admins and editors
+       * this asked by name, read off the member document: the workspace's
+       * verdict, the one this rule always asked, and not the site's. So a
+       * member whose site access is wider or narrower than their workspace
+       * role answers here as they did before.
        */
+      function canWriteCampaignContainers() {
+        return isOrgMember() && isVerified() &&
+          memberKeyOrOverride('marketing.campaigns', ['owner', 'admin', 'editor']) &&
+          orgNotSuspended();
+      }
       match /emailCampaigns/{campaignId} {
         allow read: if isStaff() || canReadScoped();
-        allow create: if isStaff() || (canWriteOrgData() && canCreateScoped());
+        allow create: if isStaff() || (canWriteCampaignContainers() && canCreateScoped());
         allow update: if isStaff() ||
-          (canWriteScopedOrgData() && (isOrgWideMember() || scopeUnchanged()));
+          (canWriteCampaignContainers() && canReadScoped() &&
+           (isOrgWideMember() || scopeUnchanged()));
         allow delete: if false;
       }
       /**

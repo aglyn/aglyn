@@ -59,7 +59,7 @@
  * The transfer gate admits a member who may manage the SITE's data. A list
  * is the organization's, and every site in it can mail one, so changing who
  * is on it — or reading their consent through the matching — needs an
- * org-wide owner, admin or editor (`isOrgWideListWriter`), the rule the
+ * org-wide holder of "Manage data" (`isOrgWideListWriter`), the rule the
  * list routes apply. An export reads through `scopeTokens`: a collaborator
  * scoped to some sites reads no member at all, which is what the rules
  * would answer them.
@@ -209,7 +209,7 @@ export async function listTargetFor(
     const membership = ctx.actorUid
       ? await resolveOrgMembership(ctx.actorUid, ctx.orgId).catch(() => null)
       : null
-    if (!isOrgWideListWriter(membership?.member)) {
+    if (!(await isOrgWideListWriter(ctx.orgId, membership?.member))) {
       throw new TransferEngineError(
         'forbidden',
         403,

@@ -280,7 +280,7 @@ export const CORE_ORG_PERMISSION_ENTRIES: readonly OrgPermissionEntry[] = [
     key: 'data.manage',
     group: 'datasets',
     label: 'Manage data',
-    description: 'Create, edit, and delete organization datasets.',
+    description: 'Create, edit, and delete organization datasets, the CRM’s records, and marketing lists and topics.',
   },
   // Workspace content that asked for the owner, admin or editor role
   // (AGL-4047), each a key whose default is exactly those roles.

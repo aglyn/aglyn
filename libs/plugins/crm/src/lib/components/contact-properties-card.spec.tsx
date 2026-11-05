@@ -88,6 +88,11 @@ jest.mock('firebase/firestore', () => ({
   }),
 }))
 
+let stageBlocked = false
+jest.mock('../hooks/use-stage-move-blocked', () => ({
+  useStageMoveBlocked: () => stageBlocked,
+}))
+
 const FIRESTORE = {}
 const USER = { uid: 'uid-1', getIdToken: async () => 'token' }
 jest.mock('@aglyn/tenant-feature-instance', () => ({
@@ -357,7 +362,7 @@ describe('a stage move', () => {
   })
 
   it('reports a refused move on its own, after the profile it did not undo', async () => {
-    setContactStage.mockRejectedValue(new Error('Not a site admin or editor'))
+    setContactStage.mockRejectedValue(new Error('Refused'))
     renderCard()
     typeJobTitle('Head roaster')
     pickStage('Customer')
@@ -366,7 +371,7 @@ describe('a stage move', () => {
     expect(profileSaves()[0].payload['set']).toMatchObject({ jobTitle: 'Head roaster' })
     await waitFor(() =>
       expect(notices).toContainEqual({
-        message: 'Saved, but the stage could not be changed: Not a site admin or editor',
+        message: 'Saved, but the stage could not be changed: Refused',
         variant: 'warning',
       }),
     )
@@ -383,6 +388,24 @@ describe('a stage move', () => {
     await waitFor(() =>
       expect(notices).toContainEqual({ message: 'Contact saved', variant: 'success' }),
     )
+  })
+})
+
+describe('without "Move contacts and deals between stages" (AGL-4047)', () => {
+  afterEach(() => {
+    stageBlocked = false
+  })
+
+  it('switches the stage off with the permission named, and the rest of the form stays', async () => {
+    stageBlocked = true
+    renderCard()
+    const stage = screen.getByRole('combobox', { name: 'Lifecycle stage' })
+    expect(stage.getAttribute('aria-disabled')).toBe('true')
+    expect(screen.getByText('Your role does not include "Move contacts and deals between stages" — ask an organization admin')).toBeTruthy()
+    typeJobTitle('Head roaster')
+    save()
+    await waitFor(() => expect(profileSaves()).toHaveLength(1))
+    expect(setContactStage).not.toHaveBeenCalled()
   })
 })
 

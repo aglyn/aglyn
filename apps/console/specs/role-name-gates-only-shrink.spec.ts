@@ -99,9 +99,11 @@ export const TS_ROLE_GATE = [
  * settings" and "Change CRM settings", the subscription "View billing",
  * invites "Manage members", plugin settings "Organization settings", a
  * consent group change both of its keys, ownership claims "Bring a site in").
+ * Nor `canWriteOrgData` and `canWriteOrgWideData`, which ask "Manage data"
+ * alone, nor the campaign containers, which ask "Run email campaigns".
  */
 export const RULES_ROLE_GATE = [
-  String.raw`\b(canManageOrg|canWriteOrgData|canWriteOrgWideData)\(`,
+  String.raw`\bcanManageOrg\(`,
   String.raw`hostMemberRole\(hostId\)\s*(==|in)\s*['\[]`,
   String.raw`\brole\s*(==|in)\s*['\[]`,
   String.raw`\.role\s+in\b`,

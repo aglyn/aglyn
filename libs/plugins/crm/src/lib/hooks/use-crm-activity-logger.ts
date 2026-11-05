@@ -61,8 +61,8 @@ export interface CrmActivityTarget {
  *
  * ## The two gates are on different axes, and that is the bug this closes
  *
- * The record write asks `canWriteOrgData()` — an org role of owner, admin
- * or editor, plus the scope tokens. The line asks `canWriteHostContent()`,
+ * The record write asks `canWriteOrgData()` — "Manage data" in the org, plus
+ * the scope tokens. The line asks `canWriteHostContent()`,
  * which resolves a role out of `hosts/{hostId}.memberRoles[uid]` and knows
  * nothing about the org roster. At the org hub the two come apart for
  * members who are genuinely admitted to the hub:
