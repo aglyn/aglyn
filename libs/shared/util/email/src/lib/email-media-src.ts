@@ -126,6 +126,27 @@ function mediaRefOfStorageUrl(value: string): string | undefined {
 }
 
 /**
+ * Mirrors `isMediaCdnPath` and `hostQualifiedLegacyPath`: a legacy stored CDN
+ * path names the sending site when its org scope names none yet. Anything else,
+ * a signed URL and a path already naming a site included, comes back as itself.
+ */
+function hostQualifiedLegacyPath(
+  value: string,
+  hostId: string | undefined | null,
+): string {
+  const prefix = `${MEDIA_CDN_ROUTE}/`
+  if (!value.startsWith(prefix)) return value
+  const rest = value.slice(prefix.length)
+  const slash = rest.indexOf('/')
+  if (slash <= 0) return value
+  const scope = rest.slice(0, slash)
+  if (!isCdnScope(scope) || !SEGMENT.test(rest.slice(slash + 1))) return value
+  if (!scope.startsWith(ORG_SCOPE_PREFIX)) return value
+  if (scope.includes(':', ORG_SCOPE_PREFIX.length)) return value
+  return `${prefix}${hostQualified(scope, hostId)}${rest.slice(slash)}`
+}
+
+/**
  * Mirrors `resolveMediaSrc`, including its routing of a library object's
  * Storage download URL through the CDN (AGL-3506) — an inbox is a visitor
  * too, and its bytes count and stop like a page's.
@@ -138,7 +159,7 @@ export function resolveEmailMediaSrc(
   const stored = value.startsWith(MEDIA_REF_PREFIX)
     ? value
     : mediaRefOfStorageUrl(value)
-  if (!stored) return value
+  if (!stored) return hostQualifiedLegacyPath(value, hostId)
   const rest = stored.slice(MEDIA_REF_PREFIX.length)
   // The scope may contain ':' but never '/', so the FIRST slash is the
   // boundary and the media id is everything after it.

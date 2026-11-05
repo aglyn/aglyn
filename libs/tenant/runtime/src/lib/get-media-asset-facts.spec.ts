@@ -94,6 +94,8 @@ describe('getMediaAssetFacts (AGL-2807, AGL-2833)', () => {
         'deletedAt',
         'private',
         'visibleTo',
+        // The CDN's verdict on a bare URL reads it (AGL-4047).
+        'scopeMode',
       ],
     })
     // Every spelling that placed the film gets the one answer.

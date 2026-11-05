@@ -328,7 +328,13 @@ export async function resolvePaidMediaDelivery(options: {
     }
     // The CDN would 404 an org asset this site is not allowed to use, so a
     // link to one is a link that cannot play.
-    if (mediaCdnScopeRefusal(deliveryParsed, document.get('visibleTo'))) {
+    if (
+      mediaCdnScopeRefusal(
+        deliveryParsed,
+        document.get('visibleTo'),
+        document.get('scopeMode'),
+      )
+    ) {
       return refuse('not-found')
     }
     if (document.get('private') !== true) return refuse('not-private')

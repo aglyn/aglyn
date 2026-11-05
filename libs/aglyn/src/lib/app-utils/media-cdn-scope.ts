@@ -38,7 +38,7 @@
  * by path, and nothing here has a reason to reach a published page's bundle.
  */
 
-import { isOrgWideScope, visibleToHost } from './scope-tokens'
+import { isOrgWideScope, SCOPE_MODE_ALL_EXCEPT, visibleToHost } from './scope-tokens'
 
 /** One CDN path segment: a host id, an org id, a media id or a content hash. */
 export const MEDIA_CDN_SEGMENT = /^[A-Za-z0-9_-]{1,64}$/
@@ -47,7 +47,8 @@ export const MEDIA_CDN_SEGMENT = /^[A-Za-z0-9_-]{1,64}$/
  * The parsed CDN scope segment (AGL-1043). Shapes:
  *
  * - `{hostId}` — that host's own library
- * - `org:{orgId}` — the org library, ORG-WIDE assets only
+ * - `org:{orgId}` — the org library: assets shared with every site, and assets
+ *   shared with all sites except some (`mediaCdnScopeRefusal`)
  * - `org:{orgId}:{hostId}` — an org asset in one site's context
  *
  * The host is in the URL rather than sniffed from the `Host` header on
@@ -109,10 +110,25 @@ export function parseMediaCdnScope(
  */
 export type MediaCdnScopeRefusal = 'restricted' | 'unscoped' | 'no-sites'
 
-/** Why the asset is refused under this URL; `null` when it is not. */
+/**
+ * Why the asset is refused under this URL; `null` when it is not.
+ *
+ * `scopeMode` is the document's own, passed by every caller. An asset shared
+ * with all sites except some has no `'org'` token (`visibleTo` lists the sites
+ * it IS on), and the bare `org:{orgId}` form still serves it. Bare URLs stay in
+ * the world after the choice is made, in raw HTML and CSS strings and in sent
+ * email, and refusing them would break every one the moment a single site was
+ * excluded. It widens nothing: the CDN is unauthenticated, and any included
+ * site's URL already serves these bytes to anyone. A private asset is a later,
+ * separate gate that demands a signature whichever form was asked for.
+ *
+ * The named-site form is unchanged, so an excluded site's URL is refused. So
+ * is a marked asset with no sites left, which is `no-sites` under every form.
+ */
 export function mediaCdnScopeRefusal(
   scope: MediaCdnScope,
   visibleTo: unknown,
+  scopeMode?: unknown,
 ): MediaCdnScopeRefusal | null {
   // Host-library assets are private by construction and carry no
   // `visibleTo`, so only the org branch is scoped at all.
@@ -122,7 +138,7 @@ export function mediaCdnScopeRefusal(
   const scoped = visibleTo as string[]
   const allowed = scope.contextHostId
     ? visibleToHost(scoped, scope.contextHostId)
-    : isOrgWideScope(scoped)
+    : isOrgWideScope(scoped) || scopeMode === SCOPE_MODE_ALL_EXCEPT
   return allowed ? null : 'restricted'
 }
 
@@ -130,6 +146,7 @@ export function mediaCdnScopeRefusal(
 export function mediaCdnAllows(
   scope: MediaCdnScope,
   visibleTo: unknown,
+  scopeMode?: unknown,
 ): boolean {
-  return mediaCdnScopeRefusal(scope, visibleTo) === null
+  return mediaCdnScopeRefusal(scope, visibleTo, scopeMode) === null
 }
