@@ -78,4 +78,18 @@ final class InboxTests: XCTestCase {
     XCTAssertEqual(InboxPermissions(holding: { $0 == "inbox.assign" }), InboxPermissions(canWrite: false, canReply: false, canAssign: true))
     XCTAssertEqual(InboxPermissions(holding: { _ in false }), InboxPermissions(canWrite: false, canReply: false, canAssign: false))
   }
+
+  func testASubmissionsFilesAndRequestReadDefensively() {
+    let files = submissionFiles([
+      ["id": "f_1", "name": "brief.pdf", "size": 2048], ["id": "bad id", "name": "x"], ["id": "f2"], "nope",
+    ])
+    XCTAssertEqual(files, [SubmissionFile(id: "f_1", name: "brief.pdf", size: 2048)])
+    XCTAssertEqual(submissionFiles(nil), [])
+    XCTAssertEqual(submissionRequestLabel(["kind": "quote"]), "Quote request")
+    XCTAssertNil(submissionRequestLabel(["kind": "other"]))
+    XCTAssertEqual(submissionFileSize(0), "0 KB")
+    XCTAssertEqual(submissionFileSize(100), "1 KB")
+    XCTAssertEqual(submissionFileSize(3.4 * 1024 * 1024), "3.4 MB")
+    XCTAssertEqual(submissionFileSize(12.4 * 1024 * 1024), "12 MB")
+  }
 }

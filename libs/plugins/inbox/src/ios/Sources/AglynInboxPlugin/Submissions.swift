@@ -72,6 +72,42 @@ struct SubmissionField: Hashable, Identifiable {
 }
 
 /// One submission, as the list and its detail read it.
+/// A file a submission carries (`submissionFiles`).
+struct SubmissionFile: Identifiable, Hashable {
+  let id: String
+  let name: String
+  let size: Double
+}
+
+/// The files a stored submission names, in order; none for a row without any.
+func submissionFiles(_ raw: Any?) -> [SubmissionFile] {
+  (raw as? [Any] ?? []).prefix(10).compactMap { entry in
+    let file = entry as? [String: Any] ?? [:]
+    guard let id = file["id"] as? String, let name = file["name"] as? String, !name.isEmpty,
+      id.range(of: "^[A-Za-z0-9_-]{1,128}$", options: .regularExpression) != nil
+    else { return nil }
+    return SubmissionFile(id: id, name: name, size: (file["size"] as? NSNumber)?.doubleValue ?? 0)
+  }
+}
+
+/// `12 KB`, `3.4 MB`: a file's size as the Inbox shows it (`submissionFileSize`).
+func submissionFileSize(_ bytes: Double) -> String {
+  if !(bytes > 0) { return "0 KB" }
+  if bytes < 1024 * 1024 { return "\(max(1, Int((bytes / 1024).rounded()))) KB" }
+  let mb = bytes / (1024 * 1024)
+  if mb >= 10 { return "\(Int(mb.rounded())) MB" }
+  let tenths = (mb * 10).rounded() / 10
+  return tenths == tenths.rounded() ? "\(Int(tenths)) MB" : "\(tenths) MB"
+}
+
+/// What a submission asks for, as a chip says it (`submissionRequestLabel`).
+func submissionRequestLabel(_ raw: Any?) -> String? {
+  (raw as? [String: Any])?["kind"] as? String == "quote" ? "Quote request" : nil
+}
+
+/// The forms plugin's route for a submission's files.
+let submissionFileRoute = "/api/forms/submission-file"
+
 struct Submission: Identifiable, Hashable {
   let id: String
   let formID: String?
@@ -90,6 +126,10 @@ struct Submission: Identifiable, Hashable {
   let capturedID: String?
   /// What the site did with it: saved to the Inbox, added to a dataset, or refused by one.
   let chips: [RoutingChip]
+  /// What it asks for, as a chip says it: "Quote request" from a form marked as asking for a quote.
+  let requestLabel: String?
+  /// The files it carries, which live in private storage and download through the forms plugin's route.
+  let files: [SubmissionFile]
 
   init(_ doc: FirestoreDocument) {
     let raw = (doc.data["fields"] as? [String: Any] ?? [:]).sorted { $0.key < $1.key }
@@ -107,6 +147,8 @@ struct Submission: Identifiable, Hashable {
     capturedKind = captured?["kind"] as? String
     capturedID = captured?["id"] as? String
     chips = routingChips(doc.data["routing"] as? [String: Any])
+    requestLabel = submissionRequestLabel(doc.data["request"])
+    files = submissionFiles(doc.data["files"])
   }
 
   private static func date(_ value: Any?) -> Date? {
@@ -377,10 +419,24 @@ struct SubmissionsAPI {
 
   func delete(_ submission: Submission) async throws {
     try await firestore.deleteDocument(submissionsPath(hostID) + [submission.id])
+    // Its files go with it, as on the web Inbox: they sit in private storage, which only the forms plugin can delete, and
+    // they count against the workspace's storage until it does. Best effort: the delete has happened either way.
+    if !submission.files.isEmpty {
+      _ = try? await api.request(
+        submissionFileRoute, method: .post,
+        body: ["action": "release", "hostId": .string(hostID), "submissionId": .string(submission.id)])
+    }
     if let formID = submission.formID {
       _ = try? await api.request(
         "/api/forms/stats", method: .post, body: ["hostId": .string(hostID), "formIds": [.string(formID)]])
     }
+  }
+
+  /// One file's bytes, through the forms plugin's route.
+  func download(_ file: SubmissionFile, of submissionID: String) async throws -> DownloadedFile {
+    try await api.download(
+      submissionFileRoute,
+      body: ["action": "download", "hostId": .string(hostID), "submissionId": .string(submissionID), "fileId": .string(file.id)])
   }
 
   func replyBody(_ id: String, subject: String, message: String) -> JSONValue {

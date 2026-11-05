@@ -298,6 +298,7 @@ fun SubmissionDetail(context: NativePluginContext, hostId: String, submissionId:
             }
           }
         }
+        row.requestLabel?.let { StatusChip(it, StatusTone.INFO, Modifier.testTag("submission-request")) }
         SectionCard("Message", Modifier.fillMaxWidth()) {
           if (row.fields.isEmpty()) Text("This message has no fields.", color = MaterialTheme.colorScheme.onSurfaceVariant)
           row.fields.forEach { (key, value) -> PropertyRow(key, value) }
@@ -319,6 +320,7 @@ fun SubmissionDetail(context: NativePluginContext, hostId: String, submissionId:
             ) { Text(if (row.capturedKind == "lead") "Open the lead in the CRM" else "Open the contact in the CRM") }
           }
         }
+        if (row.files.isNotEmpty()) SubmissionFilesCard(row, actions)
         if (permissions.canReply) ReplyCard(context, hostId, row, site, actions) { notice = it }
         if (permissions.canAssign) ListAssignmentCard(row, actions) { notice = it }
       }
@@ -352,6 +354,39 @@ fun SubmissionDetail(context: NativePluginContext, hostId: String, submissionId:
   }
 }
 
+@Composable
+private fun SubmissionFilesCard(row: Submission, actions: InboxActions) {
+  val exporter = com.aglyn.ui.LocalFileExporter.current
+  val scope = rememberCoroutineScope()
+  var downloading by remember(row.id) { mutableStateOf<String?>(null) }
+  var error by remember(row.id) { mutableStateOf<String?>(null) }
+  SectionCard(if (row.files.size == 1) "File" else "Files (${row.files.size})", Modifier.fillMaxWidth()) {
+    error?.let { NoticeBanner(it, StatusTone.ERROR) }
+    row.files.forEach { file ->
+      TextButton(
+        enabled = downloading == null,
+        onClick = {
+          downloading = file.id
+          error = null
+          scope.launch {
+            try {
+              val answer = actions.downloadFile(row.id, file.id)
+              exporter?.export(answer.name ?: file.name, file.contentType.ifEmpty { "application/octet-stream" }, answer.bytes)
+            } catch (failure: Throwable) {
+              if (failure is kotlinx.coroutines.CancellationException) throw failure
+              error = (failure as? com.aglyn.core.ConsoleApiError)?.message ?: "${file.name} could not be downloaded."
+            } finally {
+              downloading = null
+            }
+          }
+        },
+        modifier = Modifier.testTag("submission-file-${file.id}"),
+      ) { Text("${file.name} · ${submissionFileSize(file.size)}") }
+    }
+  }
+}
+
+/** Reply to the sender. */
 @Composable
 private fun ReplyCard(
   context: NativePluginContext,

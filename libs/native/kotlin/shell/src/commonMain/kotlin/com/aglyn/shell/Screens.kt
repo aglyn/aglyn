@@ -194,6 +194,10 @@ data class FeedNotification(
   val read: Boolean,
   val level: String?,
   val type: String? = null,
+  /** What it calls itself where its emitter named it ("Proof approved"), over its type's label. */
+  val label: String? = null,
+  /** What its open button says, where its emitter named what the link opens. */
+  val actionLabel: String? = null,
   val createdAt: com.aglyn.core.FirestoreTimestamp? = null,
   /** The workspace and site it is about, which opening it switches to. */
   val orgId: String? = null,
