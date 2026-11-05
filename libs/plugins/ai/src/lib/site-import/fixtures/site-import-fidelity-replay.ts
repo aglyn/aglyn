@@ -71,11 +71,19 @@ function plannedLinks(blocks: readonly SiteImportBlock[], origin: string): Array
   return [...paths].map((path) => ({ path, id: `p${path.replace(/[^a-z0-9]+/gi, '-')}` }))
 }
 
+/** A page's read as the import step hands it on, and what it says it left out for the fidelity (AGL-4152). */
+export type SiteImportReplayRead = AiSiteImportDocument & { concealed?: { pictures: string[]; words: string[] } }
+
 /** A recorded page as a wave's read keeps it and the import step hands it on: its blocks, its layout, its photos in the library. */
-export function siteImportReplayDocument(name: SiteLayoutPageName): AiSiteImportDocument {
+export function siteImportReplayDocument(name: SiteLayoutPageName): SiteImportReplayRead {
   const { url } = SITE_LAYOUT_PAGES[name]
-  const page = extractSiteImportPage(siteLayoutRecording(name), url, siteLayoutSameSite(name), { structure: true })
-  const layout = siteImportLayout(page as Parameters<typeof siteImportLayout>[0])
+  return siteImportReplayDocumentOf(siteLayoutRecording(name), url, siteLayoutSameSite(name))
+}
+
+/** Any page as a wave's read keeps it, read through its stylesheets (AGL-4152). */
+export function siteImportReplayDocumentOf(html: string, url: string, sameSite: (url: URL) => boolean, stylesheets: readonly string[] = []): SiteImportReplayRead {
+  const page = extractSiteImportPage(html, url, sameSite, { structure: true, stylesheets })
+  const layout = siteImportLayout(page as Parameters<typeof siteImportLayout>[0], stylesheets)
   const path = new URL(url).pathname
   const read = siteImportPageRead({ ...page, layout, url, path, foundBy: path === '/' ? 'home' : 'sitemap', bytes: 0 } as never, 'now')
   const blocks = read.blocks ?? []
@@ -91,6 +99,7 @@ export function siteImportReplayDocument(name: SiteLayoutPageName): AiSiteImport
     origins: [origin, origin.replace('://', '://www.')],
     ...(read.layout ? { layout: read.layout } : {}),
     ...(read.videos?.length ? { videos: read.videos } : {}),
+    ...(read.concealed ? { concealed: read.concealed } : {}),
   }
 }
 
@@ -134,7 +143,11 @@ export interface SiteImportReplayOptions {
  * keeps the words as written.
  */
 export function siteImportReplayPage(name: SiteLayoutPageName, options: SiteImportReplayOptions = {}): SiteImportReplayPage {
-  const read = siteImportReplayDocument(name)
+  return siteImportReplayBuild(siteImportReplayDocument(name), name === 'home' ? '/' : `/${name}`, name === 'home', options)
+}
+
+/** A page's read built and checked as the page step stores it: `siteImportReplayPage`, for any read (AGL-4152). */
+export function siteImportReplayBuild(read: SiteImportReplayRead, slug: string, home: boolean, options: SiteImportReplayOptions = {}): SiteImportReplayPage {
   const { layout, ...rest } = read
   const rewrites = new Map((options.wording ?? []).map((rewrite) => [rewrite.line, rewrite.text]))
   const finished = { ...(options.finish ? { finish: options.finish } : {}), ...(options.words ? { wording: options.words } : {}) }
@@ -148,7 +161,7 @@ export function siteImportReplayPage(name: SiteLayoutPageName, options: SiteImpo
   const doc: AiSiteImportDocument = { ...parsed, ...finished }
   const names = aiSiteImportSectionNames(doc)
   const sectionIds = names.map((_, index) => `sec-${index}`)
-  const screen = { title: doc.title, slug: name === 'home' ? '/' : `/${name}`, sections: names.map((section) => ({ name: section, uses: [] as string[], items: 0 })) }
+  const screen = { title: doc.title, slug, sections: names.map((section) => ({ name: section, uses: [] as string[], items: 0 })) }
   const forms = options.forms ?? []
   const targets = { pageId: 'p0', pages: [], homeIds: [], forms, formPageId: null, components: [], facts: '' }
   const check = aiImportedPageCheck({
@@ -156,14 +169,14 @@ export function siteImportReplayPage(name: SiteLayoutPageName, options: SiteImpo
     sectionIds,
     targets: targets as never,
     context: { screenIds: doc.links.map((link) => link.id), formIds: forms.map((form) => form.id), componentIds: [], codeBuilt: true },
-    design: { kind: 'business', seed: 7, home: name === 'home' } as never,
+    design: { kind: 'business', seed: 7, home } as never,
     doc,
   })
   const result = check(options.answer ?? null)
   const nodes = (result.value?.nodes ?? {}) as unknown as SiteImportFidelityTree['nodes']
   return {
     doc,
-    source: { layout: layout as NonNullable<typeof layout>, blocks: read.blocks, photos: read.photos },
+    source: { layout: layout as NonNullable<typeof layout>, blocks: read.blocks, photos: read.photos, ...(read.concealed ? { concealed: read.concealed } : {}) },
     tree: { rootId: '_@_', nodes },
     violations: result.violations,
   }

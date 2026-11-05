@@ -184,6 +184,8 @@ export function siteImportPageRead(page: SiteImportPage, at: string): AiSiteImpo
     ...(layout ? { layout } : {}),
     // Its videos (AGL-4140), which its layout places by index.
     ...(page.videos?.length ? { videos: page.videos } : {}),
+    // What a visitor cannot see (AGL-4152), which the fidelity holds a build to not drawing.
+    ...(page.concealed ? { concealed: page.concealed } : {}),
     // The source's own title and description, for the page's listing (AGL-4107).
     meta: { title: siteImportMetaText(page.title, SITE_IMPORT_META_TITLE_MAX_CHARS), description: siteImportMetaText(page.description, SITE_IMPORT_META_DESCRIPTION_MAX_CHARS) },
   }
