@@ -928,6 +928,9 @@ describe('Home’s hero as its source draws it, whatever the answer says (AGL-41
     expect(designedWith(doc, 'editorial').sections[0]?.measure).toBe('md')
     expect(designedWith(doc, 'editorial').settled.map((entry) => entry.what)).toEqual(["the editorial hero set aside: the page keeps its source's own opening, a column hero"])
     expect(designedWith(doc, 'column').settled).toEqual([])
+    // An answer of none asks nothing of it: the same opening, its measure held.
+    expect(designedWith(doc, 'none').sections[0]).toMatchObject({ hero: 'column', measure: 'md' })
+    expect(designedWith(doc, 'none').settled).toEqual([])
     const { stored } = build('home', asked('split'))
     // Its words held to the width step the source's 920 px heading measure maps to (AGL-4152).
     const measure = Object.values(stored).find((node) => node.componentId === 'muiBox' && JSON.stringify(node.sx) === JSON.stringify({ maxWidth: { xs: '100%', md: 'md' }, mx: 'auto' }))

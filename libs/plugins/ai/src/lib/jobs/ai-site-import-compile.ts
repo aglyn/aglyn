@@ -1085,18 +1085,6 @@ function mergeLists(blocks: readonly AiLayoutBlock[]): AiLayoutBlock[] {
 const DIMMED_HEROES: ReadonlySet<AiLayoutImportHero> = new Set(['cover', 'poster'])
 
 /**
- * The heroes that keep the source's picture where it lays it (AGL-4138): under
- * or over its words in a column, beside them, or behind them. An answer may
- * choose among these alone.
- */
-const HEROES_AT: Readonly<Record<SiteImportHeroPicture, ReadonlySet<AiLayoutImportHero>>> = {
-  below: new Set(['column', 'editorial']),
-  above: new Set(['column', 'editorial']),
-  beside: new Set(['split', 'bleed', 'panel']),
-  behind: new Set(['cover', 'poster', 'panel']),
-}
-
-/**
  * The hero a section's opening takes: the first section's, around its picture
  * beside, behind or under its words. Words dimmed over the picture draw the
  * section dark, so a section that keeps a lighter ground of its own, with its
@@ -1115,14 +1103,14 @@ function heroOf(
   drawn: { band: SiteImportLayoutSection['band']; finish: AiSiteImportFinish },
 ): AiLayoutImportHero | undefined {
   if (index !== 0 || !section.hero?.picture) return undefined
-  // An answer of "none" keeps the opening as the source lays it out.
-  if (answer?.hero === 'none') return undefined
   const place = section.hero.picture
   if (drawn.finish !== 'improve') {
     const own = ownHeroOf(section, place)
-    if (answer?.hero && answer.hero !== own) settled.push({ at: 'sections[0]', what: `the ${answer.hero} hero set aside: the page keeps its source's own opening, a ${own} hero` })
+    if (answer?.hero && answer.hero !== 'none' && answer.hero !== own) settled.push({ at: 'sections[0]', what: `the ${answer.hero} hero set aside: the page keeps its source's own opening, a ${own} hero` })
     return own
   }
+  // An answer of "none" keeps the opening as the source lays it out.
+  if (answer?.hero === 'none') return undefined
   const own = HERO_FOR[place]
   // Dimmed words need a dark ground: the section's own, or on a page its owner asked improved, the answer's (AGL-4152).
   if (answer?.hero && DIMMED_HEROES.has(answer.hero) && drawn.band !== 'dark' && place !== 'behind') {
