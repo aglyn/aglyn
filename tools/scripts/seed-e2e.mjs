@@ -532,6 +532,8 @@ await put(
 const teamDataset = orgRef.collection('datasets').doc('seed-team')
 await put(teamDataset, {
   name: 'Team',
+  // The Data page's name key, which every dataset writer stamps (AGL-4047).
+  nameLower: nameSearchKey('Team'),
   fields: ['name', 'role', 'photo'],
   visibleTo: ['org'],
   createdAt: now,
@@ -567,6 +569,7 @@ const ratesDataset = orgRef.collection('datasets').doc('seed-internal-rates')
 await put(ratesDataset, {
   name: 'Internal rates',
   displayName: 'Internal rates',
+  nameLower: nameSearchKey('Internal rates'),
   fields: ['name'],
   visibleTo: ['host:seed-internal-only'],
   createdAt: now,
@@ -586,6 +589,7 @@ await put(ratesDataset.collection('records').doc('seed-rate-1'), {
 await put(orgRef.collection('datasets').doc('seed-guide-survey'), {
   name: 'Survey responses',
   displayName: 'Survey responses',
+  nameLower: nameSearchKey('Survey responses'),
   visibleTo: ['org'],
   singularName: 'Survey response',
   fields: ['satisfaction', 'comments'],

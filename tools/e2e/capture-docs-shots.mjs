@@ -146,6 +146,7 @@ async function seedGuideFixtures() {
   await put(survey, {
     name: 'Survey responses',
     displayName: 'Survey responses',
+    nameLower: nameSearchKey('Survey responses'),
     singularName: 'Survey response',
     fields: ['satisfaction', 'visit', 'topics', 'comments'],
     model: surveyModel,

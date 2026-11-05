@@ -141,6 +141,8 @@ describe('restoring a site’s datasets', () => {
     }
     expect(dataset?.data).toMatchObject(STAMPS)
     expect(dataset?.data['visibleTo']).toEqual(['host:host-1'])
+    // The name's search key is derived from the restored name (AGL-4047).
+    expect(dataset?.data['nameLower']).toBe('roasts')
 
     const record = writes.find(
       (entry) => entry.path === 'orgs/org-1/datasets/dataset-1/records/record-1',
@@ -174,6 +176,21 @@ describe('restoring a site’s datasets', () => {
     expect(record.data).not.toHaveProperty('deletedAt')
     // The integrity index is derived from the restored values, never carried.
     expect(record.data).not.toHaveProperty('referencedIds')
+  })
+
+  it("derives the name's search key rather than carrying one, and stamps a nameless dataset '' (AGL-4047)", async () => {
+    const { request, writes } = restoreInto({
+      items: [
+        { ...DATASET, displayName: 'Dark  Roasts', nameLower: 'forged' },
+        { ...DATASET, $id: 'dataset-2', displayName: undefined, name: undefined },
+      ],
+    })
+    await importSiteDatasets(request)
+
+    const byPath = new Map(writes.map((entry) => [entry.path, entry.data]))
+    expect(byPath.get('orgs/org-1/datasets/dataset-1')?.['nameLower']).toBe('dark roasts')
+    // Blank, not absent: a list ordered by the key leaves out a document without it.
+    expect(byPath.get('orgs/org-1/datasets/dataset-2')?.['nameLower']).toBe('')
   })
 
   it('restores a record that does not conform AND reports it', async () => {

@@ -22,6 +22,7 @@
  */
 
 import type { ScopeToken } from '@aglyn/aglyn/foundation/definitions/platform.types'
+import { nameSearchKey } from '@aglyn/aglyn/app-utils/name-search'
 import {
   coerceDocumentValues,
   type DatasetModel,
@@ -56,6 +57,23 @@ export interface HostDataset {
    * the AGL-1040 backfill stamps it. See `app-utils/scope-tokens`.
    */
   visibleTo?: ScopeToken[]
+  /**
+   * The name's search key (AGL-4047): `nameSearchKey(displayName)`, written
+   * beside the name by every path that writes one, so the Data page can find a
+   * dataset by the start of its name and order the list by it. Never shown.
+   */
+  nameLower?: string
+}
+
+/**
+ * The search key stored beside a dataset's name (AGL-4047).
+ *
+ * One function for every writer, so a name saved on the web, through the API,
+ * by an AI draft, an install or a restore is found by the same typed prefix.
+ * The native apps write the same key through their own `nameSearchKey` port.
+ */
+export function datasetNameLower(displayName: string | null | undefined): string {
+  return nameSearchKey(displayName)
 }
 
 export interface HostDatasetRecord {

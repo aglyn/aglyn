@@ -626,6 +626,8 @@ export async function seedBrand({ firestore, hostRef, brand, log, prune = true }
     const { id, ...fields } = dataset
     await put(dataRef.collection('datasets').doc(scopedId(id, hostRef.id, orgRef)), {
       ...fields,
+      // The Data page's name key, which every dataset writer stamps (AGL-4047).
+      nameLower: nameSearchKey(fields.displayName ?? fields.name),
       ...dataScope,
       createdAt: now,
     })

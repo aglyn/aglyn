@@ -155,6 +155,9 @@ describe('DatasetSchemaDialog field names & descriptions (AGL-560)', () => {
     })
     expect(payload.model.order).toEqual(['title'])
     expect(payload.fields).toEqual(['title'])
+    // The collection's name, with its search key beside it (AGL-4047).
+    expect(payload.displayName).toBe('Products')
+    expect(payload.nameLower).toBe('products')
   })
 
   it('drops a whitespace-only description instead of persisting it', async () => {
@@ -522,7 +525,7 @@ describe('DatasetSchemaDialog shares with all sites except some (AGL-4047)', () 
     await waitFor(() => expect(mockFetch).toHaveBeenCalledTimes(1))
     expect(sharingCalls()[0].choice).toEqual({ mode: 'allExcept', exceptHostIds: ['h2'] })
     const [, payload] = (updateDoc as jest.Mock).mock.calls[0]
-    expect(Object.keys(payload).sort()).toEqual(['displayName', 'fields', 'model', 'names'])
+    expect(Object.keys(payload).sort()).toEqual(['displayName', 'fields', 'model', 'nameLower', 'names'])
   })
 
   it('from chosen sites, leaves out the ones not chosen', () => {
