@@ -82,8 +82,9 @@ const mockConfirm = jest.fn((_options?: Record<string, unknown>) =>
 )
 
 let containersBlocked = false
+let deleteBlocked = false
 jest.mock('./use-campaign-containers-blocked', () => ({
-  useCampaignContainersBlocked: () => containersBlocked,
+  useCampaignContainerAccess: () => ({ editBlocked: containersBlocked, deleteBlocked }),
 }))
 jest.mock('@aglyn/shared-ui-snackstack', () => ({
   __esModule: true,
@@ -393,6 +394,17 @@ describe('an id that names a campaign', () => {
     const item = screen.getByRole('menuitem', { name: /Edit campaign/ })
     expect(item.getAttribute('aria-disabled')).toBe('true')
     containersBlocked = false
+  })
+
+  it('switches Delete campaign off with the permission named when the route refuses it, and leaves Edit on (AGL-4047)', async () => {
+    deleteBlocked = true
+    await mount('camp-1')
+    fireEvent.click(screen.getByRole('button', { name: 'More actions for Spring sale' }))
+    const remove = screen.getByRole('menuitem', { name: /Delete campaign/ })
+    expect(remove.getAttribute('aria-disabled')).toBe('true')
+    expect(document.body.innerHTML).toContain('Run email campaigns')
+    expect(screen.getByRole('menuitem', { name: /Edit campaign/ }).getAttribute('aria-disabled')).not.toBe('true')
+    deleteBlocked = false
   })
 
   it('renders the campaign, its window and its lists', async () => {

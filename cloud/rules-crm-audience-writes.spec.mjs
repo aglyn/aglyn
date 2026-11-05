@@ -295,6 +295,9 @@ for (const [name, data, campaigns, orgWide, why] of ROWS) {
   )
 
   // ── Campaign containers: their own key ────────────────────────────────────
+  // The workspace's verdict: no host is seeded here, so no site's verdict can
+  // count. That, and what a real collaborator's tokens reach, is the table in
+  // `rules-campaign-site-gain.spec.mjs`.
   await expectThat(campaigns, `${why}: ${campaigns ? 'creates' : 'cannot create'} a campaign`, () =>
     creates(name, 'emailCampaigns', { name: 'New', visibleTo }),
   )
@@ -343,9 +346,6 @@ for (const name of ['collabEditor', 'collabViewerGranted']) {
   )
   await deny(`${name} cannot re-scope a campaign`, () =>
     updateDoc(ref(name, 'emailCampaigns', 'campaign-site'), { visibleTo: [SITE_TOKEN, OTHER_TOKEN] }),
-  )
-  await deny(`${name} cannot update a campaign placed on the whole org`, () =>
-    updateDoc(ref(name, 'emailCampaigns', 'campaign-org'), { name: 'Reached' }),
   )
 }
 await allow('an org-wide editor may re-scope a campaign', () =>

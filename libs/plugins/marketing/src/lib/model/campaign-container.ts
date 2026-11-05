@@ -152,6 +152,18 @@ export function campaignSiteIds(
   return ids
 }
 
+/**
+ * Whether a container is placed on this one site and no other: the placement
+ * where the site's own "Run email campaigns" counts for writing it (AGL-4047).
+ */
+export function campaignPlacedOnlyOn(
+  campaign: Pick<EmailCampaign, 'visibleTo'> | null | undefined,
+  hostId: string,
+): boolean {
+  const tokens = campaign?.visibleTo ?? []
+  return tokens.length === 1 && tokens[0] === campaignHostScope(hostId)
+}
+
 /** Whether a container is offered on this site. */
 export function campaignPlacedOnHost(
   campaign: Pick<EmailCampaign, 'visibleTo'> | null | undefined,
