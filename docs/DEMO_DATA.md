@@ -86,14 +86,22 @@ owns one production org (`9A5fJ_zEoH`, "Juniper Street Co."). Its sites are
 `review-juniper-cafe`, `review-juniper-catering`, and the brand-pack sites
 `review-cantina` and `review-ironleaf`.
 
+All five sites are designed by hand in the Besigner (AGL-4166): pages,
+header and footer layouts, theme and routes. The seeds that first filled
+them no longer touch that work (`tools/scripts/lib/hand-built-demo-sites.mjs`):
+
+- `seed-demo-host.mjs` refuses these five hosts, `--reset` included. Its
+  prune deletes every `seed-*` page and it rewrites the home page, theme
+  and name.
+- `seed-review-org.mjs` refreshes their data only. It leaves out every page
+  document (designed emails excepted), the host's `screens` routing map,
+  the prune of pages and the re-creation of a sibling site that exists.
+
 ```bash
-# 1. The brand pack first: its prune deletes every `seed-` document in the
-#    collections it owns, this seed's included.
-node --env-file=.env tools/scripts/seed-demo-host.mjs --host review-bakery --brand bakery
-# 2. Then the workspace data. Without --write it prints every document.
+# The workspace data. Without --write it prints every document.
 node --env-file=.env tools/scripts/seed-review-org.mjs \
   --org 9A5fJ_zEoH --host review-bakery --create-sibling-sites --write
-# 3. Read it back: every planned field, per collection.
+# Read it back: every planned field, per collection.
 node --env-file=.env tools/scripts/seed-review-org.mjs \
   --org 9A5fJ_zEoH --host review-bakery --create-sibling-sites --verify
 ```

@@ -26,6 +26,7 @@ import Typography from '@mui/material/Typography'
 import { forwardRef, useEffect, useState } from 'react'
 import { BUNDLE_ID } from '../constants/bundle-common'
 import { generatePresetId } from '../utils/generate-preset-id'
+import { formatOrderMoney } from '../model/buyer-notifications'
 import { ProductImagePlaceholder } from './product-image-placeholder'
 
 // Component ids are persisted in screen documents; never rename.
@@ -193,7 +194,9 @@ const RelatedProducts = forwardRef<HTMLDivElement, RelatedProductsProps>(
                       {item.name}
                     </Typography>
                     <Typography variant={grid ? 'body2' : 'caption'} color="text.secondary">
-                      {item.priceComingSoon ? 'Price coming soon' : `$${item.priceUsd}`}
+                      {item.priceComingSoon
+                        ? 'Price coming soon'
+                        : formatOrderMoney(Math.round(item.priceUsd * 100))}
                     </Typography>
                   </CardContent>
                 </CardActionArea>

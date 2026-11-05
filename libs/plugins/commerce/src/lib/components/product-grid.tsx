@@ -45,6 +45,7 @@ import {
 } from '../constants/storefront-catalog-query'
 import { generatePresetId } from '../utils/generate-preset-id'
 import { addToCart } from '../utils/add-to-cart'
+import { formatOrderMoney } from '../model/buyer-notifications'
 import { ProductImagePlaceholder } from './product-image-placeholder'
 
 // Component ids are persisted in screen documents; never rename.
@@ -238,11 +239,14 @@ function collectionSlugFromLocation(): string {
   return match ? decodeURIComponent(match[1]) : ''
 }
 
+/** A catalog price as the product page prints it: `$3.50`, never `$3.5`. */
+const usdLabel = (priceUsd: number) => formatOrderMoney(Math.round(priceUsd * 100))
+
 function priceLabel(item: CatalogItem): string {
   if (item.priceComingSoon) return PRICE_COMING_SOON_LABEL
   return item.priceUsd === item.maxPriceUsd
-    ? `$${item.priceUsd}`
-    : `From $${item.priceUsd}`
+    ? usdLabel(item.priceUsd)
+    : `From ${usdLabel(item.priceUsd)}`
 }
 
 /**

@@ -354,7 +354,7 @@ interface SitesCardsProps {
  * guess from the count on screen. A row whose host the page could not read
  * has nothing to draw and is left out.
  *
- * The sites the reader pinned (`usePinnedHosts`, five a workspace) lead the
+ * The sites the reader pinned (`usePinnedHosts`, as many as they like) lead the
  * unfiltered list in the order they were pinned, drawn from the host
  * documents the page holds, so a pin on a site the query has not paged to
  * yet still leads. A search or a filter is the query's answer and keeps the
@@ -408,7 +408,7 @@ function SitesCards(props: SitesCardsProps) {
     toggle: togglePin,
     replace: replacePin,
   } = usePinnedHosts(orgId)
-  // A sixth pin asks which of the five it replaces.
+  // Only a pin past the account-wide bound asks which pin it replaces.
   const [pinning, setPinning] = useState<PinnedOrgEntry | null>(null)
   const cards = useMemo(() => {
     if (filtering || !shown.length) return shown

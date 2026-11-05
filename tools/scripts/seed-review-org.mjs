@@ -60,6 +60,7 @@ import { FieldValue, getFirestore } from 'firebase-admin/firestore'
 import { dirname, join, resolve } from 'node:path'
 import { fileURLToPath, pathToFileURL } from 'node:url'
 import { ensureHost } from './lib/seed-demo.mjs'
+import { isHandBuiltDemoHost, prunesHandBuiltPages, withoutHandBuiltPages } from './lib/hand-built-demo-sites.mjs'
 import {
   JUNIPER,
   REVIEW_HOST_ID,
@@ -138,8 +139,12 @@ const plan = buildReviewOrgPlan({ records, target, nowMs, siblings })
 const { skipped } = plan
 const hostIds = [hostId, ...(siblings ? JUNIPER.siblings.map((site) => site.hostId) : [])]
 assertPlanSafe(plan.docs, { orgId, hostIds, ownerUid })
-// The whole plan is checked; `--only` narrows what this run touches.
-const docs = only ? plan.docs.filter((doc) => only.some((prefix) => doc.path.startsWith(prefix))) : plan.docs
+// The whole plan is checked; `--only` narrows what this run touches. The
+// hand-built demo sites (AGL-4166) keep their own pages and routes: the seed
+// refreshes their data only.
+const handBuilt = withoutHandBuiltPages(plan.docs)
+const planDocs = handBuilt.docs
+const docs = only ? planDocs.filter((doc) => only.some((prefix) => doc.path.startsWith(prefix))) : planDocs
 if (only && !docs.length) fail(`--only ${only.join(',')} matches no planned document.`)
 
 const summary = () => {
@@ -151,6 +156,9 @@ const summary = () => {
   for (const entry of skipped) reasons[entry.reason] = (reasons[entry.reason] ?? 0) + 1
   console.log(`\n${skipped.length} fixture documents left out:`)
   for (const [reason, count] of Object.entries(reasons)) console.log(`  ${String(count).padStart(4)}  ${reason}`)
+  if (handBuilt.dropped.length) {
+    console.log(`\n${handBuilt.dropped.length} page documents and routes left alone on the hand-built demo sites (AGL-4166).`)
+  }
 }
 
 if (verify) {
@@ -168,6 +176,12 @@ if (!write) {
 // ── The sibling sites ──────────────────────────────────────────────────────
 if (siblings && !only) {
   for (const site of JUNIPER.siblings) {
+    // `ensureHost` merges an empty `screens` map, which would unroute every
+    // hand-built page on a sibling that already exists.
+    if (isHandBuiltDemoHost(site.hostId) && (await firestore.collection('hosts').doc(site.hostId).get()).exists) {
+      console.log(`  ${site.hostId} exists and is hand-built: left as it is`)
+      continue
+    }
     await ensureHost({
       firestore,
       hostId: site.hostId,
@@ -223,6 +237,7 @@ const collections = new Set(
 )
 let pruned = 0
 for (const collectionPath of collections) {
+  if (prunesHandBuiltPages(collectionPath)) continue
   const stale = await firestore.collection(collectionPath).where('seedSource', '==', REVIEW_SEED_SOURCE).get()
   for (const doc of stale.docs) {
     if (!doc.id.startsWith(REVIEW_ID_PREFIX) || planned.has(doc.ref.path)) continue

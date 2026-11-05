@@ -350,14 +350,24 @@ describe('the Sites page leads with the sites the reader pinned (AGL-4005)', () 
     expect(screen.queryByText('Pinned is full. Replace one?')).toBeNull()
   })
 
-  it('asks which of five to replace, never dropping one quietly', async () => {
+  it('pins a sixth site with no question: a workspace has no cap (AGL-4165)', () => {
+    mockPins.pinned = ['host-1', 'host-2', 'host-3', 'host-4', 'host-5']
+    mockPins.full = false
+    mockTogglePin.mockReturnValue('pinned')
+    render(<HostsPage />)
+    fireEvent.click(screen.getByRole('button', { name: 'Pin Site 10' }))
+    expect(mockTogglePin).toHaveBeenCalledWith('host-10')
+    expect(screen.queryByText('Pinned is full. Replace one?')).toBeNull()
+  })
+
+  it('asks which to replace only at the account-wide bound, never dropping one quietly', async () => {
     mockPins.pinned = ['host-1', 'host-2', 'host-3', 'host-4', 'host-5']
     mockPins.full = true
     mockTogglePin.mockReturnValue('full')
     render(<HostsPage />)
     fireEvent.click(screen.getByRole('button', { name: 'Pin Site 10' }))
     const dialog = await screen.findByRole('dialog')
-    expect(within(dialog).getByText(/You can pin up to 5 sites in a workspace/)).toBeTruthy()
+    expect(within(dialog).getByText(/You can pin up to 500 sites\./)).toBeTruthy()
     fireEvent.click(within(dialog).getByRole('button', { name: 'Replace Site 02' }))
     expect(mockReplacePin).toHaveBeenCalledWith('host-2', 'host-10')
   })
