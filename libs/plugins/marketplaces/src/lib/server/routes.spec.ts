@@ -17,6 +17,7 @@
  * limitations under the License.
  */
 
+import { MARKETPLACES_SITE_PRESETS } from '../model/marketplaces-permissions'
 import { randomBytes } from 'node:crypto'
 import { MARKETPLACES_ENV } from '../constants'
 import { DEFAULT_SETTINGS } from '../model/marketplaces'
@@ -65,8 +66,9 @@ function setup(env: Record<string, string> = {}) {
     engine,
     gate: async (request, wanted) => {
       gateCalls.push(wanted)
-      const rank: Record<string, number> = { viewer: 1, editor: 2, admin: 3 }
-      if (rank[role] < rank[wanted]) return Response.json({ error: 'Not permitted' }, { status: 403 })
+      if (wanted && !MARKETPLACES_SITE_PRESETS[wanted][role as 'admin' | 'editor' | 'viewer']) {
+        return Response.json({ error: 'Not permitted' }, { status: 403 })
+      }
       const body = request.method === 'GET' ? {} : ((await request.json().catch(() => ({}))) as Record<string, unknown>)
       return { orgId: 'org1', hostId: HOST, uid: 'u1', body } satisfies MarketplaceGateResult
     },

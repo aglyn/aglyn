@@ -15,6 +15,9 @@
  * limitations under the License.
  */
 
+import { holdsStampedSiteKey } from '@aglyn/aglyn/app-utils/host-permissions'
+import { permissionRefusalText } from '@aglyn/aglyn/app-utils/org-permissions'
+import { POST_PURCHASE_SITE_PRESETS, type PostPurchaseSitePermission } from '../model/post-purchase-permissions'
 import { firebaseAdmin } from '@aglyn/tenant-data-admin'
 import { isEmailVerified, isImpersonationSession } from '@aglyn/tenant-data-admin/server/firebase-admin'
 import { isRefusedIdToken } from '@aglyn/tenant-data-admin/server/id-token-refusal'
@@ -33,7 +36,7 @@ import { resolvePostPurchaseSite } from './site-context'
  *   403  unverified address (impersonation exempt)
  *   400  no site named
  *   404  the site does not sell, or has post-purchase switched off
- *   403  not a collaborator with the role the route needs
+ *   403  not on the site, or without the key the route asks (AGL-4047)
  */
 
 const NO_STORE = { 'Cache-Control': 'no-store' }
@@ -45,10 +48,6 @@ export function json(body: unknown, status = 200): Response {
 export function refuse(status: number, error: string): Response {
   return Response.json({ error }, { status, headers: NO_STORE })
 }
-
-export type PostPurchaseRole = 'viewer' | 'editor' | 'admin'
-
-const ROLE_RANK: Record<string, number> = { viewer: 1, author: 1, editor: 2, admin: 3 }
 
 export interface PostPurchaseGateResult {
   orgId: string
@@ -69,7 +68,7 @@ export function setPostPurchaseTokenVerifierForTests(verifier: TokenVerifier | n
 
 export async function postPurchaseGate(
   request: Request,
-  options: { role: PostPurchaseRole },
+  options: { permission: PostPurchaseSitePermission | null },
 ): Promise<PostPurchaseGateResult | Response> {
   const configured = readPostPurchaseConfig()
   if (!configured.configured) return refuse(404, POST_PURCHASE_NOT_CONFIGURED_MESSAGE)
@@ -97,9 +96,14 @@ export async function postPurchaseGate(
   if (!isDocumentId(hostId)) return refuse(400, 'Missing hostId')
   const site = await resolvePostPurchaseSite(hostId)
   if (!site) return refuse(404, 'Tracking and package protection are not available for this site')
-  const memberRole = String((site.host['memberRoles'] as Record<string, unknown> | undefined)?.[decoded.uid] ?? '')
-  if (decoded['staff'] !== true && (ROLE_RANK[memberRole] ?? 0) < ROLE_RANK[options.role]) {
+  const staff = decoded['staff'] === true
+  // No key named: anyone on the site's roster reads it.
+  if (!staff && !(site.host['memberRoles'] as Record<string, unknown> | undefined)?.[decoded.uid]) {
     return refuse(403, 'Not permitted')
+  }
+  const { permission } = options
+  if (!staff && permission && !holdsStampedSiteKey(site.host, decoded.uid, permission, POST_PURCHASE_SITE_PRESETS[permission])) {
+    return refuse(403, permissionRefusalText(permission))
   }
   return { orgId: site.orgId, hostId, uid: decoded.uid, config: configured.config, body }
 }

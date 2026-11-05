@@ -18,6 +18,7 @@
  * limitations under the License.
  */
 
+import type { CouriersSitePermission } from '../model/couriers-permissions'
 import type { PluginLocalDeliveryRecord } from '@aglyn/aglyn/plugin-manager/plugin-local-deliveries'
 import { createSecretBoxKey } from '@aglyn/shared-util-tools/secret-box'
 import { randomBytes } from 'node:crypto'
@@ -25,7 +26,7 @@ import { createDoordashDriveProvider } from '../providers/doordash'
 import { createMemoryCourierStore } from '../testing/memory-store'
 import { createMockHttp, type MockAnswer, type MockCall } from '../testing/mock-http'
 import { courierRef, createEngine } from './engine'
-import { createCourierRoutes, sha256, webhookAuthorized, type CourierRole } from './routes'
+import { createCourierRoutes, sha256, webhookAuthorized, } from './routes'
 
 /**
  * The couriers console API (AGL-3695): the gate's refusal answers as is,
@@ -54,7 +55,7 @@ const record: PluginLocalDeliveryRecord = {
   courier: null,
 }
 
-function setup(options: { gate?: (role: CourierRole) => Response | null; configured?: boolean } = {}) {
+function setup(options: { gate?: (permission: CouriersSitePermission) => Response | null; configured?: boolean } = {}) {
   const store = createMemoryCourierStore()
   const answers = {
     fn: (call: MockCall): MockAnswer => {
@@ -118,8 +119,8 @@ describe('couriers routes (AGL-3695)', () => {
     expect(response.status).toBe(404)
   })
 
-  it('asks for admin to handle keys, and editor to work orders', async () => {
-    const roles: CourierRole[] = []
+  it('asks its own key to handle keys, to dispatch and to read', async () => {
+    const roles: CouriersSitePermission[] = []
     const { routes } = setup({
       gate: (role) => {
         roles.push(role)
@@ -130,7 +131,7 @@ describe('couriers routes (AGL-3695)', () => {
     await routes.disconnect(post('disconnect', {}))
     await routes.quote(post('quote', { orderId: ORDER }))
     await routes.list(get('connection'))
-    expect(roles).toEqual(['admin', 'admin', 'editor', 'editor'])
+    expect(roles).toEqual(['couriers.manage', 'couriers.manage', 'couriers.dispatch', 'couriers.view'])
   })
 
   it('connects, shows the webhook token once, and never answers a secret', async () => {

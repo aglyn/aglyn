@@ -17,6 +17,10 @@
  * limitations under the License.
  */
 
+import { permissionRefusalText } from '@aglyn/aglyn/app-utils/org-permissions'
+import { BlockedControl } from '@aglyn/shared-ui-jsx/components/blocked-control.component'
+import { useSiteKeys } from '@aglyn/tenant-feature-instance/hooks/use-site-keys'
+import { TAX_ENGINES_SITE_PRESETS } from '../model/tax-engines-permissions'
 import { useSnackbar } from '@aglyn/shared-ui-snackstack'
 import { Button, Stack, TextField, Typography } from '@mui/material'
 import { useEffect, useState } from 'react'
@@ -42,6 +46,7 @@ export interface ProductTaxCodeFieldProps {
  */
 export function ProductTaxCodeField(props: ProductTaxCodeFieldProps) {
   const { hostId, product } = props
+  const refused = useSiteKeys(hostId).blocked('taxEngines.productCodes', TAX_ENGINES_SITE_PRESETS['taxEngines.productCodes'])
   const state = useTaxEngineConnection(hostId)
   const request = useTaxEnginesFetch()
   const { enqueueSnackbar } = useSnackbar()
@@ -111,9 +116,11 @@ export function ProductTaxCodeField(props: ProductTaxCodeFieldProps) {
               : 'Blank taxes it as general goods'
         }
       />
-      <Button size="small" disabled={busy || invalid || (value.trim() || null) === saved} onClick={handleSave}>
+      <BlockedControl blocked={refused} reason={permissionRefusalText('taxEngines.productCodes')}>
+        <Button size="small" disabled={busy || invalid || (value.trim() || null) === saved} onClick={handleSave}>
         {'Save code'}
       </Button>
+      </BlockedControl>
     </Stack>
   )
 }

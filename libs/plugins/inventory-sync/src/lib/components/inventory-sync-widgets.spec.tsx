@@ -21,6 +21,10 @@ import type { InventorySyncApi } from './inventory-sync-api'
 import { InventorySyncCard } from './inventory-sync-card.component'
 import { OrderInventoryWidget } from './order-inventory-widget.component'
 
+jest.mock('@aglyn/tenant-feature-instance/hooks/use-site-keys', () => ({
+  useSiteKeys: () => ({ blocked: (key: string) => mockBlockedKeys.has(key) }),
+}))
+const mockBlockedKeys = new Set<string>()
 jest.mock('./inventory-sync-api', () => ({ useInventorySyncApi: () => null }))
 const mockSnack = jest.fn()
 jest.mock('@aglyn/shared-ui-snackstack', () => ({ useSnackbar: () => ({ enqueueSnackbar: mockSnack }) }))
@@ -191,5 +195,25 @@ describe('the inventory system on an order (AGL-3642)', () => {
     render(<OrderInventoryWidget hostId="h" order={{ id: 'o-1' }} api={routes} />)
     await screen.findByText('Not sent')
     expect(screen.queryByRole('button', { name: 'Send again' })).toBeNull()
+  })
+})
+
+describe('the card follows the keys its routes ask (AGL-4047)', () => {
+  afterEach(() => mockBlockedKeys.clear())
+
+  it('switches the connect form off and names the permission without the manage key', async () => {
+    mockBlockedKeys.add('inventorySync.manage')
+    const routes = api({
+      connection: jest.fn(async () => ({ offered: [{ id: 'cin7-core' as const }], connection: null, capabilities: {} })),
+    } as never)
+    render(<InventorySyncCard hostId="h" api={routes} />)
+    expect(((await screen.findByRole('button', { name: 'Connect Cin7 Core' })) as HTMLButtonElement).disabled).toBe(true)
+    expect(screen.getByText(/does not include/).textContent).toContain('ask an organization admin')
+  })
+
+  it('names the permission rather than drawing nothing without the view key', async () => {
+    mockBlockedKeys.add('inventorySync.view')
+    render(<InventorySyncCard hostId="h" api={api()} />)
+    expect((await screen.findByText(/does not include/)).textContent).toContain('ask an organization admin')
   })
 })

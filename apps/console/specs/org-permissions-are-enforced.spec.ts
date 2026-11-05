@@ -258,6 +258,30 @@ const ENFORCED_AS: Record<OrgPermission, readonly string[]> = {
   'helpDesks.view': ["'helpDesks.view'"],
   'helpDesks.manage': ["'helpDesks.manage'"],
   'commerce.giftCards.import': ["'commerce.giftCards.import'"],
+  'adConversions.view': ["'adConversions.view'"],
+  'adConversions.manage': ["'adConversions.manage'"],
+  'couriers.view': ["'couriers.view'"],
+  'couriers.manage': ["'couriers.manage'"],
+  'couriers.dispatch': ["'couriers.dispatch'"],
+  'fulfillmentNetworks.view': ["'fulfillmentNetworks.view'"],
+  'fulfillmentNetworks.manage': ["'fulfillmentNetworks.manage'"],
+  'fulfillmentNetworks.orders': ["'fulfillmentNetworks.orders'"],
+  'inventorySync.view': ["'inventorySync.view'"],
+  'inventorySync.manage': ["'inventorySync.manage'"],
+  'inventorySync.orders': ["'inventorySync.orders'"],
+  'marketplaces.view': ["'marketplaces.view'"],
+  'marketplaces.manage': ["'marketplaces.manage'"],
+  'marketplaces.orders': ["'marketplaces.orders'"],
+  'postPurchase.manage': ["'postPurchase.manage'"],
+  'printOnDemand.manage': ["'printOnDemand.manage'"],
+  'printOnDemand.products': ["'printOnDemand.products'"],
+  'printOnDemand.orders': ["'printOnDemand.orders'"],
+  'reviewPlatforms.manage': ["'reviewPlatforms.manage'"],
+  'taxEngines.manage': ["'taxEngines.manage'"],
+  'taxEngines.exemptions': ["'taxEngines.exemptions'"],
+  'taxEngines.productCodes': ["'taxEngines.productCodes'"],
+  'taxEngines.addresses': ["'taxEngines.addresses'"],
+  'taxEngines.orders': ["'taxEngines.orders'"],
   'funnels.manage': ["'funnels.manage'"],
   'marketing.campaigns': ["'marketing.campaigns'"],
   // The marketplace on a site (AGL-4047): the seven install doors ask
@@ -326,7 +350,7 @@ describe('every advertised org permission is enforced server-side (AGL-2444)', (
     expect([...CATALOG].sort()).toEqual(
       Object.keys(ENFORCED_AS).sort(),
     )
-    expect(CATALOG.length).toBe(72)
+    expect(CATALOG.length).toBe(96)
   })
 
   it('the search really searches — a key nobody uses finds nothing', () => {

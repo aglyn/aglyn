@@ -15,6 +15,10 @@
  * limitations under the License.
  */
 
+import { permissionRefusalText } from '@aglyn/aglyn/app-utils/org-permissions'
+import { BlockedControl } from '@aglyn/shared-ui-jsx/components/blocked-control.component'
+import { useSiteKeys } from '@aglyn/tenant-feature-instance/hooks/use-site-keys'
+import { PRINT_ON_DEMAND_SITE_PRESETS } from '../model/print-on-demand-permissions'
 import { StatusChip } from '@aglyn/shared-ui-jsx/components/status-chip.component'
 import { useSnackbar } from '@aglyn/shared-ui-snackstack'
 import { Alert, Button, Link, Stack, Typography } from '@mui/material'
@@ -48,6 +52,7 @@ const ACTION_LABELS: Record<PodOrderView['actions'][number], string> = {
  */
 export function OrderPodParts(props: OrderPodPartsProps) {
   const { hostId, order } = props
+  const refused = useSiteKeys(hostId).blocked('printOnDemand.orders', PRINT_ON_DEMAND_SITE_PRESETS['printOnDemand.orders'])
   const request = usePodFetch()
   const { enqueueSnackbar } = useSnackbar()
   const [parts, setParts] = useState<PodOrderView[]>([])
@@ -128,9 +133,9 @@ export function OrderPodParts(props: OrderPodPartsProps) {
             {part.actions.length ? (
               <Stack direction="row" spacing={1}>
                 {part.actions.map((action) => (
-                  <Button
-                    key={action}
-                    size="small"
+                  <BlockedControl key={action} blocked={refused} reason={permissionRefusalText('printOnDemand.orders')}>
+                    <Button
+                                        size="small"
                     disabled={busy}
                     color={action === 'cancel' ? 'error' : 'primary'}
                     variant={action === 'confirm' || action === 'retry' ? 'contained' : 'text'}
@@ -138,6 +143,7 @@ export function OrderPodParts(props: OrderPodPartsProps) {
                   >
                     {ACTION_LABELS[action]}
                   </Button>
+                  </BlockedControl>
                 ))}
               </Stack>
             ) : null}

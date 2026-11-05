@@ -18,6 +18,7 @@
  * limitations under the License.
  */
 
+import { FULFILLMENT_NETWORKS_SITE_PRESETS, type FulfillmentNetworksSitePermission } from '../model/fulfillment-networks-permissions'
 import { createHmac, randomBytes } from 'node:crypto'
 import { FULFILLMENT_NETWORKS_ENV } from '../constants'
 import { networkConnectionId, networkOrderId } from '../model/networks'
@@ -29,7 +30,7 @@ import { mockHttp } from '../testing/mock-http'
 import { openGrant, readFulfillmentNetworksConfig } from './config'
 import type { Engine } from './engine'
 import { readOAuthState, sha256 } from './oauth'
-import { createNetworkRoutes, fail, type NetworkGateResult, type NetworkRole } from './routes'
+import { createNetworkRoutes, fail, type NetworkGateResult, } from './routes'
 import { emptyConnection, type StoredRouting } from './store'
 
 const HOST = 'host-1'
@@ -45,7 +46,9 @@ const ENV = {
   [FULFILLMENT_NETWORKS_ENV.amazonClientSecret]: 'lwa-secret',
 }
 
-function harness(options: { env?: Record<string, string>; role?: NetworkRole } = {}) {
+type GateRole = 'viewer' | 'editor' | 'admin'
+
+function harness(options: { env?: Record<string, string>; role?: GateRole } = {}) {
   const store = createMemoryNetworkStore()
   const env = options.env ?? ENV
   const { http, calls } = mockHttp([
@@ -104,7 +107,7 @@ function harness(options: { env?: Record<string, string>; role?: NetworkRole } =
     applyShipbobEvent: jest.Mock
     applyOrderWebhook: jest.Mock
   }
-  let gateRole: NetworkRole = options.role ?? 'admin'
+  let gateRole: GateRole = options.role ?? 'admin'
   const activity: unknown[] = []
   const routes = createNetworkRoutes({
     now: () => 1_000_000,
@@ -114,9 +117,9 @@ function harness(options: { env?: Record<string, string>; role?: NetworkRole } =
     http,
     engine,
     credential: async () => ({ accessToken: 'opened', channelId: 'ch-5' }),
-    gate: async (request: Request, role: NetworkRole): Promise<NetworkGateResult | Response> => {
-      const rank = { viewer: 1, editor: 2, admin: 3 }
-      if (rank[gateRole] < rank[role]) return fail(403, 'Not permitted')
+    // The gate as the routes climb it: the key each names, read off its preset.
+    gate: async (request: Request, permission: FulfillmentNetworksSitePermission | null): Promise<NetworkGateResult | Response> => {
+      if (permission && !FULFILLMENT_NETWORKS_SITE_PRESETS[permission][gateRole]) return fail(403, 'Not permitted')
       const body = request.method === 'GET' ? {} : ((await request.clone().json().catch(() => ({}))) as Record<string, unknown>)
       return { orgId: 'org-1', hostId: HOST, uid: 'uid-1', body }
     },
@@ -132,7 +135,7 @@ function harness(options: { env?: Record<string, string>; role?: NetworkRole } =
     activity,
     accountCalls,
     env,
-    setRole: (role: NetworkRole) => {
+    setRole: (role: GateRole) => {
       gateRole = role
     },
   }
