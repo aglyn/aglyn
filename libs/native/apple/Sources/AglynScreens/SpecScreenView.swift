@@ -1,6 +1,7 @@
 // Copyright 2026 Aglyn LLC
 // SPDX-License-Identifier: Apache-2.0
 
+import AglynContracts
 import AglynCore
 import AglynPluginHost
 import AglynUI
@@ -53,7 +54,8 @@ public struct SpecScreenView: View {
           spec.scope == "staff" ? "Staff only" : "Not available to your role", systemImage: "lock",
           message: spec.scope == "staff"
             ? "This page is for Aglyn staff."
-            : "Ask an owner or admin of this workspace for access.")
+            : ScreenValues.requiredKey(spec.requires).map { permissionRefusalText(ContractValues.shared.orgRoleGrants, key: $0) }
+              ?? "Ask an owner or admin of this workspace for access.")
       } else if let model {
         if !embedded, splitBlock != nil {
           WideLayoutReader { wide in
@@ -76,6 +78,8 @@ public struct SpecScreenView: View {
     }
     .environment(\.aglynPluginContext, plugin)
     .onChange(of: session.claims) { _, _ in model?.rebase(baseContext) }
+    .onChange(of: session.orgPermissions) { _, _ in model?.rebase(baseContext) }
+    .onChange(of: session.sitePermissions) { _, _ in model?.rebase(baseContext) }
     .navigationTitle(ScreenValues.render(spec.title, in: model?.context ?? baseContext))
     .aglynScreenTitle(ScreenValues.render(spec.title, in: model?.context ?? baseContext))
     .task(id: "\(plugin.orgID ?? ""):\(plugin.hostID ?? ""):\(params.sorted { $0.key < $1.key }.map { "\($0.key)=\($0.value)" })") {

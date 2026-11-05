@@ -1470,8 +1470,9 @@ export interface OrgCrmRoundRobin {
  */
 export const ORG_CLIENT_WRITABLE_FIELDS: Readonly<Record<string, string>> = {
   name:
-    'The workspace name. Deliberately writable by an org admin — the rules ' +
-    'admit the rename branch and `firestore-rules.test.mjs` asserts it still ' +
+    'The workspace name. Deliberately writable by a member holding ' +
+    '"Organization settings" (`org.settings`, owners and admins by default) — ' +
+    'the rules admit the rename branch and `firestore-rules.test.mjs` asserts it still ' +
     'succeeds. Cosmetic: no entitlement, price or routing decision reads it. ' +
     '(The console renames through /api/orgs/settings anyway, because the name ' +
     'is denormalized onto every membership row and the fan-out is a server ' +
@@ -1491,7 +1492,8 @@ export const ORG_CLIENT_WRITABLE_FIELDS: Readonly<Record<string, string>> = {
     'The CRM settings map (AGL-2613): `autoCreateCompanies`, the per-site ' +
     'default owner, the assignment rules and the round-robin pool ' +
     '(AGL-2618), and whatever the CRM → Settings section adds beside them. ' +
-    'Deliberately writable by an org owner or admin — the section writes it ' +
+    'Deliberately writable by a member holding "Change CRM settings" ' +
+    '(`crm.settings`, owners and admins by default, AGL-4047) — the section writes it ' +
     'client-direct by dotted path. No entitlement, price, routing decision ' +
     'or staff judgement reads it; its readers are the contact capture door ' +
     'deciding whether to mint a company record from an email domain and ' +

@@ -61,7 +61,7 @@ one.
    until every box is ticked.
 5. Choose the **Adult age**, from 18 to 21. Signers younger than that need a parent
    or guardian to sign for them (see [Minors](#minors)). It starts at 18.
-6. Leave **A parent or guardian may sign for riders under 18** on if minors ride. The
+6. Leave **A parent or guardian may sign for people under 18** on if minors ride. The
    number in it follows the adult age you chose.
 7. Choose how long **one signature is good for** (see
    [How long a signature lasts](#how-long-a-signature-lasts)).
@@ -173,7 +173,7 @@ When you check people in at the register (see
 shows their waiver for the day:
 
 - **Waiver signed**: a signature covers today.
-- **Signed for 2 of 3 riders**: a signature covers today, but for fewer people than
+- **Signed for 2 of 3 people**: a signature covers today, but for fewer people than
   the customer is checking in. Have the rest sign.
 - **Waiver needed** or **Waiver not on file**: nobody has signed for today yet.
 - **Waiver not matched — check by name**: no waiver was signed with the customer's
@@ -226,8 +226,8 @@ sent the waiver to the display, and the rider's email is optional.
 Each waiver sets its own **Adult age**, from 18 to 21. It starts at 18, and every
 waiver written before the setting existed reads as 18. The examples here use 18.
 
-When **A parent or guardian may sign for riders under 18** is on, the signer can turn
-on **I'm also signing for riders under 18** and add each minor's full name and date of
+When **A parent or guardian may sign for people under 18** is on, the signer can turn
+on **I'm also signing for people under 18** and add each minor's full name and date of
 birth, then say how they're related to them, like *Parent* or *Legal guardian*. One
 signature covers the adult and every minor on it.
 
@@ -288,7 +288,8 @@ counts for any day.
 
 A signer who gives an email is added to your contacts, or matched to the contact you
 already have for them, with the signing on their timeline. Their source reads
-**Waiver signed** in your contacts list, on their record and in the contact reports.
+**Waiver signed** in your contacts list, on their record and in the contact reports,
+and the list's **Source** filter finds everyone who came in that way.
 
 ## Privacy
 
@@ -309,7 +310,7 @@ adult age, if that's later.
 
 When you [erase a person](../../workspace-and-billing/signing-in-and-sessions.md#erasing-a-person)
 from your workspace, the waivers they signed are kept for the same period, not
-erased:
+erased. The **Erase a person** card says so, with your period, before you file:
 
 - its link to the person's contact is removed, because the contact is erased;
 - on the **Signatures** card its status reads **Kept until** and the date it will be

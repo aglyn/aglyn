@@ -118,6 +118,9 @@ type QboRecord = Record<string, unknown>
 
 const ref = (value: string) => ({ value })
 
+/** Whether the company is a US one, read from QuickBooks when the mapping is saved (`prepare`). */
+const isUsCompany = (extras: AccountingProviderExtras) => ['US', 'USA'].includes(extras['companyCountry'] ?? '')
+
 function classify(account: QboRecord): AccountingAccountOption['classification'] {
   const type = String(account['AccountType'] ?? '')
   if (type === 'Bank') return 'bank'
@@ -221,6 +224,7 @@ export function createQuickBooksProvider(
     // Tax-inclusive lines carry their net amount, with the gross beside it.
     const net = doc.taxTreatment === 'inclusive' ? line.amountCents - line.taxCents : line.amountCents
     const quantity = line.quantity || 1
+    const us = isUsCompany(extras)
     return {
       DetailType: 'SalesItemLineDetail',
       Amount: centsToDecimal(net),
@@ -229,8 +233,15 @@ export function createQuickBooksProvider(
         ItemRef: ref(itemId),
         Qty: quantity,
         UnitPrice: Math.round((net / quantity) * 1e4) / 1e6,
-        ...(line.taxCodeId ? { TaxCodeRef: ref(line.taxCodeId) } : {}),
-        ...(doc.taxTreatment === 'inclusive' ? { TaxInclusiveAmt: centsToDecimal(line.amountCents) } : {}),
+        // A US company's line says only whether it is taxable; the tax code
+        // itself goes on the transaction (`salesBody`). Elsewhere the line
+        // names the code.
+        ...(us
+          ? { TaxCodeRef: ref(line.taxCents > 0 ? 'TAX' : 'NON') }
+          : line.taxCodeId
+            ? { TaxCodeRef: ref(line.taxCodeId) }
+            : {}),
+        ...(!us && doc.taxTreatment === 'inclusive' ? { TaxInclusiveAmt: centsToDecimal(line.amountCents) } : {}),
       },
     }
   }
@@ -241,17 +252,30 @@ export function createQuickBooksProvider(
   }
 
   function salesBody(doc: AccountingSaleDoc | AccountingRefundDoc, context: AccountingWriteContext) {
+    const us = isUsCompany(context.extras)
     return {
       DocNumber: doc.externalId,
       TxnDate: doc.date,
       PrivateNote: doc.memo,
       ...(context.customerId ? { CustomerRef: ref(context.customerId) } : {}),
       ...currencyRef(doc.currency, context),
-      GlobalTaxCalculation:
-        doc.taxTreatment === 'exclusive' ? 'TaxExcluded' : doc.taxTreatment === 'inclusive' ? 'TaxInclusive' : 'NotApplicable',
+      // QuickBooks has no such setting on a US company's transaction.
+      ...(us
+        ? {}
+        : {
+            GlobalTaxCalculation:
+              doc.taxTreatment === 'exclusive' ? 'TaxExcluded' : doc.taxTreatment === 'inclusive' ? 'TaxInclusive' : 'NotApplicable',
+          }),
       DepositToAccountRef: ref(doc.depositAccountId),
       Line: doc.lines.map((line) => salesLine(line, doc, context.extras)),
-      ...(doc.taxCents > 0 ? { TxnTaxDetail: { TotalTax: centsToDecimal(doc.taxCents) } } : {}),
+      ...(doc.taxCents > 0
+        ? {
+            TxnTaxDetail: {
+              ...(us && doc.taxCodeId ? { TxnTaxCodeRef: ref(doc.taxCodeId) } : {}),
+              TotalTax: centsToDecimal(doc.taxCents),
+            },
+          }
+        : {}),
     }
   }
 
@@ -379,7 +403,9 @@ export function createQuickBooksProvider(
       const shipping = accounts.shippingIncome ?? income
       const saleItemId = await ensureItem(session, QUICKBOOKS_SALE_ITEM_NAME, income)
       const shippingItemId = await ensureItem(session, QUICKBOOKS_SHIPPING_ITEM_NAME, shipping)
-      return { saleItemId, shippingItemId }
+      const info = await get<{ CompanyInfo?: QboRecord }>(session, `companyinfo/${encodeURIComponent(session.tenantId)}`)
+      const companyCountry = String(info?.CompanyInfo?.['Country'] ?? '').trim().toUpperCase()
+      return { saleItemId, shippingItemId, ...(companyCountry ? { companyCountry } : {}) }
     },
 
     async upsertCustomer(session, customer: AccountingCustomerRef) {
@@ -414,13 +440,32 @@ export function createQuickBooksProvider(
     },
 
     async createExpense(session, doc: AccountingExpenseDoc, context) {
+      // A fee given back is money into clearing and less expense. QuickBooks
+      // honors a purchase's `Credit` only on a credit card, and silently posts
+      // a cash one as more spending, so this one is a deposit.
+      if (doc.credit) {
+        const deposit = {
+          DepositToAccountRef: ref(doc.bankAccountId),
+          TxnDate: doc.date,
+          PrivateNote: doc.memo,
+          ...currencyRef(doc.currency, context),
+          Line: [
+            {
+              DetailType: 'DepositLineDetail',
+              Amount: centsToDecimal(doc.amountCents),
+              Description: doc.memo,
+              DepositLineDetail: { AccountRef: ref(doc.expenseAccountId) },
+            },
+          ],
+        }
+        return created(await post(session, 'deposit', deposit, context.idempotencyKey), 'Deposit')
+      }
       const body = {
         PaymentType: 'Cash',
         AccountRef: ref(doc.bankAccountId),
         TxnDate: doc.date,
         DocNumber: doc.externalId,
         PrivateNote: doc.memo,
-        Credit: doc.credit,
         ...currencyRef(doc.currency, context),
         Line: [
           {
@@ -469,10 +514,10 @@ export function createQuickBooksProvider(
         sale: 'SalesReceipt',
         refund: 'RefundReceipt',
         fee: 'Purchase',
-        'fee-refund': 'Purchase',
         summary: 'JournalEntry',
-        // A transfer has no document number; the request id and the sync
-        // log are its locks.
+        // A deposit and a transfer have no document number; the request id
+        // and the sync log are their locks.
+        'fee-refund': null,
         payout: null,
       }
       const name = entity[kind]

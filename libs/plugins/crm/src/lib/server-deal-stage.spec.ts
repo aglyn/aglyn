@@ -66,6 +66,10 @@ jest.mock('@aglyn/tenant-runtime', () => ({
 const state = {
   member: { role: 'editor', allHosts: true } as Record<string, unknown> | null,
   permitted: true,
+  /** An explicit decision on "Move contacts and deals between stages", on a site. */
+  siteStageKey: undefined as boolean | undefined,
+  /** An explicit decision on it with no site named. */
+  orgStageKey: undefined as boolean | undefined,
   deals: {} as Record<string, Record<string, unknown>>,
   pipelines: {} as Record<string, Record<string, unknown>>,
   contacts: {} as Record<string, Record<string, unknown>>,
@@ -157,7 +161,16 @@ jest.mock('@aglyn/tenant-data-admin', () => ({
       : null,
   resolveOrgMembership: async () =>
     state.member ? { orgId: 'org-1', member: state.member } : null,
-  memberHasOrgPermission: async () => state.permitted,
+  memberHasOrgPermission: async (_orgId: string, _member: unknown, key: string) =>
+    key === 'crm.moveStages' ? (state.orgStageKey ?? state.permitted) : state.permitted,
+  // The catalog's answer on a site: its preset is the member's site role, the
+  // resolver's own `hostRoleFor`, until something decides it.
+  memberHasPermissionOnHost: async (_orgId: string, hostId: string, member: Record<string, unknown> | null) =>
+    Boolean(member) &&
+    (state.siteStageKey ??
+      ['admin', 'editor'].includes(
+        String(jest.requireActual('@aglyn/aglyn/app-utils/organizations').hostRoleFor(member, hostId) ?? ''),
+      )),
   getOrgDoc: async (orgId: string) =>
     orgId === 'org-1' ? { $id: 'org-1', ...state.org } : null,
   logOrgActivity: async (orgId: string, actor: unknown, action: string, target: unknown) => {
@@ -224,10 +237,11 @@ beforeEach(() => {
   state.org = { plan: 'starter' }
   state.member = { role: 'editor', allHosts: true }
   state.permitted = true
+  state.siteStageKey = undefined
+  state.orgStageKey = undefined
   state.orgPermissions = {
     orgId: 'org-1',
     role: 'editor',
-    isOwner: false,
     permissions: { 'data.manage': true },
     orgWide: true,
     hostRole: 'editor',
@@ -296,6 +310,51 @@ describe('the deal-stage route (AGL-2598)', () => {
 
     expect(state.updates).toEqual([])
     expect(emitted).toEqual([])
+  })
+
+  describe('"Move contacts and deals between stages" on a site (AGL-4047)', () => {
+    const MOVE = { hostId: 'shop', dealId: 'd1', stageId: 'negotiation-review' }
+    const REFUSAL = 'Your role does not include "Move contacts and deals between stages" — ask an organization admin'
+
+    it.each([
+      ['the owner', { role: 'owner' }, 200],
+      ['an admin', { role: 'admin' }, 200],
+      ['a workspace editor', { role: 'editor', allHosts: true }, 200],
+      ['a collaborator, Admin here', { role: 'viewer', allHosts: false, hostAccess: { shop: 'admin' } }, 200],
+      ['a collaborator, Editor here', { role: 'viewer', allHosts: false, hostAccess: { shop: 'editor' } }, 200],
+      ['a viewer made Editor here', { role: 'viewer', allHosts: true, hostAccess: { shop: 'editor' } }, 200],
+      ['an editor narrowed to Author here', { role: 'editor', allHosts: true, hostAccess: { shop: 'author' } }, 403],
+      ['a workspace viewer', { role: 'viewer', allHosts: true }, 403],
+      ['a collaborator, Author here', { role: 'editor', allHosts: false, hostAccess: { shop: 'author' } }, 403],
+      ['a collaborator elsewhere', { role: 'editor', allHosts: false, hostAccess: { other: 'admin' } }, 403],
+    ])('with nothing decided, %s answers as the site role did', async (_name, member, expected) => {
+      state.member = member
+      const { status, body } = await call(MOVE)
+      expect(status).toBe(expected)
+      if (expected === 403) expect(body).toEqual({ error: REFUSAL })
+    })
+
+    it('a grant admits a viewer, and a refusal stops an admin of the site', async () => {
+      state.member = { role: 'viewer', allHosts: true }
+      state.siteStageKey = true
+      expect((await call(MOVE)).status).toBe(200)
+      state.deals['d1']['stageId'] = 'prospecting'
+      state.member = { role: 'admin' }
+      state.siteStageKey = false
+      const refused = await call(MOVE)
+      expect(refused.status).toBe(403)
+      expect(refused.body).toEqual({ error: REFUSAL })
+    })
+
+    it('still asks "Manage data", whatever the key says', async () => {
+      state.member = { role: 'viewer', allHosts: false, hostAccess: { shop: 'admin' } }
+      state.siteStageKey = true
+      state.permitted = false
+      const { status, body } = await call(MOVE)
+      expect(status).toBe(403)
+      expect(body).toEqual({ error: 'Moving a deal requires the "Manage data" permission.' })
+      expect(state.updates).toEqual([])
+    })
   })
 
   it('refuses a deal the calling site cannot see', async () => {
@@ -524,6 +583,18 @@ describe('the deal-stage route at the organization level (AGL-2634)', () => {
     expect(state.updates).toEqual([])
     expect(emitted).toEqual([])
     expect(state.orgLines).toEqual([])
+  })
+
+  it('a refusal of "Move contacts and deals between stages" stops the org hub too, and staff are not asked it', async () => {
+    state.orgStageKey = false
+    const refused = await call({ ...ORG, stageId: 'negotiation-review' })
+    expect(refused.status).toBe(403)
+    expect(refused.body).toEqual({
+      error: 'Your role does not include "Move contacts and deals between stages" — ask an organization admin',
+    })
+    expect(state.updates).toEqual([])
+    const staff = await call({ ...ORG, stageId: 'negotiation-review' }, { token: 'staff' })
+    expect(staff.status).toBe(200)
   })
 
   it('moves a deal no site captured, with no event to emit and the org line still written', async () => {

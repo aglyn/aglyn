@@ -33,7 +33,7 @@ import {
   listingArtifactType,
   resolveEmailStarterAssurance,
 } from '../model'
-import { canActAsPublisher } from './publisher-profile'
+import { ownsListingHere } from './own-listing'
 import { requirePurchase } from './purchase-entitlement'
 import { recordInstallProvenance } from './provenance'
 import { recordVersionMove } from './version-stats'
@@ -135,11 +135,13 @@ export const installEmailStarterHandler: PluginApiHandler = async (req, res) => 
       return res.status(404).json({ error: 'Unknown email starter' })
     }
 
-    const ownsListing = await canActAsPublisher(
-      firestore,
-      decoded.uid,
-      listing.profileId,
-    )
+    // Free for the publisher's members on its OWN sites only (AGL-2484,
+    // AGL-4047); into another workspace they are buyers like anyone else.
+    const ownsListing = await ownsListingHere(firestore, {
+      uid: decoded.uid,
+      publisherOrgId: listing.profileId,
+      targetOrgId: membership.orgId,
+    })
     if (isPrivateListing(listing) && !ownsListing) {
       return res.status(404).json({ error: 'Unknown listing' })
     }

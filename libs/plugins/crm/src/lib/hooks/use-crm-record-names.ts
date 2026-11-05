@@ -16,8 +16,15 @@
  */
 
 import { contactDisplayName, CRM_COLLECTIONS } from '@aglyn/aglyn'
-import { useFirestore } from '@aglyn/tenant-feature-instance'
-import { doc, type Firestore, getDoc } from 'firebase/firestore'
+import { subscribeFirestoreSessionHeal, useFirestore } from '@aglyn/tenant-feature-instance'
+import {
+  doc,
+  type DocumentReference,
+  type DocumentSnapshot,
+  type Firestore,
+  getDoc,
+  getDocFromCache,
+} from 'firebase/firestore'
 import { useCallback, useEffect, useState } from 'react'
 import { contactPrimaryGroup } from '../model/contact-record'
 
@@ -79,6 +86,60 @@ const cacheKey = (orgId: string, kind: CrmRecordKind, id: string) =>
 export function resetCrmRecordNameCache(): void {
   nameCache.clear()
   pending.clear()
+  retriesSpentAt = 0
+}
+
+/**
+ * The post-sign-in race's budget: the one the page's own listeners spend
+ * before they give up (`use-firestore-doc`, AGL-216). That race resolves in
+ * well under two seconds.
+ */
+const READ_RETRIES = 5
+const READ_RETRY_MS = 400
+
+/**
+ * When a name read last spent its whole budget and was still refused.
+ *
+ * Surviving the budget means it is not the post-sign-in race, and a session
+ * the server refuses refuses every read: a task list naming fifty records
+ * would otherwise spend six refused reads on each (AGL-1440, where retries
+ * that ignored what the last read had learned multiplied a dead session's
+ * cost sixfold). For a minute after, a read tries once. One read that gets
+ * through re-arms the budget.
+ */
+let retriesSpentAt = 0
+const RETRIES_SPENT_WINDOW_MS = 60_000
+
+/**
+ * One record's document, read the way the page beside it is.
+ *
+ * A one-shot read gets no second try for free, and a record page's listeners
+ * do: they retry a refusal, they reopen when the session heals, and under
+ * `persistentLocalCache` they keep painting the cached document while the
+ * server refuses. So a single failed `getDoc` left a card naming a person by
+ * their id while the person's own page, open beside it, showed the name. The
+ * read retries on the listeners' budget, and when the server still cannot be
+ * read it names the record from the cached copy the page's listeners show.
+ * Throws only when neither has it.
+ */
+async function readRecordDocument(ref: DocumentReference): Promise<DocumentSnapshot> {
+  for (let attempt = 0; ; attempt += 1) {
+    try {
+      const snapshot = await getDoc(ref)
+      retriesSpentAt = 0
+      return snapshot
+    } catch (error) {
+      const spent =
+        attempt >= READ_RETRIES || Date.now() - retriesSpentAt < RETRIES_SPENT_WINDOW_MS
+      if (spent) {
+        retriesSpentAt = Date.now()
+        return getDocFromCache(ref).catch(() => {
+          throw error
+        })
+      }
+      await new Promise((resolve) => setTimeout(resolve, READ_RETRY_MS))
+    }
+  }
 }
 
 /**
@@ -99,7 +160,7 @@ function startNameReads(
     if (nameCache.has(key)) continue
     let read = pending.get(key)
     if (!read) {
-      read = getDoc(doc(firestore, 'orgs', orgId, CRM_RECORD_COLLECTIONS[kind], id))
+      read = readRecordDocument(doc(firestore, 'orgs', orgId, CRM_RECORD_COLLECTIONS[kind], id))
         .then((snapshot) => {
           const data = snapshot.exists() ? (snapshot.data() as Record<string, unknown>) : undefined
           nameCache.set(
@@ -108,8 +169,9 @@ function startNameReads(
           )
         })
         .catch(() => {
-          // A refused or failed read is not cached: the cell keeps showing
-          // the id, and the next mount tries again.
+          // A read that failed even after its retries is not cached: the
+          // cell keeps showing the id, and the next mount, or the session
+          // healing, tries again.
         })
         .finally(() => {
           pending.delete(key)
@@ -165,6 +227,10 @@ export function useCrmRecordNames(options: {
   // A counter rather than a copy of the cache: the cache is the source of
   // truth and this only exists to re-render when it grows.
   const [, setResolved] = useState(0)
+  // Bumped when the session heals, so a name whose read was refused is read
+  // again on this mount, as the page's listeners reopen then too.
+  const [healed, setHealed] = useState(0)
+  useEffect(() => subscribeFirestoreSessionHeal(() => setHealed((count) => count + 1)), [])
 
   // The pairs as one string, so the effect runs when the SET changes and not
   // when the caller builds a new array of the same pairs on every render.
@@ -194,7 +260,7 @@ export function useCrmRecordNames(options: {
     return () => {
       active = false
     }
-  }, [firestore, orgId, groupId, wanted])
+  }, [firestore, orgId, groupId, wanted, healed])
 
   return useCallback(
     (kind: CrmRecordKind, id: string) => {

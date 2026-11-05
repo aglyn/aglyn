@@ -18,6 +18,7 @@
 import {
   WAIVERS_CONFIG_SCHEMA,
   WAIVER_RETENTION_YEARS,
+  waiverErasureKeptLine,
   waiverRetainUntilMs,
   waiverRetentionStamp,
   waiverRetentionStampMoved,
@@ -82,5 +83,22 @@ describe('when a kept signature is deleted', () => {
     expect(waiverRetentionStampMoved({ retainUntilMs: stamp.retainUntilMs }, stamp)).toBe(true)
     expect(waiverRetentionStampMoved({ ...stamp }, stamp)).toBe(false)
     expect(waiverRetentionStampMoved({ ...stamp }, waiverRetentionStamp({ validThroughDayKey: '2026-10-24' }, 3))).toBe(true)
+  })
+})
+
+describe('the sentence the Erase a person card prints', () => {
+  it('reads in full, for one period', () => {
+    expect(waiverErasureKeptLine([7, 7])).toBe(
+      'Any waiver signed with this address stays as signed, with the person’s name on it, for your ' +
+        'waiver retention period (now 7 years) after the last day it covers, or after the youngest ' +
+        'minor on it reaches the waiver’s adult age if that is later, and is then deleted',
+    )
+  })
+
+  it('says one year in the singular, a range when the sites differ, and no figure when it has none', () => {
+    expect(waiverErasureKeptLine([1])).toContain('(now 1 year)')
+    expect(waiverErasureKeptLine([9, 3, 5])).toContain('(now 3 to 9 years, depending on the site)')
+    expect(waiverErasureKeptLine(null)).toContain('(set per site)')
+    expect(waiverErasureKeptLine([])).toContain('(set per site)')
   })
 })

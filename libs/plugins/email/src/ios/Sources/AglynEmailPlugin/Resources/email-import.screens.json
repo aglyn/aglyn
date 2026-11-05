@@ -264,7 +264,7 @@
       "subtitle": "{params.name}",
       "icon": "arrow.up.arrow.down|sync",
       "scope": "site",
-      "requires": "org.manager",
+      "requires": "org.can[data.manage]",
       "load": {
         "unfinished": {
           "url": "/api/transfer/jobs",

@@ -117,14 +117,14 @@ One message can ask for any mix of:
 - **who can see the site**: turn maintenance mode on or off, hide the site from search
   engines or allow them again, or set pages to Public, Unlisted or Members only, such as
   *make my site private until launch* or *hide the pricing page*. Maintenance mode needs
-  the admin role on the site. Assist never sets a page password. See
+  the **Manage site settings** permission on the site. Assist never sets a page password. See
   [Make your site private](../building-sites/site-protection/make-your-site-private.md#ask-aglyn-ai).
 - **store setup**: shipping zones and rates, local pickup, local delivery and sales tax,
   such as *free shipping over $50, otherwise $5 flat in the US*. See
   [Shipping](../commerce-and-bookings/commerce/shipping.md#ask-aglyn-ai),
   [Pickup & local delivery](../commerce-and-bookings/commerce/pickup-and-local-delivery.md#ask-aglyn-ai)
   and [Tax settings](../commerce-and-bookings/commerce/overview.md#tax-settings). Store
-  setup needs the admin or editor role on the site.
+  setup needs the **Publish site content** permission on the site.
 - **a theme change**: new colors, fonts or corners for the whole site, such as *give it a
   warmer look*. One build proposes one. It is a proposal, the same one the
   [Theme assistant](./theme-assist.md) makes: your theme does not change until you apply it.

@@ -5,7 +5,11 @@
       "id": "org1",
       "name": "Acme",
       "role": "admin",
-      "manager": true
+      "manager": true,
+      "can": {
+        "data.manage": true,
+        "commerce.quotes.send": false
+      }
     },
     "staff": {
       "is": false,
@@ -284,6 +288,11 @@
       },
       "siteEraseNone": {
         "resources": []
+      },
+      "storedRole": {
+        "a": true,
+        "b": true,
+        "kept": false
       }
     },
     "now": {
@@ -299,7 +308,10 @@
       "quota.empty": "",
       "feature.a": "true",
       "feature.b": "false",
-      "feature.c": ""
+      "feature.c": "",
+      "role.a": "false",
+      "role.b": "",
+      "role.c": "true"
     }
   },
   "render": [
@@ -1531,6 +1543,54 @@
           "u2": "b@acme.test"
         }
       }
+    },
+    {
+      "body": {
+        "over": {
+          "$collect": {
+            "prefix": "role.",
+            "as": "flag",
+            "over": "data.storedRole"
+          }
+        },
+        "changes": {
+          "$collect": {
+            "prefix": "role.",
+            "as": "flag",
+            "changes": "data.storedRole"
+          }
+        },
+        "fresh": {
+          "$collect": {
+            "prefix": "role.",
+            "as": "flag",
+            "over": "data.noSuchRole"
+          }
+        },
+        "same?": {
+          "$collect": {
+            "prefix": "nothing.",
+            "as": "flag",
+            "changes": "data.storedRole"
+          }
+        }
+      },
+      "expect": {
+        "over": {
+          "a": false,
+          "c": true,
+          "kept": false
+        },
+        "changes": {
+          "a": false,
+          "b": null,
+          "c": true
+        },
+        "fresh": {
+          "a": false,
+          "c": true
+        }
+      }
     }
   ],
   "condition": [
@@ -1540,6 +1600,26 @@
     },
     {
       "when": "org.manager",
+      "expect": true
+    },
+    {
+      "when": "org.can[data.manage]",
+      "expect": true
+    },
+    {
+      "when": "!org.can[data.manage]",
+      "expect": false
+    },
+    {
+      "when": "org.can[commerce.quotes.send]",
+      "expect": false
+    },
+    {
+      "when": "org.can[not.in.the.catalog]",
+      "expect": false
+    },
+    {
+      "when": "org.can[data.manage] && params.uid == u2",
       "expect": true
     },
     {

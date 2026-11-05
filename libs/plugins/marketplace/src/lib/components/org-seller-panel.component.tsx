@@ -53,6 +53,12 @@ import {
 */
 import { PLATFORM_BRAND_LEGAL_NAME } from '@aglyn/aglyn/app-utils/platform-brand'
 import { LISTING_LOGO_HINT } from '../constants/listing-media'
+import {
+  MARKETPLACE_MANAGE_LISTINGS_PERMISSION,
+  MARKETPLACE_PAYOUTS_PERMISSION,
+  MARKETPLACE_PUBLISHER_PROFILE_PERMISSION,
+  marketplacePublisherPermissionRefusal,
+} from '../model/marketplace-publisher-permissions'
 import { useRouter } from 'next/navigation'
 import { collection, doc, query, where } from 'firebase/firestore'
 import { type ReactElement, useCallback, useEffect, useState } from 'react'
@@ -90,6 +96,16 @@ export interface OrgSellerPanelProps {
    * table, which a plugin may not import.
    */
   basePath: string
+  /**
+   * The viewer's resolved permissions, from the shell (AGL-4047). Saving the
+   * profile asks "Edit the publisher profile", a listing's edit, visibility
+   * and unpublish actions ask "Manage published listings", and setting up
+   * payouts asks "Manage marketplace payouts", as their routes (and, for the
+   * first two, the rules) do; a control the viewer may not use stays on
+   * screen, disabled, with the permission named. An absent key reads as
+   * allowed, as the map reads while it loads: the route still decides.
+   */
+  permissions?: Record<string, boolean | undefined>
 }
 
 /**
@@ -102,7 +118,13 @@ export interface OrgSellerPanelProps {
  * navigated to is mounted at all, so the others never subscribe.
  */
 export function OrgSellerPanel(props: OrgSellerPanelProps) {
-  const { orgId, section, basePath } = props
+  const { orgId, section, basePath, permissions } = props
+  const canEditProfile =
+    permissions?.[MARKETPLACE_PUBLISHER_PROFILE_PERMISSION] !== false
+  const canManageListings =
+    permissions?.[MARKETPLACE_MANAGE_LISTINGS_PERMISSION] !== false
+  const canManagePayouts =
+    permissions?.[MARKETPLACE_PAYOUTS_PERMISSION] !== false
   const router = useRouter()
   const firestore = useFirestore()
   const { data: user } = useUser()
@@ -660,13 +682,14 @@ export function OrgSellerPanel(props: OrgSellerPanelProps) {
           <PublisherAgreementCheckbox
             checked={profileAgreement.agreed}
             onChange={profileAgreement.setAgreed}
-            disabled={profileBusy}
+            disabled={profileBusy || !canEditProfile}
           />
           <Button
             variant="contained"
             color="primary"
             disabled={
               profileBusy ||
+              !canEditProfile ||
               !validHandle ||
               !displayName.trim() ||
               !profileAgreement.agreed
@@ -675,6 +698,14 @@ export function OrgSellerPanel(props: OrgSellerPanelProps) {
           >
             {profileBusy ? 'Saving…' : 'Save profile'}
           </Button>
+          {/* Why Save is off, named (AGL-4047). */}
+          {canEditProfile ? null : (
+            <Typography variant="caption" color="text.secondary">
+              {marketplacePublisherPermissionRefusal(
+                MARKETPLACE_PUBLISHER_PROFILE_PERMISSION,
+              )}
+            </Typography>
+          )}
         </Stack>
       </CardDisplay>
 
@@ -742,6 +773,15 @@ export function OrgSellerPanel(props: OrgSellerPanelProps) {
           </Typography>
         ) : (
           <Stack spacing={1}>
+            {/* Why a row's Edit, visibility and Unpublish are off, named
+                (AGL-4047). */}
+            {canManageListings ? null : (
+              <Typography variant="caption" color="text.secondary">
+                {marketplacePublisherPermissionRefusal(
+                  MARKETPLACE_MANAGE_LISTINGS_PERMISSION,
+                )}
+              </Typography>
+            )}
             {/* Private plugins are invisible in Browse by design (AGL-993),
                 which makes this the only door to them — say so, or a
                 publisher looking for the one they just uploaded will hunt
@@ -856,6 +896,7 @@ export function OrgSellerPanel(props: OrgSellerPanelProps) {
             </MenuItem>
           ) : null}
           <MenuItem
+            disabled={!canManageListings}
             onClick={() => {
               setEditListing(rowMenu?.listing ?? null)
               closeRowMenu()
@@ -870,6 +911,7 @@ export function OrgSellerPanel(props: OrgSellerPanelProps) {
           {(rowMenu?.listing?.artifactType ?? rowMenu?.listing?.type) ===
           'plugin' ? (
             <MenuItem
+              disabled={!canManageListings}
               onClick={() => {
                 const listing = rowMenu?.listing
                 closeRowMenu()
@@ -883,6 +925,7 @@ export function OrgSellerPanel(props: OrgSellerPanelProps) {
           ) : null}
           <Divider />
           <MenuItem
+            disabled={!canManageListings}
             sx={{
               color: rowMenu?.listing?.deletedAt ? undefined : 'error.main',
             }}
@@ -1000,7 +1043,7 @@ export function OrgSellerPanel(props: OrgSellerPanelProps) {
               <Button
                 variant={chargesEnabled ? 'outlined' : 'contained'}
                 color="primary"
-                disabled={payoutsBusy}
+                disabled={payoutsBusy || !canManagePayouts}
                 onClick={handlePayouts}
               >
                 {payoutsBusy
@@ -1015,6 +1058,14 @@ export function OrgSellerPanel(props: OrgSellerPanelProps) {
                           ? 'Recheck payout status'
                           : 'Set up payouts'}
               </Button>
+              {/* Why the payout button is off, named (AGL-4047). */}
+              {canManagePayouts ? null : (
+                <Typography variant="caption" color="text.secondary">
+                  {marketplacePublisherPermissionRefusal(
+                    MARKETPLACE_PAYOUTS_PERMISSION,
+                  )}
+                </Typography>
+              )}
               {/*
                 Where the money actually is. Aglyn records no
                 balance, no payout schedule, and handles no `payout.failed`

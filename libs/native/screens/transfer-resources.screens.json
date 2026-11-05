@@ -7,7 +7,7 @@
       "subtitle": "Export what each plugin keeps, or move a package",
       "icon": "tablecells|view_agenda",
       "scope": "org",
-      "requires": "org.manager",
+      "requires": "org.can[data.manage]",
       "load": {
         "sw": {
           "switchboard": "org"
@@ -504,7 +504,7 @@
       "scope": "site",
       "group": "site",
       "order": 61,
-      "requires": "org.manager",
+      "requires": "org.can[data.manage]",
       "load": {
         "sw": {
           "switchboard": "site"

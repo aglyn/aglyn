@@ -243,8 +243,7 @@ describe('every Outreach read asks the entitlement, and no client writes (AGL-29
     // document's get(). CEL's `&&` short-circuits left to right.
     const expression = returned(canRead)
     expect(expression.startsWith('isOrgWideMember() &&')).toBe(true)
-    expect(expression).toContain("memberStamps('outreach.use')")
-    expect(expression).toContain("memberResolves('outreach.use')")
+    expect(expression).toContain("memberKeyOrOverride('outreach.use', ['owner', 'admin'])")
     expect(expression.endsWith('&& orgCarriesOutreach(orgId)')).toBe(true)
   })
 

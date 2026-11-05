@@ -35,7 +35,7 @@ import {
 import { useEffect, useMemo, useState } from 'react'
 import usePinnedOrgs from '../hooks/use-pinned-orgs'
 import useOrgScope from '../hooks/use-org-scope'
-import { PINNED_HOSTS_PER_WORKSPACE } from '@aglyn/aglyn/app-utils/account-preferences'
+import { PINNED_HOSTS_MAX } from '@aglyn/aglyn/app-utils/account-preferences'
 import { PINNED_ORGS_MAX } from '../utils/workspace-list'
 
 /** A pinned workspace, or a pinned site, as a dialog names it. */
@@ -59,7 +59,8 @@ export interface PinnedFullDialogProps {
  * "Pinned is full. Replace one?" (AGL-3943). Pins are capped at five
  * everywhere (Zach, 2026-10-18), and a sixth is never made room for quietly:
  * the reader picks the pin it takes the place of, or keeps the five. Site
- * pins ask the same question, five to a workspace.
+ * pins have no cap a workspace (AGL-4165) and ask the same question only at
+ * the account-wide bound.
  */
 export function PinnedFullDialog({
   pinning,
@@ -75,7 +76,7 @@ export function PinnedFullDialog({
       <DialogContent sx={{ display: 'flex', flexDirection: 'column', gap: 1 }}>
         <Typography variant="body2" color="text.secondary">
           {(site
-            ? `You can pin up to ${PINNED_HOSTS_PER_WORKSPACE} sites in a workspace. `
+            ? `You can pin up to ${PINNED_HOSTS_MAX} sites. `
             : `You can pin up to ${PINNED_ORGS_MAX} workspaces. `) +
             `Pick the one ${pinning?.name ?? (site ? 'this site' : 'this workspace')} ` +
             'takes the place of.'}

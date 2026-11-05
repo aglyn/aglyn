@@ -70,6 +70,12 @@ export interface OrgPermissionEntry {
    * refines.
    */
   follows?: string
+  /**
+   * Whether a site can narrow the key (`narrowsPerSite`, AGL-4047), so the
+   * role and member editors offer its "follow the site role" choice. Absent
+   * for a key a site cannot narrow.
+   */
+  narrowable?: boolean
 }
 
 /** A heading the role editor groups keys under. */
@@ -280,7 +286,7 @@ export const CORE_ORG_PERMISSION_ENTRIES: readonly OrgPermissionEntry[] = [
     key: 'data.manage',
     group: 'datasets',
     label: 'Manage data',
-    description: 'Create, edit, and delete organization datasets.',
+    description: 'Create, edit, and delete organization datasets, the CRM’s records, and marketing lists and topics.',
   },
   // Workspace content that asked for the owner, admin or editor role
   // (AGL-4047), each a key whose default is exactly those roles.
@@ -393,6 +399,8 @@ export function assembleOrgRoleGrants(
       ...(declaration.follows && declaration.follows !== declaration.key && !declaration.refines
         ? { follows: declaration.follows }
         : {}),
+      // A plugin's own declaration carries `narrowsPerSite` (a flag or one per role); only whether it is set matters here.
+      ...((declaration as { narrowsPerSite?: unknown }).narrowsPerSite ? { narrowable: true } : {}),
     })
     if (group && !groupIds.has(group)) {
       groupIds.add(group)

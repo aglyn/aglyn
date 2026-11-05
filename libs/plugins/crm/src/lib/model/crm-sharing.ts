@@ -18,7 +18,7 @@
 /**
  * CRM SHARING FOR MULTI-BRAND ORGS (AGL-3336).
  *
- * An org manager shares a lead, a contact, a company or a deal with other
+ * A member holding "Change CRM settings" shares a lead, a contact, a company or a deal with other
  * sites — by hand, from the record or a list's bulk bar, or by a SHARING
  * RULE that applies to every record it matches, now and later. The model is
  * Salesforce's three layers:

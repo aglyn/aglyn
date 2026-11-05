@@ -16,13 +16,9 @@
  */
 'use client'
 
-import {
-  authorizedFetch,
-  type TokenSource,
-} from '@aglyn/shared-util-http/authorized-token'
-import { type CrmMemberOption, crmMemberOption, findOrgMember } from '@aglyn/aglyn'
-import { useUser } from '@aglyn/tenant-feature-instance'
-import { useCallback, useEffect, useMemo, useRef, useState } from 'react'
+import { type CrmMemberOption, findOrgMember } from '@aglyn/aglyn'
+import { useCallback } from 'react'
+import { useOrgMemberDirectory } from '../hooks/use-org-member-directory'
 
 /** One team member, as an owner picker lists them. */
 export type OrgMemberOption = CrmMemberOption
@@ -49,81 +45,46 @@ export interface OrgMembers {
  * THE WORKSPACE'S ROSTER, for picking and naming a contact's owner
  * (AGL-2596).
  *
- * Read through `/api/orgs/members`, not from Firestore: the roster is
- * evaluated against the QUERY by the rules, and a scoped member's read of
- * `orgs/{orgId}/members` is refused for exactly the shape the owner picker
- * needs — every row. The route re-derives membership with the Admin SDK and
- * answers any member of the org, which is who may see who else is on the
- * team.
+ * The same read the deal and task cards name their owners and assignees
+ * with, {@link useOrgMemberDirectory}: `/api/orgs/members`, not Firestore,
+ * because a scoped member's read of `orgs/{orgId}/members` is refused for
+ * exactly the shape the owner picker needs, every row. One request per
+ * workspace for the life of the page, shared by every card that names a
+ * teammate.
  *
- * Read only when ASKED — `enabled` — and once per workspace for the life of
- * the mount. The list of contacts does not need the roster until a row
- * carries an owner or the create drawer opens, and a request per mount of a
- * page that may never show a name is a read paid for nothing.
+ * This hook used to make its own request, once per mount, with whatever
+ * sign-in it had at that moment, and kept a failed answer as the roster. A
+ * contact page whose one request failed (the token not ready yet, a busy
+ * route) named its owner by uid until it was reloaded, while the deal page
+ * beside it, reading through the directory, named the same person. The
+ * directory waits for the signed-in user and asks again after a failure that
+ * can clear.
+ *
+ * Read only when ASKED — `enabled`. The list of contacts does not need the
+ * roster until a row carries an owner or the create drawer opens, and a
+ * request for a page that may never show a name is a read paid for nothing.
  */
 export function useOrgMembers(
   orgId: string | null | undefined,
   options: { enabled?: boolean } = {},
 ): OrgMembers {
   const enabled = options.enabled ?? false
-  const { data: user } = useUser()
-  const userRef = useRef(user)
-  userRef.current = user
-  const [loaded, setLoaded] = useState<{
-    orgId: string
-    options: OrgMemberOption[]
-  } | null>(null)
-  const loadedOrgId = loaded?.orgId ?? null
-
-  useEffect(() => {
-    if (!enabled || !orgId || loadedOrgId === orgId) return undefined
-    let active = true
-    void authorizedFetch(
-      userRef.current as TokenSource | null | undefined,
-      `/api/orgs/members?orgId=${encodeURIComponent(orgId)}`,
-    )
-      .then(async (response) =>
-        response.ok ? ((await response.json()) as { members?: unknown[] }) : {},
-      )
-      .then((json) => {
-        if (!active) return
-        const members = Array.isArray(json?.members) ? json.members : []
-        setLoaded({
-          orgId,
-          options: members
-            .map((member) => crmMemberOption((member ?? {}) as Record<string, unknown>))
-            .filter((option): option is OrgMemberOption => option !== null)
-            .sort((a, b) => a.label.localeCompare(b.label)),
-        })
-      })
-      .catch(() => {
-        // An unanswered roster is an EMPTY picker, not a broken page: the
-        // owner column falls back to the uid, and the picker says it has
-        // nobody to offer.
-        if (active) setLoaded({ orgId, options: [] })
-      })
-    return () => {
-      active = false
-    }
-  }, [enabled, orgId, loadedOrgId])
-
-  const current = loaded && loaded.orgId === orgId ? loaded : null
-  const roster = useMemo(() => current?.options ?? [], [current])
-  const memberName = useCallback(
-    (ref: string) => findOrgMember(roster, ref)?.label ?? ref,
-    [roster],
-  )
+  const directory = useOrgMemberDirectory(enabled ? orgId : null)
+  const { members, nameOf } = directory
   const memberEmail = useCallback(
     (ref: string) => {
-      const member = findOrgMember(roster, ref)
+      const member = findOrgMember(members, ref)
       return member?.email || member?.label || ref
     },
-    [roster],
+    [members],
   )
   return {
-    options: roster,
-    ready: current !== null,
-    memberName,
+    options: members,
+    // An unanswered roster is an EMPTY picker, not a broken page: the owner
+    // column falls back to the uid, and the picker says it has nobody to
+    // offer.
+    ready: enabled && Boolean(orgId) && !directory.loading,
+    memberName: nameOf,
     memberEmail,
   }
 }

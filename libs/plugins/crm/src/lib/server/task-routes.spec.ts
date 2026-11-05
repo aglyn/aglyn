@@ -239,7 +239,12 @@ beforeEach(() => {
     .mockImplementation(async (uid: string, orgId: string) =>
       roster[uid] ? { orgId, member: roster[uid] } : null,
     )
-  memberHasOrgPermission.mockReset().mockResolvedValue(true)
+  // The key's default: the owner, admins and editors.
+  memberHasOrgPermission
+    .mockReset()
+    .mockImplementation(async (_orgId: string, member: { role?: string } | null) =>
+      ['owner', 'admin', 'editor'].includes(String(member?.role)),
+    )
   notifyUsers.mockReset().mockResolvedValue(undefined)
   emitHostEvent.mockReset().mockResolvedValue({ alerts: [] })
 })
@@ -262,7 +267,7 @@ describe('crm/task-save', () => {
     expect(stored()).toEqual([])
   })
 
-  it('refuses a caller with no token, and one whose role cannot write org data', async () => {
+  it('refuses a caller with no token, and one without "Manage data"', async () => {
     const anonymous = await call(crmTaskSaveHandler, {
       body: { hostId: HOST_ID, task: task() },
       token: null,
@@ -275,14 +280,30 @@ describe('crm/task-save', () => {
     })
     expect(viewer.status).toBe(403)
 
-    // The rules' other half: a writer role whose custom permission map has
-    // revoked `data.manage` is refused too.
+    // A custom permission map that revoked `data.manage` refuses an editor.
     roster[WRITER] = { role: 'editor' }
     memberHasOrgPermission.mockResolvedValue(false)
     const revoked = await call(crmTaskSaveHandler, {
       body: { hostId: HOST_ID, task: task() },
     })
     expect(revoked.status).toBe(403)
+    expect(revoked.body).toEqual({ error: 'Your role does not include "Manage data" — ask an organization admin' })
+    expect(stored()).toEqual([])
+  })
+
+  it('a grant of "Manage data" admits a viewer, as the rules do (AGL-4047)', async () => {
+    roster[WRITER] = { role: 'viewer' }
+    memberHasOrgPermission.mockResolvedValue(true)
+    const { status } = await call(crmTaskSaveHandler, { body: { hostId: HOST_ID, task: task() } })
+    expect(status).toBe(200)
+    expect(stored()).toHaveLength(1)
+  })
+
+  it('refuses a suspended member, whatever they hold (AGL-4047)', async () => {
+    roster[WRITER] = { role: 'owner', orgSuspended: true }
+    memberHasOrgPermission.mockResolvedValue(true)
+    const { status } = await call(crmTaskSaveHandler, { body: { hostId: HOST_ID, task: task() } })
+    expect(status).toBe(403)
     expect(stored()).toEqual([])
   })
 
@@ -1165,13 +1186,13 @@ describe('the plan (AGL-2787)', () => {
       expect(stored()).toHaveLength(1)
     })
 
-    it('tells a viewer about the role, not the plan', async () => {
+    it('tells a viewer about the permission, not the plan', async () => {
       roster[WRITER] = { role: 'viewer' }
       const { status, body } = await call(crmTaskSaveHandler, {
         body: { hostId: HOST_ID, task: task() },
       })
       expect(status).toBe(403)
-      expect(body).toEqual({ error: 'Your organization role does not allow editing the CRM.' })
+      expect(body).toEqual({ error: 'Your role does not include "Manage data" — ask an organization admin' })
     })
   })
 

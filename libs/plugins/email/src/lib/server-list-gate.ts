@@ -66,6 +66,7 @@ import {
   filterSuppressedEmails,
   firebaseAdmin,
   getOrgForHost,
+  memberHasOrgPermission,
   orgDataCollectionForHost,
   resolveOrgMembership,
 } from '@aglyn/tenant-data-admin'
@@ -172,7 +173,7 @@ export async function resolveListContext(
   const membership = await resolveOrgMembership(decoded.uid, orgId).catch(
     () => null,
   )
-  if (!isOrgWideListWriter(membership?.member)) {
+  if (!(await isOrgWideListWriter(orgId, membership?.member))) {
     return {
       ok: false,
       status: 403,
@@ -209,21 +210,18 @@ export async function resolveListContext(
 
 /**
  * Whether an org member may change who is on the organization's lists: an
- * org-wide owner, admin or editor whose membership is not suspended. The one
- * answer the list routes and the list-member import ask (see
- * {@link resolveListContext} for why a site role is not enough).
+ * org-wide member holding "Manage data" (`data.manage`, AGL-4047; the owner,
+ * admins and editors by default) whose membership is not suspended, what the
+ * rules' `canWriteOrgWideData()` asks. The one answer the list routes and the
+ * list-member import ask (see {@link resolveListContext} for why a site role
+ * is not enough).
  */
-export function isOrgWideListWriter(member: unknown): boolean {
-  const entry = member as
-    | { role?: string; orgSuspended?: boolean }
-    | null
-    | undefined
+export async function isOrgWideListWriter(orgId: string, member: unknown): Promise<boolean> {
+  const entry = member as Parameters<typeof memberHasOrgPermission>[1] & { orgSuspended?: boolean }
   return (
-    isOrgWideMember(entry as Parameters<typeof isOrgWideMember>[0]) &&
-    (entry?.role === 'owner' ||
-      entry?.role === 'admin' ||
-      entry?.role === 'editor') &&
-    entry?.orgSuspended !== true
+    isOrgWideMember(entry) &&
+    entry?.orgSuspended !== true &&
+    (await memberHasOrgPermission(orgId, entry, 'data.manage'))
   )
 }
 

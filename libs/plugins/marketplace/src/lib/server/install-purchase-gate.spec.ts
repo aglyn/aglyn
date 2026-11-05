@@ -43,7 +43,7 @@ jest.mock('@aglyn/tenant-runtime/org-permissions', () => ({
 }))
 
 jest.mock('./publisher-profile', () => ({
-  canActAsPublisher: async () => false,
+  isPublisherMember: async () => false,
 }))
 
 jest.mock('./provenance', () => ({
@@ -276,7 +276,7 @@ describe('the install door and the listing itself (AGL-2290)', () => {
   })
 
   it('404s a PRIVATE listing for someone outside the publishing org', async () => {
-    // `canActAsPublisher` is mocked false at the top of this file, so the
+    // `isPublisherMember` is mocked false at the top of this file, so the
     // caller here is exactly the non-owner the exemption must not cover.
     paid()
     state.listing.visibility = 'private'

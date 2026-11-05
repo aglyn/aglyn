@@ -382,7 +382,7 @@ export interface ParsedUpdateRule {
  *
  * `matchHeader` is post-`normalizePathVariables`, e.g.
  * `match /hosts/<hostId> {`. `clientPredicate` names the branch that a CLIENT
- * reaches — `canManageOrg()`, `canWriteHostContent(hostId)`, `listingManager()`
+ * reaches — `mayChangeOrgFields(`, `canWriteHostContent(hostId)`, `listingManager()`
  * — as opposed to the staff branches, which are trusted by design.
  */
 export function parseUpdateRule(

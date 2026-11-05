@@ -110,7 +110,7 @@ internal fun BusinessSection(context: NativePluginContext, hostId: String, host:
   val initial = remember(stored) { businessProfileForm(stored?.data) }
   val form = remember(initial) { mutableStateMapOf<String, String>().apply { putAll(initial) } }
   val scope = androidx.compose.runtime.rememberCoroutineScope()
-  val runner = remember(hostId) { ActionRunner(scope, roleHint = "an author, editor or admin") }
+  val runner = remember(hostId) { ActionRunner(scope) }
   fun line(field: String, fallback: String) = businessOriginLine(field, stored?.data, resolved, fallback)
   val foundedError = businessFoundedError(form)
 

@@ -191,7 +191,6 @@ const mockLogHostActivity = jest.fn(async () => undefined)
 const mockResolveOrgPermissions = jest.fn(async () => ({
   orgId: ORG,
   role: 'editor',
-  isOwner: false,
   permissions: { 'data.manage': true },
   orgWide: true,
   hostRole: 'editor',
@@ -387,7 +386,6 @@ beforeEach(() => {
   mockResolveOrgPermissions.mockResolvedValue({
     orgId: ORG,
     role: 'editor',
-    isOwner: false,
     permissions: { 'data.manage': true },
     orgWide: true,
     hostRole: 'editor',
@@ -418,7 +416,6 @@ describe('the door', () => {
     mockResolveOrgPermissions.mockResolvedValueOnce({
       orgId: ORG,
       role: 'viewer',
-      isOwner: false,
       permissions: { 'data.manage': false },
       orgWide: true,
       hostRole: 'viewer',
@@ -427,7 +424,6 @@ describe('the door', () => {
     mockResolveOrgPermissions.mockResolvedValueOnce({
       orgId: ORG,
       role: 'editor',
-      isOwner: false,
       permissions: { 'data.manage': true },
       orgWide: false,
       hostRole: null,
@@ -1133,7 +1129,6 @@ describe('the plan (AGL-2787)', () => {
     mockResolveOrgPermissions.mockResolvedValueOnce({
       orgId: ORG,
       role: null,
-      isOwner: false,
       permissions: {},
       orgWide: false,
       hostRole: null,

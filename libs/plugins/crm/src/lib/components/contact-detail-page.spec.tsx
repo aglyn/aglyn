@@ -122,6 +122,9 @@ jest.mock('./crm-record-header', () => ({
 jest.mock('./erase-person-action', () => ({
   useErasePersonAction: () => ({ menuItems: [], banner: null, dialog: null }),
 }))
+jest.mock('./record-sharing-card', () => ({
+  RecordSharingCard: () => null,
+}))
 jest.mock('./record-files-card', () => ({
   __esModule: true,
   default: (props: Record<string, unknown>) => double('files')(props),

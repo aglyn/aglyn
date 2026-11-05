@@ -23,7 +23,7 @@
  */
 
 import { act, fireEvent, render, screen, waitFor } from '@testing-library/react'
-import PosKioskPage from './pos-kiosk-page.component'
+import PosKioskPage, { POS_KIOSK_SEARCH_DEBOUNCE_MS } from './pos-kiosk-page.component'
 import { POS_KIOSK_TOKEN_KEY } from './pos-kiosk/pos-kiosk-api'
 
 const TOKEN = 'k'.repeat(43)
@@ -179,6 +179,145 @@ describe('the self-service kiosk (AGL-3623)', () => {
     fireEvent.click(screen.getByRole('button', { name: 'Start order' }))
     await screen.findByText('Flat white')
     expect(screen.queryByRole('button', { name: /Checkout/ })).toBeNull()
+  })
+
+  describe('the search on a catalog longer than the menu (AGL-4060)', () => {
+    const item = (id: string, name: string) => ({
+      id,
+      name,
+      categoryIds: [],
+      options: [],
+      variants: [{ id: 'default', options: {}, priceCents: 300, soldOut: false }],
+      modifierGroups: [],
+    })
+    /** The server's menu: the first of a catalog past its length. */
+    const LONG = {
+      ...CATALOG,
+      truncated: true,
+      products: Array.from({ length: 200 }, (_, index) => item(`p${index}`, `Item ${index}`)),
+    }
+    const searches = () => calls.filter((call) => call.url.includes('search='))
+    /** The catalog route, answering a search with `answer`. */
+    function catalogAnswers(menu: unknown, answer: () => Promise<unknown>) {
+      const real = (global.fetch as jest.Mock).getMockImplementation()!
+      ;(global.fetch as jest.Mock).mockImplementation((url: string, init: any = {}) => {
+        if (url.includes('search=')) {
+          calls.push({ method: 'GET', url, token: null, body: null, key: null })
+          return answer()
+        }
+        if (url.includes('action=catalog')) return respond(200, menu)
+        return real(url, init)
+      })
+    }
+    async function openMenu() {
+      window.localStorage.setItem(POS_KIOSK_TOKEN_KEY, TOKEN)
+      render(<PosKioskPage pluginId="commerce" path="/pos-kiosk" />)
+      fireEvent.click(await screen.findByRole('button', { name: 'Start order' }))
+    }
+    const type = (value: string) =>
+      fireEvent.change(screen.getByLabelText('Search the menu'), { target: { value } })
+
+    it('a menu that lists the whole catalog shows no search', async () => {
+      await openMenu()
+      await screen.findByText('Flat white')
+      expect(screen.queryByLabelText('Search the menu')).toBeNull()
+    })
+
+    it('finds a product the menu never loaded, asked once when the typing rests', async () => {
+      catalogAnswers(LONG, () => respond(200, { ...CATALOG, categories: [], products: [item('zebra', 'Zebra Latte')] }))
+      await openMenu()
+      await screen.findByText('Item 0')
+      expect(screen.queryByText('Zebra Latte')).toBeNull()
+      expect(POS_KIOSK_SEARCH_DEBOUNCE_MS).toBeGreaterThanOrEqual(250)
+      // Each key restarts the wait: no read until the typing has rested for all of it.
+      jest.useFakeTimers()
+      for (const value of ['z', 'ze', 'zeb']) {
+        type(value)
+        await act(async () => {
+          jest.advanceTimersByTime(POS_KIOSK_SEARCH_DEBOUNCE_MS - 1)
+        })
+        expect(searches()).toHaveLength(0)
+      }
+      await act(async () => {
+        jest.advanceTimersByTime(1)
+      })
+      expect(searches()).toHaveLength(1)
+      jest.useRealTimers()
+      expect(await screen.findByText('Zebra Latte')).toBeTruthy()
+      expect(searches()).toHaveLength(1)
+      expect(searches()[0]!.url).toContain('search=zeb')
+      expect(screen.queryByText('Item 0')).toBeNull()
+    })
+
+    it('adds what it found to the cart', async () => {
+      catalogAnswers(LONG, () => respond(200, { ...CATALOG, categories: [], products: [item('zebra', 'Zebra Latte')] }))
+      await openMenu()
+      await screen.findByText('Item 0')
+      type('zebra')
+      fireEvent.click(await screen.findByText('Zebra Latte'))
+      fireEvent.click(await screen.findByRole('button', { name: /Checkout/ }))
+      await screen.findByText('Review your order')
+      expect(posts('checkout')[0]!.body.lines).toEqual([{ productId: 'zebra', quantity: 1 }])
+    })
+
+    it('with no connection, keeps narrowing what it has loaded', async () => {
+      catalogAnswers(LONG, () => Promise.reject(new Error('offline')))
+      await openMenu()
+      await screen.findByText('Item 0')
+      type('item 199')
+      expect(await screen.findByText('Item 199')).toBeTruthy()
+      expect(screen.queryByText('Item 0')).toBeNull()
+      expect(await screen.findByText('Reconnecting…')).toBeTruthy()
+      // The menu it had is still there to come back to.
+      type('')
+      expect(await screen.findByText('Item 0')).toBeTruthy()
+    })
+
+    it('says so when nothing matches, once the server has answered', async () => {
+      catalogAnswers(LONG, () => respond(200, { ...CATALOG, categories: [], products: [] }))
+      await openMenu()
+      await screen.findByText('Item 0')
+      type('nothing like it')
+      expect(screen.queryByText('Nothing on the menu matches that.')).toBeNull()
+      expect(await screen.findByText('Nothing on the menu matches that.')).toBeTruthy()
+    })
+
+    it('a category chip clears the word typed, and clearing it reads nothing again', async () => {
+      catalogAnswers(LONG, () => respond(200, { ...CATALOG, categories: [], products: [item('zebra', 'Zebra Latte')] }))
+      await openMenu()
+      await screen.findByText('Item 0')
+      type('zebra')
+      await screen.findByText('Zebra Latte')
+      const reads = calls.filter((call) => call.url.includes('action=catalog')).length
+      type('')
+      expect(await screen.findByText('Item 0')).toBeTruthy()
+      expect(calls.filter((call) => call.url.includes('action=catalog'))).toHaveLength(reads)
+      type('zebra')
+      await screen.findByText('Zebra Latte')
+      fireEvent.click(screen.getByRole('button', { name: 'All' }))
+      expect(await screen.findByText('Item 0')).toBeTruthy()
+      expect((screen.getByLabelText('Search the menu') as HTMLInputElement).value).toBe('')
+    })
+
+    it('the next customer finds nothing of the word the last one typed', async () => {
+      catalogAnswers(LONG, () => respond(200, { ...CATALOG, categories: [], products: [item('zebra', 'Zebra Latte')] }))
+      jest.useFakeTimers({ advanceTimers: true })
+      await openMenu()
+      await screen.findByText('Item 0')
+      type('zebra')
+      await screen.findByText('Zebra Latte')
+      await act(async () => {
+        jest.advanceTimersByTime((30 + 1) * 1000)
+      })
+      await act(async () => {
+        jest.advanceTimersByTime(21 * 1000)
+      })
+      jest.useRealTimers()
+      fireEvent.click(await screen.findByRole('button', { name: 'Start order' }))
+      await screen.findByText('Item 0')
+      expect((screen.getByLabelText('Search the menu') as HTMLInputElement).value).toBe('')
+      expect(screen.queryByText('Zebra Latte')).toBeNull()
+    })
   })
 
   it('a revoked kiosk goes back to pairing', async () => {

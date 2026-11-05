@@ -9,7 +9,8 @@
  * key to a viewer opens the client-direct writes, as `/api/orgs/datasets`
  * opens creates for them; one that takes it from an editor closes them.
  *
- * `canWriteOrgData()` read the raw `role` field against a hardcoded list.
+ * `canWriteOrgData()` read the raw `role` field against a hardcoded list (it
+ * asks the key too now, `cloud/rules-crm-audience-writes.spec.mjs`).
  * `/api/orgs/datasets` resolves all three permission layers and refuses a
  * member whose `data.manage` a custom role revoked. So the same principal got
  * two different answers, and the RULES were the permissive one.
@@ -40,6 +41,17 @@
  * The bare rows and the media/contact rows at the bottom are the load-bearing
  * half.
  *
+ * ## The people and a list's people (AGL-4047)
+ *
+ * The CRM's twelve people collections (`canReadScopedPeople`) and a list's
+ * members (`isOrgWideAudienceManager`) ask the same key for READS, also
+ * through `memberKeyOrOverride` with no role beside it. They asked the owner,
+ * admin or editor role AND the key (and, for the CRM, the key stamped), so
+ * every member with no decision written down keeps their verdict; the table
+ * below says it per principal. The one movement is on a list's people: a
+ * viewer a custom role or an override GRANTS the key now reads them, as the
+ * Emails page (registered on `data.manage`) already admits them.
+ *
  *   npx firebase emulators:start --only firestore --project aglyn-main
  *   node cloud/rules-org-data-permission.spec.mjs
  */
@@ -57,6 +69,75 @@ const RECORD = 'rec-1'
 const CONTACT = 'contact-1'
 const MEDIA = 'media-1'
 const JOB = 'job-1'
+const LIST = 'list-1'
+const LIST_MEMBER = 'someone-example-com'
+
+/** The CRM collections `canReadScopedPeople` guards, one document each. */
+const PEOPLE_COLLECTIONS = [
+  'contacts',
+  'leads',
+  'contactSegments',
+  'companies',
+  'pipelines',
+  'deals',
+  'crmTasks',
+  'crmActivities',
+  'contactFields',
+  'crmPicklists',
+  'crmViews',
+  'crmEmailTemplates',
+]
+
+/**
+ * Who reads the people (AGL-4047), per principal of the shared table: the
+ * CRM's collections, a list's members, and whether they may take someone off
+ * a list (the read, verified and not suspended). `was` is what a list's
+ * members answered before, where it differs.
+ */
+const PEOPLE_VERDICTS = {
+  'uid-owner': [true, true, true],
+  'uid-editor': [true, true, true],
+  'uid-viewer': [false, false, false],
+  'uid-admin-bare': [true, true, true],
+  // The scope refuses: the contact is the workspace's, not host-a's, and a
+  // list is never a collaborator's.
+  'uid-site-author': [false, false, false],
+  'uid-editor-revoked': [false, false, false],
+  'uid-viewer-granted': [true, true, true, 'was refused a list’s people'],
+  'uid-editor-restored': [true, true, true],
+  'uid-editor-bare': [true, true, true],
+  'uid-viewer-bare': [false, false, false],
+  'uid-editor-override-only': [false, false, false],
+  'uid-editor-member-denied': [false, false, false],
+  'uid-viewer-member-granted': [true, true, true, 'was refused a list’s people'],
+  'uid-viewer-override-only-granted': [true, true, true, 'was refused a list’s people'],
+  'uid-editor-other-key': [true, true, true],
+  // A suspended workspace still reads its own people; removing is a write.
+  'uid-editor-suspended': [true, true, false],
+}
+
+/**
+ * Members of this spec alone, not the shared table (whose server half runs
+ * the dataset routes): a site collaborator a custom role granted the key,
+ * who reads the people their site shares and nothing about a list, and an
+ * editor stamped false by their role and true by their own override.
+ */
+const PEOPLE_ONLY = {
+  'uid-site-editor-granted': {
+    role: 'viewer',
+    allHosts: false,
+    hostAccess: { 'host-a': 'editor' },
+    scopeTokens: ['host:host-a'],
+    resolvedPermissions: { 'data.manage': true },
+  },
+  'uid-admin-role-revoked': {
+    role: 'admin',
+    allHosts: true,
+    scopeTokens: ['org'],
+    roleId: 'role-limited',
+    resolvedPermissions: { 'data.manage': false },
+  },
+}
 
 const { principals } = JSON.parse(
   readFileSync('cloud/rules-fixtures/org-data-principals.json', 'utf8'),
@@ -116,6 +197,21 @@ await env.withSecurityRulesDisabled(async (context) => {
     resource: 'dataset',
     status: 'done',
   })
+  for (const name of PEOPLE_COLLECTIONS) {
+    await setDoc(doc(db, 'orgs', ORG, name, `${name}-org`), { name: 'org only', visibleTo: ['org'] })
+    await setDoc(doc(db, 'orgs', ORG, name, `${name}-site`), {
+      name: 'shared with host-a',
+      visibleTo: ['org', 'host:host-a'],
+    })
+  }
+  await setDoc(doc(db, 'orgs', ORG, 'lists', LIST), { name: 'Newsletter', kind: 'static' })
+  await setDoc(doc(db, 'orgs', ORG, 'lists', LIST, 'members', LIST_MEMBER), {
+    email: 'someone@example.com',
+    marketingConsent: true,
+  })
+  for (const [uid, member] of Object.entries(PEOPLE_ONLY)) {
+    await setDoc(doc(db, 'orgs', ORG, 'members', uid), member)
+  }
   for (const principal of principals) {
     await setDoc(
       doc(db, 'orgs', ORG, 'members', principal.uid),
@@ -163,11 +259,9 @@ for (const principal of principals) {
 }
 
 // ── Controls: what `data.manage` must NOT have taken away ───────────────────
-// `data.manage` is scoped to datasets — "Create, edit, and delete organization
-// datasets". Folding it into `canWriteOrgData` would have applied it to the
-// media library, which no server route stands in front of, and refused
-// members the product permits there. That is the same disagreement this file
-// closes, pointed the other way. (A contact takes no client write at all since
+// The media library has its own key, "Edit the workspace media library"
+// (`org.media`), so refusing `data.manage` leaves it alone.
+// (A contact takes no client write at all since
 // AGL-3338: letting one go is `crm/contact-remove`'s.)
 
 await check('CONTROL — the revoked editor may still update org MEDIA', () =>
@@ -228,6 +322,62 @@ await check('CONTROL — an outsider may not update the dataset', () =>
   assertFails(updateDoc(datasetRef(as('uid-outsider')), { name: 'theirs' })),
 )
 
+// ── The people and a list's people: "Manage data" alone (AGL-4047) ─────────
+const listMemberRef = (db) => doc(db, 'orgs', ORG, 'lists', LIST, 'members', LIST_MEMBER)
+for (const principal of principals) {
+  const verdict = PEOPLE_VERDICTS[principal.uid]
+  if (!verdict) {
+    await check(`${principal.uid} has a people verdict in this spec`, () => {
+      throw new Error('add it to PEOPLE_VERDICTS')
+    })
+    continue
+  }
+  const [people, listPeople, remove, was] = verdict
+  const why = `${principal.note.split('.')[0]}${was ? ` (${was})` : ''}`
+  for (const name of PEOPLE_COLLECTIONS) {
+    await check(`${principal.uid} ${people ? 'MAY' : 'may NOT'} read ${name} — ${why}`, () =>
+      (people ? assertSucceeds : assertFails)(getDoc(doc(as(principal.uid), 'orgs', ORG, name, `${name}-org`))),
+    )
+  }
+  await check(`${principal.uid} ${listPeople ? 'MAY' : 'may NOT'} read a list’s people — ${why}`, () =>
+    (listPeople ? assertSucceeds : assertFails)(getDoc(listMemberRef(as(principal.uid)))),
+  )
+  // Removing is a delete, which takes the person off the list for the rows
+  // below; the refusals run first and the one allowed delete is restored.
+  if (!remove) {
+    await check(`${principal.uid} may NOT take someone off a list`, () =>
+      assertFails(deleteDoc(listMemberRef(as(principal.uid)))),
+    )
+  }
+}
+for (const name of PEOPLE_COLLECTIONS) {
+  await check(`a site collaborator granted the key reads the ${name} its site shares`, () =>
+    assertSucceeds(getDoc(doc(as('uid-site-editor-granted'), 'orgs', ORG, name, `${name}-site`))),
+  )
+  await check(`a site collaborator granted the key may NOT read the ${name} only the workspace sees`, () =>
+    assertFails(getDoc(doc(as('uid-site-editor-granted'), 'orgs', ORG, name, `${name}-org`))),
+  )
+  await check(`an admin a custom role took the key from may NOT read ${name}`, () =>
+    assertFails(getDoc(doc(as('uid-admin-role-revoked'), 'orgs', ORG, name, `${name}-org`))),
+  )
+}
+await check('a site collaborator granted the key may NOT read a list’s people', () =>
+  assertFails(getDoc(listMemberRef(as('uid-site-editor-granted')))),
+)
+await check('an admin a custom role took the key from may NOT read a list’s people', () =>
+  assertFails(getDoc(listMemberRef(as('uid-admin-role-revoked')))),
+)
+await check('a viewer the key was granted to takes someone off a list (the read, verified, not suspended)', () =>
+  assertSucceeds(deleteDoc(listMemberRef(as('uid-viewer-granted')))),
+)
+await env.withSecurityRulesDisabled(async (context) => {
+  await setDoc(listMemberRef(context.firestore()), { email: 'someone@example.com', marketingConsent: true })
+})
+await check('CONTROL — an outsider reads no people and no list’s people', async () => {
+  await assertFails(getDoc(doc(as('uid-outsider'), 'orgs', ORG, 'contacts', 'contacts-org')))
+  await assertFails(getDoc(listMemberRef(as('uid-outsider'))))
+})
+
 // Remove ONLY what this spec seeded — never `clearFirestore()`, which would
 // take a shared dev session's data with it.
 await env.withSecurityRulesDisabled(async (context) => {
@@ -238,6 +388,13 @@ await env.withSecurityRulesDisabled(async (context) => {
     doc(db, 'orgs', ORG, 'contacts', CONTACT),
     doc(db, 'orgs', ORG, 'media', MEDIA),
     doc(db, 'orgs', ORG, 'transferJobs', JOB),
+    ...PEOPLE_COLLECTIONS.flatMap((name) => [
+      doc(db, 'orgs', ORG, name, `${name}-org`),
+      doc(db, 'orgs', ORG, name, `${name}-site`),
+    ]),
+    doc(db, 'orgs', ORG, 'lists', LIST, 'members', LIST_MEMBER),
+    doc(db, 'orgs', ORG, 'lists', LIST),
+    ...Object.keys(PEOPLE_ONLY).map((uid) => doc(db, 'orgs', ORG, 'members', uid)),
     doc(db, 'orgs', ORG),
   ]
   for (const principal of principals) {

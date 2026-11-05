@@ -2588,7 +2588,7 @@
     },
     {
       "alwaysOnForWorkspace": true,
-      "description": "Digital waivers riders and guests sign before they arrive or at the window.",
+      "description": "Digital waivers guests sign before they arrive or at the window.",
       "id": "waivers",
       "label": "Waivers",
       "siteOff": {
@@ -7437,6 +7437,11 @@
         "posBuyHardware",
         "marketplace.siteInstall",
         "marketplace.sitePublish",
+        "marketplace.publisherProfile",
+        "marketplace.manageListings",
+        "marketplace.payouts",
+        "crm.moveStages",
+        "crm.settings",
         "outreach.use",
         "outreach.manageAll",
         "email.suppressions",
@@ -7479,6 +7484,7 @@
         "posBuyHardware",
         "marketplace.siteInstall",
         "marketplace.sitePublish",
+        "crm.moveStages",
         "email.suppressions",
         "email.lists",
         "inbox.reply",
@@ -7538,6 +7544,11 @@
         "posBuyHardware",
         "marketplace.siteInstall",
         "marketplace.sitePublish",
+        "marketplace.publisherProfile",
+        "marketplace.manageListings",
+        "marketplace.payouts",
+        "crm.moveStages",
+        "crm.settings",
         "outreach.use",
         "outreach.manageAll",
         "email.suppressions",
@@ -7598,7 +7609,13 @@
       },
       {
         "id": "marketplace",
-        "label": "Marketplace"
+        "label": "Marketplace",
+        "pluginId": "marketplace"
+      },
+      {
+        "id": "crm",
+        "label": "CRM",
+        "pluginId": "crm"
       },
       {
         "id": "outreach",
@@ -7744,7 +7761,7 @@
         "scope": "site"
       },
       {
-        "description": "Create, edit, and delete organization datasets.",
+        "description": "Create, edit, and delete organization datasets, the CRM’s records, and marketing lists and topics.",
         "group": "datasets",
         "key": "data.manage",
         "label": "Manage data"
@@ -7898,6 +7915,7 @@
         "group": "commerce",
         "key": "managePos",
         "label": "Use the point of sale",
+        "narrowable": true,
         "pluginId": "commerce",
         "scope": "org"
       },
@@ -7906,6 +7924,7 @@
         "group": "commerce",
         "key": "posSell",
         "label": "Sell at the register",
+        "narrowable": true,
         "pluginId": "commerce",
         "refines": "managePos",
         "scope": "org"
@@ -7915,6 +7934,7 @@
         "group": "commerce",
         "key": "posRefund",
         "label": "Refunds and returns",
+        "narrowable": true,
         "pluginId": "commerce",
         "refines": "managePos",
         "scope": "org"
@@ -7924,6 +7944,7 @@
         "group": "commerce",
         "key": "posDiscount",
         "label": "Give discounts at the register",
+        "narrowable": true,
         "pluginId": "commerce",
         "refines": "managePos",
         "scope": "org"
@@ -7933,6 +7954,7 @@
         "group": "commerce",
         "key": "posCashDrawer",
         "label": "Cash drawer and shifts",
+        "narrowable": true,
         "pluginId": "commerce",
         "refines": "managePos",
         "scope": "org"
@@ -7942,6 +7964,7 @@
         "group": "commerce",
         "key": "posDevices",
         "label": "Registers and devices",
+        "narrowable": true,
         "pluginId": "commerce",
         "refines": "managePos",
         "scope": "org"
@@ -7968,6 +7991,46 @@
         "key": "marketplace.sitePublish",
         "label": "Publish a site’s items to the marketplace",
         "scope": "site"
+      },
+      {
+        "description": "Change the workspace’s public marketplace profile (its handle, name, bio, logo, support contact and links), and ask for the Verified publisher badge or withdraw the ask.",
+        "group": "marketplace",
+        "key": "marketplace.publisherProfile",
+        "label": "Edit the publisher profile",
+        "pluginId": "marketplace",
+        "scope": "org"
+      },
+      {
+        "description": "Edit the listings the workspace has published (their words, pictures and category), make a plugin public or private, unpublish or republish a listing, and see each version’s review status.",
+        "group": "marketplace",
+        "key": "marketplace.manageListings",
+        "label": "Manage published listings",
+        "pluginId": "marketplace",
+        "scope": "org"
+      },
+      {
+        "description": "Connect the payout account the workspace’s paid listings pay into, finish its setup, and open its payouts.",
+        "group": "marketplace",
+        "key": "marketplace.payouts",
+        "label": "Manage marketplace payouts",
+        "pluginId": "marketplace",
+        "scope": "org"
+      },
+      {
+        "description": "Change a contact’s lifecycle stage and move a deal through its pipeline, including winning, losing and reopening it. Follows the site role on a site, and “Manage data” in the organization hub, unless a role or member sets it.",
+        "follows": "data.manage",
+        "group": "crm",
+        "key": "crm.moveStages",
+        "label": "Move contacts and deals between stages",
+        "scope": "site"
+      },
+      {
+        "description": "Change the CRM’s settings for every site: default sharing for new records, companies from email domains, default owners, assignment rules and the round-robin pool, sharing rules, and rotating the email capture address; and share records with other sites.",
+        "group": "crm",
+        "key": "crm.settings",
+        "label": "Change CRM settings",
+        "pluginId": "crm",
+        "scope": "org"
       },
       {
         "description": "Open Sequences, and work its email sequences and connected mailboxes.",
@@ -8047,6 +8110,7 @@
         "group": "waivers",
         "key": "manageWaivers",
         "label": "Manage waivers",
+        "narrowable": true,
         "pluginId": "waivers",
         "scope": "org"
       },
@@ -8055,6 +8119,7 @@
         "group": "waivers",
         "key": "collectWaivers",
         "label": "Collect waivers",
+        "narrowable": true,
         "pluginId": "waivers",
         "scope": "org"
       },

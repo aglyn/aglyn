@@ -91,7 +91,7 @@ class ScreenImportStepsTest {
     // The step belongs to a products import, in the zone the review draws; only a manager sees it.
     assertEquals(listOf("transferStep"), step.zones)
     fun offered(resource: String, manager: Boolean = true) =
-      ScreenValues.condition(step.requires, json("""{"stash":{"importResource":"$resource"},"org":{"manager":$manager}}"""))
+      ScreenValues.condition(step.requires, json("""{"stash":{"importResource":"$resource"},"org":{"manager":$manager,"can":{"data.manage":$manager}}}"""))
     assertTrue(offered("commerce.products"))
     assertFalse(offered("commerce.gift-cards"))
     assertFalse(offered("commerce.products", manager = false))
@@ -128,7 +128,7 @@ class ScreenImportStepsTest {
     val sent = mutableListOf<HttpRequestData>()
     val applying = ScreenModel(review, json("""{"org":{"id":"o1"}}"""), client(200 to """{"done":true,"progress":{"done":4}}""", 200 to results, 200 to """{"job":{"id":"a1"}}""", sent = sent))
     ScreenStash.set(json("""{"importResource":"commerce.products","importHost":"h1"}"""))
-    val outcome = applying.run(apply, ScreenContext.with(json("""{"org":{"id":"o1","manager":true}}"""), "stash", ScreenStash.values))
+    val outcome = applying.run(apply, ScreenContext.with(json("""{"org":{"id":"o1","manager":true,"can":{"data.manage":true}}}"""), "stash", ScreenStash.values))
     assertEquals(ActionOutcome.Done(null, json("""{"done":true,"progress":{"done":4}}""")), outcome)
     assertEquals(listOf("/api/transfer/apply", "/api/transfer/status", "/api/ai/jobs"), sent.map { it.url.encodedPath })
     assertEquals(json("""{"orgId":"o1","jobId":"j1","include":"results"}"""), body(sent, 1))
@@ -145,7 +145,7 @@ class ScreenImportStepsTest {
     ScreenStash.set(json("""{"importAiCopy":null,"importAfter":null}"""))
     val quiet = mutableListOf<HttpRequestData>()
     ScreenModel(review, JsonObject(emptyMap()), client(200 to """{"done":true}""", sent = quiet))
-      .run(apply, ScreenContext.with(json("""{"org":{"id":"o1","manager":true}}"""), "stash", ScreenStash.values))
+      .run(apply, ScreenContext.with(json("""{"org":{"id":"o1","manager":true,"can":{"data.manage":true}}}"""), "stash", ScreenStash.values))
     assertEquals(1, quiet.size)
     assertEquals(null, ScreenStash.values["importAfter"])
     // The done screen says what the hooks said.
@@ -163,7 +163,7 @@ class ScreenImportStepsTest {
     val sent = mutableListOf<HttpRequestData>()
     val model = ScreenModel(
       transfer,
-      json("""{"org":{"id":"o1","manager":true},"site":{"id":"h1"},"params":{"list":"abc","name":"Spring sale","resource":"email.list-members:abc"}}"""),
+      json("""{"org":{"id":"o1","manager":true,"can":{"data.manage":true}},"site":{"id":"h1"},"params":{"list":"abc","name":"Spring sale","resource":"email.list-members:abc"}}"""),
       client(200 to jobs, sent = sent),
     )
     model.load()

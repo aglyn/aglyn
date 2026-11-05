@@ -120,6 +120,7 @@ const roster = {
 let calls: Array<{ kind: string; dealId: string; arg?: string }>
 let refuseIds: Set<string>
 const api = {
+  moveBlocked: false,
   moveToStage: jest.fn(async (deal: { $id: string }, stageId: string) => {
     calls.push({ kind: 'move', dealId: deal.$id, arg: stageId })
     if (refuseIds.has(deal.$id)) throw new Error('This deal is not visible to this site.')
@@ -160,6 +161,27 @@ beforeEach(() => {
   calls = []
   refuseIds = new Set()
   mockExports.length = 0
+})
+
+describe('without "Move contacts and deals between stages" (AGL-4047)', () => {
+  it('switches Set stage and Mark lost off with the permission named, and leaves Set owner', () => {
+    render(
+      <DealsBulkBar
+        hostId="host-1"
+        scope={SCOPE}
+        rows={rows}
+        selected={[rows[0].$id]}
+        onSelectedChange={jest.fn()}
+        pipelineById={pipelineById}
+        roster={roster}
+        api={{ ...api, moveBlocked: true }}
+      />,
+    )
+    expect((screen.getByRole('button', { name: 'Set stage' }) as HTMLButtonElement).disabled).toBe(true)
+    expect((screen.getByRole('button', { name: 'Mark lost' }) as HTMLButtonElement).disabled).toBe(true)
+    expect((screen.getByRole('button', { name: 'Set owner' }) as HTMLButtonElement).disabled).toBe(false)
+    expect(screen.getAllByLabelText('Your role does not include "Move contacts and deals between stages" — ask an organization admin')).toHaveLength(2)
+  })
 })
 
 describe('the bar and its selection', () => {

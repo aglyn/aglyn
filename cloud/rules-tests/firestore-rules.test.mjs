@@ -208,12 +208,14 @@ const orgAdminDenied = memoize(() => {
     1,
     'expected exactly one `allow … update` under match /orgs/{orgId}',
   )
+  // The member branch: the one that asks each changed field's key through
+  // `mayChangeOrgFields` (AGL-4047; it asked `canManageOrg()` before).
   const branches = updates[0]
     .split('||')
-    .filter((branch) => branch.includes('canManageOrg()'))
-  assert.equal(branches.length, 1, 'expected one canManageOrg() update branch')
+    .filter((branch) => branch.includes('mayChangeOrgFields('))
+  assert.equal(branches.length, 1, 'expected one mayChangeOrgFields() update branch')
   const list = branches[0].match(/hasAny\(\s*\[([^\]]*)\]/)
-  assert.ok(list, 'the canManageOrg() branch has no hasAny([…]) key diff')
+  assert.ok(list, 'the mayChangeOrgFields() branch has no hasAny([…]) key diff')
   return [...list[1].matchAll(/'([^']+)'/g)].map((entry) => entry[1])
 })
 
@@ -4209,6 +4211,40 @@ describe('hosts', () => {
   })
 })
 
+describe("a site's dataset list (AGL-4047)", () => {
+  const OTHER_SITE = 'site-not-theirs'
+  const datasets = (uid) => collection(authed(uid), 'orgs', ORG, 'datasets')
+  const forSite = (uid, hostId) =>
+    query(datasets(uid), where('visibleTo', 'array-contains-any', ['org', `host:${hostId}`]), limit(100))
+
+  beforeEach(async () => {
+    await env.withSecurityRulesDisabled(async (context) => {
+      const db = context.firestore()
+      await setDoc(doc(db, 'orgs', ORG, 'datasets', 'wide'), { visibleTo: ['org'] })
+      await setDoc(doc(db, 'orgs', ORG, 'datasets', 'mine'), { visibleTo: [`host:${HOST}`] })
+      await setDoc(doc(db, 'orgs', ORG, 'datasets', 'theirs'), { visibleTo: [`host:${OTHER_SITE}`] })
+    })
+  })
+
+  it('answers an org-wide member with the site’s and the workspace-wide datasets alone', async () => {
+    const snapshot = await assertSucceeds(getDocs(forSite(OWNER, HOST)))
+    const ids = snapshot.docs.map((row) => row.id)
+    assert.ok(ids.includes('wide') && ids.includes('mine'))
+    assert.ok(!ids.includes('theirs'))
+    // The control: the same member reads the other site's on the workspace page.
+    const everything = await assertSucceeds(getDocs(query(datasets(OWNER), limit(100))))
+    assert.ok(everything.docs.some((row) => row.id === 'theirs'))
+  })
+
+  it('admits a site collaborator to their own site’s list, and to nothing wider', async () => {
+    const snapshot = await assertSucceeds(getDocs(forSite(EDITOR, HOST)))
+    assert.ok(!snapshot.docs.some((row) => row.id === 'theirs'))
+    // Unprovable lists stay refused: no filter, and another site's tokens.
+    await assertFails(getDocs(query(datasets(EDITOR), limit(100))))
+    await assertFails(getDocs(forSite(EDITOR, OTHER_SITE)))
+  })
+})
+
 describe('org-shared data (AGL-237)', () => {
   beforeEach(async () => {
     await env.withSecurityRulesDisabled(async (context) => {
@@ -6639,16 +6675,17 @@ describe('account preferences are bounded, pins at five (AGL-3943)', () => {
     await mustAllow('editing another field beside seven pins', setDoc(me(), { firstName: 'Zach' }, { merge: true }))
   })
 
-  it('bounds pinned sites at a hundred in all (AGL-4005)', async () => {
+  it('bounds pinned sites at five hundred in all, none a workspace (AGL-4005, AGL-4165)', async () => {
     const pins = (n) => Array.from({ length: n }, (_, i) => ({ orgId: ORG, hostId: `h${i + 1}` }))
-    await mustAllow('a hundred pinned sites', setDoc(me(), { pinnedHosts: pins(100) }))
+    await mustAllow('a hundred and one pinned sites in one workspace', setDoc(me(), { pinnedHosts: pins(101) }))
+    await mustAllow('five hundred pinned sites', setDoc(me(), { pinnedHosts: pins(500) }))
     await mustDeny(
-      'a hundred and first by arrayUnion',
-      setDoc(me(), { pinnedHosts: arrayUnion({ orgId: ORG, hostId: 'h101' }) }, { merge: true }),
+      'a five hundred and first by arrayUnion',
+      setDoc(me(), { pinnedHosts: arrayUnion({ orgId: ORG, hostId: 'h501' }) }, { merge: true }),
     )
     await mustAllow(
       'unpinning one',
-      setDoc(me(), { pinnedHosts: arrayRemove({ orgId: ORG, hostId: 'h100' }) }, { merge: true }),
+      setDoc(me(), { pinnedHosts: arrayRemove({ orgId: ORG, hostId: 'h500' }) }, { merge: true }),
     )
     await mustDeny('pinned sites that are not a list', setDoc(me(), { pinnedHosts: { h1: ORG } }, { merge: true }))
   })
@@ -8501,7 +8538,7 @@ describe('the org suspended* additions are on both deny branches (AGL-1507)', ()
     for (const key of NEW_ORG_KEYS) {
       assert.ok(
         orgAdminDenied().includes(key),
-        `\`${key}\` fell off the canManageOrg() deny list — an org admin ` +
+        `\`${key}\` fell off the member branch's deny list — an org admin ` +
           `with the client SDK could now ${key === 'suspendedUntilMs'
             ? 'shorten their own suspension'
             : 'rewrite their own suspension record'} (AGL-1501).`,
@@ -8674,7 +8711,7 @@ describe('the org suspended* family is Admin-SDK-only — even for super staff (
  * validates the reason with `normalizeOrgOverrideReason` and commits the org
  * document and its `adminAudit` row with the Admin SDK in one batch. That made
  * it the last client writer of these three keys — what is left on this document
- * from a browser is the org rename (`canManageOrg()`, which already excluded
+ * from a browser is the org rename (the member branch, which already excluded
  * them) and the erasure toggle's `erasureRequestedAt`.
  *
  * So this narrowing is what turns the reason gate into a boundary. It has to
@@ -14091,7 +14128,8 @@ describe('CRM sharing: a share is read where it lands and written only as grante
     await mustAllow('the owner’s update of the read-only share', updateDoc(lead(OWNER, 'shared-read'), { status: 'working' }))
     await mustDeny(
       'a read-only deal share’s update',
-      updateDoc(doc(authed(EDITOR), 'orgs', ORG, 'deals', 'deal-shared-read'), { stageId: 's2' }),
+      // The title, because a stage is refused to every client update whatever the share.
+      updateDoc(doc(authed(EDITOR), 'orgs', ORG, 'deals', 'deal-shared-read'), { title: 'Renamed' }),
     )
     await mustAllow(
       'an edit company share’s update',

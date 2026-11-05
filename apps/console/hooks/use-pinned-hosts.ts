@@ -18,7 +18,7 @@
 
 import {
   PINNED_HOSTS_FIELD,
-  PINNED_HOSTS_PER_WORKSPACE,
+  PINNED_HOSTS_MAX,
   pinHost,
   readPinnedHosts,
   replacePinnedHost,
@@ -33,13 +33,16 @@ import useFirestoreDoc from './use-firestore-doc'
 import type { PinToggleOutcome } from './use-pinned-orgs'
 
 export interface PinnedHosts {
-  /** The workspace's pinned site ids, in the order pinned, at most five. */
+  /** The workspace's pinned site ids, in the order pinned, as many as the reader pinned. */
   pinned: string[]
-  /** Five are pinned in this workspace, so a sixth asks which to replace. */
+  /**
+   * This workspace holds every pin the account keeps (`PINNED_HOSTS_MAX`),
+   * so one more asks which to replace. Short of that a workspace is never full.
+   */
   full: boolean
   /** The account document has answered, so `pinned` is the real set. */
   ready: boolean
-  /** Pins a site, or unpins one that is pinned; a sixth answers `full` and writes nothing. */
+  /** Pins a site, or unpins one that is pinned; past the account bound it answers `full` and writes nothing. */
   toggle: (hostId: string) => PinToggleOutcome
   /** Puts `hostId` where `replacing` was: the answer to "Replace one?". */
   replace: (replacing: string, hostId: string) => void
@@ -48,8 +51,8 @@ export interface PinnedHosts {
 /**
  * The sites the reader pinned in one workspace (AGL-4005), kept on `users/{uid}` as
  * `pinnedHosts` beside the workspaces they pinned (`usePinnedOrgs`), so a
- * pin follows them to every device. Five a workspace, like workspace pins;
- * the rules bound the whole list (see `PINNED_HOSTS_MAX`).
+ * pin follows them to every device. A workspace takes as many as the reader
+ * likes (AGL-4165); the rules bound the whole list (see `PINNED_HOSTS_MAX`).
  *
  * Optimistic, the way workspace pins are: the pin answers the click and the
  * write follows. A pin or an unpin adds or removes ONE entry (`arrayUnion` /
@@ -134,7 +137,7 @@ export function usePinnedHosts(
 
   return {
     pinned,
-    full: pinned.length >= PINNED_HOSTS_PER_WORKSPACE,
+    full: pinned.length >= PINNED_HOSTS_MAX,
     ready,
     toggle,
     replace,

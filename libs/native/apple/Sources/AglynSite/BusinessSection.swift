@@ -72,7 +72,7 @@ struct BusinessSection: View {
   @State private var workspace = ObservedDocument()
   @State private var fields: [String: String] = [:]
   @State private var seeded: [String: String] = [:]
-  @State private var runner = PluginActionRunner(roleHint: "an author, editor or admin")
+  @State private var runner = PluginActionRunner()
   private let contracts = ContractValues.shared
 
   private var path: [String] { ["hosts", hostID, contracts.businessProfileSubcollection, contracts.businessProfileSiteDoc] }

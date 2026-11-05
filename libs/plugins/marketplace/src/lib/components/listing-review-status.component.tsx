@@ -33,6 +33,10 @@ import {
 } from '../model/publisher-attestation'
 import { authorizedFetch } from '@aglyn/shared-util-http/authorized-token'
 import { pluginDocsHelp } from '@aglyn/aglyn'
+import {
+  MARKETPLACE_MANAGE_LISTINGS_PERMISSION,
+  marketplacePublisherPermissionRefusal,
+} from '../model/marketplace-publisher-permissions'
 
 export interface PublisherVersion {
   version: string
@@ -129,6 +133,14 @@ export interface ListingReviewStatusProps {
   listingId: string
   /** Only a plugin listing has a review-per-version story to tell. */
   isPlugin: boolean
+  /**
+   * The viewer's resolved permissions, from the shell (AGL-4047). The
+   * publisher's version history needs "Manage published listings", as its
+   * route does; without it the card says which permission to ask for rather
+   * than vanishing. An absent key reads as allowed, as the map reads while it
+   * loads: the route still decides.
+   */
+  permissions?: Record<string, boolean | undefined>
 }
 
 /**
@@ -147,14 +159,16 @@ export interface ListingReviewStatusProps {
  * publish internals a client has no business holding.
  */
 export function ListingReviewStatus(props: ListingReviewStatusProps) {
-  const { listingId, isPlugin } = props
+  const { listingId, isPlugin, permissions } = props
+  const canSeeVersions =
+    permissions?.[MARKETPLACE_MANAGE_LISTINGS_PERMISSION] !== false
   const { data: user } = useUser()
   const [payload, setPayload] = useState<PublisherVersionsPayload | null>(null)
   const [failed, setFailed] = useState(false)
 
   useEffect(() => {
     let cancelled = false
-    if (!listingId || !isPlugin) return undefined
+    if (!listingId || !isPlugin || !canSeeVersions) return undefined
     void (async () => {
       try {
         const response = await authorizedFetch(
@@ -176,9 +190,29 @@ export function ListingReviewStatus(props: ListingReviewStatusProps) {
     return () => {
       cancelled = true
     }
-  }, [listingId, isPlugin, user])
+  }, [listingId, isPlugin, user, canSeeVersions])
 
   if (!isPlugin) return null
+  // Without the key the route refuses, so the card names the permission
+  // instead of fetching (AGL-4047).
+  if (!canSeeVersions) {
+    return (
+      <CardDisplay
+        header={'Review status'}
+        help={pluginDocsHelp('publisherHandbook', {
+          anchor: '#watching-your-own-submission',
+        })}
+        contentGutterX
+        contentGutterY
+      >
+        <Typography variant="body2" color="text.secondary">
+          {marketplacePublisherPermissionRefusal(
+            MARKETPLACE_MANAGE_LISTINGS_PERMISSION,
+          )}
+        </Typography>
+      </CardDisplay>
+    )
+  }
   if (failed) return null
   // Nothing rather than an empty shell: this card is only worth space once
   // it has something to say, and a skeleton that never fills is worse than

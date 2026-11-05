@@ -23,6 +23,7 @@ import {
   resolveEnabledPlugins,
   resolvePluginSiteState,
 } from '@aglyn/aglyn'
+import { permissionRefusalText } from '@aglyn/aglyn/app-utils/org-permissions'
 import { mdiPuzzleOutline } from '@aglyn/shared-data-mdi'
 import { AppLink, CardDisplay, Container } from '@aglyn/shared-ui-jsx'
 import type { NextPageWithLayout } from '@aglyn/shared-ui-next'
@@ -43,6 +44,7 @@ import useCurrentOrg from '../../../../../../../../hooks/use-current-org'
 import { useOrgScope, useOrgSlug } from '../../../../../../../../hooks/use-org-scope'
 import { useSitePluginSwitchboard } from '../../../../../../../../hooks/use-plugin-switchboard'
 import {
+  useHostAdminKnown,
   useHostId,
   useHostSubdomain,
   useIsHostAdmin,
@@ -68,7 +70,16 @@ const SitePluginInstallation: NextPageWithLayout<Record<string, never>> = () => 
   const orgSlug = useOrgSlug()
   const host = useHostSubdomain()
   const hostId = useHostId()
+  /**
+   * "Manage site settings" (`site.manage`, AGL-4047), the key the rules ask of
+   * everything this page writes: the site's plugin lists and sign-in pages on
+   * the host document, and `hosts/{hostId}/pluginSettings/{pluginId}`. Read as
+   * the rules read it, from the host document's stamp, else the preset of the
+   * member's site role. False until the document is read, so every control
+   * below holds while it loads; `adminKnown` is what tells that from a refusal.
+   */
   const isAdmin = useIsHostAdmin()
+  const adminKnown = useHostAdminKnown()
   const firestore = useFirestore()
   const { currentOrg } = useOrgScope()
   // EXEMPT from `no-unguarded-loading-hook`: `org` reaches only
@@ -254,17 +265,18 @@ const SitePluginInstallation: NextPageWithLayout<Record<string, never>> = () => 
       <Container gutterY maxWidth={CONTENT_MAX_WIDTH}>
         <Stack spacing={3}>
           {/*
-            A NOTICE, not the boundary — the Firestore rules refuse a
-            non-admin write regardless of what renders here. It mirrors the
-            admin sections layout so a non-admin who follows a link is told
-            why, rather than shown a form that fails on save.
+            A NOTICE, not the boundary — the Firestore rules refuse the write
+            without the key regardless of what renders here. Someone who
+            follows a link is told why, rather than shown a form that fails on
+            save. Only once the answer is known: not while the site loads, and
+            not after a failed read, when nobody has been refused anything.
           */}
-          {isAdmin ? null : (
+          {adminKnown && !isAdmin ? (
             <Alert severity="info">
-              {'Only site admins can change a plugin’s settings for this ' +
-                'site. You can read what is set here.'}
+              {`${permissionRefusalText('site.manage')}. You can read what is ` +
+                'set here.'}
             </Alert>
-          )}
+          ) : null}
 
           {/* Where it runs, at SITE scope. The org page answers "which of my
               sites"; the only question here is this one, and it has three
@@ -442,7 +454,7 @@ const SitePluginInstallation: NextPageWithLayout<Record<string, never>> = () => 
             three routes that 404.
           */}
           {pluginId === ACCOUNTS_PLUGIN_ID && hostId ? (
-            <AuthScreensCard hostId={hostId} />
+            <AuthScreensCard hostId={hostId} disabled={!isAdmin} />
           ) : null}
         </Stack>
         <PluginDisableCascadeDialog {...switchboard.dialogProps} />

@@ -79,7 +79,7 @@ describe('pins: five everywhere (Zach, 2026-10-18)', () => {
   })
 })
 
-describe('site pins: five a workspace, like workspace pins (AGL-4005)', () => {
+describe('site pins: as many as the person likes in a workspace (AGL-4005, AGL-4165)', () => {
   const pins = (orgId: string, n: number, from = 1): PinnedHost[] =>
     Array.from({ length: n }, (_, i) => ({ orgId, hostId: `${orgId}-h${from + i}` }))
 
@@ -102,29 +102,48 @@ describe('site pins: five a workspace, like workspace pins (AGL-4005)', () => {
     expect(readPinnedHosts(undefined)).toEqual([])
   })
 
-  it("counts each workspace's pins on their own", () => {
+  it("counts each workspace's pins on their own, with no cap a workspace", () => {
     const stored = [...pins('o1', 5), ...pins('o2', 2)]
     expect(workspacePinnedHosts(stored, 'o2')).toEqual(['o2-h1', 'o2-h2'])
     expect(pinHost(stored, { orgId: 'o2', hostId: 'o2-h3' })).toEqual({
       pinnedHosts: [...stored, { orgId: 'o2', hostId: 'o2-h3' }],
       outcome: 'pinned',
     })
+    // A sixth, a seventh and a fortieth pin in one workspace all land.
     expect(pinHost(stored, { orgId: 'o1', hostId: 'o1-h6' })).toEqual({
-      pinnedHosts: stored,
-      outcome: 'full',
+      pinnedHosts: [...stored, { orgId: 'o1', hostId: 'o1-h6' }],
+      outcome: 'pinned',
     })
+    const forty = pins('o1', 39)
+    const fortieth = pinHost(forty, { orgId: 'o1', hostId: 'o1-h40' })
+    expect(fortieth.outcome).toBe('pinned')
+    expect(workspacePinnedHosts(fortieth.pinnedHosts, 'o1')).toHaveLength(40)
     expect(pinHost(stored, { orgId: 'o1', hostId: 'o1-h2' }).outcome).toBe('alreadyPinned')
   })
 
   it('makes room past the account bound only from other workspaces', () => {
-    const stored = [...pins('o1', 1), ...pins('o9', 99)]
-    const { pinnedHosts, outcome } = pinHost(stored, { orgId: 'o9', hostId: 'o9-h100' })
-    expect(outcome).toBe('full')
-    expect(pinnedHosts).toEqual(stored)
-    const next = pinHost([...pins('o1', 2), ...pins('o9', 98, 10)], { orgId: 'o2', hostId: 'x' })
+    const stored = [...pins('o1', 1), ...pins('o9', PINNED_HOSTS_MAX - 1)]
+    const roomMade = pinHost(stored, { orgId: 'o9', hostId: 'o9-new' })
+    expect(roomMade.outcome).toBe('pinned')
+    expect(roomMade.pinnedHosts).toHaveLength(PINNED_HOSTS_MAX)
+    expect(roomMade.pinnedHosts[0]).toEqual({ orgId: 'o9', hostId: 'o9-h1' })
+    expect(roomMade.pinnedHosts.at(-1)).toEqual({ orgId: 'o9', hostId: 'o9-new' })
+    const next = pinHost([...pins('o1', 2), ...pins('o9', PINNED_HOSTS_MAX - 2, 10)], {
+      orgId: 'o2',
+      hostId: 'x',
+    })
     expect(next.pinnedHosts).toHaveLength(PINNED_HOSTS_MAX)
     expect(next.pinnedHosts[0]).toEqual({ orgId: 'o1', hostId: 'o1-h2' })
     expect(next.pinnedHosts.at(-1)).toEqual({ orgId: 'o2', hostId: 'x' })
+  })
+
+  it('is full only when one workspace holds every pin the account keeps', () => {
+    const stored = pins('o9', PINNED_HOSTS_MAX)
+    expect(pinHost(stored, { orgId: 'o9', hostId: 'o9-new' })).toEqual({
+      pinnedHosts: stored,
+      outcome: 'full',
+    })
+    expect(workspacePinnedHosts(stored, 'o9')).toHaveLength(PINNED_HOSTS_MAX)
   })
 
   it('unpins one and replaces one in its place', () => {

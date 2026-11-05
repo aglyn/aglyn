@@ -170,7 +170,7 @@ fun SpecScreen(
   if (!ScreenValues.condition(spec.requires, base)) {
     EmptyState(
       if (spec.scope == "staff") "Staff only" else "Not available to your role",
-      body = if (spec.scope == "staff") "This page is for Aglyn staff." else "Ask an owner or admin of this workspace for access.",
+      body = if (spec.scope == "staff") "This page is for Aglyn staff." else ScreenValues.requiredKey(spec.requires)?.let { com.aglyn.contracts.permissionRefusalText(it) } ?: "Ask an owner or admin of this workspace for access.",
       icon = AglynIcons.named("lock"),
     )
     return
@@ -180,7 +180,7 @@ fun SpecScreen(
   val model = remember(key) { ScreenModel(spec, base, plugin.api, plugin.firestore, plugin.writer, session.account) }
   model.createPasskey = if (session.passkeyRelyingParty != null) passkeys else null
   LaunchedEffect(key) { if (seed != null) model.seed(seed) else model.load() }
-  LaunchedEffect(session.claims) { model.rebase(base) }
+  LaunchedEffect(session.claims, session.orgPermissions, session.sitePermissions) { model.rebase(base) }
   // A title drawn from the data (`{data.jobs.jobs[id=params.jobId].brief|'AI job'}`) replaces the registered one in the top
   // bar once the data is in.
   val screenTitle = com.aglyn.ui.LocalScreenTitle.current
@@ -1170,6 +1170,7 @@ internal fun FieldInput(field: FieldSpec, context: JsonElement, value: FieldValu
   val label = ScreenValues.render(field.label, context)
   Column(Modifier.fillMaxWidth().testTag("field-${field.key}")) {
     when (field.kind) {
+      "heading" -> androidx.compose.material3.Text(label, style = androidx.compose.material3.MaterialTheme.typography.titleSmall, modifier = Modifier.padding(top = 8.dp))
       "toggle" -> SwitchRow(label, (value as? FieldValue.Flag)?.value == true, { onChange(FieldValue.Flag(it)) }, supporting = help)
       "hours" -> HoursInput(field, text) { onChange(FieldValue.Text(it)) }
       "stepper" -> StepperInput(field, context, label, text) { onChange(FieldValue.Text(it)) }

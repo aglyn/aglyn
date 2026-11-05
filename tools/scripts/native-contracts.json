@@ -1124,6 +1124,9 @@
         "COMMERCE_WORKSPACE_SITE_PERMISSIONS",
         "COMMERCE_PERMISSIONS",
         "MARKETPLACE_SITE_PERMISSIONS",
+        "MARKETPLACE_PUBLISHER_PERMISSIONS",
+        "CRM_SITE_PERMISSIONS",
+        "CRM_PERMISSIONS",
         "OUTREACH_PERMISSIONS",
         "EMAIL_SITE_PERMISSIONS",
         "INBOX_SITE_PERMISSIONS",
@@ -1141,6 +1144,8 @@
         "libs/plugins/funnels/src/lib/model/funnels-permissions.ts",
         "libs/plugins/marketing/src/lib/model/marketing-permissions.ts",
         "libs/plugins/marketplace/src/lib/model/marketplace-site-permissions.ts",
+        "libs/plugins/marketplace/src/lib/model/marketplace-publisher-permissions.ts",
+        "libs/plugins/crm/src/lib/model/crm-permissions.ts",
         "libs/plugins/email/src/lib/model/email-permissions.ts",
         "libs/plugins/inbox/src/lib/model/inbox-permissions.ts",
         "libs/plugins/outreach/src/lib/constants/bundle-common.ts",
@@ -29038,6 +29043,73 @@
           {
             "permissions": {
               "hosts.delete": false
+            }
+          }
+        ],
+        [
+          "viewer",
+          null,
+          {
+            "permissions": {
+              "posSell": true
+            }
+          }
+        ],
+        [
+          "viewer",
+          null,
+          {
+            "permissions": {
+              "managePos": true
+            }
+          }
+        ],
+        [
+          "editor",
+          {
+            "permissions": {
+              "managePos": false
+            }
+          },
+          null
+        ],
+        [
+          "editor",
+          null,
+          {
+            "permissions": {
+              "posRefund": false
+            }
+          }
+        ],
+        [
+          "viewer",
+          null,
+          {
+            "permissions": {
+              "posBuyHardware": true
+            }
+          }
+        ],
+        [
+          "editor",
+          {
+            "permissions": {
+              "commerce.reservations": false
+            }
+          },
+          null
+        ],
+        [
+          "editor",
+          {
+            "permissions": {
+              "commerce.reservations": false
+            }
+          },
+          {
+            "permissions": {
+              "commerce.walkIns": true
             }
           }
         ]

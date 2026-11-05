@@ -27,6 +27,7 @@ import {
 } from '../drafts/besigner-draft-store'
 import useBesignerDraft, {
   recoverableRoomSessions,
+  SHARED_DRAFT_READ_DEADLINE_MS,
   type BesignerDraftState,
 } from './use-besigner-draft'
 
@@ -557,6 +558,72 @@ describe('useBesignerDraft unopened saved draft (AGL-2874)', () => {
     expect(mockReadServerDraft).toHaveBeenCalledTimes(1)
   })
 
+  it('says it is loading until the read answers, draft or no draft (AGL-4174)', async () => {
+    mockReadServerDraft.mockResolvedValue(null)
+    const { state } = setup()
+    expect(state().sharedDraftLoading).toBe(true)
+    await settle()
+    expect(state().sharedDraftLoading).toBe(false)
+    expect(state().sharedDraftUnopened).toBe(false)
+  })
+
+  it('is not loading where there is no shared draft to read (AGL-4174)', () => {
+    const { state } = setup({ firestore: undefined })
+    expect(state().sharedDraftLoading).toBe(false)
+  })
+
+  it('counts a read that failed as a draft nothing may delete (AGL-4174)', async () => {
+    mockReadServerDraft.mockRejectedValue(new Error('unavailable'))
+    const { state } = setup()
+    await settle()
+    expect(state().sharedDraftLoading).toBe(false)
+    expect(state().sharedDraftUnopened).toBe(true)
+    expect(state().available).toBe(false)
+  })
+
+  it('opens saving after the deadline without calling the draft gone (AGL-4174)', async () => {
+    jest.useFakeTimers()
+    try {
+      mockReadServerDraft.mockReturnValue(new Promise(() => undefined))
+      const { state } = setup()
+      expect(state().sharedDraftLoading).toBe(true)
+      act(() => {
+        jest.advanceTimersByTime(SHARED_DRAFT_READ_DEADLINE_MS)
+      })
+      expect(state().sharedDraftLoading).toBe(false)
+      expect(state().sharedDraftUnopened).toBe(true)
+    } finally {
+      jest.useRealTimers()
+    }
+  })
+
+  it('keeps loading while a draft a link asked for waits on the room (AGL-4174)', async () => {
+    const seen: BesignerDraftState[] = []
+    function Harness(props: { roomPeople: number | null }) {
+      const draft = useBesignerDraft({
+        ids: IDS,
+        firestore: {} as never,
+        loaded: true,
+        dirty: false,
+        storedStamp: 'ms:100',
+        storedNodes: STORED_NODES,
+        roomPeople: props.roomPeople,
+        roomSessions: props.roomPeople,
+        openShared: true,
+      })
+      seen.push(draft)
+      return null
+    }
+    const { rerender } = render(<Harness roomPeople={null} />)
+    await settle()
+    expect(seen[seen.length - 1].sharedDraftLoading).toBe(true)
+    expect(mockCanvas.applyNodes).not.toHaveBeenCalled()
+    rerender(<Harness roomPeople={0} />)
+    await settle()
+    expect(mockCanvas.applyNodes).toHaveBeenCalledWith(DRAFT_NODES)
+    expect(seen[seen.length - 1].sharedDraftLoading).toBe(false)
+  })
+
   it('reports the draft unopened until it is opened', async () => {
     const { state } = setup()
     await settle()
@@ -794,6 +861,7 @@ describe('describeDraftOffer origin (AGL-2508)', () => {
     staleAgainstDocument: false,
     restoreBlockedBy: null,
     sharedDraftUnopened: false,
+    sharedDraftLoading: false,
     openWithheld: false,
     restore: () => undefined,
     discard: () => undefined,

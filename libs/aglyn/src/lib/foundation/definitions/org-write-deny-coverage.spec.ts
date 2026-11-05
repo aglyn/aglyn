@@ -176,7 +176,7 @@ function parseOrgUpdateRule(): OrgUpdateRule {
   }
 
   return {
-    orgAdminDenied: hasAnyKeys(branchFor('canManageOrg()')),
+    orgAdminDenied: hasAnyKeys(branchFor('mayChangeOrgFields(')),
     billingStaffDenied: hasAnyKeys(branchFor('isBillingStaff()')),
     superStaffDenied: hasAnyKeys(branchFor('isSuperStaff()')),
     branches,
@@ -337,7 +337,7 @@ describe('every server-owned org field is denied to client writes (AGL-1355)', (
           .filter((field) => !rule.superStaffDenied.includes(field))
           .sort(),
       ).toEqual(['enabledPlugins', 'erasureRequestedAt'])
-      // isSuperStaff / isBillingStaff / canManageOrg.
+      // isSuperStaff / isBillingStaff / the member branch (mayChangeOrgFields).
       expect(rule.branches).toHaveLength(3)
     })
 
@@ -394,7 +394,7 @@ describe('every server-owned org field is denied to client writes (AGL-1355)', (
           `(AGL-1354: \`brandingProfile\` was exactly this, and it bought a ` +
           `free-plan org the Enterprise white-label gate). The console writes ` +
           `these through Admin-SDK routes, so denying them costs nothing: add ` +
-          `each to the \`canManageOrg()\` hasAny([…]) list in ${RULES_FILE}.`,
+          `each to the member branch's \`mayChangeOrgFields()\` hasAny([…]) list in ${RULES_FILE}.`,
       )
     }
   })
@@ -420,7 +420,7 @@ describe('every server-owned org field is denied to client writes (AGL-1355)', (
           `AGL-1354, which shipped four such fields.\n\n` +
           `Decide, on this commit:\n` +
           `  • server-owned (an entitlement, price, routing or staff input) — ` +
-          `add it to the \`canManageOrg()\` hasAny([…]) list in ` +
+          `add it to the member branch's \`mayChangeOrgFields()\` hasAny([…]) list in ` +
           `${RULES_FILE}, and to the \`isBillingStaff()\` list too if ` +
           `repointing it is not a billing action;\n` +
           `  • genuinely a user preference — add it to ` +

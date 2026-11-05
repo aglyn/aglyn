@@ -232,7 +232,7 @@ jest.mock('@aglyn/tenant-runtime/org-permissions', () => ({
   }),
 }))
 
-jest.mock('./publisher-profile', () => ({ canActAsPublisher: async () => true }))
+jest.mock('./publisher-profile', () => ({ isPublisherMember: async () => true }))
 
 jest.mock('./purchase-entitlement', () => ({
   requirePurchase: async () => null,

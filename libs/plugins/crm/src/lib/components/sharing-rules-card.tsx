@@ -53,6 +53,7 @@ import {
   describeShareTargets,
   describeSharingRuleScope,
 } from '../model/crm-sharing'
+import { crmSettingsPermissionRefusal } from '../model/crm-permissions'
 import { callCrmSharing } from '../model/crm-sharing-api'
 import { SharingRuleDrawer, type SharingRuleDraft } from './sharing-rule-drawer'
 
@@ -252,7 +253,7 @@ export function SharingRulesCard(props: SharingRulesCardProps) {
         )}
         {ready && !canManage ? (
           <Typography variant="caption" color="text.secondary">
-            {'Only a workspace owner or admin can change sharing rules.'}
+            {crmSettingsPermissionRefusal()}
           </Typography>
         ) : null}
       </Stack>

@@ -29,10 +29,11 @@ import {
   collectionCeiling,
   useFirestore,
   useFirestoreCollection,
+  useFirestoreDoc,
 } from '@aglyn/tenant-feature-instance'
 import { Button, Chip, Stack, Typography } from '@mui/material'
 import type { GridColDef } from '@mui/x-data-grid'
-import { collection, limit, query, where } from 'firebase/firestore'
+import { collection, doc, limit, query, where } from 'firebase/firestore'
 import { useSearchParams } from 'next/navigation'
 import { useEffect, useMemo, useRef, useState } from 'react'
 import QuoteEditorDialog, { type QuoteRow } from './quote-editor-dialog.component'
@@ -62,12 +63,14 @@ interface QuoteListRow extends QuoteRow {
   moreItems: number
   statusKey: ReturnType<typeof CommerceModel.quoteDisplayStatus>['key']
   statusLabel: string
+  /** Unpaid, with tax still to be added at payment: the pay page's own answer. */
+  taxAtPayment: boolean
   totalCents: number
   updatedAtMs: number
 }
 
-/** One quote as its row draws and sorts it. */
-function quoteListRow(quote: QuoteRow): QuoteListRow {
+/** One quote as its row draws and sorts it, under the store's sales tax choice. */
+function quoteListRow(quote: QuoteRow, store: CommerceModel.PayLinkStore): QuoteListRow {
   const customer = quote.quote?.customer
   const status = CommerceModel.quoteDisplayStatus(quote)
   const items = quote.lineItems ?? []
@@ -78,6 +81,9 @@ function quoteListRow(quote: QuoteRow): QuoteListRow {
     moreItems: Math.max(0, items.length - 1),
     statusKey: status.key,
     statusLabel: status.label,
+    // `quotePayTax`, as the pay page reads it (AGL-4162): a quote saved before
+    // the store chose its sales tax takes the choice as it stands now.
+    taxAtPayment: CommerceModel.isUnpaidQuote(quote) && CommerceModel.quotePayTax(quote.quote, store).basis.kind === 'at-payment',
     totalCents: Number(quote.totals?.totalCents ?? 0),
     // The customer's latest answer counts as an update (AGL-4096), so a quote
     // they just approved or asked changes to sorts to the top.
@@ -108,7 +114,15 @@ export function HostQuotesCard(props: HostQuotesCardProps) {
     { idField: '$id' },
   )
   const quotes = useMemo(() => ceilingedWindow<QuoteRow>(quoteDocs ?? undefined, QUOTE_CEILING), [quoteDocs])
-  const rows = useMemo(() => Array.from(quotes.rows, quoteListRow), [quotes])
+  // One read for the whole list. Until it answers, each quote's saved basis stands.
+  const { data: storeSettings } = useFirestoreDoc<{ tax?: unknown }>(
+    () => doc(firestore, 'hosts', hostId, 'settings', 'store'),
+    [firestore, hostId],
+  )
+  const rows = useMemo(() => {
+    const store = CommerceModel.payLinkStoreOf(storeSettings)
+    return quotes.rows.map((quote) => quoteListRow(quote, store))
+  }, [quotes, storeSettings])
 
   const { data: productDocs } = useFirestoreCollection<Record<string, any>>(
     () => collectionCeiling(collection(firestore, 'hosts', hostId, 'products'), PRODUCT_WINDOW),
@@ -176,7 +190,7 @@ export function HostQuotesCard(props: HostQuotesCardProps) {
         renderCell: ({ row }: { row: QuoteListRow }) => (
           <Stack sx={{ alignItems: 'flex-end', minWidth: 0, width: 1 }}>
             <Typography variant="body2">{posMoney(row.totalCents)}</Typography>
-            {row.quote?.tax?.kind === 'at-payment' && CommerceModel.isUnpaidQuote(row) ? (
+            {row.taxAtPayment ? (
               <Typography variant="caption" color="text.secondary" noWrap>
                 {'plus tax at payment'}
               </Typography>

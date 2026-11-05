@@ -26,7 +26,7 @@ switch that puts every page behind one password. Instead, pick the setting that 
 | Who should see the site | Use | Where | Plan |
 | --- | --- | --- | --- |
 | **Only you and your team, while you finish it** | [Preview](#keep-it-to-your-team-with-preview) | **Admin → Error pages** (also offered when you create a site) | Every plan |
-| **No one yet.** Not visitors, not search engines, not someone with the link | [Maintenance mode](#hide-the-whole-site-until-launch) | **Admin → Error pages** | Every plan |
+| **Your team only, while a live site is paused.** Not visitors, not search engines, not someone with the link | [Maintenance mode](#hide-the-whole-site-until-launch) | **Admin → Error pages** | Every plan |
 | **Anyone with the link, but keep it off Google** | [Discourage search engines](#keep-it-out-of-search-only) | **Setup → SEO → Search engines** | Every plan |
 | **Only people you give a password to** | [Password protected](#share-it-behind-a-password), page by page | The page's **Page Access** card | Every plan |
 | **Only people signed in to your site** | [Members only](#only-signed-in-members), page by page | The page's **Page Access** card | Pro and up |
@@ -42,7 +42,8 @@ team see the whole site: every page, your header and footer, collections and wor
 with a bar across the top that says only your team can see it. When you're ready, you flip
 one switch and the site is public to everyone.
 
-1. Open **Admin → Error pages** for the site. Only **site admins** can open the Admin area.
+1. Open **Admin → Error pages** for the site. Opening the Admin area takes the **Manage site
+   settings** permission, which a site's admins hold by default.
 2. Switch on **Preview — only you and your team can see the site**. It confirms with
    *"Your site is in preview — only you and your team can see it"*.
 3. Keep building. A banner, *"This site is in preview"*, follows you around the site's
@@ -99,16 +100,16 @@ your team sees the page. Switch it off to make the page public. When you create 
 Choosing who sees a page is part of publishing, so it needs a role that can publish.
 
 :::note Preview or maintenance mode?
-Both show visitors your 503 page. **Maintenance mode** shows it to everyone, your team
-included. **Preview** keeps the whole site working for your team. If both are on, maintenance
-mode wins and nobody sees the site.
+Both show visitors your 503 page and keep the whole site working for your team. Without a
+503 page, **Preview** tells visitors the site is **Coming soon**, and **Maintenance mode**
+tells them it's undergoing maintenance. If both are on, visitors get the maintenance answer.
 :::
 
 ## Hide the whole site until launch {#hide-the-whole-site-until-launch}
 
 **Maintenance mode** is the way to make the whole site private in one step. Every address
 on the site shows your 503 page to every visitor, including anyone who already has a
-link, and pages you add later are covered too.
+link, and pages you add later are covered too. You and your team still see the whole site.
 
 ![The Error pages card, with the four error-page pickers and the "Maintenance mode — show the 503 page at every address" switch beneath them](/img/site-protection/setup-error-pages.png)
 
@@ -117,7 +118,8 @@ link, and pages you add later are covered too.
    [custom error pages](error-screens.md). Without one, visitors see Aglyn's plain
    built-in notice.
 2. In the same **Admin → Error pages** card, switch on **Maintenance mode — show the 503
-   page at every address**. Only **site admins** can open the Admin area.
+   page at every address**. Opening the Admin area takes the **Manage site settings**
+   permission, which a site's admins hold by default.
 3. Keep building. You and your team still edit pages, layouts and content in the console
    and the Besigner as usual. Maintenance mode only changes what the published site
    shows.
@@ -126,7 +128,7 @@ link, and pages you add later are covered too.
 
 Search engines are told the site is temporarily unavailable, and the 503 page is never
 offered to them, so nothing about the unfinished site gets indexed while maintenance mode
-is on. The site's search page and its collection feeds pause too. See
+is on. For visitors, the site's search page and its collection feeds pause too. See
 [Search engines and feeds](maintenance-mode.md#search-engines-and-feeds).
 
 :::tip Keep one page open instead
@@ -187,9 +189,9 @@ back online*. Assist shows the change on a plan card, and nothing changes until 
 confirm it. It's then saved to your live site straight away, just as if you'd used the
 switch yourself, and it uses no AI credits.
 
-- **Maintenance mode** can only be turned on or off by a **site admin**, as in the Admin
-  area. If you're an editor or author, Assist makes the rest of your request and says it
-  left maintenance mode alone.
+- **Maintenance mode** needs the **Manage site settings** permission to turn on or off, as
+  in the Admin area. A site's admins hold it by default. Without it, Assist makes the rest
+  of your request and says it left maintenance mode alone.
 - **Members only** is set only on the **Pro** plan and up. On other plans, Assist
   says why it left the page as it was.
 - **Passwords** are never set by Assist, so a password never goes into the chat. Set it

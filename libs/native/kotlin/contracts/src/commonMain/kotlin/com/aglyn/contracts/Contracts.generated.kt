@@ -2296,6 +2296,7 @@ data class OrgPermissionEntry(
     val group: String? = null,
     val key: String,
     val label: String,
+    val narrowable: Boolean? = null,
     val pluginId: String? = null,
     val refines: String? = null,
     val scope: OrgPermissionScope? = null,
@@ -2675,6 +2676,7 @@ data class PosKioskCatalog(
     val categories: List<PosKioskCategory>,
     val currency: String,
     val products: List<PosKioskProduct>,
+    val truncated: Boolean? = null,
 )
 
 @Serializable

@@ -318,4 +318,40 @@ describe('ListingReviewStatus (AGL-1079)', () => {
     expect(container.textContent).toBe('')
     expect(global.fetch).not.toHaveBeenCalled()
   })
+
+  describe('asks "Manage published listings" (AGL-4047)', () => {
+    it('without it, names the permission and never asks the route', () => {
+      respondWith({ versions: [], latestVersion: '', latestApprovedVersion: '' })
+      render(
+        <ListingReviewStatus
+          listingId="listing-1"
+          isPlugin
+          permissions={{ 'marketplace.manageListings': false }}
+        />,
+      )
+      expect(
+        screen.getByText(
+          'Your role does not include "Manage published listings" — ask an organization admin',
+        ),
+      ).toBeTruthy()
+      expect(global.fetch).not.toHaveBeenCalled()
+    })
+
+    it('with it, reads the versions as before', async () => {
+      respondWith({
+        latestVersion: '1.0.2',
+        latestApprovedVersion: '1.0.2',
+        versions: [{ ...VERSION, version: '1.0.2', reviewState: 'approved' }],
+      })
+      render(
+        <ListingReviewStatus
+          listingId="listing-1"
+          isPlugin
+          permissions={{ 'marketplace.manageListings': true }}
+        />,
+      )
+      await waitFor(() => expect(screen.getByText('Approved')).toBeTruthy())
+      expect(screen.queryByText(/Manage published listings/)).toBeNull()
+    })
+  })
 })

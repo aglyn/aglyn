@@ -48,6 +48,7 @@ import {
 import { recordCanvasRenderedWidths } from '../utils/record-canvas-rendered-widths'
 import {
   type BesignerDraftState,
+  SHARED_DRAFT_READ_DEADLINE_MS,
   useBesignerDraft,
 } from './use-besigner-draft'
 
@@ -342,9 +343,15 @@ export interface UseBesignerDocumentResult {
    *
    * Only while the offer is ON SCREEN and can be opened: the refusal points
    * at the banner's Open draft and Discard, and must never point at buttons
-   * that are not there.
+   * that are not there. It also refuses while the draft is still loading
+   * (AGL-4174), when nobody can yet say what a save would run over.
    */
   refuseOverUnopenedDraft: (action: 'save' | 'publish') => boolean
+  /**
+   * Why saving is closed for now, for the toolbar to show (AGL-4174); undefined
+   * when it is open.
+   */
+  saveBlockedReason?: string
   /**
    * Announce a write this editor is about to make to the SAME document
    * outside `handleSave` — component properties are the first (AGL-1247).
@@ -587,9 +594,16 @@ export function useBesignerDocument<TData = unknown>(
    */
   const expectOwnWriteRef = useRef<{ nodes: unknown } | null>(null)
   const [remoteChanged, setRemoteChanged] = useState(false)
+  /**
+   * The canvas was filled from this browser's cached copy, and the server has
+   * not answered yet. Its next snapshot is the document catching up, not
+   * somebody saving while this author edits (AGL-4183).
+   */
+  const baseFromCacheRef = useRef(false)
 
   useEffect(() => {
     if (nodes && !canvas.didSetInitial) {
+      baseFromCacheRef.current = fromCache === true
       setLocalNodes(toCanvasNodes ? toCanvasNodes(nodes) : nodes)
       // The loaded document becomes the "saved" baseline ONLY when the store
       // has acknowledged it. A snapshot still carrying our own queued write
@@ -637,6 +651,27 @@ export function useBesignerDocument<TData = unknown>(
 
   useEffect(() => {
     const stored = versionStamp(updatedAt)
+    // The server's first answer over a canvas filled from the cache (AGL-4183).
+    // A page saved from anywhere else since this browser last opened it reads
+    // older here for a moment, and calling that a conflict told the author
+    // someone else had saved and paused saving, with nobody else in the page.
+    // Nothing is lost by taking the server's copy while the canvas is untouched.
+    // An author who already typed falls through to the guard below as before.
+    if (baseFromCacheRef.current && fromCache !== true) {
+      baseFromCacheRef.current = false
+      if (nodes && canvas.isInitialSame) {
+        const moved =
+          hasConcurrentWrite(baseStampRef.current, stored) ||
+          !isEqual(nodes, baseNodesRef.current)
+        if (moved) {
+          setLocalNodes(toCanvasNodes ? toCanvasNodes(nodes) : nodes)
+          canvas.updateInitialNodes(undefined, { confirmed: !pendingWrites })
+        }
+        baseStampRef.current = stored
+        baseNodesRef.current = nodes
+        return
+      }
+    }
     const stampMoved = hasConcurrentWrite(baseStampRef.current, stored)
     // A writer that forgot the stamp still cannot hide: the content moved.
     const nodesMoved =
@@ -692,7 +727,18 @@ export function useBesignerDocument<TData = unknown>(
     // not be allowed to walk the baseline forward over a reported conflict.
     expectOwnWriteRef.current = null
     setRemoteChanged(true)
-  }, [updatedAt, nodes, storedShapeOfCanvas])
+  }, [updatedAt, nodes, storedShapeOfCanvas, fromCache])
+
+  // A saved draft is weighed against the server's copy of the document, never a
+  // cached one (AGL-4183): against an older cached stamp a good draft reads as
+  // overtaken and stays closed. Past the deadline, say offline, the cache is all
+  // there will be, so it goes ahead rather than leaving saving closed.
+  const [cacheDeadlinePassed, setCacheDeadlinePassed] = useState(false)
+  useEffect(() => {
+    if (fromCache !== true) return undefined
+    const timer = setTimeout(() => setCacheDeadlinePassed(true), SHARED_DRAFT_READ_DEADLINE_MS)
+    return () => clearTimeout(timer)
+  }, [fromCache])
 
   // Crash net (AGL-1256). Shares the conflict guard's stamp so the restore
   // prompt can tell "your unsaved work" from "your unsaved work, and someone
@@ -702,7 +748,7 @@ export function useBesignerDocument<TData = unknown>(
     // Given one, the shared working draft joins the local crash net and wins
     // when both exist (AGL-1152).
     firestore: options.firestore,
-    loaded: canvas.didSetInitial,
+    loaded: canvas.didSetInitial && (fromCache !== true || cacheDeadlinePassed),
     dirty: saveAvailable,
     storedStamp: versionStamp(updatedAt),
     storedNodes: nodes,
@@ -721,6 +767,15 @@ export function useBesignerDocument<TData = unknown>(
     ;(options.notify ?? noopNotify)(BESIGNER_DRAFT_OPEN_WITHHELD_COPY, { variant: 'info' })
   }, [draft.openWithheld, options.notify])
 
+  /**
+   * Why saving is closed for now (AGL-4174). Until the saved draft's read has
+   * answered, the canvas may not hold what the author came to publish, and a
+   * save from it is how a draft gets replaced by an empty page.
+   */
+  const saveBlockedReason = draft.sharedDraftLoading
+    ? `Loading this ${noun}'s saved draft`
+    : undefined
+
   const unopenedDraftOnOffer =
     draft.available &&
     draft.origin === 'shared' &&
@@ -729,6 +784,15 @@ export function useBesignerDocument<TData = unknown>(
   // See `UseBesignerDocumentResult.refuseOverUnopenedDraft`.
   const refuseOverUnopenedDraft = useCallback(
     (action: 'save' | 'publish'): boolean => {
+      // Every way in, not just the toolbar: the File menu and the keyboard
+      // reach these handlers without passing the disabled button.
+      if (saveBlockedReason) {
+        notify(`${saveBlockedReason}. Try again in a moment.`, {
+          variant: 'info',
+          allowDuplicate: true,
+        })
+        return true
+      }
       if (!unopenedDraftOnOffer) return false
       notify(
         action === 'publish'
@@ -740,7 +804,7 @@ export function useBesignerDocument<TData = unknown>(
       )
       return true
     },
-    [unopenedDraftOnOffer, noun, notify],
+    [saveBlockedReason, unopenedDraftOnOffer, noun, notify],
   )
 
   const handleSave = useCallback(async () => {
@@ -1016,6 +1080,7 @@ export function useBesignerDocument<TData = unknown>(
     discardChanges,
     canDiscard: saveAvailable || draft.available || draft.sharedDraftUnopened,
     refuseOverUnopenedDraft,
+    saveBlockedReason,
     markOwnWrite,
     draft,
     jsonOpen,

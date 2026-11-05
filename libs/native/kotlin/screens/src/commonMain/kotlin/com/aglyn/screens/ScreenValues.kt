@@ -529,10 +529,17 @@ object ScreenValues {
       val spec = body["\$collect"] as JsonObject
       val prefix = spec.str("prefix").orEmpty()
       val kind = spec.str("as") ?: "text"
+      // `over: <path>`: the map stored there with the inputs laid over it, so a key this form does not offer is kept.
+      // `changes: <path>`: only what differs from the map stored there, a cleared key being null.
+      val over = spec.str("over")
+      val against = spec.str("changes")
+      val stored = (over ?: against)?.let { lookup(it, context) } as? JsonObject
       val map = mutableMapOf<String, JsonElement>()
+      if (over != null) stored?.let { map.putAll(it) }
       ((lookup("form", context)) as? JsonObject)?.forEach { (key, value) ->
         if (!key.startsWith(prefix)) return@forEach
         val name = key.removePrefix(prefix)
+        if (over != null) map.remove(name)
         val primitive = value as? JsonPrimitive
         when {
           value is JsonNull -> {}
@@ -548,6 +555,16 @@ object ScreenValues {
           primitive != null && primitive.isString -> if (primitive.content.isNotEmpty()) map[name] = value
           else -> map[name] = value
         }
+      }
+      if (against != null) {
+        val changes = mutableMapOf<String, JsonElement>()
+        ((lookup("form", context)) as? JsonObject)?.keys.orEmpty().filter { it.startsWith(prefix) }.forEach { key ->
+          val name = key.removePrefix(prefix)
+          val before = (stored?.get(name) as? JsonPrimitive)?.takeIf { !it.isString }?.booleanOrNull
+          val after = (map[name] as? JsonPrimitive)?.booleanOrNull
+          if (before != after) changes[name] = map[name] ?: JsonNull
+        }
+        return JsonObject(changes)
       }
       JsonObject(map)
     } else if (body.size == 1 && body["\$afterHours"] != null) {
@@ -738,6 +755,10 @@ object ScreenValues {
     }
     return out.toString()
   }
+
+  /** The catalog key a `requires` asks (`org.can[data.manage]`, `site.can[managePos]`), so a refusal can name it. */
+  fun requiredKey(expression: String?): String? =
+    expression?.substringAfter(".can[", "")?.takeIf { it.contains(']') }?.substringBefore(']')
 
   fun condition(expression: String?, context: JsonElement): Boolean {
     val e = expression?.trim().orEmpty()

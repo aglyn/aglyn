@@ -45,7 +45,7 @@ const flat = (source: string) => source.replace(/\s+/g, ' ').replace(/[`'"] \+ [
 describe('native products import After import step', () => {
   it('belongs to the products resource, in the zone the review draws, and asks what the console asks', () => {
     expect(screen.zones).toEqual(['transferStep'])
-    expect(screen.requires).toBe('stash.importResource == commerce.products && org.manager')
+    expect(screen.requires).toBe('stash.importResource == commerce.products && org.can[data.manage]')
     expect(flat(stepComponent)).toContain('What happens to the new products once they land.')
     expect(screen.blocks[0]?.text).toBe('What happens to the new products once they land.')
     const field = screen.blocks.find((block) => block.id === 'copy')?.fields?.[0]

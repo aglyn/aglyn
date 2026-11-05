@@ -122,6 +122,7 @@ const mockFirestore = {}
 const mockDataScope = { scope: ['orgs', 'org-1'], orgId: 'org-1' }
 
 jest.mock('@aglyn/tenant-feature-instance', () => ({
+  useFirestoreDoc: () => ({ data: undefined, status: 'loading' }),
   useFirestore: () => mockFirestore,
   useOrgDataScope: () => mockDataScope,
   useScopeTokens: () => ({ tokens: ['org'], orgWide: true, loaded: true }),

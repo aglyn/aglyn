@@ -7,11 +7,12 @@ description: Temporarily take your site offline behind a designed 503 page.
 # Maintenance mode
 
 Need to pause your live site while you make changes? **Maintenance mode** serves your
-designed **503** page to visitors until you switch it back.
+designed **503** page to visitors until you switch it back. You and your team still see
+the whole site, with a bar across the top that says only your team can see it.
 
-To keep building while only your team can see the site, use
-[Preview](make-your-site-private.md#keep-it-to-your-team-with-preview) instead: visitors
-see the same 503 page, and your team sees the whole site.
+For a site that hasn't launched yet, use
+[Preview](make-your-site-private.md#keep-it-to-your-team-with-preview) instead: your team
+sees the site the same way, and visitors without a 503 page get a **Coming soon** notice.
 
 ![The Error pages card, with the four error-page pickers and the "Maintenance mode — show the 503 page at every address" switch beneath them](/img/site-protection/setup-error-pages.png)
 
@@ -19,7 +20,8 @@ see the same 503 page, and your team sees the whole site.
 
 1. Open **Admin → Error pages** for the site — the same card that assigns your
    [error pages](error-screens.md). The switch takes every page of the site offline for
-   every visitor, so the Admin area is limited to **site admins**.
+   every visitor, so the Admin area takes the **Manage site settings** permission, which a
+   site's admins hold by default.
 2. Switch on **Maintenance mode — show the 503 page at every address**. It confirms with
    *"Maintenance mode on — visitors see the 503 page"*.
 3. Visitors now see your [503 error page](error-screens.md) on every path.
@@ -33,8 +35,9 @@ check back shortly.") rather than anything on-brand. Design and assign the 503 f
 
 While maintenance mode is on, every address tells search engines the site is down for a
 short while and to check back later. They don't take your 503 page for your site's
-content, so your pages aren't replaced by it in search results. Your site's search page
-and its collection feeds pause too, and come back when you switch maintenance mode off.
+content, so your pages aren't replaced by it in search results. For visitors, your site's
+search page and its collection feeds pause too, and come back when you switch maintenance
+mode off.
 
 Keep it short on a site that's already live. If a site stays unavailable for more than
 a couple of days, search engines may start dropping its pages.

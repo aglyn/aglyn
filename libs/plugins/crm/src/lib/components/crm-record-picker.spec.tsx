@@ -32,6 +32,8 @@ const mockReads: string[] = []
 let mockReadsHang = false
 
 jest.mock('@aglyn/tenant-feature-instance', () => ({
+  // The record-names hook re-reads when the session heals; nothing heals here.
+  subscribeFirestoreSessionHeal: () => () => undefined,
   useFirestore: () => ({}),
   useFirestoreCollection: (build: () => unknown) =>
     build() ? { data: mockWindow, status: 'success' } : { data: undefined, status: 'idle' },

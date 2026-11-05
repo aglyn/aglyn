@@ -163,7 +163,11 @@ describe('a page as an import keeps it', () => {
 
   it('leaves out a page bot protection or a firewall turned away (401, 403, 429) as blocked; any other error is unreadable', async () => {
     for (const status of [401, 403, 429]) expect(siteImportLeftOutReason('http-error', status)).toBe('blocked')
-    for (const status of [404, 410, 500, 503]) expect(siteImportLeftOutReason('http-error', status)).toBe('unreadable')
+    for (const status of [500, 503]) expect(siteImportLeftOutReason('http-error', status)).toBe('unreadable')
+    // A page the site says is not there is not a page it could not read just now (AGL-4152).
+    for (const status of [404, 410]) expect(siteImportLeftOutReason('http-error', status)).toBe('missing')
+    expect(siteImportLeftOutReason('duplicate')).toBe('duplicate')
+    expect(siteImportLeftOutReason('system-page')).toBe('system-page')
     expect(siteImportLeftOutReason('http-error')).toBe('unreadable')
     // Only an error answer is a refusal: a 2xx that is not a page is a file (AGL-4106).
     expect(siteImportLeftOutReason('not-html', 403)).toBe('file')

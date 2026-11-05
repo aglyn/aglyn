@@ -84,10 +84,33 @@ data class ScreenSession(
    * the app is linked to that domain, and a creator is bound); null hides the action.
    */
   val passkeyRelyingParty: String? = null,
+  /** The member's verdict on every catalog key in this workspace (`memberPermissions`); a screen asks `org.can[<key>]`. */
+  val orgPermissions: Map<String, Boolean> = emptyMap(),
+  /** The same on the site in [permissionsSiteId], with that site's own stamp applied; a screen asks `site.can[<key>]`. */
+  val sitePermissions: Map<String, Boolean> = emptyMap(),
+  val permissionsSiteId: String? = null,
+  /** The plugins on for this workspace, which decide the keys a permission editor offers; null offers them all. */
+  val enabledPlugins: List<String>? = null,
 ) {
   fun context(plugin: NativePluginContext?, params: NativeParams): JsonElement {
     val role = orgRole.orEmpty()
     val manager = role == "owner" || role == "admin"
+    // Staff read what a manager reads, as `org.manager` lets them; the routes decide. A screen on no site, or on another
+    // site than the one the stamp was read for, reads the workspace's verdict.
+    val onSite = if (plugin?.hostId != null && plugin.hostId == permissionsSiteId) sitePermissions else orgPermissions
+    fun can(verdicts: Map<String, Boolean>) = JsonObject(verdicts.mapValues { JsonPrimitive(it.value || claims.isStaff) })
+    fun rows(narrowable: Boolean) = kotlinx.serialization.json.JsonArray(
+      com.aglyn.contracts.permissionEditorRows(com.aglyn.contracts.Contracts.orgRoleGrants, enabledPlugins, narrowable).map { row ->
+        buildJsonObject {
+          put("key", row.key)
+          put("label", row.label)
+          put("description", row.description)
+          put("group", row.group)
+          put("groupLabel", row.groupLabel)
+          put("first", row.first)
+        }
+      },
+    )
     return buildJsonObject {
       put("org", buildJsonObject {
         put("id", plugin?.orgId)
@@ -96,11 +119,13 @@ data class ScreenSession(
         put("role", role)
         put("manager", manager || claims.isStaff)
         put("owner", role == "owner")
+        put("can", can(orgPermissions))
       })
       put("site", buildJsonObject {
         put("id", plugin?.hostId)
         put("slug", plugin?.hostSlug)
         put("name", siteName)
+        put("can", can(onSite))
       })
       put("user", buildJsonObject {
         put("uid", plugin?.uid)
@@ -121,6 +146,8 @@ data class ScreenSession(
       put("app", buildJsonObject {
         put("origin", origin)
         put("passkeyRp", passkeyRelyingParty)
+        put("permissionCatalog", rows(false))
+        put("narrowablePermissions", rows(true))
       })
       // Today, for routes that take a period, in UTC as the routes keep them (`ScreenValues.nowObject`).
       put("now", ScreenValues.nowObject())

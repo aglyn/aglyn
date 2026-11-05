@@ -20,7 +20,7 @@ import { firebaseAdmin, getOrgForHost } from '@aglyn/tenant-data-admin'
 import { resolveOrgPermissions } from '@aglyn/tenant-runtime/org-permissions'
 import { isPrivateListing, listingArtifactType } from '../model/marketplace'
 import { artifactTypeOwnerOrRefusal, marketplaceInstallStamp } from './artifact-owner'
-import { canActAsPublisher } from './publisher-profile'
+import { ownsListingHere } from './own-listing'
 import { requirePurchase } from './purchase-entitlement'
 import { recordInstallProvenance } from './provenance'
 import { recordVersionMove } from './version-stats'
@@ -119,11 +119,15 @@ export const installDatasetSchemaHandler: PluginApiHandler = async (
     }
 
     const priceUsd = Number(listing.priceUsd ?? 0)
-    const ownsListing = await canActAsPublisher(
-      firestore,
-      decoded.uid,
-      listing.profileId,
-    )
+    // Free for the publisher's members in its OWN workspace only (AGL-2484,
+    // AGL-4047); into another workspace they are buyers like anyone else.
+    // `orgId` is the workspace the dataset lands in, checked above to be the
+    // one the caller's membership resolved.
+    const ownsListing = await ownsListingHere(firestore, {
+      uid: decoded.uid,
+      publisherOrgId: listing.profileId,
+      targetOrgId: orgId,
+    })
     // Private listings install ONLY for the owning org (AGL-2290).
     //
     // `install-plugin.ts` has carried this since AGL-968; the other six never

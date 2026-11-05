@@ -18,8 +18,7 @@
 import { type PluginApiHandler } from '@aglyn/aglyn/server'
 import { firebaseAdmin, isImpersonationSession } from '@aglyn/tenant-data-admin'
 import { findUserByUidAcrossPools } from '@aglyn/tenant-data-admin/server/auth-pools'
-import { canActAsPublisher } from './publisher-profile'
-import { isOrgMember } from './sale-risk'
+import { isPublisherMember } from './publisher-profile'
 
 const MAX_COMMENT_LENGTH = 2000
 /** Orgs scanned when looking for an install pin. */
@@ -174,12 +173,11 @@ export const reviewsHandler: PluginApiHandler = async (req, res) => {
     }
 
     // Publishing org cannot review itself, however many accounts it has —
-    // ANY member of it (AGL-3365). `canActAsPublisher` answers only for an
-    // owner or admin, so an editor of the publisher could rate its listing.
-    if (
-      (await canActAsPublisher(firestore, decoded.uid, listing.profileId)) ||
-      (await isOrgMember(firestore, String(listing.profileId ?? ''), decoded.uid))
-    ) {
+    // ANY member of it (AGL-3365): asking only for an owner or admin let an
+    // editor of the publisher rate its listing. Membership, never a
+    // permission (AGL-4047): an admin whose publisher keys are refused still
+    // published it.
+    if (await isPublisherMember(firestore, decoded.uid, String(listing.profileId ?? ''))) {
       return res.status(403).json({
         error: 'You cannot review your organization’s own listing',
       })

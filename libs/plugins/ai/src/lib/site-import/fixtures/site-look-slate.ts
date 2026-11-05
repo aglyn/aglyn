@@ -23,7 +23,8 @@ import { join } from 'node:path'
  * plain markup of no builder's (`site-look/slate-home.html`): a dark slate
  * hero and a second slate band, a near-black closing band, light cyan filled
  * buttons set in capitals under dark words, and a hero heading held to 12 em
- * inside a 1200 px column. What the reader keeps of it, and the theme Keep my
+ * inside a 1200 px column. Its stylesheet says its dark scheme, under a media
+ * query and a class on the root (AGL-4152). What the reader keeps of it, and the theme Keep my
  * site draws from that, is held by `site-import-layout.spec.ts` and
  * `ai-site-import-look.spec.ts`.
  */

@@ -33,6 +33,10 @@ import {
   PublisherAgreementCheckbox,
   usePublisherAgreementConsent,
 } from './publisher-agreement-checkbox.component'
+import {
+  MARKETPLACE_PUBLISHER_PROFILE_PERMISSION,
+  marketplacePublisherPermissionRefusal,
+} from '../model/marketplace-publisher-permissions'
 
 export interface ListingVerificationRequestProps {
   listingId: string
@@ -42,6 +46,14 @@ export interface ListingVerificationRequestProps {
   user: unknown
   /** Verified is a plugin-listing claim; other artifact types never ask. */
   isPlugin: boolean
+  /**
+   * The viewer's resolved permissions, from the shell (AGL-4047). Asking for
+   * the badge, and withdrawing the ask, need "Edit the publisher profile", as
+   * the route does; without it the card stays, its buttons off, with the
+   * permission named. An absent key reads as allowed, as the map reads while
+   * it loads: the route still decides.
+   */
+  permissions?: Record<string, boolean | undefined>
 }
 
 /** What the badge actually claims, said once, in the place someone asks for
@@ -79,7 +91,9 @@ const WHAT_VERIFIED_CLAIMS =
 export function ListingVerificationRequest(
   props: ListingVerificationRequestProps,
 ) {
-  const { listingId, listing, viewerOrgId, user, isPlugin } = props
+  const { listingId, listing, viewerOrgId, user, isPlugin, permissions } = props
+  const canAsk =
+    permissions?.[MARKETPLACE_PUBLISHER_PROFILE_PERMISSION] !== false
   const [busy, setBusy] = useState(false)
   const [error, setError] = useState<string | null>(null)
   // Optimistically reflects the action just taken, so the card does not sit
@@ -173,13 +187,13 @@ export function ListingVerificationRequest(
             <PublisherAgreementCheckbox
               checked={agreement.agreed}
               onChange={agreement.setAgreed}
-              disabled={busy}
+              disabled={busy || !canAsk}
             />
             <Stack direction="row">
               <Button
                 variant="outlined"
                 color="inherit"
-                disabled={busy || !agreement.agreed}
+                disabled={busy || !canAsk || !agreement.agreed}
                 onClick={() => void post('withdraw')}
               >
                 {'Withdraw request'}
@@ -206,19 +220,29 @@ export function ListingVerificationRequest(
             <PublisherAgreementCheckbox
               checked={agreement.agreed}
               onChange={agreement.setAgreed}
-              disabled={busy || block !== null}
+              disabled={busy || !canAsk || block !== null}
             />
             <Stack direction="row">
               <Button
                 variant="contained"
                 color="primary"
-                disabled={busy || block !== null || !agreement.agreed}
+                disabled={busy || !canAsk || block !== null || !agreement.agreed}
                 onClick={() => void post('request')}
               >
                 {'Request verification'}
               </Button>
             </Stack>
           </>
+        )}
+
+        {/* Why asking is off, named (AGL-4047). Not under the cooling-down
+            notice, which has no button to explain. */}
+        {canAsk || (block === 'cooling-down' && state !== 'pending') ? null : (
+          <Typography variant="caption" color="text.secondary">
+            {marketplacePublisherPermissionRefusal(
+              MARKETPLACE_PUBLISHER_PROFILE_PERMISSION,
+            )}
+          </Typography>
         )}
 
         {error ? <Alert severity="error">{error}</Alert> : null}

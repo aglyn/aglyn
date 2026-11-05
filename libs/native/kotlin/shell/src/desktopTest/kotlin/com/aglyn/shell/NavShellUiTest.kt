@@ -587,15 +587,15 @@ class NavShellUiTest {
   @Test
   fun createIsGatedByTheMembersStampElseTheirRole() {
     // The role's grants, then a custom role's values, then the member's own overrides (the console's resolver).
-    val owner = memberPermissions(mapOf("role" to "owner", "permissions" to mapOf("hosts.create" to false)), "owner")
+    val owner = com.aglyn.contracts.memberPermissions(mapOf("role" to "owner", "permissions" to mapOf("hosts.create" to false)), "owner")
     assertEquals(false, owner["hosts.create"])
     assertEquals(true, owner["data.manage"])
-    val editor = memberPermissions(mapOf("role" to "editor"), "editor")
+    val editor = com.aglyn.contracts.memberPermissions(mapOf("role" to "editor"), "editor")
     assertEquals(true, editor["data.manage"])
     assertEquals(false, editor["hosts.create"])
-    val custom = memberPermissions(mapOf("role" to "viewer", "roleId" to "r1"), "viewer", mapOf("permissions" to mapOf("hosts.create" to true)))
+    val custom = com.aglyn.contracts.memberPermissions(mapOf("role" to "viewer", "roleId" to "r1"), "viewer", mapOf("permissions" to mapOf("hosts.create" to true)))
     assertEquals(true, custom["hosts.create"])
-    assertEquals(false, memberPermissions(null, "viewer")["hosts.create"])
+    assertEquals(false, com.aglyn.contracts.memberPermissions(null, "viewer")["hosts.create"])
     assertEquals("admin", createHostRole("author", "owner"))
     assertEquals("author", createHostRole("author", "editor"))
   }

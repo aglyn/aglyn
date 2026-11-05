@@ -183,9 +183,97 @@ fun rolePermissions(catalog: OrgRoleGrants, role: String?, customRole: OrgPermis
     val values = layer?.permissions ?: continue
     for (key in keys) values[key]?.let { out[key] = it }
   }
+  // A key that refines a broader one is never held without it, and follows it where neither layer set the key; a key
+  // that only follows one takes its verdict where neither layer set the key, and nothing more. Broader keys first, so a
+  // chain settles in one pass; a refinement that loops is left alone.
+  val broader = LinkedHashMap<String, String>()
+  val followsOnly = HashSet<String>()
+  for (entry in catalog.permissions) {
+    val refines = entry.refines
+    val follows = entry.follows
+    if (refines != null && refines in out) {
+      broader[entry.key] = refines
+    } else if (follows != null && follows in out) {
+      broader[entry.key] = follows
+      followsOnly += entry.key
+    }
+  }
+  fun depth(key: String): Int {
+    val seen = HashSet<String>()
+    var steps = 0
+    var current = key
+    while (true) {
+      val parent = broader[current] ?: return steps
+      if (!seen.add(current)) return -1
+      current = parent
+      steps += 1
+    }
+  }
+  val ordered = broader.keys.map { it to depth(it) }.filter { it.second > 0 }.sortedBy { it.second }
+  for ((key, _) in ordered) {
+    var stored: Boolean? = null
+    for (layer in listOf(customRole, overrides)) layer?.permissions?.get(key)?.let { stored = it }
+    val held = out[broader[key]] == true
+    out[key] = if (key in followsOnly) stored ?: held else held && (stored ?: true)
+  }
   return out
 }
 
 /** [rolePermissions] on the catalog this build carries. */
 fun rolePermissions(role: String?, customRole: OrgPermissionLayer? = null, overrides: OrgPermissionLayer? = null): Map<String, Boolean> =
   rolePermissions(Contracts.orgRoleGrants, role, customRole, overrides)
+
+private fun booleansOf(value: Any?): Map<String, Boolean>? =
+  (value as? Map<*, *>)?.mapNotNull { (k, v) -> (v as? Boolean)?.let { k.toString() to it } }?.toMap()
+
+/**
+ * The signed-in member's verdict on every catalog key, as the Firestore rules and the routes read it: `resolvedPermissions`
+ * on their member row (every layer applied) where it has the key; else their role's grants, custom role and own overrides
+ * ([rolePermissions]). Until the row is read, the role the membership index names answers, so a screen does not flash a
+ * refusal at someone who holds the key. No row and no role holds nothing.
+ */
+fun memberPermissions(member: Map<String, Any?>?, orgRole: String?, customRole: Map<String, Any?>? = null): Map<String, Boolean> {
+  if (member == null && orgRole == null) return emptyMap()
+  val role = member?.get("role") as? String ?: orgRole
+  fun layer(value: Any?) = booleansOf(value)?.let { OrgPermissionLayer(permissions = it) }
+  val custom = if (member?.get("roleId") != null) layer(customRole?.get("permissions")) else null
+  return rolePermissions(role, custom, layer(member?.get("permissions"))) + booleansOf(member?.get("resolvedPermissions")).orEmpty()
+}
+
+/**
+ * The verdict on one site: the site's own stamp for this member (`hosts/{hostId}.memberPermissions[uid]`, which holds the
+ * per-site keys and the keys a site can narrow, decided for that site) over their workspace verdict.
+ */
+fun sitePermissions(workspace: Map<String, Boolean>, siteStamp: Map<String, Any?>?): Map<String, Boolean> =
+  workspace + booleansOf(siteStamp).orEmpty()
+
+/**
+ * One row of a permission editor (`groupOrgPermissions`, `offeredOrgPermissions`): a key the workspace is offered, under its
+ * group's heading. [first] marks the group's first row, where the heading goes.
+ */
+data class PermissionEditorRow(val key: String, val label: String, val description: String, val group: String, val groupLabel: String, val first: Boolean)
+
+/**
+ * The keys an editor offers, in the groups' display order: every core key, and a plugin's keys while the plugin is on for the
+ * workspace (null: no filter). [narrowable] keeps only the keys a site can narrow. A key stored for a plugin that is now off is
+ * not offered and not dropped: the save writes back the stored map.
+ */
+fun permissionEditorRows(catalog: OrgRoleGrants, enabledPlugins: List<String>?, narrowable: Boolean = false): List<PermissionEditorRow> {
+  val groups = catalog.groups.orEmpty()
+  val offered = catalog.permissions.filter { entry ->
+    (!narrowable || entry.narrowable == true) && (entry.pluginId == null || enabledPlugins == null || entry.pluginId in enabledPlugins)
+  }
+  val order = (groups.map { it.id } + offered.map { it.group.orEmpty() }).distinct()
+  return order.flatMap { id ->
+    val label = groups.firstOrNull { it.id == id }?.label ?: id
+    offered.filter { it.group.orEmpty() == id }.mapIndexed { index, entry ->
+      PermissionEditorRow(entry.key, entry.label, entry.description, id, label, index == 0)
+    }
+  }
+}
+
+/** What a refusal says when a member lacks a key (`permissionRefusalText`): it names the permission, never a role. */
+fun permissionRefusalText(key: String): String {
+  val label = Contracts.orgRoleGrants.permissions.firstOrNull { it.key == key }?.label ?: key
+  return "Your role does not include \"$label\" — ask an organization admin"
+}

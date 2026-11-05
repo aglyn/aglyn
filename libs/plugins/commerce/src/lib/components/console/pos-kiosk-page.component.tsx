@@ -30,6 +30,7 @@ import DialogTitle from '@mui/material/DialogTitle'
 import Stack from '@mui/material/Stack'
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react'
 import * as CommerceModel from '../../model'
+import { posKioskNameMatches } from '../../model/commerce-kiosk-search'
 import { newAttemptKey, posNativeBridge } from './pos/pos-api'
 import { PosItemDialog, posItemNeedsChoice, type PosItemChoice } from './pos/pos-item-dialog.component'
 import { PosDisplayBrandMark, PosDisplayBrandScreen } from './pos-display/brand-screen'
@@ -50,6 +51,9 @@ import { useKioskIdle } from './pos-kiosk/use-kiosk-idle'
 
 /** How often the kiosk asks after a card payment in flight. */
 export const POS_KIOSK_PAYMENT_POLL_MS = 1_500
+
+/** How long the typing rests before the word is asked of the catalog. */
+export const POS_KIOSK_SEARCH_DEBOUNCE_MS = 400
 
 type Phase =
   | { kind: 'start' }
@@ -131,6 +135,10 @@ export default function PosKioskPage(_props: ConsolePublicPageProps) {
   const [catalog, setCatalog] = useState<CommerceModel.PosKioskCatalog | null>(null)
   const [catalogLoading, setCatalogLoading] = useState(false)
   const [categoryId, setCategoryId] = useState<string | null>(null)
+  const [search, setSearch] = useState('')
+  // The server's answer to a word typed; `products: null` when it couldn't
+  // answer, which leaves the customer narrowing the menu already loaded.
+  const [found, setFound] = useState<{ typed: string; products: CommerceModel.PosKioskProduct[] | null } | null>(null)
   const [phase, setPhase] = useState<Phase>({ kind: 'start' })
   const [lines, setLines] = useState<KioskCartLine[]>([])
   const [itemProduct, setItemProduct] = useState<CommerceModel.PosKioskProduct | null>(null)
@@ -160,6 +168,7 @@ export default function PosKioskPage(_props: ConsolePublicPageProps) {
     setToken(null)
     setContext(null)
     setCatalog(null)
+    setSearch('')
     setSale(null)
     setLines([])
     setPhase({ kind: 'start' })
@@ -203,13 +212,39 @@ export default function PosKioskPage(_props: ConsolePublicPageProps) {
       if (!active) return
       setCatalogLoading(false)
       if (lost(result.status)) return
+      setOffline(result.status === 0)
       if (result.ok && result.value) setCatalog(result.value)
-      else setOffline(result.status === 0)
     })
     return () => {
       active = false
     }
   }, [token, categoryId, turn, lost])
+
+  // A word typed, once the typing rests, asked of the whole catalog.
+  const typed = search.trim()
+  useEffect(() => {
+    if (!token || !typed) {
+      setFound(null)
+      return undefined
+    }
+    let active = true
+    const timer = setTimeout(() => {
+      void kioskApi.search(token, typed).then((result) => {
+        if (!active || lost(result.status)) return
+        setOffline(result.status === 0)
+        setFound({ typed, products: result.ok && result.value ? result.value.products : null })
+      })
+    }, POS_KIOSK_SEARCH_DEBOUNCE_MS)
+    return () => {
+      active = false
+      clearTimeout(timer)
+    }
+  }, [token, typed, lost])
+
+  const menuProducts = useMemo(() => {
+    const listed = (typed ? found?.products : null) ?? catalog?.products ?? []
+    return typed ? listed.filter((product) => posKioskNameMatches(product.name, typed)) : listed
+  }, [typed, found, catalog])
 
   const currency = context?.currency ?? catalog?.currency ?? 'usd'
   const money = useCallback((cents: number) => displayMoney(cents, currency), [currency])
@@ -228,6 +263,7 @@ export default function PosKioskPage(_props: ConsolePublicPageProps) {
     setCartOpen(false)
     setNotice(null)
     setCategoryId(null)
+    setSearch('')
     checkoutKey.current = null
     payKey.current = null
     clearKioskCustomerStorage()
@@ -528,9 +564,16 @@ export default function PosKioskPage(_props: ConsolePublicPageProps) {
         ) : null}
         <KioskMenu
           catalog={catalog}
+          products={menuProducts}
           loading={catalogLoading && !catalog}
-          categoryId={categoryId}
-          onCategory={setCategoryId}
+          search={search}
+          onSearch={setSearch}
+          searching={Boolean(typed) && found?.typed !== typed}
+          categoryId={typed ? null : categoryId}
+          onCategory={(next) => {
+            setSearch('')
+            setCategoryId(next)
+          }}
           onProduct={tapProduct}
           lines={lines}
           currency={currency}

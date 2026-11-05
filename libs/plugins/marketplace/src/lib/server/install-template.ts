@@ -29,7 +29,7 @@ import {
 import { firebaseAdmin, getOrgForHost } from '@aglyn/tenant-data-admin'
 import { type PluginApiHandler } from '@aglyn/aglyn/server'
 import { resolveOrgPermissions } from '@aglyn/tenant-runtime/org-permissions'
-import { canActAsPublisher } from './publisher-profile'
+import { ownsListingHere } from './own-listing'
 import { requirePurchase } from './purchase-entitlement'
 import { recordInstallProvenance } from './provenance'
 import { TEMPLATE_SOURCE_TYPE } from '../constants/template-source'
@@ -126,14 +126,13 @@ export const installTemplateHandler: PluginApiHandler = async (req, res) => {
     }
 
     const priceUsd = Number(listing.priceUsd ?? 0)
-    // The publisher installs their own listing for free. Org-owned now
-    // (AGL-652), so this is a role check — comparing a uid to an org id
-    // would never match and would charge publishers for their own work.
-    const ownsListing = await canActAsPublisher(
-      firestore,
-      decoded.uid,
-      listing.profileId,
-    )
+    // Free for the publisher's members on its OWN sites only (AGL-2484,
+    // AGL-4047); into another workspace they are buyers like anyone else.
+    const ownsListing = await ownsListingHere(firestore, {
+      uid: decoded.uid,
+      publisherOrgId: listing.profileId,
+      targetOrgId: membership.orgId,
+    })
     // Private listings install ONLY for the owning org (AGL-2290).
     //
     // `install-plugin.ts` has carried this since AGL-968; the other six never

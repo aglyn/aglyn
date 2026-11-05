@@ -89,10 +89,21 @@ export const TS_ROLE_GATE = [
  * The deployed rules: a role helper called, or a role compared with a literal
  * or a literal list. `canWriteHostContent`, `canPublishHostContent` and
  * `canReadHostSensitive` are not on it: they ask the site keys (AGL-4047).
- * Nor is `canReadTransferJobs`, which asks "Manage data" alone.
+ * Nor is `canReadTransferJobs`, which asks "Manage data" alone, nor
+ * `publisherManager`, `listingManager` and `canReadOutreach`, which ask
+ * "Edit the publisher profile", "Manage published listings" and "Use
+ * Sequences" alone, nor `canReadScopedPeople` and
+ * `isOrgWideAudienceManager`, which ask "Manage data" alone. `canManageOrg`
+ * stays on the pattern so it cannot come back: it is gone, and every rule
+ * that asked it asks a key (the workspace document's fields "Organization
+ * settings" and "Change CRM settings", the subscription "View billing",
+ * invites "Manage members", plugin settings "Organization settings", a
+ * consent group change both of its keys, ownership claims "Bring a site in").
+ * Nor `canWriteOrgData` and `canWriteOrgWideData`, which ask "Manage data"
+ * alone, nor the campaign containers, which ask "Run email campaigns".
  */
 export const RULES_ROLE_GATE = [
-  String.raw`\b(canManageOrg|canWriteOrgData|canWriteOrgWideData|isOrgWideAudienceManager|publisherManager|listingManager|canReadScopedPeople|canReadOutreach)\(`,
+  String.raw`\bcanManageOrg\(`,
   String.raw`hostMemberRole\(hostId\)\s*(==|in)\s*['\[]`,
   String.raw`\brole\s*(==|in)\s*['\[]`,
   String.raw`\.role\s+in\b`,

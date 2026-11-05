@@ -27,6 +27,7 @@ import { MdiIcon } from '@aglyn/shared-ui-jsx'
 import RowActionsMenu, {
   type RowActionsMenuItem,
 } from '@aglyn/shared-ui-jsx/components/row-actions-menu.component'
+import { CRM_MOVE_STAGES_REFUSAL } from '../model/crm-permissions'
 import {
   closestCorners,
   DndContext,
@@ -82,6 +83,8 @@ export interface DealBoardProps {
   /** Deals whose move is in flight — drawn dimmed, not draggable. */
   moving: ReadonlySet<string>
   onOpen: (deal: DealDoc) => void
+  /** "Move contacts and deals between stages" is known refused here (AGL-4047): cards stay put, and the menu says why. */
+  moveBlocked?: boolean
   onMove: (deal: DealDoc, stageId: string) => void
   onWon: (deal: DealDoc) => void
   onLost: (deal: DealDoc) => void
@@ -137,6 +140,7 @@ export function DealBoard(props: DealBoardProps) {
     labelFor,
     moving,
     onOpen,
+    moveBlocked = false,
     onMove,
     onWon,
     onLost,
@@ -180,6 +184,10 @@ export function DealBoard(props: DealBoardProps) {
     [pipeline, onMove, onWon, onLost],
   )
 
+  const blockedItem = useMemo(
+    () => (moveBlocked ? { disabled: true, disabledReason: CRM_MOVE_STAGES_REFUSAL } : {}),
+    [moveBlocked],
+  )
   const cardActions = useCallback(
     (deal: DealDoc): RowActionsMenuItem[] => [
       {
@@ -195,12 +203,14 @@ export function DealBoard(props: DealBoardProps) {
           label: `Move to ${stage.name}`,
           icon: <MdiIcon path={mdiChevronRight.path} size={0.8} />,
           onClick: () => onMove(deal, stage.id),
+          ...blockedItem,
         })),
       {
         key: 'won',
         label: 'Mark won',
         icon: <MdiIcon path={mdiTrophyOutline.path} size={0.8} />,
         onClick: () => onWon(deal),
+        ...blockedItem,
       },
       {
         key: 'lost',
@@ -208,9 +218,10 @@ export function DealBoard(props: DealBoardProps) {
         icon: <MdiIcon path={mdiThumbDownOutline.path} size={0.8} />,
         onClick: () => onLost(deal),
         destructive: true,
+        ...blockedItem,
       },
     ],
-    [stages, onOpen, onMove, onWon, onLost],
+    [stages, onOpen, onMove, onWon, onLost, blockedItem],
   )
 
   const renderCard = (deal: DealDoc) => (
@@ -221,6 +232,7 @@ export function DealBoard(props: DealBoardProps) {
       days={daysInStage(deal, nowMs)}
       pending={moving.has(deal.$id)}
       actions={cardActions(deal)}
+      locked={moveBlocked}
       onOpen={() => onOpen(deal)}
     />
   )
@@ -466,16 +478,18 @@ interface DealCardProps {
   ownerLabel: string
   days: number
   pending: boolean
+  /** The member may not move it (AGL-4047): no drag, and its menu says why. */
+  locked: boolean
   actions: RowActionsMenuItem[]
   onOpen: () => void
 }
 
 function DealCard(props: DealCardProps) {
-  const { deal, ownerLabel, days, pending, actions, onOpen } = props
+  const { deal, ownerLabel, days, pending, locked, actions, onOpen } = props
   const { attributes, listeners, setNodeRef, transform, isDragging } = useDraggable({
     id: deal.$id,
     data: { deal },
-    disabled: pending || deal.status !== 'open',
+    disabled: pending || locked || deal.status !== 'open',
   })
   return (
     <Box
@@ -483,7 +497,7 @@ function DealCard(props: DealCardProps) {
       sx={{
         transform: CSS.Translate.toString(transform),
         opacity: isDragging ? 0.3 : pending ? 0.5 : 1,
-        cursor: deal.status === 'open' && !pending ? 'grab' : 'default',
+        cursor: deal.status === 'open' && !pending && !locked ? 'grab' : 'default',
         outline: 'none',
         '&:focus-visible': {
           borderRadius: 1,

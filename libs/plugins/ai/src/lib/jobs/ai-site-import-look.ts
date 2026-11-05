@@ -250,13 +250,26 @@ export function aiSiteImportStyle(
   const darkPage = solidHex(facts?.darkBackground)
   const buttonFill = solidHex(facts?.buttonFill)
   const buttonText = buttonFill ? solidHex(facts?.buttonText) : null
-  const buttonCase = facts?.buttonCase === 'upper' || facts?.buttonCase === 'none' ? facts.buttonCase : null
+  const caseOf = (value: string | null | undefined) => (value === 'upper' || value === 'none' ? value : null)
+  const buttonCase = caseOf(facts?.buttonCase)
+  const outlinedCase = caseOf(facts?.outlinedCase)
+  const textCase = caseOf(facts?.textCase)
+  const paper = solidHex(facts?.paperBackground)
+  const darkPaper = solidHex(facts?.darkPaper)
+  const outlinedFill = solidHex(facts?.outlinedFill)
+  const buttonOutline = solidHex(facts?.buttonOutline)
   return {
     ...style,
     finish,
     ...(page ? { page } : {}),
     ...(darkPage ? { darkPage } : {}),
+    ...(paper ? { paper } : {}),
+    ...(darkPaper ? { darkPaper } : {}),
     ...(buttonCase ? { buttonCase } : {}),
+    ...(outlinedCase ? { outlinedCase } : {}),
+    ...(textCase ? { textCase } : {}),
+    ...(outlinedFill ? { outlinedFill } : {}),
+    ...(buttonOutline ? { buttonOutline } : {}),
     ...(buttonFill ? { buttonFill } : {}),
     ...(buttonText ? { buttonText } : {}),
     ...fonts,

@@ -289,6 +289,28 @@ describe('a pick with a price (AGL-4049 lanes 3 and D)', () => {
     expect(screen.queryByRole('button', { name: 'Buy and continue' })).toBeNull()
   })
 
+  it('switches Buy off, with the reason, for a member of the publisher (AGL-4047)', async () => {
+    const reason = "Someone in this workspace who isn't in Northwind needs to buy it."
+    answering([OFFICIAL, { ...PAID, owned: false, buyBlockedReason: reason }])
+    shelf()
+    fireEvent.click(await screen.findByRole('radio', { name: /^Studio North/ }))
+    const buy = screen.getByRole('button', { name: 'Buy and continue' }) as HTMLButtonElement
+    expect(buy.disabled).toBe(true)
+    expect(screen.getByText(`Studio North costs $12. ${reason}`)).toBeTruthy()
+    expect(screen.getByLabelText(reason)).toBeTruthy()
+    expect(screen.queryByText(/Buy it here/)).toBeNull()
+    fireEvent.click(buy)
+    expect(mockFetch.mock.calls.some(([, url]) => url === '/api/marketplace/pay')).toBe(false)
+  })
+
+  it('leaves Buy on for anyone else (AGL-4047)', async () => {
+    answering([OFFICIAL, { ...PAID, owned: false }])
+    shelf()
+    fireEvent.click(await screen.findByRole('radio', { name: /^Studio North/ }))
+    expect((screen.getByRole('button', { name: 'Buy and continue' }) as HTMLButtonElement).disabled).toBe(false)
+    expect(screen.getByText(/Buy it here/)).toBeTruthy()
+  })
+
   it('learns from the payment that the workspace owns it already, and tells the dialog', async () => {
     answeringWith([OFFICIAL, PAID], {
       quote: { status: 409, body: { code: 'already_purchased', error: 'owned' } },

@@ -27,11 +27,15 @@ import {
   validatePublisherProfileContent,
 } from '../model/marketplace'
 import {
-  canActAsPublisher,
   claimPublisherHandle,
   PublisherHandleTakenError,
   PUBLISHER_PROFILES,
 } from './publisher-profile'
+import {
+  MARKETPLACE_PUBLISHER_PROFILE_PERMISSION,
+  marketplacePublisherPermissionRefusal,
+} from '../model/marketplace-publisher-permissions'
+import { publisherPermissionVerdict } from './publisher-permissions'
 import {
   listingSubmissionRefusal,
   publisherIdentityImpersonation,
@@ -52,8 +56,10 @@ import type { DecodedIdToken } from 'firebase-admin/auth'
  * handle is server-owned here, exactly like the host subdomain (AGL-642), and
  * the rules freeze it against client writes.
  *
- * Manager-only: the profile is the org's public identity and its payout
- * anchor, so it follows the same gate as the profile rules.
+ * "Edit the publisher profile" (`marketplace.publisherProfile`, AGL-4047):
+ * the profile is the org's public identity and its payout anchor, so it asks
+ * the key the profile rules ask. Its default is the owner and admins this
+ * asked for by role before, so nobody's access moved.
  */
 export const publisherProfileSaveHandler: PluginApiHandler = async (req, res) => {
   if (req.method !== 'POST') {
@@ -107,9 +113,18 @@ export const publisherProfileSaveHandler: PluginApiHandler = async (req, res) =>
   }
   try {
     const firestore = firebaseAdmin.app().firestore()
-    if (!(await canActAsPublisher(firestore, decoded.uid, orgId))) {
+    const verdict = await publisherPermissionVerdict(
+      decoded.uid,
+      orgId,
+      MARKETPLACE_PUBLISHER_PROFILE_PERMISSION,
+    )
+    if (verdict !== 'granted') {
       return res.status(403).json({
-        error: 'Only an organization owner or admin can edit the publisher profile',
+        error: marketplacePublisherPermissionRefusal(
+          MARKETPLACE_PUBLISHER_PROFILE_PERMISSION,
+        ),
+        reason: 'permission',
+        permission: MARKETPLACE_PUBLISHER_PROFILE_PERMISSION,
       })
     }
 

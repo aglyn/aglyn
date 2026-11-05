@@ -76,7 +76,7 @@ const ERROR_SLOT_COPY: Record<
   },
   unavailable: {
     label: '503 · Maintenance',
-    hint: 'Shown everywhere while maintenance mode is on, and to visitors while the site is in preview',
+    hint: 'Shown to visitors while maintenance mode is on or the site is in preview',
   },
 }
 
@@ -352,10 +352,9 @@ export function ErrorScreensCard(props: ErrorScreensCardProps) {
         />
         {/*
           Preview (AGL-4086), beside maintenance because the two answer the
-          same visitors the same way. The difference is the team: maintenance
-          shows the 503 page to everyone, preview keeps the whole site working
-          for the people building it. A server door, not a client write like
-          the switch above — making a site public is a launch.
+          same visitors the same way, and both keep the whole site working for
+          the team. A server door, not a client write like the switch above —
+          making a site public is a launch.
         */}
         <SitePreviewSwitch
           hostId={hostId}

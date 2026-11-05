@@ -24,7 +24,7 @@
  * quotes and invoices to customers".
  */
 
-import { fireEvent, render, screen, waitFor, within } from '@testing-library/react'
+import { cleanup, fireEvent, render, screen, waitFor, within } from '@testing-library/react'
 import type { ReactNode } from 'react'
 
 const mockFetch = jest.fn<Promise<{ ok: boolean; json: () => Promise<Record<string, unknown>> }>, unknown[]>(
@@ -159,6 +159,75 @@ describe('the Quotes card', () => {
     expect(screen.getByText('plus tax at payment')).toBeTruthy()
   })
 
+  /*
+   * The list says what the pay page will do (AGL-4162): `quotePayTax` against
+   * the store as it stands now, the same answer the dialog's notice reads.
+   */
+  describe('its "plus tax at payment" label', () => {
+    const LABEL = 'plus tax at payment'
+    const UNDECIDED = { kind: 'none', reason: 'undecided' }
+    const OWN_RATES = { mode: 'manual', origin: { country: 'US', state: 'TX' }, rates: [{ country: 'US', state: 'TX', pct: 10 }] }
+
+    function listed(
+      tax: Record<string, unknown>,
+      store: Record<string, unknown> | undefined,
+      order: Record<string, unknown> = {},
+    ) {
+      mockStore = store as Record<string, unknown>
+      mockQuotes = [{ ...QUOTE, ...order, quote: { ...QUOTE.quote, tax } }]
+      render(<HostQuotesCard hostId="site1" canEdit canSend />)
+      expect(screen.getByText('Quote #1042')).toBeTruthy()
+    }
+
+    it('shows for a quote saved at payment, whatever the store has chosen since', () => {
+      listed({ kind: 'at-payment' }, { tax: { mode: 'none' } })
+      expect(screen.getByText(LABEL)).toBeTruthy()
+    })
+
+    it('shows for a quote saved before the store chose, once it is on Stripe Tax', () => {
+      listed(UNDECIDED, { tax: { mode: 'stripe' } })
+      expect(screen.getByText(LABEL)).toBeTruthy()
+    })
+
+    it('stays off for a quote saved before the store chose “Don’t collect sales tax”', () => {
+      listed(UNDECIDED, { tax: { mode: 'none' } })
+      expect(screen.queryByText(LABEL)).toBeNull()
+    })
+
+    it('stays off for a quote saved before the store chose its own rates, which only a save prices', () => {
+      listed(UNDECIDED, { tax: OWN_RATES })
+      expect(screen.queryByText(LABEL)).toBeNull()
+    })
+
+    it('stays off for a quote saved at the store’s own rate', () => {
+      listed({ kind: 'rate', pct: 10, label: 'Texas sales tax' }, { tax: { mode: 'stripe' } })
+      expect(screen.queryByText(LABEL)).toBeNull()
+    })
+
+    it('stays off while the store has not chosen', () => {
+      listed(UNDECIDED, {})
+      expect(screen.queryByText(LABEL)).toBeNull()
+    })
+
+    it('goes by the saved basis until the store’s settings answer', () => {
+      listed(UNDECIDED, undefined)
+      expect(screen.queryByText(LABEL)).toBeNull()
+      cleanup()
+      listed({ kind: 'at-payment' }, undefined)
+      expect(screen.getByText(LABEL)).toBeTruthy()
+    })
+
+    it('stays off once a quote is paid, however it was saved', () => {
+      listed({ kind: 'at-payment' }, { tax: { mode: 'stripe' } }, { status: 'paid' })
+      expect(screen.queryByText(LABEL)).toBeNull()
+    })
+
+    it('stays off for a paid quote saved before the store chose, on Stripe Tax', () => {
+      listed(UNDECIDED, { tax: { mode: 'stripe' } }, { status: 'paid' })
+      expect(screen.queryByText(LABEL)).toBeNull()
+    })
+  })
+
   it('invites the first quote when there are none', () => {
     render(<HostQuotesCard hostId="site1" canEdit canSend />)
     expect(screen.getByText(/No quotes yet/)).toBeTruthy()
@@ -216,6 +285,129 @@ describe('the Quotes card', () => {
     const dialog = await screen.findByRole('dialog')
     expect(within(dialog).getByText('Tax is added at payment')).toBeTruthy()
     expect(within(dialog).getByText('Total before tax')).toBeTruthy()
+  })
+})
+
+/*
+ * The open quote's totals (AGL-4162). Left as saved, it says what the customer
+ * is charged: the customer's page, `quotePayTax` over the stored lines, or a
+ * paid quote's recorded totals. Once anything is changed, it says what a save
+ * will store, because every save re-prices the lines and re-bases the tax.
+ */
+describe('the totals in a quote’s dialog', () => {
+  const UNDECIDED = { kind: 'none', reason: 'undecided' }
+  const RATE = { kind: 'rate', pct: 10, label: 'Texas sales tax' }
+  const OWN_RATES = { mode: 'manual', origin: { country: 'US', state: 'TX' }, rates: [{ country: 'US', state: 'TX', pct: 10 }] }
+  const AT_TEN_PERCENT = { itemsCents: 30_000, discountCents: 0, shippingCents: 0, taxCents: 3_000, feeCents: 0, totalCents: 33_000 }
+
+  async function open(tax: Record<string, unknown>, store: Record<string, unknown> | undefined, order: Record<string, unknown> = {}) {
+    mockStore = store as Record<string, unknown>
+    mockQuotes = [{ ...QUOTE, ...order, quote: { ...QUOTE.quote, tax } }]
+    render(<HostQuotesCard hostId="site1" canEdit canSend />)
+    fireEvent.click(screen.getByText('Quote #1042'))
+    return screen.findByRole('dialog')
+  }
+
+  /** The summary's text, every row: `Items$300.00Tax (10%)$30.00Total$330.00`. */
+  const summary = (dialog: HTMLElement) => within(dialog).getByText(/^Total/).parentElement?.parentElement?.textContent
+
+  const editNotes = (dialog: HTMLElement) =>
+    fireEvent.change(within(dialog).getByLabelText('Notes for the customer'), { target: { value: 'Thanks' } })
+
+  describe('left as saved', () => {
+    it('adds tax at payment for a quote saved at payment, on a store that no longer collects', async () => {
+      expect(summary(await open({ kind: 'at-payment' }, { tax: { mode: 'none' } }))).toBe(
+        'Items$300.00Tax is added at paymentTotal before tax$300.00',
+      )
+    })
+
+    it('charges the saved rate for a quote saved at a rate, on a store now on Stripe Tax', async () => {
+      expect(summary(await open(RATE, { tax: { mode: 'stripe' } }, { totals: AT_TEN_PERCENT }))).toBe(
+        'Items$300.00Texas sales tax (10%)$30.00Total$330.00',
+      )
+    })
+
+    it('adds tax at payment for an undecided quote, once the store is on Stripe Tax', async () => {
+      expect(summary(await open(UNDECIDED, { tax: { mode: 'stripe' } }))).toBe(
+        'Items$300.00Tax is added at paymentTotal before tax$300.00',
+      )
+    })
+
+    it('adds no tax for an undecided quote, once the store does not collect', async () => {
+      expect(summary(await open(UNDECIDED, { tax: { mode: 'none' } }))).toBe('Items$300.00No sales tax$0.00Total$300.00')
+    })
+
+    it('keeps the saved basis and the save-again notice where only a save prices the store’s own rates', async () => {
+      const dialog = await open(UNDECIDED, { tax: OWN_RATES })
+      expect(summary(dialog)).toBe('Items$300.00Sales tax is not set up$0.00Total$300.00')
+      expect(within(dialog).getByText('Save this quote again to apply the store’s sales tax setting.')).toBeTruthy()
+    })
+
+    it('keeps a tax service’s saved answer, whatever the store has chosen since', async () => {
+      const service = { kind: 'service', taxCents: 1_234, providerLabel: 'Tax Co' }
+      expect(summary(await open(service, { tax: { mode: 'stripe' } }))).toBe('Items$300.00Tax (Tax Co)$12.34Total$312.34')
+    })
+
+    it('goes by the saved basis until the store’s settings answer', async () => {
+      expect(summary(await open(RATE, undefined))).toBe('Items$300.00Texas sales tax (10%)$30.00Total$330.00')
+    })
+
+    it('prices the lines the customer is charged, not the catalog’s price today', async () => {
+      const lineItems = [{ productId: 'canopy', variantId: 'red', name: 'Canopy 10x10', quantity: 1, unitAmountCents: 100_000, productType: 'physical' }]
+      const dialog = await open(RATE, { tax: OWN_RATES }, { lineItems })
+      expect(summary(dialog)).toBe('Items$1000.00Texas sales tax (10%)$100.00Total$1100.00')
+      editNotes(dialog)
+      expect(summary(dialog)).toBe('Items$1200.00Tax (10%)$120.00Total$1320.00')
+    })
+  })
+
+  describe('once something is changed, what the save will store', () => {
+    it('takes a quote saved at payment to no tax, on a store that no longer collects', async () => {
+      const dialog = await open({ kind: 'at-payment' }, { tax: { mode: 'none' } })
+      editNotes(dialog)
+      expect(summary(dialog)).toBe('Items$300.00No sales tax$0.00Total$300.00')
+    })
+
+    it('takes a quote saved at a rate to tax at payment, on a store now on Stripe Tax', async () => {
+      const dialog = await open(RATE, { tax: { mode: 'stripe' } }, { totals: AT_TEN_PERCENT })
+      editNotes(dialog)
+      expect(summary(dialog)).toBe('Items$300.00Tax is added at paymentTotal before tax$300.00')
+    })
+
+    it('takes an undecided quote to the store’s own rate', async () => {
+      const dialog = await open(UNDECIDED, { tax: OWN_RATES })
+      editNotes(dialog)
+      expect(summary(dialog)).toBe('Items$300.00Tax (10%)$30.00Total$330.00')
+    })
+
+    it('drops a tax service’s saved answer, which the save asks for again', async () => {
+      const dialog = await open({ kind: 'service', taxCents: 1_234, providerLabel: 'Tax Co' }, { tax: OWN_RATES })
+      editNotes(dialog)
+      expect(summary(dialog)).toBe('Items$300.00Tax (10%)$30.00Total$330.00')
+    })
+  })
+
+  it('shows a new quote what the save will store', async () => {
+    mockStore = { tax: { mode: 'none' } }
+    render(<HostQuotesCard hostId="site1" canEdit canSend />)
+    fireEvent.click(screen.getByRole('button', { name: 'New quote' }))
+    expect(summary(await screen.findByRole('dialog'))).toBe('Items$0.00No sales tax$0.00Total$0.00')
+  })
+
+  describe('once paid, what was recorded', () => {
+    const PAID = { itemsCents: 30_000, discountCents: 0, shippingCents: 0, taxCents: 2_500, feeCents: 0, totalCents: 32_500 }
+
+    it('states Stripe Tax’s figure, with nothing left to add at payment', async () => {
+      expect(summary(await open({ kind: 'at-payment' }, { tax: { mode: 'stripe' } }, { status: 'paid', totals: PAID }))).toBe(
+        'Items$300.00Tax$25.00Total$325.00',
+      )
+    })
+
+    it('keeps the rate it was paid at, whatever the store has chosen since', async () => {
+      expect(summary(await open(RATE, { tax: OWN_RATES }, { status: 'paid', totals: PAID }))).toBe(
+        'Items$300.00Texas sales tax (10%)$25.00Total$325.00',
+      )
+    })
   })
 })
 

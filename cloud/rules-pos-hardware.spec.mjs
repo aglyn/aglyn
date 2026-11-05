@@ -25,6 +25,15 @@
  * switched off, a member of another workspace and a signed-out visitor are
  * refused.
  *
+ * The register's half asks "Use the point of sale" (`managePos`) alone
+ * (AGL-4047), through `memberKeyOrOverride` with its default, the owner,
+ * admins and editors, as the shop's route asks it (`authorizePosStaff`). It
+ * asked that role list AND the member's own override, so every member with
+ * no decision written down keeps their verdict (the owner, the admin, the
+ * editor, the editor stamped before the key existed); a custom role deciding
+ * the key now decides it here as it does at the route: the admin it takes
+ * the register from is refused, the viewer it grants the register to reads.
+ *
  * The retained sale records beside them, `posHardwareSales/{orderId}`, are
  * the platform's tax and accounting records and outlive the workspace: NO
  * client reads, lists or writes one — not the buying workspace's owner, and
@@ -50,6 +59,14 @@ const SCOPED = 'uid-hw-scoped'
 const SCOPED_BUYER = 'uid-hw-scoped-buyer'
 const OUTSIDER = 'uid-hw-outsider'
 const STAFF = 'uid-hw-staff'
+/** An editor stamped before the key existed: the map carries another key, not this one. */
+const EDITOR_STAMPED_WITHOUT = 'uid-hw-editor-stamped-without'
+/** An admin a custom role took the register from (and so the shop, which follows it). */
+const ADMIN_ROLE_REVOKED = 'uid-hw-admin-role-revoked'
+/** A viewer a custom role granted the register. */
+const VIEWER_ROLE_GRANTED = 'uid-hw-viewer-role-granted'
+/** A viewer whose own override grants the register, never stamped. */
+const VIEWER_OVERRIDE_GRANTED = 'uid-hw-viewer-override-granted'
 const ORDER = 'hw_0123456789abcdef0123'
 const ORDER_DATA = {
   orgId: ORG,
@@ -129,6 +146,28 @@ await env.withSecurityRulesDisabled(async (context) => {
     hostAccess: { 'host-hw': 'viewer' },
     resolvedPermissions: { posBuyHardware: true },
   })
+  await setDoc(doc(db, 'orgs', ORG, 'members', EDITOR_STAMPED_WITHOUT), {
+    role: 'editor',
+    allHosts: true,
+    resolvedPermissions: { 'data.manage': true },
+  })
+  await setDoc(doc(db, 'orgs', ORG, 'members', ADMIN_ROLE_REVOKED), {
+    role: 'admin',
+    allHosts: true,
+    roleId: 'role-no-register',
+    resolvedPermissions: { managePos: false },
+  })
+  await setDoc(doc(db, 'orgs', ORG, 'members', VIEWER_ROLE_GRANTED), {
+    role: 'viewer',
+    allHosts: true,
+    roleId: 'role-register',
+    resolvedPermissions: { managePos: true },
+  })
+  await setDoc(doc(db, 'orgs', ORG, 'members', VIEWER_OVERRIDE_GRANTED), {
+    role: 'viewer',
+    allHosts: true,
+    permissions: { managePos: true },
+  })
   await setDoc(doc(db, 'orgs', OTHER_ORG, 'members', OUTSIDER), { role: 'owner', allHosts: true })
   await setDoc(orderRef(db), ORDER_DATA)
   await setDoc(saleRef(db), SALE_DATA)
@@ -143,6 +182,9 @@ const mayRead = [
   ['an org-wide member granted buying hardware without the register', () => as(BUYER)],
   ['an org-wide member granted buying hardware by their own override', () => as(BUYER_OVERRIDE)],
   ['STAFF', () => as(STAFF, { staff: true })],
+  ['an org-wide EDITOR stamped before the key existed (the default)', () => as(EDITOR_STAMPED_WITHOUT)],
+  ['a VIEWER a custom role granted the register', () => as(VIEWER_ROLE_GRANTED)],
+  ['a VIEWER whose own override grants the register, nothing stamped', () => as(VIEWER_OVERRIDE_GRANTED)],
 ]
 const mayNotRead = [
   ['an editor whose managePos is off', () => as(EDITOR_NO_POS)],
@@ -151,6 +193,7 @@ const mayNotRead = [
   ['a site-scoped collaborator granted buying hardware', () => as(SCOPED_BUYER)],
   ['a member of another workspace', () => as(OUTSIDER)],
   ['a signed-out visitor', () => env.unauthenticatedContext().firestore()],
+  ['an ADMIN a custom role took the register from', () => as(ADMIN_ROLE_REVOKED)],
 ]
 
 await check('control: the owner reads the organization itself', () => assertSucceeds(getDoc(doc(as(OWNER), 'orgs', ORG))))
@@ -207,7 +250,21 @@ await env.withSecurityRulesDisabled(async (context) => {
   const db = context.firestore()
   await deleteDoc(orderRef(db))
   await deleteDoc(saleRef(db))
-  for (const uid of [OWNER, ADMIN, EDITOR, EDITOR_NO_POS, VIEWER, BUYER, BUYER_OVERRIDE, SCOPED, SCOPED_BUYER]) {
+  for (const uid of [
+    OWNER,
+    ADMIN,
+    EDITOR,
+    EDITOR_NO_POS,
+    VIEWER,
+    BUYER,
+    BUYER_OVERRIDE,
+    SCOPED,
+    SCOPED_BUYER,
+    EDITOR_STAMPED_WITHOUT,
+    ADMIN_ROLE_REVOKED,
+    VIEWER_ROLE_GRANTED,
+    VIEWER_OVERRIDE_GRANTED,
+  ]) {
     await deleteDoc(doc(db, 'orgs', ORG, 'members', uid))
   }
   await deleteDoc(doc(db, 'orgs', OTHER_ORG, 'members', OUTSIDER))

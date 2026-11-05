@@ -276,7 +276,7 @@ describe('the /pricing table reconciler can fail (AGL-1278)', () => {
     resetFixtures()
 
     const run = check([
-      '--declare-missing-row=Single sign-on (SAML/OIDC)|the frame predates self-serve SSO',
+      '--declare-missing-row=Single sign-on (SSO, SAML/OIDC)|the frame predates self-serve SSO',
     ])
     assert.equal(run.status, 1)
     assert.match(run.stderr, /declared in EXPECTED_MISSING but the frame now carries it/)

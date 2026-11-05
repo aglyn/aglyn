@@ -21,9 +21,13 @@ import {
   type AnchorHTMLAttributes,
   forwardRef,
   useCallback,
+  useRef,
   useState,
 } from 'react'
-import { LinkNavigationReporter } from './link-navigation-reporter'
+import {
+  isSameDocumentJump,
+  LinkNavigationReporter,
+} from './link-navigation-reporter'
 
 export interface NextAnchorProps
   extends AnchorHTMLAttributes<HTMLAnchorElement> {}
@@ -57,6 +61,7 @@ export const NextLink = forwardRef<any, NextLinkProps>((props, ref) => {
     onPointerEnter,
     onTouchStart,
     onFocus,
+    onClick,
     ...rest
   } = props as LinkProps & NextLinkProps
 
@@ -83,6 +88,18 @@ export const NextLink = forwardRef<any, NextLinkProps>((props, ref) => {
       noteIntent()
     }
 
+  // Judged on the click, before Next has touched the URL, so the reporter
+  // knows a `#fragment` jump from a real navigation when the link goes
+  // pending. A jump never raises the loading overlay: see
+  // `isSameDocumentJump` for the scroll it would undo.
+  const sameDocumentRef = useRef(false)
+  const handleClick = (event: any) => {
+    sameDocumentRef.current =
+      typeof window !== 'undefined' &&
+      isSameDocumentJump(hrefTo, window.location)
+    onClick?.(event)
+  }
+
   return (
     <Link
       ref={ref}
@@ -96,12 +113,13 @@ export const NextLink = forwardRef<any, NextLinkProps>((props, ref) => {
       onPointerEnter={compose(onPointerEnter)}
       onTouchStart={compose(onTouchStart)}
       onFocus={compose(onFocus)}
+      onClick={handleClick}
       {...rest}
     >
       {children}
       {/* null-rendering: drives the global loading overlay off this link's
           real navigation transition (useLinkStatus), not URL-commit. */}
-      <LinkNavigationReporter />
+      <LinkNavigationReporter sameDocumentRef={sameDocumentRef} />
     </Link>
   )
 })

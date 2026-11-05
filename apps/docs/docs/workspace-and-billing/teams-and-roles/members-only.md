@@ -94,7 +94,8 @@ See [Filter and search a list](../../getting-started/console-tour.md#filter-and-
 - **Profile** — email, display name, join date, and saved addresses.
 - **Order history** — the member's payment records, newest first: order number,
   status, total, and date, plus the Stripe payment reference and any refunded
-  amount. Order history is visible to site admins and editors.
+  amount. Order history takes the **See orders and webhooks** permission, which a site's
+  admins and editors hold by default.
 - **Subscriptions** — active and past storefront subscriptions with their
   renewal date.
 - **Lifetime purchases** — everything the member actually paid: charged order

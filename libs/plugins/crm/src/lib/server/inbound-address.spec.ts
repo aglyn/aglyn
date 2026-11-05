@@ -31,11 +31,16 @@ const TOKEN = 'k7m2p9q4r1s8t3u6v0w5x2y7z1a4b8c3'
 
 let mockDecoded: Record<string, unknown> = { uid: 'u-1', email: 'ada@acme.test' }
 let mockMember: Record<string, unknown> | null = { role: 'editor', allHosts: true }
+/** `data.manage`, as the catalog answers it for the caller. */
 let mockPermitted = true
+/**
+ * "Change CRM settings" (`crm.settings`, AGL-4047) as a custom role or an
+ * override decided it; absent, the key's default, the owner and admins.
+ */
+let mockCrmSettings: boolean | undefined
 let mockPermissions: Record<string, unknown> = {
   orgId: ORG,
   role: 'editor',
-  isOwner: false,
   permissions: { 'data.manage': true },
   orgWide: true,
   hostRole: 'editor',
@@ -66,7 +71,10 @@ jest.mock('@aglyn/tenant-data-admin', () => ({
     hostId === HOST ? { orgId: ORG, org: { $id: ORG, plan: mockPlan } } : null,
   getOrgDoc: async (orgId: string) => (orgId === ORG ? { $id: ORG, plan: mockPlan } : null),
   resolveOrgMembership: async () => ({ member: mockMember }),
-  memberHasOrgPermission: async () => mockPermitted,
+  memberHasOrgPermission: async (_orgId: string, member: { role?: string } | null, key: string) =>
+    key === 'crm.settings'
+      ? Boolean(member) && (mockCrmSettings ?? ['owner', 'admin'].includes(String(member?.role)))
+      : mockPermitted,
   logOrgActivity: (...args: unknown[]) => (mockLogOrgActivity as any)(...args),
 }))
 jest.mock('./crm-inbound-email', () => ({
@@ -109,10 +117,10 @@ beforeEach(() => {
   mockDecoded = { uid: 'u-1', email: 'ada@acme.test' }
   mockMember = { role: 'editor', allHosts: true }
   mockPermitted = true
+  mockCrmSettings = undefined
   mockPermissions = {
     orgId: ORG,
     role: 'editor',
-    isOwner: false,
     permissions: { 'data.manage': true },
     orgWide: true,
     hostRole: 'editor',
@@ -181,6 +189,12 @@ describe('crm/inbound-address', () => {
     expect((await call({ hostId: 'site-none' })).status).toBe(404)
   })
 
+  it('names the permission when it refuses a rotation, never a role', () => {
+    expect(CRM_INBOUND_ROTATE_REFUSAL).toBe(
+      'Your role does not include "Change CRM settings" — ask an organization admin',
+    )
+  })
+
   it('lets an editor read but not rotate; an owner rotates, and the feed says so', async () => {
     const refused = await call({ hostId: HOST, rotate: true })
     expect(refused.status).toBe(403)
@@ -206,6 +220,26 @@ describe('crm/inbound-address', () => {
     )
   })
 
+  it('rotates for an editor granted "Change CRM settings", and refuses an admin refused it', async () => {
+    mockCrmSettings = true
+    expect((await call({ hostId: HOST, rotate: true })).status).toBe(200)
+    mockMember = { role: 'admin', allHosts: true }
+    mockCrmSettings = false
+    const refused = await call({ hostId: HOST, rotate: true })
+    expect(refused.status).toBe(403)
+    expect(refused.answer).toEqual({ error: CRM_INBOUND_ROTATE_REFUSAL })
+    expect(mockEnsure).toHaveBeenCalledTimes(1)
+  })
+
+  it('refuses the rotation to a site collaborator granted the key: it is the whole workspace’s', async () => {
+    mockMember = { role: 'editor', allHosts: false, hostAccess: { [HOST]: 'admin' } }
+    mockCrmSettings = true
+    expect((await call({ hostId: HOST })).status).toBe(200)
+    expect((await call({ hostId: HOST, rotate: true })).status).toBe(403)
+    expect(mockEnsure).toHaveBeenCalledWith(firestoreHandle, ORG, { rotate: false })
+    expect(mockEnsure).not.toHaveBeenCalledWith(firestoreHandle, ORG, { rotate: true })
+  })
+
   it('admits staff to read and refuses them the rotation', async () => {
     mockDecoded = { uid: 'staff-1', email: 'staff@aglyn.com', staff: true }
     mockMember = null
@@ -228,7 +262,8 @@ describe('crm/inbound-address', () => {
 
     it('rotates for an owner and refuses an editor', async () => {
       expect((await call({ orgId: ORG, rotate: true })).status).toBe(403)
-      mockPermissions = { ...mockPermissions, role: 'owner', isOwner: true }
+      mockPermissions = { ...mockPermissions, role: 'owner' }
+      mockMember = { role: 'owner' }
       const { status, answer } = await call({ orgId: ORG, rotate: true })
       expect(status).toBe(200)
       expect(answer.rotated).toBe(true)
@@ -266,7 +301,8 @@ describe('the plan (AGL-2787)', () => {
 
   it('refuses a Free workspace at the organization level, for a read and an owner’s rotation alike', async () => {
     expectRefused(await call({ orgId: ORG }))
-    mockPermissions = { ...mockPermissions, role: 'owner', isOwner: true }
+    mockPermissions = { ...mockPermissions, role: 'owner' }
+    mockMember = { role: 'owner' }
     expectRefused(await call({ orgId: ORG, rotate: true }))
     expect(mockEnsure).not.toHaveBeenCalled()
     expect(mockLogOrgActivity).not.toHaveBeenCalled()

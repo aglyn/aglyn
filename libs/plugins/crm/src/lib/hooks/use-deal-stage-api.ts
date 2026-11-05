@@ -20,6 +20,7 @@ import { authorizedFetch } from '@aglyn/shared-util-http/authorized-token'
 import { useUser } from '@aglyn/tenant-feature-instance'
 import { useCallback, useMemo } from 'react'
 import { useCrmOrgMount } from './use-crm-org-mount'
+import { useStageMoveBlocked } from './use-stage-move-blocked'
 
 /** What `POST /api/crm/deal-stage` accepts, minus the `hostId` this hook adds. */
 export type DealStageRequest =
@@ -79,6 +80,8 @@ export interface DealStageRef {
 export function useDealStageApi(hostId: string | null) {
   const { data: user } = useUser()
   const orgId = useCrmOrgMount()?.orgId ?? null
+  // Asked where the route will ask it: at the org hub the body names the org.
+  const moveBlocked = useStageMoveBlocked(orgId ? null : hostId)
 
   const call = useCallback(
     async (
@@ -119,8 +122,10 @@ export function useDealStageApi(hostId: string | null) {
       markWon: (deal: DealStageRef) => call(deal, { dealId: deal.$id, status: 'won' }),
       markLost: (deal: DealStageRef, lostReason?: string) =>
         call(deal, { dealId: deal.$id, status: 'lost', lostReason }),
+      /** "Move contacts and deals between stages" is known refused here (AGL-4047): controls switch off. */
+      moveBlocked,
     }),
-    [call],
+    [call, moveBlocked],
   )
 }
 

@@ -42,10 +42,17 @@ import {
   siteImportPagePromptText,
   type SiteImportInventory,
 } from './site-import-crawl'
-import { siteImportLeftOutReason } from './site-import-page'
+import { siteImportLeftOutReason, siteImportListedPage } from './site-import-page'
 import { SITE_LAYOUT_PAGES, siteLayoutRecording } from './fixtures/site-layout-recordings'
 import { SITE_IMPORT_RECORDINGS } from './fixtures/site-import-crawl-recordings'
-import { AI_SITE_IMPORT_MAX_PAGES, aiSiteImportReadVerdict } from '../model/ai-site-import'
+import {
+  AI_SITE_IMPORT_LEFT_OUT_COPY,
+  AI_SITE_IMPORT_MAX_PAGES,
+  aiSiteImportCreditRange,
+  aiSiteImportInventory,
+  aiSiteImportReadVerdict,
+  aiSiteImportWaveCreditRange,
+} from '../model/ai-site-import'
 import {
   AGLYN_DOMAIN,
   AGLYN_ORIGIN,
@@ -603,5 +610,259 @@ describe('reading how pages are laid out', () => {
     expect(home?.nav?.items.map((item) => item.label)).toEqual(['Classes', 'Gallery', 'Visit', 'Shop'])
     expect(home?.footer?.copyright).toBe('© 2026 Tidewater Pottery Studio')
     expect(home?.look?.fonts).toEqual({ body: 'Work Sans', headings: 'Fraunces', google: ['Fraunces', 'Work Sans'] })
+  })
+})
+
+describe('a site’s other addresses for one page (AGL-4152)', () => {
+  const ORIGIN = 'https://www.cedar-ridge-paving.example'
+  const paths = (inventory: SiteImportInventory) => inventory.pages.map((page) => new URL(page.url).pathname + new URL(page.url).search)
+  const left = (inventory: SiteImportInventory, reason: string) =>
+    inventory.skipped.filter((entry) => entry.reason === reason).map((entry) => new URL(entry.url).pathname + new URL(entry.url).search)
+  const crawlCedar = (maxPages = 25) => crawlSiteForImport({ domain: 'cedar-ridge-paving.example', maxPages })
+
+  it('reads the hosted-builder site as its real pages, and says what became of every other address', async () => {
+    const inventory = await crawlCedar()
+    expect(paths(inventory).sort()).toEqual(['/', '/commercial', '/contact', '/photos'])
+    expect(left(inventory, 'duplicate').sort()).toEqual(['/home', '/photos?itemId=a1', '/photos?itemId=b2', '/photos?itemId=c3', '/photos?itemId=d4'])
+    expect(left(inventory, 'system-page')).toEqual(['/cart'])
+    expect(inventory.skipped.find((entry) => entry.url === `${ORIGIN}/home`)?.sameAs).toBe(`${ORIGIN}/`)
+    expect(inventory.skipped.find((entry) => entry.url === `${ORIGIN}/photos?itemId=a1`)?.sameAs).toBe(`${ORIGIN}/photos`)
+    expect(inventory.stoppedBy).toBeNull()
+  })
+
+  it('says a page the site answers 404 for is missing, not that it could not be read just now', async () => {
+    const inventory = await crawlCedar()
+    const dead = inventory.skipped.find((entry) => entry.url === `${ORIGIN}/our-work`)
+    expect(dead).toMatchObject({ reason: 'http-error', status: 404 })
+    expect(siteImportLeftOutReason(dead?.reason as never, dead?.status)).toBe('missing')
+  })
+
+  it('takes nothing from the page budget for an address that is not a page of its own', async () => {
+    // Four real pages fill a budget of four; the five other addresses and the cart never count.
+    const inventory = await crawlCedar(4)
+    expect(paths(inventory).sort()).toEqual(['/', '/commercial', '/contact', '/photos'])
+  })
+
+  it('the inventory: fewer pages, the same list said under Not brought in, and a quote that follows the real count', async () => {
+    const inventory = await crawlCedar()
+    const state = aiSiteImportInventory({
+      domain: 'cedar-ridge-paving.example',
+      siteName: 'Cedar Ridge Paving',
+      ownership: { method: 'dns', provenAt: '2026-11-05T00:00:00.000Z', detail: null } as never,
+      readAt: '2026-11-05T00:00:00.000Z',
+      pages: inventory.pages.map(siteImportListedPage),
+      menu: [],
+      skipped: inventory.skipped.map((entry) => ({
+        url: entry.url,
+        reason: siteImportLeftOutReason(entry.reason, entry.status),
+        ...(entry.sameAs ? { sameAs: entry.sameAs } : {}),
+      })),
+      stoppedBy: inventory.stoppedBy,
+      pageLimit: null,
+      existingPages: 0,
+      mintId: (() => {
+        let next = 0
+        return () => `draft${(next += 1)}`
+      })(),
+    })
+    expect(state.found).toBe(4)
+    expect(state.pages.map((page) => page.slug).sort()).toEqual(['/', 'commercial', 'contact', 'photos'])
+    expect(state.leftOutCount).toEqual({ duplicate: 5, 'system-page': 1, missing: 1 })
+    expect(state.leftOut).toContainEqual(expect.objectContaining({ path: '/photos?itemId=a1', reason: 'duplicate', sameAs: '/photos' }))
+    expect(state.leftOut).toContainEqual(expect.objectContaining({ path: '/home', reason: 'duplicate', sameAs: '/' }))
+    for (const reason of ['duplicate', 'system-page', 'missing'] as const) expect(AI_SITE_IMPORT_LEFT_OUT_COPY[reason]).toBeTruthy()
+    // The quote is the pages kept, with nothing of its own to change.
+    expect(state.waves.map((wave) => wave.slots.length)).toEqual([4])
+    expect(aiSiteImportWaveCreditRange(state, state.waves[0])).toEqual(aiSiteImportCreditRange(4, { frame: true }))
+  })
+
+  it('a wave’s own read is exactly the pages it asks for: it refuses none of them', async () => {
+    const inventory = await crawlSiteForImport({
+      domain: 'cedar-ridge-paving.example',
+      maxPages: 3,
+      only: [`${ORIGIN}/`, `${ORIGIN}/home`, `${ORIGIN}/photos?itemId=a1`],
+    })
+    expect(paths(inventory)).toEqual(['/', '/home', '/photos?itemId=a1'])
+    expect(inventory.skipped).toEqual([])
+  })
+})
+
+describe('what a rule about other addresses must not break (AGL-4152)', () => {
+  const ORIGIN = 'https://older-site.example'
+  const WORDS = (word: string) => `<h1>${word}</h1><p>Everything we have to say about ${word}, in a sentence of its own that no other page repeats.</p>`
+  type Page = { main?: string; head?: string; status?: number }
+  const serve = (pages: Record<string, Page>, sitemap: readonly string[] = []) => {
+    fetchSpy.mockImplementation(async (input, init) => {
+      const url = new URL(String(input))
+      calls.push({ url: url.toString(), headers: ((init as RequestInit | undefined)?.headers ?? {}) as Record<string, string> })
+      if (url.pathname === '/robots.txt') return new Response('User-agent: *\nAllow: /', { status: 200, headers: { 'content-type': 'text/plain' } })
+      if (url.pathname === '/sitemap.xml') {
+        return new Response(`<urlset>${sitemap.map((path) => `<url><loc>${ORIGIN}${path}</loc></url>`).join('')}</urlset>`, { status: 200, headers: { 'content-type': 'application/xml' } })
+      }
+      const page = pages[`${url.pathname}${url.search}`]
+      if (!page) return new Response('Not found', { status: 404, headers: { 'content-type': 'text/html' } })
+      return new Response(`<!DOCTYPE html><html><head><title>A page</title>${page.head ?? ''}</head><body><main>${page.main ?? ''}</main></body></html>`, {
+        status: page.status ?? 200,
+        headers: { 'content-type': 'text/html' },
+      })
+    })
+  }
+  const crawlIt = () => crawlSiteForImport({ domain: 'older-site.example', maxPages: 50 })
+  const addresses = (inventory: SiteImportInventory) => inventory.pages.map((page) => new URL(page.url).pathname + new URL(page.url).search).sort()
+  const canonical = (path: string) => `<link rel="canonical" href="${ORIGIN}${path}">`
+  const link = (href: string) => `<a href="${href}">More</a>`
+
+  it('keeps an older site’s pages, whose query string is what names them', async () => {
+    serve({
+      '/': { main: `${WORDS('home')}${link('/?page_id=12')}${link('/?p=5')}${link('/?page_id=13')}${link('/index.php?id=3')}` },
+      // It names itself; it names nothing; and a template that names the home page on every page, whose words say otherwise.
+      '/?page_id=12': { main: WORDS('history'), head: canonical('/?page_id=12') },
+      '/?p=5': { main: WORDS('news') },
+      '/?page_id=13': { main: WORDS('staff'), head: canonical('/') },
+      '/index.php?id=3': { main: WORDS('hours'), head: canonical('/index.php') },
+      '/index.php': { main: WORDS('index') },
+    })
+    expect(addresses(await crawlIt())).toEqual(expect.arrayContaining(['/', '/?p=5', '/?page_id=12', '/?page_id=13', '/index.php?id=3']))
+  })
+
+  it('keeps a page whose canonical names another page when its words are its own: a template’s mistake', async () => {
+    serve({ '/': { main: `${WORDS('home')}${link('/about')}`, head: canonical('/') }, '/about': { main: WORDS('about'), head: canonical('/') } })
+    const inventory = await crawlIt()
+    expect(addresses(inventory)).toEqual(['/', '/about'])
+    expect(inventory.skipped).toEqual([])
+  })
+
+  it('never takes the home page for another address, whatever its canonical says', async () => {
+    const home = `${WORDS('home')}${link('/start')}`
+    serve({ '/': { main: home, head: canonical('/start') }, '/start': { main: home } })
+    const inventory = await crawlIt()
+    expect(addresses(inventory)).toEqual(['/'])
+    expect(inventory.skipped).toEqual([{ url: `${ORIGIN}/start`, reason: 'duplicate', sameAs: `${ORIGIN}/` }])
+  })
+
+  it('without a canonical, an address with the same main content as a page found is left out; different content is a page', async () => {
+    const home = `${WORDS('home')}${link('/home')}${link('/gallery')}${link('/gallery?sort=new')}${link('/gallery?item=1')}`
+    serve({
+      '/': { main: home },
+      '/home': { main: home },
+      '/gallery': { main: WORDS('gallery') },
+      '/gallery?item=1': { main: WORDS('gallery') },
+      '/gallery?sort=new': { main: WORDS('newest') },
+    })
+    const inventory = await crawlIt()
+    expect(addresses(inventory)).toEqual(['/', '/gallery', '/gallery?sort=new'])
+    expect(inventory.skipped.map((entry) => entry.url).sort()).toEqual([`${ORIGIN}/gallery?item=1`, `${ORIGIN}/home`])
+  })
+
+  it('two stubs of the same few words are two pages', async () => {
+    serve({
+      '/': { main: `${WORDS('home')}${link('/team')}${link('/services')}` },
+      '/team': { main: '<h1>Coming soon</h1><p>Check back later.</p>' },
+      '/services': { main: '<h1>Coming soon</h1><p>Check back later.</p>' },
+    })
+    expect(addresses(await crawlIt())).toEqual(['/', '/services', '/team'])
+  })
+
+  it('two pages of different photos and no words are two pages', async () => {
+    serve({
+      '/': { main: `${WORDS('home')}${link('/one')}${link('/two')}` },
+      '/one': { main: '<img src="https://cdn.example.com/one.jpg" alt="">' },
+      '/two': { main: '<img src="https://cdn.example.com/two.jpg" alt="">' },
+    })
+    expect(addresses(await crawlIt())).toEqual(['/', '/one', '/two'])
+  })
+
+  it('reads the page a canonical names even when nothing else links it, and that page stands', async () => {
+    serve(
+      {
+        '/': { main: WORDS('home') },
+        '/gallery?itemId=1': { main: WORDS('gallery'), head: canonical('/gallery') },
+        '/gallery': { main: WORDS('gallery'), head: canonical('/gallery') },
+      },
+      ['/gallery?itemId=1'],
+    )
+    const inventory = await crawlIt()
+    expect(addresses(inventory)).toEqual(['/', '/gallery'])
+    expect(inventory.skipped).toEqual([{ url: `${ORIGIN}/gallery?itemId=1`, reason: 'duplicate', sameAs: `${ORIGIN}/gallery` }])
+  })
+
+  it('a canonical that names a page that does not serve, or another site, leaves the page standing', async () => {
+    serve(
+      {
+        '/': { main: WORDS('home') },
+        '/gallery?itemId=1': { main: WORDS('gallery'), head: canonical('/gallery') },
+        '/moved': { main: WORDS('moved'), head: '<link rel="canonical" href="https://another-site.example/moved">' },
+      },
+      ['/gallery?itemId=1', '/moved'],
+    )
+    const inventory = await crawlIt()
+    expect(addresses(inventory)).toEqual(['/', '/gallery?itemId=1', '/moved'])
+    expect(inventory.skipped).toEqual([{ url: `${ORIGIN}/gallery`, reason: 'http-error', status: 404 }])
+  })
+
+  it('a canonical over http, or with a slash, names the same address and not another page', async () => {
+    serve(
+      { '/': { main: WORDS('home') }, '/about/': { main: WORDS('about'), head: '<link rel="canonical" href="http://older-site.example/about">' } },
+      ['/about/'],
+    )
+    const inventory = await crawlIt()
+    expect(addresses(inventory)).toEqual(['/', '/about/'])
+    expect(inventory.skipped).toEqual([])
+  })
+
+  it('reads every address without a query before the ones a link adds a query to', async () => {
+    const variants = ['1', '2', '3', '4', '5', '6'].map((id) => `/gallery?itemId=${id}`)
+    serve({
+      '/': { main: `${WORDS('home')}${variants.map(link).join('')}${link('/gallery')}${link('/about')}` },
+      '/gallery': { main: WORDS('gallery'), head: canonical('/gallery') },
+      '/about': { main: WORDS('about') },
+      ...Object.fromEntries(variants.map((path) => [path, { main: WORDS('gallery'), head: canonical('/gallery') }])),
+    })
+    await crawlIt()
+    const asked = calls.map((call) => new URL(call.url)).filter((url) => !/robots|sitemap/.test(url.pathname)).map((url) => `${url.pathname}${url.search}`)
+    expect(asked.slice(0, 3)).toEqual(['/', '/gallery', '/about'])
+  })
+
+  describe('a platform’s own screens', () => {
+    const LONG = `<h1>Carts</h1><p>${'We build and repair golf carts in our own shop with parts we stock ourselves, and we will bring yours back better than new. '.repeat(3)}</p>`
+
+    it('leaves out a known screen with almost no words, or one the site itself keeps out of search', async () => {
+      serve({
+        '/': { main: `${WORDS('home')}${['/cart', '/checkout', '/account/orders', '/en/basket', '/my-account', '/cart.php', '/search'].map(link).join('')}` },
+        '/cart': { main: '<p>Your cart is empty.</p>' },
+        '/checkout': { main: '<p>0</p>', head: '<meta name="robots" content="noindex">' },
+        '/account/orders': { main: LONG, head: '<meta name="ROBOTS" content="NOINDEX, NOFOLLOW">' },
+        '/en/basket': { main: '<h1>Basket</h1>' },
+        '/my-account': { main: '<p>Sign in to see your orders.</p>' },
+        '/cart.php': { main: '<p>No items yet.</p>' },
+        '/search': { main: '<h1>Search</h1>' },
+      })
+      const inventory = await crawlIt()
+      expect(addresses(inventory)).toEqual(['/'])
+      expect(inventory.skipped.map((entry) => [new URL(entry.url).pathname, entry.reason]).sort()).toEqual(
+        ['/account/orders', '/cart', '/cart.php', '/checkout', '/en/basket', '/my-account', '/search'].map((path) => [path, 'system-page']),
+      )
+    })
+
+    it('keeps a page at one of those addresses that has plenty to say and asks to be found', async () => {
+      serve({ '/': { main: `${WORDS('home')}${link('/cart')}` }, '/cart': { main: LONG } })
+      expect(addresses(await crawlIt())).toEqual(['/', '/cart'])
+    })
+
+    it('keeps a product whose name only sounds like one, deep in the shop', async () => {
+      serve({ '/': { main: `${WORDS('home')}${link('/shop/cart')}${link('/shop/basket')}` }, '/shop/cart': { main: '<h1>Garden cart</h1><p>Steel, two wheels.</p>' }, '/shop/basket': { main: '<h1>Willow basket</h1>' } })
+      expect(addresses(await crawlIt())).toEqual(['/', '/shop/basket', '/shop/cart'])
+    })
+
+    it('keeps a page the site keeps out of search at any other address: noindex alone says nothing', async () => {
+      serve({ '/': { main: `${WORDS('home')}${link('/spring-offer')}`, head: '<meta name="robots" content="noindex">' }, '/spring-offer': { main: WORDS('offer'), head: '<meta name="robots" content="noindex">' } })
+      expect(addresses(await crawlIt())).toEqual(['/', '/spring-offer'])
+    })
+  })
+
+  it('the Wix-style recording still reads all its pages, though every one names the home page as canonical', async () => {
+    const inventory = await crawlSiteForImport({ domain: 'rosies-bakery.com', maxPages: 20, maxPageBytes: PAGE_CAP })
+    expect(inventory.pages.length).toBeGreaterThan(2)
+    expect(inventory.skipped.filter((entry) => entry.reason === 'duplicate')).toEqual([])
   })
 })

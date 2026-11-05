@@ -96,18 +96,14 @@ export default async function SearchPage({
   const facetKey = String(sp?.in ?? SEARCH_FACET_ALL).slice(0, 100)
   const hostRes = await getHostCached(host)
   if (hostRes.error || !hostRes.host) notFound()
-  // A site in preview (AGL-4086) answers its search to its team alone: the
-  // results are the site's own words, which the public may not see yet. This
-  // page is dynamic already, so asking who is here costs it no cache.
-  //
-  // A site in maintenance answers it to nobody (AGL-4111). Every other address
-  // serves the 503 page while maintenance is on, team included, and this one
-  // kept answering with the site's content: entry titles and excerpts, to
-  // anyone who typed a query. It answers as preview does for the public.
+  // A site in preview (AGL-4086) or maintenance (AGL-4111) answers its search
+  // to its team alone: the results are the site's own words, entry titles and
+  // excerpts, which the public may not see right now. This page is dynamic
+  // already, so asking who is here costs it no cache.
   if (
-    isHostInMaintenance(hostRes.host as never) ||
-    (isHostInPreview(hostRes.host as never) &&
-      !(await sitePreviewViewer(String(hostRes.host.$id))).admitted)
+    (isHostInMaintenance(hostRes.host as never) ||
+      isHostInPreview(hostRes.host as never)) &&
+    !(await sitePreviewViewer(String(hostRes.host.$id))).admitted
   ) {
     notFound()
   }

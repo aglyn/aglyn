@@ -213,7 +213,7 @@ jest.mock(
 )
 
 jest.mock('./publisher-profile', () => ({
-  canActAsPublisher: async () => false,
+  isPublisherMember: async () => false,
   resolvePublisherProfile: async () => ({
     orgId: 'org-seller',
     handle: 'acme',

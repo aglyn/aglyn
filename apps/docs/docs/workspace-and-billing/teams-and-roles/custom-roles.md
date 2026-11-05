@@ -110,10 +110,13 @@ override can hand one to someone outside the roles that held it, or take it away
 
 Each starts with exactly the roles that could do it before, so nobody's access changed.
 
-**Manage data** (`data.manage`) decides the workspace's datasets on its own: creating,
-editing and deleting datasets and their records, and importing into them. Owners,
-admins and editors hold it by default and viewers don't, so a custom role or a
-per-member override can let a viewer edit datasets, or stop an editor from doing so.
+**Manage data** (`data.manage`) decides the workspace's data on its own: creating,
+editing and deleting datasets and their records, and importing into them; working the
+CRM's records, such as leads, companies, deals and tasks; and changing the workspace's
+marketing lists and email topics. Owners, admins and editors hold it by default and viewers
+don't, so a custom role or a per-member override can let a viewer do this work, or stop
+an editor from doing so. Lists and topics belong to the whole workspace, so a collaborator
+added to particular sites doesn't change them, even when granted this permission.
 
 ### Site permissions {#site-permissions}
 
@@ -201,6 +204,12 @@ permissions. In the organization hub, with no site picked, **Run email campaigns
 the workspace role instead: owners, admins and editors of the whole workspace hold it. A custom
 role, a per-member override or the site's **Permissions** dialog can grant or deny either one.
 
+Creating or editing a campaign asks **Run email campaigns** on the workspace. On a campaign placed
+on one site, holding it on that site is enough too. So turning it off for someone in a site's
+**Permissions** dialog stops them sending, duplicating and deleting there, and, if they hold it on
+the workspace, they can still create and edit campaigns. A campaign placed on several sites or on
+every site follows the workspace permission alone.
+
 ### Marketplace permissions on a site {#marketplace-site-permissions}
 
 | Permission | What it opens | Admin | Editor | Author | Viewer |
@@ -212,6 +221,50 @@ Each works beside the workspace's own marketplace permission (installing from th
 marketplace, publishing to it), which is still asked too. Both start from the member's role
 on the site, so nobody's access changed when they became permissions, and a custom role, a
 per-member override or the site's **Permissions** dialog can grant or deny either one.
+
+### Marketplace publisher permissions {#marketplace-publisher-permissions}
+
+| Permission | What it opens | Owner | Admin | Editor | Viewer |
+|---|---|---|---|---|---|
+| **Edit the publisher profile** (`marketplace.publisherProfile`) | Change the workspace's public marketplace profile on **Marketplace → Profile**: its handle, name, bio, logo, support contact and links; and ask for the Verified publisher badge on a listing, or withdraw the ask | Yes | Yes | No | No |
+| **Manage published listings** (`marketplace.manageListings`) | Edit the listings the workspace has published (their words, pictures and category), make a plugin public or private, unpublish or republish a listing, and read a listing's **Review status** card | Yes | Yes | No | No |
+| **Manage marketplace payouts** (`marketplace.payouts`) | Set up, finish and recheck the payout account on **Marketplace → Payouts** that the workspace's paid listings pay into, and open its payouts | Yes | Yes | No | No |
+
+Publishing a new listing is still **Publish to marketplace**, which editors hold too.
+Nobody's access changed when these became permissions, and a custom role or a per-member
+override can grant or deny each one, so an editor can be trusted with the listings
+without the profile or the payouts, or any one of them alone.
+
+Belonging to the publishing workspace is not a permission, so no role grants it or takes
+it away: everyone in the workspace installs its own listings on the workspace's own sites
+without buying them, and nobody in it can buy or review them. On another workspace's
+sites the same people are buyers like anyone else, so that workspace needs its own
+license. See
+[Your own listings](../../developers/plugins/publishing/publisher-handbook.md#your-own-listings).
+
+### CRM settings permission {#crm-settings-permission}
+
+| Permission | What it opens | Owner | Admin | Editor | Viewer |
+|---|---|---|---|---|---|
+| **Change CRM settings** (`crm.settings`) | Change what the CRM does for every site on **CRM → Settings**: default sharing for new records, companies from email domains, default owners, assignment rules and the round-robin pool, sharing rules, and rotating the email capture address; and share records across sites by hand | Yes | Yes | No | No |
+
+A custom role or a per-member override can grant or deny it. A site collaborator never
+holds it, because it acts on the whole workspace. Everyone who can open the CRM can still
+read the settings, and a member without the permission sees each control switched off with
+the permission named beside it.
+
+### Moving contacts and deals between stages {#crm-move-stages-permission}
+
+| Permission | What it opens | Admin | Editor | Author | Viewer |
+|---|---|---|---|---|---|
+| **Move contacts and deals between stages** (`crm.moveStages`) | Change a contact's lifecycle stage, and move a deal through its pipeline, including winning, losing and reopening it | Yes | Yes | No | No |
+
+This one starts from the member's role on the site, so nobody's access changed when it
+became a permission. In the organization hub, with no site picked, it follows **Manage
+data** until a custom role or a per-member override sets it. A custom role, a per-member
+override or the site's **Permissions** dialog can grant or deny it. Moving a deal also
+takes **Manage data**. A member without the permission still sees each stage control,
+switched off with the permission named beside it.
 
 ### Automation and domain permissions {#automation-and-domain-permissions}
 

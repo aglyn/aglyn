@@ -157,8 +157,10 @@ reusable pieces pages are assembled from — see
 [Pages & Layouts](../building-sites/screens-and-layouts/overview.md)), **Templates**
 (saved starting points), **Content** (collections and blog entries), **Users** (the people
 who sign in to the site you're building, not your own team), and **Analytics**. **Admin**
-appears only if you're an owner or admin of the site; it holds per-site plugin settings,
-the custom domain, the site's security lists, the full activity log, and the danger zone.
+appears only if you hold the **Manage site settings** permission on the site, which the
+site's admins hold by default, and workspace owners and admins are admins of every site. It
+holds per-site plugin settings, the custom domain, the site's security lists, the full
+activity log, and the danger zone.
 
 :::note Sections that come and go
 Tabs such as **Data**, **Products**, **Logic**, **Automation**, **Inbox**, **Bookings**,
@@ -192,9 +194,8 @@ Each card carries:
   Domain**.
 - A **status pill** (below).
 - A **pin**, beside the pill. Pinned sites lead the list in the order you pinned them,
-  and the site switcher in the top bar lists them first too. You can pin up to five
-  sites in each workspace; pinning a sixth asks which one it replaces. Your pins are
-  yours alone, and they follow you to every device you sign in on.
+  and the site switcher in the top bar lists them first too. Pin as many sites as you
+  like. Your pins are yours alone, and they follow you to every device you sign in on.
 - **Visit**, which opens the live site in a new tab, and **Manage**, which opens that
   site's dashboard in the console.
 

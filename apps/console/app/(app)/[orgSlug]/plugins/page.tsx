@@ -17,6 +17,7 @@
 'use client'
 
 import { FIRST_PARTY_PLUGINS, isLockedOnForWorkspace } from '@aglyn/aglyn'
+import { permissionRefusalText } from '@aglyn/aglyn/app-utils/org-permissions'
 import { mdiChevronRight, mdiPuzzleOutline } from '@aglyn/shared-data-mdi'
 import { AppLink, CardDisplay, Container, MdiIcon } from '@aglyn/shared-ui-jsx'
 import type { NextPageWithLayout } from '@aglyn/shared-ui-next'
@@ -29,6 +30,7 @@ import { docsHelp } from '../../../../constants/docs-links'
 import { buildRoute, Route } from '../../../../constants/route-links'
 import { useOrgHosts } from '../../../../hooks/use-org-hosts'
 import useBranding from '../../../../hooks/use-branding'
+import useOrgPermissions from '../../../../hooks/use-org-permissions'
 import PluginDisableCascadeDialog from '../../../../components/plugin-disable-cascade-dialog.component'
 import PluginWidgetSlot from '../../../../components/plugin-widget-slot.component'
 import { useOrgScope, useOrgSlug } from '../../../../hooks/use-org-scope'
@@ -66,6 +68,15 @@ const OrgPlugins: NextPageWithLayout<Record<string, never>> = () => {
    * out here and re-derived there.
    */
   const switchboard = useOrgPluginSwitchboard()
+  /**
+   * Whether to say why the switches are off (AGL-4047): the key they and their
+   * route ask, and only once the answer is known. `canWrite` is also false
+   * while the permissions load or when the read failed, and neither of those
+   * is a refusal to accuse someone of.
+   */
+  const orgPermissions = useOrgPermissions()
+  const switchRefused =
+    orgPermissions.loaded && !orgPermissions.can('org.settings')
 
   // `undefined`, never `null`, while the workspace resolves (AGL-2350):
   // `null` means "an account with no org — list every site they hold", and
@@ -189,6 +200,15 @@ const OrgPlugins: NextPageWithLayout<Record<string, never>> = () => {
                 'one off removes it from navigation, the editor, published ' +
                 'sites and the API for every site in this organization.'}
             </Typography>
+            {switchRefused ? (
+              <Typography
+                variant="body2"
+                color="text.secondary"
+                sx={{ mb: 1 }}
+              >
+                {permissionRefusalText('org.settings')}
+              </Typography>
+            ) : null}
             <Stack>
               {FIRST_PARTY_PLUGINS.map((plugin) =>
                 row(

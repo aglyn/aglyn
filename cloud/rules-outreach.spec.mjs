@@ -82,6 +82,12 @@ const STAMP_REVOKED_ADMIN = 'uid-outreach-admin-stamp-revoked'
 const ORG_EDITOR = 'uid-outreach-editor'
 /** An org-wide viewer a custom role explicitly granted `outreach.use`. */
 const GRANTED_VIEWER = 'uid-outreach-viewer-granted'
+/**
+ * An org-wide editor whose own override grants the key, on a member the
+ * projection never stamped (AGL-4047): the override is read before the
+ * role's default, as the console's resolver reads it.
+ */
+const OVERRIDE_GRANTED_EDITOR = 'uid-outreach-editor-override-granted'
 /** A scoped site collaborator carrying the same explicit grant. */
 const COLLABORATOR = 'uid-outreach-collaborator'
 const OUTSIDER = 'uid-outreach-outsider'
@@ -228,6 +234,11 @@ await env.withSecurityRulesDisabled(async (context) => {
     resolvedPermissions: { 'outreach.use': false },
   })
   await member(ORG, ORG_EDITOR, { role: 'editor', allHosts: true })
+  await member(ORG, OVERRIDE_GRANTED_EDITOR, {
+    role: 'editor',
+    allHosts: true,
+    permissions: { 'outreach.use': true },
+  })
   await member(ORG, GRANTED_VIEWER, {
     role: 'viewer',
     allHosts: true,
@@ -297,6 +308,10 @@ for (const entry of COLLECTIONS) {
   await check(
     `${name}: an org-wide EDITOR with nothing stamped is refused`,
     () => assertFails(getDoc(docOf(as(ORG_EDITOR), ORG, entry))),
+  )
+  await check(
+    `${name}: an org-wide EDITOR whose own override grants outreach.use, nothing stamped, gets a document`,
+    () => assertSucceeds(getDoc(docOf(as(OVERRIDE_GRANTED_EDITOR), ORG, entry))),
   )
   await check(
     `${name}: an org-wide VIEWER explicitly granted outreach.use gets a document`,

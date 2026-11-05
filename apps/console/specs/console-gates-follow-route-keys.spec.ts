@@ -15,6 +15,7 @@
  * limitations under the License.
  */
 
+import { execFileSync } from 'node:child_process'
 import { readFileSync } from 'node:fs'
 import { join } from 'node:path'
 
@@ -45,6 +46,7 @@ const GATES: Array<{ surface: string; key: string; route: string }> = [
   { surface: 'components/org-sso-card.component.tsx', key: 'org.settings', route: 'app/api/orgs/sso/route.ts' },
   { surface: 'components/media/org-default-sharing-card.component.tsx', key: 'org.settings', route: 'app/api/orgs/settings/route.ts' },
   { surface: 'hooks/use-plugin-switchboard.ts', key: 'org.settings', route: 'app/api/orgs/settings/route.ts' },
+  { surface: 'app/(app)/[orgSlug]/plugins/page.tsx', key: 'org.settings', route: 'app/api/orgs/settings/route.ts' },
   { surface: 'app/(app)/[orgSlug]/settings/(sections)/layout.tsx', key: 'org.settings', route: 'app/api/orgs/settings/route.ts' },
   // The three sections that stayed on the owner or admin role until their
   // routes moved to keys of their own.
@@ -78,6 +80,38 @@ describe('console gates ask the key their route checks (AGL-4047)', () => {
     ]) {
       expect(read(surface)).not.toContain('canManageOrg(')
     }
+  })
+
+  it('the workspace plugin settings card asks the key the rules ask of its document', () => {
+    // A client-direct write, so the rule is the enforcer and no route is. The
+    // card's behavior is `plugin-config-org-settings-gate.spec.tsx`.
+    const surface = read('components/plugin-config-card.component.tsx')
+    expect(surface).toContain("can('org.settings')")
+    expect(surface).toMatch(/loaded/)
+    expect(surface).not.toContain('canManageOrg(')
+    const rules = read('../../cloud/firebase-firestore.rules')
+    const block = rules.slice(rules.indexOf('match /pluginSettings/{pluginId}'))
+    expect(block.slice(0, block.indexOf('\n      }'))).toContain(
+      "memberKeyOrOverride('org.settings', ['owner', 'admin'])",
+    )
+  })
+
+  it('the site plugin page asks the key the rules ask of everything it writes', () => {
+    // Client-direct writes again, so the rules are the enforcer. The page's
+    // behavior is `site-plugin-refusal-follows-the-key.spec.tsx`.
+    const page = read('app/(app)/[orgSlug]/hosts/[host]/admin/plugins/[pluginRef]/page.tsx')
+    expect(page).toContain("permissionRefusalText('site.manage')")
+    expect(page).toContain('adminKnown && !isAdmin')
+    expect(page).not.toContain('Only site admins')
+    expect(read('components/host-id-provider.tsx')).toContain(
+      "hostStampedSitePermission(host, uid, 'site.manage', CORE_SITE_ROLE_PRESETS['site.manage'])",
+    )
+    const rules = read('../../cloud/firebase-firestore.rules')
+    const site = rules.slice(rules.indexOf("match /pluginSettings/{pluginId}", rules.indexOf('Per-site plugin settings')))
+    expect(site.slice(0, site.indexOf('\n      }'))).toContain("hostSiteRoleKey(hostId, 'site.manage', ['admin'])")
+    expect(rules).toMatch(
+      /hostSiteRoleKey\(hostId, 'site\.manage', \['admin'\]\) \|\|\s+!request\.resource\.data\.diff\(resource\.data\)\.affectedKeys\(\)\s+\.hasAny\(\['disabledPlugins', 'enabledPlugins', 'authScreens',/,
+    )
   })
 
   it('the holds surfaces and the CRM’s erase item ask the same keys as their routes', () => {
@@ -175,3 +209,228 @@ describe('the workspace keys’ controls ask the keys their routes and rules che
   })
 })
 
+
+/**
+ * THE WORKSPACE'S PUBLISHER KEYS: ONE KEY FOR THE CONTROL, THE ROUTE AND THE
+ * RULE (AGL-4047).
+ *
+ * Saving the publisher profile, managing a published listing and setting up
+ * payouts asked the owner or admin role in places that never named each
+ * other: the routes through one role helper, the rules through a role list of
+ * their own, and the console not at all (it offered Save and Edit to every
+ * member of the hub and let the route refuse). Each row holds them to one
+ * key: the marketplace page disables its control by it, the doors ask it,
+ * and, where a client can write the same thing directly, the deployed rules
+ * ask it too. A key with no client-direct write names the rules' freeze that
+ * makes its route the only door instead.
+ */
+const MARKETPLACE = '../../libs/plugins/marketplace/src/lib'
+const PUBLISHER_GATES: Array<{
+  key: string
+  constant: string
+  surfaces: string[]
+  doors: string[]
+  /** `null` when no client writes it: the route is the only door. */
+  rule: 'asks-the-key' | null
+}> = [
+  {
+    key: 'marketplace.publisherProfile',
+    constant: 'MARKETPLACE_PUBLISHER_PROFILE_PERMISSION',
+    surfaces: [
+      `${MARKETPLACE}/components/org-seller-panel.component.tsx`,
+      `${MARKETPLACE}/components/listing-verification-request.component.tsx`,
+    ],
+    doors: [`${MARKETPLACE}/server/publisher-profile-save.ts`, `${MARKETPLACE}/server/verification-request.ts`],
+    rule: 'asks-the-key',
+  },
+  {
+    key: 'marketplace.manageListings',
+    constant: 'MARKETPLACE_MANAGE_LISTINGS_PERMISSION',
+    surfaces: [
+      `${MARKETPLACE}/components/org-seller-panel.component.tsx`,
+      `${MARKETPLACE}/components/listing-detail-page.component.tsx`,
+      `${MARKETPLACE}/components/listing-review-status.component.tsx`,
+    ],
+    doors: [`${MARKETPLACE}/server/publisher-permissions.ts`, `${MARKETPLACE}/server/listing-versions.ts`],
+    rule: 'asks-the-key',
+  },
+  {
+    key: 'marketplace.payouts',
+    constant: 'MARKETPLACE_PAYOUTS_PERMISSION',
+    surfaces: [`${MARKETPLACE}/components/org-seller-panel.component.tsx`],
+    doors: [`${MARKETPLACE}/server/connect.ts`],
+    rule: null,
+  },
+]
+
+/** Every non-spec source file of the marketplace plugin, by path. */
+const marketplaceSources = (): string[] =>
+  execFileSync('git', ['ls-files', '--', 'libs/plugins/marketplace/src/lib'], {
+    cwd: join(ROOT, '../..'),
+    encoding: 'utf8',
+  })
+    .split('\n')
+    .filter((file) => /\.tsx?$/.test(file) && !/\.spec\.tsx?$/.test(file))
+
+describe('the publisher keys: one key for the control, the route and the rule (AGL-4047)', () => {
+  const model = read(`${MARKETPLACE}/model/marketplace-publisher-permissions.ts`)
+  const rules = read('../../cloud/firebase-firestore.deploy.rules')
+
+  it.each(PUBLISHER_GATES)('$key', ({ key, constant, surfaces, doors, rule }) => {
+    expect(model).toContain(`export const ${constant}: MarketplacePublisherPermission = '${key}'`)
+    for (const surface of surfaces) expect(read(surface)).toContain(`permissions?.[${constant}] !== false`)
+    for (const door of doors) expect(read(door)).toContain(constant)
+    if (rule) expect(rules).toContain(`'${key}'`)
+    else expect(rules).not.toContain(`'${key}'`)
+  })
+
+  it('payouts have no client door: the rules freeze every payout field on the profile', () => {
+    const profileUpdate = /match \/publisherProfiles\/\{orgId\}[\s\S]*?allow update:([\s\S]*?);/.exec(rules)?.[1] ?? ''
+    for (const field of ['stripeAccountId', 'stripeChargesEnabled', 'stripeAccountLivemode', 'stripePayoutsEnabled']) {
+      expect(profileUpdate).toContain(`'${field}'`)
+    }
+  })
+
+  it('the publisher doors all go through the gate that asks their key, and none asks the role any more', () => {
+    for (const door of [
+      'publish-plugin.ts',
+      'preview-image.ts',
+      'publisher-profile-save.ts',
+      'connect.ts',
+      'verification-request.ts',
+      'listing-versions.ts',
+    ]) {
+      expect(read(`${MARKETPLACE}/server/${door}`)).not.toMatch(/canActAsPublisher\(/)
+    }
+    expect(read(`${MARKETPLACE}/server/publish-plugin.ts`).match(/manageListingsRefusal\(/g)).toHaveLength(3)
+    expect(read(`${MARKETPLACE}/server/preview-image.ts`)).toContain('manageListingsRefusal(')
+    for (const door of ['connect.ts', 'verification-request.ts', 'listing-versions.ts']) {
+      expect(read(`${MARKETPLACE}/server/${door}`)).toContain('publisherPermissionVerdict(')
+    }
+  })
+
+  it('the role helper is gone from the plugin; the ownership questions ask membership, never a key', () => {
+    const sources = marketplaceSources()
+    // The search searches: the plugin has sources, and the membership fact is found.
+    expect(sources.length).toBeGreaterThan(50)
+    expect(sources.filter((file) => /\bcanActAsPublisher\b/.test(read(`../../${file}`)))).toEqual([])
+    // No buying your own listing, no rating it: membership alone.
+    for (const file of ['sale.ts', 'reviews.ts', 'own-listing.ts']) {
+      expect([file, read(`${MARKETPLACE}/server/${file}`).includes('isPublisherMember(')]).toEqual([file, true])
+    }
+    // Free own installs: membership AND the install landing in the publishing
+    // workspace (AGL-2484, AGL-4047), one definition every door asks.
+    const OWN_SITES = [
+      'install.ts',
+      'install-plugin.ts',
+      'install-theme.ts',
+      'install-template.ts',
+      'install-layout.ts',
+      'install-email-template.ts',
+      'install-email-starter.ts',
+      'install-dataset-schema.ts',
+      'update-artifact.ts',
+      'site-starter-source.ts',
+    ]
+    for (const file of OWN_SITES) {
+      const source = read(`${MARKETPLACE}/server/${file}`)
+      expect([file, source.includes('ownsListingHere('), /\bisPublisherMember\(/.test(source)]).toEqual([file, true, false])
+    }
+    const waiver = /export function isOwnListingInstall\([\s\S]*?\n}\n/.exec(read(`${MARKETPLACE}/model/own-listing.ts`))?.[0] ?? ''
+    expect(waiver).toContain('landsInPublisherWorkspace(facts.publisherOrgId, facts.targetOrgId)')
+    expect(waiver).not.toMatch(/memberHasOrgPermission|permissions|'owner'|'admin'/)
+    // The fact asks the members collection and nothing else: no key, no role.
+    const fact = /export async function isPublisherMember\([\s\S]*?\n}\n/.exec(read(`${MARKETPLACE}/server/publisher-profile.ts`))?.[0] ?? ''
+    expect(fact).toContain('member.exists')
+    expect(fact).not.toMatch(/memberHasOrgPermission|permissions|\.get\('role'\)|'owner'|'admin'/)
+  })
+
+  it('the rules ask the keys through the stamped helper, and Sequences asks "Use Sequences" the same way', () => {
+    expect(rules).toMatch(/orgMemberKeyOrOverride\(orgId, 'marketplace\.publisherProfile', \['owner', 'admin'\]\)/)
+    expect(rules).toMatch(/orgMemberKeyOrOverride\(resource\.data\.profileId,\s*'marketplace\.manageListings', \['owner', 'admin'\]\)/)
+    expect(rules).toContain("memberKeyOrOverride('outreach.use', ['owner', 'admin'])")
+  })
+})
+
+/**
+ * THE READERS THAT ASKED A ROLE AND A KEY ASK THE KEY ALONE (AGL-4047).
+ *
+ * The CRM's people, a list's people, the AI usage and billing documents and
+ * the hardware orders were read in the rules as "the owner/admin(/editor)
+ * role AND the key, or the key stamped". The key's default is exactly that
+ * role list, so `memberKeyOrOverride(key, thoseRoles)` gives every member the
+ * same answer with no role named. Each row holds the rule to the key the
+ * console registers the surface with and the route that serves the same data
+ * asks, so a route or a page that moves to another key fails here.
+ */
+const PLUGINS = '../../libs/plugins'
+const READER_GATES: Array<{
+  reader: string
+  rule: string
+  console: Array<[string, string]>
+  routes: Array<[string, RegExp]>
+}> = [
+  {
+    reader: 'the CRM’s people (`canReadScopedPeople`)',
+    rule: "function canReadScopedPeople() {\nreturn canReadScoped() &&\nmemberKeyOrOverride('data.manage', ['owner', 'admin', 'editor']);\n}",
+    console: [[`${PLUGINS}/crm/src/lib/plugin.ts`, "permission: 'data.manage'"]],
+    routes: [
+      [`${PLUGINS}/crm/src/lib/server/record-facts.ts`, /memberHasOrgPermission\(orgId, member, 'data\.manage'\)/],
+      [`${PLUGINS}/crm/src/lib/server/org-caller.ts`, /memberHasOrgPermission\(orgId, member, 'data\.manage'\)/],
+    ],
+  },
+  {
+    reader: 'a list’s people (`isOrgWideAudienceManager`)',
+    rule: "function isOrgWideAudienceManager() {\nreturn isOrgWideMember() &&\nmemberKeyOrOverride('data.manage', ['owner', 'admin', 'editor']);\n}",
+    console: [[`${PLUGINS}/email/src/lib/plugin.ts`, "permission: 'data.manage'"]],
+    routes: [],
+  },
+  {
+    reader: 'a person’s AI usage months (`aiUsageByUser`)',
+    rule: "(memberKeyOrOverride('billing.view', ['owner', 'admin']) ||\nmemberKeyOrOverride('org.auditLog', ['owner', 'admin'])));",
+    console: [[`${PLUGINS}/ai/src/lib/plugin.ts`, "permission: 'billing.view'"]],
+    routes: [
+      [`${PLUGINS}/ai/src/lib/server/ai-usage.ts`, /memberHasOrgPermission\(orgId, member, 'billing\.view'\)/],
+      [`${PLUGINS}/ai/src/lib/server/ai-usage.ts`, /memberHasOrgPermission\(orgId, member, 'org\.auditLog'\)/],
+    ],
+  },
+  {
+    reader: 'the AI allotments, billing standing and overage charges',
+    rule: "(memberKeyOrOverride('billing.view', ['owner', 'admin']) ||\nmemberKeyOrOverride('billing.manage', ['owner', 'admin']))",
+    console: [[`${PLUGINS}/ai/src/lib/plugin.ts`, "permission: 'billing.view'"]],
+    routes: [
+      [`${PLUGINS}/ai/src/lib/server/ai-allotments.ts`, /memberHasOrgPermission\(orgId, member, 'billing\.view'\)/],
+      [`${PLUGINS}/ai/src/lib/server/ai-allotments.ts`, /memberHasOrgPermission\(orgId, member, 'billing\.manage'\)/],
+      [`${PLUGINS}/ai/src/lib/server/billing-overage.ts`, /memberHasOrgPermission\(orgId, actor\?\.member, 'billing\.manage'\)/],
+    ],
+  },
+  {
+    reader: 'the hardware orders (`hardwareOrders`)',
+    rule: "(memberKeyOrOverride('managePos', ['owner', 'admin', 'editor']) ||\nmemberStamps('posBuyHardware')));",
+    console: [],
+    routes: [[`${PLUGINS}/commerce/src/lib/server/pos-auth.ts`, /permissions\?\.\['managePos'\] === true/]],
+  },
+]
+
+describe('the readers that asked a role and a key ask the key alone (AGL-4047)', () => {
+  const rules = read('../../cloud/firebase-firestore.deploy.rules')
+
+  it.each(READER_GATES)('$reader', ({ rule, console: surfaces, routes }) => {
+    expect(rules).toContain(rule)
+    for (const [surface, gate] of surfaces) expect(read(surface)).toContain(gate)
+    for (const [route, gate] of routes) expect(read(route)).toMatch(gate)
+  })
+
+  it('the four AI usage and billing reads no longer ask the role', () => {
+    expect(rules.match(/memberKeyOrOverride\('billing\.manage', \['owner', 'admin'\]\)/g)).toHaveLength(3)
+    for (const match of ['aiUsageByUser/{subjectUid}/months/{month}', 'aiAllotments/{subject}', 'aiBilling/{document}', 'aiOverageCharges/{chargeId}']) {
+      const block = rules.slice(rules.indexOf(`match /${match} {`), rules.indexOf('allow write: if false;', rules.indexOf(`match /${match} {`)))
+      expect(block.length).toBeGreaterThan(0)
+      expect(block).not.toContain('canManageOrg()')
+    }
+  })
+
+  it('the helper whose absent answer was "allowed" is gone with its last caller', () => {
+    expect(rules).not.toMatch(/\bmemberResolves\(/)
+  })
+})

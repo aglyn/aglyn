@@ -40,7 +40,7 @@ import com.aglyn.core.nowMillis
 import com.aglyn.core.relativeTime
 import com.aglyn.pluginhost.ActionRunner
 import com.aglyn.pluginhost.NativePluginContext
-import com.aglyn.pluginhost.ORG_WRITER_ROLES
+import com.aglyn.pluginhost.rememberMemberPermissions
 import com.aglyn.pluginhost.TransferExportDialog
 import com.aglyn.pluginhost.describeScope
 import com.aglyn.pluginhost.listScopeTokens
@@ -83,9 +83,6 @@ fun datasetTransferResource(datasetId: String) = "data.dataset:$datasetId"
  */
 const val DATA_IMPORT_SCREEN = "core.settings.data.import"
 
-/** Who may import records: the transfer routes' own rule for a workspace resource, an owner or an admin. */
-fun canImportDatasetRecords(orgRole: String?): Boolean = orgRole == "owner" || orgRole == "admin"
-
 /** The wizard's parameters for one dataset, the console's `openImport` call: the resource and the title. */
 fun datasetImportParams(id: String, name: String): Map<String, String> =
   mapOf("resource" to datasetTransferResource(id), "title" to if (name.isEmpty()) "Import records" else "Import into $name")
@@ -105,7 +102,7 @@ private sealed interface DatasetDialog {
 @Composable
 internal fun rememberDatasets(context: NativePluginContext, orgId: String): Pair<Live<OrgAccess>, Live<List<DatasetRow>>> {
   val access = rememberOrgAccess(context, orgId)
-  val tokens = (access as? Live.Ready)?.value?.listScopeTokens()
+  val tokens = (access as? Live.Ready)?.value?.let { datasetListScope(context.hostId, it.listScopeTokens()) }
   val ready = access is Live.Ready && (tokens == null || tokens.isNotEmpty())
   val live by remember(orgId, ready, tokens, context.firestore) {
     if (ready) context.firestore.observe(datasetsQuery(orgId, tokens)) else kotlinx.coroutines.flow.flowOf(Live.Loading)
@@ -129,9 +126,9 @@ fun DatasetsScreen(context: NativePluginContext, initialDatasetId: String? = nul
   val orgId = context.orgId ?: return EmptyState("Pick a workspace to see its data", icon = AglynIcons.named("dataset"))
   val scope = rememberCoroutineScope()
   val api = remember(orgId, context.api, context.writer) { DataApi(context.api, context.writer, orgId) }
-  val runner = remember(orgId) { ActionRunner(scope, roleHint = "an owner, admin or editor") }
+  val runner = remember(orgId) { ActionRunner(scope) }
   var dialog by remember { mutableStateOf<DatasetDialog?>(null) }
-  val canWrite = context.orgRole in ORG_WRITER_ROLES
+  val canWrite = rememberMemberPermissions(context).can("data.manage")
   val (access, datasets) = rememberDatasets(context, orgId)
 
   AglynListDetail(
@@ -239,7 +236,7 @@ private fun DatasetDetail(
         OverflowMenu(
           buildList {
             add(MenuAction("schema", "Edit schema", "table_chart", enabled = canWrite) { context.navigate(DATA_SCHEMA_SCREEN, mapOf("dataset" to dataset.id)) })
-            if (canImportDatasetRecords(context.orgRole)) {
+            if (canWrite) {
               add(MenuAction("import", "Import records", "upload") { context.navigate(DATA_IMPORT_SCREEN, datasetImportParams(dataset.id, dataset.name)) })
             }
             add(MenuAction("export", "Export records", "download", enabled = (records ?: 1L) > 0) { open(DatasetDialog.Export(dataset)) })
@@ -353,7 +350,7 @@ private fun DatasetDialogs(
         onDismiss = close,
         onConfirm = {
           runner.run("Dataset \"${name.trim()}\" created.", onDone = close) {
-            val id = api.createDataset(name, columns, hostId = null)
+            val id = api.createDataset(name, columns, hostId = context.hostId)
             context.navigate(DATA_DATASETS_SCREEN, mapOf("dataset" to id))
           }
         },
@@ -387,7 +384,7 @@ private fun DatasetDialogs(
           val first = datasets.firstOrNull { it.id == a } ?: return@ActionDialog
           val second = datasets.firstOrNull { it.id == b } ?: return@ActionDialog
           runner.run("Join collection created.", onDone = close) {
-            val id = api.createJoin(first, second, hostId = null)
+            val id = api.createJoin(first, second, hostId = context.hostId)
             context.navigate(DATA_DATASETS_SCREEN, mapOf("dataset" to id))
           }
         },

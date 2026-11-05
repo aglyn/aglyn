@@ -212,6 +212,8 @@ function noticeOf(input: {
   order: CommerceModel.HostOrder
   response: CommerceModel.QuoteCustomerResponse
   currency: string
+  /** The store's sales tax choice, which a quote saved before it was made takes. */
+  store: CommerceModel.PayLinkStore
 }) {
   const { hostId, quoteId, order, response } = input
   const quote = order.quote as CommerceModel.OrderQuote
@@ -221,7 +223,9 @@ function noticeOf(input: {
   const files = response.files ?? []
   const approving = response.action === 'approve'
   const money = CommerceModel.formatOrderMoney(Number(order.totals?.totalCents ?? 0), input.currency)
-  const total = quote.tax?.kind === 'at-payment' ? `${money} before tax` : money
+  // The tax the customer is charged (AGL-4162). The saved total stands whichever
+  // basis that is: a basis taken from the store's choice now adds no tax here.
+  const total = CommerceModel.quotePayTax(quote, input.store).basis.kind === 'at-payment' ? `${money} before tax` : money
   const filesSent = `${files.length} file${files.length === 1 ? '' : 's'}`
   const details = [
     { label: 'Quote', value: number },
@@ -379,6 +383,7 @@ export async function handleQuoteRespond(deps: QuoteProofDeps, req: PluginApiReq
       order: settled.order,
       response: settled.response,
       currency: String(store.get('currency') ?? 'USD'),
+      store: CommerceModel.payLinkStoreOf({ tax: store.get('tax') }),
     })
     void deps.notify(hostId, notice.payload, notice.options)
     return outcome

@@ -3491,16 +3491,18 @@ public struct OrgPermissionEntry: Codable, Hashable, Sendable {
   public var group: String?
   public var key: String
   public var label: String
+  public var narrowable: Bool?
   public var pluginId: String?
   public var refines: String?
   public var scope: OrgPermissionScope?
 
-  public init(description: String, follows: String? = nil, group: String? = nil, key: String, label: String, pluginId: String? = nil, refines: String? = nil, scope: OrgPermissionScope? = nil) {
+  public init(description: String, follows: String? = nil, group: String? = nil, key: String, label: String, narrowable: Bool? = nil, pluginId: String? = nil, refines: String? = nil, scope: OrgPermissionScope? = nil) {
     self.description = description
     self.follows = follows
     self.group = group
     self.key = key
     self.label = label
+    self.narrowable = narrowable
     self.pluginId = pluginId
     self.refines = refines
     self.scope = scope
@@ -4088,11 +4090,13 @@ public struct PosKioskCatalog: Codable, Hashable, Sendable {
   public var categories: [PosKioskCategory]
   public var currency: String
   public var products: [PosKioskProduct]
+  public var truncated: Bool?
 
-  public init(categories: [PosKioskCategory], currency: String, products: [PosKioskProduct]) {
+  public init(categories: [PosKioskCategory], currency: String, products: [PosKioskProduct], truncated: Bool? = nil) {
     self.categories = categories
     self.currency = currency
     self.products = products
+    self.truncated = truncated
   }
 }
 

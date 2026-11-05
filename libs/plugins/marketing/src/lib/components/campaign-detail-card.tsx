@@ -16,6 +16,8 @@
  */
 'use client'
 
+import { MARKETING_CAMPAIGNS_REFUSAL } from '../model/marketing-permissions'
+import { useCampaignContainerAccess } from './use-campaign-containers-blocked'
 import { pluginRecordHref } from '@aglyn/aglyn/plugin-manager/plugin-record-routes'
 import {
   mdiDeleteOutline,
@@ -279,6 +281,10 @@ export function CampaignDetailCard(props: CampaignDetailCardProps) {
     () => (orgId ? campaignContainerDoc(firestore, orgId, campaignId) : null),
     [firestore, orgId, campaignId],
   )
+  // "Run email campaigns" (AGL-4047): the menu says so before the save or the
+  // route does. Edit is client-direct, so it answers the rule; Delete answers
+  // the manage route.
+  const { editBlocked, deleteBlocked } = useCampaignContainerAccess(orgId, hostId, campaign)
 
   /*
    * ONLY WHEN THE ID NAMES A CAMPAIGN.
@@ -858,6 +864,8 @@ export function CampaignDetailCard(props: CampaignDetailCardProps) {
                 {
                   key: 'edit',
                   label: 'Edit campaign',
+                  disabled: editBlocked,
+                  ...(editBlocked ? { disabledReason: MARKETING_CAMPAIGNS_REFUSAL } : {}),
                   icon: <MdiIcon path={mdiPencilOutline.path} size={0.8} />,
                   onClick: () => {
                     setSaveError(null)
@@ -869,8 +877,8 @@ export function CampaignDetailCard(props: CampaignDetailCardProps) {
                   label: 'Delete campaign',
                   icon: <MdiIcon path={mdiDeleteOutline.path} size={0.8} />,
                   destructive: true,
-                  disabled: deleting,
-                  disabledReason: 'This campaign is being deleted',
+                  disabled: deleting || deleteBlocked,
+                  disabledReason: deleteBlocked ? MARKETING_CAMPAIGNS_REFUSAL : 'This campaign is being deleted',
                   onClick: () => void handleDelete(),
                 },
               ]}

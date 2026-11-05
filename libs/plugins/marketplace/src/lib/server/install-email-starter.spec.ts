@@ -41,14 +41,15 @@ jest.mock('@aglyn/aglyn/server', () => ({
 }))
 
 jest.mock('@aglyn/tenant-runtime/org-permissions', () => ({
+  // The workspace the install lands in, resolved from the site.
   resolveOrgPermissions: async () => ({
-    orgId: 'buyer-org',
+    orgId: state.targetOrgId,
     permissions: { installPlugins: true },
   }),
 }))
 
 jest.mock('./publisher-profile', () => ({
-  canActAsPublisher: async () => state.ownsListing,
+  isPublisherMember: async () => state.ownsListing,
 }))
 
 jest.mock('./purchase-entitlement', () => ({
@@ -119,7 +120,10 @@ interface Written {
 }
 
 const state = {
+  /** Whether the caller belongs to the publishing workspace (`isPublisherMember`). */
   ownsListing: false,
+  /** The workspace the site belongs to; the listing's publisher is `seller-org`. */
+  targetOrgId: 'buyer-org',
   listing: {} as Record<string, unknown>,
   version: {} as Record<string, unknown>,
   versionExists: true,
@@ -225,6 +229,7 @@ const screenWrite = () =>
 beforeEach(() => {
   mintedIds = 0
   state.ownsListing = false
+  state.targetOrgId = 'buyer-org'
   state.versionExists = true
   state.revocation = undefined
   state.writes = []
@@ -317,6 +322,7 @@ describe('an unreviewed version is never treated as reviewed', () => {
     // The deliberate self-install path: the publisher's org installs its own
     // listing to test it. Nothing about owning the listing reviews the bytes.
     state.ownsListing = true
+    state.targetOrgId = 'seller-org'
     state.listing['reviewStatus'] = 'verified'
     const res = await install()
     expect(res.body.assurance).toBe('unreviewed')
@@ -334,6 +340,7 @@ describe('an unreviewed version is never treated as reviewed', () => {
   it('refuses a version review turned down, for the publisher too', async () => {
     state.version['reviewState'] = 'rejected'
     state.ownsListing = true
+    state.targetOrgId = 'seller-org'
     const res = await install()
     expect(res.statusCode).toBe(409)
     expect(siteWrites()).toHaveLength(0)
@@ -442,10 +449,14 @@ describe('the storefront gates apply to this type too', () => {
     expect((await install()).statusCode).toBe(404)
   })
 
-  it('404s a private listing for anyone but its publisher', async () => {
+  it('404s a private listing for anyone but its publisher, on its own sites', async () => {
     state.listing['visibility'] = 'private'
     expect((await install()).statusCode).toBe(404)
+    // A member of the publisher, on another workspace's site, is anyone
+    // there (AGL-4047).
     state.ownsListing = true
+    expect((await install()).statusCode).toBe(404)
+    state.targetOrgId = 'seller-org'
     expect((await install()).statusCode).toBe(200)
   })
 

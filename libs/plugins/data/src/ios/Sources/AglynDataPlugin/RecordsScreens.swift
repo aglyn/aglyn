@@ -146,7 +146,7 @@ private struct RecordsBody: View {
   #endif
   @State private var model: RecordsModel
   @State private var references = ReferenceChoicesModel()
-  @State private var runner = PluginActionRunner(roleHint: "an owner, admin or editor")
+  @State private var runner = PluginActionRunner()
   @State private var selection: String?
   @State private var pushed: String?
   @State private var sheet: RecordSheet?
@@ -163,7 +163,7 @@ private struct RecordsBody: View {
     _model = State(initialValue: RecordsModel(dataset: dataset))
   }
 
-  private var canWrite: Bool { orgWriterRoles.contains(context.orgRole ?? "") }
+  private var canWrite: Bool { context.can("data.manage") }
   private var noun: String { dataset.singular.trimmingCharacters(in: .whitespaces).isEmpty ? "record" : dataset.singular.lowercased() }
   private var api: DataAPI { DataAPI(api: context.api, writer: context.writer, orgID: orgID) }
 
@@ -202,7 +202,7 @@ private struct RecordsBody: View {
     }
     .aglynScreenToolbar(id: "records") {
       AglynSecondaryActions {
-        if canImportDatasetRecords(orgRole: context.orgRole) {
+        if canWrite {
           Button {
             context.navigate(dataImportScreen, datasetImportParams(id: dataset.id, name: dataset.name))
           } label: {

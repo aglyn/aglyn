@@ -177,7 +177,6 @@ export interface OrgPermissionsValue {
   can: (permission: OrgPermission) => boolean
   /** The full resolved permission map. */
   granted: Record<OrgPermission, boolean>
-  isOwner: boolean
   /** Org the permissions were resolved in (undefined pre-first-org). */
   orgId: string | undefined
   role: OrgRole | undefined
@@ -216,7 +215,6 @@ export const OrgPermissionsContext = createContext<OrgPermissionsValue | null>(
 interface Resolution {
   member: Partial<AglynOrgMember> | null
   customRole: AglynOrgCustomRole | null
-  isOwner: boolean
   orgId: string | undefined
   role: OrgRole | undefined
   /**
@@ -233,7 +231,6 @@ interface Resolution {
 const UNANSWERED: Resolution = {
   member: null,
   customRole: null,
-  isOwner: true,
   orgId: undefined,
   role: undefined,
   overrides: undefined,
@@ -247,7 +244,6 @@ const UNANSWERED: Resolution = {
 const OWNER_OF_A_FUTURE_ORG: Resolution = {
   member: OWNER_OF_NOTHING,
   customRole: null,
-  isOwner: true,
   orgId: undefined,
   role: undefined,
   overrides: undefined,
@@ -261,7 +257,6 @@ const OWNER_OF_A_FUTURE_ORG: Resolution = {
 const MEMBERSHIPS_UNREADABLE: Resolution = {
   member: null,
   customRole: null,
-  isOwner: false,
   orgId: undefined,
   role: undefined,
   overrides: undefined,
@@ -375,7 +370,6 @@ function useOrgPermissionsResolution(enabled: boolean): OrgPermissionsValue {
           key,
           member,
           customRole,
-          isOwner: role === 'owner' || role === 'admin',
           orgId,
           role,
           overrides: member.permissions as Record<string, boolean>,
@@ -385,14 +379,12 @@ function useOrgPermissionsResolution(enabled: boolean): OrgPermissionsValue {
         // FAIL CLOSED, AND SAY SO (AGL-243 residual). `status: 'error'` keeps
         // `loaded` false so the gates HOLD rather than accuse a legitimate
         // admin, and drops `granted` to all-false so the callers that never
-        // look at `loaded` hide rather than grant. `isOwner` goes with it:
-        // it is read as an authorization answer.
+        // look at `loaded` hide rather than grant.
         if (active)
           setMemberRead({
             key,
             member: null,
             customRole: null,
-            isOwner: false,
             orgId,
             role: undefined,
             overrides: undefined,
@@ -461,7 +453,6 @@ function useOrgPermissionsResolution(enabled: boolean): OrgPermissionsValue {
           : allTrueWhileLoading(),
     can: (permission) => granted[permission],
     granted,
-    isOwner: resolution.isOwner,
     orgId: resolution.orgId,
     role: resolution.role,
     loaded: resolution.status === 'ready',

@@ -267,6 +267,58 @@ final class NavContractsTests: XCTestCase {
     }
   }
 
+  func testAMemberStampDecidesOverTheirRole() {
+    let catalog = ContractValues.shared.orgRoleGrants
+    // The stamp wins both ways, and a key it lacks falls back to the role.
+    let member: [String: Any] = ["role": "editor", "resolvedPermissions": ["data.manage": false, "billing.manage": true, "plugin.only": true]]
+    let held = memberPermissions(catalog, member: member, orgRole: "editor")
+    XCTAssertEqual(held["data.manage"], false)
+    XCTAssertEqual(held["billing.manage"], true)
+    XCTAssertEqual(held["plugin.only"], true)
+    XCTAssertEqual(held["org.media"], true)
+    // Before the row is read, the membership index's role answers; with neither, nothing is held.
+    XCTAssertEqual(memberPermissions(catalog, member: nil, orgRole: "viewer")["data.manage"], false)
+    XCTAssertEqual(memberPermissions(catalog, member: nil, orgRole: "admin")["data.manage"], true)
+    XCTAssertTrue(memberPermissions(catalog, member: nil, orgRole: nil).isEmpty)
+    // A custom role counts only for a member who carries its id.
+    let custom: [String: Any] = ["permissions": ["hosts.create": true]]
+    XCTAssertEqual(memberPermissions(catalog, member: ["role": "viewer", "roleId": "r1"], orgRole: nil, customRole: custom)["hosts.create"], true)
+    XCTAssertEqual(memberPermissions(catalog, member: ["role": "viewer"], orgRole: nil, customRole: custom)["hosts.create"], false)
+  }
+
+  func testASiteStampNarrowsTheWorkspaceVerdict() {
+    let workspace = ["managePos": true, "data.manage": true]
+    let site = sitePermissions(workspace, siteStamp: ["managePos": false])
+    XCTAssertEqual(site["managePos"], false)
+    XCTAssertEqual(site["data.manage"], true)
+    XCTAssertEqual(sitePermissions(workspace, siteStamp: nil), workspace)
+  }
+
+  func testAPermissionEditorOffersTheWorkspacesKeysByGroup() {
+    let catalog = ContractValues.shared.orgRoleGrants
+    let all = permissionEditorRows(catalog, enabledPlugins: nil)
+    XCTAssertEqual(all.count, catalog.permissions.count)
+    XCTAssertEqual(all.first?.first, true)
+    XCTAssertEqual(all.first?.groupLabel, "Organization")
+    // Each group's heading goes on its first row, and a group's rows sit together.
+    XCTAssertEqual(Set(all.filter(\.first).map(\.group)).count, all.filter(\.first).count)
+    // A plugin's keys show only while it is on; the core's always do.
+    let none = permissionEditorRows(catalog, enabledPlugins: [])
+    XCTAssertFalse(none.contains { $0.key == "marketplace.payouts" })
+    XCTAssertTrue(none.contains { $0.key == "members.manage" })
+    XCTAssertTrue(permissionEditorRows(catalog, enabledPlugins: ["marketplace"]).contains { $0.key == "marketplace.payouts" })
+    // Only the keys a site can narrow ask the narrowing choice.
+    let narrow = permissionEditorRows(catalog, enabledPlugins: nil, narrowable: true)
+    XCTAssertTrue(narrow.contains { $0.key == "managePos" })
+    XCTAssertFalse(narrow.contains { $0.key == "members.manage" })
+  }
+
+  func testARefusalNamesThePermission() {
+    XCTAssertEqual(
+      permissionRefusalText(ContractValues.shared.orgRoleGrants, key: "marketplace.payouts"),
+      "Your role does not include \"Manage marketplace payouts\" — ask an organization admin")
+  }
+
   func testTheOneBoxPagesAndFindsScreensAsTheRouteDoes() throws {
     for item in cases("oneBoxLimit") { XCTAssertEqual(oneBoxLimit(item.args[0]), number(item.result), item.label) }
     for item in cases("oneBoxCursor") { XCTAssertEqual(oneBoxCursor(item.args[0]), number(item.result), item.label) }

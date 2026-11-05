@@ -327,7 +327,7 @@ every lead its sites captured. Each opens the same export dialog as the CRM's
 [**Export…**](../content-and-data/crm/export.md): choose the fields (custom fields
 included) and the format — CSV, JSON or NDJSON — and the file covers every record,
 whether or not your plan includes the CRM. Exporting needs the **Manage data**
-permission, which owners and admins hold. If fewer rows arrive than the server
+permission, which owners, admins and editors hold by default. If fewer rows arrive than the server
 promised, because a connection dropped, nothing is saved and you are told so; try
 again.
 
@@ -348,6 +348,7 @@ to confirm, and choose **Erase permanently**. It cannot be undone.
 | --- | --- |
 | **Removed across the workspace** | The contact record on every site — profile, notes, tags, timeline and custom fields; every lead for the address, on every site; the tasks and logged activities filed against the person; the person on any email audience list; the campaign delivery log for the address, with its opens and clicks. |
 | **Kept, with the person taken off** | Orders and bookings stay as financial records with the name, email, phone and addresses removed. Deals stay on the pipeline, unlinked from the person. Companies stay, with their contact count reduced. |
+| **Kept as they are, with the person still on them** | Listed only when your workspace holds such records. Signed waivers stay as signed for your [waiver retention period](../commerce-and-bookings/commerce/waivers.md#keeping-signed-waivers), then are deleted. |
 | **Not reached — finish these by hand** | Form submissions — delete them from the Inbox. A site member account — close it from the site's Members page. |
 
 Filing the same address again does no harm: a request already waiting is answered, not

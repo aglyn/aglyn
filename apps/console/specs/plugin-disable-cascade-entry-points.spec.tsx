@@ -169,6 +169,7 @@ jest.mock('../components/host-id-provider', () => ({
   useHostId: () => HOST_ID,
   useHostSubdomain: () => 'acme',
   useIsHostAdmin: () => mockIsAdmin,
+  useHostAdminKnown: () => true,
 }))
 jest.mock('../hooks/use-current-org', () => ({
   __esModule: true,

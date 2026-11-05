@@ -59,15 +59,20 @@ jest.mock('./version-stats', () => ({
     .reconcileInstallTallies,
 }))
 
-jest.mock('./publisher-profile', () => ({
-  canActAsPublisher: async () => {
+// The caller's standing on "Manage published listings" in the workspace that
+// published the listing (AGL-4047), and every question asked of it.
+jest.mock('./publisher-permissions', () => ({
+  publisherPermissionVerdict: async (uid: unknown, orgId: unknown, key: unknown) => {
     // eslint-disable-next-line @typescript-eslint/no-var-requires
-    const store = jest.requireMock('./publisher-profile') as {
-      __isPublisher: boolean
+    const store = jest.requireMock('./publisher-permissions') as {
+      __verdict: string
+      __asked: unknown[]
     }
-    return store.__isPublisher
+    store.__asked.push([uid, orgId, key])
+    return store.__verdict
   },
-  __isPublisher: true,
+  __verdict: 'granted',
+  __asked: [],
 }))
 
 const VERSION_FIELDS: Record<string, unknown> = {
@@ -232,7 +237,14 @@ jest.mock('@aglyn/tenant-data-admin', () => {
         },
       },
       app: () => ({
-        auth: () => ({ verifyIdToken: async () => ({ uid: 'uid-1' }) }),
+        auth: () => ({
+          verifyIdToken: async () => ({
+            uid: 'uid-1',
+            ...((jest.requireMock('./publisher-permissions') as { __staff?: boolean }).__staff
+              ? { staff: true }
+              : {}),
+          }),
+        }),
         firestore: () => ({
           // BY NAME (AGL-2328). This used to hand `listingRef` back for
           // EVERY collection, so the route's `revocations` read would have
@@ -254,8 +266,11 @@ jest.mock('@aglyn/tenant-data-admin', () => {
 })
 
 // eslint-disable-next-line @typescript-eslint/no-var-requires
-const profileMock = jest.requireMock('./publisher-profile') as {
-  __isPublisher: boolean
+const permissionsMock = jest.requireMock('./publisher-permissions') as {
+  __verdict: 'granted' | 'refused' | 'not-a-member'
+  __asked: unknown[]
+  /** Whether the verified caller carries the staff claim. */
+  __staff?: boolean
 }
 const adminMock = jest.requireMock('@aglyn/tenant-data-admin') as {
   __listing: Record<string, unknown> | undefined
@@ -301,7 +316,9 @@ async function call(query: Record<string, string>, authed = true) {
 
 describe('publisher-scoped listing versions (AGL-1079)', () => {
   beforeEach(() => {
-    profileMock.__isPublisher = true
+    permissionsMock.__verdict = 'granted'
+    permissionsMock.__asked.length = 0
+    permissionsMock.__staff = false
     adminMock.__listing = { ...DEFAULT_LISTING }
     adminMock.__pins = { total: 3, byVersion: { '1.0.1': 1, '1.0.0': 1 } }
     adminMock.__aggregations = []
@@ -321,12 +338,38 @@ describe('publisher-scoped listing versions (AGL-1079)', () => {
   })
 
   it('refuses a signed-in stranger, without confirming the listing exists', async () => {
-    profileMock.__isPublisher = false
+    permissionsMock.__verdict = 'not-a-member'
     const result = await call({ listingId: 'l1', scope: 'publisher' })
     // 404 rather than 403: whether a listing exists is not a stranger's
     // business, and a 403 answers that question for them.
     expect(result.status).toBe(404)
     expect(result.body.versions).toBeUndefined()
+  })
+
+  it('asks "Manage published listings" of the workspace that published it (AGL-4047)', async () => {
+    await call({ listingId: 'l1', scope: 'publisher' })
+    expect(permissionsMock.__asked).toEqual([
+      ['uid-1', 'org-1', 'marketplace.manageListings'],
+    ])
+  })
+
+  it('a member without the key hears the permission named, and gets no versions (AGL-4047)', async () => {
+    permissionsMock.__verdict = 'refused'
+    const result = await call({ listingId: 'l1', scope: 'publisher' })
+    expect(result.status).toBe(403)
+    expect(result.body).toEqual({
+      error: 'Your role does not include "Manage published listings" — ask an organization admin',
+      reason: 'permission',
+      permission: 'marketplace.manageListings',
+    })
+  })
+
+  it('staff read any listing’s versions without the key, as before (AGL-4047)', async () => {
+    permissionsMock.__staff = true
+    permissionsMock.__verdict = 'not-a-member'
+    const result = await call({ listingId: 'l1', scope: 'publisher' })
+    expect(result.status).toBe(200)
+    expect(permissionsMock.__asked).toEqual([])
   })
 
   it('gives the publisher review state, the reason, the sha and the attestation', async () => {

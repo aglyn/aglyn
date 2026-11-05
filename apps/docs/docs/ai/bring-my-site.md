@@ -117,6 +117,14 @@ Each page left out is listed under one of these reasons:
   [When your site turns AglynBot away](#turned-away).
 - **Not reached.** The read stopped before it got to the page.
 - **A file, not a page.** The link led to a file, such as a PDF, rather than a page.
+- **A second address for the same page.** Your site answers at this address with a page
+  already found, such as a photo's link in a gallery, or a home page at both `/` and
+  `/home`. It is not brought in twice, and links to it go to the page.
+- **A cart, checkout, account, or search screen.** Your website platform makes these
+  screens, and they are not pages of your own. A page at one of those addresses is brought
+  in if it has plenty to say and your site doesn't keep it out of search results.
+- **Your site says this page does not exist.** A link or a sitemap on your site still
+  points to the address, so that link is worth fixing on your current site.
 - **No text could be read.** The page shows its words only once a browser runs it, so it
   cannot be brought in yet.
 - **Could not be read just now**, **a sign-in page**, **robots.txt asks AglynBot not to
@@ -165,7 +173,9 @@ An import started before this choice existed is built as **Keep my site**.
   your links' color beside it, the color of the small labels above your headings as its
   third color, your pages' background color, the rounding of your buttons, and your own
   font when Google Fonts has it, or a font in the same style when it does not.
-  Colors are kept readable, so a color too light for white words is used a shade deeper. If
+  Colors are kept readable. With **Improve it**, a color too light for white words is used a
+  shade deeper. With **Keep my site**, your buttons keep their color and take dark words on a
+  color too light for white ones, while links and outlined buttons use a shade that reads. If
   you already chose a theme for the new site, it is kept.
 - **Your header and footer** come in with the first wave, as your current site shows them:
   your logo, your name, or both; your menu, each dropdown as a **Dropdown Menu** or a

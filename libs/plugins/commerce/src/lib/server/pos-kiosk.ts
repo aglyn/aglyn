@@ -19,7 +19,9 @@ import { createHmac, timingSafeEqual } from 'crypto'
 import * as Aglyn from '@aglyn/aglyn/server'
 import type { PluginApiHandler, PluginApiRequest, PluginApiResponse } from '@aglyn/aglyn/server'
 import { resolveMediaSrc } from '@aglyn/aglyn/app-utils/media-ref'
+import { nameSearchNormalizers } from '@aglyn/aglyn/app-utils/name-search'
 import { pluginSmsAvailable } from '@aglyn/aglyn/plugin-manager/plugin-sms-messaging'
+import { planListQuery } from '@aglyn/shared-ui-jsx/const/list-query-plan'
 import {
   consumeRateLimit,
   firebaseAdmin,
@@ -27,9 +29,16 @@ import {
   getOrgForHost,
   getPluginConfig,
 } from '@aglyn/tenant-data-admin'
+import { applyListQuery } from '@aglyn/tenant-data-admin/server/list-query'
 import { resolveOrgPermissions } from '@aglyn/tenant-runtime/org-permissions'
+import {
+  STOREFRONT_CATALOG_BASE,
+  STOREFRONT_CATALOG_DECLARATION,
+  STOREFRONT_CATALOG_SORTS,
+} from '../constants/storefront-catalog-query'
 import * as CommerceModel from '../model'
 import { productOfferedOnKiosk } from '../model/commerce-kiosk-offer'
+import { posKioskNameMatches } from '../model/commerce-kiosk-search'
 import { posRegisterSettings, type PosRegisterSettings } from '../plugin-config'
 import { posKioskSettings, type PosKioskSettings } from '../pos-kiosk-config'
 import { verifyMemberPassword } from './membership'
@@ -301,31 +310,76 @@ export function posKioskProduct(
   }
 }
 
+/**
+ * How many pages of the query one answer may read looking for products the
+ * kiosk can sell. What a kiosk can't sell isn't on any product as a field a
+ * query can ask, so it is answered row by row, and a page of those must not
+ * cost the store the products named after them. The ceiling is the read cost
+ * of a catalog that is nearly all held back; past it the answer says
+ * `truncated`, and a search still reaches any name.
+ */
+const POS_KIOSK_CATALOG_PAGES = 5
+
+/** The first page of sellable products in name order, however many rows that takes to find. */
+async function sellableProducts(
+  query: FirebaseFirestore.Query,
+  hostId: string,
+  typed: string,
+): Promise<{ products: CommerceModel.PosKioskProduct[]; truncated: boolean }> {
+  const limit = CommerceModel.POS_KIOSK_CATALOG_LIMIT
+  const products: CommerceModel.PosKioskProduct[] = []
+  let after: FirebaseFirestore.QueryDocumentSnapshot | undefined
+  for (let page = 0; page < POS_KIOSK_CATALOG_PAGES; page += 1) {
+    const snapshot = await (after ? query.startAfter(after) : query).limit(limit).get()
+    for (const doc of snapshot.docs) {
+      const product = CommerceModel.liftLegacyProduct(doc.data())
+      if (!posKioskSellable(product)) continue
+      if (!posKioskNameMatches(String(product.name ?? ''), typed)) continue
+      products.push(posKioskProduct(String(doc.id), product, hostId))
+    }
+    // A short page is the end of the query: all of it has been read.
+    const ended = snapshot.docs.length < limit
+    if (ended || products.length >= limit) {
+      return { products: products.slice(0, limit), truncated: products.length > limit || !ended }
+    }
+    after = snapshot.docs[snapshot.docs.length - 1]
+  }
+  return { products, truncated: true }
+}
+
 async function catalog(gate: KioskGate, body: Record<string, any>): Promise<Outcome> {
   const categoryId = String(body['categoryId'] ?? '')
   if (categoryId && !/^[A-Za-z0-9_-]{1,128}$/.test(categoryId)) return refuse(400, 'Unknown category')
-  // The register grid's query (AGL-3321): live, active, by name — and a
-  // category is a clause on the query, never a filter over what was read.
-  let query: FirebaseFirestore.Query = gate.hostRef
-    .collection('products')
-    .where('deletedAt', '==', null)
-    .where('status', '==', 'active')
-  if (categoryId) query = query.where('categoryIds', 'array-contains', categoryId)
-  const [products, categories, currency] = await Promise.all([
-    query.orderBy('nameLower').limit(CommerceModel.POS_KIOSK_CATALOG_LIMIT).get(),
-    gate.hostRef.collection('productCategories').limit(30).get(),
+  const typed = String(body['search'] ?? '').trim().slice(0, 120)
+  if (typed && !(await withinBudget(gate, 'search', 600))) return refuse(429, 'Too many tries. Wait a moment.')
+  // The storefront catalog's own query (AGL-3321), and its composites: live,
+  // active, by name. A category or the first word typed is a clause on it,
+  // never a filter over what was read, and a search takes the one array
+  // clause when both are asked.
+  const plan = planListQuery(
+    STOREFRONT_CATALOG_DECLARATION,
+    {
+      base: STOREFRONT_CATALOG_BASE,
+      clauses: categoryId ? [{ field: 'category', op: 'contains', value: categoryId }] : [],
+      search: typed.split(/\s+/).filter(Boolean),
+      sort: STOREFRONT_CATALOG_SORTS.name,
+    },
+    nameSearchNormalizers,
+  )
+  const [sellable, categories, currency] = await Promise.all([
+    sellableProducts(applyListQuery(gate.hostRef.collection('products'), plan), gate.hostId, typed),
+    // A search answers products alone: the menu already has its chips.
+    typed ? null : gate.hostRef.collection('productCategories').limit(30).get(),
     posDisplayCurrency(gate.hostId),
   ])
   const value: CommerceModel.PosKioskCatalog = {
-    products: products.docs
-      .map((doc: any) => ({ id: String(doc.id), product: CommerceModel.liftLegacyProduct(doc.data()) }))
-      .filter(({ product }) => posKioskSellable(product))
-      .map(({ id, product }) => posKioskProduct(id, product, gate.hostId)),
-    categories: categories.docs.map((doc: any) => ({
+    products: sellable.products,
+    categories: (categories?.docs ?? []).map((doc: any) => ({
       id: String(doc.id),
       name: String(doc.get('name') ?? 'Category').slice(0, 60),
     })),
     currency,
+    ...(sellable.truncated ? { truncated: true } : {}),
   }
   return { status: 200, body: value as unknown as Record<string, unknown> }
 }

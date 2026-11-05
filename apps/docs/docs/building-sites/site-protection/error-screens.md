@@ -18,7 +18,7 @@ pages** for each status.
 | **404** | 404 · Not found | The URL doesn't match any page. |
 | **401** | 401 · Members only | A members-only page, requested by a signed-out visitor. |
 | **403** | 403 · Forbidden | Reserved for future access rules — nothing serves it yet. |
-| **503** | 503 · Maintenance | Shown on every page while [maintenance mode](maintenance-mode.md) is on, and to visitors while the site is in [preview](make-your-site-private.md#keep-it-to-your-team-with-preview). |
+| **503** | 503 · Maintenance | Shown to visitors while [maintenance mode](maintenance-mode.md) is on or the site is in [preview](make-your-site-private.md#keep-it-to-your-team-with-preview). |
 
 ## Design one
 
@@ -28,7 +28,8 @@ pages** for each status.
 2. **Assign it.** Go to **Admin → Error pages**. Each status has its own picker —
    **404 · Not found**, **401 · Members only**, **403 · Forbidden**, **503 · Maintenance**
    — listing every page on the site. Choose your page in the matching picker. The
-   Admin area is limited to **site admins**, so that is who assigns these.
+   Admin area takes the **Manage site settings** permission, which a site's admins hold by
+   default, so that is who assigns these.
 
 Step 2 is the one that's easy to miss: designing a page does **not** make it an error
 page on its own. Until it's picked in the **Error pages** card, the status renders the

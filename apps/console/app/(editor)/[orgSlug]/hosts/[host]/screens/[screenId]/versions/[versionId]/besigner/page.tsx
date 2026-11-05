@@ -598,6 +598,7 @@ function BesignerPage(props) {
     saveWorkingDraft,
     workingDraftSaved,
     refuseOverUnopenedDraft,
+    saveBlockedReason,
     jsonOpen,
     openJsonEditor,
     closeJsonEditor,
@@ -2328,6 +2329,7 @@ function BesignerPage(props) {
                           liveUrl={liveUrl}
                           liveUnavailableReason={liveUnavailableReason}
                           onPropertiesEdit={() => setScreenDialog(true)}
+                          saveBlockedReason={saveBlockedReason}
                           saveAvailable={saveAvailable}
                           // Save draft writes the draft document, not
                           // this version, so the canvas never reads

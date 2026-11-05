@@ -63,10 +63,47 @@ jest.mock('next/link', () => ({
   ),
 }))
 
+/** The `sameDocumentRef` each rendered reporter was handed, in order. */
+const reporterRefs: Array<{ current: boolean } | undefined> = []
 jest.mock('./link-navigation-reporter', () => ({
   __esModule: true,
-  LinkNavigationReporter: () => null,
+  ...jest.requireActual('./link-navigation-reporter'),
+  LinkNavigationReporter: (props: {
+    sameDocumentRef?: { current: boolean }
+  }) => {
+    reporterRefs.push(props.sameDocumentRef)
+    return null
+  },
 }))
+
+describe('NextLink same-page jumps', () => {
+  beforeEach(() => {
+    reporterRefs.length = 0
+  })
+
+  it('flags a #fragment click so the reporter skips the overlay', () => {
+    render(<NextLink hrefTo="#included">See what’s included</NextLink>)
+    fireEvent.click(screen.getByTestId('link-#included'))
+    expect(reporterRefs.at(-1)?.current).toBe(true)
+  })
+
+  it('leaves a click to another page unflagged', () => {
+    render(<NextLink hrefTo="/pricing">Pricing</NextLink>)
+    fireEvent.click(screen.getByTestId('link-/pricing'))
+    expect(reporterRefs.at(-1)?.current).toBe(false)
+  })
+
+  it('still calls a click handler the caller passed', () => {
+    const onClick = jest.fn()
+    render(
+      <NextLink hrefTo="#start" onClick={onClick}>
+        Start
+      </NextLink>,
+    )
+    fireEvent.click(screen.getByTestId('link-#start'))
+    expect(onClick).toHaveBeenCalledTimes(1)
+  })
+})
 
 describe('NextLink prefetching', () => {
   it('does not prefetch a link the visitor has not reached for', () => {

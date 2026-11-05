@@ -63,26 +63,6 @@ const MAX_MEMBERS_COMPARED = 200
 const MAX_CARD_MATCHES = 20
 
 /**
- * Whether `uid` is ANY member of `orgId` — not only a manager, which is all
- * `canActAsPublisher` asks. A publishing workspace's editor buying its
- * listing is the publisher buying it.
- */
-export async function isOrgMember(
-  firestore: FirebaseFirestore.Firestore,
-  orgId: string,
-  uid: string,
-): Promise<boolean> {
-  if (!orgId || !uid) return false
-  const member = await firestore
-    .collection('orgs')
-    .doc(orgId)
-    .collection('members')
-    .doc(uid)
-    .get()
-  return member.exists
-}
-
-/**
  * Whether the publishing workspace is under a SECURITY lock (AGL-3365) — the
  * install and update doors hand nothing from it over. Security only: a
  * workspace locked over its own unpaid bill has not made its listings

@@ -34,6 +34,11 @@ your [publisher page](../publish-a-plugin.md#your-publisher-profile). The same c
 takes optional support contacts — a support email and URL — and links to your website,
 GitHub, X and LinkedIn, so buyers know where to ask for help.
 
+Saving the profile needs the **Edit the publisher profile** permission, which the
+workspace's owners and admins hold by default. Without it, **Save profile** stays off
+and the card names the permission to ask an organization admin for. See
+[Marketplace publisher permissions](../../../workspace-and-billing/teams-and-roles/custom-roles.md#marketplace-publisher-permissions).
+
 ## The publisher agreement
 
 Your **organization** — not you personally — is the publishing party, and
@@ -390,6 +395,9 @@ What happens next:
 - One request at a time. You can **withdraw** it while it is waiting.
 - Asking and withdrawing are saves like any other: tick the
   [publisher agreement](#the-publisher-agreement) box above the button first.
+- Asking and withdrawing need the **Edit the publisher profile** permission, which the
+  workspace's owners and admins hold by default. Without it the buttons stay off and
+  the card names the permission to ask an organization admin for.
 - If it is **granted**, the Verified publisher badge appears on your listing.
 - If it is **declined**, you are told why, and you can ask again 30 days after
   the decision. A decline is a refusal of the badge, not a verdict on your
@@ -440,6 +448,10 @@ you — answers what an email cannot:
 - **What you confirmed** on the pre-publish checklist for those exact
   bytes, so you can see the claims you already made before making them
   again.
+
+Reading the card needs the **Manage published listings** permission, which the
+workspace's owners and admins hold by default. Without it the card names the
+permission to ask an organization admin for.
 
 Two things it states that you would otherwise have to infer:
 
@@ -543,13 +555,19 @@ editor for what buyers see: name, summary, rich-text body and media. Tick the
 and the listing changes at once — no new version, and no new review, because review is
 about the bundle's bytes rather than the words around them.
 
+Editing a listing needs the **Manage published listings** permission, which the
+workspace's owners and admins hold by default. Without it, **Edit listing** stays off,
+and hovering it names the permission to ask an organization admin for.
+
 ### Your listings {#your-listings}
 
 **Marketplace → Listings** lists everything your organization has published, with its
 preview image; a row's menu is where you **Publish new version…**, **Edit listing**,
 switch a plugin between private and public, or **Unpublish…** (and later
 **Republish…**) a listing. Each of those saves asks for the
-[publisher agreement](#the-publisher-agreement) first. Private plugins never appear in
+[publisher agreement](#the-publisher-agreement) first. All but
+**Publish new version…** need **Manage published listings**; without it they stay off
+and the card says which permission to ask for. Private plugins never appear in
 Browse, so this list — and **View** on a row — is where you find them.
 
 ### The Links card {#listing-links}
@@ -687,6 +705,25 @@ counts the organizations and sites that currently hold a pin — it goes
 down when someone uninstalls. A big gap between the two is churn worth
 investigating.
 
+### Your own listings {#your-own-listings}
+
+Everyone in the workspace that publishes a listing installs it free on that
+workspace's own sites, whatever the listing is: a plugin, component, theme, site
+template, layout, dataset schema, email template or email starter. A site starter
+works the same way: a new site in your workspace starts from it free. That includes
+a private listing, and for plugins and site starters a version still in review, so
+you can try your work before anyone else can.
+
+Free covers your own sites only. Installing your listing on a site in another
+workspace, a client's for example, works as it does for any buyer: that workspace
+needs a license for it, and a paid listing asks for the purchase first. Nobody in the
+publishing workspace can buy its own listings, for any workspace, so someone in the
+other workspace who isn't part of yours makes that purchase. A private listing
+can't be installed outside your workspace at all.
+
+The same holds for taking a new version of a paid listing that is already installed:
+free on your own sites, and covered by that workspace's license anywhere else.
+
 ### The Install card {#install-card}
 
 The **Install** card on a listing's detail page is where an install happens: choose
@@ -763,6 +800,12 @@ account so paid listings can pay you: select **Set up payouts** and finish Strip
 onboarding. The card then says where you stand — payouts enabled, setup still to
 finish in Stripe, or an account to reconnect — and links to your payouts in Stripe. The
 platform fee is 20% per sale, 30% on the Free plan.
+
+Setting up payouts needs the **Manage marketplace payouts** permission, which the
+workspace's owners and admins hold by default. Without it the card still says where
+payouts stand, its button stays off, and it names the permission to ask an organization
+admin for. See
+[Marketplace publisher permissions](../../../workspace-and-billing/teams-and-roles/custom-roles.md#marketplace-publisher-permissions).
 
 ### Purchases and the platform fee {#purchases-and-fees}
 

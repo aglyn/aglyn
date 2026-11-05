@@ -1238,6 +1238,7 @@ private fun rememberScreenSession(
   val passkeyRelyingParty = services.config.passkeyRelyingParty.takeIf { com.aglyn.screens.LocalPasskeyCreator.current != null }
   // Google can be connected where the platform bound a way to sign in to it.
   val googleSource = com.aglyn.screens.LocalGoogleCredentialSource.current
+  val held = com.aglyn.pluginhost.rememberMemberPermissions(services.firestore, workspace.org?.id, workspace.site?.id, user?.uid.orEmpty(), workspace.org?.role)
   suspend fun freshClaims() = setClaims(com.aglyn.core.TokenClaims.fromIdToken(runCatching { services.auth.idToken(true) }.getOrNull()))
   return com.aglyn.screens.ScreenSession(
     passkeyRelyingParty = passkeyRelyingParty,
@@ -1246,6 +1247,10 @@ private fun rememberScreenSession(
     displayName = user?.displayName,
     orgName = workspace.org?.name,
     orgRole = workspace.org?.role,
+    orgPermissions = held.workspace,
+    sitePermissions = held.site,
+    permissionsSiteId = workspace.site?.id,
+    enabledPlugins = workspace.orgLogo?.let { com.aglyn.contracts.resolveEnabledPlugins(it.enabledPlugins) },
     siteName = workspace.site?.name,
     claims = claims,
     origin = services.config.consoleOrigin,

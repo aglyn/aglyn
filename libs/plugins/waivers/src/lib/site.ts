@@ -36,7 +36,7 @@ export function registerWaiversPlugin(): void {
       {
         bundleId: WAIVERS_PLUGIN_ID,
         displayName: 'Waivers',
-        description: 'Digital waivers riders and guests sign before they arrive',
+        description: 'Digital waivers guests sign before they arrive',
         icon: { path: mdiFileSign.path },
         components: WAIVERS_BUNDLE,
       },

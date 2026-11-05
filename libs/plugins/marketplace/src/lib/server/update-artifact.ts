@@ -49,7 +49,7 @@ import { listingArtifactType } from '../model/marketplace'
 import { readPublishedProps } from '../model/marketplace-props'
 import { artifactTypeOwnerOrRefusal, marketplaceInstallStamp } from './artifact-owner'
 import { recordInstallProvenance } from './provenance'
-import { canActAsPublisher } from './publisher-profile'
+import { ownsListingHere } from './own-listing'
 import { requirePurchase } from './purchase-entitlement'
 import { recordVersionMove } from './version-stats'
 import { isPublisherSecurityLocked } from './sale-risk'
@@ -223,8 +223,11 @@ export const updateArtifactHandler: PluginApiHandler = async (req, res) => {
     // version fresh — kept pulling every future paid release through here.
     //
     // Deliberately not a regression for anyone legitimate: a live purchase,
-    // a free listing, or the publisher's own listing all pass, and nobody
-    // without one of those could have had an installed copy to update.
+    // a free listing, or the publisher's own listing on the publisher's own
+    // site all pass, and nobody without one of those could have had an
+    // installed copy to update. A publisher's member taking a new version on
+    // ANOTHER workspace's site needs that workspace's licence, as installing
+    // it there does (AGL-2484, AGL-4047).
     // The `priceUsd > 0` test is out here rather than left to the helper so
     // a free listing — most of them — does not pay for a publisher lookup.
     const priceUsd = Number(listing.priceUsd ?? 0)
@@ -240,11 +243,11 @@ export const updateArtifactHandler: PluginApiHandler = async (req, res) => {
         buyerOrgId: membership.orgId ?? '',
         listingId,
         priceUsd,
-        ownsListing: await canActAsPublisher(
-          firestore,
-          decoded.uid,
-          listing.profileId,
-        ),
+        ownsListing: await ownsListingHere(firestore, {
+          uid: decoded.uid,
+          publisherOrgId: listing.profileId,
+          targetOrgId: membership.orgId,
+        }),
       })
       if (unpaid) return res.status(402).json(unpaid)
     }

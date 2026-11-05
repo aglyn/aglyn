@@ -115,7 +115,6 @@ const mockLogOrgActivity = jest.fn(async () => undefined)
 const mockResolveOrgPermissions = jest.fn(async () => ({
   orgId: ORG,
   role: 'admin',
-  isOwner: true,
   permissions: { 'data.manage': true },
   orgWide: true,
   hostRole: 'admin',
@@ -253,7 +252,6 @@ beforeEach(() => {
   mockResolveOrgPermissions.mockResolvedValue({
     orgId: ORG,
     role: 'admin',
-    isOwner: true,
     permissions: { 'data.manage': true },
     orgWide: true,
     hostRole: 'admin',
@@ -278,7 +276,6 @@ describe('the door', () => {
     mockResolveOrgPermissions.mockResolvedValue({
       orgId: ORG,
       role: 'editor',
-      isOwner: false,
       permissions: { 'data.manage': true },
       orgWide: true,
       hostRole: 'editor',
@@ -291,7 +288,6 @@ describe('the door', () => {
     mockResolveOrgPermissions.mockResolvedValue({
       orgId: ORG,
       role: 'admin',
-      isOwner: true,
       permissions: { 'data.manage': true },
       orgWide: true,
       hostRole: 'admin',
@@ -310,7 +306,6 @@ describe('the door', () => {
     mockResolveOrgPermissions.mockResolvedValue({
       orgId: ORG,
       role: 'editor',
-      isOwner: false,
       permissions: { 'data.manage': true },
       orgWide: true,
       hostRole: 'editor',
@@ -482,7 +477,6 @@ describe('the door at the organization level', () => {
     mockResolveOrgPermissions.mockResolvedValue({
       orgId: ORG,
       role: 'editor',
-      isOwner: false,
       permissions: { 'data.manage': true },
       orgWide: true,
       hostRole: 'editor',
@@ -491,7 +485,6 @@ describe('the door at the organization level', () => {
     mockResolveOrgPermissions.mockResolvedValue({
       orgId: ORG,
       role: 'admin',
-      isOwner: true,
       permissions: { 'data.manage': true },
       orgWide: false,
       hostRole: 'admin',
@@ -572,7 +565,6 @@ describe('filing by address alone', () => {
     mockResolveOrgPermissions.mockResolvedValue({
       orgId: ORG,
       role: 'editor',
-      isOwner: false,
       permissions: { 'data.manage': true },
       orgWide: true,
       hostRole: 'editor',

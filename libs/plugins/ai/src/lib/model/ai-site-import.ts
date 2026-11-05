@@ -182,6 +182,12 @@ export type AiSiteImportLeftOutReason =
   | 'not-reached'
   /** A link to a file (a download, a PDF with no extension), not a page (AGL-4106). */
   | 'file'
+  /** Another address of a page already found: a gallery photo's link, a home page's second address (AGL-4152). */
+  | 'duplicate'
+  /** The cart, checkout or account screen the site's platform makes, not a page of the owner's (AGL-4152). */
+  | 'system-page'
+  /** The site itself answers that the address does not exist (404 or 410): a link or sitemap line gone stale (AGL-4152). */
+  | 'missing'
 
 export const AI_SITE_IMPORT_LEFT_OUT_REASONS: readonly AiSiteImportLeftOutReason[] = [
   'plan-limit',
@@ -194,6 +200,9 @@ export const AI_SITE_IMPORT_LEFT_OUT_REASONS: readonly AiSiteImportLeftOutReason
   'off-site',
   'not-reached',
   'file',
+  'duplicate',
+  'system-page',
+  'missing',
 ]
 
 /** The reasons that mean the page was there and AglynBot could not read it: the "could not be read" of what was found. */
@@ -204,6 +213,16 @@ export interface AiSiteImportLeftOut {
   path: string
   title: string
   reason: AiSiteImportLeftOutReason
+  /** The path of the page a `duplicate` is another address of: where a link to it goes on the new site. */
+  sameAs?: string
+}
+
+/** The left-out addresses that are other addresses of a kept page, as their path and that page's. */
+export function aiSiteImportOtherAddresses(state: Partial<Pick<AiSiteImportState, 'leftOut'>>): Array<{ path: string; sameAs: string }> {
+  const key = (path: string) => path.split('?')[0].replace(/\/+$/, '') || '/'
+  return (state.leftOut ?? []).flatMap((entry) =>
+    entry.reason === 'duplicate' && entry.sameAs && key(entry.path) !== key(entry.sameAs) ? [{ path: key(entry.path), sameAs: key(entry.sameAs) }] : [],
+  )
 }
 
 /** A photo brought into the site's media library, as a page places it. */
@@ -440,9 +459,22 @@ export interface SiteImportLayoutSection {
   name: string
   /** How its edges were found: a landmark (`<section>`), a container of its own, or its headings. */
   from: 'landmark' | 'container' | 'heading'
+  /**
+   * Its band against the page's own ground (AGL-4152): a light fill within
+   * OKLab ΔE 0.02 of the page's, or none, is `plain`, any other light one
+   * `soft`; `brand` and `dark` as its color says.
+   */
   band: SiteImportBand
+  /**
+   * Its band by its color's own lightness, near white `plain` and any other
+   * light fill `soft`, where that differs from {@link SiteImportLayoutSection.band}:
+   * what Improve it and the design answer's text read. Absent, the two agree.
+   */
+  absoluteBand?: SiteImportBand
   /** Its background color as `#rrggbb`, when it has one. */
   background: string | null
+  /** Its background in the page's dark scheme (AGL-4152), where its stylesheets change it. */
+  darkBackground?: string
   /** A gradient, a photo, or a film playing on its own behind it (AGL-4140), its poster an image line. */
   backdrop?: { kind: 'gradient' } | { kind: 'picture'; url: string } | { kind: 'video'; video: number; poster?: SiteImportLineRef }
   align: 'start' | 'center'
@@ -511,10 +543,26 @@ export interface SiteImportLookFacts {
   link: string | null
   /** Its header bar's background. */
   header: string | null
-  /** The fill of its dark bands, the most used first (AGL-4152): the dark ground Keep my site keeps. Absent on a read made before. */
+  /**
+   * The dark ground Keep my site keeps (AGL-4152): its page's fill in its dark
+   * scheme where its stylesheets say one, else the fill of its dark bands, the
+   * most used first. Absent on a read made before.
+   */
   darkBackground?: string | null
+  /** The fill of its `soft` bands, the most used first (AGL-4152): what Keep my site's paper is. Absent on a read made before. */
+  paperBackground?: string | null
+  /** The fill of its `soft` bands in its dark scheme (AGL-4152), where its stylesheets say one. */
+  darkPaper?: string | null
   /** Whether its filled buttons are set in capitals (AGL-4152). Absent on a read made before. */
   buttonCase?: 'upper' | 'none' | null
+  /** Whether its outlined buttons are set in capitals (AGL-4152); `null` for a page with none. */
+  outlinedCase?: 'upper' | 'none' | null
+  /** Whether its text buttons and the links a page draws as them are set in capitals (AGL-4152); `null` for a page with none. */
+  textCase?: 'upper' | 'none' | null
+  /** The words' color on its outlined buttons (AGL-4152), the most used first. */
+  buttonOutline?: string | null
+  /** The fill an outlined button of its own sets (AGL-4152); `null` where they leave the ground showing. */
+  outlinedFill?: string | null
   /**
    * The color most of its eyebrows are drawn in, where that is a color of its
    * own: none of its text's, its buttons' or white (AGL-4138). The look pass
@@ -1214,6 +1262,9 @@ const pathOfUrl = (url: string): string => {
 
 const wordsOf = (text: string) => (text.match(/[\p{L}\p{N}]+/gu) ?? []).length
 
+/** How much of a site was turned away counts its pages: never another address of one, or its platform's screen. */
+const isOneOfTheSitesPages = (entry: { reason: string }) => entry.reason !== 'duplicate' && entry.reason !== 'system-page'
+
 /** One verdict from what became of the home page and how much of the site was turned away. */
 function readVerdictOf(
   home: { problem: AiSiteImportHomeProblem; status: number | null; edge: string | null } | null,
@@ -1254,7 +1305,7 @@ export function aiSiteImportReadVerdict(crawled: AiSiteImportReadInput): AiSiteI
   const blocked = crawled.skipped.filter(
     (entry) => entry.reason === 'http-error' && entry.status !== undefined && AI_SITE_IMPORT_BLOCKED_STATUSES.has(entry.status),
   ).length
-  const total = Math.max(crawled.sitemapUrls, crawled.pages.length + crawled.skipped.length)
+  const total = Math.max(crawled.sitemapUrls, crawled.pages.length + crawled.skipped.filter(isOneOfTheSitesPages).length)
   const page = crawled.pages.find((entry) => entry.foundBy === 'home') ?? crawled.pages.find((entry) => (entry.path.replace(/\/+$/, '') || '/') === '/')
   if (page) {
     const words = page.blocks.reduce((sum, block) => sum + (block.kind === 'image' || block.inline ? 0 : wordsOf(block.text ?? '')), 0)
@@ -1344,7 +1395,7 @@ export function aiSiteImportReadVerdictMessage(verdict: AiSiteImportReadVerdict 
 /** The verdict an inventory reads from its own pages and skips, when the step did not hand it the crawl's. */
 function inventoryVerdict(input: Pick<AiSiteImportInventoryInput, 'pages' | 'skipped' | 'skippedOverflow'>): AiSiteImportReadVerdict {
   const blocked = input.skipped.filter((entry) => entry.reason === 'blocked').length
-  const total = input.pages.length + input.skipped.length + Math.max(0, input.skippedOverflow ?? 0)
+  const total = input.pages.length + input.skipped.filter(isOneOfTheSitesPages).length + Math.max(0, input.skippedOverflow ?? 0)
   const page = input.pages.find((entry) => entry.foundBy === 'home') ?? input.pages.find((entry) => (entry.path.replace(/\/+$/, '') || '/') === '/')
   if (page) {
     const empty = page.words < AI_SITE_IMPORT_MIN_WORDS && page.images === 0
@@ -1497,7 +1548,7 @@ export interface AiSiteImportInventoryInput {
   /** Addresses the home page's menu links, in its order. */
   menu: readonly string[]
   /** What the crawl could not read, by reason. */
-  skipped: ReadonlyArray<{ url: string; reason: AiSiteImportLeftOutReason }>
+  skipped: ReadonlyArray<{ url: string; reason: AiSiteImportLeftOutReason; sameAs?: string }>
   /** Skips the crawl only counted. */
   skippedOverflow?: number
   stoppedBy: string | null
@@ -1533,12 +1584,16 @@ export function aiSiteImportInventory(input: AiSiteImportInventoryInput): AiSite
   const unreached: AiSiteImportLeftOutReason = input.stoppedBy === 'page-budget' && limit !== null ? 'plan-limit' : 'not-reached'
   for (const skipped of input.skipped) {
     let path = '/'
+    let sameAs: string | null = null
     try {
-      path = new URL(skipped.url).pathname
+      const url = new URL(skipped.url)
+      // Its query too: forty addresses of one path are told apart by it.
+      path = `${url.pathname}${url.search}`
+      if (skipped.sameAs) sameAs = new URL(skipped.sameAs).pathname
     } catch {
       // A malformed address keeps the root as its path.
     }
-    leave({ url: skipped.url, path, title: '', reason: skipped.reason === 'not-reached' ? unreached : skipped.reason })
+    leave({ url: skipped.url, path, title: '', reason: skipped.reason === 'not-reached' ? unreached : skipped.reason, ...(sameAs ? { sameAs } : {}) })
   }
   if (input.skippedOverflow) leftOutCount['unreadable'] = (leftOutCount['unreadable'] ?? 0) + input.skippedOverflow
 
@@ -2045,15 +2100,15 @@ export function aiSiteImportWordingPages(
 
 /**
  * What improving this many pages' wording adds (AGL-4152): a reworded page
- * is quoted as an AI page (`AI_MEASURED_IMPORT_CREDITS.page`) in place of an
+ * is quoted as measured (`AI_MEASURED_IMPORT_CREDITS.reworded`) in place of an
  * arranged one, its design answer and its wording together, so each adds the
  * difference between the two. Its ceiling, the page's two passes, does not
  * move, and no price is new.
  */
 export function aiSiteImportWordingCredits(pages: number): { likely: number; p90: number } {
   const count = whole(pages)
-  const { page, arranged } = AI_MEASURED_IMPORT_CREDITS
-  return { likely: count * (page.median - arranged.median), p90: count * (page.p90 - arranged.p90) }
+  const { reworded, arranged } = AI_MEASURED_IMPORT_CREDITS
+  return { likely: count * (reworded.median - arranged.median), p90: count * (reworded.p90 - arranged.p90) }
 }
 
 /*------------------------------------------
@@ -2202,6 +2257,9 @@ export const AI_SITE_IMPORT_LEFT_OUT_COPY: Readonly<Record<AiSiteImportLeftOutRe
   'off-site': 'It sends visitors to another website.',
   'not-reached': 'Not reached: the read stopped before it got to this page.',
   file: 'A file, not a page.',
+  duplicate: 'A second address for the same page, so it is not brought in twice.',
+  'system-page': 'A cart, checkout, account, or search screen your website platform makes, not a page of your own.',
+  missing: 'Your site says this page does not exist, though a link or sitemap on your site still points to it.',
 }
 
 /** "3 pages" / "1 page". */

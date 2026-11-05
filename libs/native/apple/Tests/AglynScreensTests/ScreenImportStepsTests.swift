@@ -74,7 +74,7 @@ final class ScreenImportStepsTests: XCTestCase {
     // The step belongs to a products import, in the zone the review draws; only a manager sees it.
     XCTAssertEqual(step.zones, ["transferStep"])
     func offered(_ resource: String, manager: Bool = true) -> Bool {
-      ScreenValues.condition(step.requires, in: ["stash": ["importResource": .string(resource)], "org": ["manager": .bool(manager)]])
+      ScreenValues.condition(step.requires, in: ["stash": ["importResource": .string(resource)], "org": ["manager": .bool(manager), "can": ["data.manage": .bool(manager)]]])
     }
     XCTAssertTrue(offered("commerce.products"))
     XCTAssertFalse(offered("commerce.gift-cards"))
@@ -113,7 +113,7 @@ final class ScreenImportStepsTests: XCTestCase {
     let run = RecordingTransport(responses: [(200, #"{"done":true,"progress":{"done":4}}"#), (200, results), (200, #"{"job":{"id":"a1"}}"#)])
     let applying = ScreenModel(spec: review, context: ["org": ["id": "o1"]], api: api(run))
     ScreenStash.set(["importResource": "commerce.products", "importHost": "h1"])
-    let outcome = await applying.run(apply, in: ["org": ["id": "o1", "manager": true], "stash": .object(ScreenStash.values)])
+    let outcome = await applying.run(apply, in: ["org": ["id": "o1", "manager": true, "can": ["data.manage": true]], "stash": .object(ScreenStash.values)])
     XCTAssertEqual(outcome, .done(message: nil, response: ["done": true, "progress": ["done": 4]]))
     XCTAssertEqual(run.requests.map { $0.url?.path }, ["/api/transfer/apply", "/api/transfer/status", "/api/ai/jobs"])
     XCTAssertEqual(try sent(run, 1), ["orgId": "o1", "jobId": "j1", "include": "results"])
@@ -128,7 +128,7 @@ final class ScreenImportStepsTests: XCTestCase {
     // An import that did not ask, or asked for another import, starts nothing.
     ScreenStash.set(["importAiCopy": .null, "importAfter": .null])
     let quiet = RecordingTransport(responses: [(200, #"{"done":true}"#)])
-    _ = await ScreenModel(spec: review, context: [:], api: api(quiet)).run(apply, in: ["org": ["id": "o1", "manager": true], "stash": .object(ScreenStash.values)])
+    _ = await ScreenModel(spec: review, context: [:], api: api(quiet)).run(apply, in: ["org": ["id": "o1", "manager": true, "can": ["data.manage": true]], "stash": .object(ScreenStash.values)])
     XCTAssertEqual(quiet.requests.count, 1)
     XCTAssertNil(ScreenStash.values["importAfter"])
     // The done screen says what the hooks said.
@@ -146,7 +146,7 @@ final class ScreenImportStepsTests: XCTestCase {
       """#
     let transport = RecordingTransport(responses: [(200, jobs)])
     let model = ScreenModel(
-      spec: transfer, context: ["org": ["id": "o1", "manager": true], "site": ["id": "h1"],
+      spec: transfer, context: ["org": ["id": "o1", "manager": true, "can": ["data.manage": true]], "site": ["id": "h1"],
         "params": ["list": "abc", "name": "Spring sale", "resource": "email.list-members:abc"]], api: api(transport))
     await model.load()
     XCTAssertEqual(try sent(transport, 0), ["orgId": "o1", "unfinished": true])

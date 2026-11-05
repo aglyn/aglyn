@@ -38,6 +38,7 @@
 
 import { CRM_COLLECTIONS, dealStageById, crmMemberPickerLabel } from '@aglyn/aglyn'
 import { useConfirmationContext } from '@aglyn/shared-ui-jsx'
+import { BlockedControl } from '@aglyn/shared-ui-jsx/components/blocked-control.component'
 import { useFirestore, useHostActivityLogger } from '@aglyn/tenant-feature-instance'
 import { Button, MenuItem, TextField, Typography } from '@mui/material'
 import { deleteField, doc } from 'firebase/firestore'
@@ -66,6 +67,7 @@ import {
 } from './crm-bulk-bar-frame'
 import { CrmExportButton } from './crm-transfer-buttons'
 import { CRM_DEALS_RESOURCE } from '../transfer/fields'
+import { CRM_MOVE_STAGES_REFUSAL } from '../model/crm-permissions'
 import { LostReasonDialog } from './lost-reason-dialog'
 import { useCrmSharingFollowUp } from '../hooks/use-crm-sharing'
 
@@ -334,15 +336,19 @@ function DealsBulkBarBody(props: DealsBulkBarProps) {
         </>
       }
     >
-      <Button size="small" disabled={busy || !scope} onClick={() => openAction('stage')}>
-        {'Set stage'}
-      </Button>
+      <BlockedControl blocked={api.moveBlocked === true} reason={CRM_MOVE_STAGES_REFUSAL}>
+        <Button size="small" disabled={busy || !scope} onClick={() => openAction('stage')}>
+          {'Set stage'}
+        </Button>
+      </BlockedControl>
       <Button size="small" disabled={busy || !scope} onClick={() => openAction('owner')}>
         {'Set owner'}
       </Button>
-      <Button size="small" disabled={busy || !scope} onClick={() => setLosing(true)}>
-        {'Mark lost'}
-      </Button>
+      <BlockedControl blocked={api.moveBlocked === true} reason={CRM_MOVE_STAGES_REFUSAL}>
+        <Button size="small" disabled={busy || !scope} onClick={() => setLosing(true)}>
+          {'Mark lost'}
+        </Button>
+      </BlockedControl>
       {/* The selection through the export dialog: every field, chosen (AGL-3528). */}
       <CrmExportButton
         resource={CRM_DEALS_RESOURCE}

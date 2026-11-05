@@ -93,11 +93,13 @@ import {
 import { isRefusedIdToken } from '@aglyn/tenant-data-admin/server/id-token-refusal'
 import { emitHostEvent } from '@aglyn/tenant-runtime'
 import { ORG_CONTACT_HOLDER_ID } from '@aglyn/aglyn/app-utils/contacts'
+import { holdsStampedSiteKey } from '@aglyn/aglyn/app-utils/host-permissions'
 import { crmDefaultScopeOf } from '@aglyn/aglyn/app-utils/crm'
 import { logOrgActivity } from '@aglyn/tenant-data-admin/server/organizations'
 import { contactPrimaryGroup } from './model/contact-holder'
 import { addContactByHand } from './server/add-contact-by-hand'
-import { authorizeOrgCaller, readOrgForCreate } from './server/org-caller'
+import { authorizeOrgStageMover, readOrgForCreate } from './server/org-caller'
+import { CRM_MOVE_STAGES_REFUSAL, CRM_MOVE_STAGES_SITE_ROLE_PRESET } from './model/crm-permissions'
 import { captureHostContact } from './server/capture-host-contact'
 import { FieldValue } from 'firebase-admin/firestore'
 import { CRM_API_ROUTES } from './constants/api-routes'
@@ -166,16 +168,16 @@ export const crmPingHandler: PluginApiHandler = (req, res) => {
 type Refusal = { ok: false; status: number; error: string }
 
 /**
- * Who is calling, and whether they may edit this site's CRM.
+ * Who is calling, and whether they may move this site's contacts between
+ * stages.
  *
- * The same check the inbox, bookings and email console routes make: a
- * bearer ID token, verified, and an `admin` or `editor` role on the host
- * document. A contact is a site's business record, so the site's own role
- * map is the right authority; org-wide reach is not required, because a
- * site editor who can open the record in the console can already write
- * every other field on it client-direct.
+ * A bearer ID token, verified, and "Move contacts and deals between stages"
+ * (`crm.moveStages`, AGL-4047) on the host document: the site's stamp, else the
+ * preset of the member's site role, the Admin and Editor this asked for. A
+ * contact is a site's business record, so the site's own access is the right
+ * authority; org-wide reach is not required.
  */
-async function authorizeSiteEditor(
+async function authorizeSiteStageMover(
   req: PluginApiRequest,
   hostId: string,
 ): Promise<{ ok: true; uid: string; email: string | null } | Refusal> {
@@ -206,9 +208,8 @@ async function authorizeSiteEditor(
   if (!hostSnapshot.exists) {
     return { ok: false, status: 404, error: 'Unknown site' }
   }
-  const memberRole = (hostSnapshot.get('memberRoles') ?? {})[uid]
-  if (memberRole !== 'admin' && memberRole !== 'editor') {
-    return { ok: false, status: 403, error: 'Not a site admin or editor' }
+  if (!holdsStampedSiteKey(hostSnapshot, uid, 'crm.moveStages', CRM_MOVE_STAGES_SITE_ROLE_PRESET)) {
+    return { ok: false, status: 403, error: CRM_MOVE_STAGES_REFUSAL }
   }
   return { ok: true, uid, email }
 }
@@ -267,10 +268,11 @@ export const contactStageHandler: PluginApiHandler = async (req, res) => {
    * stage is in their org-held facet, and no site has an automation to tell.
    */
   if (!hostId) {
-    const caller = await authorizeOrgCaller(req, orgId, {
-      needs: 'data.manage',
-      refusal: 'Moving a contact’s stage requires the "Manage data" permission.',
-    })
+    const caller = await authorizeOrgStageMover(
+      req,
+      orgId,
+      'Moving a contact’s stage requires the "Manage data" permission.',
+    )
     if (caller.ok === false) {
       res.status(caller.status).json({ error: caller.error })
       return
@@ -316,7 +318,7 @@ export const contactStageHandler: PluginApiHandler = async (req, res) => {
     }
     return
   }
-  const caller = await authorizeSiteEditor(req, hostId)
+  const caller = await authorizeSiteStageMover(req, hostId)
   if (caller.ok === false) {
     res.status(caller.status).json({ error: caller.error })
     return

@@ -165,8 +165,9 @@ settings, with the deletion confirmation as its last step instead of the cancel.
 ## Deleting a single site
 
 To remove just one site (not the whole organization), open the site's
-**Admin → Danger zone** and use **Delete site**. A site admin
-types the site name to confirm, and it's deleted **immediately** — its pages,
+**Admin → Danger zone** and use **Delete site**. It takes the **Manage site settings**
+permission on the site and **Delete sites**, which workspace owners and admins hold by
+default. You type the site name to confirm, and it's deleted **immediately** — its pages,
 media, and settings are permanently removed and its address stops resolving.
 Unlike an organization deletion there's no hold, so **export a backup first**
 (Setup → Backup & restore) if you might want it back. Your other sites and the

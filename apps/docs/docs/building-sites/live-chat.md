@@ -29,9 +29,9 @@ Connect your own Tidio or LiveChat account by its public key or license number, 
      **Settings → Channels → Website** in LiveChat.
 5. Turn on **Show the chat on this site** and press **Save**.
 
-Saving refreshes your live pages, so the chat button appears within a minute. Only
-a **site admin** can change the card; everyone else on the site can see how it is
-set.
+Saving refreshes your live pages, so the chat button appears within a minute. Changing
+the card takes the **Manage site settings** permission, which a site's admins hold by
+default; everyone else on the site can see how it is set.
 
 To pause the chat without losing your settings, turn off **Show the chat on this
 site** and save. Switching **Live chat** off under **Admin → Plugins** removes it

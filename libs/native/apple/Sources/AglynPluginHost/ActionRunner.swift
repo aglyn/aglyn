@@ -17,11 +17,8 @@ public final class ActionRunner {
   public var error: String?
   /// What just happened, for the screen's banner.
   public var notice: String?
-  @ObservationIgnored private let roleHint: String
 
-  public init(roleHint: String = "an editor or admin") {
-    self.roleHint = roleHint
-  }
+  public init() {}
 
   /// Runs `block` unless another write is running; `onDone` follows a success.
   public func run(
@@ -56,7 +53,7 @@ public final class ActionRunner {
       return api.message
     }
     if text.range(of: "permission", options: .caseInsensitive) != nil {
-      return "That change needs a different role — ask \(roleHint)."
+      return "Your role does not include this permission — ask an organization admin."
     }
     return "That did not go through. Check the connection and try again."
   }

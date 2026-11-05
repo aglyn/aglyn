@@ -114,4 +114,13 @@ describe('a designed 401 screen’s link references (AGL-3122)', () => {
       'collection:plans': 'plans',
     })
   })
+
+  it('renders inside the site, so a header Cart is a cart and not its stub (AGL-4182)', async () => {
+    const container = await renderDenied()
+    await waitFor(() => {
+      expect(
+        container.querySelector('[data-testid="probe"]')?.getAttribute('data-host'),
+      ).toBe('host-1')
+    })
+  })
 })

@@ -108,7 +108,7 @@ export const presets: Aglyn.PresetSchema[] = [
     type: Aglyn.NodeType.PRESET,
     displayName: 'Sign Waiver',
     pluginId: WAIVERS_PLUGIN_ID,
-    description: 'Riders and guests sign your waiver before they arrive',
+    description: 'Guests sign your waiver before they arrive',
     category: Aglyn.ComponentCategory.FORMS,
     icon: { path: mdiFileSign.path, sx: { color: 'primary.main' } },
     data: { $id: null, componentId: ID, pluginId: WAIVERS_PLUGIN_ID, props: {} },

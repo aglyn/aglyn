@@ -180,7 +180,7 @@ private fun SnapshotStateMap<String, String>.dirty(stored: Map<String, String>) 
 @Composable
 private fun rememberRunner(): ActionRunner {
   val scope = rememberCoroutineScope()
-  return remember { ActionRunner(scope, roleHint = "an author, editor or admin") }
+  return remember { ActionRunner(scope) }
 }
 
 /** A text card over host fields: each path's text, saved through [settingsPayload]. */

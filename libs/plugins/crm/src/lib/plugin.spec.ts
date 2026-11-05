@@ -58,9 +58,8 @@ describe('crm plugin', () => {
     registerCrmConsole()
     const permission = registered()?.permission as Aglyn.OrgPermission
     expect(Aglyn.ORG_PERMISSION_KEYS).toContain(permission)
-    // The population it admits: the tiers the Firestore rules already let
-    // write contacts (`canWriteOrgData` is owner/admin/editor), and not the
-    // viewer tier.
+    // The population it admits: the tiers `canWriteOrgData` lets write the
+    // CRM by default (it asks this key), and not the viewer tier.
     expect(Aglyn.DEFAULT_ROLE_PERMISSIONS.owner[permission]).toBe(true)
     expect(Aglyn.DEFAULT_ROLE_PERMISSIONS.admin[permission]).toBe(true)
     expect(Aglyn.DEFAULT_ROLE_PERMISSIONS.editor[permission]).toBe(true)

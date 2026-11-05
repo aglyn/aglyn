@@ -13,16 +13,27 @@ final class OrgAccess {
   @ObservationIgnored private let org = ObservedDocument()
   @ObservationIgnored private let member = ObservedDocument()
   @ObservationIgnored private let role = ObservedDocument()
+  @ObservationIgnored private let site = ObservedDocument()
+  @ObservationIgnored private var uid: String?
+  @ObservationIgnored private var siteID: String?
+  /// The role the membership index names, which answers until the member row is read.
+  private var indexRole: String?
   @ObservationIgnored private var orgID: String?
   @ObservationIgnored private var roleID: String?
   /// The workspace's features as the console resolves them (`/api/orgs/entitlements`: the plan, its comp, add-ons such
   /// as the events calendar, and per-workspace overrides); nil until read.
   private var resolvedFeatures: [String: Bool]?
 
-  func follow(reader: FirestoreReader?, api: ConsoleAPIClient?, orgID: String?, uid: String?) {
+  func follow(reader: FirestoreReader?, api: ConsoleAPIClient?, orgID: String?, uid: String?, hostID: String? = nil, orgRole: String? = nil) {
     guard let reader, let orgID, let uid else {
       stop()
       return
+    }
+    self.uid = uid
+    indexRole = orgRole
+    if hostID != siteID {
+      siteID = hostID
+      if let hostID { site.start(reader, ["hosts", hostID]) } else { site.stop() }
     }
     if orgID != self.orgID {
       self.orgID = orgID
@@ -57,21 +68,37 @@ final class OrgAccess {
     org.stop()
     member.stop()
     role.stop()
+    site.stop()
+    siteID = nil
+    uid = nil
+    indexRole = nil
+  }
+
+  /// The member's verdict on every catalog key in this workspace (`memberPermissions`).
+  var workspacePermissions: [String: Bool] {
+    memberPermissions(
+      ContractValues.shared.orgRoleGrants, member: member.document?.data, orgRole: indexRole, customRole: role.document?.data)
+  }
+
+  /// The same on the site `follow` was given, with the site's own stamp for this member applied.
+  var pickedSitePermissions: [String: Bool] {
+    sitePermissions(
+      workspacePermissions,
+      siteStamp: uid.flatMap { (site.document?.data["memberPermissions"] as? [String: Any])?[$0] as? [String: Any] })
+  }
+
+  /// The site `pickedSitePermissions` answers for.
+  var pickedSiteID: String? { siteID }
+
+  /// The answer for one key on a site: that site's when it is the one followed, else the workspace's.
+  func holds(_ key: String, onSite hostID: String?) -> Bool {
+    (hostID != nil && hostID == siteID ? pickedSitePermissions : workspacePermissions)[key] == true
   }
 
   /// The workspace's answers for each permission the keys name (an absent key is not held).
-  ///
-  /// The verdict stamped on the member (`resolvedPermissions`, every layer applied) when there is one; else the role's
-  /// grants from the catalog (`ORG_ROLE_GRANTS`), then the member's custom role, then their own overrides.
   func permissions(_ keys: [String]) -> [String: Bool] {
-    let data = member.document?.data
-    let stamped = data?["resolvedPermissions"] as? [String: Any]
-    let resolved = rolePermissions(
-      ContractValues.shared.orgRoleGrants, role: data?["role"] as? String,
-      customRole: data?["roleId"] as? String != nil ? role.document?.data : nil, overrides: data)
-    return Dictionary(
-      keys.map { key in (key, data == nil ? false : (stamped?[key] as? Bool) ?? resolved[key] ?? false) },
-      uniquingKeysWith: { a, _ in a })
+    let all = workspacePermissions
+    return Dictionary(keys.map { ($0, all[$0] ?? false) }, uniquingKeysWith: { a, _ in a })
   }
 
   /// Whether the workspace carries each feature the keys name: the console's resolved answer, else (before it is read,

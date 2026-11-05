@@ -102,11 +102,16 @@ function declarationFiles(): string[] {
   return gitGrepFiles('PluginPermission[]', ['libs/plugins'])
 }
 
-/** Every `key: '...'` a declaration file writes down. */
+/**
+ * Every `key: '...'` a declaration file writes down, dotted ones included
+ * (AGL-4047). The pattern once stopped at letters, digits and underscores, so
+ * `marketplace.payouts` and the dotted commerce keys never matched and were
+ * declared without this guard asking who enforces them.
+ */
 function declaredKeys(): { key: string; file: string }[] {
   return declarationFiles().flatMap((file) => {
     const source = readFileSync(resolve(REPO_ROOT, file), 'utf8')
-    return [...source.matchAll(/\bkey:\s*'([A-Za-z0-9_]+)'/g)].map((match) => ({
+    return [...source.matchAll(/\bkey:\s*'([A-Za-z0-9_.]+)'/g)].map((match) => ({
       key: match[1],
       file,
     }))
@@ -131,6 +136,10 @@ describe('every plugin-declared permission is enforced server-side (AGL-2474)', 
     const keys = declaredKeys()
     expect(declarationFiles().length).toBeGreaterThan(0)
     expect(keys.map((entry) => entry.key)).toContain('managePos')
+    // A dotted key is a key too.
+    expect(keys.map((entry) => entry.key)).toEqual(
+      expect.arrayContaining(['marketplace.payouts', 'commerce.orders']),
+    )
   })
 
   it('the search really searches — a key nobody declares finds nothing', () => {

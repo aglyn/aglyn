@@ -14,6 +14,21 @@
  * site admin reads their site" is what keeps the collaborators card from
  * rendering nothing for the person it was built for.
  *
+ * The site admin's arm asks "Manage site settings" (`site.manage`, AGL-4047)
+ * on the site the subject names, as `isSiteAdminCollaborator` in the route
+ * asks it: the site's stamp for the member, else their role there in Admin,
+ * for a member given access to the site by name. So the sites are seeded as
+ * the projection writes them (`memberRoles`, `memberPermissions`), and a
+ * site's toggle that refuses a site admin the key, or grants it to a site
+ * editor, decides it here as it does at the route.
+ *
+ * The AI billing standing (`aiBilling/standing`) and the overage charges
+ * (`aiOverageCharges/{id}`) are read by the same people, and the three reads
+ * ask the keys alone (AGL-4047): `billing.view` or `billing.manage` through
+ * `memberKeyOrOverride`, the owner and admins by default, where they asked
+ * the owner or admin role AND the key, or the key stamped. The table at the
+ * bottom holds every member to the verdict they had on all three.
+ *
  *   npx firebase emulators:start --only firestore --project aglyn-main
  *   node cloud/rules-ai-allotments.spec.mjs
  */
@@ -43,12 +58,76 @@ const SITE_ADMIN = 'uid-allot-site-admin'
 /** A collaborator scoped to site A as an editor — the subject of the collab allotment. */
 const COLLABORATOR = 'uid-allot-collaborator'
 const OUTSIDER = 'uid-allot-outsider'
+/** Site A's admin, whose toggle on the site refuses them "Manage site settings". */
+const SITE_ADMIN_REFUSED = 'uid-allot-site-admin-refused'
+/** Site A's editor, whose toggle on the site grants them "Manage site settings". */
+const SITE_EDITOR_GRANTED = 'uid-allot-site-editor-granted'
+/** An editor of the whole workspace with Admin on site A: not a collaborator, as the route reads them. */
+const ORG_WIDE_SITE_ADMIN = 'uid-allot-org-wide-site-admin'
+/** An admin refused both billing keys, an old site entry still on their membership. */
+const STALE_ENTRY_ADMIN = 'uid-allot-stale-entry-admin'
+
+/**
+ * The rest of the billing readers (AGL-4047), each as the projection writes
+ * them: who reads every allotment, the standing and a charge.
+ */
+const BILLING_READERS = {
+  'uid-allot-admin-stamped-without': {
+    member: { role: 'admin', allHosts: true, resolvedPermissions: { 'data.manage': true } },
+    reads: true,
+    why: 'an admin stamped before the keys existed: the default',
+  },
+  'uid-allot-admin-role-revoked': {
+    member: {
+      role: 'admin',
+      allHosts: true,
+      roleId: 'role-no-billing',
+      resolvedPermissions: { 'billing.view': false, 'billing.manage': false },
+    },
+    reads: false,
+    why: 'an admin a custom role took both keys from',
+  },
+  'uid-allot-admin-half-revoked': {
+    member: { role: 'admin', allHosts: true, resolvedPermissions: { 'billing.view': false } },
+    reads: true,
+    why: 'an admin refused billing.view alone: billing.manage still admits',
+  },
+  'uid-allot-editor-override': {
+    member: { role: 'editor', allHosts: true, permissions: { 'billing.view': true } },
+    reads: true,
+    why: 'an editor whose own override grants billing.view, nothing stamped',
+  },
+  'uid-allot-viewer-stamped-view': {
+    member: { role: 'viewer', allHosts: true, resolvedPermissions: { 'billing.view': true } },
+    reads: true,
+    why: 'a viewer a custom role stamped with billing.view',
+  },
+  'uid-allot-viewer-bare': {
+    member: { role: 'viewer', allHosts: true },
+    reads: false,
+    why: 'a viewer with nothing stamped: the default refuses',
+  },
+  'uid-allot-collab-granted': {
+    member: {
+      role: 'viewer',
+      allHosts: false,
+      hostAccess: { 'host-allot-a': 'editor' },
+      resolvedPermissions: { 'billing.view': true, 'billing.manage': true },
+    },
+    reads: false,
+    why: 'a scoped collaborator stamped with both keys: the reach refuses',
+  },
+}
+
+// `emulators:exec` names the emulator it started; the fixed port is the
+// fallback for one started by hand.
+const [emulatorHost, emulatorPort] = (process.env.FIRESTORE_EMULATOR_HOST || '127.0.0.1:8082').split(':')
 
 const env = await initializeTestEnvironment({
   projectId: 'aglyn-main',
   firestore: {
-    host: '127.0.0.1',
-    port: 8082,
+    host: emulatorHost,
+    port: Number(emulatorPort),
     // The comment-stripped artifact is what deploys (AGL-3544).
     rules: readFileSync('cloud/firebase-firestore.deploy.rules', 'utf8'),
   },
@@ -65,6 +144,8 @@ const check = async (label, fn) => {
 }
 
 const allotmentOf = (db, subject) => doc(db, 'orgs', ORG, 'aiAllotments', subject)
+const standingOf = (db) => doc(db, 'orgs', ORG, 'aiBilling', 'standing')
+const chargeOf = (db) => doc(db, 'orgs', ORG, 'aiOverageCharges', 'charge-1')
 
 const SUBJECTS = {
   org: 'org',
@@ -111,9 +192,66 @@ await env.withSecurityRulesDisabled(async (context) => {
     allHosts: false,
     hostAccess: { [HOST_A]: 'editor', [HOST_B]: 'editor' },
   })
+  await setDoc(doc(db, 'orgs', ORG, 'members', SITE_ADMIN_REFUSED), {
+    role: 'editor',
+    allHosts: false,
+    hostAccess: { [HOST_A]: 'admin' },
+    hostPermissions: { [HOST_A]: { 'site.manage': false } },
+  })
+  await setDoc(doc(db, 'orgs', ORG, 'members', SITE_EDITOR_GRANTED), {
+    role: 'editor',
+    allHosts: false,
+    hostAccess: { [HOST_A]: 'editor' },
+    hostPermissions: { [HOST_A]: { 'site.manage': true } },
+  })
+  await setDoc(doc(db, 'orgs', ORG, 'members', ORG_WIDE_SITE_ADMIN), {
+    role: 'editor',
+    allHosts: true,
+    hostAccess: { [HOST_A]: 'admin' },
+  })
+  await setDoc(doc(db, 'orgs', ORG, 'members', STALE_ENTRY_ADMIN), {
+    role: 'admin',
+    allHosts: true,
+    hostAccess: { [HOST_A]: 'editor' },
+    permissions: { 'billing.view': false, 'billing.manage': false },
+  })
+  // The sites as the projection writes them: each member's role there, and
+  // the site's stamp where a toggle decided "Manage site settings".
+  await setDoc(doc(db, 'hosts', HOST_A), {
+    orgId: ORG,
+    memberRoles: {
+      [OWNER]: 'admin',
+      [ADMIN]: 'admin',
+      [REVOKED_ADMIN]: 'admin',
+      [BARE_ADMIN]: 'admin',
+      [EDITOR]: 'editor',
+      [SITE_ADMIN]: 'admin',
+      [COLLABORATOR]: 'editor',
+      [SITE_ADMIN_REFUSED]: 'admin',
+      [SITE_EDITOR_GRANTED]: 'editor',
+      [ORG_WIDE_SITE_ADMIN]: 'admin',
+      [STALE_ENTRY_ADMIN]: 'admin',
+    },
+    memberPermissions: {
+      [SITE_ADMIN]: { 'site.manage': true },
+      [SITE_ADMIN_REFUSED]: { 'site.manage': false },
+      [SITE_EDITOR_GRANTED]: { 'site.manage': true },
+      [ORG_WIDE_SITE_ADMIN]: { 'site.manage': true },
+      [STALE_ENTRY_ADMIN]: { 'site.manage': true },
+    },
+  })
+  await setDoc(doc(db, 'hosts', HOST_B), {
+    orgId: ORG,
+    memberRoles: { [OWNER]: 'admin', [ADMIN]: 'admin', [REVOKED_ADMIN]: 'admin', [COLLABORATOR]: 'editor' },
+  })
   for (const subject of Object.values(SUBJECTS)) {
     await setDoc(allotmentOf(db, subject), seeded(subject))
   }
+  for (const [uid, { member }] of Object.entries(BILLING_READERS)) {
+    await setDoc(doc(db, 'orgs', ORG, 'members', uid), member)
+  }
+  await setDoc(standingOf(db), { cardOnFile: true, pause: null })
+  await setDoc(chargeOf(db), { status: 'paid', amountUsd: 5 })
 })
 
 const as = (uid) => env.authenticatedContext(uid, { email_verified: true }).firestore()
@@ -173,6 +311,33 @@ await check('the SITE ADMIN cannot read another site’s allotments', async () =
 await check('the SITE ADMIN cannot read a member’s allotment', () =>
   assertFails(getDoc(allotmentOf(as(SITE_ADMIN), SUBJECTS.editorMember))),
 )
+// "Manage site settings" decides it now (AGL-4047), as at the route.
+await check('a site ADMIN the site’s toggle refuses "Manage site settings" reads neither', async () => {
+  await assertFails(getDoc(allotmentOf(as(SITE_ADMIN_REFUSED), SUBJECTS.collabA)))
+  await assertFails(getDoc(allotmentOf(as(SITE_ADMIN_REFUSED), SUBJECTS.siteA)))
+})
+await check('a site EDITOR the site’s toggle grants "Manage site settings" reads both', async () => {
+  await assertSucceeds(getDoc(allotmentOf(as(SITE_EDITOR_GRANTED), SUBJECTS.collabA)))
+  await assertSucceeds(getDoc(allotmentOf(as(SITE_EDITOR_GRANTED), SUBJECTS.siteA)))
+})
+await check('the site editor so granted still reads nothing about another site', () =>
+  assertFails(getDoc(allotmentOf(as(SITE_EDITOR_GRANTED), SUBJECTS.siteB))),
+)
+// No widening: an org admin is an admin of every site, but the site arm is
+// for a member given the site by name, so the billing keys alone decide them.
+await check('an ADMIN refused both billing keys reads no site’s allotment through the site arm', async () => {
+  await assertFails(getDoc(allotmentOf(as(REVOKED_ADMIN), SUBJECTS.siteA)))
+  await assertFails(getDoc(allotmentOf(as(REVOKED_ADMIN), SUBJECTS.collabA)))
+})
+// The route's `isSiteAdminCollaborator` asks for a collaborator, and so does this.
+await check('an ADMIN with an old site entry, refused both billing keys, reads nothing through it', async () => {
+  await assertFails(getDoc(allotmentOf(as(STALE_ENTRY_ADMIN), SUBJECTS.siteA)))
+  await assertFails(getDoc(allotmentOf(as(STALE_ENTRY_ADMIN), SUBJECTS.collabA)))
+})
+await check('an org-wide EDITOR with Admin on the site reads nothing through it: the billing keys decide', async () => {
+  await assertFails(getDoc(allotmentOf(as(ORG_WIDE_SITE_ADMIN), SUBJECTS.siteA)))
+  await assertFails(getDoc(allotmentOf(as(ORG_WIDE_SITE_ADMIN), SUBJECTS.collabA)))
+})
 
 // ── The org-wide restriction, and outsiders ────────────────────────────────
 await check('any member reads the org-wide model restriction', async () => {
@@ -198,14 +363,55 @@ await check('the SUBJECT cannot delete their own allotment', () =>
   assertFails(deleteDoc(allotmentOf(as(EDITOR), SUBJECTS.editorMember))),
 )
 
+// ── The billing standing and the overage charges (AGL-4047) ────────────────
+// The roster's managers first, then the table. The keys decide alone, and
+// every default is the verdict the role arm gave.
+const STANDING_CASES = [
+  [OWNER, true, 'the OWNER, no stamp'],
+  [ADMIN, true, 'an ADMIN, no stamp'],
+  [BARE_ADMIN, true, 'CONTROL — an ADMIN with NO permissions map'],
+  [REVOKED_ADMIN, false, 'an ADMIN whose own overrides revoke both keys'],
+  [BILLING_VIEWER, true, 'an org-wide VIEWER stamped with billing.manage'],
+  [EDITOR, false, 'a bare org-wide EDITOR'],
+  [SITE_ADMIN, false, 'a collaborator who is a site’s ADMIN'],
+  [OUTSIDER, false, 'an OUTSIDER'],
+  ...Object.entries(BILLING_READERS).map(([uid, { reads, why }]) => [uid, reads, why]),
+]
+for (const [uid, reads, why] of STANDING_CASES) {
+  const assertion = reads ? assertSucceeds : assertFails
+  await check(`${why}: ${reads ? 'reads' : 'cannot read'} the AI billing standing`, () =>
+    assertion(getDoc(standingOf(as(uid)))),
+  )
+  await check(`${why}: ${reads ? 'reads' : 'cannot read'} an overage charge`, () =>
+    assertion(getDoc(chargeOf(as(uid)))),
+  )
+  if (uid in BILLING_READERS) {
+    await check(`${why}: ${reads ? 'reads' : 'cannot read'} another member’s allotment`, () =>
+      assertion(getDoc(allotmentOf(as(uid), SUBJECTS.adminMember))),
+    )
+  }
+}
+await check('nobody writes the standing or a charge, the owner included', async () => {
+  await assertFails(setDoc(standingOf(as(OWNER)), { cardOnFile: false }))
+  await assertFails(setDoc(chargeOf(as(OWNER)), { status: 'void' }))
+})
+
 // Remove ONLY what this spec seeded. Deliberately not `clearFirestore()` — the
 // emulator is often shared with a running dev server.
 await env.withSecurityRulesDisabled(async (context) => {
   const db = context.firestore()
+  await deleteDoc(standingOf(db))
+  await deleteDoc(chargeOf(db))
+  for (const uid of Object.keys(BILLING_READERS)) await deleteDoc(doc(db, 'orgs', ORG, 'members', uid))
   for (const subject of Object.values(SUBJECTS)) await deleteDoc(allotmentOf(db, subject))
-  for (const uid of [OWNER, ADMIN, REVOKED_ADMIN, BARE_ADMIN, BILLING_VIEWER, EDITOR, SITE_ADMIN, COLLABORATOR]) {
+  for (const uid of [
+    OWNER, ADMIN, REVOKED_ADMIN, BARE_ADMIN, BILLING_VIEWER, EDITOR, SITE_ADMIN, COLLABORATOR,
+    SITE_ADMIN_REFUSED, SITE_EDITOR_GRANTED, ORG_WIDE_SITE_ADMIN, STALE_ENTRY_ADMIN,
+  ]) {
     await deleteDoc(doc(db, 'orgs', ORG, 'members', uid))
   }
+  await deleteDoc(doc(db, 'hosts', HOST_A))
+  await deleteDoc(doc(db, 'hosts', HOST_B))
   await deleteDoc(doc(db, 'orgs', ORG))
 })
 

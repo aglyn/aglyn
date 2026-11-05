@@ -121,6 +121,23 @@ export function reviewFormMode(
   return 'sign-in'
 }
 
+/**
+ * The badge a bought-it review wears. The green stays on the border: as 12px
+ * words `success.main` is 3.3:1 on white and 2.9:1 on a cream section, so they
+ * print in the theme's own text color (AGL-4179).
+ */
+function VerifiedBuyerChip() {
+  return (
+    <Chip
+      label="Verified buyer"
+      size="small"
+      variant="outlined"
+      color="success"
+      sx={{ color: 'text.primary' }}
+    />
+  )
+}
+
 const TOKEN_PROBLEM_TEXT: Record<string, string> = {
   review_token_used: 'This review link has already been used.',
   review_token_expired: 'This review link has expired.',
@@ -272,7 +289,7 @@ const StoreReviews = forwardRef<HTMLDivElement, ProductReviewsProps>(
                   {review.authorName}
                 </Typography>
                 {review.verified ? (
-                  <Chip label="Verified buyer" size="small" variant="outlined" color="success" />
+                  <VerifiedBuyerChip />
                 ) : null}
               </Box>
               {review.productName || review.soldInStore ? (
@@ -424,7 +441,7 @@ const SingleProductReviews = forwardRef<HTMLDivElement, ProductReviewsProps>(
                 {review.authorName}
               </Typography>
               {review.verified ? (
-                <Chip label="Verified buyer" size="small" variant="outlined" color="success" />
+                <VerifiedBuyerChip />
               ) : null}
             </Box>
             <Typography variant="body2" sx={{ mt: 0.5 }}>

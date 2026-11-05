@@ -82,6 +82,10 @@ const COMPANY_ROWS = [
   { $id: 'c-acme', name: 'Acme', domain: 'acme.com', nameLower: 'acme' },
   { $id: 'c-globex', name: 'Globex', nameLower: 'globex' },
 ]
+let stageBlocked = false
+jest.mock('../hooks/use-stage-move-blocked', () => ({
+  useStageMoveBlocked: () => stageBlocked,
+}))
 jest.mock('@aglyn/tenant-feature-instance', () => ({
   // The member document behind "Share with sites…" (AGL-3336): not a manager here.
   useFirestoreDoc: () => ({ data: undefined, status: 'success', fromCache: false }),
@@ -162,7 +166,7 @@ jest.mock('../model/crm-api', () => ({
     stage: string | null,
   ) => {
     stageCalls(user, hostId, contactId, stage)
-    if (refuseStage.has(contactId)) throw new Error('Not a site admin or editor')
+    if (refuseStage.has(contactId)) throw new Error('Refused')
     return { ok: true, changed: true, lifecycleStage: stage ?? '', previousStage: '' }
   },
 }))
@@ -298,6 +302,21 @@ describe('the bar and its selection', () => {
     ]) {
       expect(screen.getByRole('button', { name: label })).toBeTruthy()
     }
+  })
+})
+
+describe('without "Move contacts and deals between stages" (AGL-4047)', () => {
+  afterEach(() => {
+    stageBlocked = false
+  })
+
+  it('switches Set stage off with the permission named, and leaves the other acts', () => {
+    stageBlocked = true
+    render(<Harness initial={['c1', 'c2']} />)
+    const button = screen.getByRole('button', { name: 'Set stage' }) as HTMLButtonElement
+    expect(button.disabled).toBe(true)
+    expect(screen.getByLabelText('Your role does not include "Move contacts and deals between stages" — ask an organization admin')).toBeTruthy()
+    expect((screen.getByRole('button', { name: 'Set owner' }) as HTMLButtonElement).disabled).toBe(false)
   })
 })
 
@@ -443,7 +462,7 @@ describe('a refused row', () => {
     fireEvent.click(within(screen.getByRole('listbox')).getByText('Lead'))
     fireEvent.click(screen.getByRole('button', { name: 'Apply' }))
     expect(
-      await screen.findByText(/c@example\.com — Not a site admin or editor/),
+      await screen.findByText(/c@example\.com — Refused/),
     ).toBeTruthy()
     expect(screen.getByText('One contact was not changed:')).toBeTruthy()
     expect(notices).toContain('Stage set on 1 contact')
