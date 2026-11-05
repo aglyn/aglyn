@@ -213,6 +213,18 @@ marketplace, publishing to it), which is still asked too. Both start from the me
 on the site, so nobody's access changed when they became permissions, and a custom role, a
 per-member override or the site's **Permissions** dialog can grant or deny either one.
 
+### Marketplace publisher permissions {#marketplace-publisher-permissions}
+
+| Permission | What it opens | Owner | Admin | Editor | Viewer |
+|---|---|---|---|---|---|
+| **Edit the publisher profile** (`marketplace.publisherProfile`) | Change the workspace's public marketplace profile on **Marketplace → Profile**: its handle, name, bio, logo, support contact and links | Yes | Yes | No | No |
+| **Manage published listings** (`marketplace.manageListings`) | Edit the listings the workspace has published (their words, pictures and category), make a plugin public or private, and unpublish or republish a listing | Yes | Yes | No | No |
+
+Publishing a new listing is still **Publish to marketplace**, which editors hold too.
+Nobody's access changed when these became permissions, and a custom role or a per-member
+override can grant or deny each one, so an editor can be trusted with the listings
+without the profile, or the other way round.
+
 ### Automation and domain permissions {#automation-and-domain-permissions}
 
 | Permission | What it opens | Owner | Admin | Editor | Viewer |

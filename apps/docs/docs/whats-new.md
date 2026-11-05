@@ -45,6 +45,15 @@ for the how-to.
   yet keeps its **Rolling out** note in the docs, and its tab stays hidden in the
   console until it is released.
 
+## November 2026 — the publisher profile and published listings are permissions
+
+- **[Marketplace publisher permissions](workspace-and-billing/teams-and-roles/custom-roles.md#marketplace-publisher-permissions)**
+  — saving the workspace's publisher profile is **Edit the publisher profile**, and
+  editing, hiding and unpublishing its published listings is **Manage published
+  listings**. Owners and admins keep both, and a custom role or a per-member override
+  can now hand either one to an editor. A control the member may not use stays on
+  screen, switched off, and names the permission to ask for.
+
 ## October 2026 — datasets follow Manage data
 
 - **[Manage data](workspace-and-billing/teams-and-roles/custom-roles.md#workspace-permissions)**

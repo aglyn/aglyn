@@ -22,6 +22,7 @@ import {
   PageHeaderRecord,
 } from '@aglyn/aglyn'
 import { AppLink } from '@aglyn/shared-ui-jsx'
+import { BlockedControl } from '@aglyn/shared-ui-jsx/components/blocked-control.component'
 import { useFirestore, useFirestoreDoc, useUser } from '@aglyn/tenant-feature-instance'
 import { Alert, Button, Stack } from '@mui/material'
 import { doc } from 'firebase/firestore'
@@ -31,6 +32,10 @@ import ListingReviewStatus from './listing-review-status.component'
 import ListingVerificationRequest from './listing-verification-request.component'
 import { MarketplaceListingContent } from './listing-content.component'
 import { publishPluginPath } from '../model/marketplace-paths'
+import {
+  MARKETPLACE_MANAGE_LISTINGS_PERMISSION,
+  marketplacePublisherPermissionRefusal,
+} from '../model/marketplace-publisher-permissions'
 
 /**
  * Org marketplace listing detail (AGL-772), at `{marketplace}/{listingId}`.
@@ -67,6 +72,11 @@ export function ListingDetailPage(props: {
   )
   // Listings are org-owned (AGL-652): ownership is an org comparison.
   const isOwner = Boolean(orgId && listing?.profileId === orgId)
+  // Editing it asks "Manage published listings" (AGL-4047), as its save
+  // route and the listing rules do. Off with the permission named, not
+  // hidden; an absent key reads as allowed, and the route still decides.
+  const canManageListings =
+    permissions?.[MARKETPLACE_MANAGE_LISTINGS_PERMISSION] !== false
   const [editing, setEditing] = useState(false)
 
   // Name the thing you are looking at (AGL-1000). The page used to announce
@@ -105,16 +115,23 @@ export function ListingDetailPage(props: {
               </Button>
             </AppLink>
           ) : null}
-          <Button
-            variant="outlined"
-            color="primary"
-            onClick={() => setEditing(true)}
+          <BlockedControl
+            blocked={!canManageListings}
+            reason={marketplacePublisherPermissionRefusal(
+              MARKETPLACE_MANAGE_LISTINGS_PERMISSION,
+            )}
           >
-            {'Edit listing'}
-          </Button>
+            <Button
+              variant="outlined"
+              color="primary"
+              onClick={() => setEditing(true)}
+            >
+              {'Edit listing'}
+            </Button>
+          </BlockedControl>
         </Stack>
       ) : null,
-    [isOwner, editing, isPlugin, basePath, listingId],
+    [isOwner, editing, isPlugin, basePath, listingId, canManageListings],
   )
 
   return (
@@ -129,7 +146,7 @@ export function ListingDetailPage(props: {
           content — unanchored to anything, and it moved depending on whether
           the org had a site yet. */}
       <PageHeaderActions>{ownerActions}</PageHeaderActions>
-      {editing && isOwner && orgId && listing ? (
+      {editing && isOwner && canManageListings && orgId && listing ? (
         <ListingDetailEditor
           orgId={orgId}
           listingId={listingId}
