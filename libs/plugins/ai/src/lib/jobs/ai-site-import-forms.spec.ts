@@ -24,7 +24,7 @@
 import { checkFormContract } from '@aglyn/aglyn/app-utils/form-contract'
 import type { AiJobItemLedger } from '../model/ai-jobs.types'
 import type { AiSiteImportPage, AiSiteImportState, SiteImportLayout } from '../model/ai-site-import'
-import { SITE_LAYOUT_PAGES, siteLayoutRecording, siteLayoutSameSite } from '../site-import/fixtures/site-layout-recordings'
+import { SITE_LAYOUT_PAGES, SITE_READ_JSON_FORM_URL, SITE_READ_ORIGIN, siteLayoutRecording, siteLayoutSameSite, siteReadPage } from '../site-import/fixtures/site-layout-recordings'
 import { extractSiteImportPage, type SiteImportBlock, type SiteImportForm } from '../site-import/site-import-html'
 import { siteImportLayout } from '../site-import/site-import-layout'
 import { AI_FORM_CONSENT_FIELD_NAME, aiFormDraft, aiFormDraftViolations } from './ai-job-form-step'
@@ -206,5 +206,15 @@ describe('a page’s forms, as the site’s own', () => {
 
   it('calls a form with no heading above it by the default name', () => {
     expect(AI_SITE_IMPORT_FORM_DEFAULT_NAME).toBe('Contact form')
+  })
+})
+
+describe('a form its page holds as data (AGL-4152)', () => {
+  it('is rebuilt as any other, with its fields, required marks and button', () => {
+    const read = extractSiteImportPage(siteReadPage('json-form.html'), SITE_READ_JSON_FORM_URL, (url) => url.origin === SITE_READ_ORIGIN, { structure: true })
+    const form = read.forms.kept[0] as SiteImportForm
+    const tree = JSON.stringify(aiSiteImportFormTree(form).nodes)
+    for (const words of ['Your name', 'Email', 'Phone', 'How can we help?', 'Monthly books', 'Message', 'Send it']) expect(tree).toContain(words)
+    expect(tree).not.toContain('Attach a statement')
   })
 })

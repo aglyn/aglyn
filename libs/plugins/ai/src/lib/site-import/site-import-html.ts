@@ -52,6 +52,7 @@
  *=========================================*/
 
 import { videoEmbedOf } from '@aglyn/aglyn/plugin-manager/video-embed-provider'
+import { siteImportDataForms } from './site-import-data-forms'
 
 /** One run of a page's content, in the order the page draws it. */
 export type SiteImportBlock =
@@ -635,9 +636,9 @@ function formContents(form: string): SiteImportForm {
   return { fields, ...(submit ? { submit } : {}), ...(leftOut.length ? { leftOut } : {}) }
 }
 
-/** Forms with a payment field go whole; the rest are summarized, then go. */
-function takeForms(html: string): { html: string; kept: SiteImportForm[]; removed: number } {
-  const kept: SiteImportForm[] = []
+/** Forms with a payment field go whole; the rest are summarized, then go. `first` are the forms the page's data held, whose markers are in place. */
+function takeForms(html: string, first: readonly SiteImportForm[] = []): { html: string; kept: SiteImportForm[]; removed: number } {
+  const kept: SiteImportForm[] = [...first]
   let removed = 0
   const out = html.replace(/<form\b(?:[^>"']|"[^"]*"|'[^']*')*>[\s\S]*?(?:<\/form\s*>|$)/gi, (form) => {
     if (PAYMENT_FIELD.test(form)) {
@@ -1466,6 +1467,9 @@ export function extractSiteImportPage(
   const icons = readIcons(source, pageUrl)
   const keep = options.structure === true
   const sheets = keep ? readStyleSheets(source, pageUrl) : { styles: [], stylesheets: [] }
+  // A form defined in data (AGL-4152), read before scripts go: a marker at its place, its fields from the data.
+  const dataForms = siteImportDataForms(source, formWords, SITE_IMPORT_PAGE_LIMITS)
+  source = dataForms.html
   // A video is a marker at its place (AGL-4140), read before scripts and
   // players go: its structured data is a script's body.
   const film = readVideos(source, pageUrl, isSameSite)
@@ -1476,7 +1480,7 @@ export function extractSiteImportPage(
   source = readSvgIcons(source, svgIcons)
   source = removeElements(readPictures(source), REMOVED_WITH_CONTENT).replace(REMOVED_VOID, ' ')
   // Forms next, so a field list is read before the controls go.
-  const forms = takeForms(source)
+  const forms = takeForms(source, dataForms.kept)
   source = removeElements(forms.html, FORM_CONTROLS)
 
   const metas = metaTags(source)
@@ -1876,7 +1880,7 @@ export function extractSiteImportPage(
     images,
     navLinks,
     links,
-    forms: { kept: forms.kept, removed: forms.removed },
+    forms: { kept: forms.kept, removed: forms.removed + dataForms.removed },
     ...(videos.length ? { videos } : {}),
     loginForm: false,
     ...(keep
