@@ -24,7 +24,7 @@
  * | field | shape | cap |
  * | -- | -- | -- |
  * | `pinnedOrgs` | workspace ids, in the order the person keeps them | 5 |
- * | `pinnedHosts` | {@link PinnedHost}s, in the order they were pinned | 5 a workspace, 100 in all |
+ * | `pinnedHosts` | {@link PinnedHost}s, in the order they were pinned | 500 in all, no cap a workspace |
  * | `recentOrgs` | workspace ids, most recently opened first | 8 |
  * | `starred` | {@link StarredItem}s, in the order they were starred | 50 |
  * | `recents` | {@link RecentItem}s, most recently opened first | 30 |
@@ -327,16 +327,16 @@ export function movePinnedOrg(pinned: readonly string[], orgId: string, offset: 
 /** `users/{uid}` field holding the sites the person pinned, each with its workspace (AGL-4005). */
 export const PINNED_HOSTS_FIELD = 'pinnedHosts'
 
-/** The most sites a person may pin in one workspace: five, as for workspaces. */
-export const PINNED_HOSTS_PER_WORKSPACE = 5
-
 /**
  * The most site pins the account keeps across every workspace, the bound the
- * Firestore rules hold. Nobody meets it by pinning: it takes twenty
- * workspaces with five each. Past it, the oldest pins of OTHER workspaces
- * give way (see {@link pinHost}).
+ * Firestore rules hold so `users/{uid}` (read on every launch) cannot grow
+ * without end. A workspace has no cap of its own: a person pins as many of
+ * its sites as they like (AGL-4165, Zach 2026-11-04), where workspace pins
+ * stay at five. Past the bound, the oldest pins of OTHER workspaces give way
+ * (see {@link pinHost}); only a workspace holding every one of the 500 is
+ * ever full.
  */
-export const PINNED_HOSTS_MAX = 100
+export const PINNED_HOSTS_MAX = 500
 
 /**
  * One pinned site and the workspace it belongs to. The workspace rides with
@@ -372,12 +372,12 @@ export function readPinnedHosts(profile: unknown): PinnedHost[] {
   return pinnedHostList(field(profile, PINNED_HOSTS_FIELD))
 }
 
-/** One workspace's pinned site ids, in the order pinned, at most five. */
+/** One workspace's pinned site ids, in the order pinned. */
 export function workspacePinnedHosts(stored: readonly PinnedHost[], orgId: string): string[] {
   return pinnedHostList(stored)
     .filter((pin) => pin.orgId === orgId)
     .map((pin) => pin.hostId)
-    .slice(0, PINNED_HOSTS_PER_WORKSPACE)
+    .slice(0, PINNED_HOSTS_MAX)
 }
 
 export interface PinHostResult {
@@ -387,20 +387,18 @@ export interface PinHostResult {
 }
 
 /**
- * Pins a site at the end of its workspace's pins, or says that workspace
- * already has five. As with workspaces, a full list is never made room in
- * quietly: the caller asks "Pinned is full. Replace one?" and calls
- * {@link replacePinnedHost} with the answer. Only the account-wide bound
- * ({@link PINNED_HOSTS_MAX}) makes room, and only from other workspaces.
+ * Pins a site at the end of its workspace's pins. A workspace takes as many
+ * as the person likes; only the account-wide bound ({@link PINNED_HOSTS_MAX})
+ * makes room, and only from other workspaces. A workspace that already holds
+ * every pin the account keeps answers `full`, never a pin dropped quietly:
+ * the caller asks "Pinned is full. Replace one?" and calls
+ * {@link replacePinnedHost} with the answer.
  */
 export function pinHost(stored: readonly PinnedHost[], pin: PinnedHost): PinHostResult {
   const current = pinnedHostList(stored)
   if (!pin.orgId || !pin.hostId) return { pinnedHosts: current, outcome: 'alreadyPinned' }
   const inWorkspace = workspacePinnedHosts(current, pin.orgId)
   if (inWorkspace.includes(pin.hostId)) return { pinnedHosts: current, outcome: 'alreadyPinned' }
-  if (inWorkspace.length >= PINNED_HOSTS_PER_WORKSPACE) {
-    return { pinnedHosts: current, outcome: 'full' }
-  }
   // A site pinned under the workspace it has since moved out of moves with it.
   const next = [
     ...current.filter((entry) => entry.hostId !== pin.hostId),
@@ -408,7 +406,7 @@ export function pinHost(stored: readonly PinnedHost[], pin: PinnedHost): PinHost
   ]
   while (next.length > PINNED_HOSTS_MAX) {
     const oldest = next.findIndex((entry) => entry.orgId !== pin.orgId)
-    if (oldest === -1) break
+    if (oldest === -1) return { pinnedHosts: current, outcome: 'full' }
     next.splice(oldest, 1)
   }
   return { pinnedHosts: next, outcome: 'pinned' }

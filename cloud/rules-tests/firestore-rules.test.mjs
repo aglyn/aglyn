@@ -6639,16 +6639,17 @@ describe('account preferences are bounded, pins at five (AGL-3943)', () => {
     await mustAllow('editing another field beside seven pins', setDoc(me(), { firstName: 'Zach' }, { merge: true }))
   })
 
-  it('bounds pinned sites at a hundred in all (AGL-4005)', async () => {
+  it('bounds pinned sites at five hundred in all, none a workspace (AGL-4005, AGL-4165)', async () => {
     const pins = (n) => Array.from({ length: n }, (_, i) => ({ orgId: ORG, hostId: `h${i + 1}` }))
-    await mustAllow('a hundred pinned sites', setDoc(me(), { pinnedHosts: pins(100) }))
+    await mustAllow('a hundred and one pinned sites in one workspace', setDoc(me(), { pinnedHosts: pins(101) }))
+    await mustAllow('five hundred pinned sites', setDoc(me(), { pinnedHosts: pins(500) }))
     await mustDeny(
-      'a hundred and first by arrayUnion',
-      setDoc(me(), { pinnedHosts: arrayUnion({ orgId: ORG, hostId: 'h101' }) }, { merge: true }),
+      'a five hundred and first by arrayUnion',
+      setDoc(me(), { pinnedHosts: arrayUnion({ orgId: ORG, hostId: 'h501' }) }, { merge: true }),
     )
     await mustAllow(
       'unpinning one',
-      setDoc(me(), { pinnedHosts: arrayRemove({ orgId: ORG, hostId: 'h100' }) }, { merge: true }),
+      setDoc(me(), { pinnedHosts: arrayRemove({ orgId: ORG, hostId: 'h500' }) }, { merge: true }),
     )
     await mustDeny('pinned sites that are not a list', setDoc(me(), { pinnedHosts: { h1: ORG } }, { merge: true }))
   })

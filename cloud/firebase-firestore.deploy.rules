@@ -4921,7 +4921,7 @@ t.get('useWorkspaceBrand', true) is bool);
 }
 function accountPrefsValid() {
 return pinnedOrgsValid() &&
-prefListWithin('pinnedHosts', 100) &&
+prefListWithin('pinnedHosts', 500) &&
 prefListWithin('tabBars', 100) &&
 prefListWithin('recentOrgs', 8) &&
 prefListWithin('starred', 50) &&

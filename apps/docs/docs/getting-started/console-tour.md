@@ -192,9 +192,8 @@ Each card carries:
   Domain**.
 - A **status pill** (below).
 - A **pin**, beside the pill. Pinned sites lead the list in the order you pinned them,
-  and the site switcher in the top bar lists them first too. You can pin up to five
-  sites in each workspace; pinning a sixth asks which one it replaces. Your pins are
-  yours alone, and they follow you to every device you sign in on.
+  and the site switcher in the top bar lists them first too. Pin as many sites as you
+  like. Your pins are yours alone, and they follow you to every device you sign in on.
 - **Visit**, which opens the live site in a new tab, and **Manage**, which opens that
   site's dashboard in the console.
 
