@@ -46,7 +46,7 @@ import { readFreeAiCreditsLeft } from '../usage/free-ai-credits-left'
 import { aiCreditsConfirmation, type AiCreditsPrompt } from '../model/ai-credit-estimate'
 import { aiUsageMeter } from '../usage/ai-usage-meter'
 import { aiJobsGate } from './ai-jobs-gate'
-import { siteImportOfferFor } from './ai-site-import-route'
+import { siteImportGenerativeOfferFor, siteImportOfferFor } from './ai-site-import-route'
 import { withoutErasedSites } from './ai-jobs-live-sites'
 import { AI_JOB_ACTIVE_STATUSES } from '../model/ai-job-activity'
 import { reportServerError } from '@aglyn/tenant-data-admin/server/client-error-report'
@@ -418,6 +418,8 @@ export async function GET(request: Request): Promise<Response> {
     url.searchParams.get('siteImport') === '1'
       ? await siteImportOfferFor({ orgId: gate.orgId, staff: gate.staff, org: gate.org, member: gate.member })
       : null
+  // Whether its choice speaks of a generative Improve it (AGL-4152); asked only with the offer it words.
+  const siteImportGenerative = siteImport === 'ready' ? await siteImportGenerativeOfferFor(gate.orgId) : false
   // Whether the guided start asks for the sites the person likes (AGL-3975):
   // the workspace's own verdict, the one its site job reads them by.
   const siteInspiration = await isServerReleaseFlagOnForOrg(AI_SITE_INSPIRATION_FLAG, gate.orgId).catch(() => false)
@@ -429,6 +431,7 @@ export async function GET(request: Request): Promise<Response> {
       freeTaste,
       ...(freeCredits ? { freeCredits } : {}),
       ...(siteImport ? { siteImport } : {}),
+      ...(siteImportGenerative ? { siteImportGenerative: true } : {}),
       ...(siteInspiration ? { siteInspiration: true } : {}),
     },
     { status: 200, headers: { 'Cache-Control': 'no-store' } },
