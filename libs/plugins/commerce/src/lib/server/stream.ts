@@ -82,6 +82,45 @@ function signatureMatches(presented: string, expected: string): boolean {
  * the server-enforced gate, a shared stream link dies within 15 minutes, and
  * the media URL behind it dies with the viewing session.
  */
+/** How many "also open to" products one video product may name (AGL-4188). */
+export const MAX_VIDEO_ACCESS_PRODUCTS = 20
+
+/**
+ * May this member watch `productId`'s gated videos? Yes when they are entitled
+ * to the product itself, or to one of the products its merchant opened the
+ * videos to (`videoAccessProductIds`, AGL-4188). The list is read from the
+ * product document, never from the request, so a visitor cannot widen it.
+ */
+async function memberMayWatch(
+  hostId: string,
+  email: string,
+  productId: string,
+): Promise<boolean> {
+  if (await checkMemberEntitlement(hostId, email, productId)) return true
+  const productSnapshot = await firebaseAdmin
+    .app()
+    .firestore()
+    .collection('hosts')
+    .doc(hostId)
+    .collection('products')
+    .doc(productId)
+    .get()
+  const listed = (productSnapshot.data() as any)?.videoAccessProductIds
+  if (!Array.isArray(listed)) return false
+  const others = [
+    ...new Set(
+      listed.filter(
+        (id): id is string =>
+          typeof id === 'string' && id !== '' && id !== 'any' && id !== productId,
+      ),
+    ),
+  ].slice(0, MAX_VIDEO_ACCESS_PRODUCTS)
+  for (const other of others) {
+    if (await checkMemberEntitlement(hostId, email, other)) return true
+  }
+  return false
+}
+
 export const streamHandler: PluginApiHandler = async (req, res) => {
   const hostId = String(
     (req.method === 'POST' ? req.body?.hostId : req.query.hostId) ?? '',
@@ -107,7 +146,7 @@ export const streamHandler: PluginApiHandler = async (req, res) => {
       if (!auth) return
       const email = String(auth.member.get('email') ?? '')
       const entitled =
-        email && (await checkMemberEntitlement(hostId, email, productId))
+        email && (await memberMayWatch(hostId, email, productId))
       if (!entitled) {
         return res.status(403).json({ error: 'Not entitled' })
       }

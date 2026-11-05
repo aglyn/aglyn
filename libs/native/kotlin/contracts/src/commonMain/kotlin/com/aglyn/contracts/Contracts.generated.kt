@@ -1047,6 +1047,7 @@ data class HostProduct(
     val type: ProductType? = null,
     val updatedAtMs: Double? = null,
     val variants: List<ProductVariant>? = null,
+    val videoAccessProductIds: List<String>? = null,
 )
 
 @Serializable
