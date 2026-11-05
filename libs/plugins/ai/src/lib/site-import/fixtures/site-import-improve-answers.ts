@@ -252,35 +252,3 @@ export const SITE_IMPORT_IMPROVE_ANSWERS: Readonly<Record<SiteBasicPageName, { s
     ],
   },
 }
-
-/**
- * The home page of the recorded long site, as one answer draws it once its
- * groups fold: the page's own order and grounds planned, each group kept whole
- * by its ref, and only what is around them written.
- */
-export const SITE_IMPORT_IMPROVE_LONG_HOME_ANSWER: { sections: Answer[] } = {
-  sections: [
-    section(
-      'plain',
-      [
-        block('eyebrow', { col: 0, text: 'Build a website · Free to start · No code' }),
-        block('heading', { col: 0, text: 'Build your website. Describe it, edit it, publish free.' }),
-        block('lede', { col: 0, text: 'Tell Aglyn what your website is for and Aglyn AI builds the first draft: pages, navigation, a contact form and a theme to match. Store, bookings, forms, email and analytics are already built in. Start with one free site; the same console runs a hundred.' }),
-        block('button', { col: 0, text: 'Build my website free', to: 'link:1', style: 'primary' }),
-        block('button', { col: 0, text: 'Watch the film', to: 'link:2', style: 'quiet' }),
-        block('note', { col: 0, text: 'Watch the 40-second film. No credit card required · A free plan, not a trial' }),
-        keep('video:1', 1),
-      ],
-      { cols: [7, 5] },
-    ),
-    section('soft', [block('eyebrow', { text: 'Who builds websites on Aglyn' }), block('heading', { text: 'Anyone can build a website here. Agencies build a hundred.' }), block('lede', { text: "Build your first website on the free plan and grow from there: the same console runs an agency's client portfolio or a company's brands." }), keep('group:1')], { align: 'center' }),
-    section('plain', [block('eyebrow', { col: 0, text: 'Why Aglyn' }), block('heading', { col: 0, text: 'A first draft in your own theme, every part editable' }), block('text', { col: 0, text: 'Most website builders hand you a blank page or a template to fight with. Aglyn builds the first draft from what you tell it, so your first website looks finished, and your hundredth is still easy to run.' }), keep('group:3', 1)], { cols: [5, 7] }),
-    section('soft', [block('eyebrow', { text: 'Everything you need to build a website' }), block('heading', { text: 'Everything you need to build a website, already in it.' }), block('lede', { text: 'The builder, your store, forms, bookings, email, a CRM and analytics ship with the platform: no plugins to buy and no second subscription to run.' }), keep('group:2')], { align: 'center' }),
-    section('plain', [block('eyebrow', { col: 0, text: 'For agencies & multi-brand teams' }), block('heading', { col: 0, text: 'Build and run every client website from one console.' }), block('text', { col: 0, text: 'Aglyn puts every client site on one platform, so your team learns it once and reuses everything.' }), keep('group:4', 0), keep('picture:1', 1)], { cols: [7, 5] }),
-    section('soft', [block('eyebrow', { text: 'What will you build?' }), block('heading', { text: "Build a website for whatever you're starting." }), block('lede', { text: 'Describe it and start from a draft, or begin with a ready-made site. Every kind of website below runs on the same platform.' }), keep('group:5')], { align: 'center' }),
-    section('plain', [block('eyebrow', { col: 0, text: 'Build a website for free' }), block('heading', { col: 0, text: 'Start building for free. Pay when your website needs more.' }), block('text', { col: 0, text: 'The free plan includes the website builder, forms, the media library and one site. Paid plans add your own domain, a store, the CRM and more capacity: you add room, not features.' }), keep('group:6', 1)], { cols: [5, 7] }),
-    section('soft', [block('eyebrow', { text: 'Start building' }), block('heading', { text: 'Three ways to start building your website.' }), keep('group:7')], { align: 'center' }),
-    section('plain', [block('eyebrow', { text: 'Before you start' }), block('heading', { text: 'Questions people ask before they build a website.' }), block('lede', { text: 'Straight answers on what is free, what is gated by plan, and how Aglyn AI builds a website.' }), keep('group:8')]),
-    section('dark', [block('heading', { text: 'Build your website today.' }), block('lede', { text: 'Describe it, edit the draft, publish for free, then grow into a store, a team or a hundred websites without switching platforms.' }), block('button', { text: 'Build my website free', to: 'link:1', style: 'primary' })], { align: 'center' }),
-  ],
-}
