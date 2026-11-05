@@ -924,8 +924,12 @@ function nodeBlocks(scope: MapScope, nodes: readonly SiteImportLayoutNode[], row
           weights.forEach((entry, col) => {
             for (const block of nodeBlocks(scope, entry.cell.nodes, { cols: null, allowed: false })) out.push({ ...block, col })
           })
+        } else if (cells.length >= 2 && cells.length <= AI_LAYOUT_MAX_COLS) {
+          // A second row of a section, or one inside a column (AGL-4152): in its columns too.
+          const columns = node.cells.map((cell, index) => ({ weight: Math.min(12, Math.max(1, Math.round(node.cols[index] ?? 1))), blocks: nodeBlocks(scope, cell.nodes, { cols: null, allowed: false }) }))
+          out.push({ kind: 'row', row: columns.filter((column) => column.blocks.length) })
         } else {
-          // A second row of a section, or one inside a column: its cells one under another.
+          // Wider than a row may be: its cells one under another.
           for (const cell of node.cells) out.push(...nodeBlocks(scope, cell.nodes, { cols: null, allowed: false }))
         }
         break
