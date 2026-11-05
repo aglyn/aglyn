@@ -81,7 +81,6 @@ import com.aglyn.ui.TextButton
 import com.aglyn.ui.space
 
 /** Roles that may create and change a site's components, layouts and templates (`hostRoleCanWrite`). */
-private val WRITE_ROLES = setOf("admin", "editor", "author")
 
 /** The slot a plugin fills to publish a site's component or layout (the console's `hostArtifactPublish`). */
 const val ARTIFACT_PUBLISH_SLOT = "hostArtifactPublish"
@@ -120,7 +119,7 @@ fun ArtifactsScreen(context: NativePluginContext, kind: ArtifactKind, initialId:
   val runner = remember(hostId, kind) { ActionRunner(scope) }
   val api = remember(hostId, kind, context.api, context.writer) { ArtifactsApi(context.api, context.writer, hostId, kind) }
   var dialog by remember { mutableStateOf<ArtifactDialog?>(null) }
-  val canEdit = context.siteRole in WRITE_ROLES
+  val canEdit = com.aglyn.pluginhost.rememberMemberPermissions(context).can("site.edit")
 
   AglynListDetail(
     initialSelected = initialId,

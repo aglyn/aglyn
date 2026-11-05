@@ -33,7 +33,6 @@ import kotlinx.coroutines.launch
  */
 
 /** The site roles that may read and manage webhooks (the rules' own). */
-private val WEBHOOK_ROLES = setOf("admin", "editor")
 
 @Composable
 fun WebhooksSection(context: NativePluginContext, hostId: String, entitlements: Entitlements?, open: (AutomationTarget) -> Unit) {
@@ -41,8 +40,8 @@ fun WebhooksSection(context: NativePluginContext, hostId: String, entitlements: 
   val scope = rememberCoroutineScope()
   val copy = rememberCopyToClipboard()
   val host = liveDoc(context, "hosts/$hostId")
-  val role = ((host as? Live.Ready)?.value?.data?.get("memberRoles") as? Map<*, *>)?.get(context.uid) as? String
-  val allowed = role == null || role in WEBHOOK_ROLES
+  // "See orders and webhooks", which the rules ask of a site's webhooks.
+  val allowed = com.aglyn.pluginhost.rememberMemberPermissions(context).can("site.sensitive")
   val live = liveQuery(context, remember(hostId, allowed) { if (allowed) ceilingQuery(webhooksPath(hostId), WEBHOOK_CEILING) else null })
   val siteBase = hostPublicOrigin((host as? Live.Ready)?.value?.data) ?: ""
   var notice by remember { mutableStateOf<Pair<String, StatusTone>?>(null) }

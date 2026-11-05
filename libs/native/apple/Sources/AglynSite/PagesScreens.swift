@@ -1,14 +1,13 @@
 // Copyright 2026 Aglyn LLC
 // SPDX-License-Identifier: Apache-2.0
 
+import AglynContracts
 import AglynCore
 import AglynPluginHost
 import AglynUI
 import SwiftUI
 
 /// Roles the rules let change a page's document; the routing map needs `pagePublishRoles`.
-let pageContentRoles: Set<String> = ["admin", "editor", "author"]
-let pagePublishRoles: Set<String> = ["admin", "editor"]
 
 /// The site's pages: the host's routing map, live, and the pages tree, read a level at a time (AGL-3896).
 @MainActor
@@ -133,8 +132,8 @@ struct PagesScreen: View {
   @State private var linkSeeded = false
   @State private var sheet: PageSheet?
 
-  private var canEdit: Bool { pageContentRoles.contains(context.siteRole ?? "") }
-  private var canPublish: Bool { pagePublishRoles.contains(context.siteRole ?? "") }
+  private var canEdit: Bool { context.can("site.edit") }
+  private var canPublish: Bool { context.can("site.publish") }
 
   var body: some View {
     Group {
@@ -181,7 +180,7 @@ struct PagesScreen: View {
     .navigationTitle("Pages")
     .aglynScreenTitle("Pages")
     // New page is the one primary action; a template and a group are in the More menu on the Mac and iPad.
-    .aglynPrimaryAction(id: "add-page", "New page", systemImage: "plus", enabled: canEdit, shortcut: KeyboardShortcut("n", modifiers: .command), help: AglynRoleReason.site("creating pages")) { open(.newPage) }
+    .aglynPrimaryAction(id: "add-page", "New page", systemImage: "plus", enabled: canEdit, shortcut: KeyboardShortcut("n", modifiers: .command), help: permissionRefusalText(ContractValues.shared.orgRoleGrants, key: "site.edit")) { open(.newPage) }
     .aglynScreenToolbar(id: "pages") {
       AglynSecondaryActions {
         Button {

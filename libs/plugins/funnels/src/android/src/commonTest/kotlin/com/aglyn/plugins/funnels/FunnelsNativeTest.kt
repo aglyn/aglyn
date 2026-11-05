@@ -112,11 +112,11 @@ class FunnelsNativeTest {
   @Test
   fun accessFollowsTheRoleAndThePaidTier() {
     val pro = mapOf("plan" to "pro")
-    assertTrue(funnelsAccess("admin", pro, true).canManage)
-    assertTrue(funnelsAccess("editor", pro, true).entitled)
-    assertFalse(funnelsAccess("author", pro, true).canManage)
-    assertFalse(funnelsAccess("admin", mapOf("plan" to "starter"), true).entitled)
-    assertFalse(funnelsAccess("admin", pro, false).entitled)
+    assertTrue(funnelsAccess(true, pro, true).canManage)
+    assertTrue(funnelsAccess(true, pro, true).entitled)
+    assertFalse(funnelsAccess(false, pro, true).canManage)
+    assertFalse(funnelsAccess(true, mapOf("plan" to "starter"), true).entitled)
+    assertFalse(funnelsAccess(true, pro, false).entitled)
   }
 
   @Test

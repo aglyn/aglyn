@@ -135,7 +135,7 @@ struct FunnelsScreen: View {
         "No funnels yet", systemImage: FunnelsSymbols.funnel,
         message:
           "A funnel is the steps you expect a visitor to take, such as a page, then a form, then a booking. It shows how many visits reached each step and where they dropped off. Recording starts when you save the first one."
-          + (access.state.canManage ? "" : " A site admin or editor can create one.")
+          + (access.state.canManage ? "" : " Someone with \"Publish site content\" can create one.")
       ) {
         if access.state.canManage {
           Button("New funnel") { Task { await editor?.add() } }.buttonStyle(.aglynProminent)
@@ -254,7 +254,7 @@ struct FunnelDetail: View {
       VStack(alignment: .leading, spacing: AglynSpace.one) {
         Text(
           "It is not measured, and the site does not record visits for it, until "
-            + (canManage ? "you activate it." : "a site admin or editor activates it."))
+            + (canManage ? "you activate it." : "someone with \"Publish site content\" activates it."))
         ForEach(Array(row.steps.enumerated()), id: \.offset) { index, step in
           Text("\(index + 1). \(funnelStepTitle(step))")
         }

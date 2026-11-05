@@ -21,7 +21,6 @@ let logicPageScreen = "logic.page"
 let logicFunctionScreen = "logic.function"
 
 /// Roles the rules let change a site's logic: the publishing roles.
-let logicWriteRoles: Set<String> = ["admin", "editor"]
 
 /// The cards' window: at most this many rows are read, and a fuller collection says so.
 let logicCeiling = 100

@@ -69,7 +69,7 @@ struct LogicScreen: View {
     _tab = State(initialValue: initialTab == "functions" ? .functions : (initialTab == "health" ? .health : .variables))
   }
 
-  private var canEdit: Bool { logicWriteRoles.contains(context.siteRole ?? "") }
+  private var canEdit: Bool { context.can("site.publish") }
 
   private var api: LogicAPI? {
     context.hostID.map { LogicAPI(api: context.api, writer: context.writer, reader: context.firestore, hostID: $0) }

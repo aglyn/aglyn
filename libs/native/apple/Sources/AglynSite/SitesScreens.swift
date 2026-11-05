@@ -1,6 +1,7 @@
 // Copyright 2026 Aglyn LLC
 // SPDX-License-Identifier: Apache-2.0
 
+import AglynContracts
 import AglynCore
 import AglynPluginHost
 import AglynUI
@@ -17,7 +18,6 @@ func hostStatusTone(_ kind: HostStatus.Kind) -> AglynTone {
 }
 
 /// Roles that may create a site in the workspace.
-let siteCreatorRoles: Set<String> = ["owner", "admin"]
 
 /// The workspace's sites, the picked one beside the list in a wide window:
 /// search, the custom-domain filter, create a site, and open or switch to
@@ -34,7 +34,7 @@ struct SitesScreen: View {
   @Environment(\.aglynWideChrome) private var wide
   @Environment(\.openURL) private var openURL
 
-  private var canCreate: Bool { siteCreatorRoles.contains(context.orgRole ?? "") }
+  private var canCreate: Bool { context.can("hosts.create") }
 
   var body: some View {
     Group {
@@ -702,7 +702,7 @@ enum CreateSiteBlock: Equatable {
 /// tell; the route still refuses what it must.
 @MainActor
 func createSiteBlock(_ context: NativePluginContext, orgID: String) async -> CreateSiteBlock? {
-  if let role = context.orgRole, !siteCreatorRoles.contains(role) { return .role }
+  if context.orgRole != nil && !context.can("hosts.create") { return .role }
   guard let entitlements = try? await context.api.request("/api/orgs/entitlements", query: [("orgId", orgID)]),
     let limit = entitlements["quotas"]?["hostLimit"]?.numberValue
   else { return nil }

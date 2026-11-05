@@ -84,11 +84,9 @@ data class MarketingAccess(val canEdit: Boolean, val org: Map<String, Any?>?, va
 fun rememberMarketingAccess(context: NativePluginContext): MarketingAccess {
   val hostId = context.hostId
   val orgId = context.orgId
-  val host = remember(hostId) { context.firestore.observeDoc("hosts/$hostId") }.collectAsState(Live.Loading).value
   val org = remember(orgId) { context.firestore.observeDoc("orgs/$orgId") }.collectAsState(Live.Loading).value
-  @Suppress("UNCHECKED_CAST")
-  val role = ((host as? Live.Ready)?.value?.data?.get("memberRoles") as? Map<String, Any?>)?.get(context.uid)
-  return MarketingAccess(role in listOf("owner", "admin", "editor"), (org as? Live.Ready)?.value?.data, org is Live.Ready)
+  // "Run email campaigns".
+  return MarketingAccess(com.aglyn.pluginhost.rememberMemberPermissions(context).can("marketing.campaigns"), (org as? Live.Ready)?.value?.data, org is Live.Ready)
 }
 
 /** The Marketing hub: the console's sections as chips over the chosen one. */

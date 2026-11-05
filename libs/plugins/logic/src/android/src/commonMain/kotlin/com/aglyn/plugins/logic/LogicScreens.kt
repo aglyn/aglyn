@@ -61,7 +61,6 @@ const val LOGIC_PAGE_SCREEN = "logic.page"
 const val LOGIC_FUNCTION_SCREEN = "logic.function"
 
 /** Roles the rules let change a site's logic: the publishing roles. */
-internal val LOGIC_WRITE_ROLES = setOf("admin", "editor")
 
 private enum class LogicTab(val label: String) { VARIABLES("Variables"), FUNCTIONS("Functions"), HEALTH("Reference health") }
 
@@ -95,7 +94,7 @@ fun LogicScreen(context: NativePluginContext, initialTab: String? = null) {
   val runner = remember(hostId) { ActionRunner(scope) }
   var tab by remember { mutableStateOf(if (initialTab == "functions") LogicTab.FUNCTIONS else if (initialTab == "health") LogicTab.HEALTH else LogicTab.VARIABLES) }
   var dialog by remember { mutableStateOf<LogicDialog?>(null) }
-  val canEdit = context.siteRole in LOGIC_WRITE_ROLES
+  val canEdit = com.aglyn.pluginhost.rememberMemberPermissions(context).can("site.publish")
   val variablesLive by remember(hostId, context.firestore) { context.firestore.observe(ceilingQuery(variablesPath(hostId))) }.collectAsState(Live.Loading)
   val functionsLive by remember(hostId, context.firestore) { context.firestore.observe(ceilingQuery(functionsPath(hostId))) }.collectAsState(Live.Loading)
   val variables = (variablesLive as? Live.Ready)?.value?.let { docs -> liveWindow(docs, VariableRow::from) { it.name } }

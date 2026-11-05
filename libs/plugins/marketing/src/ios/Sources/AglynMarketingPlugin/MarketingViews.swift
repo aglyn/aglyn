@@ -17,10 +17,10 @@ func problemText(_ error: Error) -> String {
 final class MarketingAccess {
   @ObservationIgnored let host = ObservedDocument()
   @ObservationIgnored let org = ObservedDocument()
-  private var uid = ""
+  private var context: NativePluginContext?
 
   func start(_ context: NativePluginContext) {
-    uid = context.uid
+    self.context = context
     if let hostID = context.hostID { host.start(context.firestore, ["hosts", hostID]) }
     if let orgID = context.orgID { org.start(context.firestore, ["orgs", orgID]) }
   }
@@ -30,8 +30,8 @@ final class MarketingAccess {
     org.stop()
   }
 
-  var role: String? { (host.document?.data["memberRoles"] as? [String: Any])?[uid] as? String }
-  var canEdit: Bool { ["owner", "admin", "editor"].contains(role ?? "") }
+  /// "Run email campaigns".
+  var canEdit: Bool { context?.can("marketing.campaigns") == true }
   func carries(_ feature: String) -> Bool { planFeatureCarried(org.document?.data, feature) }
 }
 
@@ -240,7 +240,7 @@ struct CampaignsSection: View {
     }
     .aglynSearchable(text: $searchText, prompt: "Search campaigns", onSubmit: { search = searchText })
     .onChange(of: searchText) { _, text in if text.isEmpty { search = "" } }
-    .aglynPrimaryAction(id: "campaign-new", "New campaign", systemImage: "plus", enabled: access.canEdit, help: AglynRoleReason.site("creating campaigns")) { creating = true }
+    .aglynPrimaryAction(id: "campaign-new", "New campaign", systemImage: "plus", enabled: access.canEdit, help: permissionRefusalText(ContractValues.shared.orgRoleGrants, key: "marketing.campaigns")) { creating = true }
     .task(id: search) {
       if selection == nil { selection = initial }
       let orgID = actions.orgID, hostID = actions.hostID, search = search, orgLevel = actions.orgLevel
@@ -808,7 +808,7 @@ struct ExperimentsSection: View {
     }
     .aglynSearchable(text: $searchText, prompt: "Search experiments", onSubmit: { search = searchText })
     .onChange(of: searchText) { _, text in if text.isEmpty { search = "" } }
-    .aglynPrimaryAction(id: "experiment-new", "New experiment", systemImage: "plus", enabled: access.canEdit, help: AglynRoleReason.site("creating experiments")) { creating = true }
+    .aglynPrimaryAction(id: "experiment-new", "New experiment", systemImage: "plus", enabled: access.canEdit, help: permissionRefusalText(ContractValues.shared.orgRoleGrants, key: "marketing.campaigns")) { creating = true }
     .task(id: search) {
       let hostID = actions.hostID, search = search
       list.show(context.firestore) { experimentsQuery(hostID, search: search, limit: $0) }

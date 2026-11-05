@@ -335,7 +335,7 @@ fun PluginInstallationCard(context: NativePluginContext) {
           ) { Text("Install for the whole organization") }
         }
         if (!canChange) {
-          Text("Installing needs the owner, admin or editor role in the workspace.", style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurfaceVariant)
+          Text(com.aglyn.contracts.permissionRefusalText("plugins.install"), style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurfaceVariant)
         }
       }
     }

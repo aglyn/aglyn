@@ -44,12 +44,8 @@ struct ShellScope {
     }
   }
 
-  /// Whether the person sees the site's Admin rows, as the console shows its Admin tab: a site admin, or a workspace
-  /// owner or admin.
-  var hostAdmin: Bool {
-    let admins: Set<String> = ["owner", "admin"]
-    return admins.contains(site?.role ?? "") || admins.contains(org?.role ?? "")
-  }
+  /// Whether the person sees the site's Admin rows, as the console shows its Admin tab: "Manage site settings".
+  var hostAdmin: Bool { model.orgAccess.holds("site.manage", onSite: site?.id) }
 
   /// One list as this scope shows it, its rows trimmed to the screens this build has.
   func list(_ id: NativeNavListId) -> ResolvedNavList {

@@ -394,7 +394,7 @@ struct PluginInstallationCard: View {
           .accessibilityIdentifier("install-org")
       }
       if !canChange {
-        Text("Installing needs the owner, admin or editor role in the workspace.").font(AglynFont.caption).foregroundStyle(.secondary)
+        Text(context.refusal("plugins.install")).font(AglynFont.caption).foregroundStyle(.secondary)
       }
     }
   }

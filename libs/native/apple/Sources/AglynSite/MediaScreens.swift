@@ -12,8 +12,6 @@ import SwiftUI
   import AppKit
 #endif
 
-let mediaSiteRoles: Set<String> = ["admin", "editor", "author"]
-let mediaOrgRoles: Set<String> = ["owner", "admin", "editor"]
 
 /// The media library as a file browser (Figma "Media · file browser", AGL-4004): at rest the grid fills the content,
 /// folders first, then files; picking a file splits the view and opens its details on the right (a phone pushes them).
@@ -158,7 +156,7 @@ struct MediaLibrary: View {
   private var origin: String { context.api.origin }
 
   private var canEdit: Bool {
-    scope.isOrg ? mediaOrgRoles.contains(context.orgRole ?? "") : mediaSiteRoles.contains(context.siteRole ?? "")
+    scope.isOrg ? context.can("org.media") : context.can("site.edit")
   }
 
   private var folderList: [MediaFolder] { sortedFolders((folders.state.value ?? []).map(MediaFolder.init)) }
