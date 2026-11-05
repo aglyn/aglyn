@@ -117,6 +117,14 @@ Each page left out is listed under one of these reasons:
   [When your site turns AglynBot away](#turned-away).
 - **Not reached.** The read stopped before it got to the page.
 - **A file, not a page.** The link led to a file, such as a PDF, rather than a page.
+- **A second address for the same page.** Your site answers at this address with a page
+  already found, such as a photo's link in a gallery, or a home page at both `/` and
+  `/home`. It is not brought in twice, and links to it go to the page.
+- **A cart, checkout, account, or search screen.** Your website platform makes these
+  screens, and they are not pages of your own. A page at one of those addresses is brought
+  in if it has plenty to say and your site doesn't keep it out of search results.
+- **Your site says this page does not exist.** A link or a sitemap on your site still
+  points to the address, so that link is worth fixing on your current site.
 - **No text could be read.** The page shows its words only once a browser runs it, so it
   cannot be brought in yet.
 - **Could not be read just now**, **a sign-in page**, **robots.txt asks AglynBot not to

@@ -32,6 +32,11 @@
  * - `down-robots.com`: robots.txt answers 503.
  * - `guarded-garden.com`: bot protection answers every request 403,
  *   robots.txt included.
+ * - `cedar-ridge-paving.example` (AGL-4152), a hosted-builder site: the bare
+ *   name redirects to www; its home page answers at `/` and `/home`, which is
+ *   the address its sitemap names; each photo of its gallery links its own
+ *   `?itemId=` address of the same page; a button on its home page links a
+ *   page that answers 404; its empty cart is a page in its header.
  */
 
 export interface RecordedResponse {
@@ -199,6 +204,71 @@ const PLAIN_SERVICES = `<html><head><title>Services</title></head>
 
 const PLAIN_CONTACT = `<html><head><title>Contact</title></head><body><address>Call 555-0100</address></body></html>`
 
+/** A page of the hosted-builder site: the same header on every page, and its own head. */
+const CEDAR_ORIGIN = 'https://www.cedar-ridge-paving.example'
+const cedarPage = (head: string, main: string) => `<!DOCTYPE html>
+<html lang="en-US">
+<head>
+  <title>Cedar Ridge Paving</title>
+  ${head}
+</head>
+<body>
+  <header>
+    <a href="/"><img src="https://cdn.builder.example/cedar/logo.png" alt=""></a>
+    <nav>
+      <a href="/">Home</a>
+      <a href="/photos">Photos</a>
+      <a href="/commercial">Commercial</a>
+      <a href="/contact">Contact</a>
+    </nav>
+    <a href="/cart">Cart</a>
+  </header>
+  <main>${main}</main>
+</body>
+</html>`
+const cedarCanonical = (path: string) => `<link rel="canonical" href="${CEDAR_ORIGIN}${path}"/>`
+const CEDAR_HOME_MAIN = `
+  <h1>Paving for homes and businesses</h1>
+  <p>Driveways, patios and parking lots poured and sealed by one crew, from the first measure to the last walk through.</p>
+  <img src="https://cdn.builder.example/cedar/driveway.jpg" alt="A new driveway">
+  <a href="/our-work">Our work</a>`
+const CEDAR_PHOTO_IDS = ['a1', 'b2', 'c3', 'd4']
+const CEDAR_PHOTOS_MAIN = `
+  <h1>Photos</h1>
+  <p>A few of the driveways and patios we finished this year, and the crew that poured them.</p>
+  ${CEDAR_PHOTO_IDS.map((id) => `<a href="/photos?itemId=${id}"><img src="https://cdn.builder.example/cedar/${id}.jpg" alt=""></a>`).join('\n  ')}`
+const CEDAR_RECORDINGS: Record<string, RecordedResponse> = {
+  'https://cedar-ridge-paving.example/robots.txt': {
+    status: 200,
+    headers: TEXT,
+    body: ['User-agent: *', 'Disallow: /config', `Sitemap: ${CEDAR_ORIGIN}/sitemap.xml`].join('\n'),
+  },
+  'https://cedar-ridge-paving.example/': { status: 301, headers: { location: `${CEDAR_ORIGIN}/` } },
+  [`${CEDAR_ORIGIN}/sitemap.xml`]: {
+    status: 200,
+    headers: XML,
+    body: `<urlset>${['/home', '/contact', '/commercial', '/photos'].map((path) => `<url><loc>${CEDAR_ORIGIN}${path}</loc></url>`).join('')}</urlset>`,
+  },
+  [`${CEDAR_ORIGIN}/`]: { status: 200, headers: HTML, body: cedarPage(`<link rel="canonical" href="${CEDAR_ORIGIN}"/>`, CEDAR_HOME_MAIN) },
+  [`${CEDAR_ORIGIN}/home`]: { status: 200, headers: HTML, body: cedarPage(`<link rel="canonical" href="${CEDAR_ORIGIN}"/>`, CEDAR_HOME_MAIN) },
+  [`${CEDAR_ORIGIN}/photos`]: { status: 200, headers: HTML, body: cedarPage(cedarCanonical('/photos'), CEDAR_PHOTOS_MAIN) },
+  ...Object.fromEntries(
+    CEDAR_PHOTO_IDS.map((id) => [`${CEDAR_ORIGIN}/photos?itemId=${id}`, { status: 200, headers: HTML, body: cedarPage(cedarCanonical('/photos'), CEDAR_PHOTOS_MAIN) }]),
+  ),
+  [`${CEDAR_ORIGIN}/commercial`]: {
+    status: 200,
+    headers: HTML,
+    body: cedarPage(cedarCanonical('/commercial'), '<h1>Commercial</h1><p>Parking lots and loading docks, sealed and striped on a schedule your business can live with.</p>'),
+  },
+  [`${CEDAR_ORIGIN}/contact`]: {
+    status: 200,
+    headers: HTML,
+    body: cedarPage(cedarCanonical('/contact'), '<h1>Contact</h1><p>Call the office for a free measure of your driveway or lot.</p>'),
+  },
+  [`${CEDAR_ORIGIN}/cart`]: { status: 200, headers: HTML, body: cedarPage('<meta name="ROBOTS" content="NOINDEX">', '<p>0</p>') },
+  [`${CEDAR_ORIGIN}/our-work`]: { status: 404, headers: HTML, body: cedarPage('', '<h1>Page not found</h1>') },
+}
+
 export const SITE_IMPORT_RECORDINGS: Record<string, RecordedResponse> = {
   // rosies-bakery.com: bare to www, then the site.
   'https://rosies-bakery.com/robots.txt': {
@@ -263,4 +333,6 @@ export const SITE_IMPORT_RECORDINGS: Record<string, RecordedResponse> = {
   'https://guarded-garden.com/robots.txt': { status: 403, headers: HTML, body: 'Access denied' },
   'https://guarded-garden.com/sitemap.xml': { status: 403, headers: HTML, body: 'Access denied' },
   'https://guarded-garden.com/': { status: 403, headers: HTML, body: 'Access denied' },
+
+  ...CEDAR_RECORDINGS,
 }
