@@ -62,7 +62,7 @@ jest.mock('@aglyn/tenant-runtime/org-permissions', () => ({
 }))
 
 jest.mock('./publisher-profile', () => ({
-  canActAsPublisher: async () => true,
+  isPublisherMember: async () => true,
   resolvePublisherProfile: async () => {
     // eslint-disable-next-line @typescript-eslint/no-var-requires
     const store = jest.requireMock('./publisher-profile') as {

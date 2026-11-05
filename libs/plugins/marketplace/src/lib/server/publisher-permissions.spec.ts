@@ -57,6 +57,8 @@ beforeEach(() => {
     'acme/viewer': { role: 'viewer', allHosts: true },
     'acme/granted-editor': { role: 'editor', allHosts: true, permissions: { 'marketplace.manageListings': true } },
     'acme/revoked-admin': { role: 'admin', permissions: { 'marketplace.publisherProfile': false } },
+    'acme/payouts-editor': { role: 'editor', allHosts: true, permissions: { 'marketplace.payouts': true } },
+    'acme/no-payouts-admin': { role: 'admin', permissions: { 'marketplace.payouts': false } },
   })
 })
 
@@ -69,6 +71,7 @@ describe('publisherPermissionVerdict (AGL-4047)', () => {
   ])('a workspace %s is %s by default, as the owner-or-admin gate answered', async (uid, verdict) => {
     expect(await publisherPermissionVerdict(uid, 'acme', 'marketplace.publisherProfile')).toBe(verdict)
     expect(await publisherPermissionVerdict(uid, 'acme', 'marketplace.manageListings')).toBe(verdict)
+    expect(await publisherPermissionVerdict(uid, 'acme', 'marketplace.payouts')).toBe(verdict)
   })
 
   it('follows a grant to an editor and a refusal of an admin', async () => {
@@ -76,6 +79,12 @@ describe('publisherPermissionVerdict (AGL-4047)', () => {
     expect(await publisherPermissionVerdict('granted-editor', 'acme', 'marketplace.publisherProfile')).toBe('refused')
     expect(await publisherPermissionVerdict('revoked-admin', 'acme', 'marketplace.publisherProfile')).toBe('refused')
     expect(await publisherPermissionVerdict('revoked-admin', 'acme', 'marketplace.manageListings')).toBe('granted')
+    // Payouts are their own key: neither of the others moves it.
+    expect(await publisherPermissionVerdict('payouts-editor', 'acme', 'marketplace.payouts')).toBe('granted')
+    expect(await publisherPermissionVerdict('payouts-editor', 'acme', 'marketplace.publisherProfile')).toBe('refused')
+    expect(await publisherPermissionVerdict('no-payouts-admin', 'acme', 'marketplace.payouts')).toBe('refused')
+    expect(await publisherPermissionVerdict('no-payouts-admin', 'acme', 'marketplace.publisherProfile')).toBe('granted')
+    expect(await publisherPermissionVerdict('revoked-admin', 'acme', 'marketplace.payouts')).toBe('granted')
   })
 
   it('answers not-a-member for a stranger, a missing org and a missing uid', async () => {

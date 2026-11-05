@@ -58,7 +58,7 @@ jest.mock('@aglyn/tenant-runtime/org-permissions', () => ({
 const __actingOrgId = { value: 'buyer-org' }
 
 jest.mock('./publisher-profile', () => ({
-  canActAsPublisher: async () => __ownsListing.value,
+  isPublisherMember: async () => __ownsListing.value,
 }))
 
 jest.mock('./purchase-entitlement', () => ({

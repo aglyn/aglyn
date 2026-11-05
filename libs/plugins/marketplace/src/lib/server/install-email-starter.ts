@@ -33,7 +33,7 @@ import {
   listingArtifactType,
   resolveEmailStarterAssurance,
 } from '../model'
-import { canActAsPublisher } from './publisher-profile'
+import { isPublisherMember } from './publisher-profile'
 import { requirePurchase } from './purchase-entitlement'
 import { recordInstallProvenance } from './provenance'
 import { recordVersionMove } from './version-stats'
@@ -135,7 +135,7 @@ export const installEmailStarterHandler: PluginApiHandler = async (req, res) => 
       return res.status(404).json({ error: 'Unknown email starter' })
     }
 
-    const ownsListing = await canActAsPublisher(
+    const ownsListing = await isPublisherMember(
       firestore,
       decoded.uid,
       listing.profileId,

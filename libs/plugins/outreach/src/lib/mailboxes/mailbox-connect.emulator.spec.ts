@@ -128,7 +128,6 @@ describeEmulated('a mailbox connect against Firestore (AGL-2978)', () => {
       resolveOrgPermissions: async (_uid, { orgId }) => ({
         orgId,
         role: 'admin',
-        isOwner: true,
         orgWide: true,
         permissions: { 'outreach.use': true, 'outreach.manageAll': true },
       }),

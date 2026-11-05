@@ -20,8 +20,8 @@
 /**
  * The publisher waiver is about the publisher's OWN sites (AGL-2484).
  *
- * `canActAsPublisher` answers a question about ONE org: is this uid an
- * owner/admin of the org that owns the listing. The install target is
+ * `isPublisherMember` answers a question about ONE org: is this uid a
+ * member of the org that owns the listing. The install target is
  * validated separately, against the host's org. Nothing correlated the two,
  * so a single flag computed from org P waived three gates on an install
  * landing in org Q:
@@ -48,8 +48,8 @@ jest.mock('@aglyn/aglyn/server', () => ({
 
 /** The org the INSTALL lands in; resolved from the host, never the body. */
 const __targetOrgId = { value: 'buyer-org' }
-/** Whether the caller is an owner/admin of the org that owns the listing. */
-const __actsAsPublisher = { value: true }
+/** Whether the caller is a member of the org that owns the listing. */
+const __isPublisherMember = { value: true }
 /** Every `requirePurchase` call, so the payment waiver is observable. */
 const __purchaseCalls: Array<Record<string, unknown>> = []
 
@@ -61,7 +61,7 @@ jest.mock('@aglyn/tenant-runtime/org-permissions', () => ({
 }))
 
 jest.mock('./publisher-profile', () => ({
-  canActAsPublisher: async () => __actsAsPublisher.value,
+  isPublisherMember: async () => __isPublisherMember.value,
 }))
 
 jest.mock('./purchase-entitlement', () => ({
@@ -243,7 +243,7 @@ beforeEach(() => {
   for (const key of Object.keys(state.listing)) delete state.listing[key]
   state.pins.length = 0
   __purchaseCalls.length = 0
-  __actsAsPublisher.value = true
+  __isPublisherMember.value = true
   __targetOrgId.value = 'buyer-org'
   // v1.0.0 is the approved, installable build. v2.0.0 is the one still in
   // review — the bytes nobody outside the publisher org may run.
@@ -368,7 +368,7 @@ describe('the waiver still requires the publisher ROLE (AGL-652)', () => {
     // the two orgs must not degenerate into replacing the role check with a
     // comparison. Green before this issue and green after — it exists to
     // fail a fix that swaps one condition for the other.
-    __actsAsPublisher.value = false
+    __isPublisherMember.value = false
     __targetOrgId.value = 'seller-org'
     const res = makeRes()
     await installPluginHandler(makeReq({ version: '2.0.0' }), res)

@@ -34,7 +34,7 @@ import {
   isPrivateListing,
   listingArtifactType,
 } from '../model/marketplace'
-import { canActAsPublisher } from './publisher-profile'
+import { isPublisherMember } from './publisher-profile'
 import { requirePurchase } from './purchase-entitlement'
 import { recordInstallProvenance } from './provenance'
 import { recordVersionMove } from './version-stats'
@@ -120,7 +120,7 @@ export const installEmailTemplateHandler: PluginApiHandler = async (
     }
 
     const priceUsd = Number(listing.priceUsd ?? 0)
-    const ownsListing = await canActAsPublisher(
+    const ownsListing = await isPublisherMember(
       firestore,
       decoded.uid,
       listing.profileId,

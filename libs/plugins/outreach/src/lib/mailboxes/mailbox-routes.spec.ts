@@ -319,14 +319,13 @@ let readinessCalls: Array<{ fromDomain: string; dkimSelector: string; spfInclude
 
 const members: Record<
   string,
-  { orgId: string; role: string; isOwner: boolean; orgWide: boolean; permissions: Record<string, boolean> }
+  { orgId: string; role: string; orgWide: boolean; permissions: Record<string, boolean> }
 > = {
-  [REP]: { orgId: ORG, role: 'editor', isOwner: false, orgWide: true, permissions: { 'outreach.use': true } },
-  [TEAMMATE]: { orgId: ORG, role: 'editor', isOwner: false, orgWide: true, permissions: { 'outreach.use': true } },
+  [REP]: { orgId: ORG, role: 'editor', orgWide: true, permissions: { 'outreach.use': true } },
+  [TEAMMATE]: { orgId: ORG, role: 'editor', orgWide: true, permissions: { 'outreach.use': true } },
   [ADMIN]: {
     orgId: ORG,
     role: 'admin',
-    isOwner: true,
     orgWide: true,
     permissions: { 'outreach.use': true, 'outreach.manageAll': true },
   },
@@ -355,7 +354,7 @@ function deps(): OutreachMailboxRouteDeps {
         const member = members[uid]
         return member && member.orgId === orgId
           ? member
-          : { orgId, role: null, isOwner: false, orgWide: false, permissions: {} }
+          : { orgId, role: null, orgWide: false, permissions: {} }
       },
       readOrg: async (orgId) => docs.get(`orgs/${orgId}`) ?? null,
       lockdownRefusal: async () => null,

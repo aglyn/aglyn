@@ -166,7 +166,11 @@ export function ListingDetailPage(props: {
               opened their own listing. */}
           {isOwner ? (
             <>
-              <ListingReviewStatus listingId={listingId} isPlugin={isPlugin} />
+              <ListingReviewStatus
+                listingId={listingId}
+                isPlugin={isPlugin}
+                permissions={permissions}
+              />
               {/* The door to the Verified badge (AGL-1217). Below the review
                   card on purpose: "where is my submission" is the more urgent
                   question, and asking for a badge only makes sense once the
@@ -177,6 +181,7 @@ export function ListingDetailPage(props: {
                 viewerOrgId={orgId ?? undefined}
                 user={user}
                 isPlugin={isPlugin}
+                permissions={permissions}
               />
             </>
           ) : null}

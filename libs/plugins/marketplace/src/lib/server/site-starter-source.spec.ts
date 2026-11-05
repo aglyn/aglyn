@@ -44,8 +44,8 @@ const state = {
   updates: [] as Array<{ path: string; data: Data }>,
   failUpdate: false,
   locked: new Set<string>(),
-  /** `${uid}@${orgId}` for each owner/admin. */
-  managers: new Set<string>(),
+  /** `${uid}@${orgId}` for each member of a publishing workspace. */
+  publisherMembers: new Set<string>(),
   versionMoves: [] as Array<Record<string, unknown>>,
 }
 
@@ -129,8 +129,8 @@ jest.mock('@aglyn/tenant-data-admin', () => ({
 
 jest.mock('./publisher-profile', () => ({
   PUBLISHER_PROFILES: 'publisherProfiles',
-  canActAsPublisher: async (_firestore: unknown, uid: string, orgId: string) =>
-    state.managers.has(`${uid}@${orgId}`),
+  isPublisherMember: async (_firestore: unknown, uid: string, orgId: string) =>
+    state.publisherMembers.has(`${uid}@${orgId}`),
 }))
 
 jest.mock('./sale-risk', () => ({
@@ -198,7 +198,7 @@ beforeEach(() => {
   state.updates = []
   state.failUpdate = false
   state.locked.clear()
-  state.managers.clear()
+  state.publisherMembers.clear()
   state.versionMoves = []
   state.docs.set(`publisherProfiles/${PUBLISHER}`, { handle: 'pub', displayName: 'Pub Studio' })
 })
@@ -336,7 +336,7 @@ describe('owned, on a priced starter (AGL-4049 lane 3)', () => {
     listing('paid', { priceUsd: 29 })
     state.docs.set('marketplacePurchases/p1', { buyerOrgId: BUYER.orgId, listingId: 'paid', refundedAt: 5 })
     expect((await search()).find((row) => row.listingId === 'paid')?.owned).toBe(false)
-    state.managers.add(`owner-1@${PUBLISHER}`)
+    state.publisherMembers.add(`owner-1@${PUBLISHER}`)
     const own = await source.search({ word: '', filter: {}, limit: 10 }, { orgId: PUBLISHER, uid: 'owner-1' })
     expect(own.find((row) => row.listingId === 'paid')?.owned).toBe(true)
   })
@@ -378,7 +378,7 @@ describe('describe (AGL-4049 lane 3)', () => {
 
   it('describes a private or unlisted starter to its own publisher, owned', async () => {
     listing('a', { visibility: 'private', priceUsd: 29 })
-    state.managers.add(`owner-1@${PUBLISHER}`)
+    state.publisherMembers.add(`owner-1@${PUBLISHER}`)
     expect(await source.describe({ listingId: 'a' }, { orgId: PUBLISHER, uid: 'owner-1' })).toMatchObject({
       listingId: 'a',
       owned: true,
@@ -418,14 +418,14 @@ describe('resolve (AGL-4049)', () => {
   it('keeps a starter in review to its own workspace', async () => {
     listing('a', { reviewStatus: 'submitted' })
     expect(await source.resolve({ listingId: 'a' }, BUYER)).toMatchObject({ status: 404 })
-    state.managers.add(`owner-1@${PUBLISHER}`)
+    state.publisherMembers.add(`owner-1@${PUBLISHER}`)
     expect(await source.resolve({ listingId: 'a' }, { orgId: PUBLISHER, uid: 'owner-1' })).toEqual(payload())
   })
 
   it('keeps a private starter to its own workspace', async () => {
     listing('a', { visibility: 'private' })
     expect(await source.resolve({ listingId: 'a' }, BUYER)).toMatchObject({ status: 404 })
-    state.managers.add(`owner-1@${PUBLISHER}`)
+    state.publisherMembers.add(`owner-1@${PUBLISHER}`)
     expect(await source.resolve({ listingId: 'a' }, { orgId: PUBLISHER, uid: 'owner-1' })).toEqual(payload())
   })
 
@@ -456,7 +456,7 @@ describe('resolve (AGL-4049)', () => {
 
   it('waives the price for the publisher only on a site in the publisher’s own workspace', async () => {
     listing('a', { priceUsd: 29 })
-    state.managers.add(`owner-1@${PUBLISHER}`)
+    state.publisherMembers.add(`owner-1@${PUBLISHER}`)
     expect(await source.resolve({ listingId: 'a' }, { orgId: PUBLISHER, uid: 'owner-1' })).toEqual(payload())
     // The same person, creating a site in another workspace, is a buyer there (AGL-2484).
     expect(await source.resolve({ listingId: 'a' }, { orgId: 'elsewhere', uid: 'owner-1' })).toMatchObject({

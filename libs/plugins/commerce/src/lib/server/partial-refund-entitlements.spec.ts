@@ -303,7 +303,6 @@ jest.mock('@aglyn/tenant-runtime/org-permissions', () => ({
   resolveOrgPermissions: async () => ({
     orgId: 'org-1',
     role: 'owner',
-    isOwner: true,
     permissions: {},
     orgWide: true,
     hostRole: 'admin',

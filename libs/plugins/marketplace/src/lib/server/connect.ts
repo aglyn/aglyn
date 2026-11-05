@@ -19,7 +19,11 @@ import { firebaseAdmin, getOrgForUser } from '@aglyn/tenant-data-admin'
 import { paymentProvider } from '@aglyn/tenant-data-admin/server/payment-provider'
 import { buildRoute, Route, type PluginApiHandler } from '@aglyn/aglyn/server'
 import { orgAgeDays } from '@aglyn/tenant-data-admin/server/org-age'
-import { canActAsPublisher } from './publisher-profile'
+import {
+  MARKETPLACE_PAYOUTS_PERMISSION,
+  marketplacePublisherPermissionRefusal,
+} from '../model/marketplace-publisher-permissions'
+import { publisherPermissionVerdict } from './publisher-permissions'
 import { applyPublisherPayoutPolicy } from './sale-risk'
 
 async function stripe(path: string, params?: URLSearchParams) {
@@ -65,8 +69,10 @@ export const connectHandler: PluginApiHandler = async (req, res) => {
     const decoded = await firebaseAdmin.app().auth().verifyIdToken(idToken)
     const firestore = firebaseAdmin.app().firestore()
     // Payouts belong to the publishing ORG (AGL-652) — the marketplace pays
-    // the organization that published, not whoever set the account up. Only
-    // a manager may bind a payout destination.
+    // the organization that published, not whoever set the account up.
+    // Binding the payout destination asks "Manage marketplace payouts"
+    // (`marketplace.payouts`, AGL-4047), whose default is the owner and admins
+    // this asked for by role before, so nobody's access moved.
     //
     // The acting org comes from the client (AGL-861): the URL is the source of
     // truth for which workspace the seller is in, and a member can belong to
@@ -80,9 +86,18 @@ export const connectHandler: PluginApiHandler = async (req, res) => {
       undefined
     const orgForUser = await getOrgForUser(decoded.uid, requestedOrgId)
     const orgId = orgForUser?.orgId
-    if (!orgId || !(await canActAsPublisher(firestore, decoded.uid, orgId))) {
+    const verdict = await publisherPermissionVerdict(
+      decoded.uid,
+      orgId,
+      MARKETPLACE_PAYOUTS_PERMISSION,
+    )
+    if (!orgId || verdict !== 'granted') {
       return res.status(403).json({
-        error: 'Only an organization owner or admin can set up payouts',
+        error: marketplacePublisherPermissionRefusal(
+          MARKETPLACE_PAYOUTS_PERMISSION,
+        ),
+        reason: 'permission',
+        permission: MARKETPLACE_PAYOUTS_PERMISSION,
       })
     }
     const profileRef = firestore.collection('publisherProfiles').doc(orgId)

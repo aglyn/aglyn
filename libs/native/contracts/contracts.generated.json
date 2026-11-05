@@ -7439,6 +7439,7 @@
         "marketplace.sitePublish",
         "marketplace.publisherProfile",
         "marketplace.manageListings",
+        "marketplace.payouts",
         "outreach.use",
         "outreach.manageAll",
         "email.suppressions",
@@ -7542,6 +7543,7 @@
         "marketplace.sitePublish",
         "marketplace.publisherProfile",
         "marketplace.manageListings",
+        "marketplace.payouts",
         "outreach.use",
         "outreach.manageAll",
         "email.suppressions",
@@ -7975,7 +7977,7 @@
         "scope": "site"
       },
       {
-        "description": "Change the workspace’s public marketplace profile: its handle, name, bio, logo, support contact and links.",
+        "description": "Change the workspace’s public marketplace profile (its handle, name, bio, logo, support contact and links), and ask for the Verified publisher badge or withdraw the ask.",
         "group": "marketplace",
         "key": "marketplace.publisherProfile",
         "label": "Edit the publisher profile",
@@ -7983,10 +7985,18 @@
         "scope": "org"
       },
       {
-        "description": "Edit the listings the workspace has published (their words, pictures and category), make a plugin public or private, and unpublish or republish a listing.",
+        "description": "Edit the listings the workspace has published (their words, pictures and category), make a plugin public or private, unpublish or republish a listing, and see each version’s review status.",
         "group": "marketplace",
         "key": "marketplace.manageListings",
         "label": "Manage published listings",
+        "pluginId": "marketplace",
+        "scope": "org"
+      },
+      {
+        "description": "Connect the payout account the workspace’s paid listings pay into, finish its setup, and open its payouts.",
+        "group": "marketplace",
+        "key": "marketplace.payouts",
+        "label": "Manage marketplace payouts",
         "pluginId": "marketplace",
         "scope": "org"
       },

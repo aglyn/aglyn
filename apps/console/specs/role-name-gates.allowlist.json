@@ -189,10 +189,6 @@
       "count": 3,
       "kind": "pending"
     },
-    "libs/plugins/marketplace/src/lib/server/publisher-profile.ts": {
-      "count": 1,
-      "kind": "pending"
-    },
     "libs/plugins/marketplace/src/lib/server/publisher-review-email.ts": {
       "count": 1,
       "kind": "not-a-gate",
@@ -227,10 +223,6 @@
       "count": 1,
       "kind": "not-a-gate",
       "note": "Picks who the weekly summary goes to."
-    },
-    "libs/tenant/runtime/src/lib/org-permissions.ts": {
-      "count": 1,
-      "kind": "pending"
     }
   }
 }

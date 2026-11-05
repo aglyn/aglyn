@@ -35,7 +35,7 @@ jest.mock('./publisher-agreement-acceptance', () => ({
 jest.mock('./listing-screen', () => ({ listingSubmissionRefusal: async () => null }))
 jest.mock('./listing-query-fields', () => ({ refreshListingQueryFields: async () => undefined }))
 jest.mock('./publisher-profile', () => ({
-  canActAsPublisher: async () => true,
+  isPublisherMember: async () => true,
   resolvePublisherProfile: async () => null,
 }))
 jest.mock('@aglyn/tenant-runtime/org-permissions', () => ({ resolveOrgPermissions: async () => null }))

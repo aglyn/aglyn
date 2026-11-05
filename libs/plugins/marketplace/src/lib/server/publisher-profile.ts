@@ -114,15 +114,23 @@ export async function resolvePublisherProfile(
 }
 
 /**
- * Whether a user may act for a publishing org (AGL-652).
+ * Whether a user belongs to the org that publishes a listing, in any role
+ * (AGL-652, AGL-4047).
+ *
+ * A FACT ABOUT OWNERSHIP, NOT A PERMISSION. It answers the questions that
+ * turn on who published the listing: its own workspace installs it free (and
+ * may try a private or unreviewed one), and nobody in that workspace may buy
+ * it or review it. A key could be refused to an admin, and the admin would
+ * still be part of the workspace that published it, so a permission here
+ * would let them pay themselves or rate their own work. What a member may DO
+ * for the publisher (its profile, its listings, its payouts, the Verified
+ * badge) asks a key instead: `publisherPermissionVerdict`.
  *
  * Ownership checks used to read `listing.profileId === decoded.uid`. With
- * org-owned listings that comparison can NEVER be true — a uid is not an org
- * id — so leaving them would lock every publisher out of their own listing
- * and make every paid listing chargeable to its own publisher. Managers
- * (owner/admin) act for the org, matching the gate the profile rules apply.
+ * org-owned listings that comparison can NEVER be true (a uid is not an org
+ * id), which is why this asks the org's members.
  */
-export async function canActAsPublisher(
+export async function isPublisherMember(
   firestore: FirebaseFirestore.Firestore,
   uid: string,
   publisherOrgId: string | undefined | null,
@@ -134,8 +142,7 @@ export async function canActAsPublisher(
     .collection('members')
     .doc(uid)
     .get()
-  const role = member.get('role')
-  return role === 'owner' || role === 'admin'
+  return member.exists
 }
 
 export class PublisherHandleTakenError extends Error {

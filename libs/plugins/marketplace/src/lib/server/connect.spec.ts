@@ -26,8 +26,16 @@
  * never pay out.
  */
 
-jest.mock('./publisher-profile', () => ({
-  canActAsPublisher: async () => true,
+/** The caller's standing on "Manage marketplace payouts", and what was asked. */
+const mockVerdict: { current: 'granted' | 'refused' | 'not-a-member' } = {
+  current: 'granted',
+}
+const mockAsked: Array<[unknown, unknown, unknown]> = []
+jest.mock('./publisher-permissions', () => ({
+  publisherPermissionVerdict: async (uid: unknown, orgId: unknown, key: unknown) => {
+    mockAsked.push([uid, orgId, key])
+    return mockVerdict.current
+  },
 }))
 
 jest.mock('@aglyn/aglyn/server', () => ({
@@ -127,6 +135,8 @@ beforeAll(() => {
 })
 
 beforeEach(() => {
+  mockVerdict.current = 'granted'
+  mockAsked.length = 0
   stripeCalls.length = 0
   state.profile = { handle: 'acme' }
   state.profileWrites.length = 0
@@ -192,4 +202,31 @@ describe('Connect onboarding hardening (AGL-1547)', () => {
       ),
     ).toBe(true)
   })
+})
+
+describe('setting up payouts asks "Manage marketplace payouts" (AGL-4047)', () => {
+  it('asks the key of the acting workspace, never a role', async () => {
+    const res = makeRes()
+    await connectHandler(makeReq(), res)
+    expect(res.statusCode).toBe(200)
+    expect(mockAsked).toEqual([['owner-1', 'seller-org', 'marketplace.payouts']])
+  })
+
+  it.each(['refused', 'not-a-member'] as const)(
+    'a caller who is %s hears the permission named, and nothing reaches the payout account',
+    async (verdict) => {
+      mockVerdict.current = verdict
+      const res = makeRes()
+      await connectHandler(makeReq(), res)
+      expect(res.statusCode).toBe(403)
+      expect(res.body).toEqual({
+        error:
+          'Your role does not include "Manage marketplace payouts" — ask an organization admin',
+        reason: 'permission',
+        permission: 'marketplace.payouts',
+      })
+      expect(stripeCalls).toEqual([])
+      expect(state.profileWrites).toEqual([])
+    },
+  )
 })

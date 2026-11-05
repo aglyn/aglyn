@@ -15,6 +15,7 @@
  * limitations under the License.
  */
 
+import { execFileSync } from 'node:child_process'
 import { readFileSync } from 'node:fs'
 import { join } from 'node:path'
 
@@ -180,21 +181,34 @@ describe('the workspace keys’ controls ask the keys their routes and rules che
  * THE WORKSPACE'S PUBLISHER KEYS: ONE KEY FOR THE CONTROL, THE ROUTE AND THE
  * RULE (AGL-4047).
  *
- * Saving the publisher profile and managing a published listing asked the
- * owner or admin role in three places that never named each other: the
- * routes through `canActAsPublisher`, the rules through a role list of their
- * own, and the console not at all (it offered Save and Edit to every member
- * of the hub and let the route refuse). Each row holds the three to one key:
- * the marketplace page disables its control by it, the doors ask it, and the
- * deployed rules ask it for the client-direct write.
+ * Saving the publisher profile, managing a published listing and setting up
+ * payouts asked the owner or admin role in places that never named each
+ * other: the routes through one role helper, the rules through a role list of
+ * their own, and the console not at all (it offered Save and Edit to every
+ * member of the hub and let the route refuse). Each row holds them to one
+ * key: the marketplace page disables its control by it, the doors ask it,
+ * and, where a client can write the same thing directly, the deployed rules
+ * ask it too. A key with no client-direct write names the rules' freeze that
+ * makes its route the only door instead.
  */
 const MARKETPLACE = '../../libs/plugins/marketplace/src/lib'
-const PUBLISHER_GATES: Array<{ key: string; constant: string; surfaces: string[]; doors: string[] }> = [
+const PUBLISHER_GATES: Array<{
+  key: string
+  constant: string
+  surfaces: string[]
+  doors: string[]
+  /** `null` when no client writes it: the route is the only door. */
+  rule: 'asks-the-key' | null
+}> = [
   {
     key: 'marketplace.publisherProfile',
     constant: 'MARKETPLACE_PUBLISHER_PROFILE_PERMISSION',
-    surfaces: [`${MARKETPLACE}/components/org-seller-panel.component.tsx`],
-    doors: [`${MARKETPLACE}/server/publisher-profile-save.ts`],
+    surfaces: [
+      `${MARKETPLACE}/components/org-seller-panel.component.tsx`,
+      `${MARKETPLACE}/components/listing-verification-request.component.tsx`,
+    ],
+    doors: [`${MARKETPLACE}/server/publisher-profile-save.ts`, `${MARKETPLACE}/server/verification-request.ts`],
+    rule: 'asks-the-key',
   },
   {
     key: 'marketplace.manageListings',
@@ -202,29 +216,93 @@ const PUBLISHER_GATES: Array<{ key: string; constant: string; surfaces: string[]
     surfaces: [
       `${MARKETPLACE}/components/org-seller-panel.component.tsx`,
       `${MARKETPLACE}/components/listing-detail-page.component.tsx`,
+      `${MARKETPLACE}/components/listing-review-status.component.tsx`,
     ],
-    doors: [`${MARKETPLACE}/server/publisher-permissions.ts`],
+    doors: [`${MARKETPLACE}/server/publisher-permissions.ts`, `${MARKETPLACE}/server/listing-versions.ts`],
+    rule: 'asks-the-key',
+  },
+  {
+    key: 'marketplace.payouts',
+    constant: 'MARKETPLACE_PAYOUTS_PERMISSION',
+    surfaces: [`${MARKETPLACE}/components/org-seller-panel.component.tsx`],
+    doors: [`${MARKETPLACE}/server/connect.ts`],
+    rule: null,
   },
 ]
+
+/** Every non-spec source file of the marketplace plugin, by path. */
+const marketplaceSources = (): string[] =>
+  execFileSync('git', ['ls-files', '--', 'libs/plugins/marketplace/src/lib'], {
+    cwd: join(ROOT, '../..'),
+    encoding: 'utf8',
+  })
+    .split('\n')
+    .filter((file) => /\.tsx?$/.test(file) && !/\.spec\.tsx?$/.test(file))
 
 describe('the publisher keys: one key for the control, the route and the rule (AGL-4047)', () => {
   const model = read(`${MARKETPLACE}/model/marketplace-publisher-permissions.ts`)
   const rules = read('../../cloud/firebase-firestore.deploy.rules')
 
-  it.each(PUBLISHER_GATES)('$key', ({ key, constant, surfaces, doors }) => {
+  it.each(PUBLISHER_GATES)('$key', ({ key, constant, surfaces, doors, rule }) => {
     expect(model).toContain(`export const ${constant}: MarketplacePublisherPermission = '${key}'`)
     for (const surface of surfaces) expect(read(surface)).toContain(`permissions?.[${constant}] !== false`)
     for (const door of doors) expect(read(door)).toContain(constant)
-    expect(rules).toContain(`'${key}'`)
+    if (rule) expect(rules).toContain(`'${key}'`)
+    else expect(rules).not.toContain(`'${key}'`)
   })
 
-  it('the listing doors all go through the gate that asks it, and none asks the role any more', () => {
-    for (const door of ['publish-plugin.ts', 'preview-image.ts', 'publisher-profile-save.ts']) {
-      const source = read(`${MARKETPLACE}/server/${door}`)
-      expect(source).not.toMatch(/canActAsPublisher\(/)
+  it('payouts have no client door: the rules freeze every payout field on the profile', () => {
+    const profileUpdate = /match \/publisherProfiles\/\{orgId\}[\s\S]*?allow update:([\s\S]*?);/.exec(rules)?.[1] ?? ''
+    for (const field of ['stripeAccountId', 'stripeChargesEnabled', 'stripeAccountLivemode', 'stripePayoutsEnabled']) {
+      expect(profileUpdate).toContain(`'${field}'`)
+    }
+  })
+
+  it('the publisher doors all go through the gate that asks their key, and none asks the role any more', () => {
+    for (const door of [
+      'publish-plugin.ts',
+      'preview-image.ts',
+      'publisher-profile-save.ts',
+      'connect.ts',
+      'verification-request.ts',
+      'listing-versions.ts',
+    ]) {
+      expect(read(`${MARKETPLACE}/server/${door}`)).not.toMatch(/canActAsPublisher\(/)
     }
     expect(read(`${MARKETPLACE}/server/publish-plugin.ts`).match(/manageListingsRefusal\(/g)).toHaveLength(3)
     expect(read(`${MARKETPLACE}/server/preview-image.ts`)).toContain('manageListingsRefusal(')
+    for (const door of ['connect.ts', 'verification-request.ts', 'listing-versions.ts']) {
+      expect(read(`${MARKETPLACE}/server/${door}`)).toContain('publisherPermissionVerdict(')
+    }
+  })
+
+  it('the role helper is gone from the plugin; the ownership questions ask membership, never a key', () => {
+    const sources = marketplaceSources()
+    // The search searches: the plugin has sources, and the membership fact is found.
+    expect(sources.length).toBeGreaterThan(50)
+    expect(sources.filter((file) => /\bcanActAsPublisher\b/.test(read(`../../${file}`)))).toEqual([])
+    // Free own installs, no buying your own listing, no rating it.
+    const MEMBERSHIP = [
+      'install.ts',
+      'install-plugin.ts',
+      'install-theme.ts',
+      'install-template.ts',
+      'install-layout.ts',
+      'install-email-template.ts',
+      'install-email-starter.ts',
+      'install-dataset-schema.ts',
+      'update-artifact.ts',
+      'site-starter-source.ts',
+      'sale.ts',
+      'reviews.ts',
+    ]
+    for (const file of MEMBERSHIP) {
+      expect([file, read(`${MARKETPLACE}/server/${file}`).includes('isPublisherMember(')]).toEqual([file, true])
+    }
+    // The fact asks the members collection and nothing else: no key, no role.
+    const fact = /export async function isPublisherMember\([\s\S]*?\n}\n/.exec(read(`${MARKETPLACE}/server/publisher-profile.ts`))?.[0] ?? ''
+    expect(fact).toContain('member.exists')
+    expect(fact).not.toMatch(/memberHasOrgPermission|permissions|\.get\('role'\)|'owner'|'admin'/)
   })
 
   it('the rules ask the keys through the stamped helper, and Sequences asks "Use Sequences" the same way', () => {
