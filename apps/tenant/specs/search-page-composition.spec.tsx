@@ -177,10 +177,10 @@ describe('/search composition (AGL-1525)', () => {
 })
 
 /**
- * A site in maintenance answers its search to nobody (AGL-4111).
+ * A site in maintenance answers its search to its team alone (AGL-4111).
  *
- * Every other address of the site serves its 503 page in maintenance, the
- * team included, and this page went on answering with the site's own words —
+ * Every other address of the site serves the public its 503 page in
+ * maintenance, and this page went on answering with the site's own words —
  * entry titles and snippets, to anyone who typed a query. It refuses the way
  * it already refused the public of a site in preview.
  */
@@ -205,13 +205,13 @@ describe('/search on a site that is not open (AGL-4111)', () => {
     expect(mockSearch).not.toHaveBeenCalled()
   })
 
-  it('in maintenance AND preview, even for the team: maintenance means nobody', async () => {
+  it('in maintenance, the admitted team still gets its results', async () => {
     mockHost.mockResolvedValue({
       host: { $id: 'host_acme', maintenance: true, preview: true },
     } as any)
     mockViewer.mockResolvedValue({ admitted: true, via: 'cookie' })
-    await expect(renderPage({ q: 'platform' })).rejects.toThrow('notFound')
-    expect(mockSearch).not.toHaveBeenCalled()
+    await renderPage({ q: 'platform' })
+    expect(mockSearch).toHaveBeenCalled()
   })
 
   it('CONTROL — in preview, the admitted team still gets its results', async () => {

@@ -27,7 +27,9 @@ import {
   type PluginConfigField,
   type PluginConfigSchema,
 } from '@aglyn/aglyn'
+import { permissionRefusalText } from '@aglyn/aglyn/app-utils/org-permissions'
 import { CardDisplay } from '@aglyn/shared-ui-jsx'
+import { BlockedControl } from '@aglyn/shared-ui-jsx/components/blocked-control.component'
 import { useSnackbar } from '@aglyn/shared-ui-snackstack'
 import {
   Alert,
@@ -53,6 +55,7 @@ import {
   type DocsHelpTopicKey,
 } from '../constants/docs-help.generated'
 import { docsHelp } from '../constants/docs-links'
+import useOrgPermissions from '../hooks/use-org-permissions'
 import { revalidateLivePages } from '../utils/revalidate-live-pages'
 
 /**
@@ -75,12 +78,13 @@ function SchemaForm({
   orgId,
   hostId,
   schema,
-  disabled,
+  disabled: disabledByCaller,
   displayName,
 }: {
   orgId: string
   hostId?: string
   schema: PluginConfigSchema
+  /** The caller's own gate; the site form's page answers it with its role. */
   disabled?: boolean
   /** The plugin's own name, for a schema the first-party catalog cannot name. */
   displayName?: string
@@ -89,6 +93,19 @@ function SchemaForm({
   const { data: user } = useUser()
   const { enqueueSnackbar } = useSnackbar()
   const siteScoped = Boolean(hostId)
+  /**
+   * The workspace form's write asks "Organization settings" (AGL-4047), the
+   * key the rules ask of `orgs/{orgId}/pluginSettings/{pluginId}`, so a custom
+   * role or an override that grants or takes it moves this the way it moves
+   * the write. Held while the permissions load, and a failed read holds too,
+   * rather than accusing someone who may hold it. The site form writes another
+   * document under another key, and its page passes that gate as `disabled`.
+   */
+  const orgPermissions = useOrgPermissions()
+  const permissionsHeld = !siteScoped && !orgPermissions.loaded
+  const permissionRefused =
+    !siteScoped && orgPermissions.loaded && !orgPermissions.can('org.settings')
+  const disabled = disabledByCaller || permissionsHeld || permissionRefused
   /**
    * Held at null until the scope is known, never addressed as
    * `orgs/-pending-` or `hosts/-pending-` (AGL-1440). `pluginSettings` is
@@ -471,14 +488,19 @@ function SchemaForm({
           </Stack>
         ))}
         <Stack direction="row">
-          <Button
-            variant="contained"
-            size="small"
-            disabled={disabled || !dirty || busy}
-            onClick={() => void save()}
+          <BlockedControl
+            blocked={permissionRefused}
+            reason={permissionRefusalText('org.settings')}
           >
-            {siteScoped ? 'Save site settings' : 'Save settings'}
-          </Button>
+            <Button
+              variant="contained"
+              size="small"
+              disabled={disabled || !dirty || busy}
+              onClick={() => void save()}
+            >
+              {siteScoped ? 'Save site settings' : 'Save settings'}
+            </Button>
+          </BlockedControl>
         </Stack>
       </Stack>
     </CardDisplay>

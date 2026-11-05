@@ -544,7 +544,7 @@ export interface AglynHost extends AglynDocument {
   /**
    * Preview (AGL-4086): only the site's team, and Aglyn staff, see the site;
    * the public gets the 503 page or a "Coming soon" notice at every address.
-   * Unlike `maintenance`, which replaces the site for EVERYONE, this keeps the
+   * Unlike `maintenance`, which replaces the site for every visitor, this keeps the
    * whole site working for the people building it.
    *
    * ADMIN-SDK ONLY: written by `/api/hosts/preview` (a site admin) and by

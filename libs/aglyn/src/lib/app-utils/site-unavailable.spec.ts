@@ -39,12 +39,12 @@ describe('maintenance mode is read as the loader reads it (AGL-4110)', () => {
 })
 
 describe('which page requests answer 503 (AGL-4110)', () => {
-  it('maintenance: everyone, the team included', () => {
+  it('maintenance: the public, not the team', () => {
     expect(siteUnavailableForRequest({ maintenance: true }, PUBLIC)).toBe(true)
-    expect(siteUnavailableForRequest({ maintenance: true }, TEAM)).toBe(true)
+    expect(siteUnavailableForRequest({ maintenance: true }, TEAM)).toBe(false)
     expect(
       siteUnavailableForRequest({ maintenance: true, preview: true }, TEAM),
-    ).toBe(true)
+    ).toBe(false)
   })
 
   it('a site in preview: the public, never the team routed around the cache', () => {

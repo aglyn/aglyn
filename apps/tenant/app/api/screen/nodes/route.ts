@@ -31,6 +31,7 @@ import {
   type SiteOverride,
 } from '../../../[host]/[scheme]/[[...slug]]/load-page-data'
 import getHost from '../../../../utils/get-host'
+import { isHostInMaintenance } from '@aglyn/aglyn/app-utils/site-unavailable'
 import { sitePreviewViewerForRequest } from '../../../../utils/site-preview-viewer'
 
 /**
@@ -84,7 +85,8 @@ export async function GET(request: Request): Promise<Response> {
 
   try {
     /**
-     * A site, or this page, in preview (AGL-4086): the team's page asks for
+     * A site in maintenance or preview, or this page in preview (AGL-4086):
+     * the team's page asks for
      * its panels here too, and gets them only once its cookie is verified —
      * the same check the uncached preview route runs. Either answer is kept
      * out of every shared cache, because the URL is the same for the team and
@@ -95,6 +97,7 @@ export async function GET(request: Request): Promise<Response> {
     const inPreview = isSitePreviewRequest(
       {
         preview: (hostRes.host as { preview?: unknown } | null)?.preview === true,
+        maintenance: isHostInMaintenance(hostDoc),
         previewPaths: sitePreviewPaths(hostDoc),
       },
       `/${slug.join('/')}`,

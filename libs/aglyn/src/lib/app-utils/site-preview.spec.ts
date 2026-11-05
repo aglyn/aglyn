@@ -56,6 +56,8 @@ describe('preview state (AGL-4086)', () => {
 
   it('routes every path of a site in preview, and only the pages of a public one', () => {
     expect(isSitePreviewRequest({ preview: true }, '/anything')).toBe(true)
+    expect(isSitePreviewRequest({ maintenance: true }, '/anything')).toBe(true)
+    expect(isSitePreviewRequest({ maintenance: false }, '/anything')).toBe(false)
     const page = { preview: false, previewPaths: ['/launch'] }
     expect(isSitePreviewRequest(page, '/launch')).toBe(true)
     expect(isSitePreviewRequest(page, '/launch/')).toBe(true)

@@ -145,7 +145,7 @@ export const AI_PRIVACY_ARGS_SCHEMA: PluginAiCapabilityArgsSchema = {
     maintenance: {
       type: 'boolean',
       description:
-        'true takes the whole site offline: every address shows its 503 page to every visitor, including anyone with a link, until it is turned off. false brings the site back. Leave it out unless the person asked to take the whole site offline, keep it from everyone until launch, or bring it back.',
+        'true takes the whole site offline for visitors: every address shows its 503 page to every visitor, including anyone with a link, until it is turned off, while the site team still sees the site. false brings the site back. Leave it out unless the person asked to take the whole site offline, keep it from everyone until launch, or bring it back.',
     },
     discourageSearchEngines: {
       type: 'boolean',
@@ -286,7 +286,7 @@ export async function writeAiSitePrivacy(
         done.push({
           output: 'maintenance',
           said: maintenance
-            ? `Maintenance mode is on: every address shows ${assigned ? 'your 503 page' : `${PLATFORM_BRAND_NAME}’s plain “undergoing maintenance” notice, because no 503 page is assigned yet`} to every visitor.`
+            ? `Maintenance mode is on: every address shows ${assigned ? 'your 503 page' : `${PLATFORM_BRAND_NAME}’s plain “undergoing maintenance” notice, because no 503 page is assigned yet`} to every visitor. You and your team still see the site.`
             : 'Maintenance mode is off: the site is open to visitors again.',
         })
       }

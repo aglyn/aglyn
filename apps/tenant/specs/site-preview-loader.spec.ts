@@ -23,7 +23,8 @@
  * `revalidate: 30`, no page nodes — and answers its TEAM, verified by the
  * uncached preview route and passed in as `SITE_PREVIEW_TEAM_VIEW`, with the
  * real page. One page in preview on a public site is a 404 to the public and
- * the page to the team. Lockdown and maintenance outrank preview for everyone.
+ * the page to the team. Lockdown outranks preview for everyone; maintenance
+ * outranks it for the public, and the team sees the site through both.
  *
  * The module boundary is the one `loader-lockdown.spec.ts` draws, so these
  * are the branches of the real loader with the reads stubbed.
@@ -214,10 +215,17 @@ describe('a site in preview, to the public (AGL-4086)', () => {
     expect(result.props.sitePreview).toBeUndefined()
   })
 
-  it('maintenance outranks preview for the team too', async () => {
+  it('the team sees a site in maintenance', async () => {
+    mockGetHost.mockResolvedValue(host({ maintenance: true }))
+    const result: any = await loadPageData('acme', [], '', SITE_PREVIEW_TEAM_VIEW)
+    expect(result.props.maintenanceFallback).toBeUndefined()
+  })
+
+  it('the team sees a site in both maintenance and preview', async () => {
     mockGetHost.mockResolvedValue(host({ preview: true, maintenance: true }))
     const result: any = await loadPageData('acme', [], '', SITE_PREVIEW_TEAM_VIEW)
-    expect(result.props.maintenanceFallback).toBe(true)
+    expect(result.props.maintenanceFallback).toBeUndefined()
+    expect(result.props.sitePreview).toBeUndefined()
   })
 
   it('a lockdown outranks preview, for the team as for everyone', async () => {

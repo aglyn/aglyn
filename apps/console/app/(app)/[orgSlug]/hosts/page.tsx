@@ -278,9 +278,9 @@ function SiteCard(props: SiteCardProps) {
           <SiteVisitButton
             newTab
             hostId={host.$id}
-            // A site in preview (AGL-4086) is entered as the team, through
-            // a console-minted link, on whatever address it has.
-            inPreview={isHostInPreview(host as never)}
+            // A site in preview (AGL-4086) or maintenance is entered as the
+            // team, through a console-minted link, on whatever address it has.
+            inPreview={isHostInPreview(host as never) || Boolean(host.maintenance)}
             // `?aglyn-edit` arms the admin bar without the
             // chord (AGL-1842): on a foreign CUSTOM domain no
             // hint can exist by construction — a console
