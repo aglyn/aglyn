@@ -2588,7 +2588,7 @@
     },
     {
       "alwaysOnForWorkspace": true,
-      "description": "Digital waivers riders and guests sign before they arrive or at the window.",
+      "description": "Digital waivers guests sign before they arrive or at the window.",
       "id": "waivers",
       "label": "Waivers",
       "siteOff": {
