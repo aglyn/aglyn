@@ -253,7 +253,7 @@ export function LoyaltyConnectionCard(props: {
             disabled={busy || (held > 0 && !replace)}
             onClick={connect}
           >
-            {busy ? 'Connecting…' : 'Connect'}
+            {working ? 'Connecting…' : 'Connect'}
           </Button>
         ),
       }}
