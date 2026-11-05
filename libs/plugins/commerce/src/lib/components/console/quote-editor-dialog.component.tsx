@@ -311,6 +311,8 @@ interface FoundCustomer {
  * shipping, notes and terms, with the totals worked out as it is edited. The
  * server prices and saves it; the totals here are the same function's answer
  * over the same inputs, and a connected tax service's figure arrives on save.
+ * A saved quote left as it is shows what its customer's page shows instead
+ * (AGL-4162): that is what the customer is charged until a save re-prices it.
  */
 export function QuoteEditorDialog(props: QuoteEditorDialogProps) {
   const { hostId, quote, products, canEdit, canSend, onClose } = props
@@ -402,7 +404,20 @@ export function QuoteEditorDialog(props: QuoteEditorDialogProps) {
   const pricedLines = priced.flatMap((entry) => ('line' in entry && entry.line ? [entry.line] : []))
   const totals = CommerceModel.computeQuoteTotals({ lines: pricedLines, discount, shippingCents, tax: taxBasis })
   const problems = priced.some((entry) => 'error' in entry)
-  const savedService = quote?.quote?.tax?.kind === 'service' ? quote.quote.tax : null
+  // Every save re-prices the lines and re-bases the tax on the store's settings
+  // (`priceQuote` in `server/quote.ts`), so any edit shows what that save will
+  // store. Until then a saved quote is what its customer's page says, from the
+  // stored lines under `quotePayTax`, and a paid one its recorded totals.
+  const asSaved =
+    quote && !edited
+      ? CommerceModel.buildQuotePageView({
+          order: quote,
+          orderId: quote.$id,
+          storeName: '',
+          currency: '',
+          store: CommerceModel.payLinkStoreOf(store),
+        })
+      : null
 
   const save = useCallback(async () => {
     setBusy(true)
@@ -674,10 +689,9 @@ export function QuoteEditorDialog(props: QuoteEditorDialogProps) {
 
           <Divider />
           <QuoteTotalsSummary
-            totals={totals}
-            tax={taxBasis}
-            savedService={edited ? null : savedService}
-            savedTotals={edited ? null : (quote?.totals ?? null)}
+            totals={asSaved?.totals ?? totals}
+            taxLabel={asSaved?.taxLabel ?? CommerceModel.describeQuoteTax(taxBasis)}
+            taxAtPayment={asSaved?.taxAtPayment ?? totals.taxAtPayment}
           />
         </Stack>
       </DialogContent>
@@ -1095,15 +1109,12 @@ function QuoteLineEditor(props: {
 
 /** The quote's totals, as the customer will read them. */
 function QuoteTotalsSummary(props: {
-  totals: CommerceModel.QuoteTotals
-  tax: CommerceModel.QuoteTaxBasis
-  /** A saved quote's tax service answer, shown until the quote is edited. */
-  savedService: CommerceModel.QuoteTaxBasis | null
-  savedTotals: CommerceModel.OrderTotals | null
+  totals: CommerceModel.QuotePageView['totals']
+  taxLabel: string
+  /** Stripe Tax works the tax out when the customer pays, so there is no figure yet. */
+  taxAtPayment: boolean
 }) {
-  const { totals, tax, savedService, savedTotals } = props
-  const shown = savedService && savedTotals ? { ...totals, ...savedTotals } : totals
-  const taxLabel = CommerceModel.describeQuoteTax(savedService ?? tax)
+  const { totals, taxLabel, taxAtPayment } = props
   const row = (label: string, value: string, strong = false) => (
     <Stack direction="row" sx={{ justifyContent: 'space-between' }}>
       <Typography variant={strong ? 'subtitle1' : 'body2'} color={strong ? 'text.primary' : 'text.secondary'}>
@@ -1114,17 +1125,17 @@ function QuoteTotalsSummary(props: {
   )
   return (
     <Stack spacing={0.5} sx={(theme) => ({ alignSelf: { sm: 'flex-end' }, minWidth: { sm: theme.spacing(40) } })}>
-      {row('Items', money(shown.itemsCents))}
-      {shown.discountCents ? row('Discount', `−${money(shown.discountCents)}`) : null}
-      {shown.shippingCents ? row('Shipping', money(shown.shippingCents)) : null}
-      {tax.kind === 'at-payment' && !savedService ? (
+      {row('Items', money(totals.itemsCents))}
+      {totals.discountCents ? row('Discount', `−${money(totals.discountCents)}`) : null}
+      {totals.shippingCents ? row('Shipping', money(totals.shippingCents)) : null}
+      {taxAtPayment ? (
         <Typography variant="body2" color="text.secondary">
           {taxLabel}
         </Typography>
       ) : (
-        row(taxLabel, money(shown.taxCents))
+        row(taxLabel, money(totals.taxCents))
       )}
-      {row(totals.taxAtPayment && !savedService ? 'Total before tax' : 'Total', money(shown.totalCents), true)}
+      {row(taxAtPayment ? 'Total before tax' : 'Total', money(totals.totalCents), true)}
     </Stack>
   )
 }

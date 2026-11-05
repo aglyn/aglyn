@@ -427,6 +427,39 @@ describe('POST commerce/quote-respond', () => {
     expect(`${notice.title} ${notice.body} ${notice.label}`).not.toMatch(/new order/i)
   })
 
+  /*
+   * The notice states the tax the customer is charged (AGL-4162): `quotePayTax`
+   * against the store as it stands, with the saved total, which each case holds
+   * to the figure the customer's own page prints in the answer.
+   */
+  describe('the total the managers are told', () => {
+    const UNDECIDED = { kind: 'none', reason: 'undecided' }
+    const OWN_RATES = { mode: 'manual', origin: { country: 'US', state: 'TX' }, rates: [{ country: 'US', state: 'TX', pct: 10 }] }
+    const UNTAXED = { itemsCents: 40_000, discountCents: 0, shippingCents: 0, taxCents: 0, feeCents: 0, totalCents: 40_000 }
+    const AT_TEN_PERCENT = { ...UNTAXED, taxCents: 4_000, totalCents: 44_000 }
+
+    it.each([
+      ['undecided, store now on Stripe Tax', UNDECIDED, { mode: 'stripe' }, UNTAXED, '$400.00 before tax', true],
+      ['undecided, store now not collecting', UNDECIDED, { mode: 'none' }, UNTAXED, '$400.00', false],
+      ['undecided, prices now include tax', UNDECIDED, { mode: 'manual', pricesIncludeTax: true }, UNTAXED, '$400.00', false],
+      ['undecided, store now on its own rates, which only a save prices', UNDECIDED, OWN_RATES, UNTAXED, '$400.00', false],
+      ['undecided, store still undecided', UNDECIDED, {}, UNTAXED, '$400.00', false],
+      ['saved at payment, store still on Stripe Tax', { kind: 'at-payment' }, { mode: 'stripe' }, UNTAXED, '$400.00 before tax', true],
+      ['saved at payment, store now not collecting', { kind: 'at-payment' }, { mode: 'none' }, UNTAXED, '$400.00 before tax', true],
+      ['saved at a rate, store now on Stripe Tax', { kind: 'rate', pct: 10 }, { mode: 'stripe' }, AT_TEN_PERCENT, '$440.00', false],
+      ['saved at a rate, store now not collecting', { kind: 'rate', pct: 10 }, { mode: 'none' }, AT_TEN_PERCENT, '$440.00', false],
+    ])('%s', async (_name, tax, storeTax, totals, shown, atPayment) => {
+      storeQuote({ tax }, { totals })
+      docs.set('hosts/site1/settings/store', { currency: 'USD', tax: storeTax })
+      const outcome = await handleQuoteRespond(deps, post({ v: 2_000, action: 'approve', name: 'Jordan Lee' }))
+      expect(outcome.status).toBe(200)
+      expect(notified[0][2]?.emailDetails).toContainEqual({ label: 'Total', value: shown })
+      const view = outcome.body['view'] as { totals: { totalCents: number }; taxAtPayment: boolean }
+      expect(view.totals.totalCents).toBe(totals.totalCents)
+      expect(view.taxAtPayment).toBe(atPayment)
+    })
+  })
+
   it('records a change request with the artwork read back from this quote, by id', async () => {
     kept.set('a1', { id: 'a1', name: 'logo.ai', contentType: 'application/illustrator', size: 900, path: 'hosts/site1/private/uploads/quote-artwork/q-1/a1', uploadedAtMs: 9 })
     const outcome = await handleQuoteRespond(deps, post({ v: 2_000, action: 'changes', comment: 'Bigger logo', fileIds: ['a1'] }))
