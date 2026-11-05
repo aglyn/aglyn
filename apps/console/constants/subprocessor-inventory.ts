@@ -674,6 +674,30 @@ const DECLARED_EGRESS_HOSTS: Record<string, EgressHost> = {
       "From a visitor who presses play, or whose stored consent grants analytics on a page that loads the player with the page: the browser's requests for the player and, once it plays, the film, carrying the visitor's IP address and user-agent, and the viewing data Wistia's player reports. `video.tsx` adds Wistia's `doNotTrack` option to a pressed player unless the visitor's stored consent grants analytics, so a visitor still deciding, refused, opted out or sending GPC gets a player that does not record a viewing session; a player loaded with the page is loaded only for a visitor whose consent grants analytics. Either way the player keeps its own local storage inside its frame from the moment it loads. A visitor who neither presses play nor opens such a page with that consent sends nothing.",
   },
 
+  // YouTube's still of a film (AGL-4140). The player below is the author's
+  // choice of vendor; this picture is not. A YouTube film placed with no
+  // poster shows YouTube's own thumbnail, which the visitor's browser loads
+  // from Google with the page, before any press, because the PLATFORM chose
+  // to draw it rather than ask the author for a poster. So it is a published
+  // row of its own, unlike the player.
+  //
+  // ⛔ HELD: `publishedOn` is the /legal/subprocessors change-log date, and it
+  // is written only once that page publishes this row. Until then this entry
+  // reds `subprocessor-inventory.spec` on purpose, and the flag
+  // `release_video_embed_posters` stays off.
+  'i.ytimg.com': {
+    disposition: 'subprocessor',
+    entity: 'Google LLC (YouTube)',
+    region: 'United States (Google operates a global service)',
+    purpose:
+      'Showing YouTube’s own thumbnail as the poster of a YouTube video a customer’s site places without a poster of its own, until a visitor presses play',
+    publishedOn: 'PENDING-SUBPROCESSORS-PUBLISH',
+    reason:
+      "The still the Video element (`libs/plugins/mui/src/lib/components/video.tsx`) shows as the poster of a YouTube film with none, at `https://i.ytimg.com/vi/{id}/hqdefault.jpg`, an address core's `videoEmbedPosterSrc` rebuilds from the media id and the plugin's declaration (`libs/plugins/mui/src/lib/video-embed-providers.ts`) alone. Shown only where the site's workspace has `release_video_embed_posters` on, which is also the only place the tenant's `img-src` admits the origin (`apps/tenant/middleware.ts`). Declared a subprocessor because the platform, not the author, chose to load it: an author who wants nothing requested from YouTube before a press picks their own poster.",
+    dataReceived:
+      "From every visitor to a page that shows such a film, as the page loads and whether or not they press play: the browser's request for the picture, carrying the visitor's IP address and user-agent. The image is requested with no referrer, so the page's address is not sent, and nothing from the platform's own records goes with it.",
+  },
+
   // MARK – Requests that are made, and are still not Annex III rows
   //
   // Two admissible reasons only: nothing personal reaches the host, or the
@@ -682,16 +706,16 @@ const DECLARED_EGRESS_HOSTS: Record<string, EgressHost> = {
   'www.youtube-nocookie.com': {
     disposition: 'not-a-subprocessor',
     reason:
-      "Customer-chosen destination. The embed block renders an iframe for a URL a site author pasted into their own page. Aglyn selected no video vendor; the author did, and could equally paste a different one. The privacy-enhanced host is used precisely so the default carries less.",
+      "Customer-chosen destination. A YouTube link a site author pasted into their own page plays in YouTube's privacy-enhanced player: framed by the Video embed block as it comes into view (`loading='lazy'`), or by the Video element (AGL-4140) once a visitor presses play, or with the page for a visitor whose stored consent grants analytics when the element's `loadPlayer` switch is on. Either way the address is rebuilt from the media id alone (`parseVideoEmbedSrc`, and core's `video-embed-provider.ts` over the plugin's declaration). Aglyn selected no video vendor; the author did, and could equally paste a different one. The privacy-enhanced host is used precisely so the default carries less. YouTube's still of a poster-less film is another matter, declared on its own host, `i.ytimg.com`, above.",
     dataReceived:
-      "Whatever an embedded player receives from the visitor's browser — IP and user-agent — on a page the site author chose to put it on. Nothing from Aglyn's own records.",
+      "From a visitor whose browser loads the player, at any of the moments above: what the player's frame receives from the visitor's browser, IP address and user-agent, and the viewing YouTube's player records. Nothing from the platform's own records.",
   },
   'player.vimeo.com': {
     disposition: 'not-a-subprocessor',
     reason:
-      'Customer-chosen destination, identical shape to the YouTube embed above.',
+      "Customer-chosen destination, the same shape as the YouTube player above: a Vimeo link a site author pasted plays in Vimeo's player, framed by the Video embed block as it comes into view, or by the Video element (AGL-4140) after a press or with the page as above. Both rebuild the address from the media id alone; the element's carries `dnt=1` on every address, the block's carries none. Vimeo serves no still at an address built from the id, so the element asks the author for a poster and requests nothing from Vimeo before its player loads.",
     dataReceived:
-      "Whatever an embedded player receives from the visitor's browser, on a page the site author chose to put it on.",
+      "From a visitor whose browser loads the player, at any of the moments above: what the player's frame receives from the visitor's browser, IP address and user-agent, and, from the Video embed block's player, which sends no `dnt=1`, the viewing Vimeo's player records. Nothing from the platform's own records.",
   },
   'picsum.photos': {
     disposition: 'not-a-subprocessor',
