@@ -346,7 +346,7 @@ const PLATFORM_RELEASE_FLAGS: readonly ReleaseFlagDefinition[] = [
       'A YouTube film placed or imported with no poster shows YouTube\u2019s ' +
       'own thumbnail (AGL-4140), which each visitor\u2019s browser loads from ' +
       'i.ytimg.com with the page. OFF by default: nothing is requested from ' +
-      'Google until the Subprocessors page that discloses it is in effect.',
+      'Google until the Subprocessors page that discloses it is published.',
     defaultEnabled: false,
   },
 ]

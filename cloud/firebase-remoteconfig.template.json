@@ -207,7 +207,7 @@
       "defaultValue": {
         "value": "{\"enabled\": false, \"rolloutPercent\": 0}"
       },
-      "description": "A YouTube film with no poster shows YouTube's own thumbnail, loaded by each visitor's browser from i.ytimg.com (AGL-4140). OFF until the Subprocessors page disclosing it is in effect.",
+      "description": "A YouTube film with no poster shows YouTube's own thumbnail, loaded by each visitor's browser from i.ytimg.com (AGL-4140). OFF until the Subprocessors page disclosing it is published.",
       "valueType": "JSON"
     }
   },
