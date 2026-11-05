@@ -15,11 +15,8 @@
  * limitations under the License.
  */
 
-import {
-  CONTACT_SOURCE_LABELS,
-  type ContactSource,
-  normalizeContactEmail,
-} from '@aglyn/aglyn'
+import { type ContactSource, normalizeContactEmail } from '@aglyn/aglyn'
+import { isKnownContactSource } from '@aglyn/aglyn/plugin-manager/plugin-contact-capture'
 import type { ListFilterRequest } from '@aglyn/shared-util-tools/list-query/list-filter'
 import {
   CONTACTS_LIST_EMAIL_PARAM,
@@ -61,17 +58,17 @@ const NO_SEED: ContactsListSeed = {
  * query built from it is the query a typed filter builds. Nothing here is a
  * second predicate.
  *
- * Pure, and strict about what it accepts: an unknown source or an address
- * that is not one seeds nothing rather than a filter that matches nothing,
- * because an empty list under a bad link reads as "no such people".
+ * Strict about what it accepts: a source neither the core nor a plugin
+ * declares, or an address that is not one, seeds nothing rather than a filter
+ * that matches nothing, because an empty list under a bad link reads as "no
+ * such people".
  */
 export function contactsListSeed(
   params: { get(name: string): string | null } | null | undefined,
 ): ContactsListSeed {
   if (!params) return NO_SEED
   const rawSource = params.get(CONTACTS_LIST_SOURCE_PARAM) ?? ''
-  const source =
-    rawSource in CONTACT_SOURCE_LABELS ? (rawSource as ContactSource) : ''
+  const source = isKnownContactSource(rawSource) ? (rawSource as ContactSource) : ''
   const formId = (params.get(CONTACTS_LIST_FORM_PARAM) ?? '').trim() || null
   const openEmail = normalizeContactEmail(
     params.get(CONTACTS_LIST_EMAIL_PARAM),

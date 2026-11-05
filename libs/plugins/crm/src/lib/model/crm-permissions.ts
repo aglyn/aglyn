@@ -44,10 +44,21 @@ import type { PluginPermission } from '@aglyn/aglyn/plugin-manager/plugin-permis
  */
 
 /** The CRM's workspace keys, declared by tier. */
-export type CrmPermission = 'crm.settings'
+export type CrmPermission = 'crm.settings' | 'crm.colleagueTemplates'
 
 /** "Change CRM settings". */
 export const CRM_SETTINGS_PERMISSION: CrmPermission = 'crm.settings'
+
+/**
+ * "Change colleagues' email templates": the one rule branch that lets a member
+ * change or delete a personal template someone else keeps. It asked only whether
+ * the member spans the workspace, on top of the "Manage data" every template
+ * write asks, so every role holds this by default and those two questions still
+ * decide who reaches it: nobody's access moved, and a custom role or a member's
+ * own permissions can now refuse it. No route or console control asks it. A
+ * colleague's personal template is listed to nobody but its owner.
+ */
+export const CRM_COLLEAGUE_TEMPLATES_PERMISSION: CrmPermission = 'crm.colleagueTemplates'
 
 /** The keys as the plugin declares them; owners and admins hold it by default. */
 export const CRM_PERMISSIONS: readonly PluginPermission[] = [
@@ -58,6 +69,15 @@ export const CRM_PERMISSIONS: readonly PluginPermission[] = [
     description:
       'Change the CRM’s settings for every site: default sharing for new records, companies from email domains, default owners, assignment rules and the round-robin pool, sharing rules, and rotating the email capture address; and share records with other sites.',
     defaults: { admin: true, editor: false, viewer: false },
+    groupLabel: 'CRM',
+  },
+  {
+    key: 'crm.colleagueTemplates',
+    pluginId: 'crm',
+    label: 'Change colleagues’ email templates',
+    description:
+      'Change or delete an email template or snippet a colleague keeps for themselves, or re-file any template. Asks “Manage data” over the whole workspace as well; a site collaborator never holds it.',
+    defaults: { admin: true, editor: true, viewer: true },
     groupLabel: 'CRM',
   },
 ]

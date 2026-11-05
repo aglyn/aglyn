@@ -7443,6 +7443,7 @@
         "marketplace.payouts",
         "crm.moveStages",
         "crm.settings",
+        "crm.colleagueTemplates",
         "outreach.use",
         "outreach.manageAll",
         "data.siteManage",
@@ -7534,6 +7535,7 @@
         "marketplace.siteInstall",
         "marketplace.sitePublish",
         "crm.moveStages",
+        "crm.colleagueTemplates",
         "data.siteManage",
         "data.siteDelete",
         "data.viewRecords",
@@ -7628,6 +7630,7 @@
         "marketplace.payouts",
         "crm.moveStages",
         "crm.settings",
+        "crm.colleagueTemplates",
         "outreach.use",
         "outreach.manageAll",
         "data.siteManage",
@@ -7691,6 +7694,7 @@
         "domains.manage"
       ],
       "viewer": [
+        "crm.colleagueTemplates",
         "data.viewRecords",
         "data.export"
       ]
@@ -8348,6 +8352,14 @@
         "group": "crm",
         "key": "crm.settings",
         "label": "Change CRM settings",
+        "pluginId": "crm",
+        "scope": "org"
+      },
+      {
+        "description": "Change or delete an email template or snippet a colleague keeps for themselves, or re-file any template. Asks “Manage data” over the whole workspace as well; a site collaborator never holds it.",
+        "group": "crm",
+        "key": "crm.colleagueTemplates",
+        "label": "Change colleagues’ email templates",
         "pluginId": "crm",
         "scope": "org"
       },

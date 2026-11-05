@@ -1642,7 +1642,8 @@ resource.data.get(['sharing', 'added'], []));
 }
 function crmSharingUnchanged() {
 return !request.resource.data.diff(resource.data).affectedKeys()
-.hasAny(['sharing', 'writeTo', 'scopeMode', 'scopeExcept']);
+.hasAny(['sharing', 'writeTo', 'scopeMode', 'scopeExcept']) &&
+scopeHeldWhenMarked();
 }
 function crmSharingAbsent() {
 return !request.resource.data.keys()
@@ -1672,9 +1673,20 @@ return !request.resource.data.diff(resource.data)
 
 
 
+
+
+
+
+
+
+
 function scopeMarkerUnchanged() {
 return !request.resource.data.diff(resource.data).affectedKeys()
-.hasAny(['scopeMode', 'scopeExcept']);
+.hasAny(['scopeMode', 'scopeExcept']) &&
+scopeHeldWhenMarked();
+}
+function scopeHeldWhenMarked() {
+return scopeUnchanged() || scopeUnmarked(resource.data);
 }
 function scopeMarkerAbsent() {
 return !request.resource.data.keys().hasAny(['scopeMode', 'scopeExcept']);
@@ -1993,6 +2005,7 @@ allow delete: if isStaff() || canWriteScopedOrgData();
 
 
 
+
 function dealStageUnchanged() {
 return !request.resource.data.diff(resource.data).affectedKeys()
 .hasAny(['pipelineId', 'stageId', 'status', 'stageChangedAtMs',
@@ -2002,6 +2015,7 @@ match /deals/{dealId} {
 allow read: if isStaff() || canReadScopedPeople();
 allow create: if isStaff() ||
 (canWriteOrgData() && canCreateScoped() && crmSharingAbsent() &&
+request.resource.data.get('status', 'open') == 'open' &&
 crmMediaIdsOk() && orgCarriesCrmSuite(orgId));
 allow update: if isStaff() ||
 (canWriteScopedCrm() && (isOrgWideMember() || scopeUnchanged()) &&
@@ -2118,7 +2132,15 @@ resource.data.createdByUid == request.auth.uid));
 
 
 
+
+
+
+
 match /crmEmailTemplates/{templateId} {
+function mayTidyColleagueTemplates() {
+return isOrgWideMember() &&
+memberKeyOrOverride('crm.colleagueTemplates', ['owner', 'admin', 'editor', 'viewer']);
+}
 allow read: if isStaff() || canReadScopedPeople();
 allow create: if isStaff() ||
 (canWriteOrgData() && canCreateScoped() &&
@@ -2128,7 +2150,7 @@ request.resource.data.get('ownerUid', null) == request.auth.uid) &&
 orgCarriesCrmSuite(orgId));
 allow update: if isStaff() ||
 (canWriteScopedOrgData() &&
-(isOrgWideMember() ||
+(mayTidyColleagueTemplates() ||
 (scopeUnchanged() &&
 request.resource.data.createdByUid == resource.data.createdByUid &&
 (resource.data.get('visibility', 'shared') != 'personal' ||
@@ -2136,7 +2158,7 @@ resource.data.get('ownerUid', null) == request.auth.uid))) &&
 orgCarriesCrmSuite(orgId));
 allow delete: if isStaff() ||
 (canWriteScopedOrgData() &&
-(isOrgWideMember() ||
+(mayTidyColleagueTemplates() ||
 resource.data.get('visibility', 'shared') != 'personal' ||
 resource.data.get('ownerUid', null) == request.auth.uid));
 }

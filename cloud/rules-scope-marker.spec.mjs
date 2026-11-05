@@ -244,16 +244,34 @@ const seedCollections = async (seed, org = ORG) => {
   )
   await seed(['orgs', ORG, 'media', 'plain'], { ...COLLECTIONS.media.fields, visibleTo: ONE })
 
-  // TODAY'S ANSWER, NOT A DESIGN: `visibleTo` alone is not frozen on a marked
-  // document, so a member who may re-scope can leave the marker behind. `scopeSharingOf`
-  // reads `visibleTo` first and the sweep reports a marked `['org']` as invalid. The
-  // slice that first writes a marker decides this by moving the write to its route.
-  await allow('an org-wide re-scope of a marked document leaves the marker as it was', () =>
-    updateDoc(doc(as('owner'), 'orgs', ORG, 'media', 'marked'), { visibleTo: ['org'] }),
-  )
-  await deny('a collaborator still cannot re-scope a marked document', () =>
-    updateDoc(doc(as('siteOnly'), 'orgs', ORG, 'mediaFolders', 'marked'), { visibleTo: TWO }),
-  )
+  // A client cannot re-scope a marked document, or it would leave the marker
+  // describing sharing the document no longer has. Only the set-sharing route writes
+  // the two together. A document with no marker re-scopes as it always has.
+  for (const [name, { writes, fields }] of Object.entries(COLLECTIONS)) {
+    if (!writes) continue
+    await seed(['orgs', ORG, name, 're-scope'], { ...fields, visibleTo: ONE })
+    for (const uid of ['owner', 'editor']) {
+      const db = as(uid)
+      await deny(`${uid} on ${name}: cannot widen a marked document`, () =>
+        updateDoc(doc(db, 'orgs', ORG, name, 'marked'), { visibleTo: ['org'] }),
+      )
+      await deny(`${uid} on ${name}: cannot narrow a marked document`, () =>
+        updateDoc(doc(db, 'orgs', ORG, name, 'marked'), { visibleTo: TWO }),
+      )
+      await deny(`${uid} on ${name}: cannot re-scope a marked document along with an edit`, () =>
+        updateDoc(doc(db, 'orgs', ORG, name, 'marked'), { label: `e${++edits}`, visibleTo: TWO }),
+      )
+    }
+    await allow(`owner on ${name}: re-scopes a document with no marker, as today`, () =>
+      updateDoc(doc(as('owner'), 'orgs', ORG, name, 're-scope'), { visibleTo: TWO }),
+    )
+    await allow(`editor on ${name}: re-scopes a document with no marker, as today`, () =>
+      updateDoc(doc(as('editor'), 'orgs', ORG, name, 're-scope'), { visibleTo: ONE }),
+    )
+    await deny(`a collaborator on ${name}: cannot re-scope a marked document`, () =>
+      updateDoc(doc(as('siteOnly'), 'orgs', ORG, name, 'marked'), { visibleTo: TWO }),
+    )
+  }
 
   await env.cleanup()
 }
@@ -582,6 +600,9 @@ const slug = (text) => text.replace(/[^a-z]+/gi, '-')
     if (!writes) continue
     await allow(`control: without the freeze, ${name} takes a forged marker`, () =>
       updateDoc(doc(db, 'orgs', ORG, name, 'plain'), MARKER),
+    )
+    await allow(`control: without the freeze, ${name} is re-scoped with its marker on`, () =>
+      updateDoc(doc(db, 'orgs', ORG, name, 'marked'), { visibleTo: TWO }),
     )
     await allow(`control: without the freeze, ${name} loses its marker`, () =>
       updateDoc(doc(db, 'orgs', ORG, name, 'marked'), { scopeMode: deleteField(), scopeExcept: deleteField() }),
