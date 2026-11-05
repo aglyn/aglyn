@@ -130,6 +130,8 @@ export const waiversRefs = {
     org(orgId).collection(WAIVERS_COLLECTIONS.signatures).doc(signatureId),
   /** A site's retention state: the period its signatures are stamped with (AGL-4042). */
   retention: (orgId: string, hostId: string) => org(orgId).collection(WAIVERS_COLLECTIONS.retention).doc(hostId),
+  /** Every site's retention state, one document per site with a signature (AGL-4042). */
+  retentions: (orgId: string) => org(orgId).collection(WAIVERS_COLLECTIONS.retention),
   /**
    * The site's mirror of each waiver's title, for the Besigner's picker. The
    * name is written out (it is `WAIVER_TITLES_SUBCOLLECTION`) because the
