@@ -92,10 +92,11 @@ export const TS_ROLE_GATE = [
  * Nor is `canReadTransferJobs`, which asks "Manage data" alone, nor
  * `publisherManager`, `listingManager` and `canReadOutreach`, which ask
  * "Edit the publisher profile", "Manage published listings" and "Use
- * Sequences" alone.
+ * Sequences" alone, nor `canReadScopedPeople` and
+ * `isOrgWideAudienceManager`, which ask "Manage data" alone.
  */
 export const RULES_ROLE_GATE = [
-  String.raw`\b(canManageOrg|canWriteOrgData|canWriteOrgWideData|isOrgWideAudienceManager|canReadScopedPeople)\(`,
+  String.raw`\b(canManageOrg|canWriteOrgData|canWriteOrgWideData)\(`,
   String.raw`hostMemberRole\(hostId\)\s*(==|in)\s*['\[]`,
   String.raw`\brole\s*(==|in)\s*['\[]`,
   String.raw`\.role\s+in\b`,

@@ -797,6 +797,7 @@ allow update: if (isSuperStaff() &&
 
 
 
+
 match /billing/{billingDocId} {
 allow read: if isStaff() ||
 (canManageOrg() && memberGrants('billing.view'));
@@ -953,11 +954,15 @@ allow read, write: if false;
 
 
 
+
+
+
+
+
 match /hardwareOrders/{orderId} {
 allow read: if isStaff() ||
 (isOrgWideMember() && orgNotSuspended() &&
-((orgMember().role in ['owner', 'admin', 'editor'] &&
-memberGrants('managePos')) ||
+(memberKeyOrOverride('managePos', ['owner', 'admin', 'editor']) ||
 memberStamps('posBuyHardware')));
 allow write: if false;
 }
@@ -1157,14 +1162,14 @@ allow write: if false;
 
 
 
+
+
 match /aiUsageByUser/{subjectUid}/months/{month} {
 allow read: if isStaff() ||
 (isOrgMember() && subjectUid == request.auth.uid) ||
 (isOrgWideMember() &&
-((canManageOrg() &&
-(memberResolves('billing.view') || memberResolves('org.auditLog'))) ||
-memberStamps('billing.view') ||
-memberStamps('org.auditLog')));
+(memberKeyOrOverride('billing.view', ['owner', 'admin']) ||
+memberKeyOrOverride('org.auditLog', ['owner', 'admin'])));
 allow write: if false;
 }
 
@@ -1201,10 +1206,8 @@ allow read: if isStaff() ||
 (subject.matches('collab:[A-Za-z0-9_-]+:[A-Za-z0-9_-]+') &&
 subject.split(':')[2] == request.auth.uid))) ||
 (isOrgWideMember() &&
-((canManageOrg() &&
-(memberResolves('billing.view') || memberResolves('billing.manage'))) ||
-memberStamps('billing.view') ||
-memberStamps('billing.manage'))) ||
+(memberKeyOrOverride('billing.view', ['owner', 'admin']) ||
+memberKeyOrOverride('billing.manage', ['owner', 'admin']))) ||
 (isOrgMember() &&
 subject.matches('(collab|host):[A-Za-z0-9_-]+(:[A-Za-z0-9_-]+)?') &&
 orgMember().get('hostAccess', {}).get(subject.split(':')[1], '') == 'admin');
@@ -1227,23 +1230,21 @@ allow write: if false;
 
 
 
+
+
 match /aiBilling/{document} {
 allow read: if isStaff() ||
 (isOrgWideMember() &&
-((canManageOrg() &&
-(memberResolves('billing.view') || memberResolves('billing.manage'))) ||
-memberStamps('billing.view') ||
-memberStamps('billing.manage')));
+(memberKeyOrOverride('billing.view', ['owner', 'admin']) ||
+memberKeyOrOverride('billing.manage', ['owner', 'admin'])));
 allow write: if false;
 }
 
 match /aiOverageCharges/{chargeId} {
 allow read: if isStaff() ||
 (isOrgWideMember() &&
-((canManageOrg() &&
-(memberResolves('billing.view') || memberResolves('billing.manage'))) ||
-memberStamps('billing.view') ||
-memberStamps('billing.manage')));
+(memberKeyOrOverride('billing.view', ['owner', 'admin']) ||
+memberKeyOrOverride('billing.manage', ['owner', 'admin'])));
 allow write: if false;
 }
 
@@ -1397,33 +1398,13 @@ orgNotSuspended();
 
 
 
-
-function memberResolves(permission) {
-return orgMember()
-.get('resolvedPermissions', orgMember().get('permissions', {}))
-.get(permission, true) == true;
-}
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
 function memberStamps(permission) {
 return orgMember()
 .get('resolvedPermissions', orgMember().get('permissions', {}))
 .get(permission, false) == true;
 }
+
+
 
 
 
@@ -1547,11 +1528,14 @@ resource.data.visibleTo.hasAny(orgMember().get('scopeTokens', ['org'])));
 
 
 
+
+
+
+
+
 function canReadScopedPeople() {
 return canReadScoped() &&
-(memberStamps('data.manage') ||
-(orgMember().role in ['owner', 'admin', 'editor'] &&
-memberResolves('data.manage')));
+memberKeyOrOverride('data.manage', ['owner', 'admin', 'editor']);
 }
 function canWriteScopedOrgData() {
 return canWriteOrgData() && canReadScoped();
@@ -2174,10 +2158,12 @@ match /lists/{listId} {
 
 
 
+
+
+
 function isOrgWideAudienceManager() {
 return isOrgWideMember() &&
-orgMember().role in ['owner', 'admin', 'editor'] &&
-memberResolves('data.manage');
+memberKeyOrOverride('data.manage', ['owner', 'admin', 'editor']);
 }
 
 
