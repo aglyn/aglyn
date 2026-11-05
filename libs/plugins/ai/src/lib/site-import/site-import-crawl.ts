@@ -70,8 +70,6 @@
 import { lookalikeBrandForHost } from '@aglyn/shared-util-email/outbound-phishing-screen'
 import { fenceUntrustedText } from '@aglyn/shared-util-tools/untrusted-text'
 import {
-  AI_THEME_REFERENCE_STYLESHEETS,
-  AI_THEME_STYLESHEET_MAX_BYTES,
   fetchPublicTextDetailed,
   type PublicFetchEdge,
   type PublicFetchOptions,
@@ -99,6 +97,7 @@ import {
   type RobotsRule,
 } from './site-import-robots'
 import { NO_SITE_IMPORT_HEADERS, siteImportEdgeHeadersFor, type SiteImportHeadersFor } from './site-import-edge'
+import { siteImportReadStylesheets, type SiteImportSheetAnswer } from './site-import-css'
 import { siteImportLayout, siteImportLookOf } from './site-import-layout'
 import {
   siteImportAddressOf,
@@ -138,6 +137,8 @@ export const SITE_IMPORT_DEFAULTS = {
   requestTimeoutMs: 8_000,
   robotsMaxBytes: 256 * 1024,
   sitemapMaxBytes: 4 * 1024 * 1024,
+  /** All the distinct stylesheets one crawl holds at once (AGL-4152): a site's pages share theirs, and one that does not stops here. */
+  stylesheetsMaxBytes: 32 * 1024 * 1024,
   /** Sitemap documents read, an index's children included: an index of six children is seven. */
   maxSitemaps: 24,
   /** URLs a sitemap may contribute to the queue. */
@@ -417,7 +418,8 @@ export async function crawlSiteForImport(
   const sameSite = (url: URL) => origins.includes(url.origin) && url.protocol === 'https:'
   const remainingBytes = () => maxTotalBytes - inventory.bytesRead
   const outOfTime = () => controller.signal.aborted || now() >= deadlineAt
-  const request = (url: string, accept: RegExp, acceptHeader: string, maxBytes: number) =>
+  /** A stylesheet's read (`sheet`) may be cut at its cap and may go where its CDN sends it: every hop is checked as public all the same. */
+  const request = (url: string, accept: RegExp, acceptHeader: string, maxBytes: number, sheet = false) =>
     fetchText(url, {
       maxBytes,
       accept,
@@ -426,8 +428,7 @@ export async function crawlSiteForImport(
       headersFor,
       signal: controller.signal,
       timeoutMs: Math.max(1, Math.min(SITE_IMPORT_DEFAULTS.requestTimeoutMs, deadlineAt - now())),
-      redirectAllowed: (_from, to) => sameSite(to),
-      refuseOver: true,
+      ...(sheet ? {} : { redirectAllowed: (_from: URL, to: URL) => sameSite(to), refuseOver: true }),
     })
   /** Addresses taken in, read or not: one a page is waiting on that is here and is no page will never be. */
   const takenIn = new Set<string>()
@@ -613,25 +614,20 @@ export async function crawlSiteForImport(
       }
     }
     const readLayout = options.layout ?? !!only
-    /** Linked stylesheets, each asked once a crawl. */
-    const sheets = new Map<string, Promise<string | null>>()
-    const stylesheet = (url: string): Promise<string | null> => {
+    /** Linked stylesheets, as far as any page has read each: a sheet a page shares is asked no further than it was. */
+    const sheets = new Map<string, { asked: number; answer: SiteImportSheetAnswer | null }>()
+    let sheetBytes = 0
+    const stylesheet = async (url: string, maxBytes: number): Promise<SiteImportSheetAnswer | null> => {
       const held = sheets.get(url)
-      if (held) return held
-      const room = Math.min(AI_THEME_STYLESHEET_MAX_BYTES, remainingBytes() - reserved)
-      const asked: Promise<string | null> =
-        room <= 0 || outOfTime()
-          ? Promise.resolve(null)
-          : request(url, /text\/css|text\/plain/i, 'text/css,*/*;q=0.1', room).then(
-              (answer) => {
-                if (!answer.ok) return null
-                inventory.bytesRead += answer.bytes
-                return answer.text
-              },
-              () => null,
-            )
-      sheets.set(url, asked)
-      return asked
+      if (held && (held.asked >= maxBytes || (held.answer && !held.answer.truncated))) return held.answer
+      const room = Math.min(maxBytes, SITE_IMPORT_DEFAULTS.stylesheetsMaxBytes - sheetBytes + (held?.answer?.bytes ?? 0), remainingBytes() - reserved)
+      if (room <= 0 || outOfTime()) return held?.answer ?? null
+      const read = await request(url, /text\/css|text\/plain/i, 'text/css,*/*;q=0.1', room, true).catch(() => null)
+      if (read?.ok) inventory.bytesRead += read.bytes
+      const answer = read?.ok ? read : (held?.answer ?? null)
+      sheetBytes += (answer?.bytes ?? 0) - (held?.answer?.bytes ?? 0)
+      sheets.set(url, { asked: room, answer })
+      return answer
     }
     /** Takes one asked page in: the inventory's next page, a skip, or the reason the read must stop. */
     const takeIn = async ({ next, key, cap, page }: Asked): Promise<SiteImportStop | null> => {
@@ -705,8 +701,7 @@ export async function crawlSiteForImport(
       // How the page is built (AGL-4106), through its own stylesheets.
       let built: Pick<SiteImportPage, 'layout' | 'nav' | 'footer' | 'look'> = {}
       if (extract.structure) {
-        const linked = await Promise.all(extract.structure.stylesheets.filter((url) => !/fonts\.googleapis\.com/i.test(url)).slice(0, AI_THEME_REFERENCE_STYLESHEETS).map(stylesheet))
-        const css = linked.filter((text): text is string => typeof text === 'string')
+        const css = await siteImportReadStylesheets(extract.structure.stylesheets.filter((url) => !/fonts\.googleapis\.com/i.test(url)), stylesheet, { outOfTime })
         const source = { blocks: extract.blocks, organization: extract.organization, structure: extract.structure, ...(extract.videos ? { videos: extract.videos } : {}) }
         try {
           built = {
