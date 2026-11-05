@@ -36,6 +36,10 @@ let connectionState: {
 }
 const request = jest.fn()
 
+jest.mock('@aglyn/tenant-feature-instance/hooks/use-site-keys', () => ({
+  useSiteKeys: () => ({ blocked: (key: string) => mockBlockedKeys.has(key) }),
+}))
+const mockBlockedKeys = new Set<string>()
 jest.mock('./tax-engines-api', () => ({
   useTaxEnginesFetch: () => request,
   useTaxEngineConnection: () => ({ ...connectionState, refresh: jest.fn(), replace: jest.fn() }),
@@ -149,5 +153,18 @@ describe('a product’s tax code', () => {
     connectionState = { ...connectionState, available: true }
     const { container } = render(<ProductTaxCodeField hostId="host-1" product={{ id: 'prod-1' } as never} />)
     expect(container.innerHTML).toBe('')
+  })
+})
+
+describe('the card follows the keys its routes ask (AGL-4047)', () => {
+  afterEach(() => mockBlockedKeys.clear())
+
+  it('names the permission without "Manage the tax engine connection"', async () => {
+    mockBlockedKeys.add('taxEngines.manage')
+    connectionState = { ...connectionState, available: true, connection: CONNECTION }
+    request.mockResolvedValue({ exemptions: [] })
+    render(<TaxEngineCard hostId="host-1" />)
+    expect(screen.getByText(/does not include/).textContent).toContain('ask an organization admin')
+    expect((screen.getByRole('button', { name: 'Disconnect' }) as HTMLButtonElement).disabled).toBe(true)
   })
 })

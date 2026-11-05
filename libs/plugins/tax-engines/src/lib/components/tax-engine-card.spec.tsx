@@ -31,6 +31,10 @@ let connection: TaxEngineConnectionView | null
 let storeTax: StoreTaxSettingsView | null | undefined
 const request = jest.fn()
 
+jest.mock('@aglyn/tenant-feature-instance/hooks/use-site-keys', () => ({
+  useSiteKeys: () => ({ blocked: (key: string) => mockBlockedKeys.has(key) }),
+}))
+const mockBlockedKeys = new Set<string>()
 jest.mock('./tax-engines-api', () => ({
   useTaxEnginesFetch: () => request,
   useTaxEngineConnection: () => ({

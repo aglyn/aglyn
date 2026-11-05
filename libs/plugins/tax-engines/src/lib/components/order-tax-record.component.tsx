@@ -17,6 +17,10 @@
  * limitations under the License.
  */
 
+import { permissionRefusalText } from '@aglyn/aglyn/app-utils/org-permissions'
+import { BlockedControl } from '@aglyn/shared-ui-jsx/components/blocked-control.component'
+import { useSiteKeys } from '@aglyn/tenant-feature-instance/hooks/use-site-keys'
+import { TAX_ENGINES_SITE_PRESETS } from '../model/tax-engines-permissions'
 import { useSnackbar } from '@aglyn/shared-ui-snackstack'
 import { Alert, Button, Chip, Stack, Typography } from '@mui/material'
 import { useCallback, useEffect, useState } from 'react'
@@ -56,6 +60,7 @@ function money(cents: number, currency = 'usd'): string {
  */
 export function OrderTaxRecord(props: OrderTaxRecordProps) {
   const { hostId, order } = props
+  const refused = useSiteKeys(hostId).blocked('taxEngines.orders', TAX_ENGINES_SITE_PRESETS['taxEngines.orders'])
   const request = useTaxEnginesFetch()
   const { enqueueSnackbar } = useSnackbar()
   const [transaction, setTransaction] = useState<TaxEngineTransactionView | null>(null)
@@ -119,9 +124,11 @@ export function OrderTaxRecord(props: OrderTaxRecordProps) {
       ) : null}
       {transaction.lastError ? <Alert severity={transaction.status === 'failed' ? 'error' : 'warning'}>{transaction.lastError}</Alert> : null}
       {transaction.status === 'failed' || transaction.status === 'pending' ? (
-        <Button size="small" disabled={busy} onClick={handleRetry} sx={{ alignSelf: 'flex-start' }}>
+        <BlockedControl blocked={refused} reason={permissionRefusalText('taxEngines.orders')}>
+          <Button size="small" disabled={busy} onClick={handleRetry} sx={{ alignSelf: 'flex-start' }}>
           {'Record it again'}
         </Button>
+        </BlockedControl>
       ) : null}
     </Stack>
   )

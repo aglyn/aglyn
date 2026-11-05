@@ -35,6 +35,8 @@ import { newAttemptKey, type CouriersApi } from './couriers-api'
  * queue's "Send a courier" dialog, so both say the same thing.
  */
 export interface CourierPanelProps {
+  /** The member does not hold "Dispatch couriers": its controls are off, and it says so. */
+  locked?: boolean
   orderId: string
   api: CouriersApi
   connection: CourierConnectionView
@@ -69,7 +71,9 @@ export function CourierPanel(props: CourierPanelProps) {
   const { enqueueSnackbar } = useSnackbar()
   const { confirm } = useConfirmationContext()
   const [view, setView] = useState<CourierOrderView | null>(null)
-  const [busy, setBusy] = useState(false)
+  const [working, setBusy] = useState(false)
+  // Off for a member without "Dispatch couriers", the same way as while a change runs.
+  const busy = working || props.locked === true
   const [error, setError] = useState<string | null>(null)
   // One booking attempt's key, kept until it lands: a retry after a lost
   // answer finds the courier the first try booked instead of booking twice.

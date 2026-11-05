@@ -1134,11 +1134,20 @@
         "WORKFLOWS_PERMISSIONS",
         "ACCOUNTING_PERMISSIONS",
         "SHIPPING_SITE_PERMISSIONS",
+        "TAX_ENGINES_SITE_PERMISSIONS",
         "SALES_CHANNELS_SITE_PERMISSIONS",
         "MARKETING_PLATFORMS_SITE_PERMISSIONS",
+        "POST_PURCHASE_SITE_PERMISSIONS",
+        "FULFILLMENT_NETWORKS_SITE_PERMISSIONS",
+        "MARKETPLACES_SITE_PERMISSIONS",
+        "PRINT_ON_DEMAND_SITE_PERMISSIONS",
+        "INVENTORY_SYNC_SITE_PERMISSIONS",
         "LOYALTY_SITE_PERMISSIONS",
+        "COURIERS_SITE_PERMISSIONS",
+        "REVIEW_PLATFORMS_SITE_PERMISSIONS",
         "HELP_DESKS_SITE_PERMISSIONS",
         "WAIVERS_PERMISSION_DECLARATIONS",
+        "AD_CONVERSIONS_SITE_PERMISSIONS",
         "DOMAINS_PERMISSIONS"
       ],
       "parts": [
@@ -1162,7 +1171,16 @@
         "libs/plugins/sales-channels/src/lib/model/sales-channels-permissions.ts",
         "libs/plugins/marketing-platforms/src/lib/model/marketing-platforms-permissions.ts",
         "libs/plugins/loyalty/src/lib/model/loyalty-permissions.ts",
-        "libs/plugins/help-desks/src/lib/model/help-desks-permissions.ts"
+        "libs/plugins/help-desks/src/lib/model/help-desks-permissions.ts",
+        "libs/plugins/tax-engines/src/lib/model/tax-engines-permissions.ts",
+        "libs/plugins/post-purchase/src/lib/model/post-purchase-permissions.ts",
+        "libs/plugins/fulfillment-networks/src/lib/model/fulfillment-networks-permissions.ts",
+        "libs/plugins/marketplaces/src/lib/model/marketplaces-permissions.ts",
+        "libs/plugins/print-on-demand/src/lib/model/print-on-demand-permissions.ts",
+        "libs/plugins/inventory-sync/src/lib/model/inventory-sync-permissions.ts",
+        "libs/plugins/couriers/src/lib/model/couriers-permissions.ts",
+        "libs/plugins/review-platforms/src/lib/model/review-platforms-permissions.ts",
+        "libs/plugins/ad-conversions/src/lib/model/ad-conversions-permissions.ts"
       ]
     }
   },

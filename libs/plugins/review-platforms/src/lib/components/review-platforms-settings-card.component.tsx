@@ -17,6 +17,10 @@
 
 'use client'
 
+import { permissionRefusalText } from '@aglyn/aglyn/app-utils/org-permissions'
+import { BlockedControl } from '@aglyn/shared-ui-jsx/components/blocked-control.component'
+import { useSiteKeys } from '@aglyn/tenant-feature-instance/hooks/use-site-keys'
+import { REVIEW_PLATFORMS_SITE_PRESETS } from '../model/review-platforms-permissions'
 import { pluginDocsHelp } from '@aglyn/aglyn/app-utils/docs-help'
 import { CardDisplay } from '@aglyn/shared-ui-jsx'
 import { StatusChip } from '@aglyn/shared-ui-jsx/components/status-chip.component'
@@ -100,7 +104,10 @@ export default ReviewPlatformsSettingsCards
 function useSave(platform: ReviewPlatform, hostId: string, onSaved: (answer: SettingsAnswer) => void) {
   const request = useReviewPlatformsFetch()
   const { enqueueSnackbar } = useSnackbar()
-  const [saving, setSaving] = useState(false)
+  const [working, setSaving] = useState(false)
+  // Off for a member without the key, the same way as while a change saves.
+  const refused = useSiteKeys(hostId).blocked('reviewPlatforms.manage', REVIEW_PLATFORMS_SITE_PRESETS['reviewPlatforms.manage'])
+  const saving = working || refused
   const send = async (change: Draft, done: string): Promise<boolean> => {
     setSaving(true)
     try {
@@ -114,7 +121,7 @@ function useSave(platform: ReviewPlatform, hostId: string, onSaved: (answer: Set
       setSaving(false)
     }
   }
-  return { saving, send }
+  return { saving, working, refused, send }
 }
 
 function secretField(props: {
@@ -140,7 +147,7 @@ function TrustpilotCard(props: { hostId: string; settings: ReviewPlatformsSettin
   const { hostId, settings, onSaved } = props
   const current = settings.trustpilot
   const [draft, setDraft] = useState<Draft>({})
-  const { saving, send } = useSave('trustpilot', hostId, onSaved)
+  const { saving, working, refused, send } = useSave('trustpilot', hostId, onSaved)
   const mode = draft.mode ?? current.mode
   const set = (patch: Draft) => setDraft((prior) => ({ ...prior, ...patch }))
   const value = (key: keyof Draft, fallback: string | null) => String((draft[key] as string | undefined) ?? fallback ?? '')
@@ -168,13 +175,15 @@ function TrustpilotCard(props: { hostId: string; settings: ReviewPlatformsSettin
                 {'Disconnect API'}
               </Button>
             ) : null}
-            <Button
+            <BlockedControl blocked={refused} reason={permissionRefusalText('reviewPlatforms.manage')}>
+              <Button
               variant="contained"
               disabled={saving || Object.keys(draft).length === 0}
               onClick={() => void send(draft, 'Trustpilot saved').then((ok) => ok && setDraft({}))}
             >
-              {saving ? 'Saving…' : 'Save'}
+              {working ? 'Saving…' : 'Save'}
             </Button>
+            </BlockedControl>
           </Stack>
         ),
       }}
@@ -264,7 +273,7 @@ function YotpoCard(props: { hostId: string; settings: ReviewPlatformsSettingsVie
   const { hostId, settings, onSaved } = props
   const current = settings.yotpo
   const [draft, setDraft] = useState<Draft>({})
-  const { saving, send } = useSave('yotpo', hostId, onSaved)
+  const { saving, working, refused, send } = useSave('yotpo', hostId, onSaved)
   const set = (patch: Draft) => setDraft((prior) => ({ ...prior, ...patch }))
 
   return (
@@ -289,13 +298,15 @@ function YotpoCard(props: { hostId: string; settings: ReviewPlatformsSettingsVie
                 {'Disconnect'}
               </Button>
             ) : null}
-            <Button
+            <BlockedControl blocked={refused} reason={permissionRefusalText('reviewPlatforms.manage')}>
+              <Button
               variant="contained"
               disabled={saving || Object.keys(draft).length === 0}
               onClick={() => void send(draft, 'Yotpo saved').then((ok) => ok && setDraft({}))}
             >
-              {saving ? 'Saving…' : 'Save'}
+              {working ? 'Saving…' : 'Save'}
             </Button>
+            </BlockedControl>
           </Stack>
         ),
       }}
@@ -312,7 +323,7 @@ function YotpoCard(props: { hostId: string; settings: ReviewPlatformsSettingsVie
         {secretField({ label: 'Secret key', value: draft.secretKey, stored: current.connected, onChange: (secretKey) => set({ secretKey }) })}
         <FormControlLabel
           control={
-            <Switch checked={draft.enabled ?? current.enabled} onChange={(event) => set({ enabled: event.target.checked })} />
+            <Switch disabled={refused} checked={draft.enabled ?? current.enabled} onChange={(event) => set({ enabled: event.target.checked })} />
           }
           label="Send shipped orders to Yotpo for review requests"
         />

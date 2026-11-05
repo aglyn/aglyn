@@ -15,6 +15,7 @@
  * limitations under the License.
  */
 
+import type { MarketplacesSitePermission } from '../model/marketplaces-permissions'
 import { MARKETPLACES_API_ROUTES, OAUTH_STATE_TTL_MS, ORDERS_FIRST_LOOKBACK_MS } from '../constants'
 import {
   isMarketplaceId,
@@ -52,8 +53,6 @@ import {
  * {@link connectionView} and {@link marketplaceOrderView}.
  */
 
-export type MarketplaceRole = 'viewer' | 'editor' | 'admin'
-
 export interface MarketplaceGateResult {
   orgId: string
   hostId: string
@@ -67,7 +66,7 @@ export interface MarketplaceRouteDeps {
   store: MarketplaceStore
   provider(id: MarketplaceId): MarketplaceProvider
   engine: Engine
-  gate(request: Request, role: MarketplaceRole): Promise<MarketplaceGateResult | Response>
+  gate(request: Request, permission: MarketplacesSitePermission | null): Promise<MarketplaceGateResult | Response>
   /** The console address of a path, or `null` when the deployment has none. */
   consoleAddress(path: string, requestUrl: string): string | null
   /** Records a connect or a disconnect on the workspace's activity log. Must not throw. */
@@ -117,7 +116,7 @@ export function createMarketplaceRoutes(deps: MarketplaceRouteDeps) {
     /** GET ?hostId — what this deployment offers, and the site's connections. */
     async list(request: Request): Promise<Response> {
       if (request.method !== 'GET') return fail(405, 'Method not allowed')
-      const gate = await deps.gate(request, 'editor')
+      const gate = await deps.gate(request, 'marketplaces.view')
       if (gate instanceof Response) return gate
       const config = deps.config()
       const connections = (await deps.store.connectionsForHost(gate.hostId))
@@ -132,7 +131,7 @@ export function createMarketplaceRoutes(deps: MarketplaceRouteDeps) {
     /** POST { hostId, marketplace, returnTo } — start connecting; answers the consent page address. */
     async connect(request: Request): Promise<Response> {
       if (request.method !== 'POST') return fail(405, 'Method not allowed')
-      const gate = await deps.gate(request, 'admin')
+      const gate = await deps.gate(request, 'marketplaces.manage')
       if (gate instanceof Response) return gate
       const marketplace = readMarketplace(gate.body, request)
       if (!marketplace) return fail(400, 'Choose a marketplace')
@@ -262,7 +261,7 @@ export function createMarketplaceRoutes(deps: MarketplaceRouteDeps) {
     /** PATCH { hostId, marketplace, …settings } · DELETE { hostId, marketplace } */
     async connection(request: Request): Promise<Response> {
       if (request.method !== 'PATCH' && request.method !== 'DELETE') return fail(405, 'Method not allowed')
-      const gate = await deps.gate(request, 'admin')
+      const gate = await deps.gate(request, 'marketplaces.manage')
       if (gate instanceof Response) return gate
       const marketplace = readMarketplace(gate.body, request)
       if (!marketplace) return fail(400, 'Choose a marketplace')
@@ -307,7 +306,7 @@ export function createMarketplaceRoutes(deps: MarketplaceRouteDeps) {
     /** POST { hostId, marketplace } — read orders, confirm shipments and bring listings in line now. */
     async syncNow(request: Request): Promise<Response> {
       if (request.method !== 'POST') return fail(405, 'Method not allowed')
-      const gate = await deps.gate(request, 'admin')
+      const gate = await deps.gate(request, 'marketplaces.manage')
       if (gate instanceof Response) return gate
       const marketplace = readMarketplace(gate.body, request)
       if (!marketplace) return fail(400, 'Choose a marketplace')
@@ -325,7 +324,7 @@ export function createMarketplaceRoutes(deps: MarketplaceRouteDeps) {
     /** GET ?hostId&marketplace — the connection's activity, newest first, and the listings to look at. */
     async activity(request: Request): Promise<Response> {
       if (request.method !== 'GET') return fail(405, 'Method not allowed')
-      const gate = await deps.gate(request, 'editor')
+      const gate = await deps.gate(request, 'marketplaces.view')
       if (gate instanceof Response) return gate
       const marketplace = readMarketplace(gate.body, request)
       if (!marketplace) return fail(400, 'Choose a marketplace')
@@ -347,7 +346,7 @@ export function createMarketplaceRoutes(deps: MarketplaceRouteDeps) {
     /** GET ?hostId&recordId — the marketplace an order came from, its fees and its shipments there. */
     async order(request: Request): Promise<Response> {
       if (request.method !== 'GET') return fail(405, 'Method not allowed')
-      const gate = await deps.gate(request, 'viewer')
+      const gate = await deps.gate(request, null)
       if (gate instanceof Response) return gate
       const recordId = readRecordId(gate.body, request)
       if (!recordId) return fail(400, 'Missing recordId')
@@ -358,7 +357,7 @@ export function createMarketplaceRoutes(deps: MarketplaceRouteDeps) {
     /** POST { hostId, recordId } — send an order's refused or failed shipments to its marketplace again. */
     async orderRetry(request: Request): Promise<Response> {
       if (request.method !== 'POST') return fail(405, 'Method not allowed')
-      const gate = await deps.gate(request, 'editor')
+      const gate = await deps.gate(request, 'marketplaces.orders')
       if (gate instanceof Response) return gate
       const recordId = readRecordId(gate.body, request)
       if (!recordId) return fail(400, 'Missing recordId')

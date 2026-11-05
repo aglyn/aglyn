@@ -15,6 +15,10 @@
  * limitations under the License.
  */
 
+import { permissionRefusalText } from '@aglyn/aglyn/app-utils/org-permissions'
+import { BlockedControl } from '@aglyn/shared-ui-jsx/components/blocked-control.component'
+import { useSiteKeys } from '@aglyn/tenant-feature-instance/hooks/use-site-keys'
+import { INVENTORY_SYNC_SITE_PRESETS } from '../model/inventory-sync-permissions'
 import { StatusChip, type StatusTone } from '@aglyn/shared-ui-jsx/components/status-chip.component'
 import { useSnackbar } from '@aglyn/shared-ui-snackstack'
 import { Alert, Box, Button, Stack, Typography } from '@mui/material'
@@ -52,6 +56,7 @@ const STATUS: Readonly<Record<InventoryOrderStatus, { label: string; tone: Statu
 export function OrderInventoryWidget(props: OrderInventoryWidgetProps) {
   const routesApi = useInventorySyncApi(props.hostId)
   const api = props.api ?? routesApi
+  const refused = useSiteKeys(props.hostId).blocked('inventorySync.orders', INVENTORY_SYNC_SITE_PRESETS['inventorySync.orders'])
   const { enqueueSnackbar } = useSnackbar()
   const [answer, setAnswer] = useState<InventoryOrderAnswer | null>(null)
   const [busy, setBusy] = useState(false)
@@ -98,9 +103,11 @@ export function OrderInventoryWidget(props: OrderInventoryWidgetProps) {
           {label}
         </Typography>
         {canSend ? (
-          <Button variant="outlined" disabled={busy} onClick={() => void send()}>
+          <BlockedControl blocked={refused} reason={permissionRefusalText('inventorySync.orders')}>
+            <Button variant="outlined" disabled={busy} onClick={() => void send()}>
             Send again
           </Button>
+          </BlockedControl>
         ) : null}
       </Stack>
       {error ? (

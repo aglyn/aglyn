@@ -48,7 +48,9 @@ for the how-to.
 ## November 2026 — integrations and gift card import are permissions
 
 - **Grant or deny each integration by permission.** Email platforms, help desks, rewards,
-  sales channels, shipping labels and gift card import each have
+  sales channels, shipping labels, ad conversions, couriers, fulfillment networks, inventory
+  sync, online marketplaces, after-the-sale and review services, print on demand, tax
+  engines and gift card import each have
   [their own permissions](workspace-and-billing/teams-and-roles/custom-roles.md#integration-permissions),
   starting from the member's role on the site, so nobody's access changed. A control a
   member can't use is switched off and names the permission it takes.

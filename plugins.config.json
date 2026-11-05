@@ -3175,6 +3175,7 @@
       "package": "@aglyn/plugins-post-purchase",
       "uses": ["commerce"],
       "register": {
+        "consoleDeclarations": "registerPostPurchaseConsoleDeclarations",
         "console": "registerPostPurchaseConsole",
         "consoleApi": "registerPostPurchaseConsoleApi",
         "serverDeclarations": "registerPostPurchaseServerDeclarations",
@@ -3224,6 +3225,7 @@
       "package": "@aglyn/plugins-review-platforms",
       "uses": ["commerce"],
       "register": {
+        "consoleDeclarations": "registerReviewPlatformsConsoleDeclarations",
         "console": "registerReviewPlatformsConsole",
         "consoleApi": "registerReviewPlatformsConsoleApi",
         "serverDeclarations": "registerReviewPlatformsServerDeclarations",
@@ -3409,6 +3411,7 @@
       "package": "@aglyn/plugins-tax-engines",
       "uses": ["commerce"],
       "register": {
+        "consoleDeclarations": "registerTaxEnginesConsoleDeclarations",
         "console": "registerTaxEnginesConsole",
         "consoleApi": "registerTaxEnginesConsoleApi",
         "serverDeclarations": "registerTaxEnginesServerDeclarations",
@@ -3595,6 +3598,7 @@
       "package": "@aglyn/plugins-ad-conversions",
       "uses": ["commerce"],
       "register": {
+        "consoleDeclarations": "registerAdConversionsConsoleDeclarations",
         "console": "registerAdConversionsConsole",
         "consoleApi": "registerAdConversionsConsoleApi",
         "serverDeclarations": "registerAdConversionsServerDeclarations",
@@ -3716,6 +3720,7 @@
       "package": "@aglyn/plugins-fulfillment-networks",
       "uses": ["commerce"],
       "register": {
+        "consoleDeclarations": "registerFulfillmentNetworksConsoleDeclarations",
         "console": "registerFulfillmentNetworksConsole",
         "consoleApi": "registerFulfillmentNetworksConsoleApi",
         "serverDeclarations": "registerFulfillmentNetworksServerDeclarations",
@@ -3780,6 +3785,7 @@
       "package": "@aglyn/plugins-couriers",
       "uses": ["commerce"],
       "register": {
+        "consoleDeclarations": "registerCouriersConsoleDeclarations",
         "console": "registerCouriersConsole",
         "consoleApi": "registerCouriersConsoleApi",
         "serverDeclarations": "registerCouriersServerDeclarations",
@@ -3846,6 +3852,7 @@
       "package": "@aglyn/plugins-marketplaces",
       "uses": ["commerce"],
       "register": {
+        "consoleDeclarations": "registerMarketplacesConsoleDeclarations",
         "console": "registerMarketplacesConsole",
         "consoleApi": "registerMarketplacesConsoleApi",
         "serverDeclarations": "registerMarketplacesServerDeclarations",
@@ -3914,6 +3921,7 @@
       "package": "@aglyn/plugins-print-on-demand",
       "uses": ["commerce"],
       "register": {
+        "consoleDeclarations": "registerPrintOnDemandConsoleDeclarations",
         "console": "registerPrintOnDemandConsole",
         "consoleApi": "registerPrintOnDemandConsoleApi",
         "serverDeclarations": "registerPrintOnDemandServerDeclarations",
@@ -3984,6 +3992,7 @@
       "package": "@aglyn/plugins-inventory-sync",
       "uses": ["commerce"],
       "register": {
+        "consoleDeclarations": "registerInventorySyncConsoleDeclarations",
         "console": "registerInventorySyncConsole",
         "consoleApi": "registerInventorySyncConsoleApi",
         "serverDeclarations": "registerInventorySyncServerDeclarations",

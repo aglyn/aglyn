@@ -43,7 +43,7 @@ const text = (value: unknown) => (typeof value === 'string' ? value.trim() : '')
 /** `GET ?hostId` — the site's settings; `POST {hostId, change}` — change one service. */
 export async function settingsRoute(request: Request): Promise<Response> {
   if (request.method !== 'GET' && request.method !== 'POST') return refuse(405, 'Method not allowed')
-  const gate = await reviewPlatformsGate(request, { role: request.method === 'GET' ? 'viewer' : 'admin' })
+  const gate = await reviewPlatformsGate(request, { permission: request.method === 'GET' ? null : 'reviewPlatforms.manage' })
   if (gate instanceof Response) return gate
   const stored = await readStoredSettings(gate.orgId, gate.hostId)
   if (request.method === 'GET') return json({ settings: toSettingsView(stored, gate.config) })
@@ -85,7 +85,7 @@ export async function settingsRoute(request: Request): Promise<Response> {
 /** `GET ?hostId&recordId` — whether each service was asked to invite one order's buyer. */
 export async function orderRoute(request: Request): Promise<Response> {
   if (request.method !== 'GET') return refuse(405, 'Method not allowed')
-  const gate = await reviewPlatformsGate(request, { role: 'viewer' })
+  const gate = await reviewPlatformsGate(request, { permission: null })
   if (gate instanceof Response) return gate
   const recordId = new URL(request.url).searchParams.get('recordId') ?? ''
   if (!isDocumentId(recordId)) return refuse(400, 'Missing recordId')

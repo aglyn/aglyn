@@ -15,6 +15,9 @@
  * limitations under the License.
  */
 
+import { holdsStampedSiteKey } from '@aglyn/aglyn/app-utils/host-permissions'
+import { permissionRefusalText } from '@aglyn/aglyn/app-utils/org-permissions'
+import { TAX_ENGINES_SITE_PRESETS, type TaxEnginesSitePermission } from '../model/tax-engines-permissions'
 import { firebaseAdmin } from '@aglyn/tenant-data-admin'
 import { isEmailVerified, isImpersonationSession } from '@aglyn/tenant-data-admin/server/firebase-admin'
 import type { SecretBoxKeyring } from '@aglyn/shared-util-tools/secret-box'
@@ -34,11 +37,12 @@ import { isRefusedIdToken } from '@aglyn/tenant-data-admin/server/id-token-refus
  *   403  unverified address (impersonation exempt)
  *   400  no site named
  *   404  the site does not sell, or has tax services switched off
- *   403  not a collaborator with the role the route needs
+ *   403  not on the site, or without the key the route asks (AGL-4047)
  *
- * Credentials and the site's tax settings are an ADMIN's; product codes,
- * exempt customers and an order's record an EDITOR's, the role that edits
- * products and works orders; the connection's public half any collaborator's.
+ * Credentials and the site's tax settings ask "Manage the tax engine
+ * connection"; product codes, exempt customers, address checks and an order's
+ * record each ask their own key (AGL-4047), whose presets are the site's Admin
+ * and Editor; the connection's public half anyone on the site's.
  */
 
 const NO_STORE = { 'Cache-Control': 'no-store' }
@@ -57,10 +61,6 @@ export async function readJsonBody(request: Request): Promise<Record<string, unk
   return body && typeof body === 'object' && !Array.isArray(body) ? (body as Record<string, unknown>) : {}
 }
 
-export type TaxEnginesRole = 'viewer' | 'editor' | 'admin'
-
-const ROLE_RANK: Record<string, number> = { viewer: 1, author: 1, editor: 2, admin: 3 }
-
 export interface TaxEnginesGateResult {
   orgId: string
   hostId: string
@@ -71,7 +71,7 @@ export interface TaxEnginesGateResult {
 
 export async function taxEnginesGate(
   request: Request,
-  options: { role: TaxEnginesRole },
+  options: { permission: TaxEnginesSitePermission | null },
 ): Promise<TaxEnginesGateResult | Response> {
   const keyring = readTaxEnginesKeyring()
   if (!keyring) return taxError(404, TAX_ENGINES_NOT_CONFIGURED_MESSAGE)
@@ -92,10 +92,14 @@ export async function taxEnginesGate(
   if (!isDocumentId(hostId)) return taxError(400, 'Missing hostId')
   const site = await resolveTaxEngineSite(hostId)
   if (!site) return taxError(404, 'Tax services are not available for this site')
-  const memberRole = String((site.host['memberRoles'] as Record<string, unknown> | undefined)?.[decoded.uid] ?? '')
   const staff = decoded['staff'] === true
-  if (!staff && (ROLE_RANK[memberRole] ?? 0) < ROLE_RANK[options.role]) {
+  // No key named: anyone on the site's roster reads it.
+  if (!staff && !(site.host['memberRoles'] as Record<string, unknown> | undefined)?.[decoded.uid]) {
     return taxError(403, 'Not permitted')
+  }
+  const { permission } = options
+  if (!staff && permission && !holdsStampedSiteKey(site.host, decoded.uid, permission, TAX_ENGINES_SITE_PRESETS[permission])) {
+    return taxError(403, permissionRefusalText(permission))
   }
   return { orgId: site.orgId, hostId, uid: decoded.uid, keyring, body }
 }

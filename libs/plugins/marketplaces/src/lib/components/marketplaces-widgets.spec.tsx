@@ -21,6 +21,10 @@ import type { MarketplacesApi } from './marketplaces-api'
 import { MarketplacesCard } from './marketplaces-card.component'
 import { OrderMarketplaceWidget } from './order-marketplace-widget.component'
 
+jest.mock('@aglyn/tenant-feature-instance/hooks/use-site-keys', () => ({
+  useSiteKeys: () => ({ blocked: (key: string) => mockBlockedKeys.has(key) }),
+}))
+const mockBlockedKeys = new Set<string>()
 jest.mock('./marketplaces-api', () => ({ useMarketplacesApi: () => null }))
 const mockSnack = jest.fn()
 jest.mock('@aglyn/shared-ui-snackstack', () => ({ useSnackbar: () => ({ enqueueSnackbar: mockSnack }) }))
@@ -163,5 +167,23 @@ describe('OrderMarketplaceWidget (AGL-3638)', () => {
     expect(screen.getByText('Not confirmed')).toBeTruthy()
     fireEvent.click(screen.getByRole('button', { name: 'Send tracking again' }))
     await waitFor(() => expect(routes.retry).toHaveBeenCalledWith('rec-1'))
+  })
+})
+
+describe('the card follows the keys its routes ask (AGL-4047)', () => {
+  afterEach(() => mockBlockedKeys.clear())
+
+  it('switches Connect off and names the permission without the manage key', async () => {
+    mockBlockedKeys.add('marketplaces.manage')
+    const routes = api({ list: jest.fn(async () => ({ offered: [{ id: 'etsy' as const, sandbox: false }], connections: [] })) })
+    render(<MarketplacesCard hostId="h" api={routes} />)
+    expect(((await screen.findByRole('button', { name: 'Connect Etsy' })) as HTMLButtonElement).disabled).toBe(true)
+    expect(screen.getByText(/does not include/).textContent).toContain('ask an organization admin')
+  })
+
+  it('names the permission rather than drawing nothing without the view key', async () => {
+    mockBlockedKeys.add('marketplaces.view')
+    render(<MarketplacesCard hostId="h" api={api()} />)
+    expect((await screen.findByText(/does not include/)).textContent).toContain('ask an organization admin')
   })
 })

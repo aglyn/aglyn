@@ -70,7 +70,7 @@ function methodNotAllowed(): Response {
 /** GET: whether the deployment can hold a connection, and the site's. */
 export async function connectionRoute(request: Request): Promise<Response> {
   if (request.method !== 'GET') return methodNotAllowed()
-  const gate = await taxEnginesGate(request, { role: 'viewer' })
+  const gate = await taxEnginesGate(request, { permission: null })
   if (gate instanceof Response) return gate
   const connection = await readConnection(gate.hostId)
   return taxJson({
@@ -83,7 +83,7 @@ export async function connectionRoute(request: Request): Promise<Response> {
 /** POST: test the credentials with the vendor, and store them only if they pass. */
 export async function connectRoute(request: Request): Promise<Response> {
   if (request.method !== 'POST') return methodNotAllowed()
-  const gate = await taxEnginesGate(request, { role: 'admin' })
+  const gate = await taxEnginesGate(request, { permission: 'taxEngines.manage' })
   if (gate instanceof Response) return gate
   const { body, hostId } = gate
   const provider = body['provider']
@@ -139,7 +139,7 @@ export async function connectRoute(request: Request): Promise<Response> {
 /** POST: test the stored credentials again, and record the verdict. */
 export async function testRoute(request: Request): Promise<Response> {
   if (request.method !== 'POST') return methodNotAllowed()
-  const gate = await taxEnginesGate(request, { role: 'admin' })
+  const gate = await taxEnginesGate(request, { permission: 'taxEngines.manage' })
   if (gate instanceof Response) return gate
   const connection = await readConnection(gate.hostId)
   if (!connection) return taxError(404, 'No tax service is connected.')
@@ -166,7 +166,7 @@ export async function testRoute(request: Request): Promise<Response> {
 /** POST: forget the credentials. Records of what was sent are kept. */
 export async function disconnectRoute(request: Request): Promise<Response> {
   if (request.method !== 'POST') return methodNotAllowed()
-  const gate = await taxEnginesGate(request, { role: 'admin' })
+  const gate = await taxEnginesGate(request, { permission: 'taxEngines.manage' })
   if (gate instanceof Response) return gate
   await connectionRef(gate.hostId).delete()
   return taxJson({ connection: null })
@@ -175,7 +175,7 @@ export async function disconnectRoute(request: Request): Promise<Response> {
 /** POST: ship-from address, default tax code, recording switch. */
 export async function settingsRoute(request: Request): Promise<Response> {
   if (request.method !== 'POST') return methodNotAllowed()
-  const gate = await taxEnginesGate(request, { role: 'admin' })
+  const gate = await taxEnginesGate(request, { permission: 'taxEngines.manage' })
   if (gate instanceof Response) return gate
   const { body, hostId } = gate
   const connection = await readConnection(hostId)
@@ -222,7 +222,7 @@ export async function settingsRoute(request: Request): Promise<Response> {
 /** POST: the engine's reading of an address. */
 export async function addressValidateRoute(request: Request): Promise<Response> {
   if (request.method !== 'POST') return methodNotAllowed()
-  const gate = await taxEnginesGate(request, { role: 'editor' })
+  const gate = await taxEnginesGate(request, { permission: 'taxEngines.addresses' })
   if (gate instanceof Response) return gate
   const address = normalizeTaxAddress(gate.body['address'])
   if (!address) return taxError(400, 'Enter an address with a two-letter country code.')
@@ -236,7 +236,7 @@ export async function addressValidateRoute(request: Request): Promise<Response> 
 /** GET / POST: one product's tax code. */
 export async function productTaxCodeRoute(request: Request): Promise<Response> {
   if (request.method !== 'GET' && request.method !== 'POST') return methodNotAllowed()
-  const gate = await taxEnginesGate(request, { role: request.method === 'GET' ? 'viewer' : 'editor' })
+  const gate = await taxEnginesGate(request, { permission: request.method === 'GET' ? null : 'taxEngines.productCodes' })
   if (gate instanceof Response) return gate
   const productId = String(gate.body['productId'] ?? new URL(request.url).searchParams.get('productId') ?? '')
   if (!isDocumentId(productId)) return taxError(400, 'Missing productId')
@@ -266,7 +266,7 @@ export async function productTaxCodeRoute(request: Request): Promise<Response> {
 /** GET: the site's exempt customers. POST: save one. */
 export async function exemptionsRoute(request: Request): Promise<Response> {
   if (request.method !== 'GET' && request.method !== 'POST') return methodNotAllowed()
-  const gate = await taxEnginesGate(request, { role: 'editor' })
+  const gate = await taxEnginesGate(request, { permission: 'taxEngines.exemptions' })
   if (gate instanceof Response) return gate
   const collection = taxEnginesDb().collection(TAX_ENGINE_COLLECTIONS.exemptions)
   if (request.method === 'GET') {
@@ -312,7 +312,7 @@ export async function exemptionsRoute(request: Request): Promise<Response> {
 /** POST: remove one exempt customer. */
 export async function exemptionsDeleteRoute(request: Request): Promise<Response> {
   if (request.method !== 'POST') return methodNotAllowed()
-  const gate = await taxEnginesGate(request, { role: 'editor' })
+  const gate = await taxEnginesGate(request, { permission: 'taxEngines.exemptions' })
   if (gate instanceof Response) return gate
   const id = String(gate.body['id'] ?? '')
   // The id names the site, so a member of one site cannot remove another's.
@@ -324,7 +324,7 @@ export async function exemptionsDeleteRoute(request: Request): Promise<Response>
 /** GET: how one order stands with the engine. */
 export async function orderTransactionRoute(request: Request): Promise<Response> {
   if (request.method !== 'GET') return methodNotAllowed()
-  const gate = await taxEnginesGate(request, { role: 'editor' })
+  const gate = await taxEnginesGate(request, { permission: 'taxEngines.orders' })
   if (gate instanceof Response) return gate
   const orderId = String(new URL(request.url).searchParams.get('orderId') ?? '')
   if (!isDocumentId(orderId)) return taxError(400, 'Missing orderId')
@@ -335,7 +335,7 @@ export async function orderTransactionRoute(request: Request): Promise<Response>
 /** POST: send one order to the engine again. */
 export async function orderTransactionRetryRoute(request: Request): Promise<Response> {
   if (request.method !== 'POST') return methodNotAllowed()
-  const gate = await taxEnginesGate(request, { role: 'editor' })
+  const gate = await taxEnginesGate(request, { permission: 'taxEngines.orders' })
   if (gate instanceof Response) return gate
   const orderId = String(gate.body['orderId'] ?? '')
   if (!isDocumentId(orderId)) return taxError(400, 'Missing orderId')

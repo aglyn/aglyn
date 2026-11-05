@@ -15,6 +15,10 @@
  * limitations under the License.
  */
 
+import { permissionRefusalText } from '@aglyn/aglyn/app-utils/org-permissions'
+import { BlockedControl } from '@aglyn/shared-ui-jsx/components/blocked-control.component'
+import { useSiteKeys } from '@aglyn/tenant-feature-instance/hooks/use-site-keys'
+import { PRINT_ON_DEMAND_SITE_PRESETS } from '../model/print-on-demand-permissions'
 import { pluginDocsHelp } from '@aglyn/aglyn/app-utils/docs-help'
 import { CardDisplay } from '@aglyn/shared-ui-jsx/components/card-display'
 import { useConfirmationContext } from '@aglyn/shared-ui-jsx/contexts/confirmation.context'
@@ -77,6 +81,7 @@ function itemCount(part: PodOrderView): string {
 export function PrintOnDemandCard(props: PrintOnDemandCardProps) {
   const { hostId } = props
   const state = usePodConnections(hostId)
+  const manageRefused = useSiteKeys(hostId).blocked('printOnDemand.manage', PRINT_ON_DEMAND_SITE_PRESETS['printOnDemand.manage'])
   const { enqueueSnackbar } = useSnackbar()
   const [connectOpen, setConnectOpen] = useState(false)
   const [importing, setImporting] = useState<PodConnectionView | null>(null)
@@ -101,9 +106,11 @@ export function PrintOnDemandCard(props: PrintOnDemandCardProps) {
         contentGutterY
         HeaderProps={{
           action: offers.length ? (
-            <Button size="small" variant="contained" onClick={() => setConnectOpen(true)}>
+            <BlockedControl blocked={manageRefused} reason={permissionRefusalText('printOnDemand.manage')}>
+              <Button size="small" variant="contained" onClick={() => setConnectOpen(true)}>
               {offers.length === 1 ? `Connect ${offers[0].label}` : 'Connect'}
             </Button>
+            </BlockedControl>
           ) : null,
         }}
       >
@@ -111,6 +118,7 @@ export function PrintOnDemandCard(props: PrintOnDemandCardProps) {
           <Stack spacing={2}>
             {state.connections.map((connection) => (
               <ConnectionSection
+                locked={manageRefused}
                 key={connection.provider}
                 hostId={hostId}
                 connection={connection}
@@ -164,6 +172,7 @@ export function PrintOnDemandCard(props: PrintOnDemandCardProps) {
 }
 
 function ConnectionSection(props: {
+  locked: boolean
   hostId: string
   connection: PodConnectionView
   storeCurrency: string
@@ -174,7 +183,10 @@ function ConnectionSection(props: {
   const request = usePodFetch()
   const { confirm } = useConfirmationContext()
   const { enqueueSnackbar } = useSnackbar()
-  const [busy, setBusy] = useState(false)
+  const [working, setBusy] = useState(false)
+  // Off for a member without the key, the same way as while a change runs.
+  const busy = working || props.locked
+  const productsRefused = useSiteKeys(hostId).blocked('printOnDemand.products', PRINT_ON_DEMAND_SITE_PRESETS['printOnDemand.products'])
   const [error, setError] = useState<string | null>(null)
   const label = connection.providerLabel
 
@@ -237,9 +249,11 @@ function ConnectionSection(props: {
               tone={connection.webhooks === 'registered' ? 'success' : 'info'}
               variant="outlined"
             />
-            <Button size="small" variant="contained" disabled={busy} onClick={onImport}>
+            <BlockedControl blocked={productsRefused} reason={permissionRefusalText('printOnDemand.products')}>
+              <Button size="small" variant="contained" disabled={working || productsRefused} onClick={onImport}>
               Import products
             </Button>
+            </BlockedControl>
             <RowActionsMenu
               label={`${label} connection`}
               items={[{ key: 'disconnect', label: 'Disconnect', destructive: true, onClick: () => void disconnect() }]}

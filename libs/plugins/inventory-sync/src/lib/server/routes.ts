@@ -15,6 +15,7 @@
  * limitations under the License.
  */
 
+import type { InventorySyncSitePermission } from '../model/inventory-sync-permissions'
 import { INVENTORY_SYNC_API_ROUTES, OAUTH_STATE_TTL_MS } from '../constants'
 import {
   INVENTORY_PROVIDERS,
@@ -55,8 +56,6 @@ import { connectionView, emptyConnection, orderView, type InventoryStore, type S
  * system, sealed, and never echoed.
  */
 
-export type InventoryRole = 'viewer' | 'editor' | 'admin'
-
 export interface InventoryGateResult {
   orgId: string
   hostId: string
@@ -73,7 +72,7 @@ export interface InventoryRouteDeps {
   engine: Engine
   /** Opens a connection's credential, refreshing a Brightpearl grant about to expire. */
   credential(connectionId: string, connection: StoredConnection): Promise<InventoryCredential>
-  gate(request: Request, role: InventoryRole): Promise<InventoryGateResult | Response>
+  gate(request: Request, permission: InventorySyncSitePermission | null): Promise<InventoryGateResult | Response>
   /** Whether the deployment has a product writer to import into (`core.product-writer`). */
   canImportProducts(): boolean
   /** The console address of a path of this plugin, or `null` when the deployment has none. */
@@ -203,7 +202,7 @@ export function createInventoryRoutes(deps: InventoryRouteDeps) {
     /** GET ?hostId — what this deployment offers, and the site's connection. */
     async connection(request: Request): Promise<Response> {
       if (request.method !== 'GET') return fail(405, 'Method not allowed')
-      const gate = await deps.gate(request, 'editor')
+      const gate = await deps.gate(request, 'inventorySync.view')
       if (gate instanceof Response) return gate
       return json(await answer(gate))
     },
@@ -211,7 +210,7 @@ export function createInventoryRoutes(deps: InventoryRouteDeps) {
     /** POST { hostId, provider, accountId|companyId, apiKey } or { hostId, provider, clientId, clientSecret } — connect with the merchant's own keys. */
     async connectKeys(request: Request): Promise<Response> {
       if (request.method !== 'POST') return fail(405, 'Method not allowed')
-      const gate = await deps.gate(request, 'admin')
+      const gate = await deps.gate(request, 'inventorySync.manage')
       if (gate instanceof Response) return gate
       const provider = gate.body['provider']
       if (!isInventoryProviderId(provider) || INVENTORY_PROVIDERS[provider].auth !== 'keys') return fail(400, 'Choose Cin7 Core, inFlow or Ordoro')
@@ -239,7 +238,7 @@ export function createInventoryRoutes(deps: InventoryRouteDeps) {
     /** POST { hostId, accountCode, returnTo } — start connecting Brightpearl; answers its consent page address. */
     async connectOAuth(request: Request): Promise<Response> {
       if (request.method !== 'POST') return fail(405, 'Method not allowed')
-      const gate = await deps.gate(request, 'admin')
+      const gate = await deps.gate(request, 'inventorySync.manage')
       if (gate instanceof Response) return gate
       const config = deps.config()
       if (!offered().includes('brightpearl') || !config.brightpearl) return fail(404, 'Brightpearl cannot be connected here')
@@ -328,7 +327,7 @@ export function createInventoryRoutes(deps: InventoryRouteDeps) {
     /** PATCH { hostId, …settings } · DELETE { hostId } */
     async settings(request: Request): Promise<Response> {
       if (request.method !== 'PATCH' && request.method !== 'DELETE') return fail(405, 'Method not allowed')
-      const gate = await deps.gate(request, 'admin')
+      const gate = await deps.gate(request, 'inventorySync.manage')
       if (gate instanceof Response) return gate
       const found = await connected(gate)
       if (found instanceof Response) return found
@@ -411,7 +410,7 @@ export function createInventoryRoutes(deps: InventoryRouteDeps) {
     /** GET ?hostId — the connected system's locations, for the settings menu. */
     async locations(request: Request): Promise<Response> {
       if (request.method !== 'GET') return fail(405, 'Method not allowed')
-      const gate = await deps.gate(request, 'admin')
+      const gate = await deps.gate(request, 'inventorySync.manage')
       if (gate instanceof Response) return gate
       const found = await connected(gate)
       if (found instanceof Response) return found
@@ -427,7 +426,7 @@ export function createInventoryRoutes(deps: InventoryRouteDeps) {
     /** POST { hostId } — sync stock and products now, and send the orders that are due. */
     async syncNow(request: Request): Promise<Response> {
       if (request.method !== 'POST') return fail(405, 'Method not allowed')
-      const gate = await deps.gate(request, 'admin')
+      const gate = await deps.gate(request, 'inventorySync.manage')
       if (gate instanceof Response) return gate
       const found = await connected(gate)
       if (found instanceof Response) return found
@@ -451,7 +450,7 @@ export function createInventoryRoutes(deps: InventoryRouteDeps) {
     /** GET ?hostId — the connection's activity, newest first. */
     async log(request: Request): Promise<Response> {
       if (request.method !== 'GET') return fail(405, 'Method not allowed')
-      const gate = await deps.gate(request, 'editor')
+      const gate = await deps.gate(request, 'inventorySync.view')
       if (gate instanceof Response) return gate
       const found = await connectionFor(gate)
       return json({ entries: found ? await deps.store.readLog(found.id, 50) : [] })
@@ -460,7 +459,7 @@ export function createInventoryRoutes(deps: InventoryRouteDeps) {
     /** GET ?hostId — the site's orders that could not be sent, newest first. */
     async orders(request: Request): Promise<Response> {
       if (request.method !== 'GET') return fail(405, 'Method not allowed')
-      const gate = await deps.gate(request, 'editor')
+      const gate = await deps.gate(request, 'inventorySync.view')
       if (gate instanceof Response) return gate
       return json({ orders: (await deps.store.failedOrdersForHost(gate.hostId, 25)).map(orderView) })
     },
@@ -468,7 +467,7 @@ export function createInventoryRoutes(deps: InventoryRouteDeps) {
     /** GET ?hostId&recordId — where one order stands with the connected system. */
     async order(request: Request): Promise<Response> {
       if (request.method !== 'GET') return fail(405, 'Method not allowed')
-      const gate = await deps.gate(request, 'viewer')
+      const gate = await deps.gate(request, null)
       if (gate instanceof Response) return gate
       const recordId = readRecordId(gate.body, request)
       if (!recordId) return fail(400, 'Missing recordId')
@@ -485,7 +484,7 @@ export function createInventoryRoutes(deps: InventoryRouteDeps) {
     /** POST { hostId, recordId } — send an order that failed, now. */
     async orderSend(request: Request): Promise<Response> {
       if (request.method !== 'POST') return fail(405, 'Method not allowed')
-      const gate = await deps.gate(request, 'editor')
+      const gate = await deps.gate(request, 'inventorySync.orders')
       if (gate instanceof Response) return gate
       const recordId = readRecordId(gate.body, request)
       if (!recordId) return fail(400, 'Missing recordId')
