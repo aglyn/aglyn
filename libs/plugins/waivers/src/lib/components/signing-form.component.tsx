@@ -317,7 +317,7 @@ export function SigningForm(props: SigningFormProps) {
           <Stack spacing={2}>
             <FormControlLabel
               control={<Switch checked={forMinors} onChange={(event) => setForMinors(event.target.checked)} />}
-              label={`I’m also signing for riders under ${props.adultAge}`}
+              label={`I’m also signing for people under ${props.adultAge}`}
             />
             {forMinors ? (
               <Stack spacing={2}>

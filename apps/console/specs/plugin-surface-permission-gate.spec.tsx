@@ -509,11 +509,10 @@ describe('a site collaborator', () => {
 
   it('matches the population the rules admit for contact writes', async () => {
     /*
-     * `canWriteOrgData()` in `cloud/firebase-firestore.rules` is
-     * `role in ['owner','admin','editor']`, and it is the ORG role field it
-     * reads even for a scoped member. `data.manage` defaults true on exactly
-     * those tiers, so the console gate and the rules agree on the built-in
-     * roles by construction rather than by being kept in step by hand.
+     * `canWriteOrgData()` in `cloud/firebase-firestore.rules` asks
+     * `data.manage`, with the ORG role's default even for a scoped member, so
+     * the console gate and the rules agree by construction rather than by
+     * being kept in step by hand.
      */
     mockMember = collaborator('owner')
     mountPage()

@@ -101,6 +101,7 @@ import {
   type PicklistValueSet,
 } from './picklists'
 import { MAX_SCOPE_HOSTS, ORG_SCOPE_TOKEN, type ScopeToken } from './scope-tokens'
+import { isKnownContactSource } from '../plugin-manager/plugin-contact-capture'
 
 // The fixed vocabularies and their guards live in a leaf module; every name
 // stays importable from here.
@@ -4920,9 +4921,7 @@ export function crmViewFiltersFromSegment(
   segment: Pick<ContactSegment, 'tags' | 'sources'>,
 ): CrmViewFilterClause[] {
   const tags = (segment.tags ?? []).map((tag) => tag.trim()).filter(Boolean)
-  const sources = (segment.sources ?? []).filter(
-    (source) => source in CONTACT_SOURCE_LABELS,
-  )
+  const sources = (segment.sources ?? []).filter(isKnownContactSource)
   return [
     ...(tags.length === 1
       ? [{ field: CRM_VIEW_TAGS_FIELD, op: 'contains', value: tags[0] }]
@@ -4951,7 +4950,9 @@ export function crmViewFiltersFromSegment(
  * operators that mean "has one of these"; a `name startsWith` or an owner
  * clause is not a segment's to keep. What comes back is what "Save as
  * segment" writes, so a campaign audience built from it selects exactly the
- * tags and sources the reader could see on the chips.
+ * tags and sources the reader could see on the chips. That includes a source
+ * a plugin declared: dropping one would save a broader segment than the list
+ * on screen.
  */
 export function crmViewSegmentFilters(
   filters: readonly CrmViewFilterClause[],
@@ -4972,7 +4973,7 @@ export function crmViewSegmentFilters(
     } else if (clause.field === CRM_VIEW_SOURCE_FIELD) {
       const values = clause.op === 'equals' ? [clause.value.trim()] : clause.op === 'isAnyOf' ? split(clause.value) : []
       for (const source of values) {
-        if (source in CONTACT_SOURCE_LABELS) sources.add(source as ContactSource)
+        if (isKnownContactSource(source)) sources.add(source as ContactSource)
       }
     }
   }

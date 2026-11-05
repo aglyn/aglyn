@@ -24,6 +24,7 @@ import {
 } from '@aglyn/aglyn'
 import { mdiThumbDownOutline, mdiTrophyOutline } from '@aglyn/shared-data-mdi'
 import { CardDisplay, MdiIcon } from '@aglyn/shared-ui-jsx'
+import { BlockedControl } from '@aglyn/shared-ui-jsx/components/blocked-control.component'
 import { useSnackbar } from '@aglyn/shared-ui-snackstack'
 import {
   Button,
@@ -42,6 +43,7 @@ import {
 } from '@mui/material'
 import { useCallback, useState } from 'react'
 import { type DealStageApi } from '../hooks/use-deal-stage-api'
+import { CRM_MOVE_STAGES_REFUSAL } from '../model/crm-permissions'
 import {
   closingStage,
   daysInStage,
@@ -88,6 +90,9 @@ export function DealStageCard(props: DealStageCardProps) {
   const activeIndex = stages.findIndex((stage) => stage.id === deal.stageId)
   const wonName = closingStage(pipeline, 'won')?.name ?? DEAL_STATUS_LABELS.won
   const lostName = closingStage(pipeline, 'lost')?.name ?? DEAL_STATUS_LABELS.lost
+  // "Move contacts and deals between stages" (AGL-4047): every control below
+  // stays in view, switched off, with the permission named.
+  const blocked = api.moveBlocked === true
 
   const run = useCallback(
     async (request: () => Promise<unknown>, done: string) => {
@@ -120,8 +125,8 @@ export function DealStageCard(props: DealStageCardProps) {
       {stages.map((stage, index) => (
         <Step key={stage.id} completed={closed || index < activeIndex}>
           <StepButton
-            title={closed ? undefined : `Move here: ${stage.probability}% likely to close`}
-            disabled={busy || closed || stage.id === deal.stageId}
+            title={closed ? undefined : blocked ? CRM_MOVE_STAGES_REFUSAL : `Move here: ${stage.probability}% likely to close`}
+            disabled={busy || closed || blocked || stage.id === deal.stageId}
             onClick={() =>
               void run(() => api.moveToStage(deal, stage.id), `Moved to ${stage.name}`)
             }
@@ -133,8 +138,8 @@ export function DealStageCard(props: DealStageCardProps) {
       <Step key="$closed" completed={deal.status === 'won'}>
         <StepButton
           data-testid="deal-stage-closing-step"
-          title={closed ? undefined : 'Close the deal as won or lost'}
-          disabled={busy || closed}
+          title={closed ? undefined : blocked ? CRM_MOVE_STAGES_REFUSAL : 'Close the deal as won or lost'}
+          disabled={busy || closed || blocked}
           onClick={(event) => setCloseMenu(event.currentTarget)}
           icon={
             deal.status === 'won' ? (
@@ -159,26 +164,30 @@ export function DealStageCard(props: DealStageCardProps) {
       HeaderProps={{
         action: !closed ? (
           <Stack direction="row" spacing={1}>
-            <Button
-              size="small"
-              color="success"
-              variant="outlined"
-              disabled={busy || !pipeline}
-              startIcon={<MdiIcon path={mdiTrophyOutline.path} size={0.8} />}
-              onClick={() => void run(() => api.markWon(deal), 'Deal won')}
-            >
-              {'Won'}
-            </Button>
-            <Button
-              size="small"
-              color="error"
-              variant="outlined"
-              disabled={busy || !pipeline}
-              startIcon={<MdiIcon path={mdiThumbDownOutline.path} size={0.8} />}
-              onClick={() => setLosing(true)}
-            >
-              {'Lost'}
-            </Button>
+            <BlockedControl blocked={blocked} reason={CRM_MOVE_STAGES_REFUSAL}>
+              <Button
+                size="small"
+                color="success"
+                variant="outlined"
+                disabled={busy || !pipeline}
+                startIcon={<MdiIcon path={mdiTrophyOutline.path} size={0.8} />}
+                onClick={() => void run(() => api.markWon(deal), 'Deal won')}
+              >
+                {'Won'}
+              </Button>
+            </BlockedControl>
+            <BlockedControl blocked={blocked} reason={CRM_MOVE_STAGES_REFUSAL}>
+              <Button
+                size="small"
+                color="error"
+                variant="outlined"
+                disabled={busy || !pipeline}
+                startIcon={<MdiIcon path={mdiThumbDownOutline.path} size={0.8} />}
+                onClick={() => setLosing(true)}
+              >
+                {'Lost'}
+              </Button>
+            </BlockedControl>
           </Stack>
         ) : null,
       }}
@@ -211,13 +220,13 @@ export function DealStageCard(props: DealStageCardProps) {
             size="small"
             label="Reopen into"
             value=""
-            disabled={busy}
+            disabled={busy || blocked}
             onChange={(event) => {
               const stageId = event.target.value
               if (!stageId) return
               void run(() => api.moveToStage(deal, stageId), 'Deal reopened')
             }}
-            helperText="Reopening puts the deal back in an open stage and tells the automations."
+            helperText={blocked ? CRM_MOVE_STAGES_REFUSAL : 'Reopening puts the deal back in an open stage and tells the automations.'}
             sx={{ maxWidth: 320 }}
           >
             <MenuItem value="">{'Pick a stage'}</MenuItem>

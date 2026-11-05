@@ -206,6 +206,10 @@ const firestoreHandle: any = {
 
 jest.mock('@aglyn/tenant-data-admin', () => ({
   __esModule: true,
+  // The catalog's own answer for "Manage data", the list writer's key (AGL-4047).
+  memberHasOrgPermission: async (_orgId: string, member: Record<string, unknown> | null, key: string) =>
+    Boolean(member) &&
+    jest.requireActual('@aglyn/aglyn/app-utils/org-permissions').resolveOrgPermissions(member, null)[key] === true,
   consentGroupForSite: async (hostId: string) => ({
     hostId,
     groupId: hostId,
@@ -388,6 +392,15 @@ describe('the dry run', () => {
     expect(plan.rows[0]?.verdict).toBe('create')
     expect(plan.rows[0]?.diff.map((change) => change.fieldId)).not.toContain('contact:jobTitle')
     expect(plan.rows[0]?.heldBack).toContain('contact:jobTitle')
+  })
+
+  it('asks "Manage data", org-wide (AGL-4047)', async () => {
+    membership = { orgId: ORG_ID, member: { role: 'viewer', allHosts: true } }
+    await expect(dryRun([{ email: UNKNOWN }], context(attest(true)))).rejects.toMatchObject({ status: 403 })
+    membership = { orgId: ORG_ID, member: { role: 'admin', allHosts: true, permissions: { 'data.manage': false } } }
+    await expect(dryRun([{ email: UNKNOWN }], context(attest(true)))).rejects.toMatchObject({ status: 403 })
+    membership = { orgId: ORG_ID, member: { role: 'viewer', allHosts: true, permissions: { 'data.manage': true } } }
+    await expect(dryRun([{ email: UNKNOWN }], context(attest(true)))).resolves.toBeTruthy()
   })
 
   it('refuses a member who may manage the site but not the organization’s lists', async () => {

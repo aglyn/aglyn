@@ -346,7 +346,7 @@ export const PLUGIN_DOCS_SECTION_EXCERPTS: {
     '#deal-properties': 'The Properties card lists what the deal is worth and where it stands; to change any of it, choose Edit in the page\'s header, which carries a control for each.',
     '#deals-on-a-record': 'The Deals card on a contact\'s or a company\'s page lists every deal that names that record, newest first, and New deal in its header starts one already linked to them.',
     '#line-items': 'A deal\'s amount can be a number you type, or the sum of the products behind it.',
-    '#moving-winning-and-losing': 'Stage changes go through the server rather than being written directly, so that automations can hear them.',
+    '#moving-winning-and-losing': 'Moving, winning, losing and reopening a deal take the Move contacts and deals between stages permission as well as Manage data.',
     '#the-board-and-the-table': 'The section opens as a board of the chosen pipeline: one column per open stage, with Won and Lost folded away at the end until you expand them.',
   },
   deliveryApps: {

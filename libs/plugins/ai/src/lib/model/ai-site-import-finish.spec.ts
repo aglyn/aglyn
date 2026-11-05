@@ -211,10 +211,11 @@ describe('the change between waves the resume door writes', () => {
 })
 
 describe('what Also improve my wording adds', () => {
-  it('prices each reworded page as an AI page, and counts only the pages it rewords', () => {
-    // A reworded page is an AI page in place of an arranged one: the switch adds the difference.
-    const { page, arranged } = AI_MEASURED_IMPORT_CREDITS
-    expect(aiSiteImportWordingCredits(1)).toEqual({ likely: page.median - arranged.median, p90: page.p90 - arranged.p90 })
+  it('prices each reworded page as measured, about 25 more than an arranged one, and counts only the pages it rewords', () => {
+    // A reworded page stands in place of an arranged one: the switch adds the difference.
+    const { reworded, arranged } = AI_MEASURED_IMPORT_CREDITS
+    expect(aiSiteImportWordingCredits(1)).toEqual({ likely: reworded.median - arranged.median, p90: reworded.p90 - arranged.p90 })
+    expect(aiSiteImportWordingCredits(1).likely).toBe(25)
     const state = harbor()
     // Home and about: the policy and the blog keep every word.
     expect(aiSiteImportWordingPages(state, state.waves[0], { finish: 'improve', wording: true })).toBe(2)
@@ -226,9 +227,9 @@ describe('what Also improve my wording adds', () => {
   /** The inventory with each page's build chosen, as the import step chooses it. */
   const built = (state: AiSiteImportState): AiSiteImportState => ({ ...state, pages: state.pages.map((entry) => ({ ...entry, build: aiSiteImportPageBuild(entry) })) })
 
-  it('quotes a reworded page on the AI page row, inside the ceiling an arranged page already holds', () => {
-    const { page } = AI_MEASURED_IMPORT_CREDITS
-    expect(aiSiteImportCreditRange(0, { arranged: 1, reworded: 1 })).toEqual({ likely: page.median, p90: page.p90, ceiling: 100 })
+  it('quotes a reworded page on its measured row, inside the ceiling an arranged page already holds', () => {
+    const { reworded } = AI_MEASURED_IMPORT_CREDITS
+    expect(aiSiteImportCreditRange(0, { arranged: 1, reworded: 1 })).toEqual({ likely: reworded.median, p90: reworded.p90, ceiling: 100 })
     // No more reworded than arranged.
     expect(aiSiteImportCreditRange(0, { arranged: 1, reworded: 3 })).toEqual(aiSiteImportCreditRange(0, { arranged: 1, reworded: 1 }))
     const on = built(harbor({ finish: 'improve', wording: true }))

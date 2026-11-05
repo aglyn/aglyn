@@ -69,6 +69,7 @@ import {
   crmMemberPickerLabel,
 } from '@aglyn/aglyn'
 import { useConfirmationContext } from '@aglyn/shared-ui-jsx'
+import { BlockedControl } from '@aglyn/shared-ui-jsx/components/blocked-control.component'
 import { Button, MenuItem, TextField } from '@mui/material'
 import { useCallback, useMemo, useState } from 'react'
 import { useOrgMemberOptions, useUser } from '@aglyn/tenant-feature-instance'
@@ -76,7 +77,9 @@ import { useContactRemove } from '../hooks/use-contact-remove'
 import { useContactUpdate } from '../hooks/use-contact-update'
 import { useCrmBulkApply } from '../hooks/use-crm-bulk-apply'
 import { useCrmScope } from '../hooks/use-crm-scope'
+import { useStageMoveBlocked } from '../hooks/use-stage-move-blocked'
 import { CRM_CONTACT_REMOVE_MAX } from '../model/contact-remove'
+import { CRM_MOVE_STAGES_REFUSAL } from '../model/crm-permissions'
 import { CRM_CONTACT_UPDATE_MAX, type ContactUpdateFields } from '../model/contact-update'
 import { setContactStage } from '../model/crm-api'
 import {
@@ -231,6 +234,10 @@ function ContactsBulkBarBody(props: ContactsBulkBarProps) {
   // The site the audiences API is asked from: the mounted one, or at the
   // organization level the one the reader picked (AGL-2630).
   const { createHostId } = useCrmScope({ hostId, org })
+  // "Move contacts and deals between stages" (AGL-4047): on the mounted site,
+  // or at the organization level the workspace's verdict. There a row's own
+  // site still answers for that row, and the report names any it refuses.
+  const stageBlocked = useStageMoveBlocked(hostId)
 
   const openAction = (action: PendingAction) => {
     setValue('')
@@ -493,9 +500,11 @@ function ContactsBulkBarBody(props: ContactsBulkBarProps) {
           <Button size="small" disabled={busy || !scope} onClick={() => openAction('owner')}>
             {'Set owner'}
           </Button>
-          <Button size="small" disabled={busy || !scope} onClick={() => openAction('stage')}>
-            {'Set stage'}
-          </Button>
+          <BlockedControl blocked={stageBlocked} reason={CRM_MOVE_STAGES_REFUSAL}>
+            <Button size="small" disabled={busy || !scope} onClick={() => openAction('stage')}>
+              {'Set stage'}
+            </Button>
+          </BlockedControl>
           <Button
             size="small"
             disabled={busy || !scope}

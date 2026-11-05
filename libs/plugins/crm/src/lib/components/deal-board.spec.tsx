@@ -73,6 +73,19 @@ const board = () => (
   />
 )
 
+describe('without "Move contacts and deals between stages" (AGL-4047)', () => {
+  it('keeps the cards in view, and each move in their menu says why it is off', () => {
+    render(<DealBoard {...board().props} moveBlocked />)
+    fireEvent.click(screen.getAllByRole('button', { name: /More actions/ })[0])
+    for (const name of [/^Move to /, /^Mark won/, /^Mark lost/]) {
+      for (const item of screen.getAllByRole('menuitem', { name })) {
+        expect(item.getAttribute('aria-disabled')).toBe('true')
+      }
+    }
+    expect(screen.getByRole('menuitem', { name: /^Open/ }).getAttribute('aria-disabled')).not.toBe('true')
+  })
+})
+
 describe('the deal board', () => {
   it('folds the stages with no deals and keeps the full column for the one that has them', () => {
     render(board())

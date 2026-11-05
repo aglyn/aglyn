@@ -218,6 +218,10 @@
       "why": "Which legal documents have a published page and the origin they are served from (LEGAL_ORIGIN): the hardware terms of sale the receipts print name its Terms address (AGL-4038); no imports, one public env read like platform-brand.ts."
     },
     {
+      "path": "libs/aglyn/src/lib/app-utils/registering-plugin.ts",
+      "why": "The marker plugin-services.ts reads for which plugin is registering: one module-level value, no imports that reach web code."
+    },
+    {
       "path": "libs/aglyn/src/lib/app-utils/resolve-named-tokens.ts",
       "why": "A template's {{name}} placeholders filled in as a page, component or layout is made from it (AGL-3668). Type-only import."
     },
@@ -340,6 +344,14 @@
     {
       "path": "libs/aglyn/src/lib/plugin-manager/first-party-plugins.generated.ts",
       "why": "Reached by enabled-plugins: the generated first-party catalog rows; every other import is type-only (AGL-3671)."
+    },
+    {
+      "path": "libs/aglyn/src/lib/plugin-manager/plugin-contact-capture.ts",
+      "why": "crm.ts asks it whether a saved segment's source word is known, core or a plugin's door (AGL-3680). Types and an in-process registry over plugin-services; no I/O. In a native generator no plugin has registered, so it answers for the core words alone."
+    },
+    {
+      "path": "libs/aglyn/src/lib/plugin-manager/plugin-services.ts",
+      "why": "The in-process registry plugin-contact-capture.ts declares its doors on: a module-level map of contracts and their implementations, with no I/O."
     },
     {
       "path": "libs/plugins/accounting/src/lib/constants/bundle-common.ts",
@@ -567,7 +579,7 @@
     },
     {
       "path": "libs/plugins/crm/src/lib/model/crm-permissions.ts",
-      "why": "The CRM plugin's workspace key (change CRM settings) and its tier defaults, assembled into the contracts' ORG_ROLE_GRANTS (AGL-4047); type-only imports."
+      "why": "The CRM plugin's keys (change CRM settings, with its tier defaults; move contacts and deals between stages, with its site-role preset), assembled into the contracts' ORG_ROLE_GRANTS (AGL-4047); type-only imports."
     },
     {
       "path": "libs/plugins/workflows/src/lib/model/workflows-permissions.ts",

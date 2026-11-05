@@ -48,6 +48,7 @@ import {
 } from '@aglyn/tenant-data-admin'
 import { isRefusedIdToken } from '@aglyn/tenant-data-admin/server/id-token-refusal'
 import { resolveOrgPermissions } from '@aglyn/tenant-runtime/org-permissions'
+import { CRM_MOVE_STAGES_REFUSAL } from '../model/crm-permissions'
 
 /**
  * Which level a CRM route runs at, read off its body once.
@@ -148,7 +149,7 @@ export type OrgCallerRequirement =
 export async function holdsOrgPermission(
   orgId: string | null | undefined,
   uid: string,
-  permission: 'org.privacy' | 'crm.settings',
+  permission: 'org.privacy' | 'crm.settings' | 'crm.moveStages',
 ): Promise<boolean> {
   if (!orgId) return false
   try {
@@ -215,6 +216,25 @@ export async function authorizeOrgCaller(
     orgId,
     org,
   }
+}
+
+/**
+ * Who may move a contact or a deal between stages at the organization level
+ * (AGL-4047): what these doors asked before, an org-wide member holding "Manage
+ * data" with staff passing it, and then "Move contacts and deals between
+ * stages", which follows that key until someone decides it, so with nothing
+ * decided it answers the same. Staff are not asked it, as they are not asked
+ * "Manage data".
+ */
+export async function authorizeOrgStageMover(
+  req: PluginApiRequest,
+  orgId: string,
+  refusal: string,
+): Promise<OrgCaller | OrgCallerRefusal> {
+  const caller = await authorizeOrgCaller(req, orgId, { needs: 'data.manage', refusal })
+  if (caller.ok === false || caller.staff) return caller
+  if (await holdsOrgPermission(orgId, caller.uid, 'crm.moveStages')) return caller
+  return { ok: false, status: 403, error: CRM_MOVE_STAGES_REFUSAL }
 }
 
 /**

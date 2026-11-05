@@ -36,6 +36,8 @@ import useFirestoreDoc from '../hooks/use-firestore-doc'
 
 export interface AuthScreensCardProps {
   hostId: string
+  /** The reader may not write `authScreens`: shown switched off, not hidden. */
+  disabled?: boolean
 }
 
 const AUTH_SLOTS: Array<{
@@ -68,7 +70,7 @@ const AUTH_SLOTS: Array<{
  * minimally restyled with the site theme.
  */
 export function AuthScreensCard(props: AuthScreensCardProps) {
-  const { hostId } = props
+  const { hostId, disabled } = props
   const firestore = useFirestore()
   const { data: user } = useUser()
   const { enqueueSnackbar } = useSnackbar()
@@ -146,6 +148,7 @@ export function AuthScreensCard(props: AuthScreensCardProps) {
             key={slot.key}
             select
             size="small"
+            disabled={disabled}
             label={slot.label}
             helperText={slot.hint}
             value={authScreens[slot.key] ?? ''}

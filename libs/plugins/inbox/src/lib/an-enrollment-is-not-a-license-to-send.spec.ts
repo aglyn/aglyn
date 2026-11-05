@@ -177,6 +177,10 @@ const suppressionKey = (email: string) =>
     .digest('hex')
 
 jest.mock('@aglyn/tenant-data-admin', () => ({
+  // The catalog's own answer for "Manage data", the list writer's key (AGL-4047).
+  memberHasOrgPermission: async (_orgId: string, member: Record<string, unknown> | null, key: string) =>
+    Boolean(member) &&
+    jest.requireActual('@aglyn/aglyn/app-utils/org-permissions').resolveOrgPermissions(member, null)[key] === true,
   // The real resolution's shape: an org that declared no pooling resolves
   // every site to a group of ONE — the narrow answer, which is the direction
   // a wrong group may fail in.

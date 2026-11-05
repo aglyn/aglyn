@@ -9,6 +9,75 @@ content on the marketing site and is written separately.
 
 <!-- releases below -->
 
+## v1.12.0 — 2026-11-05
+
+[Compare with the previous release](https://github.com/aglyn/aglyn/compare/v1.11.0...v1.12.0)
+
+### Added
+
+- **marketing:** campaign create and edit switch off without the key ([AGL-4047](https://linear.app/aglyn/issue/AGL-4047))
+- **crm:** CRM and audience writes ask permission keys ([AGL-4047](https://linear.app/aglyn/issue/AGL-4047))
+- **console:** workspace plugin settings form follows org.settings ([AGL-4047](https://linear.app/aglyn/issue/AGL-4047))
+- **native:** screens and plugin gates ask catalog keys ([AGL-4047](https://linear.app/aglyn/issue/AGL-4047))
+- **marketplace:** Buy off with the reason for a publisher's members elsewhere ([AGL-4047](https://linear.app/aglyn/issue/AGL-4047))
+- **crm:** share controls switched off with the permission named, specs ask the key ([AGL-4047](https://linear.app/aglyn/issue/AGL-4047))
+- **marketplace:** own listings install free only on the publisher's own sites ([AGL-4047](https://linear.app/aglyn/issue/AGL-4047))
+- **rules:** people, list, AI billing and hardware order reads ask the key alone ([AGL-4047](https://linear.app/aglyn/issue/AGL-4047))
+- **marketplace:** Payouts, Verified and Review status controls ask the same keys; docs ([AGL-4047](https://linear.app/aglyn/issue/AGL-4047))
+- **marketplace:** payouts, the Verified ask and version history ask publisher keys ([AGL-4047](https://linear.app/aglyn/issue/AGL-4047))
+- **rules:** publisher, listing and Sequences reads ask stamped keys, not roles ([AGL-4047](https://linear.app/aglyn/issue/AGL-4047))
+- **marketplace:** seller controls ask the publisher keys and name them; docs ([AGL-4047](https://linear.app/aglyn/issue/AGL-4047))
+- **marketplace:** the publisher profile and listing doors ask their own keys ([AGL-4047](https://linear.app/aglyn/issue/AGL-4047))
+- **console:** pin as many sites as you like in a workspace ([AGL-4165](https://linear.app/aglyn/issue/AGL-4165))
+
+### Fixed
+
+- **crm:** name the source option type so core declares no CRM domain word ([AGL-3680](https://linear.app/aglyn/issue/AGL-3680))
+- **crm:** the contact Source filter offers any plugin's source, Sources sorts by label ([AGL-3680](https://linear.app/aglyn/issue/AGL-3680))
+- **rules:** a client update cannot change where a deal stands ([AGL-4047](https://linear.app/aglyn/issue/AGL-4047))
+- **ai:** Also improve my wording quotes about 25 more credits, as the live wave measured ([AGL-4152](https://linear.app/aglyn/issue/AGL-4152))
+- **storefront:** waivers fit any trade, and compare-at prices are readable ([AGL-4180](https://linear.app/aglyn/issue/AGL-4180))
+- **accounting:** handle what real QuickBooks and Xero refuse ([AGL-3614](https://linear.app/aglyn/issue/AGL-3614))
+- **android:** the Listings refusal sits under the rows, as elsewhere ([AGL-4047](https://linear.app/aglyn/issue/AGL-4047))
+- **commerce:** the Verified buyer badge on reviews is readable ([AGL-4179](https://linear.app/aglyn/issue/AGL-4179))
+- **tenant:** a site's team sees the site while it is in maintenance mode ([AGL-4178](https://linear.app/aglyn/issue/AGL-4178))
+- **commerce:** a collection page lists only that collection's products ([AGL-4177](https://linear.app/aglyn/issue/AGL-4177))
+- **apple:** the Selling listings menu opens, and no site is not a refusal ([AGL-4047](https://linear.app/aglyn/issue/AGL-4047))
+- **site:** the announcement bar no longer covers a header over the hero ([AGL-4176](https://linear.app/aglyn/issue/AGL-4176))
+- **seed:** demo data uses the shapes the product reads ([AGL-4175](https://linear.app/aglyn/issue/AGL-4175))
+- **besigner:** saving waits until a saved draft has loaded ([AGL-4174](https://linear.app/aglyn/issue/AGL-4174))
+- **crm:** register the settings key through declarations only, within budget ([AGL-4047](https://linear.app/aglyn/issue/AGL-4047))
+- **commerce:** quote dialog and response notice state the tax charged ([AGL-4162](https://linear.app/aglyn/issue/AGL-4162))
+- **rules:** site allotment arm asks a collaborator as its route does; CRM key docs ([AGL-4047](https://linear.app/aglyn/issue/AGL-4047))
+- **shared-ui-jsx:** a same-page #link no longer opens the loading overlay ([AGL-4173](https://linear.app/aglyn/issue/AGL-4173))
+- **commerce:** storefront grid and related products print two-decimal prices ([AGL-4167](https://linear.app/aglyn/issue/AGL-4167))
+- **crm:** a name lookup no longer keeps one failed read until the page reloads ([AGL-4164](https://linear.app/aglyn/issue/AGL-4164), [AGL-1440](https://linear.app/aglyn/issue/AGL-1440))
+
+### Documentation
+
+- name the permission and its default holders, not a role ([AGL-4047](https://linear.app/aglyn/issue/AGL-4047))
+- **marketplace:** a listing is free on its publisher's own sites only ([AGL-4047](https://linear.app/aglyn/issue/AGL-4047))
+
+<details>
+<summary>Also in this release: 4 test, 8 chore</summary>
+
+- **crm:** main merged, contact Source filter ready to merge ([AGL-3680](https://linear.app/aglyn/issue/AGL-3680))
+- **crm:** contact Source filter and Sources sort ready to merge ([AGL-3680](https://linear.app/aglyn/issue/AGL-3680))
+- **native:** regenerate contract cases after merging main ([AGL-4047](https://linear.app/aglyn/issue/AGL-4047))
+- **marketplace:** the Selling gates read the member's stamp ([AGL-4047](https://linear.app/aglyn/issue/AGL-4047))
+- **native:** regenerate contract cases after merging main ([AGL-4047](https://linear.app/aglyn/issue/AGL-4047))
+- **besigner:** the draft state fixture names sharedDraftLoading ([AGL-4174](https://linear.app/aglyn/issue/AGL-4174))
+- **docs:** regenerate the assistant's docs index for the CRM settings key ([AGL-4047](https://linear.app/aglyn/issue/AGL-4047))
+- **rules:** allow and deny rows for the readers that now ask the key alone ([AGL-4047](https://linear.app/aglyn/issue/AGL-4047))
+- **permissions:** the plugin-key enforcement guard reads dotted keys too ([AGL-4047](https://linear.app/aglyn/issue/AGL-4047))
+- **docs:** regenerate the docs index for main's console tour edit ([AGL-4047](https://linear.app/aglyn/issue/AGL-4047))
+- **tools:** the demo seeds leave the hand-built demo sites' pages alone ([AGL-4166](https://linear.app/aglyn/issue/AGL-4166))
+- **docs:** the pricing table's single sign-on row names SSO ([AGL-4126](https://linear.app/aglyn/issue/AGL-4126))
+
+</details>
+
+6 commit(s) did not parse as conventional commits (merge commits and the like) and did not contribute to the version bump.
+
 ## v1.11.0 — 2026-11-04
 
 [Compare with the previous release](https://github.com/aglyn/aglyn/compare/v1.10.0...v1.11.0)
@@ -65,6 +134,7 @@ content on the marketing site and is written separately.
 <details>
 <summary>Also in this release: 4 test</summary>
 
+- **console:** the subprocessor gate names Bring my site's wording eval as a key it only mentions ([AGL-4152](https://linear.app/aglyn/issue/AGL-4152))
 - **ai:** the wording eval runs in node, where the provider batch has fetch ([AGL-4152](https://linear.app/aglyn/issue/AGL-4152))
 - **ai:** the wording eval, by the real model, on the eight recorded main pages ([AGL-4152](https://linear.app/aglyn/issue/AGL-4152))
 - **ai:** the start and job page specs read what the wording switch adds on the page row ([AGL-4152](https://linear.app/aglyn/issue/AGL-4152))

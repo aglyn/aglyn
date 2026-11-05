@@ -114,6 +114,7 @@ import {
   getOrgForHost,
   hostSendingIdentity,
   isEmailSuppressed,
+  memberHasOrgPermission,
   meterHostEmail,
   consentGroupForSite,
   orgDataCollectionForHost,
@@ -491,12 +492,12 @@ async function resolveAssignmentContext(
     () => null,
   )
   const member = membership?.member
+  // "Manage data" (AGL-4047), org-wide and not suspended: the rules'
+  // `canWriteOrgWideData()`, whose default is the owner, admins and editors.
   const orgWideWriter =
     isOrgWideMember(member) &&
-    (member?.role === 'owner' ||
-      member?.role === 'admin' ||
-      member?.role === 'editor') &&
-    (member as { orgSuspended?: boolean } | undefined)?.orgSuspended !== true
+    (member as { orgSuspended?: boolean } | undefined)?.orgSuspended !== true &&
+    (await memberHasOrgPermission(orgId, member, 'data.manage'))
   if (!orgWideWriter) {
     return {
       ok: false,

@@ -108,7 +108,8 @@ Capture does not wait for the plan. Every form submission, sign-up, order or boo
 that carries an email address updates the person's record — a
 [lead](./leads.md#what-makes-a-lead) from a booking or a form with lead routing on, a
 contact from a sign-up or an order — exactly as on a paid plan. Those records are kept, up to Free's 100-record band, and are there when the
-plan includes the CRM. Workspace owners and admins can export them, or erase a person,
+plan includes the CRM. Members holding **Privacy requests**, which workspace owners and
+admins hold by default, can export them, or erase a person,
 from [Settings → Privacy](../../workspace-and-billing/signing-in-and-sessions.md#privacy-requests)
 on every plan.
 
@@ -294,6 +295,11 @@ organization when the organization has chosen to share its data. A collaborator
 scoped to one site sees that site's people, deals and tasks and no others. The
 rule is the same in every section, so no section can show a record the reader
 could not open as a contact.
+
+Changing a record takes the same **manage data** permission. Moving a contact or a deal
+between stages also takes [**Move contacts and deals between
+stages**](../../workspace-and-billing/teams-and-roles/custom-roles.md#crm-move-stages-permission),
+which starts from the reader's role on the site: its admins and editors by default.
 
 ### One sender, one CRM {#one-sender-one-crm}
 

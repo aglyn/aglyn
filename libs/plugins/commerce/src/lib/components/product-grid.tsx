@@ -875,10 +875,10 @@ const ProductGrid = forwardRef<HTMLDivElement, ProductGridProps>(
                   {item.compareAtPriceUsd ? (
                     <Typography
                       variant="caption"
-                      color="text.disabled"
+                      color="text.secondary"
                       sx={{ textDecoration: 'line-through' }}
                     >
-                      {`$${item.compareAtPriceUsd}`}
+                      {usdLabel(item.compareAtPriceUsd)}
                     </Typography>
                   ) : null}
                   {item.soldOut ? (

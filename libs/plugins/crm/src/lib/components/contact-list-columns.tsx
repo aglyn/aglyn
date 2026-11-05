@@ -233,11 +233,14 @@ export function contactListColumns(
       minWidth: 160,
       // A map of provenance flags, not a scalar — `sources.form == true` is
       // queryable one key at a time, which is a menu of its own rather than
-      // a filter on this column.
+      // a filter on this column. For the same reason the query cannot order
+      // by it: the header sorts the page (AGL-3680), by the words on the
+      // chips, so `order` sorts where "Customer" reads.
       filterable: false,
-      sortable: false,
       valueGetter: (_value, row: ContactRecord) =>
-        Object.keys(row.sources ?? {}).join(', '),
+        Object.keys(row.sources ?? {})
+          .map((source) => labelContactSource(source))
+          .join(', '),
       renderCell: ({ row }: { row: ContactRecord }) => (
         <Stack
           direction="row"

@@ -338,7 +338,7 @@ export function WaiverEditor(props: WaiverEditorProps) {
               control={
                 <Switch checked={allowMinors} disabled={!canManage} onChange={(event) => setAllowMinors(event.target.checked)} />
               }
-              label={`A parent or guardian may sign for riders under ${adultAge}`}
+              label={`A parent or guardian may sign for people under ${adultAge}`}
             />
             <FormControl disabled={!canManage}>
               <FormLabel>{'One signature is good for'}</FormLabel>

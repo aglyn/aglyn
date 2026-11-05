@@ -252,6 +252,10 @@ const ENFORCED_AS: Record<OrgPermission, readonly string[]> = {
   // site's suppressions", the list routes "Add people to marketing lists from
   // a site", the inbox's reply "Reply from the inbox" and its list assignment
   // "Add people to lists from the inbox".
+  // The CRM (AGL-4047): `authorizeOrgCaller` asks "Change CRM settings", and
+  // both stage routes "Move contacts and deals between stages".
+  'crm.settings': ["'crm.settings'"],
+  'crm.moveStages': ["'crm.moveStages'"],
   'email.suppressions': ["'email.suppressions'"],
   'email.lists': ["'email.lists'"],
   'inbox.reply': ["'inbox.reply'"],
@@ -298,7 +302,7 @@ describe('every advertised org permission is enforced server-side (AGL-2444)', (
     expect([...CATALOG].sort()).toEqual(
       Object.keys(ENFORCED_AS).sort(),
     )
-    expect(CATALOG.length).toBe(49)
+    expect(CATALOG.length).toBe(51)
   })
 
   it('the search really searches — a key nobody uses finds nothing', () => {

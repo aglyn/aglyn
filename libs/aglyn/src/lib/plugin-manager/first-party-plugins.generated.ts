@@ -368,7 +368,7 @@ export const FIRST_PARTY_PLUGINS: readonly FirstPartyPlugin[] = [
     "id": "waivers",
     "label": "Waivers",
     "alwaysOnForWorkspace": true,
-    "description": "Digital waivers riders and guests sign before they arrive or at the window.",
+    "description": "Digital waivers guests sign before they arrive or at the window.",
     "siteOff": {
       "stops": "Switching Waivers off for this site stops its Sign waiver elements rendering, closes its share links, and refuses new signatures, online or at the window.",
       "keeps": "Every signature already taken is kept, with its signed copy and audit trail, and Waivers keeps working on the workspace’s other sites."

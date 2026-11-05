@@ -26,11 +26,12 @@
  * owner. The listing's ceiling refuses a copy the way the create drawer
  * refuses a new one.
  *
- * Reached from a site — the host role decides — or from the organization
+ * Reached from a site — "Edit site content" decides — or from the organization
  * hub, where an org-wide seat does. Both scopes land in the same
  * collection, so the copy is looked up where the source was found.
  */
 
+import { holdsSiteKey, siteKeyRefusal } from '@aglyn/aglyn/app-utils/host-permissions'
 import {
   DUPLICATE_BUSY_MESSAGE,
   duplicateDisplayName,
@@ -44,7 +45,6 @@ import {
 import {
   claimAttempt,
   createResourceUid,
-  hostRoleCanWrite,
   type PluginApiHandler,
 } from '@aglyn/aglyn/server'
 import {
@@ -96,9 +96,8 @@ export const crmEmailTemplateDuplicateHandler: PluginApiHandler = async (req, re
     if (scope.level === 'site') {
       const host = await firestore.collection('hosts').doc(scope.hostId).get()
       if (!host.exists) return res.status(404).json({ error: 'Unknown site' })
-      const role = (host.get('memberRoles') ?? {})[decoded.uid]
-      if (!staff && !hostRoleCanWrite(role)) {
-        return res.status(403).json({ error: 'Editing requires the editor role' })
+      if (!staff && !holdsSiteKey(host, decoded.uid, 'site.edit')) {
+        return res.status(403).json({ error: siteKeyRefusal('site.edit') })
       }
       orgId = (await resolveOrgIdForHost(scope.hostId)) ?? ''
     } else if (!staff) {

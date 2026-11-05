@@ -27,6 +27,7 @@ import { useSnackbar } from '@aglyn/shared-ui-snackstack'
 import { useCallback, useMemo, useState } from 'react'
 import { useCrmScope } from '../hooks/use-crm-scope'
 import type { DealStageApi, DealStageRef } from '../hooks/use-deal-stage-api'
+import { CRM_MOVE_STAGES_REFUSAL } from '../model/crm-permissions'
 import { openStages, type PipelineDoc } from '../model/deal-board-model'
 import type { CrmTaskFields } from '../model/task-routes'
 import TaskEditDrawer from './task-edit-drawer'
@@ -134,6 +135,10 @@ function HostedRecordInsightsZone(props: CrmRecordInsightsZoneProps & { Slot: Co
       if (!deal || deal.status !== 'open') return
       const stage = stages?.find((entry) => entry.id === stageId)
       if (!stage || stage.id === deal.stageId) return
+      if (deal.api.moveBlocked === true) {
+        enqueueSnackbar(CRM_MOVE_STAGES_REFUSAL, { variant: 'warning' })
+        return
+      }
       const agreed = await confirm({
         title: `Move this deal to ${stage.name}?`,
         description: 'The deal moves as it would from its stage card, and any automation that listens for a stage change runs.',

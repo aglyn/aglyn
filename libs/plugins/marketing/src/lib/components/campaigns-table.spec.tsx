@@ -235,6 +235,11 @@ let postAnswer = { ok: true, body: {} as Record<string, unknown> }
 
 import { nameSearchNormalizers } from '@aglyn/aglyn/app-utils/name-search'
 import { planListQuery } from '@aglyn/shared-ui-jsx/const/list-query-plan'
+let containersBlocked = false
+jest.mock('./use-campaign-containers-blocked', () => ({
+  useCampaignContainersBlocked: () => containersBlocked,
+}))
+
 import HostCampaignsCard from './campaigns-card'
 import { MarketingOrgMountProvider } from './marketing-org-mount'
 import { ConsoleWidgetSlotContext } from '@aglyn/aglyn/app-utils/console-widget-slot-context'
@@ -791,6 +796,20 @@ describe('a campaign whose email is still going out', () => {
 
     expect(emailsCell()).toContain('scheduled')
     expect(emailsCell()).not.toContain('sending')
+  })
+})
+
+describe('without "Run email campaigns" (AGL-4047)', () => {
+  afterEach(() => {
+    containersBlocked = false
+  })
+
+  it('switches Create campaign off with the permission named', async () => {
+    containersBlocked = true
+    render(<HostCampaignsCard hostId="host-1" basePath="/acme/hosts/store/marketing" />)
+    const button = (await screen.findByRole('button', { name: 'Create campaign' })) as HTMLButtonElement
+    expect(button.disabled).toBe(true)
+    expect(screen.getByLabelText('Your role does not include "Run email campaigns" — ask an organization admin')).toBeTruthy()
   })
 })
 

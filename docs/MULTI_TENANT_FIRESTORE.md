@@ -229,10 +229,11 @@ Org roles (org-wide), then per-host refinement:
     a path that bypasses the projection, therefore gets the verdict the role
     gate alone produces. Never "everything allowed"; never "nothing allowed"
     either.
-  - Applied to datasets and records only (`canWriteOrgDatasets()`), matching
-    `data.manage`'s scope. Contacts, segments and media keep the plain role
-    check, because no server route gates them on that permission and
-    requiring it would refuse members those routes permit.
+  - Datasets and records (`canWriteOrgDatasets()`), the CRM's records, segments,
+    lists and topics (`canWriteOrgData()`, `canWriteOrgWideData()`) ask
+    `data.manage` through `memberKeyOrOverride`, as the routes in front of them
+    do (AGL-4047). The media library asks `org.media`, and campaign containers
+    `marketing.campaigns`.
   - This projection has one input no membership mutation touches: the custom
     role document itself. `/api/orgs/roles` therefore calls the same writer on
     save and on delete, and awaits it, so a narrowing is in force before the

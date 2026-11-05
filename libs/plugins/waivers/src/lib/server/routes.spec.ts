@@ -659,7 +659,7 @@ describe('voiding and status', () => {
     const id = signatures()[0].id as string
     const status = async () =>
       (await (await call(statusRoute, 'GET', { token: 'tok-clerk', query: { email: 'jordan@example.com', dayKey: '2026-10-24', people: '3' } })).json())
-    expect(await status()).toMatchObject({ signed: true, coveredNames: ['Jordan Lee', 'Pat Lee'], label: 'Signed for 2 of 3 riders' })
+    expect(await status()).toMatchObject({ signed: true, coveredNames: ['Jordan Lee', 'Pat Lee'], label: 'Signed for 2 of 3 people' })
     expect((await call(signatureRoute, 'POST', { token: 'tok-clerk', body: { signatureId: id, action: 'void', reason: 'Duplicate' } })).status).toBe(403)
     expect((await call(signatureRoute, 'POST', { body: { signatureId: id, action: 'void', reason: '' } })).status).toBe(400)
     const voided = await call(signatureRoute, 'POST', { body: { signatureId: id, action: 'void', reason: 'Duplicate' } })

@@ -47,7 +47,6 @@ import {
   CRM_SETUP_FIELD_SCOPE_REFUSAL,
   CRM_SETUP_PERMISSION_REFUSAL,
   CRM_SETUP_PICKLIST_SCOPE_REFUSAL,
-  CRM_SETUP_ROLE_REFUSAL,
   CRM_SETUP_SCOPE_REFUSAL,
   type CrmSetupMember,
   type CrmSetupStore,
@@ -120,7 +119,7 @@ beforeEach(() => {
   picklists = new Map()
   regrouped = []
   writes = 0
-  member = { role: 'editor', canManageData: true, member: { role: 'editor', allHosts: true } }
+  member = { canManageData: true, member: { role: 'editor', allHosts: true } }
 })
 
 describe('who may set up the CRM', () => {
@@ -135,18 +134,21 @@ describe('who may set up the CRM', () => {
   it('refuses another org’s site, a Free plan, a viewer, a suspended member, and no data.manage', async () => {
     await expect(writer.refusal({ ...context, hostId: 'elsewhere' })).resolves.toEqual({ status: 404, error: 'Unknown site' })
     await expect(writer.refusal({ ...context, org: { plan: 'free' } })).resolves.toMatchObject({ status: 403 })
-    member = { role: 'viewer', canManageData: true, member: { role: 'viewer', allHosts: true } }
-    await expect(writer.refusal(context)).resolves.toEqual({ status: 403, error: CRM_SETUP_ROLE_REFUSAL })
-    member = { role: 'admin', canManageData: true, member: { role: 'admin', orgSuspended: true } }
-    await expect(writer.refusal(context)).resolves.toEqual({ status: 403, error: CRM_SETUP_ROLE_REFUSAL })
-    member = { role: 'editor', canManageData: false, member: { role: 'editor', allHosts: true } }
+    member = { canManageData: false, member: { role: 'viewer', allHosts: true } }
     await expect(writer.refusal(context)).resolves.toEqual({ status: 403, error: CRM_SETUP_PERMISSION_REFUSAL })
+    member = { canManageData: true, member: { role: 'admin', orgSuspended: true } }
+    await expect(writer.refusal(context)).resolves.toEqual({ status: 403, error: CRM_SETUP_PERMISSION_REFUSAL })
+    member = { canManageData: false, member: { role: 'editor', allHosts: true } }
+    await expect(writer.refusal(context)).resolves.toEqual({ status: 403, error: CRM_SETUP_PERMISSION_REFUSAL })
+    // The key alone decides (AGL-4047): a viewer granted "Manage data" is admitted.
+    member = { canManageData: true, member: { role: 'viewer', allHosts: true } }
+    await expect(writer.refusal(context)).resolves.toBeNull()
   })
 
   it('refuses a member whose sites do not reach the scope, and an org-wide field to a site collaborator', async () => {
-    member = { role: 'editor', canManageData: true, member: { role: 'editor', allHosts: false, hostAccess: { other: 'editor' }, scopeTokens: ['host:other'] } }
+    member = { canManageData: true, member: { role: 'editor', allHosts: false, hostAccess: { other: 'editor' }, scopeTokens: ['host:other'] } }
     await expect(writer.refusal(context)).resolves.toEqual({ status: 403, error: CRM_SETUP_SCOPE_REFUSAL })
-    member = { role: 'editor', canManageData: true, member: { role: 'editor', allHosts: false, hostAccess: { h1: 'editor' }, scopeTokens: ['host:h1'] } }
+    member = { canManageData: true, member: { role: 'editor', allHosts: false, hostAccess: { h1: 'editor' }, scopeTokens: ['host:h1'] } }
     await expect(createCrmFieldSetupWriter(deps).refusal(context)).resolves.toEqual({
       status: 403,
       error: CRM_SETUP_FIELD_SCOPE_REFUSAL,
@@ -212,7 +214,7 @@ describe('the crm-pipeline writer', () => {
     pipelines.set('p1', { $id: 'p1', name: 'Sales', stages: [], archivedAt: null, visibleTo: ['org'] } as unknown as PipelineDoc)
     await expect(writer.write(request('j', { name: 'Partners', renameFrom: 'Sales' }))).resolves.toMatchObject({ ok: false, status: 409 })
     member = null
-    await expect(writer.write(request('j', ask))).resolves.toEqual({ ok: false, status: 403, error: CRM_SETUP_ROLE_REFUSAL })
+    await expect(writer.write(request('j', ask))).resolves.toEqual({ ok: false, status: 403, error: CRM_SETUP_PERMISSION_REFUSAL })
     expect(writes).toBe(0)
   })
 })
@@ -255,9 +257,9 @@ describe('the crm-picklist-values writer (AGL-3756)', () => {
   it('is gated as the Fields page is, org-wide', async () => {
     await expect(writer.refusal(context)).resolves.toBeNull()
     await expect(writer.refusal({ ...context, org: { plan: 'free' } })).resolves.toMatchObject({ status: 403 })
-    member = { role: 'viewer', canManageData: true, member: { role: 'viewer', allHosts: true } }
-    await expect(writer.refusal(context)).resolves.toEqual({ status: 403, error: CRM_SETUP_ROLE_REFUSAL })
-    member = { role: 'editor', canManageData: true, member: { role: 'editor', allHosts: false, hostAccess: { h1: 'editor' }, scopeTokens: ['host:h1'] } }
+    member = { canManageData: false, member: { role: 'viewer', allHosts: true } }
+    await expect(writer.refusal(context)).resolves.toEqual({ status: 403, error: CRM_SETUP_PERMISSION_REFUSAL })
+    member = { canManageData: true, member: { role: 'editor', allHosts: false, hostAccess: { h1: 'editor' }, scopeTokens: ['host:h1'] } }
     await expect(writer.refusal(context)).resolves.toEqual({ status: 403, error: CRM_SETUP_PICKLIST_SCOPE_REFUSAL })
     await expect(writer.write(request('j', { list: 'opportunityType', values: ['Renewal'] }))).resolves.toEqual({
       ok: false,

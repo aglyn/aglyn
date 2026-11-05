@@ -27,8 +27,9 @@ alone, every site's. See
 :::info Plan availability
 Leads are part of the **CRM**, included from **Starter**. On Free the section is shown
 locked, with the rest of the CRM. Leads are still filed on Free, exactly as described
-below, and kept; workspace owners and admins can export every lead, or erase a person,
-from [Settings → Privacy](../../workspace-and-billing/signing-in-and-sessions.md#privacy-requests).
+below, and kept; members holding **Privacy requests**, which workspace owners and admins
+hold by default, can export every lead, or erase a person, from
+[Settings → Privacy](../../workspace-and-billing/signing-in-and-sessions.md#privacy-requests).
 See [What each plan includes](./overview.md#what-each-plan-includes).
 :::
 
@@ -508,7 +509,8 @@ the same request the contact record offers, filed by the lead's address: the
 person is removed from every site in the workspace, the address is closed to
 capture at once, the lead shows an **Erasure pending** banner with its
 **Convert** button disabled, and the sweep runs with the nightly erasure job.
-Workspace admins only. What it removes,
+It takes the **Privacy requests** permission, which workspace owners and admins hold by
+default. What it removes,
 what it keeps and what it does not reach are listed in
 [Deleting and erasing](./contact-record.md#deleting-and-erasing).
 
