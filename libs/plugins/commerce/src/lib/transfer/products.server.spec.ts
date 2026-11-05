@@ -361,3 +361,132 @@ describe('importing products', () => {
     expect(results).toEqual([expect.objectContaining({ outcome: 'failed', reason: 'matchedRecordMissing' })])
   })
 })
+
+describe('add-ons, check-in and quick keys (AGL-4060)', () => {
+  const overwrite: Partial<TransferPolicy> = { fieldDefault: { mode: 'overwrite', blank: 'leave' } }
+  const stored = () => fake.read(`${HOST}/products/lamp`) as Record<string, any>
+
+  const groups = [
+    {
+      id: 'g-shade',
+      name: 'Shade',
+      min: 1,
+      max: 1,
+      online: true,
+      options: [{ id: 'o-linen', name: 'Linen', priceCents: 500, priceCentsByVariant: { b: 700 } }],
+    },
+  ]
+
+  function seedRegisterLamp() {
+    seedProduct('lamp', {
+      name: 'Desk lamp',
+      slug: 'desk-lamp',
+      status: 'draft',
+      posQuickKey: true,
+      checkIn: { enabled: true, headcount: 2 },
+      modifierGroups: groups,
+      options: [{ name: 'Color', values: ['Black', 'Brass'] }],
+      variants: [
+        { id: 'a', options: { Color: 'Black' }, priceUsd: 40, inventory: 3, sku: 'LAMP-B' },
+        { id: 'b', options: { Color: 'Brass' }, priceUsd: 55, inventory: 1, sku: 'LAMP-R', checkIn: { enabled: false } },
+      ],
+      skus: ['lamp-b', 'lamp-r'],
+    })
+  }
+
+  it('exports them, on the product’s first row and each variant’s own', async () => {
+    seedRegisterLamp()
+    const fieldIds = ['handle', 'posQuickKey', 'checkIn', 'variantCheckIn', 'modifierGroups']
+    const { rows: lamp } = await readProductsPage(ctx, null, fieldIds, { ids: ['lamp'] })
+    expect(lamp[0]).toEqual({
+      handle: 'desk-lamp',
+      posQuickKey: true,
+      checkIn: 'Yes, 2 people',
+      variantCheckIn: null,
+      modifierGroups: 'Shade (at least 1): Linen +$5.00 (Brass +$7.00)',
+    })
+    expect(lamp[1]).toEqual({ handle: 'desk-lamp', posQuickKey: null, checkIn: null, variantCheckIn: 'No', modifierGroups: null })
+  })
+
+  it('creates a product holding them', async () => {
+    const plan = await planFile(
+      'Handle,Title,Variant Price,Quick key,Check-in,Add-ons\nposter,Poster,9,yes,"Yes, ask which day",Frame: Oak +$12.00\n',
+    )
+    await applyPlan(plan.rows as ProductPlannedRow[])
+    const id = (plan.rows[0] as ProductPlannedRow).commerce?.productId as string
+    const doc = fake.read(`${HOST}/products/${id}`) as Record<string, any>
+    expect(doc['posQuickKey']).toBe(true)
+    expect(doc['checkIn']).toEqual({ enabled: true, headcount: 1, askUseDate: true })
+    expect(doc['modifierGroups']).toEqual([
+      { id: 'g-frame', name: 'Frame', min: 0, max: 1, online: true, options: [{ id: 'o-oak', name: 'Oak', priceCents: 1200 }] },
+    ])
+  })
+
+  it('writes an update through to the document, and undo puts every one back', async () => {
+    seedRegisterLamp()
+    const before = JSON.parse(JSON.stringify(stored()))
+    const plan = await planFile(
+      'Handle,Quick key,Check-in,Add-ons,Variant SKU,Variant check-in\n' +
+        'desk-lamp,no,"Yes, 5 people","Shade (at least 1): Linen +$6.00 (Brass +$8.00), Silk +$9.00; Bulb: LED",LAMP-B,"Yes, 3 people"\n' +
+        'desk-lamp,,,,LAMP-R,"Yes, 4 people"\n',
+      overwrite,
+    )
+    expect((plan.rows as ProductPlannedRow[]).map((row) => row.verdict)).toEqual(['update', 'update'])
+    const applied = await applyPlan(plan.rows as ProductPlannedRow[])
+    expect(applied.results.map((result) => result.outcome)).toEqual(['updated', 'updated'])
+    const doc = stored()
+    expect(doc['posQuickKey']).toBe(false)
+    expect(doc['checkIn']).toEqual({ enabled: true, headcount: 5 })
+    expect(doc['variants'][0]['checkIn']).toEqual({ enabled: true, headcount: 3 })
+    expect(doc['variants'][1]['checkIn']).toEqual({ enabled: true, headcount: 4 })
+    expect(doc['modifierGroups'][0]).toMatchObject({ id: 'g-shade', name: 'Shade' })
+    expect(doc['modifierGroups'][0]['options'][0]).toEqual({
+      id: 'o-linen',
+      name: 'Linen',
+      priceCents: 600,
+      priceCentsByVariant: { b: 800 },
+    })
+    expect(doc['modifierGroups'][1]).toMatchObject({ id: 'g-bulb', online: true })
+
+    const undone = await revertProducts(ctx, { jobId: 'job-1', chunk: 0, entries: applied.undo })
+    expect(undone.conflicts).toEqual([])
+    const back = stored()
+    expect(back['posQuickKey']).toBe(true)
+    expect(back['checkIn']).toEqual({ enabled: true, headcount: 2 })
+    expect(back['variants'][0]['checkIn']).toBeUndefined()
+    expect(back['variants'][1]['checkIn']).toEqual(before['variants'][1]['checkIn'])
+    expect(back['modifierGroups']).toEqual(before['modifierGroups'])
+  })
+
+  it('leaves them exactly as stored when a file omits their columns', async () => {
+    seedRegisterLamp()
+    const before = JSON.parse(JSON.stringify(stored()))
+    const plan = await planFile('Handle,Title,Variant SKU,Variant Price\ndesk-lamp,Lamp v2,LAMP-R,60\n', overwrite)
+    await applyPlan(plan.rows as ProductPlannedRow[])
+    const doc = stored()
+    expect(doc['name']).toBe('Lamp v2')
+    expect(doc['variants'][1]['priceUsd']).toBe(60)
+    expect(doc['posQuickKey']).toBe(before['posQuickKey'])
+    expect(doc['checkIn']).toEqual(before['checkIn'])
+    expect(doc['modifierGroups']).toEqual(before['modifierGroups'])
+    expect(doc['variants'][1]['checkIn']).toEqual(before['variants'][1]['checkIn'])
+  })
+
+  it('refuses add-ons at the write when the options the product stores make too many combinations', async () => {
+    const values = (prefix: string) => Array.from({ length: 11 }, (_, at) => `${prefix}${at}`)
+    seedProduct('wide', {
+      name: 'Wide',
+      slug: 'wide',
+      options: [
+        { name: 'X', values: values('x') },
+        { name: 'Y', values: values('y') },
+      ],
+      variants: [{ id: 'a', options: { X: 'x0', Y: 'y0' }, priceUsd: 1, inventory: null }],
+    })
+    const plan = await planFile('Handle,Add-ons\nwide,Milk: Oat\n', overwrite)
+    const applied = await applyPlan(plan.rows as ProductPlannedRow[])
+    expect(applied.results[0]).toMatchObject({ outcome: 'failed', reason: 'refusedValue' })
+    expect(applied.results[0]?.message).toMatch(/121 combinations/)
+    expect((fake.read(`${HOST}/products/wide`) as Record<string, unknown>)['modifierGroups']).toBeUndefined()
+  })
+})
