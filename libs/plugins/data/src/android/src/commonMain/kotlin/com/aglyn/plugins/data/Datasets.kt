@@ -14,6 +14,7 @@ import com.aglyn.core.ApiMethod
 import com.aglyn.core.ConsoleApiClient
 import com.aglyn.core.ConsoleApiError
 import com.aglyn.core.FilterOp
+import com.aglyn.core.OrgAccess
 import com.aglyn.core.FirestoreDoc
 import com.aglyn.core.FirestoreFilter
 import com.aglyn.core.FirestoreQuery
@@ -114,6 +115,13 @@ data class RecordRow(val id: String, val values: Map<String, Any?>, val updatedA
     }
   }
 }
+
+/**
+ * The `visibleTo` tokens a list of datasets asks for, or null for no filter (`datasetListScope`). On a site, the site decides,
+ * whoever is looking: that site's datasets and the workspace-wide ones. With no site, the member's own reach decides.
+ */
+fun datasetListScope(hostId: String?, memberScope: List<String>?): List<String>? =
+  if (hostId != null) listOf(OrgAccess.ORG_SCOPE_TOKEN, OrgAccess.hostScopeToken(hostId)) else memberScope
 
 /** The datasets a member can list: everything for an org-wide member, their scope's otherwise (the rules refuse an unfiltered list). */
 fun datasetsQuery(orgId: String, scopeTokens: List<String>?): FirestoreQuery = FirestoreQuery(

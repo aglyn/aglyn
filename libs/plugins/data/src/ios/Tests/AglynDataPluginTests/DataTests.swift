@@ -338,9 +338,14 @@ final class DataTests: XCTestCase {
       datasetImportParams(id: "ds1", name: "Menu items"),
       ["resource": "data.dataset:ds1", "title": "Import into Menu items"])
     XCTAssertEqual(datasetImportParams(id: "ds1", name: "")["title"], "Import records")
-    XCTAssertTrue(canImportDatasetRecords(orgRole: "owner"))
-    XCTAssertTrue(canImportDatasetRecords(orgRole: "admin"))
-    XCTAssertFalse(canImportDatasetRecords(orgRole: "editor"))
-    XCTAssertFalse(canImportDatasetRecords(orgRole: nil))
+  }
+
+  func testASiteDecidesWhichDatasetsItLists() {
+    // On a site, the site decides, even for an owner who reaches everything.
+    XCTAssertEqual(datasetListScope(hostID: "h1", memberScope: nil), ["org", "host:h1"])
+    XCTAssertEqual(datasetListScope(hostID: "h1", memberScope: ["host:h2"]), ["org", "host:h1"])
+    // With no site, the member's own reach decides.
+    XCTAssertNil(datasetListScope(hostID: nil, memberScope: nil))
+    XCTAssertEqual(datasetListScope(hostID: nil, memberScope: ["host:h2"]), ["host:h2"])
   }
 }

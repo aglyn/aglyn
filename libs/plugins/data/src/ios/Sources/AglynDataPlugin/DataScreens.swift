@@ -26,9 +26,6 @@ public func datasetTransferResource(_ datasetID: String) -> String { "data.datas
 /// and exports hub's Dataset records list opens for a dataset.
 public let dataImportScreen = "core.settings.data.import"
 
-/// Who may import records: the transfer routes' own rule for a workspace resource, an owner or an admin.
-public func canImportDatasetRecords(orgRole: String?) -> Bool { orgRole == "owner" || orgRole == "admin" }
-
 /// The wizard's parameters for one dataset, the console's `openImport` call: the resource and the title.
 public func datasetImportParams(id: String, name: String) -> NativeParams {
   ["resource": datasetTransferResource(id), "title": name.isEmpty ? "Import records" : "Import into \(name)"]
@@ -124,7 +121,7 @@ final class DatasetsModel {
   /// Re-listens when the member's reach is known or changes.
   func refresh() {
     guard let context, case .ready = access.state else { return }
-    let tokens = access.listScopeTokens
+    let tokens = datasetListScope(hostID: context.hostID, memberScope: access.listScopeTokens)
     if let listeningTokens, listeningTokens == tokens, listener != nil { return }
     listeningTokens = .some(tokens)
     listener?.remove()
@@ -367,7 +364,7 @@ struct DatasetsScreen: View {
         guard let api else { return }
         let trimmed = name.trimmingCharacters(in: .whitespacesAndNewlines)
         runner.run(success: "Dataset \"\(trimmed)\" created.", onDone: { self.sheet = nil }) {
-          let id = try await api.createDataset(name: name, columns: columns, hostID: nil)
+          let id = try await api.createDataset(name: name, columns: columns, hostID: context.hostID)
           open(id)
         }
       }
@@ -375,7 +372,7 @@ struct DatasetsScreen: View {
       NewJoinSheet(datasets: model.rows, runner: runner) { first, second in
         guard let api else { return }
         runner.run(success: "Join collection created.", onDone: { self.sheet = nil }) {
-          let id = try await api.createJoin(first, second, hostID: nil)
+          let id = try await api.createJoin(first, second, hostID: context.hostID)
           open(id)
         }
       }
@@ -528,7 +525,7 @@ struct DatasetDetailView: View {
               Label("Edit schema", systemImage: "tablecells")
             }
             .disabled(!canWrite)
-            if canImportDatasetRecords(orgRole: context.orgRole) {
+            if canWrite {
               Button { context.navigate(dataImportScreen, datasetImportParams(id: dataset.id, name: dataset.name)) } label: {
                 Label("Import records", systemImage: "square.and.arrow.up")
               }

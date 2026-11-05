@@ -168,7 +168,7 @@ private fun Records(context: NativePluginContext, orgId: String, dataset: Datase
         ListHeader(dataset.plural.ifBlank { dataset.name }) {
           OverflowMenu(
             buildList {
-              if (canImportDatasetRecords(context.orgRole)) {
+              if (canWrite) {
                 add(MenuAction("import", "Import records", "upload") { context.navigate(DATA_IMPORT_SCREEN, datasetImportParams(dataset.id, dataset.name)) })
               }
               add(MenuAction("export", "Export records", "download") { dialog = RecordDialog.Export })
