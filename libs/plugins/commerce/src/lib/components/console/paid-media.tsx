@@ -33,8 +33,10 @@ import { doc, getDoc } from 'firebase/firestore'
 import { useCallback, useEffect, useState } from 'react'
 import {
   PAID_MEDIA_COPY,
+  paidMediaCheckingNotice,
   paidMediaConfirmation,
   paidMediaScopeBody,
+  paidMediaTitle,
   usesBesideProduct,
   type PaidMediaKind,
   type PaidMediaReference,
@@ -80,16 +82,23 @@ export function usePaidMediaAttach(product: {
   const copy = PAID_MEDIA_COPY[kind]
   const { data: user } = useUser()
   const { confirm } = useConfirmationContext()
-  const { enqueueSnackbar } = useSnackbar()
+  const { enqueueSnackbar, closeSnackbar } = useSnackbar()
 
   const protect = useCallback(
     async (
       asset: { scope: string; mediaId: string },
-      options: { adding: boolean },
+      options: { adding: boolean; fileName?: string },
     ): Promise<boolean> => {
       const scopeBody = paidMediaScopeBody(asset.scope)
       let others: PaidMediaReference[] = []
       let checked: PaidMediaUsageCheck = 'failed'
+      // The where-used scan can take seconds (AGL-4189). Without a word on
+      // screen the pick looks like it did nothing, and the question then
+      // opens over whatever the author did next.
+      const checking = enqueueSnackbar(paidMediaCheckingNotice(options.fileName), {
+        variant: 'info',
+        persist: true,
+      })
       try {
         const response = await authorizedFetch(user, '/api/media/references', {
           method: 'POST',
@@ -107,9 +116,11 @@ export function usePaidMediaAttach(product: {
       } catch {
         // Said in the confirmation instead: "we could not check" is not
         // "nothing uses it".
+      } finally {
+        closeSnackbar?.(checking)
       }
       const confirmed = await confirm({
-        title: copy.title,
+        title: paidMediaTitle(kind, options.fileName),
         description: paidMediaConfirmation({ others, checked, kind }),
         confirmationText: 'Make private',
       })
@@ -145,7 +156,7 @@ export function usePaidMediaAttach(product: {
       }
       return true
     },
-    [confirm, copy, enqueueSnackbar, hostId, kind, productId, user],
+    [closeSnackbar, confirm, copy, enqueueSnackbar, hostId, kind, productId, user],
   )
 
   /** The value to store on the product, or null when nothing was added. */
@@ -162,7 +173,7 @@ export function usePaidMediaAttach(product: {
       if (picked.private) return reference
       const madePrivate = await protect(
         { scope: picked.mediaScope, mediaId: picked.mediaId },
-        { adding: true },
+        { adding: true, fileName: picked.fileName },
       )
       return madePrivate ? reference : null
     },
