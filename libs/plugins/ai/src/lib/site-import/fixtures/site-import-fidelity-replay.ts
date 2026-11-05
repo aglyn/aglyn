@@ -35,6 +35,7 @@ import { aiLayoutChecks } from '../../jobs/ai-job-layout-step'
 import { aiSiteImportSectionNames } from '../../jobs/ai-site-import-compile'
 import { AI_LAYOUT_IMPORTED_SECTIONS_INPUT, aiSiteImportDocumentOf, type AiSiteImportDocument } from '../../jobs/ai-site-import-document'
 import { aiSiteImportStyle } from '../../jobs/ai-site-import-look'
+import { aiLayoutDesignChoices } from '../../layout-language/ai-layout-design'
 import type { AiLayoutFrameSource } from '../../layout-language/ai-layout-frame-source'
 import type { AiJob } from '../../model/ai-jobs.types'
 import {
@@ -198,6 +199,18 @@ export function siteImportReplayTheme(name: SiteImportReplayName, finish?: AiSit
   const input = { seed: 7, description: read.title, facts: read.layout?.look ?? null, ...(finish ? { finish } : {}), ...(options.generative ? { generative: true } : {}) }
   const style = aiSiteImportStyle(null, input as Parameters<typeof aiSiteImportStyle>[1])
   return style ? siteImportFidelityThemeOf(aiSiteTheme(style, DEFAULT_SITE_THEME), 'style') : null
+}
+
+/**
+ * A site's design seed whose bands run on one ground (AGL-4152), as the 11/5
+ * Improve it test drew its pages: what today's build leaves of a page's rhythm
+ * on such a site, whatever its answer asks.
+ */
+export function siteImportReplayOneGroundSeed(): number {
+  for (let seed = 1; seed < 1_000; seed += 1) {
+    if (aiLayoutDesignChoices({ kind: 'business', seed, home: true }).bandRhythm === 'plain') return seed
+  }
+  throw new Error('no seed draws one ground')
 }
 
 /** A basic site's page as a recorded `submit_improved_page` answer draws it (AGL-4152), with what the code that keeps it reads. */
