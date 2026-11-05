@@ -2583,7 +2583,9 @@ whose passes each do one unit (`aiSiteImportNextWork`):
    (`site-import/site-import-layout.ts`, no model): its sections and bands,
    rows, groups by kind, tables, tabs, pictures, icons and buttons over the
    read's blocks by index (`AiSiteImportPageRead.layout`), through the page's
-   own stylesheets (`site-import-css.ts`), and its VIDEOS (AGL-4140,
+   own stylesheets (`site-import-css.ts`), a grid whose children name their
+   places (`grid-area`, `grid-row`, `grid-column`) read in the rows, columns and
+   pairing a visitor sees rather than the markup's order (AGL-4152), and its VIDEOS (AGL-4140,
    `readVideos`, at most 10 a page, `AiSiteImportPageRead.videos`): a
    `<video>`, an `<iframe>` of a host a `videoEmbedProviders` declaration
    names, a facade (a `lite-youtube`/`lite-vimeo`, a `data-*-id` element, a

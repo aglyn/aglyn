@@ -782,3 +782,185 @@ describe('the look facts Keep my site keeps (AGL-4152)', () => {
     for (const value of ['100%', '80vw', 'none', 'calc(100% - 2rem)', undefined]) expect(siteImportMeasurePx(value, 16)).toBeNull()
   })
 })
+
+/*------------------------------------------
+ * A grid read as a visitor sees it (AGL-4152)
+ *-----------------------------------------*/
+
+/** A group's items as the words a visitor reads together: its title, its words, its picture's alt. */
+const cardsOf = (name: SiteLayoutPageName, group: SiteImportLayoutGroup) =>
+  group.items.map((item) => ({
+    title: item.title === undefined ? null : read(name).text(item.title),
+    text: (item.text ?? []).map((ref) => read(name).text(ref)),
+    image: item.image === undefined ? null : read(name).text(item.image),
+  }))
+
+describe('a page placed on a grid, read in the order and columns a visitor sees (AGL-4152)', () => {
+  it('reads blocks placed one over another as a stack, not a row of the grid’s tracks', () => {
+    const open = sectionNamed('gridServices', 'Gardens that grow with you')
+    expect(open.nodes.map((node) => node.kind)).toEqual(['line', 'line', 'line'])
+    expect(open.lines.map(read('gridServices').text)).toEqual([
+      'Gardens that grow with you',
+      'Design, planting and care for the spaces you use every day, from a first sketch to the last leaf of autumn.',
+      'Book a visit',
+    ])
+  })
+
+  it('reads three columns of picture, heading and words as one group of three cards', () => {
+    const section = sectionNamed('gridServices', 'What we do')
+    expect(section.nodes.map((node) => node.kind)).toEqual(['line', 'group'])
+    const group = section.nodes[1] as SiteImportLayoutGroup
+    expect(group.group).toBe('cards')
+    expect(group.columns).toBe(3)
+    expect(cardsOf('gridServices', group)).toEqual([
+      { title: 'Garden design', text: ['A plan drawn for your light, your soil and the way you live outside.', 'Plan a garden'], image: 'A sketched garden plan' },
+      { title: 'Planting', text: ['Native shrubs and perennials set out by a crew that stays until they settle.', 'Start planting'], image: 'Young plants in a raised bed' },
+      { title: 'Seasonal care', text: ['Pruning, feeding and clean-up four times a year, on a calendar you can see.', 'Book a season'], image: 'Pruning shears on a stone wall' },
+    ])
+  })
+
+  it('reads a row of pictures side by side, with the widths they are placed at', () => {
+    const section = read('gridServices').layout.sections[2]
+    const row = section?.nodes[0]
+    expect(row?.kind).toBe('row')
+    expect(row?.kind === 'row' && row.cols).toEqual([1, 1])
+    expect(row?.kind === 'row' && row.cells.map((cell) => cell.nodes.map((node) => node.kind))).toEqual([['picture'], ['picture']])
+  })
+
+  it('pairs each heading with the words under it on screen, where the written order says otherwise', () => {
+    const { main } = read('swappedGrid')
+    const written = main.filter((block) => block.kind !== 'link').map((block) => (block.kind === 'image' ? block.alt : block.text))
+    // The next card's words follow each heading in the page as written.
+    expect(written[written.indexOf('Planted garden') + 1]).toBe('We visit four times a year and keep it looking its best.')
+    const section = sectionNamed('swappedGrid', 'Three plans')
+    const group = section.nodes[1] as SiteImportLayoutGroup
+    expect(group.group).toBe('cards')
+    expect(group.columns).toBe(3)
+    expect(cardsOf('swappedGrid', group)).toEqual([
+      { title: 'One-time plan', text: ['A drawn plan you can plant yourself, with a list of what to buy.', 'Get a plan'], image: null },
+      { title: 'Planted garden', text: ['We draw it, plant it and hand it over ready to grow.', 'Plant with us'], image: null },
+      { title: 'Year-round care', text: ['We visit four times a year and keep it looking its best.', 'Join the calendar'], image: null },
+    ])
+  })
+
+  it('reads words placed over a picture as words over a picture', () => {
+    const open = sectionNamed('swappedGrid', 'Choose how we work together')
+    expect(open.hero?.picture).toBe('behind')
+    expect(open.band).toBe('dark')
+    expect(open.nodes[0]?.kind).toBe('picture')
+    expect(open.lines.map(read('swappedGrid').text).slice(1)).toEqual(['Choose how we work together', 'Every garden is different, so every plan starts with a walk around yours.'])
+  })
+
+  it('reads a picture laid out of the flow of a row as behind the words, never a column beside them', () => {
+    const page = extractSiteImportPage(
+      `<!doctype html><html><head><title>Laid</title><style>
+        .open { display: flex; position: relative; } .ground { position: absolute; }
+      </style></head><body><main>
+        <section class="open"><div class="ground"><img src="https://www.fern-and-stone.example/ground.jpg" alt="A meadow"></div><div><h1>Over the meadow</h1><p>Words a visitor reads on the picture.</p></div></section>
+        <section><h2>Next</h2><p>The rest of the page.</p></section>
+      </main></body></html>`,
+      'https://www.fern-and-stone.example/laid',
+      () => true,
+      { structure: true },
+    )
+    const open = siteImportLayout(page as Parameters<typeof siteImportLayout>[0])?.sections[0]
+    expect(open?.nodes.map((node) => node.kind)).toEqual(['picture', 'line', 'line'])
+    expect(open?.hero?.picture).toBe('behind')
+  })
+
+  it('reads named areas: the heading over its words, the picture beside them', () => {
+    const section = sectionNamed('swappedGrid', 'People who know the soil')
+    const row = section.nodes[0]
+    expect(row?.kind).toBe('row')
+    if (row?.kind !== 'row') return
+    expect(row.cells[0]?.nodes.map((node) => (node.kind === 'line' ? read('swappedGrid').text(node.line) : node.kind))).toEqual(['People who know the soil', 'Most of our crew has worked this valley for a decade.'])
+    expect(row.cells[1]?.nodes.map((node) => node.kind)).toEqual(['picture'])
+  })
+
+  it('honors `order` on a flex row’s children', () => {
+    const section = sectionNamed('swappedGrid', 'Written first, shown second')
+    expect(section.lines.map(read('swappedGrid').text)).toEqual(['Written first, shown second', 'This column comes first on screen.', 'Written second, shown first', 'This column comes second on screen.'])
+  })
+
+  it('leaves a grid whose children only say how wide they are exactly as it was', () => {
+    const section = sectionNamed('swappedGrid', 'Spans say how wide, not where')
+    expect(section.nodes.map((node) => node.kind)).toEqual(['line', 'group'])
+    const group = section.nodes[1] as SiteImportLayoutGroup
+    expect(group.columns).toBe(3)
+    expect(cardsOf('swappedGrid', group).map((card) => card.title)).toEqual(['The first plain note of three', 'The second plain note of three', 'The third plain note of three'])
+  })
+
+  it('never reads rows of whole cards as columns: each row keeps its own cards', () => {
+    const page = extractSiteImportPage(
+      `<!doctype html><html><head><title>Cards</title><style>
+        .g { display: grid; grid-template-columns: repeat(2, 1fr); }
+        .a { grid-area: 1/1/2/2 } .b { grid-area: 1/2/2/3 } .c { grid-area: 2/1/3/2 } .d { grid-area: 2/2/3/3 }
+      </style></head><body><main><div class="g">
+        <div class="a"><h3>One</h3><p>The first of four whole cards.</p></div>
+        <div class="b"><h3>Two</h3><p>The second of four whole cards.</p></div>
+        <div class="c"><h3>Three</h3><p>The third of four whole cards.</p></div>
+        <div class="d"><h3>Four</h3><p>The fourth of four whole cards.</p></div>
+      </div></main></body></html>`,
+      'https://www.fern-and-stone.example/cards',
+      () => true,
+      { structure: true },
+    )
+    const layout = siteImportLayout(page as Parameters<typeof siteImportLayout>[0])
+    const nodes = layout?.sections.flatMap((section) => section.nodes) ?? []
+    expect(nodes.map((node) => node.kind)).toEqual(['row', 'row'])
+    const main = page.blocks.filter((block) => block.region === 'main')
+    const heads = (node: SiteImportLayoutNode) => (node.kind === 'row' ? node.cells.map((cell) => cell.nodes.map((entry) => (entry.kind === 'line' ? main[entry.line] : null)).find((block) => block?.kind === 'heading')) : []).map((block) => (block as { text?: string } | undefined)?.text)
+    expect(nodes.map(heads)).toEqual([
+      ['One', 'Two'],
+      ['Three', 'Four'],
+    ])
+  })
+
+  /** A page of one placed grid, read: its nodes, and each line's words. */
+  function placedPage(css: string, body: string) {
+    const page = extractSiteImportPage(`<!doctype html><html><head><title>Placed</title><style>${css}</style></head><body><main>${body}</main></body></html>`, 'https://www.fern-and-stone.example/placed', () => true, { structure: true })
+    const main = page.blocks.filter((block) => block.region === 'main')
+    const sections = siteImportLayout(page as Parameters<typeof siteImportLayout>[0])?.sections ?? []
+    return { nodes: sections.flatMap((section) => section.nodes), lines: sections.flatMap((section) => section.lines).map((ref) => (main[ref] as { text: string }).text) }
+  }
+
+  it('reads rows of short words under nothing they belong to as rows: a table drawn with a grid', () => {
+    const cell = (row: number, column: number, words: string) => `<div style="grid-area: ${row}/${column}/${row + 1}/${column + 1}">${words}</div>`
+    const { nodes } = placedPage('.g { display: grid; grid-template-columns: repeat(3, 1fr); }', `<div class="g">${[
+      ['Plan', 'Visits', 'Cost'],
+      ['Small', 'Two', 'Low'],
+      ['Large', 'Four', 'High'],
+    ].flatMap((row, at) => row.map((words, column) => cell(at + 1, column + 1, `<p>${words}</p>`))).join('')}</div>`)
+    expect(nodes.map((node) => node.kind)).toEqual(['table'])
+    expect(nodes[0]?.kind === 'table' && nodes[0].rows.map((row) => row.cells.length)).toEqual([3, 3, 3])
+  })
+
+  it('gives what the read width does not draw no cell, and loses none of its words', () => {
+    const { nodes, lines } = placedPage(
+      '.g { display: grid; grid-template-columns: repeat(2, 1fr); } .a { grid-area: 1/2/2/3 } .b { grid-area: 1/1/2/2 } .phone { display: none; grid-area: 1/1/2/3 }',
+      '<div class="g"><div class="a"><h3>Shown on the right</h3></div><div class="phone"><p>Shown only on a phone.</p></div><div class="b"><h3>Shown on the left</h3></div></div>',
+    )
+    expect(lines).toEqual(['Shown on the left', 'Shown on the right', 'Shown only on a phone.'])
+    expect(nodes.map((node) => node.kind)).toEqual(['row', 'line'])
+  })
+
+  it('reads a placement a breakpoint nested in its rule sets, as the read width sees it', () => {
+    const page = extractSiteImportPage(
+      `<!doctype html><html><head><title>Nested</title><style>
+        .g { display: grid; grid-template-columns: repeat(2, 1fr); }
+        .a { grid-area: 1/1/2/3; @media (min-width: 768px) { grid-area: 1/2/2/3; } }
+        .b { grid-area: 2/1/3/3; @media (min-width: 768px) { grid-area: 1/1/2/2; } @media (max-width: 767px) { grid-area: 9/1/10/2; } }
+      </style></head><body><main><div class="g">
+        <div class="a"><h2>Written first</h2><p>Shown on the right of the row above it.</p></div>
+        <div class="b"><h2>Written second</h2><p>Shown on the left of the row beside it.</p></div>
+      </div></main></body></html>`,
+      'https://www.fern-and-stone.example/nested',
+      () => true,
+      { structure: true },
+    )
+    const layout = siteImportLayout(page as Parameters<typeof siteImportLayout>[0])
+    const main = page.blocks.filter((block) => block.region === 'main')
+    const lines = layout?.sections.flatMap((section) => section.lines) ?? []
+    expect(lines.map((ref) => (main[ref] as { text: string }).text)[0]).toBe('Written second')
+  })
+})
