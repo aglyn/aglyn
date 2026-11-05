@@ -100,6 +100,16 @@ content on the marketing site and is written separately.
 - test(outreach): the rules drift spec reads the key the read now asks ([AGL-4047](https://linear.app/aglyn/issue/AGL-4047))
 - test: count the campaign member read, and widen a flaky rate-limit deadline ([AGL-4047](https://linear.app/aglyn/issue/AGL-4047), [AGL-2404](https://linear.app/aglyn/issue/AGL-2404))
 
+- [AGL-4047](https://linear.app/aglyn/issue/AGL-4047): a one-site campaign adds the site's verdict at the rule
+- [AGL-4047](https://linear.app/aglyn/issue/AGL-4047): console follows the one-site campaign verdict; Delete names the permission
+- [AGL-4047](https://linear.app/aglyn/issue/AGL-4047): regenerate the Assist docs index for the campaign permission note
+- feat(native): data, transfer, AI billing and copy ask keys, not roles ([AGL-4047](https://linear.app/aglyn/issue/AGL-4047))
+- fix(ai): Bring my site reads pages, not every address of them ([AGL-4152](https://linear.app/aglyn/issue/AGL-4152))
+- fix(data): a site's Data page lists its own datasets; write controls name the key ([AGL-4047](https://linear.app/aglyn/issue/AGL-4047))
+- fix(native): read an unpaid quote from stored fields, not the decoded order ([AGL-4162](https://linear.app/aglyn/issue/AGL-4162))
+- fix(native): the Orders lists leave out unpaid quotes under every sort ([AGL-4162](https://linear.app/aglyn/issue/AGL-4162))
+- fix(native): the transfer screens' generator asks data.manage, as #2343 meant ([AGL-4047](https://linear.app/aglyn/issue/AGL-4047))
+
 ## v1.11.0 — 2026-11-04
 
 [Compare with the previous release](https://github.com/aglyn/aglyn/compare/v1.10.0...v1.11.0)
