@@ -147,8 +147,15 @@ jest.mock('./membership', () => ({
     },
   }),
 }))
+/** Products the member is entitled to when `mockEntitled` is false (AGL-4188). */
+const mockEntitledTo = new Set<string>()
+/** Every product the route asked the gate about, in order. */
+const mockAsked: string[] = []
 jest.mock('./gate', () => ({
-  checkMemberEntitlement: async () => mockEntitled,
+  checkMemberEntitlement: async (_host: string, _email: string, productId: string) => {
+    mockAsked.push(productId)
+    return mockEntitled || mockEntitledTo.has(productId)
+  },
 }))
 
 const HOST = 'host-1'
@@ -305,6 +312,8 @@ beforeEach(() => {
   docs.clear()
   signedReads.length = 0
   mockEntitled = true
+  mockEntitledTo.clear()
+  mockAsked.length = 0
   docs.set(`hostIndex/${HOST}`, { orgId: ORG })
   docs.set(`orgs/${ORG}/media/med-film`, {
     fileName: 'week-1.mp4',
@@ -381,6 +390,66 @@ describe('the gate still decides who gets a link (AGL-315)', () => {
     const minted = await mint()
     expect(minted.status).toBe(403)
     expect(minted.body).toEqual({ error: 'Not entitled' })
+  })
+
+  describe('one library for every plan (AGL-4188)', () => {
+    function openTo(ids: unknown) {
+      const path = `hosts/${HOST}/products/${PRODUCT}`
+      docs.set(path, { ...docs.get(path), videoAccessProductIds: ids })
+    }
+
+    it('mints for a subscriber of a product the merchant opened the videos to', async () => {
+      mockEntitled = false
+      mockEntitledTo.add('plan-starter')
+      openTo(['plan-team', 'plan-starter'])
+      const minted = await mint()
+      expect(minted.status).toBe(200)
+      expect(mockAsked).toEqual([PRODUCT, 'plan-team', 'plan-starter'])
+      const played = await redeem(redeemable(minted.body.url))
+      expect(played.status).toBe(302)
+    })
+
+    it('⛔ refuses a member entitled only to a product the list does not name', async () => {
+      mockEntitled = false
+      mockEntitledTo.add('plan-starter')
+      openTo(['plan-team'])
+      const minted = await mint()
+      expect(minted.status).toBe(403)
+      expect(minted.body).toEqual({ error: 'Not entitled' })
+    })
+
+    it('⛔ takes the list from the product, never from the request', async () => {
+      mockEntitled = false
+      mockEntitledTo.add('plan-starter')
+      const { res, result } = makeResponse()
+      await streamHandler(
+        request('POST', {
+          hostId: HOST,
+          productId: PRODUCT,
+          video: 0,
+          videoAccessProductIds: ['plan-starter'],
+        }),
+        res,
+      )
+      expect(result.status).toBe(403)
+      expect(mockAsked).toEqual([PRODUCT])
+    })
+
+    it('⛔ never reads "any", the product itself, or a non-string as another product', async () => {
+      mockEntitled = false
+      mockEntitledTo.add('any')
+      openTo(['any', PRODUCT, 7, '', null, 'plan-pro', 'plan-pro'])
+      const minted = await mint()
+      expect(minted.status).toBe(403)
+      expect(mockAsked).toEqual([PRODUCT, 'plan-pro'])
+    })
+
+    it('⛔ ignores a list that is not an array', async () => {
+      mockEntitled = false
+      mockEntitledTo.add('plan-starter')
+      openTo('plan-starter')
+      expect((await mint()).status).toBe(403)
+    })
   })
 
   it('⛔ refuses a redeem whose signature does not verify', async () => {

@@ -137,6 +137,10 @@ can hold both the pitch and the members-only part:
   member's player gets expires, so a link copied out of the page stops working
   on its own; see
   [Members videos are private files](../content-and-data/media/overview.md#members-videos-are-private).
+  To share one video library across several plans, add the videos to one
+  product and pick the other plans under **Members videos are also open to
+  buyers of** in that product's editor. Buyers and active subscribers of any
+  of them can then watch.
 - **Member feed** — posts only entitled members can see, newest first, with a
   **Heading**, **Empty text** for when there are none, and a cap on how many
   show. Non-members never receive the posts, not merely a hidden copy of them.

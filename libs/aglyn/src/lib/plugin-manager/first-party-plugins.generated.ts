@@ -598,6 +598,7 @@ export const PLUGIN_HOST_COLLECTIONS_DECLARED: readonly ResolvedPluginHostCollec
         "subscription",
         "subscriptionOptional",
         "gatedVideos",
+        "videoAccessProductIds",
         "relatedProductIds",
         "giftCard",
         "lowStockThreshold",

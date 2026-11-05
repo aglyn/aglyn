@@ -1380,6 +1380,19 @@ export function ProductEditorDialog(props: ProductEditorDialogProps) {
       ),
     [categories.rows, categoryIds],
   )
+  const setVideoAccessProducts = useCallback(
+    (picked: any[]) =>
+      update({ videoAccessProductIds: picked.map((item: any) => item.$id) }),
+    [update],
+  )
+  const videoAccessProductIds = current.videoAccessProductIds
+  const pickedVideoAccess = useMemo(
+    () =>
+      relatedProducts.rows.filter((item: any) =>
+        (videoAccessProductIds ?? []).includes(item.$id),
+      ),
+    [relatedProducts.rows, videoAccessProductIds],
+  )
   const relatedProductIds = current.relatedProductIds
   const productId = product?.$id
   const relatedOptions = useMemo(
@@ -1987,6 +2000,18 @@ export function ProductEditorDialog(props: ProductEditorDialogProps) {
             downloadLimit={current.downloadLimit}
             gatedVideos={current.gatedVideos ?? NO_VIDEOS}
             update={update}
+          />
+        ) : null}
+        {current.type === 'digital' &&
+        ((current.gatedVideos?.length ?? 0) > 0 || pickedVideoAccess.length > 0) ? (
+          <ProductChipsField<any>
+            label="Members videos are also open to buyers of"
+            helperText="Their buyers and active subscribers can watch this product's members videos too. Use it to share one video library across several plans."
+            options={relatedOptions}
+            getOptionLabel={recordLabel}
+            isOptionEqualToValue={sameRecord}
+            value={pickedVideoAccess}
+            onChange={setVideoAccessProducts}
           />
         ) : null}
 

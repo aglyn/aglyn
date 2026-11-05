@@ -72,7 +72,7 @@
 
 import { LEGAL_URLS } from './shared'
 
-export const LEGAL_DOCUMENT_VERSION = 'v22'
+export const LEGAL_DOCUMENT_VERSION = 'v23'
 
 export interface LegalDocumentManifestEntry {
   /** Stable key, and the snapshot's filename under `legal/{version}/`. */
@@ -1101,6 +1101,34 @@ export interface LegalDocumentManifestEntry {
  * after publication, and terms reproduced its `v21` pin (70966 bytes /
  * `c6d848…`) before.
  *
+ * v23 (2026-11-05): projects are priced from the published Site Care list.
+ *
+ *   - Terms §4.24: the one sentence on how a Site Care project is priced now
+ *     points at the Site Care project price list on the pricing page, where
+ *     each kind of job has one flat price agreed before work starts. No price
+ *     is copied into the Terms, so a change to the list owes the Terms
+ *     nothing. §4.23 names only the hourly rate for extra time and is
+ *     unchanged.
+ *   - Privacy Policy unchanged, so its pin is unchanged and it is the
+ *     control. `POS_HARDWARE_TERMS_VERSION` stays `v21`: §4.26–§4.32 did not
+ *     change.
+ *
+ * The Terms and their `/legal` index card move "Last updated" to November
+ * 5, 2026 (the Terms keep "Effective date: August 5, 2026"), published at
+ * 16:49 Central that day, the same evening the price list went live on the
+ * pricing page. The record is
+ * `Platform Docs/Legal/Proposed/2026-11-05-site-care-project-prices/`.
+ *
+ * Publication-first: the Google Doc master was edited and verified through
+ * the Docs API (revision 25 to 26: the date line and the §4.24 sentence,
+ * nothing else), both versions were published, the live pages confirmed
+ * serving the new text on two consecutive checks, and only then was terms
+ * captured: 71341 bytes (`48018d…`), identical across the capture's
+ * requests, and archived in `Acceptance-Snapshots/v23`. Privacy reproduced
+ * its `v22` pin, 38630 bytes / `b315fe…`, byte for byte both before and
+ * after publication, and terms reproduced its `v22` pin (71090 bytes /
+ * `df8de1…`) before.
+ *
  * ## ONE snapshot in the tree, and why that is enough
  *
  * Only the CURRENT version is checked out. Superseded text is not deleted —
@@ -1160,8 +1188,8 @@ export const LEGAL_DOCUMENTS: LegalDocumentManifestEntry[] = [
     key: 'terms',
     url: LEGAL_URLS.TERMS,
     sha256:
-      'df8de1fff85f0e0e7b8992055184c5c14d508da199a216feaf15b8db13cbf6a9',
-    bytes: 71090,
+      '48018d1946bd3e3157cd21f672d6787f3b25ab210ceac0acd2e41c94e2d3f731',
+    bytes: 71341,
   },
   {
     key: 'privacy',

@@ -316,6 +316,12 @@ export interface HostProduct {
   subscriptionOptional?: boolean
   /** Members-only videos (AGL-315), streamed via short-TTL links. */
   gatedVideos?: Array<{ url: string; title?: string }>
+  /**
+   * Other products whose buyers or subscribers may also watch this product's
+   * gated videos (AGL-4188): one tutorial library for every plan. Set by the
+   * merchant on the product, so a page cannot widen it.
+   */
+  videoAccessProductIds?: string[]
   /** Manual related products for the upsell block (AGL-325). */
   relatedProductIds?: string[]
   /**

@@ -92,6 +92,16 @@ introduce a price or an entitlement the account owner has not chosen.
 
 ---
 
+## 2026-11-05 — Site Care project price list: one flat price per job, agreed before work starts; landing page and logo or brand kit become flat
+
+**Nineteen Site Care projects get one published flat price each; no plan, add-on or rate moves.** Pages: simple page (contact, reviews, an account page) $149, standard page (gallery, about, services list) $199, landing or service page $249, detailed page (comparisons, options) $349, home page $499, error and legal pages $199, redesign from $749. Store and content: online store setup $499, product list setup $349, blog setup $249, moving an article, images included, $29 each, point of sale setup $149, quotes and proofs setup $199. Brand and setup: logo or brand kit $349, header, footer and menus $249, photo prep $199, local search setup $499, redirects for old links $149, CRM and email setup $249. The 2026-10-19 starting points for a landing page ($249) and a logo or brand kit ($349) become those jobs' flat prices; the redesign stays "from $749", a floor. A job not on the list is still quoted as one flat number before work starts, as the 2026-10-19 entry set out. Unchanged: Site Care $49/mo ($588/yr), extra time $79 per started hour after the owner's yes, Managed Starter $74/mo ($65/mo billed yearly), and half up front above $500. On `/pricing` the list is a full-width panel under the add-on cards, so the Site Care card stays one short sentence long.
+
+- **Decided by:** the account owner, 2026-11-05, in the session chat: he approved the fifteen added jobs and asked for a compact display, then approved the mockup and the rollout order and said to publish it. A client brief that needed every job priced prompted the list.
+- **Scope:** pricing
+- **Evidence:** the Drive Pricing Decision Log entry of the same date (the list, the reasoning, what stays unchanged); `tools/scripts/publish-pricing-site-care-project-prices.mjs` (one constant per price; dry run by default, `--write` cuts a new version, `--publish` moves the pointer); `docs/PRICING_SURFACES.md`, 2026-11-05 section; `tools/marketing/pricing-copy/copy-*.json`. No code constant, Stripe price or `plan_rates` variable carries a project price: a project bills as a one-off invoice.
+
+---
+
 ## 2026-11-04 — Custom's saved forms per site are unlimited, as on Pro; Custom is never below Pro (AGL-4158)
 
 **`PLAN_ENTITLEMENTS.enterprise.formsPerHost` moves from 500 (`FORMS_PER_HOST_CEILING`) to `UNLIMITED`.** Pricing v4 made Pro's saved forms unlimited (a saved form is a count with no cost term) and placed Custom above Pro, but Custom's row kept the finite fallback it had when it sat above Agency, so the top plan allowed fewer saved forms per site than the plan below it. A contract that wants a bound still sets the per-org `formsPerHost` override. No price moves and nothing changes in Stripe; the retired plans keep the rungs they were sold with.
