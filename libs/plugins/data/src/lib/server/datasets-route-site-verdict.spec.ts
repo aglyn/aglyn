@@ -198,7 +198,7 @@ describe('on a dataset shared beyond one site', () => {
     expect((await updateRecord()).status).toBe(200)
   })
 
-  it('a site-only holder of "Manage data" keeps editing what the workspace shares, as the owner chose', async () => {
+  it('a site-only holder of "Manage data" keeps editing what the workspace shares, which stays as it was', async () => {
     mockVisibleTo = ['org']
     mockMember = seated({ role: 'editor', allHosts: false, hostAccess: { [HOST]: 'viewer' } })
     expect((await updateRecord()).status).toBe(200)

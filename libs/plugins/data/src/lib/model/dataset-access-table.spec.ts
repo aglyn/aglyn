@@ -137,7 +137,7 @@ describe('the fixture is what the projections write', () => {
   })
 })
 
-describe('the rule moved only where the owner approved', () => {
+describe('the rule moved only where the four changes say', () => {
   const writesOn = (placement: string) => [`schema${placement}`, `recordEdit${placement}`]
 
   it.each(named)('%s: every write on a shared dataset is as it was', (_name, row) => {

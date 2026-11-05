@@ -68,8 +68,9 @@ custom role and overrides give them, and members whose access matches their
 workspace role everywhere (owners and admins always do) see no change.
 
 Whether a permission follows the narrower site role is a setting of its own. Each
-permission a site can narrow (the point of sale ones, the waivers ones and the two AI
-ones) has a second choice under it, **On sites where their role is narrower**:
+permission a site can narrow (the point of sale ones, the waivers ones, the two AI ones
+and [the two site dataset ones](#dataset-permissions)) has a second choice under it, **On
+sites where their role is narrower**:
 
 - **Follow the site role**: on that site the member holds what their Viewer or Author
   access holds, which for the register and waivers is nothing.
@@ -79,8 +80,8 @@ ones) has a second choice under it, **On sites where their role is narrower**:
 
 Set it on a custom role for everyone on that role, or on one member in their
 **Permissions** card, where it wins over their custom role. Left on **Inherit**, the
-built-in default applies: the point of sale and waivers permissions follow the site
-role, and the AI permissions are kept, so nothing changes until you choose otherwise.
+built-in default applies: the point of sale, waivers and site dataset permissions follow
+the site role, and the AI permissions are kept.
 Keeping **Sell at the register** also keeps the register open for selling, and only
 for selling. The choice changes something only for editors: owners and admins are
 admins of every site, and a viewer has no narrower access to be given. Keeping a

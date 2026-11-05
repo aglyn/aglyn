@@ -621,7 +621,18 @@ export const datasetsHandler: PluginWebApiHandler = async (request) => {
               { status: 409 },
             )
           }
-          if (plan.kind === 'strip') fixups.push({ datasetId: other.id, model: otherModel, updates: plan.updates })
+          if (plan.kind === 'strip') {
+            // Stripping a reference writes THAT dataset, so it asks what writing
+            // it asks, as the card's client-direct batch does at the rule (AGL-4047).
+            const otherPlacedOn = (other.data() as { visibleTo?: string[] }).visibleTo
+            if (
+              decoded['staff'] !== true &&
+              !(await memberMayActOnDataset({ firestore, orgId, uid: decoded.uid, member, visibleTo: otherPlacedOn, act: 'write' }))
+            ) {
+              return datasetsPermissionRefusal(datasetRefusalPermission('write', otherPlacedOn))
+            }
+            fixups.push({ datasetId: other.id, model: otherModel, updates: plan.updates })
+          }
         }
         for (const fixup of fixups) {
           const holdersRef = orgRef.collection('datasets').doc(fixup.datasetId).collection('records')
