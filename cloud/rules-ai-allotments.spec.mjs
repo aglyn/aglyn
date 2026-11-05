@@ -14,6 +14,13 @@
  * site admin reads their site" is what keeps the collaborators card from
  * rendering nothing for the person it was built for.
  *
+ * The AI billing standing (`aiBilling/standing`) and the overage charges
+ * (`aiOverageCharges/{id}`) are read by the same people, and the three reads
+ * ask the keys alone (AGL-4047): `billing.view` or `billing.manage` through
+ * `memberKeyOrOverride`, the owner and admins by default, where they asked
+ * the owner or admin role AND the key, or the key stamped. The table at the
+ * bottom holds every member to the verdict they had on all three.
+ *
  *   npx firebase emulators:start --only firestore --project aglyn-main
  *   node cloud/rules-ai-allotments.spec.mjs
  */
@@ -44,11 +51,67 @@ const SITE_ADMIN = 'uid-allot-site-admin'
 const COLLABORATOR = 'uid-allot-collaborator'
 const OUTSIDER = 'uid-allot-outsider'
 
+/**
+ * The rest of the billing readers (AGL-4047), each as the projection writes
+ * them: who reads every allotment, the standing and a charge.
+ */
+const BILLING_READERS = {
+  'uid-allot-admin-stamped-without': {
+    member: { role: 'admin', allHosts: true, resolvedPermissions: { 'data.manage': true } },
+    reads: true,
+    why: 'an admin stamped before the keys existed: the default',
+  },
+  'uid-allot-admin-role-revoked': {
+    member: {
+      role: 'admin',
+      allHosts: true,
+      roleId: 'role-no-billing',
+      resolvedPermissions: { 'billing.view': false, 'billing.manage': false },
+    },
+    reads: false,
+    why: 'an admin a custom role took both keys from',
+  },
+  'uid-allot-admin-half-revoked': {
+    member: { role: 'admin', allHosts: true, resolvedPermissions: { 'billing.view': false } },
+    reads: true,
+    why: 'an admin refused billing.view alone: billing.manage still admits',
+  },
+  'uid-allot-editor-override': {
+    member: { role: 'editor', allHosts: true, permissions: { 'billing.view': true } },
+    reads: true,
+    why: 'an editor whose own override grants billing.view, nothing stamped',
+  },
+  'uid-allot-viewer-stamped-view': {
+    member: { role: 'viewer', allHosts: true, resolvedPermissions: { 'billing.view': true } },
+    reads: true,
+    why: 'a viewer a custom role stamped with billing.view',
+  },
+  'uid-allot-viewer-bare': {
+    member: { role: 'viewer', allHosts: true },
+    reads: false,
+    why: 'a viewer with nothing stamped: the default refuses',
+  },
+  'uid-allot-collab-granted': {
+    member: {
+      role: 'viewer',
+      allHosts: false,
+      hostAccess: { 'host-allot-a': 'editor' },
+      resolvedPermissions: { 'billing.view': true, 'billing.manage': true },
+    },
+    reads: false,
+    why: 'a scoped collaborator stamped with both keys: the reach refuses',
+  },
+}
+
+// `emulators:exec` names the emulator it started; the fixed port is the
+// fallback for one started by hand.
+const [emulatorHost, emulatorPort] = (process.env.FIRESTORE_EMULATOR_HOST || '127.0.0.1:8082').split(':')
+
 const env = await initializeTestEnvironment({
   projectId: 'aglyn-main',
   firestore: {
-    host: '127.0.0.1',
-    port: 8082,
+    host: emulatorHost,
+    port: Number(emulatorPort),
     // The comment-stripped artifact is what deploys (AGL-3544).
     rules: readFileSync('cloud/firebase-firestore.deploy.rules', 'utf8'),
   },
@@ -65,6 +128,8 @@ const check = async (label, fn) => {
 }
 
 const allotmentOf = (db, subject) => doc(db, 'orgs', ORG, 'aiAllotments', subject)
+const standingOf = (db) => doc(db, 'orgs', ORG, 'aiBilling', 'standing')
+const chargeOf = (db) => doc(db, 'orgs', ORG, 'aiOverageCharges', 'charge-1')
 
 const SUBJECTS = {
   org: 'org',
@@ -114,6 +179,11 @@ await env.withSecurityRulesDisabled(async (context) => {
   for (const subject of Object.values(SUBJECTS)) {
     await setDoc(allotmentOf(db, subject), seeded(subject))
   }
+  for (const [uid, { member }] of Object.entries(BILLING_READERS)) {
+    await setDoc(doc(db, 'orgs', ORG, 'members', uid), member)
+  }
+  await setDoc(standingOf(db), { cardOnFile: true, pause: null })
+  await setDoc(chargeOf(db), { status: 'paid', amountUsd: 5 })
 })
 
 const as = (uid) => env.authenticatedContext(uid, { email_verified: true }).firestore()
@@ -198,10 +268,46 @@ await check('the SUBJECT cannot delete their own allotment', () =>
   assertFails(deleteDoc(allotmentOf(as(EDITOR), SUBJECTS.editorMember))),
 )
 
+// ── The billing standing and the overage charges (AGL-4047) ────────────────
+// The roster's managers first, then the table. The keys decide alone, and
+// every default is the verdict the role arm gave.
+const STANDING_CASES = [
+  [OWNER, true, 'the OWNER, no stamp'],
+  [ADMIN, true, 'an ADMIN, no stamp'],
+  [BARE_ADMIN, true, 'CONTROL — an ADMIN with NO permissions map'],
+  [REVOKED_ADMIN, false, 'an ADMIN whose own overrides revoke both keys'],
+  [BILLING_VIEWER, true, 'an org-wide VIEWER stamped with billing.manage'],
+  [EDITOR, false, 'a bare org-wide EDITOR'],
+  [SITE_ADMIN, false, 'a collaborator who is a site’s ADMIN'],
+  [OUTSIDER, false, 'an OUTSIDER'],
+  ...Object.entries(BILLING_READERS).map(([uid, { reads, why }]) => [uid, reads, why]),
+]
+for (const [uid, reads, why] of STANDING_CASES) {
+  const assertion = reads ? assertSucceeds : assertFails
+  await check(`${why}: ${reads ? 'reads' : 'cannot read'} the AI billing standing`, () =>
+    assertion(getDoc(standingOf(as(uid)))),
+  )
+  await check(`${why}: ${reads ? 'reads' : 'cannot read'} an overage charge`, () =>
+    assertion(getDoc(chargeOf(as(uid)))),
+  )
+  if (uid in BILLING_READERS) {
+    await check(`${why}: ${reads ? 'reads' : 'cannot read'} another member’s allotment`, () =>
+      assertion(getDoc(allotmentOf(as(uid), SUBJECTS.adminMember))),
+    )
+  }
+}
+await check('nobody writes the standing or a charge, the owner included', async () => {
+  await assertFails(setDoc(standingOf(as(OWNER)), { cardOnFile: false }))
+  await assertFails(setDoc(chargeOf(as(OWNER)), { status: 'void' }))
+})
+
 // Remove ONLY what this spec seeded. Deliberately not `clearFirestore()` — the
 // emulator is often shared with a running dev server.
 await env.withSecurityRulesDisabled(async (context) => {
   const db = context.firestore()
+  await deleteDoc(standingOf(db))
+  await deleteDoc(chargeOf(db))
+  for (const uid of Object.keys(BILLING_READERS)) await deleteDoc(doc(db, 'orgs', ORG, 'members', uid))
   for (const subject of Object.values(SUBJECTS)) await deleteDoc(allotmentOf(db, subject))
   for (const uid of [OWNER, ADMIN, REVOKED_ADMIN, BARE_ADMIN, BILLING_VIEWER, EDITOR, SITE_ADMIN, COLLABORATOR]) {
     await deleteDoc(doc(db, 'orgs', ORG, 'members', uid))
