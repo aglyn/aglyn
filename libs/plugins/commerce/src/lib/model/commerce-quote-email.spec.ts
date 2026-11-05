@@ -26,6 +26,7 @@ import {
   quoteSendPrefill,
   quoteSendRecipient,
   quoteSendRefusal,
+  quoteSendRefusalMessage,
   quoteSendReplacesLink,
 } from './commerce-quote-email'
 import type { OrderQuote, QuoteSendRecord } from './commerce-quotes'
@@ -57,7 +58,7 @@ const quote = (over: Partial<OrderQuote> = {}): OrderQuote =>
   }) as OrderQuote
 
 const order = (over: Partial<OrderQuote> = {}, status = 'pending'): HostOrder =>
-  ({ number: 1042, status, channel: 'quote', lineItems: [], quote: quote(over) }) as unknown as HostOrder
+  ({ number: 1042, status, channel: 'quote', lineItems: [{ name: 'Banner' }], quote: quote(over) }) as unknown as HostOrder
 
 describe('when a send replaces the pay link', () => {
   it('never on the first email, nor on a resend of the same revision', () => {
@@ -162,5 +163,30 @@ describe('the quote once it was emailed', () => {
     expect(after.quote?.stage).toBe('changes_requested')
     expect(after.quote?.sends).toHaveLength(QUOTE_MAX_SENDS)
     expect(after.quote?.sends?.at(-1)?.atMs).toBe(999)
+  })
+})
+
+describe('a proof only quote’s send (AGL-4184)', () => {
+  const PROOF = { id: 'p1', revision: 1, name: 'a.png', contentType: 'image/png', size: 1, path: 'x', addedAtMs: 1, addedBy: 'a' }
+  const order = (proofs: unknown[], lineItems: unknown[] = []) =>
+    ({ number: 1042, status: 'pending', channel: 'quote', lineItems, quote: { revision: 1, proofs, customer: { email: 'pat@example.com' } } }) as never
+
+  it('goes out with a proof, and not without one', () => {
+    expect(quoteSendRefusal(order([PROOF]), 'pat@example.com')).toBeNull()
+    expect(quoteSendRefusal(order([]), 'pat@example.com')).toBe('nothing-to-send')
+    expect(quoteSendRefusalMessage('nothing-to-send')).toContain('no items and no proof')
+    expect(quoteSendRefusal(order([], [{ name: 'Item' }]), 'pat@example.com')).toBeNull()
+  })
+
+  it('says it is a proof until it has been sent', () => {
+    expect(quoteSendLabel({ revision: 1 }, true)).toBe('Send proof')
+    expect(quoteSendLabel({ revision: 1 })).toBe('Send quote')
+    const sent = { revision: 1, sends: [{ revision: 1 }] } as never
+    expect(quoteSendLabel(sent, true)).toBe('Send again')
+  })
+
+  it('names itself in the subject', () => {
+    expect(quoteEmailDefaultSubject(order([PROOF]), 'Acme Signs')).toBe('Proof #1042 from Acme Signs')
+    expect(quoteEmailDefaultSubject(order([PROOF], [{ name: 'Item' }]), 'Acme Signs')).toBe('Quote #1042 from Acme Signs')
   })
 })

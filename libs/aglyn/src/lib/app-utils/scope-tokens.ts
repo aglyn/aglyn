@@ -387,9 +387,9 @@ export function scopeCovers(
  * Rewrites an org media CDN path so it names the site using the asset
  * (AGL-1043/1045).
  *
- * `/api/media/cdn/org:{orgId}/{mediaId}` serves ORG-WIDE assets only. A
- * restricted asset has to be requested through the form that names the
- * site — `org:{orgId}:{hostId}` — because the CDN is unauthenticated and
+ * `/api/media/cdn/org:{orgId}/{mediaId}` serves org-wide assets, and assets
+ * shared with all sites except some. An asset shared with chosen sites has to
+ * be requested through the form that names the site — `org:{orgId}:{hostId}` — because the CDN is unauthenticated and
  * the URL is the only thing it can decide from.
  *
  * Returns the path untouched when there is nothing to do: an org-wide

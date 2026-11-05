@@ -563,7 +563,7 @@ export const PLUGIN_DOCS_SECTION_EXCERPTS: {
     '#your-listings': 'Marketplace → Listings lists everything your organization has published, with its preview image; a row\'s menu is where you Publish new version…, Edit listing, switch a plugin between private and public, or Unpublish……',
   },
   quotes: {
-    '#make-a-quote': 'On the Orders tab, choose New quote in the Quotes card. The quote gets the next number from your store\'s order numbers and is listed as Quote #1042, for example.',
+    '#make-a-quote': 'On the Orders tab, choose New quote in the Quotes card. Sending a design before it has a price?',
     '#quote-defaults': 'The Quotes card on the Checkout settings page sets what every new quote starts with: whether customers approve the proof before they can pay.',
   },
   redirects: {

@@ -15,11 +15,13 @@
  * limitations under the License.
  */
 
+import { visitorUploadTypeOf } from '@aglyn/aglyn/app-utils/visitor-upload'
 import { appendOrderEvent, type HostOrder, type OrderAddress, type OrderLineItem, type OrderTotals } from './commerce-orders'
 import {
   formatQuoteNumber,
   isQuote,
   isUnpaidQuote,
+  quoteIsProofOnly,
   type OrderQuote,
   type QuoteApproval,
   type QuoteCustomer,
@@ -138,7 +140,7 @@ export function quoteRevisionAnswered(quote: Pick<OrderQuote, 'responses' | 'rev
  * The business's proofs
  *-----------------------------------------*/
 
-export type QuoteProofRefusal = 'not-a-quote' | 'paid' | 'answered' | 'full' | 'unknown-proof'
+export type QuoteProofRefusal = 'not-a-quote' | 'paid' | 'answered' | 'full' | 'unknown-proof' | 'needs-proof'
 
 /** Why the current revision's proofs cannot be changed now, if they cannot. */
 export function quoteProofChangeRefusal(
@@ -164,7 +166,49 @@ export function quoteProofRefusalMessage(reason: QuoteProofRefusal): string {
       return `A revision holds up to ${QUOTE_MAX_PROOFS} proofs. Remove one first.`
     case 'unknown-proof':
       return 'That proof is no longer on this quote.'
+    case 'needs-proof':
+      return 'This quote has no items yet, so it needs its proof. Add another proof or an item first.'
   }
+}
+
+/** A media library file chosen for a proof, as the console names it: the library and the file's id. */
+export interface QuoteLibraryProof {
+  mediaScope: string
+  mediaId: string
+}
+
+/**
+ * What is wrong with a file just chosen in the media picker, before it is sent:
+ * no way to name it, or a kind of file a proof can't be. The server decides for
+ * itself; this only says so sooner.
+ */
+export function quoteLibraryProofProblem(picked: { fileName?: string; contentType?: string; mediaId?: string; mediaScope?: string }): string | null {
+  if (!picked.mediaId || !picked.mediaScope) return 'That file can’t be used as a proof. Choose another.'
+  if (picked.contentType && !visitorUploadTypeOf(picked.contentType)) {
+    return `${picked.fileName || 'That file'} can’t be used as a proof. Choose an image or a PDF.`
+  }
+  return null
+}
+
+/**
+ * The media library files a new quote is saved with (AGL-4184), or what to fix.
+ * Only the names of the files: the server reads each one for the member saving.
+ */
+export function parseQuoteLibraryProofs(raw: unknown): { ok: true; proofs: QuoteLibraryProof[] } | { ok: false; error: string } {
+  if (raw === undefined || raw === null) return { ok: true, proofs: [] }
+  if (!Array.isArray(raw)) return { ok: false, error: 'Choose the proofs from your media library again.' }
+  const proofs: QuoteLibraryProof[] = []
+  for (const entry of raw) {
+    const source = (entry && typeof entry === 'object' ? entry : {}) as Record<string, unknown>
+    const mediaScope = typeof source['mediaScope'] === 'string' ? source['mediaScope'] : ''
+    const mediaId = typeof source['mediaId'] === 'string' ? source['mediaId'] : ''
+    if (!mediaScope || !mediaId) return { ok: false, error: 'Choose the proofs from your media library again.' }
+    if (!proofs.some((proof) => proof.mediaScope === mediaScope && proof.mediaId === mediaId)) {
+      proofs.push({ mediaScope, mediaId })
+    }
+  }
+  if (proofs.length > QUOTE_MAX_PROOFS) return { ok: false, error: quoteProofRefusalMessage('full') }
+  return { ok: true, proofs }
 }
 
 /** The quote with a proof added to its current revision, edited by `by` at `atMs`. */
@@ -219,6 +263,8 @@ export function withQuoteProofRemoved(
   const proofs = currentQuoteProofs(quote)
   const proof = proofs.find((entry) => entry.id === proofId)
   if (!proof) return { ok: false, reason: 'unknown-proof' }
+  // A quote with no lines shows nothing but its proof (AGL-4184).
+  if (quoteIsProofOnly(order) && proofs.length === 1) return { ok: false, reason: 'needs-proof' }
   return {
     ok: true,
     proof,

@@ -186,6 +186,33 @@ describe('resolvePaidMediaDelivery (AGL-2814)', () => {
     })
   })
 
+  it('signs for an included site of an all-except asset, and refuses the excluded one', async () => {
+    const { io, media } = makeIo()
+    media.set('orgs/acme/media/med-film', {
+      private: true,
+      visibleTo: ['host:host-1'],
+      scopeMode: 'allExcept',
+      scopeExcept: ['host:host-2'],
+    })
+    const delivery = await resolve('media:org:acme/med-film', io)
+    if (!delivery.ok || delivery.via !== 'signed-cdn') {
+      throw new Error('expected a signed CDN link')
+    }
+    expect(signedParts(delivery.location).path).toBe(
+      '/api/media/cdn/org:acme:host-1/med-film',
+    )
+    media.set('orgs/acme/media/med-film', {
+      private: true,
+      visibleTo: ['host:host-3'],
+      scopeMode: 'allExcept',
+      scopeExcept: ['host:host-1'],
+    })
+    expect(await resolve('media:org:acme/med-film', io)).toEqual({
+      ok: false,
+      refusal: 'not-found',
+    })
+  })
+
   it('⛔ never reads or signs another site’s or another org’s library', async () => {
     const { io, media, reads } = makeIo()
     media.set('hosts/host-2/media/med-film', { private: true })

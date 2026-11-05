@@ -113,6 +113,23 @@ export function transferAccessAllowed(
 }
 
 /**
+ * The permission to name when a member may not `intent` the records, or `null`
+ * when their permissions are not what refuses them: they hold what it takes, or
+ * they do not reach the site, which no key decides. Asked in the gate's order.
+ */
+export function transferMissingPermission(
+  intent: TransferAccessIntent,
+  descriptor: TransferReadDeclaration | null | undefined,
+  axis: TransferMemberAxis,
+): string | null {
+  if (!axis.reachesSite) return null
+  const needed = transferAccessPermissions(intent, descriptor)
+  if (needed.length && !needed.some((permission) => axis.holds(permission))) return needed[0]
+  const stricter = transferImportPermission(intent, descriptor)
+  return stricter && !axis.holds(stricter) ? stricter : null
+}
+
+/**
  * The key a member must also hold to `intent` the records, on top of
  * `data.manage` (AGL-4047): the resource's `importPermission` for an import,
  * and nothing for an export or a resource that names none.

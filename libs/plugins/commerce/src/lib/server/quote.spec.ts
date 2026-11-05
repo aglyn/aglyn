@@ -114,6 +114,12 @@ let finalizeAnswer: Awaited<ReturnType<QuoteUploadCalls['finalize']>> = {
   ok: true,
   file: { id: 'proof1', name: 'Banner.png', contentType: 'image/png', size: 2_000, path: 'hosts/site1/private/uploads/quote-proof/QID/proof1', uploadedAtMs: 1 },
 }
+/** What the pipeline answers for a media library file (AGL-4184); by default, a kept file in the quote's own folder. */
+let keepCopyAnswer: Awaited<ReturnType<QuoteUploadCalls['keepCopy']>> | null = null
+let keepCopies = 0
+/** Who may have which media library file (AGL-4184), and who asked. */
+let proofMediaAnswer: Awaited<ReturnType<QuoteDeps['proofMedia']>> = { ok: true, path: 'orgs/org-1/media/m1', name: 'Banner.png' }
+const proofMediaAsked: Array<Parameters<QuoteDeps['proofMedia']>[0]> = []
 const uploads: QuoteUploadCalls = {
   mint: async (input) => {
     uploadCalls.push(['mint', input])
@@ -127,6 +133,22 @@ const uploads: QuoteUploadCalls = {
   finalize: async (input) => {
     uploadCalls.push(['finalize', input])
     return finalizeAnswer
+  },
+  keepCopy: async (input) => {
+    uploadCalls.push(['keepCopy', input])
+    if (keepCopyAnswer) return keepCopyAnswer
+    const id = `copied${++keepCopies}`
+    return {
+      ok: true,
+      file: {
+        id,
+        name: input.source.name,
+        contentType: 'image/png',
+        size: 2_000,
+        path: `hosts/${input.scope.hostId}/private/uploads/${input.scope.purpose}/${input.scope.purposeId}/${id}`,
+        uploadedAtMs: 1,
+      },
+    }
   },
   read: async () => null,
   remove: async (path) => void uploadCalls.push(['remove', path]),
@@ -175,6 +197,10 @@ const deps: QuoteDeps = {
   proofLinkUrl: (_host, hostId, quoteId, version, proofId) =>
     `https://acme.aglyn.app/api/commerce/quote-proof?hostId=${hostId}&q=${quoteId}&t=${version}.sig&file=${proofId}`,
   uploads: async () => uploads,
+  proofMedia: async (asked) => {
+    proofMediaAsked.push(asked)
+    return proofMediaAnswer
+  },
   mailer: async () => quoteMailer(mailerDeps),
   requestFacts: async (asked) => {
     requestFactsAsked.push(asked)
@@ -381,7 +407,7 @@ describe('creating a quote', () => {
     })
     expect(await handleQuote(deps, request('admin', { action: 'create', hostId: 'site1', quote: { lines: [] } }, 'k'))).toEqual({
       status: 400,
-      body: { error: 'Add at least one line to the quote.' },
+      body: { error: 'Add at least one line, or a proof, to the quote.' },
     })
     expect(
       await handleQuote(
@@ -1428,5 +1454,226 @@ describe('a quote started from a request (AGL-4098)', () => {
     })
     expect(quote).not.toHaveProperty('request')
     expect(requestFactsAsked).toEqual([])
+  })
+})
+
+describe('a proof from the media library (AGL-4184)', () => {
+  const MEDIA = { mediaScope: 'org:org-1', mediaId: 'm1' }
+  async function created(key = 'lib-c'): Promise<{ quoteId: string; path: string }> {
+    const outcome = await handleQuote(deps, request('admin', { action: 'create', hostId: 'site1', quote: { lines: [CUSTOM] } }, key))
+    const quoteId = String(outcome.body['quoteId'])
+    return { quoteId, path: `hosts/site1/orders/${quoteId}` }
+  }
+  const attach = (uid: string, quoteId: string, media: unknown = MEDIA) =>
+    handleQuote(deps, request(uid, { action: 'proof-from-media', hostId: 'site1', quoteId, media }))
+  const copies = () => uploadCalls.filter(([name]) => name === 'keepCopy')
+
+  beforeEach(() => {
+    keepCopyAnswer = null
+    keepCopies = 0
+    proofMediaAnswer = { ok: true, path: 'orgs/org-1/media/m1', name: 'Banner.png' }
+    proofMediaAsked.length = 0
+    uploadCalls.length = 0
+  })
+
+  it('copies the file into the quote’s private proofs, for the member asking, and puts it on the revision', async () => {
+    const { quoteId, path } = await created()
+    nowMs += 10
+    const outcome = await attach('admin', quoteId)
+    expect(outcome.status).toBe(200)
+    expect(outcome.body['updatedAtMs']).toBe(nowMs)
+    // The console is told about the proof, never where it is kept.
+    expect(outcome.body['proof']).toMatchObject({ name: 'Banner.png', revision: 1 })
+    expect(outcome.body['proof']).not.toHaveProperty('path')
+    expect(proofMediaAsked).toEqual([{ hostId: 'site1', orgId: 'org-1', uid: 'admin', ...MEDIA }])
+    expect(copies()[0][1]).toEqual({
+      scope: { hostId: 'site1', purpose: 'quote-proof', purposeId: quoteId },
+      source: { path: 'orgs/org-1/media/m1', name: 'Banner.png' },
+      caller: { uid: 'admin' },
+    })
+    const quote = docs.get(path)?.['quote'] as Record<string, any>
+    expect(quote['proofs']).toEqual([
+      expect.objectContaining({ name: 'Banner.png', revision: 1, path: `hosts/site1/private/uploads/quote-proof/${quoteId}/copied1` }),
+    ])
+    expect(quote['updatedAtMs']).toBe(nowMs)
+  })
+
+  it('stops the same people an upload stops: no "Create and edit quotes", no copy', async () => {
+    const { quoteId } = await created('lib-perm')
+    const outcome = await attach('stranger', quoteId)
+    expect(outcome.status).toBe(403)
+    expect(proofMediaAsked).toEqual([])
+    expect(copies()).toEqual([])
+  })
+
+  it('refuses what the member may not read, cross-workspace included, and copies nothing', async () => {
+    const { quoteId, path } = await created('lib-cross')
+    proofMediaAnswer = { ok: false, status: 404, error: 'That file isn’t in a media library you can read for this site. Choose another.' }
+    const outcome = await attach('admin', quoteId, { mediaScope: 'org:someone-else', mediaId: 'm1' })
+    expect(outcome.status).toBe(404)
+    expect(proofMediaAsked[0]).toMatchObject({ orgId: 'org-1', mediaScope: 'org:someone-else' })
+    expect(copies()).toEqual([])
+    expect((docs.get(path)?.['quote'] as Record<string, any>)['proofs']).toBeUndefined()
+  })
+
+  it('answers with the upload’s own refusal, and adds nothing', async () => {
+    const { quoteId, path } = await created('lib-refused')
+    keepCopyAnswer = { ok: false, status: 413, code: 'size', error: 'Banner.png is 30 MB. Files can be up to 25 MB.' }
+    expect(await attach('admin', quoteId)).toEqual({ status: 413, body: { error: 'Banner.png is 30 MB. Files can be up to 25 MB.' } })
+    expect((docs.get(path)?.['quote'] as Record<string, any>)['proofs']).toBeUndefined()
+  })
+
+  it('holds a revision to ten proofs before anything is copied', async () => {
+    const { quoteId, path } = await created('lib-full')
+    const proofs = Array.from({ length: 10 }, (_entry, index) => ({ id: `p${index}`, revision: 1, name: 'a.png', contentType: 'image/png', size: 1, path: 'x', addedAtMs: 1, addedBy: 'a' }))
+    docs.set(path, { ...docs.get(path), quote: { ...(docs.get(path)?.['quote'] as object), proofs } })
+    expect(await attach('admin', quoteId)).toEqual({ status: 409, body: { error: 'A revision holds up to 10 proofs. Remove one first.' } })
+    expect(proofMediaAsked).toEqual([])
+    expect(copies()).toEqual([])
+  })
+
+  it('takes nothing on a revision the customer has answered, or a paid quote', async () => {
+    const { quoteId, path } = await created('lib-answered')
+    docs.set(path, {
+      ...docs.get(path),
+      quote: { ...(docs.get(path)?.['quote'] as object), responses: [{ action: 'changes', revision: 1, atMs: 1, comment: 'x', ip: null, userAgent: null }] },
+    })
+    expect((await attach('admin', quoteId)).status).toBe(409)
+    docs.set(path, { ...docs.get(path), status: 'paid' })
+    expect((await attach('admin', quoteId)).status).toBe(409)
+    expect(copies()).toEqual([])
+  })
+
+  it('takes back the copy when the quote changed under it', async () => {
+    const { quoteId, path } = await created('lib-race')
+    const real = uploads.keepCopy
+    uploads.keepCopy = async (input) => {
+      const kept = await real(input)
+      docs.set(path, { ...docs.get(path), status: 'paid' })
+      return kept
+    }
+    try {
+      expect((await attach('admin', quoteId)).status).toBe(409)
+    } finally {
+      uploads.keepCopy = real
+    }
+    expect(uploadCalls.at(-1)).toEqual(['remove', `hosts/site1/private/uploads/quote-proof/${quoteId}/copied1`])
+  })
+})
+
+describe('a proof only quote (AGL-4184)', () => {
+  const MEDIA = { mediaScope: 'org:org-1', mediaId: 'm1' }
+  const NEEDS = { status: 400, body: { error: 'Add at least one line, or a proof, to the quote.' } }
+  const create = (quote: Record<string, unknown>, libraryProofs: unknown, key: string, uid = 'admin') =>
+    handleQuote(deps, request(uid, { action: 'create', hostId: 'site1', quote, libraryProofs }, key))
+  const update = (quoteId: string, baseUpdatedAtMs: unknown, quote: Record<string, unknown>, key: string) =>
+    handleQuote(deps, request('admin', { action: 'update', hostId: 'site1', quoteId, baseUpdatedAtMs, quote }, key))
+
+  beforeEach(() => {
+    keepCopyAnswer = null
+    keepCopies = 0
+    proofMediaAnswer = { ok: true, path: 'orgs/org-1/media/m1', name: 'Banner.png' }
+    proofMediaAsked.length = 0
+    uploadCalls.length = 0
+  })
+
+  it('is created with no lines only with a proof', async () => {
+    expect(await create({ lines: [] }, undefined, 'po-none')).toEqual(NEEDS)
+    expect(await create({ lines: [] }, [], 'po-empty')).toEqual(NEEDS)
+    expect(uploadCalls).toEqual([])
+    const made = await create({ lines: [], customer: { name: 'Jordan Lee' } }, [MEDIA], 'po-1')
+    expect(made.status).toBe(200)
+    const quoteId = String(made.body['quoteId'])
+    const stored = docs.get(`hosts/site1/orders/${quoteId}`) as Record<string, any>
+    expect(stored['lineItems']).toEqual([])
+    expect(stored['totals']).toMatchObject({ itemsCents: 0, discountCents: 0, shippingCents: 0, taxCents: 0, totalCents: 0 })
+    expect(stored['quote']['proofs']).toEqual([
+      expect.objectContaining({ name: 'Banner.png', revision: 1, path: `hosts/site1/private/uploads/quote-proof/${quoteId}/copied1` }),
+    ])
+    expect(uploadCalls[0][1]).toMatchObject({ scope: { purposeId: quoteId }, caller: { uid: 'admin' } })
+  })
+
+  it('reads every chosen file for the member saving, and keeps none when one is refused', async () => {
+    let asked = 0
+    const before = quoteDocs().length
+    const real = deps.proofMedia
+    deps.proofMedia = async (request) => {
+      asked += 1
+      return asked === 2 ? { ok: false, status: 404, error: 'No' } : real(request)
+    }
+    try {
+      const made = await create({ lines: [] }, [MEDIA, { ...MEDIA, mediaId: 'm2' }], 'po-refused')
+      expect(made).toEqual({ status: 404, body: { error: 'No' } })
+    } finally {
+      deps.proofMedia = real
+    }
+    // The first was copied, so its folder goes; the quote was never written.
+    expect(uploadCalls.filter(([name]) => name === 'removeAll')).toHaveLength(2)
+    expect(quoteDocs()).toHaveLength(before)
+  })
+
+  it('refuses more files than a revision holds, and a malformed list', async () => {
+    const many = Array.from({ length: 11 }, (_entry, index) => ({ ...MEDIA, mediaId: `m${index}` }))
+    expect(await create({ lines: [] }, many, 'po-many')).toEqual({ status: 400, body: { error: 'A revision holds up to 10 proofs. Remove one first.' } })
+    expect(await create({ lines: [] }, 'nope', 'po-bad')).toEqual({ status: 400, body: { error: 'Choose the proofs from your media library again.' } })
+    expect(uploadCalls).toEqual([])
+  })
+
+  it('keeps no discount or shipping: a quote with no lines totals nothing', async () => {
+    const made = await create(
+      { lines: [], discount: { kind: 'amount', amountCents: 500 }, shipping: { amountCents: 4_500 } },
+      [MEDIA],
+      'po-money',
+    )
+    const stored = docs.get(`hosts/site1/orders/${String(made.body['quoteId'])}`) as Record<string, any>
+    expect(stored['totals']['totalCents']).toBe(0)
+    expect(stored['quote']['discount']).toBeNull()
+    expect(stored['quote']['shipping']).toBeNull()
+  })
+
+  it('can lose its lines only with a proof on the current revision, and becomes a normal quote with lines', async () => {
+    const made = await handleQuote(deps, request('admin', { action: 'create', hostId: 'site1', quote: { lines: [CUSTOM] } }, 'po-lines'))
+    const quoteId = String(made.body['quoteId'])
+    const path = `hosts/site1/orders/${quoteId}`
+    nowMs += 10
+    expect(await update(quoteId, made.body['updatedAtMs'], { lines: [] }, 'po-u1')).toEqual(NEEDS)
+    expect((docs.get(path) as Record<string, any>)['lineItems']).toHaveLength(1)
+
+    const attached = await handleQuote(deps, request('admin', { action: 'proof-from-media', hostId: 'site1', quoteId, media: MEDIA }))
+    nowMs += 10
+    const emptied = await update(quoteId, attached.body['updatedAtMs'], { lines: [] }, 'po-u2')
+    expect(emptied.status).toBe(200)
+    expect((docs.get(path) as Record<string, any>)['lineItems']).toEqual([])
+    expect((docs.get(path) as Record<string, any>)['totals']['totalCents']).toBe(0)
+
+    nowMs += 10
+    const priced = await update(quoteId, emptied.body['updatedAtMs'], { lines: [CUSTOM] }, 'po-u3')
+    expect(priced.status).toBe(200)
+    const stored = docs.get(path) as Record<string, any>
+    expect(stored['lineItems']).toHaveLength(1)
+    expect(stored['totals']['totalCents']).toBeGreaterThan(0)
+    expect(stored['quote']['proofs']).toHaveLength(1)
+  })
+
+  it('keeps its last proof until it has another, or a line', async () => {
+    const made = await create({ lines: [] }, [MEDIA], 'po-keep')
+    const quoteId = String(made.body['quoteId'])
+    const remove = (proofId: string) => handleQuote(deps, request('admin', { action: 'proof-remove', hostId: 'site1', quoteId, proofId }))
+    expect(await remove('copied1')).toEqual({
+      status: 409,
+      body: { error: 'This quote has no items yet, so it needs its proof. Add another proof or an item first.' },
+    })
+    await handleQuote(deps, request('admin', { action: 'proof-from-media', hostId: 'site1', quoteId, media: MEDIA }))
+    expect((await remove('copied1')).status).toBe(200)
+  })
+
+  it('is not sent while a new revision has no proof', async () => {
+    const made = await create({ lines: [], customer: { email: 'jordan@example.com' } }, [MEDIA], 'po-send')
+    const quoteId = String(made.body['quoteId'])
+    await handleQuote(deps, request('admin', { action: 'start-revision', hostId: 'site1', quoteId }))
+    expect(await handleQuote(deps, request('admin', { action: 'send', hostId: 'site1', quoteId, message: '' }, 'po-send-1'))).toEqual({
+      status: 409,
+      body: { error: 'This quote has no items and no proof on this revision yet. Add one, then send it.' },
+    })
   })
 })

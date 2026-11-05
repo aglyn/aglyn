@@ -61,6 +61,8 @@ interface QuoteListRow extends QuoteRow {
   customerLabel: string
   firstItem: string
   moreItems: number
+  /** No lines yet: a proof going out before it has a price (AGL-4184). */
+  proofOnly: boolean
   statusKey: ReturnType<typeof CommerceModel.quoteDisplayStatus>['key']
   statusLabel: string
   /** Unpaid, with tax still to be added at payment: the pay page's own answer. */
@@ -79,6 +81,7 @@ function quoteListRow(quote: QuoteRow, store: CommerceModel.PayLinkStore): Quote
     customerLabel: customer?.name || customer?.company || customer?.email || '',
     firstItem: items[0]?.name ?? '',
     moreItems: Math.max(0, items.length - 1),
+    proofOnly: CommerceModel.quoteIsProofOnly(quote),
     statusKey: status.key,
     statusLabel: status.label,
     // `quotePayTax`, as the pay page reads it (AGL-4162): a quote saved before
@@ -164,7 +167,7 @@ export function HostQuotesCard(props: HostQuotesCardProps) {
               {CommerceModel.formatQuoteNumber(row, row.$id)}
             </Typography>
             <Typography variant="caption" color="text.secondary" noWrap>
-              {row.moreItems ? `${row.firstItem} and more` : row.firstItem}
+              {row.proofOnly ? 'Proof only' : row.moreItems ? `${row.firstItem} and more` : row.firstItem}
             </Typography>
           </Stack>
         ),
@@ -189,7 +192,7 @@ export function HostQuotesCard(props: HostQuotesCardProps) {
         headerAlign: 'right',
         renderCell: ({ row }: { row: QuoteListRow }) => (
           <Stack sx={{ alignItems: 'flex-end', minWidth: 0, width: 1 }}>
-            <Typography variant="body2">{posMoney(row.totalCents)}</Typography>
+            <Typography variant="body2">{row.proofOnly ? '—' : posMoney(row.totalCents)}</Typography>
             {row.taxAtPayment ? (
               <Typography variant="caption" color="text.secondary" noWrap>
                 {'plus tax at payment'}

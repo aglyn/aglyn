@@ -16,11 +16,12 @@
  */
 
 /**
- * A SITE'S PERMISSIONS BUTTON ASKS WHAT ITS DOOR ASKS (AGL-4047).
+ * A SITE'S USERS CARD ASKS WHAT ITS DOORS ASK (AGL-4047).
  *
- * `/api/hosts/members/permissions` admits "Manage site settings" on this site
- * as well as the workspace's "Manage members". The button asked the second
- * alone, so a site's own admin was refused a dialog its door would have opened.
+ * `/api/hosts/members` and `/api/hosts/members/permissions` admit "Manage site
+ * settings" on this site as well as the workspace's "Manage members". The card's
+ * controls asked the second alone, so a site's own admin was refused what its
+ * doors would have done.
  */
 
 import { fireEvent, render, screen } from '@testing-library/react'
@@ -126,6 +127,14 @@ import HostMembersCard from './host-members-card.component'
 const REFUSAL = 'Your role does not include "Manage site settings" — ask an organization admin'
 
 const button = () => screen.getByRole('button', { name: 'Permissions' }) as HTMLButtonElement
+const removeButton = () => screen.getByRole('button', { name: 'Remove' }) as HTMLButtonElement
+const addButton = () => screen.getByRole('button', { name: 'Add' }) as HTMLButtonElement
+/** The role picker's input on the collaborator's row, after the Add form's own. */
+const rolePicker = () => Array.from(document.querySelectorAll<HTMLInputElement>("input[value='editor']")).at(-1) as HTMLInputElement
+const typeEmail = () =>
+  fireEvent.change(screen.getByRole('textbox', { name: 'Email' }), { target: { value: 'new@example.test' } })
+const refusedBy = (element: Element) =>
+  screen.queryAllByLabelText(REFUSAL).some((wrapper) => wrapper.contains(element))
 
 beforeEach(() => {
   mockManageMembers = false
@@ -155,13 +164,53 @@ describe('the Permissions button beside a site’s collaborator', () => {
   it('is off for a member with neither, naming the permission', () => {
     render(<HostMembersCard hostId="host-1" />)
     expect(button().disabled).toBe(true)
-    expect(screen.getByLabelText(REFUSAL).contains(button())).toBe(true)
+    expect(refusedBy(button())).toBe(true)
   })
 
   it('holds with no reason said while the site has not answered', () => {
     mockSiteKnown = false
     render(<HostMembersCard hostId="host-1" />)
     expect(button().disabled).toBe(true)
+    expect(screen.queryByLabelText(REFUSAL)).toBeNull()
+  })
+})
+
+describe('a site’s role picker, Remove and Add', () => {
+  it('are on for a holder of the workspace’s Manage members', () => {
+    mockManageMembers = true
+    render(<HostMembersCard hostId="host-1" />)
+    typeEmail()
+    expect(rolePicker().disabled).toBe(false)
+    expect(removeButton().disabled).toBe(false)
+    expect(addButton().disabled).toBe(false)
+    expect(screen.queryByLabelText(REFUSAL)).toBeNull()
+  })
+
+  it('are on for a holder of Manage site settings here, as the door admits them', () => {
+    mockCanManageSite = true
+    render(<HostMembersCard hostId="host-1" />)
+    typeEmail()
+    expect(rolePicker().disabled).toBe(false)
+    expect(removeButton().disabled).toBe(false)
+    expect(addButton().disabled).toBe(false)
+    expect(screen.queryByLabelText(REFUSAL)).toBeNull()
+  })
+
+  it('are off for a member with neither, naming the permission', () => {
+    render(<HostMembersCard hostId="host-1" />)
+    typeEmail()
+    for (const control of [rolePicker(), removeButton(), addButton()]) {
+      expect(control.disabled).toBe(true)
+      expect(refusedBy(control)).toBe(true)
+    }
+  })
+
+  it('hold with no reason said while the site has not answered', () => {
+    mockSiteKnown = false
+    render(<HostMembersCard hostId="host-1" />)
+    typeEmail()
+    expect(removeButton().disabled).toBe(true)
+    expect(addButton().disabled).toBe(true)
     expect(screen.queryByLabelText(REFUSAL)).toBeNull()
   })
 })

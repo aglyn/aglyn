@@ -17,11 +17,13 @@
 
 import { appendOrderEvent, type HostOrder } from './commerce-orders'
 import { quoteLinkVersion } from './commerce-quote-pay'
-import { latestQuoteResponse } from './commerce-quote-proofs'
+import { currentQuoteProofs, latestQuoteResponse } from './commerce-quote-proofs'
 import {
+  formatProofNumber,
   formatQuoteNumber,
   isQuote,
   isUnpaidQuote,
+  quoteIsProofOnly,
   type OrderQuote,
   type QuoteEmailThread,
   type QuoteSendRecord,
@@ -94,9 +96,9 @@ export function quoteSendReplacesLink(
   return Number(lastQuoteSend(quote)?.linkVersion) === quoteLinkVersion(quote)
 }
 
-/** What the console's Send button says: `Send quote`, `Send again`, or `Send revision 2`. */
-export function quoteSendLabel(quote: Pick<OrderQuote, 'sends' | 'revision'> | null | undefined): string {
-  if (!lastQuoteSend(quote)) return 'Send quote'
+/** What the console's Send button says: `Send quote` (`Send proof` for one with no price yet), `Send again`, or `Send revision 2`. */
+export function quoteSendLabel(quote: Pick<OrderQuote, 'sends' | 'revision'> | null | undefined, proofOnly = false): string {
+  if (!lastQuoteSend(quote)) return proofOnly ? 'Send proof' : 'Send quote'
   return quoteSendIsNewRevision(quote) ? `Send revision ${Number(quote?.revision ?? 1)}` : 'Send again'
 }
 
@@ -117,15 +119,17 @@ export function quoteSendPrefill(order: Pick<HostOrder, 'quote'> | null | undefi
   return quoteSendRecipient(order, null) || String(lastQuoteSend(order?.quote)?.to ?? '').trim()
 }
 
-export type QuoteSendRefusal = 'not-a-quote' | 'paid' | 'no-address' | 'bad-address'
+export type QuoteSendRefusal = 'not-a-quote' | 'paid' | 'nothing-to-send' | 'no-address' | 'bad-address'
 
 /** Why the quote cannot be emailed to `to` now, if it cannot. */
 export function quoteSendRefusal(
-  order: Pick<HostOrder, 'channel' | 'status' | 'quote'> | null | undefined,
+  order: (Pick<HostOrder, 'channel' | 'status' | 'quote'> & Partial<Pick<HostOrder, 'lineItems'>>) | null | undefined,
   to: string,
 ): QuoteSendRefusal | null {
   if (!order || !isQuote(order) || !order.quote) return 'not-a-quote'
   if (!isUnpaidQuote(order)) return 'paid'
+  // A new revision of a proof only quote starts with no proof, and so with nothing to show (AGL-4184).
+  if (quoteIsProofOnly(order) && currentQuoteProofs(order.quote).length === 0) return 'nothing-to-send'
   if (!to) return 'no-address'
   if (to.length > 320 || !EMAIL.test(to)) return 'bad-address'
   return null
@@ -137,6 +141,8 @@ export function quoteSendRefusalMessage(reason: QuoteSendRefusal): string {
       return 'Unknown quote'
     case 'paid':
       return 'This quote has been paid, so it is an order now and is not sent again.'
+    case 'nothing-to-send':
+      return 'This quote has no items and no proof on this revision yet. Add one, then send it.'
     case 'no-address':
       return 'This quote has no email for the customer. Add one to the quote, or type where to send it.'
     case 'bad-address':
@@ -146,17 +152,18 @@ export function quoteSendRefusalMessage(reason: QuoteSendRefusal): string {
 
 /**
  * The subject a send defaults to: the conversation's, so it stays one
- * conversation, else `Quote #1042 from Acme Signs`.
+ * conversation, else `Quote #1042 from Acme Signs` (`Proof #1042` for one with
+ * no price yet).
  */
 export function quoteEmailDefaultSubject(
-  order: Pick<HostOrder, 'number' | 'quote'>,
+  order: Pick<HostOrder, 'number' | 'quote'> & Partial<Pick<HostOrder, 'lineItems'>>,
   businessName: string,
   quoteId?: string,
 ): string {
   const thread = String(order.quote?.emailThread?.subject ?? '').trim()
   if (thread) return thread
   const name = String(businessName ?? '').trim()
-  const number = formatQuoteNumber(order, quoteId)
+  const number = quoteIsProofOnly(order) ? formatProofNumber(order, quoteId) : formatQuoteNumber(order, quoteId)
   return name ? `${number} from ${name}` : number
 }
 

@@ -32,6 +32,7 @@ import androidx.compose.ui.platform.testTag
 import androidx.compose.ui.semantics.heading
 import androidx.compose.ui.semantics.semantics
 import androidx.compose.ui.unit.dp
+import com.aglyn.contracts.deviceTimeZone
 import com.aglyn.contracts.formatReceiptTime
 import com.aglyn.core.Live
 import com.aglyn.core.nowMillis
@@ -192,8 +193,8 @@ fun EmailDetail(context: NativePluginContext, orgId: String, hostId: String, sen
             Text(
               listOfNotNull(
                 audienceLabel(send),
-                send.sendAtMs?.takeIf { send.status == "scheduled" }?.let { "Scheduled for ${formatReceiptTime(it)}" },
-                send.createdAtMs?.let { "Written ${formatReceiptTime(it)}" },
+                send.sendAtMs?.takeIf { send.status == "scheduled" }?.let { "Scheduled for ${formatReceiptTime(it, deviceTimeZone())}" },
+                send.createdAtMs?.let { "Written ${formatReceiptTime(it, deviceTimeZone())}" },
               ).joinToString(" · "),
               style = MaterialTheme.typography.bodyMedium,
               color = MaterialTheme.colorScheme.onSurfaceVariant,

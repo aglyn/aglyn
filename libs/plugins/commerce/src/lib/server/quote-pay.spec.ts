@@ -228,7 +228,7 @@ describe('the quote page’s data', () => {
   it('opens a link to an older version on the replaced page, with nothing of the quote', async () => {
     storeQuote({ linkVersion: 2 })
     const outcome = await handleQuoteView(deps, viewRequest({ hostId: 'site1', q: 'q-1', t: token(1) }))
-    expect(outcome).toEqual({ status: 200, body: { state: 'replaced', kind: 'quote', storeName: 'Acme Tents' } })
+    expect(outcome).toEqual({ status: 200, body: { state: 'replaced', kind: 'quote', noun: 'quote', storeName: 'Acme Tents' } })
     expect((await handleQuoteView(deps, viewRequest({ hostId: 'site1', q: 'q-1', t: token(2) }))).body['state']).toBe('quote')
   })
 
@@ -476,7 +476,7 @@ describe('an invoiced draft order’s link (AGL-4099)', () => {
     storeDraft({ payLink: { version: 2 } })
     expect(await handleQuoteView(deps, viewRequest({ hostId: 'site1', q: 'd-1', t: draftToken(1) }))).toEqual({
       status: 200,
-      body: { state: 'replaced', kind: 'invoice', storeName: 'Acme Tents' },
+      body: { state: 'replaced', kind: 'invoice', noun: 'invoice', storeName: 'Acme Tents' },
     })
     expect((await handleQuoteView(deps, viewRequest({ hostId: 'site1', q: 'd-1', t: draftToken(2) }))).body['kind']).toBe('invoice')
     expect((await handleQuoteView(deps, viewRequest({ hostId: 'site1', q: 'd-1', t: draftToken(3) }))).status).toBe(404)

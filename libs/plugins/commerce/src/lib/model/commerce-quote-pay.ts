@@ -28,7 +28,9 @@ import {
 import {
   computeQuoteTotals,
   describeQuoteTax,
+  formatProofNumber,
   formatQuoteNumber,
+  quoteIsProofOnly,
   quoteLineAmounts,
   quotePaymentBlockedByApproval,
   quoteTaxBasisFromSettings,
@@ -288,8 +290,13 @@ export interface QuotePageView {
    * page says "invoice" where a quote's says "quote".
    */
   kind: 'quote' | 'invoice'
+  /**
+   * A proof for the customer to answer, with no price yet (AGL-4184): the page
+   * shows no lines, totals or Pay, and the view carries none of them.
+   */
+  proofOnly: boolean
   storeName: string
-  /** `Quote #1042`, or `Invoice #1042`. */
+  /** `Quote #1042`, `Proof #1042` for a proof only quote, or `Invoice #1042`. */
   number: string
   /** When the quote was last written, which is the date it carries. */
   dateMs: number | null
@@ -435,34 +442,38 @@ export function buildQuotePageView(input: {
   const lines = order.lineItems ?? []
   const status = quotePageStatus(order.status)
   const unpaid = status.status === 'unpaid'
+  const proofOnly = quoteIsProofOnly(order)
   const payTax = quotePayTax(quote, input.store)
   const charge = quoteCheckoutCharge(order, input.orderId, input.store)
   const stored = order.totals
-  const totals = unpaid || !stored
-    ? {
-        itemsCents: charge.itemsCents,
-        discountCents: charge.discountCents,
-        shippingCents: charge.shippingCents,
-        taxCents: charge.taxCents,
-        totalCents: charge.totalCents,
-      }
-    : {
-        itemsCents: cents(stored.itemsCents),
-        discountCents: cents(stored.discountCents),
-        shippingCents: cents(stored.shippingCents),
-        taxCents: cents(stored.taxCents),
-        totalCents: cents(stored.totalCents),
-      }
-  const approvalRequired = unpaid && quotePaymentBlockedByApproval(quote)
-  const taxAtPayment = unpaid && payTax.basis.kind === 'at-payment'
+  const totals = proofOnly
+    ? { itemsCents: 0, discountCents: 0, shippingCents: 0, taxCents: 0, totalCents: 0 }
+    : unpaid || !stored
+      ? {
+          itemsCents: charge.itemsCents,
+          discountCents: charge.discountCents,
+          shippingCents: charge.shippingCents,
+          taxCents: charge.taxCents,
+          totalCents: charge.totalCents,
+        }
+      : {
+          itemsCents: cents(stored.itemsCents),
+          discountCents: cents(stored.discountCents),
+          shippingCents: cents(stored.shippingCents),
+          taxCents: cents(stored.taxCents),
+          totalCents: cents(stored.totalCents),
+        }
+  const approvalRequired = unpaid && !proofOnly && quotePaymentBlockedByApproval(quote)
+  const taxAtPayment = unpaid && !proofOnly && payTax.basis.kind === 'at-payment'
   const refused = unpaid
     ? payLinkRefusalWithPayments(quotePayRefusal(order, input.orderId, input.store), input.paymentsReady)
     : null
   return {
     state: 'quote',
     kind: 'quote',
+    proofOnly,
     storeName: input.storeName,
-    number: formatQuoteNumber(order, input.orderId),
+    number: proofOnly ? formatProofNumber(order, input.orderId) : formatQuoteNumber(order, input.orderId),
     dateMs: Number(quote?.updatedAtMs ?? quote?.createdAtMs) || null,
     version: Number(quote?.updatedAtMs) || 0,
     currency: input.currency || 'USD',
@@ -474,7 +485,7 @@ export function buildQuotePageView(input: {
     totals,
     discountLabel: discountLabel(quote?.discount),
     // Once paid, the tax is what was charged: Stripe's figure under Stripe Tax.
-    taxLabel: unpaid || payTax.basis.kind !== 'at-payment' ? describeQuoteTax(payTax.basis) : 'Tax',
+    taxLabel: proofOnly ? '' : unpaid || payTax.basis.kind !== 'at-payment' ? describeQuoteTax(payTax.basis) : 'Tax',
     taxAtPayment,
     shippingAtPayment: false,
     notes: text(quote?.notes),
@@ -485,8 +496,9 @@ export function buildQuotePageView(input: {
     receiptUrl: unpaid ? null : (input.receiptUrl ?? null),
     approvalRequired,
     payable: unpaid && refused === null,
-    notPayableMessage: refused === 'payments-unavailable' ? payLinkPaymentsUnavailableMessage(input.storeName, 'quote') : null,
-    taxKey: unpaid ? quoteTaxBasisKey(payTax.basis) : null,
+    notPayableMessage:
+      !proofOnly && refused === 'payments-unavailable' ? payLinkPaymentsUnavailableMessage(input.storeName, 'quote') : null,
+    taxKey: unpaid && !proofOnly ? quoteTaxBasisKey(payTax.basis) : null,
     revision: Math.max(1, Number(quote?.revision ?? 1) || 1),
     proofs: currentQuoteProofs(quote).map((proof) => ({
       id: String(proof.id),
@@ -707,6 +719,8 @@ export function quotePayRefusal(
 ): QuotePayRefusal | null {
   if (order.status === 'cancelled' || order.status === 'refunded') return 'closed'
   if (order.status !== 'pending') return 'paid'
+  // No lines, no price: nothing to pay, whatever the proof or the store's setup says (AGL-4184).
+  if (quoteIsProofOnly(order)) return 'nothing-to-pay'
   if (quotePaymentBlockedByApproval(order.quote)) return 'approval-required'
   if (store && storefrontTaxDecision({ settings: store.tax }).kind === 'undecided') return 'tax-undecided'
   if (quoteTaxIsUndecided(quotePayTax(order.quote, store).basis)) return 'tax-undecided'

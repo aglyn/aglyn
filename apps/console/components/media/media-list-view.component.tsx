@@ -101,7 +101,7 @@ export function mediaRowMenuItems(
     items.push({ key: 'download', label: 'Download file', onClick: handlers.onDownload })
   }
   if (handlers.onReplace) {
-    items.push({ key: 'replace', label: 'Replace file', onClick: handlers.onReplace })
+    items.push({ key: 'replace', label: 'Replace file', ...off, onClick: handlers.onReplace })
   }
   if (handlers.onDetails) {
     items.push({ key: 'details', label: 'Details', onClick: handlers.onDetails })

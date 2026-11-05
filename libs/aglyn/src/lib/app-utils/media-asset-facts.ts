@@ -154,7 +154,7 @@ export interface MediaAssetFacts {
  * Every field an asset's facts are decided from, and the projection a reader
  * asks Firestore for: ONE list, whichever surface reads. `width` and `height`
  * (an image's) and `video` and `poster` (a film's) are the facts. The other
- * three are the gates `serveMediaCdn` applies before it will serve an asset at
+ * four are the gates `serveMediaCdn` applies before it will serve an asset at
  * all, so no surface shows the shape of a file its page's URL refuses.
  */
 export const MEDIA_ASSET_FACT_FIELDS = [
@@ -166,6 +166,7 @@ export const MEDIA_ASSET_FACT_FIELDS = [
   'deletedAt',
   'private',
   'visibleTo',
+  'scopeMode',
 ] as const
 
 /** An asset's media document, as far as {@link MEDIA_ASSET_FACT_FIELDS} reach. */
@@ -243,7 +244,10 @@ export function mediaAssetFactsFromDocument(
   if (!document) return undefined
   if (document.deletedAt || document.private === true) return undefined
   const served = parseMediaCdnScope(hostQualifiedScope(ref.scope, hostId))
-  if (!served || mediaCdnScopeRefusal(served, document.visibleTo)) {
+  if (
+    !served ||
+    mediaCdnScopeRefusal(served, document.visibleTo, document.scopeMode)
+  ) {
     return undefined
   }
   return {

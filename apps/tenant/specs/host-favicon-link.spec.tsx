@@ -225,9 +225,11 @@ describe('tenant `<link rel="icon">` (AGL-1421)', () => {
       )
     })
 
-    it('the AGL-175 relative CDN path', async () => {
+    it('the AGL-175 relative CDN path, qualified for the site', async () => {
       const path = '/api/media/cdn/org:jWmGooWE3L/19G8Ipyfb1'
-      expect(await iconHref(path)).toBe(path)
+      expect(await iconHref(path)).toBe(
+        '/api/media/cdn/org:jWmGooWE3L:DXnRbPH4CQ/19G8Ipyfb1',
+      )
     })
 
     it('an absolute URL somebody typed into the card', async () => {

@@ -35,7 +35,7 @@ import {
   projectMemberScopeTokens,
 } from '@aglyn/aglyn/app-utils/organizations'
 import { deleteBeyondReach, oneSitePlacement as siteOf, resolvedPlacementKey } from '@aglyn/aglyn/app-utils/site-placement'
-import { datasetAccessBlocked } from '../components/use-dataset-writes-blocked'
+import { datasetAccessBlocked, datasetInstanceImportAccess } from '../components/use-dataset-writes-blocked'
 import { registerDataDeclarations } from '../declarations'
 import { memberMayActOnDataset } from '../server/dataset-access.server'
 import { DATA_MANAGE_PERMISSION, DATA_SITE_DELETE_PERMISSION, DATA_SITE_MANAGE_PERMISSION } from './dataset-access'
@@ -232,6 +232,18 @@ describe('the console reads the table as the rule and the route do', () => {
       expect(!blocked.writes).toBe(await routeSays(row, placement, 'write'))
       const beyond = deleteBeyondReach(asMember(row) as never, PLACEMENTS[placement])
       expect(!blocked.deletes).toBe(!beyond && (await routeSays(row, placement, 'delete')))
+    }
+  })
+
+  it.each(named)('%s: the Import & export hub’s row says what the import route will, on each placement', async (_name, row) => {
+    for (const placement of Object.keys(PLACEMENTS)) {
+      const answer = datasetInstanceImportAccess({
+        record: { id: 'ds', name: 'Trails', facts: { visibleTo: PLACEMENTS[placement] } },
+        member: asMember(row),
+        customRole: row.customRole ?? null,
+      })
+      expect(answer.allowed).toBe(await routeSays(row, placement, 'write'))
+      expect(answer.reason).toContain(siteOf(PLACEMENTS[placement]) ? 'Manage this site’s data' : 'Manage data')
     }
   })
 

@@ -40,7 +40,7 @@ const ORDER = {
   number: 1042,
   status: 'pending',
   channel: 'quote',
-  lineItems: [],
+  lineItems: [{ productId: '', custom: true, name: 'Banner', quantity: 1, unitAmountCents: 5_000 }],
   totals: { itemsCents: 5_000, discountCents: 0, shippingCents: 0, taxCents: 0, feeCents: 0, totalCents: 5_000 },
   quote: {
     stage: 'draft',
@@ -179,5 +179,21 @@ describe('the quote email’s send (AGL-4097)', () => {
     expect(outcome).toMatchObject({ sent: false, status })
     expect(String((outcome as { error: string }).error)).not.toMatch(/undefined/)
     expect(metered).toEqual([])
+  })
+})
+
+describe('a proof with no price yet (AGL-4184)', () => {
+  const PROOF_ONLY = {
+    ...ORDER,
+    lineItems: [],
+    totals: { itemsCents: 0, discountCents: 0, shippingCents: 0, taxCents: 0, feeCents: 0, totalCents: 0 },
+  } as unknown as HostOrder
+
+  it('goes out under a proof’s subject with no PDF made or attached', async () => {
+    const outcome = await quoteMailer(deps()).deliver(delivery({ order: PROOF_ONLY }))
+    expect(outcome).toMatchObject({ sent: true, subject: 'Proof #1042 from Northwind Signs' })
+    expect(mockQuotePdfFile).not.toHaveBeenCalled()
+    expect(sent[0].attachments).toBeUndefined()
+    expect(sent[0].text).toBe('Your proof from Northwind Signs')
   })
 })
