@@ -14,6 +14,14 @@
  * site admin reads their site" is what keeps the collaborators card from
  * rendering nothing for the person it was built for.
  *
+ * The site admin's arm asks "Manage site settings" (`site.manage`, AGL-4047)
+ * on the site the subject names, as `isSiteAdminCollaborator` in the route
+ * asks it: the site's stamp for the member, else their role there in Admin,
+ * for a member given access to the site by name. So the sites are seeded as
+ * the projection writes them (`memberRoles`, `memberPermissions`), and a
+ * site's toggle that refuses a site admin the key, or grants it to a site
+ * editor, decides it here as it does at the route.
+ *
  * The AI billing standing (`aiBilling/standing`) and the overage charges
  * (`aiOverageCharges/{id}`) are read by the same people, and the three reads
  * ask the keys alone (AGL-4047): `billing.view` or `billing.manage` through
@@ -50,6 +58,10 @@ const SITE_ADMIN = 'uid-allot-site-admin'
 /** A collaborator scoped to site A as an editor — the subject of the collab allotment. */
 const COLLABORATOR = 'uid-allot-collaborator'
 const OUTSIDER = 'uid-allot-outsider'
+/** Site A's admin, whose toggle on the site refuses them "Manage site settings". */
+const SITE_ADMIN_REFUSED = 'uid-allot-site-admin-refused'
+/** Site A's editor, whose toggle on the site grants them "Manage site settings". */
+const SITE_EDITOR_GRANTED = 'uid-allot-site-editor-granted'
 
 /**
  * The rest of the billing readers (AGL-4047), each as the projection writes
@@ -176,6 +188,43 @@ await env.withSecurityRulesDisabled(async (context) => {
     allHosts: false,
     hostAccess: { [HOST_A]: 'editor', [HOST_B]: 'editor' },
   })
+  await setDoc(doc(db, 'orgs', ORG, 'members', SITE_ADMIN_REFUSED), {
+    role: 'editor',
+    allHosts: false,
+    hostAccess: { [HOST_A]: 'admin' },
+    hostPermissions: { [HOST_A]: { 'site.manage': false } },
+  })
+  await setDoc(doc(db, 'orgs', ORG, 'members', SITE_EDITOR_GRANTED), {
+    role: 'editor',
+    allHosts: false,
+    hostAccess: { [HOST_A]: 'editor' },
+    hostPermissions: { [HOST_A]: { 'site.manage': true } },
+  })
+  // The sites as the projection writes them: each member's role there, and
+  // the site's stamp where a toggle decided "Manage site settings".
+  await setDoc(doc(db, 'hosts', HOST_A), {
+    orgId: ORG,
+    memberRoles: {
+      [OWNER]: 'admin',
+      [ADMIN]: 'admin',
+      [REVOKED_ADMIN]: 'admin',
+      [BARE_ADMIN]: 'admin',
+      [EDITOR]: 'editor',
+      [SITE_ADMIN]: 'admin',
+      [COLLABORATOR]: 'editor',
+      [SITE_ADMIN_REFUSED]: 'admin',
+      [SITE_EDITOR_GRANTED]: 'editor',
+    },
+    memberPermissions: {
+      [SITE_ADMIN]: { 'site.manage': true },
+      [SITE_ADMIN_REFUSED]: { 'site.manage': false },
+      [SITE_EDITOR_GRANTED]: { 'site.manage': true },
+    },
+  })
+  await setDoc(doc(db, 'hosts', HOST_B), {
+    orgId: ORG,
+    memberRoles: { [OWNER]: 'admin', [ADMIN]: 'admin', [REVOKED_ADMIN]: 'admin', [COLLABORATOR]: 'editor' },
+  })
   for (const subject of Object.values(SUBJECTS)) {
     await setDoc(allotmentOf(db, subject), seeded(subject))
   }
@@ -243,6 +292,24 @@ await check('the SITE ADMIN cannot read another site’s allotments', async () =
 await check('the SITE ADMIN cannot read a member’s allotment', () =>
   assertFails(getDoc(allotmentOf(as(SITE_ADMIN), SUBJECTS.editorMember))),
 )
+// "Manage site settings" decides it now (AGL-4047), as at the route.
+await check('a site ADMIN the site’s toggle refuses "Manage site settings" reads neither', async () => {
+  await assertFails(getDoc(allotmentOf(as(SITE_ADMIN_REFUSED), SUBJECTS.collabA)))
+  await assertFails(getDoc(allotmentOf(as(SITE_ADMIN_REFUSED), SUBJECTS.siteA)))
+})
+await check('a site EDITOR the site’s toggle grants "Manage site settings" reads both', async () => {
+  await assertSucceeds(getDoc(allotmentOf(as(SITE_EDITOR_GRANTED), SUBJECTS.collabA)))
+  await assertSucceeds(getDoc(allotmentOf(as(SITE_EDITOR_GRANTED), SUBJECTS.siteA)))
+})
+await check('the site editor so granted still reads nothing about another site', () =>
+  assertFails(getDoc(allotmentOf(as(SITE_EDITOR_GRANTED), SUBJECTS.siteB))),
+)
+// No widening: an org admin is an admin of every site, but the site arm is
+// for a member given the site by name, so the billing keys alone decide them.
+await check('an ADMIN refused both billing keys reads no site’s allotment through the site arm', async () => {
+  await assertFails(getDoc(allotmentOf(as(REVOKED_ADMIN), SUBJECTS.siteA)))
+  await assertFails(getDoc(allotmentOf(as(REVOKED_ADMIN), SUBJECTS.collabA)))
+})
 
 // ── The org-wide restriction, and outsiders ────────────────────────────────
 await check('any member reads the org-wide model restriction', async () => {
@@ -309,9 +376,14 @@ await env.withSecurityRulesDisabled(async (context) => {
   await deleteDoc(chargeOf(db))
   for (const uid of Object.keys(BILLING_READERS)) await deleteDoc(doc(db, 'orgs', ORG, 'members', uid))
   for (const subject of Object.values(SUBJECTS)) await deleteDoc(allotmentOf(db, subject))
-  for (const uid of [OWNER, ADMIN, REVOKED_ADMIN, BARE_ADMIN, BILLING_VIEWER, EDITOR, SITE_ADMIN, COLLABORATOR]) {
+  for (const uid of [
+    OWNER, ADMIN, REVOKED_ADMIN, BARE_ADMIN, BILLING_VIEWER, EDITOR, SITE_ADMIN, COLLABORATOR,
+    SITE_ADMIN_REFUSED, SITE_EDITOR_GRANTED,
+  ]) {
     await deleteDoc(doc(db, 'orgs', ORG, 'members', uid))
   }
+  await deleteDoc(doc(db, 'hosts', HOST_A))
+  await deleteDoc(doc(db, 'hosts', HOST_B))
   await deleteDoc(doc(db, 'orgs', ORG))
 })
 

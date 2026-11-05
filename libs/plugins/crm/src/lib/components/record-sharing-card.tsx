@@ -84,7 +84,7 @@ const when = (atMs: number) => (atMs > 0 ? new Date(atMs).toLocaleDateString() :
  * unshare: visibility a site holds is not the sharing's to take away. A
  * rule's line is removed by editing the rule, in Settings.
  *
- * The header's "Share with sites…" is an org manager's, and so is the
+ * The header's "Share with sites…" asks "Change CRM settings", and so does the
  * unshare; every other reader sees the lines and nothing to press. For a
  * reader on a site that sees the record only through a read-only share,
  * the card says so, since the page's edits will be refused.
@@ -214,7 +214,8 @@ RecordSharingCard.displayName = 'RecordSharingCard'
 
 /**
  * "Share with sites…" on a list's bulk bar (AGL-3336): the same dialog as
- * the record page, over the selection. Drawn for an org manager only.
+ * the record page, over the selection. Drawn only for a member holding
+ * "Change CRM settings".
  */
 export function CrmBulkShareButton(props: {
   object: CrmSharingObject

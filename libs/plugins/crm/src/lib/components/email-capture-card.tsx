@@ -32,12 +32,13 @@ import {
   CAPTURE_ADDRESS_HELPER,
   CopyCaptureAddressButton,
 } from './copy-capture-address-button'
+import { crmSettingsPermissionRefusal } from '../model/crm-permissions'
 import { useCrmInboundAddress } from './use-crm-inbound-address'
 
 export interface EmailCaptureCardProps {
   /** The site the section is read under, or `null` at the organization level. */
   hostId: string | null
-  /** Whether the reader may rotate the address — a workspace owner or admin. */
+  /** Whether the reader may rotate the address: "Change CRM settings" over the whole workspace. */
   canManage: boolean
   /** Whether the scope and the role are known, so the address may be asked for. */
   ready: boolean
@@ -139,7 +140,7 @@ export function EmailCaptureCard(props: EmailCaptureCardProps) {
         </FormHelperText>
         {ready && !canManage ? (
           <Typography variant="caption" color="text.secondary">
-            {'Only a workspace owner or admin can rotate the address.'}
+            {crmSettingsPermissionRefusal()}
           </Typography>
         ) : null}
       </Stack>

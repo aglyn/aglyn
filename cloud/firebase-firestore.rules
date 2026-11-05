@@ -364,9 +364,6 @@ service cloud.firestore {
       function orgMember() {
         return get(/databases/$(database)/documents/orgs/$(orgId)/members/$(request.auth.uid)).data;
       }
-      function canManageOrg() {
-        return isOrgMember() && orgMember().role in ['owner', 'admin'];
-      }
       /**
        * Does this member hold a workspace key whose default is a set of
        * workspace roles (AGL-4047)? A gate that asked "is their role owner or
@@ -385,6 +382,36 @@ service cloud.firestore {
       function memberKeyOr(permission, presetRoles) {
         let stamped = orgMember().get('resolvedPermissions', {}).get(permission, null);
         return stamped is bool ? stamped == true : orgMember().get('role', '') in presetRoles;
+      }
+      /**
+       * May this member change these fields of the workspace document
+       * (AGL-4047)? `changed` is the update's affected top-level keys. The
+       * update branch's deny-list still decides which fields no client writes
+       * at all; this decides who may write the rest, by the key each field's
+       * console card and route ask:
+       *
+       *   - `crm`, the CRM settings map the CRM → Settings cards write by
+       *     dotted path: "Change CRM settings" (`crm.settings`), as
+       *     `authorizeOrgCaller` and the capture address's rotation ask it;
+       *   - every other field (the name, the blurb, the stamps): "Organization
+       *     settings" (`org.settings`), as /api/orgs/settings asks it;
+       *   - an update that changes nothing: `org.settings`, so even a no-op
+       *     asks a key.
+       *
+       * Both keys default to the owner and admins, the role list this branch
+       * asked before it was two keys (`canManageOrg()`), so nobody's access
+       * moved: what the client may write is the same list of fields, and who
+       * may write it is the same people until a custom role or an override
+       * decides one of the keys. Through `memberKeyOrOverride`, so a member
+       * the projection has not stamped since a key existed answers by the
+       * preset. The branch already asks `isOrgWideMember()`, so a site
+       * collaborator granted either key still changes nothing here.
+       */
+      function mayChangeOrgFields(changed) {
+        return (!changed.hasAny(['crm']) ||
+                memberKeyOrOverride('crm.settings', ['owner', 'admin'])) &&
+               ((changed.size() > 0 && changed.hasOnly(['crm'])) ||
+                memberKeyOrOverride('org.settings', ['owner', 'admin']));
       }
       /**
        * A member whose reach is the WHOLE org, not a named set of sites
@@ -410,36 +437,6 @@ service cloud.firestore {
       function orgNotSuspended() {
         return orgMember().get('orgSuspended', false) != true;
       }
-      /**
-       * A PER-MEMBER permission override, read straight off the membership
-       * doc (AGL-243).
-       *
-       * The rules gate on ROLE; the page and the API gate on PERMISSION. An
-       * admin whose `billing.view` is revoked is correctly refused by both of
-       * those — and Firestore still handed the subscription document to their
-       * browser. Nothing painted it; it sat in devtools with the Stripe
-       * customer id, the price id and the seat add-ons in it.
-       *
-       * `permissions` is a flat `Record<string, boolean>` on the member doc
-       * (`AglynOrgMember`), and `orgMember()` is a get() every caller here
-       * already pays for — identical get()s in one evaluation are billed once
-       * — so this costs no extra document access.
-       *
-       * DEFAULT TRUE, and that is the whole safety argument: an absent key
-       * means "no override", which is the state of every member in every org
-       * today. A default of false would deny every paying owner the moment
-       * this ruleset deploys. This narrows the rule for members who carry an
-       * explicit `false` and changes nothing for anyone else.
-       *
-       * ⚠️ THIS IS THE PER-MEMBER LAYER ONLY. The resolver in
-       * `resolveOrgPermissions` has three: per-member overrides beat a custom
-       * role (`member.roleId` -> `orgs/{orgId}/roles/{roleId}`), which beats
-       * the role default. The custom-role layer is NOT enforced here and
-       * deliberately so — see the note on the `billing` match below.
-       */
-      function memberGrants(permission) {
-        return orgMember().get('permissions', {}).get(permission, true) == true;
-      }
 
       // Still ANY member, including a scoped collaborator (AGL-1026): this doc
       // carries `plan` and `entitlements`, which every console surface gates
@@ -448,7 +445,7 @@ service cloud.firestore {
       //
       // It no longer carries the commercial keys. `stripeCustomerId`,
       // `subscription` and `seatAddons` moved to `billing/stripe` below, gated
-      // on `canManageOrg()` (AGL-1028) — Firestore has no field-level reads, so
+      // on "View billing" (AGL-1028, AGL-4047) — Firestore has no field-level reads, so
       // moving them was the only way to narrow this without locking anyone out.
       // What stays is deliberate: `plan`/`entitlements` because that is the
       // whole reason this doc is readable, `suspendedAt`/`suspendedReason`
@@ -465,8 +462,10 @@ service cloud.firestore {
       // differences, both asserted by org-write-deny-coverage.spec.ts:
       // super staff keeps `enabledPlugins` (the AGL-501 carve-out) and
       // `erasureRequestedAt` (the erasure toggle's client batch); billing
-      // staff keeps the rename. Members with the admin role may rename the
-      // org; nothing else is client-writable.
+      // staff keeps the rename. A member holding "Organization settings"
+      // (`org.settings`) may rename the org and one holding "Change CRM
+      // settings" (`crm.settings`) may change its `crm` map, both owners and
+      // admins by default (AGL-4047); nothing else is client-writable.
       allow create, delete: if false;
       // `enabledPlugins` is the runtime plugin switchboard, written ONLY by
       // the install API after entitlement + kill-switch checks (AGL-501) —
@@ -498,7 +497,7 @@ service cloud.firestore {
       // EVERY client, staff included (AGL-1795). AGL-1786 moved the staff
       // override to /api/admin/org-override, which was the last client
       // writer of the three: what remains on this document from a browser is
-      // the org rename (`canManageOrg()`, which already excludes them) and
+      // the org rename (the member branch, which already excludes them) and
       // the erasure toggle's `erasureRequestedAt`. So denying them costs the
       // product nothing, and it is what makes the reason gate a BOUNDARY —
       // `adminAudit` validates no shape at all (`allow create: if isStaff()`),
@@ -668,10 +667,13 @@ service cloud.firestore {
              'erasureRequestedAt', 'crmInbound', 'acquisition',
              'consentGroups', 'consentGroupsAwaitConfirmation', 'consentGroupsChange',
              'marketingConsentPolicy', 'upgradeProposal', 'lastActivityAt'])) ||
-        // `isVerified()` here rather than inside `canManageOrg()` (AGL-2589):
-        // that helper is a READ gate too — `billing/stripe` and the member
-        // roster ask it — and folding verification in would refuse those.
-        (canManageOrg() && isVerified() && orgNotSuspended() &&
+        // The member branch (AGL-4047): an org-wide member holding the key
+        // each changed field asks (`mayChangeOrgFields`: `crm` asks "Change
+        // CRM settings", every other field "Organization settings"), both
+        // owners and admins by default, as `canManageOrg()` was. Verified
+        // (AGL-2589) and not suspended, as before; the deny-list is unchanged.
+        (isOrgWideMember() && isVerified() && orgNotSuspended() &&
+          mayChangeOrgFields(request.resource.data.diff(resource.data).affectedKeys()) &&
           !request.resource.data.diff(resource.data).affectedKeys().hasAny(
             ['slug', 'ownerUid', 'createdByUid', 'hosts', 'plan',
              'entitlements', 'releaseFlags',
@@ -756,51 +758,46 @@ service cloud.firestore {
        * collaborator stops reading them (AGL-1028): `stripeCustomerId`,
        * `subscription`, `seatAddons`.
        *
-       * Managers and staff only. Written exclusively by the Stripe webhook and
-       * the billing/staff APIs through the Admin SDK, which rules never
-       * applied to — so `write: false` costs nothing and keeps the client out.
+       * Staff, and an org-wide member holding "View billing". Written
+       * exclusively by the Stripe webhook and the billing/staff APIs through
+       * the Admin SDK, which rules never applied to — so `write: false` costs
+       * nothing and keeps the client out.
        *
        * The org doc keeps a derived `billingStatus` string for the AGL-275
        * dunning banner, which is shown to every member on purpose. That is the
-       * only thing about a subscription a non-manager can still see, and it
-       * carries no amount, price id or customer id.
+       * only thing about a subscription a member without the key can still
+       * see, and it carries no amount, price id or customer id.
        */
       /**
-       * ROLE ALONE WAS NOT THE GATE THE PRODUCT ENFORCES (AGL-243).
+       * "VIEW BILLING" (`billing.view`), THE KEY THE PAGE AND THE ROUTES ASK
+       * (AGL-243, AGL-4047).
        *
-       * This read `isStaff() || canManageOrg()`. The page and the API both
-       * gate on the PERMISSION `billing.view`, which a per-member override can
-       * revoke from an admin — so such a member was refused by the console and
-       * by every route, and Firestore delivered this document to their browser
-       * anyway. `memberGrants` closes that for the per-member layer at zero
-       * extra document reads.
+       * This read `isStaff() || canManageOrg()`, then (AGL-243) the owner or
+       * admin role AND the member's own override of the key, because an admin
+       * whose `billing.view` an override revoked was refused by the console
+       * and every route while Firestore still delivered the document. It read
+       * the per-member layer only: a custom role deciding the key, which the
+       * page and the routes honour through `memberHasOrgPermission`, was not
+       * honoured here.
        *
-       * `canManageOrg()` is unchanged and still leads: this is a narrowing,
-       * not a re-grant. There is exactly ONE match block on this path — the
-       * org block deliberately has no `{document=**}` catch-all (see the note
-       * further down) — so there is no looser sibling to defeat it.
+       * It asks the key alone now, through `memberKeyOrOverride` with the
+       * key's default, the owner and admins: the member's `resolvedPermissions`
+       * stamp (every layer applied, written by `syncOrgAuthProjections` on
+       * every membership change and every custom role save), else their own
+       * override for a member never stamped, else the preset. With nothing
+       * decided every member answers as before, an override answers as it did,
+       * and a custom role granting or refusing the key now counts here as it
+       * already did at the routes. Org-wide only, as before: owners and admins
+       * span the workspace by definition, and a site collaborator granted the
+       * key still reads nothing about the workspace's subscription here.
        *
-       * ⚠️ THE CUSTOM-ROLE LAYER IS NOT READ HERE. `memberStamps` and
-       * `memberKeyOrOverride` further down read it, through denormalization
-       * rather than resolution:
-       * `syncOrgAuthProjections` writes the RESOLVED map
-       * (`resolvedPermissions`, all three layers applied) onto the member doc
-       * and the rules read the answer instead of chasing the inputs. Resolving
-       * it directly is not available at any price — it needs a second
-       * cross-document get(), a three-layer precedence expressed in CEL, and a
-       * dangling `roleId` whose null get() denies where the resolver falls
-       * back to the role defaults.
-       *
-       * This billing rule is deliberately NOT switched over to it. The gap it
-       * closes is a custom role revoking `billing.view` from a manager, and
-       * nothing has asked for that; changing a rule that guards the Stripe
-       * document to gain a case nobody has is how a lockout ships. The reader
-       * that needed it is `canWriteOrgDatasets`, where the rules and
-       * `/api/orgs/datasets` were already disagreeing about a live workspace.
+       * There is exactly ONE match block on this path — the org block
+       * deliberately has no `{document=**}` catch-all (see the note further
+       * down) — so there is no looser sibling to defeat it.
        */
       match /billing/{billingDocId} {
         allow read: if isStaff() ||
-          (canManageOrg() && memberGrants('billing.view'));
+          (isOrgWideMember() && memberKeyOrOverride('billing.view', ['owner', 'admin']));
         allow write: if false;
       }
 
@@ -820,10 +817,13 @@ service cloud.firestore {
         allow write: if false;
       }
 
-      // Invites carry emails — readable by org managers only; the invited
-      // account accepts through the API, never by writing here.
+      // Invites carry emails — readable by an org-wide member holding "Manage
+      // members" (`members.manage`, AGL-4047), the key /api/orgs/invites asks,
+      // whose default is the owner and admins `canManageOrg()` asked for; the
+      // invited account accepts through the API, never by writing here.
       match /invites/{inviteId} {
-        allow read: if isStaff() || canManageOrg();
+        allow read: if isStaff() ||
+          (isOrgWideMember() && memberKeyOrOverride('members.manage', ['owner', 'admin']));
         allow write: if false;
       }
 
@@ -948,10 +948,10 @@ service cloud.firestore {
       // point of sale" (`managePos`), asked through `memberKeyOrOverride`
       // with its default, the owner, admins and editors (AGL-4047), as the
       // shop's route asks it. It asked that role list AND the member's own
-      // override (`memberGrants`), which gives every member with no decision
-      // written down the same verdict; a custom role deciding the key now
-      // decides it here as the route decides it. The console itself reads
-      // the orders through the plugin's route.
+      // override (`memberGrants`, since removed), which gives every member
+      // with no decision written down the same verdict; a custom role
+      // deciding the key now decides it here as the route decides it. The
+      // console itself reads the orders through the plugin's route.
       //
       // And by an org-wide member whose resolved permissions say they may
       // buy hardware (AGL-4047): `posBuyHardware` stands on its own, so a
@@ -1187,10 +1187,14 @@ service cloud.firestore {
        *  - an org-wide member holding `billing.view` or `billing.manage`,
        *    asked the way the per-user usage months ask theirs
        *    (`memberKeyOrOverride`, the owner and admins by default, AGL-4047);
-       *  - a collaborator holding the ADMIN role on the site the subject
-       *    names reads that site's collaborator and site allotments — the
-       *    collaborators card is theirs. Nothing about another site, and
-       *    nobody's `member:` allotment.
+       *  - a member given access to the site the subject names by name
+       *    (`hostAccess`), holding "Manage site settings" there (`site.manage`,
+       *    AGL-4047: the site's stamp, else their site role in Admin, as
+       *    `isSiteAdminCollaborator` in `ai-allotments.ts` asks it), reads
+       *    that site's collaborator and site allotments — the collaborators
+       *    card is theirs. It asked their `hostAccess` role to be Admin; the
+       *    key's preset is that role, so nobody's access moved. Nothing about
+       *    another site, and nobody's `member:` allotment.
        *
        * The subject is matched with a full-string regex BEFORE it is split,
        * so a malformed id never reaches an index that does not exist.
@@ -1210,7 +1214,8 @@ service cloud.firestore {
              memberKeyOrOverride('billing.manage', ['owner', 'admin']))) ||
           (isOrgMember() &&
             subject.matches('(collab|host):[A-Za-z0-9_-]+(:[A-Za-z0-9_-]+)?') &&
-            orgMember().get('hostAccess', {}).get(subject.split(':')[1], '') == 'admin');
+            orgMember().get('hostAccess', {}).get(subject.split(':')[1], null) is string &&
+            hostSiteRoleKey(subject.split(':')[1], 'site.manage', ['admin']));
         allow write: if false;
       }
 
@@ -1314,8 +1319,13 @@ service cloud.firestore {
         // Verification on the write half only (AGL-2589): a plugin's org
         // config includes the marketing plugin's own, so this is send-path
         // adjacent, and the read is what the console needs to render at all.
+        //
+        // "Organization settings" (`org.settings`, AGL-4047), the key the
+        // workspace's plugin switchboard asks, whose default is the owner and
+        // admins `canManageOrg()` asked for. Org-wide, as before.
         allow write: if isStaff() ||
-          (canManageOrg() && isVerified() && orgNotSuspended());
+          (isOrgWideMember() && memberKeyOrOverride('org.settings', ['owner', 'admin']) &&
+            isVerified() && orgNotSuspended());
       }
 
       // The workspace's business profile defaults (AGL-3661): the services,
@@ -1362,14 +1372,14 @@ service cloud.firestore {
        * The RESOLVED permission verdict, denormalized (AGL-243 residual):
        * was this permission written down as granted?
        *
-       * `memberGrants` above reads the per-member override layer only, and
-       * the note under the `billing` match says why the custom-role layer was
-       * left open: rules cannot resolve `member.roleId` into
+       * The rules once read the per-member override layer alone
+       * (`memberGrants`, AGL-243, removed with its last caller in AGL-4047),
+       * because they cannot resolve `member.roleId` into
        * `orgs/{orgId}/roles/{roleId}` and reimplement a three-layer
        * precedence in CEL without a second get() and two lockout-shaped
-       * failure modes. That note also names the fix, which is this one —
-       * denormalize the ANSWER, exactly as `scopeTokens` denormalizes a reach
-       * the rules language cannot compute either.
+       * failure modes. The fix is this one — denormalize the ANSWER, exactly
+       * as `scopeTokens` denormalizes a reach the rules language cannot
+       * compute either.
        *
        * `resolvedPermissions` is `resolveOrgPermissions(member, customRole)`
        * with all three layers already applied, written by
@@ -2338,12 +2348,20 @@ service cloud.firestore {
       }
 
       // A consent group change's job (AGL-3320): read by whoever the route
-      // lets run one — a manager, or an org-wide member stamped with both of
-      // its permissions — and written only by the Admin-SDK executor.
+      // lets run one — an org-wide member holding both of its permissions,
+      // "Organization settings" and "Manage data", as /api/orgs/consent-groups
+      // asks them — and written only by the Admin-SDK executor.
+      //
+      // Each key through `memberKeyOrOverride` with its own default (AGL-4047):
+      // `org.settings` the owner and admins, `data.manage` the owner, admins
+      // and editors, so with nothing decided it is the owner and admins, the
+      // managers `canManageOrg()` admitted. An admin whose custom role or
+      // override refuses either key is refused here, as the route refuses them.
       match /consentGroupChanges/{changeId} {
-        allow read: if isStaff() || canManageOrg() ||
-          (isOrgWideMember() && memberStamps('org.settings') &&
-           memberStamps('data.manage'));
+        allow read: if isStaff() ||
+          (isOrgWideMember() &&
+           memberKeyOrOverride('org.settings', ['owner', 'admin']) &&
+           memberKeyOrOverride('data.manage', ['owner', 'admin', 'editor']));
         allow write: if false;
       }
 
@@ -2436,14 +2454,17 @@ service cloud.firestore {
 
       // Website ownership claims (AGL-3974): "this org proved it controls
       // this domain", which a site import requires before it reads a page.
-      // An owner or admin reads the claim, because it holds the token they
-      // publish in DNS or on their home page. Nobody writes it from a
+      // A member holding "Bring a site in" (`ai.import`, AGL-4047), the key
+      // `/api/ai/site-import/ownership` asks, reads the claim, because it
+      // holds the token they publish in DNS or on their home page; its
+      // default is the owner and admins `canManageOrg()` asked for, org-wide
+      // as before. Nobody writes it from a
       // client: `status: 'proven'` IS the proof, and a client able to set it
       // could import, and clone, any website. The emailed code is stored
       // only as an HMAC under a server secret, so a reader learns nothing
       // that shortcuts the code. Admin SDK only (domain-ownership.ts).
       match /domainOwnershipClaims/{domain} {
-        allow read: if canManageOrg();
+        allow read: if isOrgWideMember() && memberKeyOrOverride('ai.import', ['owner', 'admin']);
         allow write: if false;
       }
     }

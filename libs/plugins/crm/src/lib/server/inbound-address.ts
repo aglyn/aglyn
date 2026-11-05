@@ -17,7 +17,6 @@
 
 import {
   type AglynOrgMember,
-  canManageOrg,
   inboundMailDomain,
   isOrgWideMember,
   type PluginApiHandler,
@@ -33,6 +32,7 @@ import {
 import { isRefusedIdToken } from '@aglyn/tenant-data-admin/server/id-token-refusal'
 import { CRM_API_ROUTES } from '../constants/api-routes'
 import { crmInboundAddress } from '../model/crm-inbound'
+import { crmSettingsPermissionRefusal } from '../model/crm-permissions'
 import { ensureCrmInboundToken } from './crm-inbound-email'
 import { authorizeOrgCaller, readCrmRouteScope } from './org-caller'
 import { crmSuiteRefusal } from './suite-gate'
@@ -60,12 +60,13 @@ import { crmSuiteRefusal } from './suite-gate'
  * Asking takes what opening the CRM takes: `data.manage` on the site's
  * org, for a member who reaches the site — the sender's own gate in
  * `email-send.ts`, restated — or, at the organization level, org-wide
- * reach with the same permission. Rotating is a workspace OWNER or ADMIN's
- * act, because the old address stops filing the moment the new token is
- * written and every mailbox rule that carried it goes quiet: the same bar
- * every CRM setting has, and the erasure route's. Staff are admitted to
- * read as they are on every CRM route, and refused the rotation as the
- * erasure route refuses them — it is the workspace's address to retire.
+ * reach with the same permission. Rotating asks "Change CRM settings"
+ * (`crm.settings`, AGL-4047) over the whole workspace, because the old
+ * address stops filing the moment the new token is written and every
+ * mailbox rule that carried it goes quiet: the same key every CRM setting
+ * asks, on for owners and admins by default. Staff are admitted to read as
+ * they are on every CRM route, and refused the rotation as the erasure
+ * route refuses them — it is the workspace's address to retire.
  */
 
 export const CRM_INBOUND_ADDRESS_ROUTE = CRM_API_ROUTES.inboundAddress
@@ -81,8 +82,8 @@ export interface CrmInboundAddressResponse {
   rotated: boolean
 }
 
-export const CRM_INBOUND_ROTATE_REFUSAL =
-  'Rotating the capture address requires a workspace owner or admin.'
+/** Names the permission, never a role (AGL-4047). */
+export const CRM_INBOUND_ROTATE_REFUSAL = crmSettingsPermissionRefusal()
 
 type Refusal = { ok: false; status: number; error: string }
 
@@ -102,11 +103,13 @@ const refuse = (status: number, error: string): Refusal => ({ ok: false, status,
 /**
  * The site variant's caller: a verified token, then `data.manage` on the
  * site's org for a member who reaches the site, staff passing as they do
- * on every CRM route. Rotation needs the org role itself.
+ * on every CRM route. Rotation needs "Change CRM settings" over the whole
+ * workspace, asked only when the caller asks to rotate.
  */
 async function authorizeSiteCaller(
   req: PluginApiRequest,
   hostId: string,
+  rotate: boolean,
 ): Promise<Caller | Refusal> {
   const authorization = String(req.headers.authorization ?? '')
   const idToken = authorization.startsWith('Bearer ')
@@ -146,7 +149,11 @@ async function authorizeSiteCaller(
     email: decoded.email ?? null,
     orgId,
     org: resolved.org,
-    canRotate: canManageOrg(member?.role ?? null),
+    canRotate:
+      rotate &&
+      member !== null &&
+      isOrgWideMember(member) &&
+      (await memberHasOrgPermission(orgId, member, 'crm.settings')),
   }
 }
 
@@ -157,7 +164,7 @@ async function authorizeOrgLevelCaller(
   rotate: boolean,
 ): Promise<Caller | Refusal> {
   const caller = await authorizeOrgCaller(req, orgId, {
-    needs: rotate ? 'manage-org' : 'data.manage',
+    needs: rotate ? 'crm.settings' : 'data.manage',
     refusal: rotate
       ? CRM_INBOUND_ROTATE_REFUSAL
       : 'Reading the capture address at the organization level requires the ' +
@@ -170,7 +177,7 @@ async function authorizeOrgLevelCaller(
     email: caller.email,
     orgId,
     org: caller.org,
-    // `manage-org` admitted them when they asked to rotate; a reader who
+    // `crm.settings` admitted them when they asked to rotate; a reader who
     // did not ask is not told whether they could.
     canRotate: rotate,
   }
@@ -195,7 +202,7 @@ export const crmInboundAddressHandler: PluginApiHandler = async (req, res) => {
     const caller =
       scope.level === 'org'
         ? await authorizeOrgLevelCaller(req, scope.orgId, rotate)
-        : await authorizeSiteCaller(req, scope.hostId)
+        : await authorizeSiteCaller(req, scope.hostId, rotate)
     if (caller.ok === false) {
       res.status(caller.status).json({ error: caller.error })
       return

@@ -18,7 +18,7 @@
 
 import {
   type AglynOrgBilling,
-  canManageOrg,
+  type AglynOrgCustomRole,
   type ConsolePluginPageProps,
   CRM_ASSIGNMENT_RULES_MAX,
   CRM_ASSIGNMENT_RULES_PATH,
@@ -30,10 +30,11 @@ import {
   crmDefaultScopeOf,
   crmHostDefaultOwnerSegments,
   describeAssignmentRule,
+  isOrgWideMember,
   orgAutoCreatesCompanies,
-  type OrgRole,
   pluginDocsHelp,
   readCrmAssignmentSettings,
+  resolveOrgPermissions,
   roundRobinOrder,
   crmMemberPickerLabel,
 } from '@aglyn/aglyn'
@@ -68,6 +69,7 @@ import { deleteField, doc, FieldPath, updateDoc } from 'firebase/firestore'
 import { useCallback, useEffect, useMemo, useState } from 'react'
 import { useCrmOrgMount } from '../hooks/use-crm-org-mount'
 import { useCrmScope } from '../hooks/use-crm-scope'
+import { CRM_SETTINGS_PERMISSION, crmSettingsPermissionRefusal } from '../model/crm-permissions'
 import { useOrgMemberDirectory } from '../hooks/use-org-member-directory'
 import AssignmentRuleDrawer from './assignment-rule-drawer'
 import EmailTemplatesCard from './email-templates-card'
@@ -78,18 +80,28 @@ import SharingRulesCard from './sharing-rules-card'
 
 export type CrmSettingsSectionProps = Pick<ConsolePluginPageProps, 'hostId' | 'org'>
 
+/** A membership document, as the permission resolver reads one. */
+type MemberRecord = NonNullable<Parameters<typeof resolveOrgPermissions>[0]>
+
 /**
  * Whether the signed-in member may change an org-wide CRM setting, and
- * whether that is known yet.
+ * whether that is known yet: "Change CRM settings" (`crm.settings`, AGL-4047)
+ * over the whole workspace.
  *
- * The org document's client branch admits an OWNER or ADMIN and nobody
- * else — `canManageOrg()` in the rules — so the question is the caller's
- * org role, read off their own membership document, which the rules let a
- * member read for themselves. A scoped collaborator, an editor, a viewer:
- * each sees the switch and cannot move it, with the reason beside it,
- * rather than a switch that moves and snaps back with a bare
- * `permission-denied`. `ready` separates "no" from "not yet", so the
- * control disables with a reason instead of hiding until the read lands.
+ * The same key everything behind these cards asks: the org document's client
+ * rule for its `crm` map, `authorizeOrgCaller(…, 'crm.settings')` for record
+ * sharing and the sharing rules, and the capture address's rotation. On for
+ * owners and admins by default; a custom role or an override can hand it to
+ * another member of the whole workspace, or take it from an admin. A site
+ * collaborator never holds it, whatever they are granted.
+ *
+ * Read off the member's own membership document and their custom role when
+ * they hold one, both of which the rules let a member read, the way the erase
+ * item answers "Privacy requests". Each card shows its switch to a member who
+ * cannot move it, disabled with the reason beside it, rather than a switch
+ * that moves and snaps back with a bare `permission-denied`. `ready`
+ * separates "no" from "not yet", so the control disables with a reason
+ * instead of hiding until the read lands.
  */
 export function useCanManageCrmSettings(orgId: string | undefined): {
   canManage: boolean
@@ -98,13 +110,25 @@ export function useCanManageCrmSettings(orgId: string | undefined): {
   const firestore = useFirestore()
   const { data: user } = useUser()
   const uid = user?.uid ?? ''
-  const { data: member, status } = useFirestoreDoc<{ role?: OrgRole }>(
+  const memberRead = useFirestoreDoc<MemberRecord>(
     () => (orgId && uid ? doc(firestore, 'orgs', orgId, 'members', uid) : null),
     [firestore, orgId, uid],
   )
+  const member = memberRead.status === 'success' ? memberRead.data : undefined
+  const roleId = typeof member?.roleId === 'string' ? member.roleId : ''
+  const roleRead = useFirestoreDoc<AglynOrgCustomRole>(
+    () => (orgId && roleId ? doc(firestore, 'orgs', orgId, 'roles', roleId) : null),
+    [firestore, orgId, roleId],
+  )
+  const ready =
+    Boolean(orgId && uid) && memberRead.status !== 'loading' && (!roleId || roleRead.status !== 'loading')
+  const granted = resolveOrgPermissions(
+    member ?? null,
+    roleId && roleRead.status === 'success' ? (roleRead.data ?? null) : null,
+  )
   return {
-    canManage: canManageOrg(member?.role ?? null),
-    ready: Boolean(orgId && uid) && status !== 'loading',
+    canManage: Boolean(member) && isOrgWideMember(member) && granted[CRM_SETTINGS_PERMISSION] === true,
+    ready,
   }
 }
 
@@ -208,7 +232,7 @@ export function AutoCreateCompaniesCard(props: AutoCreateCompaniesCardProps) {
         </FormHelperText>
         {ready && !canManage ? (
           <Typography variant="caption" color="text.secondary">
-            {'Only a workspace owner or admin can change this.'}
+            {crmSettingsPermissionRefusal()}
           </Typography>
         ) : null}
       </Stack>
@@ -312,7 +336,7 @@ DefaultRecordSharingCard.displayName = 'DefaultRecordSharingCard'
 function ManagersOnlyNote(props: { ready: boolean; canManage: boolean }) {
   return props.ready && !props.canManage ? (
     <Typography variant="caption" color="text.secondary">
-      {'Only a workspace owner or admin can change this.'}
+      {crmSettingsPermissionRefusal()}
     </Typography>
   ) : null
 }
@@ -333,7 +357,7 @@ export interface AssignmentCardProps {
  *
  * Per site, on the org document: the reader is the org-level assignment
  * pass, which reads one document for every site's default, and the writer
- * is the same owner-or-admin the rest of the `crm` map admits. Under a
+ * is whoever holds "Change CRM settings", as for the rest of the `crm` map. Under a
  * site the card is that site's one picker; at the ORGANIZATION level
  * (AGL-2630) it is one picker per site in the org, because the map is per
  * site and this is the one place all of it is on screen at once. The
@@ -838,8 +862,8 @@ RoundRobinCard.displayName = 'RoundRobinCard'
 export function CrmSettingsSection(props: CrmSettingsSectionProps) {
   const { hostId, org } = props
   const mount = useCrmOrgMount()
-  // The Email capture card (AGL-2657) rotates on the same owner-or-admin
-  // bar every other card writes on; the scope and the role are resolved
+  // The Email capture card (AGL-2657) rotates on the same key every other
+  // card writes on, "Change CRM settings"; the scope and the key are resolved
   // here once and handed down, since the card itself writes no document.
   const { orgId, ready: scopeReady } = useCrmScope({ hostId, org })
   const { canManage, ready: roleReady } = useCanManageCrmSettings(orgId)

@@ -322,13 +322,16 @@ describe('a manual share (AGL-3336)', () => {
     )
   })
 
-  it('is an org manager’s: anyone else is refused and nothing is written', async () => {
+  it('asks "Change CRM settings": anyone without it is refused, told the permission, and nothing is written', async () => {
     authorizeOrgCaller.mockResolvedValueOnce({ ok: false, status: 403, error: 'No' })
     const before = clone(store)
     const out = await call({ hostId: 'site-b', action: 'share', object: 'leads', ids: ['l1'], targets: 'all' })
     expect(out.status).toBe(403)
     expect(store).toEqual(before)
-    expect(authorizeOrgCaller.mock.calls[0][2]).toMatchObject({ needs: 'manage-org' })
+    expect(authorizeOrgCaller.mock.calls[0][2]).toEqual({
+      needs: 'crm.settings',
+      refusal: 'Your role does not include "Change CRM settings" — ask an organization admin',
+    })
   })
 
   it('asks the CRM’s plan gate', async () => {

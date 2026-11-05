@@ -364,9 +364,6 @@ exists(/databases/$(database)/documents/orgs/$(orgId)/members/$(request.auth.uid
 function orgMember() {
 return get(/databases/$(database)/documents/orgs/$(orgId)/members/$(request.auth.uid)).data;
 }
-function canManageOrg() {
-return isOrgMember() && orgMember().role in ['owner', 'admin'];
-}
 
 
 
@@ -385,6 +382,36 @@ return isOrgMember() && orgMember().role in ['owner', 'admin'];
 function memberKeyOr(permission, presetRoles) {
 let stamped = orgMember().get('resolvedPermissions', {}).get(permission, null);
 return stamped is bool ? stamped == true : orgMember().get('role', '') in presetRoles;
+}
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+function mayChangeOrgFields(changed) {
+return (!changed.hasAny(['crm']) ||
+memberKeyOrOverride('crm.settings', ['owner', 'admin'])) &&
+((changed.size() > 0 && changed.hasOnly(['crm'])) ||
+memberKeyOrOverride('org.settings', ['owner', 'admin']));
 }
 
 
@@ -426,37 +453,9 @@ return orgMember().get('orgSuspended', false) != true;
 
 
 
-
-
-
-
-
-
-
-
-
-
-
-function memberGrants(permission) {
-return orgMember().get('permissions', {}).get(permission, true) == true;
-}
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
 allow read: if isStaff() || isOrgMember();
+
+
 
 
 
@@ -671,7 +670,10 @@ allow update: if (isSuperStaff() &&
 
 
 
-(canManageOrg() && isVerified() && orgNotSuspended() &&
+
+
+(isOrgWideMember() && isVerified() && orgNotSuspended() &&
+mayChangeOrgFields(request.resource.data.diff(resource.data).affectedKeys()) &&
 !request.resource.data.diff(resource.data).affectedKeys().hasAny(
 ['slug', 'ownerUid', 'createdByUid', 'hosts', 'plan',
 'entitlements', 'releaseFlags',
@@ -793,14 +795,9 @@ allow update: if (isSuperStaff() &&
 
 
 
-
-
-
-
-
 match /billing/{billingDocId} {
 allow read: if isStaff() ||
-(canManageOrg() && memberGrants('billing.view'));
+(isOrgWideMember() && memberKeyOrOverride('billing.view', ['owner', 'admin']));
 allow write: if false;
 }
 
@@ -822,8 +819,11 @@ allow write: if false;
 
 
 
+
+
 match /invites/{inviteId} {
-allow read: if isStaff() || canManageOrg();
+allow read: if isStaff() ||
+(isOrgWideMember() && memberKeyOrOverride('members.manage', ['owner', 'admin']));
 allow write: if false;
 }
 
@@ -1198,6 +1198,10 @@ allow write: if false;
 
 
 
+
+
+
+
 match /aiAllotments/{subject} {
 allow read: if isStaff() ||
 (subject == 'org' && isOrgMember()) ||
@@ -1210,7 +1214,8 @@ subject.split(':')[2] == request.auth.uid))) ||
 memberKeyOrOverride('billing.manage', ['owner', 'admin']))) ||
 (isOrgMember() &&
 subject.matches('(collab|host):[A-Za-z0-9_-]+(:[A-Za-z0-9_-]+)?') &&
-orgMember().get('hostAccess', {}).get(subject.split(':')[1], '') == 'admin');
+orgMember().get('hostAccess', {}).get(subject.split(':')[1], null) is string &&
+hostSiteRoleKey(subject.split(':')[1], 'site.manage', ['admin']));
 allow write: if false;
 }
 
@@ -1314,8 +1319,13 @@ allow read: if isStaff() || isOrgMember();
 
 
 
+
+
+
+
 allow write: if isStaff() ||
-(canManageOrg() && isVerified() && orgNotSuspended());
+(isOrgWideMember() && memberKeyOrOverride('org.settings', ['owner', 'admin']) &&
+isVerified() && orgNotSuspended());
 }
 
 
@@ -2340,10 +2350,18 @@ allow write: if false;
 
 
 
+
+
+
+
+
+
+
 match /consentGroupChanges/{changeId} {
-allow read: if isStaff() || canManageOrg() ||
-(isOrgWideMember() && memberStamps('org.settings') &&
-memberStamps('data.manage'));
+allow read: if isStaff() ||
+(isOrgWideMember() &&
+memberKeyOrOverride('org.settings', ['owner', 'admin']) &&
+memberKeyOrOverride('data.manage', ['owner', 'admin', 'editor']));
 allow write: if false;
 }
 
@@ -2442,8 +2460,11 @@ allow read, write: if false;
 
 
 
+
+
+
 match /domainOwnershipClaims/{domain} {
-allow read: if canManageOrg();
+allow read: if isOrgWideMember() && memberKeyOrOverride('ai.import', ['owner', 'admin']);
 allow write: if false;
 }
 }

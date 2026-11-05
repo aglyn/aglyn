@@ -82,6 +82,7 @@ import {
   withoutManualShares,
 } from '../model/crm-sharing'
 import { stampCrmActivityCompany } from '../model/crm-activity-link'
+import { crmSettingsPermissionRefusal } from '../model/crm-permissions'
 import { readLeadSourcePicklist } from './lead-source-picklist'
 import { authorizeOrgCaller, orgHostIds, readCrmRouteScope } from './org-caller'
 import { crmSuiteRefusal } from './suite-gate'
@@ -573,8 +574,8 @@ export async function advanceSharingRuleRun(
 /** How long one request works on a rule before it answers and the page asks again. */
 const RUN_BUDGET_MS = 20_000
 
-const MANAGERS_ONLY =
-  'Sharing records across sites is for the workspace’s owners and admins.'
+/** Names the permission, never a role (AGL-4047). */
+const MANAGERS_ONLY = crmSettingsPermissionRefusal()
 
 function readIds(raw: unknown): string[] | null {
   if (!Array.isArray(raw)) return null
@@ -589,10 +590,11 @@ function readIds(raw: unknown): string[] | null {
 /**
  * `POST /api/crm/sharing` — `{ action, hostId | orgId, … }`.
  *
- * Every action but `evaluate` is an org manager's: an OWNER or ADMIN of the
- * whole workspace (`authorizeOrgCaller(…, 'manage-org')`), under a site's
- * hub or the org's. `evaluate` is what a client-direct write owes the rules
- * and is open to whoever may write the CRM. The plan gate is the CRM's own
+ * Every action but `evaluate` asks "Change CRM settings" over the whole
+ * workspace (`authorizeOrgCaller(…, 'crm.settings')`, AGL-4047; owners and
+ * admins by default), under a site's hub or the org's. `evaluate` is what a
+ * client-direct write owes the rules and is open to whoever may write the
+ * CRM. The plan gate is the CRM's own
  * (`crmSuiteRefusal`): sharing is only meaningful across several sites, and
  * the number of sites a workspace may have is already the plan's.
  */
@@ -638,7 +640,7 @@ export const crmSharingHandler: PluginApiHandler = async (req, res) => {
       return
     }
     const caller = await authorizeOrgCaller(req, orgId, {
-      needs: 'manage-org',
+      needs: 'crm.settings',
       refusal: MANAGERS_ONLY,
     })
     if (caller.ok === false) {

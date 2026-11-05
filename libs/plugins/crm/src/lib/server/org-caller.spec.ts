@@ -56,7 +56,12 @@ jest.mock('@aglyn/tenant-data-admin', () => ({
 }))
 
 import { resolveOrgPermissions as mockResolveCatalog } from '@aglyn/aglyn'
+import { registerPluginPermissions } from '@aglyn/aglyn/plugin-manager/plugin-permissions'
+import { CRM_PERMISSIONS } from '../model/crm-permissions'
 import { authorizeOrgCaller, holdsDataManage } from './org-caller'
+
+// The CRM's key, as the declarations register it in every process.
+registerPluginPermissions(CRM_PERMISSIONS)
 
 const request = () =>
   ({
@@ -105,6 +110,40 @@ describe('the organization gate asks the catalog for data.manage (AGL-2843)', ()
     expect((await gate()).ok).toBe(false)
     verifyIdToken.mockImplementation(async () => ({ uid: 'support', staff: true }))
     expect(await gate()).toMatchObject({ ok: true, staff: true })
+  })
+})
+
+/**
+ * "CHANGE CRM SETTINGS" (`crm.settings`, AGL-4047): record sharing, the
+ * sharing rules and the capture address's rotation asked for an owner or
+ * admin of the whole workspace. They ask the key, whose default is exactly
+ * those roles, so a custom role or an override decides it for anyone org-wide,
+ * and staff acting alone still do not pass.
+ */
+describe('the organization gate asks "Change CRM settings" (AGL-4047)', () => {
+  const settings = () =>
+    authorizeOrgCaller(request(), 'org-1', { needs: 'crm.settings', refusal: 'Refused' })
+
+  it.each([
+    ['an owner', { role: 'owner' }, true],
+    ['an admin', { role: 'admin', allHosts: true }, true],
+    ['an editor', { role: 'editor', allHosts: true }, false],
+    ['a viewer', { role: 'viewer', allHosts: true }, false],
+    ['an editor whose own override grants it', { role: 'editor', allHosts: true, permissions: { 'crm.settings': true } }, true],
+    ['an admin whose own override refuses it', { role: 'admin', allHosts: true, permissions: { 'crm.settings': false } }, false],
+    [
+      'a site collaborator granted it: the reach refuses',
+      { role: 'editor', allHosts: false, hostAccess: { 'host-1': 'admin' }, permissions: { 'crm.settings': true } },
+      false,
+    ],
+  ])('%s: %s', async (_name, member, admitted) => {
+    members.set('org-1:caller', member)
+    expect((await settings()).ok).toBe(admitted)
+  })
+
+  it('refuses staff acting alone, as it always has', async () => {
+    verifyIdToken.mockImplementation(async () => ({ uid: 'support', staff: true }))
+    expect(await settings()).toEqual({ ok: false, status: 403, error: 'Refused' })
   })
 })
 

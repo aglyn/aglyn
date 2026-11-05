@@ -93,7 +93,12 @@ export const TS_ROLE_GATE = [
  * `publisherManager`, `listingManager` and `canReadOutreach`, which ask
  * "Edit the publisher profile", "Manage published listings" and "Use
  * Sequences" alone, nor `canReadScopedPeople` and
- * `isOrgWideAudienceManager`, which ask "Manage data" alone.
+ * `isOrgWideAudienceManager`, which ask "Manage data" alone. `canManageOrg`
+ * stays on the pattern so it cannot come back: it is gone, and every rule
+ * that asked it asks a key (the workspace document's fields "Organization
+ * settings" and "Change CRM settings", the subscription "View billing",
+ * invites "Manage members", plugin settings "Organization settings", a
+ * consent group change both of its keys, ownership claims "Bring a site in").
  */
 export const RULES_ROLE_GATE = [
   String.raw`\b(canManageOrg|canWriteOrgData|canWriteOrgWideData)\(`,
