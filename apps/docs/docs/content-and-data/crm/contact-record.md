@@ -223,6 +223,7 @@ type the person's email address back before it files anything:
 | --- | --- |
 | **Removed across the workspace** | The contact record on every site — profile (birthdate, phones and addresses included), notes, tags, timeline and custom fields; any other contact's **Reports to** that named the person; every lead for the address on every site; the tasks and logged activities filed against the person; the person on any email audience list; the campaign delivery log for the address, with its opens and clicks. |
 | **Kept, with the person taken off** | Orders and bookings stay as financial and appointment records with the name, email, phone and addresses removed. Deals stay on the pipeline, unlinked from the person and taken off their contact roles. Companies stay, with their contact count reduced. |
+| **Kept as they are, with the person still on them** | Listed only when your workspace holds such records. Signed waivers stay as signed for your [waiver retention period](../../commerce-and-bookings/commerce/waivers.md#keeping-signed-waivers), then are deleted. |
 | **Not reached — finish these by hand** | Form submissions, which keep the address inside the answers under whatever the form called the field — delete them from the Inbox. A site member account, which is the person's own login — close it from the site's Members page. |
 
 Two things follow the click at once, before anything is deleted. The address

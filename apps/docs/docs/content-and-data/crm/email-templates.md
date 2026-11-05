@@ -83,7 +83,7 @@ listing's ceiling applies to copies as it does to new templates.
 | | Who sees it | Who can change or delete it |
 | --- | --- | --- |
 | **Shared** | Everyone who can send email from the CRM. | Any CRM editor, and any org-wide member. |
-| **Personal** | You alone. | You, and an org-wide owner or admin tidying up. |
+| **Personal** | You alone. | You, and any org-wide member who holds **Manage data** and **Change colleagues' email templates** tidying up. Every role holds the second by default. |
 
 A personal template is your own working arrangement, the way a private
 [saved view](./views.md) is: it is kept out of colleagues' menus rather than

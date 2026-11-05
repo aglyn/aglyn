@@ -101,7 +101,7 @@ import {
   type PicklistValueSet,
 } from './picklists'
 import { MAX_SCOPE_HOSTS, ORG_SCOPE_TOKEN, type ScopeToken } from './scope-tokens'
-import { isKnownContactSource } from '../plugin-manager/plugin-contact-capture'
+import { isKnownContactSource, labelContactSource } from '../plugin-manager/plugin-contact-capture'
 
 // The fixed vocabularies and their guards live in a leaf module; every name
 // stays importable from here.
@@ -2714,10 +2714,6 @@ export interface CrmAssignmentSettings {
   hostDefaultOwners: Record<string, string>
 }
 
-function isContactSourceValue(value: unknown): value is ContactSource {
-  return typeof value === 'string' && value in CONTACT_SOURCE_LABELS
-}
-
 function cleanText(value: unknown, max: number): string | undefined {
   const text = typeof value === 'string' ? value.trim().slice(0, max) : ''
   return text || undefined
@@ -2734,7 +2730,11 @@ export function readCrmAssignmentRule(raw: unknown): CrmAssignmentRule | null {
       ? (entry['when'] as Record<string, unknown>)
       : {}
   const when: CrmAssignmentRuleWhen = {}
-  if (isContactSourceValue(whenRaw['source'])) when.source = whenRaw['source']
+  // Any word, not only one this process can name. A capture's source is an open
+  // word a plugin declares, and a rule that lost this clause would claim every
+  // capture: an unknown word matches no door, which is the narrow way to be wrong.
+  const source = cleanText(whenRaw['source'], 64)
+  if (source) when.source = source as ContactSource
   const formId = cleanText(whenRaw['formId'], 128)
   if (formId) when.formId = formId
   // A person types a domain the way they see one in an address — `@acme.com`
@@ -2883,7 +2883,7 @@ export function describeAssignmentRule(
   memberLabel: (uid: string) => string,
 ): { when: string; assign: string } {
   const parts: string[] = []
-  if (rule.when.source) parts.push(`source is ${CONTACT_SOURCE_LABELS[rule.when.source]}`)
+  if (rule.when.source) parts.push(`source is ${labelContactSource(rule.when.source)}`)
   if (rule.when.formId) parts.push(`form is ${rule.when.formId}`)
   if (rule.when.emailDomain) parts.push(`email domain is ${rule.when.emailDomain}`)
   if (rule.when.tag) parts.push(`tagged ${rule.when.tag}`)

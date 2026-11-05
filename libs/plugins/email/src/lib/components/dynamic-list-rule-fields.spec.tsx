@@ -38,6 +38,8 @@ import {
   EMPTY_RULE_DRAFT,
   type DynamicListRuleDraft,
 } from './dynamic-list-rule-fields'
+import { registerPluginContactSource } from '@aglyn/aglyn/plugin-manager/plugin-contact-capture'
+import { unregisterPluginServices } from '@aglyn/aglyn/plugin-manager/plugin-services'
 import {
   DYNAMIC_LIST_MAX_CUSTOM_CLAUSES,
   DYNAMIC_LIST_MAX_GROUPS,
@@ -553,6 +555,17 @@ describe('the CRM dimensions in the form', () => {
 describe('the rule reads back as sentences', () => {
   const clauses = (rule: Parameters<typeof describeDynamicListRule>[0]) =>
     describeDynamicListRule(rule).join(' ')
+
+  it('names a plugin\'s capture source by its label', () => {
+    registerPluginContactSource({ source: 'kiosk', label: 'Guest book' }, { pluginId: 'kiosk' })
+    try {
+      expect(
+        clauses({ sources: ['contacts'], captureSources: ['kiosk' as never] }),
+      ).toContain('Captured by: Guest book.')
+    } finally {
+      unregisterPluginServices('kiosk')
+    }
+  })
 
   it('says which lean each engagement arm takes', () => {
     // The reason it is spelled out: `notOpenedForDays` counts somebody with
