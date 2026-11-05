@@ -603,6 +603,17 @@ async function handler(request: Request): Promise<Response> {
         lastIssueError: record.lastIssueError ?? null,
       })),
       canManage,
+      // The domains route's own key, not this route's (AGL-4047): Check DNS,
+      // Request records, Add and Remove go there. Asked on the read only, which
+      // is the one verb that reports it.
+      canManageDomains:
+        staff ||
+        (Boolean(orgId) &&
+          (await memberHasOrgPermission(
+            orgId,
+            membership?.member,
+            'org.sendingDomains',
+          ).catch(() => false))),
       entitled,
       dedicated,
     })

@@ -189,6 +189,7 @@ beforeEach(() => {
     options: [],
     domains: [],
     canManage: true,
+    canManageDomains: true,
     entitled: true,
     dedicated: { available: true, proposed: 'acme.mail.aglyn.app' },
   }
@@ -321,12 +322,14 @@ describe('what a reader may do is what the server says they may do', () => {
     expect(screen.getByText('Add domain')).toBeTruthy()
   })
 
-  it('hides Add domain from somebody who cannot manage, and says so', async () => {
-    identity = { ...identity, canManage: false }
+  it('switches Add domain off for somebody without its key, naming it', async () => {
+    identity = { ...identity, canManage: false, canManageDomains: false }
 
     await mount()
 
-    expect(screen.queryByText('Add domain')).toBeNull()
+    expect((screen.getByText('Add domain') as HTMLButtonElement).disabled).toBe(true)
+    expect(screen.getByLabelText(/does not include "Sending domains"/)).toBeTruthy()
+    expect(screen.queryByText('Add sender')).toBeNull()
     expect(screen.getByText(/does not include "Organization settings"/)).toBeTruthy()
   })
 
@@ -479,8 +482,9 @@ describe('the row menu offers only what the routes will accept', () => {
    * than a shorter menu that leaves them wondering whether the console can do
    * these things at all.
    */
-  it('inerts the domains-route actions for somebody who cannot manage', async () => {
-    identity.canManage = false
+  it('inerts the domains-route actions for somebody without their key', async () => {
+    identity.canManage = true
+    identity.canManageDomains = false
     identity.domains = [
       { domain: 'acme.com', status: 'verified', records: [] },
     ]
@@ -489,8 +493,10 @@ describe('the row menu offers only what the routes will accept', () => {
     expect(menuItem(/Check DNS/i).disabled).toBe(true)
     expect(menuItem(/Remove domain/i).disabled).toBe(true)
     expect(menuItem(/Remove domain/i).getAttribute('title')).toMatch(
-      /does not include "Organization settings"/,
+      /does not include "Sending domains"/,
     )
+    // The identity route's own action follows its own key.
+    expect(menuItem(/Send this site/i).disabled).toBe(false)
     // Opening it is still offered — reading a domain's records needs nothing.
     expect(
       screen.getByRole('link', { name: 'Open domain' }),

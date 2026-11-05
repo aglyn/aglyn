@@ -111,6 +111,7 @@ beforeEach(() => {
           options: [],
           domains: [],
           canManage: true,
+          canManageDomains: true,
           entitled: true,
         }),
       } as any

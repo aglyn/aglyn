@@ -416,8 +416,10 @@ That site stops sending altogether, receipts included, until you choose another 
 way to fail. Removing the domain **we set up** is the gentler case: receipts go back to
 the shared address, where campaigns are held to the tighter complaint and bounce limits.
 
-Adding a domain takes the **Sending domains** permission, and choosing what a site sends as
-takes **Organization settings**. Owners and admins hold both by default.
+Adding a domain, **Request records**, **Check DNS** and removing a domain take the **Sending
+domains** permission, and choosing what a site sends as takes **Organization settings**.
+Owners and admins hold both by default. A control you don't hold the permission for is
+switched off and names it.
 
 #### A domain on your organization's Emails page {#org-sending-domain}
 
