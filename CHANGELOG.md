@@ -71,6 +71,23 @@ content on the marketing site and is written separately.
 
 9 commit(s) did not parse as conventional commits (merge commits and the like) and did not contribute to the version bump.
 
+### Added while this release was open
+
+- feat(commerce): add a quote proof from the media library, and send one before a price ([AGL-4184](https://linear.app/aglyn/issue/AGL-4184))
+- feat(sharing): rules freeze the all-sites-except marker, no one-site verdict on it ([AGL-4047](https://linear.app/aglyn/issue/AGL-4047))
+- feat(data): hub Import switches off naming the key; a dataset's asks its placement ([AGL-4047](https://linear.app/aglyn/issue/AGL-4047))
+- feat(sites): a site's role picker, Remove and Add also open for site.manage ([AGL-4047](https://linear.app/aglyn/issue/AGL-4047))
+- feat(media): upload, folders, replace, file info, usage scan answer to the library key ([AGL-4047](https://linear.app/aglyn/issue/AGL-4047))
+- fix(native): order, shift and message times show device time, not UTC ([AGL-4162](https://linear.app/aglyn/issue/AGL-4162))
+- fix(native): a stay's Only N left follows Sleeps, as the console's dialog has it ([AGL-4044](https://linear.app/aglyn/issue/AGL-4044))
+- fix(native): the role editor and gates know the four dataset permissions ([AGL-4047](https://linear.app/aglyn/issue/AGL-4047))
+- fix(plugins): a refused integration card keeps its help link ([AGL-2213](https://linear.app/aglyn/issue/AGL-2213))
+- fix(settings): Import & export holds while permissions load, spelled as the gate sweep reads it ([AGL-4047](https://linear.app/aglyn/issue/AGL-4047))
+- fix: media URLs keep working under all sites except, and legacy paths name the site ([AGL-4047](https://linear.app/aglyn/issue/AGL-4047))
+- docs: media, site users and import pages say which permission each control takes ([AGL-4047](https://linear.app/aglyn/issue/AGL-4047))
+- test(permissions): refusal specs read the permission's name; the refusal sweep pairs each site door's key with the key it names ([AGL-4047](https://linear.app/aglyn/issue/AGL-4047))
+- test(console): setup mocks gain the entitlements subscription; the nav spec reads screens, not permission keys ([AGL-4047](https://linear.app/aglyn/issue/AGL-4047))
+
 ## v1.12.0 — 2026-11-05
 
 [Compare with the previous release](https://github.com/aglyn/aglyn/compare/v1.11.0...v1.12.0)
