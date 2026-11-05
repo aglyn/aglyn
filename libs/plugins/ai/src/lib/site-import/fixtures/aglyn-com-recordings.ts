@@ -107,11 +107,12 @@ export function aglynSitemapUrls(): string[] {
 /**
  * A page of aglyn.com that was not recorded, padded to `bytes`: a title, a
  * heading and a paragraph that say which page it is, so the inventory has
- * words to list, then a comment the extractor throws away.
+ * words to list (its whole path, as two pages of one last segment are two
+ * pages), then a comment the extractor throws away.
  */
 export function aglynSyntheticPage(path: string, bytes = AGLYN_AVERAGE_PAGE_BYTES): string {
   const name = path.split('/').filter(Boolean).pop() ?? 'home'
-  const head = `<!DOCTYPE html><html lang="en"><head><title>${name} | ${AGLYN_DOMAIN}</title><meta name="description" content="The ${name} page."></head><body><main><h1>${name}</h1><p>This is the ${name} page of ${AGLYN_DOMAIN}, recorded as a stand-in.</p></main>`
+  const head = `<!DOCTYPE html><html lang="en"><head><title>${name} | ${AGLYN_DOMAIN}</title><meta name="description" content="The ${name} page."></head><body><main><h1>${name}</h1><p>This is the ${path} page of ${AGLYN_DOMAIN}, recorded as a stand-in.</p></main>`
   const tail = '</body></html>'
   const pad = Math.max(0, bytes - head.length - tail.length - 7)
   return `${head}<!--${'x'.repeat(pad)}-->${tail}`

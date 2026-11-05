@@ -102,6 +102,7 @@ import {
   siteImportApprovedHostsWith,
   aiSiteImportWaveMessage,
   aiSiteImportWaveChoice,
+  aiSiteImportOtherAddresses,
   aiSiteImportWaveStamped,
   aiSiteImportWordsKept,
   aiSiteImportWaveStarted,
@@ -404,10 +405,15 @@ function aiSiteImportDesignInputs(state: AiSiteImportState): Record<string, unkn
  * the source's own address, so a button that leaves the source leaves the
  * new site too. `null` for an address no link may carry.
  */
-export function aiSiteImportFrameLinkTo(state: Pick<AiSiteImportState, 'domain' | 'pages'>, wave: number): (href: string | null | undefined) => AiLayoutFrameSourceTo | null {
+export function aiSiteImportFrameLinkTo(state: Pick<AiSiteImportState, 'domain' | 'pages'> & Partial<Pick<AiSiteImportState, 'leftOut'>>, wave: number): (href: string | null | undefined) => AiLayoutFrameSourceTo | null {
   const origins = new Set(siteImportOrigins(state.domain))
   const key = (path: string) => path.replace(/\/+$/, '') || '/'
   const pages = new Map(state.pages.filter((page) => !page.refused).map((page) => [key(page.path), page]))
+  // A link to another address of a kept page goes to that page (AGL-4152).
+  for (const other of aiSiteImportOtherAddresses(state)) {
+    const page = pages.get(other.sameAs)
+    if (page && !pages.has(other.path)) pages.set(other.path, page)
+  }
   return (href) => {
     const raw = String(href ?? '').trim()
     if (!raw) return null
@@ -633,7 +639,14 @@ export function aiSiteImportDocumentFor(state: AiSiteImportState, page: AiSiteIm
     // Every page the import plans, in any wave (AGL-4107): a link to one still
     // to come shows its words until it is live. Home's own links are words: a
     // link home says home, which the source's words may not.
-    links: state.pages.filter((entry) => entry.slug !== '/' && !entry.refused).map((entry) => ({ path: entry.path.replace(/\/+$/, '') || '/', id: entry.draftId })),
+    links: [
+      ...state.pages.filter((entry) => entry.slug !== '/' && !entry.refused).map((entry) => ({ path: entry.path.replace(/\/+$/, '') || '/', id: entry.draftId })),
+      // Another address of a page goes to that page (AGL-4152).
+      ...aiSiteImportOtherAddresses(state).flatMap((other) => {
+        const target = state.pages.find((entry) => entry.slug !== '/' && !entry.refused && (entry.path.replace(/\/+$/, '') || '/') === other.sameAs)
+        return target ? [{ path: other.path, id: target.draftId }] : []
+      }),
+    ],
     origins: [`https://${state.domain}`, `https://www.${state.domain.replace(/^www\./, '')}`],
     ...(page.forms ? { forms: page.forms } : {}),
     // How the source lays it out (AGL-4106), which the site compiler builds it from (AGL-4107).
@@ -1021,7 +1034,11 @@ export function createAiJobImportStep(deps: AiSiteImportStepDeps = {}): AiJobSte
       )
       if (crawled.refused) return unspent({ failure: AI_SITE_IMPORT_COPY.badDomain })
       if (crawled.stoppedBy === 'robots-unreachable') return unspent({ review: waveReview(AI_SITE_IMPORT_COPY.robots(domain)) })
-      const skipped = crawled.skipped.map((entry) => ({ url: entry.url, reason: siteImportLeftOutReason(entry.reason, entry.status) }))
+      const skipped = crawled.skipped.map((entry) => ({
+        url: entry.url,
+        reason: siteImportLeftOutReason(entry.reason, entry.status),
+        ...(entry.sameAs ? { sameAs: entry.sameAs } : {}),
+      }))
       // Home first (AGL-4083): a site read without its home page plans nothing, quotes nothing and spends nothing.
       const verdict = aiSiteImportReadVerdict(crawled)
       const inventory = aiSiteImportInventory({

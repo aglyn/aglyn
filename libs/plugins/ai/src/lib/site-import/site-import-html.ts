@@ -175,6 +175,8 @@ export interface SiteImportExtract {
   description: string
   lang: string | null
   canonical: string | null
+  /** Its head asks search engines not to list it: `<meta name="robots" content="noindex">` (AGL-4152). */
+  noindex: boolean
   /** The share card, `og:image` (or `twitter:image`), as an absolute address (AGL-4083). */
   ogImage: string | null
   /** The site's own name, `og:site_name` (or `application-name`); empty when absent. */
@@ -1431,6 +1433,7 @@ export function extractSiteImportPage(
     description: '',
     lang: null,
     canonical: null,
+    noindex: false,
     ogImage: null,
     siteName: '',
     icons: [],
@@ -1492,6 +1495,8 @@ export function extractSiteImportPage(
       break
     }
   }
+
+  const noindex = readMetaValues(source, 'robots').some((value) => /\b(?:noindex|none)\b/i.test(value))
 
   const bodyStart = source.search(/<body\b/i)
   const body = bodyStart >= 0 ? source.slice(bodyStart) : source.replace(/<head\b[\s\S]*?<\/head\s*>/i, ' ')
@@ -1851,6 +1856,7 @@ export function extractSiteImportPage(
     description,
     lang,
     canonical,
+    noindex,
     ogImage,
     siteName,
     icons,
