@@ -212,6 +212,23 @@ private class PairingDevice : PosDeviceApi {
 
 class PosKioskItemTest {
   @Test
+  fun aChoicePricesOnThePickedVariant() {
+    val option = com.aglyn.contracts.ProductModifierOption(id = "o", name = "Canopy", priceCents = 500.0, priceCentsByVariant = mapOf("large" to 900.0))
+    assertEquals(900L, modifierOptionPriceCents(option, "large"))
+    assertEquals(500L, modifierOptionPriceCents(option, "small"))
+    assertEquals(500L, modifierOptionPriceCents(option, null))
+    assertEquals(500L, modifierOptionPriceCents(option, "default"))
+    val group = com.aglyn.contracts.ProductModifierGroup(id = "g", max = 1.0, min = 0.0, name = "Add", online = true, options = listOf(option))
+    val resolved = resolveLineModifiers("Tent", listOf(group), listOf(com.aglyn.contracts.ModifierSelection("g", "o")), "large") as ResolvedModifiers.Ok
+    assertEquals(900L, resolved.modifiers.single().priceCents)
+    val bad = group.copy(options = listOf(option.copy(priceCentsByVariant = mapOf("x" to 200_000.0))))
+    assertEquals("“Canopy” needs a price of $0 to $1,000 for each option it is priced by", modifierGroupsProblem(listOf(bad)))
+    val read = modifierGroupsFrom(listOf(mapOf("id" to "g", "name" to "Add", "min" to 0, "max" to 1, "online" to true, "options" to listOf(mapOf("id" to "o", "name" to "Canopy", "priceCents" to 500, "priceCentsByVariant" to mapOf("large" to 900))))))
+    assertEquals(true, read.single().online)
+    assertEquals(mapOf("large" to 900.0), read.single().options.single().priceCentsByVariant)
+  }
+
+  @Test
   fun aWordTypedMatchesAsTheCatalogSearchDoes() {
     for ((typed, expected) in listOf(
       "   " to true, "zeb" to true, "lat" to true, "  ZEBRA   latte " to true, "latte zeb" to true,

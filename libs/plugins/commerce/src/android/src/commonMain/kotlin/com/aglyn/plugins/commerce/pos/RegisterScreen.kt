@@ -610,7 +610,7 @@ private fun ItemSheetContent(model: RegisterModel, sheet: ItemSheet) {
                 }
                 model.sheet = sheet.copy(picks = others + mine.map { ModifierSelection(group.id, it) }, problem = null)
               },
-              label = { Text(if (option.priceCents > 0) "${option.name} +${money(option.priceCents.toLong(), model.currency)}" else option.name) },
+              label = { Text(if (modifierOptionPriceCents(option, variant.id) > 0) "${option.name} +${money(modifierOptionPriceCents(option, variant.id), model.currency)}" else option.name) },
               leadingIcon = if (on) ({ Icon(AglynIcons.named("check"), null, Modifier.size(18.dp)) }) else null,
               modifier = Modifier.heightIn(min = 40.dp).testTag("option-${group.id}-${option.id}"),
             )

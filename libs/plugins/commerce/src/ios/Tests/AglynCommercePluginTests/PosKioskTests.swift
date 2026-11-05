@@ -175,6 +175,24 @@ private final class PairingDevice: PosDeviceAPI, @unchecked Sendable {
 }
 
 final class PosKioskItemTests: XCTestCase {
+  func testAChoicePricesOnThePickedVariant() {
+    let option = ProductModifierOption(id: "o", name: "Canopy", priceCents: 500, priceCentsByVariant: ["large": 900])
+    XCTAssertEqual(modifierOptionPriceCents(option, variantID: "large"), 900)
+    XCTAssertEqual(modifierOptionPriceCents(option, variantID: "small"), 500)
+    XCTAssertEqual(modifierOptionPriceCents(option, variantID: nil), 500)
+    XCTAssertEqual(modifierOptionPriceCents(option, variantID: "default"), 500)
+    let group = ProductModifierGroup(id: "g", max: 1, min: 0, name: "Add", online: true, options: [option])
+    XCTAssertEqual(
+      resolveLineModifiers("Tent", [group], [ModifierSelection(groupId: "g", optionId: "o")], variantID: "large"),
+      .ok([LineModifier(groupID: "g", optionID: "o", group: "Add", name: "Canopy", priceCents: 900)], extraCents: 900))
+    let bad = ProductModifierGroup(
+      id: "g", max: 1, min: 0, name: "Add", options: [ProductModifierOption(id: "o", name: "Canopy", priceCents: 500, priceCentsByVariant: ["x": 200_000])])
+    XCTAssertEqual(modifierGroupsProblem([bad]), "“Canopy” needs a price of $0 to $1,000 for each option it is priced by")
+    let read = modifierGroups([["id": "g", "name": "Add", "min": 0, "max": 1, "online": true, "options": [["id": "o", "name": "Canopy", "priceCents": 500, "priceCentsByVariant": ["large": 900]]]]])
+    XCTAssertEqual(read.first?.online, true)
+    XCTAssertEqual(read.first?.options.first?.priceCentsByVariant, ["large": 900])
+  }
+
   func testAWordTypedMatchesAsTheCatalogSearchDoes() {
     for (typed, expected) in [
       ("   ", true), ("zeb", true), ("lat", true), ("  ZEBRA   latte ", true), ("latte zeb", true),
