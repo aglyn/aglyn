@@ -136,8 +136,9 @@ function isLine(block: SiteImportBlock): boolean {
 
 const BUTTON_CLASS = /(?:^|[\s_-])(?:btn|button)(?:$|[\s_-])|Button-root|wp-block-button__link|sqs-block-button-element|elementor-button|w-button/i
 const TEXT_BUTTON_CLASS = /MuiButton-text\b|btn-link\b|is-style-text/i
-const OUTLINED_CLASS = /MuiButton-outlined\b|btn-outline|is-style-outline|--outline|button--secondary|btn-secondary/i
-const FILLED_CLASS = /MuiButton-contained\b|btn-primary|button--primary|--solid|is-style-fill/i
+/** An element's own `--primary` or `--secondary` (AGL-4152), whatever it is called, never a longer name that starts so (`--primary-inverse`). */
+const OUTLINED_CLASS = /MuiButton-outlined\b|btn-outline|is-style-outline|--outline|--secondary(?=\s|$)|btn-secondary/i
+const FILLED_CLASS = /MuiButton-contained\b|btn-primary|--primary(?=\s|$)|--solid|is-style-fill/i
 const LANDMARK_TAGS = new Set(['section', 'article', 'aside'])
 const SECTION_CLASS = /(?:^|[\s_-])(?:section|page-section|wp-block-group|elementor-section|e-con|shopify-section|block-section)(?:$|[\s_-])/i
 const MUI_GRID_SIZE = /\bMuiGrid-grid-(xs|sm|md|lg|xl)-(\d+)\b/g
