@@ -24,7 +24,7 @@
  * quotes and invoices to customers".
  */
 
-import { fireEvent, render, screen, waitFor, within } from '@testing-library/react'
+import { cleanup, fireEvent, render, screen, waitFor, within } from '@testing-library/react'
 import type { ReactNode } from 'react'
 
 const mockFetch = jest.fn<Promise<{ ok: boolean; json: () => Promise<Record<string, unknown>> }>, unknown[]>(
@@ -157,6 +157,75 @@ describe('the Quotes card', () => {
     expect(screen.getByText('$300.00')).toBeTruthy()
     expect(screen.getByText('Draft')).toBeTruthy()
     expect(screen.getByText('plus tax at payment')).toBeTruthy()
+  })
+
+  /*
+   * The list says what the pay page will do (AGL-4162): `quotePayTax` against
+   * the store as it stands now, the same answer the dialog's notice reads.
+   */
+  describe('its "plus tax at payment" label', () => {
+    const LABEL = 'plus tax at payment'
+    const UNDECIDED = { kind: 'none', reason: 'undecided' }
+    const OWN_RATES = { mode: 'manual', origin: { country: 'US', state: 'TX' }, rates: [{ country: 'US', state: 'TX', pct: 10 }] }
+
+    function listed(
+      tax: Record<string, unknown>,
+      store: Record<string, unknown> | undefined,
+      order: Record<string, unknown> = {},
+    ) {
+      mockStore = store as Record<string, unknown>
+      mockQuotes = [{ ...QUOTE, ...order, quote: { ...QUOTE.quote, tax } }]
+      render(<HostQuotesCard hostId="site1" canEdit canSend />)
+      expect(screen.getByText('Quote #1042')).toBeTruthy()
+    }
+
+    it('shows for a quote saved at payment, whatever the store has chosen since', () => {
+      listed({ kind: 'at-payment' }, { tax: { mode: 'none' } })
+      expect(screen.getByText(LABEL)).toBeTruthy()
+    })
+
+    it('shows for a quote saved before the store chose, once it is on Stripe Tax', () => {
+      listed(UNDECIDED, { tax: { mode: 'stripe' } })
+      expect(screen.getByText(LABEL)).toBeTruthy()
+    })
+
+    it('stays off for a quote saved before the store chose “Don’t collect sales tax”', () => {
+      listed(UNDECIDED, { tax: { mode: 'none' } })
+      expect(screen.queryByText(LABEL)).toBeNull()
+    })
+
+    it('stays off for a quote saved before the store chose its own rates, which only a save prices', () => {
+      listed(UNDECIDED, { tax: OWN_RATES })
+      expect(screen.queryByText(LABEL)).toBeNull()
+    })
+
+    it('stays off for a quote saved at the store’s own rate', () => {
+      listed({ kind: 'rate', pct: 10, label: 'Texas sales tax' }, { tax: { mode: 'stripe' } })
+      expect(screen.queryByText(LABEL)).toBeNull()
+    })
+
+    it('stays off while the store has not chosen', () => {
+      listed(UNDECIDED, {})
+      expect(screen.queryByText(LABEL)).toBeNull()
+    })
+
+    it('goes by the saved basis until the store’s settings answer', () => {
+      listed(UNDECIDED, undefined)
+      expect(screen.queryByText(LABEL)).toBeNull()
+      cleanup()
+      listed({ kind: 'at-payment' }, undefined)
+      expect(screen.getByText(LABEL)).toBeTruthy()
+    })
+
+    it('stays off once a quote is paid, however it was saved', () => {
+      listed({ kind: 'at-payment' }, { tax: { mode: 'stripe' } }, { status: 'paid' })
+      expect(screen.queryByText(LABEL)).toBeNull()
+    })
+
+    it('stays off for a paid quote saved before the store chose, on Stripe Tax', () => {
+      listed(UNDECIDED, { tax: { mode: 'stripe' } }, { status: 'paid' })
+      expect(screen.queryByText(LABEL)).toBeNull()
+    })
   })
 
   it('invites the first quote when there are none', () => {
