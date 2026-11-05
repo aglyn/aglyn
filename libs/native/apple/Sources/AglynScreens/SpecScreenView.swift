@@ -241,7 +241,9 @@ struct SpecScreenBody: View {
     content
       .safeAreaInset(edge: .top) {
         if let notice {
+          // Opaque beneath its tint: the list scrolls under this inset, and its text must not show through.
           AglynNotice(notice.text, tone: notice.tone) { self.notice = nil }
+            .background(AglynColor.paper, in: RoundedRectangle(cornerRadius: AglynRadius.control, style: .continuous))
             .aglynContentEdges().padding(.top, AglynSpace.one)
             .transition(.move(edge: .top).combined(with: .opacity))
         }

@@ -38,7 +38,7 @@ public func registerCommerceNative(_ r: NativePluginRegistrar) {
     commerceRegisterScreen, title: "Register", requiresSite: true, apps: [.pos], icon: "dollarsign.circle",
     placement: .register
   ) { context, _ in
-    RegisterScreen(context: context)
+    RegisterGate(context: context)
   }
   r.screen(
     commerceCardReadersScreen, title: "Card readers", requiresSite: true, apps: [.pos], icon: "creditcard",

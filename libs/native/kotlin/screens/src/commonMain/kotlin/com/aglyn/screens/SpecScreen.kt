@@ -437,8 +437,12 @@ private fun SpecBodyContent(
         onRefresh = { scope.launch { refreshing = true; model.load(); refreshing = false } },
         modifier = Modifier.fillMaxSize().testTag("spec-${model.spec.id}"),
       ) {
+        // The notice is the list's first row: bring it into view, or a save at the foot of a long form says nothing.
+        val listState = androidx.compose.foundation.lazy.rememberLazyListState()
+        LaunchedEffect(notice) { if (notice != null) listState.animateScrollToItem(0) }
         LazyColumn(
           Modifier.fillMaxSize(),
+          state = listState,
           verticalArrangement = Arrangement.spacedBy(space(1.5f)),
           // The whole content area, on the content edge E (Zach 10/19: no capped column).
           contentPadding = androidx.compose.foundation.layout.PaddingValues(horizontal = com.aglyn.ui.paneInset(), vertical = space(2f)),

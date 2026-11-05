@@ -130,12 +130,24 @@ internal fun NoticeTone.status() = when (this) {
 
 @Composable
 fun RegisterScreen(context: NativePluginContext) {
+  // "Use the point of sale", on this store. The routes hold it too; this says so before a sale is rung up.
+  if (!com.aglyn.pluginhost.rememberMemberPermissions(context).can(REGISTER_PERMISSION)) {
+    com.aglyn.ui.EmptyState(
+      "Point of sale is off for you here",
+      body = com.aglyn.contracts.permissionRefusalText(REGISTER_PERMISSION),
+      icon = com.aglyn.ui.AglynIcons.named("lock"),
+      modifier = Modifier.testTag("pos-register-refused"),
+    )
+    return
+  }
   // A product's picture is a media reference (`media:<scope>/<id>`) or a path on the console: both read through the console.
   val pictures = remember(context.api.origin, context.hostId) {
     { value: String? -> value?.let { mediaPreviewUrl(it, context.api.origin, context.hostId) } }
   }
   CompositionLocalProvider(LocalPosPictures provides pictures) { RegisterScreenBody(context) }
 }
+
+const val REGISTER_PERMISSION = "managePos"
 
 @Composable
 private fun RegisterScreenBody(context: NativePluginContext) {

@@ -633,13 +633,26 @@ class FieldSpec private constructor(
      * choices, which make a select; `required` names the row flag; `kind` is the kind of a row with no flag set and
      * `initial` a template for its starting value; `{index}` in any template is the row's place in the list. With
      * `each` (a list of field templates, their strings rendered per row) every row draws all of them together.
+     * `only` is the path to a list of keys, keeping just those rows (`key`) and marking each group's first (`group`,
+     * `first`) anew, so a filtered catalog keeps its headings.
      */
+    private fun fieldRows(from: JsonElement, context: JsonElement): List<JsonElement> {
+      val rows = ScreenValues.rows(ScreenValues.lookup(from.str("items").orEmpty(), context))
+      val only = from.str("only") ?: return rows
+      val keep = ScreenValues.rows(ScreenValues.lookup(only, context)).map { ScreenValues.text(it) }.toSet()
+      val seen = mutableSetOf<String>()
+      return rows.filter { ScreenValues.text(it.obj("key")) in keep }.map { row ->
+        val record = row as? JsonObject ?: return@map row
+        JsonObject(record + ("first" to JsonPrimitive(seen.add(ScreenValues.text(row.obj("group"))))))
+      }
+    }
+
     fun parseAll(items: List<JsonElement>, context: JsonElement): List<FieldSpec> = items.flatMap { entry ->
       val from = entry.obj("fieldsFrom") ?: return@flatMap listOfNotNull(parse(entry))
       val perRow = from.arr("each")
       if (perRow.isNotEmpty()) {
         // `each`: a field template per entry, drawn for every row, so one row's fields sit together.
-        return@flatMap ScreenValues.rows(ScreenValues.lookup(from.str("items").orEmpty(), context)).withIndex().flatMap { (position, row) ->
+        return@flatMap fieldRows(from, context).withIndex().flatMap { (position, row) ->
           val scope = ScreenContext.with(ScreenContext.withItem(context, row), "index", JsonPrimitive(position))
           perRow.mapNotNull { template ->
             // `if`: this template only for the rows it holds on (a group's heading, once).
@@ -653,7 +666,7 @@ class FieldSpec private constructor(
           }
         }
       }
-      ScreenValues.rows(ScreenValues.lookup(from.str("items").orEmpty(), context)).withIndex().mapNotNull { (position, row) ->
+      fieldRows(from, context).withIndex().mapNotNull { (position, row) ->
         // `{index}` is the row's place in the list, for a key that names the row by position.
         val scope = ScreenContext.with(ScreenContext.withItem(context, row), "index", JsonPrimitive(position))
         val key = ScreenValues.render(from.str("key") ?: "{item.key}", scope).ifEmpty { return@mapNotNull null }
