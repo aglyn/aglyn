@@ -4078,11 +4078,13 @@ function importedItem(scope: SectionScope, block: AiLayoutBlock, item: AiLayoutI
     parts.push(tree.add(AI_ICON_COMPONENT_ID, { iconId: AI_ICON_LIBRARY.quote.id, size: '32' }, { color: 'primary.main' }, null, 'quoteMark'))
     parts.push(...paragraphs(scope, [item.text, ...(item.more ?? [])], 'body1', null, 'quote'))
     if (title) parts.push(tree.add('muiTypography', { children: title, variant: 'subtitle2', component: 'p', ...align(scope) }, null, null, 'attribution'))
+    if (item.links?.length) parts.push(itemLinks(scope, item.links))
   } else if (kind === 'stats') {
     const lead = figure || title
     if (lead) parts.push(tree.add('muiTypography', { children: lead, variant: 'h2', component: 'p', ...align(scope) }, accent(scope), null, 'figure'))
     if (figure && title) parts.push(titleNode())
     parts.push(...paragraphs(scope, [item.text, ...(item.more ?? [])], 'body2', muted(scope), 'label'))
+    if (item.links?.length) parts.push(itemLinks(scope, item.links))
   } else {
     if (item.picture) parts.push(itemPicture(scope, item.picture))
     const { lead, mark } = leadRow(scope, item, style)

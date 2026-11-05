@@ -1281,7 +1281,9 @@ function framingScore(source: SiteImportFidelitySource, built: Built, placement:
 
 /** The headings: each of the source's drawn as a heading (an `h1`–`h6`, or the question of an accordion). */
 function headingsScore(source: SiteImportFidelitySource, built: Built, placement: Placement): SiteImportFidelityCount {
-  const refs = source.layout.sections.flatMap((section: SiteImportLayoutSection) => section.lines).filter((ref) => source.blocks[ref]?.kind === 'heading')
+  // Words a source sets in a heading and groups as a customer's quote are that quote (AGL-4152), no part of the page's outline.
+  const quoted = new Set(source.layout.sections.flatMap((section) => layoutNodes(section.nodes)).flatMap((node) => (node.kind === 'group' && node.group === 'quotes' ? node.items.flatMap((item) => item.lines) : [])))
+  const refs = source.layout.sections.flatMap((section: SiteImportLayoutSection) => section.lines).filter((ref) => source.blocks[ref]?.kind === 'heading' && !quoted.has(ref))
   const kept = refs.filter((ref) => {
     const id = placement.of.get(ref)
     const node = id ? built.node(id) : undefined
