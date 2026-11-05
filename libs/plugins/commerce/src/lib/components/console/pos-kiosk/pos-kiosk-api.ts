@@ -131,6 +131,9 @@ export const kioskApi = {
       method: 'GET',
       query: { action: 'catalog', ...(categoryId ? { categoryId } : {}) },
     }),
+  /** A word typed at the menu, asked of the whole catalog. */
+  search: (token: string, search: string) =>
+    call<CommerceModel.PosKioskCatalog>(token, { method: 'GET', query: { action: 'catalog', search } }),
   sale: (token: string, orderId: string) =>
     call<{ sale: CommerceModel.PosKioskSale }>(token, { method: 'GET', query: { action: 'sale', orderId } }),
   checkout: (token: string, lines: CommerceModel.PosKioskLine[], attemptKey: string) =>

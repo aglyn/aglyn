@@ -169,22 +169,50 @@ function matchesFilter(stored: any, op: string, value: any): boolean {
   return false
 }
 
-function collectionRef(path: string, filters: Array<[string, string, any]> = []): any {
+/** A collection query's order, cursor and cap, read as Firestore reads them. */
+interface CollectionPaging {
+  order?: { field: string; desc: boolean }
+  after?: string
+  cap?: number
+}
+
+function collectionRef(
+  path: string,
+  filters: Array<[string, string, any]> = [],
+  paging: CollectionPaging = {},
+): any {
   const children = () =>
     [...fakeDocs.keys()].filter(
       (key) => key.startsWith(`${path}/`) && !key.slice(path.length + 1).includes('/'),
     )
   const query = {
     where: (field: string, op: string, value: any) =>
-      collectionRef(path, [...filters, [field, op, value]]),
-    limit: () => query,
-    orderBy: () => query,
+      collectionRef(path, [...filters, [field, op, value]], paging),
+    limit: (cap: number) => collectionRef(path, filters, { ...paging, cap }),
+    orderBy: (field: string, direction?: string) =>
+      collectionRef(path, filters, { ...paging, order: { field, desc: direction === 'desc' } }),
+    startAfter: (snapshot: { ref: { path: string } }) =>
+      collectionRef(path, filters, { ...paging, after: snapshot.ref.path }),
     get: async () => {
-      const docs = children()
-        .filter((key) =>
-          filters.every(([field, op, value]) => matchesFilter(fieldAt(fakeDocs.get(key), field), op, value)),
-        )
-        .map(snapshotOf)
+      let keys = children().filter((key) =>
+        filters.every(([field, op, value]) => matchesFilter(fieldAt(fakeDocs.get(key), field), op, value)),
+      )
+      if (paging.order) {
+        const { field, desc } = paging.order
+        const sign = desc ? -1 : 1
+        keys = [...keys].sort((a, b) => {
+          const left = fieldAt(fakeDocs.get(a), field) ?? 0
+          const right = fieldAt(fakeDocs.get(b), field) ?? 0
+          if (left !== right) return left < right ? -sign : sign
+          return a < b ? -sign : a > b ? sign : 0
+        })
+      }
+      if (paging.after) {
+        const at = keys.indexOf(paging.after)
+        keys = at >= 0 ? keys.slice(at + 1) : keys
+      }
+      if (paging.cap !== undefined) keys = keys.slice(0, paging.cap)
+      const docs = keys.map(snapshotOf)
       return { docs, empty: docs.length === 0, size: docs.length }
     },
     /** The aggregate count over the same filters. */

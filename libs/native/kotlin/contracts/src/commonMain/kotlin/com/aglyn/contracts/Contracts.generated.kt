@@ -2676,6 +2676,7 @@ data class PosKioskCatalog(
     val categories: List<PosKioskCategory>,
     val currency: String,
     val products: List<PosKioskProduct>,
+    val truncated: Boolean? = null,
 )
 
 @Serializable
