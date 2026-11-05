@@ -425,7 +425,8 @@ function OrgSendingDomainPage(
               {canManage
                 ? refusal
                 : 'The records to publish, and the checks that verify them, ' +
-                  'are shown to the organization’s owners and admins.'}
+                  'are shown to members holding "Sending domains", which owners ' +
+                  'and admins hold by default.'}
             </Alert>
           ) : record ? (
             <>

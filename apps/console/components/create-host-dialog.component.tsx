@@ -17,6 +17,7 @@
 'use client'
 
 import { trackEvent } from '@aglyn/aglyn/app-utils/analytics-events'
+import { permissionRefusalText } from '@aglyn/aglyn/app-utils/org-permissions'
 import { checkQuota } from '@aglyn/aglyn/app-utils/plan-entitlements'
 import { TENANT_APEX } from '@aglyn/aglyn/app-utils/host-naming'
 import {
@@ -878,8 +879,7 @@ function CreateSiteFlow({
             {blocked === 'limit'
               ? `Your plan includes ${quota?.limit === 1 ? 'one site' : `${quota?.limit} sites`}, and ` +
                 'this workspace is using all of them. Upgrade or add extra sites from Billing.'
-              : 'Your role in this workspace does not allow creating sites. Ask a workspace ' +
-                'owner or admin to create it, or to change your role.'}
+              : permissionRefusalText('hosts.create')}
           </Alert>
         </DialogContent>
         <DialogActions>

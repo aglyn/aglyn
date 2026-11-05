@@ -145,7 +145,7 @@ export function createOutreachStepTestRoute(
       return outreachRefusal(
         403,
         'permission',
-        "Only the member who connected this sequence's mailbox, or an organization owner or admin, can send a test from it.",
+        `Only the member who connected this sequence's mailbox, or a member holding "Manage everyone’s Sequences", can send a test from it.`,
       )
     }
     const to = typed ?? caller.email

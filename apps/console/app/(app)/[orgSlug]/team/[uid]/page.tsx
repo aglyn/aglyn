@@ -57,6 +57,7 @@ import { buildRoute, Route } from '../../../../../constants/route-links'
 import { CONTENT_MAX_WIDTH } from '../../../../../constants/shared'
 import useBranding from '../../../../../hooks/use-branding'
 import { useOrgScope, useOrgSlug } from '../../../../../hooks/use-org-scope'
+import { permissionRefusalText } from '@aglyn/aglyn/app-utils/org-permissions'
 import useOrgPermissions from '../../../../../hooks/use-org-permissions'
 
 /**
@@ -500,7 +501,7 @@ const TeamMemberDetail: NextPageWithLayout<Record<string, never>> = () => {
                   </>
                 ) : !canManage ? (
                   <Alert severity="info">
-                    {'Editing members requires the admin role.'}
+                    {permissionRefusalText('members.manage')}
                   </Alert>
                 ) : (
                   <Alert severity="info">

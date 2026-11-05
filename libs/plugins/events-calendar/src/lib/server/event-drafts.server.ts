@@ -16,6 +16,7 @@
  */
 
 import { checkEntitlement } from '@aglyn/aglyn/app-utils/plan-entitlements'
+import { orgPermissionLabel } from '@aglyn/aglyn/app-utils/org-permissions'
 import { holdsSiteKey, siteKeyRefusal } from '@aglyn/aglyn/app-utils/host-permissions'
 import type {
   PluginDraftContext,
@@ -85,7 +86,7 @@ export const EVENT_DRAFT_PLAN_REFUSAL =
 
 /** Why an event a member wrote was kept as a draft: they may write the site, not publish it. */
 export const EVENT_DRAFT_UNPUBLISHED_NOTICE =
-  'Kept as a draft: publishing an event takes the editor role, so someone who has it publishes it on the Events page.'
+  `Kept as a draft: publishing an event takes the "${orgPermissionLabel('site.publish')}" permission, so someone who holds it publishes it on the Events page.`
 
 /** The refusal for a start that is not after the write. */
 export function eventDraftPastRefusal(wallText: string): string {

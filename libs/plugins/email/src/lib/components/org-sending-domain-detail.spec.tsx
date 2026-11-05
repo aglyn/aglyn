@@ -229,7 +229,7 @@ describe('a domain opened on the organization’s page', () => {
     expect(screen.getByText('Store')).toBeTruthy()
     expect(screen.queryByText('Publish these records')).toBeNull()
     expect(
-      screen.getByText(/shown to the organization’s owners and admins/),
+      screen.getByText(/shown to members holding "Sending domains"/),
     ).toBeTruthy()
     // An editor is offered no control the route would refuse.
     expect(screen.queryByText('Stop sending as this domain')).toBeNull()

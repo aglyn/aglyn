@@ -364,7 +364,8 @@ jest.mock('../components/host-id-provider', () => ({
   // The Admin sections layout draws its rail only for a site admin, and the
   // Basic details form is behind it. A non-admin gets the refusal notice, and
   // there would be no form to type into.
-  useIsHostAdmin: () => true,
+  useCanManageSite: () => true,
+  useCanManageSiteKnown: () => true,
 }))
 jest.mock('../hooks/use-org-scope', () => ({ useOrgSlug: () => 'acme' }))
 // The SEO section hands its `hostSeo` plugin zone the org the site belongs to

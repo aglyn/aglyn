@@ -168,7 +168,7 @@ export function createOutreachLinkDomainsRoute(
       return outreachRefusal(400, 'invalid-request', 'Say whether to set the link domain up, check it, or remove it.')
     }
     if (action !== 'check' && !gate.isOrgAdmin) {
-      return outreachRefusal(403, 'permission', 'Only an owner or an admin can change link domains.')
+      return outreachRefusal(403, 'permission', 'Your role does not include "Manage everyone’s Sequences" — ask an organization admin')
     }
     const checked = validateTrackingHostDomain(String(body['domain'] ?? ''))
     if (!checked.domain) {

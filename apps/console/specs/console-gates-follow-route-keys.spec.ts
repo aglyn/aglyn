@@ -101,7 +101,7 @@ describe('console gates ask the key their route checks (AGL-4047)', () => {
     // behavior is `site-plugin-refusal-follows-the-key.spec.tsx`.
     const page = read('app/(app)/[orgSlug]/hosts/[host]/admin/plugins/[pluginRef]/page.tsx')
     expect(page).toContain("permissionRefusalText('site.manage')")
-    expect(page).toContain('adminKnown && !isAdmin')
+    expect(page).toContain('canManageSiteKnown && !canManageSite')
     expect(page).not.toContain('Only site admins')
     expect(read('components/host-id-provider.tsx')).toContain(
       "hostStampedSitePermission(host, uid, 'site.manage', CORE_SITE_ROLE_PRESETS['site.manage'])",

@@ -85,7 +85,7 @@ describe('the door a list reads', () => {
     const member = aiCreateDoorView(door({ entitled: false, purchasable: true, canManageBilling: false }))
     expect(member.upsell?.action).toBeNull()
     expect(member.upsell?.dismiss).toBe('Close')
-    expect(member.upsell?.offer).toContain('Ask a workspace owner or admin')
+    expect(member.upsell?.offer).toContain('Ask a member holding "Manage billing"')
   })
 
   it('says every word the console’s brief dialog says, with the kind’s own chips', () => {

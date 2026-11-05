@@ -136,7 +136,8 @@ export function DataExportCard({ user, orgId, description }: DataExportCardProps
               ? 'A machine-readable JSON copy of everything this workspace ' +
                 'holds — its sites and their content, datasets, contacts, ' +
                 'orders, form submissions, members, support threads and ' +
-                'billing identifiers. Owners and admins only.'
+                'billing identifiers. Downloading it takes the "Export workspace data" ' +
+                'permission, which owners and admins hold by default.'
               : 'A machine-readable JSON copy of everything we hold about ' +
                 'you — your profile, contact details, workspace memberships, ' +
                 'passkeys, public handle and the support messages you wrote.')}

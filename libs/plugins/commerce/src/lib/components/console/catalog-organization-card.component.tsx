@@ -1327,7 +1327,7 @@ export function CatalogOrganizationCard(props: CatalogOrganizationCardProps) {
           `Storefront blocks pointing at "${row.name}" go empty. The delete ` +
           'is refused while the collection still has entries, or while a ' +
           'page uses it as a list or entry template — empty it and detach ' +
-          'those pages first. It also takes the site admin role.',
+          'those pages first. It also takes the "Manage site settings" permission.',
         confirmationText: 'Delete',
         confirmationButtonProps: { color: 'error' },
       })

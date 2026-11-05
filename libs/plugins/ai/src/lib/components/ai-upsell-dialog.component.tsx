@@ -67,7 +67,7 @@ export interface AiUpsellDialogProps {
 const aiUpsellHelp = () =>
   pluginDocsHelp('aiCreate', {
     anchor: '#without-the-add-on',
-    excerpt: `On every paid plan, Create with AI runs on the AI credits the plan includes. Where it is switched off for a workspace, ${aiAddonName()} credits switch it on; an owner or admin adds them in Billing.`,
+    excerpt: `On every paid plan, Create with AI runs on the AI credits the plan includes. Where it is switched off for a workspace, ${aiAddonName()} credits switch it on; a member holding Manage billing adds them in Billing.`,
   })
 
 export function AiUpsellDialog({ kind, open, onClose, upgrade }: AiUpsellDialogProps) {

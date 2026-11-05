@@ -742,7 +742,7 @@ export function OrderDetailDialog(props: OrderDetailDialogProps) {
         console.error(error)
         enqueueSnackbar(
           'The answer was not recorded — it needs a live connection and the ' +
-            'editor or admin role. Nothing changed; answering again is safe.',
+            '"Edit site content" permission. Nothing changed; answering again is safe.',
           { variant: 'error', allowDuplicate: true },
         )
       } finally {

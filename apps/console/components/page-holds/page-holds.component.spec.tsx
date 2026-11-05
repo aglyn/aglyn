@@ -163,7 +163,7 @@ describe('the banner in an editor', () => {
   it('tells a member who cannot ask for a review who can', () => {
     const { container } = renderBanner({ type: 'screen', id: 'IhmjX3ymSg' }, false)
     expect(screen.queryByText('Request a review')).toBeNull()
-    expect(container.textContent).toContain('A workspace owner or admin can request a review.')
+    expect(container.textContent).toContain('Requesting a review takes the "Holds and reviews" permission, which owners and admins hold by default.')
   })
 
   it('pairs holds with the documents they are shown on', () => {

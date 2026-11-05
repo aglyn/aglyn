@@ -237,7 +237,7 @@ export function presenceFaultNotice(fault: PresenceFault | null): PresenceNotice
           'You can edit this page, but this account was not admitted to ' +
           'its live session.',
         remedy:
-          'Ask an admin of this site to check your access, then reload. ' +
+          'Ask a member holding "Manage members" to check your access, then reload. ' +
           'Your editing permissions are unchanged either way.',
         caution,
         detail,
