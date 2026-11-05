@@ -76,3 +76,28 @@ export function isOwnListingInstall(facts: {
     landsInPublisherWorkspace(facts.publisherOrgId, facts.targetOrgId)
   )
 }
+
+/**
+ * A member of the publishing workspace, buying for any other workspace: the
+ * sale refuses them whichever workspace it is for (`server/sale.ts`, AGL-3365),
+ * so the console switches Buy off for them rather than let them find out
+ * afterward. On the publisher's own sites there is nothing to buy: the waiver
+ * above makes it free, so this is false there.
+ */
+export function isPublisherMemberElsewhere(facts: {
+  publisherOrgId: unknown
+  targetOrgId: unknown
+  /** `isPublisherMember` for the person asking, in the publishing workspace. */
+  publisherMember: boolean
+}): boolean {
+  return (
+    facts.publisherMember === true &&
+    !landsInPublisherWorkspace(facts.publisherOrgId, facts.targetOrgId)
+  )
+}
+
+/** Why Buy is off for a member of the publishing workspace, in one sentence. */
+export function publisherMemberBuyReason(publisherName: unknown): string {
+  const name = typeof publisherName === 'string' ? publisherName.trim() : ''
+  return `Someone in this workspace who isn't in ${name || 'the publishing workspace'} needs to buy it.`
+}

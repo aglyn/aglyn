@@ -48,7 +48,8 @@ import {
   siteStarterSearchTokens,
   siteStarterSummaryOf,
 } from '../model/site-starter-listing'
-import { ownsListingHere } from './own-listing'
+import { publisherMemberBuyReason } from '../model/own-listing'
+import { memberOfPublisherElsewhere, ownsListingHere } from './own-listing'
 import { PUBLISHER_PROFILES } from './publisher-profile'
 import { hasLivePurchase, requirePurchase } from './purchase-entitlement'
 import { isPublisherSecurityLocked } from './sale-risk'
@@ -179,9 +180,37 @@ async function ownedBy(
   return hasLivePurchase({ firestore, buyerUid, buyerOrgId, listingId })
 }
 
-/** A summary with `owned` set where the listing has a price, and left out where it has none. */
-const withOwned = (summary: SiteStarterSummary, owned: boolean | undefined): SiteStarterSummary =>
-  owned === undefined ? summary : { ...summary, owned }
+/**
+ * Why this viewer's Buy is off, for a priced starter they do not own: they
+ * belong to the publisher, and the sale refuses that (AGL-4047). `undefined`
+ * for anyone who can buy it, and for a starter with nothing to buy.
+ */
+async function buyBlockedReasonFor(
+  firestore: FirebaseFirestore.Firestore,
+  listing: ListingDoc,
+  viewer: SiteStarterViewer,
+  owned: boolean | undefined,
+  authorName: string,
+): Promise<string | undefined> {
+  if (owned !== false) return undefined
+  const member = await memberOfPublisherElsewhere(firestore, {
+    uid: String(viewer?.uid ?? ''),
+    publisherOrgId: listing.profileId,
+    targetOrgId: viewer?.orgId,
+  })
+  return member ? publisherMemberBuyReason(authorName) : undefined
+}
+
+/** A summary with what this viewer's answer says of buying it, left out where it says nothing. */
+const withOwned = (
+  summary: SiteStarterSummary,
+  owned: boolean | undefined,
+  buyBlockedReason?: string,
+): SiteStarterSummary => ({
+  ...summary,
+  ...(owned === undefined ? {} : { owned }),
+  ...(buyBlockedReason ? { buyBlockedReason } : {}),
+})
 
 /**
  * What anyone may see: the search asks the public audience only, so who is
@@ -232,11 +261,16 @@ async function search(
     firestore,
     ordered.map(({ listing }) => String(listing['profileId'] ?? '')),
   )
-  const owned = await Promise.all(
-    ordered.map(({ id, listing }) => ownedBy(firestore, id, listing, viewer ?? { orgId: null, uid: '' })),
+  const asker = viewer ?? { orgId: null, uid: '' }
+  const owned = await Promise.all(ordered.map(({ id, listing }) => ownedBy(firestore, id, listing, asker)))
+  const authorOf = (listing: ListingDoc) => names.get(String(listing['profileId'] ?? '')) ?? ''
+  const blocked = await Promise.all(
+    ordered.map(({ listing }, index) =>
+      buyBlockedReasonFor(firestore, listing, asker, owned[index], authorOf(listing)),
+    ),
   )
   return ordered.map(({ id, listing }, index) =>
-    withOwned(siteStarterSummaryOf(id, listing, names.get(String(listing['profileId'] ?? '')) ?? ''), owned[index]),
+    withOwned(siteStarterSummaryOf(id, listing, authorOf(listing)), owned[index], blocked[index]),
   )
 }
 
@@ -260,7 +294,9 @@ async function describe(
   const profileId = String(listing['profileId'] ?? '')
   const names = await authorNames(firestore, [profileId])
   const owned = await ownedBy(firestore, listingId, listing, viewer, publishes)
-  return withOwned(siteStarterSummaryOf(listingId, listing, names.get(profileId) ?? ''), owned)
+  const authorName = names.get(profileId) ?? ''
+  const blocked = await buyBlockedReasonFor(firestore, listing, viewer, owned, authorName)
+  return withOwned(siteStarterSummaryOf(listingId, listing, authorName), owned, blocked)
 }
 
 async function resolve(

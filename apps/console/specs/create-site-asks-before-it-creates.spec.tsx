@@ -732,6 +732,11 @@ describe('AGL-4049 lane 3 · Choose your starter, behind release_site_starters',
     pick(PAID)
     expect(createButton().disabled).toBe(true)
     expect(screen.getByText('Buy this starter to create your site from it.')).toBeTruthy()
+    // A person the sale would refuse is not told to buy it (AGL-4047).
+    pick({ ...PAID, owned: false, buyBlockedReason: 'Someone else needs to buy it.' })
+    expect(createButton().disabled).toBe(true)
+    expect(screen.getByText('Someone else needs to buy it.')).toBeTruthy()
+    expect(screen.queryByText('Buy this starter to create your site from it.')).toBeNull()
     pick({ ...PAID, owned: true })
     expect(createButton().disabled).toBe(false)
     pick(FREE)
@@ -937,6 +942,9 @@ describe('AGL-4049 phase 4 · an AI starter picked in Choose your starter', () =
     expect(screen.getByText('Buy this starter to continue with it.')).toBeTruthy()
     pick({ ...PAID_AI, owned: false })
     expect(continueButton().disabled).toBe(true)
+    pick({ ...PAID_AI, owned: false, buyBlockedReason: 'Someone else needs to buy it.' })
+    expect(continueButton().disabled).toBe(true)
+    expect(screen.getByText('Someone else needs to buy it.')).toBeTruthy()
   })
 
   it('Continue lands in the questions, filled from the starter, with nothing created', async () => {

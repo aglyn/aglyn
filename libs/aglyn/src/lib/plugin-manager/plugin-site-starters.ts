@@ -65,6 +65,13 @@ export interface SiteStarterSummary {
    * say; a free starter needs no purchase either way.
    */
   owned?: boolean
+  /**
+   * Why this person cannot buy it, in one sentence, when the source knows they
+   * cannot (AGL-4047). The surface keeps Buy on screen, switched off, with
+   * these words; absent, anyone may buy it. Read for the person who asked, like
+   * `owned`.
+   */
+  buyBlockedReason?: string
 }
 
 /** Who is asking: the workspace the site will belong to, and the person. */

@@ -162,6 +162,13 @@ describe('readStarterSummary', () => {
     )
   })
 
+  it('keeps why Buy is off only where the answer said (AGL-4047)', () => {
+    expect(readStarterSummary({ ...ROW, buyBlockedReason: 'Why' })?.buyBlockedReason).toBe('Why')
+    expect(readStarterSummary({ ...ROW, buyBlockedReason: '' })).not.toHaveProperty('buyBlockedReason')
+    expect(readStarterSummary({ ...ROW, buyBlockedReason: 7 })).not.toHaveProperty('buyBlockedReason')
+    expect(readStarterSummary(ROW)).not.toHaveProperty('buyBlockedReason')
+  })
+
   it('keeps `owned` only where the answer said yes or no (AGL-4049 lane 3)', () => {
     expect(readStarterSummary({ ...ROW, owned: true })?.owned).toBe(true)
     expect(readStarterSummary({ ...ROW, owned: false })?.owned).toBe(false)
