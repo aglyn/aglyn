@@ -714,6 +714,14 @@ function AutomationsEngine(props: {
   return null
 }
 
+/**
+ * The bar's live height, published on `<html>` while it is up (AGL-4176), the
+ * same contract as the admin bar's `--aglyn-admin-bar-height`. A site header
+ * lying over the hero is absolute to the top of the page, so nothing in flow
+ * can move it; `muiAppBar`'s `overHero` header adds this to its `top`.
+ */
+export const ANNOUNCEMENT_BAR_HEIGHT_VAR = '--aglyn-announcement-bar-height'
+
 function AnnouncementBar(props: {
   bar: AnnouncementBarData
   hostId?: string
@@ -721,6 +729,26 @@ function AnnouncementBar(props: {
   const { bar, hostId } = props
   const storageKey = `aglyn-abar-${bar.contentHash}`
   const [hidden, setHidden] = useState(true)
+  const barRef = useRef<HTMLDivElement>(null)
+  useEffect(() => {
+    const element = barRef.current
+    if (hidden || !element) return undefined
+    const root = document.documentElement
+    const publish = () =>
+      root.style.setProperty(
+        ANNOUNCEMENT_BAR_HEIGHT_VAR,
+        `${element.getBoundingClientRect().height}px`,
+      )
+    publish()
+    // The words wrap onto a second line on a phone, and rewrap on a rotate.
+    const observer =
+      typeof ResizeObserver === 'undefined' ? null : new ResizeObserver(publish)
+    observer?.observe(element)
+    return () => {
+      observer?.disconnect()
+      root.style.removeProperty(ANNOUNCEMENT_BAR_HEIGHT_VAR)
+    }
+  }, [hidden])
   useEffect(() => {
     try {
       setHidden(Boolean(window.localStorage.getItem(storageKey)))
@@ -760,7 +788,7 @@ function AnnouncementBar(props: {
     <span>{bar.text}</span>
   )
   return (
-    <div role="region" aria-label="Announcement" style={style}>
+    <div ref={barRef} role="region" aria-label="Announcement" style={style}>
       {text}
       {bar.dismissible ? (
         <button

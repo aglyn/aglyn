@@ -118,6 +118,12 @@ jest.mock('@aglyn/shared-ui-jsx', () => ({
 }))
 jest.mock('../constants/docs-links', () => ({ docsHelp: () => ({}) }))
 
+// The holder's answer; the gate itself is `plugin-config-org-settings-gate.spec.tsx`.
+jest.mock('../hooks/use-org-permissions', () => ({
+  __esModule: true,
+  default: () => ({ loaded: true, can: () => true }),
+}))
+
 // eslint-disable-next-line @typescript-eslint/no-var-requires
 const PluginConfigCards =
   require('../components/plugin-config-card.component').default
