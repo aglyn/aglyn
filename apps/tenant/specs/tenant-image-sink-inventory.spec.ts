@@ -323,9 +323,9 @@ const DECLARED: Readonly<Record<string, DeclaredSinkFile>> = {
     why: "Not a sink, and never on a tenant render: the AI eval harness's live recorders and grader (AGL-2937, AGL-3074), imported only by the AI plugin's own specs and run from a developer's machine by `npm run eval:ai-live`, never by a deployment. Both markers are a product's photo on its way to a model: the `image` seams handed to the products job step, which read a committed fixture under tools/ai-eval/fixtures in place of the storage download, and the `read.image` picture part `readAiProductImage` re-encodes for the grader. Neither is a URL, and nothing here renders a page.",
   },
   'libs/plugins/ai/src/lib/site-import/fixtures/site-import-crawl-recordings.ts': {
-    markers: 6,
+    markers: 9,
     guard: 'off-tenant',
-    why: "Not a sink, and never on a tenant render: synthetic recorded pages for the Bring my site crawler (AGL-3974, AGL-3976), imported only by the AI plugin's own specs (site-import-crawl, site-import-waves, ai-job-import-step, ai-jobs), never by a route or a page. Every marker is an `<img>` `src`, `data-src` or `srcset` inside a recorded HTML string for an invented business (one in the address shape of Wix's media CDN, one a `data:` pixel), served to a spec by the crawler's fetch stub and never fetched; no deployment reads the file and nothing here renders a page.",
+    why: "Not a sink, and never on a tenant render: synthetic recorded pages for the Bring my site crawler (AGL-3974, AGL-3976, AGL-4152), imported only by the AI plugin's own specs (site-import-crawl, site-import-waves, ai-job-import-step, ai-jobs), never by a route or a page. Every marker is an `<img>` `src`, `data-src` or `srcset` inside a recorded HTML string for an invented business (one in the address shape of Wix's media CDN, one a `data:` pixel), served to a spec by the crawler's fetch stub and never fetched; no deployment reads the file and nothing here renders a page.",
   },
   'libs/plugins/ai/src/lib/site-import/fixtures/site-import-wave-recordings.ts': {
     markers: 5,
