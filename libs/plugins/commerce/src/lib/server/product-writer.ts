@@ -15,6 +15,7 @@
  * limitations under the License.
  */
 
+import { validateProductForSave } from '../model/product-card-rules'
 import * as Aglyn from '@aglyn/aglyn/server'
 import { countLiveDocuments } from '@aglyn/aglyn/app-utils/live-document-count'
 import type {
@@ -28,7 +29,6 @@ import { isDocumentId } from '@aglyn/tenant-data-admin/server/document-id'
 import {
   commerceSlug,
   liftLegacyProduct,
-  validateProduct,
   type HostProduct,
   type ProductVariant,
 } from '../model/commerce'
@@ -158,7 +158,7 @@ export async function upsertSourcedProduct(
               }
             : {}),
         }
-        const invalid = validateProduct(next)
+        const invalid = validateProductForSave(next)
         if (invalid) throw new WriteRefusal({ outcome: 'invalid', message: invalid })
         const changed = COMPARED_KEYS.some(
           (key) =>
@@ -212,7 +212,7 @@ export async function upsertSourcedProduct(
       variants: source.variants.map((variant) => variantFrom(variant, undefined, { prices: true, content: true })),
       oversellPolicy: 'deny',
     }
-    const invalid = validateProduct(product)
+    const invalid = validateProductForSave(product)
     if (invalid) return { outcome: 'invalid', message: invalid }
     const now = Date.now()
     const ref = products.doc(productId)

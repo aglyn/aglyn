@@ -21,22 +21,22 @@
  * request carries into a quote. What the product page is sent of them.
  */
 
-import { liftLegacyProduct, validateProduct, type HostProduct } from '../model/commerce'
+import { liftLegacyProduct, type HostProduct } from '../model/commerce'
 import {
   builderPicksLabel,
   encodeProductFieldValue,
   parseProductFieldValue,
   quoteLinesFromFieldData,
 } from '../model/commerce-quote-request'
+import { modifierGroupsProblem, modifierOptionIsCombo, type ProductModifierGroup } from '../model/product-modifiers'
 import {
   choiceCardProblem,
   comboIncludesProblem,
-  modifierGroupsProblem,
-  modifierOptionIsCombo,
+  modifierCardsProblem,
   PRODUCT_CHOICE_NOTE_MAX,
   PRODUCT_COMBO_MAX_ITEMS,
-  type ProductModifierGroup,
-} from '../model/product-modifiers'
+  validateProductForSave as validateProduct,
+} from '../model/product-card-rules'
 import { publicModifierGroups, toPublicProductDetail } from './product'
 
 jest.mock('@aglyn/tenant-data-admin', () => ({ firebaseAdmin: {} }))
@@ -66,7 +66,7 @@ const canopy = (patch: Partial<HostProduct> = {}): HostProduct =>
 describe('a choice’s card', () => {
   it('saves a picture, a note and a combo’s contents', () => {
     expect(
-      modifierGroupsProblem(
+      modifierCardsProblem(
         walls({
           imageUrl: 'https://cdn.example/kit.jpg',
           note: 'Everything for a windy weekend',
@@ -77,16 +77,23 @@ describe('a choice’s card', () => {
   })
 
   it('refuses a note past its length, a combo past its items, and an unnamed item, saying which', () => {
-    expect(modifierGroupsProblem(walls({ note: 'x'.repeat(PRODUCT_CHOICE_NOTE_MAX + 1) }))).toBe(
+    expect(modifierCardsProblem(walls({ note: 'x'.repeat(PRODUCT_CHOICE_NOTE_MAX + 1) }))).toBe(
       `Keep the note on “Weekend kit” to ${PRODUCT_CHOICE_NOTE_MAX} characters`,
     )
     expect(
-      modifierGroupsProblem(walls({ includes: Array.from({ length: PRODUCT_COMBO_MAX_ITEMS + 1 }, (_, i) => `Item ${i}`) })),
+      modifierCardsProblem(walls({ includes: Array.from({ length: PRODUCT_COMBO_MAX_ITEMS + 1 }, (_, i) => `Item ${i}`) })),
     ).toBe(`“Weekend kit” lists more than ${PRODUCT_COMBO_MAX_ITEMS} items`)
-    expect(modifierGroupsProblem(walls({ includes: ['Bag', '  '] }))).toBe('Name every item “Weekend kit” includes')
-    expect(modifierGroupsProblem(walls({ imageUrl: 42 }))).toBe('Choose the picture for “Weekend kit” again')
+    expect(modifierCardsProblem(walls({ includes: ['Bag', '  '] }))).toBe('Name every item “Weekend kit” includes')
+    expect(modifierCardsProblem(walls({ imageUrl: 42 }))).toBe('Choose the picture for “Weekend kit” again')
     expect(comboIncludesProblem('Bag', 'Kit')).toBe('What “Kit” includes must be a list')
     expect(choiceCardProblem({ note: 5 }, 'Kit')).toBe('The note on “Kit” must be text')
+  })
+
+  it('is checked when the product is saved, and never stops a page reading the groups', () => {
+    const bad = walls({ includes: ['Bag', '  '] })
+    expect(validateProduct(canopy({ modifierGroups: bad }))).toBe('Name every item “Weekend kit” includes')
+    // Display only: a page still prices the sale with the groups as stored.
+    expect(modifierGroupsProblem(bad)).toBeNull()
   })
 
   it('is a combo only when it lists what it includes', () => {

@@ -24,7 +24,8 @@
  */
 
 import { act, fireEvent, render, screen, waitFor } from '@testing-library/react'
-import ProductDetail, { optionPresentation, productDetailFacts, productShippingLines } from './product-detail'
+import ProductDetail, { optionPresentation } from './product-detail'
+import { productDetailFacts, productShippingLines } from './product-detail-panels'
 import ProductReviews from './product-reviews'
 import RelatedProducts from './related-products'
 
@@ -116,7 +117,7 @@ describe('the product page', () => {
     expect(screen.getByText('$27.00')).toBeTruthy()
   })
 
-  it('draws the Details and Shipping & returns folds only when asked', () => {
+  it('draws the Details and Shipping & returns folds only when asked', async () => {
     mockSite.pageData = { commerce: { product: candle({ tags: ['gift'] }), returns: { windowDays: 30 } } }
     const { unmount } = render(<ProductDetail />)
     expect(screen.queryByText('Details')).toBeNull()
@@ -124,7 +125,8 @@ describe('the product page', () => {
     unmount()
 
     render(<ProductDetail showDetails showShipping />)
-    fireEvent.click(screen.getByText('Details'))
+    // Their own chunk (AGL-4205), loaded only where they are switched on.
+    fireEvent.click(await screen.findByText('Details'))
     expect(screen.getByText('gift')).toBeTruthy()
     fireEvent.click(screen.getByText('Shipping & returns'))
     expect(screen.getByText('Shipping is calculated at checkout.')).toBeTruthy()

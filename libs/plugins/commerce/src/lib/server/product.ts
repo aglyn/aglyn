@@ -117,8 +117,10 @@ export function publicModifierGroups(
       ...(option.priceCentsByVariant && Object.keys(option.priceCentsByVariant).length
         ? { priceCentsByVariant: { ...option.priceCentsByVariant } }
         : {}),
-      ...(option.imageUrl ? { imageUrl: option.imageUrl } : {}),
-      ...(option.note?.trim() ? { note: option.note.trim() } : {}),
+      // Card fields are checked at save (`modifierCardsProblem`), not on this
+      // read, so only well-formed values reach the page (AGL-4205).
+      ...(typeof option.imageUrl === 'string' && option.imageUrl ? { imageUrl: option.imageUrl } : {}),
+      ...(typeof option.note === 'string' && option.note.trim() ? { note: option.note.trim() } : {}),
       ...(CommerceModel.modifierOptionIsCombo(option) ? { includes: [...(option.includes ?? [])] } : {}),
     })),
   }))
@@ -166,7 +168,7 @@ export function toPublicProductDetail(
       ...(variant.imageUrl ? { imageUrl: variant.imageUrl } : {}),
       ...(variant.sku ? { sku: variant.sku } : {}),
       ...(CommerceModel.productAsksUseDate(product, variant.id) ? { asksUseDate: true as const } : {}),
-      ...(variant.note?.trim() ? { note: variant.note.trim() } : {}),
+      ...(typeof variant.note === 'string' && variant.note.trim() ? { note: variant.note.trim() } : {}),
     })),
     ...(product.mockupRequests === true ? { mockupRequests: true as const } : {}),
     ...(asksUseDate ? { useDayTimeZone: options.timeZone || 'UTC' } : {}),

@@ -104,56 +104,13 @@ export const POS_MAX_MODIFIER_GROUPS = 10
 export const POS_MAX_MODIFIER_OPTIONS = 20
 /** $1,000 on one modifier: anything larger is a product, not an add-on. */
 export const POS_MAX_MODIFIER_PRICE_CENTS = 100_000
-/** The longest note a choice or variant card carries (AGL-4205). */
-export const PRODUCT_CHOICE_NOTE_MAX = 160
-/** The most items a combo lists, and the longest each may be (AGL-4205). */
-export const PRODUCT_COMBO_MAX_ITEMS = 12
-export const PRODUCT_COMBO_ITEM_MAX = 80
-/** The longest picture address a card keeps. */
-export const PRODUCT_CHOICE_IMAGE_URL_MAX = 2000
-
-/**
- * Why a card's picture and note cannot be saved, or null when they can
- * (AGL-4205). Shared by a choice and a variant. `what` names it in the
- * message.
- */
-export function choiceCardProblem(
-  card: { imageUrl?: unknown; note?: unknown },
-  what: string,
-): string | null {
-  if (card.imageUrl != null) {
-    if (typeof card.imageUrl !== 'string' || card.imageUrl.length > PRODUCT_CHOICE_IMAGE_URL_MAX) {
-      return `Choose the picture for “${what}” again`
-    }
-  }
-  if (card.note != null) {
-    if (typeof card.note !== 'string') return `The note on “${what}” must be text`
-    if (card.note.length > PRODUCT_CHOICE_NOTE_MAX) {
-      return `Keep the note on “${what}” to ${PRODUCT_CHOICE_NOTE_MAX} characters`
-    }
-  }
-  return null
-}
-
-/** Why a combo's contents cannot be saved, or null when they can (AGL-4205). */
-export function comboIncludesProblem(includes: unknown, what: string): string | null {
-  if (includes == null) return null
-  if (!Array.isArray(includes)) return `What “${what}” includes must be a list`
-  if (includes.length > PRODUCT_COMBO_MAX_ITEMS) {
-    return `“${what}” lists more than ${PRODUCT_COMBO_MAX_ITEMS} items`
-  }
-  for (const item of includes) {
-    if (typeof item !== 'string' || !item.trim()) return `Name every item “${what}” includes`
-    if (item.length > PRODUCT_COMBO_ITEM_MAX) {
-      return `Keep each item “${what}” includes to ${PRODUCT_COMBO_ITEM_MAX} characters`
-    }
-  }
-  return null
-}
-
 /** Whether a choice is a combo: it lists what it includes (AGL-4205). */
 export function modifierOptionIsCombo(option: Pick<ProductModifierOption, 'includes'>): boolean {
-  return Array.isArray(option.includes) && option.includes.length > 0
+  return (
+    Array.isArray(option.includes) &&
+    option.includes.length > 0 &&
+    option.includes.every((item) => typeof item === 'string')
+  )
 }
 
 function modifierPriceIsValid(price: unknown): boolean {
@@ -200,9 +157,6 @@ export function modifierGroupsProblem(groups: unknown): string | null {
           return `“${option.name}” needs a price of $0 to $1,000 for each option it is priced by`
         }
       }
-      const cardProblem =
-        choiceCardProblem(option, option.name) ?? comboIncludesProblem(option.includes, option.name)
-      if (cardProblem) return cardProblem
     }
     if (group.online != null && typeof group.online !== 'boolean') {
       return `“${group.name}” is shown on the website or not`

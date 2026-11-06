@@ -26,7 +26,8 @@
  */
 
 import { act, fireEvent, render, screen, waitFor, within } from '@testing-library/react'
-import ProductDetail, { MOCKUP_LABEL_DEFAULT, productBuilderPicks } from './product-detail'
+import ProductDetail from './product-detail'
+import { MOCKUP_LABEL_DEFAULT, productBuilderPicks } from './product-builder-mockup'
 import { addOnPriceLabel, pressChoice, variantForOptionValue } from './product-choice-cards'
 import ProductOptionsField from './product-options-field'
 import { builderFieldValue } from './product-options-field-body'
@@ -420,7 +421,7 @@ describe('the picks a request form reads', () => {
 
   it('leaves a one-variant product’s default variant off, and posts nothing until ready', () => {
     const picks = productBuilderPicks({
-      product: { id: 'mug', name: 'Mug', options: [], variants: [{ id: 'default', priceUsd: 10, soldOut: false }] },
+      product: { id: 'mug', name: 'Mug' },
       variant: { id: 'default' },
       addOns: [],
       quantity: 1,

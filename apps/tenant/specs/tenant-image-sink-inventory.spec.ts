@@ -517,6 +517,11 @@ const DECLARED: Readonly<Record<string, DeclaredSinkFile>> = {
     guard: 'off-tenant',
     why: 'The merchant editing their own catalogue in the console, picker-only. The IP at risk is the merchant\'s own.',
   },
+  'libs/plugins/commerce/src/lib/components/console/product-builder-fields.component.tsx': {
+    markers: 1,
+    guard: 'off-tenant',
+    why: "The product editor's picture-card thumbnails in the console (AGL-4205): the merchant previews the picture they chose from their own media library for a variant or an add-on choice. Picker-only, never a tenant render; the IP at risk is the merchant's own.",
+  },
   'libs/plugins/commerce/src/lib/components/console/pos/pos-product-grid.component.tsx': {
     markers: 1,
     guard: 'off-tenant',
@@ -611,6 +616,11 @@ const DECLARED: Readonly<Record<string, DeclaredSinkFile>> = {
     markers: 3,
     guard: 'raw',
     why: 'The gallery and its thumbnail strip take siteRelativeMediaSrc, but the Product JSON-LD emits resolved.mediaUrls wholesale with no resolver, deliberately — and that is the copy a crawler fetches.',
+  },
+  'libs/plugins/commerce/src/lib/components/product-choice-cards.tsx': {
+    markers: 1,
+    guard: 'media-ref',
+    why: "The product builder's picture cards (AGL-4205): a variant's or an add-on choice's imageUrl, set by the merchant from the media library, through siteRelativeMediaSrc with the site's id. Resolution only; no scheme refusal, like the gallery beside it.",
   },
   'libs/plugins/commerce/src/lib/components/product-grid.tsx': {
     markers: 1,

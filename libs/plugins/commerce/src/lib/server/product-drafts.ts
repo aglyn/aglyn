@@ -15,6 +15,7 @@
  * limitations under the License.
  */
 
+import { validateProductForSave } from '../model/product-card-rules'
 import { checkEntitlement, checkQuota } from '@aglyn/aglyn/app-utils/plan-entitlements'
 import { holdsSiteKey, siteKeyRefusal } from '@aglyn/aglyn/app-utils/host-permissions'
 import { countLiveDocuments } from '@aglyn/aglyn/app-utils/live-document-count'
@@ -45,7 +46,6 @@ import {
   type SmartCollectionRules,
   unpricedProductDraft,
   type UnpricedProductDraft,
-  validateProduct,
 } from '../model/commerce'
 
 /**
@@ -73,7 +73,7 @@ import {
  *    resources route and the importer count it, inside the transaction that
  *    creates. THE PLAN is the `commerce` feature, and THE ROLE a member who
  *    may write the site's content — refused in the resources route's words.
- *  - THE CHECK is `validateProduct`, the rule every product write is held to,
+ *  - THE CHECK is `validateProductForSave` (`validateProduct` and the product builder's fields, AGL-4205), the rule every product write is held to,
  *    with a placeholder price standing in where none was stated.
  *
  * Nothing is published, priced or sold. The writer touches the one new
@@ -350,7 +350,7 @@ export function productDraftDocument(
 
 /** What the owner's product rule says about a draft, a placeholder price standing in for none. */
 function productProblem(product: UnpricedProductDraft | HostProduct): string | null {
-  return validateProduct({
+  return validateProductForSave({
     ...product,
     variants: product.variants.map((variant) => ({
       ...variant,

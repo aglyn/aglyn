@@ -15,7 +15,7 @@
  * limitations under the License.
  */
 
-import { choiceCardProblem, modifierGroupsProblem, type ProductModifierGroup } from './product-modifiers'
+import { modifierGroupsProblem, type ProductModifierGroup } from './product-modifiers'
 import { productCheckInProblem, type ProductCheckIn } from './commerce-check-in-product'
 import { nameSearchFields } from '@aglyn/aglyn/app-utils/name-search'
 import { draftProductChannelFacts, type ProductChannelFacts } from './product-channel'
@@ -1521,9 +1521,6 @@ export function validateProduct(product: HostProduct): string | null {
   }
   const modifierProblem = modifierGroupsProblem(product.modifierGroups)
   if (modifierProblem) return modifierProblem
-  if (product.mockupRequests != null && typeof product.mockupRequests !== 'boolean') {
-    return 'Offering a free mockup is on or off'
-  }
   const checkInProblem =
     productCheckInProblem(product.checkIn) ??
     (product.variants ?? []).map((variant) => productCheckInProblem(variant.checkIn)).find(Boolean) ??
@@ -1540,11 +1537,6 @@ export function validateProduct(product: HostProduct): string | null {
     if (!variant.id) return 'Variants need stable ids'
     if (ids.has(variant.id)) return 'Variant ids must be unique'
     ids.add(variant.id)
-    const cardProblem = choiceCardProblem(
-      variant,
-      Object.values(variant.options ?? {}).filter(Boolean).join(' / ') || 'Default',
-    )
-    if (cardProblem) return cardProblem
     // A variant with no price is storable (AGL-3676): the owner may list a
     // product before pricing it, the storefront says "Price coming soon",
     // and no sale door sells it (`variantHasPrice`).
