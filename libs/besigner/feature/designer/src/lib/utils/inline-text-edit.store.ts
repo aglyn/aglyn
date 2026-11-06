@@ -61,8 +61,9 @@ export interface InlinePropEditTarget {
 /**
  * Table-cell edit target: the editor is anchored on one rendered cell of a
  * Table element, and the commit rewrites that cell inside the node's grid
- * attribute instead of its `children` (see `table-cell-edit.ts`). Always the
- * plain surface — a cell stores plain text.
+ * attribute instead of its `children` (see `table-cell-edit.ts`). A
+ * formatting surface limited to inline formatting and links (AGL-4203): a
+ * cell is one line of a pipe grid, so it holds no blocks.
  */
 export interface InlineCellEditTarget {
   /** The attribute holding the grid string. */
@@ -70,8 +71,10 @@ export interface InlineCellEditTarget {
   /** Row in the parsed grid, header row included. */
   row: number
   column: number
-  /** The cell's text when the edit opened. */
+  /** The cell's words when the edit opened. */
   initialText: string
+  /** The cell's markup when it was formatted, or `''`. */
+  initialHtml?: string
 }
 
 /**

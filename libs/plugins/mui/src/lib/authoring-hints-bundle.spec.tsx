@@ -106,7 +106,7 @@ const HINTS: Array<{
   props?: Record<string, unknown>
 }> = [
   { name: 'Social Links', id: 'socialLinks', hint: /add profile URLs in Attributes/ },
-  { name: 'Table', id: 'dataTable', hint: /add rows in Attributes/ },
+  { name: 'Table', id: 'dataTable', hint: /right-click it to start a table/ },
   { name: 'Custom HTML', id: 'custom-html', hint: /add markup in the attributes panel/ },
   { name: 'Video embed', id: 'videoEmbed', hint: /paste a YouTube or Vimeo URL/ },
   { name: 'Video, no source', id: 'video', hint: /set a source URL/ },

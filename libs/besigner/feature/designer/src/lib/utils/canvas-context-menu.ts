@@ -34,13 +34,41 @@ import { observable, runInAction } from 'mobx'
  * A single id rather than a queue — only one context menu can be open, and a
  * second right-click supersedes the first rather than stacking.
  */
-const state = observable<{ nodeId: string | null }>({ nodeId: null })
+/** The Table cell a right-click landed on (AGL-4203). */
+export interface CanvasContextMenuTableCell {
+  row: number
+  column: number
+}
 
-/** Ask for the menu on this node; supersedes any earlier request. */
-export function requestCanvasContextMenu(nodeId: string | undefined): void {
+const state = observable<{
+  nodeId: string | null
+  tableCell: CanvasContextMenuTableCell | null
+}>({ nodeId: null, tableCell: null })
+
+/**
+ * Ask for the menu on this node; supersedes any earlier request. On a Table,
+ * `tableCell` says which cell was right-clicked, so the menu can offer rows
+ * and columns relative to it.
+ */
+export function requestCanvasContextMenu(
+  nodeId: string | undefined,
+  tableCell?: CanvasContextMenuTableCell,
+): void {
   runInAction(() => {
     state.nodeId = nodeId ?? null
+    state.tableCell = nodeId && tableCell ? { ...tableCell } : null
   })
+}
+
+/**
+ * The Table cell the open menu was asked for on, or `null` when it was
+ * opened from the ⋮ button, the hierarchy, or anywhere but a cell.
+ */
+export function canvasContextMenuTableCell(
+  nodeId: string | undefined,
+): CanvasContextMenuTableCell | null {
+  if (!nodeId || state.nodeId !== nodeId) return null
+  return state.tableCell
 }
 
 /** Whether the open menu was asked for on this node. */
@@ -60,5 +88,6 @@ export function isCanvasContextMenuRequested(
 export function clearCanvasContextMenu(): void {
   runInAction(() => {
     state.nodeId = null
+    state.tableCell = null
   })
 }

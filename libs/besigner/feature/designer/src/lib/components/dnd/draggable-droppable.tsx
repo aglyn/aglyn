@@ -66,7 +66,7 @@ import { findLeafTextElement } from '../../utils/in-place-edit-surface'
 import {
   findDataTableAttributeName,
   findDataTableCellAtPoint,
-  readDataTableCell,
+  readDataTableCellForEdit,
 } from '../../utils/table-cell-edit'
 import { holdKeyboardForEdit } from '../../utils/touch-keyboard'
 import { repeatCopyAt, repeatCopyStandIns } from '../../utils/repeat-copy'
@@ -383,7 +383,20 @@ export const DraggableDroppable = observer(
         const target = copy?.original ?? node
         Besigner.focus.setSelectedNode(target)
         repeatCopyStandIns.set('selected', copy)
-        requestCanvasContextMenu(target?.$id)
+        // On a Table, which cell was right-clicked (AGL-4203): the menu
+        // offers rows and columns relative to it. Not on a repeat copy,
+        // whose cells are a preview of the original's.
+        const pointer = e as MouseEvent
+        const tableCell =
+          !copy && findDataTableAttributeName(target)
+            ? findDataTableCellAtPoint(el, pointer.clientX, pointer.clientY)
+            : undefined
+        requestCanvasContextMenu(
+          target?.$id,
+          tableCell
+            ? { row: tableCell.row, column: tableCell.column }
+            : undefined,
+        )
       }
       function handleMouseOver(e: Event) {
         // Same stand-down, same reason to consume it: a hover repaint while
@@ -583,6 +596,7 @@ export const DraggableDroppable = observer(
             tableAttribute
           ]
           const cellRect = cell.element.getBoundingClientRect()
+          const content = readDataTableCellForEdit(stored, cell.row, cell.column)
           // Editing an element is selecting it, as for markdown below: the
           // two mousedowns of the double-click toggled the selection off.
           Besigner.focus.setSelectedNode(node)
@@ -598,7 +612,8 @@ export const DraggableDroppable = observer(
               attribute: tableAttribute,
               row: cell.row,
               column: cell.column,
-              initialText: readDataTableCell(stored, cell.row, cell.column),
+              initialText: content.text,
+              initialHtml: content.html,
             },
             cell.element,
           )

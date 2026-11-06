@@ -79,7 +79,7 @@ describe('the Table element (AGL-2543)', () => {
         <DataTable rows="" />
       </Aglyn.ScreenLinkContext.Provider>,
     )
-    expect(screen.getByText(/add rows in Attributes/i)).toBeTruthy()
+    expect(screen.getByText(/right-click it to start a table/i)).toBeTruthy()
     expect(document.querySelector('table')).toBeNull()
   })
 
@@ -103,6 +103,38 @@ describe('the Table element (AGL-2543)', () => {
       (attribute) => attribute.name === 'rows',
     )
     expect(rowsAttribute?.component).toBe('data-table')
+  })
+
+  it('draws a cell formatted on the canvas as formatting (AGL-4203)', () => {
+    render(
+      <DataTable
+        rows={[
+          'Feature | Us',
+          'Docs | <b>Yes</b>, <a href="https://example.test/docs">see docs</a>',
+          'Plain | a < b',
+        ].join('\n')}
+      />,
+    )
+    const bold = document.querySelector('tbody b')
+    expect(bold?.textContent).toBe('Yes')
+    const link = document.querySelector('tbody a')
+    expect(link?.getAttribute('href')).toBe('https://example.test/docs')
+    // A plain cell is still text: its `<` is a character, not a tag.
+    expect(screen.getByText('a < b')).toBeTruthy()
+  })
+
+  it('never draws script a formatted cell was given (AGL-4203)', () => {
+    // A document can be written without the editor, so the renderer
+    // sanitizes on every render rather than trusting what was stored.
+    render(
+      <DataTable
+        rows={'A | B\n<img src=x onerror="alert(1)"><script>alert(1)</script>ok | <a href="javascript:alert(1)">x</a>'}
+      />,
+    )
+    expect(document.querySelector('script')).toBeNull()
+    expect(document.querySelector('img')).toBeNull()
+    expect(document.querySelector('[onerror]')).toBeNull()
+    expect(document.querySelector('a[href^="javascript"]')).toBeNull()
   })
 
   it('ships a preset that already shows what the element is for', () => {

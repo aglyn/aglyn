@@ -17,20 +17,22 @@
 
 import {
   type DataTableAlignment,
+  type DataTableShapeEdit,
+  dataTableCellText,
+  dataTableStarterValue,
+  editDataTableShape,
+  isDataTableCellMarkup,
   parseDataTableRows,
   readDataTableAlignments,
   readPastedDataTable,
   serializeDataTable,
   withCellSet,
-  withColumnAdded,
-  withColumnRemoved,
-  withRowAdded,
-  withRowRemoved,
 } from '@aglyn/shared-data-enums'
 import {
   mdiFormatAlignCenter,
   mdiFormatAlignLeft,
   mdiFormatAlignRight,
+  mdiFormatClear,
   mdiPlus,
   mdiTrashCanOutline,
 } from '@aglyn/shared-data-mdi'
@@ -38,6 +40,7 @@ import { MdiIcon } from '@aglyn/shared-ui-jsx'
 import Box from '@mui/material/Box'
 import Button from '@mui/material/Button'
 import IconButton from '@mui/material/IconButton'
+import InputAdornment from '@mui/material/InputAdornment'
 import Stack from '@mui/material/Stack'
 import TextField from '@mui/material/TextField'
 import ToggleButton from '@mui/material/ToggleButton'
@@ -118,6 +121,20 @@ export const DataTableField = (props: DataTableFieldProps) => {
   )
 
   /**
+   * A change to the table's shape, through the same helper the canvas uses
+   * (AGL-4203), so a column's alignment moves with the column instead of
+   * sliding onto its neighbour.
+   */
+  const reshape = useCallback(
+    (edit: DataTableShapeEdit) => {
+      input.onChange(editDataTableShape(stored, edit))
+    },
+    [input, stored],
+  )
+
+  const anyFormatted = rows.some((row) => row.some(isDataTableCellMarkup))
+
+  /**
    * Importing a markdown table by pasting it into a cell (AGL-2568).
    *
    * It replaces the whole grid rather than splicing at the cell, because what
@@ -155,15 +172,7 @@ export const DataTableField = (props: DataTableFieldProps) => {
             variant="outlined"
             disabled={locked}
             startIcon={<MdiIcon path={mdiPlus.path} />}
-            onClick={() =>
-              commit(
-                [
-                  ['Feature', 'Us', 'Them'],
-                  ['', '', ''],
-                ],
-                ['left', 'center', 'center'],
-              )
-            }
+            onClick={() => input.onChange(dataTableStarterValue())}
           >
             {'Start a table'}
           </Button>
@@ -219,7 +228,9 @@ export const DataTableField = (props: DataTableFieldProps) => {
                 size="small"
                 disabled={locked || width <= 1}
                 aria-label={`Remove column ${columnIndex + 1}`}
-                onClick={() => commit(withColumnRemoved(rows, columnIndex))}
+                onClick={() =>
+                  reshape({ kind: 'removeColumn', at: columnIndex })
+                }
               >
                 <MdiIcon path={mdiTrashCanOutline.path} size={0.7} />
               </IconButton>
@@ -234,33 +245,80 @@ export const DataTableField = (props: DataTableFieldProps) => {
             spacing={0.5}
             sx={{ alignItems: 'center' }}
           >
-            {row.map((cell, columnIndex) => (
-              <TextField
-                key={columnIndex}
-                size="small"
-                fullWidth
-                disabled={locked}
-                value={cell}
-                onPaste={importPaste}
-                slotProps={{
-                  htmlInput: {
-                    'aria-label': `Row ${rowIndex + 1} column ${
-                      columnIndex + 1
-                    }`,
-                  },
-                }}
-                onChange={(event) =>
-                  commit(
-                    withCellSet(rows, rowIndex, columnIndex, event.target.value),
-                  )
-                }
-              />
-            ))}
+            {row.map((cell, columnIndex) => {
+              // A formatted cell (AGL-4203) holds markup this plain field
+              // cannot show or keep, so it shows the cell's words and is
+              // edited on the canvas, where its formatting is. Typing here
+              // would silently drop the formatting; Remove formatting does
+              // the same on purpose.
+              const formatted = isDataTableCellMarkup(cell)
+              return (
+                <TextField
+                  key={columnIndex}
+                  size="small"
+                  fullWidth
+                  disabled={locked}
+                  value={formatted ? dataTableCellText(cell) : cell}
+                  onPaste={formatted ? undefined : importPaste}
+                  slotProps={{
+                    htmlInput: {
+                      'aria-label': `Row ${rowIndex + 1} column ${
+                        columnIndex + 1
+                      }`,
+                      readOnly: formatted,
+                      title: formatted
+                        ? 'Formatted. Double-click this cell on the canvas to edit it.'
+                        : undefined,
+                    },
+                    input: formatted
+                      ? {
+                          endAdornment: (
+                            <InputAdornment position="end">
+                              <IconButton
+                                size="small"
+                                edge="end"
+                                disabled={locked}
+                                title="Remove formatting"
+                                aria-label={`Remove formatting from row ${
+                                  rowIndex + 1
+                                } column ${columnIndex + 1}`}
+                                onClick={() =>
+                                  commit(
+                                    withCellSet(
+                                      rows,
+                                      rowIndex,
+                                      columnIndex,
+                                      dataTableCellText(cell),
+                                    ),
+                                  )
+                                }
+                              >
+                                <MdiIcon path={mdiFormatClear.path} size={0.6} />
+                              </IconButton>
+                            </InputAdornment>
+                          ),
+                        }
+                      : undefined,
+                  }}
+                  onChange={(event) => {
+                    if (formatted) return
+                    commit(
+                      withCellSet(
+                        rows,
+                        rowIndex,
+                        columnIndex,
+                        event.target.value,
+                      ),
+                    )
+                  }}
+                />
+              )
+            })}
             <IconButton
               size="small"
               disabled={locked || rows.length <= 1}
               aria-label={`Remove row ${rowIndex + 1}`}
-              onClick={() => commit(withRowRemoved(rows, rowIndex))}
+              onClick={() => reshape({ kind: 'removeRow', at: rowIndex })}
             >
               <MdiIcon path={mdiTrashCanOutline.path} size={0.7} />
             </IconButton>
@@ -272,7 +330,7 @@ export const DataTableField = (props: DataTableFieldProps) => {
             size="small"
             disabled={locked}
             startIcon={<MdiIcon path={mdiPlus.path} />}
-            onClick={() => commit(withRowAdded(rows))}
+            onClick={() => reshape({ kind: 'insertRow', at: rows.length })}
           >
             {'Row'}
           </Button>
@@ -280,11 +338,17 @@ export const DataTableField = (props: DataTableFieldProps) => {
             size="small"
             disabled={locked}
             startIcon={<MdiIcon path={mdiPlus.path} />}
-            onClick={() => commit(withColumnAdded(rows))}
+            onClick={() => reshape({ kind: 'insertColumn', at: width })}
           >
             {'Column'}
           </Button>
         </Stack>
+
+        {anyFormatted ? (
+          <Box sx={{ color: 'text.secondary', fontSize: 12 }}>
+            {'Formatted cells are edited on the canvas: double-click one.'}
+          </Box>
+        ) : null}
 
         {helperText || description ? (
           <Box sx={{ color: 'text.secondary', fontSize: 12 }}>
