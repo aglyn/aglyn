@@ -681,17 +681,16 @@ const DECLARED_EGRESS_HOSTS: Record<string, EgressHost> = {
   // to draw it rather than ask the author for a poster. So it is a published
   // row of its own, unlike the player.
   //
-  // ⛔ HELD: `publishedOn` is the /legal/subprocessors change-log date, and it
-  // is written only once that page publishes this row. Until then this entry
-  // reds `subprocessor-inventory.spec` on purpose, and the flag
-  // `release_video_embed_posters` stays off.
+  // Published on /legal/subprocessors on November 5, 2026 (its change-log
+  // date), from the Subprocessors master's revision 50. The flag
+  // `release_video_embed_posters` turns on separately.
   'i.ytimg.com': {
     disposition: 'subprocessor',
     entity: 'Google LLC (YouTube)',
     region: 'United States (Google operates a global service)',
     purpose:
       'Showing YouTube’s own thumbnail as the poster of a YouTube video a customer’s site places without a poster of its own, until a visitor presses play',
-    publishedOn: 'PENDING-SUBPROCESSORS-PUBLISH',
+    publishedOn: '2026-11-05',
     reason:
       "The still the Video element (`libs/plugins/mui/src/lib/components/video.tsx`) shows as the poster of a YouTube film with none, at `https://i.ytimg.com/vi/{id}/hqdefault.jpg`, an address core's `videoEmbedPosterSrc` rebuilds from the media id and the plugin's declaration (`libs/plugins/mui/src/lib/video-embed-providers.ts`) alone. Shown only where the site's workspace has `release_video_embed_posters` on, which is also the only place the tenant's `img-src` admits the origin (`apps/tenant/middleware.ts`). Declared a subprocessor because the platform, not the author, chose to load it: an author who wants nothing requested from YouTube before a press picks their own poster.",
     dataReceived:
