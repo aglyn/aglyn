@@ -24,6 +24,7 @@ import {
 import { addAdminAudit } from '@aglyn/tenant-data-admin/server/admin-audit-write'
 import { invalidIdTokenResponse } from '@aglyn/tenant-data-admin/server/id-token-refusal'
 import {
+  isPosHardwareSellerStoreSale,
   isPosHardwareOrderStatus,
   nextPosHardwareStatus,
   POS_HARDWARE_ORDER_ID,
@@ -52,9 +53,9 @@ import { sendPosHardwareEmail, sendPosHardwareEmailOnce } from './pos-hardware-n
  * hardware shop, for the Hardware orders staff page.
  *
  *   GET   every workspace's orders, newest first, optionally one status,
- *         or `?attach=pending`: the in-person sales nobody has said whose
- *         they are yet (AGL-4038), after recording any paid sale on the
- *         seller store still waiting to be recorded
+ *         or `?attach=pending`: the sales of the platform's own store nobody
+ *         has said whose they are yet (AGL-4038). Any paid sale on the
+ *         seller store still waiting to be recorded is recorded first.
  *   POST  update  record Stripe's order id and the tracking, or move the
  *                 order one step on (Ordered → Shipped → Delivered →
  *                 Registered); Shipped needs a tracking number
@@ -174,15 +175,17 @@ async function handler(request: Request): Promise<Response> {
       if (attach && attach !== 'pending') return json({ error: 'Unknown filter' }, 400)
       const returns = String(query?.['returns'] ?? '')
       if (returns && returns !== 'requested') return json({ error: 'Unknown filter' }, 400)
+      // A sale on the platform's own store whose recording was missed — at
+      // its register or online (AGL-4038) — is recorded before any list is
+      // read, so it is on the Paid list and To attach both.
+      const config = posHardwareInPersonConfig()
+      if (config) await (await import('./pos-hardware-in-person')).sweepInPersonPosHardwareSales(config)
       let ordersQuery: any = firestore.collectionGroup(POS_HARDWARE_ORDERS_COLLECTION)
       if (returns === 'requested') {
         // Buyers' open return requests (AGL-4038), oldest waiting first in the
         // newest-first list like every other filter.
         ordersQuery = ordersQuery.where('returnRequest.state', '==', 'requested')
       } else if (attach === 'pending') {
-        // A sale whose recording was missed is recorded before the list is read.
-        const config = posHardwareInPersonConfig()
-        if (config) await (await import('./pos-hardware-in-person')).sweepInPersonPosHardwareSales(config)
         ordersQuery = ordersQuery.where('attachment.state', '==', 'pending')
       } else if (requested) {
         if (!isPosHardwareOrderStatus(requested)) return json({ error: 'Unknown status' }, 400)
@@ -449,8 +452,8 @@ async function forgetBuyer(firestore: any, ref: any, orgId: string, orderId: str
     const snapshot = await transaction.get(ref)
     if (!snapshot.exists) throw new Refusal('No such order', 404)
     const before = snapshot.data() as PosHardwareOrder
-    if (posHardwareOrderSource(before) !== 'in_person') {
-      throw new Refusal('Only an order sold in person has a buyer to remove here.', 409)
+    if (!isPosHardwareSellerStoreSale(before)) {
+      throw new Refusal('Only an order sold by our own store has a buyer to remove here.', 409)
     }
     const patch = posHardwareBuyerErasedPatch(before, Date.now())
     const next = { ...before, ...patch } as PosHardwareOrder

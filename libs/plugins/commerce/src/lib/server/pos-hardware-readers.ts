@@ -18,6 +18,7 @@
 import * as Aglyn from '@aglyn/aglyn/server'
 import { firebaseAdmin, getOrgForHost } from '@aglyn/tenant-data-admin'
 import {
+  isPosHardwareSellerStoreSale,
   normalizePosHardwareSerial,
   POS_HARDWARE_ORDER_ID,
   POS_HARDWARE_ORDERS_COLLECTION,
@@ -147,7 +148,7 @@ export async function matchRegisteredPosHardwareReader(input: {
       const from = await transaction.get(fromRef)
       if (!from.exists) return false
       const before = from.data() as PosHardwareOrder
-      if (before.source !== 'in_person' || before.status === 'canceled' || before.status === 'refunded') return false
+      if (!isPosHardwareSellerStoreSale(before) || before.status === 'canceled' || before.status === 'refunded') return false
       const pending = before.attachment?.state !== 'attached'
       if (!pending && fromOrgId !== input.orgId) return false
       const units = withRegisteredUnit(before.units ?? [], serial, input.readerId, input.hostId, now)
@@ -251,8 +252,8 @@ export async function recordPosHardwareSerials(input: {
     const snapshot = await transaction.get(ref)
     if (!snapshot.exists) throw new PosHardwareReaderRefusal('No such card reader sale.', 404)
     const before = snapshot.data() as PosHardwareOrder
-    if (before.source !== 'in_person' || before.posSale?.hostId !== input.config.sellerHostId) {
-      throw new PosHardwareReaderRefusal('Only a card reader sold in person here takes serial numbers.', 409)
+    if (!isPosHardwareSellerStoreSale(before) || before.posSale?.hostId !== input.config.sellerHostId) {
+      throw new PosHardwareReaderRefusal('Only a card reader sold by this store takes serial numbers here.', 409)
     }
     const units = before.units ?? []
     if (serials.length > units.length) {
@@ -293,7 +294,7 @@ export async function choosePosHardwareStore(input: {
     const snapshot = await transaction.get(ref)
     if (!snapshot.exists) throw new PosHardwareReaderRefusal('No such order.', 404)
     const before = snapshot.data() as PosHardwareOrder
-    if (before.source !== 'in_person') throw new PosHardwareReaderRefusal('Only a reader bought in person waits for a store.', 409)
+    if (!isPosHardwareSellerStoreSale(before)) throw new PosHardwareReaderRefusal('Only a reader bought from our store waits for a store.', 409)
     const after: PosHardwareOrder = {
       ...before,
       hostId: input.hostId,
@@ -319,7 +320,7 @@ export async function markPosHardwareSetUp(input: { orgId: string; orderId: stri
     const snapshot = await transaction.get(ref)
     if (!snapshot.exists) throw new PosHardwareReaderRefusal('No such order.', 404)
     const before = snapshot.data() as PosHardwareOrder
-    if (before.source !== 'in_person') throw new PosHardwareReaderRefusal('Only a reader bought in person is marked set up here.', 409)
+    if (!isPosHardwareSellerStoreSale(before)) throw new PosHardwareReaderRefusal('Only a reader bought from our store is marked set up here.', 409)
     if (before.status === 'registered') return before
     if (before.status !== 'delivered') throw new PosHardwareReaderRefusal('This order can no longer be set up.', 409)
     const now = Date.now()
@@ -373,7 +374,7 @@ export async function registerPosHardwareAtBooth(input: {
   const orgId = String(sale.get('orgId') ?? '')
   const snapshot = await hardwareOrdersRef(orgId).doc(input.orderId).get()
   const order = snapshot.data() as PosHardwareOrder | undefined
-  if (!order || order.source !== 'in_person' || order.posSale?.hostId !== input.config.sellerHostId) {
+  if (!order || !isPosHardwareSellerStoreSale(order) || order.posSale?.hostId !== input.config.sellerHostId) {
     throw new PosHardwareReaderRefusal('No such card reader sale.', 404)
   }
   if (order.attachment?.state !== 'attached' || !order.attachment.orgId) {

@@ -25,9 +25,10 @@
  *
  *   - **sold online from the shop** — on the platform's own account — under
  *     "Card reader shop (online)";
- *   - **sold in person** at the operator's own store's register: already in
- *     that store's register sale, which the own-stores section folds in
- *     (`own-store-tax-return-source.ts`), so NOT again here. Only a sale whose
+ *   - **sold by the operator's own store**, in person at its register or
+ *     online from its product pages and cart: already in that store's sale,
+ *     which the own-stores section folds in (`own-store-tax-return-source.ts`),
+ *     so NOT again here. Only a sale whose
  *     store is not one of the operator's own (the store was moved, or no
  *     workspace is named as the operator's own) is folded in from its record
  *     here, and a review finding says so.
@@ -90,7 +91,9 @@ export function posHardwareFoldedAs(
   row: Pick<PosHardwareTaxRowInput, 'source' | 'posHostId'>,
   options: PosHardwareFoldOptions = {},
 ): PosHardwareFoldedAs {
-  if (row.source !== 'in_person') return 'shop'
+  // Sold by the operator's own store, at its register or online (AGL-4038):
+  // in that store's sale, as every other sale it makes.
+  if (row.source !== 'in_person' && row.source !== 'storefront') return 'shop'
   const host = typeof row.posHostId === 'string' ? row.posHostId : ''
   return host && options.ownHostIds?.has(host) ? 'store register sale' : 'in-person record'
 }

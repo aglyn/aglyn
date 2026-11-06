@@ -356,8 +356,11 @@ function seedStore(storeSettings: Record<string, any> | null, scenario: Scenario
 async function runCheckout(
   storeSettings: Record<string, any> | null,
   scenario: Scenario = {},
+  extraBody: Record<string, unknown> = {},
+  seed: () => void = () => undefined,
 ) {
   seedStore(storeSettings, scenario)
+  seed()
   sessionBody = null
   const { res, result } = makeResponse()
   await cartCheckoutHandler(
@@ -366,6 +369,7 @@ async function runCheckout(
       body: {
         hostId: 'host-1',
         ...(scenario.couponCode ? { couponCode: scenario.couponCode } : {}),
+        ...extraBody,
       },
       cookies: { 'aglyn_cart_host-1': 'cart-1' },
       headers: { host: 'shop.example.com' },
@@ -561,5 +565,92 @@ describe('tax and a discount on the same session', () => {
     await runCheckout(MANUAL_TX, { couponCode: 'HALF' })
     expect(sessionBody?.get('discounts[0][coupon]')).toBe('co_test_1')
     expect(sessionBody?.get('line_items[0][tax_rates][0]')).toBe('txr_test_1')
+  })
+})
+
+/*
+ * CARD READER HARDWARE ON THE PLATFORM'S OWN STORE (AGL-4038). When this
+ * store is the configured seller and a line's product names a hardware item,
+ * the line is taxed as goods, the buyer must have ticked the terms of sale
+ * and business use, the online order limits hold, and the acceptance rides
+ * the session. Any other store, or the same products elsewhere, is untouched.
+ */
+describe('card reader hardware on the platform’s own store (AGL-4038)', () => {
+  const SELLER = {
+    POS_HARDWARE_IN_PERSON_ENABLED: 'true',
+    POS_HARDWARE_SELLER_HOST_ID: 'host-1',
+    POS_HARDWARE_SELLER_ORG_ID: 'org-1',
+  }
+  const asReader = () => {
+    docs.set('hosts/host-1/products/p1', {
+      name: 'Pocket reader (M2)',
+      status: 'active',
+      type: 'physical',
+      hardwareSku: 'stripe-reader-m2',
+      variants: [{ id: 'v1', priceUsd: 30, weightGrams: 400, inventory: 10 }],
+    })
+  }
+  const ACCEPTED = { hardwareTerms: { accepted: true, businessUse: true } }
+
+  beforeEach(() => Object.assign(process.env, SELLER))
+  afterEach(() => {
+    for (const name of Object.keys(SELLER)) delete process.env[name]
+  })
+
+  it('refuses a checkout without the terms of sale, in a plain sentence, before Stripe', async () => {
+    const result = await runCheckout(MANUAL_TX, {}, {}, asReader)
+    expect(result.status).toBe(400)
+    expect(result.body).toEqual({
+      error:
+        'To buy card reader hardware, accept the hardware terms of sale (Terms, Sections 4.26–4.32) and confirm you are buying it for your business.',
+      needsHardwareTerms: true,
+    })
+    expect(sessionBody).toBeNull()
+  })
+
+  it('refuses one ticked without business use', async () => {
+    const result = await runCheckout(MANUAL_TX, {}, { hardwareTerms: { accepted: true, businessUse: false } }, asReader)
+    expect(result.body.needsHardwareTerms).toBe(true)
+    expect(sessionBody).toBeNull()
+  })
+
+  it('taxes the reader as goods and carries the acceptance on the session', async () => {
+    const result = await runCheckout(MANUAL_TX, { exemptLine: true }, ACCEPTED, asReader)
+    expect(result.status).toBe(200)
+    expect(sessionBody!.get('line_items[0][price_data][product_data][tax_code]')).toBe('txcd_99999999')
+    // The other line is not hardware: no code of its own, as before.
+    expect(sessionBody!.get('line_items[1][price_data][product_data][tax_code]')).toBeNull()
+    expect(sessionBody!.get('metadata[hardwareTermsVersion]')).toBe('v21')
+    expect(sessionBody!.get('metadata[hardwareTermsBusinessUse]')).toBe('true')
+    // The store's own tax still applies to it.
+    expect(sessionBody!.get('line_items[0][tax_rates][0]')).toBe('txr_test_1')
+  })
+
+  it('holds the online order limits of the terms of sale', async () => {
+    const result = await runCheckout(MANUAL_TX, {}, ACCEPTED, () => {
+      asReader()
+      docs.set('hosts/host-1/products/p1', {
+        ...docs.get('hosts/host-1/products/p1'),
+        variants: [{ id: 'v1', priceUsd: 30, weightGrams: 400, inventory: 50 }],
+      })
+      docs.set('hosts/host-1/carts/cart-1', { lines: [{ productId: 'p1', variantId: 'v1', quantity: 11 }] })
+    })
+    expect(result.status).toBe(400)
+    expect(result.body.error).toBe('One order holds at most 10 of each card reader or accessory, and 20 in all.')
+    expect(sessionBody).toBeNull()
+  })
+
+  it('leaves another store’s product that names a hardware item alone', async () => {
+    process.env.POS_HARDWARE_SELLER_HOST_ID = 'another-host'
+    const result = await runCheckout(MANUAL_TX, {}, {}, asReader)
+    expect(result.status).toBe(200)
+    expect(sessionBody!.get('line_items[0][price_data][product_data][tax_code]')).toBeNull()
+    expect(sessionBody!.get('metadata[hardwareTermsVersion]')).toBeNull()
+  })
+
+  it('leaves the seller store’s other products alone', async () => {
+    const result = await runCheckout(MANUAL_TX)
+    expect(result.status).toBe(200)
+    expect(sessionBody!.get('line_items[0][price_data][product_data][tax_code]')).toBeNull()
   })
 })

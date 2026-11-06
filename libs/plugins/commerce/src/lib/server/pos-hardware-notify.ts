@@ -83,6 +83,17 @@ function shipToText(order: PosHardwareOrder): string {
 
 async function siteAndOrgNames(order: PosHardwareOrder): Promise<{ site: string; org: string; ban: boolean }> {
   const firestore = firebaseAdmin.app().firestore()
+  // Bought from the platform's own store and not yet in the buyer's
+  // workspace (AGL-4038): it is for their business, which has no workspace
+  // here yet, and the selling store's name says where it came from.
+  if (order.attachment?.state === 'pending' && order.posSale?.hostId) {
+    const seller = await firestore.collection('hosts').doc(order.posSale.hostId).get().catch(() => null)
+    return {
+      site: seller?.exists ? hostDisplayName(seller.data() as Record<string, unknown>, order.posSale.hostId) : 'our store',
+      org: PENDING_BUYER,
+      ban: false,
+    }
+  }
   const [host, org] = await Promise.all([
     firestore.collection('hosts').doc(order.hostId).get().catch(() => null),
     firestore.collection('orgs').doc(order.orgId).get().catch(() => null),
@@ -108,6 +119,9 @@ const FALLBACK: Record<PosHardwareEmailKind, (number: string) => string> = {
 
 /** The fallback a workspace with no name gets in a sentence. */
 const UNNAMED_WORKSPACE = 'your workspace'
+
+/** Who a sale not yet in anyone's workspace is for, in a sentence. */
+const PENDING_BUYER = 'your business'
 
 /**
  * Who canceled the order and why, as the email's first sentence; the
@@ -136,9 +150,11 @@ export async function posHardwareEmailMerge(
   order: PosHardwareOrder,
   names: { site: string; org: string },
 ): Promise<Record<string, string>> {
-  const base = await posSettingsUrl(order.hostId)
+  // An order with no store yet (AGL-4038) has no settings page to link: the
+  // console's front door, where signing in or up leads to it.
+  const base = order.hostId ? await posSettingsUrl(order.hostId) : platformConsoleOrigin()
   const [path] = base.split('#')
-  const ordersUrl = `${path}#${POS_HARDWARE_ANCHOR}`
+  const ordersUrl = order.hostId ? `${path}#${POS_HARDWARE_ANCHOR}` : path
   return {
     'org.name': names.org,
     'site.name': names.site,
@@ -152,7 +168,7 @@ export async function posHardwareEmailMerge(
     // An unknown carrier has no tracker to link; the card shows the number.
     'order.trackingUrl': order.tracking?.url ?? ordersUrl,
     'order.ordersUrl': ordersUrl,
-    'order.setupUrl': `${path}#pos-devices`,
+    'order.setupUrl': order.hostId ? `${path}#pos-devices` : path,
     // What Stripe reported refunding, or the whole charge where it has not.
     'order.refunded': formatPosHardwareCents(order.refundedCents ?? order.totalCents ?? 0),
     // This refund alone, for an order refunded in parts; the whole of it otherwise.

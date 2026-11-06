@@ -245,6 +245,31 @@ card. A Pocket reader (M2) pairs by Bluetooth from the Aglyn POS app instead.
 **Who can buy:** a member with the **Buy point of sale hardware** permission for
 the site, on a plan that includes POS.
 
+### Bought from Aglyn's online store {#bought-from-our-online-store}
+
+Aglyn's own website also sells its card readers and accessories, from their
+product pages and the cart, to anyone, with or without an Aglyn account.
+
+**The terms of sale.** When the cart holds a card reader or an accessory, it
+asks you to tick **I accept the hardware terms of sale**, which links to
+Sections 4.26–4.32 of the [Terms](https://aglyn.com/legal/terms), and **I am
+buying this hardware for use in my business**. Checkout needs both. Your order
+records the acceptance.
+
+Then:
+
+- **If you don't have an account yet**, you get an email inviting you to create
+  one with the address you paid with. Once you create your workspace, the order
+  is in it.
+- **If you already have an account**, Aglyn's team attaches the order to your
+  workspace, or it joins your workspace on its own when you add its reader to
+  one of your stores with the reader's pairing code.
+
+The order then moves through the same statuses as one from the **Hardware**
+card, and you get the same emails as it ships and arrives. Until it joins your
+workspace, the links in those emails take you to sign in. To return it once it
+has shipped, use **Request a return** on the order under **Your orders**.
+
 ### Bought from us in person {#bought-from-us-in-person}
 
 At an event, Aglyn may sell you a reader in person. You pay at Aglyn's register,

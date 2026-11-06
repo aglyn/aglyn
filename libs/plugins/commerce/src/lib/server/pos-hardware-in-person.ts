@@ -61,6 +61,9 @@ export type InPersonRecordOutcome =
 /** How many marked sales one sweep records at most. */
 export const IN_PERSON_SWEEP_LIMIT = 25
 
+/** A paid online order's statuses once the store marked it shipped, which still record. */
+const SHIPPED_ONLINE = new Set(['fulfilled', 'partially_fulfilled'])
+
 /** Statuses after which a marked sale can never be paid, so the mark is dropped. */
 const NEVER_PAID = new Set(['cancelled', 'canceled', 'voided', 'refunded', 'expired'])
 
@@ -97,8 +100,20 @@ async function storeStripeAccount(hostId: string): Promise<string | null> {
   return text(profile.get('stripeAccountId'))
 }
 
+/** Whether an account already uses this address; an unanswerable lookup reads as yes, so no stray sign-up invitation goes out. */
+async function buyerHasAccount(email: string): Promise<boolean> {
+  try {
+    const { findUserByEmailAcrossPools } = await import('@aglyn/tenant-data-admin/server/auth-pools')
+    return Boolean(await findUserByEmailAcrossPools(email))
+  } catch (error) {
+    console.error('[pos-hardware-in-person] account lookup failed', error)
+    return true
+  }
+}
+
 /**
- * Records the hardware order of one register sale on the seller store, once.
+ * Records the hardware order of one sale on the seller store, at its
+ * register or online (AGL-4038), once.
  * Never throws for a sale that is not one: it says why it did nothing.
  */
 export async function recordInPersonPosHardwareSale(
@@ -117,7 +132,13 @@ export async function recordInPersonPosHardwareSale(
     checkoutSessionId?: string
     customerEmail?: string | null
   }
-  if (order.status !== 'paid') return { outcome: 'not-paid' }
+  // An order from the store's own product pages and cart (AGL-4038), rather
+  // than its register: it ships, and its buyer is whoever paid online. Its
+  // store order may already be marked fulfilled; it was paid all the same.
+  const online = order.channel === 'online'
+  if (order.status !== 'paid' && !(online && SHIPPED_ONLINE.has(String(order.status)))) {
+    return { outcome: 'not-paid' }
+  }
 
   const lineItems = Array.isArray(order.lineItems) ? order.lineItems : []
   const productIds = [...new Set(lineItems.map((line) => String(line.productId ?? '')).filter(Boolean))]
@@ -140,6 +161,7 @@ export async function recordInPersonPosHardwareSale(
     lines,
     discountCents: Number(order.totals?.discountCents ?? 0),
     taxCents: Number(order.totals?.taxCents ?? 0),
+    ...(online ? { shippingCents: Number(order.totals?.shippingCents ?? 0) } : {}),
   })
   if (!share) {
     // Marked when it was rung, but no line is hardware now: nothing to record.
@@ -154,6 +176,23 @@ export async function recordInPersonPosHardwareSale(
   const livemodes = payments.map((payment) => payment.livemode).filter((mode): mode is boolean => typeof mode === 'boolean')
   const [tax, stripeAccountId] = await Promise.all([storeTax(hostId), storeStripeAccount(hostId)])
   const paidAtMs = Number(order.paidAtMs ?? order.createdAtMs ?? options.now ?? Date.now())
+  const receiptEmail = text(order.customerEmail)?.toLowerCase() ?? null
+  const shippingAddress = order.shippingAddress ?? null
+  const shipName = text(shippingAddress?.name) ?? text(order.customerName)
+  // Online, the buyer is whoever paid: their address and name, to attach
+  // when they sign up or pair a reader, or by staff from To attach.
+  const buyer = online
+    ? (order.hardwareBuyer ?? {
+        uid: null,
+        orgId: null,
+        hostId: null,
+        email: receiptEmail,
+        attachedBy: '',
+        attachedAtMs: paidAtMs,
+        ...(shipName ? { name: shipName } : {}),
+        ...(shippingAddress ? { address: shippingAddress as never } : {}),
+      })
+    : order.hardwareBuyer
   const hardwareOrder: PosHardwareOrder = inPersonPosHardwareOrder({
     sellerHostId: config.sellerHostId,
     sellerOrgId: config.sellerOrgId,
@@ -167,8 +206,8 @@ export async function recordInPersonPosHardwareSale(
     tenders: payments.map((payment) => payment.method),
     paymentLinkSessionId:
       text(payments.find((payment) => payment.checkoutSessionId)?.checkoutSessionId) ?? text(order.checkoutSessionId),
-    receiptEmail: text(order.customerEmail)?.toLowerCase() ?? null,
-    buyer: order.hardwareBuyer,
+    receiptEmail,
+    buyer,
     termsAcceptance: order.hardwareTermsAcceptance,
     serials: (Array.isArray(order.hardwareSerials) ? order.hardwareSerials : [])
       .map(normalizePosHardwareSerial)
@@ -180,6 +219,9 @@ export async function recordInPersonPosHardwareSale(
     // deployment's, so a test deployment's booth is never a real sale.
     livemode: livemodes.length ? livemodes.every(Boolean) : !posStripeTestMode(),
     currency: String((order as { currency?: unknown }).currency ?? 'usd').toLowerCase(),
+    ...(online
+      ? { storefront: { name: shipName, phone: text(order.customerPhone), address: shippingAddress } }
+      : {}),
   })
 
   const { created } = await recordPosHardwareOrder(orderId, hardwareOrder)
@@ -188,10 +230,19 @@ export async function recordInPersonPosHardwareSale(
     { hardwareOrderId: orderId, hardwareSalePending: firebaseAdmin.firestore.FieldValue.delete() },
     { merge: true },
   )
+  if (created && online) {
+    // Staff prepare and ship it: the same alert a Hardware card order raises.
+    await (await import('./pos-hardware-notify')).raisePosHardwareOrderAlert(orderId, hardwareOrder)
+  }
   // A buyer with no account, named at the register while the sale was open,
-  // is invited to sign up now that there is an order to point them at.
+  // is invited to sign up now that there is an order to point them at. One
+  // who paid online is invited only when no account has their address: one
+  // that does is attached by staff from To attach, or by pairing a reader.
   if (created && hardwareOrder.attachment?.state === 'pending' && hardwareOrder.attachment.email) {
-    await (await import('./pos-hardware-attach')).invitePendingBuyer(orderId, hardwareOrder.orgId, hardwareOrder)
+    const hasAccount = online && (await buyerHasAccount(hardwareOrder.attachment.email))
+    if (!hasAccount) {
+      await (await import('./pos-hardware-attach')).invitePendingBuyer(orderId, hardwareOrder.orgId, hardwareOrder)
+    }
   }
   return {
     outcome: created ? 'recorded' : 'already',
@@ -227,7 +278,7 @@ export async function sweepInPersonPosHardwareSales(
         await doc.ref.set({ hardwareSalePending: firebaseAdmin.firestore.FieldValue.delete() }, { merge: true })
         continue
       }
-      if (status !== 'paid') continue
+      if (status !== 'paid' && !SHIPPED_ONLINE.has(status)) continue
       const outcome = await recordInPersonPosHardwareSale(config.sellerHostId, String(doc.id), { config })
       if (outcome.outcome === 'recorded') recorded += 1
     } catch (error) {

@@ -15,6 +15,7 @@
  * limitations under the License.
  */
 
+import { isPosHardwareSkuId, parsePosHardwareInPersonConfig } from '../model/pos-hardware'
 import type { PluginApiHandler } from '@aglyn/aglyn/server'
 import * as Aglyn from '@aglyn/aglyn/server'
 import * as CommerceModel from '../model'
@@ -274,10 +275,18 @@ export const cartHandler: PluginApiHandler = async (req, res) => {
     const subtotalCents = lines
       .filter((line) => !line.unavailable)
       .reduce((sum, line) => sum + line.unitAmountCents * line.quantity, 0)
+    // Card reader hardware the platform's own store sells (AGL-4038): the
+    // cart asks for the terms of sale before checkout. Read from the
+    // environment first, so no other store reads anything more.
+    const sellerHostId = parsePosHardwareInPersonConfig(process.env)?.sellerHostId
+    const hardwareTerms =
+      sellerHostId === hostId &&
+      cart.lines.some((line) => isPosHardwareSkuId(productsById.get(line.productId)?.hardwareSku))
     return res.status(200).json({
       lines,
       count: CommerceModel.cartCount(cart),
       subtotalCents,
+      ...(hardwareTerms ? { hardwareTerms: true } : {}),
     })
   } catch (error) {
     console.error(error)

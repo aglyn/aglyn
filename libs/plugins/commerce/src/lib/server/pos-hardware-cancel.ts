@@ -106,6 +106,12 @@ export async function cancelAndRefundPosHardwareOrder(
   const firestore = firebaseAdmin.app().firestore()
   const ref = hardwareOrdersRef(orgId).doc(orderId)
 
+  // Bought from the platform's own online store (AGL-4038): its money is in
+  // that store's account, so it comes back through the store order's own
+  // refund, never a refund on the platform's balance.
+  const stored = (await ref.get()).data() as PosHardwareOrder | undefined
+  if (stored?.source === 'storefront') return cancelSellerStoreOrder(request, stored)
+
   const claim = await firestore.runTransaction(async (transaction: any): Promise<PosHardwareCancelResult | { outcome: 'claimed'; order: ClaimedOrder }> => {
     const snapshot = await transaction.get(ref)
     if (!snapshot.exists) return { outcome: 'missing' }
@@ -177,4 +183,59 @@ export async function cancelAndRefundPosHardwareOrder(
     transaction.set(posHardwareSaleRef(orderId), posHardwareSaleRecord(orderId, after), posHardwareSaleSetOptions(after))
   })
   return { outcome: 'settled', before: settled, order: after }
+}
+
+/**
+ * Cancels an order the platform's own online store sold (AGL-4038): the
+ * same rules as {@link cancelAndRefundPosHardwareOrder} — only before it
+ * ships, once — with the refund made through the store order's own card
+ * refund (`refundInPersonPosHardwareOrder`), which reverses the transfer into
+ * the store's account and writes the refund onto the order once by its key.
+ */
+async function cancelSellerStoreOrder(
+  request: PosHardwareCancelRequest,
+  stored: PosHardwareOrder,
+): Promise<PosHardwareCancelResult> {
+  const { orgId, orderId, finalStatus, reason } = request
+  const now = request.now ?? Date.now
+  if (stored.status === finalStatus) return { outcome: 'already', order: stored }
+  if (!posHardwareRefundable(stored.status)) return { outcome: 'not-refundable', order: stored }
+  const [{ refundInPersonPosHardwareOrder, PosHardwareReturnRefusal }, { posHardwareInPersonConfig }] = await Promise.all([
+    import('./pos-hardware-returns'),
+    import('./pos-hardware'),
+  ])
+  let refunded: PosHardwareOrder
+  try {
+    refunded = (
+      await refundInPersonPosHardwareOrder({
+        config: posHardwareInPersonConfig(),
+        orgId,
+        orderId,
+        actorUid: `system:${reason}`,
+        now: now(),
+      })
+    ).order
+  } catch (error) {
+    if (error instanceof PosHardwareReturnRefusal) {
+      return { outcome: 'refused', order: stored, message: error.message, code: null }
+    }
+    throw error
+  }
+  const at = now()
+  const ref = hardwareOrdersRef(orgId).doc(orderId)
+  const after: PosHardwareOrder = {
+    ...refunded,
+    status: finalStatus,
+    [POS_HARDWARE_STATUS_STAMP[finalStatus]]: at,
+    updatedAtMs: at,
+    cancelReason: reason,
+  }
+  await firebaseAdmin
+    .app()
+    .firestore()
+    .runTransaction(async (transaction: any) => {
+      transaction.set(ref, after)
+      transaction.set(posHardwareSaleRef(orderId), posHardwareSaleRecord(orderId, after), posHardwareSaleSetOptions(after))
+    })
+  return { outcome: 'settled', before: stored, order: after }
 }
