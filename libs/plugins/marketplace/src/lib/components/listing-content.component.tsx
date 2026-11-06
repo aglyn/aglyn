@@ -177,6 +177,8 @@ interface ListingVersionEntry {
   changelog?: string
   trust?: string
   hostAbi?: number
+  /** The services this version declares connections to, by label (AGL-4197). */
+  connections?: string[]
   publishedAtMs: number | null
   /** Installs that ever landed on this version (AGL-1036). */
   installCount?: number
@@ -1711,6 +1713,8 @@ export function MarketplaceListingContent({
                               reviewedVersion:
                                 listing?.latestVersionReviewState ===
                                 'approved',
+                              realmTrusted: latestEntry?.trust === 'realm',
+                              connections: latestEntry?.connections ?? [],
                             }).map((row) => (
                               <Stack
                                 key={row.label}

@@ -96,4 +96,27 @@ describe('listingInclusions', () => {
     // The line this whole helper exists to not cross.
     expect(labels({ artifactType: 'template' }).join(' ')).not.toMatch(/\d+ screens/)
   })
+
+  it('says which plans connecting a declared service needs (AGL-4197)', () => {
+    const rows = listingInclusions(
+      { artifactType: 'plugin' },
+      { connections: ['Google Business Profile'] },
+    )
+    expect(rows[1]).toEqual({
+      label:
+        'Connecting Google Business Profile comes with the Starter, Pro and Custom plans',
+      tone: 'note',
+    })
+    expect(labels({ artifactType: 'plugin' }).join(' ')).not.toContain('Connecting')
+    expect(
+      labels({ artifactType: 'template' }, { connections: ['Google Business Profile'] }).join(' '),
+    ).not.toContain('Connecting')
+  })
+
+  it('does not call a realm-trusted plugin sandboxed', () => {
+    expect(labels({ artifactType: 'plugin' })[0]).toContain('sandboxed')
+    expect(labels({ artifactType: 'plugin' }, { realmTrusted: true })[0]).toBe(
+      'A plugin, reviewed and signed by Aglyn to run with your site',
+    )
+  })
 })

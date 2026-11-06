@@ -369,6 +369,19 @@ export const listingVersionsHandler: PluginApiHandler = async (req, res) => {
               .slice(0, 20),
           }
         : {}),
+      // The services the version declares connections to (AGL-4197), by
+      // label only: the listing says which plan connecting them needs. The
+      // site's own connection card already shows these labels to installers.
+      ...(Array.isArray(doc.get('manifest')?.connections)
+        ? {
+            connections: (doc.get('manifest').connections as unknown[])
+              .map((entry) =>
+                String((entry as { label?: unknown })?.label ?? '').slice(0, 80),
+              )
+              .filter(Boolean)
+              .slice(0, 10),
+          }
+        : {}),
       publishedAtMs: doc.get('publishedAt')?.toMillis?.() ?? null,
     }))
 

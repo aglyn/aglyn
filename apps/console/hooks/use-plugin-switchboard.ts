@@ -274,6 +274,13 @@ export interface SiteSwitchboardOptions extends SwitchboardOptions {
   autoSave?: boolean
   /** The reader may not write — rendered disabled rather than hidden. */
   readOnly?: boolean
+  /**
+   * The marketplace listings pinned for this site (its own pins and the
+   * workspace's). A workspace that never configured `enabledPlugins` runs
+   * every one of them, and `resolveHostEnabledPlugins` cannot see pins, so
+   * without them each installed listing read as off here while it ran.
+   */
+  installedListings?: readonly string[]
 }
 
 /**
@@ -332,14 +339,20 @@ export function useSitePluginSwitchboard(
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [storedDisabled, storedOptedIn])
 
+  const installedKey = [...(options.installedListings ?? [])].sort().join('|')
+
   /** What runs on this site given a candidate local state. */
   const effective = useCallback(
     (candidate: SiteState) =>
-      resolveHostEnabledPlugins(org, {
-        disabledPlugins: candidate.disabled,
-        enabledPlugins: candidate.optedIn,
-      }),
-    [org],
+      resolveHostEnabledPlugins(
+        org,
+        {
+          disabledPlugins: candidate.disabled,
+          enabledPlugins: candidate.optedIn,
+        },
+        installedKey ? installedKey.split('|') : [],
+      ),
+    [org, installedKey],
   )
 
   const enabledNow = useMemo(() => effective(state), [effective, state])

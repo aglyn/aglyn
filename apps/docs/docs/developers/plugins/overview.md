@@ -102,13 +102,19 @@ The first row is what the install physically produces, which depends on the type
 
 | Type | The row reads |
 | --- | --- |
-| Plugin | A plugin, sandboxed on its own origin with a per-plugin CSP |
+| Plugin | A plugin, sandboxed on its own origin with a per-plugin CSP — or, for a version staff signed to run with the site (realm trust), *A plugin, reviewed and signed by Aglyn to run with your site* |
 | Component | An editable component you can place on any page |
 | Template | Editable pages you can rework in Besigner |
 | Layout | An editable layout you can apply to any page |
 | Dataset schema | A new empty dataset with its fields already defined |
 | Email template | An editable email design you can send campaigns from |
 | Theme | A theme applied to the site you choose |
+
+A plugin whose version declares a [connection](reference/manifest-and-envs.md#connections) to
+another service adds a **plan** row straight after it, marked as a **note**: *Connecting
+Google Business Profile comes with the Starter, Pro and Custom plans*. The plugin
+installs on any plan, but on Free its **Connect** button is disabled, so the shopper is
+told before installing rather than after.
 
 Then, in order, up to four more rows:
 
