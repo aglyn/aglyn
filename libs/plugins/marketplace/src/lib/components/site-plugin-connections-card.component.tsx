@@ -44,6 +44,7 @@ import {
   pluginConnectionPhase,
   pluginConnectionResultMessage,
   pluginConnectionSharesText,
+  pluginConnectionSyncFailedText,
   pluginConnectionTooSoonText,
   readPluginConnectionReturn,
   type PluginConnectionCardView,
@@ -480,7 +481,8 @@ function SitePluginConnection(props: SitePluginConnectionProps) {
 
   const chip = PLUGIN_CONNECTION_PHASE_CHIP[phase]
   const shares = pluginConnectionSharesText(entry.hosts)
-  const nextSync = pluginConnectionNextSyncAtMs(view, intervalHours)
+  // A plan without connections is never run by the scheduled sync, so it has no next one to show.
+  const nextSync = planAllows ? pluginConnectionNextSyncAtMs(view, intervalHours) : null
   const chosen = entry.resources.filter((one) => view?.choices[one.id])
 
   return (
@@ -526,11 +528,7 @@ function SitePluginConnection(props: SitePluginConnectionProps) {
         ) : null}
 
         {phase === 'error' ? (
-          <Alert severity="error">
-            {view?.lastError
-              ? `The last sync did not work: ${view.lastError}. It tries again on schedule, or you can sync now.`
-              : 'The last sync did not work. It tries again on schedule, or you can sync now.'}
-          </Alert>
+          <Alert severity="error">{pluginConnectionSyncFailedText(view?.lastError)}</Alert>
         ) : null}
 
         {resource ? (

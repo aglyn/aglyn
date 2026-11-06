@@ -184,6 +184,15 @@ func pluginConnectionTooSoonText(_ label: String, retryAfterMs: Double?) -> Stri
   return "\(label) synced moments ago. You can sync it again in \(Int((retryAfterMs / 1000).rounded(.up))) seconds."
 }
 
+/// The failed-sync sentence (`pluginConnectionSyncFailedText`): the provider's own sentence without its closing period.
+func pluginConnectionSyncFailedText(_ lastError: String?) -> String {
+  var reason = (lastError ?? "").trimmingCharacters(in: .whitespacesAndNewlines)
+  while let last = reason.last, ".!? ".contains(last) { reason.removeLast() }
+  return reason.isEmpty
+    ? "The last sync did not work. It tries again on schedule, or you can sync now."
+    : "The last sync did not work: \(reason). It tries again on schedule, or you can sync now."
+}
+
 /// Where a connection's data goes and comes from (`pluginConnectionSharesText`).
 func pluginConnectionSharesText(_ hosts: [String]) -> String? {
   hosts.isEmpty ? nil : "Shares data with: \(hosts.joined(separator: ", "))"
@@ -251,6 +260,8 @@ struct SitePluginConnectionsCard: View {
   @State private var status: PluginConnectionsStatus?
   @State private var loadError: String?
   @State private var refused = false
+  /// Counts the returns to the app: a section's banners spoke of what was true before it left, so they go.
+  @State private var returns = 0
 
   private var listingID: String { slot["pluginId"] ?? "" }
   private var hostID: String { context.hostID ?? "" }
@@ -275,7 +286,8 @@ struct SitePluginConnectionsCard: View {
             ForEach(status.connections) { entry in
               SitePluginConnectionSection(
                 context: context, entry: entry, configured: status.configured, planAllows: status.planAllows && entry.planAllows,
-                pluginName: pluginName, intervalHours: declared.first { $0.id == entry.connectionID }?.intervalHours, api: api
+                pluginName: pluginName, intervalHours: declared.first { $0.id == entry.connectionID }?.intervalHours, api: api,
+                returns: returns
               ) { updated in
                 self.status?.connections = self.status?.connections.map { $0.id == entry.id ? updated : $0 } ?? []
               } onStale: {
@@ -292,7 +304,12 @@ struct SitePluginConnectionsCard: View {
     }
     .task(id: "\(hostID)/\(listingID)") { await load() }
     // Back from the provider's sign-in in the browser: read where it stands again.
-    .onChange(of: scenePhase) { _, phase in if phase == .active, declared?.isEmpty == false { Task { await refresh() } } }
+    .onChange(of: scenePhase) { _, phase in
+      if phase == .active, declared?.isEmpty == false {
+        returns += 1
+        Task { await refresh() }
+      }
+    }
   }
 
   private func header(_ label: String, chip: PluginConnectionPhase?) -> some View {
@@ -336,6 +353,8 @@ private struct SitePluginConnectionSection: View {
   let pluginName: String
   let intervalHours: Double?
   let api: PluginConnectionsAPI
+  /// Bumped each time the person comes back to the app, when the card reads where the connection stands again.
+  let returns: Int
   let onChange: (PluginConnectionEntry) -> Void
   let onStale: () -> Void
   @Environment(\.openURL) private var openURL
@@ -376,6 +395,12 @@ private struct SitePluginConnectionSection: View {
       actions
     }
     .task(id: "\(resource?.id ?? "")/\(planAllows)") { await loadItems() }
+    // Back in the app the state is read again; "is up to date" or "synced moments ago" from before would now mislead.
+    .onChange(of: returns) { _, _ in
+      runner.notice = nil
+      runner.error = nil
+      wait = nil
+    }
     .confirmationDialog("Disconnect \(label)?", isPresented: $confirmingDisconnect, titleVisibility: .visible) {
       Button("Disconnect", role: .destructive) { disconnect() }
     } message: {
@@ -402,8 +427,7 @@ private struct SitePluginConnectionSection: View {
     case .reconnect:
       AglynNotice("\(label) no longer accepts this connection. Nothing syncs until you reconnect.", tone: .warning)
     case .error:
-      let reason = entry.connection?.lastError.map { "The last sync did not work: \($0). " } ?? "The last sync did not work. "
-      AglynNotice(reason + "It tries again on schedule, or you can sync now.", tone: .error)
+      AglynNotice(pluginConnectionSyncFailedText(entry.connection?.lastError), tone: .error)
     default: EmptyView()
     }
   }
@@ -438,13 +462,15 @@ private struct SitePluginConnectionSection: View {
   private var details: some View {
     if let connection = entry.connection, changing == nil {
       let chosen = entry.resources.compactMap { one in connection.choices[one.id].map { (one.label, $0.label) } }
+      // "Account: Candle Co", as the console card, the Kotlin screen and the Figma frames say it.
       ForEach(chosen, id: \.0) { pair in
-        LabeledContent(pair.0, value: pair.1).font(AglynFont.subheadline)
+        Text("\(pair.0): \(pair.1)").font(AglynFont.body)
       }
       if declaresSync, phase == .connected || phase == .error {
         Text(connection.lastSyncAtMs.map { "Last synced \(pluginConnectionTime($0))" } ?? "Not synced yet")
           .font(AglynFont.caption).foregroundStyle(.secondary)
-        switch pluginConnectionNextSync(connection, intervalHours: intervalHours) {
+        // A plan without connections is never run by the scheduled sync, so it has no next one to show.
+        switch planAllows ? pluginConnectionNextSync(connection, intervalHours: intervalHours) : nil {
         case .at(let ms)?: Text("Next sync \(pluginConnectionTime(ms))").font(AglynFont.caption).foregroundStyle(.secondary)
         case .soon?: Text("Next sync: within the hour").font(AglynFont.caption).foregroundStyle(.secondary)
         case nil: EmptyView()

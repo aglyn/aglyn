@@ -98,4 +98,11 @@ final class PluginConnectionsTests: XCTestCase {
     XCTAssertEqual(pluginConnectionsPlanRefusal, "Connecting a plugin to another service comes with the Starter, Pro and Custom plans.")
     XCTAssertEqual(pluginConnectionsSiteKey, "marketplace.siteConnections")
   }
+
+  func testSyncFailedTextAddsNoSecondPeriod() {
+    XCTAssertEqual(
+      pluginConnectionSyncFailedText("Google Business Profile did not answer: Internal error encountered."),
+      "The last sync did not work: Google Business Profile did not answer: Internal error encountered. It tries again on schedule, or you can sync now.")
+    XCTAssertEqual(pluginConnectionSyncFailedText(nil), "The last sync did not work. It tries again on schedule, or you can sync now.")
+  }
 }

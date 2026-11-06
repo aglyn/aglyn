@@ -25,6 +25,7 @@ import {
 } from './model/plugin-connection-card'
 import {
   PLUGIN_CONNECTIONS_API_ROUTES,
+  PLUGIN_CONNECTIONS_CREDENTIALS_PERMISSION,
   PLUGIN_CONNECTIONS_PLAN_REFUSAL,
   PLUGIN_CONNECTIONS_SITE_PERMISSION,
 } from './model/plugin-connections'
@@ -88,5 +89,45 @@ describe('the native connection screens match the console (AGL-4196)', () => {
     expect(read('apps/console/app/(app)/[orgSlug]/hosts/[host]/admin/plugins/[pluginRef]/page.tsx')).toContain(
       'slot="sitePluginConnections"',
     )
+  })
+
+  /*
+   * The publisher's half (AGL-4196): the listing's connection credentials, which
+   * the console's ListingConnectionCredentialsCard sets, replaces and clears.
+   */
+  const CREDENTIALS = {
+    swift: read('libs/plugins/marketplace/src/ios/Sources/AglynMarketplacePlugin/ListingConnectionCredentials.swift'),
+    kotlin: read(
+      'libs/plugins/marketplace/src/android/src/commonMain/kotlin/com/aglyn/plugins/marketplace/ListingConnectionCredentials.kt',
+    ),
+  }
+  const CARD = read('libs/plugins/marketplace/src/lib/components/listing-connection-credentials-card.component.tsx')
+
+  it.each(Object.entries(CREDENTIALS))('%s sets the publisher credentials through the console route, with its words', (_, source) => {
+    expect(source).toContain(`"/api/${PLUGIN_CONNECTIONS_API_ROUTES.credentials}"`)
+    expect(source).toContain(`"${PLUGIN_CONNECTIONS_CREDENTIALS_PERMISSION}"`)
+    expect(source).toContain('/api/plugin-connections/connect/callback')
+    for (const sentence of [
+      'Until these are set, sites that install your plugin cannot connect this service.',
+      'Sites sign in to this service with your OAuth app. The client ID and secret are never shown again; replace them to change them.',
+      'Stored sealed. It cannot be read back, by you or anyone else.',
+      "Register this address at the provider as your OAuth app's redirect URI, exactly as shown.",
+      'Sites already connected stop syncing, and nobody can connect until you set new ones.',
+    ]) {
+      expect(CARD).toContain(sentence)
+      expect(source).toContain(sentence)
+    }
+    for (const label of ['"Set"', '"Not set"', '"Replace"', '"Set credentials"', '"Clear"', '"Client ID"', '"Client secret"']) {
+      expect(source).toContain(label)
+    }
+  })
+
+  it('both draw the credentials on the publisher’s own plugin listing only', () => {
+    expect(read('libs/plugins/marketplace/src/ios/Sources/AglynMarketplacePlugin/MarketplaceScreens.swift')).toMatch(
+      /if mine, plugin \{\s*ListingConnectionCredentialsSections/,
+    )
+    expect(
+      read('libs/plugins/marketplace/src/android/src/commonMain/kotlin/com/aglyn/plugins/marketplace/MarketplaceScreens.kt'),
+    ).toContain('if (mine && plugin) ListingConnectionCredentialsCards(context, listing.id)')
   })
 })

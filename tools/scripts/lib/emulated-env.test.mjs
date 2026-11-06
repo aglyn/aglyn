@@ -30,6 +30,7 @@ import { mkdirSync, mkdtempSync, writeFileSync } from 'node:fs'
 import { tmpdir } from 'node:os'
 import { join } from 'node:path'
 import { describe, it } from 'node:test'
+import { createPrivateKey, createPublicKey, sign, verify } from 'node:crypto'
 
 import {
   consoleEnvFiles,
@@ -42,6 +43,8 @@ import {
   LIVE_AI_CREDENTIALS,
   liveAiFromEnv,
   LOCAL_CRON_SECRET,
+  LOCAL_PLUGIN_CONNECTIONS_TOKEN_KEY,
+  LOCAL_PLUGIN_TRUST_KEYS,
   parseProcessEnvironment,
   serveEnvFiles,
   serversHoldNoCredential,
@@ -188,6 +191,43 @@ describe('emulatedServeEnvironment', () => {
       emulatedServeEnvironment({ CRON_SECRET: 'shell' }, liveFiles, { liveAi: true }).env.CRON_SECRET,
       'shell',
     )
+  })
+
+  // AGL-4196: the key was blanked like a provider credential, so every
+  // plugin connection on the emulator stack read "not available here yet".
+  it("seals plugin connections with the local key beside an emulator, never the file's or the shell's", () => {
+    const files = [file({ PLUGIN_CONNECTIONS_TOKEN_KEY: 'deployment-key' })]
+    const emulated = emulatedServeEnvironment(
+      { FIRESTORE_EMULATOR_HOST: 'localhost:8082', PLUGIN_CONNECTIONS_TOKEN_KEY: 'shell-key' },
+      files,
+    )
+    assert.equal(emulated.env.PLUGIN_CONNECTIONS_TOKEN_KEY, LOCAL_PLUGIN_CONNECTIONS_TOKEN_KEY)
+    assert.equal(Buffer.from(LOCAL_PLUGIN_CONNECTIONS_TOKEN_KEY, 'base64').length, 32)
+    assert.equal(emulated.blanked.includes('PLUGIN_CONNECTIONS_TOKEN_KEY'), false)
+    // It reaches no service, so a server holding it passes the e2e preflight.
+    assert.equal(isOutboundCredential('PLUGIN_CONNECTIONS_TOKEN_KEY'), false)
+    assert.deepEqual(heldCredentials(new Map([['PLUGIN_CONNECTIONS_TOKEN_KEY', 'set']]), new Set()), [])
+  })
+
+  it('signs and verifies realm trust with the local pair beside an emulator, never a deployed key', () => {
+    const files = [file({ PLUGIN_TRUST_PRIVATE_KEY: 'deployment-private', NEXT_PUBLIC_PLUGIN_TRUST_PUBLIC_KEY: 'deployment-public' })]
+    const { env, blanked } = emulatedServeEnvironment({ FIREBASE_AUTH_EMULATOR_HOST: 'localhost:9099' }, files)
+    assert.equal(env.PLUGIN_TRUST_PRIVATE_KEY, LOCAL_PLUGIN_TRUST_KEYS.PLUGIN_TRUST_PRIVATE_KEY)
+    assert.equal(env.PLUGIN_TRUST_PUBLIC_KEY, LOCAL_PLUGIN_TRUST_KEYS.PLUGIN_TRUST_PUBLIC_KEY)
+    assert.equal(env.NEXT_PUBLIC_PLUGIN_TRUST_PUBLIC_KEY, LOCAL_PLUGIN_TRUST_KEYS.PLUGIN_TRUST_PUBLIC_KEY)
+    assert.equal(blanked.includes('PLUGIN_TRUST_PRIVATE_KEY'), false)
+    // The pair is a real one: what the private key signs, the public key verifies.
+    const privateKey = createPrivateKey({
+      key: Buffer.from(LOCAL_PLUGIN_TRUST_KEYS.PLUGIN_TRUST_PRIVATE_KEY, 'base64'),
+      format: 'der',
+      type: 'pkcs8',
+    })
+    const publicKey = createPublicKey({
+      key: { kty: 'OKP', crv: 'Ed25519', x: Buffer.from(LOCAL_PLUGIN_TRUST_KEYS.PLUGIN_TRUST_PUBLIC_KEY, 'base64').toString('base64url') },
+      format: 'jwk',
+    })
+    const signature = sign(null, Buffer.from('sha256-hex'), privateKey)
+    assert.equal(verify(null, Buffer.from('sha256-hex'), publicKey, signature), true)
   })
 
   // AGL-3910: a checkout without the app env files served a console whose

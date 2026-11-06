@@ -19,7 +19,7 @@
 import { components } from '@aglyn/aglyn'
 import { pluginInstallToPresets, setKnownPluginInstalls } from '@aglyn/aglyn'
 import { collection, limit, query } from 'firebase/firestore'
-import { runInAction } from 'mobx'
+import { reaction, runInAction } from 'mobx'
 import { useEffect, useMemo, useRef } from 'react'
 import { useFirestore } from './firebase/firebase-services'
 import { useHostOrgId } from './use-host-org-id'
@@ -94,31 +94,42 @@ export function usePluginDrawerRegistration(hostId: string): void {
   }, [installs])
 
   useEffect(() => {
-    // Single mobx transaction (AGL-371): the drawer re-renders once per
-    // install sync, not once for the unregister and again per preset.
-    runInAction(() => {
+    const unregister = () => {
       if (registeredIds.current.length) {
         components.unregisterPreset(registeredIds.current)
         registeredIds.current = []
       }
-      // One preset per install PLUS one per element the pinned version
-      // declares (AGL-1031). Built from the pin, so a declared element appears
-      // only where the plugin is installed and leaves with a revoked version.
-      const presets = installs
-        .flatMap((install) => pluginInstallToPresets(install))
-        .filter(
-          (preset): preset is NonNullable<typeof preset> => Boolean(preset),
-        )
-      if (presets.length) {
-        components.registerPreset(presets)
-        registeredIds.current = presets.map((preset) => preset.$id)
-      }
-    })
+    }
+    // One preset per install PLUS one per element the pinned version
+    // declares (AGL-1031). Built from the pin, so a declared element appears
+    // only where the plugin is installed and leaves with a revoked version.
+    // A reaction, not a one-off: whether a signed plugin's own elements are
+    // registered (which drops its generic entry, AGL-4196) can change after
+    // the installs arrive, when its bundle finishes loading.
+    const dispose = reaction(
+      () =>
+        installs
+          .flatMap((install) => pluginInstallToPresets(install))
+          .filter((preset): preset is NonNullable<typeof preset> => Boolean(preset)),
+      (presets) => {
+        // Single mobx transaction (AGL-371): the drawer re-renders once per
+        // install sync, not once for the unregister and again per preset.
+        runInAction(() => {
+          unregister()
+          if (presets.length) {
+            components.registerPreset(presets)
+            registeredIds.current = presets.map((preset) => preset.$id)
+          }
+        })
+      },
+      {
+        fireImmediately: true,
+        equals: (a, b) => a.map((preset) => preset.$id).join('\n') === b.map((preset) => preset.$id).join('\n'),
+      },
+    )
     return () => {
-      if (registeredIds.current.length) {
-        components.unregisterPreset(registeredIds.current)
-        registeredIds.current = []
-      }
+      dispose()
+      unregister()
     }
   }, [installs])
 }

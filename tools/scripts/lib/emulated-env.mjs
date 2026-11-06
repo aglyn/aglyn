@@ -40,6 +40,7 @@
 // refill, and handed to `next dev` with each credential present and empty.
 
 import { execFileSync } from 'node:child_process'
+import { createPrivateKey, createPublicKey } from 'node:crypto'
 import { existsSync, readFileSync } from 'node:fs'
 import { dirname, join } from 'node:path'
 import dotenv from 'dotenv'
@@ -74,6 +75,14 @@ export const KEPT_CREDENTIALS = new Map([
   ['EMAIL_UNSUBSCRIBE_SECRET', 'signs the unsubscribe links this app verifies'],
   ['CRON_SECRET', 'verifies scheduler calls this server receives'],
   ['REVALIDATE_SECRET', 'shared between the local console and tenant for revalidation'],
+  [
+    'PLUGIN_CONNECTIONS_TOKEN_KEY',
+    "seals plugin connection credentials and tokens in this server's own Firestore; beside an emulator it is always LOCAL_PLUGIN_CONNECTIONS_TOKEN_KEY",
+  ],
+  [
+    'PLUGIN_TRUST_PRIVATE_KEY',
+    "signs realm trust on this server's own plugin versions; beside an emulator it is always the published local key (LOCAL_PLUGIN_TRUST_KEYS)",
+  ],
 ])
 
 /** Whether an emulated server must hold this variable empty. */
@@ -140,6 +149,38 @@ export const LIVE_AI_ENV = 'AGLYN_EMULATED_LIVE_AI'
  * know it without reading an env file.
  */
 export const LOCAL_CRON_SECRET = 'emulated-local-beat'
+
+/**
+ * The key an emulated server seals plugin connections with (AGL-4196): 32
+ * bytes, base64, published here on purpose. It seals only what lives in the
+ * emulator (a publisher's test client id, a test grant), and it reaches no
+ * service. Beside an emulator it replaces whatever an env file or the shell
+ * holds, so the deployment's real key never seals emulator data, and the
+ * connection card shows every state instead of "not available here yet".
+ */
+export const LOCAL_PLUGIN_CONNECTIONS_TOKEN_KEY = Buffer.from('aglyn-emulator-plugin-connection').toString('base64')
+
+/**
+ * The realm-trust key pair an emulated server signs and verifies with
+ * (AGL-4196), derived from a seed published here on purpose: a version a
+ * staff member grants on the emulator stack is signed with it, and only a
+ * runtime holding this public key accepts that signature, which no deployed
+ * one does. Without it the stack cannot grant realm trust ("Trust signing is
+ * not configured"), so no signed plugin, and no element that reads a
+ * connection's record, ever ran locally.
+ */
+export const LOCAL_PLUGIN_TRUST_KEYS = (() => {
+  const seed = Buffer.from('aglyn-emulator-plugin-trust-seed')
+  // PKCS8 DER of an Ed25519 key: the fixed prefix, then the 32-byte seed.
+  const der = Buffer.concat([Buffer.from('302e020100300506032b657004220420', 'hex'), seed])
+  const publicJwk = createPublicKey(createPrivateKey({ key: der, format: 'der', type: 'pkcs8' })).export({ format: 'jwk' })
+  const publicKey = Buffer.from(String(publicJwk.x), 'base64url').toString('base64')
+  return {
+    PLUGIN_TRUST_PRIVATE_KEY: der.toString('base64'),
+    PLUGIN_TRUST_PUBLIC_KEY: publicKey,
+    NEXT_PUBLIC_PLUGIN_TRUST_PUBLIC_KEY: publicKey,
+  }
+})()
 
 /** Whether the shell asked for a live model through {@link LIVE_AI_ENV}. */
 export function liveAiFromEnv(env) {
@@ -317,6 +358,8 @@ export function emulatedServeEnvironment(inherited, envFiles, { liveAi = false, 
   const identityFilled = []
   const adminSdkMissing = []
   if (namesAnEmulator(env)) {
+    env.PLUGIN_CONNECTIONS_TOKEN_KEY = LOCAL_PLUGIN_CONNECTIONS_TOKEN_KEY
+    Object.assign(env, LOCAL_PLUGIN_TRUST_KEYS)
     for (const [name, value] of Object.entries(emulatorFirebaseIdentity(env))) {
       if (env[name]) continue
       env[name] = value

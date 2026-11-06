@@ -343,6 +343,23 @@ describe('SitePluginConnectionsCard (AGL-4196)', () => {
     expect(screen.queryByRole('button', { name: 'Sync now' })).toBeNull()
   })
 
+  it('error: a provider sentence that ends in a period is not given a second one', async () => {
+    open(stubApi(status({ connection: view({ status: 'error', lastError: 'Google Business Profile did not answer: Internal error encountered.' }) })))
+    expect(await screen.findByText('Sync failed')).toBeTruthy()
+    expect(
+      screen.getByText(
+        'The last sync did not work: Google Business Profile did not answer: Internal error encountered. It tries again on schedule, or you can sync now.',
+      ),
+    ).toBeTruthy()
+  })
+
+  it('a plan without connections shows no next sync, which the schedule would never run', async () => {
+    open(stubApi(status({ planAllows: false, connection: view() }, { planAllows: false })))
+    expect(await screen.findByText('Connected')).toBeTruthy()
+    expect(screen.getByText(/^Last synced /)).toBeTruthy()
+    expect(screen.queryByText(/^Next sync/)).toBeNull()
+  })
+
   it('error: the last error and Sync now', async () => {
     open(stubApi(status({ connection: view({ status: 'error', lastError: 'The provider answered 503' }) })))
     expect(await screen.findByText('Sync failed')).toBeTruthy()

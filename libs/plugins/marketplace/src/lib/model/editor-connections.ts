@@ -53,13 +53,20 @@ export function syncingConnectionsOf(manifest: unknown): PluginConnectionDeclara
   return verdict.ok ? verdict.value.filter((connection) => Boolean(connection.sync)) : []
 }
 
-/** A declared field name as a person reads it: `reviewCount` → `Review count`. */
+/** Words a field name abbreviates that a person reads in capitals: `reviewUrl` → `Review URL`. */
+const FIELD_ACRONYMS: Readonly<Record<string, string>> = { url: 'URL', uri: 'URI', id: 'ID', api: 'API', sms: 'SMS', html: 'HTML' }
+
+/** A declared field name as a person reads it: `reviewCount` → `Review count`, `reviewUrl` → `Review URL`. */
 export function connectionFieldLabel(field: string): string {
   const words = field
     .replace(/_/g, ' ')
     .replace(/([a-z0-9])([A-Z])/g, '$1 $2')
     .trim()
     .toLowerCase()
+    .split(/\s+/)
+    .filter(Boolean)
+    .map((word) => FIELD_ACRONYMS[word] ?? word)
+    .join(' ')
   return words ? words.charAt(0).toUpperCase() + words.slice(1) : field
 }
 
