@@ -2277,7 +2277,7 @@ describe('hosts', () => {
     const AUTHORING = [
       'overlays', 'experiments', 'emailTemplates',
       'coupons', 'discounts',
-      'subscriptions', 'suppliers', 'events', 'bookings', 'activity',
+      'suppliers', 'events', 'bookings', 'activity',
       'settings', 'media', 'mediaFolders',
       'licenseKeys', 'reservations', 'resources', 'productCategories',
       // `suppressions` JOINS this list in AGL-2042 rather than being denied
@@ -2289,6 +2289,13 @@ describe('hosts', () => {
       // is the assertion that would catch the next attempt.
       'suppressions',
     ]
+    // `subscriptions` LEFT this list in AGL-4191: only the billing webhook
+    // writes one (Admin SDK), no console or app surface ever did, and a
+    // client-written one would be an unpaid subscription the members-only
+    // gate honors. Its reads follow the order book's permission. Both are
+    // asserted in `returns, order webhooks and the event outbox are the
+    // server’s`.
+    //
     // `reviews` LEFT this list in AGL-3736: only `/api/commerce/reviews`
     // creates one (it alone decides `verified`), no client deletes one, and
     // an update may touch only the moderation fields. All of it is asserted
@@ -14197,11 +14204,16 @@ describe('returns, order webhooks and the event outbox are the server’s (AGL-3
       await setDoc(doc(db, 'hosts', HOST, 'orderWebhookSecrets', 'w1'), { secret: 'sealed' })
       await setDoc(doc(db, 'hosts', HOST, 'orderWebhookDeliveries', 'd1'), { endpointId: 'w1', status: 'delivered', createdAtMs: 1 })
       await setDoc(doc(db, 'pluginEventOutbox', 'e1'), { status: 'pending', event: 'order.paid', hostId: HOST })
+      // Subscriptions and their invoices (AGL-4191): customer and money, the
+      // billing webhook's to write.
+      await setDoc(doc(db, 'hosts', HOST, 'subscriptions', 's1'), { status: 'active', customerEmail: 'sam@example.com' })
+      await setDoc(doc(db, 'hosts', HOST, 'subscriptions', 's1', 'invoices', 'i1'), { paidCents: 9900, paidAtMs: 1 })
     })
   })
 
-  for (const name of ['returns', 'orderWebhooks', 'orderWebhookDeliveries']) {
-    const id = name === 'returns' ? 'r1' : name === 'orderWebhooks' ? 'w1' : 'd1'
+  for (const name of ['returns', 'orderWebhooks', 'orderWebhookDeliveries', 'subscriptions']) {
+    const id =
+      name === 'returns' ? 'r1' : name === 'orderWebhooks' ? 'w1' : name === 'subscriptions' ? 's1' : 'd1'
     it(`lets the order book's readers read ${name}, and nobody else`, async () => {
       await assertSucceeds(getDoc(doc(authed(OWNER), 'hosts', HOST, name, id)))
       await assertSucceeds(getDoc(doc(authed(EDITOR), 'hosts', HOST, name, id)))
@@ -14217,6 +14229,18 @@ describe('returns, order webhooks and the event outbox are the server’s (AGL-3
       await assertFails(deleteDoc(doc(authed(OWNER), 'hosts', HOST, name, id)))
     })
   }
+
+  it('lets the order book’s readers read a subscription’s invoices, and nobody write one (AGL-4191)', async () => {
+    const invoice = (uid) => doc(authed(uid), 'hosts', HOST, 'subscriptions', 's1', 'invoices', 'i1')
+    await assertSucceeds(getDoc(invoice(OWNER)))
+    await assertSucceeds(getDoc(invoice(EDITOR)))
+    await assertFails(getDoc(invoice(AUTHOR)))
+    await assertFails(getDoc(invoice(VIEWER)))
+    await assertFails(getDoc(invoice(OUTSIDER)))
+    await assertFails(setDoc(doc(authed(OWNER), 'hosts', HOST, 'subscriptions', 's1', 'invoices', 'minted'), { paidCents: 1 }))
+    await assertFails(updateDoc(invoice(OWNER), { paidCents: 0 }))
+    await assertFails(deleteDoc(invoice(OWNER)))
+  })
 
   it('gives the check-ins at the window no client reader and no client writer (AGL-4043)', async () => {
     await env.withSecurityRulesDisabled(async (context) => {

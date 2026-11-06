@@ -20,6 +20,7 @@ import type { ConsoleNavSection } from '@aglyn/aglyn'
 export type CommerceConsoleSectionId =
   | 'catalog'
   | 'orders'
+  | 'subscriptions'
   | 'returns'
   | 'promotions'
   | 'reservations'
@@ -91,6 +92,8 @@ const SETTINGS = COMMERCE_SETTINGS_GROUP
 export const COMMERCE_CONSOLE_SECTIONS: readonly ConsoleNavSection[] = [
   { id: 'catalog', label: 'Catalog' },
   { id: 'orders', label: 'Orders' },
+  // Every subscription and its recurring revenue (AGL-4191).
+  { id: 'subscriptions', label: 'Subscriptions' },
   { id: 'returns', label: 'Returns' },
   { id: 'promotions', label: 'Promotions' },
   { id: 'reservations', label: 'Reservations' },

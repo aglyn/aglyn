@@ -33,6 +33,30 @@ export interface AccountOrderView {
   tracking?: { carrier?: string; trackingNumber?: string }
 }
 
+/** How many of each subscription's invoices the account page lists. */
+export const ACCOUNT_INVOICE_WINDOW = 12
+
+export interface AccountSubscriptionView {
+  id: string
+  productName: string
+  status: string
+  currentPeriodEndMs: number | null
+  paidThroughMs?: number
+  cancelAtPeriodEnd?: true
+  /** What each cycle charges, tax included: what the subscriber pays. */
+  priceCents?: number
+  interval?: CommerceModel.SubscriptionBillingInterval
+  invoices: Array<{
+    id: string
+    paidAtMs: number
+    paidCents: number
+    currency: string
+    number?: string
+    /** Stripe's hosted invoice, which carries the receipt download. */
+    url?: string
+  }>
+}
+
 /**
  * Member account (AGL-294): profile + address book + order history for
  * the signed-in site member (AGL-109 session cookie). Orders match by
@@ -167,23 +191,78 @@ export const membershipAccountHandler: PluginApiHandler = async (req, res) => {
       }
     }
 
-    // Storefront subscriptions (AGL-303) with product names resolved.
+    // Storefront subscriptions (AGL-303) with product names resolved, and
+    // what the subscriber needs to plan around (AGL-4191): the price, the one
+    // date that matters next, and their recent invoices with Stripe's own
+    // receipt link.
     const subscriptionsSnapshot = await hostRef
       .collection('subscriptions')
       .where('customerEmail', '==', email)
       .limit(10)
       .get()
-    const subscriptions = await Promise.all(
+    const subscriptions: AccountSubscriptionView[] = await Promise.all(
       subscriptionsSnapshot.docs.map(async (docSnapshot) => {
-        const productSnapshot = await hostRef
-          .collection('products')
-          .doc(String(docSnapshot.get('productId') ?? ''))
-          .get()
+        const soldLine = (docSnapshot.get('lineItems') ?? [])[0] as
+          | { name?: string }
+          | undefined
+        const [productSnapshot, invoicesSnapshot] = await Promise.all([
+          soldLine?.name
+            ? null
+            : hostRef
+                .collection('products')
+                .doc(String(docSnapshot.get('productId') ?? '') || 'missing')
+                .get()
+                .catch(() => null),
+          // The billing history is extra: a failed read leaves it empty
+          // rather than taking the whole account page down with it.
+          (async () => {
+            try {
+              return await hostRef
+                .collection('subscriptions')
+                .doc(docSnapshot.id)
+                .collection('invoices')
+                .orderBy('paidAtMs', 'desc')
+                .limit(ACCOUNT_INVOICE_WINDOW)
+                .get()
+            } catch {
+              return null
+            }
+          })(),
+        ])
+        const totalCents = docSnapshot.get('totals.totalCents')
+        const interval = CommerceModel.subscriptionInterval(
+          docSnapshot.get('interval'),
+        )
         return {
           id: docSnapshot.id,
-          productName: String(productSnapshot.get('name') ?? 'Subscription'),
+          productName: String(
+            soldLine?.name ?? productSnapshot?.get('name') ?? 'Subscription',
+          ),
           status: String(docSnapshot.get('status') ?? 'active'),
           currentPeriodEndMs: docSnapshot.get('currentPeriodEndMs') ?? null,
+          ...(docSnapshot.get('paidThroughMs')
+            ? { paidThroughMs: Number(docSnapshot.get('paidThroughMs')) }
+            : {}),
+          ...(docSnapshot.get('cancelAtPeriodEnd') === true
+            ? { cancelAtPeriodEnd: true }
+            : {}),
+          ...(typeof totalCents === 'number' ? { priceCents: totalCents } : {}),
+          ...(interval ? { interval } : {}),
+          invoices: (invoicesSnapshot?.docs ?? [])
+            // A trial's opening $0 invoice is a record, not a payment.
+            .filter((invoice) => Number(invoice.get('paidCents') ?? 0) > 0)
+            .map((invoice) => ({
+              id: invoice.id,
+              paidAtMs: Number(invoice.get('paidAtMs') ?? 0),
+              paidCents: Number(invoice.get('paidCents') ?? 0),
+              currency: String(invoice.get('currency') ?? 'usd'),
+              ...(invoice.get('number')
+                ? { number: String(invoice.get('number')) }
+                : {}),
+              ...(invoice.get('hostedInvoiceUrl')
+                ? { url: String(invoice.get('hostedInvoiceUrl')) }
+                : {}),
+            })),
         }
       }),
     )
