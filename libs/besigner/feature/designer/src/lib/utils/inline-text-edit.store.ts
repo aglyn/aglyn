@@ -59,6 +59,22 @@ export interface InlinePropEditTarget {
 }
 
 /**
+ * Table-cell edit target: the editor is anchored on one rendered cell of a
+ * Table element, and the commit rewrites that cell inside the node's grid
+ * attribute instead of its `children` (see `table-cell-edit.ts`). Always the
+ * plain surface — a cell stores plain text.
+ */
+export interface InlineCellEditTarget {
+  /** The attribute holding the grid string. */
+  attribute: string
+  /** Row in the parsed grid, header row included. */
+  row: number
+  column: number
+  /** The cell's text when the edit opened. */
+  initialText: string
+}
+
+/**
  * State for the inline canvas text editor: which node is being edited and
  * where its element sits in viewport coordinates (the editor renders as a
  * fixed overlay OUTSIDE the closed canvas shadow root, so screen coordinates
@@ -78,6 +94,7 @@ class InlineTextEditStore {
   rect?: InlineTextEditRect = undefined
   anchor?: Element = undefined
   propTarget?: InlinePropEditTarget = undefined
+  cellTarget?: InlineCellEditTarget = undefined
 
   constructor() {
     makeAutoObservable(this, { anchor: observableRef })
@@ -92,6 +109,21 @@ class InlineTextEditStore {
     this.node = node
     this.rect = rect
     this.propTarget = propTarget
+    this.cellTarget = undefined
+    this.anchor = anchor
+  }
+
+  /** Opens the editor on one Table cell — see {@link InlineCellEditTarget}. */
+  openCell(
+    node: Aglyn.NodeSchema<any>,
+    rect: InlineTextEditRect,
+    cellTarget: InlineCellEditTarget,
+    anchor: Element,
+  ) {
+    this.node = node
+    this.rect = rect
+    this.propTarget = undefined
+    this.cellTarget = cellTarget
     this.anchor = anchor
   }
 
@@ -100,6 +132,7 @@ class InlineTextEditStore {
     this.rect = undefined
     this.anchor = undefined
     this.propTarget = undefined
+    this.cellTarget = undefined
   }
 }
 

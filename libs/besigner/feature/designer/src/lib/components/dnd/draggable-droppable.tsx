@@ -63,6 +63,11 @@ import {
 } from '../../utils/instance-leaf-hit'
 import { pickPlacementPart } from '../../utils/placement-part-pick'
 import { findLeafTextElement } from '../../utils/in-place-edit-surface'
+import {
+  findDataTableAttributeName,
+  findDataTableCellAtPoint,
+  readDataTableCell,
+} from '../../utils/table-cell-edit'
 import { holdKeyboardForEdit } from '../../utils/touch-keyboard'
 import { repeatCopyAt, repeatCopyStandIns } from '../../utils/repeat-copy'
 import { DropSurface } from './drop-surface'
@@ -561,6 +566,41 @@ export const DraggableDroppable = observer(
             // The measured element travels with the rect so the overlay can
             // re-measure on scroll instead of drifting (AGL-1644).
             element,
+          )
+          return true
+        }
+        // In-place Table cell editing: a component whose schema declares a
+        // DATA_TABLE attribute stores its grid as one string, so a cell is
+        // not a node of its own. The double-clicked cell becomes the editing
+        // surface and the commit rewrites that one cell in the grid — the
+        // same edit the attributes panel's grid makes. A double-click that
+        // lands outside every cell (the empty-table hint) falls through.
+        const tableAttribute = findDataTableAttributeName(node)
+        if (tableAttribute) {
+          const cell = findDataTableCellAtPoint(el, point.clientX, point.clientY)
+          if (!cell) return false
+          const stored = (node.props as Record<string, unknown> | undefined)?.[
+            tableAttribute
+          ]
+          const cellRect = cell.element.getBoundingClientRect()
+          // Editing an element is selecting it, as for markdown below: the
+          // two mousedowns of the double-click toggled the selection off.
+          Besigner.focus.setSelectedNode(node)
+          inlineTextEdit.openCell(
+            node,
+            {
+              left: cellRect.left,
+              top: cellRect.top,
+              width: cellRect.width,
+              height: cellRect.height,
+            },
+            {
+              attribute: tableAttribute,
+              row: cell.row,
+              column: cell.column,
+              initialText: readDataTableCell(stored, cell.row, cell.column),
+            },
+            cell.element,
           )
           return true
         }
