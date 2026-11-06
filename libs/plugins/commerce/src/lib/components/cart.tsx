@@ -545,7 +545,8 @@ function CartLines(props: {
               if (event.key === 'Enter') commitQuantity(line)
             }}
             size="small"
-            sx={{ width: 60 }}
+            // Four digits fit (AGL-4205): a line goes up to 9,999.
+            sx={{ width: (theme) => theme.spacing(10) }}
             slotProps={{ htmlInput: { inputMode: 'numeric' } }}
           />
           <Button

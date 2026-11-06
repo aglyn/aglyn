@@ -55,7 +55,12 @@ export interface HostCart {
 }
 
 export const CART_MAX_LINES = 50
-export const CART_MAX_QUANTITY = 99
+/**
+ * The most of one line a shopper can buy online (AGL-4205): 9,999, the same
+ * ceiling a quote line has (`QUOTE_MAX_QUANTITY`). It was 99, which stopped a
+ * print shop's 100-, 250- and 500-piece apparel orders at the product page.
+ */
+export const CART_MAX_QUANTITY = 9_999
 
 /**
  * One cart line's identity: product, variant, use day and add-ons

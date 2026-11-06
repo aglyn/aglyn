@@ -34,6 +34,8 @@ import Alert from '@mui/material/Alert'
 import Box from '@mui/material/Box'
 import Button from '@mui/material/Button'
 import Chip from '@mui/material/Chip'
+import Collapse from '@mui/material/Collapse'
+import Paper from '@mui/material/Paper'
 import MenuItem from '@mui/material/MenuItem'
 import Skeleton from '@mui/material/Skeleton'
 import SvgIcon from '@mui/material/SvgIcon'
@@ -42,6 +44,7 @@ import ToggleButton from '@mui/material/ToggleButton'
 import ToggleButtonGroup from '@mui/material/ToggleButtonGroup'
 import Typography from '@mui/material/Typography'
 import {
+  Children,
   Suspense,
   forwardRef,
   lazy,
@@ -68,6 +71,7 @@ import { readLocalWishlist, toggleWishlist } from './wishlist'
 import { StorefrontPaymentElementFallback } from './storefront-payment-element-fallback'
 import { CheckoutReturnNotice } from './checkout-return-notice'
 import { zonedDayKey } from '@aglyn/shared-util-timestamp/zoned-time'
+import { ProductBuilderContext, type ProductBuilderPicks } from './product-builder-context'
 
 /**
  * The Payment Element (AGL-1944), behind a lazy boundary rather than a plain
@@ -106,6 +110,21 @@ export interface ProductDetailProps {
    * when the store takes returns of this kind of product. Off by default.
    */
   showShipping?: boolean
+  /**
+   * How the shopper picks options and add-ons (AGL-4205): `menus`, the
+   * drop-downs and check boxes every page had, or `cards`, the product
+   * builder — a picture card per choice with its price and note, combos that
+   * fold out what they include, and a running total. Absent reads as menus,
+   * so no existing page changes shape.
+   */
+  choiceStyle?: 'menus' | 'cards'
+  /** The free-mockup button's words (AGL-4205); "Get a free mockup" when blank. */
+  mockupLabel?: string
+  /**
+   * What the site builder dropped into the block (AGL-4205): the request
+   * form a free mockup opens. Shown only for a product that offers mockups.
+   */
+  children?: ReactNode
 }
 
 interface DetailVariant {
@@ -119,6 +138,8 @@ interface DetailVariant {
   sku?: string
   /** The buyer may choose the day they will use it (AGL-4043). */
   asksUseDate?: true
+  /** A short line on the variant's picture card (AGL-4205). */
+  note?: string
 }
 
 /** What the page says where a variant with no price yet would show one (AGL-3676). */
@@ -145,6 +166,8 @@ interface Detail {
    * website ever arrive here.
    */
   modifierGroups?: CommerceModel.ProductModifierGroup[]
+  /** The page offers "Get a free mockup" (AGL-4205). */
+  mockupRequests?: true
 }
 
 /**
@@ -159,11 +182,97 @@ const UseDayPicker = lazy(() => import('./use-day-picker'))
  */
 const ProductAddOns = lazy(() => import('./product-add-ons'))
 
+/**
+ * The picture cards (AGL-4205), in their own chunk: only a page set to show
+ * its choices as cards downloads them.
+ */
+const ProductChoiceCards = lazy(() => import('./product-choice-cards'))
+
+/** The free-mockup button's words when the site builder typed none (AGL-4205). */
+export const MOCKUP_LABEL_DEFAULT = 'Get a free mockup'
+
 /** Money on the product page, in the store's currency: `$1,250.00`, never `$1250`. */
 const money = (cents: number) => CommerceModel.formatOrderMoney(cents)
 
 /** A price in dollars as the page prints it. */
 const moneyFromUsd = (priceUsd: number) => money(Math.round(priceUsd * 100))
+
+/**
+ * The canvas's sample for a block that shows picture cards (AGL-4205): an
+ * add-on group with a combo, and a free mockup offered, so the site builder
+ * sees every part the builder draws and can design the request form.
+ */
+const SAMPLE_BUILDER: Detail = {
+  id: 'sample',
+  name: 'Sample product',
+  slug: '#',
+  description: 'Drop this block on your product page template.',
+  mediaUrls: [],
+  options: [{ name: 'Size', values: ['Small', 'Medium', 'Large'] }],
+  variants: [
+    { id: 'a', options: { Size: 'Small' }, priceUsd: 299, soldOut: false, note: 'Fits one table' },
+    { id: 'b', options: { Size: 'Medium' }, priceUsd: 399, soldOut: false, note: 'Fits two tables' },
+    { id: 'c', options: { Size: 'Large' }, priceUsd: 549, soldOut: false, note: 'Fits a booth' },
+  ],
+  modifierGroups: [
+    {
+      id: 'g',
+      name: 'Add-ons',
+      min: 0,
+      max: 2,
+      online: true,
+      options: [
+        { id: 'o1', name: 'Side wall', priceCents: 8900, note: 'Blocks wind on one side' },
+        {
+          id: 'o2',
+          name: 'Weekend kit',
+          priceCents: 19900,
+          includes: ['Side wall ×2', 'Weights ×4', 'Carry bag'],
+        },
+      ],
+    },
+  ],
+  mockupRequests: true,
+}
+
+/**
+ * The picks a request form in the block reads (AGL-4205): ids and words
+ * only, and whether every required choice is answered.
+ */
+export function productBuilderPicks(input: {
+  product: Pick<Detail, 'id' | 'name' | 'options' | 'variants' | 'modifierGroups'>
+  variant: Pick<DetailVariant, 'id' | 'options'> | undefined
+  addOns: readonly CommerceModel.ModifierSelection[]
+  quantity: number
+  ready: boolean
+  problem?: string
+  total?: string
+}): ProductBuilderPicks {
+  const { product, variant, addOns, quantity, ready, problem, total } = input
+  const names: string[] = []
+  for (const group of product.modifierGroups ?? []) {
+    for (const option of group.options) {
+      if (addOns.some((pick) => pick.groupId === group.id && pick.optionId === option.id)) {
+        names.push(option.name)
+      }
+    }
+  }
+  const options = Object.fromEntries(
+    Object.entries(variant?.options ?? {}).filter(([, value]) => Boolean(value)),
+  )
+  return {
+    productId: product.id,
+    productName: product.name,
+    ...(variant && variant.id !== 'default' ? { variantId: variant.id } : {}),
+    options,
+    modifiers: addOns.map((pick) => ({ groupId: pick.groupId, optionId: pick.optionId })),
+    addOnNames: names,
+    quantity,
+    ready: ready && Boolean(variant),
+    ...(problem ? { problem } : {}),
+    ...(total ? { total } : {}),
+  }
+}
 
 const SAMPLE: Detail = {
   id: 'sample',
@@ -360,8 +469,13 @@ const ProductDetail = forwardRef<HTMLDivElement, ProductDetailProps>(
       showCoupon,
       showDetails,
       showShipping,
+      choiceStyle,
+      mockupLabel,
+      children,
       ...rest
     } = props
+    /** The product builder (AGL-4205): choices as picture cards. */
+    const cards = choiceStyle === 'cards'
     // Node styles ride the renderer-merged sx; recompose (stack.ts pattern).
     const nodeSx = Array.isArray(props['sx']) ? props['sx'] : [props['sx']]
     const site = Aglyn.useSite()
@@ -409,6 +523,9 @@ const ProductDetail = forwardRef<HTMLDivElement, ProductDetailProps>(
     const [coupon, setCoupon] = useState('')
     // A thumbnail the shopper picked; null follows the variant's own photo.
     const [activeImage, setActiveImage] = useState<number | null>(null)
+    /** The free-mockup request form is open (AGL-4205). */
+    const [mockupOpen, setMockupOpen] = useState(false)
+    const mockupRef = useRef<HTMLDivElement>(null)
     // `unconfigured` is not an `error` with softer words (AGL-2019). A store
     // with no Stripe key answers 501, and rendering that at `severity="error"`
     // tells a shopper their payment failed when nothing was ever attempted —
@@ -506,7 +623,9 @@ const ProductDetail = forwardRef<HTMLDivElement, ProductDetailProps>(
       ? detail === 'missing'
         ? null
         : detail
-      : SAMPLE
+      : cards
+        ? SAMPLE_BUILDER
+        : SAMPLE
 
     const variant = useMemo(() => {
       if (!resolved) return undefined
@@ -803,6 +922,27 @@ const ProductDetail = forwardRef<HTMLDivElement, ProductDetailProps>(
     // Listed before it has a price (AGL-3676): no price to show and nothing
     // to buy; every sale door would refuse it anyway.
     const priced = typeof variant?.priceUsd === 'number'
+    // The add-ons are offered where they can be priced, and on a product that
+    // offers a free mockup, whose request carries them (AGL-4205).
+    // Live, the button shows only where the block holds a request form to
+    // open; on the canvas the block shows the space to drop one in.
+    const hasRequestForm = Children.toArray(children).length > 0
+    const offersMockup = hostId
+      ? resolved.mockupRequests === true && hasRequestForm
+      : resolved.mockupRequests === true || hasRequestForm
+    const showAddOns = addOnGroups.length > 0 && (priced || offersMockup)
+    // What the shopper has picked, for a request form in the block (AGL-4205).
+    const builderPicks = offersMockup
+      ? productBuilderPicks({
+          product: resolved,
+          variant,
+          addOns,
+          quantity,
+          ready: pageAddOns.ready,
+          problem: pageAddOns.ready ? undefined : pageAddOns.error,
+          total: priced ? money(unitCents * quantity) : undefined,
+        })
+      : null
 
     // schema.org Product/Offer (AGL-299). Kept ONLY for the case where this
     // block renders without server-seeded page data — the besigner preview,
@@ -986,8 +1126,29 @@ const ProductDetail = forwardRef<HTMLDivElement, ProductDetailProps>(
               </ToggleButton>
             </ToggleButtonGroup>
           ) : null}
+          {cards ? (
+            // The product builder (AGL-4205): every choice a picture card.
+            <Suspense fallback={null}>
+              <ProductChoiceCards
+                options={presentedOptions.filter((option) => option.mode === 'select')}
+                variants={resolved.variants}
+                selections={variant?.options ?? selections}
+                onSelect={(name, value) => {
+                  setActiveImage(null)
+                  setSelections((prev) => ({ ...(variant?.options ?? {}), ...prev, [name]: value }))
+                }}
+                groups={showAddOns ? addOnGroups : []}
+                variantId={variant?.id}
+                value={addOns}
+                onChange={setAddOns}
+                formatCents={money}
+                unpricedLabel={PRICE_COMING_SOON_LABEL}
+                disabled={Boolean(variant?.soldOut)}
+              />
+            </Suspense>
+          ) : null}
           {presentedOptions.map((option) =>
-            option.mode === 'hidden' ? null : option.mode === 'text' ? (
+            cards && option.mode === 'select' ? null : option.mode === 'hidden' ? null : option.mode === 'text' ? (
               <Typography
                 key={option.name}
                 variant="body2"
@@ -1026,7 +1187,7 @@ const ProductDetail = forwardRef<HTMLDivElement, ProductDetailProps>(
             </TextField>
             ),
           )}
-          {addOnGroups.length && priced ? (
+          {showAddOns && !cards ? (
             <Suspense fallback={null}>
               <ProductAddOns
                 groups={addOnGroups}
@@ -1073,12 +1234,13 @@ const ProductDetail = forwardRef<HTMLDivElement, ProductDetailProps>(
                 setQuantity(
                   Math.max(
                     1,
-                    Math.min(99, Math.round(Number(event.target.value)) || 1),
+                    Math.min(CommerceModel.CART_MAX_QUANTITY, Math.round(Number(event.target.value)) || 1),
                   ),
                 )
               }
               size="small"
-              sx={{ width: 80 }}
+              // Four digits fit (AGL-4205): a line goes up to 9,999.
+              sx={{ width: (theme) => theme.spacing(12) }}
               slotProps={{ htmlInput: { inputMode: 'numeric' } }}
             />
             <Button
@@ -1131,8 +1293,8 @@ const ProductDetail = forwardRef<HTMLDivElement, ProductDetailProps>(
             The live price with add-ons (AGL-4100): one configured unit
             times the quantity, and what is still to choose.
           */}
-          {addOnGroups.length && priced ? (
-            <Box sx={{ mb: 2 }}>
+          {(addOnGroups.length || cards) && priced ? (
+            <Box sx={{ mb: 2 }} aria-live="polite">
               <Typography variant="subtitle1" component="p">
                 {quantity > 1
                   ? `Total for ${quantity}: ${money(unitCents * quantity)}`
@@ -1143,6 +1305,46 @@ const ProductDetail = forwardRef<HTMLDivElement, ProductDetailProps>(
                   {pageAddOns.error}
                 </Typography>
               ) : null}
+            </Box>
+          ) : null}
+          {/*
+            The free mockup (AGL-4205): on a product that offers one, the
+            button opens what the site builder dropped into this block — a
+            request form whose Product and options field reads the picks from
+            the context below. On the canvas the form stays open to design.
+          */}
+          {offersMockup ? (
+            <Box sx={{ mb: 2 }}>
+              <Button
+                variant={priced ? 'text' : 'contained'}
+                color="primary"
+                size="large"
+                aria-expanded={mockupOpen || !hostId}
+                onClick={() => {
+                  setMockupOpen(true)
+                  // After the form has opened, so it is where the page scrolls to.
+                  window.setTimeout(
+                    () => mockupRef.current?.scrollIntoView?.({ behavior: 'smooth', block: 'start' }),
+                    50,
+                  )
+                }}
+              >
+                {mockupLabel?.trim() || MOCKUP_LABEL_DEFAULT}
+              </Button>
+              <Collapse in={mockupOpen || !hostId} ref={mockupRef}>
+                <Paper variant="outlined" sx={{ p: 2, mt: 1 }}>
+                  <ProductBuilderContext.Provider value={builderPicks}>
+                    {hasRequestForm ? (
+                      children
+                    ) : (
+                      <Typography variant="body2" color="text.secondary">
+                        {'Drop a request form here: a form with a Product and options field, the ' +
+                          'contact fields and a File upload for artwork. It opens with the shopper’s picks.'}
+                      </Typography>
+                    )}
+                  </ProductBuilderContext.Provider>
+                </Paper>
+              </Collapse>
             </Box>
           ) : null}
           {addRefusal ? (
@@ -1383,10 +1585,12 @@ export const schema: Aglyn.ComponentSchema<ProductDetailProps> = {
   $id: ID,
   pluginId: BUNDLE_ID,
   displayName: 'Product detail',
-  description: "One product's gallery, options and buy button.",
+  description:
+    "One product's gallery, options and buy button. Drop a request form into it to offer a free mockup.",
   category: Aglyn.ComponentCategory.COMMERCE,
   icon: { path: mdiTagOutline.path, sx: { color: '#2e7d32' } },
-  flags: { selfClosing: Aglyn.FEATURE_FLAG.ENABLED },
+  // Not self-closing since AGL-4205: what is dropped in is the request form
+  // "Get a free mockup" opens, shown only for a product that offers one.
   attributes: [
     {
       name: 'slug',
@@ -1434,6 +1638,27 @@ export const schema: Aglyn.ComponentSchema<ProductDetailProps> = {
         'A Shipping & returns fold: shipping priced at checkout (or digital ' +
         'delivery), and your return window when your store takes returns.',
       component: Aglyn.FieldComponentType.CHECKBOX,
+    },
+    {
+      // AGL-4205. Absent reads as menus, so no existing page changes shape.
+      name: 'choiceStyle',
+      label: 'Show choices as',
+      description:
+        'Menus: a drop-down per option and check boxes for add-ons. Picture cards: a card per choice ' +
+        'with its picture, price and note, combos that open to show what they include, and a running total.',
+      component: Aglyn.FieldComponentType.SELECT,
+      options: [
+        { label: 'Menus', value: 'menus' },
+        { label: 'Picture cards', value: 'cards' },
+      ],
+    },
+    {
+      name: 'mockupLabel',
+      label: 'Free mockup button label',
+      description:
+        'Shown on products with “Offer a free mockup” on, when this block holds a request form. ' +
+        'Defaults to “Get a free mockup”.',
+      component: Aglyn.FieldComponentType.TEXT_FIELD,
     },
   ],
 }

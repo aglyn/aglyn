@@ -15,7 +15,7 @@
  * limitations under the License.
  */
 
-import { modifierGroupsProblem, type ProductModifierGroup } from './product-modifiers'
+import { choiceCardProblem, modifierGroupsProblem, type ProductModifierGroup } from './product-modifiers'
 import { productCheckInProblem, type ProductCheckIn } from './commerce-check-in-product'
 import { nameSearchFields } from '@aglyn/aglyn/app-utils/name-search'
 import { draftProductChannelFacts, type ProductChannelFacts } from './product-channel'
@@ -95,8 +95,13 @@ export interface ProductVariant {
    * denormalization. Absent = single default location.
    */
   inventoryByLocation?: Record<string, number>
-  /** Media-library image URL shown when this variant is selected. */
+  /**
+   * Media-library image URL shown when this variant is selected, and on its
+   * card when the product page shows choices as picture cards (AGL-4205).
+   */
   imageUrl?: string
+  /** A short line on the variant's picture card (AGL-4205): "Fits two tables". */
+  note?: string
   /**
    * Whether this variant needs check-in at the window (AGL-4043), over the
    * product's own setting; absent follows the product.
@@ -341,6 +346,12 @@ export interface HostProduct {
    * `product-modifiers.ts`.
    */
   modifierGroups?: ProductModifierGroup[]
+  /**
+   * The product page offers "Get a free mockup" (AGL-4205): a shopper's picks
+   * go with the request form the site placed in the product block, and a
+   * quote started from the request begins with them. Absent: not offered.
+   */
+  mockupRequests?: boolean
   /** Shown under Quick keys on the register's first screen (AGL-3607). */
   posQuickKey?: boolean
   /**
@@ -1510,6 +1521,9 @@ export function validateProduct(product: HostProduct): string | null {
   }
   const modifierProblem = modifierGroupsProblem(product.modifierGroups)
   if (modifierProblem) return modifierProblem
+  if (product.mockupRequests != null && typeof product.mockupRequests !== 'boolean') {
+    return 'Offering a free mockup is on or off'
+  }
   const checkInProblem =
     productCheckInProblem(product.checkIn) ??
     (product.variants ?? []).map((variant) => productCheckInProblem(variant.checkIn)).find(Boolean) ??
@@ -1526,6 +1540,11 @@ export function validateProduct(product: HostProduct): string | null {
     if (!variant.id) return 'Variants need stable ids'
     if (ids.has(variant.id)) return 'Variant ids must be unique'
     ids.add(variant.id)
+    const cardProblem = choiceCardProblem(
+      variant,
+      Object.values(variant.options ?? {}).filter(Boolean).join(' / ') || 'Default',
+    )
+    if (cardProblem) return cardProblem
     // A variant with no price is storable (AGL-3676): the owner may list a
     // product before pricing it, the storefront says "Price coming soon",
     // and no sale door sells it (`variantHasPrice`).

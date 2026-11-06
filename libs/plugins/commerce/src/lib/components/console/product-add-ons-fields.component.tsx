@@ -29,6 +29,7 @@ import {
 } from '@mui/material'
 import { memo, useCallback, useId, useState } from 'react'
 import * as CommerceModel from '../../model'
+import { CardPictureField, type ProductMediaPick } from './product-builder-fields.component'
 
 type Patch = Partial<CommerceModel.HostProduct>
 
@@ -39,6 +40,8 @@ export interface ProductAddOnsFieldsProps {
   /** The product's variants, each of which a choice may be priced on. */
   variants: readonly Pick<CommerceModel.ProductVariant, 'id' | 'options'>[]
   update: (patch: Patch) => void
+  /** Opens the media browser for a choice's picture (AGL-4205); without it, no picture is chosen. */
+  pick?: ProductMediaPick
 }
 
 function newId(prefix: string): string {
@@ -96,6 +99,38 @@ export function withVariantPrice(
 }
 
 /**
+ * A choice with its card changed (AGL-4205): its picture, its note, or what
+ * it includes as a combo, typed one item per line. A cleared field is
+ * dropped, never stored as `undefined`.
+ */
+export function withChoiceCard(
+  option: CommerceModel.ProductModifierOption,
+  patch: { imageUrl?: string | null; note?: string | null; includes?: string | null },
+): CommerceModel.ProductModifierOption {
+  const next: CommerceModel.ProductModifierOption = { ...option }
+  if ('imageUrl' in patch) {
+    const url = String(patch.imageUrl ?? '').trim()
+    if (url) next.imageUrl = url
+    else delete next.imageUrl
+  }
+  if ('note' in patch) {
+    const note = String(patch.note ?? '').trim().slice(0, CommerceModel.PRODUCT_CHOICE_NOTE_MAX)
+    if (note) next.note = note
+    else delete next.note
+  }
+  if ('includes' in patch) {
+    const items = String(patch.includes ?? '')
+      .split('\n')
+      .map((item) => item.trim().slice(0, CommerceModel.PRODUCT_COMBO_ITEM_MAX))
+      .filter(Boolean)
+      .slice(0, CommerceModel.PRODUCT_COMBO_MAX_ITEMS)
+    if (items.length) next.includes = items
+    else delete next.includes
+  }
+  return next
+}
+
+/**
  * The product's add-ons (AGL-4100, from the register's modifiers of
  * AGL-3607): choices added to the item that are not stocked variants — walls
  * and printing on a canopy, a milk in a latte — each free or adding to the
@@ -111,9 +146,10 @@ export function withVariantPrice(
 export const ProductAddOnsFields = memo(function ProductAddOnsFields(
   props: ProductAddOnsFieldsProps,
 ) {
-  const { modifierGroups, options, variants, update } = props
+  const { modifierGroups, options, variants, update, pick } = props
   const helpId = useId()
   const [pricedByVariant, setPricedByVariant] = useState<Record<string, boolean>>({})
+  const [cardOpen, setCardOpen] = useState<Record<string, boolean>>({})
   const setGroups = useCallback(
     (groups: CommerceModel.ProductModifierGroup[]) => update({ modifierGroups: groups }),
     [update],
@@ -209,6 +245,9 @@ export const ProductAddOnsFields = memo(function ProductAddOnsFields(
               const optionKey = `${group.id}:${option.id}`
               const byVariantOpen =
                 pricedByVariant[optionKey] ?? Object.keys(option.priceCentsByVariant ?? {}).length > 0
+              const hasCard = Boolean(option.imageUrl || option.note || option.includes?.length)
+              const cardShown = cardOpen[optionKey] ?? hasCard
+              const choiceLabel = option.name || 'this choice'
               return (
                 <Box key={option.id}>
                   <Stack direction="row" spacing={1} sx={{ alignItems: 'center', flexWrap: 'wrap', rowGap: 1 }}>
@@ -241,6 +280,13 @@ export const ProductAddOnsFields = memo(function ProductAddOnsFields(
                         {byLabel}
                       </Button>
                     ) : null}
+                    <Button
+                      size="small"
+                      aria-expanded={cardShown}
+                      onClick={() => setCardOpen((open) => ({ ...open, [optionKey]: !cardShown }))}
+                    >
+                      {'Picture & combo'}
+                    </Button>
                     <IconButton
                       aria-label={`Remove ${option.name || 'choice'}`}
                       onClick={() =>
@@ -292,6 +338,60 @@ export const ProductAddOnsFields = memo(function ProductAddOnsFields(
                       </Stack>
                     </Collapse>
                   ) : null}
+                  <Collapse in={cardShown} unmountOnExit>
+                    <Stack spacing={1} sx={{ pl: 2, pt: 1.5 }}>
+                      <Typography variant="caption" color="text.secondary">
+                        {`What “${choiceLabel}” shows on its picture card. List what it includes to make it ` +
+                          'a combo: shoppers can open the list on its card.'}
+                      </Typography>
+                      <CardPictureField
+                        imageUrl={option.imageUrl}
+                        label={choiceLabel}
+                        pick={pick}
+                        onChange={(imageUrl) =>
+                          replaceOption(
+                            groupIndex,
+                            optionIndex,
+                            withChoiceCard(modifierGroups[groupIndex].options[optionIndex], { imageUrl }),
+                          )
+                        }
+                      />
+                      <TextField
+                        label="Note"
+                        size="small"
+                        defaultValue={option.note ?? ''}
+                        placeholder="Blocks wind on one side"
+                        onBlur={(event) =>
+                          replaceOption(
+                            groupIndex,
+                            optionIndex,
+                            withChoiceCard(modifierGroups[groupIndex].options[optionIndex], {
+                              note: event.target.value,
+                            }),
+                          )
+                        }
+                        slotProps={{ htmlInput: { maxLength: CommerceModel.PRODUCT_CHOICE_NOTE_MAX } }}
+                      />
+                      <TextField
+                        label="Combo: what it includes"
+                        size="small"
+                        multiline
+                        minRows={2}
+                        defaultValue={(option.includes ?? []).join('\n')}
+                        placeholder={'Full wall ×2\nSteel weights ×4\nRoller bag'}
+                        helperText={`One item per line, up to ${CommerceModel.PRODUCT_COMBO_MAX_ITEMS}. Leave it empty for a single choice.`}
+                        onBlur={(event) =>
+                          replaceOption(
+                            groupIndex,
+                            optionIndex,
+                            withChoiceCard(modifierGroups[groupIndex].options[optionIndex], {
+                              includes: event.target.value,
+                            }),
+                          )
+                        }
+                      />
+                    </Stack>
+                  </Collapse>
                 </Box>
               )
             })}

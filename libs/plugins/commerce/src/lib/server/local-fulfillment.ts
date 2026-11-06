@@ -570,7 +570,7 @@ export const localFulfillmentOptionsHandler: PluginApiHandler = async (req, res)
             ...(Array.isArray(body.modifiers)
               ? { modifiers: CommerceModel.modifierSelectionFrom(body.modifiers) }
               : {}),
-            quantity: Math.min(99, Math.max(1, Math.round(Number(body.quantity) || 1))),
+            quantity: Math.min(CommerceModel.CART_MAX_QUANTITY, Math.max(1, Math.round(Number(body.quantity) || 1))),
           },
         ],
       }

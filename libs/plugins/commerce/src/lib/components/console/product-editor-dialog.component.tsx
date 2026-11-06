@@ -86,6 +86,7 @@ import {
 import { ProductCheckInFields } from './product-check-in-fields.component'
 import { ProductRegisterFields, ProductSellOnlineField } from './product-register-fields.component'
 import { ProductAddOnsFields } from './product-add-ons-fields.component'
+import { ProductBuilderFields } from './product-builder-fields.component'
 import { ProductKioskOfferField } from './product-kiosk-offer-field.component'
 
 /**
@@ -1348,6 +1349,16 @@ export function ProductEditorDialog(props: ProductEditorDialogProps) {
     // eslint-disable-next-line react-hooks/exhaustive-deps
     [checkInVariantsKey],
   )
+  // The picture cards' view of the variants (AGL-4205): ids, options and
+  // each card's picture and note, keyed the same way.
+  const cardVariantsKey = JSON.stringify(
+    current.variants.map((variant) => [variant.id, variant.options ?? null, variant.imageUrl ?? null, variant.note ?? null]),
+  )
+  const cardVariants = useMemo(
+    () => current.variants.map(({ id, options, imageUrl, note }) => ({ id, options, imageUrl, note })),
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+    [cardVariantsKey],
+  )
   // The kiosk choice's view of the variants (AGL-4038), kept apart the same way.
   const kioskVariantsKey = JSON.stringify(
     current.variants.map((variant) => [variant.id, variant.options ?? null, variant.offerOnKiosk ?? null]),
@@ -1962,6 +1973,18 @@ export function ProductEditorDialog(props: ProductEditorDialogProps) {
           options={current.options ?? NO_OPTIONS}
           variants={current.variants}
           update={update}
+          pick={pick}
+        />
+        {/*
+          The product builder (AGL-4205): each option's picture card, and
+          whether the page offers a free mockup.
+        */}
+        <Divider textAlign="left">{'Product page'}</Divider>
+        <ProductBuilderFields
+          variants={cardVariants}
+          mockupRequests={current.mockupRequests === true}
+          update={update}
+          pick={pick}
         />
         {pos.ready && pos.entitled ? (
           <>

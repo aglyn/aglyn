@@ -603,6 +603,7 @@ export const PLUGIN_HOST_COLLECTIONS_DECLARED: readonly ResolvedPluginHostCollec
         "giftCard",
         "lowStockThreshold",
         "modifierGroups",
+        "mockupRequests",
         "posQuickKey",
         "sellOnline",
         "inStoreReviews",

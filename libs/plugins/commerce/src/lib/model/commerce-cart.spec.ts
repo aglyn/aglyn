@@ -64,7 +64,7 @@ describe('upsertCartLine', () => {
 
   it('treats variant selections as distinct lines and clamps quantity', () => {
     let lines = upsertCartLine({ lines: [] }, { productId: 'p1', variantId: 'a', quantity: 1 })
-    lines = upsertCartLine({ lines }, { productId: 'p1', variantId: 'b', quantity: 500 })
+    lines = upsertCartLine({ lines }, { productId: 'p1', variantId: 'b', quantity: 50_000 })
     expect(lines).toHaveLength(2)
     expect(lines[1].quantity).toBe(CART_MAX_QUANTITY)
   })
@@ -161,7 +161,10 @@ describe('a quantity that is not a number (AGL-2285)', () => {
     expect(lines).toEqual([{ productId: 'p1', quantity: 2 }])
     lines = upsertCartLine({ lines }, { productId: 'p1', quantity: 3 }, 'add')
     expect(lines).toEqual([{ productId: 'p1', quantity: 5 }])
+    // A bulk order of 500 is an ordinary order (AGL-4205), kept whole.
     lines = upsertCartLine({ lines }, { productId: 'p1', quantity: 500 }, 'set')
+    expect(lines[0].quantity).toBe(500)
+    lines = upsertCartLine({ lines }, { productId: 'p1', quantity: 50_000 }, 'set')
     expect(lines[0].quantity).toBe(CART_MAX_QUANTITY)
     expect(cartCount({ lines })).toBe(CART_MAX_QUANTITY)
   })

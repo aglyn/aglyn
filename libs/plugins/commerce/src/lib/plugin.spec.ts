@@ -50,7 +50,7 @@ describe('commerce plugin', () => {
     // widget, and a new one that is not says so on its schema or turns this
     // red. See `auditChildContract` for why this is an inventory rather than
     // an exemption list.
-    expect(Aglyn.auditChildContract(COMMERCE_BUNDLE, ['gate'])).toEqual([])
+    expect(Aglyn.auditChildContract(COMMERCE_BUNDLE, ['gate', 'product-detail'])).toEqual([])
   })
 
   it('keeps every container’s children through compose (AGL-1389)', () => {

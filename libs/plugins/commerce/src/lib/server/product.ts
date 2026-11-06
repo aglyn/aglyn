@@ -54,7 +54,14 @@ export interface PublicProductDetail {
      * AGL-4043): the page offers an optional date. Absent when it does not.
      */
     asksUseDate?: true
+    /** A short line on the variant's picture card (AGL-4205). */
+    note?: string
   }>
+  /**
+   * The page offers "Get a free mockup" (AGL-4205): the request form the site
+   * placed in the product block opens with the shopper's picks.
+   */
+  mockupRequests?: true
   /**
    * The store's time zone, sent only when a variant asks for a use day, so
    * the page offers no day that has passed on the store's calendar.
@@ -87,6 +94,10 @@ export interface PublicModifierGroup {
     priceCents: number
     /** What the choice adds on a variant priced differently, by variant id. */
     priceCentsByVariant?: Record<string, number>
+    /** The choice's card (AGL-4205): its picture, its note, and what a combo includes. */
+    imageUrl?: string
+    note?: string
+    includes?: string[]
   }>
 }
 
@@ -106,6 +117,9 @@ export function publicModifierGroups(
       ...(option.priceCentsByVariant && Object.keys(option.priceCentsByVariant).length
         ? { priceCentsByVariant: { ...option.priceCentsByVariant } }
         : {}),
+      ...(option.imageUrl ? { imageUrl: option.imageUrl } : {}),
+      ...(option.note?.trim() ? { note: option.note.trim() } : {}),
+      ...(CommerceModel.modifierOptionIsCombo(option) ? { includes: [...(option.includes ?? [])] } : {}),
     })),
   }))
 }
@@ -152,7 +166,9 @@ export function toPublicProductDetail(
       ...(variant.imageUrl ? { imageUrl: variant.imageUrl } : {}),
       ...(variant.sku ? { sku: variant.sku } : {}),
       ...(CommerceModel.productAsksUseDate(product, variant.id) ? { asksUseDate: true as const } : {}),
+      ...(variant.note?.trim() ? { note: variant.note.trim() } : {}),
     })),
+    ...(product.mockupRequests === true ? { mockupRequests: true as const } : {}),
     ...(asksUseDate ? { useDayTimeZone: options.timeZone || 'UTC' } : {}),
     ...(product.tags?.length ? { tags: product.tags } : {}),
     ...(product.subscription ? { subscription: product.subscription } : {}),

@@ -17,7 +17,7 @@
 
 import * as Aglyn from '@aglyn/aglyn'
 import { formFieldDataKey } from '../model/commerce-product-field'
-import { encodeProductFieldValue, productFieldLabel } from '../model/commerce-quote-request'
+import { builderPicksLabel, encodeProductFieldValue, productFieldLabel } from '../model/commerce-quote-request'
 import Box from '@mui/material/Box'
 import FormControl from '@mui/material/FormControl'
 import FormHelperText from '@mui/material/FormHelperText'
@@ -25,7 +25,9 @@ import FormLabel from '@mui/material/FormLabel'
 import MenuItem from '@mui/material/MenuItem'
 import Stack from '@mui/material/Stack'
 import TextField from '@mui/material/TextField'
-import { forwardRef, useEffect, useId, useMemo, useRef, useState } from 'react'
+import Typography from '@mui/material/Typography'
+import { forwardRef, useContext, useEffect, useId, useMemo, useRef, useState } from 'react'
+import { ProductBuilderContext, type ProductBuilderPicks } from './product-builder-context'
 import type { ProductOptionsFieldProps } from './product-options-field'
 
 /** A product as the store's public catalog lists it. */
@@ -69,7 +71,7 @@ export function variantForOptions(
  * On the canvas and in Preview it draws with the store's products but sends
  * nothing, like every form field there.
  */
-const ProductOptionsFieldBody = forwardRef<HTMLDivElement, ProductOptionsFieldProps>((props, ref) => {
+const StoreProductPicker = forwardRef<HTMLDivElement, ProductOptionsFieldProps>((props, ref) => {
   const { name: rawName, label, productId: fixedProductId, required, ...rest } = props
   const name = String(rawName ?? '').trim() || 'product'
   const { hostId } = Aglyn.useSite()
@@ -130,7 +132,7 @@ const ProductOptionsFieldBody = forwardRef<HTMLDivElement, ProductOptionsFieldPr
         productId: detail.id,
         ...(variantId && variantId !== 'default' ? { variantId } : {}),
         ...(Object.keys(picked).length ? { options: picked } : {}),
-        // Add-ons are chosen on the storefront from slice 8 on: they ride here as `modifiers`.
+        // Add-ons ride here as `modifiers` when the field sits in a product page's builder (AGL-4205).
       })
     : ''
 
@@ -225,6 +227,98 @@ const ProductOptionsFieldBody = forwardRef<HTMLDivElement, ProductOptionsFieldPr
       </Stack>
     </FormControl>
   )
+})
+StoreProductPicker.displayName = 'AglynStoreProductPicker'
+
+/** What the field posts for a product page's picks (AGL-4205): the line in words, and the exact choice. */
+export function builderFieldValue(picks: ProductBuilderPicks): { answer: string; value: string } {
+  if (!picks.ready) return { answer: '', value: '' }
+  return {
+    answer: builderPicksLabel(picks.productName, picks.options, picks.addOnNames, picks.quantity),
+    value: encodeProductFieldValue({
+      productId: picks.productId,
+      ...(picks.variantId ? { variantId: picks.variantId } : {}),
+      ...(Object.keys(picks.options).length ? { options: picks.options } : {}),
+      ...(picks.modifiers.length ? { modifiers: picks.modifiers } : {}),
+      ...(picks.quantity > 1 ? { quantity: picks.quantity } : {}),
+    }),
+  }
+}
+
+/**
+ * The field inside a Product detail block (AGL-4205): the shopper already
+ * picked on the page, so it lists those picks and posts them, and changes as
+ * they do. Until every required choice is answered it posts nothing, so a
+ * required field stops the form and says what is left to choose.
+ */
+const ProductBuilderAnswer = forwardRef<HTMLDivElement, ProductOptionsFieldProps & { picks: ProductBuilderPicks }>(
+  (props, ref) => {
+    const { name: rawName, label, productId: _fixed, required, picks, ...rest } = props
+    const name = String(rawName ?? '').trim() || 'product'
+    const labelId = useId()
+    const answerRef = useRef<HTMLInputElement>(null)
+    const { answer, value } = builderFieldValue(picks)
+    const announced = useRef(answer)
+    useEffect(() => {
+      if (announced.current === answer) return
+      announced.current = answer
+      answerRef.current?.dispatchEvent(new Event('change', { bubbles: true }))
+    }, [answer])
+    const chosen = [
+      ...Object.entries(picks.options).map(([option, picked]) => `${option}: ${picked}`),
+      ...picks.addOnNames,
+      ...(picks.quantity > 1 ? [`Quantity: ${picks.quantity}`] : []),
+    ]
+    return (
+      <FormControl ref={ref} fullWidth required={Boolean(required)} {...rest}>
+        <FormLabel id={labelId}>{label || 'Product'}</FormLabel>
+        <Stack spacing={0.5} sx={{ mt: 1, position: 'relative' }} aria-labelledby={labelId}>
+          <Typography variant="subtitle2" component="p">
+            {picks.productName}
+          </Typography>
+          {chosen.map((line) => (
+            <Typography key={line} variant="body2" color="text.secondary">
+              {line}
+            </Typography>
+          ))}
+          {picks.total ? (
+            <Typography variant="body2">{`Total: ${picks.total}`}</Typography>
+          ) : null}
+          <FormHelperText error={!picks.ready} sx={{ mx: 0 }}>
+            {picks.ready ? 'Change your picks above and this follows.' : picks.problem || 'Finish your picks above.'}
+          </FormHelperText>
+          <Box
+            component="input"
+            ref={answerRef}
+            type="text"
+            name={name}
+            value={answer}
+            required={Boolean(required)}
+            onChange={() => undefined}
+            tabIndex={-1}
+            aria-hidden="true"
+            autoComplete="off"
+            sx={{ position: 'absolute', left: 0, bottom: 0, width: 1, height: '1px', p: 0, border: 0, opacity: 0, pointerEvents: 'none' }}
+          />
+          {value ? <input type="hidden" name={formFieldDataKey(name)} value={value} readOnly /> : null}
+        </Stack>
+      </FormControl>
+    )
+  },
+)
+ProductBuilderAnswer.displayName = 'AglynProductBuilderAnswer'
+
+/**
+ * The Product and options field's body: inside a Product detail block it
+ * posts the shopper's picks there (AGL-4205), unless the author pinned it to
+ * another product; anywhere else it asks for a product and its options.
+ */
+const ProductOptionsFieldBody = forwardRef<HTMLDivElement, ProductOptionsFieldProps>((props, ref) => {
+  const picks = useContext(ProductBuilderContext)
+  if (picks && (!props.productId || props.productId === picks.productId)) {
+    return <ProductBuilderAnswer ref={ref} {...props} picks={picks} />
+  }
+  return <StoreProductPicker ref={ref} {...props} />
 })
 ProductOptionsFieldBody.displayName = 'AglynProductOptionsFieldBody'
 

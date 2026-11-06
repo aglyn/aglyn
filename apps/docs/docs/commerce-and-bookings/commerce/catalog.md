@@ -112,6 +112,63 @@ the receipt and your order emails name them after the size, like
 own line in the cart. A product that needs a required add-on opens its page
 from a product grid's **Add to cart**, so the customer can choose it there.
 
+### Picture cards, combos and a live total {#picture-cards}
+
+A **Product detail** block can show the product's choices as picture cards
+instead of drop-downs: one card for each size or style, and one for each add-on.
+Each card shows its picture, its name, what it costs, and a short note. Choose
+the block in the Besigner and set **Show choices as** to **Picture cards**.
+
+- **A size's card** shows that variant's price, picture and note. Set them in
+  the product editor under **Product page** → **Picture cards**: **Choose
+  picture** and a **Note** for each variant, like "Fits two tables". The
+  gallery also shows the variant's picture when the customer picks it.
+- **An add-on's card** shows what it adds, or **No extra charge**. Click
+  **Picture & combo** beside the choice in **Add-ons** to choose its picture
+  and write its note.
+- **A combo** is one choice that is a bundle: a weekend kit with two side
+  walls, four weights and a carry bag, at one price. Under **Picture & combo**,
+  list what it includes in **Combo: what it includes**, one item per line. Its
+  card is marked **Combo**, and **What's included** opens the list.
+- A group that takes one choice works like radio buttons, and a required one
+  is marked **Choose one**. A group that takes several shows how many it
+  takes, and its other cards turn off once that many are picked.
+- The **Total** under the cards adds up the size and the add-ons picked, times
+  the quantity, as the customer chooses.
+- A customer can buy or ask about up to 9,999 of one item, so a bulk order such
+  as 250 shirts is one line. For prices that drop at larger amounts, add an
+  option such as "How many" with values like "24 to 99" and "100 or more", and
+  give each variant its own price.
+
+Picture cards change only how the choices look. The cart and checkout price
+them the same way, and **Add to cart** and **Buy now** work as before.
+
+### A free mockup before they buy {#free-mockup}
+
+Let customers ask for a mockup of what they picked, such as their logo on a
+canopy, before they pay:
+
+1. Open the product in the product editor and, under **Product page**, turn on
+   **Offer a free mockup**.
+2. Make a [Request a quote form](quotes-and-proofs.md#a-request-a-quote-form)
+   with a name, an email, a **Product and options** field (leave its
+   **Product** empty), and a **File upload** field for their artwork.
+3. In the Besigner, drop that form into the **Product detail** block on your
+   product page. To change the button's words, set **Free mockup button
+   label** on the block. It says **Get a free mockup** when you leave it
+   empty.
+
+The product's page then shows **Get a free mockup**, which opens the form. Its
+**Product and options** field lists what the customer picked, add-ons and
+quantity included, and changes as they do. The form can't be sent until every
+required choice is picked.
+
+The request lands in your Inbox marked **Quote request**. **Start a quote**
+opens the quote editor with a line for the product, its size, its add-ons and
+the quantity, priced from your catalog. A product that has no price yet can
+still take mockup requests: its page offers the form instead of **Buy now**.
+Products with **Offer a free mockup** off don't show the button or the form.
+
 ## Sell in person only {#sell-in-person-only}
 
 Every product sells online and in person unless you say otherwise. To sell a
