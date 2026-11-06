@@ -1028,6 +1028,7 @@ data class HostProduct(
     val inventory: Double? = null,
     val lowStockThreshold: Double? = null,
     val mediaUrls: List<String>? = null,
+    val mockupRequests: Boolean? = null,
     val modifierGroups: List<ProductModifierGroup>? = null,
     val name: String? = null,
     val offerOnKiosk: Boolean? = null,
@@ -3181,7 +3182,10 @@ data class ProductModifierGroup(
 @Serializable
 data class ProductModifierOption(
     val id: String,
+    val imageUrl: String? = null,
+    val includes: List<String>? = null,
     val name: String,
+    val note: String? = null,
     val priceCents: Double,
     val priceCentsByVariant: Map<String, Double>? = null,
 )
@@ -3234,6 +3238,7 @@ data class ProductVariant(
     val imageUrl: String? = null,
     val inventory: Double? = null,
     val inventoryByLocation: Map<String, Double>? = null,
+    val note: String? = null,
     val offerOnKiosk: Boolean? = null,
     val options: Map<String, String>? = null,
     val priceUsd: Double? = null,

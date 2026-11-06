@@ -1548,6 +1548,7 @@ public struct HostProduct: Codable, Hashable, Sendable {
   public var inventory: Double?
   public var lowStockThreshold: Double?
   public var mediaUrls: [String]?
+  public var mockupRequests: Bool?
   public var modifierGroups: [ProductModifierGroup]?
   public var name: String?
   public var offerOnKiosk: Bool?
@@ -1572,7 +1573,7 @@ public struct HostProduct: Codable, Hashable, Sendable {
   public var variants: [ProductVariant]?
   public var videoAccessProductIds: [String]?
 
-  public init(categoryIds: [String]? = nil, channel: ProductChannelFacts? = nil, checkIn: ProductCheckIn? = nil, collectionIds: [String]? = nil, createdAtMs: Double? = nil, description: String? = nil, digitalFiles: [HostProductDigitalFilesItem]? = nil, downloadLimit: Double? = nil, gatedVideos: [HostProductGatedVideosItem]? = nil, giftCard: Bool? = nil, hardwareSku: String? = nil, imageUrl: String? = nil, inStoreReviews: HostProductInStoreReviews? = nil, inventory: Double? = nil, lowStockThreshold: Double? = nil, mediaUrls: [String]? = nil, modifierGroups: [ProductModifierGroup]? = nil, name: String? = nil, offerOnKiosk: Bool? = nil, options: [ProductOption]? = nil, oversellPolicy: HostProductOversellPolicy? = nil, posQuickKey: Bool? = nil, priceUsd: Double? = nil, relatedProductIds: [String]? = nil, sample: Bool? = nil, sellOnline: Bool? = nil, seo: HostProductSeo? = nil, shipping: ProductShippingFacts? = nil, slug: String? = nil, status: ProductStatus? = nil, subscription: HostProductSubscription? = nil, subscriptionOptional: Bool? = nil, supplierId: String? = nil, tags: [String]? = nil, taxExempt: Bool? = nil, type: ProductType? = nil, updatedAtMs: Double? = nil, variants: [ProductVariant]? = nil, videoAccessProductIds: [String]? = nil) {
+  public init(categoryIds: [String]? = nil, channel: ProductChannelFacts? = nil, checkIn: ProductCheckIn? = nil, collectionIds: [String]? = nil, createdAtMs: Double? = nil, description: String? = nil, digitalFiles: [HostProductDigitalFilesItem]? = nil, downloadLimit: Double? = nil, gatedVideos: [HostProductGatedVideosItem]? = nil, giftCard: Bool? = nil, hardwareSku: String? = nil, imageUrl: String? = nil, inStoreReviews: HostProductInStoreReviews? = nil, inventory: Double? = nil, lowStockThreshold: Double? = nil, mediaUrls: [String]? = nil, mockupRequests: Bool? = nil, modifierGroups: [ProductModifierGroup]? = nil, name: String? = nil, offerOnKiosk: Bool? = nil, options: [ProductOption]? = nil, oversellPolicy: HostProductOversellPolicy? = nil, posQuickKey: Bool? = nil, priceUsd: Double? = nil, relatedProductIds: [String]? = nil, sample: Bool? = nil, sellOnline: Bool? = nil, seo: HostProductSeo? = nil, shipping: ProductShippingFacts? = nil, slug: String? = nil, status: ProductStatus? = nil, subscription: HostProductSubscription? = nil, subscriptionOptional: Bool? = nil, supplierId: String? = nil, tags: [String]? = nil, taxExempt: Bool? = nil, type: ProductType? = nil, updatedAtMs: Double? = nil, variants: [ProductVariant]? = nil, videoAccessProductIds: [String]? = nil) {
     self.categoryIds = categoryIds
     self.channel = channel
     self.checkIn = checkIn
@@ -1589,6 +1590,7 @@ public struct HostProduct: Codable, Hashable, Sendable {
     self.inventory = inventory
     self.lowStockThreshold = lowStockThreshold
     self.mediaUrls = mediaUrls
+    self.mockupRequests = mockupRequests
     self.modifierGroups = modifierGroups
     self.name = name
     self.offerOnKiosk = offerOnKiosk
@@ -4889,13 +4891,19 @@ public struct ProductModifierGroup: Codable, Hashable, Sendable {
 
 public struct ProductModifierOption: Codable, Hashable, Sendable {
   public var id: String
+  public var imageUrl: String?
+  public var includes: [String]?
   public var name: String
+  public var note: String?
   public var priceCents: Double
   public var priceCentsByVariant: [String: Double]?
 
-  public init(id: String, name: String, priceCents: Double, priceCentsByVariant: [String: Double]? = nil) {
+  public init(id: String, imageUrl: String? = nil, includes: [String]? = nil, name: String, note: String? = nil, priceCents: Double, priceCentsByVariant: [String: Double]? = nil) {
     self.id = id
+    self.imageUrl = imageUrl
+    self.includes = includes
     self.name = name
+    self.note = note
     self.priceCents = priceCents
     self.priceCentsByVariant = priceCentsByVariant
   }
@@ -4961,13 +4969,14 @@ public struct ProductVariant: Codable, Hashable, Sendable {
   public var imageUrl: String?
   public var inventory: Double?
   public var inventoryByLocation: [String: Double]?
+  public var note: String?
   public var offerOnKiosk: Bool?
   public var options: [String: String]?
   public var priceUsd: Double?
   public var sku: String?
   public var weightGrams: Double?
 
-  public init(barcode: String? = nil, checkIn: ProductCheckIn? = nil, compareAtPriceUsd: Double? = nil, id: String? = nil, imageUrl: String? = nil, inventory: Double? = nil, inventoryByLocation: [String: Double]? = nil, offerOnKiosk: Bool? = nil, options: [String: String]? = nil, priceUsd: Double? = nil, sku: String? = nil, weightGrams: Double? = nil) {
+  public init(barcode: String? = nil, checkIn: ProductCheckIn? = nil, compareAtPriceUsd: Double? = nil, id: String? = nil, imageUrl: String? = nil, inventory: Double? = nil, inventoryByLocation: [String: Double]? = nil, note: String? = nil, offerOnKiosk: Bool? = nil, options: [String: String]? = nil, priceUsd: Double? = nil, sku: String? = nil, weightGrams: Double? = nil) {
     self.barcode = barcode
     self.checkIn = checkIn
     self.compareAtPriceUsd = compareAtPriceUsd
@@ -4975,6 +4984,7 @@ public struct ProductVariant: Codable, Hashable, Sendable {
     self.imageUrl = imageUrl
     self.inventory = inventory
     self.inventoryByLocation = inventoryByLocation
+    self.note = note
     self.offerOnKiosk = offerOnKiosk
     self.options = options
     self.priceUsd = priceUsd
