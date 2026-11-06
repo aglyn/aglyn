@@ -25,7 +25,7 @@ import { mockFetch } from '../testing/mock-fetch'
 import { registerPluginService, resetPluginServicesForTests } from '@aglyn/aglyn/plugin-manager/plugin-services'
 import { ORDER_HISTORY_CONTRACT, type OrderHistoryEntry, type OrderHistoryPageRequest } from '@aglyn/plugins-commerce/contracts'
 import { backfillRefund, runBackfillStep, snapshotFromHistoryEntry, startBackfill } from './backfill'
-import { newConnectionRecord, readConnection } from './connection-store'
+import { newConnectionRecord, readConnection, toStoredConnection } from './connection-store'
 import { listPaidPayouts } from './payouts'
 import type { AccountingProvider } from './providers/provider'
 import { pollPayouts, runAccountingSyncJob, type AccountingJobDeps } from './sync-job'
@@ -59,7 +59,7 @@ function setup(options: { fetch?: typeof fetch; locked?: boolean } = {}) {
   record.payoutCursorMs = NOW - 7 * 86_400_000
   store.seed('orgs/org-1', { ownerUid: 'owner-1', name: 'Acme' })
   store.seed('profiles/owner-1', { stripeAccountId: 'acct_123' })
-  store.seed('orgs/org-1/accountingConnections/quickbooks', record as never)
+  store.seed('orgs/org-1/accountingConnections/quickbooks', toStoredConnection(record, keyring) as never)
   const provider = {
     id: 'quickbooks',
     findByExternalId: jest.fn(async () => null),
@@ -112,14 +112,14 @@ describe('payouts', () => {
 
   it('queues each payout once and moves the cursor past it', async () => {
     const { deps, store } = setup({ fetch: stripePayouts.fetch })
-    const connection = readConnection(store.read('orgs/org-1/accountingConnections/quickbooks'))!
+    const connection = readConnection(store.read('orgs/org-1/accountingConnections/quickbooks'), keyring)!
     expect(await pollPayouts(deps, connection)).toBe(2)
     expect(store.read(`orgs/org-1/accountingSyncItems/${payoutItemId({ payoutId: 'po_1' })}`)).toMatchObject({
       kind: 'payout',
       status: 'pending',
       amountCents: 2500,
     })
-    const after = readConnection(store.read('orgs/org-1/accountingConnections/quickbooks'))!
+    const after = readConnection(store.read('orgs/org-1/accountingConnections/quickbooks'), keyring)!
     expect(after.payoutCursorMs).toBe(Math.floor((NOW - 86_400_000) / 1000) * 1000)
     expect(await pollPayouts(deps, after)).toBe(0)
   })
@@ -128,7 +128,7 @@ describe('payouts', () => {
     const { deps, store } = setup({ fetch: stripePayouts.fetch })
     store.seed('orgs/org-2', { ownerUid: 'owner-1', name: 'Acme East' })
     store.seed('orgs/org-2/accountingConnections/xero', { provider: 'xero', orgId: 'org-2' })
-    const connection = readConnection(store.read('orgs/org-1/accountingConnections/quickbooks'))!
+    const connection = readConnection(store.read('orgs/org-1/accountingConnections/quickbooks'), keyring)!
     await pollPayouts(deps, connection)
     expect(store.read(`orgs/org-1/accountingSyncItems/${payoutItemId({ payoutId: 'po_2' })}`)).toMatchObject({
       status: 'needs_attention',
@@ -238,9 +238,9 @@ describe('backfill', () => {
       entry('o-2', { paidAtMs: null }),
       entry('o-3', { createdAtMs: NOW + 1, paidAtMs: NOW + 1 }),
     ])
-    const connection = readConnection(store.read('orgs/org-1/accountingConnections/quickbooks'))!
+    const connection = readConnection(store.read('orgs/org-1/accountingConnections/quickbooks'), keyring)!
     await startBackfill(asFirestore(store), connection, NOW - 30 * 86_400_000)
-    const withBackfill = readConnection(store.read('orgs/org-1/accountingConnections/quickbooks'))!
+    const withBackfill = readConnection(store.read('orgs/org-1/accountingConnections/quickbooks'), keyring)!
     const queued = await runBackfillStep(deps, withBackfill as never)
     // The sale, its fee, its refund and the fee the refund gave back; the
     // unpaid order and the one after the connection are not.
@@ -254,9 +254,9 @@ describe('backfill', () => {
   it('waits where it stands while commerce’s reader is not registered', async () => {
     const { deps, store } = setup()
     store.seed('hosts/host-1', { orgId: 'org-1' })
-    const connection = readConnection(store.read('orgs/org-1/accountingConnections/quickbooks'))!
+    const connection = readConnection(store.read('orgs/org-1/accountingConnections/quickbooks'), keyring)!
     await startBackfill(asFirestore(store), connection, NOW - 30 * 86_400_000)
-    const withBackfill = readConnection(store.read('orgs/org-1/accountingConnections/quickbooks'))!
+    const withBackfill = readConnection(store.read('orgs/org-1/accountingConnections/quickbooks'), keyring)!
     await expect(runBackfillStep(deps, withBackfill as never)).resolves.toBe(0)
     expect(store.read('orgs/org-1/accountingConnections/quickbooks')!['backfill']).toMatchObject({ done: false, hostIndex: 0 })
   })

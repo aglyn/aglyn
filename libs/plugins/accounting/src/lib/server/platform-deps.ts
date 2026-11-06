@@ -85,6 +85,7 @@ export function defaultAccountingRouteDeps(): AccountingRouteDeps {
       lockdownRefusal: (options) => lockdownRefusal(options),
     },
     readProviderConfig: readAccountingProviderConfig,
+    keyring: readAccountingKeyring,
     providerFor: (provider) => platformAccountingProvider(provider),
     stateSigningConfigured: () => {
       try {

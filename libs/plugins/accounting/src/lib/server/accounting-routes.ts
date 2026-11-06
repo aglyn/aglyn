@@ -29,6 +29,7 @@
  */
 
 import type { PluginWebApiHandler } from '@aglyn/aglyn/server'
+import type { SecretBoxKeyring } from '@aglyn/shared-util-tools/secret-box'
 import { ACCOUNTING_API_ROUTES } from '../constants/api-routes'
 import { validateAccountingMapping } from '../model/accounting-mapping'
 import { dateInZone } from '../model/accounting-money'
@@ -54,6 +55,7 @@ import {
   newConnectionRecord,
   openToken,
   toConnectionView,
+  toStoredConnection,
   type AccountingConnectionRecord,
 } from './connection-store'
 import {
@@ -71,6 +73,8 @@ export interface AccountingRouteDeps {
   firestore: () => FirebaseFirestore.Firestore
   gate: AccountingGateDeps
   readProviderConfig: (provider: AccountingProviderId) => AccountingProviderConfigResult
+  /** The token keyring, which also seals the bound company id; `null` when unset. */
+  keyring: () => SecretBoxKeyring | null
   /** The adapter, or `null` when the provider is not configured here. */
   providerFor: (provider: AccountingProviderId) => AccountingProvider | null
   stateSigningConfigured: () => boolean
@@ -160,7 +164,7 @@ export function createAccountingRoutes(deps: AccountingRouteDeps): AccountingRou
   }
 
   async function connected(gate: AccountingGateContext): Promise<AccountingConnectionRecord | Response> {
-    const record = await loadOrgConnection(deps.firestore(), gate.orgId)
+    const record = await loadOrgConnection(deps.firestore(), gate.orgId, deps.keyring())
     if (!record || record.status !== 'connected') return refusal(409, 'not-connected', 'Connect your books first.')
     return record
   }
@@ -172,7 +176,7 @@ export function createAccountingRoutes(deps: AccountingRouteDeps): AccountingRou
     const providers = Object.fromEntries(
       ACCOUNTING_PROVIDERS.map((provider) => [provider, connectable(provider, request.url)]),
     ) as Record<AccountingProviderId, boolean>
-    const record = await loadOrgConnection(deps.firestore(), gate.orgId)
+    const record = await loadOrgConnection(deps.firestore(), gate.orgId, deps.keyring())
     const counts = record ? await syncCounts(deps.firestore(), gate.orgId) : { pending: 0, synced: 0, needsAttention: 0 }
     return ok({
       providers,
@@ -194,7 +198,7 @@ export function createAccountingRoutes(deps: AccountingRouteDeps): AccountingRou
     if (!redirectUri || !adapter || !connectable(provider, request.url)) {
       return refusal(503, 'not-configured', accountingNotConfiguredMessage(provider))
     }
-    const existing = await loadOrgConnection(deps.firestore(), gate.orgId)
+    const existing = await loadOrgConnection(deps.firestore(), gate.orgId, deps.keyring())
     if (existing && existing.provider !== provider) {
       return refusal(
         409,
@@ -330,7 +334,7 @@ export function createAccountingRoutes(deps: AccountingRouteDeps): AccountingRou
           : 'This connection was already used. Connect your books again.',
       )
     }
-    const previous = await loadOrgConnection(firestore, gate.orgId)
+    const previous = await loadOrgConnection(firestore, gate.orgId, config.config.keyring)
     if (previous && previous.provider !== provider) {
       return refusal(409, 'invalid-request', `Disconnect ${accountingProviderName(previous.provider)} first.`)
     }
@@ -364,12 +368,12 @@ export function createAccountingRoutes(deps: AccountingRouteDeps): AccountingRou
     })
     // The grant is stored before anything else is asked of it, so a failure
     // below leaves a connection to retry rather than a spent code.
-    await connectionRef(firestore, gate.orgId, provider).set(record)
+    await connectionRef(firestore, gate.orgId, provider).set(toStoredConnection(record, config.config.keyring))
     if (record.status === 'connected' && record.tenantId) {
       const bound = await bindTenant({ ...record, tenants: exchanged.tenants }, record.tenantId)
       if (bound instanceof Response) return bound
       record = bound
-      await connectionRef(firestore, gate.orgId, provider).set(record)
+      await connectionRef(firestore, gate.orgId, provider).set(toStoredConnection(record, config.config.keyring))
     }
     await deps.logOrgActivity(gate.orgId, { uid: gate.uid, email: gate.email }, 'accounting.connected', {
       type: ACCOUNTING_ACTIVITY_TARGET,
@@ -384,12 +388,15 @@ export function createAccountingRoutes(deps: AccountingRouteDeps): AccountingRou
     const body = await readBody(request)
     const gate = await accountingMemberGate(request, body['orgId'], deps.gate)
     if (gate instanceof Response) return gate
-    const record = await loadOrgConnection(deps.firestore(), gate.orgId)
+    const record = await loadOrgConnection(deps.firestore(), gate.orgId, deps.keyring())
     if (!record || record.status !== 'choose-tenant') return refusal(409, 'not-connected', 'There is no organization to choose.')
     const tenantId = typeof body['tenantId'] === 'string' ? body['tenantId'] : ''
     const bound = await bindTenant(record, tenantId)
     if (bound instanceof Response) return bound
-    await connectionRef(deps.firestore(), gate.orgId, record.provider).set(bound)
+    // Binding opened a session, so the provider and its key are configured.
+    const keyring = deps.keyring()
+    if (!keyring) return refusal(503, 'not-configured', accountingNotConfiguredMessage(record.provider))
+    await connectionRef(deps.firestore(), gate.orgId, record.provider).set(toStoredConnection(bound, keyring))
     await deps.logOrgActivity(gate.orgId, { uid: gate.uid, email: gate.email }, 'accounting.connected', {
       type: ACCOUNTING_ACTIVITY_TARGET,
       id: record.provider,
@@ -543,7 +550,7 @@ export function createAccountingRoutes(deps: AccountingRouteDeps): AccountingRou
     const body = await readBody(request)
     const gate = await accountingMemberGate(request, body['orgId'], deps.gate)
     if (gate instanceof Response) return gate
-    const record = await loadOrgConnection(deps.firestore(), gate.orgId)
+    const record = await loadOrgConnection(deps.firestore(), gate.orgId, deps.keyring())
     if (!record) return ok({ disconnected: false })
     const adapter = deps.providerFor(record.provider)
     const config = deps.readProviderConfig(record.provider)
