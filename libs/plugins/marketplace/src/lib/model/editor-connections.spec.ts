@@ -44,6 +44,10 @@ describe('the editor half of declared connections (AGL-4196)', () => {
     expect(connectionFieldLabel('reviewCount')).toBe('Review count')
     expect(connectionFieldLabel('average_rating')).toBe('Average rating')
     expect(connectionFieldLabel('rating')).toBe('Rating')
+    // Abbreviations read in capitals, as the picker should print them.
+    expect(connectionFieldLabel('reviewUrl')).toBe('Review URL')
+    expect(connectionFieldLabel('url')).toBe('URL')
+    expect(connectionFieldLabel('place_id')).toBe('Place ID')
   })
 
   it('attributes a component to the listing whose namespace it is in, longest first', () => {

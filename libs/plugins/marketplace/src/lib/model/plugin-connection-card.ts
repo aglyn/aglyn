@@ -203,6 +203,18 @@ export function pluginConnectionTooSoonText(label: string, retryAfterMs: number 
     : `${label} synced moments ago. You can sync it again in a minute.`
 }
 
+/**
+ * What a site owner is told when the last sync failed. The provider's own
+ * sentence usually ends in a period, and the card's next sentence must not
+ * add a second one.
+ */
+export function pluginConnectionSyncFailedText(lastError: string | null | undefined): string {
+  const reason = String(lastError ?? '').trim().replace(/[.!?\s]+$/, '')
+  return reason
+    ? `The last sync did not work: ${reason}. It tries again on schedule, or you can sync now.`
+    : 'The last sync did not work. It tries again on schedule, or you can sync now.'
+}
+
 /** Where a connection's data goes and comes from, as the card says it. */
 export function pluginConnectionSharesText(hosts: readonly string[] | undefined): string | null {
   return hosts && hosts.length ? `Shares data with: ${hosts.join(', ')}` : null
