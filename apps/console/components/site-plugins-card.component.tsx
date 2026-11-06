@@ -104,7 +104,14 @@ export default function SitePluginsCard(props: { hostId: string }) {
     return (id: string) => catalog.get(id)?.label ?? names.get(id) ?? id
   }, [catalog, marketplace])
 
-  const switchboard = useSitePluginSwitchboard(hostId, { labelFor })
+  const installedListings = useMemo(
+    () => marketplace.map((install) => install.listingId),
+    [marketplace],
+  )
+  const switchboard = useSitePluginSwitchboard(hostId, {
+    labelFor,
+    installedListings,
+  })
   const { busy, dirty, isOn, isLocked, requestToggle, save } = switchboard
 
   const builtIn = bundles.map((id) => {

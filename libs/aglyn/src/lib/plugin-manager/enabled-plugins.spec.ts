@@ -430,3 +430,41 @@ describe('a plugin on for every workspace and opt-in per site (AGL-3698)', () =>
     ).toBe(false)
   })
 })
+
+describe('an installed marketplace listing in a default-open workspace (AGL-4197)', () => {
+  // The workspace never configured `enabledPlugins`, so the site loads every
+  // pinned listing (`getRealmPluginInstalls`). The console has to say the
+  // same, or an installed, running plugin reads "Off for the workspace".
+  const listing = 'pIbeqgnNLn'
+
+  it('counts a pinned listing as on when the field is absent', () => {
+    expect(resolveEnabledPlugins({}, [listing])).toContain(listing)
+    expect(resolvePluginSiteState({}, {}, listing, [listing])).toBe('runs-here')
+    expect(resolveHostEnabledPlugins({}, {}, [listing])).toContain(listing)
+  })
+
+  it('still lets one site switch it off', () => {
+    expect(
+      resolvePluginSiteState({}, { disabledPlugins: [listing] }, listing, [listing]),
+    ).toBe('off-for-site')
+  })
+
+  it('ignores pins once the workspace has a stored list', () => {
+    const org = { enabledPlugins: ['forms'] }
+    expect(resolveEnabledPlugins(org, [listing])).not.toContain(listing)
+    expect(resolvePluginSiteState(org, {}, listing, [listing])).toBe('off-for-workspace')
+  })
+
+  it('never lets a pin stand in for a first-party plugin', () => {
+    const notDefault = FIRST_PARTY_PLUGINS.find(
+      (plugin) => !DEFAULT_ENABLED_PLUGINS.includes(plugin.id),
+    )
+    if (!notDefault) return
+    expect(resolveEnabledPlugins({}, [notDefault.id])).not.toContain(notDefault.id)
+  })
+
+  it('reads exactly as before without pins', () => {
+    expect(resolveEnabledPlugins({})).toEqual([...DEFAULT_ENABLED_PLUGINS])
+    expect(resolvePluginSiteState({}, {}, listing)).toBe('off-for-workspace')
+  })
+})

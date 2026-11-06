@@ -407,14 +407,30 @@ export function classifyEnabledPlugins(pluginIds: readonly string[]): {
  * in, so no stored list can switch them off for a workspace, including one
  * saved before the plugin existed. Unknown ids are kept — realm-trusted
  * marketplace plugins (AGL-420) ride the same field.
+ *
+ * `installedListings` are the marketplace listings the workspace has pinned
+ * (its `installs`). A workspace that never configured the field is
+ * default-open for them: install sync only appends to a list that already
+ * exists, and the site loads every pinned listing when there is none
+ * (`getRealmPluginInstalls`). Without them, a surface asking "is it on?"
+ * answered no for a plugin that was running. A stored list is the answer as
+ * it stands, so they are ignored once the field exists.
  */
 export function resolveEnabledPlugins(
   org?: { enabledPlugins?: string[] } | null,
+  installedListings?: readonly string[] | null,
 ): string[] {
   const configured = org?.enabledPlugins
   // The default already holds every catalog id, the always-on ones included,
   // in catalog order; only a stored list needs them unioned back in.
-  if (!Array.isArray(configured)) return [...DEFAULT_ENABLED_PLUGINS]
+  if (!Array.isArray(configured)) {
+    const listings = (installedListings ?? [])
+      .map(String)
+      .filter((id) => id && !isFirstPartyPlugin(id))
+    return listings.length
+      ? Array.from(new Set([...DEFAULT_ENABLED_PLUGINS, ...listings]))
+      : [...DEFAULT_ENABLED_PLUGINS]
+  }
   return Array.from(new Set([...ALWAYS_ON_FOR_WORKSPACE, ...canonicalPluginIds(configured)]))
 }
 
@@ -459,9 +475,14 @@ export function subtractDisabledPlugins(
 export function resolveHostEnabledPlugins(
   org?: { enabledPlugins?: string[] } | null,
   host?: { disabledPlugins?: string[]; enabledPlugins?: string[] } | null,
+  /** The workspace's pinned marketplace listings; see {@link resolveEnabledPlugins}. */
+  installedListings?: readonly string[] | null,
 ): string[] {
   return subtractDisabledPlugins(
-    applyDefaultOffOptIn(resolveEnabledPlugins(org), host?.enabledPlugins),
+    applyDefaultOffOptIn(
+      resolveEnabledPlugins(org, installedListings),
+      host?.enabledPlugins,
+    ),
     host?.disabledPlugins,
   )
 }
@@ -520,10 +541,14 @@ export function resolvePluginSiteState(
   org: { enabledPlugins?: string[] } | null | undefined,
   host: { disabledPlugins?: string[]; enabledPlugins?: string[] } | null | undefined,
   pluginId: string,
+  /** The workspace's pinned marketplace listings; see {@link resolveEnabledPlugins}. */
+  installedListings?: readonly string[] | null,
 ): PluginSiteState {
   if (ALWAYS_ON.includes(pluginId)) return 'always-on'
-  if (!resolveEnabledPlugins(org).includes(pluginId)) return 'off-for-workspace'
-  if (resolveHostEnabledPlugins(org, host).includes(pluginId)) return 'runs-here'
+  if (!resolveEnabledPlugins(org, installedListings).includes(pluginId))
+    return 'off-for-workspace'
+  if (resolveHostEnabledPlugins(org, host, installedListings).includes(pluginId))
+    return 'runs-here'
   // A default-off plugin this site has not named is off because nobody asked
   // for it; naming it in the deny-list is a decision, and an explicit deny
   // beats an opt-in, so the deny-list is checked first.

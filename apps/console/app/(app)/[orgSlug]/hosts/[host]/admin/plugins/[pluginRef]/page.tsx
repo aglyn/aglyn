@@ -30,6 +30,7 @@ import type { NextPageWithLayout } from '@aglyn/shared-ui-next'
 import { Alert, Button, Chip, Stack, Switch, Typography } from '@mui/material'
 import { doc } from 'firebase/firestore'
 import { useParams } from 'next/navigation'
+import { useMemo } from 'react'
 import { useFirestore, useFirestoreDoc } from '@aglyn/tenant-feature-instance'
 import AuthScreensCard from '../../../../../../../../components/auth-screens-card.component'
 import DashboardLayout from '../../../../../../../../components/layouts/dashboard.layout'
@@ -142,7 +143,20 @@ const SitePluginInstallation: NextPageWithLayout<Record<string, never>> = () => 
    * sits inside the shared hook, in front of the write, so this entry point
    * cannot skip it any more than the list can.
    */
+  /**
+   * This listing, when it is pinned for the workspace or this site. A
+   * workspace that never configured `enabledPlugins` runs every pinned
+   * listing, and the resolvers below cannot see pins, so without it an
+   * installed marketplace plugin read "Off for the workspace" while it ran.
+   */
+  const pinned = Boolean(pin)
+  const installedListings = useMemo(
+    () => (!firstParty && pinned ? [pluginRef] : []),
+    [firstParty, pinned, pluginRef],
+  )
+
   const switchboard = useSitePluginSwitchboard(hostId, {
+    installedListings,
     autoSave: true,
     readOnly: !canManageSite,
     labelFor: (id) =>
@@ -164,8 +178,15 @@ const SitePluginInstallation: NextPageWithLayout<Record<string, never>> = () => 
    * exactly this question about each neighbor, and two derivations of it could
    * disagree with `resolveHostEnabledPlugins`, which is what actually runs.
    */
-  const siteState = resolvePluginSiteState(org, hostDoc, pluginRef)
-  const orgEnabled = resolveEnabledPlugins(org).includes(pluginRef)
+  const siteState = resolvePluginSiteState(
+    org,
+    hostDoc,
+    pluginRef,
+    installedListings,
+  )
+  const orgEnabled = resolveEnabledPlugins(org, installedListings).includes(
+    pluginRef,
+  )
   const runsHere = siteState === 'runs-here' || siteState === 'always-on'
   const alwaysOn = siteState === 'always-on'
 
