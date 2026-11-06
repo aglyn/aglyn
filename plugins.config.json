@@ -1122,6 +1122,7 @@
         "consoleApi": "registerMarketplaceConsoleApi",
         "declarations": "registerMarketplaceDeclarations",
         "serverDeclarations": "registerMarketplaceServerDeclarations",
+        "consoleServerDeclarations": "registerMarketplaceConsoleServerDeclarations",
         "planEntitlements": "marketplacePlanEntitlements"
       },
       "mobile": {
