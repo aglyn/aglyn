@@ -205,6 +205,8 @@ export * from './upload-cors'
 export * from './docs-help'
 export * from './platform-brand'
 export * from './plan-entitlements'
+// No site checkout offers buy-now-pay-later (AGL-4198).
+export * from './buy-now-pay-later'
 // Aglyn AI credits by the block (AGL-4144): the block and the arithmetic
 // `plan-entitlements` folds into the plan's included credits.
 export * from './ai-credit-blocks'

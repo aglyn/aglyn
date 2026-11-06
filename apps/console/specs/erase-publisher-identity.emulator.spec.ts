@@ -355,12 +355,15 @@ describeEmulated('an erasure leaves no public identity standing (AGL-1970)', () 
       expect(row.exists).toBe(false)
     }
 
-    // The marketplace's share, reported under its plugin (AGL-3080).
+    // The marketplace's share, reported under its plugin (AGL-3080), with
+    // the declared connections' app credentials it erased: none here
+    // (AGL-4193).
     expect(plainResult.plugins?.['marketplace']).toEqual({
       publisherHandles: 2,
       publisherProfileDeleted: true,
       publisherProfileTombstoned: false,
       listingsRetained: 0,
+      connectionCredentials: 0,
     })
   }, 60_000)
 

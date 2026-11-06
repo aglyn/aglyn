@@ -15,6 +15,11 @@
  * limitations under the License.
  */
 
+import {
+  BUY_NOW_PAY_LATER_PAYMENT_METHOD_TYPES,
+  type BuyNowPayLaterPaymentMethodType,
+} from '@aglyn/aglyn/app-utils/buy-now-pay-later'
+
 /**
  * The storefront payment methods a merchant chooses between (AGL-3629).
  *
@@ -38,24 +43,23 @@
  *     reaches the hosted page; Apple Pay and Google Pay on a hosted Stripe page
  *     follow the device and cannot be hidden per merchant.
  *
+ * ## Buy-now-pay-later is never offered (AGL-4198)
+ *
+ * Klarna, Afterpay and Affirm are not in this catalog and are excluded on every
+ * session (`BUY_NOW_PAY_LATER_PAYMENT_METHOD_TYPES`), whatever a store chose
+ * before. They cost Stripe about 6% + 30¢ against 2.9% + 30¢ for a card, and
+ * the platform's fee is fixed before the shopper picks how to pay, so offering
+ * them would size every fee for the dearest method.
+ *
  * ## Why toggling a method never moves a fee
  *
- * `application_fee_amount` is priced against the dearest method the platform
- * could offer (`SALE_PROCESSING_PERCENT`, the BNPL rate), because the shopper
- * picks how to pay after the fee is fixed. Every method here costs Stripe that
- * much or less, so turning one off or on changes what a shopper may choose and
- * never what the platform recovers.
- *
- * ## Quotes and invoices pay by card, never buy-now-pay-later
- *
- * A quote's or an invoice's pay link always excludes every `bnpl` method,
- * whatever the store chose (`payLinkPaymentMethodControls`), and its fee is
- * priced at the card rate (`PAY_LINK_PROCESSING_PERCENT`). That holds only
- * while every method a pay link can still offer costs Stripe no more than a
- * card: Apple Pay, Google Pay, Link, Cash App Pay and Amazon Pay are 2.9% +
- * 30¢ on Stripe's US pricing, and stablecoins 1.5%. `PAY_LINK_METHOD_IDS`
- * lists them, and a spec fails when a method is added to the catalog without
- * being placed on one side or the other.
+ * `application_fee_amount` is priced at the card rate
+ * (`SALE_PROCESSING_PERCENT`). Every method in this catalog costs Stripe that
+ * much or less (Apple Pay, Google Pay, Link, Cash App Pay and Amazon Pay are
+ * 2.9% + 30¢ on Stripe's US pricing, stablecoins 1.5%), so turning one off or
+ * on changes what a shopper may choose and never what the platform recovers.
+ * A method added here must cost no more than a card; the catalog spec holds
+ * the list.
  */
 
 /** A method the merchant may switch off (or, for crypto, on). */
@@ -63,14 +67,14 @@ export type StorefrontPaymentMethodId =
   | 'apple_pay'
   | 'google_pay'
   | 'link'
-  | 'klarna'
-  | 'afterpay_clearpay'
-  | 'affirm'
   | 'cashapp'
   | 'amazon_pay'
   | 'crypto'
 
-export type StorefrontPaymentMethodKind = 'wallet' | 'bnpl' | 'crypto'
+export type StorefrontPaymentMethodKind = 'wallet' | 'crypto'
+
+/** A method a session excludes: one the merchant switched off, or buy-now-pay-later. */
+export type ExcludedPaymentMethodType = StorefrontPaymentMethodId | BuyNowPayLaterPaymentMethodType
 
 /** How a toggle reaches Stripe. */
 export type StorefrontPaymentMethodControl =
@@ -157,52 +161,6 @@ export const STOREFRONT_PAYMENT_METHODS: readonly StorefrontPaymentMethodSpec[] 
     limits: 'Same as cards.',
     subscriptions: true,
     needsDomain: true,
-  },
-  {
-    id: 'klarna',
-    label: 'Klarna',
-    kind: 'bnpl',
-    control: 'exclude',
-    defaultOn: true,
-    capability: 'klarna_payments',
-    configurationKey: 'klarna',
-    requirements:
-      'US shoppers paying in USD. Pay in full, in 30 days, in 4, or monthly financing.',
-    limits: 'From $10; the highest amount depends on the shopper (financing up to $10,000).',
-    minCents: 1000,
-    subscriptions: true,
-    needsDomain: false,
-  },
-  {
-    id: 'afterpay_clearpay',
-    label: 'Afterpay',
-    kind: 'bnpl',
-    control: 'exclude',
-    defaultOn: true,
-    capability: 'afterpay_clearpay_payments',
-    configurationKey: 'afterpay_clearpay',
-    requirements: 'US shoppers paying in USD. Pay in 4 interest-free installments.',
-    limits: '$1 to $4,000. One-time purchases only.',
-    minCents: 100,
-    maxCents: 400_000,
-    subscriptions: false,
-    needsDomain: false,
-  },
-  {
-    id: 'affirm',
-    label: 'Affirm',
-    kind: 'bnpl',
-    control: 'exclude',
-    defaultOn: true,
-    capability: 'affirm_payments',
-    configurationKey: 'affirm',
-    requirements:
-      'US shoppers paying in USD. Pay in 4, or monthly installments up to 36 months.',
-    limits: '$50 to $30,000. One-time purchases only.',
-    minCents: 5_000,
-    maxCents: 3_000_000,
-    subscriptions: false,
-    needsDomain: false,
   },
   {
     id: 'cashapp',
@@ -299,8 +257,8 @@ export interface StorefrontCheckoutWallets {
 }
 
 export interface StorefrontPaymentMethodControls {
-  /** Sent as `excluded_payment_method_types[n]`, in catalog order. */
-  excluded: StorefrontPaymentMethodId[]
+  /** Sent as `excluded_payment_method_types[n]`: buy-now-pay-later, then the merchant's, in catalog order. */
+  excluded: ExcludedPaymentMethodType[]
   /** Handed to the Payment Element. */
   wallets: StorefrontCheckoutWallets
 }
@@ -309,18 +267,20 @@ export interface StorefrontPaymentMethodControls {
  * What one checkout session sends Stripe for the merchant's choices.
  *
  * A method the merchant left on is NOT added anywhere: dynamic payment methods
- * already offer it when the platform does and the order qualifies. Only the
- * methods turned off are named, which is why a merchant who never opened the
- * card produces the same session as before AGL-3629 — except crypto, which is
- * excluded until chosen, and was never offered by the platform before either.
+ * already offer it when the platform does and the order qualifies. Named are
+ * buy-now-pay-later, always (AGL-4198), then the methods turned off, which
+ * include crypto until it is chosen.
  */
 export function resolveStorefrontPaymentMethodControls(
   settings: StorefrontPaymentMethodSettings | null | undefined,
 ): StorefrontPaymentMethodControls {
-  const excluded = STOREFRONT_PAYMENT_METHODS.filter(
-    (method) =>
-      method.control === 'exclude' && !isStorefrontPaymentMethodOn(settings, method.id),
-  ).map((method) => method.id)
+  const excluded: ExcludedPaymentMethodType[] = [
+    ...BUY_NOW_PAY_LATER_PAYMENT_METHOD_TYPES,
+    ...STOREFRONT_PAYMENT_METHODS.filter(
+      (method) =>
+        method.control === 'exclude' && !isStorefrontPaymentMethodOn(settings, method.id),
+    ).map((method) => method.id),
+  ]
   const display = (id: StorefrontPaymentMethodId): StorefrontWalletDisplay =>
     isStorefrontPaymentMethodOn(settings, id) ? 'auto' : 'never'
   return {
@@ -334,9 +294,8 @@ export function resolveStorefrontPaymentMethodControls(
 }
 
 /**
- * Write the controls onto a Checkout Session param set. Leaves the params
- * untouched when the merchant hid nothing, so a store with default settings —
- * apart from the crypto opt-in — sends what it always sent.
+ * Write the controls onto a Checkout Session param set: every exclusion in
+ * order, and Link hidden on the session when the merchant hid it.
  */
 export function appendStorefrontPaymentMethodParams(
   params: URLSearchParams,
@@ -348,37 +307,6 @@ export function appendStorefrontPaymentMethodParams(
   if (controls.wallets.link === 'never') {
     params.set('wallet_options[link][display]', 'never')
   }
-}
-
-/**
- * The methods a quote's or an invoice's pay link may still offer, each of
- * which Stripe prices at the card rate or below (see the note at the top of
- * this file). Every other catalog method is excluded from a pay link.
- */
-export const PAY_LINK_METHOD_IDS: readonly StorefrontPaymentMethodId[] = [
-  'apple_pay',
-  'google_pay',
-  'link',
-  'cashapp',
-  'amazon_pay',
-  'crypto',
-]
-
-/**
- * The store's choices as a quote's or an invoice's pay link sends them: what
- * the store turned off, plus every method that is not on `PAY_LINK_METHOD_IDS`
- * (Klarna, Afterpay and Affirm), excluded however the store set it. Catalog
- * order, so the params read the same as a storefront session's.
- */
-export function payLinkPaymentMethodControls(
-  controls: StorefrontPaymentMethodControls,
-): StorefrontPaymentMethodControls {
-  const excluded = STOREFRONT_PAYMENT_METHODS.filter(
-    (method) =>
-      method.control === 'exclude' &&
-      (controls.excluded.includes(method.id) || !PAY_LINK_METHOD_IDS.includes(method.id)),
-  ).map((method) => method.id)
-  return { excluded, wallets: controls.wallets }
 }
 
 /** True when the browser has to be told about a hidden wallet at all. */

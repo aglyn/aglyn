@@ -143,9 +143,13 @@ export function SubscriptionDetailDialog(props: SubscriptionDetailDialogProps) {
         {dateText ? <Fact label="Next" value={dateText} /> : null}
         <Fact
           label="Paid so far"
-          value={`${money(Number(subscription.paidCents) || 0)} over ${Number(subscription.invoicesCount ?? 0)} ${
-            Number(subscription.invoicesCount ?? 0) === 1 ? 'invoice' : 'invoices'
-          }`}
+          value={
+            Number(subscription.paidCents ?? 0) > 0
+              ? `${money(Number(subscription.paidCents) || 0)} over ${Number(subscription.invoicesCount ?? 0)} ${
+                  Number(subscription.invoicesCount ?? 0) === 1 ? 'invoice' : 'invoices'
+                }`
+              : 'Nothing yet'
+          }
         />
         {subscription.livemode === false ? (
           <Typography variant="caption" color="text.secondary">

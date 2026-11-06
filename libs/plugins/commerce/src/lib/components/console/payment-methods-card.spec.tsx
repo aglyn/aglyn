@@ -60,14 +60,13 @@ function answer(extra: Record<string, unknown> = {}) {
   return {
     methods: [
       row('apple_pay'),
-      row('google_pay'),
+      row('google_pay', { platform: 'unavailable' }),
       row('link'),
+      // A server from before AGL-4198 still answering with buy-now-pay-later.
       row('klarna', { capability: 'active' }),
-      row('afterpay_clearpay', { capability: 'pending' }),
-      row('affirm', { capability: 'inactive' }),
-      row('cashapp', { platform: 'unavailable', capability: 'unrequested' }),
-      row('amazon_pay', { capability: 'unrequested' }),
-      row('crypto', { on: false, platform: null, capability: 'unrequested' }),
+      row('cashapp', { capability: 'active' }),
+      row('amazon_pay', { capability: 'pending' }),
+      row('crypto', { on: true, platform: 'on', capability: 'inactive' }),
     ],
     domains: [
       {
@@ -98,36 +97,35 @@ describe('the payment methods card (AGL-3629)', () => {
   it('lists what the platform offers, with each method’s needs, limits and Stripe state', async () => {
     fetchMock.mockReturnValueOnce(reply(answer()))
     render(<PaymentMethodsCard hostId="host-1" />)
-    await screen.findByTestId('payment-method-klarna')
-    // Not offered by the platform, or crypto with no verdict: not listed.
-    expect(screen.queryByTestId('payment-method-cashapp')).toBeNull()
-    expect(screen.queryByTestId('payment-method-crypto')).toBeNull()
-    expect(screen.getByTestId('payment-method-klarna').textContent).toContain('Ready')
-    expect(screen.getByTestId('payment-method-klarna').textContent).toContain('From $10')
-    expect(screen.getByTestId('payment-method-afterpay_clearpay').textContent).toContain(
+    await screen.findByTestId('payment-method-cashapp')
+    // Not offered by the platform, or buy-now-pay-later (AGL-4198): not listed.
+    expect(screen.queryByTestId('payment-method-google_pay')).toBeNull()
+    expect(screen.queryByTestId('payment-method-klarna')).toBeNull()
+    expect(screen.getByTestId('payment-method-cashapp').textContent).toContain('Ready')
+    expect(screen.getByTestId('payment-method-cashapp').textContent).toContain('USD only.')
+    expect(screen.getByTestId('payment-method-amazon_pay').textContent).toContain(
       'Stripe is reviewing',
     )
-    expect(screen.getByTestId('payment-method-amazon_pay').textContent).toContain('Save to request')
     expect(screen.getByTestId('payment-domain-shop.acme.com').textContent).toContain('Apple Pay ready')
   })
 
   it('saves only what changed, then shows Stripe’s answer', async () => {
     fetchMock.mockReturnValueOnce(reply(answer()))
     render(<PaymentMethodsCard hostId="host-1" />)
-    await screen.findByTestId('payment-method-klarna')
+    await screen.findByTestId('payment-method-cashapp')
     const save = screen.getByRole('button', { name: 'Save' }) as HTMLButtonElement
     expect(save.disabled).toBe(true)
 
-    fireEvent.click(screen.getByLabelText('Klarna'))
-    fireEvent.click(screen.getByLabelText('Affirm'))
-    fireEvent.click(screen.getByLabelText('Affirm'))
+    fireEvent.click(screen.getByLabelText('Cash App Pay'))
+    fireEvent.click(screen.getByLabelText('Amazon Pay'))
+    fireEvent.click(screen.getByLabelText('Amazon Pay'))
     fetchMock.mockReturnValueOnce(reply(answer()))
     fireEvent.click(save)
 
     await waitFor(() => expect(fetchMock).toHaveBeenCalledTimes(2))
     const [, path, init] = fetchMock.mock.calls[1]
     expect(path).toBe('/api/commerce/payment-methods')
-    expect(JSON.parse(init.body)).toEqual({ hostId: 'host-1', methods: { klarna: false } })
+    expect(JSON.parse(init.body)).toEqual({ hostId: 'host-1', methods: { cashapp: false } })
     await waitFor(() =>
       expect(enqueueSnackbar).toHaveBeenCalledWith('Payment methods saved', expect.anything()),
     )
@@ -136,8 +134,8 @@ describe('the payment methods card (AGL-3629)', () => {
   it('says where Stripe is connected while every method waits on it (AGL-3982)', async () => {
     fetchMock.mockReturnValueOnce(reply(answer({ accountConnected: false })))
     render(<PaymentMethodsCard hostId="host-1" />)
-    await screen.findByTestId('payment-method-klarna')
-    expect(screen.getByTestId('payment-method-klarna').textContent).toContain('Connect Stripe first')
+    await screen.findByTestId('payment-method-cashapp')
+    expect(screen.getByTestId('payment-method-cashapp').textContent).toContain('Connect Stripe first')
     expect(screen.getByText(/Connect Stripe in the Payments card above to offer these methods\./)).toBeTruthy()
     // A link to the Payments card on the same page, drawn as a button.
     expect(screen.getByText('Connect Stripe').closest('a')?.getAttribute('href')).toBe('#store-payments')
@@ -146,24 +144,24 @@ describe('the payment methods card (AGL-3629)', () => {
   it('THE CONTROL: a connected account gets no notice', async () => {
     fetchMock.mockReturnValueOnce(reply(answer()))
     render(<PaymentMethodsCard hostId="host-1" />)
-    await screen.findByTestId('payment-method-klarna')
+    await screen.findByTestId('payment-method-cashapp')
     expect(screen.queryByText(/Connect Stripe in the Payments card above/)).toBeNull()
   })
 
   it('offers Finish in Stripe on an on method Stripe needs details for, to the owner', async () => {
     fetchMock.mockReturnValueOnce(reply(answer()))
     render(<PaymentMethodsCard hostId="host-1" />)
-    await screen.findByTestId('payment-method-affirm')
+    await screen.findByTestId('payment-method-crypto')
     expect(screen.getAllByRole('button', { name: 'Finish in Stripe' })).toHaveLength(1)
   })
 
   it('is read-only without "Manage payment methods", and hides Finish from anyone but the owner', async () => {
     fetchMock.mockReturnValueOnce(reply(answer({ canEdit: false, canFinish: false })))
     render(<PaymentMethodsCard hostId="host-1" />)
-    await screen.findByTestId('payment-method-klarna')
+    await screen.findByTestId('payment-method-cashapp')
     expect(screen.queryByRole('button', { name: 'Save' })).toBeNull()
     expect(screen.queryByRole('button', { name: 'Finish in Stripe' })).toBeNull()
-    expect((screen.getByLabelText('Klarna') as HTMLInputElement).disabled).toBe(true)
+    expect((screen.getByLabelText('Cash App Pay') as HTMLInputElement).disabled).toBe(true)
     expect(screen.getByText(/takes the "Manage payment methods" permission/)).toBeTruthy()
   })
 
@@ -177,7 +175,7 @@ describe('the payment methods card (AGL-3629)', () => {
     render(<PaymentMethodsCard hostId="host-1" />)
     fetchMock.mockReturnValueOnce(reply(answer()))
     fireEvent.click(await screen.findByRole('button', { name: 'Retry' }))
-    await screen.findByTestId('payment-method-klarna')
+    await screen.findByTestId('payment-method-cashapp')
   })
 })
 
