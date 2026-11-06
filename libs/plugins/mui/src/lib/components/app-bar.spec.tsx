@@ -22,7 +22,86 @@ import AppBar from '@mui/material/AppBar'
 import { act, fireEvent, render } from '@testing-library/react'
 import { FIELD_COLOR_ALT1 } from '../constants/field-presets'
 import { createTheme } from '@mui/material/styles'
-import AglynAppBar, { overHeroSx, schema } from './app-bar'
+import AglynAppBar, {
+  OVER_HERO_PINNED_ATTRIBUTE,
+  OVER_HERO_SOLID_ATTRIBUTE,
+  overHeroSx,
+  schema,
+} from './app-bar'
+
+/**
+ * AGL-4200: "Sit over a photo hero?" made the bar absolute, so a bar the site
+ * had set to Sticky scrolled away with the photo and the page lost its
+ * navigation. A pinned bar now stays clear over the photo and, once the
+ * announcement bar has scrolled away, pins to the top as its own solid self.
+ */
+describe('App Bar over a photo hero stays pinned when Sticky (AGL-4200)', () => {
+  const realRaf = window.requestAnimationFrame
+  function scrollTo(y: number) {
+    act(() => {
+      Object.defineProperty(window, 'scrollY', { configurable: true, value: y })
+      fireEvent.scroll(window)
+    })
+  }
+  beforeEach(() => {
+    window.requestAnimationFrame = ((callback: FrameRequestCallback) => {
+      callback(0)
+      return 1
+    }) as typeof window.requestAnimationFrame
+  })
+  afterEach(() => {
+    scrollTo(0)
+    document.documentElement.style.removeProperty('--aglyn-announcement-bar-height')
+    window.requestAnimationFrame = realRaf
+  })
+
+  it('marks a Sticky over-hero bar pinned, clear at the top', () => {
+    const { container } = render(<AglynAppBar overHero position="sticky" />)
+    const bar = container.querySelector('header') as HTMLElement
+    expect(bar.hasAttribute(OVER_HERO_PINNED_ATTRIBUTE)).toBe(true)
+    expect(bar.hasAttribute(OVER_HERO_SOLID_ATTRIBUTE)).toBe(false)
+  })
+
+  it('turns solid once the announcement bar has scrolled away, and clear again at the top', () => {
+    document.documentElement.style.setProperty('--aglyn-announcement-bar-height', '48px')
+    const { container } = render(<AglynAppBar overHero position="sticky" shrinkOnScroll />)
+    const bar = container.querySelector('header') as HTMLElement
+    scrollTo(40)
+    expect(bar.hasAttribute(OVER_HERO_SOLID_ATTRIBUTE)).toBe(false)
+    scrollTo(49)
+    expect(bar.hasAttribute(OVER_HERO_SOLID_ATTRIBUTE)).toBe(true)
+    scrollTo(0)
+    expect(bar.hasAttribute(OVER_HERO_SOLID_ATTRIBUTE)).toBe(false)
+  })
+
+  it('leaves a static over-hero bar scrolling away with the photo, as before', () => {
+    const { container } = render(<AglynAppBar overHero position="static" />)
+    const bar = container.querySelector('header') as HTMLElement
+    scrollTo(400)
+    expect(bar.hasAttribute(OVER_HERO_PINNED_ATTRIBUTE)).toBe(false)
+    expect(bar.hasAttribute(OVER_HERO_SOLID_ATTRIBUTE)).toBe(false)
+  })
+
+  it('does nothing to a Sticky bar that is not over a hero', () => {
+    const { container } = render(<AglynAppBar position="sticky" />)
+    const bar = container.querySelector('header') as HTMLElement
+    scrollTo(400)
+    expect(bar.hasAttribute(OVER_HERO_PINNED_ATTRIBUTE)).toBe(false)
+    expect(bar.hasAttribute(OVER_HERO_SOLID_ATTRIBUTE)).toBe(false)
+  })
+
+  it('clears the photo look only until solid, and pins to the top when solid', () => {
+    const rules = overHeroSx(createTheme()) as Record<string, Record<string, unknown>>
+    expect(
+      rules[`body:has([data-aglyn-under-header]) &:not([${OVER_HERO_SOLID_ATTRIBUTE}])`],
+    ).toMatchObject({ backgroundColor: 'transparent', color: '#fff' })
+    expect(
+      rules[
+        `body:has([data-aglyn-under-header]) &[${OVER_HERO_PINNED_ATTRIBUTE}][${OVER_HERO_SOLID_ATTRIBUTE}]`
+      ],
+    ).toEqual({ position: 'fixed', top: 'var(--aglyn-admin-bar-height, 0px)' })
+  })
+})
 
 /**
  * AGL-1191: picking "Theme color → Default" on an App Bar silently reverted
