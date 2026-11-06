@@ -2367,6 +2367,7 @@ the source does not send you looking for a value to put in it.
 | `AGLYN_TENANT_HOST_ID`, `AGLYN_TENANT_HOST_HOST`, `AGLYN_TENANT_HOST_HOSTNAME`, `AGLYN_TENANT_HOST_URL` | Single-host tenant pinning, for a one-site deployment. Not used by the multi-tenant compose shape. |
 | `AGLYN_HOST`, `AGLYN_HOSTNAME`, `AGLYN_PORT`, `AGLYN_PROTOCOL`, `AGLYN_URL` | Build-time origin overrides in the shared Next config. Leave at the defaults. |
 | `AGLYN_DISABLE_BOOT_WARMUP` | Skips the tenant's boot warm-up. A debugging aid. |
+| `AGLYN_DEBUG_MIDDLEWARE` | Set to exactly `1` to write the tenant middleware's per-request trace (`console.debug`) to the logs. A debugging aid read at runtime. Unset by default, so the trace stays off and a log drain is not billed for a line per request. |
 | `CONSENT_DEV_COUNTRY` | On a non-production build only, the country the consent endpoint answers when no geo header is present — the default is `US`, so the implied-consent path is testable on a laptop. Hard-gated off when `NODE_ENV=production`, so it can do nothing on a real deployment. |
 | `NEXT_PUBLIC_AGLYN_TENANT_LOCAL_ORIGIN`, `NEXT_PUBLIC_AGLYN_TENANT_PREVIEW_HOST` | Where "Live" links point from a local or preview console. Both default to Aglyn's own addresses, which matters only on a preview build. |
 | `NEXT_PUBLIC_ANALYTICS_ALLOW_NONPROD` | Development only. |
