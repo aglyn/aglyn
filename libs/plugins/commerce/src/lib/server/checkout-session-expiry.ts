@@ -37,13 +37,32 @@ export type CheckoutSessionExpiry = 'expired' | 'complete' | 'missing' | 'open'
 
 const SESSION_ID = /^cs_(test|live)_[A-Za-z0-9]{8,255}$/
 
-export async function expireCheckoutSession(sessionId: string): Promise<CheckoutSessionExpiry> {
+export async function expireCheckoutSession(
+  sessionId: string,
+  sellerAccount?: string | null,
+): Promise<CheckoutSessionExpiry> {
   if (!SESSION_ID.test(String(sessionId ?? ''))) return 'missing'
+  // A direct-charge session lives on the seller's account. Asked there first,
+  // then on the platform, where a session opened before the seller switched
+  // (or Aglyn's own hardware sale) lives: left open, either is a second way
+  // to pay.
+  if (sellerAccount) {
+    const onSeller = await expireOn(sessionId, sellerAccount)
+    if (onSeller !== 'missing') return onSeller
+  }
+  return expireOn(sessionId, null)
+}
+
+async function expireOn(
+  sessionId: string,
+  account: string | null,
+): Promise<CheckoutSessionExpiry> {
   const secretKey = String(process.env.STRIPE_SECRET_KEY ?? '').trim()
   if (!secretKey) return 'open'
   const headers = {
     Authorization: `Bearer ${secretKey}`,
     'Content-Type': 'application/x-www-form-urlencoded',
+    ...(account ? { 'Stripe-Account': account } : {}),
   }
   try {
     const expired = await fetch(`https://api.stripe.com/v1/checkout/sessions/${sessionId}/expire`, {

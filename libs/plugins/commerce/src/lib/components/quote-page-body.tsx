@@ -147,6 +147,8 @@ const QuotePageBody = forwardRef<HTMLDivElement, QuotePageProps>((props, ref) =>
   const [nativeCheckout, setNativeCheckout] = useState<{
     clientSecret: string
     publishableKey: string
+    /** The seller's account for a direct-charge session. */
+    stripeAccount?: string
     wallets?: StorefrontCheckoutWallets
   } | null>(null)
   /** What a return from paying turned out to be: still being confirmed, or not paid. */
@@ -254,6 +256,9 @@ const QuotePageBody = forwardRef<HTMLDivElement, QuotePageProps>((props, ref) =>
         setNativeCheckout({
           clientSecret: String(payload.clientSecret),
           publishableKey: String(payload.publishableKey),
+          ...(payload.stripeAccount
+            ? { stripeAccount: String(payload.stripeAccount) }
+            : {}),
           wallets: readStorefrontCheckoutWallets(payload.wallets),
         })
         setPaying(false)
@@ -516,6 +521,7 @@ const QuotePageBody = forwardRef<HTMLDivElement, QuotePageProps>((props, ref) =>
                       <StorefrontPaymentElement
                         clientSecret={nativeCheckout.clientSecret}
                         publishableKey={nativeCheckout.publishableKey}
+                        stripeAccount={nativeCheckout.stripeAccount}
                         wallets={nativeCheckout.wallets}
                         payLabel={later ? 'Pay now' : `Pay ${money(quote.totals.totalCents)}`}
                         defaultShippingAddress={stripeContact(quote.shipTo)}

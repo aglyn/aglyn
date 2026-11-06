@@ -1202,3 +1202,84 @@ describe('when the reversal cannot be made (AGL-1956)', () => {
     })
   })
 })
+
+// ---------------------------------------------------------------------------
+// A DIRECT-charge subscription: the seller's tax, on the seller's account
+// ---------------------------------------------------------------------------
+
+describe('a direct-charge subscription cycle', () => {
+  const SELLER = 'acct_1Seller'
+  /** The same Stripe Tax cycle, sold on the seller's own account. */
+  const DIRECT_INVOICE = {
+    ...STRIPE_TAX_INVOICE,
+    id: 'in_direct',
+    subscription_details: {
+      metadata: {
+        ...STRIPE_TAX_INVOICE.subscription_details.metadata,
+        chargeModel: 'direct',
+      },
+    },
+  }
+
+  async function deliverConnect(object: any) {
+    await commerceBillingWebhookHandler({
+      type: 'invoice.paid',
+      object,
+      event: { id: 'evt_direct', account: SELLER },
+      requestHost: 'acme.aglyn.app',
+    } as any)
+  }
+
+  it('takes no tax back: the seller owns the tax', async () => {
+    await deliverConnect(DIRECT_INVOICE)
+    for (const fragment of ['/v1/transfers/']) {
+      expect(callsMatching(fragment)).toHaveLength(0)
+    }
+    expect(reversedCents()).toBe(0)
+    expect(
+      docs.get('hosts/host-1/subscriptions/sub_1/taxReversals/in_direct'),
+    ).toBeUndefined()
+  })
+
+  it('still takes the fee on the goods only, giving back the share Stripe took on tax', async () => {
+    await deliverConnect(DIRECT_INVOICE)
+    expect(feeRefundedCents()).toBe(STRIPE_FEE_CENTS - ITEMS_ONLY_FEE_CENTS)
+    // The charge is the seller's, so any read of it is made on their account;
+    // the application fee and its refund are the platform's own objects.
+    for (const call of [...callsMatching('/v1/charges/'), ...callsMatching('/v1/payment_intents/')]) {
+      expect((call[1] as any).headers['Stripe-Account']).toBe(SELLER)
+    }
+    for (const call of callsMatching('/v1/application_fees')) {
+      expect((call[1] as any)?.headers?.['Stripe-Account']).toBeUndefined()
+    }
+  })
+
+  it('records the cycle with the fee Aglyn kept, marked as a direct sale', async () => {
+    await deliverConnect(DIRECT_INVOICE)
+    const invoice = docs.get('hosts/host-1/subscriptions/sub_1/invoices/in_direct') as any
+    expect(invoice.paidCents).toBe(CHARGE_CENTS)
+    expect(invoice.totals.feeCents).toBe(ITEMS_ONLY_FEE_CENTS)
+    expect(docs.get('hosts/host-1/orders/in_direct')).toMatchObject({
+      chargeModel: 'direct',
+      stripeAccountId: SELLER,
+      feeCents: ITEMS_ONLY_FEE_CENTS,
+    })
+  })
+
+  it('re-prices the subscription on the seller’s account', async () => {
+    await deliverConnect(DIRECT_INVOICE)
+    const reprices = callsMatching('/v1/subscriptions/')
+    expect(reprices.length).toBeGreaterThan(0)
+    for (const call of reprices) {
+      expect((call[1] as any).headers['Stripe-Account']).toBe(SELLER)
+    }
+  })
+
+  it('ignores the seller’s copy of a cycle that was not sold direct', async () => {
+    await deliverConnect({ ...STRIPE_TAX_INVOICE, id: 'in_seller_copy' })
+    expect(fetchMock).not.toHaveBeenCalled()
+    expect(
+      docs.get('hosts/host-1/subscriptions/sub_1/invoices/in_seller_copy'),
+    ).toBeUndefined()
+  })
+})

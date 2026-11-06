@@ -256,6 +256,10 @@ const fetchMock = jest.fn(async (url: any, init: any): Promise<any> => {
     }
     return { ok: true, json: async () => ({ id: 'txr_test_1' }) }
   }
+  if (target.endsWith('/v1/tax/settings')) {
+    // A direct-charge seller with Stripe Tax set up on its own account.
+    return { ok: true, json: async () => ({ status: 'active' }) }
+  }
   if (target.endsWith('/v1/coupons')) {
     return { ok: true, json: async () => ({ id: 'co_test_1' }) }
   }
@@ -565,6 +569,90 @@ describe('tax and a discount on the same session', () => {
     await runCheckout(MANUAL_TX, { couponCode: 'HALF' })
     expect(sessionBody?.get('discounts[0][coupon]')).toBe('co_test_1')
     expect(sessionBody?.get('line_items[0][tax_rates][0]')).toBe('txr_test_1')
+  })
+})
+
+/*
+ * A DIRECT-CHARGE SELLER. The sale is created on the seller's own Stripe
+ * account, so every object this handler mints for it carries
+ * `Stripe-Account`, a platform tax rate id is never reused there, the split
+ * is the take as `application_fee_amount` with no transfer, and Stripe Tax is
+ * the seller's (no Aglyn-liable transfer). A destination seller is unchanged.
+ */
+describe('a seller on direct charges', () => {
+  const asDirect = () => {
+    docs.set('profiles/owner-1', {
+      stripeAccountId: 'acct_1',
+      stripeChargesEnabled: true,
+      stripeChargeModel: 'direct',
+    })
+  }
+  const headersFor = (endpoint: string) =>
+    fetchMock.mock.calls
+      .filter((call) => String(call[0]).endsWith(endpoint))
+      .map((call) => (call[1]?.headers ?? {}) as Record<string, string>)
+
+  it('creates the coupon, the tax rate and the session on the seller account', async () => {
+    const result = await runCheckout(MANUAL_TX, { couponCode: 'HALF' }, {}, asDirect)
+    expect(result.status).toBe(200)
+    for (const endpoint of ['/v1/coupons', '/v1/tax_rates', '/v1/checkout/sessions']) {
+      const sent = headersFor(endpoint)
+      expect(sent.length).toBeGreaterThan(0)
+      for (const headers of sent) expect(headers['Stripe-Account']).toBe('acct_1')
+    }
+    expect(sessionBody?.get('discounts[0][coupon]')).toBe('co_test_1')
+    expect(sessionBody?.get('line_items[0][tax_rates][0]')).toBe('txr_test_1')
+  })
+
+  it('never reuses a tax rate cached from the platform account', async () => {
+    await runCheckout(MANUAL_TX, {}, {}, () => {
+      asDirect()
+      docs.set('hosts/host-1/stripeTaxRates/p82500-TX%20sales%20tax', {
+        taxRateId: 'txr_platform',
+      })
+    })
+    expect(stripeCalls('/v1/tax_rates')).toBe(1)
+    expect(sessionBody?.get('line_items[0][tax_rates][0]')).toBe('txr_test_1')
+  })
+
+  it('splits by application fee alone, with no transfer and the model recorded', async () => {
+    await runCheckout(MANUAL_TX, {}, {}, asDirect)
+    expect(sessionBody?.get('payment_intent_data[transfer_data][destination]')).toBeNull()
+    expect(sessionBody?.get('payment_intent_data[transfer_data][amount]')).toBeNull()
+    expect(sessionBody?.get('payment_intent_data[on_behalf_of]')).toBeNull()
+    expect(sessionBody?.get('metadata[chargeModel]')).toBe('direct')
+    const fee = sessionBody?.get('payment_intent_data[application_fee_amount]')
+    expect(fee ?? null).toBe(
+      Number(sessionBody?.get('metadata[feeCents]')) > 0
+        ? sessionBody?.get('metadata[feeCents]')
+        : null,
+    )
+  })
+
+  it('charges the take only, below the destination fee that carries the card cost', async () => {
+    await runCheckout(MANUAL_TX)
+    const destinationFee = Number(sessionBody?.get('metadata[feeCents]'))
+    await runCheckout(MANUAL_TX, {}, {}, asDirect)
+    const directFee = Number(sessionBody?.get('metadata[feeCents]'))
+    expect(directFee).toBeLessThan(destinationFee)
+  })
+
+  it('leaves Stripe Tax to the seller: no fixed transfer, no Aglyn-liable metadata', async () => {
+    await runCheckout({ tax: { mode: 'stripe' } }, {}, {}, asDirect)
+    expect(sessionBody?.get('automatic_tax[enabled]')).toBe('true')
+    expect(sessionBody?.get('payment_intent_data[transfer_data][amount]')).toBeNull()
+    expect(sessionBody?.get('metadata[transferCents]')).toBeNull()
+    expect(sessionBody?.get('metadata[transferShippingCents]')).toBeNull()
+    expect(headersFor('/v1/checkout/sessions')[0]['Stripe-Account']).toBe('acct_1')
+  })
+
+  it('keeps a destination seller exactly as before', async () => {
+    await runCheckout(MANUAL_TX, { couponCode: 'HALF' })
+    for (const call of fetchMock.mock.calls) {
+      expect((call[1]?.headers ?? {})['Stripe-Account']).toBeUndefined()
+    }
+    expect(sessionBody?.get('payment_intent_data[transfer_data][destination]')).toBe('acct_1')
+    expect(sessionBody?.get('metadata[chargeModel]')).toBeNull()
   })
 })
 

@@ -15,6 +15,7 @@
  * limitations under the License.
  */
 
+import { directSellerAccountForHost } from './seller-stripe-account'
 import { checkEntitlement, pluginRequestFromWeb } from '@aglyn/aglyn/server'
 import type { SiteReturnHost } from '@aglyn/aglyn/app-utils/site-return-url'
 import {
@@ -377,7 +378,10 @@ export async function paymentMethodsHandler(request: Request): Promise<Response>
 
     const answer: PaymentMethodsAnswer = {
       methods: buildPaymentMethodRows(settings, platform, capabilities),
-      domains: await readSiteDomainRecords(hostSnapshot.data() as SiteReturnHost | undefined),
+      domains: await readSiteDomainRecords(
+        hostSnapshot.data() as SiteReturnHost | undefined,
+        await directSellerAccountForHost(hostId),
+      ),
       accountConnected: Boolean(accountId),
       canEdit: mayEdit,
       canFinish: Boolean(accountId) && decoded.uid === ownerUid,

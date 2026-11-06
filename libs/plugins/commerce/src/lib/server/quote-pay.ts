@@ -27,7 +27,13 @@ import { resolveHostToken, type HostTokenSource } from '@aglyn/aglyn/app-utils/h
 import { readClientIp } from '@aglyn/aglyn/app-utils/request-ip'
 import { type SiteReturnHost, siteReturnOrigin } from '@aglyn/aglyn/app-utils/site-return-url'
 import { consumeRateLimit, firebaseAdmin, getOrgForHost } from '@aglyn/tenant-data-admin'
-import { merchantAccountIsReady } from '@aglyn/tenant-data-admin/server/payment-provider'
+import {
+  connectedAccountHeader,
+  directChargeParams,
+  merchantAccountIsReady,
+  saleChargeModel,
+  type SaleChargeModel,
+} from '@aglyn/tenant-data-admin/server/payment-provider'
 import { checkoutSessionCardAuthenticationParams } from '@aglyn/tenant-data-admin/server/stripe-card-authentication'
 import { quotePageHref } from '../constants/quote-page'
 import * as CommerceModel from '../model'
@@ -43,6 +49,7 @@ import {
 import { orderStatusUrl } from './order-status-token'
 import { ensureCheckoutDomain } from './payment-method-domains'
 import { verifyQuoteLinkToken } from './quote-link-token'
+import { SELLER_STRIPE_TAX_NOT_SET_UP_MESSAGE, sellerStripeTaxActive } from './seller-stripe-account'
 
 /*==========================================
  * THE CUSTOMER'S QUOTE PAGE AND ITS PAY BUTTON (AGL-4094), AND AN
@@ -104,7 +111,17 @@ export interface QuotePayDeps {
     params: URLSearchParams,
     headers: Record<string, string>,
   ): Promise<{ ok: boolean; session: { id?: string; url?: string; client_secret?: string; error?: unknown } }>
-  expireSession(sessionId: string): Promise<CheckoutSessionExpiry>
+  /**
+   * Closes a session so it can no longer be paid. `stripeAccount` names the
+   * seller's account for a session opened there (a direct charge); absent, the
+   * session is the platform's.
+   */
+  expireSession(sessionId: string, stripeAccount?: string): Promise<CheckoutSessionExpiry>
+  /**
+   * Whether the seller's own Stripe Tax is set up, for a direct charge that
+   * asks Stripe Tax. Absent, `sellerStripeTaxActive` answers.
+   */
+  sellerTaxActive?(accountId: string): Promise<boolean>
   /** Registers the page's domain for Apple Pay; never throws. */
   ensureDomain(input: Parameters<typeof ensureCheckoutDomain>[0]): Promise<unknown>
   now(): number
@@ -132,9 +149,45 @@ export function defaultQuotePayDeps(): QuotePayDeps {
       })
       return { ok: response.ok, session: (await response.json().catch(() => ({}))) as never }
     },
-    expireSession: (sessionId) => expireCheckoutSession(sessionId),
+    expireSession: (sessionId, stripeAccount) =>
+      stripeAccount ? expireConnectedCheckoutSession(sessionId, stripeAccount) : expireCheckoutSession(sessionId),
     ensureDomain: (input) => ensureCheckoutDomain(input).catch(() => null),
     now: () => Date.now(),
+  }
+}
+
+/**
+ * `expireCheckoutSession` for a session on the seller's own account (a direct
+ * charge), where the platform's call answers 404. Same answers, same rule: a
+ * refused expiry reads the session back, so a paid one is never read as closed.
+ */
+async function expireConnectedCheckoutSession(
+  sessionId: string,
+  stripeAccount: string,
+): Promise<CheckoutSessionExpiry> {
+  if (!/^cs_(test|live)_[A-Za-z0-9]{8,255}$/.test(String(sessionId ?? ''))) return 'missing'
+  const secretKey = String(process.env.STRIPE_SECRET_KEY ?? '').trim()
+  if (!secretKey) return 'open'
+  const headers = {
+    Authorization: `Bearer ${secretKey}`,
+    'Content-Type': 'application/x-www-form-urlencoded',
+    'Stripe-Account': stripeAccount,
+  }
+  try {
+    const expired = await fetch(`https://api.stripe.com/v1/checkout/sessions/${sessionId}/expire`, {
+      method: 'POST',
+      headers,
+    })
+    if (expired.ok) return 'expired'
+    const read = await fetch(`https://api.stripe.com/v1/checkout/sessions/${sessionId}`, { headers })
+    if (read.status === 404) return 'missing'
+    if (!read.ok) return 'open'
+    const session = (await read.json().catch(() => ({}))) as { status?: string }
+    if (session.status === 'complete') return 'complete'
+    if (session.status === 'expired') return 'expired'
+    return 'open'
+  } catch {
+    return 'open'
   }
 }
 
@@ -271,6 +324,11 @@ export interface PayLinkPayments {
   owner: { id?: string; org?: any } | null
   /** The owner's payment account; empty unless `ready`. */
   accountId: string
+  /**
+   * Whether a sale is a direct charge on that account or a destination charge
+   * from the platform's, as the connect route recorded it on the profile.
+   */
+  chargeModel: SaleChargeModel
 }
 
 /**
@@ -285,7 +343,9 @@ export async function payLinkPayments(
   input: { hostId: string; orderId: string; kind: CommerceModel.OrderPayLinkKind },
 ): Promise<PayLinkPayments> {
   const owner = await deps.orgForHost(input.hostId)
-  if (!checkEntitlement(owner?.org as never, 'commerce')) return { ready: false, owner, accountId: '' }
+  if (!checkEntitlement(owner?.org as never, 'commerce')) {
+    return { ready: false, owner, accountId: '', chargeModel: 'destination' }
+  }
   const ownerUid = owner?.org?.ownerUid
   const profile = ownerUid ? await deps.firestore().collection('profiles').doc(String(ownerUid)).get() : null
   const accountId = profile?.get('stripeAccountId')
@@ -297,7 +357,12 @@ export async function payLinkPayments(
     },
     { subject: `${nounOf(input.kind)} ${input.orderId} on host ${input.hostId}` },
   )
-  return { ready, owner, accountId: ready ? String(accountId) : '' }
+  return {
+    ready,
+    owner,
+    accountId: ready ? String(accountId) : '',
+    chargeModel: saleChargeModel(profile?.get('stripeChargeModel')),
+  }
 }
 
 /**
@@ -358,6 +423,12 @@ export function buildQuoteSessionParams(input: {
   order: CommerceModel.HostOrder
   charge: CommerceModel.QuoteCheckoutCharge & Partial<Pick<CommerceModel.InvoiceCheckoutCharge, 'shippingOptions' | 'shippingCountries'>>
   accountId: string
+  /**
+   * `direct` opens the session ON the seller's account (the caller sends the
+   * `Stripe-Account` header): Aglyn's take is the application fee, the seller
+   * owns any Stripe Tax, and nothing is transferred. Absent is `destination`.
+   */
+  chargeModel?: SaleChargeModel
   feeCents: number
   taxRateId: string
   returnUrl: string
@@ -411,14 +482,19 @@ export function buildQuoteSessionParams(input: {
     ])
   }
   const shippingFloorCents = rates.length > 0 ? CommerceModel.shippingFloorCents(rates) : charge.shippingCents
+  const direct = input.chargeModel === 'direct'
   for (const [key, value] of Object.entries(
-    CommerceModel.destinationChargeParams({
-      accountId: input.accountId,
-      feeCents: input.feeCents,
-      taxOwner: charge.taxAtPayment ? 'platform' : 'merchant',
-      merchantGoodsCents: charge.goodsCents,
-      shippingFloorCents,
-    }),
+    // A direct charge is already the seller's money, Stripe Tax included
+    // (computed on THEIR registrations), so the take is the whole split.
+    direct
+      ? directChargeParams(input.feeCents)
+      : CommerceModel.destinationChargeParams({
+          accountId: input.accountId,
+          feeCents: input.feeCents,
+          taxOwner: charge.taxAtPayment ? 'platform' : 'merchant',
+          merchantGoodsCents: charge.goodsCents,
+          shippingFloorCents,
+        }),
   )) {
     params.set(key, value)
   }
@@ -447,12 +523,17 @@ export function buildQuoteSessionParams(input: {
     if (input.chargedTax) params.set('metadata[quoteTax]', CommerceModel.quoteTaxBasisKey(input.chargedTax))
   }
   params.set('metadata[feeCents]', String(input.feeCents))
+  // What the webhook, refunds and reports read to find the payment on the
+  // seller's account rather than the platform's.
+  if (direct) params.set('metadata[chargeModel]', 'direct')
   // A tax charged as its own line is invisible to Stripe's tax total; this
   // witness is what records it as the business's tax.
   if (charge.taxCents > 0 && charge.taxPct === null) {
     params.set('metadata[taxCents]', String(charge.taxCents))
   }
-  if (charge.taxAtPayment) {
+  // The fixed transfer Aglyn keeps its Stripe Tax back from; a direct charge
+  // transfers nothing and its tax is the seller's.
+  if (charge.taxAtPayment && !direct) {
     params.set(
       'metadata[transferCents]',
       String(
@@ -523,20 +604,32 @@ export async function handleQuotePay(deps: QuotePayDeps, req: PluginApiRequest):
     return refusal(409, blocked, CommerceModel.payLinkPaymentsUnavailableMessage(storeName, kind))
   }
   if (blocked) return refusal(409, blocked, CommerceModel.invoicePayRefusalMessage(blocked, storeName, kind))
-  const { owner, accountId } = payments
+  const { owner, accountId, chargeModel } = payments
+  const direct = chargeModel === 'direct'
+  // Every Stripe object for a direct sale lives on the seller's account.
+  const onAccount = connectedAccountHeader(chargeModel, accountId)
+  const sessionAccount = onAccount['Stripe-Account'] ?? ''
 
   const charge = CommerceModel.invoiceCheckoutCharge(order, quoteId, payStore)
   // The fee is sized on the most the buyer can pay, as a draft's first link
   // sized it on its dearest rate, and its processing half at the card rate:
-  // the session below excludes every buy-now-pay-later method.
+  // the session below excludes every buy-now-pay-later method. A direct
+  // charge's fee is the take alone: Stripe bills the seller its card fee.
   const dearestRateCents = charge.shippingOptions.reduce((most, rate) => Math.max(most, rate.amountCents), 0)
   const feeCents = resolveTransactionFeeCents(
     owner?.org as never,
     charge.feeProductType,
     charge.goodsCents,
     charge.totalCents + dearestRateCents,
-    { stripeTax: charge.taxAtPayment },
+    direct ? { direct: true } : { stripeTax: charge.taxAtPayment },
   )
+  // Stripe refuses `automatic_tax` on a seller's account whose Stripe Tax is
+  // not set up, and a store that chose it must not sell untaxed. Above the
+  // claim, so the refusal spends no press.
+  if (direct && charge.taxAtPayment) {
+    const taxActive = await (deps.sellerTaxActive ?? sellerStripeTaxActive)(String(accountId))
+    if (!taxActive) return refusal(409, 'seller-tax', SELLER_STRIPE_TAX_NOT_SET_UP_MESSAGE)
+  }
   const nativeMode = await deps.nativeMode(String(owner?.id ?? ''))
   const site = host as SiteReturnHost
   const origin = siteReturnOrigin({
@@ -550,6 +643,15 @@ export async function handleQuotePay(deps: QuotePayDeps, req: PluginApiRequest):
   const openedFor = order.checkoutSessionId ?? ''
   const openedAtEdit = Number(order.quote?.updatedAtMs) || 0
   const openedAtVersion = CommerceModel.orderPayLinkVersion(order)
+  // Closes a session this quote opened, on the account it was opened on. A
+  // seller's earlier session may be the platform's (opened before the seller
+  // moved to direct charges), so one the seller's account does not know is
+  // closed there too: leaving it open would be a second way to pay.
+  const expire = async (sessionId: string): Promise<CheckoutSessionExpiry> => {
+    if (!sessionAccount) return deps.expireSession(sessionId)
+    const result = await deps.expireSession(sessionId, sessionAccount)
+    return result === 'missing' ? deps.expireSession(sessionId) : result
+  }
 
   const claimed = await claimAttempt(deps.firestore(), {
     kind: 'commerce-quote-pay',
@@ -572,7 +674,7 @@ export async function handleQuotePay(deps: QuotePayDeps, req: PluginApiRequest):
     // that was paid a moment ago means the quote is paid; one that cannot be
     // closed means a second session would be a second way to pay.
     if (openedFor) {
-      const previous = await deps.expireSession(openedFor)
+      const previous = await expire(openedFor)
       if (previous === 'complete') {
         await claim.release()
         return refusal(409, 'paid', `This ${noun} has just been paid. Your receipt is on its way.`, { confirming: true })
@@ -595,6 +697,8 @@ export async function handleQuotePay(deps: QuotePayDeps, req: PluginApiRequest):
               ? basis.label || `Tax (${charge.taxPct}%)`
               : 'Sales tax',
           headers: stripeKey(`tax-rate-${Math.round(charge.taxPct * 10_000)}`),
+          // A platform rate id does not resolve on the seller's account.
+          ...(sessionAccount ? { stripeAccount: sessionAccount } : {}),
         })) ?? ''
       if (!taxRateId) {
         // Never an untaxed session for a taxed quote.
@@ -612,6 +716,7 @@ export async function handleQuotePay(deps: QuotePayDeps, req: PluginApiRequest):
       order,
       charge,
       accountId: String(accountId),
+      ...(direct ? { chargeModel } : {}),
       feeCents,
       taxRateId,
       returnUrl,
@@ -621,16 +726,23 @@ export async function handleQuotePay(deps: QuotePayDeps, req: PluginApiRequest):
     if (nativeMode.native) {
       applyNativeCheckoutParams(params, params.get('success_url') ?? returnUrl)
     }
-    const domain = nativeMode.native
-      ? deps.ensureDomain({ pageUrl: returnUrl, site, hostId })
-      : Promise.resolve(null)
+    // Apple Pay's domain is registered on the account the session lives on.
+    const domainInput = {
+      pageUrl: returnUrl,
+      site,
+      hostId,
+      ...(sessionAccount ? { stripeAccount: sessionAccount } : {}),
+    }
+    const domain = nativeMode.native ? deps.ensureDomain(domainInput) : Promise.resolve(null)
     const created = await deps.createSession(params, {
       ...stripeKey('session'),
       ...nativeCheckoutStripeHeaders(nativeMode),
+      ...onAccount,
     })
     await domain
     const payload = created.ok
-      ? readCheckoutSessionPayload(created.session, nativeMode, paymentMethods.wallets)
+      ? // A direct sale's in-page form opens Stripe.js on the seller's account, where the session is.
+        readCheckoutSessionPayload(created.session, nativeMode, paymentMethods.wallets, sessionAccount)
       : null
     if (!payload || !created.session.id) {
       console.error('Stripe quote checkout error', created.session?.error)
@@ -676,16 +788,16 @@ export async function handleQuotePay(deps: QuotePayDeps, req: PluginApiRequest):
       return { outcome: null, displaced }
     })
     if (settled.outcome) {
-      await deps.expireSession(minted)
+      await expire(minted)
       await claim.release()
       return settled.outcome
     }
-    if (settled.displaced && settled.displaced !== minted) await deps.expireSession(settled.displaced)
+    if (settled.displaced && settled.displaced !== minted) await expire(settled.displaced)
     await claim.record(200, payload)
     return { status: 200, body: payload as unknown as Record<string, unknown> }
   } catch (error) {
     console.error('quote pay failed', error)
-    if (minted) await deps.expireSession(minted).catch(() => 'open')
+    if (minted) await expire(minted).catch(() => 'open')
     await claim.release()
     return { status: 500, body: { error: 'Your payment could not be set up. Try again.' } }
   }

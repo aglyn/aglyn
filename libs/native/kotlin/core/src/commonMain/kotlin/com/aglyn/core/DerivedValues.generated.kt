@@ -118,6 +118,7 @@ object ReleaseFlagDefaults {
     "release_weglot" to ReleaseFlagValue(true, 0, listOf()),
     "release_addon_store" to ReleaseFlagValue(true, 0, listOf()),
     "release_native_checkout" to ReleaseFlagValue(true, 0, listOf()),
+    "release_direct_charges" to ReleaseFlagValue(false, 0, listOf()),
     "release_edit_bar" to ReleaseFlagValue(true, 0, listOf()),
     "release_assist" to ReleaseFlagValue(true, 0, listOf()),
     "release_video_uploads" to ReleaseFlagValue(false, 0, listOf()),

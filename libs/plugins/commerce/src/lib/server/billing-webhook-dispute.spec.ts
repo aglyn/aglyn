@@ -16,7 +16,10 @@
  */
 
 import type { PluginPersonRefundRequest } from '@aglyn/aglyn/plugin-manager/plugin-person-records'
-import { commerceBillingWebhookHandler } from './billing-webhook'
+import {
+  commerceBillingWebhookHandler,
+  connectEventIsForDirectSale,
+} from './billing-webhook'
 import { posOfflineCardOrderMoney } from './pos-offline-card-order'
 import {
   reportedRefundLedger,
@@ -2058,5 +2061,109 @@ describe('a register card sale taken offline (AGL-4039)', () => {
     await expect(
       deliver('charge.dispute.created', disputeEvent({ amount: 4100, payment_intent: 'pi_offline_card' })),
     ).resolves.toEqual({ claimed: false })
+  })
+})
+
+describe('direct charges: events the Connect destination delivers', () => {
+  const SELLER = 'acct_1Seller'
+
+  /** As the Connect destination delivers it: the seller named at the top. */
+  async function deliverConnect(type: string, object: any) {
+    return await commerceBillingWebhookHandler({
+      type,
+      object,
+      event: { id: `evt_connect_${type}`, account: SELLER },
+      requestHost: 'acme.aglyn.app',
+    } as any)
+  }
+
+  /** A throwaway key, so a reversal would get as far as Stripe if it ran. */
+  beforeEach(() => {
+    process.env.STRIPE_SECRET_KEY = 'sk_double_direct'
+  })
+
+  it('judges whose event it is before anything else', () => {
+    const connect = { account: SELLER }
+    expect(connectEventIsForDirectSale('checkout.session.completed', { metadata: {} }, {})).toBe(true)
+    expect(
+      connectEventIsForDirectSale('checkout.session.completed', { metadata: { type: 'commerce-order' } }, connect),
+    ).toBe(false)
+    expect(
+      connectEventIsForDirectSale(
+        'checkout.session.completed',
+        { metadata: { type: 'commerce-order', chargeModel: 'direct' } },
+        connect,
+      ),
+    ).toBe(true)
+    expect(
+      connectEventIsForDirectSale(
+        'invoice.paid',
+        { parent: { subscription_details: { metadata: { chargeModel: 'direct' } } } },
+        connect,
+      ),
+    ).toBe(true)
+    // Charge-level objects carry no metadata of ours; the order decides.
+    expect(connectEventIsForDirectSale('charge.refunded', { id: 'py_1' }, connect)).toBe(true)
+    // Anything else on a seller's account is not a storefront sale's.
+    expect(connectEventIsForDirectSale('payment_intent.succeeded', { id: 'pi_1' }, connect)).toBe(false)
+  })
+
+  it('ignores a Connect event for a destination-charge session, with no side effects', async () => {
+    const before = new Map(docs)
+    const result = await deliverConnect('checkout.session.completed', {
+      id: 'cs_live_destination',
+      payment_status: 'paid',
+      payment_intent: 'pi_destination',
+      amount_total: 6200,
+      metadata: { type: 'commerce-order', hostId: 'host-1', productId: 'product-1' },
+    })
+    expect(result).toBeUndefined()
+    expect(docs).toEqual(before)
+    expect(managerNotices).toHaveLength(0)
+  })
+
+  it('ignores a Connect dispute on a destination-charge order: the platform’s event owns it', async () => {
+    const result = await deliverConnect('charge.dispute.closed', disputeEvent({ status: 'lost' }))
+    expect(result).toMatchObject({ claimed: false })
+    expect(order().refundedCents).toBeUndefined()
+    expect(order().dispute).toBeUndefined()
+    expect(managerNotices).toHaveLength(0)
+  })
+
+  it('ignores a Connect refund on a destination-charge order', async () => {
+    const result = await deliverConnect('charge.refunded', {
+      id: 'py_1',
+      payment_intent: 'pi_dispute_1',
+      amount_refunded: 6200,
+      refunds: { data: [{ id: 're_1', amount: 6200 }] },
+    })
+    expect(result).toBeUndefined()
+    expect(order().refundedCents).toBeUndefined()
+  })
+
+  it('a lost dispute on a direct order reverses no transfer and tells the merchant it left their balance', async () => {
+    docs.set('hosts/host-1/orders/order-1', {
+      ...order(),
+      chargeModel: 'direct',
+      stripeAccountId: SELLER,
+    })
+    const result = await deliverConnect('charge.dispute.closed', disputeEvent({ status: 'lost' }))
+    expect(result).toMatchObject({ claimed: true, hostId: 'host-1' })
+    expect(order().refundedCents).toBe(DISPUTE_CENTS)
+    // No Stripe call at all: there is no transfer on a direct charge.
+    expect(fetchMock).not.toHaveBeenCalled()
+    expect(order().dispute.reversedTransferCents).toBeUndefined()
+    expect(managerNotices).toHaveLength(1)
+    expect(managerNotices[0].body).toBe(
+      "The chargeback on order #RDER-1 on {site} was decided in the " +
+        "shopper's favor, and their bank took back $62.00 from your Stripe balance.",
+    )
+  })
+
+  it('an opened dispute on a direct order still warns the merchant', async () => {
+    docs.set('hosts/host-1/orders/order-1', { ...order(), chargeModel: 'direct' })
+    await deliverConnect('charge.dispute.created', disputeEvent())
+    expect(riskNotices).toHaveLength(1)
+    expect(riskNotices[0]).toMatchObject({ kind: 'sale-dispute', hostId: 'host-1' })
   })
 })

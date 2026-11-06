@@ -727,3 +727,44 @@ describe('the managers hear of a paid booking (AGL-3500)', () => {
     expect(mockNotified).toHaveLength(1)
   })
 })
+
+describe('a DIRECT-charge booking records where its charge lives', () => {
+  const DIRECT_SESSION = {
+    ...BOOKING_SESSION,
+    payment_intent: 'pi_direct_1',
+    metadata: { ...BOOKING_SESSION.metadata, feeCents: '375', chargeModel: 'direct' },
+  }
+
+  it('stamps the model and the seller account from the event, for the refund', async () => {
+    await bookingsBillingWebhookHandler({
+      type: 'checkout.session.completed',
+      object: DIRECT_SESSION,
+      event: { id: 'evt_direct', account: 'acct_seller_direct' },
+    } as any)
+    const booking = storedBooking()
+    expect(booking.status).toBe('confirmed')
+    expect(booking.paymentIntentId).toBe('pi_direct_1')
+    expect(booking.feeCents).toBe(375)
+    expect(booking.chargeModel).toBe('direct')
+    expect(booking.stripeAccountId).toBe('acct_seller_direct')
+    // Nothing on the event needs a Stripe read.
+    expect(fetchMock).not.toHaveBeenCalled()
+  })
+
+  it('keeps the account the hold recorded when the event names none', async () => {
+    docs.set('hosts/host-1/bookings/booking-1', {
+      ...BOOKING,
+      chargeModel: 'direct',
+      stripeAccountId: 'acct_from_hold',
+    })
+    await deliver(DIRECT_SESSION)
+    expect(storedBooking().chargeModel).toBe('direct')
+    expect(storedBooking().stripeAccountId).toBe('acct_from_hold')
+  })
+
+  it('leaves a destination booking without either field', async () => {
+    await deliver({ ...BOOKING_SESSION, payment_intent: 'pi_destination_1' })
+    expect('chargeModel' in storedBooking()).toBe(false)
+    expect('stripeAccountId' in storedBooking()).toBe(false)
+  })
+})

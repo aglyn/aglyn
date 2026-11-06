@@ -43,6 +43,8 @@ jest.mock('@aglyn/tenant-data-admin', () => {
     profile: undefined as Record<string, unknown> | undefined,
     profileWrites: [] as Array<Record<string, unknown>>,
     ownerUid: 'owner-1' as string | undefined,
+    /** `release_direct_charges` for the merchant org. */
+    directCharges: false,
   }
   const profileRef = {
     get: async () => ({
@@ -78,6 +80,8 @@ jest.mock('@aglyn/tenant-data-admin', () => {
       orgId: 'merchant-org',
       org: { ownerUid: state.ownerUid, slug: 'acme' },
     }),
+    isServerReleaseFlagOnForOrg: async (flag: string, orgId: string | null) =>
+      flag === 'release_direct_charges' && orgId === 'merchant-org' && state.directCharges,
   }
 })
 
@@ -89,6 +93,7 @@ const state = (
       profile: Record<string, unknown> | undefined
       profileWrites: Array<Record<string, unknown>>
       ownerUid: string | undefined
+      directCharges: boolean
     }
   }
 ).__state
@@ -184,6 +189,36 @@ describe('Storefront Connect onboarding hardening (AGL-1994)', () => {
     // The commerce metadata the marketplace twin does not carry survives.
     expect(creation?.params.get('metadata[purpose]')).toBe('commerce')
     expect(creation?.params.get('metadata[profileId]')).toBe('owner-1')
+  })
+
+  it('creates a full, Stripe-billed account when the org has direct charges on', async () => {
+    state.directCharges = true
+    try {
+      accountState = {
+        ...accountState,
+        controller: { fees: { payer: 'account' }, stripe_dashboard: { type: 'full' } },
+      }
+      const res = makeRes()
+      await connectHandler(makeReq(), res)
+      expect(res.statusCode).toBe(200)
+      const creation = creationCall()
+      expect(creation?.params.get('type')).toBeNull()
+      expect(creation?.params.get('controller[fees][payer]')).toBe('account')
+      expect(creation?.params.get('controller[losses][payments]')).toBe('stripe')
+      expect(creation?.params.get('controller[stripe_dashboard][type]')).toBe('full')
+      expect(creation?.params.get('capabilities[transfers][requested]')).toBe('true')
+      // The shape is read back off the account and recorded for every sale.
+      expect(state.profile?.['stripeChargeModel']).toBe('direct')
+    } finally {
+      state.directCharges = false
+    }
+  })
+
+  it('records an Express account as destination', async () => {
+    const res = makeRes()
+    await connectHandler(makeReq(), res)
+    expect(res.statusCode).toBe(200)
+    expect(state.profile?.['stripeChargeModel']).toBe('destination')
   })
 
   // Positive control for the guard above: a merchant mid-onboarding still

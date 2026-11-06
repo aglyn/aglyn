@@ -110,6 +110,8 @@ interface Registration {
   id: string
   domain_name: string
   enabled: boolean
+  /** The connected account it lives on; absent for the platform's own. */
+  account?: string
 }
 let registry: Registration[] = []
 let outage = false
@@ -127,9 +129,15 @@ const fetchMock = jest.fn(async (url: any, init: any): Promise<any> => {
   const params = new URLSearchParams(String(init?.body ?? ''))
   const reply = (body: unknown) => ({ ok: true, json: async () => body })
   const shape = (entry: Registration) => ({ ...entry, apple_pay: { status: entry.enabled ? 'active' : 'inactive' } })
+  // Each account sees only its own registrations, as Stripe scopes them.
+  const account = headers['Stripe-Account']
   if (method === 'GET') {
     const name = new URL(target).searchParams.get('domain_name')
-    return reply({ data: registry.filter((entry) => entry.domain_name === name).map(shape) })
+    return reply({
+      data: registry
+        .filter((entry) => entry.domain_name === name && entry.account === account)
+        .map(shape),
+    })
   }
   const byId = /payment_method_domains\/([^/?]+)$/.exec(target)
   if (byId) {
@@ -142,7 +150,12 @@ const fetchMock = jest.fn(async (url: any, init: any): Promise<any> => {
     registry.push({ id: `pmd_${registry.length + 1}`, domain_name: name, enabled: true })
     return { ok: false, status: 400, json: async () => ({ error: { message: 'already exists' } }) }
   }
-  const entry = { id: `pmd_${registry.length + 1}`, domain_name: name, enabled: params.get('enabled') === 'true' }
+  const entry: Registration = {
+    id: `pmd_${registry.length + 1}`,
+    domain_name: name,
+    enabled: params.get('enabled') === 'true',
+    ...(account ? { account } : {}),
+  }
   registry.push(entry)
   return reply(shape(entry))
 })
@@ -330,5 +343,80 @@ describe('the daily backfill', () => {
     delete process.env.STRIPE_SECRET_KEY
     docs.set('hosts/host-1', { cname: 'acme.com' })
     expect(await reconcileCustomDomains({ isLocked: async () => false })).toMatchObject({ hosts: 0 })
+  })
+})
+
+describe('a direct-charge seller', () => {
+  const site = { subdomain: 'acme', cname: 'acme.com' }
+  const seller = 'acct_1Seller'
+
+  it('the checkout registers the page’s host on the seller’s account, cached apart from the platform’s', async () => {
+    const result = await ensureCheckoutDomain({
+      pageUrl: 'https://www.acme.com/cart',
+      site,
+      hostId: 'host-1',
+      stripeAccount: seller,
+    })
+    expect(result?.outcome).toBe('registered')
+    expect(registration('www.acme.com')).toEqual([
+      expect.objectContaining({ account: seller, enabled: true }),
+    ])
+    const create = calls.find((call) => call.method === 'POST')!
+    expect(create.headers['Stripe-Account']).toBe(seller)
+    expect(create.headers['Idempotency-Key']).toBe(`aglyn-pmd-register:${seller}:www.acme.com`)
+    expect(docs.get(`paymentMethodDomains/test~${seller}~www.acme.com`)).toMatchObject({
+      enabled: true,
+      stripeAccount: seller,
+    })
+    // The platform's registration is a different record, still to be made.
+    expect(docs.has('paymentMethodDomains/test~www.acme.com')).toBe(false)
+    calls.length = 0
+    expect(
+      (
+        await ensureCheckoutDomain({
+          pageUrl: 'https://www.acme.com/cart',
+          site,
+          hostId: 'host-1',
+          stripeAccount: seller,
+        })
+      )?.outcome,
+    ).toBe('cached')
+    expect(calls).toHaveLength(0)
+  })
+
+  it('connecting a domain registers it on the platform and on the seller', async () => {
+    await onHostDomainAttached(
+      { hostId: 'host-1', domain: 'acme.com' },
+      { sellerAccount: async () => seller },
+    )
+    expect(registration('acme.com').map((entry) => entry.account ?? 'platform').sort()).toEqual([
+      seller,
+      'platform',
+    ])
+    expect(registration('www.acme.com')).toHaveLength(2)
+  })
+
+  it('releasing a domain disables the seller’s own registration even while another site keeps the platform’s', async () => {
+    docs.set('hosts/host-2', { cname: 'acme.com' })
+    registry = [
+      { id: 'pmd_p', domain_name: 'acme.com', enabled: true },
+      { id: 'pmd_s', domain_name: 'acme.com', enabled: true, account: seller },
+    ]
+    await onHostDomainReleased(
+      { hostId: 'host-1', domain: 'acme.com' },
+      { sellerAccount: async () => seller },
+    )
+    expect(registry.find((entry) => entry.id === 'pmd_s')?.enabled).toBe(false)
+    expect(registry.find((entry) => entry.id === 'pmd_p')?.enabled).toBe(true)
+  })
+
+  it('the daily pass registers a direct seller’s custom domain on its account too', async () => {
+    docs.set('hosts/host-1', { cname: 'acme.com' })
+    const result = await reconcileCustomDomains(
+      { isLocked: async () => false },
+      { sellerAccount: async (hostId) => (hostId === 'host-1' ? seller : null) },
+    )
+    expect(result.registered).toBe(4)
+    expect(registration('acme.com')).toHaveLength(2)
   })
 })

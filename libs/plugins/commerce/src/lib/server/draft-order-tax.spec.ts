@@ -15,7 +15,11 @@
  * limitations under the License.
  */
 
-import type { PluginApiRequest, PluginApiResponse } from '@aglyn/aglyn/server'
+import {
+  resolveTransactionFeeCents,
+  type PluginApiRequest,
+  type PluginApiResponse,
+} from '@aglyn/aglyn/server'
 import { draftOrderHandler } from './draft-order'
 
 /**
@@ -152,6 +156,7 @@ jest.mock('@aglyn/tenant-data-admin', () => ({
 
 let sessionBody: URLSearchParams | null = null
 let taxRateRefuses = false
+let sellerTaxStatus = 'active'
 
 const fetchMock = jest.fn(async (url: any, init: any): Promise<any> => {
   const target = String(url)
@@ -167,6 +172,9 @@ const fetchMock = jest.fn(async (url: any, init: any): Promise<any> => {
         url: 'https://checkout.stripe.com/pay/cs_test_1',
       }),
     }
+  }
+  if (target.endsWith('/v1/tax/settings')) {
+    return { ok: true, json: async () => ({ status: sellerTaxStatus }) }
   }
   if (target.endsWith('/v1/tax_rates')) {
     if (taxRateRefuses) {
@@ -223,6 +231,8 @@ const MANUAL_TX = {
 interface Scenario {
   settings?: Record<string, any> | null
   product?: Record<string, any>
+  /** Extra fields on the owner's profile, e.g. `stripeChargeModel`. */
+  profile?: Record<string, any>
 }
 
 async function runDraft(scenario: Scenario = {}) {
@@ -238,6 +248,7 @@ async function runDraft(scenario: Scenario = {}) {
   docs.set('profiles/owner-1', {
     stripeAccountId: 'acct_1',
     stripeChargesEnabled: true,
+    ...(scenario.profile ?? {}),
   })
   docs.set('hosts/host-1/products/p1', {
     name: 'Kettle',
@@ -289,6 +300,7 @@ afterAll(() => {
 beforeEach(() => {
   process.env.STRIPE_SECRET_KEY = 'sk_double_1953'
   taxRateRefuses = false
+  sellerTaxStatus = 'active'
   fetchMock.mockClear()
   jest.spyOn(console, 'error').mockImplementation(() => undefined)
 })
@@ -460,5 +472,71 @@ describe('a variant nobody has priced yet (AGL-2916)', () => {
     expect(result.body).toEqual({ error: 'Set a price for Kettle before selling it.' })
     expect(fetchMock).not.toHaveBeenCalled()
     expect(childPaths('hosts/host-1/orders')).toHaveLength(0)
+  })
+})
+
+/**
+ * A seller on DIRECT charges: the link opens on their own Stripe account, so
+ * every object it names lives there, Aglyn's take is the application fee, and
+ * any Stripe Tax is computed on, and owed by, the seller.
+ */
+describe('a draft order for a seller on direct charges', () => {
+  const DIRECT = { stripeChargeModel: 'direct' }
+
+  /** The `Stripe-Account` header each call to `endpoint` carried. */
+  function accountHeaders(endpoint: string) {
+    return fetchMock.mock.calls
+      .filter((call) => String(call[0]).endsWith(endpoint))
+      .map((call) => (call[1] as any)?.headers?.['Stripe-Account'])
+  }
+
+  it('opens the link on the seller’s account with the take as its fee and no transfer', async () => {
+    const { result, body } = await runDraft({ settings: MANUAL_TX, profile: DIRECT })
+    expect(result.status).toBe(200)
+    expect(accountHeaders('/v1/checkout/sessions')).toEqual(['acct_1'])
+    expect(body?.get('payment_intent_data[transfer_data][destination]')).toBeNull()
+    expect(body?.get('payment_intent_data[transfer_data][amount]')).toBeNull()
+    const fee = resolveTransactionFeeCents(mockOrg.org, 'digital', 6000, 6495, { direct: true })
+    expect(body?.get('metadata[feeCents]')).toBe(String(fee))
+    expect(body?.get('payment_intent_data[application_fee_amount]')).toBe(fee > 0 ? String(fee) : null)
+    expect(orderDoc()?.totals?.feeCents).toBe(fee)
+    expect(body?.get('metadata[chargeModel]')).toBe('direct')
+  })
+
+  it('mints the store’s tax rate on the seller’s account, where the link is', async () => {
+    const { body } = await runDraft({ settings: MANUAL_TX, profile: DIRECT })
+    expect(accountHeaders('/v1/tax_rates')).toEqual(['acct_1'])
+    expect(body?.get('line_items[0][tax_rates][0]')).toBe('txr_draft_1')
+  })
+
+  it('leaves Stripe Tax with the seller: no fixed transfer, none recorded', async () => {
+    const { body } = await runDraft({ settings: { tax: { mode: 'stripe' } }, profile: DIRECT })
+    expect(body?.get('automatic_tax[enabled]')).toBe('true')
+    expect(body?.get('payment_intent_data[transfer_data][amount]')).toBeNull()
+    expect(body?.get('metadata[transferCents]')).toBeNull()
+    expect(body?.get('metadata[transferShippingCents]')).toBeNull()
+    expect(accountHeaders('/v1/tax/settings')).toEqual(['acct_1'])
+  })
+
+  it('refuses Stripe Tax until the seller’s own is set up, writing no order', async () => {
+    sellerTaxStatus = 'pending'
+    const { result, body } = await runDraft({ settings: { tax: { mode: 'stripe' } }, profile: DIRECT })
+    expect(result.status).toBe(409)
+    expect(String(result.body?.error)).toContain('sales tax')
+    expect(body).toBeNull()
+    expect(orderDoc()).toBeUndefined()
+  })
+
+  it('asks nothing of the seller’s Stripe Tax for the store’s own rate', async () => {
+    await runDraft({ settings: MANUAL_TX, profile: DIRECT })
+    expect(stripeCalls('/v1/tax/settings')).toBe(0)
+  })
+
+  it('keeps a destination seller’s link on the platform, exactly as before', async () => {
+    const { body } = await runDraft({ settings: MANUAL_TX })
+    expect(accountHeaders('/v1/checkout/sessions')).toEqual([undefined])
+    expect(accountHeaders('/v1/tax_rates')).toEqual([undefined])
+    expect(body?.get('payment_intent_data[transfer_data][destination]')).toBe('acct_1')
+    expect(body?.get('metadata[chargeModel]')).toBeNull()
   })
 })
