@@ -123,7 +123,7 @@ export const checkoutHandler: PluginApiHandler = async (req, res) => {
   const variantId = String(body.variantId ?? '')
   const quantity = Math.max(
     1,
-    Math.min(99, Math.round(Number(body.quantity ?? 1))),
+    Math.min(CommerceModel.CART_MAX_QUANTITY, Math.round(Number(body.quantity ?? 1))),
   )
   // The day the buyer chose to use a check-in item (AGL-4043); checked below
   // against the product and the store's calendar.

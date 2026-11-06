@@ -160,7 +160,8 @@ describe('the quantity a request carries into a quote', () => {
   it('reads one for none, and caps or ignores a quantity that is not a whole number from 1', () => {
     expect(encodeProductFieldValue({ productId: 'canopy', quantity: 1 })).toBe('{"productId":"canopy"}')
     const parsed = (quantity: unknown) => parseProductFieldValue(JSON.stringify({ productId: 'canopy', quantity }))
-    expect(parsed(500)?.quantity).toBe(99)
+    expect(parsed(500)?.quantity).toBe(500)
+    expect(parsed(50_000)?.quantity).toBe(9_999)
     expect(parsed('4')?.quantity).toBe(4)
     expect(parsed(0)?.quantity).toBeUndefined()
     expect(parsed(2.5)?.quantity).toBeUndefined()

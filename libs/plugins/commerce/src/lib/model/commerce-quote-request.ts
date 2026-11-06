@@ -15,7 +15,13 @@
  * limitations under the License.
  */
 
-import type { QuoteCatalogLineRequest, QuoteCustomer, QuoteEmailThread, QuoteResponseFile } from './commerce-quotes'
+import {
+  QUOTE_MAX_QUANTITY,
+  type QuoteCatalogLineRequest,
+  type QuoteCustomer,
+  type QuoteEmailThread,
+  type QuoteResponseFile,
+} from './commerce-quotes'
 
 /*==========================================
  * A QUOTE STARTED FROM A REQUEST (AGL-4098).
@@ -70,8 +76,8 @@ export interface ProductFieldValue {
 const ID = /^(?!__.*__$)[^/]{1,200}$/
 const MAX_OPTIONS = 20
 const MAX_MODIFIERS = 50
-/** The most a request can ask about in one line: the product page's own limit. */
-export const PRODUCT_FIELD_MAX_QUANTITY = 99
+/** The most a request can ask about in one line: a quote line's own limit, 9,999. */
+export const PRODUCT_FIELD_MAX_QUANTITY = QUOTE_MAX_QUANTITY
 
 /** A posted quantity as a whole number from 1 to the cap; anything else is none. */
 function fieldQuantity(raw: unknown): number | null {

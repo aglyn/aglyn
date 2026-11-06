@@ -135,6 +135,10 @@ the block in the Besigner and set **Show choices as** to **Picture cards**.
   takes, and its other cards turn off once that many are picked.
 - The **Total** under the cards adds up the size and the add-ons picked, times
   the quantity, as the customer chooses.
+- A customer can buy or ask about up to 9,999 of one item, so a bulk order such
+  as 250 shirts is one line. For prices that drop at larger amounts, add an
+  option such as "How many" with values like "24 to 99" and "100 or more", and
+  give each variant its own price.
 
 Picture cards change only how the choices look. The cart and checkout price
 them the same way, and **Add to cart** and **Buy now** work as before.

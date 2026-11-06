@@ -1234,12 +1234,13 @@ const ProductDetail = forwardRef<HTMLDivElement, ProductDetailProps>(
                 setQuantity(
                   Math.max(
                     1,
-                    Math.min(99, Math.round(Number(event.target.value)) || 1),
+                    Math.min(CommerceModel.CART_MAX_QUANTITY, Math.round(Number(event.target.value)) || 1),
                   ),
                 )
               }
               size="small"
-              sx={{ width: 80 }}
+              // Four digits fit (AGL-4205): a line goes up to 9,999.
+              sx={{ width: (theme) => theme.spacing(12) }}
               slotProps={{ htmlInput: { inputMode: 'numeric' } }}
             />
             <Button

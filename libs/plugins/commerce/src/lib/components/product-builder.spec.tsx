@@ -321,6 +321,73 @@ describe('a free mockup', () => {
   })
 })
 
+describe('a bulk order on a quantity tier (AGL-4205)', () => {
+  // Shirts priced by how many: the tier is an option, the count is the quantity.
+  const SHIRTS = {
+    id: 'shirts',
+    name: 'Custom shirts',
+    slug: 'custom-shirts',
+    type: 'physical',
+    mediaUrls: [],
+    options: [{ name: 'How many', values: ['24 to 99', '100 or more'] }],
+    variants: [
+      { id: 'small-run', options: { 'How many': '24 to 99' }, priceUsd: 12, soldOut: false },
+      { id: 'bulk', options: { 'How many': '100 or more' }, priceUsd: 9, soldOut: false },
+    ],
+    modifierGroups: [
+      {
+        id: 'print',
+        name: 'Print',
+        min: 1,
+        max: 1,
+        online: true,
+        options: [{ id: 'front', name: 'Front print', priceCents: 250 }],
+      },
+    ],
+    mockupRequests: true,
+  }
+  const requestForm = (
+    <form aria-label="Mockup request">
+      <ProductOptionsField name="product" label="Your shirts" required />
+    </form>
+  )
+
+  it('prices 150 on the "100 or more" tier, sends all 150 to the cart, and carries 150 into the quote', async () => {
+    mockSite.pageData = { commerce: { product: SHIRTS } }
+    const { container } = render(<ProductDetail choiceStyle="cards">{requestForm}</ProductDetail>)
+    await waitFor(() => card(/100 or more/))
+    fireEvent.click(card(/100 or more/))
+    fireEvent.click(card(/Front print/))
+    fireEvent.change(screen.getByLabelText('Qty'), { target: { value: '150' } })
+    expect((screen.getByLabelText('Qty') as HTMLInputElement).value).toBe('150')
+    // ($9.00 + $2.50) × 150.
+    expect(screen.getByText('Total for 150: $1,725.00')).toBeTruthy()
+
+    fireEvent.click(button(MOCKUP_LABEL_DEFAULT))
+    const data = () => container.querySelector('input[name="product__data"]') as HTMLInputElement | null
+    await waitFor(() => expect(parseProductFieldValue(data()?.value)?.quantity).toBe(150))
+    expect(quoteLinesFromFieldData({ product__data: data()?.value ?? '' })[0]).toMatchObject({
+      variantId: 'bulk',
+      quantity: 150,
+    })
+
+    await act(async () => {
+      fireEvent.click(button('Add to cart'))
+    })
+    await waitFor(() => expect(fetchMock.mock.calls.some((call) => call[0] === '/api/commerce/cart')).toBe(true))
+    const cartCall = fetchMock.mock.calls.find((call) => call[0] === '/api/commerce/cart')
+    expect(JSON.parse(cartCall?.[1]?.body)).toMatchObject({ variantId: 'bulk', quantity: 150 })
+  })
+
+  it('stops a line at 9,999, the same ceiling a quote line has', async () => {
+    mockSite.pageData = { commerce: { product: SHIRTS } }
+    render(<ProductDetail choiceStyle="cards" />)
+    await waitFor(() => card(/100 or more/))
+    fireEvent.change(screen.getByLabelText('Qty'), { target: { value: '25000' } })
+    expect((screen.getByLabelText('Qty') as HTMLInputElement).value).toBe('9999')
+  })
+})
+
 describe('the picks a request form reads', () => {
   it('names the product, the variant, the add-ons in group order and the quantity', () => {
     const picks = productBuilderPicks({
