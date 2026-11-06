@@ -164,4 +164,18 @@ describe('relatedHandler sampling', () => {
     expect(pagedCollections).toEqual([])
     expect(res.body).toEqual({ productIds: ['p_one', 'p_two'] })
   })
+
+  /*
+   * AGL-4038: the ids are cut before the catalog drops the hidden ones, so the
+   * cut must leave room for them. At eight, a rail of six whose first three
+   * curated picks are drafts showed five. Forced red by restoring `slice(0, 8)`.
+   */
+  it('names more ids than a rail shows, so hidden picks take no slot', async () => {
+    const curated = Array.from({ length: 12 }, (_, index) => `p_${index}`)
+    seed({ product: { relatedProductIds: curated } })
+
+    const res = await run()
+
+    expect(res.body).toEqual({ productIds: curated })
+  })
 })

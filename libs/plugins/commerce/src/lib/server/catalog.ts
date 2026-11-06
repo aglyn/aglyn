@@ -201,14 +201,27 @@ const MANUAL_COLLECTION_MAX = 1000
 /** Ids per `getAll`, well inside the Admin SDK's comfortable batch. */
 const GET_ALL_CHUNK = 100
 /**
- * Reads one page may make to fill itself past products sold in person only
+ * Most rows one page reads to fill itself past products sold in person only
  * (AGL-4060). `sellOnline` is absent on every product stored before the
  * switch, and a query cannot ask for "absent or true", so the query reads
  * the catalog's scope and the page drops what is not sold online — and reads
- * on, up to this many times, so a run of in-person-only products does not
- * leave a short page in the middle of the grid.
+ * on until the page holds its size in products sold online (AGL-4038).
+ *
+ * Each read asks for twice the rows of the one before, starting at the page
+ * and one row to spare: a page of six past a run of a hundred in-person
+ * products takes five reads. Reading on by the rows still missing read one
+ * row at a time and stopped after four reads, so a run of four left the page
+ * short and the products sold in person took the slots they were dropped
+ * from. Past this many rows the page ends short, with a cursor to read on.
  */
-const CATALOG_FILL_READS = 4
+const CATALOG_FILL_SCAN_MAX = 500
+/**
+ * Most ids an explicit list names: a wishlist's whole list (200, the member
+ * route's bound). The list is read in order, a page's worth at a time, until
+ * the page holds its size in products on sale, so a saved product that is no
+ * longer listed takes no slot.
+ */
+const CATALOG_IDS_MAX = 200
 /**
  * Rows each price-bound read scans for the cheapest (or dearest) product
  * sold online, past any sold in person only.
@@ -528,7 +541,7 @@ async function runPublicCatalog(
   const type = STOREFRONT_PRODUCT_TYPES.includes(params.type as CommerceModel.ProductType)
     ? (params.type as CommerceModel.ProductType)
     : ''
-  const ids = (params.ids ?? []).slice(0, CATALOG_PAGE_MAX)
+  const ids = [...new Set(params.ids ?? [])].slice(0, CATALOG_IDS_MAX)
   const asked = Math.floor(Number(params.limit ?? CATALOG_PAGE_DEFAULT))
   const max =
     Number.isFinite(asked) && asked > 0
@@ -547,11 +560,19 @@ async function runPublicCatalog(
       : hostRef.collection('productCategories').limit(200).get())
 
   // Wishlist and related rendering (AGL-297): an explicit id list is its own
-  // complete set — read it by id, keep what is on sale, in the given order.
+  // complete set — read it by id, keep what is on sale, in the given order,
+  // until the page holds `max` of them (AGL-4038): an id no longer on sale
+  // takes no slot, and the ids past a full page are never read.
   if (ids.length) {
     const order = new Map(ids.map((id, index) => [id, index]))
-    const rows = (await readProductsById(productsRef, ids)).filter(onSale)
-    rows.sort((a, b) => (order.get(a.id) ?? 0) - (order.get(b.id) ?? 0))
+    const rows: CatalogRow[] = []
+    for (let at = 0; at < ids.length && rows.length < max; ) {
+      const take = ids.slice(at, at + Math.min(GET_ALL_CHUNK, max - rows.length))
+      at += take.length
+      const read = (await readProductsById(productsRef, take)).filter(onSale)
+      read.sort((a, b) => (order.get(a.id) ?? 0) - (order.get(b.id) ?? 0))
+      rows.push(...read)
+    }
     return { items: rows.slice(0, max).map(toItem) }
   }
 
@@ -792,22 +813,38 @@ async function runPublicCatalog(
     unpriced ? pricedBy(unpriced, 'asc') : null,
     unpriced ? pricedBy(unpriced, 'desc') : null,
   ])
-  // A page of rows sold online, read on past the ones sold in person only.
+  // A page of `max` rows sold online, read on past the ones sold in person
+  // only (AGL-4038). The first read is the page and one row to spare, so a
+  // catalog with none in person reads exactly as it did; each further read
+  // doubles. The cursor follows the last row the page took.
   const rows: CatalogRow[] = []
   let last: FirebaseFirestore.QueryDocumentSnapshot | undefined
-  let more = false
-  for (let read = 0; read < CATALOG_FILL_READS && rows.length < max; read += 1) {
-    const need = max - rows.length
-    const snapshot = await pageQuery.limit(need + 1).get()
-    const docs = snapshot.docs.slice(0, need)
-    for (const docSnapshot of docs) {
-      last = docSnapshot
-      const row = toRow(docSnapshot)
+  let more: boolean
+  let batch = max + 1
+  let scanned = 0
+  for (;;) {
+    const { docs } = await pageQuery.limit(batch).get()
+    scanned += docs.length
+    let taken = 0
+    while (taken < docs.length && rows.length < max) {
+      last = docs[taken]
+      taken += 1
+      const row = toRow(last)
       if (row && CommerceModel.productSellsOnline(row.product)) rows.push(row)
     }
-    more = snapshot.docs.length > need
-    if (!more || !last) break
+    const ended = docs.length < batch
+    if (rows.length >= max) {
+      // Full: more follow if this read holds another row sold online, or
+      // did not reach the end of the scope.
+      more =
+        !ended ||
+        docs.slice(taken).some((docSnapshot) => CommerceModel.productSellsOnline(docSnapshot.data()))
+      break
+    }
+    more = !ended
+    if (ended || !last || scanned >= CATALOG_FILL_SCAN_MAX) break
     pageQuery = ordered(plan).startAfter(last.get(plan.orderBy.path), last.id)
+    batch = Math.min(batch * 2, CATALOG_FILL_SCAN_MAX - scanned)
   }
   const [lowest, highest] = await bounds
   const low = boundOf(lowest)
