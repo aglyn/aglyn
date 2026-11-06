@@ -663,15 +663,21 @@ export function aiSiteImportLogoHoldsName(input: { aspect: number | null; alt: s
   return input.aspect >= 1.4 && !!name && key(input.alt).includes(name)
 }
 
+/** How a redesigned header sizes its logo (AGL-4152): the width it reads at, and the heights the header's bar holds it between. */
+export const AI_SITE_IMPORT_LOGO_SCALE = { width: 150, least: 32, most: 56 } as const
+
 /**
  * The height a redesigned header draws its logo at (AGL-4152), a Besigner field
- * like any: a mark about square a little taller, a wordmark held to a width the
- * row has room for, and neither under what reads on a phone.
+ * like any. A logo reads by its width, as a designer sizes one: about
+ * `AI_SITE_IMPORT_LOGO_SCALE.width` across, never taller than the bar holds on
+ * a phone, and never so short a long wordmark's letters stop reading. A lockup
+ * of a mark and stacked words (about twice as wide as tall) then stands as tall
+ * as the bar allows, where a fixed 40px drew it the size of a menu label.
  */
 export function aiSiteImportLogoHeight(aspect: number | null): string {
-  const WIDEST = 200
+  const { width, least, most } = AI_SITE_IMPORT_LOGO_SCALE
   if (!aspect) return '40px'
-  return `${Math.round(Math.max(28, Math.min(aspect <= 1.25 ? 48 : 40, WIDEST / aspect)))}px`
+  return `${Math.round(Math.max(least, Math.min(most, width / aspect)))}px`
 }
 
 /** A menu entry that asks a visitor to act, which a redesigned header's button may take where the source draws none (AGL-4152). */
@@ -794,10 +800,15 @@ export function aiSiteImportSiteLines(state: AiSiteImportState): string[] {
   ].filter((line): line is string => typeof line === 'string' && !!line.trim())
 }
 
-/** The lines of a wave's other pages, as far as they are read (AGL-4152): a fact one of them says is no invention. */
-function aiSiteImportWaveLines(state: AiSiteImportState, page: AiSiteImportPage): string[] {
-  const out: string[] = []
-  let chars = 0
+/**
+ * The lines of a wave's other pages, as far as they are read (AGL-4152): a
+ * fact one of them says is no invention. What the site's pages said as their
+ * wave read them comes first (`said`): a page's read is emptied once it is in,
+ * so an earlier page's lines would otherwise be gone by the next page.
+ */
+export function aiSiteImportWaveLines(state: AiSiteImportState, page: AiSiteImportPage): string[] {
+  const out: string[] = [...(state.said ?? [])]
+  let chars = out.reduce((sum, line) => sum + line.length, 0)
   for (const other of state.pages) {
     if (other.slot === page.slot || other.wave !== page.wave) continue
     for (const block of other.read?.blocks ?? []) {
@@ -1531,7 +1542,7 @@ export function createAiJobImportStep(deps: AiSiteImportStepDeps = {}): AiJobSte
       // A page whose rewrite was refused keeps its words, and its row says so (AGL-4152).
       if (page && outcome.wording === 'kept' && page.wording === 'improved') current = aiSiteImportWordsKept(current, slot)
       // How its redesign came out (AGL-4152): what its row says, what it added and what it shows.
-      if (page && outcome.redesign) current = aiSiteImportRedesignOf(current, slot, outcome.redesign.status, outcome.redesign.added, outcome.redesign.pictures)
+      if (page && outcome.redesign) current = aiSiteImportRedesignOf(current, slot, outcome.redesign.status, outcome.redesign.added, outcome.redesign.pictures, outcome.redesign.missed)
       const spent = aiUnitSpend(outcome)
       const stopped = aiUnitFailure(slot, outcome)
       if (stopped?.status === 'running') return { ...spent, outputs: [], item: stopped, siteImport: current, continue: true }

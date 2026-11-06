@@ -267,7 +267,7 @@ export function AiSiteImportStart({ orgId, orgSlug, hostId, host, user, pendingS
           <AiSiteImportFinish
             value={finish}
             onChange={setFinish}
-            wordingCredits={aiSiteImportWordingCreditsText(null)}
+            wordingCredits={aiSiteImportWordingCreditsText(null, generative === true ? { generative: true } : {})}
             help={AI_SITE_IMPORT_HELP.finish}
             disabled={busy}
             generative={generative === true}

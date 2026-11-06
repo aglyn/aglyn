@@ -1051,6 +1051,7 @@ export function createAiJobPageStep(deps: AiJobPageStepDeps = {}): AiJobStepRunn
                 status: result.value.redesign.status,
                 added: result.value.redesign.added,
                 pictures: redesigned?.pictures ? aiSiteImportPagePicturesOf(redesigned.pictures, pictureTally) : result.value.redesign.pictures,
+                ...(result.value.redesign.missed?.length ? { missed: result.value.redesign.missed } : {}),
               },
             }
           : {}),

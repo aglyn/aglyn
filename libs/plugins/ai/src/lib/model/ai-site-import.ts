@@ -1079,6 +1079,13 @@ export interface AiSiteImportPage {
    * compile drew it. Absent on every other page.
    */
   redesign?: AiSiteImportRedesign | null
+  /**
+   * Why its layout was kept, or the design lines its redesign was taken
+   * missing, by internal code (AGL-4152): `improve-invented-fact`,
+   * `improve-new-sections`, `refused`. For the job's record and the import's
+   * report; its row reads in words, never these.
+   */
+  redesignMissed?: string[] | null
 }
 
 /** How a page's generative Improve it came out (AGL-4152). */
@@ -1193,6 +1200,37 @@ export interface AiSiteImportState {
   generative?: true
   /** The source's photos a redesigned page left off (AGL-4152), which a later page's slot takes before a stock photo. */
   sitePhotos?: AiSiteImportPhoto[] | null
+  /**
+   * What the site's pages say, as a generative wave read them (AGL-4152):
+   * each line once, in reading order, up to `AI_SITE_IMPORT_SAID_MAX_CHARS`.
+   * A page's read is emptied once it is in, so without these a later page's
+   * redesign was held as if no earlier page had said anything: the home
+   * page's towns, years and credentials read as invented on the next.
+   * Kept past each page, and written only by a generative wave.
+   */
+  said?: string[] | null
+}
+
+/** The most characters of what the site's pages say an import keeps for its redesigns' facts (AGL-4152). */
+export const AI_SITE_IMPORT_SAID_MAX_CHARS = 16_000
+
+/** What the site's pages say, with these reads' lines added where there is room (AGL-4152). */
+export function aiSiteImportSaid(said: readonly string[] | null | undefined, reads: Iterable<AiSiteImportPageRead | AiSiteImportLeftOutReason>): string[] {
+  const out = [...(said ?? [])]
+  const seen = new Set(out)
+  let chars = out.reduce((sum, line) => sum + line.length, 0)
+  for (const read of reads) {
+    if (typeof read === 'string') continue
+    for (const block of read.blocks ?? []) {
+      if (block.kind === 'image') continue
+      const line = block.text.replace(/\s+/g, ' ').trim()
+      if (!line || seen.has(line) || chars + line.length > AI_SITE_IMPORT_SAID_MAX_CHARS) continue
+      seen.add(line)
+      out.push(line)
+      chars += line.length
+    }
+  }
+  return out
 }
 
 /**
@@ -2090,6 +2128,8 @@ export function aiSiteImportPagesRead(
     }
     next = withPage(next, slot, { read: kept, refused: null, title: clipLabel(read.title) || next.pages.find((page) => page.slot === slot)?.title || '' })
   }
+  // A generative wave keeps what its pages say past each page (AGL-4152); any other leaves the state as it was.
+  if (next.waves.some((wave) => wave.status === 'running' && wave.generative)) next = { ...next, said: aiSiteImportSaid(next.said, reads.values()) }
   return next
 }
 
@@ -2158,8 +2198,10 @@ export function aiSiteImportCanceled(state: AiSiteImportState, at: string): AiSi
 /** The state as the console reads it: every page's read text left off. */
 export function aiSiteImportWire(state: AiSiteImportState | null | undefined): AiSiteImportState | null {
   if (!state) return null
+  // What the site's pages say is the redesigns' (AGL-4152): the console reads none of it.
+  const { said: _said, ...rest } = state
   return {
-    ...state,
+    ...rest,
     pages: state.pages.map((page) =>
       page.read ? { ...page, read: { ...page.read, text: '', images: [], blocks: [], forms: [], layout: null, ...(page.read.videos ? { videos: [] } : {}) } } : page,
     ),
@@ -2259,6 +2301,15 @@ export function aiSiteImportWaveStamped(state: AiSiteImportState, index: number,
         : entry,
     ),
     pages: state.pages.map((page) => (slots.has(page.slot) ? { ...page, wording: aiSiteImportPageWording(page, choice) } : page)),
+    // What its pages say, kept past each page for every redesign's facts (AGL-4152): the home page's first.
+    ...(generative
+      ? {
+          said: aiSiteImportSaid(
+            state.said,
+            [...state.pages].sort((a, b) => Number(b.slug === '/') - Number(a.slug === '/')).flatMap((page) => (slots.has(page.slot) && page.read ? [page.read] : [])),
+          ),
+        }
+      : {}),
   }
 }
 
@@ -2290,8 +2341,15 @@ const SITE_PHOTOS_HELD = 24
  * it shows, for its row; and the source's photos it left off, which a later
  * page's slot takes before a stock photo.
  */
-export function aiSiteImportRedesignOf(state: AiSiteImportState, slot: string, redesign: AiSiteImportRedesign, added?: readonly AiSiteImportAddedSection[], pictures?: AiSiteImportPagePictures | null): AiSiteImportState {
-  const next = withPage(state, slot, { redesign, ...(added?.length ? { added: [...added] } : {}), ...(pictures ? { pictures } : {}) })
+export function aiSiteImportRedesignOf(
+  state: AiSiteImportState,
+  slot: string,
+  redesign: AiSiteImportRedesign,
+  added?: readonly AiSiteImportAddedSection[],
+  pictures?: AiSiteImportPagePictures | null,
+  missed?: readonly string[] | null,
+): AiSiteImportState {
+  const next = withPage(state, slot, { redesign, ...(added?.length ? { added: [...added] } : {}), ...(pictures ? { pictures } : {}), ...(missed?.length ? { redesignMissed: missed.slice(0, 8).map((code) => code.slice(0, 40)) } : {}) })
   const left = new Set(pictures?.unplaced ?? [])
   if (!left.size) return next
   const assets = state.pages.find((page) => page.slot === slot)?.photos?.assets ?? []
@@ -2461,10 +2519,12 @@ export function aiSiteImportWordingPages(
  * difference between the two. Its ceiling, the page's two passes, does not
  * move, and no price is new.
  */
-export function aiSiteImportWordingCredits(pages: number): { likely: number; p90: number } {
+export function aiSiteImportWordingCredits(pages: number, options: { generative?: boolean } = {}): { likely: number; p90: number } {
   const count = whole(pages)
-  const { reworded, arranged } = AI_MEASURED_IMPORT_CREDITS
-  return { likely: count * (reworded.median - arranged.median), p90: count * (reworded.p90 - arranged.p90) }
+  // Under a generative Improve it (AGL-4152) new copy is a redesign from the ledger, measured on its own row.
+  const { arranged } = AI_MEASURED_IMPORT_CREDITS
+  const worded = options.generative ? AI_MEASURED_IMPORT_CREDITS.redesigned : AI_MEASURED_IMPORT_CREDITS.reworded
+  return { likely: count * (worded.median - arranged.median), p90: count * (worded.p90 - arranged.p90) }
 }
 
 /*------------------------------------------
@@ -2505,13 +2565,15 @@ export function aiSiteImportCreditRange(
     proposed?: number
     /** Generated pictures it may take at most (AGL-4152): in its ceiling only, since each takes what nothing else fills. */
     pictures?: number
+    /** Its reworded pages are redesigned from their ledgers (AGL-4152), quoted on that row. */
+    generative?: boolean
   } = {},
 ): AiCreditRange {
   const count = whole(pages)
   const proposed = whole(options.proposed)
   const arranged = whole(options.arranged) + proposed
   const copied = whole(options.copied)
-  const wording = aiSiteImportWordingCredits(Math.min(arranged, whole(options.reworded) + proposed))
+  const wording = aiSiteImportWordingCredits(Math.min(arranged, whole(options.reworded) + proposed), options.generative ? { generative: true } : {})
   const measured = AI_MEASURED_IMPORT_CREDITS
   const plan = options.plan ? AI_MEASURED_PAID_SITE_CREDITS.plan : { median: 0, p90: 0 }
   return aiCreditRangeOrdered({
@@ -2542,7 +2604,7 @@ export function aiSiteImportWaveOwed(
   state: AiSiteImportState,
   wave: AiSiteImportWave,
   items?: readonly AiJobItemLedger[] | null,
-): { pages: number; arranged: number; reworded: number; copied: number; frame: boolean; plan?: boolean; proposed?: number; pictures?: number } {
+): { pages: number; arranged: number; reworded: number; copied: number; frame: boolean; plan?: boolean; proposed?: number; pictures?: number; generative?: boolean } {
   const owed = (slot: string) => (items ? aiSiteImportItemOpen(items, slot) : true)
   const choice = aiSiteImportWaveChoice(state, wave)
   // A generative Improve it's own (AGL-4152): its frame draws from the plan, and a plan is owed once.
@@ -2564,7 +2626,7 @@ export function aiSiteImportWaveOwed(
   // Before the plan is in, a page it may propose is quoted, where the plan's count has room for one.
   const proposed = first && state.plan === undefined && choice.wording && aiSiteImportHasRoomForPage(state, { limit: state.pageLimit, used: state.existingPages }) ? 1 : 0
   const pictures = choice.wording && aiSiteImportGeneratedPicturesOn(state) ? (counts.reworded + proposed) * AI_SITE_IMPORT_GENERATED_PICTURES_PER_PAGE : 0
-  return { ...counts, ...(first && state.plan === undefined ? { plan: true } : {}), ...(proposed ? { proposed } : {}), ...(pictures ? { pictures } : {}) }
+  return { ...counts, generative: true, ...(first && state.plan === undefined ? { plan: true } : {}), ...(proposed ? { proposed } : {}), ...(pictures ? { pictures } : {}) }
 }
 
 /**
@@ -2583,7 +2645,7 @@ export function aiSiteImportWaveCreditRange(
   items?: readonly AiJobItemLedger[] | null,
 ): AiCreditRange {
   const owed = aiSiteImportWaveOwed(state, wave, items)
-  return aiSiteImportCreditRange(owed.pages, { frame: owed.frame, arranged: owed.arranged, reworded: owed.reworded, copied: owed.copied, plan: owed.plan, proposed: owed.proposed, pictures: owed.pictures })
+  return aiSiteImportCreditRange(owed.pages, { frame: owed.frame, arranged: owed.arranged, reworded: owed.reworded, copied: owed.copied, plan: owed.plan, proposed: owed.proposed, pictures: owed.pictures, ...(owed.generative ? { generative: true } : {}) })
 }
 
 /** Every wave still waiting, quoted at once: "Start every remaining wave" (AGL-4083). */
@@ -2591,7 +2653,7 @@ export function aiSiteImportRemainingCreditRange(
   state: AiSiteImportState,
   items?: readonly AiJobItemLedger[] | null,
 ): AiCreditRange {
-  const total = { pages: 0, arranged: 0, reworded: 0, copied: 0, frame: false, plan: false, proposed: 0, pictures: 0 }
+  const total = { pages: 0, arranged: 0, reworded: 0, copied: 0, frame: false, plan: false, proposed: 0, pictures: 0, generative: false }
   for (const wave of state.waves) {
     if (wave.status !== 'waiting') continue
     const owed = aiSiteImportWaveOwed(state, wave, items)
@@ -2603,8 +2665,9 @@ export function aiSiteImportRemainingCreditRange(
     total.plan = total.plan || owed.plan === true
     total.proposed += owed.proposed ?? 0
     total.pictures += owed.pictures ?? 0
+    total.generative = total.generative || owed.generative === true
   }
-  return aiSiteImportCreditRange(total.pages, { frame: total.frame, arranged: total.arranged, reworded: total.reworded, copied: total.copied, plan: total.plan, proposed: total.proposed, pictures: total.pictures })
+  return aiSiteImportCreditRange(total.pages, { frame: total.frame, arranged: total.arranged, reworded: total.reworded, copied: total.copied, plan: total.plan, proposed: total.proposed, pictures: total.pictures, ...(total.generative ? { generative: true } : {}) })
 }
 
 /**

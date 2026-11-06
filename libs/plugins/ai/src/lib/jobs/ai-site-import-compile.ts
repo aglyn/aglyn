@@ -485,6 +485,21 @@ function take(scope: MapScope, ref: SiteImportLineRef | undefined): string {
   return block.kind === 'image' ? '' : clean(block.text)
 }
 
+/**
+ * The link a short paragraph is the words of (AGL-4152), where a generative
+ * redesign draws it: a source that wraps a button's label in a paragraph
+ * reads as that paragraph and then the same words as an inline link to where
+ * the button goes. `null` for any other line, and on every other page.
+ */
+function labelOfLink(scope: MapScope, ref: SiteImportLineRef): Extract<SiteImportBlock, { kind: 'link' }> | null {
+  if (scope.doc.generative !== true || scope.used.has(ref)) return null
+  const block = scope.doc.blocks[ref]
+  const next = scope.doc.blocks[ref + 1]
+  if (block?.kind !== 'paragraph' || next?.kind !== 'link' || !next.inline || !next.href) return null
+  const text = clean(block.text)
+  return text && text.length <= AI_SITE_IMPORT_LABEL_CHARS && clean(next.text) === text ? next : null
+}
+
 /** A width over a height as `aspect-ratio` writes it: "1600 / 900", or "1.7778" for a ratio alone. */
 function ratioText(width: number, height = 1): string {
   const round = (value: number) => String(Math.round(value * 10_000) / 10_000)
@@ -700,8 +715,12 @@ function itemOf(scope: MapScope, group: SiteImportLayoutGroup, item: SiteImportL
       if (line) out.list = [...(out.list ?? []), line]
     } else if (item.link?.includes(ref) || (block.kind === 'link' && (!named.has(ref) || clean(block.text).length <= AI_SITE_IMPORT_LABEL_CHARS))) addLink(ref)
     else {
+      // A button the source wraps its words in reads as a paragraph with its link after it (AGL-4152): a call to action, never a line of text.
+      const button = labelOfLink(scope, ref)
       const line = take(scope, ref)
-      if (line) paragraphs.push(...aiSiteImportTextParts(line))
+      const to = button ? aiSiteImportLinkTo(scope, button.href) : undefined
+      if (button && line) links.push({ text: line, ...(to ? { to } : {}), style: item.ctas?.find((cta) => cta.line === ref)?.style ?? 'secondary' })
+      else if (line) paragraphs.push(...aiSiteImportTextParts(line))
     }
   }
   if (paragraphs.length) out.text = paragraphs[0]

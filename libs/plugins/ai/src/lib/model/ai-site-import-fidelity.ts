@@ -2016,6 +2016,11 @@ export function siteImportContentKept(line: string, rewrite: string): number {
   return contentKept(line, rewrite)
 }
 
+/** How many content words a run of words says, by stem (AGL-4152): what a section says of its own. */
+export function siteImportContentWords(text: string): number {
+  return contentOf(text).size
+}
+
 /** The share of a line's content words another keeps: 1 for a line with none. */
 function contentKept(line: string, rewrite: string): number {
   const said = contentOf(line)
@@ -2240,7 +2245,10 @@ function improvedScore(source: SiteImportFidelitySource, built: Built, look: Loo
   const titleCased = (text: string) => wordsOf(text).length >= 2 && wordsOf(text).every((word) => word.length < 3 || /^\p{Lu}/u.test(word))
   // A page the site's plan proposed has no source to hold: only what it says is held (AGL-4152).
   const said = options.proposed ? [] : [...new Set(sourceTexts.filter((text) => !bareNumber(text)).flatMap((text) => siteImportFactTokens(text, ownScope, false).filter((token) => !token.startsWith('name:') || !titleCased(text))))]
-  const missingFacts = said.filter((token) => !onPage.has(token))
+  // A name the page still says, in the sentence case a redesign writes its headings in, is kept (AGL-4152):
+  // "Built on Stone" rewritten "built on stone" keeps its word, and a real name keeps its capital anyway.
+  const wordsOnPage = new Set(shown.flatMap(wordsOf).map((word) => word.toLowerCase()))
+  const missingFacts = said.filter((token) => !onPage.has(token) && !(token.startsWith('name:') && wordsOnPage.has(token.slice(5).toLowerCase())))
   // Invented: none that nothing the import read says.
   const allowed = new Set(anywhere.flatMap((text) => siteImportFactTokens(text, scope, false)))
   const found = [...new Set(shown.flatMap((text) => siteImportFactTokens(text, scope, true)))].filter((token) => !allowed.has(token) && token !== 'name:FAQ' && token !== 'name:FAQs')
