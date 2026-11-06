@@ -372,6 +372,13 @@ Object.assign(MOUNTS, {
     how: 'slot',
     props: { orgSlug: 'acme', pluginRef: 'listing-1', pin: { version: '1.0.0' } },
   },
+  // AGL-4196: a site's connections to the services an installed plugin
+  // declares, drawn by the plugin that runs them.
+  sitePluginConnections: {
+    file: 'apps/console/app/(app)/[orgSlug]/hosts/[host]/admin/plugins/[pluginRef]/page.tsx',
+    how: 'slot',
+    props: { hostId: 'host-1', orgSlug: 'acme', pluginRef: 'listing-1', pin: { version: '1.0.0' } },
+  },
   // AGL-3080: a site's templates — a shelf of the gallery, and a library row
   // whose template a plugin installed — drawn by the plugin offering them.
   templateGallery: {

@@ -27,6 +27,7 @@ import HostPluginsCard from './components/host-plugins-card.component'
 import PluginSiteSetPanel from './components/plugin-site-set-panel.component'
 import OrgPluginInstallsCard from './components/org-plugin-installs-card.component'
 import PluginInstallStatus from './components/plugin-install-status.component'
+import SitePluginConnectionsCard from './components/site-plugin-connections-card.component'
 import StaffMarketplaceOverview from './components/staff-marketplace-overview.component'
 import StarterPickerShelf from './components/starter-picker-shelf.component'
 import TemplateGalleryShelf from './components/template-gallery-shelf.component'
@@ -96,6 +97,15 @@ export function registerMarketplaceConsole(): void {
         slot: 'pluginInstallStatus',
         widgetId: 'marketplace-plugin-install-status',
         Component: PluginInstallStatus,
+      },
+      // A site's page for one installed plugin (AGL-4196): the services the
+      // pinned manifest declares it connects to. This plugin runs the
+      // connections, so it draws them; the card checks the site key itself
+      // and keeps every control on screen with the reason when it is off.
+      {
+        slot: 'sitePluginConnections',
+        widgetId: 'marketplace-site-plugin-connections',
+        Component: SitePluginConnectionsCard,
       },
       // The staff overview (AGL-3080): recent purchases and the
       // refund-reversal recovery queue, from this plugin's own purchases.

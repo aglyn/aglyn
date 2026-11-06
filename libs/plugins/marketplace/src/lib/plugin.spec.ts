@@ -73,6 +73,7 @@ describe('marketplace plugin', () => {
       'orgPluginInstalls',
       'pluginInstallStatus',
       'pluginSiteSet',
+      'sitePluginConnections',
       'staffOverview',
       'templateGallery',
       'templateInstallStatus',

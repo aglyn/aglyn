@@ -27,6 +27,7 @@ import { useFirestore, useFirestoreDoc, useUser } from '@aglyn/tenant-feature-in
 import { Alert, Button, Stack } from '@mui/material'
 import { doc } from 'firebase/firestore'
 import { useMemo, useState } from 'react'
+import ListingConnectionCredentialsCard from './listing-connection-credentials-card.component'
 import ListingDetailEditor from './listing-detail-editor.component'
 import ListingReviewStatus from './listing-review-status.component'
 import ListingVerificationRequest from './listing-verification-request.component'
@@ -183,6 +184,15 @@ export function ListingDetailPage(props: {
                 isPlugin={isPlugin}
                 permissions={permissions}
               />
+              {/* The publisher's OAuth app for each connection the latest
+                  version declares (AGL-4196). Draws nothing for a listing
+                  that declares none. */}
+              {isPlugin ? (
+                <ListingConnectionCredentialsCard
+                  listingId={listingId}
+                  permissions={permissions}
+                />
+              ) : null}
             </>
           ) : null}
           {!actingHost ? (
