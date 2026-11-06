@@ -49,6 +49,7 @@ import {
   quoteRespondRefusal,
   type QuoteProofAccess,
 } from './commerce-quote-proofs'
+import type { QuotePageMessage } from './commerce-quote-messages'
 import type { TaxSettings } from './commerce-tax'
 import { storefrontTaxDecision, type StorefrontTaxMode } from './commerce-tax-decision'
 import { engineLineTaxPercentages, storeTaxAllowsEngine } from './commerce-tax-engine'
@@ -383,6 +384,13 @@ export interface QuotePageView {
    */
   proofAccess: QuoteProofAccess
   proofAccessMessage: string | null
+  /**
+   * The quote's conversation with the business, oldest first (AGL-4207):
+   * what each side wrote, never an address or who on the team sent it. The
+   * customer writes back on the page. Empty for an invoice, and while the
+   * proof waits on a sign-in.
+   */
+  messages: QuotePageMessage[]
 }
 
 /** What a signed link for an older version of the quote opens: nothing of the quote. */
@@ -461,6 +469,8 @@ export function buildQuotePageView(input: {
   approvalStatements?: readonly string[]
   /** Whether this browser may see the proof ({@link quoteProofAccess}); absent reads as `open`. */
   proofAccess?: QuoteProofAccess
+  /** The quote's conversation ({@link quotePageMessages}); absent, none is shown. */
+  messages?: QuotePageMessage[]
 }): QuotePageView {
   const { order } = input
   const quote = order.quote
@@ -535,6 +545,7 @@ export function buildQuotePageView(input: {
     response: pageResponse(quote),
     // The page is only ever a quote's, whatever the caller picked off the order.
     respondable: quoteRespondRefusal({ channel: 'quote', status: order.status, quote }) === null,
+    messages: input.messages ?? [],
     approvalStatements: [],
     proofAccess: 'open',
     proofAccessMessage: null,
@@ -552,6 +563,8 @@ export function buildQuotePageView(input: {
     proofs: [],
     response: null,
     respondable: false,
+    // The conversation is about the proof, so it waits on the same sign-in (AGL-4207).
+    messages: [],
     approvalStatements: [],
     proofAccess: access,
     proofAccessMessage: quoteProofAccessMessage(access, input.storeName),

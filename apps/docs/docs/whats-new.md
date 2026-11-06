@@ -12,6 +12,11 @@ for the how-to.
 
 ## November 2026 — Aglyn 1.0 (newest)
 
+- **Messages on a quote.** [Messages with your customer](commerce-and-bookings/commerce/quotes-and-proofs.md#messages)
+  — reply to a customer from the quote, in the same email conversation as the quote,
+  and let them write to you on the quote page. You're notified of what they write,
+  and the conversation stays with the quote through every revision. The Inbox and
+  quotes share one reply box.
 - **Approving a proof is deliberate, and you choose who can open it.** [What your customer sees of the proofs](commerce-and-bookings/commerce/quotes-and-proofs.md#customer-proofs)
   — before **Approve** works, your customer ticks each statement you set on the
   **Quotes** card (spelling and numbers, colors and placement, production starting on

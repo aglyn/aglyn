@@ -227,12 +227,14 @@ describe('who may open the proof', () => {
       currency: 'USD',
       approvalStatements: STATEMENTS,
       proofAccess: 'sign-in',
+      messages: [{ id: 'm1', from: 'business', body: 'Hi', atMs: 1 }],
     })
     expect(page.proofs).toEqual([])
     expect(page.response).toBeNull()
     expect(page.respondable).toBe(false)
     expect(page.approvalStatements).toEqual([])
     expect(page.proofAccess).toBe('sign-in')
+    expect(page.messages).toEqual([])
     expect(page.proofAccessMessage).toBe(quoteProofAccessMessage('sign-in', 'Acme Signs'))
     expect(page.proofAccessMessage).toMatch(/Sign in to your account with Acme Signs/)
     // The quote itself still shows: its lines and total are not the proof.

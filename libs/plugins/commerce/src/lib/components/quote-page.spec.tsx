@@ -298,6 +298,8 @@ describe('the proofs on the quote page (AGL-4096)', () => {
     expect(screen.getByText(/Sign in to your account with Acme Tents to see the proof and approve it\./)).toBeTruthy()
     expect(screen.queryByRole('button', { name: 'Approve this proof' })).toBeNull()
     expect(screen.queryByRole('img')).toBeNull()
+    // The conversation waits on the same sign-in (AGL-4207).
+    expect(screen.queryByRole('button', { name: 'Send message' })).toBeNull()
   })
 
   it('rejects with changes: a note and a name required, artwork optional, sent through the upload', async () => {
@@ -451,5 +453,56 @@ describe('a proof with no price yet (AGL-4184)', () => {
     expect(await screen.findByRole('heading', { name: 'Quote #1042' })).toBeTruthy()
     expect(screen.getByRole('button', { name: 'Pay $2,675.48' })).toBeTruthy()
     expect(screen.getByRole('button', { name: 'Approve this proof' })).toBeTruthy()
+  })
+})
+
+describe('messages with the business on the quote page (AGL-4207)', () => {
+  beforeEach(() => window.history.replaceState({}, '', '/pay-quote?q=q-1&t=1.tok'))
+
+  const withMessages = (messages: Array<Record<string, unknown>>) => ({ ...view(), messages })
+
+  it('shows the conversation, the business’s replies set apart', async () => {
+    mockSiteFetch.mockResolvedValueOnce(
+      json(
+        withMessages([
+          { id: 'm1', from: 'customer', body: 'Can the logo be bigger?', atMs: Date.UTC(2026, 10, 1) },
+          { id: 'm2', from: 'business', body: 'Yes, new proof tomorrow.', atMs: Date.UTC(2026, 10, 2) },
+        ]),
+      ),
+    )
+    render(<QuotePage />)
+    expect(await screen.findByText('Yes, new proof tomorrow.')).toBeTruthy()
+    expect(screen.getByText(/Acme Tents wrote$/)).toBeTruthy()
+    expect(screen.getByText(/You wrote$/)).toBeTruthy()
+    expect(screen.getByText('To Acme Tents')).toBeTruthy()
+  })
+
+  it('sends a message once per press, and shows it in the conversation', async () => {
+    mockSiteFetch
+      .mockResolvedValueOnce(json(withMessages([])))
+      .mockResolvedValueOnce(json({ messages: [{ id: 'm1', from: 'customer', body: 'Is red available?', atMs: Date.UTC(2026, 10, 3) }] }))
+    render(<QuotePage />)
+    const send = (await screen.findByRole('button', { name: 'Send message' })) as HTMLButtonElement
+    expect(send.disabled).toBe(true)
+    fireEvent.change(screen.getByLabelText('Message'), { target: { value: 'Is red available?' } })
+    fireEvent.click(send)
+    expect(await screen.findByText('Sent. Acme Tents will get back to you.')).toBeTruthy()
+    expect(screen.getByText('Is red available?')).toBeTruthy()
+    const [url, init] = mockSiteFetch.mock.calls[1] as [string, RequestInit]
+    expect(url).toBe('/api/commerce/quote-message')
+    expect(JSON.parse(String(init.body))).toEqual({ hostId: 'host-1', q: 'q-1', t: '1.tok', message: 'Is red available?', website: '' })
+    expect((init.headers as Record<string, string>)['Idempotency-Key']).toBeTruthy()
+    expect(mockSiteFetch).toHaveBeenCalledTimes(2)
+  })
+
+  it('says what went wrong, and keeps what was typed', async () => {
+    mockSiteFetch
+      .mockResolvedValueOnce(json(withMessages([])))
+      .mockResolvedValueOnce(json({ error: 'Too many tries. Try again in a few minutes.' }, false))
+    render(<QuotePage />)
+    fireEvent.change(await screen.findByLabelText('Message'), { target: { value: 'Hello' } })
+    fireEvent.click(screen.getByRole('button', { name: 'Send message' }))
+    expect(await screen.findByText('Too many tries. Try again in a few minutes.')).toBeTruthy()
+    expect((screen.getByLabelText('Message') as HTMLTextAreaElement).value).toBe('Hello')
   })
 })

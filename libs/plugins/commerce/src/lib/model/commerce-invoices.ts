@@ -419,6 +419,7 @@ export function buildInvoicePageView(input: {
     approvalStatements: [],
     proofAccess: 'open',
     proofAccessMessage: null,
+    messages: [],
   }
 }
 

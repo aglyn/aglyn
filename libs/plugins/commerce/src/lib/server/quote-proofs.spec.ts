@@ -24,6 +24,7 @@ import { QUOTE_DEFAULT_APPROVAL_STATEMENTS } from '../model'
 import { memberCookieName, mintMemberSession } from './membership'
 import { mintQuoteLinkToken } from './quote-link-token'
 import { handleQuoteProof, handleQuoteRespond, handleQuoteUpload, type QuoteProofDeps } from './quote-proofs'
+import { handleQuoteMessage } from './quote-messages'
 import type { QuoteUploadCalls } from './quote-uploads'
 
 jest.mock('@aglyn/tenant-data-admin', () => ({
@@ -84,15 +85,21 @@ function docRef(path: string): any {
 /** Collections the routes listed, in order. */
 const listedCollections: string[] = []
 
+let autoId = 0
+
 function collectionRef(path: string): any {
-  return {
-    doc: (id: string) => docRef(`${path}/${id}`),
+  const ref: any = {
+    doc: (id?: string) => docRef(`${path}/${id ?? `auto-${++autoId}`}`),
+    // A query (the page's conversation, AGL-4207) answers this collection's own documents.
+    orderBy: () => ref,
+    limit: () => ref,
     get: async () => {
       listedCollections.push(path)
       const children = [...docs.keys()].filter((key) => key.startsWith(`${path}/`) && !key.slice(path.length + 1).includes('/'))
       return { docs: children.map((key) => snapshotOf(key)) }
     },
   }
+  return ref
 }
 
 const firestore: any = {
@@ -602,6 +609,82 @@ describe('POST commerce/quote-respond', () => {
   })
 })
 
+describe('POST commerce/quote-message: the customer writes on the quote page (AGL-4207)', () => {
+  const messagesOf = () =>
+    [...docs.entries()].filter(([key]) => key.startsWith(`${QUOTE_PATH}/messages/`)).map(([, data]) => data)
+
+  it('keeps the message under the quote, answers the conversation, and tells the managers', async () => {
+    docs.set(`${QUOTE_PATH}/messages/m0`, { direction: 'out', body: 'Here is your proof.', atMs: 5_000, revision: 1, to: 'jordan@example.com', by: 'owner@example.com' })
+    const outcome = await handleQuoteMessage(deps, post({ message: '  Can the logo be bigger?  ' }))
+    expect(outcome.status).toBe(200)
+    expect(outcome.body['messages']).toEqual([
+      { id: 'm0', from: 'business', body: 'Here is your proof.', atMs: 5_000 },
+      { id: expect.any(String), from: 'customer', body: 'Can the logo be bigger?', atMs: 10_000 },
+    ])
+    expect(messagesOf()).toContainEqual({
+      direction: 'in',
+      body: 'Can the logo be bigger?',
+      atMs: 10_000,
+      revision: 1,
+      name: 'Jordan Lee',
+      ip: '203.0.113.9',
+      userAgent: 'Spec Browser',
+    })
+    // The quote itself is untouched: the page that sent it can still pay it.
+    expect(docs.get(QUOTE_PATH)?.['quote']?.updatedAtMs).toBe(2_000)
+    expect(notified).toEqual([
+      [
+        'site1',
+        expect.objectContaining({
+          type: 'content.order',
+          level: 'info',
+          label: 'Customer message',
+          actionLabel: 'View quote',
+          title: 'Jordan Lee wrote about Quote #1042 on {site}',
+          body: 'Can the logo be bigger?\n\nReply from the quote, or reply to this email to reach them.',
+          link: '/site1/products/orders?quote=q-1',
+        }),
+        expect.objectContaining({
+          replyTo: 'jordan@example.com',
+          emailDetails: expect.arrayContaining([{ label: 'Message', value: 'Can the logo be bigger?' }]),
+        }),
+      ],
+    ])
+  })
+
+  it('keeps the conversation on the page’s own view, and an answer’s', async () => {
+    docs.set(`${QUOTE_PATH}/messages/m0`, { direction: 'in', body: 'Hello', atMs: 5_000, revision: 1, name: 'Jordan Lee' })
+    const answered = await handleQuoteRespond(deps, post({ v: 2_000, action: 'approve', name: 'Jordan Lee', confirmed: CONFIRMED }))
+    expect(answered.body['view']).toMatchObject({ messages: [{ id: 'm0', from: 'customer', body: 'Hello', atMs: 5_000 }] })
+  })
+
+  it('refuses an empty message, a press with no Idempotency-Key, a wrong token and a replaced link', async () => {
+    expect(await handleQuoteMessage(deps, post({ message: '  ' }))).toEqual({ status: 400, body: { error: 'Write a message first.' } })
+    expect((await handleQuoteMessage(deps, post({ message: 'Hi' }, ''))).status).toBe(400)
+    expect((await handleQuoteMessage(deps, post({ message: 'Hi', t: '1.bad' }))).status).toBe(404)
+    storeQuote({ linkVersion: 2 })
+    expect((await handleQuoteMessage(deps, post({ message: 'Hi', t: token(1) }))).status).toBe(410)
+    expect(messagesOf()).toEqual([])
+    expect(notified).toEqual([])
+  })
+
+  it('answers a retried press from the first, and pretends to a bot', async () => {
+    const first = await handleQuoteMessage(deps, post({ message: 'Once.' }, 'same'))
+    const again = await handleQuoteMessage(deps, post({ message: 'Once.' }, 'same'))
+    expect(again).toEqual(first)
+    expect(messagesOf()).toHaveLength(1)
+    expect(await handleQuoteMessage(deps, post({ message: 'Buy now', website: 'x' }, 'bot'))).toEqual({ status: 200, body: { received: true } })
+    expect(messagesOf()).toHaveLength(1)
+  })
+
+  it('spends the site’s rate limit before anything else', async () => {
+    rateAllowed = false
+    expect((await handleQuoteMessage(deps, post({ message: 'Hi' }))).status).toBe(429)
+    expect(limited.some((key) => key.startsWith('commerce-quote-message:site1:'))).toBe(true)
+    expect(messagesOf()).toEqual([])
+  })
+})
+
 describe('a deliberate approval (AGL-4206)', () => {
   it('refuses an approval that leaves a statement unticked, and records nothing', async () => {
     const outcome = await handleQuoteRespond(
@@ -708,6 +791,12 @@ describe('a quote whose customer signs in to see the proof (AGL-4206)', () => {
     expect(
       (await handleQuoteProof(gated, getAs({ hostId: 'site1', q: 'q-1', t: token(), file: 'p1' }, signedIn(MEMBER)))).status,
     ).toBe(403)
+  })
+
+  it('keeps the conversation behind the same sign-in, and takes a message once signed in (AGL-4207)', async () => {
+    expect(await handleQuoteMessage(gated, post({ message: 'Hello' }))).toMatchObject({ status: 403, body: { reason: 'sign-in' } })
+    expect([...docs.keys()].filter((key) => key.startsWith(`${QUOTE_PATH}/messages/`))).toEqual([])
+    expect((await handleQuoteMessage(gated, post({ message: 'Hello' }, 'k2', signedIn(MEMBER)))).status).toBe(200)
   })
 
   it('keeps the private link for a guest with no account', async () => {

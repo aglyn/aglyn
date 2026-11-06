@@ -477,13 +477,24 @@ export async function payLinkPageView(
     store: CommerceModel.payLinkStoreOf({ tax: store.get('tax') }),
     paymentsReady,
   }
-  return kind === 'quote'
-    ? CommerceModel.buildQuotePageView({
-        ...view,
-        approvalStatements: CommerceModel.quoteApprovalStatements(store.get('quotes')),
-        proofAccess: input.proofAccess ?? 'open',
-      })
-    : CommerceModel.buildInvoicePageView(view)
+  if (kind !== 'quote') return CommerceModel.buildInvoicePageView(view)
+  const proofAccess = input.proofAccess ?? 'open'
+  // The quote's conversation rides its page (AGL-4207), an answer's view too; it waits on
+  // the same sign-in as the proof, so it is not read for a page that will not show it.
+  let messages: CommerceModel.QuotePageMessage[] = []
+  if (proofAccess === 'open' || CommerceModel.currentQuoteProofs(order.quote).length === 0) {
+    const orderRef = deps.firestore().collection('hosts').doc(hostId).collection('orders').doc(orderId)
+    const listed = await orderRef.collection('messages').orderBy('atMs', 'desc').limit(CommerceModel.QUOTE_MESSAGES_SHOWN).get()
+    messages = CommerceModel.quotePageMessages(
+      listed.docs.map((entry) => ({ id: entry.id, data: entry.data() as Partial<CommerceModel.QuoteMessage> })),
+    )
+  }
+  return CommerceModel.buildQuotePageView({
+    ...view,
+    messages,
+    approvalStatements: CommerceModel.quoteApprovalStatements(store.get('quotes')),
+    proofAccess,
+  })
 }
 
 /** `GET /api/commerce/quote-view`: the quote page's data. */

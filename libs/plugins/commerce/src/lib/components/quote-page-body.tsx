@@ -35,6 +35,7 @@ import {
   type StorefrontCheckoutWallets,
 } from '../model'
 import type { QuotePageProps } from './quote-page'
+import { QuoteMessagesPanel } from './quote-messages-panel'
 import { QuoteProofPanel } from './quote-proof-panel'
 import { StorefrontPaymentElementFallback } from './storefront-payment-element-fallback'
 
@@ -493,6 +494,15 @@ const QuotePageBody = forwardRef<HTMLDivElement, QuotePageProps>((props, ref) =>
           siteFetch={siteFetch}
           onView={(next) => setState({ kind: 'ready', view: next })}
           onReload={() => void load().then(setState)}
+          onReplaced={() => setState({ kind: 'replaced', storeName: quote.storeName, noun })}
+        />
+
+        <QuoteMessagesPanel
+          view={quote}
+          hostId={hostId}
+          quoteId={link.current.quoteId}
+          token={link.current.token}
+          siteFetch={siteFetch}
           onReplaced={() => setState({ kind: 'replaced', storeName: quote.storeName, noun })}
         />
 
