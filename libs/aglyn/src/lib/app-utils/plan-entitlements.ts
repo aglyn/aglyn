@@ -4175,8 +4175,8 @@ export function resolveTransactionFeePct(
  *
  * WHY THE DEAREST METHOD AND NOT 2.9%. The shopper picks how to pay AFTER the
  * session is created, and `application_fee_amount` is a fixed number Stripe
- * will not let us revise once the charge settles. No storefront path pins
- * `payment_method_types`, so the platform's payment method configuration
+ * will not let us revise once the charge settles. No storefront or booking
+ * path pins `payment_method_types` or excludes buy-now-pay-later, so the platform's payment method configuration
  * decides the set — and per AGL-2343 that configuration has `klarna` and
  * `affirm` on beside the card family. Pricing this at the card rate would be
  * wrong exactly on the orders where it cost the most, which is the same
@@ -4189,16 +4189,20 @@ export function resolveTransactionFeePct(
  * `SALE_PROCESSING_PERCENT` below is then the single identifier to
  * repoint. That is a product decision about which payment methods a storefront
  * offers, not this one; it is recorded on AGL-2152 and in the Pricing Decision
- * Log so it can be taken deliberately.
+ * Log so it can be taken deliberately. Quote and invoice pay links have taken
+ * it: they exclude buy-now-pay-later and pass `PAY_LINK_PROCESSING_PERCENT`.
  */
 // `SALE_PROCESSING_PERCENT` and `SALE_PROCESSING_FIXED_CENTS` are declared
 // beside the processing constants they are defined from, further down this
 // file — a `const` cannot be read before its declaration is evaluated, and
 // this function is only ever CALLED, never evaluated at import.
-export function saleProcessingCostCents(chargeCents: number): number {
+export function saleProcessingCostCents(
+  chargeCents: number,
+  processingPercent: number = SALE_PROCESSING_PERCENT,
+): number {
   if (!Number.isFinite(chargeCents) || chargeCents <= 0) return 0
   return (
-    Math.ceil((chargeCents * SALE_PROCESSING_PERCENT) / 100) +
+    Math.ceil((chargeCents * processingPercent) / 100) +
     SALE_PROCESSING_FIXED_CENTS
   )
 }
@@ -4227,12 +4231,19 @@ export function saleProcessingCostCents(chargeCents: number): number {
  * Clamped to `chargeCents` because Stripe rejects an application fee larger
  * than the charge. That clamp can only bind below ~32¢, under Stripe's own 50¢
  * charge minimum, so it never trims a real order's fee.
+ *
+ * `processingPercent` is the rate the processing half is priced at. It
+ * defaults to `SALE_PROCESSING_PERCENT`, the dearest method a storefront or
+ * booking session may offer. A quote's or an invoice's pay link passes
+ * `PAY_LINK_PROCESSING_PERCENT`, the card rate, because those sessions never
+ * offer buy-now-pay-later.
  */
 export function resolveTransactionFeeCents(
   org: Partial<AglynOrgBilling> | null | undefined,
   productType: 'physical' | 'digital' | 'service',
   feeBaseCents: number,
   chargeCents: number = feeBaseCents,
+  processingPercent: number = SALE_PROCESSING_PERCENT,
 ): number {
   const charge =
     Number.isFinite(chargeCents) && chargeCents > 0 ? Math.round(chargeCents) : 0
@@ -4245,7 +4256,7 @@ export function resolveTransactionFeeCents(
   // The `Math.max(1, …)` every door already applied: a rate above zero on
   // goods the shopper pays for is a fee however small it rounds to.
   const take = pct > 0 && base > 0 ? Math.max(1, Math.round((base * pct) / 100)) : 0
-  return Math.min(charge, take + saleProcessingCostCents(charge))
+  return Math.min(charge, take + saleProcessingCostCents(charge, processingPercent))
 }
 
 /**
@@ -4395,12 +4406,14 @@ export function bindingMarketplaceFeePct(): number {
  * they exist only as inputs to a platform take and to figures a seller reads;
  * changing one never changes a price list.
  *
- * THE BNPL RATE IS THE ONE THAT BINDS, and it is not hypothetical: the live
- * default payment method configuration has `klarna` and `affirm` enabled
- * alongside `card`, `cashapp`, `link`, `amazon_pay` and `apple_pay`, and no
- * checkout session pins `payment_method_types`, so a buyer may pay by either.
- * A cost computed from the cheapest method would be wrong exactly when it
- * mattered.
+ * THE BNPL RATE IS THE ONE THAT BINDS on a storefront, a booking and a
+ * marketplace listing, and it is not hypothetical: the live default payment
+ * method configuration has `klarna` and `affirm` enabled alongside `card`,
+ * `cashapp`, `link`, `amazon_pay` and `apple_pay`, and those sessions do not
+ * exclude them, so a buyer may pay by either. A cost computed from the
+ * cheapest method would be wrong exactly when it mattered. A quote's or an
+ * invoice's pay link is the exception: it excludes every BNPL method and so
+ * is priced at the card rate (`PAY_LINK_PROCESSING_PERCENT`).
  */
 export const CARD_PROCESSING_PERCENT = 2.9
 /** Klarna/Affirm, roughly. See the note above — this is the binding one. */
@@ -4423,6 +4436,25 @@ export const PROCESSING_FIXED_CENTS = 30
  * different flow.
  */
 export const SALE_PROCESSING_PERCENT = BNPL_PROCESSING_PERCENT
+
+/**
+ * The processing rate a QUOTE's or an INVOICE's pay link is priced against:
+ * the card rate, 2.9% + 30¢.
+ *
+ * Those sessions always exclude Klarna, Afterpay and Affirm
+ * (`payLinkPaymentMethodControls` in the commerce plugin), so what a buyer
+ * can still choose is the card family: a card, Apple Pay, Google Pay, Link,
+ * Cash App Pay and Amazon Pay, all 2.9% + 30¢ on Stripe's published US
+ * pricing, and stablecoins, at 1.5% when a seller turns them on. The card
+ * rate is therefore the dearest a pay link can cost, as `SALE_PROCESSING_PERCENT`
+ * is for a storefront. An international card adds Stripe's 1.5% surcharge,
+ * which this does not recover, the same as the register's card payments.
+ *
+ * Its own name for the reason `SALE_PROCESSING_PERCENT` has one: a storefront,
+ * a booking and the marketplace floor stay on the rate their own sessions can
+ * cost, and repointing this one moves pay links only.
+ */
+export const PAY_LINK_PROCESSING_PERCENT = CARD_PROCESSING_PERCENT
 /** Stripe's per-transaction fixed component, in cents. Not rate-dependent. */
 export const SALE_PROCESSING_FIXED_CENTS = PROCESSING_FIXED_CENTS
 

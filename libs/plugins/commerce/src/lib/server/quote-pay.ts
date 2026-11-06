@@ -19,6 +19,7 @@ import {
   checkEntitlement,
   claimAttempt,
   deriveStripeObjectKey,
+  PAY_LINK_PROCESSING_PERCENT,
   resolveTransactionFeeCents,
   type PluginApiHandler,
   type PluginApiRequest,
@@ -465,7 +466,13 @@ export function buildQuoteSessionParams(input: {
     )
     params.set('metadata[transferShippingCents]', String(shippingFloorCents))
   }
-  CommerceModel.appendStorefrontPaymentMethodParams(params, input.paymentMethods)
+  // A quote or an invoice pays by card or a card-rate wallet, never by
+  // buy-now-pay-later, whatever the store offers on its storefront: its fee is
+  // priced at the card rate (`PAY_LINK_PROCESSING_PERCENT`).
+  CommerceModel.appendStorefrontPaymentMethodParams(
+    params,
+    CommerceModel.payLinkPaymentMethodControls(input.paymentMethods),
+  )
   return params
 }
 
@@ -525,13 +532,15 @@ export async function handleQuotePay(deps: QuotePayDeps, req: PluginApiRequest):
 
   const charge = CommerceModel.invoiceCheckoutCharge(order, quoteId, payStore)
   // The fee is sized on the most the buyer can pay, as a draft's first link
-  // sized it on its dearest rate.
+  // sized it on its dearest rate, and its processing half at the card rate:
+  // the session below excludes every buy-now-pay-later method.
   const dearestRateCents = charge.shippingOptions.reduce((most, rate) => Math.max(most, rate.amountCents), 0)
   const feeCents = resolveTransactionFeeCents(
     owner?.org as never,
     charge.feeProductType,
     charge.goodsCents,
     charge.totalCents + dearestRateCents,
+    PAY_LINK_PROCESSING_PERCENT,
   )
   const nativeMode = await deps.nativeMode(String(owner?.id ?? ''))
   const site = host as SiteReturnHost
