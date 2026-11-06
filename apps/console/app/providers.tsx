@@ -29,6 +29,7 @@ import ConsoleBrandingEffects from '../components/console-branding-effects.compo
 import EditHintBounce from '../components/edit-hint-bounce.component'
 import EditorHintCookie from '../components/editor-hint-cookie.component'
 import HostIdProvider from '../components/host-id-provider'
+import PreviewStatePrune from '../components/preview-state-prune.component'
 import VisitorMarketingSurface from '../components/visitor-marketing-surface.component'
 import FirebaseAppLayout from '../components/layouts/firebase-app.layout'
 // Dynamic plugin activation (AGL-417): the gate loads + registers the org's
@@ -71,6 +72,9 @@ const ThemeStack = withThemeCssVarProvider(
           on the OTHER registrable domain, where cookies set here cannot
           reach. Renders nothing. */}
       <EditHintBounce />
+      {/* Stale besigner preview snapshots out of localStorage, which the
+          Firestore client also needs room in (AGL-4204). Renders nothing. */}
+      <PreviewStatePrune />
       <VisitorMarketingSurface nonce={nonce} />
       <LoadingLayoutAppComponent>
         <ConfirmationProviderComponent>
