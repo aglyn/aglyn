@@ -616,6 +616,38 @@ describe('exportOrgData', () => {
     expect(JSON.stringify(result)).not.toContain('sha256-of-the-token')
   })
 
+  it('says a listing\'s OAuth app is set, never its sealed client id or secret (AGL-4193)', async () => {
+    const withCredentials = {
+      ...seed,
+      docs: {
+        ...seed.docs,
+        pluginConnectionCredentials: {
+          listing1__google: {
+            orgId: 'o1',
+            listingId: 'listing1',
+            connectionId: 'google',
+            sealedClientId: 'v1.k1.sealed-client-id-ciphertext',
+            sealedClientSecret: 'v1.k1.sealed-client-secret-ciphertext',
+            updatedAtMs: 1_790_000_000_000,
+            updatedBy: 'u1',
+          },
+          listing9__google: { orgId: 'other', sealedClientId: 'Theirs' },
+        },
+      },
+    }
+    const result = await exportOrgData('o1', { firestore: fakeDb(withCredentials) })
+    const rows = result.data['pluginConnectionCredentials']
+    expect(rows).toHaveLength(1)
+    const [row] = rows
+    expect((row.data as any).listingId).toBe('listing1')
+    expect((row.data as any).connectionId).toBe('google')
+    expect((row.data as any).sealedClientId).toMatchObject({ redacted: true, present: true })
+    expect((row.data as any).sealedClientSecret).toMatchObject({ redacted: true, present: true })
+    const serialized = JSON.stringify(result)
+    expect(serialized).not.toContain('sealed-client-id-ciphertext')
+    expect(serialized).not.toContain('sealed-client-secret-ciphertext')
+  })
+
   it('redacts the SSO token while still saying the domain is configured', async () => {
     const result = await exportOrgData('o1', { firestore: fakeDb(seed) })
     const [row] = result.data['ssoDomains']

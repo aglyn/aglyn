@@ -30,10 +30,16 @@
 
 import * as Aglyn from '@aglyn/aglyn'
 import { MdiIcons, mdiPuzzle } from '@aglyn/shared-data-mdi'
+// The narrow module, not the barrel: these through the barrel load the
+// manifest validators on every published page (AGL-4201).
+import {
+  PLUGIN_COMPONENT_ID,
+  resolvePluginElements,
+} from '@aglyn/aglyn/app-utils/plugin-elements'
 import { BUNDLE_ID } from '../constants/bundle-common'
 
 /** The Plugin element's component id, as the presets name it. */
-const ID: Aglyn.ComponentId = Aglyn.PLUGIN_COMPONENT_ID
+const ID: Aglyn.ComponentId = PLUGIN_COMPONENT_ID
 
 /** The besigner drawer category installed plugins register under (AGL-190). */
 export const PLUGIN_DRAWER_CATEGORY = 'Marketplace'
@@ -108,7 +114,7 @@ export function muiPluginInstallToPresets(
   const listingId = install.listingId ?? install.$id
   if (!listingId) return presets
 
-  for (const element of Aglyn.resolvePluginElements({
+  for (const element of resolvePluginElements({
     listingId,
     capabilities: (install as any).manifest?.capabilities,
     manifest: (install as any).manifest,
