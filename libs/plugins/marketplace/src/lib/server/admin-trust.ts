@@ -25,6 +25,7 @@ import {
 import { invalidIdTokenResponse } from '@aglyn/tenant-data-admin/server/id-token-refusal'
 import { FieldValue } from 'firebase-admin/firestore'
 import { addAdminAudit } from '@aglyn/tenant-data-admin/server/admin-audit-write'
+import { dropCachesForListing } from './revoke-cache-drop'
 
 /**
  * Staff trust-signing for realm plugins (AGL-420), served at
@@ -99,6 +100,8 @@ async function handler(request: Request): Promise<Response> {
       .doc(version)
     const snapshot = await versionRef.get()
     const sha256 = snapshot.get('sha256')
+    // Read before the write below clears it (AGL-4121).
+    const hadRealmTrust = Boolean(snapshot.get('trust'))
     if (typeof sha256 !== 'string' || !sha256) {
       return Response.json({ error: 'Unknown plugin version' }, { status: 404 })
     }
@@ -164,6 +167,15 @@ async function handler(request: Request): Promise<Response> {
       after: action === 'grant' ? { trust: 'realm' } : { trust: null },
       at: FieldValue.serverTimestamp(),
     })
+
+    // Every site running this version resolved its trust once and cached it
+    // with its pages, so withdrawing it has to reach those pages now, not at
+    // the week-long backstop (AGL-4121). After the audit, so a drop that could
+    // neither land nor be queued fails the request loudly without losing the
+    // record of the revoke it followed.
+    if (action === 'revoke' && hadRealmTrust) {
+      await dropCachesForListing(firebaseAdmin.app().firestore(), listingId)
+    }
 
     return Response.json({ ok: true, action, listingId, version }, { status: 200 })
   } catch (error) {

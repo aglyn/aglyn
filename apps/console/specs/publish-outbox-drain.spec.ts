@@ -40,6 +40,10 @@ interface OutboxRow {
   attempts?: number
   ageMs?: number
   entireHost?: unknown
+  plugins?: unknown
+  aliases?: unknown
+  subdomain?: unknown
+  cname?: unknown
 }
 
 let mockRows: OutboxRow[] = []
@@ -424,5 +428,55 @@ describe('a site-wide entry — a settings save, which names no page (AGL-3386)'
     await post()
     expect(mockDeleted).toEqual([])
     expect(mockMerged[0]).toMatchObject({ id: 'theme' })
+  })
+})
+
+describe('a server-staged security drop (AGL-4121)', () => {
+  it('forwards the plugin scope, widening a site entry to a platform one', async () => {
+    mockRows = [
+      { id: 'uninstall', hostId: 'host-a', paths: ['/'], entireHost: true, plugins: 'host' },
+      { id: 'takedown', hostId: 'host-a', paths: ['/'], plugins: 'everywhere' },
+    ]
+    await post()
+    expect(mockPost).toHaveBeenCalledTimes(1)
+    expect(mockPost.mock.calls[0][0]).toMatchObject({ plugins: 'everywhere' })
+    expect(mockDeleted).toEqual(['uninstall', 'takedown'])
+  })
+
+  it('sends no plugin scope for an ordinary entry, and ignores a forged one', async () => {
+    mockRows = [{ id: 'e1', hostId: 'host-a', paths: ['/x'], plugins: 'all-of-them' }]
+    await post()
+    expect(mockPost.mock.calls[0][0]).toMatchObject({ plugins: null })
+  })
+
+  it('forwards the names a site stopped answering to', async () => {
+    mockRows = [
+      { id: 'detach', hostId: 'host-a', paths: ['/'], aliases: ['cname--old.com', '../x'] },
+    ]
+    await post()
+    expect(mockPost.mock.calls[0][0]).toMatchObject({ aliases: ['cname--old.com'] })
+  })
+
+  it('still drops a deleted site that staged its own address', async () => {
+    mockRows = [
+      {
+        id: 'deleted',
+        hostId: 'host-gone',
+        paths: ['/', '/pricing'],
+        subdomain: 'gone',
+        cname: 'gone.com',
+        aliases: ['cname--gone.com'],
+      },
+    ]
+    await post()
+    expect(mockPost).toHaveBeenCalledTimes(1)
+    expect(mockPost.mock.calls[0][0]).toMatchObject({
+      subdomain: 'gone',
+      hostId: 'host-gone',
+      cname: 'gone.com',
+      paths: ['/', '/pricing'],
+      aliases: ['cname--gone.com'],
+    })
+    expect(mockDeleted).toEqual(['deleted'])
   })
 })

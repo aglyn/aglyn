@@ -266,7 +266,12 @@ const exportSite = async (query = '') => {
 }
 
 const planItem = (plan: any, key: string) => plan.items.find((one: any) => one.key === key)
-const siteWrites = () => writes.filter((one) => !one.path.includes('/packageImports/'))
+// The import's own ledger, and the cache drop it stages in the publish outbox
+// (AGL-4121) — neither is a write to the site.
+const siteWrites = () =>
+  writes.filter(
+    (one) => !one.path.includes('/packageImports/') && !one.path.startsWith('publishOutbox/'),
+  )
 
 beforeAll(async () => {
   await registerPluginServerDeclarations()

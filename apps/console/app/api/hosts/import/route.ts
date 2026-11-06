@@ -1897,10 +1897,14 @@ async function handler(request: Request): Promise<Response> {
      * Awaited, unlike the editor's fire-and-forget announcements: an import
      * is a deliberate, already-slow administrative action whose whole point
      * is that the site now reads differently, so it is worth the bounded 8s
-     * to have it done before the response says the restore finished. Best
-     * effort still — `revalidateEntireHost` never throws.
+     * to have it done before the response says the restore finished. Never
+     * throws, and durable (AGL-4121): the import moved every version pointer
+     * of the site, and those are held for the week-long backstop now, so the
+     * drop is staged in the publish outbox for the drain to retry.
      */
-    await revalidateEntireHost(firestore, hostId)
+    await revalidateEntireHost(firestore, hostId, {
+      durable: { reason: 'site package imported' },
+    })
 
     await logActivity(
       mode === 'restore'
@@ -2165,7 +2169,10 @@ async function undoImport(input: {
   }, { merge: true })
   await closing.commit()
 
-  await revalidateEntireHost(firestore, hostId)
+  // Durable, as the import's own drop is (AGL-4121).
+  await revalidateEntireHost(firestore, hostId, {
+    durable: { reason: 'site package import undone' },
+  })
   await input.logActivity(`Undid a site package import (${reverting.length} items)`)
   await addAdminAudit(firestore, {
     actorUid: input.uid,

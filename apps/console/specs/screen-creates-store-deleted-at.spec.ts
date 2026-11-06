@@ -82,6 +82,8 @@ const NOT_SCREEN_CREATES: Readonly<Record<string, string>> = {
   'apps/console/app/api/hosts/collections/route.ts': 'creates collections; only updates a screen’s kind',
   'apps/console/app/api/hosts/versions/route.ts': 'creates versions under a screen, never the screen',
   'apps/console/utils/api-v1-resources.ts': 'creates media; reads the routing map',
+  'apps/console/utils/server/tenant-revalidate.ts':
+    'reads the routing map to name a site’s pages; creates only publish outbox rows (AGL-4121)',
   'apps/console/constants/screen-publishing.ts': 'merge-sets the publish fields of a screen that exists',
   'apps/console/app/api/hosts/pages/route.ts':
     'merge-sets the publish fields of screens that exist, and moves, trashes or unpublishes them (AGL-3668)',

@@ -44,6 +44,7 @@ import { orderStatusUrl, verifyOrderStatusToken } from './order-status-token'
 import { readActiveMemberSession } from './membership'
 import { resolveTrackedRestockLines } from './restock-flag'
 import { refundHandler } from './refund'
+import { dropStorefrontPages, soldOutMoved } from './sold-out-drop'
 
 /**
  * Returns (RMA, AGL-3611): the buyer's door, the merchant's door, and the
@@ -332,7 +333,10 @@ export async function receiveReturn(request: {
   const returnRef = hostRef.collection('returns').doc(request.returnId)
   const now = request.now ?? Date.now()
   const locationId = String(request.locationId ?? '').trim().slice(0, 100)
-  return firestore.runTransaction(async (transaction) => {
+  // Whether the restock flipped a sold-out verdict the storefront shows
+  // (AGL-4121); a retried attempt can only make the drop spurious.
+  let soldOutFlipped = false
+  const outcome = await firestore.runTransaction(async (transaction) => {
     const snapshot = await transaction.get(returnRef)
     if (!snapshot.exists) return { outcome: 'no_such_return' as const }
     const entry = snapshot.data() as CommerceModel.HostReturn
@@ -392,6 +396,7 @@ export async function receiveReturn(request: {
         ...CommerceModel.productStockFields({ ...product, variants }),
         updatedAtMs: now,
       })
+      soldOutFlipped ||= soldOutMoved(product, { ...product, variants })
       for (const line of lines) {
         units += line.quantity
         transaction.create(hostRef.collection('inventoryAdjustments').doc(createResourceUid()), {
@@ -438,6 +443,13 @@ export async function receiveReturn(request: {
     }
     return { outcome: 'changed' as const, entry: received, order, units }
   })
+  if (soldOutFlipped && outcome.outcome === 'changed') {
+    await dropStorefrontPages({
+      hostId: request.hostId,
+      reason: 'a received return restocked a product',
+    })
+  }
+  return outcome
 }
 
 /**

@@ -18,6 +18,7 @@
 import * as Aglyn from '@aglyn/aglyn/server'
 import { firebaseAdmin, hostConverter } from '@aglyn/tenant-data-admin'
 import {
+  TENANT_CACHE_BACKSTOP_SECONDS,
   tenantDataTag,
   tenantHostAliasTag,
   withRenderCache,
@@ -129,8 +130,20 @@ export function normalizeHostAlias(host: string | null | undefined): string {
  * those busts would be safe; lengthening it further would not, and an hour is
  * already past the point of diminishing returns.
  */
-const HOST_ALIAS_TTL_SECONDS = 3600
-const HOST_DOC_TTL_SECONDS = 3600
+/*
+ * ## A week (AGL-4121)
+ *
+ * The note above called an hour the point of diminishing returns, and for the
+ * READ it was. The page was the other cost: the render reads both entries, so
+ * an hour here held every tenant page on an hourly window whatever the page
+ * declared. Both take the platform backstop now, and the two stale-positive
+ * events are closed at the source instead of by the TTL: detach, both renames
+ * and site deletion stage their alias expiry in the publish outbox
+ * (`revalidateHostAliases` / `dropDeletedSiteCache` with `firestore`), so a
+ * refused call is retried by the console's drain rather than left to lapse.
+ */
+const HOST_ALIAS_TTL_SECONDS = TENANT_CACHE_BACKSTOP_SECONDS
+const HOST_DOC_TTL_SECONDS = TENANT_CACHE_BACKSTOP_SECONDS
 
 async function queryHostIdByAlias(host: string): Promise<string | null> {
   const firestore = firebaseAdmin.app().firestore()

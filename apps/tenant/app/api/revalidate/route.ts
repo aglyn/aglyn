@@ -46,8 +46,10 @@
 
 import { SCHEME_ROUTE_SEGMENTS } from '@aglyn/shared-ui-theme/util/scheme-route-segment'
 import {
+  TENANT_PLUGINS_TAG,
   tenantDataTag,
   tenantHostAliasTag,
+  tenantPluginsTag,
 } from '@aglyn/tenant-data-admin/render-cache'
 import { revalidatePath, revalidateTag } from 'next/cache'
 import { timingSafeEqual } from 'crypto'
@@ -118,6 +120,7 @@ export async function POST(request: Request): Promise<Response> {
     hostId?: unknown
     paths?: unknown
     aliases?: unknown
+    plugins?: unknown
   }
   try {
     payload = (await request.json()) as typeof payload
@@ -149,8 +152,26 @@ export async function POST(request: Request): Promise<Response> {
         .map((alias) => String(alias ?? '').trim())
         .filter((alias) => alias && !alias.includes('/'))
     : []
+  /**
+   * WHICH PLUGINS MAY LOAD changed (AGL-4121): `'host'` for one site (an
+   * uninstall, a switchboard toggle, a plan move), `'everywhere'` for a
+   * platform event (a takedown, a revoked version, realm trust withdrawn).
+   *
+   * Expired with `{ expire: 0 }`, not the `'max'` the data tag takes below.
+   * `'max'` is stale-while-revalidate: the next visitor is still served the
+   * cached page while it regenerates, which for a removed plugin means its
+   * bundle runs for one more visitor on every page. A hard expiry makes that
+   * visitor wait for the fresh render instead. The plugin reads and every
+   * page that made one carry these tags (`tenantPluginGateTags`), so this
+   * reaches every cache key the site is served under — subdomain, custom
+   * domain and scheme — with no path list and no host walk.
+   */
+  const plugins =
+    payload.plugins === 'everywhere' || payload.plugins === 'host'
+      ? payload.plugins
+      : null
   const paths = Array.isArray(payload.paths) ? payload.paths : []
-  if (!paths.length && !aliases.length) {
+  if (!paths.length && !aliases.length && !plugins) {
     return Response.json({ error: 'no paths' }, { status: 400 })
   }
 
@@ -176,6 +197,13 @@ export async function POST(request: Request): Promise<Response> {
   if (hostId && !hostId.includes('/')) {
     revalidateTag(tenantDataTag(hostId), 'max')
     revalidatedTags.push(tenantDataTag(hostId))
+  }
+  if (plugins === 'everywhere') {
+    revalidateTag(TENANT_PLUGINS_TAG, { expire: 0 })
+    revalidatedTags.push(TENANT_PLUGINS_TAG)
+  } else if (plugins === 'host' && hostId && !hostId.includes('/')) {
+    revalidateTag(tenantPluginsTag(hostId), { expire: 0 })
+    revalidatedTags.push(tenantPluginsTag(hostId))
   }
   revalidateTag(tenantHostAliasTag(host), 'max')
   revalidatedTags.push(tenantHostAliasTag(host))

@@ -28,7 +28,11 @@ import {
 import { PLUGIN_DISTRIBUTION } from '@aglyn/aglyn/plugin-manager/plugin-distribution'
 import { firebaseAdmin } from './firebase-admin'
 import { resolveOrgIdForHost } from './organizations'
-import { tenantDataTag, withRenderCache } from '../render-cache'
+import {
+  TENANT_CACHE_BACKSTOP_SECONDS,
+  tenantPluginGateTags,
+  withRenderCache,
+} from '../render-cache'
 
 /**
  * One `pluginSettings` document, or `undefined` if it cannot be read.
@@ -232,20 +236,30 @@ export async function resolveMarketplacePluginVersion(
 }
 
 /**
- * SECURITY-RELEVANT TTL (AGL-1302): the join drops revoked and taken-down
- * versions, so this cache bounds how long a killed plugin keeps loading on
- * published sites when nothing announces the kill. Every write that changes
- * the answer announces itself through `tenant-data:{hostId}`: a takedown or
- * a revoked version through `dropCachesForListing`, an install or uninstall
- * through the marketplace's `announcePinChange` (AGL-3741). So this is the
- * backstop for a fan-out that failed or was capped, not the propagation —
- * five minutes, where it was one, because at one minute it re-read every
- * site's pins, listings, versions and revocations sixty times an hour. Only
- * the HOST-scoped call (the tenant render path) is cached; the console's
- * org-scoped call stays fresh so an install shows up in the workspace the
- * moment it lands.
+ * SECURITY-RELEVANT CACHE (AGL-1302, AGL-4121): the join drops revoked,
+ * taken-down, untrusted and switched-off versions, so this entry decides which
+ * plugins a published site loads.
+ *
+ * It is no longer bounded by its TTL. Every write that changes the answer
+ * expires it, and every page that read it, the moment it lands, through the
+ * plugin tags (`tenantPluginGateTags`), which the tenant expires with
+ * `{ expire: 0 }` rather than stale-while-revalidate:
+ *
+ * - a site's set (an install, an uninstall, a version re-pin, a workspace
+ *   switchboard toggle, a plan move) expires `tenant-plugins:{hostId}` for each
+ *   site it reaches;
+ * - a platform event (a takedown, a revoked version, realm trust withdrawn or
+ *   rejected away) expires `tenant-plugins` on every site at once.
+ *
+ * Each of those is staged in the publish outbox BEFORE it is sent, so a
+ * refused call is retried by the console's drain, and an alert is raised when
+ * neither the call nor the outbox entry landed. That is what lets the TTL be
+ * the platform backstop rather than five minutes: at 300s this one read held
+ * every full page on a five-minute window (#2459). Only the HOST-scoped call
+ * (the tenant render path) is cached; the console's org-scoped call stays
+ * fresh so an install shows up in the workspace the moment it lands.
  */
-const REALM_PLUGIN_INSTALLS_TTL_SECONDS = 300
+export const REALM_PLUGIN_INSTALLS_TTL_SECONDS = TENANT_CACHE_BACKSTOP_SECONDS
 
 export async function getRealmPluginInstalls(options: {
   orgId?: string
@@ -257,7 +271,7 @@ export async function getRealmPluginInstalls(options: {
     return await withRenderCache({
       key: ['tenant-realm-plugins', hostId],
       revalidate: REALM_PLUGIN_INSTALLS_TTL_SECONDS,
-      tags: [tenantDataTag(hostId)],
+      tags: tenantPluginGateTags(hostId),
       read: () => resolveRealmPluginInstalls(options),
     })
   } catch (error) {

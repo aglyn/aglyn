@@ -17,6 +17,7 @@
 
 import { notifyHostManagers } from '@aglyn/tenant-data-admin'
 import * as CommerceModel from '../model'
+import { dropStorefrontPages, soldOutMoved } from './sold-out-drop'
 
 /**
  * THE ATOMIC STOCK DECREMENT (AGL-2320).
@@ -240,6 +241,11 @@ export async function decrementVariantStock(options: {
     // stay in agreement about a decrement that did not happen.
     console.error('Stock decrement failed', hostId, productId, variantId, error)
     return { ...nothing, failed: true }
+  }
+  // A sale that sold the product out has to reach the cached storefront: the
+  // page and every grid show the verdict (AGL-4121). Only on a flip.
+  if (!outcome.failed && soldOutMoved(outcome.before, outcome.after)) {
+    await dropStorefrontPages({ hostId, reason: 'a sale sold out a product' })
   }
   // The oversell is now LOUD (AGL-2320). `content.lowStock` is deliberately
   // reused rather than a new notification type: the type union carries a label

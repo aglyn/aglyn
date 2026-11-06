@@ -28,6 +28,18 @@ import {
   type MemberSessionCheck,
 } from './membership'
 import { inspectReviewToken, redeemReviewTokenIn } from './review-tokens'
+import { dropStorefrontPages } from './sold-out-drop'
+
+/**
+ * A verified review is published the moment it is submitted, and the product
+ * page bakes the rating and the list into its cached HTML (AGL-4121). The
+ * moderation card drops the site when a merchant approves one; a review that
+ * skips moderation has to do the same, or it waits out the week-long backstop.
+ * A pending review is not shown, so it drops nothing.
+ */
+async function announcePublishedReview(hostId: string): Promise<void> {
+  await dropStorefrontPages({ hostId, reason: 'a verified review was published' })
+}
 
 export interface PublicProductReview {
   id: string
@@ -581,6 +593,7 @@ async function submitReview(
         .set({ emailVerifiedAtMs: nowMs }, { merge: true })
         .catch(() => undefined)
     }
+    await announcePublishedReview(hostId)
     return res.status(200).json({ ok: true, pending: false, verified: true })
   }
 
@@ -612,6 +625,7 @@ async function submitReview(
       status: CommerceModel.initialReviewStatus(true),
       createdAtMs: Date.now(),
     })
+    await announcePublishedReview(hostId)
     return res.status(200).json({ ok: true, pending: false, verified: true })
   }
 

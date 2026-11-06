@@ -18,7 +18,7 @@
 import { firebaseAdmin } from '@aglyn/tenant-data-admin'
 import type { PluginSiteCache } from '@aglyn/aglyn/plugin-manager/plugin-site-cache'
 import { announceLivePaths } from './announce-live-paths'
-import { dropSiteCaches } from './tenant-revalidate'
+import { dropPluginsEverywhere, dropSiteCaches } from './tenant-revalidate'
 
 /**
  * This app's implementation of `core.site-cache` (AGL-3080), in its own file
@@ -33,15 +33,28 @@ import { dropSiteCaches } from './tenant-revalidate'
  * across this app. `report-server-error.ts` is the same shape for the same
  * reason: hold the static import in a relative module, defer the module.
  *
- * `complete: true` unconditionally, and that is a claim worth stating.
- * `dropSiteCaches` never throws and each site is best effort, so reaching
- * the end means every site we were given was attempted — which is what the
- * contract's `complete` asks. The sites a cap held back come back as
- * `skipped`, not as incompleteness: that was a decision, and it is logged.
+ * `complete` is a claim worth stating (AGL-4121). Every whole-site drop is
+ * staged in the publish outbox before it is sent, so a site whose drop the
+ * tenant refused — or that the fan-out cap held back — is still dropped by
+ * the drain. `complete` is false only when a drop neither landed nor could be
+ * staged, which `dropSiteCaches` has already raised as an operator alert; a
+ * security caller fails loudly on it. The sites a cap held back come back as
+ * `skipped`: that was a decision, it is logged, and they are queued.
+ *
+ * `plugins: 'everywhere'` is one call, not a fan-out: the tenant expires the
+ * global plugin tag that every plugin read and every page that made one
+ * carries, so a platform event reaches every site with no host walk.
  */
 export const consoleSiteCache: PluginSiteCache = {
-  drop: async ({ hostIds, reason, paths }) => {
+  drop: async ({ hostIds, reason, paths, plugins }) => {
     const firestore = firebaseAdmin.app().firestore()
+    if (plugins === 'everywhere') {
+      const complete = await dropPluginsEverywhere(firestore, {
+        reason,
+        carrierHostIds: hostIds,
+      })
+      return { dropped: complete ? 1 : 0, skipped: 0, complete }
+    }
     // A site the caller placed exactly loses only the pages it named, through
     // the same announcement a server publish route makes; every other site
     // named loses every page, as a revoke needs.
@@ -56,14 +69,15 @@ export const consoleSiteCache: PluginSiteCache = {
         dropped += 1
       }
     }
-    const { hosts, hostsDropped } = await dropSiteCaches(firestore, {
+    const { hosts, hostsDropped, lost } = await dropSiteCaches(firestore, {
       hostIds: whole,
       reason,
+      ...(plugins === 'host' ? { plugins: 'host' as const } : {}),
     })
     return {
       dropped: dropped + hosts.length,
       skipped: hostsDropped,
-      complete: true,
+      complete: !lost,
     }
   },
 }

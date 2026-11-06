@@ -72,8 +72,60 @@ import { unstable_cache } from 'next/cache'
 export const tenantDataTag = (hostId: string): string => `tenant-data:${hostId}`
 
 /**
+ * THE BACKSTOP every tenant render-path read and the page itself share
+ * (AGL-4121): seven days.
+ *
+ * Freshness is change-driven. Every write that changes what a page shows
+ * drops it on demand, and the security-relevant drops (a plugin removed,
+ * disabled, taken down, revoked or untrusted) are staged in the publish
+ * outbox first, so a failed call is retried by the drain rather than left to
+ * this timer. The timer only bounds an unannounced direct Firestore edit.
+ *
+ * One number on purpose. Next lowers a page's window to the SHORTEST cached
+ * read its render makes (`unstable_cache` and `fetch` both shrink the work
+ * store's `revalidate`), so a single read left on a shorter TTL quietly
+ * becomes the page's window — exactly what kept #2459's one-day page on five
+ * minutes. `tenant-page-window.spec.ts` sweeps the render path for that.
+ */
+export const TENANT_CACHE_BACKSTOP_SECONDS = 604800
+
+/**
+ * Every cached read that decides WHICH PLUGINS a site may load — the signed
+ * realm installs, the pinned installs with their kill-switch state, and the
+ * image hosts those plugins declare — carries these tags beside
+ * `tenantDataTag` (AGL-4121), and so does every page whose render read one.
+ *
+ * - `tenantPluginsTag(hostId)`: one site's plugin set changed (an uninstall,
+ *   a switchboard toggle, a plan move).
+ * - `TENANT_PLUGINS_TAG`: a platform event changed it for every site at once
+ *   (a takedown, a revoked version, realm trust withdrawn). One tag bust
+ *   reaches every affected site with no host walk and no fan-out cap.
+ *
+ * The tenant's `/api/revalidate` expires both with `{ expire: 0 }`, not the
+ * stale-while-revalidate `'max'` the data tag takes: a removed plugin must
+ * not run for even one more visitor.
+ */
+export const TENANT_PLUGINS_TAG = 'tenant-plugins'
+export const tenantPluginsTag = (hostId: string): string =>
+  `tenant-plugins:${hostId}`
+
+/** The full tag set for a read that decides which plugins load on a site. */
+export const tenantPluginGateTags = (hostId: string): string[] => [
+  tenantDataTag(hostId),
+  tenantPluginsTag(hostId),
+  TENANT_PLUGINS_TAG,
+]
+
+/**
  * The backstop TTL for published site data — every read that
  * `revalidateTag(tenantDataTag(hostId))` busts on publish.
+ *
+ * ## Seven days (AGL-4121)
+ *
+ * The hour below became the backstop once every product write announced
+ * itself; AGL-4121 audited the remaining unannounced writers (shopper stock
+ * and reviews, the plugin switchboard, realm trust) and wired them, so the
+ * hour is now {@link TENANT_CACHE_BACKSTOP_SECONDS}.
  *
  * WHY AN HOUR AND NOT A MINUTE (2026-08-26, from the Vercel cost review).
  *
@@ -117,7 +169,7 @@ export const tenantDataTag = (hostId: string): string => `tenant-data:${hostId}`
  * cache here and carries its own memo, which is what
  * `lockdown-middleware-propagation.spec.ts` measures.
  */
-export const PUBLISHED_SITE_DATA_TTL_SECONDS = 3600
+export const PUBLISHED_SITE_DATA_TTL_SECONDS = TENANT_CACHE_BACKSTOP_SECONDS
 
 /**
  * The backstop for the one read a screen publish changes under an UNCHANGED
@@ -159,8 +211,18 @@ export const PUBLISHED_SITE_DATA_TTL_SECONDS = 3600
  * one per hour — regenerations are already bounded by the ISR window, so the
  * ceiling is the render rate and not the request rate. That is the price of
  * the bound, and it is the cheapest read on the path.
+ *
+ * ## Equal to the page window again (AGL-4121)
+ *
+ * The reasoning above held while the pointer sat BELOW the page window. It
+ * stopped holding once AGL-4121 measured that a TTL read in the render lowers
+ * the page's own window to match: at 600s the pointer was what regenerated
+ * every page every ten minutes. The failure it bounded is now closed at the
+ * source instead — every pointer move rides the publish outbox (AGL-2575),
+ * whose drain retries a refused announce — so the pointer takes the backstop
+ * and stays exactly `<=` the page window, which the spec still enforces.
  */
-export const PUBLISH_POINTER_TTL_SECONDS = 600
+export const PUBLISH_POINTER_TTL_SECONDS = TENANT_CACHE_BACKSTOP_SECONDS
 
 /**
  * The alias→hostId resolution is tagged separately because it is the one
@@ -240,5 +302,29 @@ export async function withRenderCache<T>(
     // before the callback runs, so reading directly is not a double read.
     if (isMissingIncrementalCache(error)) return toPlainJson(await read())
     throw error
+  }
+}
+
+/**
+ * Lowers the window of the page being rendered to `seconds`, and nothing
+ * else (AGL-4121).
+ *
+ * For the narrow cases where a page shows something that changes on a clock
+ * rather than on a write — a publish schedule that is still pending. Next
+ * takes the shortest `revalidate` any cached read made during a regeneration,
+ * so a tiny cached constant read with this TTL holds THAT page (and only
+ * that page) on the short window, while every other page keeps the backstop.
+ *
+ * Outside a Next render (jest, scripts) it is a no-op.
+ */
+export async function capRenderWindow(seconds: number): Promise<void> {
+  const window = Math.max(1, Math.floor(seconds))
+  try {
+    await unstable_cache(async () => window, ['tenant-render-window-cap', String(window)], {
+      revalidate: window,
+    })()
+  } catch (error) {
+    if (isMissingIncrementalCache(error)) return
+    console.error('[render-cache] could not cap the page window', error)
   }
 }

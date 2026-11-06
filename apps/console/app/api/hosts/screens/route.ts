@@ -484,7 +484,13 @@ async function handler(request: Request): Promise<Response> {
        * 4xx above without writing, and dropping the whole site's cache
        * because somebody was told "no" is a cost with nothing behind it.
        */
-      if (response.ok) await revalidateEntireHost(firestore, hostId)
+      // Durable (AGL-4121): the site's pages are held for the week-long
+      // backstop now, so a refused drop is staged for the drain to retry.
+      if (response.ok) {
+        await revalidateEntireHost(firestore, hostId, {
+          durable: { reason: 'error screen changed' },
+        })
+      }
       return response
     }
 

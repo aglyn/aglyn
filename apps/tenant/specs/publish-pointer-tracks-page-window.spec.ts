@@ -70,12 +70,20 @@ const RENDER_CACHE = join(
 function pointerTtlSeconds(): number {
   const source = readFileSync(RENDER_CACHE, 'utf8')
   const match = source.match(
-    /^export const PUBLISH_POINTER_TTL_SECONDS = (\d+)$/m,
+    /^export const PUBLISH_POINTER_TTL_SECONDS = (\d+|TENANT_CACHE_BACKSTOP_SECONDS)$/m,
   )
   if (!match) {
     throw new Error('no `PUBLISH_POINTER_TTL_SECONDS` in render-cache.ts')
   }
-  return Number(match[1])
+  if (match[1] !== 'TENANT_CACHE_BACKSTOP_SECONDS') return Number(match[1])
+  // Since AGL-4121 the pointer takes the shared backstop by name.
+  const backstop = source.match(
+    /^export const TENANT_CACHE_BACKSTOP_SECONDS = (\d+)$/m,
+  )
+  if (!backstop) {
+    throw new Error('no `TENANT_CACHE_BACKSTOP_SECONDS` in render-cache.ts')
+  }
+  return Number(backstop[1])
 }
 
 /** The route segment's own ISR window, read from the page that declares it. */

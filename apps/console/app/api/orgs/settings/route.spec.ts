@@ -124,6 +124,16 @@ function mockMakeFirestore() {
   }
 }
 
+/** Every workspace-wide live-site drop the route asked for (AGL-4121). */
+const mockOrgDrops: Array<{ orgId: string; options: unknown }> = []
+jest.mock('../../../../utils/server/tenant-revalidate', () => ({
+  __esModule: true,
+  revalidateOrgHosts: async (_firestore: unknown, orgId: string, options: unknown) => {
+    mockOrgDrops.push({ orgId, options })
+    return []
+  },
+}))
+
 jest.mock('next/server', () => ({
   __esModule: true,
   // Recorded, NEVER invoked: the deferred work on the profile branch talks to
@@ -462,6 +472,49 @@ describe('org settings honour an override, not just the role (AGL-2350)', () => 
  * answers its `membership/*` POST is off — a live site serving `/signin` with
  * nothing behind it.
  */
+/**
+ * The switchboard decides which plugins every site in the workspace loads, and
+ * the live sites hold that answer with their pages for the week-long backstop
+ * (AGL-4121). A change has to drop every site's plugin set, awaited — not left
+ * to the TTL, and not deferred past the response where it could be lost.
+ */
+describe('set-enabled-plugins drops the workspace’s live plugin sets', () => {
+  it('drops every site, plugin set included, when the set changed', async () => {
+    seedOrg()
+    mockDocs.set(`orgs/${ORG}`, { ...mockDocs.get(`orgs/${ORG}`), enabledPlugins: ['mui', 'redirects'] })
+    mockOrgDrops.length = 0
+    const response = await POST(
+      post({ orgId: ORG, action: 'set-enabled-plugins', enabledPlugins: ['mui'] }),
+    )
+    expect(response.status).toBe(200)
+    expect(mockOrgDrops).toEqual([
+      {
+        orgId: ORG,
+        options: { plugins: 'host', reason: 'workspace plugin switchboard changed' },
+      },
+    ])
+  })
+
+  it('drops nothing when the same set is saved again', async () => {
+    seedOrg()
+    mockDocs.set(`orgs/${ORG}`, { ...mockDocs.get(`orgs/${ORG}`), enabledPlugins: ['mui', 'redirects'] })
+    mockOrgDrops.length = 0
+    await POST(
+      post({ orgId: ORG, action: 'set-enabled-plugins', enabledPlugins: ['redirects', 'mui'] }),
+    )
+    expect(mockOrgDrops).toEqual([])
+  })
+
+  it('drops when a default-open workspace first stores an explicit set', async () => {
+    seedOrg()
+    mockOrgDrops.length = 0
+    await POST(
+      post({ orgId: ORG, action: 'set-enabled-plugins', enabledPlugins: ['mui'] }),
+    )
+    expect(mockOrgDrops).toHaveLength(1)
+  })
+})
+
 describe('set-enabled-plugins refuses a set that strands a dependent', () => {
   it('400s a set with User Accounts on and Commerce off, storing nothing', async () => {
     seedOrg()

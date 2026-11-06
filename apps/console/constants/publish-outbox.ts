@@ -197,3 +197,60 @@ export function isPublishOutboxDue(ageMs: number): boolean {
 export function isPublishOutboxStalled(attempts: number): boolean {
   return attempts >= PUBLISH_OUTBOX_MAX_ATTEMPTS
 }
+
+/**
+ * Keys only the SERVER writes on an entry (AGL-4121), never admitted by the
+ * rules — so they are deliberately not in `PUBLISH_OUTBOX_OPTIONAL_FIELDS`,
+ * which is the rules' `hasOnly` list for a client write.
+ *
+ * - `plugins`: which plugins may load changed — `'host'` for this site,
+ *   `'everywhere'` for a platform event. The drain forwards it, and the tenant
+ *   expires the plugin tags with it.
+ * - `aliases`: names this site stopped answering to (a detached domain's
+ *   `cname--` sentinel, a renamed subdomain), expired with the drop.
+ * - `subdomain`, `cname`: where to send the drop when the host document is
+ *   gone by the time the drain runs (a deleted site).
+ * - `reason`: what staged it, for the operator reading a stalled entry.
+ */
+export const PUBLISH_OUTBOX_SERVER_FIELDS = [
+  'plugins',
+  'aliases',
+  'subdomain',
+  'cname',
+  'reason',
+] as const
+
+/** Which plugin scope an entry asks the tenant to expire. */
+export type PublishOutboxPluginsScope = 'host' | 'everywhere'
+
+/** The plugin scope an entry carries, or `null`. Anything else reads as none. */
+export function publishOutboxPluginsScope(
+  value: unknown,
+): PublishOutboxPluginsScope | null {
+  return value === 'host' || value === 'everywhere' ? value : null
+}
+
+/** The wider of two plugin scopes: `everywhere` covers `host`. */
+export function widerPluginsScope(
+  a: PublishOutboxPluginsScope | null,
+  b: PublishOutboxPluginsScope | null,
+): PublishOutboxPluginsScope | null {
+  if (a === 'everywhere' || b === 'everywhere') return 'everywhere'
+  return a ?? b
+}
+
+/**
+ * The aliases an entry may carry: bare labels or `cname--` sentinels, the
+ * shapes the tenant's alias tag is keyed on, and nothing that could name a
+ * path.
+ */
+export function sanitizePublishOutboxAliases(aliases: unknown): string[] {
+  if (!Array.isArray(aliases)) return []
+  return [
+    ...new Set(
+      aliases
+        .map((alias) => String(alias ?? '').trim().toLowerCase())
+        .filter((alias) => alias && !alias.includes('/') && alias.length <= 300),
+    ),
+  ].slice(0, 20)
+}
