@@ -223,6 +223,7 @@ export const PLUGIN_DOCS_SECTION_EXCERPTS: {
     '#categories-and-tags': 'The Categories & collections card, in the products hub\'s catalog, organizes your products into categories and collections that storefront pages and filters use.',
     '#review-moderation': 'The Review moderation card, in the products hub\'s Promotions section, lists your reviews so you can publish, hide and reply to them.',
     '#review-settings': 'The Reviews card on Products → Promotions decides who can review your products and when customers are asked for a review.',
+    '#subscriptions-list': 'Products → Subscriptions lists every subscription on the site, newest first.',
   },
   commerce: {
     '#commerce-analytics': 'The Commerce analytics card, in the Analytics section of the products hub, shows the last 30 days of revenue, orders and average order value, a 14-day revenue trend and your top products.',

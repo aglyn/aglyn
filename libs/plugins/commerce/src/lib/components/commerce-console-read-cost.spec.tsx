@@ -214,6 +214,7 @@ const SECTION_COLLECTIONS = {
   // `restockAlerts` is not here: the Recovery & alerts card COUNTS it by
   // aggregation and never listens to it (AGL-3321).
   orders: ['orders', 'checkouts'],
+  subscriptions: ['subscriptions'],
   promotions: ['discounts', 'coupons', 'giftCards', 'reviews'],
   reservations: ['reservations'],
 } as const

@@ -97,7 +97,8 @@ See [Filter and search a list](../../getting-started/console-tour.md#filter-and-
   amount. Order history takes the **See orders and webhooks** permission, which a site's
   admins and editors hold by default.
 - **Subscriptions** — active and past storefront subscriptions with their
-  renewal date.
+  renewal date. Like order history, it takes the **See orders and webhooks**
+  permission.
 - **Lifetime purchases** — everything the member actually paid: charged order
   totals minus refunds (pending and canceled orders don't count).
 

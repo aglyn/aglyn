@@ -70,6 +70,7 @@ import ShippingEasyCard from './console/shippingeasy-card.component'
 import StockMovementsCard from './console/stock-movements-card.component'
 import StoreSettingsCard from './console/store-settings-card.component'
 import StorefrontTaxSummaryCard from './console/storefront-tax-summary-card.component'
+import SubscriptionsCard from './console/subscriptions-card.component'
 import SuppliersCard from './console/suppliers-card.component'
 import TaxSettingsCard from './console/tax-settings-card.component'
 import { COMMERCE_PROMOTIONS_ZONE } from './console/store-zones'
@@ -217,6 +218,9 @@ function sectionBody(
           ]}
         />
       )
+    case 'subscriptions':
+      // Every subscription, its recurring revenue and its invoices (AGL-4191).
+      return <SubscriptionsCard hostId={hostId} />
     case 'returns':
       // Returns (AGL-3611); `?return={id}` opens one on arrival.
       return <ReturnsCard hostId={hostId} />

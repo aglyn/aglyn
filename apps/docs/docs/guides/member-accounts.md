@@ -96,7 +96,10 @@ the slug `account`, which is where commerce gates point anonymous visitors:
   your configurable **Signed-out heading** above.
 - **Signed in**, it renders the member's profile with **Sign out**, plus
   sections for **Orders** (with status chips and tracking), **Subscriptions**
-  (each with a **Manage** button that opens the Stripe Billing Portal),
+  (each with its price, the next date that matters — **Renews**, **Trial
+  ends**, **Ends** after the member cancels, or **Ended** — a **Manage**
+  button that opens the Stripe Billing Portal, and **Billing history** with
+  each paid invoice and a link to Stripe's copy),
   **Downloads** (digital purchases and license keys), and **Addresses**.
 
 ![The account page on the live site: the Customer account block's signed-out state with sign-in and create-account tabs](/img/guides/members-account-screen.png)
@@ -191,7 +194,9 @@ Click a member to open the **member drawer**:
   status, total, date, any refunded amount, and the Stripe payment reference.
   Needs the **See orders and webhooks** permission on the site, which its admins and
   editors hold by default.
-- **Subscriptions** — each with its renewal date and status chip.
+- **Subscriptions** — each with its price, renewal date and status chip. Takes
+  the same **See orders and webhooks** permission. **Products → Subscriptions**
+  lists every member's subscriptions together.
 - **Addresses** — the member's saved addresses.
 
 ![The member drawer open over the Users page showing lifetime purchases, orders with payment references, and the Suspend member action](/img/guides/members-member-drawer.png)

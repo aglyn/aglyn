@@ -101,6 +101,18 @@ import { recordSellerStoreSaleHardware, sellerStoreOrderHardwareFields } from '.
 import { posOrderRefundStripeId } from './pos-order-refund-ids'
 
 /**
+ * A Stripe subscription's current period end, in seconds (AGL-4191). Older API
+ * versions carry it on the subscription; newer ones moved it to each item.
+ * Exported for the spec.
+ */
+export function subscriptionPeriodEnd(object: any): number | null {
+  const own = Number(object?.current_period_end)
+  if (Number.isFinite(own) && own > 0) return own
+  const item = Number(object?.items?.data?.[0]?.current_period_end)
+  return Number.isFinite(item) && item > 0 ? item : null
+}
+
+/**
  * Assigns unassigned license keys for a digital product (AGL-308):
  * stamps order/email on the key docs, returns the key strings, and
  * nudges managers when the pool runs low.
@@ -2365,9 +2377,18 @@ export const commerceBillingWebhookHandler: BillingWebhookHandler = async ({
                   type === 'customer.subscription.deleted'
                     ? 'canceled'
                     : String(object?.status ?? 'active'),
-                currentPeriodEndMs: object?.current_period_end
-                  ? object.current_period_end * 1000
+                // Newer Stripe API versions keep the period on the item, not
+                // the subscription; either answers the same question.
+                currentPeriodEndMs: subscriptionPeriodEnd(object)
+                  ? Number(subscriptionPeriodEnd(object)) * 1000
                   : null,
+                // Cancelled in the billing portal: access runs to the period
+                // end and nothing more is charged (AGL-4191). Without this the
+                // account page and the Subscriptions list would promise a
+                // renewal that will not happen.
+                cancelAtPeriodEnd:
+                  type !== 'customer.subscription.deleted' &&
+                  object?.cancel_at_period_end === true,
               },
               { merge: true },
             )
@@ -3202,10 +3223,9 @@ export const commerceBillingWebhookHandler: BillingWebhookHandler = async ({
         if (!isOpeningInvoice && paidCents > 0) {
           const renewalEmail =
             object?.customer_email ?? soldSnapshot.get('customerEmail') ?? null
-          // A physical cycle now lands in Orders (AGL-1750), but the console
-          // still has no Subscriptions tab, so for a digital or service
-          // subscription this notification remains the only place a merchant
-          // learns the money arrived at all.
+          // A physical cycle lands in Orders (AGL-1750); every cycle, digital
+          // and service ones too, is listed under the subscription in
+          // Products → Subscriptions (AGL-4191), which this links to.
           const renewalPrice = `$${(paidCents / 100).toFixed(2)}${
             interval ? `/${interval}` : ''
           }`
@@ -3217,7 +3237,7 @@ export const commerceBillingWebhookHandler: BillingWebhookHandler = async ({
               `${renewalEmail ? `${String(renewalEmail)}'s` : 'A'} ` +
               `subscription to ${snapshot.name || 'a product'} on {site} ` +
               `renewed for ${renewalPrice}.`,
-            link: `/${invoiceHostId}/products`,
+            link: `/${invoiceHostId}/products/subscriptions?subscription=${encodeURIComponent(subscriptionId)}`,
           })
           // RFM (AGL-328): a subscriber in month 12 has paid twelve times, and
           // counting only the first charge ranks them as a one-purchase

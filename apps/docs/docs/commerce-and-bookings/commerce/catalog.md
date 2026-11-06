@@ -199,6 +199,33 @@ on the notice in the editor) if that is not what you want. On a **Both**
 product the stock field stays live, because the one-time sales do
 decrement it.
 
+### Your subscribers {#subscriptions-list}
+
+**Products → Subscriptions** lists every subscription on the site, newest
+first. Filter it by status: **Active**, **Trial**, **Past due**, **Unpaid**,
+**Incomplete** or **Canceled**. Each row shows the customer, the plan, its
+price per month or year, the next date that matters (**Renews**, **Trial
+ends**, **Ends** for a subscriber who canceled but keeps access until the
+period is over, or **Ended**) and what they have paid so far. A test-mode
+subscription carries a **Test** chip.
+
+Open a row to see the subscription's invoices: the date each cycle was paid,
+the period it covered, the amount, and **View** for Stripe's copy of the
+invoice. The **Subscription renewed** notification opens the subscription it
+is about.
+
+Above the list:
+
+- **Monthly recurring revenue** — what active and past-due subscriptions
+  bring in each month, paid in live mode. A yearly plan counts as a twelfth of
+  its price, and tax is left out.
+- **Paying subscribers**, **In a free trial** and **Past due** — how many
+  live-mode subscriptions are in each state.
+
+Subscribers see the same subscription on their [account page](../../guides/member-accounts.md):
+its price, the next date, **Manage** (which opens Stripe's billing page), and
+**Billing history** with each paid invoice.
+
 ## Write and propose with AI {#ai}
 
 Aglyn AI can write a product's description, search listing and tags from what it says
