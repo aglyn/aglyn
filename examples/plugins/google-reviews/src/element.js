@@ -307,7 +307,7 @@ function GoogleReviews(props) {
           spacing: 2,
           sx: { alignItems: 'center', justifyContent: 'space-between', flexWrap: 'wrap', rowGap: 1 },
         },
-        // Where the reviews come from, as Google's policies ask attribution to be kept.
+        // Says where the reviews come from.
         h(Typography, { variant: 'caption', color: 'text.secondary', component: 'p' }, 'Reviews from Google'),
         summary.reviewUrl
           ? h(
