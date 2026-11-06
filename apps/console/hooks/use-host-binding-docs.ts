@@ -16,10 +16,14 @@
  */
 'use client'
 
+import {
+  EditorPluginConnectionsContext,
+  type EditorPluginConnections,
+} from '@aglyn/aglyn/app-utils/plugin-connection-editor'
 import type { CanvasBindingLookups } from '@aglyn/besigner-ui'
 import { useFirestore } from '@aglyn/tenant-feature-instance'
 import { collection, limit, query } from 'firebase/firestore'
-import { useMemo } from 'react'
+import { useContext, useMemo } from 'react'
 import useFirestoreCollection from './use-firestore-collection'
 
 /**
@@ -60,9 +64,29 @@ export function useHostBindingDocs(hostId: string) {
  * by its name (`normalizeBindingTokens`). Names first so an id key wins a
  * collision — the id is the reference that survives a rename.
  */
+/**
+ * The variables a site's declared plugin connections give it (AGL-4196), as
+ * documents the lookups read like the site's own: keyed by the
+ * `{{var:<listingId>__<connectionId>-<field>}}` id, named for a person (the
+ * connection's label and the field), holding what the last sync wrote. The
+ * canvas then prints the value the published page will, and a bound token
+ * reads by its name rather than its id.
+ */
+export function connectionVariableDocs(
+  connections: EditorPluginConnections | undefined,
+): Array<{ $id: string; name: string; value: string; connection: true }> {
+  return (connections?.variables ?? []).map((variable) => ({
+    $id: variable.id,
+    name: variable.label,
+    value: variable.value ?? '',
+    connection: true,
+  }))
+}
+
 export function bindingLookupsFromDocs(
   variableDocs: readonly any[] | undefined,
   functionDocs: readonly any[] | undefined,
+  connections?: EditorPluginConnections,
 ): { variables: Record<string, any>; functions: Record<string, any> } {
   const live = (docs: readonly any[] | undefined) =>
     (docs ?? []).filter((one) => !one?.deletedAt && one?.name)
@@ -72,7 +96,12 @@ export function bindingLookupsFromDocs(
     for (const one of live(docs)) map[one.$id] = one
     return map
   }
-  return { variables: keyed(variableDocs), functions: keyed(functionDocs) }
+  // The connections' first, so a site variable that happens to share a name
+  // keeps it; their ids can never be a site's own (`pluginConnectionVariableId`).
+  return {
+    variables: keyed([...connectionVariableDocs(connections), ...(variableDocs ?? [])]),
+    functions: keyed(functionDocs),
+  }
 }
 
 /**
@@ -85,9 +114,10 @@ export function useBindingTokenLookups(
   hostId: string,
 ): CanvasBindingLookups | null {
   const { variableDocs, functionDocs, loaded } = useHostBindingDocs(hostId)
+  const connections = useContext(EditorPluginConnectionsContext)
   return useMemo(
-    () => (loaded ? bindingLookupsFromDocs(variableDocs, functionDocs) : null),
-    [loaded, variableDocs, functionDocs],
+    () => (loaded ? bindingLookupsFromDocs(variableDocs, functionDocs, connections) : null),
+    [loaded, variableDocs, functionDocs, connections],
   )
 }
 

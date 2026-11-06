@@ -15,6 +15,7 @@
  * limitations under the License.
  */
 
+import { directSellerAccountForHost, fetchOnSellerThenPlatform } from './seller-stripe-account'
 import { holdsCommerceSiteKey } from './commerce-site-keys'
 import { commerceSitePermissionRefusal } from '../model/plugin-permissions'
 import * as CommerceModel from '../model'
@@ -374,7 +375,7 @@ export const cancelOrderHandler: PluginApiHandler = async (req, res) => {
     const expireSessionId = (outcome as { expireSessionId?: string })
       .expireSessionId
     if (expireSessionId && process.env.STRIPE_SECRET_KEY) {
-      const expiry = await fetch(
+      const expiry = await fetchOnSellerThenPlatform(
         `https://api.stripe.com/v1/checkout/sessions/${expireSessionId}/expire`,
         {
           method: 'POST',
@@ -383,6 +384,7 @@ export const cancelOrderHandler: PluginApiHandler = async (req, res) => {
             'Content-Type': 'application/x-www-form-urlencoded',
           },
         },
+        await directSellerAccountForHost(hostId),
       ).catch(() => null)
       if (!expiry?.ok) {
         console.error(

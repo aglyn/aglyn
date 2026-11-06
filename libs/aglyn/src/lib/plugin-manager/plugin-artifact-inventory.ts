@@ -111,6 +111,11 @@ export interface PluginArtifactVersion extends PluginArtifactClaim {
   /** What the manifest says it contributes, or `null` when it says nothing. */
   declaredContributions: unknown
   /**
+   * The manifest's declared connections (AGL-4193), or `null` when it
+   * declares none. Optional so a source written before them still reads.
+   */
+  declaredConnections?: unknown
+  /**
    * Caches a fresh verdict on THIS version.
    *
    * A method on the row rather than a lookup on the source, because the row

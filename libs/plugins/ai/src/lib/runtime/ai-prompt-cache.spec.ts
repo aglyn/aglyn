@@ -882,7 +882,8 @@ describe('the ledger: what each request caches, against its model’s minimum', 
       'site-plan': { prefixTokens: 3_133, minimum: 512, caches: true, toolsStable: true },
       // A generative Improve it's one plan (AGL-4152).
       // A generative Improve it's plan names each page's role and two nav rules (AGL-4152): up 187.
-      'site-import-plan': { prefixTokens: 1_855, minimum: 512, caches: true, toolsStable: true },
+      // Its heroes described as they draw, and a wide opening photo kept out of a boxed one (AGL-4152): up 64.
+      'site-import-plan': { prefixTokens: 1_919, minimum: 512, caches: true, toolsStable: true },
       // The layout, template, component and section doors each grew 20 when
       // the palette learned the layout elements' Color scheme (AGL-3284).
       // All four then came DOWN 2 at AGL-3411: Tertiary

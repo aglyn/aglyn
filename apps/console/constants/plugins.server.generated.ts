@@ -31,7 +31,7 @@ export const CONSOLE_PLUGIN_SERVER_MANIFEST: PluginLoadManifest = [
   },
   {
     id: 'marketplace',
-    apiPrefixes: ["marketplace"],
+    apiPrefixes: ["marketplace","plugin-connections"],
     register: {"consoleApi":"registerMarketplaceConsoleApi"},
     load: () => import('@aglyn/plugins-marketplace/server'),
   },

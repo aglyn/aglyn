@@ -30,6 +30,7 @@ import {
   type ReactNode,
   useCallback,
   useEffect,
+  useLayoutEffect,
   useMemo,
   useRef,
   useState,
@@ -188,6 +189,45 @@ const TRIGGER_SX = {
   '& .MuiButton-endIcon': { marginRight: 0 },
 } as const
 
+/** How far a dropdown panel keeps from the window's edges, in px. */
+export const PANEL_EDGE_MARGIN = 16
+/** The gap between a trigger and its open panel, in px. */
+export const PANEL_GAP = 8
+
+/** Where an open panel must move to sit inside the window, and how tall it may be. */
+export interface PanelFit {
+  /** Horizontal nudge in px, applied on top of the panel's own placement. */
+  shift: number
+  /** The most the panel may be before it scrolls inside itself, or null. */
+  maxHeight: number | null
+}
+
+/**
+ * Keeps an open panel inside the window (AGL-4200). A wide or full panel is
+ * centered under its trigger with CSS alone, which runs it off the left edge
+ * when the trigger sits near it; a left-anchored one can run off the right.
+ * `left` and `width` are the panel as placed, before any nudge.
+ */
+export function fitPanel(
+  rect: { left: number; top: number; width: number; height: number },
+  viewport: { width: number; height: number },
+  margin = PANEL_EDGE_MARGIN,
+): PanelFit {
+  const room = viewport.width - margin * 2
+  let shift = 0
+  if (rect.width >= room) {
+    // Wider than the window allows: center it on the window.
+    shift = (viewport.width - rect.width) / 2 - rect.left
+  } else if (rect.left < margin) {
+    shift = margin - rect.left
+  } else if (rect.left + rect.width > viewport.width - margin) {
+    shift = viewport.width - margin - (rect.left + rect.width)
+  }
+  const available = Math.floor(viewport.height - rect.top - margin)
+  const maxHeight = rect.height > available && available > 160 ? available : null
+  return { shift: Math.round(shift), maxHeight }
+}
+
 const MenuShell = forwardRef<HTMLDivElement, MenuShellProps>((props, ref) => {
   const { label, editorHint, panelSx, sx, children, ...rest } = props
   // Node styles ride the sx prop the renderer merges; keep them by
@@ -195,6 +235,25 @@ const MenuShell = forwardRef<HTMLDivElement, MenuShellProps>((props, ref) => {
   const nodeSx = Array.isArray(sx) ? sx : sx ? [sx] : []
   const { editorInert } = Aglyn.useScreenLink(undefined)
   const [open, setOpen] = useState(false)
+  const panelRef = useRef<HTMLDivElement | null>(null)
+  const [fit, setFit] = useState<PanelFit>({ shift: 0, maxHeight: null })
+  // Measured once the panel is on screen and before it paints, so it never
+  // flashes off the edge. Placement is CSS; this only nudges it back inside.
+  useLayoutEffect(() => {
+    if (!open) {
+      setFit({ shift: 0, maxHeight: null })
+      return
+    }
+    const panel = panelRef.current
+    if (!panel || typeof window === 'undefined') return
+    const rect = panel.getBoundingClientRect()
+    setFit(
+      fitPanel(
+        { left: rect.left, top: rect.top, width: rect.width, height: panel.scrollHeight },
+        { width: document.documentElement.clientWidth, height: window.innerHeight },
+      ),
+    )
+  }, [open])
   // True while the menu is open BECAUSE a hover interaction opened it —
   // only then does pointer leave close the menu.
   const hoverOpenRef = useRef(false)
@@ -349,14 +408,41 @@ const MenuShell = forwardRef<HTMLDivElement, MenuShellProps>((props, ref) => {
         </Button>
         {open ? (
           <Paper
+            ref={panelRef}
             elevation={4}
             aria-label={label}
+            style={{
+              // `translate` composes with a centered panel's own transform.
+              ...(fit.shift ? { translate: `${fit.shift}px 0` } : {}),
+              ...(fit.maxHeight ? { maxHeight: fit.maxHeight, overflowY: 'auto' } : {}),
+            }}
             sx={[
               {
                 position: 'absolute',
-                top: '100%',
+                top: `calc(100% + ${PANEL_GAP}px)`,
                 zIndex: (theme) => theme.zIndex.modal,
                 p: 1,
+                // A shadow alone vanishes on a dark theme or photo (AGL-4200).
+                border: 1,
+                borderColor: 'divider',
+                // The node's own styles are for its trigger, and they land on
+                // the wrapper this panel sits in. Without a reset an
+                // uppercase, letter-spaced or no-wrap nav item made every
+                // line of its panel the same (AGL-4200). Color needs no
+                // reset: Paper sets its own.
+                textTransform: 'none',
+                letterSpacing: 'normal',
+                whiteSpace: 'normal',
+                // The gap is still the menu: a pointer crossing it from the
+                // trigger stays inside, so a hover-opened menu stays open.
+                '&::before': {
+                  content: '""',
+                  position: 'absolute',
+                  left: 0,
+                  right: 0,
+                  top: -PANEL_GAP - 1,
+                  height: PANEL_GAP + 1,
+                },
               },
               panelSx as never,
             ]}

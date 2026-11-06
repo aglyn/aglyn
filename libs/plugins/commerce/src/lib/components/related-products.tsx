@@ -73,6 +73,8 @@ const RelatedProducts = forwardRef<HTMLDivElement, RelatedProductsProps>(
       site.pageData as { commerce?: { product?: { id?: string } } } | undefined
     )?.commerce?.product?.id
     const [items, setItems] = useState<CatalogItem[] | null>(null)
+    // The catalog counts the cap over products on sale (AGL-4038).
+    const cap = Number(maxItems) > 0 ? Math.floor(Number(maxItems)) : 6
 
     useEffect(() => {
       if (!hostId) return
@@ -99,7 +101,7 @@ const RelatedProducts = forwardRef<HTMLDivElement, RelatedProductsProps>(
         if (!active || ids.length === 0) return setItems([])
         const catalogResponse = await fetch(
           `/api/commerce/catalog?hostId=${encodeURIComponent(hostId)}` +
-            `&ids=${encodeURIComponent(ids.join(','))}`,
+            `&ids=${encodeURIComponent(ids.join(','))}&limit=${cap}`,
         ).catch(() => null)
         const catalog = await catalogResponse?.json().catch(() => ({}))
         if (active) setItems(catalog?.items ?? [])
@@ -107,7 +109,7 @@ const RelatedProducts = forwardRef<HTMLDivElement, RelatedProductsProps>(
       return () => {
         active = false
       }
-    }, [hostId, productIdProp, seededProductId])
+    }, [hostId, productIdProp, seededProductId, cap])
 
     if (!hostId) {
       return (
@@ -151,7 +153,7 @@ const RelatedProducts = forwardRef<HTMLDivElement, RelatedProductsProps>(
           }
         >
           {items
-            .slice(0, maxItems && maxItems > 0 ? maxItems : 6)
+            .slice(0, cap)
             .map((item) => {
               // AGL-1726: resolved BEFORE the guard — see the note in
               // `product-detail.tsx`.

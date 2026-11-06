@@ -42,7 +42,7 @@ import { isReleaseFlagOnForOrg, RELEASE_FLAGS } from '@aglyn/aglyn/app-utils/rel
 import { aiCacheMarkerTtls } from '../providers/contract'
 import { AI_LAYOUT_DESIGN_TOOL } from '../layout-language/ai-layout-language'
 import { aiLayoutPictureSlots } from '../layout-language/ai-layout-pictures'
-import { AI_SITE_IMPORT_LAYOUT_KEPT, aiSiteImportRedesignOf, aiSiteImportWaveStamped, type AiSiteImportPage, type AiSiteImportState } from '../model/ai-site-import'
+import { AI_SITE_IMPORT_LAYOUT_KEPT, aiSiteImportPageSettled, aiSiteImportRedesignOf, aiSiteImportWaveStamped, aiSiteImportWire, type AiSiteImportPage, type AiSiteImportState } from '../model/ai-site-import'
 import { siteImportFidelity, SITE_IMPORT_IMPROVED_LINES, type SiteImportImprovedFidelity } from '../model/ai-site-import-fidelity'
 import { siteImportLedger } from '../model/ai-site-import-ledger'
 import { aiSiteColors, aiSiteTheme, type AiSiteStyle } from '../model/ai-site-look'
@@ -53,7 +53,7 @@ import { SITE_IMPORT_GENERATIVE_RELEASE_FLAG } from '../site-import/site-import-
 import { siteImportReplayDocument, siteImportReplayFrame, siteImportReplayImproved, siteImportReplayOneGroundSeed, siteImportReplayPage, siteImportReplayTheme } from '../site-import/fixtures/site-import-fidelity-replay'
 import { SITE_IMPORT_IMPROVE_ANSWERS } from '../site-import/fixtures/site-import-improve-answers'
 import type { SiteBasicPageName } from '../site-import/fixtures/site-layout-recordings'
-import { aiSiteImportDocumentFor, aiSiteImportFrameSource } from './ai-job-import-step'
+import { aiSiteImportDocumentFor, aiSiteImportFrameSource, aiSiteImportWaveLines } from './ai-job-import-step'
 import { AI_LAYOUT_DESIGN_TEXT, aiRunLayoutPage } from './ai-job-page-language'
 import { aiSiteImportSectionNames } from './ai-site-import-compile'
 import { AI_LAYOUT_IMPORTED_SECTIONS_INPUT, aiSiteImportDocumentOf, type AiSiteImportDocument } from './ai-site-import-document'
@@ -68,6 +68,11 @@ import {
   aiSiteImportImproveScope,
   aiSiteImportImprovedMisses,
   aiSiteImportLedgerText,
+  aiSiteImportCardPictures,
+  aiSiteImportImproveHero,
+  aiSiteImportImproveNewSections,
+  aiSiteImportNewSectionsWanted,
+  aiSiteImportImprovedPage,
 } from './ai-site-import-improve'
 import { aiSiteImportStyle } from './ai-site-import-look'
 
@@ -513,10 +518,44 @@ describe('the page step’s redesign', () => {
     expect(result.status).toBe('ok')
     if (result.status !== 'ok') return
     expect(result.value.words).toBe('kept')
-    expect(result.value.redesign).toEqual({ status: 'layout-kept', added: [], pictures: null })
+    // Why it was kept rides the row by its internal code (AGL-4152).
+    expect(result.value.redesign).toEqual({ status: 'layout-kept', added: [], pictures: null, missed: [expect.any(String)] })
     expect(result.value.settled).toEqual(expect.arrayContaining([{ at: 'page', what: AI_SITE_IMPORT_LAYOUT_KEPT }]))
     const words = Object.values(result.value.nodes as unknown as Record<string, { props?: Record<string, unknown> }>).map((node) => node.props?.['children'])
     expect(words).toContain('Keep Your Taxes Calm')
+  })
+
+  // A redesign that misses only how it is planned, its re-ask spent or unaffordable, is taken: the old layout redrawn is no better on that line, and worse on every other (AGL-4152).
+  const planless = (): Answer => {
+    const answer = copied('tax-firm')
+    return { sections: [answer.sections[0], answer.sections[1], answer.sections[4]] as Answer['sections'] }
+  }
+
+  it('takes a redesign that misses only its new sections twice, and notes the miss on its row', async () => {
+    mockRunAiRequest.mockResolvedValue(toolAnswer('submit_improved_page', planless()))
+    const result = await runPage(generativeDoc('tax-firm'))
+    expect(mockRunAiRequest).toHaveBeenCalledTimes(2)
+    expect(String(sent()[1]?.messages.at(-1)?.content)).toContain('new sections')
+    expect(result.status).toBe('ok')
+    if (result.status !== 'ok') return
+    expect(result.value.words).toBe('improved')
+    expect(result.value.redesign).toMatchObject({ status: 'redesigned', missed: ['improve-new-sections'] })
+  })
+
+  it('takes it after one answer where the page’s ceiling leaves no re-ask', async () => {
+    const usage = { inputTokens: 4_000, outputTokens: 4_400, cacheReadTokens: 8_000, cacheWriteTokens: 0 }
+    mockRunAiRequest.mockResolvedValue({ ...toolAnswer('submit_improved_page', planless()), usage, estCostUsd: 0.08 })
+    const result = await runPage(generativeDoc('tax-firm'))
+    expect(mockRunAiRequest).toHaveBeenCalledTimes(1)
+    expect(result.status === 'ok' && result.value.redesign).toMatchObject({ status: 'redesigned', missed: ['improve-new-sections'] })
+  })
+
+  it('still keeps the layout where the last answer invents a fact, whatever else it misses', async () => {
+    const bad = planless()
+    ;(bad.sections[0] as Answer['sections'][number]).blocks[2] = { kind: 'lede', col: -1, text: 'Voted the best tax studio by 900 clients.', to: '', style: 'none', icon: '', items: [], ref: '' }
+    mockRunAiRequest.mockResolvedValue(toolAnswer('submit_improved_page', bad))
+    const result = await runPage(generativeDoc('tax-firm'))
+    expect(result.status === 'ok' && result.value.redesign).toMatchObject({ status: 'layout-kept', missed: expect.arrayContaining(['improve-invented-fact', 'improve-new-sections']) })
   })
 
   it('asks the design and wording answers as it always did, with the flag off', async () => {
@@ -569,5 +608,174 @@ describe('the row, and the header', () => {
     const site = { ...state, home, pages: [...state.pages, { ...state.pages[0], slot: 'p1', path: '/estimate', slug: 'estimate', draftId: 'd1' }] } as unknown as AiSiteImportState
     expect(aiSiteImportFrameSource(site, { index: 1 })?.ctas).toEqual([])
     expect(aiSiteImportFrameSource(site, { index: 1, generative: true })?.ctas).toEqual([{ label: 'Free estimate', to: 'page:d1', style: 'primary' }])
+  })
+})
+
+/*------------------------------------------
+ * Why a real site's redesigns fell back (AGL-4152), each on invented pages
+ *-----------------------------------------*/
+
+describe('a redesign held to what the old page says, not to its labels', () => {
+  const lines = (entries: Array<[number, string]>) => entries.map(([section, text], line) => ({ line, section, kind: 'paragraph' as const, text }))
+
+  it('counts a faq and steps as new beside an old page whose later sections are a few words each', () => {
+    const ledger = {
+      items: [],
+      lines: lines([
+        [0, 'Fresh bread baked before dawn in a wood oven on the corner of the square.'],
+        [1, 'Sourdough loaves, rye and seeded country bread, baked each morning and sold until they run out.'],
+        [2, 'Got questions?'],
+        [3, 'Why us? Kind words.'],
+      ]),
+    }
+    const answer = aiReadImprovedPage({
+      sections: [
+        { band: 'plain', cols: [], align: 'start', blocks: [{ kind: 'heading', col: -1, text: 'Bread baked before dawn', to: '', style: 'none', icon: '', items: [], ref: '' }] },
+        { band: 'soft', cols: [], align: 'start', blocks: [{ kind: 'cards', col: -1, text: '', to: '', style: 'none', icon: '', ref: '', items: [{ title: 'Sourdough loaves', text: 'Rye and seeded country bread baked each morning.', to: '', icon: '', ref: '' }, { title: 'Sold until gone', text: 'Each loaf sold until they run out.', to: '', icon: '', ref: '' }] }] },
+        { band: 'plain', cols: [], align: 'start', blocks: [{ kind: 'heading', col: -1, text: 'How an order goes', to: '', style: 'none', icon: '', items: [], ref: '' }, { kind: 'steps', col: -1, text: '', to: '', style: 'none', icon: '', ref: '', items: [{ title: 'Pick your loaves', text: 'Choose what you want for the week.', to: '', icon: '', ref: '' }, { title: 'Collect them warm', text: 'Come by the shop in the morning.', to: '', icon: '', ref: '' }] }] },
+        { band: 'soft', cols: [], align: 'start', blocks: [{ kind: 'heading', col: -1, text: 'Questions people ask', to: '', style: 'none', icon: '', items: [], ref: '' }, { kind: 'faq', col: -1, text: '', to: '', style: 'none', icon: '', ref: '', items: [{ title: 'Got questions about ordering?', text: 'Ask us in the shop.', to: '', icon: '', ref: '' }, { title: 'Why does it sell out?', text: 'We bake a set number each morning.', to: '', icon: '', ref: '' }] }] },
+      ],
+    }) as NonNullable<ReturnType<typeof aiReadImprovedPage>>
+    // "Got questions?" and "Why us?" are labels: neither makes the faq or the steps a rework of it.
+    expect(aiSiteImportImproveNewSections(answer, ledger)).toEqual([2, 3])
+  })
+
+  it('asks a gallery for no new section: its pictures are the page', () => {
+    const ledger = { folded: false, lines: lines([[0, 'Recent work']]), items: [] }
+    expect(aiSiteImportNewSectionsWanted('gallery', ledger)).toBe(0)
+    expect(aiSiteImportNewSectionsWanted('service', ledger)).toBe(2)
+  })
+
+  it('holds a name the page still says in sentence case, and still misses one it drops', () => {
+    // A source that capitalizes a common word mid-line, as a hand-made site does: "after Storms".
+    const factsOf = (wording?: ReadonlyArray<{ line: number; text: string }>) => {
+      const page = siteImportReplayPage('contractor', { finish: 'improve', words: 'improved', forms: [{ id: 'form-basic', name: 'Contact' }], ...(wording ? { wording } : {}) })
+      const at = page.source.blocks.findIndex((block) => block.kind !== 'image' && block.text.startsWith('Roof repair after storms'))
+      const source = { ...page.source, blocks: page.source.blocks.map((block, index) => (index === at && block.kind !== 'image' ? { ...block, text: 'Roof repair after Storms, leaks and age.' } : block)) }
+      return { at, facts: (siteImportFidelity(source, page.tree, { finish: 'improve', words: 'improved', improved: { destinations: [], forms: 1 } }).improved as SiteImportImprovedFidelity).ledger.facts }
+    }
+    const { at, facts } = factsOf()
+    expect(at).toBeGreaterThan(0)
+    expect(facts.missing).not.toContain('name:Storms')
+    expect(factsOf([{ line: at, text: 'Roof repair after hail, leaks and age.' }]).facts.missing).toContain('name:Storms')
+  })
+
+  it('gives written cards the photos of the services they say, where the answer gave them none', () => {
+    const answer = copied('tax-firm')
+    const cards = (answer.sections[1] as Answer['sections'][number]).blocks[2] as { items: Array<{ ref: string }> }
+    for (const entry of cards.items) entry.ref = ''
+    const read = aiReadImprovedPage(answer) as NonNullable<ReturnType<typeof aiReadImprovedPage>>
+    const doc = { ...siteImportReplayDocument('tax-firm'), finish: 'improve', wording: 'improved', generative: true } as AiSiteImportDocument
+    const ledger = aiSiteImportImproveLedger(doc)
+    const carded = aiSiteImportCardPictures(read, ledger)
+    expect([...carded.values()]).toEqual([['picture:2', 'picture:3', 'picture:4']])
+    // And the ledger tells a redesign which words each photo stands with.
+    expect(aiSiteImportLedgerText(ledger, doc, aiSiteImportImproveDestinations(doc, ledger))).toMatch(/picture:2 \([^)]*with \[\d+\]/)
+  })
+
+  it('lays the words over a wide opening photo where the plan boxed it, and leaves a narrow one boxed', () => {
+    const plan = { design: { hero: 'column', group: 'cards', rhythm: 'alternate', cta: 'band' } } as never
+    const design = { kind: 'business', seed: 7, home: true } as never
+    expect(aiSiteImportImproveHero(design, plan, { ratio: 1.75 })).toBe('cover')
+    expect(aiSiteImportImproveHero(design, plan, { ratio: 1 })).toBe('column')
+    expect(aiSiteImportImproveHero(design, { design: { hero: 'split', group: 'cards', rhythm: 'alternate', cta: 'band' } } as never, { ratio: 1.75 })).toBe('split')
+  })
+})
+
+describe('what an import’s earlier pages said, held past each page (AGL-4152)', () => {
+  const read = (text: string) => ({ at: 'x', title: 'T', text: '', sections: [], images: [], words: 3, forms: [], layout: null, blocks: [{ kind: 'paragraph', text, region: 'main' }] })
+  const state = {
+    domain: 'x.example',
+    siteName: 'X',
+    finish: 'improve',
+    wording: true,
+    pages: [
+      { slot: 'p0', url: 'https://x.example/', path: '/', title: 'Home', group: 'main', wave: 1, draftId: 'd0', slug: '/', words: 3, images: 0, build: 'arranged', read: read('Serving the river towns since 2009, fully insured.') },
+      { slot: 'p1', url: 'https://x.example/work', path: '/work', title: 'Work', group: 'main', wave: 1, draftId: 'd1', slug: 'work', words: 3, images: 0, build: 'arranged', read: read('Decks and porches.') },
+    ],
+    waves: [{ index: 1, label: 'Main pages', group: 'main', slots: ['p0', 'p1'], frame: false, status: 'running', startedAt: 'x', finishedAt: null }],
+  } as unknown as AiSiteImportState
+
+  it('keeps the home page’s lines for the next page’s facts once the home page is in', () => {
+    const stamped = aiSiteImportWaveStamped(state, 1, { generative: true })
+    const settled = aiSiteImportPageSettled(stamped, 'p0')
+    expect(settled.pages[0]?.read?.blocks).toEqual([])
+    expect(aiSiteImportWaveLines(settled, settled.pages[1] as never)).toContain('Serving the river towns since 2009, fully insured.')
+    expect(aiSiteImportWire(settled)).not.toHaveProperty('said')
+  })
+
+  it('writes nothing new on a wave that is not generative', () => {
+    expect(aiSiteImportWaveStamped(state, 1)).not.toHaveProperty('said')
+  })
+})
+
+describe('a call to action a card of the source wraps in a paragraph (AGL-4152)', () => {
+  const origin = 'https://www.fernhill-pottery.example'
+  const blocks = [
+    { kind: 'heading', level: 2, text: 'Classes', region: 'main' },
+    { kind: 'heading', level: 3, text: 'Wheel basics', region: 'main' },
+    { kind: 'paragraph', text: 'Four evenings at the wheel.', region: 'main' },
+    { kind: 'paragraph', text: 'Sign up', region: 'main' },
+    { kind: 'link', text: 'Sign up', href: `${origin}/classes`, region: 'main', inline: true },
+    { kind: 'heading', level: 3, text: 'Glazing', region: 'main' },
+    { kind: 'paragraph', text: 'Color, then the kiln.', region: 'main' },
+    { kind: 'paragraph', text: 'Sign up', region: 'main' },
+    { kind: 'link', text: 'Sign up', href: `${origin}/classes`, region: 'main', inline: true },
+    { kind: 'heading', level: 3, text: 'Open studio', region: 'main' },
+    { kind: 'paragraph', text: 'A bench of your own on Saturdays.', region: 'main' },
+    { kind: 'paragraph', text: 'Book a bench', region: 'main' },
+    { kind: 'link', text: 'Book a bench', href: `${origin}/classes`, region: 'main', inline: true },
+  ]
+  const layout = {
+    sections: [
+      {
+        name: 'Classes',
+        from: 'landmark',
+        band: null,
+        background: null,
+        align: 'start',
+        width: 1200,
+        nodes: [
+          { kind: 'line', line: 0 },
+          { kind: 'group', group: 'cards', columns: 3, boxed: false, items: [{ lines: [1, 2, 3], title: 1, text: [2, 3] }, { lines: [5, 6, 7], title: 5, text: [6, 7] }, { lines: [9, 10, 11], title: 9, text: [10, 11] }] },
+        ],
+        lines: [0, 1, 2, 3, 5, 6, 7, 9, 10, 11],
+      },
+    ],
+  }
+  const docOf = (generative: boolean) =>
+    ({
+      build: 'arranged',
+      title: 'Home',
+      url: `${origin}/`,
+      blocks,
+      photos: [],
+      links: [{ path: '/classes', id: 'p-classes' }],
+      origins: [origin],
+      layout,
+      finish: 'improve',
+      wording: 'improved',
+      ...(generative ? { generative: true } : {}),
+    }) as unknown as AiSiteImportDocument
+  const cardsOf = (doc: AiSiteImportDocument) => {
+    const ledger = aiSiteImportImproveLedger(doc)
+    const answer = aiReadImprovedPage({ sections: [{ band: 'plain', cols: [], align: 'start', blocks: [{ kind: 'heading', col: -1, text: 'Classes at the wheel', to: '', style: 'none', icon: '', items: [], ref: '' }, { kind: 'keep', col: -1, text: '', to: '', style: 'none', icon: '', items: [], ref: 'group:1' }] }] })
+    const page = aiSiteImportImprovedPage(answer as never, { doc, ledger, design: { kind: 'business', seed: 7, home: true } as never, destinations: aiSiteImportImproveDestinations(doc, ledger), formId: null })
+    return page.given.sections.flatMap((section) => section.blocks).find((block) => block.items?.length)?.items ?? []
+  }
+
+  it('draws it as the card’s own call to action, where it goes, under a generative redesign', () => {
+    const items = cardsOf(docOf(true))
+    expect(items.map((item) => item.text)).toEqual(['Four evenings at the wheel.', 'Color, then the kiln.', 'A bench of your own on Saturdays.'])
+    expect(items.map((item) => item.links)).toEqual([
+      [{ text: 'Sign up', to: 'page:p-classes', style: 'secondary' }],
+      [{ text: 'Sign up', to: 'page:p-classes', style: 'secondary' }],
+      [{ text: 'Book a bench', to: 'page:p-classes', style: 'secondary' }],
+    ])
+  })
+
+  it('leaves every other page as it drew it', () => {
+    const items = cardsOf(docOf(false))
+    expect(items.every((item) => !item.links)).toBe(true)
   })
 })

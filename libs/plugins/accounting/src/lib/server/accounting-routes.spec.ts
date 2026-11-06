@@ -24,7 +24,7 @@ import { parseAccountingConnectFragment, type AccountingProviderId } from '../mo
 import { asFirestore, memoryFirestore } from '../testing/memory-firestore'
 import type { AccountingProviderConfigResult } from './accounting-config'
 import { createAccountingRoutes, type AccountingRouteDeps } from './accounting-routes'
-import { openToken, readConnection } from './connection-store'
+import { openToken, readConnection, toStoredConnection } from './connection-store'
 import { AccountingProviderError } from './providers/http'
 import type { AccountingProvider } from './providers/provider'
 
@@ -108,6 +108,7 @@ function setup(
       lockdownRefusal: async () => null,
     },
     readProviderConfig: (provider) => (unconfigured(provider) ? { configured: false, missing: ['ENV'] } : configured),
+    keyring: () => keyring,
     providerFor: (provider) => (unconfigured(provider) ? null : providers[provider]),
     stateSigningConfigured: () => true,
     redirectUri: () => 'https://app.aglyn.com/api/accounting/oauth/callback',
@@ -178,15 +179,45 @@ describe('accounting routes', () => {
     const completed = await connectQuickBooks(context)
     expect(completed.status).toBe(200)
     expect(await completed.json()).toMatchObject({
-      connection: { provider: 'quickbooks', status: 'connected', tenantId: 'realm-1', tenantName: 'Sandbox Company', homeCurrency: 'USD' },
+      connection: { provider: 'quickbooks', status: 'connected', tenantName: 'Sandbox Company', homeCurrency: 'USD' },
     })
     expect(context.providers.quickbooks.exchangeCode).toHaveBeenCalledWith(
       expect.objectContaining({ code: 'code-1', realmId: '9130', redirectUri: 'https://app.aglyn.com/api/accounting/oauth/callback' }),
     )
-    const record = readConnection(context.store.read('orgs/org-1/accountingConnections/quickbooks'))!
+    const stored = context.store.read('orgs/org-1/accountingConnections/quickbooks')!
+    const record = readConnection(stored, keyring)!
     expect(openToken(keyring, record, 'refresh').token).toBe('refresh-1')
     expect(JSON.stringify(record)).not.toContain('refresh-1')
     expect(context.activity).toContain('accounting.connected')
+  })
+
+  it('stores the QuickBooks company id (realmID) sealed, and never sends it to the page', async () => {
+    const context = setup()
+    const completed = await connectQuickBooks(context)
+    expect(((await completed.json()) as { connection: Record<string, unknown> }).connection).not.toHaveProperty('tenantId')
+    const stored = context.store.read('orgs/org-1/accountingConnections/quickbooks')!
+    expect(stored['tenantId']).toBeNull()
+    expect(typeof stored['sealedTenantId']).toBe('string')
+    expect(JSON.stringify(stored)).not.toContain('realm-1')
+    // Opened with the key, bound to this document: a copy in another
+    // workspace, or a read with no key, reaches no company.
+    expect(readConnection(stored, keyring)!.tenantId).toBe('realm-1')
+    expect(readConnection({ ...stored, orgId: 'org-2' }, keyring)!.tenantId).toBeNull()
+    expect(readConnection(stored, null)!.tenantId).toBeNull()
+    const status = await context.routes.status(context.request('GET', 'accounting/status?orgId=org-1'))
+    expect(JSON.stringify(await status.json())).not.toContain('realm-1')
+  })
+
+  it('still reads a connection stored before the company id was sealed, and seals it when the whole document is next written', async () => {
+    const context = setup()
+    await connectQuickBooks(context)
+    const sealed = context.store.read('orgs/org-1/accountingConnections/quickbooks')!
+    const legacy = { ...sealed, tenantId: 'realm-1' } as Record<string, unknown>
+    delete legacy['sealedTenantId']
+    expect(readConnection(legacy, keyring)!.tenantId).toBe('realm-1')
+    const resealed = toStoredConnection(readConnection(legacy, keyring)!, keyring)
+    expect(resealed.tenantId).toBeNull()
+    expect(JSON.stringify(resealed)).not.toContain('realm-1')
   })
 
   it('sends the member back to the Connection section, and never acts on a forged state', async () => {
@@ -318,9 +349,9 @@ describe('accounting routes', () => {
       expect(completed.status).toBe(200)
       expect(context.providers.codat.exchangeCode).toHaveBeenCalledWith(expect.objectContaining({ code: 'c-1', orgId: 'org-1' }))
       expect(await completed.json()).toMatchObject({
-        connection: { provider: 'codat', status: 'connected', tenantId: 'conn-1', tenantName: 'Acme Inc (NetSuite)', environment: null },
+        connection: { provider: 'codat', status: 'connected', tenantName: 'Acme Inc (NetSuite)', environment: null },
       })
-      const record = readConnection(context.store.read('orgs/org-1/accountingConnections/codat'))!
+      const record = readConnection(context.store.read('orgs/org-1/accountingConnections/codat'), keyring)!
       expect(record.sealedAccessToken).not.toContain('c-1')
     })
 

@@ -549,11 +549,15 @@ export function aiSiteImportRunningLede(choice: AiSiteImportChoice, options: { g
  */
 export function aiSiteImportWordingCreditsText(
   scope: { job: Pick<AiJobSummary, 'items' | 'siteImport'>; wave: AiSiteImportWave } | null,
+  options: { generative?: boolean } = {},
 ): string {
-  if (!scope?.job.siteImport) return `About ${aiSiteImportWordingCredits(1).likely.toLocaleString('en-US')} more AI credits for each main page.`
+  // Under a generative Improve it (AGL-4152) new copy is quoted as the redesign it is, before the read and on the job's page alike.
+  const generative = scope?.job.siteImport ? aiSiteImportWaveIsGenerative(scope.job.siteImport, scope.wave) : options.generative === true
+  const how = generative ? { generative: true } : {}
+  if (!scope?.job.siteImport) return `About ${aiSiteImportWordingCredits(1, how).likely.toLocaleString('en-US')} more AI credits for each main page.`
   const pages = aiSiteImportWordingPages(scope.job.siteImport, scope.wave, { finish: 'improve', wording: true }, scope.job.items ?? null)
   if (!pages) return 'This wave’s pages keep every word, so it adds no AI credits.'
-  return `Adds about ${aiSiteImportWordingCredits(pages).likely.toLocaleString('en-US')} AI credits to this wave.`
+  return `Adds about ${aiSiteImportWordingCredits(pages, how).likely.toLocaleString('en-US')} AI credits to this wave.`
 }
 
 /**

@@ -796,6 +796,12 @@ describe('a product sold in person only (AGL-4060)', () => {
 
   it('is left out of an id list and a manual collection', async () => {
     expect(names(await run({ ids: 'b-reader,a-hat,c-reader' }))).toEqual(['A Hat'])
+    // An id list's limit counts the products it shows: hidden ids ahead of
+    // them take no slot (a related rail, AGL-4038).
+    expect(names(await run({ ids: 'b-reader,c-reader,a-hat,d-mug,e-tee', limit: '2' }))).toEqual([
+      'A Hat',
+      'D Mug',
+    ])
     fake.seed(`${HOST}/collections/kit`, {
       kind: 'catalog',
       name: 'Kit',
@@ -804,5 +810,87 @@ describe('a product sold in person only (AGL-4060)', () => {
       productIds: ['b-reader', 'd-mug', 'c-reader'],
     })
     expect(names(await run({ collectionId: 'kit' }))).toEqual(['D Mug'])
+  })
+})
+
+/**
+ * A GRID'S CAP COUNTS THE PRODUCTS IT SHOWS (AGL-4038). A shop's "All
+ * products" grid, sorted by name and capped at six, showed five: the product
+ * that sorts first is sold in person only, and four more sit in one run
+ * further down. The page read on past them one product per read and gave up
+ * after four reads, so in-person products took the slots they were dropped
+ * from.
+ *
+ * Forced red by restoring the one-row-per-read fill: the first page holds
+ * five names, and the hundred-product run leaves the page empty.
+ */
+describe('a grid whose in-person products sort first (AGL-4038)', () => {
+  const shop: Array<[string, boolean]> = [
+    ['5 ft power cable', false],
+    ['Cable', true],
+    ['Case', true],
+    ['Charger', true],
+    ['Charging dock A', true],
+    ['Charging dock B', true],
+    ['Charging dock C', false],
+    ['Countertop reader A', false],
+    ['Countertop reader B', false],
+    ['Mount', true],
+    ['Pocket reader', true],
+    ['Touchscreen reader', true],
+  ]
+  const shown = shop.filter(([, online]) => online).map(([name]) => name)
+
+  beforeEach(() => {
+    shop.forEach(([name, online], index) => {
+      seedProduct(`p${index}`, { name, ...(online ? {} : { sellOnline: false }) })
+    })
+  })
+
+  it('fills the grid to its cap with products sold online', async () => {
+    const result = await run({ sort: 'name', limit: '6' })
+    expect(names(result)).toEqual(shown.slice(0, 6))
+    expect(typeof result.body.nextCursor).toBe('string')
+  })
+
+  it('pages by products shown, every page full until the last', async () => {
+    const pages: string[][] = []
+    let after: string | undefined
+    for (let page = 0; page < 10; page += 1) {
+      const result = await run({ sort: 'name', limit: '3', ...(after ? { after } : {}) })
+      pages.push(names(result))
+      after = result.body.nextCursor
+      if (!after) break
+    }
+    expect(pages.flat()).toEqual(shown)
+    expect(pages.slice(0, -1).every((page) => page.length === 3)).toBe(true)
+  })
+
+  it('fills past a hundred in-person products sorting first', async () => {
+    for (let index = 0; index < 100; index += 1) {
+      seedProduct(`hidden-${index}`, { name: `0 register item ${String(index).padStart(3, '0')}`, sellOnline: false })
+    }
+    expect(names(await run({ sort: 'name', limit: '6' }))).toEqual(shown.slice(0, 6))
+  })
+
+  it('reads an id list a page at a time, past ids no longer on sale', async () => {
+    // A wishlist whose first hundred saved products are no longer sold
+    // online still shows the one that is. Forced red by cutting the list at
+    // the page maximum (100) before the drop.
+    for (let index = 0; index < 120; index += 1) {
+      seedProduct(`gone-${index}`, { name: `Gone ${index}`, sellOnline: false })
+    }
+    const saved = [...Array.from({ length: 120 }, (_, index) => `gone-${index}`), 'p1']
+    expect(names(await run({ ids: saved.join(','), limit: '100' }))).toEqual(['Cable'])
+    // A full page reads no further than it needs.
+    delete reads['getAll']
+    expect(names(await run({ ids: 'p1,p2,p3,p0', limit: '2' }))).toEqual(['Cable', 'Case'])
+    expect(reads['getAll']).toBe(1)
+  })
+
+  it('negative control: a store with fewer online products than the cap shows only those, and ends', async () => {
+    const result = await run({ sort: 'name', limit: '24' })
+    expect(names(result)).toEqual(shown)
+    expect(result.body.nextCursor).toBeUndefined()
   })
 })

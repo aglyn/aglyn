@@ -314,6 +314,8 @@ interface StripeCall {
   idempotencyKey: string | null
   /** The POST body, so the AGL-1969/AGL-2000 tax decision can be asserted. */
   params: URLSearchParams
+  /** The `Stripe-Account` header: the seller's account on a direct charge. */
+  account?: string
 }
 
 const stripeCalls: StripeCall[] = []
@@ -331,6 +333,7 @@ const fetchMock = jest.fn(async (url: any, init: any): Promise<any> => {
     url: target,
     idempotencyKey,
     params: new URLSearchParams(String(init?.body ?? '')),
+    account: init?.headers?.['Stripe-Account'],
   })
   if (idempotencyKey && stripeSessionsByKey.has(idempotencyKey)) {
     return {
@@ -1221,7 +1224,7 @@ describe('an availability check that must not be crowded out (AGL-2159)', () => 
 describe('a stay honors the merchant’s payment methods (AGL-3629)', () => {
   it('excludes the methods switched off on the deposit session', async () => {
     docs.set('hosts/host-1/settings/store', {
-      paymentMethods: { afterpay_clearpay: false, crypto: true },
+      paymentMethods: { cashapp: false, crypto: true },
     })
     const result = await post()
     expect(result.status).toBe(200)
@@ -1229,6 +1232,49 @@ describe('a stay honors the merchant’s payment methods (AGL-3629)', () => {
     const excluded = [...(session?.params.keys() ?? [])]
       .filter((key) => key.startsWith('excluded_payment_method_types['))
       .map((key) => session?.params.get(key))
-    expect(excluded).toEqual(['afterpay_clearpay'])
+    // Buy-now-pay-later on every deposit (AGL-4198), then what the store turned off.
+    expect(excluded).toEqual(['klarna', 'afterpay_clearpay', 'affirm', 'cashapp'])
+  })
+})
+
+/**
+ * A seller on DIRECT charges takes the deposit on their own Stripe account:
+ * Aglyn's take is the application fee and nothing is transferred.
+ */
+describe('a deposit for a seller on direct charges', () => {
+  function session() {
+    return stripeCalls.find((call) => call.url.includes('/checkout/sessions'))
+  }
+
+  it('opens the session on the seller’s account with the take as its fee', async () => {
+    docs.set('profiles/owner-1', {
+      stripeAccountId: 'acct_live_merchant',
+      stripeChargesEnabled: true,
+      stripeChargeModel: 'direct',
+    })
+    const result = await post({}, { 'idempotency-key': 'attempt-direct' })
+    expect(result.status).toBe(200)
+    const call = session()
+    expect(call?.account).toBe('acct_live_merchant')
+    expect(call?.idempotencyKey).toBeTruthy()
+    expect(call?.params.get('payment_intent_data[transfer_data][destination]')).toBeNull()
+    // Two nights at $150: the plan's take on the stay and nothing for Stripe.
+    const fee = resolveTransactionFeeCents(mockOrg.org, 'service', 30000, 30000, { direct: true })
+    expect(fee).toBeGreaterThan(0)
+    expect(fee).toBeLessThan(resolveTransactionFeeCents(mockOrg.org, 'service', 30000, 30000))
+    expect(call?.params.get('payment_intent_data[application_fee_amount]')).toBe(String(fee))
+    expect(call?.params.get('metadata[feeCents]')).toBe(String(fee))
+    expect(call?.params.get('metadata[chargeModel]')).toBe('direct')
+  })
+
+  it('keeps a destination seller’s deposit on the platform, exactly as before', async () => {
+    await post()
+    const call = session()
+    expect(call?.account).toBeUndefined()
+    expect(call?.params.get('payment_intent_data[transfer_data][destination]')).toBe('acct_live_merchant')
+    expect(call?.params.get('payment_intent_data[application_fee_amount]')).toBe(
+      String(resolveTransactionFeeCents(mockOrg.org, 'service', 30000, 30000)),
+    )
+    expect(call?.params.get('metadata[chargeModel]')).toBeNull()
   })
 })

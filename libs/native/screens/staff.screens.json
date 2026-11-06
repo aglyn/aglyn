@@ -24172,6 +24172,28 @@
               "help": "Super staff only. Off by default for everyone: no."
             },
             {
+              "key": "release.release_direct_charges",
+              "label": "Early access: Sellers get their own Stripe account",
+              "kind": "select",
+              "initial": "{item.releaseFlags.release_direct_charges}",
+              "when": "staff.super",
+              "options": [
+                {
+                  "value": "",
+                  "label": "Inherit the plan"
+                },
+                {
+                  "value": "true",
+                  "label": "On"
+                },
+                {
+                  "value": "false",
+                  "label": "Off"
+                }
+              ],
+              "help": "Super staff only. Off by default for everyone: yes."
+            },
+            {
               "key": "release.release_edit_bar",
               "label": "Early access: Site admin bar",
               "kind": "select",

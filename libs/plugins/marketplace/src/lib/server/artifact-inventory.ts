@@ -196,6 +196,8 @@ export const marketplaceArtifactInventory: PluginArtifactInventorySource = {
           declaredContributions:
             readPluginContributions(one.doc.get('manifest.contributes')) ??
             null,
+          // Declared connections (AGL-4193), as stored for THESE bytes.
+          declaredConnections: one.doc.get('manifest.connections') ?? null,
           // The document this row was read from, not one found again by id:
           // a version's document id and its `version` field are not
           // guaranteed to be the same string, and writing by id could create

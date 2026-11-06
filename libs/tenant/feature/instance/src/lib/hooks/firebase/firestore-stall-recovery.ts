@@ -397,6 +397,18 @@ export function noteFirestoreServerAnswer(
 }
 
 /**
+ * Whether the server has confirmed anything for `firestore` in this tab: the
+ * boot check's line between a tab still booting and one in use (AGL-4201).
+ */
+export function firestoreHasServerAnswered(
+  firestore: Firestore | null | undefined,
+): boolean {
+  return Boolean(
+    firestore && typeof firestore === 'object' && serverAnswers.has(firestore),
+  )
+}
+
+/**
  * Recovers `firestore` if it has stalled. Safe to call from every reader
  * that notices: the guards above collapse the calls into at most one network
  * cycle per cooldown. Never rejects.

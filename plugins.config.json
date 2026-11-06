@@ -1122,6 +1122,7 @@
         "consoleApi": "registerMarketplaceConsoleApi",
         "declarations": "registerMarketplaceDeclarations",
         "serverDeclarations": "registerMarketplaceServerDeclarations",
+        "consoleServerDeclarations": "registerMarketplaceConsoleServerDeclarations",
         "planEntitlements": "marketplacePlanEntitlements"
       },
       "mobile": {
@@ -1131,7 +1132,7 @@
         "contributes": {
           "screens": ["marketplace.browse", "marketplace.installed", "marketplace.licenses", "marketplace.listing", "marketplace.plugin-settings", "marketplace.sell", "marketplace.publish", "marketplace.publishTemplate", "marketplace.publishStarter", "marketplace.publisherAgreement", "marketplace.publishLayout", "marketplace.publishComponent", "marketplace.publishTheme", "marketplace.publishDatasetSchema", "marketplace.publishEmailTemplate", "marketplace.publishEmailStarter", "marketplace.publishPlugin"],
           "quickActions": ["marketplace.open"],
-          "widgets": ["marketplace.artifact-publish", "marketplace.org-installs", "marketplace.plugin-installation", "marketplace.starter-picker"],
+          "widgets": ["marketplace.artifact-publish", "marketplace.org-installs", "marketplace.plugin-installation", "marketplace.site-connections", "marketplace.starter-picker"],
           "deepLinks": ["marketplace.listing-page", "marketplace.page"]
         }
       },
@@ -1144,7 +1145,8 @@
         }
       ],
       "apiPrefixes": [
-        "marketplace"
+        "marketplace",
+        "plugin-connections"
       ],
       "catalog": {
         "order": 8,
@@ -1163,6 +1165,18 @@
       "hostCollections": [
         {
           "name": "installs"
+        },
+        {
+          "name": "pluginConnections",
+          "mediaScan": "none",
+          "mediaScanReason": "A site's declared plugin connections (AGL-4193): one document per listing and connection holding the SEALED OAuth grant, the owner's choices and sync times, and the single-use OAuth state of a connect in progress. No client reads or writes it, and nothing in it names a library asset."
+        }
+      ],
+      "orgKeyedCollections": [
+        {
+          "$comment": "The OAuth app client id and secret a publisher sets per listing for its declared connections (AGL-4193), both SEALED. Top level and closed to every client; `orgId` is the publishing workspace, so its erasure sweeps them by field.",
+          "name": "pluginConnectionCredentials",
+          "orgField": "orgId"
         }
       ],
       "pluginDistribution": {
@@ -1198,7 +1212,7 @@
             "hostStarterPicker",
             "orgPluginInstalls",
             "pluginInstallStatus",
-            "pluginSiteSet",
+            "pluginSiteSet", "sitePluginConnections",
             "staffOverview",
             "templateGallery",
             "templateInstallStatus"

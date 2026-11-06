@@ -20,11 +20,18 @@ import {
   PROCESSING_FIXED_CENTS,
   BNPL_PROCESSING_PERCENT,
   CARD_PROCESSING_PERCENT,
-  PAY_LINK_PROCESSING_PERCENT,
+  CONNECT_PAYOUT_FIXED_CENTS,
+  CONNECT_PAYOUT_PERCENT,
   PLAN_ENTITLEMENTS,
+  SALE_PROCESSING_FIXED_CENTS,
+  STRIPE_TAX_PERCENT,
+  TERMINAL_PROCESSING_FIXED_CENTS,
+  TERMINAL_PROCESSING_PERCENT,
   SALE_PROCESSING_PERCENT,
   resolveTransactionFeeCents,
   resolveTransactionFeePct,
+  saleApplicationFeeCents,
+  salePlatformCostCents,
   saleProcessingCostCents,
 } from './plan-entitlements'
 
@@ -93,7 +100,7 @@ describe('storefront processing recovery (AGL-2152)', () => {
             cents,
           )
           const net =
-            fee - stripeCostCents(cents, BNPL_PROCESSING_PERCENT)
+            fee - stripeCostCents(cents, SALE_PROCESSING_PERCENT)
           expect({ plan, productType, cents, net: net >= 0 }).toEqual({
             plan,
             productType,
@@ -117,7 +124,7 @@ describe('storefront processing recovery (AGL-2152)', () => {
       const cents = 10000
       const fee = resolveTransactionFeeCents(orgOn(plan), 'physical', cents, cents)
       const net =
-        fee - stripeCostCents(cents, BNPL_PROCESSING_PERCENT)
+        fee - stripeCostCents(cents, SALE_PROCESSING_PERCENT)
       expect(net).toBeGreaterThanOrEqual(Math.round((cents * pct) / 100))
     }
   })
@@ -183,10 +190,10 @@ describe('storefront processing recovery (AGL-2152)', () => {
     )
     expect(onCharge).toBeGreaterThan(onGoods)
     expect(
-      onGoods - stripeCostCents(chargeCents, BNPL_PROCESSING_PERCENT),
+      onGoods - stripeCostCents(chargeCents, SALE_PROCESSING_PERCENT),
     ).toBeLessThan(0)
     expect(
-      onCharge - stripeCostCents(chargeCents, BNPL_PROCESSING_PERCENT),
+      onCharge - stripeCostCents(chargeCents, SALE_PROCESSING_PERCENT),
     ).toBeGreaterThanOrEqual(0)
   })
 
@@ -195,14 +202,22 @@ describe('storefront processing recovery (AGL-2152)', () => {
    * bind below Stripe's own 50¢ charge minimum, so it must never trim a real
    * order — asserted from 50¢ up.
    */
-  it('never returns more than the charge, and never clamps a real order', () => {
+  it('never returns more than the charge, and never clamps an order of $1 or more', () => {
     expect(resolveTransactionFeeCents(orgOn('business'), 'physical', 10, 10)).toBe(10)
-    for (const cents of ORDER_SIZES_CENTS) {
+    // Below about 57¢ the fee is the whole charge: Stripe's 50¢ minimum with
+    // its 30¢ and the payout's 25¢ cannot be covered by any fee.
+    expect(resolveTransactionFeeCents(orgOn('business'), 'physical', 50, 50)).toBe(50)
+    for (const cents of ORDER_SIZES_CENTS.filter((size) => size >= 100)) {
       const fee = resolveTransactionFeeCents(orgOn('starter'), 'physical', cents, cents)
       expect(fee).toBeLessThanOrEqual(cents)
+      // The take plus 2.9% + 30¢, or the platform's whole cost where that is
+      // more (a small order, where the payout's 25¢ outweighs a 2% take).
       expect(fee).toBe(
-        Math.round((cents * PLAN_ENTITLEMENTS.starter.transactionFeePhysicalPct) / 100) +
-          saleProcessingCostCents(cents),
+        Math.max(
+          Math.max(1, Math.round((cents * PLAN_ENTITLEMENTS.starter.transactionFeePhysicalPct) / 100)) +
+            saleProcessingCostCents(cents),
+          salePlatformCostCents(cents),
+        ),
       )
     }
   })
@@ -223,40 +238,78 @@ describe('storefront processing recovery (AGL-2152)', () => {
 
   /** Rounded UP, so the recovery is never a cent short of Stripe's debit. */
   it('rounds the percentage up rather than to nearest', () => {
-    // 101¢ × 6% = 6.06¢ — a `Math.round` would answer 6 and leave a cent short.
+    // 120¢ × 3.15% = 3.78¢ — up to 4, never down.
+    expect(saleProcessingCostCents(120)).toBe(4 + SALE_PROCESSING_FIXED_CENTS)
     expect(saleProcessingCostCents(101)).toBe(
-      Math.ceil((101 * BNPL_PROCESSING_PERCENT) / 100) +
-        PROCESSING_FIXED_CENTS,
+      Math.ceil((101 * SALE_PROCESSING_PERCENT) / 100) +
+        SALE_PROCESSING_FIXED_CENTS,
     )
     expect(saleProcessingCostCents(101)).toBeGreaterThanOrEqual(
-      (101 * BNPL_PROCESSING_PERCENT) / 100 +
-        PROCESSING_FIXED_CENTS,
+      (101 * SALE_PROCESSING_PERCENT) / 100 +
+        SALE_PROCESSING_FIXED_CENTS,
     )
   })
 })
 
-describe('a quote’s or an invoice’s pay link is priced at the card rate', () => {
-  it('passes 2.9% + 30¢ through on the charge, while a storefront sale stays on the dearest rate', () => {
-    expect(PAY_LINK_PROCESSING_PERCENT).toBe(CARD_PROCESSING_PERCENT)
-    expect(SALE_PROCESSING_PERCENT).toBe(BNPL_PROCESSING_PERCENT)
-    // $4,000 of goods on Pro: physical 0.5% take, service 3%.
+/**
+ * NOT UNDER WATER ON ANY PLAN (AGL-4198). What Stripe charges the platform for
+ * one sale, from its published US pricing: the card (2.9% + 30¢ online,
+ * Terminal's 2.7% + 15¢ on a reader), the Connect payout that sends the money
+ * on (0.25% + 25¢, one payout per sale), and Stripe Tax's 0.5% where the
+ * session runs it. The seller pays the take plus 2.9% + 30¢; the payout and
+ * Stripe Tax come out of the take, and a take too small to cover them is
+ * topped up to break even.
+ */
+function platformCostCents(chargeCents: number, options: { stripeTax?: boolean; inPerson?: boolean } = {}): number {
+  const card = options.inPerson
+    ? (chargeCents * TERMINAL_PROCESSING_PERCENT) / 100 + TERMINAL_PROCESSING_FIXED_CENTS
+    : (chargeCents * CARD_PROCESSING_PERCENT) / 100 + PROCESSING_FIXED_CENTS
+  const payout = (chargeCents * CONNECT_PAYOUT_PERCENT) / 100 + CONNECT_PAYOUT_FIXED_CENTS
+  const tax = options.stripeTax ? (chargeCents * STRIPE_TAX_PERCENT) / 100 : 0
+  return card + payout + tax
+}
+
+describe('every site sale covers what the platform pays for it (AGL-4198)', () => {
+  it('passes 2.9% + 30¢ through on top of the take, online and on a reader', () => {
+    expect(SALE_PROCESSING_PERCENT).toBe(CARD_PROCESSING_PERCENT)
+    expect(SALE_PROCESSING_FIXED_CENTS).toBe(30)
+    expect(SALE_PROCESSING_PERCENT).toBeLessThan(BNPL_PROCESSING_PERCENT)
     const pro = orgOn('pro')
-    expect(resolveTransactionFeeCents(pro, 'physical', 400_000, 400_000, PAY_LINK_PROCESSING_PERCENT)).toBe(
-      2_000 + 11_600 + 30,
-    )
-    expect(resolveTransactionFeeCents(pro, 'service', 400_000, 400_000, PAY_LINK_PROCESSING_PERCENT)).toBe(
-      12_000 + 11_600 + 30,
-    )
-    expect(resolveTransactionFeeCents(pro, 'physical', 400_000)).toBe(2_000 + 24_000 + 30)
-    expect(saleProcessingCostCents(101, PAY_LINK_PROCESSING_PERCENT)).toBe(3 + PROCESSING_FIXED_CENTS)
+    // Pro's 0.5% on physical goods covers the payout at $4,000: $20 + $116.30.
+    expect(resolveTransactionFeeCents(pro, 'physical', 400_000)).toBe(2_000 + 11_630)
+    expect(resolveTransactionFeeCents(pro, 'physical', 400_000, 400_000, { inPerson: true })).toBe(2_000 + 11_630)
+    expect(resolveTransactionFeeCents(pro, 'service', 400_000)).toBe(12_000 + 11_630)
+    expect(resolveTransactionFeeCents(pro, 'physical', 50_000)).toBe(250 + 1_480)
   })
 
-  it('never costs the platform more than it recovers on a card, at any plan or size', () => {
+  it('tops a take too small to cover the payout up to break even, never more', () => {
+    const custom = orgOn('enterprise')
+    // 0%: card 11,630 + payout 1,025 at $4,000.
+    expect(resolveTransactionFeeCents(custom, 'physical', 400_000)).toBe(11_630 + 1_025)
+    expect(saleApplicationFeeCents(0, 400_000)).toBe(salePlatformCostCents(400_000))
+    // Pro at $50: 25¢ take < 38¢ payout, so the fee is the cost: 175 + 38.
+    expect(resolveTransactionFeeCents(orgOn('pro'), 'physical', 5_000)).toBe(175 + 38)
+    // Stripe Tax's 0.5% comes out of the take first: Pro 0.5% at $4,000 is
+    // $20 against $10.25 + $20 of costs, so the fee becomes the cost.
+    expect(resolveTransactionFeeCents(orgOn('pro'), 'physical', 400_000, 400_000, { stripeTax: true })).toBe(
+      11_630 + 1_025 + 2_000,
+    )
+  })
+
+  it('nets zero or more on every plan, a 0% take included, at $1 and up, online, under Stripe Tax and in person', () => {
     for (const plan of Object.keys(PLAN_ENTITLEMENTS) as OrgPlan[]) {
-      for (const cents of [STRIPE_MIN_CHARGE_CENTS, 99, 1_000, 12_345, 400_000, 2_500_000]) {
-        for (const type of ['physical', 'digital', 'service'] as const) {
-          const fee = resolveTransactionFeeCents(orgOn(plan), type, cents, cents, PAY_LINK_PROCESSING_PERCENT)
-          expect(fee - stripeCostCents(cents, CARD_PROCESSING_PERCENT)).toBeGreaterThanOrEqual(0)
+      for (const type of ['physical', 'digital', 'service'] as const) {
+        for (const cents of [100, 999, 5_000, 50_000, 400_000, 2_500_000]) {
+          for (const options of [{}, { stripeTax: true }, { inPerson: true }]) {
+            const fee = resolveTransactionFeeCents(orgOn(plan), type, cents, cents, options)
+            expect({ plan, type, cents, options, net: fee - platformCostCents(cents, options) >= 0 }).toEqual({
+              plan,
+              type,
+              cents,
+              options,
+              net: true,
+            })
+          }
         }
       }
     }

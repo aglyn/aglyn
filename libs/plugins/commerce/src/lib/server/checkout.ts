@@ -26,7 +26,12 @@ import { planLabelGrantingFeature } from '@aglyn/aglyn/app-utils/plan-entitlemen
 import * as CommerceModel from '../model'
 import { claimAttempt, deriveStripeObjectKey } from '@aglyn/aglyn/server'
 import { firebaseAdmin, getOrgForHost } from '@aglyn/tenant-data-admin'
-import { merchantAccountIsReady } from '@aglyn/tenant-data-admin/server/payment-provider'
+import {
+  connectedAccountHeader,
+  directChargeParams,
+  merchantAccountIsReady,
+  saleChargeModel,
+} from '@aglyn/tenant-data-admin/server/payment-provider'
 import { checkoutSessionCardAuthenticationParams } from '@aglyn/tenant-data-admin/server/stripe-card-authentication'
 import {
   CARRIER_POSTAL_CODE_MESSAGE,
@@ -63,6 +68,10 @@ import {
   resolveNativeCheckoutMode,
 } from './native-checkout'
 import { ensureCheckoutDomain } from './payment-method-domains'
+import {
+  SELLER_STRIPE_TAX_NOT_SET_UP_MESSAGE,
+  sellerStripeTaxActive,
+} from './seller-stripe-account'
 
 /**
  * Commerce Starter checkout (AGL-90): a site visitor buys a product. The
@@ -420,6 +429,16 @@ export const checkoutHandler: PluginApiHandler = async (req, res) => {
         .status(409)
         .json({ error: 'This site has not enabled payments yet' })
     }
+    // WHO SELLS (direct charges). A seller on their own full Stripe account
+    // is the merchant of record: the session is created ON that account and
+    // Aglyn keeps its take as an application fee. Express accounts from
+    // before the switch stay destination charges, and so does Aglyn's own
+    // card-reader hardware, which Aglyn sells and taxes itself.
+    const chargeModel = hardware.hardware
+      ? 'destination'
+      : saleChargeModel(ownerProfile.get('stripeChargeModel'))
+    const direct = chargeModel === 'direct'
+    const sellerAccountHeader = connectedAccountHeader(chargeModel, accountId)
 
     // The list price per unit, before any coupon (AGL-1711). This is what the
     // order's line-item snapshot records, and it is carried in the session
@@ -597,6 +616,15 @@ export const checkoutHandler: PluginApiHandler = async (req, res) => {
       return res.status(409).json({ error: taxMisconfigured })
     }
     const useStripeTax = taxDecision.kind === 'stripe-automatic'
+    // A direct-charge store's Stripe Tax runs on ITS account, against its
+    // registrations, and Stripe refuses the session where it is not set up.
+    if (
+      direct &&
+      useStripeTax &&
+      !(await sellerStripeTaxActive(String(accountId)))
+    ) {
+      return res.status(409).json({ error: SELLER_STRIPE_TAX_NOT_SET_UP_MESSAGE })
+    }
     let taxCents = 0
     let taxLabel = ''
     let taxPct = 0
@@ -797,6 +825,7 @@ export const checkoutHandler: PluginApiHandler = async (req, res) => {
           taxPct,
           taxLabel,
           headers: stripeKeyHeader('tax-rate'),
+          ...(direct ? { stripeAccount: String(accountId) } : {}),
         })) ?? ''
       if (!recurringTaxRateId) {
         // Nothing was sold — hand the key back so the same button works
@@ -994,6 +1023,7 @@ export const checkoutHandler: PluginApiHandler = async (req, res) => {
           ownerOrg.org as any,
           lifted.type ?? 'physical',
           amountCents,
+          { stripeTax: useStripeTax, direct },
         )
       : 0
     const feeCents = isSubscription
@@ -1008,6 +1038,7 @@ export const checkoutHandler: PluginApiHandler = async (req, res) => {
           lifted.type ?? 'physical',
           amountCents,
           amountCents + taxCents + shippingCeilingCents,
+          { stripeTax: useStripeTax, direct },
         )
 
     // The unit price Stripe actually charges — the coupon is priced INTO it
@@ -1084,8 +1115,12 @@ export const checkoutHandler: PluginApiHandler = async (req, res) => {
                   ),
                 }
               : {}),
-            'subscription_data[transfer_data][destination]':
-              String(accountId),
+            ...(direct
+              ? { 'subscription_data[metadata][chargeModel]': 'direct' }
+              : {
+                  'subscription_data[transfer_data][destination]':
+                    String(accountId),
+                }),
             // A PERCENT here, and Stripe applies it to the whole invoice —
             // tax and shipping included — because it offers no items-only
             // base for `application_fee_percent` and a Subscription carries
@@ -1175,7 +1210,13 @@ export const checkoutHandler: PluginApiHandler = async (req, res) => {
       // recurring path cannot be repaired this way. It is left exactly as it
       // was rather than half-changed — see the AGL-1956 note in
       // `billing-webhook.ts`.
-      ...(!isSubscription
+      // A direct charge is already the seller's money, and the seller owns
+      // the Stripe Tax on it (their registrations, their liability), so the
+      // split is the take alone and none of the AGL-1956 transfer arithmetic
+      // applies.
+      ...(direct && !isSubscription ? directChargeParams(feeCents) : {}),
+      ...(direct ? { 'metadata[chargeModel]': 'direct' } : {}),
+      ...(!isSubscription && !direct
         ? CommerceModel.destinationChargeParams({
             accountId: String(accountId),
             feeCents,
@@ -1215,7 +1256,7 @@ export const checkoutHandler: PluginApiHandler = async (req, res) => {
       // shipping baseline rides along because the gap between it and the
       // shipping the shopper actually chose is money owed BACK to the
       // merchant, and a number nobody wrote down is a number nobody can repay.
-      ...(useStripeTax && !isSubscription
+      ...(useStripeTax && !isSubscription && !direct
         ? {
             'metadata[transferCents]': String(
               CommerceModel.platformLiableTransferCents({
@@ -1361,6 +1402,7 @@ export const checkoutHandler: PluginApiHandler = async (req, res) => {
           pageUrl: backUrl,
           site: hostSnapshot.data?.() as SiteReturnHost | undefined,
           hostId,
+          ...(direct ? { stripeAccount: String(accountId) } : {}),
         }).catch(() => null)
       : Promise.resolve(null)
     const response = await fetch(
@@ -1385,6 +1427,7 @@ export const checkoutHandler: PluginApiHandler = async (req, res) => {
           // Empty on the hosted path, so its request is byte-identical to the
           // one this handler sent before AGL-1944 (AGL-1944).
           ...nativeCheckoutStripeHeaders(nativeMode),
+          ...sellerAccountHeader,
         },
         body: params.toString(),
       },
@@ -1404,6 +1447,7 @@ export const checkoutHandler: PluginApiHandler = async (req, res) => {
           session,
           nativeMode,
           paymentMethodControls.wallets,
+          direct ? String(accountId) : undefined,
         )
       : null
     if (!payload) {

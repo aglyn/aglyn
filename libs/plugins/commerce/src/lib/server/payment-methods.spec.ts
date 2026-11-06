@@ -224,7 +224,11 @@ describe('reading the card', () => {
     const body = await response.json()
     const byId = Object.fromEntries(body.methods.map((row: any) => [row.id, row]))
     // The platform's default configuration, not the other application's.
-    expect(byId.klarna).toEqual({ id: 'klarna', on: true, platform: 'on', capability: 'unrequested' })
+    expect(byId.cashapp).toEqual({ id: 'cashapp', on: true, platform: 'on', capability: 'unrequested' })
+    // Buy-now-pay-later is never listed, even where the platform has it on (AGL-4198).
+    expect(byId.klarna).toBeUndefined()
+    expect(byId.afterpay_clearpay).toBeUndefined()
+    expect(byId.affirm).toBeUndefined()
     expect(byId.crypto).toMatchObject({ on: false, platform: 'unavailable' })
     // The card wallets ride `card_payments`: no capability verdict of their own.
     expect(byId.apple_pay.capability).toBeNull()
@@ -280,50 +284,40 @@ describe('saving', () => {
   it('writes the toggles and requests each capability turned on, in one keyed update', async () => {
     const response = await call('admin-2', {
       method: 'POST',
-      body: { methods: { affirm: false, cashapp: false } },
+      body: { methods: { cashapp: false } },
     })
     expect(response.status).toBe(200)
     expect(docs.get('hosts/host-1/settings/store')).toMatchObject({
-      paymentMethods: { affirm: false, cashapp: false },
+      paymentMethods: { cashapp: false },
       paymentMethodsUpdatedBy: 'admin-2',
     })
     const [update, ...rest] = accountUpdates()
     expect(rest).toHaveLength(0)
     const requested = [...update.params.keys()].sort()
-    // On and offered: Klarna, Afterpay, Amazon Pay. Off: Affirm, Cash App.
-    // Not offered by the platform: crypto. Never: the card wallets.
-    expect(requested).toEqual([
-      'capabilities[afterpay_clearpay_payments][requested]',
-      'capabilities[amazon_pay_payments][requested]',
-      'capabilities[klarna_payments][requested]',
-    ])
+    // On and offered: Amazon Pay. Off: Cash App. Not offered by the platform:
+    // crypto. Never: the card wallets, and buy-now-pay-later (AGL-4198).
+    expect(requested).toEqual(['capabilities[amazon_pay_payments][requested]'])
     expect(update.headers['Idempotency-Key']).toBe(
-      'aglyn-pm-capabilities:acct_merchant:afterpay_clearpay_payments,amazon_pay_payments,klarna_payments',
+      'aglyn-pm-capabilities:acct_merchant:amazon_pay_payments',
     )
     expect(update.headers['Stripe-Account']).toBeUndefined()
     const body = await response.json()
-    const klarna = body.methods.find((row: any) => row.id === 'klarna')
-    expect(klarna.capability).toBe('pending')
+    const amazon = body.methods.find((row: any) => row.id === 'amazon_pay')
+    expect(amazon.capability).toBe('pending')
   })
 
   it('asks for nothing already requested', async () => {
     capabilities = {
-      klarna_payments: 'active',
-      afterpay_clearpay_payments: 'pending',
-      affirm_payments: 'inactive',
       cashapp_payments: 'active',
-      amazon_pay_payments: 'active',
+      amazon_pay_payments: 'pending',
     }
-    await call('owner-1', { method: 'POST', body: { methods: { klarna: true } } })
+    await call('owner-1', { method: 'POST', body: { methods: { cashapp: true } } })
     expect(accountUpdates()).toHaveLength(0)
   })
 
   it('opting into crypto requests it once the platform offers it', async () => {
     platformConfig!.crypto = on
     capabilities = {
-      klarna_payments: 'active',
-      afterpay_clearpay_payments: 'active',
-      affirm_payments: 'active',
       cashapp_payments: 'active',
       amazon_pay_payments: 'active',
     }
@@ -334,31 +328,31 @@ describe('saving', () => {
 
   it('keeps the save and warns when Stripe refuses the capability request', async () => {
     capabilityRefusal = 'This capability is not available for this account'
-    const response = await call('owner-1', { method: 'POST', body: { methods: { affirm: true } } })
+    const response = await call('owner-1', { method: 'POST', body: { methods: { amazon_pay: true } } })
     expect(response.status).toBe(200)
     const body = await response.json()
     expect(body.warnings[0]).toMatch(/did not accept/)
-    expect(docs.get('hosts/host-1/settings/store')?.paymentMethods).toEqual({ affirm: true })
+    expect(docs.get('hosts/host-1/settings/store')?.paymentMethods).toEqual({ amazon_pay: true })
   })
 
-  it('drops unknown ids and non-booleans, and refuses an empty save', async () => {
+  it('drops unknown ids, buy-now-pay-later and non-booleans, and refuses an empty save', async () => {
     const response = await call('owner-1', {
       method: 'POST',
-      body: { methods: { paypal: true, klarna: 'yes' } },
+      body: { methods: { paypal: true, klarna: true, affirm: false, cashapp: 'yes' } },
     })
     expect(response.status).toBe(400)
     expect(docs.get('hosts/host-1/settings/store')).toBeUndefined()
   })
 
   it('is an admin’s: an editor reads but may not change', async () => {
-    const response = await call('editor-3', { method: 'POST', body: { methods: { klarna: false } } })
+    const response = await call('editor-3', { method: 'POST', body: { methods: { cashapp: false } } })
     expect(response.status).toBe(403)
     expect(docs.get('hosts/host-1/settings/store')).toBeUndefined()
   })
 
   it('saves the toggles with no payout account and asks Stripe for nothing', async () => {
     docs.delete('profiles/owner-1')
-    const response = await call('owner-1', { method: 'POST', body: { methods: { klarna: false } } })
+    const response = await call('owner-1', { method: 'POST', body: { methods: { cashapp: false } } })
     expect(response.status).toBe(200)
     expect((await response.json()).accountConnected).toBe(false)
     expect(accountUpdates()).toHaveLength(0)
@@ -392,11 +386,15 @@ describe('helpers', () => {
 
   it('requests nothing the platform has positively turned off', () => {
     expect(
-      capabilitiesToRequest({}, { klarna: 'unavailable', affirm: null }, {}),
+      capabilitiesToRequest({}, { cashapp: 'unavailable', amazon_pay: null }, {}),
     ).toEqual(
-      expect.not.arrayContaining(['klarna_payments']),
+      expect.not.arrayContaining(['cashapp_payments']),
     )
-    expect(capabilitiesToRequest({}, { affirm: null }, {})).toContain('affirm_payments')
+    expect(capabilitiesToRequest({}, { amazon_pay: null }, {})).toContain('amazon_pay_payments')
+    // Buy-now-pay-later is never requested, even where the platform offers it (AGL-4198).
+    expect(capabilitiesToRequest({}, { klarna: 'on', affirm: 'on' } as never, {})).toEqual(
+      expect.not.arrayContaining(['klarna_payments', 'affirm_payments', 'afterpay_clearpay_payments']),
+    )
   })
 })
 
@@ -418,14 +416,14 @@ describe('who reads and changes the card (AGL-4047)', () => {
   it('lets an editor the stamp grants "Manage payment methods" save', async () => {
     stamped({ 'editor-3': { 'commerce.paymentMethods': true } })
     expect((await (await call('editor-3')).json()).canEdit).toBe(true)
-    const response = await call('editor-3', { method: 'POST', body: { methods: { klarna: false } } })
+    const response = await call('editor-3', { method: 'POST', body: { methods: { cashapp: false } } })
     expect(response.status).toBe(200)
   })
 
   it('refuses an admin the stamp refuses it, in the permission’s words, and still lets them read', async () => {
     stamped({ 'admin-2': { 'commerce.paymentMethods': false } })
     expect((await (await call('admin-2')).json()).canEdit).toBe(false)
-    const response = await call('admin-2', { method: 'POST', body: { methods: { klarna: false } } })
+    const response = await call('admin-2', { method: 'POST', body: { methods: { cashapp: false } } })
     expect(response.status).toBe(403)
     expect((await response.json()).error).toBe(
       'Your role does not include "Manage payment methods" — ask an organization admin',

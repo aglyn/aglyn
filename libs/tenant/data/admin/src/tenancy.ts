@@ -26,11 +26,17 @@ export * from './lib/server/client-error-report'
 // import `@aglyn/tenant-data-admin/server/payment-provider` directly, which
 // loads no Firebase.
 export {
+  accountChargeModel,
+  connectedAccountHeader,
+  DIRECT_CHARGE_ACCOUNT_PARAMS,
+  directChargeParams,
   merchantAccountIsReady,
   merchantAccountReadiness,
   paymentProvider,
+  saleChargeModel,
 } from './lib/server/payment-provider'
 export type {
+  SaleChargeModel,
   MerchantAccountReadiness,
   MerchantAccountReadinessInput,
   PaymentMode,

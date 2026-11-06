@@ -24,6 +24,14 @@
  * before it is interpolated into a Stripe URL.
  */
 
+// The site's seller account comes from Firestore; these cases are a
+// destination store (no owner org resolves), which reads the session on the
+// platform alone, so the Stripe boundary below sees exactly what it did.
+jest.mock('@aglyn/tenant-data-admin', () => ({
+  firebaseAdmin: { app: () => ({ firestore: () => ({}) }) },
+  getOrgForHost: async () => null,
+}))
+
 import { checkoutStatusHandler } from './checkout-status'
 
 const HOST_ID = 'host-1'

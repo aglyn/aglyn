@@ -56,6 +56,7 @@ import {
   SALE_PROCESSING_FIXED_CENTS,
   resolveTransactionFeeCents,
   saleProcessingCostCents,
+  salePlatformCostCents,
 } from '@aglyn/aglyn/server'
 import type { RevenueSourceRequest } from '@aglyn/aglyn/plugin-manager/plugin-revenue-sources'
 import {
@@ -89,17 +90,17 @@ function payingOrg(
 describe('storefront commission excludes the processing pass-through', () => {
   const org = payingOrg()
 
-  it('reports the advertised take, not the whole application fee', () => {
+  it('reports what the platform keeps, not the whole application fee', () => {
     const chargeCents = 20000
     const fee = resolveTransactionFeeCents(org, 'physical', chargeCents, chargeCents)
     const out = commerceSettledSummary([
       { id: 'o1', amountCents: chargeCents, feeCents: fee },
     ])
-    // The take is what is left once Stripe's cost is removed — derived from
-    // the same two helpers that CHARGED the fee, so a change to either rate
-    // moves both sides of this assertion together.
+    // The take is what is left once everything Stripe charges the platform
+    // is removed — the card and, since AGL-4198, the payout the take pays
+    // first — derived from the same helpers that CHARGED the fee.
     expect(out.commissionCents).toBe(
-      fee - saleProcessingCostCents(chargeCents),
+      fee - salePlatformCostCents(chargeCents),
     )
     // The whole fee is still reported, and it is strictly larger. If the code
     // reported the fee as earnings this would be an equality.
@@ -140,7 +141,7 @@ describe('storefront commission excludes the processing pass-through', () => {
     // `application_fee_percent`. Reporting that fee whole would book Stripe's
     // charge as margin on every cycle, the AGL-2152 mistake over again.
     const chargeCents = 20000
-    const passThrough = saleProcessingCostCents(chargeCents)
+    const passThrough = salePlatformCostCents(chargeCents)
     const out = commerceSettledSummary([
       {
         id: 'o1',
@@ -339,7 +340,7 @@ describe('the storefront’s revenue source', () => {
 
   it('states the take, the fee and the pass-through apart, and counts subscription cycles', async () => {
     const chargeCents = 20_000
-    const passThrough = saleProcessingCostCents(chargeCents)
+    const passThrough = salePlatformCostCents(chargeCents)
     mockSwept.docs = [
       docOf('o1', { amountCents: chargeCents, feeCents: 400 + passThrough, subscriptionId: 'sub_1' }, 'host-a'),
     ]
@@ -348,7 +349,7 @@ describe('the storefront’s revenue source', () => {
     expect(answer.grossToNet.map((line) => [line.label, line.cents, line.deduction])).toEqual([
       ['Storefront sales (shopper gross)', chargeCents, false],
       ['Storefront platform fee collected', 400 + passThrough, false],
-      ['— less card processing passed through at cost', passThrough, true],
+      ['— less card processing and payouts passed through at cost', passThrough, true],
     ])
     expect(answer.notes).toEqual([
       {
@@ -356,5 +357,51 @@ describe('the storefront’s revenue source', () => {
         tone: 'warning',
       },
     ])
+  })
+})
+
+describe('a direct-charge sale counts its whole application fee as the take', () => {
+  const org = payingOrg()
+
+  it('subtracts no pass-through, because Stripe bills the seller', () => {
+    const chargeCents = 20000
+    // The fee the direct checkout charged: the plan's take and nothing else.
+    const fee = resolveTransactionFeeCents(org, 'physical', chargeCents, chargeCents, {
+      direct: true,
+    })
+    expect(fee).toBeGreaterThan(0)
+    const out = commerceSettledSummary([
+      { id: 'o1', amountCents: chargeCents, feeCents: fee, chargeModel: 'direct' },
+    ])
+    expect(out.applicationFeeCents).toBe(fee)
+    expect(out.processingPassThroughCents).toBe(0)
+    expect(out.commissionCents).toBe(fee)
+    expect(out.commissionNetCents).toBe(fee)
+  })
+
+  it('a destination sale beside it is netted exactly as before', () => {
+    const chargeCents = 20000
+    const destinationFee = resolveTransactionFeeCents(org, 'physical', chargeCents, chargeCents)
+    const directFee = resolveTransactionFeeCents(org, 'physical', chargeCents, chargeCents, {
+      direct: true,
+    })
+    const out = commerceSettledSummary([
+      { id: 'o1', amountCents: chargeCents, feeCents: destinationFee },
+      { id: 'o2', amountCents: chargeCents, feeCents: directFee, chargeModel: 'direct' },
+    ])
+    expect(out.processingPassThroughCents).toBe(
+      Math.min(destinationFee, salePlatformCostCents(chargeCents)),
+    )
+    expect(out.commissionCents).toBe(
+      destinationFee - Math.min(destinationFee, salePlatformCostCents(chargeCents)) + directFee,
+    )
+  })
+
+  it('a refund hands back its share of the take', () => {
+    const out = commerceSettledSummary([
+      { id: 'o1', amountCents: 10000, feeCents: 500, refundedCents: 5000, chargeModel: 'direct' },
+    ])
+    expect(out.commissionRefundedCents).toBe(250)
+    expect(out.commissionNetCents).toBe(250)
   })
 })

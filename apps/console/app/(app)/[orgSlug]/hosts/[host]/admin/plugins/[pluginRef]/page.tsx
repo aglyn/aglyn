@@ -37,6 +37,7 @@ import HostDisplayNameComponent from '../../../../../../../../components/host-di
 import PluginConfigCards from '../../../../../../../../components/plugin-config-card.component'
 import PluginDependenciesCard from '../../../../../../../../components/plugin-dependencies-card.component'
 import PluginDisableCascadeDialog from '../../../../../../../../components/plugin-disable-cascade-dialog.component'
+import PluginWidgetSlot from '../../../../../../../../components/plugin-widget-slot.component'
 import { CONTENT_MAX_WIDTH } from '../../../../../../../../constants/shared'
 import { docsHelp } from '../../../../../../../../constants/docs-links'
 import { buildRoute, Route } from '../../../../../../../../constants/route-links'
@@ -430,6 +431,20 @@ const SitePluginInstallation: NextPageWithLayout<Record<string, never>> = () => 
               manifest={pin?.manifest}
               displayName={displayName}
               disabled={!canManageSite}
+            />
+          ) : null}
+
+          {/* The services a marketplace plugin declares it connects to
+              (AGL-4196): connect, choose, sync, disconnect, for THIS site.
+              The marketplace runs the connections, so it draws them; a
+              plugin that declares none draws nothing here. */}
+          {!firstParty && pin && hostId ? (
+            <PluginWidgetSlot
+              slot="sitePluginConnections"
+              hostId={hostId}
+              orgSlug={orgSlug}
+              pluginRef={pluginRef}
+              pin={pin}
             />
           ) : null}
 

@@ -21,6 +21,15 @@ import * as CommerceModel from '../model'
 import { firebaseAdmin } from '@aglyn/tenant-data-admin'
 
 /**
+ * Ids one answer names. More than any rail shows: the ids-filtered catalog
+ * drops the ones not sold online (a draft, a product sold in person only) and
+ * counts the rail's cap over the rest, so a hidden id takes no slot
+ * (AGL-4038). Cut at eight here, before that drop, a rail of six lost a card
+ * for every hidden id past the second.
+ */
+const RELATED_CANDIDATES_MAX = 24
+
+/**
  * Related products (AGL-325), best source first: the product's manual
  * list, then co-purchase pairs mined from recent orders ("frequently
  * bought together"), then tag/category neighbors. Returns catalog ids —
@@ -48,7 +57,7 @@ export const relatedHandler: PluginApiHandler = async (req, res) => {
       (productSnapshot.data() as any) ?? {},
     )
 
-    let ids = (product.relatedProductIds ?? []).slice(0, 8)
+    let ids = (product.relatedProductIds ?? []).slice(0, RELATED_CANDIDATES_MAX)
 
     if (ids.length === 0) {
       // Co-purchase pairs mined from a bounded sample of multi-line orders.
@@ -82,7 +91,7 @@ export const relatedHandler: PluginApiHandler = async (req, res) => {
       }
       ids = [...counts.entries()]
         .sort((a, b) => b[1] - a[1])
-        .slice(0, 8)
+        .slice(0, RELATED_CANDIDATES_MAX)
         .map(([id]) => id)
     }
 
@@ -109,7 +118,7 @@ export const relatedHandler: PluginApiHandler = async (req, res) => {
           )
           return sharedTag || sharedCategory
         })
-        .slice(0, 8)
+        .slice(0, RELATED_CANDIDATES_MAX)
         .map((docSnapshot) => docSnapshot.id)
     }
 

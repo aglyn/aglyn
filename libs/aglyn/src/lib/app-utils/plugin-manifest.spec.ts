@@ -32,6 +32,7 @@ import {
   unknownPluginPropKeys,
   resolvePluginElements,
 } from './plugin-manifest'
+import { pluginConfigSchemaFromManifest } from '../plugin-manager/plugin-config'
 
 const base = {
   id: 'weather-widget',
@@ -148,6 +149,118 @@ describe('validatePluginManifest', () => {
         false,
       ])
     }
+  })
+})
+
+describe('declared settings (`config`, AGL-428)', () => {
+  it('keeps a valid config block on the manifest it returns, as the console reads it', () => {
+    const result = validatePluginManifest({
+      ...base,
+      config: {
+        fields: [
+          { key: 'pointsPerDollar', label: 'Points per dollar', type: 'number', min: 1 },
+          { key: 'tier', label: 'Tier', type: 'select', options: [{ value: 'basic', label: 'Basic' }] },
+        ],
+        defaults: { pointsPerDollar: 5, tier: 'basic' },
+      },
+    })
+    expect(result.ok).toBe(true)
+    const manifest = (result as { manifest: PluginManifest }).manifest
+    expect(manifest.config).toEqual({
+      fields: [
+        { key: 'pointsPerDollar', label: 'Points per dollar', type: 'number', min: 1 },
+        { key: 'tier', label: 'Tier', type: 'select', options: [{ value: 'basic', label: 'Basic' }] },
+      ],
+      defaults: { pointsPerDollar: 5, tier: 'basic' },
+    })
+    // Firestore refuses an undefined value, so none may ride the manifest.
+    expect(JSON.stringify(manifest.config, (_key, value) => (value === undefined ? '<undefined>' : value))).not.toContain(
+      '<undefined>',
+    )
+    // What the console builds the form from, read back off the kept block.
+    expect(pluginConfigSchemaFromManifest('weather-widget', manifest)?.fields.map((field) => field.key)).toEqual([
+      'pointsPerDollar',
+      'tier',
+    ])
+  })
+
+  it('drops what the console would not draw, and coerces the defaults', () => {
+    const result = validatePluginManifest({
+      ...base,
+      config: {
+        fields: [
+          { key: 'count', type: 'number' },
+          { key: 'count', type: 'string' },
+          { key: 'script', type: 'code' },
+          { key: 'empty', type: 'select', options: [] },
+          { key: 'flag', type: 'boolean' },
+        ],
+        defaults: { count: 'seven', flag: 'yes' },
+      },
+    })
+    const manifest = (result as { manifest: PluginManifest }).manifest
+    expect(manifest.config?.fields.map((field) => [field.key, field.type])).toEqual([
+      ['count', 'number'],
+      ['flag', 'boolean'],
+    ])
+    expect(typeof manifest.config?.defaults?.['count']).toBe('number')
+    expect(typeof manifest.config?.defaults?.['flag']).toBe('boolean')
+  })
+
+  it('leaves config off when it declares nothing usable, and when it is absent', () => {
+    const unusable = validatePluginManifest({ ...base, config: { fields: [{ type: 'string' }] } })
+    expect(unusable.ok && 'config' in unusable.manifest).toBe(false)
+    const absent = validatePluginManifest(base)
+    expect(absent.ok && 'config' in absent.manifest).toBe(false)
+  })
+
+  it('refuses a config that is not an object with a fields list', () => {
+    for (const config of [null, 'x', [], {}, { fields: 'x' }]) {
+      expect([config, validatePluginManifest({ ...base, config })]).toEqual([
+        config,
+        { ok: false, error: 'config must be an object with a fields list' },
+      ])
+    }
+  })
+})
+
+describe('declared connections and image hosts (AGL-4193)', () => {
+  const connection = {
+    id: 'reviews',
+    provider: 'google',
+    label: 'Reviews',
+    authorizationUrl: 'https://accounts.example.com/auth',
+    tokenUrl: 'https://oauth2.example.com/token',
+    scopes: ['business.manage'],
+    apiHosts: ['mybusiness.example.com'],
+  }
+
+  it('keeps a valid connections block and image hosts on the manifest it returns', () => {
+    const result = validatePluginManifest({
+      ...base,
+      capabilities: { imageHosts: ['lh3.example.com'] },
+      connections: [connection],
+    })
+    expect(result.ok).toBe(true)
+    const manifest = (result as { manifest: PluginManifest }).manifest
+    expect(manifest.connections?.map((entry) => entry.id)).toEqual(['reviews'])
+    expect(manifest.capabilities?.imageHosts).toEqual(['lh3.example.com'])
+  })
+
+  it('leaves both off a manifest that declares neither', () => {
+    const result = validatePluginManifest(base)
+    expect(result.ok && 'connections' in result.manifest).toBe(false)
+  })
+
+  it('refuses the whole manifest for a malformed connection or image host', () => {
+    expect(validatePluginManifest({ ...base, connections: [{ ...connection, tokenUrl: 'http://x.example.com/t' }] })).toMatchObject({
+      ok: false,
+      error: expect.stringMatching(/tokenUrl must be an https URL/),
+    })
+    expect(validatePluginManifest({ ...base, capabilities: { imageHosts: ['*.*.example.com'] } })).toMatchObject({
+      ok: false,
+      error: expect.stringMatching(/Image host/),
+    })
   })
 })
 

@@ -16,6 +16,7 @@
  */
 
 import * as Aglyn from '@aglyn/aglyn/server'
+import { excludeBuyNowPayLater } from '@aglyn/aglyn/app-utils/buy-now-pay-later'
 import * as CommerceModel from '../model'
 import {
   firebaseAdmin,
@@ -648,8 +649,7 @@ export const posOrderHandler: PluginApiHandler = async (req, res) => {
     // online doors this one recovers the cost exactly.
     const feeCents =
       payment === 'link'
-        ? tenderTakeFeeCents +
-          Aglyn.saleProcessingCostCents(chargedItemsCents + taxCents)
+        ? Aglyn.saleApplicationFeeCents(tenderTakeFeeCents, chargedItemsCents + taxCents)
         : tenderTakeFeeCents
     const totals = CommerceModel.computeOrderTotals(lineItems, {
       discountCents,
@@ -1011,6 +1011,9 @@ export const posOrderHandler: PluginApiHandler = async (req, res) => {
           ? { 'metadata[discountHoldKey]': discountHoldKey }
           : {}),
       })
+      // The register's card link offers no buy-now-pay-later (AGL-4198), so
+      // its fee, at the card rate, covers whatever the customer pays with.
+      excludeBuyNowPayLater(params)
       const response = await fetch(
         'https://api.stripe.com/v1/checkout/sessions',
         {

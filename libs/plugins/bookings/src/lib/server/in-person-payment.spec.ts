@@ -271,6 +271,8 @@ describe('start', () => {
       'service',
       5000,
       5400,
+      // A reader's card: the in-person rate, 2.95% + 40¢ (AGL-4198).
+      { inPerson: true },
     )
     expect(Object.fromEntries(created.params)).toMatchObject({
       amount: '5400',

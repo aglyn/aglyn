@@ -19,6 +19,7 @@ import {
   type SiteReturnHost,
   siteReturnOrigin,
 } from '@aglyn/aglyn/app-utils/site-return-url'
+import { excludeBuyNowPayLater } from '@aglyn/aglyn/app-utils/buy-now-pay-later'
 import { checkEntitlement,
   type PluginJobHostGate,
   registerPluginConfigSchema,
@@ -130,7 +131,13 @@ import {
   renderHostEmailWithTokens,
   hostSendingIdentity,
 } from '@aglyn/tenant-data-admin'
-import { merchantAccountIsReady } from '@aglyn/tenant-data-admin/server/payment-provider'
+import {
+  connectedAccountHeader,
+  directChargeParams,
+  merchantAccountIsReady,
+  saleChargeModel,
+  type SaleChargeModel,
+} from '@aglyn/tenant-data-admin/server/payment-provider'
 import { checkoutSessionCardAuthenticationParams } from '@aglyn/tenant-data-admin/server/stripe-card-authentication'
 import { emitHostEvent } from '@aglyn/tenant-runtime'
 import recordCapturedContact from '@aglyn/aglyn/plugin-manager/record-captured-contact'
@@ -454,6 +461,10 @@ export const bookHandler: PluginApiHandler = async (req, res) => {
     // would strand a real appointment slot as `pendingPayment` for 15 minutes
     // on a booking that could never be paid.
     let chargeAccountId = ''
+    // DIRECT or DESTINATION, by the seller's profile. A direct charge is made
+    // ON the seller's own account, which Stripe bills itself; everything else
+    // keeps the destination charge this path has always made.
+    let chargeModel: SaleChargeModel = 'destination'
     let feeCents = 0
     // No tax until a paid booking asks the tenant's tax rule what is owed.
     let serviceTax: PluginResolvedFlatTax = { taxCents: 0, label: '', pct: 0 }
@@ -482,6 +493,7 @@ export const bookHandler: PluginApiHandler = async (req, res) => {
       ) {
         return res.status(409).json({ error: 'Payments are not set up yet' })
       }
+      chargeModel = saleChargeModel(ownerProfile?.get('stripeChargeModel'))
 
       // THE TAKE RATE IS THE STOREFRONT LADDER'S, NOT A NEW ONE (AGL-2315).
       //
@@ -567,11 +579,16 @@ export const bookHandler: PluginApiHandler = async (req, res) => {
       // (AGL-2152). The comment above already promised this: "a fee derived
       // from `priceUsd` stays off the tax the moment tax is added". This is
       // the moment.
+      //
+      // A DIRECT charge passes no card cost through: Stripe bills the seller
+      // its own fee and charges the platform nothing for the sale, so the
+      // application fee is the take alone.
       feeCents = resolveTransactionFeeCents(
         ownerOrg as never,
         'service',
         chargeCents,
         chargeCents + serviceTax.taxCents,
+        chargeModel === 'direct' ? { direct: true } : {},
       )
     }
 
@@ -615,6 +632,12 @@ export const bookHandler: PluginApiHandler = async (req, res) => {
         status: paid ? 'pendingPayment' : 'confirmed',
         ...(paid && { expiresAtMs: Date.now() + 15 * 60_000 }),
         ...(crmRef ? { crmRef: formatBookingRecordRef(crmRef) } : {}),
+        // WHERE THE CHARGE LIVES, for a direct one: a refund has to be made on
+        // the seller's account, and the booking is what the refund reads.
+        // Absent on a destination booking, which is the platform's charge.
+        ...(paid && chargeModel === 'direct'
+          ? { chargeModel: 'direct', stripeAccountId: chargeAccountId }
+          : {}),
       }
       transaction.set(bookingRef, { ...record, createdAt: FieldValue.serverTimestamp() })
       // A free booking is confirmed as it is made (AGL-3643); a paid one
@@ -755,14 +778,21 @@ export const bookHandler: PluginApiHandler = async (req, res) => {
               'line_items[1][price_data][product_data][name]': serviceTax.label,
             }
           : {}),
-        // Destination charge to the MERCHANT's connected account (AGL-2315).
-        // Unconditional: `transfer_data[destination]` is what makes this the
-        // merchant's money, and it is required on every paid booking whatever
-        // the take rate. Only the fee below is conditional.
-        'payment_intent_data[transfer_data][destination]': chargeAccountId,
-        ...(feeCents > 0
-          ? { 'payment_intent_data[application_fee_amount]': String(feeCents) }
-          : {}),
+        // A DIRECT charge is the seller's money by where the session lives
+        // (the `Stripe-Account` header below), so it carries no
+        // `transfer_data`, only Aglyn's take as the application fee.
+        ...(chargeModel === 'direct'
+          ? directChargeParams(feeCents)
+          : {
+              // Destination charge to the MERCHANT's connected account (AGL-2315).
+              // Unconditional: `transfer_data[destination]` is what makes this the
+              // merchant's money, and it is required on every paid booking whatever
+              // the take rate. Only the fee below is conditional.
+              'payment_intent_data[transfer_data][destination]': chargeAccountId,
+              ...(feeCents > 0
+                ? { 'payment_intent_data[application_fee_amount]': String(feeCents) }
+                : {}),
+            }),
         // `{CHECKOUT_SESSION_ID}` is Stripe's own template token, substituted
         // on the redirect (AGL-2481). Without it the guest came back holding
         // the word `paid` and nothing else — no id, no amount — so the
@@ -795,8 +825,14 @@ export const bookHandler: PluginApiHandler = async (req, res) => {
               'metadata[taxPct]': String(serviceTax.pct),
             }
           : {}),
+        // Tells the webhook and the refund that this session, and the charge
+        // it makes, live on the seller's account. Absent on a destination one.
+        ...(chargeModel === 'direct' ? { 'metadata[chargeModel]': 'direct' } : {}),
         expires_at: String(Math.floor(Date.now() / 1000) + 30 * 60),
       })
+      // No buy-now-pay-later on a booking (AGL-4198), so the fee above,
+      // priced at the card rate, covers whatever the guest pays with.
+      excludeBuyNowPayLater(params)
       const stripeResponse = await fetch(
         'https://api.stripe.com/v1/checkout/sessions',
         {
@@ -823,6 +859,8 @@ export const bookHandler: PluginApiHandler = async (req, res) => {
             // that opens a SECOND payable session against one held slot, and
             // a guest who pays both is charged twice for one appointment.
             'Idempotency-Key': `booking-${bookingId}`,
+            // A direct charge's session is opened ON the seller's account.
+            ...connectedAccountHeader(chargeModel, chargeAccountId),
           },
           body: params.toString(),
         },

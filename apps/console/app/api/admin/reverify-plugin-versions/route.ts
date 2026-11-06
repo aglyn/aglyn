@@ -233,6 +233,9 @@ async function handler(request: Request): Promise<Response> {
           declaredContributions: stored.declaredContributions as ReturnType<
             typeof readPluginContributions
           > | null,
+          // A version's declared connections (AGL-4193); none for a version
+          // published before them.
+          declaredConnections: stored.declaredConnections ?? null,
         })
         downloadFailure = ''
       } catch (error) {

@@ -15,6 +15,7 @@
  * limitations under the License.
  */
 
+import { directSellerAccountForHost, fetchOnSellerThenPlatform } from './seller-stripe-account'
 import * as Aglyn from '@aglyn/aglyn/server'
 import * as CommerceModel from '../model'
 import { firebaseAdmin, getOrgForHost } from '@aglyn/tenant-data-admin'
@@ -371,13 +372,14 @@ export const refundHandler: PluginApiHandler = async (req, res) => {
       // Legacy rows stored the checkout session as the doc id; resolve
       // the payment intent from Stripe.
       (await (async () => {
-        const response = await fetch(
+        const response = await fetchOnSellerThenPlatform(
           `https://api.stripe.com/v1/checkout/sessions/${orderId}`,
           {
             headers: {
               Authorization: `Bearer ${process.env.STRIPE_SECRET_KEY}`,
             },
           },
+          await directSellerAccountForHost(hostId),
         )
         const session = await response.json()
         return response.ok ? session?.payment_intent : null
@@ -560,10 +562,19 @@ export const refundHandler: PluginApiHandler = async (req, res) => {
       paymentIntentId = String(card.paymentIntentId)
     }
 
+    // A direct-charge order is refunded on the seller's own account, from
+    // their balance; `createStripeRefund` falls back to the platform when that
+    // account does not know the payment.
+    const refundAccount =
+      (order as { chargeModel?: string }).chargeModel === 'direct'
+        ? String((order as { stripeAccountId?: string }).stripeAccountId ?? '') ||
+          (await directSellerAccountForHost(hostId))
+        : await directSellerAccountForHost(hostId)
     const refund = await createStripeRefund({
       paymentIntentId: String(paymentIntentId),
       amountCents: refundCents,
       idempotencyKey: claim?.stripeKey ?? null,
+      ...(refundAccount ? { stripeAccount: refundAccount } : {}),
     })
     if ('error' in refund) {
       console.error('Stripe refund error', refund.code, refund.error)

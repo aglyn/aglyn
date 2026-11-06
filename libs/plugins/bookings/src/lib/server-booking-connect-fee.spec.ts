@@ -81,6 +81,9 @@ jest.mock('@aglyn/aglyn/server', () => ({
   saleProcessingCostCents: jest.requireActual(
     '../../../../aglyn/src/lib/app-utils/plan-entitlements',
   ).saleProcessingCostCents,
+  saleApplicationFeeCents: jest.requireActual(
+    '../../../../aglyn/src/lib/app-utils/plan-entitlements',
+  ).saleApplicationFeeCents,
 }))
 
 jest.mock('@aglyn/tenant-runtime', () => ({
@@ -252,6 +255,7 @@ import { standInTaxProfile } from './testing/stand-in-tax-profile'
 import { computeOpenSlots } from './model'
 import {
   resolveTransactionFeePct,
+  saleApplicationFeeCents,
   saleProcessingCostCents,
 } from '@aglyn/aglyn/server'
 
@@ -376,6 +380,14 @@ async function book(): Promise<URLSearchParams> {
 }
 
 describe('a paid booking pays the MERCHANT (AGL-2315)', () => {
+  it('offers no buy-now-pay-later, so the card-rate fee covers what the guest pays with (AGL-4198)', async () => {
+    const params = await book()
+    const excluded = [...params.keys()]
+      .filter((key) => key.startsWith('excluded_payment_method_types['))
+      .map((key) => params.get(key))
+    expect(excluded).toEqual(['klarna', 'afterpay_clearpay', 'affirm'])
+  })
+
   it('sends a destination charge to the merchant’s connected account', async () => {
     const params = await book()
     // The defect: this key was absent entirely, so the charge settled on the
@@ -511,13 +523,13 @@ describe('the take rate is the storefront ladder’s (AGL-2315)', () => {
       const sent = Number(
         params.get('payment_intent_data[application_fee_amount]'),
       )
-      const takeSent = sent - saleProcessingCostCents(7500)
       // Always emitted now: even a 0% tier owes Stripe for the charge, so
-      // there is always a real amount to send.
+      // there is always a real amount to send. The take plus 2.9% + 30¢, or
+      // what Stripe charges the platform where that is more (AGL-4198).
       expect(params.has('payment_intent_data[application_fee_amount]')).toBe(
         true,
       )
-      expect(takeSent).toBe(expectedFeeCents ?? 0)
+      expect(sent).toBe(saleApplicationFeeCents(expectedFeeCents ?? 0, 7500))
       // Recorded on the session too — the figure a refund reverses.
       expect(params.get('metadata[feeCents]')).toBe(String(sent))
 
@@ -544,8 +556,7 @@ describe('the take rate is the storefront ladder’s (AGL-2315)', () => {
       const storefrontPct = resolveTransactionFeePct({ plan } as never, 'service')
       expect(params.get('payment_intent_data[application_fee_amount]')).toBe(
         String(
-          Math.max(1, Math.round((7500 * storefrontPct) / 100)) +
-            saleProcessingCostCents(7500),
+          saleApplicationFeeCents(Math.max(1, Math.round((7500 * storefrontPct) / 100)), 7500),
         ),
       )
       stripePosts.length = 0
@@ -563,7 +574,7 @@ describe('the take rate is the storefront ladder’s (AGL-2315)', () => {
     mockAdmin.__state.org = { id: 'org-1', ownerUid: 'owner-1', plan: 'scale' }
     const params = await book()
     expect(params.get('payment_intent_data[application_fee_amount]')).toBe(
-      String(1 + saleProcessingCostCents(60)),
+      String(saleApplicationFeeCents(1, 60)),
     )
     expect(
       params.get('payment_intent_data[transfer_data][destination]'),
@@ -704,5 +715,75 @@ describe('the return URL names the checkout session (AGL-2481)', () => {
     const params = await book()
 
     expect(params.get('cancel_url')).not.toContain('session_id')
+  })
+})
+
+/**
+ * A seller whose profile records `stripeChargeModel: 'direct'` is charged ON
+ * their own account: the session is opened with `Stripe-Account`, carries no
+ * `transfer_data`, and the application fee is Aglyn's take alone, because
+ * Stripe bills that seller its own card fee.
+ */
+describe('a DIRECT-charge seller is charged on their own account', () => {
+  beforeEach(() => {
+    mockAdmin.__state.ownerProfile = {
+      stripeAccountId: 'acct_merchant_1',
+      stripeChargesEnabled: true,
+      stripeChargeModel: 'direct',
+    }
+  })
+
+  it('opens the session on the seller’s account with no transfer', async () => {
+    const params = await book()
+    expect(stripePosts[0].headers['Stripe-Account']).toBe('acct_merchant_1')
+    expect(params.has('payment_intent_data[transfer_data][destination]')).toBe(false)
+    expect(params.has('payment_intent_data[on_behalf_of]')).toBe(false)
+    expect(params.get('metadata[chargeModel]')).toBe('direct')
+    // The idempotency key is unchanged: it names the booking attempt.
+    expect(stripePosts[0].headers['Idempotency-Key']).toMatch(/^booking-/)
+  })
+
+  it('takes the plan’s take only, with no card cost passed through', async () => {
+    // Starter: 5% of $75.00.
+    const params = await book()
+    expect(params.get('payment_intent_data[application_fee_amount]')).toBe('375')
+    expect(params.get('metadata[feeCents]')).toBe('375')
+  })
+
+  it('sends no application fee at all on a 0% tier', async () => {
+    mockAdmin.__state.org = { id: 'org-1', ownerUid: 'owner-1', plan: 'advanced' }
+    const params = await book()
+    expect(params.has('payment_intent_data[application_fee_amount]')).toBe(false)
+    expect(params.get('metadata[feeCents]')).toBe('0')
+    expect(stripePosts[0].headers['Stripe-Account']).toBe('acct_merchant_1')
+  })
+
+  it('records the model and the seller account on the hold, for the refund', async () => {
+    await book()
+    const [hold] = [...mockAdmin.__state.bookings.values()]
+    expect(hold).toMatchObject({
+      status: 'pendingPayment',
+      chargeModel: 'direct',
+      stripeAccountId: 'acct_merchant_1',
+    })
+  })
+
+  it('still refuses a seller whose charges are not enabled', async () => {
+    mockAdmin.__state.ownerProfile['stripeChargesEnabled'] = false
+    const res = makeRes()
+    await bookHandler(makeReq(), res)
+    expect(res.statusCode).toBe(409)
+    expect(stripePosts).toHaveLength(0)
+  })
+})
+
+describe('a destination seller is unchanged', () => {
+  it('sends no Stripe-Account header and records nothing about the model', async () => {
+    const params = await book()
+    expect(stripePosts[0].headers['Stripe-Account']).toBeUndefined()
+    expect(params.has('metadata[chargeModel]')).toBe(false)
+    const [hold] = [...mockAdmin.__state.bookings.values()]
+    expect(hold).not.toHaveProperty('chargeModel')
+    expect(hold).not.toHaveProperty('stripeAccountId')
   })
 })

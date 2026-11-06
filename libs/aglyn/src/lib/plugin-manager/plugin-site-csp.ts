@@ -41,7 +41,13 @@
  * covered by its `https://` source (CSP Level 3 scheme matching).
  */
 
+import { getRegisteringPluginId } from '../app-utils/registering-plugin'
 import { PLUGIN_SITE_CSP_DECLARED } from './first-party-plugins.generated'
+import {
+  definePluginServiceContract,
+  registerPluginService,
+  resolvePluginServices,
+} from './plugin-services'
 
 /** The directives a plugin may widen; the enforced, owner-widenable ones. */
 export const PLUGIN_SITE_CSP_DIRECTIVES = [
@@ -148,4 +154,79 @@ export function pluginSiteCspPluginsToRead(
   return declared
     .map((declaration) => declaration.pluginId)
     .filter((pluginId) => enabled.has(pluginId))
+}
+
+/* ------------------------------------------------------------------ */
+/* Hosts a plugin answers per site at request time (AGL-4195)           */
+/* ------------------------------------------------------------------ */
+
+/**
+ * A plugin whose hosts are not known when the platform is built — the
+ * marketplace, whose installed plugins each declare the image hosts their
+ * elements show (`capabilities.imageHosts`) — answers them per site instead
+ * of declaring them in `plugins.config.json`. The verdict asks every source
+ * beside the declared plugins above, and the hosts ride the same owner-list
+ * parse in `security-origins.js`, so a source can widen a directive only by
+ * hosts that parse there, and only on the sites it names them for.
+ */
+export interface PluginSiteCspSource {
+  /** The hosts this site needs admitted, by directive; none is `{}`. */
+  hosts(input: { hostId: string; orgId: string | null }): Promise<PluginSiteCspHosts>
+}
+
+export const PLUGIN_SITE_CSP_SOURCES = definePluginServiceContract<PluginSiteCspSource>(
+  'core.site-csp-source',
+  { multiple: true },
+)
+
+/**
+ * Registers a plugin's per-site host source. The owner is the loader's marker
+ * when a register fn is running, else `options.pluginId`; with neither the
+ * registration throws.
+ */
+export function registerPluginSiteCspSource(
+  source: PluginSiteCspSource,
+  options?: { pluginId?: string },
+): void {
+  const pluginId = (getRegisteringPluginId() ?? options?.pluginId ?? '').trim()
+  if (!pluginId) throw new Error('a site CSP source was registered with no owner')
+  registerPluginService(PLUGIN_SITE_CSP_SOURCES, source, { pluginId })
+}
+
+/**
+ * What every registered source answers for one site, by directive,
+ * de-duplicated. A source that throws, or answers anything but a list of
+ * strings for a directive, adds nothing for it: the policy is never widened
+ * by an answer this did not parse, and one source's failure costs only its
+ * own hosts.
+ */
+export async function pluginSiteCspSourceHosts(input: {
+  hostId: string
+  orgId: string | null
+}): Promise<Record<PluginSiteCspDirective, string[]>> {
+  const out = Object.fromEntries(
+    PLUGIN_SITE_CSP_DIRECTIVES.map((directive) => [directive, [] as string[]]),
+  ) as Record<PluginSiteCspDirective, string[]>
+  const sources = resolvePluginServices(PLUGIN_SITE_CSP_SOURCES)
+  if (!sources.length) return out
+  const answers = await Promise.all(
+    sources.map(async ({ pluginId, impl }) => {
+      try {
+        return await impl.hosts(input)
+      } catch (error) {
+        console.error(`site CSP source of "${pluginId}" failed`, error)
+        return {}
+      }
+    }),
+  )
+  for (const answer of answers) {
+    for (const directive of PLUGIN_SITE_CSP_DIRECTIVES) {
+      const hosts = (answer as PluginSiteCspHosts | null | undefined)?.[directive]
+      if (!Array.isArray(hosts)) continue
+      for (const host of hosts) {
+        if (typeof host === 'string' && !out[directive].includes(host)) out[directive].push(host)
+      }
+    }
+  }
+  return out
 }

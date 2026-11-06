@@ -15,6 +15,7 @@
  * limitations under the License.
  */
 
+import { directSellerAccountForHost, fetchOnSellerThenPlatform } from './seller-stripe-account'
 import { readSiteReturnHost, siteReturnUrl } from '@aglyn/aglyn/app-utils/site-return-url'
 import type { PluginApiHandler } from '@aglyn/aglyn/server'
 import { firebaseAdmin } from '@aglyn/tenant-data-admin'
@@ -51,6 +52,10 @@ export const subscriptionPortalHandler: PluginApiHandler = async (req, res) => {
       .limit(1)
       .get()
     const customerId = subscriptions.docs[0]?.get('stripeCustomerId')
+    // A direct-charge subscription's customer lives on the seller's account,
+    // so the portal session is opened there; the seller's own portal
+    // settings in their Stripe Dashboard apply.
+    const sellerAccount = await directSellerAccountForHost(hostId)
     if (!customerId) {
       return res.status(404).json({ error: 'No subscription found' })
     }
@@ -60,7 +65,7 @@ export const subscriptionPortalHandler: PluginApiHandler = async (req, res) => {
       site: await readSiteReturnHost(hostRef),
       requestHost: String(req.headers.host ?? ''),
     })
-    const response = await fetch(
+    const response = await fetchOnSellerThenPlatform(
       'https://api.stripe.com/v1/billing_portal/sessions',
       {
         method: 'POST',
@@ -73,6 +78,7 @@ export const subscriptionPortalHandler: PluginApiHandler = async (req, res) => {
           return_url: returnUrl,
         }).toString(),
       },
+      sellerAccount,
     )
     const session = await response.json()
     if (!response.ok || !session.url) {

@@ -14,13 +14,15 @@
  * See the License for the specific language governing permissions and
  * limitations under the License.
  */
-import { createContext } from 'react'
 
 /**
  * The node id of the realm element whose Suspense boundary a leaf is
  * rendering inside (AGL-3390). A namespaced element renders its boundary
  * once and then itself inside it; this is how the inner render knows it is
  * the inner one, without a prop that could reach the DOM.
+ *
+ * Core's context, under the renderer's name (AGL-4195): the connection record
+ * hook reads the same value to know which element is asking, so the two must
+ * be one context, and core cannot import the renderer.
  */
-export const RealmBoundaryContext = createContext<string | undefined>(undefined)
-RealmBoundaryContext.displayName = 'RealmBoundaryContext'
+export { RealmElementNodeContext as RealmBoundaryContext } from '@aglyn/aglyn/app-utils/realm-elements-context'

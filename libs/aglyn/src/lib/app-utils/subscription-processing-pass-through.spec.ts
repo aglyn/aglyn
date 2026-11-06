@@ -23,6 +23,7 @@ import {
   resolveTransactionFeePct,
   saleProcessingCostCents,
   saleProcessingPassThroughPercent,
+  salePlatformCostPercent,
 } from './plan-entitlements'
 
 /**
@@ -60,25 +61,26 @@ function recoveredCents(amountCents: number, percent: number): number {
 
 describe('subscription processing pass-through (AGL-2655)', () => {
   /**
-   * THE THREE FIGURES THE ISSUE NAMES. At 6% + 30¢: $10 carries 6 + 3 = 9%,
-   * $25 carries 6 + 1.2 = 7.2%, $100 carries 6 + 0.3 = 6.3%. Pinned as
+   * THE THREE FIGURES. At the card rate, 2.9% + 30¢ (AGL-4198; 6% + 30¢
+   * before): $10 carries 2.9 + 3 = 5.9%, $25 carries 2.9 + 1.2 = 4.1%, $100
+   * carries 2.9 + 0.3 = 3.2%. Pinned as
    * literals so a drift in the constants is a red here, not a quiet re-price
    * of every recurring membership.
    */
   it('folds the fixed 30¢ into the rate for a $10, $25 and $100 price', () => {
-    expect(SALE_PROCESSING_PERCENT).toBe(6)
+    expect(SALE_PROCESSING_PERCENT).toBe(2.9)
     expect(SALE_PROCESSING_FIXED_CENTS).toBe(30)
-    expect(saleProcessingPassThroughPercent(1000)).toBe(9)
-    expect(saleProcessingPassThroughPercent(2500)).toBe(7.2)
-    expect(saleProcessingPassThroughPercent(10000)).toBe(6.3)
+    expect(saleProcessingPassThroughPercent(1000)).toBe(5.9)
+    expect(saleProcessingPassThroughPercent(2500)).toBe(4.1)
+    expect(saleProcessingPassThroughPercent(10000)).toBe(3.2)
   })
 
   it('rounds up to the next hundredth, never to nearest', () => {
-    // $90: 6 + 0.30 ÷ 90 = 6.3333…, which nearest would make 6.33 and leave
-    // the recovery a third of a cent short every cycle.
-    expect(saleProcessingPassThroughPercent(9000)).toBe(6.34)
-    // $70: 6 + 0.4285… = 6.4285…, up to 6.43.
-    expect(saleProcessingPassThroughPercent(7000)).toBe(6.43)
+    // $90: 2.9 + 0.30 ÷ 90 = 3.2333…, which nearest would make 3.23 and leave
+    // the recovery short every cycle.
+    expect(saleProcessingPassThroughPercent(9000)).toBe(3.24)
+    // $70: 2.9 + 0.4285… = 3.3285…, up to 3.33.
+    expect(saleProcessingPassThroughPercent(7000)).toBe(3.33)
   })
 
   it('never carries a third decimal, which Stripe rejects', () => {
@@ -95,7 +97,8 @@ describe('subscription processing pass-through (AGL-2655)', () => {
    * worth on that amount, plus the cent each side rounds.
    */
   it('recovers the card cost at every recurring size, and never much more', () => {
-    for (const amount of RECURRING_CENTS) {
+    // From $1 up: below that the percent hits Stripe's 100% ceiling.
+    for (const amount of RECURRING_CENTS.filter((cents) => cents >= 100)) {
       const percent = saleProcessingPassThroughPercent(amount)
       const recovered = recoveredCents(amount, percent)
       const cost = saleProcessingCostCents(amount)
@@ -112,7 +115,7 @@ describe('subscription processing pass-through (AGL-2655)', () => {
   })
 
   it('caps at 100, the ceiling Stripe puts on the parameter', () => {
-    // A 1¢ recurring price would need 3,006%. Stripe would reject that; the
+    // A 1¢ recurring price would need 3,002.9%. Stripe would reject that; the
     // cap is the recurring twin of clamping a one-time fee to the charge.
     expect(saleProcessingPassThroughPercent(1)).toBe(100)
     expect(resolveSubscriptionFeePercent(org('starter'), 'digital', 1)).toBe(100)
@@ -124,27 +127,35 @@ describe('subscription processing pass-through (AGL-2655)', () => {
    * pass-through; a fee tier's is take + pass-through, and the take is still
    * really collected on top of the cost.
    */
-  it('a 0% tier carries exactly the pass-through', () => {
+  it('a 0% tier carries what Stripe charges the platform for the cycle (AGL-4198)', () => {
     for (const plan of ['advanced', 'agency', 'enterprise'] as OrgPlan[]) {
       expect(resolveTransactionFeePct(org(plan), 'digital')).toBe(0)
       for (const amount of [1000, 2500, 10000]) {
         expect(resolveSubscriptionFeePercent(org(plan), 'digital', amount)).toBe(
-          saleProcessingPassThroughPercent(amount),
+          salePlatformCostPercent(amount),
         )
       }
     }
+    // The card's 2.9% + 30¢ and the payout's 0.25% + 25¢, each rounded up:
+    // $10 → 87¢ = 8.7%, $25 → $1.35 = 5.4%, $100 → $3.70 = 3.7%.
+    expect(salePlatformCostPercent(1000)).toBe(8.7)
+    expect(salePlatformCostPercent(2500)).toBe(5.4)
+    expect(salePlatformCostPercent(10000)).toBe(3.7)
+    // Stripe Tax's 0.5% raises the floor where the subscription runs it.
+    expect(resolveSubscriptionFeePercent(org('enterprise'), 'digital', 10000, { stripeTax: true })).toBe(4.2)
   })
 
   it('a fee tier carries its take plus the pass-through, to two decimals', () => {
-    // Business digital is 2%: $100 → 2 + 6.3 = 8.3; $90 → 2 + 6.34 = 8.34.
-    expect(resolveSubscriptionFeePercent(org('business'), 'digital', 10000)).toBe(8.3)
-    expect(resolveSubscriptionFeePercent(org('business'), 'digital', 9000)).toBe(8.34)
-    // Starter digital is 5%: $10 → 5 + 9 = 14.
-    expect(resolveSubscriptionFeePercent(org('starter'), 'digital', 1000)).toBe(14)
+    // Business digital is 2%: $100 → 2 + 3.2 = 5.2; $90 → 2 + 3.24 = 5.24.
+    expect(resolveSubscriptionFeePercent(org('business'), 'digital', 10000)).toBe(5.2)
+    expect(resolveSubscriptionFeePercent(org('business'), 'digital', 9000)).toBe(5.24)
+    // Starter digital is 5%: $10 → 5 + 5.9 = 10.9.
+    expect(resolveSubscriptionFeePercent(org('starter'), 'digital', 1000)).toBe(10.9)
     for (const plan of ['starter', 'business', 'scale'] as OrgPlan[]) {
       const take = resolveTransactionFeePct(org(plan), 'digital')
       expect(take).toBeGreaterThan(0)
-      for (const amount of RECURRING_CENTS) {
+      // From $1 up: below that the percent hits Stripe's 100% ceiling.
+      for (const amount of RECURRING_CENTS.filter((cents) => cents >= 100)) {
         const percent = resolveSubscriptionFeePercent(org(plan), 'digital', amount)
         expect(String(percent)).toMatch(/^\d+(\.\d{1,2})?$/)
         const net = recoveredCents(amount, percent) - saleProcessingCostCents(amount)

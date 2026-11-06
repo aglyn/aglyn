@@ -285,6 +285,25 @@ Forms keeps its saved submissions — the card says which before you flip it. Th
 settings can be answered differently for this site field by field; see
 [Settings for one site](../developers/plugins/overview.md#configure-site).
 
+### Connect a plugin to another service {#plugin-connections}
+
+Some plugins show information from another service, such as your business listing's
+reviews. Their page under **Site Admin → Plugins** has a card for each service the
+plugin uses:
+
+1. Press **Connect**. You sign in at that service and choose what to share; this site
+   never sees your password.
+2. Back on the page, choose what the plugin should use, such as an account and then one
+   of its locations, and press **Use this…**.
+3. From then on the plugin stays up to date on its own. The card shows when it last
+   synced and when it syncs next. **Sync now** updates it straight away, **Change**
+   picks something else, and **Disconnect** stops it.
+
+If the service stops accepting the connection, the card says **Reconnect needed**;
+press **Reconnect** and sign in again. Connecting is part of the Starter, Pro and
+Custom plans, and it needs the **Manage a site’s plugin connections** permission. On a
+plan without it the card stays on the page with its buttons off and an **Upgrade** link.
+
 ## What to do next
 
 - **Running several client sites?** [Run an agency workspace](./run-an-agency-workspace.md)

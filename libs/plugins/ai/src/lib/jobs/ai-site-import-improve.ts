@@ -57,8 +57,8 @@ import {
 import { AI_ICON_WORDS } from '../runtime/ai-icon-library'
 import type { AiSiteImportAddedSection, AiSiteImportPagePictures, AiSiteImportPageRole, AiSiteImportPlan } from '../model/ai-site-import'
 import { aiSiteHomeArc } from '../model/ai-site-home-arcs'
-import { siteImportContentKept, type SiteImportFidelityTheme, type SiteImportPageFidelity } from '../model/ai-site-import-fidelity'
-import { siteImportLedger, type SiteImportLedger, type SiteImportLedgerItem } from '../model/ai-site-import-ledger'
+import { siteImportContentKept, siteImportContentWords, type SiteImportFidelityTheme, type SiteImportPageFidelity } from '../model/ai-site-import-fidelity'
+import { siteImportLedger, type SiteImportLedger, type SiteImportLedgerItem, type SiteImportLedgerLine } from '../model/ai-site-import-ledger'
 import { AI_SITE_IMPORT_PAGE_CEILING_CREDITS } from '../model/ai-site-import'
 import { estimateAiBilledUsd } from '../providers/catalog'
 import type { AiSystemBlock, AiTool, AiUsage } from '../providers/contract'
@@ -168,7 +168,7 @@ export const AI_SITE_IMPORT_IMPROVE_TEXT = [
   'Block kinds:',
   '- eyebrow: a short label over a heading. heading: the first heading of the first section is the page title; the first heading of any other section is its heading. lede: the larger sentence under a heading. text: a paragraph. note: small print.',
   '- button: text is its label, to where it goes, style primary (filled), secondary (outlined) or quiet. Two in a row read as a pair.',
-  '- cards, steps, faq: a group of items, each a title and a text. cards are services, features or reasons; steps are numbered and in order; faq items are a question and its answer. An item may carry an icon, a to, and ref naming a picture of the page, shown on the card.',
+  '- cards, steps, faq: a group of items, each a title and a text. cards are services, features or reasons; steps are numbered and in order; faq items are a question and its answer. An item may carry an icon, a to, and ref naming a picture of the page, shown on the card: a picture the ledger lists with lines goes on the card written of those lines, so like cards each show their own.',
   '- list: short lines, title only.',
   '- image: text describes a picture the page should have where none of its own fits; the platform finds one, or leaves it out.',
   '- keep: ref names one thing of the ledger, drawn exactly as the owner has it, so write nothing for it: a picture, form, plan, table, quote, video, contact line, figures, logos, a gallery of photos (drawn as a grid of them), tabs, or a group. Place every thing the ledger marks must, exactly once, wherever it serves the page best, in a column if that helps.',
@@ -237,8 +237,26 @@ const textOf = (block: SiteImportBlock | undefined): string => (block && block.k
 
 const short = (text: string, most = 80) => (text.length > most ? `${text.slice(0, most - 1)}…` : text)
 
+/**
+ * The lines each picture of a page stands with (AGL-4152): the words after it
+ * in its section, up to the next picture, as a row of pictured services or a
+ * photo over its caption lays them out. What the ledger tells a redesign a
+ * picture goes with, and what a card written of those words is given it by.
+ */
+export function aiSiteImportPictureCaptions(ledger: Pick<SiteImportLedger, 'items' | 'lines'>): Map<string, SiteImportLedgerLine[]> {
+  const pictures = ledger.items.filter((item) => item.kind === 'picture' && item.lines[0] !== undefined)
+  const out = new Map<string, SiteImportLedgerLine[]>()
+  for (const item of pictures) {
+    const at = item.lines[0] as number
+    const next = Math.min(...pictures.filter((other) => other.section === item.section && (other.lines[0] as number) > at).map((other) => other.lines[0] as number), Number.POSITIVE_INFINITY)
+    const lines = ledger.lines.filter((line) => line.section === item.section && line.line > at && line.line < next && !line.group).slice(0, 2)
+    if (lines.length) out.set(item.ref, lines)
+  }
+  return out
+}
+
 /** A ledger item, in a few words: what it is and what it shows. */
-function shownItem(item: SiteImportLedgerItem, doc: Pick<AiSiteImportDocument, 'blocks' | 'photos'>): string {
+function shownItem(item: SiteImportLedgerItem, doc: Pick<AiSiteImportDocument, 'blocks' | 'photos'>, captions?: ReadonlyMap<string, SiteImportLedgerLine[]>): string {
   const must = item.must ? ' must' : ''
   const words = item.lines.map((ref) => textOf(doc.blocks[ref])).filter(Boolean)
   switch (item.kind) {
@@ -247,7 +265,9 @@ function shownItem(item: SiteImportLedgerItem, doc: Pick<AiSiteImportDocument, '
       const url = block?.kind === 'image' ? block.url : ''
       const photo = doc.photos.find((entry) => entry.from === url)
       const alt = block?.kind === 'image' ? clean(block.alt) : ''
-      return `${item.ref}${must} (${photo?.width && photo.height ? `${photo.width}×${photo.height}, ` : ''}"${short(alt, 60)}")`
+      // The words it stands with, by their numbers: a card written of them takes it by its ref (AGL-4152).
+      const with_ = captions?.get(item.ref)?.map((line) => `[${line.line}]`).join(', ')
+      return `${item.ref}${must} (${photo?.width && photo.height ? `${photo.width}×${photo.height}, ` : ''}"${short(alt, 60)}"${with_ ? `, with ${with_}` : ''})`
     }
     case 'form':
       return `${item.ref}${must} (a form)`
@@ -299,10 +319,11 @@ export function aiSiteImportLedgerText(ledger: SiteImportLedger, doc: Pick<AiSit
   })
   // A long page shows each group by its titles alone, kept whole: what is around them is written (AGL-4152).
   const lines = ledger.folded ? ledger.lines.filter((line) => !line.group) : ledger.lines
+  const captions = aiSiteImportPictureCaptions(ledger)
   return [
     ...(ledger.folded ? ['This page is long: its groups are folded, each shown by its titles and kept whole with keep.'] : []),
     'Things to place with keep, each once; "must" may not be left out:',
-    ...(ledger.items.length ? ledger.items.map((item) => shownItem(item, doc)) : ['(none)']),
+    ...(ledger.items.length ? ledger.items.map((item) => shownItem(item, doc, captions)) : ['(none)']),
     '',
     'Links that must go somewhere on the page:',
     ...(links.length ? links : ['(none)']),
@@ -365,18 +386,23 @@ export function aiSiteImportImprovePrompt(input: {
 
 /**
  * How many new sections a page of each role is asked for (AGL-4152): a home
- * or a main service page two, a contact page none, its form framed instead.
+ * or a main service page two, a contact page none, its form framed instead,
+ * and a gallery none: its pictures are what it is for, and a section added
+ * to a page of photos only stands between a visitor and them.
  */
 export const AI_SITE_IMPORT_NEW_SECTIONS: Readonly<Record<AiSiteImportPageRole, number>> = {
   home: 2,
   service: 2,
   about: 1,
-  gallery: 1,
+  gallery: 0,
   pricing: 1,
   other: 1,
   contact: 0,
   faq: 0,
 }
+
+/** The fewest content words an old section says for a new one to be its rework (AGL-4152): fewer is a label, which any section may echo. */
+export const AI_SITE_IMPORT_REWORK_LEAST_WORDS = 4
 
 /** The most sections a redesigned page runs to: a page the source already fills has no room for more. */
 export const AI_SITE_IMPORT_IMPROVE_MOST_SECTIONS = 10
@@ -432,7 +458,9 @@ export function aiSiteImportImproveRoleLines(input: { role: AiSiteImportPageRole
  * its own, and the rework of no section of the old page. Each section of the
  * old page past its opening is reworked by the one section that says most
  * of it; another section drawing on its words, such as a why-us of the
- * opening's facts, is new.
+ * opening's facts, is new. An old section of a few words, a heading over a
+ * band or a label over a kept group, reworks nothing: any new section that
+ * happens to say its two or three words would otherwise read as its rework.
  */
 export function aiSiteImportImproveNewSections(answer: readonly AiSiteImportImprovedSection[], ledger: Pick<SiteImportLedger, 'lines' | 'items'>): number[] {
   const kinds = new Map(ledger.items.map((item) => [item.ref, item.kind]))
@@ -448,6 +476,7 @@ export function aiSiteImportImproveNewSections(answer: readonly AiSiteImportImpr
   for (const [at, lines] of sources) {
     if (at === 0) continue
     const text = lines.join(' ')
+    if (siteImportContentWords(text) < AI_SITE_IMPORT_REWORK_LEAST_WORDS) continue
     let best = -1
     let most = 0.5
     said.forEach((words, index) => {
@@ -567,9 +596,22 @@ export function aiReadImprovedPage(raw: unknown, settled: AiLayoutSettlement[] =
  * The answer in the compiler's language
  *-----------------------------------------*/
 
-/** The site's hero as a page brought in draws it: a collage or a portrait holds what a page brought in does not. */
-export function aiSiteImportImproveHero(design: AiLayoutDesign, plan?: AiSiteImportPlan | null): AiLayoutImportHero {
+/** The least width over height of an opening photo a redesign lays its words over (AGL-4152): a landscape, not a square or a portrait. */
+export const AI_SITE_IMPORT_COVER_LEAST_RATIO = 1.3
+
+/** The heroes that box their photo under the words: a masthead's and an editorial's. */
+const BOXED_HEROES: ReadonlySet<AiLayoutHeroVariant> = new Set(['column', 'editorial'])
+
+/**
+ * The site's hero as a page brought in draws it: a collage or a portrait holds
+ * what a page brought in does not. A redesign whose opening holds the page's
+ * own landscape photo lays its words over it (AGL-4152): a hero that boxes a
+ * wide photo under centered words reads as a picture pasted below a heading,
+ * the way an old page looks, never as a brand's opening.
+ */
+export function aiSiteImportImproveHero(design: AiLayoutDesign, plan?: AiSiteImportPlan | null, opening?: { ratio?: number } | null): AiLayoutImportHero {
   const chosen = (plan?.design.hero as AiLayoutHeroVariant | undefined) ?? aiLayoutDesignChoices(design).hero
+  if (BOXED_HEROES.has(chosen) && (opening?.ratio ?? 0) >= AI_SITE_IMPORT_COVER_LEAST_RATIO) return 'cover'
   return chosen === 'collage' || chosen === 'portrait' ? 'split' : chosen
 }
 
@@ -599,6 +641,59 @@ export interface AiSiteImportImproveCompileInput {
   plan?: AiSiteImportPlan | null
   /** The theme the page is drawn in, where it is known: a brand band only where the brand itself fills. */
   theme?: SiteImportFidelityTheme | null
+}
+
+/** The least share of a picture's own words a card says for the card to take that picture (AGL-4152). */
+const CARD_PICTURE_KEPT = 0.5
+
+/**
+ * The source's own pictures each set of written cards takes (AGL-4152), by
+ * block: where an answer wrote like services as cards and gave none of them a
+ * picture, while the page's photos of those same services sit unplaced, each
+ * card takes the photo whose words it says. Every card must find one, or the
+ * set takes none: a grid of cards half of which show a photo reads as broken.
+ * Where no card says a photo's words but the one section's unplaced photos
+ * number exactly the cards, they are taken in order, as the source laid them.
+ */
+export function aiSiteImportCardPictures(answer: readonly AiSiteImportImprovedSection[], ledger: Pick<SiteImportLedger, 'items' | 'lines'>): Map<AiSiteImportImprovedBlock, string[]> {
+  const placed = new Set(aiSiteImportImprovedPlaced(answer, ledger))
+  const captions = aiSiteImportPictureCaptions(ledger)
+  const taken = new Set<string>()
+  const out = new Map<AiSiteImportImprovedBlock, string[]>()
+  for (const section of answer) {
+    for (const block of section.blocks) {
+      if (block.kind !== 'cards') continue
+      const items = block.items ?? []
+      if (items.length < 2 || items.some((item) => item.ref)) continue
+      const pool = ledger.items.filter((item) => item.kind === 'picture' && !placed.has(item.ref) && !taken.has(item.ref))
+      if (pool.length < items.length) continue
+      const said = (ref: string) => (captions.get(ref) ?? []).map((line) => line.text)
+      const chosen: string[] = []
+      for (const item of items) {
+        const words = `${item.title} ${item.text}`
+        let best: string | null = null
+        let most = CARD_PICTURE_KEPT
+        for (const picture of pool) {
+          if (chosen.includes(picture.ref)) continue
+          const lines = said(picture.ref)
+          if (!lines.length) continue
+          const kept = Math.max(siteImportContentKept(lines[0] as string, words), siteImportContentKept(lines.join(' '), words))
+          if (kept >= most) {
+            most = kept
+            best = picture.ref
+          }
+        }
+        if (!best) break
+        chosen.push(best)
+      }
+      const sections = new Set(pool.map((picture) => picture.section))
+      const refs = chosen.length === items.length ? chosen : !chosen.length && sections.size === 1 && pool.length === items.length ? pool.map((picture) => picture.ref) : null
+      if (!refs) continue
+      for (const ref of refs) taken.add(ref)
+      out.set(block, refs)
+    }
+  }
+  return out
 }
 
 /** What a redesign compiles into, and what its row and its check say of it. */
@@ -664,6 +759,8 @@ export function aiSiteImportImprovedPage(answer: readonly AiSiteImportImprovedSe
     scope.groupAt = 0
     return aiSiteImportNodeBlocks(scope, [item.node], { cols: null, allowed: false }).map((block) => ({ ...block, ...placed, ...across(block, col !== undefined) }))
   }
+  // The source's pictures a written set of cards stands for, where the answer gave them none (AGL-4152).
+  const carded = aiSiteImportCardPictures(answer, ledger)
   const sections = answer.map((section, index): AiLayoutSection => {
     scope.at = `sections[${index}]`
     const words = section.blocks.flatMap((block) => (block.kind === 'heading' || block.kind === 'eyebrow' ? [block.text ?? ''] : [])).join(' ')
@@ -692,7 +789,8 @@ export function aiSiteImportImprovedPage(answer: readonly AiSiteImportImprovedSe
       const groupItems = (block.items ?? []).map((item, at): AiLayoutItem => {
         say(item.title)
         say(item.text)
-        const picture = item.ref ? pictureOf(item.ref, '4 / 3') : null
+        const given = item.ref || carded.get(block)?.[at]
+        const picture = given ? pictureOf(given, '4 / 3') : null
         const to = resolve(item.to)
         const { ref: _ref, to: _to, ...rest } = item
         return { ...rest, ...(block.kind === 'steps' ? { figure: String(at + 1) } : {}), ...(picture ? { picture } : {}), ...(to ? { to } : {}) }
@@ -707,7 +805,8 @@ export function aiSiteImportImprovedPage(answer: readonly AiSiteImportImprovedSe
     })
     const pictures = blocks.filter((block) => block.kind === 'image' || block.kind === 'video')
     const opens = index === 0 && pictures.length === 1 && blocks.every((block) => block.kind === 'image' || block.kind === 'video' || WORD_KINDS.has(block.kind))
-    const hero = opens ? aiSiteImportImproveHero(design, input.plan) : null
+    const opening = pictures[0]?.kind === 'image' ? (pictures[0].picture ?? null) : null
+    const hero = opens ? aiSiteImportImproveHero(design, input.plan, opening) : null
     const band = section.band === 'brand' && deepened ? 'dark' : section.band
     return {
       ...(band ? { band } : {}),
@@ -722,7 +821,7 @@ export function aiSiteImportImprovedPage(answer: readonly AiSiteImportImprovedSe
     const group = sections[index]?.blocks.find((block) => block.items?.length)
     return { heading: names[index] as string, ...(group?.items?.length ? { items: group.items.length } : {}) }
   })
-  const placed = new Set(aiSiteImportImprovedPlaced(answer, ledger))
+  const placed = new Set([...aiSiteImportImprovedPlaced(answer, ledger), ...[...carded.values()].flat()])
   const allPictures = ledger.items.filter((item) => item.kind === 'picture')
   const unplaced = allPictures.filter((item) => !placed.has(item.ref)).flatMap((item) => {
     const block = doc.blocks[item.lines[0] as number]
@@ -829,6 +928,32 @@ export function aiSiteImportImproveReaskTokens(input: { model: string; spent: Ai
 export interface AiSiteImportImproved<T> {
   built: T
   page: AiSiteImportImprovedPage
+  /** The design lines it was taken with still missed, by code (`AI_SITE_IMPORT_IMPROVE_SOFT_CODES`): only where no re-ask was left. */
+  missed?: string[]
+}
+
+/**
+ * What a redesign may still miss when no re-ask is left and be taken all the
+ * same (AGL-4152): how it is planned and drawn, never what it says or holds.
+ * Each is asked for in the one re-ask where it can be paid for; past it, the
+ * old layout redrawn is no better on any of them than the redesign, and worse
+ * on every other, so a miss here is noted on the page's row, not fallen back
+ * on. What it says, holds, links and reads as (facts, invented, held, links,
+ * meaning, contrast, a phone's width) stays a fallback.
+ */
+export const AI_SITE_IMPORT_IMPROVE_SOFT_CODES: ReadonlySet<string> = new Set([
+  'improve-new-sections',
+  'improve-opening',
+  'improve-shapes',
+  'improve-cta',
+  'improve-rhythm',
+  'improve-columns',
+  'improve-framing',
+])
+
+/** Whether every miss of an answer is one it may be taken with past its last re-ask. */
+export function aiSiteImportImproveOnlySoft(violations: readonly AiDoctrineViolation[]): boolean {
+  return violations.length > 0 && violations.every((violation) => AI_SITE_IMPORT_IMPROVE_SOFT_CODES.has(violation.code))
 }
 
 /** Every line a redesign's facts may come from: its page, what the site says of itself, its wave's other pages, its name. */
@@ -889,6 +1014,12 @@ export function aiSiteImportImproveCheck<T>(input: {
   needs?: AiSiteImportImproveNeeds | null
   build: (page: AiSiteImportImprovedPage) => { value: T | null; violations: AiDoctrineViolation[] }
   score: (built: T, destinations: readonly string[]) => AiDoctrineViolation[]
+  /**
+   * The last answer read again once no re-ask is left (AGL-4152): its soft
+   * misses (`AI_SITE_IMPORT_IMPROVE_SOFT_CODES`) are noted, not refused.
+   * Every other line holds exactly as on the first read.
+   */
+  lenient?: boolean
 }): AiGenerationCheck<AiSiteImportImproved<T>> {
   return (answer) => {
     const read = aiReadImprovedPage(answer)
@@ -898,7 +1029,8 @@ export function aiSiteImportImproveCheck<T>(input: {
     const honesty = aiSiteImportHonesty(read, { ledger: input.ledger, scope: input.scope, destinations, framing: input.framing ?? null })
     // What it lost and how it is planned, named together, so the one re-ask mends both.
     const planned = input.needs ? aiSiteImportImprovePlanMisses(read, { ledger: input.ledger, needs: input.needs }) : []
-    if (honesty.length || planned.length) return { value: null, violations: [...honesty, ...planned] }
+    const missed: string[] = input.lenient ? planned.map((violation) => violation.code) : []
+    if (honesty.length || (planned.length && !input.lenient)) return { value: null, violations: [...honesty, ...planned] }
     const page = aiSiteImportImprovedPage(read, { doc: input.doc, ledger: input.ledger, design: input.design, destinations, formId: input.formId, plan: input.plan ?? null, theme: input.theme ?? null })
     const built = input.build(page)
     if (!built.value) return { value: null, violations: built.violations }
@@ -906,8 +1038,10 @@ export function aiSiteImportImproveCheck<T>(input: {
       const to = destinations.get(link.ref)
       return to ? [to] : []
     })
-    const missed = input.score(built.value, [...new Set(wanted)])
-    if (missed.length) return { value: null, violations: missed }
-    return { value: { built: built.value, page }, violations: [] }
+    const scored = input.score(built.value, [...new Set(wanted)])
+    const refused = input.lenient ? scored.filter((violation) => !AI_SITE_IMPORT_IMPROVE_SOFT_CODES.has(violation.code)) : scored
+    if (refused.length) return { value: null, violations: refused }
+    missed.push(...scored.map((violation) => violation.code))
+    return { value: { built: built.value, page, ...(missed.length ? { missed: [...new Set(missed)] } : {}) }, violations: [] }
   }
 }

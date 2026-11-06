@@ -46,10 +46,14 @@ export type MarketplacePublisherPermission =
   | 'marketplace.publisherProfile'
   | 'marketplace.manageListings'
   | 'marketplace.payouts'
+  | 'marketplace.connectionCredentials'
 
 export const MARKETPLACE_PUBLISHER_PROFILE_PERMISSION: MarketplacePublisherPermission = 'marketplace.publisherProfile'
 export const MARKETPLACE_MANAGE_LISTINGS_PERMISSION: MarketplacePublisherPermission = 'marketplace.manageListings'
 export const MARKETPLACE_PAYOUTS_PERMISSION: MarketplacePublisherPermission = 'marketplace.payouts'
+/** Setting a listing's OAuth app credentials for its declared connections (AGL-4193). */
+export const MARKETPLACE_CONNECTION_CREDENTIALS_PERMISSION: MarketplacePublisherPermission =
+  'marketplace.connectionCredentials'
 
 /** The keys as the plugin declares them; owners and admins hold each by default. */
 export const MARKETPLACE_PUBLISHER_PERMISSIONS: readonly PluginPermission[] = [
@@ -77,6 +81,16 @@ export const MARKETPLACE_PUBLISHER_PERMISSIONS: readonly PluginPermission[] = [
     label: 'Manage marketplace payouts',
     description:
       'Connect the payout account the workspace’s paid listings pay into, finish its setup, and open its payouts.',
+    defaults: { admin: true, editor: false, viewer: false },
+    groupLabel: 'Marketplace',
+  },
+  {
+    // Declared connections (AGL-4193): the publisher's OAuth app per listing.
+    key: 'marketplace.connectionCredentials',
+    pluginId: 'marketplace',
+    label: 'Set a listing’s connection credentials',
+    description:
+      'Set or replace the OAuth app client id and secret a published plugin connects sites with. They are stored sealed and are never shown again.',
     defaults: { admin: true, editor: false, viewer: false },
     groupLabel: 'Marketplace',
   },

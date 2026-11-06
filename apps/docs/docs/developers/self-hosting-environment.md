@@ -1703,6 +1703,7 @@ fired it is a day your customers were billed twice.
 | `PLUGIN_TRUST_PUBLIC_KEY` | Feature | Runtime | The server-side verification key, base64 raw Ed25519. Required with remote server bundles enabled; unset there, no bundle loads at all — it fails closed rather than degrading to a hash check. |
 | `NEXT_PUBLIC_PLUGIN_TRUST_PUBLIC_KEY` | Feature | Build | The same public key again, for browser-side verification of realm bundles. A mismatch with the server-side name refuses every bundle. |
 | `PLUGIN_JOBS_SECRET` | Feature | Runtime | See [Secrets](#secrets). |
+| `PLUGIN_CONNECTIONS_TOKEN_KEY` | Feature | Runtime | **32 random bytes, base64** — `openssl rand -base64 32`. Seals every marketplace plugin connection's secrets with AES-256-GCM: each publisher's OAuth app client id and secret, and each site's refresh and access tokens. **To rotate**, put the new key first and keep the old one after a comma (`NEW,OLD`): the first key seals, every key listed opens. **Console only.** Unset, no plugin can be connected and its connect routes answer `503`. **Losing the key loses every connection**: each publisher sets their OAuth app again and each site connects again. |
 
 Development-only, and never to be set on a real deployment:
 `NEXT_PUBLIC_PLUGIN_DEV` (exactly `enabled`, and hard-gated off when
