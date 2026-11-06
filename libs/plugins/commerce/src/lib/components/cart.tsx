@@ -860,7 +860,10 @@ const Cart = forwardRef<HTMLDivElement, CartProps>((props, ref) => {
   return (
     <Box ref={ref} {...rest} sx={[{ display: 'inline-flex' }, ...nodeSx]}>
       <CheckoutReturnNotice hostId={hostId} siteFetch={siteFetch} />
-      <IconButton aria-label="Cart" onClick={() => setOpen(true)}>
+      {/* Inherits the color around it, as the header's other icons do:
+          the default gray vanished on a dark photo and ignored a header's
+          own color (AGL-4200). */}
+      <IconButton aria-label="Cart" color="inherit" onClick={() => setOpen(true)}>
         <Badge badgeContent={cart?.count ?? 0} color="primary">
           <SvgIcon>
             <path d={mdiCartOutline.path} />
