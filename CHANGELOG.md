@@ -39,6 +39,7 @@ content on the marketing site and is written separately.
 
 ### Fixed
 
+- **data:** dataset and record tabs name what they show, with card help
 - **billing:** keep the proposal's code on the pay card opened from the menu ([AGL-4199](https://linear.app/aglyn/issue/AGL-4199))
 - **commerce:** quotes and invoices pay by card or wallet at the card rate ([AGL-4198](https://linear.app/aglyn/issue/AGL-4198))
 - **auth:** log a password reset for an unknown address as info
