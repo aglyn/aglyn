@@ -984,6 +984,31 @@ export const POS_HARDWARE_STATUS_STAMP: Record<PosHardwareOrderStatus, keyof Pos
 /** The Hardware card's anchor: Checkout returns to it and the emails link at it. */
 export const POS_HARDWARE_ANCHOR = 'pos-hardware'
 
+/**
+ * What the point of sale adds to a reader (AGL-4038), for the prompt a
+ * workspace without it sees: anyone may buy readers, and a reader takes
+ * payments at the register, which comes with the point of sale.
+ */
+export const POS_PLAN_ADDS =
+  'registers that ring up sales, card payments on your readers, cash with change due, receipts and shift reports'
+
+/**
+ * The prompt to add the point of sale (AGL-4038), never a refusal: on the
+ * Hardware card before anything has arrived, naming the orders that have
+ * arrived once one has, and at the register.
+ */
+export function posPlanPrompt(where: { arrived?: readonly string[]; atRegister?: boolean } = {}): string {
+  const arrived = where.arrived ?? []
+  if (where.atRegister) {
+    return `A card reader takes payments at the register, which comes with the point of sale: ${POS_PLAN_ADDS}. Add it to start selling.`
+  }
+  if (arrived.length) {
+    const one = arrived.length === 1
+    return `${arrived.join(', ')} ${one ? 'has' : 'have'} arrived. To take payments with ${one ? 'it' : 'them'}, add the point of sale: ${POS_PLAN_ADDS}.`
+  }
+  return `You can buy readers on any plan. To take payments with them, add the point of sale: ${POS_PLAN_ADDS}.`
+}
+
 /** The collection under `orgs/{orgId}`, named once. */
 export const POS_HARDWARE_ORDERS_COLLECTION = 'hardwareOrders'
 

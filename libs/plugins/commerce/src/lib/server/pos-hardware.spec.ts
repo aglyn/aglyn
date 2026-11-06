@@ -600,6 +600,63 @@ describe('the shop route', () => {
     })
   })
 
+  describe('on a plan without the point of sale (AGL-4038): anyone can buy', () => {
+    beforeEach(() => {
+      mockPlan = 'starter'
+    })
+
+    it('browses, checks out, gets the order recorded by the webhook, and sees it under its orders', async () => {
+      const catalog = await shop({ action: 'catalog' })
+      expect(catalog.status).toBe(200)
+      expect(catalog.body.available).toBe(true)
+      const checkout = await shop(
+        { action: 'checkout', lines: [{ sku: 'stripe-reader-s710', quantity: 1 }, { sku: 'stripe-reader-m2', quantity: 1 }], shippingMethod: 'standard' },
+        { attemptKey: 'attempt-no-plan' },
+      )
+      expect(checkout.status).toBe(200)
+      expect(checkout.body.url).toBe('https://checkout.stripe.com/c/pay/cs_test_1')
+      const session = stripeCalls.find((call) => call.path === 'checkout/sessions')
+      const orderId = String(session?.params.get('metadata[orderId]'))
+      expect(orderId).toBe(posHardwareOrderId('org-1', 'host-1', 'attempt-no-plan'))
+      // Stripe says it is paid: the webhook records the order as for any workspace.
+      const recorded = await posHardwareBillingWebhookHandler({
+        type: 'checkout.session.completed',
+        object: paidSession({ metadata: { ...paidSession().metadata, orderId } }),
+        event: { type: 'checkout.session.completed', data: { object: {} } },
+      })
+      expect(recorded).toEqual({ claimed: true, hostId: 'host-1' })
+      expect(fakeDocs.get(`orgs/org-1/hardwareOrders/${orderId}`)).toMatchObject({ orgId: 'org-1', status: 'paid' })
+      const orders = await shop({ action: 'orders' })
+      expect(orders.status).toBe(200)
+      expect(orders.body.orders.map((order: any) => [order.id, order.status])).toEqual([[orderId, 'paid']])
+      // A return can be asked for, and the readers waiting to be set up read, without it too.
+      expect((await shop({ action: 'waiting' })).status).toBe(200)
+      expect((await shop({ action: 'request-return', orderId })).status).not.toBe(403)
+    })
+
+    it('still refuses a member without the buy key, naming the permission, before Stripe', async () => {
+      mockBuyHardware = false
+      const refused = await shop(
+        { action: 'checkout', lines: [{ sku: 'stripe-reader-m2', quantity: 1 }], shippingMethod: 'standard' },
+        { attemptKey: 'attempt-no-plan-denied' },
+      )
+      expect(refused.status).toBe(403)
+      expect(refused.body.error).toBe('Your role does not include "Buy point of sale hardware" — ask an organization admin')
+      expect(stripeCalls).toHaveLength(0)
+      // And someone who may neither work the register nor buy is shut out of the shop.
+      mockManagePos = false
+      expect((await shop({ action: 'catalog' })).status).toBe(403)
+    })
+
+    it('still asks the plan to set a reader up on a store', async () => {
+      for (const action of ['choose-store', 'mark-set-up']) {
+        const answer = await shop({ action, orderId: ORDER_ID })
+        expect(answer.status).toBe(403)
+        expect(answer.body.error).toBe('POS requires the Pro plan or above')
+      }
+    })
+  })
+
   it('lists this site’s orders without Stripe ids', async () => {
     fakeDocs.set(ORDER_PATH, { hostId: 'host-1', status: 'shipped', totalCents: 100, stripePaymentIntentId: 'pi_secret', lines: [] })
     fakeDocs.set('orgs/org-1/hardwareOrders/hw_ffffffffffffffffffff', { hostId: 'host-2', status: 'paid', lines: [] })

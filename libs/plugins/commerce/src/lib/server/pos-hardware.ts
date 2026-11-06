@@ -62,8 +62,9 @@ import { posStripe, posTerminalAvailable } from './pos-stripe'
  *   checkout  a Stripe Checkout Session for the basket, on the PLATFORM
  *   orders    this site's hardware orders, newest first
  *
- * Gated like the register (`authorizePosStaff`, on a plan with POS), because
- * the readers it sells are the register's, with one difference (AGL-4047):
+ * Gated like the register (`authorizePosStaff`) but on ANY plan (AGL-4038):
+ * a workspace buys its readers first and adds the point of sale when it sets
+ * them up. The readers it sells are the register's, with one difference (AGL-4047):
  * the shop admits whoever works the register (`managePos`) AND whoever may
  * buy hardware (`posBuyHardware`), which stands on its own — a bookkeeper
  * with no register orders the store's readers. A checkout needs
@@ -307,19 +308,20 @@ export const posHardwareHandler: PluginApiHandler = async (req, res) => {
   // `managePos` until a role or the member sets it, and may be granted
   // without it — starts a checkout that the workspace pays for.
   //
-  // A READER BOUGHT IN PERSON (AGL-4038): `waiting` is read without the
-  // point of sale plan, because a workspace without it is exactly the one
-  // that must be told to add it first; choosing its store and marking it set
-  // up are setting up devices (`posDevices`) on the store named.
+  // ANYONE CAN BUY (AGL-4038): browsing, checking out, the orders, a return
+  // request and the readers waiting to be set up are open whatever the
+  // workspace's plan. A reader takes payments at the register, which comes
+  // with the point of sale, so the card, a delivered order and the register
+  // prompt to add it; the key above still decides who may buy. Setting a
+  // reader up — choosing its store, marking it set up — is setting up
+  // devices (`posDevices`) on the store named, and asks the plan.
   const settingUp = action === 'choose-store' || action === 'mark-set-up'
   const gate = await authorizePosStaff(
     req,
     hostId,
     action === 'checkout' ? 'posBuyHardware' : settingUp ? 'posDevices' : undefined,
     mayVisitPosHardwareShop,
-    // A workspace whose plan lost the point of sale still sees what it bought
-    // and may ask to return a reader bought in person.
-    action === 'waiting' || action === 'orders' || action === 'request-return' ? { planRequired: false } : {},
+    { planRequired: settingUp },
   )
   if ('error' in gate) return res.status(gate.status).json({ error: gate.error })
   const staff = gate.staff
