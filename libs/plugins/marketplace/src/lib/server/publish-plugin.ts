@@ -517,6 +517,9 @@ export const publishPluginHandler: PluginApiHandler = async (req, res) => {
       declaredNetwork: manifest.capabilities?.network ?? [],
       declaredContributions: manifest.contributes ?? null,
       requireContributions: true,
+      // Validated already by `validatePluginManifest`; the checker compares
+      // the hosts with the bundle's calls (AGL-4193).
+      declaredConnections: manifest.connections ?? null,
     })
     if (!verification.ok) {
       return res.status(422).json({

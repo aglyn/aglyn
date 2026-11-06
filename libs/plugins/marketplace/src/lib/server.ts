@@ -27,6 +27,7 @@ import { registerPluginArtifactInventory } from '@aglyn/aglyn/plugin-manager/plu
 import { registerTaxReturnSource } from '@aglyn/aglyn/plugin-manager/plugin-tax-return-sources'
 import { registerRevenueSource } from '@aglyn/aglyn/plugin-manager/plugin-revenue-sources'
 import { BUNDLE_ID } from './constants/bundle-common'
+import { PLUGIN_CONNECTIONS_API_ROUTES } from './model/plugin-connections'
 import { marketplaceBillingWebhookHandler } from './server/billing-webhook'
 import { registerMarketplaceLockdown } from './server/publisher-lockdown'
 import { publishPluginHandler } from './server/publish-plugin'
@@ -254,6 +255,47 @@ export function registerMarketplaceConsoleApi(): void {
   // A workspace lock reaches the publisher's payout account and its
   // listings (AGL-3365).
   registerMarketplaceLockdown()
+  registerPluginConnectionsApi()
+}
+
+type ConnectionRoutes = typeof import('./server/connections/routes')
+
+const connectionRoute =
+  (pick: (routes: ConnectionRoutes) => (request: Request) => Promise<Response>) =>
+  async (request: Request) =>
+    pick(await import('./server/connections/routes'))(request)
+
+/**
+ * Declared connections (AGL-4193): the platform runs the OAuth connect, holds
+ * the sealed grant and lists what it reaches for any marketplace plugin whose
+ * manifest declares a connection. Each module loads with its route's first
+ * request. The callback is a provider's redirect, with no bearer token and no
+ * site: its workspace and member come from the signed state, so the release
+ * gate asks about the right workspace. Its path is registered as a redirect
+ * URI at providers and never moves.
+ */
+function registerPluginConnectionsApi(): void {
+  const routes: Array<[string, Parameters<typeof connectionRoute>[0]]> = [
+    [PLUGIN_CONNECTIONS_API_ROUTES.connectStart, (routes) => routes.connectStartRoute],
+    [PLUGIN_CONNECTIONS_API_ROUTES.resources, (routes) => routes.resourcesRoute],
+    [PLUGIN_CONNECTIONS_API_ROUTES.choose, (routes) => routes.chooseRoute],
+    [PLUGIN_CONNECTIONS_API_ROUTES.disconnect, (routes) => routes.disconnectRoute],
+    [PLUGIN_CONNECTIONS_API_ROUTES.status, (routes) => routes.statusRoute],
+    [PLUGIN_CONNECTIONS_API_ROUTES.credentials, (routes) => routes.credentialsRoute],
+  ]
+  for (const [path, pick] of routes) {
+    const handler = connectionRoute(pick)
+    registerPluginApiRoute(path, { web: (request) => handler(request) })
+  }
+  const callback = connectionRoute((routes) => routes.connectCallbackRoute)
+  registerPluginApiRoute(
+    PLUGIN_CONNECTIONS_API_ROUTES.connectCallback,
+    { web: (request) => callback(request) },
+    {
+      subject: async (request) =>
+        (await import('./server/connections/routes')).connectCallbackSubject(request),
+    },
+  )
 }
 
 // Type-only (AGL-3080): the plugin's entitlement keys, declared by module

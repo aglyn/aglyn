@@ -627,7 +627,7 @@
     },
     {
       "path": "libs/plugins/marketplace/src/lib/model/marketplace-site-permissions.ts",
-      "why": "The marketplace plugin's site keys (install into a site, publish from one) and their site-role preset, assembled into the contracts' ORG_ROLE_GRANTS (AGL-4047); type-only imports."
+      "why": "The marketplace plugin's site keys (install into a site, publish from one, and manage its plugin connections, AGL-4193) and their site-role presets, assembled into the contracts' ORG_ROLE_GRANTS (AGL-4047); type-only imports."
     },
     {
       "path": "libs/plugins/marketplace/src/lib/model/marketplace-publisher-permissions.ts",

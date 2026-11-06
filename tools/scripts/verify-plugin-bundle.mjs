@@ -57,11 +57,15 @@ let declaredNetwork
 // `null` is "the manifest declares none", which the publish API refuses for a
 // bundle that registers something; `undefined` is "no manifest was found".
 let declaredContributions
+// Declared connections (AGL-4193): validated by the same function the publish
+// API uses, and compared with the bundle's calls. `undefined` without a manifest.
+let declaredConnections
 for (const candidate of manifestCandidates) {
   try {
     const manifest = JSON.parse(readFileSync(candidate, 'utf8'))
     declaredNetwork = manifest?.capabilities?.network ?? []
     declaredContributions = manifest?.contributes ?? null
+    declaredConnections = manifest?.connections ?? null
     console.log(
       `Manifest: ${candidate} (network: ${
         declaredNetwork.length ? declaredNetwork.join(', ') : 'none declared'
@@ -88,6 +92,7 @@ const result = checkPluginBundle(source, {
   declaredNetwork,
   declaredContributions,
   requireContributions: true,
+  declaredConnections,
 })
 
 // Every area, not only the ones with findings (AGL-1087) — the same summary

@@ -46,6 +46,12 @@ import {
 import { lookalikeBrandForHost } from '@aglyn/shared-util-email/outbound-phishing-screen'
 import type { PluginContributions } from '../plugin-manager/plugin-contributions'
 import {
+  pluginConnectionEndpointHosts,
+  pluginConnectionHostMatches,
+  validatePluginConnections,
+  type PluginConnectionDeclaration,
+} from './plugin-connections'
+import {
   PLUGIN_HOST_ABI_KEYS,
   PLUGIN_HOST_GLOBAL,
   PLUGIN_HOST_MODULE_KEYS,
@@ -67,6 +73,7 @@ export type BundleCheckId =
   | 'obfuscation'
   | 'contributions'
   | 'credentials'
+  | 'connections'
 
 export interface BundleCheckProblem {
   level: 'error' | 'warning'
@@ -135,6 +142,7 @@ const CHECK_LABELS: Record<BundleCheckId, string> = {
   obfuscation: 'No obfuscation shapes',
   contributions: 'Registrations match the declared contributions',
   credentials: 'No password, card or one-time-code inputs',
+  connections: 'Declared connections are well formed and never called directly',
 }
 
 /** Check order as displayed — findings first would reorder on every bundle. */
@@ -152,6 +160,7 @@ const CHECK_ORDER: BundleCheckId[] = [
   'obfuscation',
   'contributions',
   'credentials',
+  'connections',
 ]
 
 export const MAX_PLUGIN_BUNDLE_BYTES = 1_000_000
@@ -175,8 +184,10 @@ export const MAX_PLUGIN_BUNDLE_BYTES = 1_000_000
  * 7 — inputs that collect a password, card or one-time code (AGL-3362).
  * 8 — declared network origins that are a brand's lookalike (AGL-3365).
  * 9 — lookups on the host ABI name only keys a host provides (AGL-3392).
+ * 11 — declared connections are validated, and a bundle that calls one of
+ *      their hosts itself is refused (AGL-4193).
  */
-export const PLUGIN_VERIFIER_VERSION = 10
+export const PLUGIN_VERIFIER_VERSION = 11
 
 /** A verdict as stored on a `pluginVersions` doc (AGL-962). */
 export interface StoredBundleVerdict {
@@ -448,6 +459,16 @@ interface CheckOptions {
    * not turn them red after the fact.
    */
   requireContributions?: boolean
+  /**
+   * The manifest's `connections` block, as the publisher wrote it (AGL-4193):
+   * `null` (or an empty list) when it declares none, `undefined` when no
+   * manifest was supplied, which leaves the row `unknown`. Validated here with
+   * the same function `validatePluginManifest` uses, so the local CLI refuses
+   * what the publish API refuses, and compared with the bundle's network
+   * calls: a connection's hosts are the PLATFORM's to call with the site's
+   * token, so a bundle that calls one itself is refused.
+   */
+  declaredConnections?: unknown
 }
 
 /** The detection result of a bundle no pass could read. */
@@ -1297,9 +1318,31 @@ function analyseBundle(
     seen.add(message)
     problems.push({ level, message, check })
   }
-  /** Mark the areas that never ran, so they cannot read as clean. */
+  /**
+   * Mark the areas that never ran, so they cannot read as clean. A row that
+   * already failed keeps its failure: the connections schema is judged before
+   * the bundle is parsed, and an unparseable bundle must not hide it.
+   */
   const unknownFrom = (...ids: BundleCheckId[]) => {
-    for (const id of ids) status.set(id, 'unknown')
+    for (const id of ids) if (status.get(id) !== 'fail') status.set(id, 'unknown')
+  }
+
+  // Declared connections (AGL-4193): the schema first, since it needs no
+  // parse; the comparison with the bundle's calls runs once they are known.
+  let connections: PluginConnectionDeclaration[] | null = null
+  if (options?.declaredConnections !== undefined) {
+    const verdict = validatePluginConnections(options.declaredConnections)
+    if (verdict.ok === false) {
+      add('error', 'connections', `the manifest's connections are refused: ${verdict.error}`)
+    } else {
+      connections = verdict.value
+      details.set(
+        'connections',
+        connections.length
+          ? `declares ${connections.map((connection) => connection.id).join(', ')}`
+          : 'declares none',
+      )
+    }
   }
   const summarise = (): BundleCheckSummary[] =>
     CHECK_ORDER.map((id) => ({
@@ -1327,6 +1370,7 @@ function analyseBundle(
       'obfuscation',
       'contributions',
       'credentials',
+      'connections',
     )
     return {
       ok: false,
@@ -1372,6 +1416,7 @@ function analyseBundle(
       'obfuscation',
       'contributions',
       'credentials',
+      'connections',
     )
     return {
       ok: false,
@@ -2004,6 +2049,24 @@ function analyseBundle(
     abi.read.size ? `reads ${[...abi.read].sort().join(', ')}` : 'reads nothing by name',
   )
 
+  if (options?.declaredConnections === undefined) {
+    // No manifest: a bundle that calls nothing reaches no connection's host
+    // either, which is a pass; one that calls something was not compared.
+    if (networkOrigins.size || unresolvedOrigins.size || runtimeUrls) {
+      status.set('connections', 'unknown')
+      details.set('connections', 'no declared connections were supplied, so the calls were not compared')
+    } else {
+      details.set('connections', 'no network calls')
+    }
+  }
+  compareConnections({
+    connections,
+    calledOrigins: [...networkOrigins, ...unresolvedOrigins],
+    declaredNetwork: declared ?? [],
+    add,
+    details,
+  })
+
   const detected = detectRegistrations(program, constants)
   for (const message of credentialInputsIn(program, constants)) {
     add('warning', 'credentials', message)
@@ -2018,6 +2081,63 @@ function analyseBundle(
     checks: summarise(),
     exports: { register: exportsRegister, registerApi: exportsRegisterApi },
     contributions: detected,
+  }
+}
+
+/**
+ * A connection's hosts are the platform's (AGL-4193). The platform calls them
+ * with the site's token; the plugin's own code never holds one, so a bundle
+ * that calls a connection's API, token or authorization host itself — or
+ * declares one under `capabilities.network`, which is the same reach — is
+ * trying to do in the browser what the declaration exists to keep on the
+ * server. Refused, with the host named.
+ */
+function compareConnections(input: {
+  connections: PluginConnectionDeclaration[] | null
+  calledOrigins: string[]
+  declaredNetwork: string[]
+  add: (level: BundleCheckProblem['level'], check: BundleCheckId, message: string) => void
+  details: Map<BundleCheckId, string>
+}): void {
+  const { connections } = input
+  if (!connections?.length) return
+  const hostOf = (origin: string): string | null => {
+    try {
+      return new URL(origin).hostname.toLowerCase()
+    } catch {
+      return null
+    }
+  }
+  const owner = (host: string): PluginConnectionDeclaration | undefined =>
+    connections.find(
+      (connection) =>
+        connection.apiHosts.some((pattern) => pluginConnectionHostMatches(pattern, host)) ||
+        pluginConnectionEndpointHosts(connection).includes(host),
+    )
+  const flagged = new Set<string>()
+  for (const origin of input.calledOrigins) {
+    const host = hostOf(origin)
+    const connection = host ? owner(host) : undefined
+    if (!host || !connection || flagged.has(host)) continue
+    flagged.add(host)
+    input.add(
+      'error',
+      'connections',
+      `the bundle calls ${origin}, a host of the declared connection "${connection.id}" — ` +
+        'the platform makes those calls with the site’s token, and plugin code never can',
+    )
+  }
+  for (const origin of input.declaredNetwork) {
+    const host = hostOf(origin)
+    const connection = host ? owner(host) : undefined
+    if (!host || !connection || flagged.has(host)) continue
+    flagged.add(host)
+    input.add(
+      'error',
+      'connections',
+      `capabilities.network declares ${origin}, a host of the declared connection "${connection.id}" — ` +
+        'remove it: the platform calls that host, the plugin never does',
+    )
   }
 }
 

@@ -1656,6 +1656,10 @@ describe('hosts', () => {
       // connection a sealed channel OAuth token; only the sales-channels
       // routes read or write either.
       'salesChannels',
+      // A site's declared plugin connections (AGL-4193): a sealed OAuth grant
+      // and a pending connect's single-use state; only the marketplace's
+      // plugin-connections routes read or write either.
+      'pluginConnections',
       // The hashed review links (AGL-3736). Only the review-request sweep
       // mints one and only /api/commerce/reviews spends one; a client that
       // could write a row could mint a "verified buyer" review.
@@ -14986,6 +14990,86 @@ describe('sales channel feeds and connections are server-only (AGL-3637)', () =>
       )
       await mustDeny(`a ${role} rewriting a feed token`, updateDoc(feedDoc(db), { token: 'x' }))
       await mustDeny(`a ${role} deleting a connection`, deleteDoc(connectionDoc(db)))
+    }
+  })
+})
+
+/*
+ * A marketplace plugin's declared connections (AGL-4193). A site's connection
+ * holds the SEALED OAuth grant the platform syncs with, beside the single-use
+ * state of a connect in progress; a listing's credentials hold the
+ * publisher's OAuth app client id and secret, sealed. The marketplace's
+ * plugin-connections routes are the only reader and writer of either, so no
+ * client — no member of any role, not staff, not a visitor — reads or writes
+ * one.
+ */
+describe('declared plugin connections and their credentials are server-only (AGL-4193)', () => {
+  const connectionDoc = (db) => doc(db, 'hosts', HOST, 'pluginConnections', 'listing-1__reviews')
+  const stateDoc = (db) => doc(db, 'hosts', HOST, 'pluginConnections', 'oauth-0123456789abcdef')
+  const credentialsDoc = (db) => doc(db, 'pluginConnectionCredentials', 'listing-1__reviews')
+
+  beforeEach(async () => {
+    await env.withSecurityRulesDisabled(async (context) => {
+      const db = context.firestore()
+      await setDoc(connectionDoc(db), {
+        kind: 'connection',
+        listingId: 'listing-1',
+        connectionId: 'reviews',
+        status: 'connected',
+        sealedRefreshToken: 'sb1.k.iv.ct.tag',
+        sealedAccessToken: 'sb1.k.iv.ct.tag',
+      })
+      await setDoc(stateDoc(db), { kind: 'oauth-state', nonceDigest: 'x', expiresAtMs: 1 })
+      await setDoc(credentialsDoc(db), {
+        orgId: ORG,
+        listingId: 'listing-1',
+        connectionId: 'reviews',
+        sealedClientId: 'sb1.k.iv.ct.tag',
+        sealedClientSecret: 'sb1.k.iv.ct.tag',
+      })
+    })
+  })
+
+  it('no member and no staff reads, lists or writes a site’s connection or a connect’s state', async () => {
+    const readers = [
+      ['viewer', authed(VIEWER)],
+      ['author', authed(AUTHOR)],
+      ['editor', authed(EDITOR)],
+      ['admin', authed(OWNER)],
+      ['staff', authed(STAFF, { staff: true })],
+    ]
+    for (const [role, db] of readers) {
+      await mustDeny(`a ${role} reading a plugin connection`, getDoc(connectionDoc(db)))
+      await mustDeny(`a ${role} reading a connect state`, getDoc(stateDoc(db)))
+      await mustDeny(
+        `a ${role} listing the site’s plugin connections`,
+        getDocs(query(collection(db, 'hosts', HOST, 'pluginConnections'), limit(10))),
+      )
+      await mustDeny(
+        `a ${role} planting a plugin connection`,
+        setDoc(doc(db, 'hosts', HOST, 'pluginConnections', 'listing-2__reviews'), { kind: 'connection', sealedAccessToken: 'x' }),
+      )
+      await mustDeny(`a ${role} rewriting a connection’s choices`, updateDoc(connectionDoc(db), { choices: {} }))
+      await mustDeny(`a ${role} deleting a plugin connection`, deleteDoc(connectionDoc(db)))
+    }
+    await mustDeny('a visitor reading a plugin connection', getDoc(connectionDoc(anon())))
+  })
+
+  it('no client reads or writes a listing’s OAuth app credentials: not the publisher, not staff, not a visitor', async () => {
+    const callers = [
+      ['the publishing workspace’s owner', authed(OWNER)],
+      ['an editor', authed(EDITOR)],
+      ['staff', authed(STAFF, { staff: true })],
+      ['a visitor', anon()],
+    ]
+    for (const [who, db] of callers) {
+      await mustDeny(`${who} reading listing credentials`, getDoc(credentialsDoc(db)))
+      await mustDeny(`${who} listing credentials`, getDocs(query(collection(db, 'pluginConnectionCredentials'), limit(10))))
+      await mustDeny(
+        `${who} writing listing credentials`,
+        setDoc(doc(db, 'pluginConnectionCredentials', 'listing-2__reviews'), { orgId: ORG, sealedClientSecret: 'x' }),
+      )
+      await mustDeny(`${who} deleting listing credentials`, deleteDoc(credentialsDoc(db)))
     }
   })
 })

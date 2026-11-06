@@ -1144,7 +1144,8 @@
         }
       ],
       "apiPrefixes": [
-        "marketplace"
+        "marketplace",
+        "plugin-connections"
       ],
       "catalog": {
         "order": 8,
@@ -1163,6 +1164,18 @@
       "hostCollections": [
         {
           "name": "installs"
+        },
+        {
+          "name": "pluginConnections",
+          "mediaScan": "none",
+          "mediaScanReason": "A site's declared plugin connections (AGL-4193): one document per listing and connection holding the SEALED OAuth grant, the owner's choices and sync times, and the single-use OAuth state of a connect in progress. No client reads or writes it, and nothing in it names a library asset."
+        }
+      ],
+      "orgKeyedCollections": [
+        {
+          "$comment": "The OAuth app client id and secret a publisher sets per listing for its declared connections (AGL-4193), both SEALED. Top level and closed to every client; `orgId` is the publishing workspace, so its erasure sweeps them by field.",
+          "name": "pluginConnectionCredentials",
+          "orgField": "orgId"
         }
       ],
       "pluginDistribution": {
