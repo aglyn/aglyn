@@ -296,6 +296,7 @@ public enum BookingFieldAsk: String, Codable, CaseIterable, Hashable, Sendable {
 public struct BookingInPersonPayment: Codable, Hashable, Sendable {
   public var amountCents: Int
   public var attempt: String?
+  public var chargeModel: String?
   public var feeCents: Int
   public var paidAtMs: Int?
   public var paymentIntentId: String
@@ -303,11 +304,13 @@ public struct BookingInPersonPayment: Codable, Hashable, Sendable {
   public var startedAtMs: Int
   public var startedBy: String
   public var status: BookingInPersonPaymentStatus
+  public var stripeAccountId: String?
   public var taxCents: Int
 
-  public init(amountCents: Int, attempt: String? = nil, feeCents: Int, paidAtMs: Int? = nil, paymentIntentId: String, serviceCents: Int, startedAtMs: Int, startedBy: String, status: BookingInPersonPaymentStatus, taxCents: Int) {
+  public init(amountCents: Int, attempt: String? = nil, chargeModel: String? = nil, feeCents: Int, paidAtMs: Int? = nil, paymentIntentId: String, serviceCents: Int, startedAtMs: Int, startedBy: String, status: BookingInPersonPaymentStatus, stripeAccountId: String? = nil, taxCents: Int) {
     self.amountCents = amountCents
     self.attempt = attempt
+    self.chargeModel = chargeModel
     self.feeCents = feeCents
     self.paidAtMs = paidAtMs
     self.paymentIntentId = paymentIntentId
@@ -315,6 +318,7 @@ public struct BookingInPersonPayment: Codable, Hashable, Sendable {
     self.startedAtMs = startedAtMs
     self.startedBy = startedBy
     self.status = status
+    self.stripeAccountId = stripeAccountId
     self.taxCents = taxCents
   }
 }
@@ -3127,6 +3131,7 @@ public struct OrderPayment: Codable, Hashable, Sendable {
   public var cashierId: String?
   public var cashTenderedCents: Double?
   public var changeCents: Double?
+  public var chargeModel: String?
   public var checkoutSessionId: String?
   public var checkoutUrl: String?
   public var creditLabel: String?
@@ -3145,16 +3150,18 @@ public struct OrderPayment: Codable, Hashable, Sendable {
   public var reservationId: String?
   public var settledAtMs: Double?
   public var status: OrderPaymentStatus
+  public var stripeAccountId: String?
   public var takeFeeCents: Double?
   public var tipCents: Double?
 
-  public init(amountCents: Double, atMs: Double, cardBrand: String? = nil, cashierId: String? = nil, cashTenderedCents: Double? = nil, changeCents: Double? = nil, checkoutSessionId: String? = nil, checkoutUrl: String? = nil, creditLabel: String? = nil, creditProviderId: String? = nil, creditReference: String? = nil, failureMessage: String? = nil, feeCents: Double? = nil, folioAtMs: Double? = nil, giftCardId: String? = nil, id: String, last4: String? = nil, livemode: Bool? = nil, method: OrderPaymentMethod, paymentIntentId: String? = nil, readerId: String? = nil, reservationId: String? = nil, settledAtMs: Double? = nil, status: OrderPaymentStatus, takeFeeCents: Double? = nil, tipCents: Double? = nil) {
+  public init(amountCents: Double, atMs: Double, cardBrand: String? = nil, cashierId: String? = nil, cashTenderedCents: Double? = nil, changeCents: Double? = nil, chargeModel: String? = nil, checkoutSessionId: String? = nil, checkoutUrl: String? = nil, creditLabel: String? = nil, creditProviderId: String? = nil, creditReference: String? = nil, failureMessage: String? = nil, feeCents: Double? = nil, folioAtMs: Double? = nil, giftCardId: String? = nil, id: String, last4: String? = nil, livemode: Bool? = nil, method: OrderPaymentMethod, paymentIntentId: String? = nil, readerId: String? = nil, reservationId: String? = nil, settledAtMs: Double? = nil, status: OrderPaymentStatus, stripeAccountId: String? = nil, takeFeeCents: Double? = nil, tipCents: Double? = nil) {
     self.amountCents = amountCents
     self.atMs = atMs
     self.cardBrand = cardBrand
     self.cashierId = cashierId
     self.cashTenderedCents = cashTenderedCents
     self.changeCents = changeCents
+    self.chargeModel = chargeModel
     self.checkoutSessionId = checkoutSessionId
     self.checkoutUrl = checkoutUrl
     self.creditLabel = creditLabel
@@ -3173,6 +3180,7 @@ public struct OrderPayment: Codable, Hashable, Sendable {
     self.reservationId = reservationId
     self.settledAtMs = settledAtMs
     self.status = status
+    self.stripeAccountId = stripeAccountId
     self.takeFeeCents = takeFeeCents
     self.tipCents = tipCents
   }
