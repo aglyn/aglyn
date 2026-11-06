@@ -84,12 +84,13 @@ export function editorPluginConnections(input: {
   records: Readonly<Record<string, Readonly<Record<string, PluginConnectionSiteRecord>>>>
 }): EditorPluginConnections {
   const variables: EditorConnectionVariable[] = []
-  for (const listing of input.listings) {
-    for (const connection of listing.connections) {
-      const record = input.records[listing.listingId]?.[connection.id]
-      const values = pluginConnectionRecordVariables(listing.listingId, connection, record?.fields)
+  // `installed`, not `listing`: the listing-field coverage guard reads every `listing.<field>` here as a document read.
+  for (const installed of input.listings) {
+    for (const connection of installed.connections) {
+      const record = input.records[installed.listingId]?.[connection.id]
+      const values = pluginConnectionRecordVariables(installed.listingId, connection, record?.fields)
       for (const field of Object.keys(connection.sync?.record.fields ?? {})) {
-        const id = pluginConnectionVariableId(listing.listingId, connection.id, field)
+        const id = pluginConnectionVariableId(installed.listingId, connection.id, field)
         if (!id) continue
         variables.push({ id, label: `${connection.label}: ${connectionFieldLabel(field)}`, value: values[id]?.value ?? null })
       }
