@@ -68,8 +68,9 @@ content on the marketing site and is written separately.
 - **pricing:** site care project price list on /pricing, and its publish script
 
 <details>
-<summary>Also in this release: 5 test, 6 chore</summary>
+<summary>Also in this release: 6 test, 6 chore</summary>
 
+- **guards:** the emulator sweep runs the commerce plugin's hardware-order spec ([AGL-4038](https://linear.app/aglyn/issue/AGL-4038))
 - **guards:** classify the subscriptions list, dataset rail and Improve it prompt
 - **linear:** raise the issue ceiling to AGL-4199, read from the workspace ([AGL-4199](https://linear.app/aglyn/issue/AGL-4199))
 - **selfhost:** allow the Site Care price publish script's preview link
