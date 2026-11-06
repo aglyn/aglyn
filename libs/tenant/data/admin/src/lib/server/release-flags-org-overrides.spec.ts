@@ -35,7 +35,12 @@ jest.mock('./firebase-admin', () => ({
   firebaseAdmin: {
     app: () => ({
       remoteConfig: () => ({ getTemplate: mockGetTemplate }),
-      firestore: () => ({ collection: mockCollection }),
+      firestore: () => ({
+        collection: mockCollection,
+        // The org read is a masked `getAll` (AGL-4121); the double answers it
+        // through the same `get` so every assertion below still reads it.
+        getAll: async (ref: { get: () => Promise<unknown> }) => [await ref.get()],
+      }),
     }),
   },
 }))

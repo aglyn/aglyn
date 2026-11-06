@@ -104,7 +104,7 @@ import {
 } from '@aglyn/aglyn/plugin-manager/plugin-site-csp'
 // The leaf module, not the barrel: the verdict asks one per-org flag, and the
 // barrel's own mocks in the middleware specs name none of it.
-import { isServerReleaseFlagOnForOrg } from '@aglyn/tenant-data-admin/server/release-flags'
+import { isServerReleaseFlagOnForLoadedOrg } from '@aglyn/tenant-data-admin/server/release-flags'
 import { CNAME_HOST_PREFIX, getHost } from '../../../utils/get-host'
 import { getOrgBilling } from '../../../utils/get-org-billing'
 
@@ -522,11 +522,19 @@ export async function GET(request: Request): Promise<Response> {
      *
      * Same disclosure posture as the rest: whether a public page shows a
      * film's still is what loading it shows.
+     *
+     * Targeted from the org document `getOrgBilling` already returned
+     * (AGL-4121), not a second read of the same document: that entry is the
+     * 60-second request one, the same minute a flag grant always took to land.
      */
     const orgId = (hostRes.host as { orgId?: unknown }).orgId
     const videoEmbedPosters =
       typeof orgId === 'string' && orgId
-        ? await isServerReleaseFlagOnForOrg('release_video_embed_posters', orgId).catch(() => false)
+        ? await isServerReleaseFlagOnForLoadedOrg(
+            'release_video_embed_posters',
+            orgId,
+            (orgRes.org ?? null) as Record<string, unknown> | null,
+          ).catch(() => false)
         : false
     const state = resolveLockdown(
       {
