@@ -199,6 +199,20 @@ const MODULE_LOADED_AT = Date.now()
  */
 const PROCESS_UPTIME_AT_LOAD_MS = Math.round(process.uptime() * 1000)
 
+/**
+ * A warm render faster than this is not reported (AGL-4121). Every cold render
+ * still is: that is the one per deploy this instrument exists for (see the
+ * module docs). 1.5 s is well above an ordinary warm render, whose reads come
+ * from the render cache in well under a second, so what is dropped is the
+ * routine line and what is kept is every render worth a look.
+ */
+export const RENDER_REPORT_SLOW_MS = 1_500
+
+/** Whether a render's timing line is written: every cold one, and slow warm ones. */
+export function shouldReportRender(cold: boolean, totalMs: number): boolean {
+  return cold || totalMs >= RENDER_REPORT_SLOW_MS
+}
+
 /** Flipped by the first render on this instance; every later render is warm. */
 let hasRendered = false
 
@@ -235,6 +249,10 @@ export const startRenderTimer = (): RenderTimer => {
     report: (fields) => {
       if (reported) return
       reported = true
+      const totalMs = Date.now() - startedAt
+      // Cold or slow only (AGL-4121): every log line is a billed log-drain
+      // delivery, and a fast warm render is the one shape nobody reads.
+      if (!shouldReportRender(cold, totalMs)) return
       console.log(
         JSON.stringify({
           tag: 'AGL-1152:render',
@@ -244,7 +262,7 @@ export const startRenderTimer = (): RenderTimer => {
           // at load time, so read it together with `cold`/`sinceBootMs`.
           preLoadBootMs: PROCESS_UPTIME_AT_LOAD_MS,
           sinceBootMs: startedAt - MODULE_LOADED_AT,
-          totalMs: Date.now() - startedAt,
+          totalMs,
           phases,
           ...fields,
         }),

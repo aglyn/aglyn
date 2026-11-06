@@ -90,6 +90,7 @@ import {
   tenantImgSrcDirective,
   tenantMediaSrcDirective,
 } from '../../security-origins'
+import { middlewareDebug, middlewareHeartbeat } from './utils/middleware-log'
 
 /**
  * NO SANCTIONS GEO-BLOCK HERE, ON PURPOSE (AGL-1492).
@@ -752,6 +753,10 @@ async function redirectVerdict(
 }
 
 export const middleware: NextMiddleware = async (req, event) => {
+  // At most one line per isolate per five minutes: what keeps the log-drain
+  // receiver's one-hour silence watcher honest now that the per-request trace
+  // below is off by default (AGL-4121, `utils/middleware-log.ts`).
+  middlewareHeartbeat()
   // The native apps' association documents (AGL-3817), FIRST: they are not a
   // page of any site, so no host is resolved, no lockdown verdict is spent and
   // no cookie is set. The route answers only for the platform's own home host
@@ -789,7 +794,7 @@ export const middleware: NextMiddleware = async (req, event) => {
   const PROD_VERCEL_ENV = VERCEL_ENV === 'production'
   const PREV_VERCEL_ENV = VERCEL_ENV === 'preview'
 
-  console.debug(
+  middlewareDebug(
     'process.env.VERCEL_ENV=',
     VERCEL_ENV,
     'process.env.AGLYN_TENANT_DEMO=',
@@ -844,7 +849,7 @@ export const middleware: NextMiddleware = async (req, event) => {
         0,
         -(String(TENANT_SUBDOMAIN_APEX).length + 1),
       )
-      console.debug(
+      middlewareDebug(
         'Tenant Host Switch=',
         'operator-apex',
         'TENANT_SUBDOMAIN_APEX=',
@@ -864,7 +869,7 @@ export const middleware: NextMiddleware = async (req, event) => {
     // Deployment
     case IS_DEPLOYED && reqHost === AGLYN_TENANT_HOST_CNAME:
     case IS_DEPLOYED && reqHost.endsWith(`.${AGLYN_TENANT_HOST_CNAME}`):
-      console.debug(
+      middlewareDebug(
         'Tenant Host Switch',
         'assign',
         'reqHost == AGLYN_TENANT_HOST_CNAME=',
@@ -876,7 +881,7 @@ export const middleware: NextMiddleware = async (req, event) => {
       break
     // Subdomain deployment
     case IS_VERCEL && reqHost.endsWith(`.aglyn.app`):
-      console.debug(
+      middlewareDebug(
         'Tenant Host Switch=',
         'replace',
         'request.endsWith=',
@@ -893,7 +898,7 @@ export const middleware: NextMiddleware = async (req, event) => {
       const override =
         req.nextUrl.searchParams.get(TENANT_HOST_PARAM) ||
         req.cookies.get(TENANT_HOST_COOKIE)?.value
-      console.debug(
+      middlewareDebug(
         'Tenant Host Switch=',
         'assign',
         "reqHost.endsWith('.vercel.app')=",
@@ -912,7 +917,7 @@ export const middleware: NextMiddleware = async (req, event) => {
     }
     // Local preview dev/test
     case reqHost.endsWith(`.localhost:4500`):
-      console.debug(
+      middlewareDebug(
         'Tenant Host Switch=',
         'replace',
         'request.endsWith=',
@@ -935,7 +940,7 @@ export const middleware: NextMiddleware = async (req, event) => {
           hostname,
         )
       ) {
-        console.debug('Tenant Host Switch=', 'cname', 'hostname=', hostname)
+        middlewareDebug('Tenant Host Switch=', 'cname', 'hostname=', hostname)
         tenantHost = `cname--${hostname}`
         break
       }
@@ -944,7 +949,7 @@ export const middleware: NextMiddleware = async (req, event) => {
       // Aglyn's sign-in page — their user, our domain, mid-session.
       const consoleOrigin =
         process.env.NEXT_PUBLIC_CONSOLE_URL?.trim() || 'https://app.aglyn.com'
-      console.debug(
+      middlewareDebug(
         'Tenant Host Switch=',
         'Redirecting',
         'req.nextUrl.pathname=',
@@ -961,7 +966,7 @@ export const middleware: NextMiddleware = async (req, event) => {
     (req.cookies.get('next-auth.session-token') ||
       req.cookies.get('__Secure-next-auth.session-token'))
   ) {
-    console.debug(
+    middlewareDebug(
       'Tenant Host Switch=',
       'Redirecting',
       '/login=',
@@ -1353,7 +1358,7 @@ export const middleware: NextMiddleware = async (req, event) => {
   const routePrefix =
     uncached && !teamSearch ? `/${ENTRY_PREVIEW_ROUTE_SEGMENT}` : ''
   const rewrite = `/${tenantHost}/${scheme}${routePrefix}${req.nextUrl.pathname}${req.nextUrl.search}`
-  console.debug(
+  middlewareDebug(
     'Tenant Host Switch=',
     'Rewriting',
     'rewrite=',
