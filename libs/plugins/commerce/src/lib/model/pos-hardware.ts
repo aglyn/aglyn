@@ -55,6 +55,15 @@ export const POS_HARDWARE_SHIP_COUNTRIES: readonly string[] = ['US']
 export const POS_HARDWARE_MAX_PER_LINE = 10
 export const POS_HARDWARE_MAX_UNITS = 20
 
+/**
+ * The Stripe Tax code every hardware line carries (AGL-4038): "General -
+ * Tangible Goods" (https://docs.stripe.com/tax/tax-codes), the physical good
+ * a reader or an accessory is. Without it a line takes the account's default
+ * code, which is software as a service, and would be taxed as software.
+ * Stripe's list has no narrower code for a card reader.
+ */
+export const POS_HARDWARE_TAX_CODE = 'txcd_99999999'
+
 /** The env names the shop reads, named once for the reader and the docs. */
 export const POS_HARDWARE_ENV = {
   /** `true` releases the shop. Absent or anything else keeps it hidden. */
@@ -108,9 +117,16 @@ export type PosHardwareSkuId =
 export interface PosHardwareSku {
   id: PosHardwareSkuId
   kind: 'reader' | 'accessory'
-  /** What Stripe's hardware shop calls it, for the staff member ordering it. */
+  /**
+   * What the supplier's hardware shop calls it, for the staff member ordering
+   * it. Staff-only: the merchant never sees it.
+   */
   stripeProductName: string
-  /** What the merchant sees. */
+  /**
+   * What the merchant sees, everywhere: shop, Hardware card, booth register,
+   * emails and receipts. A plain name with the model in brackets, never the
+   * maker's name; the record keeps the exact model in `sku` for support.
+   */
   displayName: string
   /** One line on what it is for. */
   use: string
@@ -126,38 +142,39 @@ export const POS_HARDWARE_SKUS: readonly PosHardwareSku[] = [
     id: 'stripe-reader-s710',
     kind: 'reader',
     stripeProductName: 'Stripe Reader S710',
-    displayName: 'Stripe Reader S710',
-    // 4G needs Stripe's cellular service, billed monthly per reader, which a
-    // store turns on for its S710s where it is offered (AGL-4038): the reader
-    // alone does not bring a connection.
-    use: 'Handheld for events and parking lots; 4G needs Stripe’s cellular service, billed monthly',
+    // Plain names with the model in brackets, no maker's name (AGL-4038).
+    // "4G-capable", never "with 4G": 4G is a separate per-store monthly
+    // service, turned on where it is offered, and the reader alone does not
+    // bring a connection.
+    displayName: 'Touchscreen reader, 4G-capable (S710)',
+    use: 'Handheld for events and parking lots, on Wi-Fi. 4G is a separate monthly service, where offered',
   },
   {
     id: 'stripe-reader-s700',
     kind: 'reader',
     stripeProductName: 'Stripe Reader S700',
-    displayName: 'Stripe Reader S700',
+    displayName: 'Touchscreen reader (S700)',
     use: 'Handheld or countertop reader on Wi-Fi',
   },
   {
     id: 'stripe-reader-t600',
     kind: 'reader',
     stripeProductName: 'Stripe Reader T600',
-    displayName: 'Stripe Reader T600',
+    displayName: 'Countertop reader (T600)',
     use: 'Countertop reader on Wi-Fi, or on Ethernet with the hub',
   },
   {
     id: 'bbpos-wisepos-e',
     kind: 'reader',
     stripeProductName: 'BBPOS WisePOS E',
-    displayName: 'BBPOS WisePOS E',
+    displayName: 'Countertop reader (WisePOS E)',
     use: 'Countertop reader on Wi-Fi',
   },
   {
     id: 'stripe-reader-m2',
     kind: 'reader',
     stripeProductName: 'Stripe Reader M2',
-    displayName: 'Stripe Reader M2',
+    displayName: 'Pocket reader (M2)',
     use: `Pairs with the ${PLATFORM_BRAND_NAME} POS app on your phone or tablet by Bluetooth`,
   },
   {
@@ -192,7 +209,7 @@ export const POS_HARDWARE_SKUS: readonly PosHardwareSku[] = [
     id: 'stripe-reader-charger',
     kind: 'accessory',
     stripeProductName: 'Stripe Reader Charger',
-    displayName: 'Charger for Stripe readers',
+    displayName: 'Charger for card readers',
     use: 'A spare wall charger',
   },
   {
@@ -265,6 +282,13 @@ export interface PosHardwareConfig {
   markupBps: number
   shipping: Array<{ method: PosHardwareShippingMethod; cents: number }>
   automaticTax: boolean
+  /**
+   * The price each item is listed at in the platform's own store, in cents
+   * (AGL-4038), where the server read one: the shop then charges that, so
+   * the Hardware card and the store's product page quote one price
+   * ({@link posHardwareOfferUnitCents}). Never read from the environment.
+   */
+  listedCents?: Partial<Record<PosHardwareSkuId, number>>
 }
 
 /** The highest single figure the parser accepts, in cents: $10,000. */
@@ -410,6 +434,28 @@ export function posHardwareUnitCents(costCents: number, markupBps: number): numb
   return costCents + Math.floor((costCents * markupBps + 5_000) / 10_000)
 }
 
+/**
+ * ONE PRICE FOR ONE ITEM (AGL-4038). The platform's own store lists the same
+ * readers on its product pages, at prices set on the products, and the
+ * Hardware card prices them from the environment, Stripe's cost plus the
+ * markup. Two sources would quote two prices for one reader. So the item's
+ * listed price is the price wherever it is listed, and the Hardware card
+ * charges exactly what the product page shows. It never sells below cost: a
+ * listed price under Stripe's cost is a mistake on the product, and the card
+ * keeps the marked-up price for it instead. An item the store does not list
+ * is priced from the environment as before.
+ */
+export function posHardwareOfferUnitCents(
+  config: Pick<PosHardwareConfig, 'costs' | 'markupBps' | 'listedCents'>,
+  sku: PosHardwareSkuId,
+): number {
+  const cost = config.costs[sku]
+  if (cost === undefined) return 0
+  const listed = config.listedCents?.[sku]
+  if (typeof listed === 'number' && Number.isSafeInteger(listed) && listed >= cost) return listed
+  return posHardwareUnitCents(cost, config.markupBps)
+}
+
 /** An item as the shop offers it: the merchant's price, never Stripe's. */
 export interface PosHardwareOffer {
   sku: PosHardwareSkuId
@@ -430,7 +476,7 @@ export function posHardwareOffers(config: PosHardwareConfig): PosHardwareOffer[]
         kind: sku.kind,
         name: sku.displayName,
         use: sku.use,
-        unitCents: posHardwareUnitCents(cost, config.markupBps),
+        unitCents: posHardwareOfferUnitCents(config, sku.id),
       },
     ]
   })
@@ -867,9 +913,10 @@ export interface PosHardwareOrder {
   /** Whose an in-person order is, or that staff have still to say. */
   attachment?: PosHardwareAttachment
   /**
-   * How the buyer of an in-person order agreed to the terms of sale
-   * (AGL-4038): copied from the register sale, or the receipt-and-sign
-   * notice when they did not accept electronically.
+   * How the buyer agreed to the terms of sale (AGL-4038): for an in-person
+   * order, copied from the register sale, or the receipt-and-sign notice
+   * when they did not accept electronically; for an order paid online,
+   * ticked at checkout with business use confirmed (`online`).
    */
   termsAcceptance?: PosHardwareTermsAcceptance
   /** Each reader of an in-person order, with its serial when one was taken. */

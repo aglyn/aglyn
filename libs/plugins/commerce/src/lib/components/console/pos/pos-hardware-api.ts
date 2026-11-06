@@ -132,6 +132,8 @@ export function posHardwareCheckout(
     hostId: string
     lines: Array<{ sku: string; quantity: number }>
     shippingMethod: PosHardwareShippingMethod
+    /** The terms of sale accepted and business use confirmed (AGL-4038); both required. */
+    hardwareTerms: { accepted: boolean; businessUse: boolean }
   },
 ) {
   return sendPosHardwareRequest<{ url: string; orderId: string }>(user, SHOP, {

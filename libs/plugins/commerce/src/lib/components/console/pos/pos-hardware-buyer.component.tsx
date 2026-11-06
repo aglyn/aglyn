@@ -425,7 +425,7 @@ function SaleReaders(props: {
         <Box sx={{ display: 'grid', gap: 1, gridTemplateColumns: { xs: '1fr', sm: '1fr 1fr' } }}>
           <Typography variant="body2" color="text.secondary" sx={{ gridColumn: '1 / -1' }}>
             {'Their store has no address for card readers yet. Enter it with the buyer to register the reader now: ' +
-              'Stripe sets the reader up for this country. Or leave it, and they add it on their POS devices card.'}
+              'the reader is set up for this country. Or leave it, and they add it on their POS devices card.'}
           </Typography>
           <TextField
             size="small"

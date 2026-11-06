@@ -32,8 +32,8 @@ const STATE = {
   updatedAtMs: null,
   canWrite: true,
   families: [
-    { id: 'portrait-large', label: 'Stripe Reader S700 and S710', width: 1080, height: 1920, image: null },
-    { id: 'portrait-small', label: 'BBPOS WisePOS E', width: 720, height: 1280, image: null },
+    { id: 'portrait-large', label: 'Touchscreen readers (S700 and S710)', width: 1080, height: 1920, image: null },
+    { id: 'portrait-small', label: 'Countertop reader (WisePOS E)', width: 720, height: 1280, image: null },
   ],
 }
 
@@ -78,14 +78,14 @@ const props = (staffRole: string) => ({ basePath: '/admin/reader-start-up-screen
 describe('the reader start-up screen staff page', () => {
   it('lists each family with the size Stripe requires', async () => {
     render(<PosReaderSplashStaffPage {...props('super')} />)
-    await waitFor(() => expect(screen.getByText('Stripe Reader S700 and S710')).toBeTruthy())
+    await waitFor(() => expect(screen.getByText('Touchscreen readers (S700 and S710)')).toBeTruthy())
     expect(screen.getByText(/1080 × 1920 pixels/)).toBeTruthy()
     expect(screen.getByText(/720 × 1280 pixels/)).toBeTruthy()
   })
 
   it('offers no write to a staff role other than super', async () => {
     render(<PosReaderSplashStaffPage {...props('support')} />)
-    await waitFor(() => expect(screen.getByText('BBPOS WisePOS E')).toBeTruthy())
+    await waitFor(() => expect(screen.getByText('Countertop reader (WisePOS E)')).toBeTruthy())
     for (const button of screen.getAllByRole('button', { name: 'Upload' })) {
       expect((button as HTMLButtonElement).disabled).toBe(true)
     }
@@ -93,8 +93,8 @@ describe('the reader start-up screen staff page', () => {
 
   it('uploads a screen and then updates every store', async () => {
     render(<PosReaderSplashStaffPage {...props('super')} />)
-    await waitFor(() => expect(screen.getByText('Stripe Reader S700 and S710')).toBeTruthy())
-    const input = screen.getByLabelText('Upload the Stripe Reader S700 and S710 screen') as HTMLInputElement
+    await waitFor(() => expect(screen.getByText('Touchscreen readers (S700 and S710)')).toBeTruthy())
+    const input = screen.getByLabelText('Upload the Touchscreen readers (S700 and S710) screen') as HTMLInputElement
     const file = new File([new Uint8Array([137, 80, 78, 71])], 'splash.png', { type: 'image/png' })
     fireEvent.change(input, { target: { files: [file] } })
     await waitFor(() => expect(calls.some((call) => call.body?.action === 'apply')).toBe(true))
