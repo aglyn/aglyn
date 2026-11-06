@@ -45,6 +45,17 @@
  * picks how to pay after the fee is fixed. Every method here costs Stripe that
  * much or less, so turning one off or on changes what a shopper may choose and
  * never what the platform recovers.
+ *
+ * ## Quotes and invoices pay by card, never buy-now-pay-later
+ *
+ * A quote's or an invoice's pay link always excludes every `bnpl` method,
+ * whatever the store chose (`payLinkPaymentMethodControls`), and its fee is
+ * priced at the card rate (`PAY_LINK_PROCESSING_PERCENT`). That holds only
+ * while every method a pay link can still offer costs Stripe no more than a
+ * card: Apple Pay, Google Pay, Link, Cash App Pay and Amazon Pay are 2.9% +
+ * 30¢ on Stripe's US pricing, and stablecoins 1.5%. `PAY_LINK_METHOD_IDS`
+ * lists them, and a spec fails when a method is added to the catalog without
+ * being placed on one side or the other.
  */
 
 /** A method the merchant may switch off (or, for crypto, on). */
@@ -337,6 +348,37 @@ export function appendStorefrontPaymentMethodParams(
   if (controls.wallets.link === 'never') {
     params.set('wallet_options[link][display]', 'never')
   }
+}
+
+/**
+ * The methods a quote's or an invoice's pay link may still offer, each of
+ * which Stripe prices at the card rate or below (see the note at the top of
+ * this file). Every other catalog method is excluded from a pay link.
+ */
+export const PAY_LINK_METHOD_IDS: readonly StorefrontPaymentMethodId[] = [
+  'apple_pay',
+  'google_pay',
+  'link',
+  'cashapp',
+  'amazon_pay',
+  'crypto',
+]
+
+/**
+ * The store's choices as a quote's or an invoice's pay link sends them: what
+ * the store turned off, plus every method that is not on `PAY_LINK_METHOD_IDS`
+ * (Klarna, Afterpay and Affirm), excluded however the store set it. Catalog
+ * order, so the params read the same as a storefront session's.
+ */
+export function payLinkPaymentMethodControls(
+  controls: StorefrontPaymentMethodControls,
+): StorefrontPaymentMethodControls {
+  const excluded = STOREFRONT_PAYMENT_METHODS.filter(
+    (method) =>
+      method.control === 'exclude' &&
+      (controls.excluded.includes(method.id) || !PAY_LINK_METHOD_IDS.includes(method.id)),
+  ).map((method) => method.id)
+  return { excluded, wallets: controls.wallets }
 }
 
 /** True when the browser has to be told about a hidden wallet at all. */

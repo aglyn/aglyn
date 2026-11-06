@@ -17,7 +17,13 @@
  * @jest-environment node
  */
 
-import type { PluginApiRequest } from '@aglyn/aglyn/server'
+import {
+  CARD_PROCESSING_PERCENT,
+  PAY_LINK_PROCESSING_PERCENT,
+  PROCESSING_FIXED_CENTS,
+  resolveTransactionFeeCents,
+  type PluginApiRequest,
+} from '@aglyn/aglyn/server'
 import { handleQuotePay, handleQuoteView, type QuotePayDeps } from './quote-pay'
 import { mintQuoteLinkToken } from './quote-link-token'
 
@@ -285,6 +291,47 @@ describe('Pay', () => {
     expect(created[0].headers['Idempotency-Key']).toBeTruthy()
     expect(docs.get(QUOTE_PATH)?.['checkoutSessionId']).toBe('cs_test_new10000')
     expect(docs.get(QUOTE_PATH)?.['status']).toBe('pending')
+  })
+
+  it('pays by card or a card-rate wallet, never buy-now-pay-later, and prices the fee at the card rate', async () => {
+    // A store that offers everything, crypto included, and one that never chose.
+    docs.set('hosts/site1/settings/store', {
+      ...(docs.get('hosts/site1/settings/store') ?? {}),
+      paymentMethods: { klarna: true, afterpay_clearpay: true, affirm: true, crypto: true },
+    })
+    await press()
+    const params = created[0].params
+    const excluded = [...params.keys()]
+      .filter((key) => key.startsWith('excluded_payment_method_types['))
+      .map((key) => params.get(key))
+    expect(excluded).toEqual(['klarna', 'afterpay_clearpay', 'affirm'])
+    expect(params.has('payment_method_types[0]')).toBe(false)
+    expect(params.get('wallet_options[link][display]')).toBeNull()
+
+    // The plan's take on the goods plus 2.9% + 30¢ on the whole charge
+    // (goods, Texas tax and shipping), never the 6% storefront rate.
+    expect(PAY_LINK_PROCESSING_PERCENT).toBe(CARD_PROCESSING_PERCENT)
+    const fee = Number(params.get('payment_intent_data[application_fee_amount]'))
+    const atCard = resolveTransactionFeeCents(ORG as never, 'physical', 270_000, 296_775, CARD_PROCESSING_PERCENT)
+    const atStorefront = resolveTransactionFeeCents(ORG as never, 'physical', 270_000, 296_775)
+    expect(fee).toBe(atCard)
+    expect(atStorefront - fee).toBe(Math.ceil(296_775 * 0.06) - Math.ceil((296_775 * CARD_PROCESSING_PERCENT) / 100))
+    expect(params.get('metadata[feeCents]')).toBe(String(fee))
+  })
+
+  it('keeps what the store turned off excluded too', async () => {
+    docs.set('hosts/site1/settings/store', {
+      ...(docs.get('hosts/site1/settings/store') ?? {}),
+      paymentMethods: { cashapp: false, link: false },
+    })
+    await press()
+    const params = created[0].params
+    const excluded = [...params.keys()]
+      .filter((key) => key.startsWith('excluded_payment_method_types['))
+      .map((key) => params.get(key))
+    expect(excluded).toEqual(['klarna', 'afterpay_clearpay', 'affirm', 'cashapp', 'crypto'])
+    expect(params.get('wallet_options[link][display]')).toBe('never')
+    expect(PROCESSING_FIXED_CENTS).toBe(30)
   })
 
   it('opens the in-page form when in-page payments are on', async () => {
