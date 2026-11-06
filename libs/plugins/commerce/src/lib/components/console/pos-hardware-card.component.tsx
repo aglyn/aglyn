@@ -48,10 +48,12 @@ import {
   POS_HARDWARE_ANCHOR,
   POS_HARDWARE_MAX_PER_LINE,
   POS_HARDWARE_STATUS_LABELS,
+  posPlanPrompt,
   type PosHardwareOrderStatus,
   type PosHardwareShippingMethod,
 } from '../../model/pos-hardware'
 import { POS_HARDWARE_TERMS_SECTIONS, posHardwareTermsUrl } from '../../model/pos-hardware-terms'
+import { EntitlementUpsell, useCommerceEntitlement } from './entitlement-gate.component'
 import { newAttemptKey } from './pos/pos-api'
 import {
   openPosHardwareCheckout,
@@ -125,6 +127,11 @@ const TERMS_REASON = 'Accept the hardware terms of sale and confirm the hardware
  * gate only the platform can lift, so naming it would point at a step nobody
  * on the workspace can take. The route answers `available: false` until
  * every price, the markup and the shipping figures are configured.
+ *
+ * ANYONE CAN BUY (AGL-4038): the shop is open on every plan. A workspace
+ * without the point of sale is prompted to add it, because a reader takes
+ * payments at the register: above the shop, and once an order has arrived,
+ * naming it. The prompt never switches Check out off.
  */
 export function PosHardwareCard({
   hostId,
@@ -145,6 +152,9 @@ export function PosHardwareCard({
   const uid = user?.uid ?? ''
   // The route's own door (AGL-4047): the register, or the key to buy.
   const mayVisit = canManagePos || canBuyHardware
+  // The point of sale, which a reader takes payments with (AGL-4038). Only
+  // `locked` prompts: a plan still loading prompts nobody.
+  const posPlan = useCommerceEntitlement(hostId, 'pos')
 
   useEffect(() => {
     if (!user || !mayVisit) return
@@ -348,9 +358,26 @@ export function PosHardwareCard({
     [],
   )
 
+  /*
+   * Orders shipped from this card that have arrived, for the prompt. A reader
+   * bought from the platform's own store, at an event or online, is prompted
+   * on the Card readers to set up card instead, so it is not named twice.
+   */
+  const arrived = posPlan.locked
+    ? (orders ?? [])
+        .filter((order) => (order.source ?? 'online') === 'online' && (order.status === 'delivered' || order.status === 'registered'))
+        .map((order) => order.number)
+    : []
+  const planPrompt = (text: string) => (
+    <EntitlementUpsell planLabel={posPlan.planLabel} upgradeHref={posPlan.upgradeHref}>
+      {text}
+    </EntitlementUpsell>
+  )
+
   const ordersSection = (
     <Stack spacing={1}>
       <Typography variant="subtitle2">{'Your orders'}</Typography>
+      {arrived.length ? planPrompt(posPlanPrompt({ arrived })) : null}
       {orders && orders.length === 0 ? (
         <Typography variant="body2" color="text.secondary">
           {'No hardware orders yet.'}
@@ -443,6 +470,7 @@ export function PosHardwareCard({
             {'Checkout was canceled. Nothing was charged.'}
           </Alert>
         ) : null}
+        {posPlan.locked && !arrived.length ? planPrompt(posPlanPrompt()) : null}
         <Typography variant="body2" color="text.secondary">
           {'Choose the readers and accessories you need. We set each reader up and ship your order to the address you enter at checkout. The delivery email says how to start taking payments with it.'}
         </Typography>

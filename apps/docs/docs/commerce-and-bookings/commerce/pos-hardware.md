@@ -13,7 +13,9 @@ cash drawer, barcode scanners and a label printer.
 
 :::info Plan availability
 POS hardware comes with POS, on **Pro** and above. There is no extra charge for
-printers, scanners or customer displays.
+printers, scanners or customer displays. You can
+[buy card readers from Aglyn](#buy-a-reader-from-aglyn) on any plan, and add
+POS when you set them up.
 :::
 
 ## Recommended kit
@@ -177,6 +179,13 @@ The card shows only what is available to order, with its price. An item that
 Aglyn's own online store also sells costs the same on the card as on the
 store's product page.
 
+**On any plan.** You can buy readers whatever your plan. A reader takes
+payments at the register, which comes with the point of sale on **Pro** and
+above: registers that ring up sales, card payments on your readers, cash with
+change due, receipts and shift reports. Until your workspace has it, the card
+says so above the items, with an **Upgrade** button. It never stops you
+checking out.
+
 **Place an order**
 
 1. Open **Products → Point of sale** and find the **Hardware** card.
@@ -197,9 +206,10 @@ accepted.
 
 #### Who can buy hardware {#who-can-buy-hardware}
 
-Placing an order needs the **Buy point of sale hardware** permission. Owners,
-admins and editors hold it with the point of sale, and viewers don't. It stands on
-its own:
+Placing an order needs the **Buy point of sale hardware** permission, on any
+plan. Owners, admins and editors hold it by default, following **Use the point
+of sale**, and viewers don't. Someone without it is refused, and **Check out**
+names the permission. It stands on its own:
 
 - To keep ordering to a few people, deny it in a
   [custom role](../../workspace-and-billing/teams-and-roles/custom-roles.md#point-of-sale-permissions)
@@ -248,7 +258,14 @@ you add it. A Pocket reader (M2) pairs by Bluetooth from the Aglyn POS app
 instead. The delivery email says which applies.
 
 **Who can buy:** a member with the **Buy point of sale hardware** permission for
-the site, on a plan that includes POS.
+the site, on any plan.
+
+**Without the point of sale.** Once an order from the card is **Delivered** or
+**Set up** and your plan doesn't include the point of sale, the card names the
+order above **Your orders** and asks you to add it, with an **Upgrade** button.
+Aglyn can't register a reader to your store before you have it, so you add the
+reader on the **POS devices** card yourself once you've upgraded. The register
+says the same until then.
 
 ### Bought from Aglyn's online store {#bought-from-our-online-store}
 

@@ -10927,6 +10927,24 @@
       ]
     },
     {
+      "collectionGroup": "loyaltyMembers",
+      "queryScope": "COLLECTION",
+      "fields": [
+        {
+          "fieldPath": "hostId",
+          "order": "ASCENDING"
+        },
+        {
+          "fieldPath": "creditCents",
+          "order": "ASCENDING"
+        },
+        {
+          "fieldPath": "points",
+          "order": "ASCENDING"
+        }
+      ]
+    },
+    {
       "collectionGroup": "loyaltySync",
       "queryScope": "COLLECTION",
       "fields": [

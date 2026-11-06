@@ -57,6 +57,23 @@ import { answerStaffCompleteList } from '../../../../utils/server/staff-complete
 import { readStaffListQuery } from '../../../../utils/server/staff-list-query'
 
 /**
+ * The status a failed Stripe call goes back to staff as.
+ *
+ * Stripe answers 400/402/404/409 when it refuses what was ASKED ("Coupon is
+ * expired", a bad parameter), and that is the caller's to fix, so it goes back
+ * as a 400 with Stripe's own message. A 502 says Stripe itself is broken, and
+ * the AGL-1921 policy pages on every 5xx: a staff typo on 2026-11-04 paged as
+ * "Server errors". Stripe's 5xx, and the 401/403/429 that mean OUR key or
+ * OUR rate is wrong, stay 502.
+ */
+function stripeFailureStatus(status: number): number {
+  if (status >= 400 && status < 500 && ![401, 403, 429].includes(status)) {
+    return 400
+  }
+  return 502
+}
+
+/**
  * Staff coupon management (AGL-1105). Coupons live in Stripe — the source of
  * truth for redemption — and this route is the audited staff door to them.
  *
@@ -303,9 +320,10 @@ async function handler(request: Request): Promise<Response> {
       if (!couponsRead.ok || !codesRead.ok) {
         const failed = [couponsRead, codesRead].find((read) => 'body' in read)
         const message = failed && 'body' in failed ? failed.body?.error?.message : null
+        const status = failed && 'status' in failed ? failed.status : 502
         return Response.json(
           { error: message ?? 'Stripe lookup failed' },
-          { status: 502 },
+          { status: stripeFailureStatus(status) },
         )
       }
       // A coupon's codes come from the code list, so a code list cut short
@@ -370,7 +388,10 @@ async function handler(request: Request): Promise<Response> {
             error:
               current.body?.error?.message ?? 'Promotion code lookup failed',
           },
-          { status: current.status === 404 ? 404 : 502 },
+          {
+            status:
+              current.status === 404 ? 404 : stripeFailureStatus(current.status),
+          },
         )
       }
       const wasActive = current.body?.active === true
@@ -431,7 +452,7 @@ async function handler(request: Request): Promise<Response> {
             error:
               updated.body?.error?.message ?? 'Promotion code update failed',
           },
-          { status: 502 },
+          { status: stripeFailureStatus(updated.status) },
         )
       }
 
@@ -651,7 +672,7 @@ async function handler(request: Request): Promise<Response> {
     if (!created.ok) {
       return Response.json(
         { error: created.body?.error?.message ?? 'Coupon creation failed' },
-        { status: 502 },
+        { status: stripeFailureStatus(created.status) },
       )
     }
     const coupon = created.body

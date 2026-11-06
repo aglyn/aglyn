@@ -305,7 +305,7 @@ describe('POST /api/admin/coupons — promotion code activate/deactivate', () =>
     expect(mockAuditAdd).not.toHaveBeenCalled()
   })
 
-  it('surfaces a Stripe write failure as a 502, not a 200', async () => {
+  it('surfaces a Stripe refusal as a 400 with its reason, not a 200', async () => {
     let seenWrite = false
     ;(globalThis as any).fetch = jest.fn(async (url: string, init: any = {}) => {
       const path = String(url).replace('https://api.stripe.com/v1/', '')
@@ -328,11 +328,32 @@ describe('POST /api/admin/coupons — promotion code activate/deactivate', () =>
     const response = await post({ action: 'activate', promotionCodeId: CODE_ID })
 
     expect(seenWrite).toBe(true)
-    expect(response.status).toBe(502)
+    // Stripe refused the request; Stripe is not down, so it is not a 502.
+    expect(response.status).toBe(400)
     await expect(response.json()).resolves.toEqual({
       error: 'Coupon is expired',
     })
     // Nothing changed in Stripe, so nothing may claim it did.
+    expect(mockAuditAdd).not.toHaveBeenCalled()
+  })
+
+  it('surfaces Stripe itself failing as a 502', async () => {
+    ;(globalThis as any).fetch = jest.fn(async (url: string, init: any = {}) => {
+      const path = String(url).replace('https://api.stripe.com/v1/', '')
+      stripeCalls.push({ path, method: init.method ?? 'GET', body: init.body ?? null })
+      if (init.method === 'POST') {
+        return {
+          ok: false,
+          status: 500,
+          json: async () => ({ error: { message: 'An unknown error occurred' } }),
+        }
+      }
+      return { ok: true, status: 200, json: async () => promotionCode() }
+    })
+
+    const response = await post({ action: 'activate', promotionCodeId: CODE_ID })
+
+    expect(response.status).toBe(502)
     expect(mockAuditAdd).not.toHaveBeenCalled()
   })
 

@@ -81,9 +81,9 @@ export async function authorizePosStaff(
   admits: (permissions: Readonly<Record<string, boolean | undefined>>) => boolean = worksPosRegister,
   /**
    * `planRequired: false` admits a workspace whose plan does not include the
-   * point of sale, for the one read that must tell such a workspace what it
-   * needs first: a card reader it bought in person, waiting for that plan
-   * (AGL-4038). Everything that acts still asks the plan.
+   * point of sale: the hardware shop (AGL-4038), where anyone may buy readers
+   * and the card prompts to add the plan that takes payments with them.
+   * Everything at the register still asks the plan.
    */
   options: { planRequired?: boolean } = {},
 ): Promise<PosStaffGate> {

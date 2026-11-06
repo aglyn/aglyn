@@ -204,6 +204,9 @@ jest.mock('@aglyn/shared-ui-next/contexts/next-page-title-provider', () => ({
 jest.mock('@aglyn/aglyn', () => ({
   checkHostRegisterQuota: () => ({ limit: 5 }),
   checkQuota: () => ({ limit: 5 }),
+  // The point of sale's plan prompt (AGL-4038): on the plan, so no prompt.
+  checkEntitlement: () => true,
+  planLabelGrantingFeature: () => 'Pro',
 }))
 
 import { PosConsolePage, posProductPlan } from './pos-page.component'

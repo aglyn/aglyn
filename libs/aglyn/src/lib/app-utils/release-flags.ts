@@ -52,6 +52,7 @@ export type ReleaseFlagKey =
   | 'release_ai_site_inspiration'
   | 'release_ad_audience_sync'
   | 'release_site_starters'
+  | 'release_video_embed_posters'
 
 export interface ReleaseFlagDefinition {
   key: ReleaseFlagKey
@@ -331,6 +332,21 @@ const PLATFORM_RELEASE_FLAGS: readonly ReleaseFlagDefinition[] = [
       `option, ${PLATFORM_BRAND_NAME}\u2019s own included, is a marketplace listing any ` +
       'publisher may list and price, for a base start or an AI start. OFF ' +
       'by default: Create site makes the default site as it always has.',
+    defaultEnabled: false,
+  },
+  // Per org (AGL-4140): the tenant loader reads it for the site's workspace
+  // into `SiteContextValue.videoEmbedPosters`, the lockdown verdict reads it
+  // for the middleware's `img-src`, and a site import stamps it on each wave
+  // as the wave starts. Off, a poster-less YouTube film asks for a poster,
+  // as it always has.
+  {
+    key: 'release_video_embed_posters',
+    label: 'YouTube thumbnails as video posters',
+    description:
+      'A YouTube film placed or imported with no poster shows YouTube\u2019s ' +
+      'own thumbnail (AGL-4140), which each visitor\u2019s browser loads from ' +
+      'i.ytimg.com with the page. OFF by default: nothing is requested from ' +
+      'Google until the Subprocessors page that discloses it is published.',
     defaultEnabled: false,
   },
 ]

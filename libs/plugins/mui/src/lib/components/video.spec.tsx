@@ -597,6 +597,68 @@ describe('Video plays YouTube and Vimeo only after a press (AGL-4140)', () => {
 })
 
 
+describe("Video shows YouTube's own still for a film with no poster (AGL-4140)", () => {
+  const LINK = 'https://www.youtube.com/watch?v=dQw4w9WgXcQ&t=4s'
+  const STILL = 'https://i.ytimg.com/vi/dQw4w9WgXcQ/hqdefault.jpg'
+  /** A published page whose workspace has `release_video_embed_posters` on, or off. */
+  const onSite = (element: JSX.Element, videoEmbedPosters = true) => (
+    <Aglyn.SiteContext.Provider value={{ hostId: 'host1', videoEmbedPosters }}>
+      {element}
+    </Aglyn.SiteContext.Provider>
+  )
+  const still = (root: ParentNode) =>
+    root.querySelector('button img') as HTMLImageElement | null
+
+  it('draws the still as the play button, and loads no player before a press', () => {
+    const { container, baseElement } = render(onSite(<Video src={LINK} title="Tour" />))
+    const image = still(container)
+    expect(image?.getAttribute('src')).toBe(STILL)
+    expect(image?.getAttribute('srcset')).toBeNull()
+    // The visitor's browser asks Google for the picture and nothing else: no
+    // page address rides along as a referrer.
+    expect(image?.getAttribute('referrerpolicy')).toBe('no-referrer')
+    expect(baseElement.querySelector('iframe')).toBeNull()
+    expect(container.querySelector('button')?.getAttribute('aria-label')).toBe('Play video: Tour')
+  })
+
+  it('plays the privacy-enhanced player in place of the still after a press', () => {
+    const { container } = render(onSite(<Video src={LINK} />))
+    fireEvent.click(container.querySelector('button') as HTMLButtonElement)
+    const frame = new URL((container.querySelector('iframe') as HTMLIFrameElement).src)
+    expect(`${frame.origin}${frame.pathname}`).toBe(
+      'https://www.youtube-nocookie.com/embed/dQw4w9WgXcQ',
+    )
+  })
+
+  it('server-renders the still, so the first paint is the picture', () => {
+    expect(renderToString(onSite(<Video src={LINK} />))).toContain(STILL)
+  })
+
+  it("keeps the author's own poster ahead of YouTube's", () => {
+    const { container } = render(onSite(<Video src={LINK} poster="media:h/p" />))
+    expect(still(container)?.getAttribute('src')).not.toBe(STILL)
+    expect(container.innerHTML).not.toContain('ytimg')
+  })
+
+  it('shows nothing of Google with the flag off: the poster box, as before', () => {
+    const { container } = render(onSite(<Video src={LINK} />, false))
+    expect(container.innerHTML).not.toContain('ytimg')
+    expect(container.querySelector('button')).toBeNull()
+  })
+
+  it('shows nothing of Google where the page says nothing of the flag, such as the canvas', () => {
+    const { container, getByText } = render(editing(<Video src={LINK} />))
+    expect(container.innerHTML).not.toContain('ytimg')
+    expect(getByText(/play this YouTube video/)).toBeTruthy()
+  })
+
+  it('keeps asking for a poster for Vimeo, which publishes no still', () => {
+    const { container } = render(onSite(<Video src="https://vimeo.com/76979871" />))
+    expect(container.querySelector('button')).toBeNull()
+    expect(container.querySelector('img')).toBeNull()
+  })
+})
+
 /**
  * A press sent from outside the element (AGL-2867): a "Play a video"
  * interaction on a button elsewhere on the page. The command is sent to the

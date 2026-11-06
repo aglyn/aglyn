@@ -126,7 +126,7 @@ import {
   type SiteImportNavEntry,
 } from '../model/ai-site-import'
 import { aiModelForStep } from '../providers/routing'
-import { SITE_IMPORT_GENERATIVE_RELEASE_FLAG, SITE_IMPORT_RELEASE_FLAG } from '../site-import/site-import-flag'
+import { SITE_IMPORT_GENERATIVE_RELEASE_FLAG, SITE_IMPORT_RELEASE_FLAG, SITE_IMPORT_VIDEO_POSTERS_RELEASE_FLAG } from '../site-import/site-import-flag'
 import { crawlSiteForImport, siteImportOrigins, type SiteImportCrawlSeams, type SiteImportInventory } from '../site-import/site-import-crawl'
 import { bringInSiteImportPhotos, type SiteImportPhotosDeps } from '../site-import/site-import-images'
 import {
@@ -271,6 +271,8 @@ export interface AiSiteImportStepDeps {
   releaseFlagOn?: (orgId: string) => Promise<boolean>
   /** Whether a wave of this organization is a generative Improve it (AGL-4152); absent, `SITE_IMPORT_GENERATIVE_RELEASE_FLAG`'s verdict for it. */
   generativeFlagOn?: (orgId: string) => Promise<boolean>
+  /** Whether a wave of this organization places a YouTube film with no poster, for YouTube's own still (AGL-4140); absent, `SITE_IMPORT_VIDEO_POSTERS_RELEASE_FLAG`'s verdict for it. */
+  videoPostersFlagOn?: (orgId: string) => Promise<boolean>
   ingest?: () => PluginMediaIngest | null
   fetchImage?: SiteImportPhotosDeps['fetch']
   readRoom?: typeof readAiScreenRoom
@@ -817,6 +819,8 @@ export function aiSiteImportDocumentFor(state: AiSiteImportState, page: AiSiteIm
     build: page.build ?? aiSiteImportBuildOf(page),
     finish: wave ? aiSiteImportWaveChoice(state, wave).finish : 'keep',
     wording: page.wording === 'improved' ? 'improved' : 'kept',
+    // A YouTube film with no poster plays from YouTube's own still, as the wave was stamped (AGL-4140).
+    ...(wave?.videoPosters ? { videoPosters: true as const } : {}),
     // Redesigned from its ledger (AGL-4152), its wave stamped so and its words improved: never a policy page.
     ...(wave?.generative && page.wording === 'improved'
       ? {
@@ -1148,6 +1152,7 @@ export function createAiJobImportStep(deps: AiSiteImportStepDeps = {}): AiJobSte
   const rateLimit = deps.rateLimit ?? consumeRateLimit
   const flagOn = deps.releaseFlagOn ?? ((orgId: string) => isServerReleaseFlagOnForOrg(SITE_IMPORT_RELEASE_FLAG, orgId))
   const generativeOn = deps.generativeFlagOn ?? ((orgId: string) => isServerReleaseFlagOnForOrg(SITE_IMPORT_GENERATIVE_RELEASE_FLAG, orgId))
+  const videoPostersOn = deps.videoPostersFlagOn ?? ((orgId: string) => isServerReleaseFlagOnForOrg(SITE_IMPORT_VIDEO_POSTERS_RELEASE_FLAG, orgId))
   const ingestOf = deps.ingest ?? pluginMediaIngest
   const readRoom = deps.readRoom ?? readAiScreenRoom
   const siteNameOf = deps.readSiteName ?? readSiteName
@@ -1346,10 +1351,12 @@ export function createAiJobImportStep(deps: AiSiteImportStepDeps = {}): AiJobSte
       // Asked only of a wave that could be planned or redesigned; off or unread, it is built as it always was (AGL-4152).
       const asked = aiSiteImportChoiceOf(state)
       const generative = asked.finish === 'improve' && (await generativeOn(job.orgId).catch(() => false))
+      // Whether its pages place a YouTube film with no poster, for YouTube's own still (AGL-4140).
+      const videoPosters = await videoPostersOn(job.orgId).catch(() => false)
       const started = aiSiteImportWaveStamped(
         aiSiteImportWithBuilds(aiSiteImportWaveStarted(state, wave.index, nowIso, aiSiteImportReadsWithin({ ...job, items: ledger }, state, reads))),
         wave.index,
-        generative ? { generative: true } : {},
+        { ...(generative ? { generative: true } : {}), ...(videoPosters ? { videoPosters: true } : {}) },
       )
       const running = started.waves.find((entry) => entry.index === wave.index) as AiSiteImportWave
       return closing(started, ledger, running, unspent({ items: ledger }))
