@@ -24,6 +24,7 @@ import { createResourceUid } from '@aglyn/aglyn/server'
 import { firebaseAdmin } from '@aglyn/tenant-data-admin/server/firebase-admin'
 import * as CommerceModel from '../model'
 import { alertLowStockCrossing } from './low-stock'
+import { dropStorefrontPages, soldOutMoved } from './sold-out-drop'
 
 /**
  * COUNTS FROM SOMEWHERE ELSE, APPLIED AS THIS PLUGIN APPLIES ANY COUNT
@@ -154,6 +155,11 @@ async function applyToProduct(input: {
     return { results, before, after }
   })
   if (outcome.before && outcome.after) alertLowStockCrossing(hostId, outcome.before, outcome.after)
+  // A synced count that sold a product out, or brought it back, reaches the
+  // storefront (AGL-4121).
+  if (soldOutMoved(outcome.before, outcome.after)) {
+    await dropStorefrontPages({ hostId, reason: 'an inventory sync moved a sold-out verdict' })
+  }
   return outcome.results
 }
 

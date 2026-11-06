@@ -55,6 +55,7 @@ import {
 } from './pos-ops-gate'
 import { createStripeRefund } from './stripe-refund'
 import { parsePosHardwareInPersonConfig } from '../model/pos-hardware'
+import { dropStorefrontPages, soldOutMoved } from './sold-out-drop'
 
 /*==========================================
  * RETURNS AT THE REGISTER (AGL-3609): `POST /api/commerce/pos-return`.
@@ -920,6 +921,9 @@ async function restockReturn(
     ])
   }
   let units = 0
+  // Whether a restock flipped a sold-out verdict the storefront shows
+  // (AGL-4121); a retried attempt can only make the drop spurious.
+  let soldOutFlipped = false
   for (const [productId, lines] of byProduct) {
     const ref = hostRef.collection('products').doc(productId)
     units += await firestore.runTransaction(async (transaction) => {
@@ -941,6 +945,7 @@ async function restockReturn(
         ...CommerceModel.productStockFields({ ...product, variants }),
         updatedAtMs: now,
       })
+      soldOutFlipped ||= soldOutMoved(product, { ...product, variants })
       for (const row of rows) {
         transaction.create(hostRef.collection('inventoryAdjustments').doc(createResourceUid()), {
           productId,
@@ -953,6 +958,12 @@ async function restockReturn(
         } satisfies CommerceModel.InventoryAdjustment)
       }
       return rows.reduce((sum, row) => sum + row.quantity, 0)
+    })
+  }
+  if (soldOutFlipped) {
+    await dropStorefrontPages({
+      hostId: hostRef.id,
+      reason: 'a register return restocked a product',
     })
   }
   return units

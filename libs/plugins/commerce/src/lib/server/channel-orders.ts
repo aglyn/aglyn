@@ -33,6 +33,7 @@ import { alertLowStockCrossing } from './low-stock'
 import { stageOrderEvent } from './order-events'
 import { capRestockLines, resolveTrackedRestockLines, saleReleaseCaps } from './restock-flag'
 import { completeChannelOrder, recordChannelOrderRefund } from './channel-order-updates'
+import { dropStorefrontPages, soldOutMoved } from './sold-out-drop'
 
 /**
  * ORDERS SOLD ON ANOTHER CHANNEL (AGL-3638): commerce's implementation of
@@ -371,6 +372,10 @@ export async function importChannelOrder(
   if (result.kind === 'already') return alreadyOutcome(orderId, result.data)
   const displayRef = CommerceModel.formatOrderNumber({ number: result.number }, orderId)
   for (const crossing of crossings) alertLowStockCrossing(order.hostId, crossing.before, crossing.after)
+  // A channel sale that sold a product out reaches the storefront (AGL-4121).
+  if (crossings.some((crossing) => soldOutMoved(crossing.before, crossing.after))) {
+    await dropStorefrontPages({ hostId: order.hostId, reason: 'a channel sale sold out a product' })
+  }
   const totalLabel = `${(Number(order.totalCents) / 100).toFixed(2)} ${currency}`
   const units = order.lines.reduce((sum, line) => sum + Number(line.quantity), 0)
   void notifyHostManagers(order.hostId, {
@@ -432,6 +437,9 @@ export async function cancelChannelOrder(
   const hostRef = firestore.collection('hosts').doc(request.hostId)
   const orderRef = hostRef.collection('orders').doc(request.recordId)
   const nowMs = deps.now()
+  // Whether the restock flipped a sold-out verdict the storefront shows
+  // (AGL-4121); a retried attempt can only make the drop spurious.
+  let soldOutFlipped = false
   const outcome = await firestore.runTransaction(async (transaction): Promise<PluginChannelOrderCancelOutcome> => {
     const snapshot = await transaction.get(orderRef)
     if (!snapshot.exists) return { outcome: 'no_such_record' }
@@ -462,6 +470,7 @@ export async function cancelChannelOrder(
         ...CommerceModel.productStockFields({ ...product, variants }),
         updatedAtMs: nowMs,
       })
+      soldOutFlipped ||= soldOutMoved(product, { ...product, variants })
       for (const line of productLines) {
         transaction.set(hostRef.collection('inventoryAdjustments').doc(createResourceUid()), {
           productId,
@@ -493,6 +502,9 @@ export async function cancelChannelOrder(
     })
     return { outcome: 'cancelled', restockedUnits: units }
   })
+  if (soldOutFlipped && outcome.outcome === 'cancelled') {
+    await dropStorefrontPages({ hostId: request.hostId, reason: 'a channel cancellation restocked a product' })
+  }
   return outcome
 }
 
