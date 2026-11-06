@@ -19,6 +19,11 @@ import type { HostAccessRole } from '@aglyn/aglyn/foundation/definitions/organiz
 import type { OrgPlan } from '@aglyn/aglyn/foundation/definitions/org-billing.types'
 import type { PluginFeatureDeclaration, PluginOrgPermissionDeclaration } from '@aglyn/aglyn/plugin-manager/plugin-entitlements'
 import type { PluginPermission } from '@aglyn/aglyn/plugin-manager/plugin-permissions'
+import { MARKETPLACE_PUBLISHER_PERMISSIONS } from './marketplace-publisher-permissions'
+import {
+  MARKETPLACE_CONNECTION_SITE_PERMISSIONS,
+  MARKETPLACE_CONNECTION_SITE_ROLE_PRESET,
+} from './marketplace-site-permissions'
 
 /*
  * DECLARED CONNECTIONS, THE PLATFORM'S HALF (AGL-4193): THE CONTRACT.
@@ -166,37 +171,17 @@ export const PLUGIN_CONNECTIONS_SITE_PERMISSION = 'marketplace.siteConnections'
 /** The publisher key: set a listing's OAuth app credentials. */
 export const PLUGIN_CONNECTIONS_CREDENTIALS_PERMISSION = 'marketplace.connectionCredentials'
 
-/** The site Admin, who connected Google and Meta before (`salesChannels.connect`'s preset). */
-export const PLUGIN_CONNECTIONS_SITE_ROLE_PRESET: Readonly<Record<HostAccessRole, boolean>> = {
-  admin: true,
-  editor: false,
-  author: false,
-  viewer: false,
-}
+/** The site Admin (declared beside the marketplace's other site keys). */
+export const PLUGIN_CONNECTIONS_SITE_ROLE_PRESET: Readonly<Record<HostAccessRole, boolean>> =
+  MARKETPLACE_CONNECTION_SITE_ROLE_PRESET
 
 /** The site key as the plugin declares it into the org permission catalog. */
-export const PLUGIN_CONNECTIONS_SITE_PERMISSION_DECLARATION: PluginOrgPermissionDeclaration = {
-  key: PLUGIN_CONNECTIONS_SITE_PERMISSION,
-  label: 'Manage a site’s plugin connections',
-  description:
-    'Connect a marketplace plugin on a site to another service (such as a Google Business Profile), choose what it reads, see where it stands, and disconnect it. Follows the site role unless a role or member sets it.',
-  roleDefaults: { owner: true, admin: true, editor: false, viewer: false },
-  hostRoleDefaults: { ...PLUGIN_CONNECTIONS_SITE_ROLE_PRESET },
-  group: 'marketplace',
-  groupLabel: 'Marketplace',
-  presetFromSiteRole: true,
-}
+export const PLUGIN_CONNECTIONS_SITE_PERMISSION_DECLARATION: PluginOrgPermissionDeclaration =
+  MARKETPLACE_CONNECTION_SITE_PERMISSIONS[0]
 
 /** The publisher key as the plugin declares it; owners and admins hold it by default. */
-export const PLUGIN_CONNECTIONS_CREDENTIALS_PERMISSION_DECLARATION: PluginPermission = {
-  key: PLUGIN_CONNECTIONS_CREDENTIALS_PERMISSION,
-  pluginId: 'marketplace',
-  label: 'Set a listing’s connection credentials',
-  description:
-    'Set or replace the OAuth app client id and secret a published plugin connects sites with. They are stored sealed and are never shown again.',
-  defaults: { admin: true, editor: false, viewer: false },
-  groupLabel: 'Marketplace',
-}
+export const PLUGIN_CONNECTIONS_CREDENTIALS_PERMISSION_DECLARATION: PluginPermission =
+  MARKETPLACE_PUBLISHER_PERMISSIONS.find((entry) => entry.key === PLUGIN_CONNECTIONS_CREDENTIALS_PERMISSION) as PluginPermission
 
 /** The refusal a door answers without a key: names the permission, never a role. */
 export function pluginConnectionsPermissionRefusal(

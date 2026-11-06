@@ -7438,9 +7438,11 @@
         "posBuyHardware",
         "marketplace.siteInstall",
         "marketplace.sitePublish",
+        "marketplace.siteConnections",
         "marketplace.publisherProfile",
         "marketplace.manageListings",
         "marketplace.payouts",
+        "marketplace.connectionCredentials",
         "crm.moveStages",
         "crm.settings",
         "crm.colleagueTemplates",
@@ -7625,9 +7627,11 @@
         "posBuyHardware",
         "marketplace.siteInstall",
         "marketplace.sitePublish",
+        "marketplace.siteConnections",
         "marketplace.publisherProfile",
         "marketplace.manageListings",
         "marketplace.payouts",
+        "marketplace.connectionCredentials",
         "crm.moveStages",
         "crm.settings",
         "crm.colleagueTemplates",
@@ -8310,6 +8314,19 @@
         }
       },
       {
+        "description": "Connect a marketplace plugin on a site to another service (such as a business profile it reads), choose what it reads, see where it stands, and disconnect it. Follows the site role unless a role or member sets it.",
+        "group": "marketplace",
+        "key": "marketplace.siteConnections",
+        "label": "Manage a site’s plugin connections",
+        "scope": "site",
+        "sitePreset": {
+          "admin": true,
+          "author": false,
+          "editor": false,
+          "viewer": false
+        }
+      },
+      {
         "description": "Change the workspace’s public marketplace profile (its handle, name, bio, logo, support contact and links), and ask for the Verified publisher badge or withdraw the ask.",
         "group": "marketplace",
         "key": "marketplace.publisherProfile",
@@ -8330,6 +8347,14 @@
         "group": "marketplace",
         "key": "marketplace.payouts",
         "label": "Manage marketplace payouts",
+        "pluginId": "marketplace",
+        "scope": "org"
+      },
+      {
+        "description": "Set or replace the OAuth app client id and secret a published plugin connects sites with. They are stored sealed and are never shown again.",
+        "group": "marketplace",
+        "key": "marketplace.connectionCredentials",
+        "label": "Set a listing’s connection credentials",
         "pluginId": "marketplace",
         "scope": "org"
       },

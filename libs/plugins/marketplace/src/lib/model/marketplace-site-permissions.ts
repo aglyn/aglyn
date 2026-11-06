@@ -68,6 +68,34 @@ export const MARKETPLACE_SITE_PERMISSIONS: readonly PluginOrgPermissionDeclarati
   },
 ]
 
+/**
+ * Declared connections (AGL-4193): connecting a marketplace plugin on a site
+ * to another service — the business's own account there. Its preset is the
+ * site Admin alone, who connected a business's own accounts before (sales
+ * channels' "Connect Google and Meta"). A list of its own, so the two keys
+ * above keep their shared preset; the catalog places it right after them.
+ */
+export const MARKETPLACE_CONNECTION_SITE_ROLE_PRESET: Readonly<Record<HostAccessRole, boolean>> = {
+  admin: true,
+  editor: false,
+  author: false,
+  viewer: false,
+}
+
+export const MARKETPLACE_CONNECTION_SITE_PERMISSIONS: readonly PluginOrgPermissionDeclaration[] = [
+  {
+    key: 'marketplace.siteConnections',
+    label: 'Manage a site’s plugin connections',
+    description:
+      'Connect a marketplace plugin on a site to another service (such as a business profile it reads), choose what it reads, see where it stands, and disconnect it. Follows the site role unless a role or member sets it.',
+    roleDefaults: { owner: true, admin: true, editor: false, viewer: false },
+    hostRoleDefaults: { ...MARKETPLACE_CONNECTION_SITE_ROLE_PRESET },
+    group: 'marketplace',
+    groupLabel: 'Marketplace',
+    presetFromSiteRole: true,
+  },
+]
+
 /** The refusal a door answers without one: names the permission, never a role. */
 export function marketplaceSitePermissionRefusal(key: MarketplaceSitePermission): string {
   const label = MARKETPLACE_SITE_PERMISSIONS.find((entry) => entry.key === key)?.label ?? key

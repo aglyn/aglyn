@@ -531,7 +531,7 @@ async function listingDetail(
       elements: doc.get('manifest.elements') ?? [],
       // Declared connections (AGL-4193) for THESE bytes: the OAuth provider,
       // the hosts the platform calls with the grant and the public record a
-      // sync writes, which a reviewer reads before approving.
+      // sync writes, answered beside the version's other declarations.
       connections: doc.get('manifest.connections') ?? [],
       publishedAt: publishedAt?.toDate?.()?.toISOString() ?? null,
       // Per-version installs (AGL-1036). "How many workspaces would a revoke

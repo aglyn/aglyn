@@ -359,7 +359,14 @@ describe('the native Delete site screen matches the console card (AGL-4003)', ()
       }
     }
     walk(join(repo, 'libs/plugins'))
-    expect(found).toEqual(['libs/plugins/data/src/lib/declarations.server.ts'])
+    // The marketplace's eraser (AGL-4193) revokes a site's plugin connections
+    // and previews NOTHING (`going: []`, `staying: 0`, held by its own
+    // `connections/routes.spec.ts`), so the card draws no rows for it and the
+    // screen needs none either.
+    expect(found).toEqual([
+      'libs/plugins/data/src/lib/declarations.server.ts',
+      'libs/plugins/marketplace/src/lib/declarations.server.ts',
+    ])
     expect(JSON.stringify(spec)).toContain("resources[pluginId='data']")
   })
 })

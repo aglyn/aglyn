@@ -16,7 +16,6 @@
  */
 
 import type { PluginPermission } from '@aglyn/aglyn/plugin-manager/plugin-permissions'
-import { PLUGIN_CONNECTIONS_CREDENTIALS_PERMISSION_DECLARATION } from './plugin-connections'
 
 /*
  * THE WORKSPACE AS A MARKETPLACE PUBLISHER (AGL-4047).
@@ -85,8 +84,16 @@ export const MARKETPLACE_PUBLISHER_PERMISSIONS: readonly PluginPermission[] = [
     defaults: { admin: true, editor: false, viewer: false },
     groupLabel: 'Marketplace',
   },
-  // Declared connections (AGL-4193): the publisher's OAuth app per listing.
-  PLUGIN_CONNECTIONS_CREDENTIALS_PERMISSION_DECLARATION,
+  {
+    // Declared connections (AGL-4193): the publisher's OAuth app per listing.
+    key: 'marketplace.connectionCredentials',
+    pluginId: 'marketplace',
+    label: 'Set a listing’s connection credentials',
+    description:
+      'Set or replace the OAuth app client id and secret a published plugin connects sites with. They are stored sealed and are never shown again.',
+    defaults: { admin: true, editor: false, viewer: false },
+    groupLabel: 'Marketplace',
+  },
 ]
 
 /** The refusal a door answers without one: names the permission, never a role. */
