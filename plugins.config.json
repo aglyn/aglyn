@@ -1132,7 +1132,7 @@
         "contributes": {
           "screens": ["marketplace.browse", "marketplace.installed", "marketplace.licenses", "marketplace.listing", "marketplace.plugin-settings", "marketplace.sell", "marketplace.publish", "marketplace.publishTemplate", "marketplace.publishStarter", "marketplace.publisherAgreement", "marketplace.publishLayout", "marketplace.publishComponent", "marketplace.publishTheme", "marketplace.publishDatasetSchema", "marketplace.publishEmailTemplate", "marketplace.publishEmailStarter", "marketplace.publishPlugin"],
           "quickActions": ["marketplace.open"],
-          "widgets": ["marketplace.artifact-publish", "marketplace.org-installs", "marketplace.plugin-installation", "marketplace.starter-picker"],
+          "widgets": ["marketplace.artifact-publish", "marketplace.org-installs", "marketplace.plugin-installation", "marketplace.site-connections", "marketplace.starter-picker"],
           "deepLinks": ["marketplace.listing-page", "marketplace.page"]
         }
       },
@@ -1212,7 +1212,7 @@
             "hostStarterPicker",
             "orgPluginInstalls",
             "pluginInstallStatus",
-            "pluginSiteSet",
+            "pluginSiteSet", "sitePluginConnections",
             "staffOverview",
             "templateGallery",
             "templateInstallStatus"
