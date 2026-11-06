@@ -157,6 +157,9 @@ PROJECTS=(
   # The AI beat removes the empty site a stopped guided start left, through
   # the real queries and `eraseHost` (AGL-3936).
   libs/plugins/ai
+  # Commerce proves a card reader bought from the online store becomes a
+  # hardware order, through the real collections (AGL-4038).
+  libs/plugins/commerce
 )
 
 # Projects whose specs exercise a cross-workspace job run their suites one at
