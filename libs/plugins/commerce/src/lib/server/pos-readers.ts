@@ -25,6 +25,8 @@ import { posStripe, posStripeErrorMessage, posStripeTestMode, posTerminalAvailab
 import {
   ensurePosTerminalLocation,
   ownedTerminalReader,
+  posReaderAccount,
+  posTerminalAccount,
   refreshPosReaderStatus,
   type PosTerminalAddress,
   type PosTerminalReader,
@@ -108,11 +110,17 @@ async function listReaders(staff: PosStaff, refresh: boolean) {
   if (available && refresh) {
     await Promise.all(
       readers.map(async (reader: PosTerminalReader & { id: string }) => {
-        const fresh = await refreshPosReaderStatus(staff.hostId, reader.id).catch(() => null)
+        const fresh = await refreshPosReaderStatus(staff.hostId, reader.id, posReaderAccount(reader)).catch(
+          () => null,
+        )
         if (fresh) reader.status = fresh.status
       }),
     )
   }
+  // A reader registered on another account than the store sells on now (the
+  // platform, before the store moved to its own Stripe account) cannot take
+  // its cards: it is flagged so it can be removed and registered again.
+  const account = readers.length ? await posTerminalAccount(staff.hostId, staff.org) : null
   const config = await firebaseAdmin
     .app()
     .firestore()
@@ -136,6 +144,7 @@ async function listReaders(staff: PosStaff, refresh: boolean) {
       serialNumber: reader.serialNumber ?? null,
       status: reader.status ?? 'offline',
       livemode: reader.livemode,
+      ...(posReaderAccount(reader) !== account ? { registerAgain: true } : {}),
     })),
   }
 }
@@ -209,7 +218,11 @@ export async function registerPosTerminalReader(input: {
   const registerId = input.registerId ?? ''
   const host = await firebaseAdmin.app().firestore().collection('hosts').doc(input.hostId).get()
   const address = input.address
+  // The account the reader is registered on: the store's own for a
+  // direct-charge store (ToS v24 section 10.2(a)), the platform otherwise.
+  const account = await posTerminalAccount(input.hostId)
   const location = await ensurePosTerminalLocation({
+    account,
     hostId: input.hostId,
     orgId: input.orgId,
     displayName: String(host.get('name') ?? host.get('title') ?? 'Store'),
@@ -238,7 +251,11 @@ export async function registerPosTerminalReader(input: {
       'metadata[orgId]': input.orgId,
       'metadata[hostId]': input.hostId,
       ...(registerId ? { 'metadata[registerId]': registerId } : {}),
+      // Lets the Connect delivery of this reader's events through the
+      // webhook's direct-sale gate (`connectEventIsForDirectSale`).
+      ...(account ? { 'metadata[chargeModel]': 'direct' } : {}),
     },
+    ...(account ? { stripeAccount: account } : {}),
   })
   if (!created.ok || !created.body?.id) {
     return {
@@ -260,6 +277,7 @@ export async function registerPosTerminalReader(input: {
     livemode: Boolean(created.body.livemode),
     createdAtMs: Date.now(),
     createdBy: input.uid,
+    ...(account ? { stripeAccount: account } : {}),
   }
   const id = String(created.body.id)
   await readersRef(input.hostId).doc(id).set(reader)
@@ -298,7 +316,9 @@ async function updateReader(
     }
     patch['registerId'] = registerId || firebaseAdmin.firestore.FieldValue.delete()
   }
+  const readerAccount = posReaderAccount(reader)
   const updated = await posStripe('POST', `terminal/readers/${reader.id}`, {
+    ...(readerAccount ? { stripeAccount: readerAccount } : {}),
     params: {
       ...(patch['label'] ? { label: String(patch['label']) } : {}),
       ...('registerId' in body ? { 'metadata[registerId]': String(body['registerId'] ?? '') } : {}),
@@ -318,7 +338,14 @@ async function removeReader(
 ) {
   const reader = await ownedTerminalReader(staff.hostId, body['readerId'])
   if (!reader) return res.status(404).json({ error: 'That card reader is not on this site.' })
-  const removed = await posStripe('DELETE', `terminal/readers/${reader.id}`)
+  // Removed where it is registered: a reader from before the store moved to
+  // its own account is freed on the platform, so it can be registered again.
+  const readerAccount = posReaderAccount(reader)
+  const removed = await posStripe(
+    'DELETE',
+    `terminal/readers/${reader.id}`,
+    readerAccount ? { stripeAccount: readerAccount } : {},
+  )
   // Already gone at Stripe is the outcome asked for; anything else is not.
   if (!removed.ok && removed.status !== 404) {
     return res.status(502).json({ error: posStripeErrorMessage(removed.body, 'The reader could not be removed.') })

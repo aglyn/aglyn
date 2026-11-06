@@ -64,6 +64,7 @@ import {
 import {
   cancelPosCardPayment,
   createCardPresentIntent,
+  posPaymentAccount,
   refreshPosCardPayment,
   retryCardPresentPayment,
   simulatePosReaderTap,
@@ -180,7 +181,9 @@ export const posPaymentHandler: PluginApiHandler = async (req, res) => {
     const settings = posRegisterSettings(
       await getPluginConfig(staff.orgId || undefined, 'commerce', { hostId }),
     )
-    let outcome: (PosPaymentOutcome & { clientSecret?: string; paymentIntentId?: string }) | null = null
+    let outcome:
+      | (PosPaymentOutcome & { clientSecret?: string; paymentIntentId?: string; stripeAccount?: string })
+      | null = null
     switch (action) {
       case 'sale': {
         const order = await readPosSale(hostId, orderId)
@@ -290,6 +293,11 @@ export const posPaymentHandler: PluginApiHandler = async (req, res) => {
       // confirms, so a register whose context read failed can still take it.
       ...(action === 'card-keyed' && outcome.clientSecret
         ? { publishableKey: String(process.env.NEXT_PUBLIC_STRIPE_PUBLISHABLE_KEY ?? '') }
+        : {}),
+      // A direct-charge store's typed-card intent lives on its own account:
+      // the form loads Stripe for that account to confirm it.
+      ...(action === 'card-keyed' && outcome.clientSecret && outcome.stripeAccount
+        ? { stripeAccount: outcome.stripeAccount }
         : {}),
     })
   } catch (error) {
@@ -803,15 +811,20 @@ async function reversePayment(
     if (!payment.paymentIntentId) {
       return { ok: false, status: 409, error: 'A card payment on this sale has no charge to refund.' }
     }
+    // A direct charge is refunded ON the store's own account, from its
+    // balance, with nothing to reverse; a destination charge on the platform
+    // pulls the transfer back.
+    const account = posPaymentAccount(payment)
     const refund = await posStripe('POST', 'refunds', {
       idempotencyKey: `pos-void:${payment.id}`,
       params: {
         payment_intent: payment.paymentIntentId,
-        reverse_transfer: true,
+        ...(account ? {} : { reverse_transfer: true }),
         refund_application_fee: true,
         'metadata[kind]': 'pos-void',
         'metadata[orderId]': order.$id,
       },
+      ...(account ? { stripeAccount: account } : {}),
     })
     if (!refund.ok) {
       return {

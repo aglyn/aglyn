@@ -129,9 +129,12 @@ export function PosTenderPanel(props: PosTenderPanelProps) {
     null,
   )
   const [qr, setQr] = useState<{ url: string; amountCents: number } | null>(null)
-  const [keyed, setKeyed] = useState<{ clientSecret: string; amountCents: number; paymentId: string } | null>(
-    null,
-  )
+  const [keyed, setKeyed] = useState<{
+    clientSecret: string
+    amountCents: number
+    paymentId: string
+    stripeAccount?: string
+  } | null>(null)
   const [readerId, setReaderId] = useState('')
   const inFlight = useRef(false)
   const { confirm } = useConfirmationContext()
@@ -271,7 +274,12 @@ export function PosTenderPanel(props: PosTenderPanelProps) {
     const amountCents = chargeCents
     const result = await run('card-keyed', { amountCents, tipCents }, true)
     if (result?.clientSecret && result.paymentId) {
-      setKeyed({ clientSecret: result.clientSecret, amountCents: amountCents + tipCents, paymentId: result.paymentId })
+      setKeyed({
+        clientSecret: result.clientSecret,
+        amountCents: amountCents + tipCents,
+        paymentId: result.paymentId,
+        ...(result.stripeAccount ? { stripeAccount: result.stripeAccount } : {}),
+      })
     }
   }, [run, chargeCents, tipCents])
 
@@ -644,6 +652,7 @@ export function PosTenderPanel(props: PosTenderPanelProps) {
       <PosKeyedCardDialog
         clientSecret={keyed?.clientSecret ?? ''}
         publishableKey={context?.publishableKey ?? ''}
+        stripeAccount={keyed?.stripeAccount ?? ''}
         amountCents={keyed?.amountCents ?? 0}
         onClose={async () => {
           const open = keyed

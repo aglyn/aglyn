@@ -319,6 +319,7 @@ async function uploadSplashFile(
   hostId: string,
   family: PosReaderSplashFamily,
   screen: RenderedPosReaderSplash,
+  account: string | null,
 ): Promise<string> {
   const form = new FormData()
   form.append('purpose', 'terminal_reader_splashscreen')
@@ -329,7 +330,12 @@ async function uploadSplashFile(
     headers: {
       Authorization: `Bearer ${process.env.STRIPE_SECRET_KEY}`,
       'Stripe-Version': POS_STRIPE_VERSION,
-      'Idempotency-Key': `pos-splash-file:${hostId}:${family.id}:${digest(screen.body).slice(0, 32)}`,
+      'Idempotency-Key': account
+        ? `pos-splash-file:${hostId}:${account}:${family.id}:${digest(screen.body).slice(0, 32)}`
+        : `pos-splash-file:${hostId}:${family.id}:${digest(screen.body).slice(0, 32)}`,
+      // A direct-charge store's configuration is on its own account, and a
+      // configuration can name only that account's files.
+      ...(account ? { 'Stripe-Account': account } : {}),
     },
     body: form,
   })
@@ -350,9 +356,12 @@ export async function drawAndUploadPosReaderSplash(
   source: SplashSource,
 ): Promise<Record<PosReaderSplashFamilyId, string>> {
   const screens = await drawScreens(source)
+  // The files go where the store's Location (and so its configuration) is.
+  const recorded = (await terminalConfigRef(hostId).get()).get('stripeLocationAccount')
+  const account = typeof recorded === 'string' && recorded.trim() ? recorded.trim() : null
   const fileIds = {} as Record<PosReaderSplashFamilyId, string>
   for (const family of POS_READER_SPLASH_FAMILIES) {
-    fileIds[family.id] = await uploadSplashFile(hostId, family, screens[family.id])
+    fileIds[family.id] = await uploadSplashFile(hostId, family, screens[family.id], account)
   }
   return fileIds
 }

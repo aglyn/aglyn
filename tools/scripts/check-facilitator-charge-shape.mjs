@@ -169,7 +169,9 @@ const HAND_ROLLED = new Map([
       'the merchant-configured flat rate, and a card payment is a share of ' +
       'that same total plus a tip that carries no tax at all. The fee is the ' +
       'card share of the platform take plus the card cost, set at creation ' +
-      'and re-stated at capture once the reader reports a tip.',
+      'and re-stated at capture once the reader reports a tip. A store on ' +
+      'its own Stripe account sends no `transfer_data` at all (a direct ' +
+      'charge through `posStripe`, listed in DIRECT_CHARGE_SITES).',
   ],
   [
     'libs/plugins/commerce/src/lib/server/reserve.ts',
@@ -289,6 +291,27 @@ const DIRECT_CHARGE_SITES = new Map([
     'libs/plugins/bookings/src/lib/server/refund.ts',
     'Refunds an online booking sold by direct charge from the seller\'s ' +
       'balance, with no transfer to reverse.',
+  ],
+  [
+    'libs/plugins/commerce/src/lib/server/pos-stripe.ts',
+    '`posStripe`\'s `stripeAccount` option: the register\'s card payments for a ' +
+      'store on its own Stripe account (ToS v24 §10.2(a)) are made there, with ' +
+      'its Terminal Locations, Readers, Configurations and connection tokens ' +
+      '(a connection token sees only its own account\'s readers); none for ' +
+      'every other store.',
+  ],
+  [
+    'libs/plugins/commerce/src/lib/server/pos-reader-splash.ts',
+    'A direct-charge store\'s reader configuration is on its own account ' +
+      '(ToS v24 §10.2(a)), and a configuration can name only that account\'s ' +
+      'start-up screen files, so they are uploaded there.',
+  ],
+  [
+    'libs/plugins/bookings/src/lib/server/in-person-payment.ts',
+    'A booking paid at the counter for a store on its own Stripe account is ' +
+      'a direct charge made there (ToS v24 §10.2(a)), on the account the ' +
+      'app\'s Terminal connection token was minted on, with the plan\'s take ' +
+      'as the application fee.',
   ],
 ])
 
@@ -829,9 +852,9 @@ function sweep() {
   if (problems.length === 0) {
     console.log('')
     console.log(
-      'Every charge settles on Aglyn’s platform account, no Stripe-Tax ' +
-        'path uses the fee form, and the subscription reversal is wired — ' +
-        'the shape ToS §10.7 describes.',
+      'Only the listed direct-charge sites name a store’s own account ' +
+        '(ToS §10.2(a)), no charge uses on_behalf_of, no Stripe-Tax path ' +
+        'uses the fee form, and the subscription reversal is wired.',
     )
     process.exit(0)
   }

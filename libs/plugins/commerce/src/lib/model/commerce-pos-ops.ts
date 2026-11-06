@@ -100,6 +100,9 @@ export interface PosOrderTender {
   last4?: string
   cashTenderedCents?: number
   changeCents?: number
+  /** Where a card tender's charge lives: on the store's own account when `direct`. */
+  chargeModel?: 'direct'
+  stripeAccountId?: string
 }
 
 const wholeCents = (value: unknown): number => {
@@ -155,6 +158,9 @@ export function posOrderTenders(order: PosTenderSource | null | undefined): PosO
       ...(payment.last4 ? { last4: payment.last4 } : {}),
       ...(payment.cashTenderedCents != null ? { cashTenderedCents: wholeCents(payment.cashTenderedCents) } : {}),
       ...(payment.changeCents != null ? { changeCents: wholeCents(payment.changeCents) } : {}),
+      ...(payment.chargeModel === 'direct' && payment.stripeAccountId
+        ? { chargeModel: 'direct' as const, stripeAccountId: payment.stripeAccountId }
+        : {}),
     }))
 }
 

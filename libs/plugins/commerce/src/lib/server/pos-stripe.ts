@@ -73,6 +73,14 @@ export async function posStripe<T = any>(
   options: {
     params?: Record<string, string | number | boolean | undefined | null | readonly string[]>
     idempotencyKey?: string
+    /**
+     * The store's own Stripe account, for a store that sells by DIRECT charge
+     * (ToS v24 section 10.2(a)): the request is made ON that account with the
+     * `Stripe-Account` header, so its Terminal Locations, Readers,
+     * Configurations, connection tokens and PaymentIntents all live there.
+     * Absent or null, the request is the platform's, exactly as before.
+     */
+    stripeAccount?: string | null
   } = {},
 ): Promise<PosStripeResult<T>> {
   const form = posStripeForm(options.params ?? {})
@@ -88,6 +96,7 @@ export async function posStripe<T = any>(
       ...(options.idempotencyKey && method === 'POST'
         ? { 'Idempotency-Key': options.idempotencyKey.slice(0, 255) }
         : {}),
+      ...(options.stripeAccount ? { 'Stripe-Account': options.stripeAccount } : {}),
     },
     ...(method === 'POST' ? { body: form.toString() } : {}),
   })
@@ -136,6 +145,12 @@ export function posCardApplicationFeeCents(input: {
   chargeCents: number
   /** False for a typed card or a card link, which Stripe prices as online cards. */
   inPerson?: boolean
+  /**
+   * A DIRECT charge on the store's own account: Stripe bills the store its
+   * card fee and charges the platform nothing for the sale, so the fee is the
+   * plan's take alone, as on an online direct sale. Never above the charge.
+   */
+  direct?: boolean
 }): number {
   // The processing half is owed even on a plan whose take is 0%: Stripe debits
   // it from the platform on every destination charge (AGL-2071). The fee never
@@ -144,6 +159,7 @@ export function posCardApplicationFeeCents(input: {
   // the payout either way, all out of the take first.
   return saleApplicationFeeCents(input.takeShareCents, input.chargeCents, {
     inPerson: input.inPerson ?? true,
+    ...(input.direct ? { direct: true } : {}),
   })
 }
 

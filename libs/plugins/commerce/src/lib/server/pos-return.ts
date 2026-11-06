@@ -503,6 +503,10 @@ export async function handlePosReturn(deps: PosReturnDeps, req: PluginApiRequest
           amountCents: allocation.amountCents,
           idempotencyKey: claim.stripeKey ? `${claim.stripeKey}:${allocation.paymentId}` : null,
           metadata: { hostId: staff.hostId, orderId, registerId, kind: 'pos-return' },
+          // A card charged on the store's own account is refunded there.
+          ...(tender?.chargeModel === 'direct' && tender.stripeAccountId
+            ? { stripeAccount: tender.stripeAccountId }
+            : {}),
           fetch: deps.fetch,
         })
         if ('error' in refund) throw new ReturnRefusal(refund.status, refund.error)

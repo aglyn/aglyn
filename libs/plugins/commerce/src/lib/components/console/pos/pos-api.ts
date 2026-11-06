@@ -59,6 +59,11 @@ export interface PosTenderResult {
   completed: boolean
   clientSecret?: string
   paymentIntentId?: string
+  /**
+   * For a typed card on a store that sells on its own Stripe account: the
+   * account the intent lives on, which the Payment Element loads Stripe for.
+   */
+  stripeAccount?: string
 }
 
 export interface PosRegisterContext {

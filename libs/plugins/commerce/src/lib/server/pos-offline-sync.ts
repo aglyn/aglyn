@@ -63,6 +63,7 @@ import {
   capturePosOfflineCardIntent,
   ensurePosOfflineCardConfiguration,
   posMerchantAccount,
+  type PosMerchant,
   posTerminalLocationId,
   retrievePosOfflineCardIntent,
   type PosOfflineCardIntent,
@@ -157,8 +158,8 @@ export interface PosOfflineSyncDeps extends PosOpsDeps {
 export interface PosOfflineCardDeps {
   /** Whether Terminal readers are offered at all, and the site's Location once one exists. */
   terminal(hostId: string): Promise<{ available: boolean; locationId: string | null }>
-  /** The merchant's connected account, when it can take card payments. */
-  merchantAccount(hostId: string, org: Record<string, any> | null): Promise<string | null>
+  /** The merchant's connected account and how it sells, when it can take card payments. */
+  merchantAccount(hostId: string, org: Record<string, any> | null): Promise<PosMerchant | null>
   /** Turns Stripe's offline mode on for the site's readers; false when Stripe refused. */
   enableOffline(hostId: string): Promise<boolean>
   retrieve(paymentIntentId: string): Promise<{ ok: true; intent: PosOfflineCardIntent } | { ok: false; error: string }>
@@ -378,8 +379,16 @@ async function buildPosOfflineKitCard(
   const terminal = await deps.card.terminal(staff.hostId)
   if (!terminal.available) return off('Card readers are not set up for this store yet.')
   if (!terminal.locationId) return off('Connect a card reader once while online, then cards keep working offline.')
-  const destination = await deps.card.merchantAccount(staff.hostId, staff.org)
-  if (!destination) return off('Finish connecting Stripe to take cards.')
+  const merchant = await deps.card.merchantAccount(staff.hostId, staff.org)
+  if (!merchant) return off('Finish connecting Stripe to take cards.')
+  // The app makes an offline card's intent itself, as a DESTINATION charge
+  // to `destination`. A store selling on its own Stripe account needs the
+  // intent made on that account with no transfer at all, which the app does
+  // not do yet: offline cards stay off there rather than fail at the counter.
+  if (merchant.chargeModel === 'direct') {
+    return off('Card sales offline are not available for this store’s payment account yet. Take cards while online.')
+  }
+  const destination = merchant.accountId
   if (!(await deps.card.enableOffline(staff.hostId))) {
     return off('Card sales offline could not be turned on for this store’s readers yet. Try again later.')
   }
@@ -482,11 +491,15 @@ async function settleOfflineCard(
   // or a register tampered with. Money that holds or has moved is only ever
   // captured into, or recorded as paid to, the store's account as it is now.
   if (INTENT_HOLDS_MONEY.has(intent.status)) {
-    const expected = await deps.card.merchantAccount(staff.hostId, staff.org)
+    const merchant = await deps.card.merchantAccount(staff.hostId, staff.org)
+    // A direct-charge store is offered no offline kit, so an intent the app
+    // made out to a destination is never its account's money: it reads as
+    // made out elsewhere, like a kit gone stale.
+    const expected = merchant?.accountId ?? null
     if (!expected) {
       return wait('This store’s Stripe account cannot take card payments right now. The card syncs once it can.')
     }
-    if (intent.destination !== expected) {
+    if (merchant?.chargeModel === 'direct' || intent.destination !== expected) {
       return {
         kind: 'unpaid',
         flag: 'card-not-charged',

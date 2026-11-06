@@ -2323,8 +2323,11 @@ export const commerceBillingWebhookHandler: BillingWebhookHandler = async ({
   // THE REGISTER'S CARD PAYMENTS (AGL-3607): Terminal reader actions, register
   // PaymentIntents and register QR pages. Each names one payment on an open
   // sale and is settled by re-reading Stripe in `pos-terminal.ts`; every other
-  // event falls through untouched.
-  const posPayment = await handlePosStripeEvent({ type, object })
+  // event falls through untouched. A direct-charge store's register objects
+  // live on its own account, so their events arrive through the Connect
+  // destination naming it (and carry `metadata.chargeModel: direct`, which is
+  // what let them past the gate above).
+  const posPayment = await handlePosStripeEvent({ type, object, account: connectEventAccount(event) })
   if (posPayment) return { claimed: true, hostId: posPayment.hostId }
 
   // A DEAD SESSION GIVES ITS RESERVATIONS BACK (AGL-2453).

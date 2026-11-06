@@ -17,7 +17,11 @@
 
 import { createHash } from 'node:crypto'
 import { firebaseAdmin } from '@aglyn/tenant-data-admin'
-import { merchantAccountIsReady } from '@aglyn/tenant-data-admin/server/payment-provider'
+import {
+  merchantAccountIsReady,
+  type SaleChargeModel,
+} from '@aglyn/tenant-data-admin/server/payment-provider'
+import { sellerPaymentAccount } from '@aglyn/tenant-data-admin/server/seller-payment-account'
 import {
   cardAuthenticationParams,
   checkoutSessionCardAuthenticationParams,
@@ -39,12 +43,27 @@ import { applyPosPayment, readPosSale, type PosLiftedOrder, type PosPaymentOutco
  *
  * ## Where the readers live
  *
- * Every register charge is a DESTINATION charge on the platform account, so
- * Stripe's rule for that model applies: Locations and Readers are created on
- * the PLATFORM with the platform key, and identify their merchant by
- * metadata. One Location per site (`hosts/{hostId}/terminal/config`), and one
+ * Two shapes, decided by the store's selling account
+ * ({@link posMerchantAccount}, which asks `sellerPaymentAccount`):
+ *
+ *  - DESTINATION (every Express account, so every store before the switch):
+ *    the charge is made on the PLATFORM account and transferred on, so
+ *    Stripe's rule for that model applies: Locations and Readers are created
+ *    on the platform with the platform key, and identify their merchant by
+ *    metadata.
+ *  - DIRECT (a store on its own full Stripe account, ToS v24 section
+ *    10.2(a)): EVERY Terminal object, the Location, its Configuration, the
+ *    Readers, each connection token and each PaymentIntent, is made ON the
+ *    store's account with the `Stripe-Account` header. A connection token
+ *    sees only its own account's readers and locations, so nothing may mix.
+ *
+ * One Location per site (`hosts/{hostId}/terminal/config`), and one
  * `hosts/{hostId}/terminalReaders/{readerId}` document per reader, written
- * only here. The document is what makes a reader THIS site's: every call that
+ * only here. Each records the account it was made on
+ * (`stripeLocationAccount`, `stripeAccount`; absent = the platform), and an
+ * id made on another account than the store sells on now is never used: a
+ * Location is made again on the store's account, and a reader must be
+ * registered again. The reader document is what makes a reader THIS site's: every call that
  * names a reader reads it under the caller's own site first, so one store can
  * never drive, rename or remove another's reader, and the reader's own
  * `metadata.hostId` is checked again before a payment is sent to it.
@@ -81,6 +100,11 @@ export interface PosTerminalReader {
   createdAtMs: number
   createdBy?: string
   lastSeenAtMs?: number
+  /**
+   * The store's own Stripe account the reader is registered on, for a
+   * direct-charge store. Absent: registered on the platform.
+   */
+  stripeAccount?: string
 }
 
 /**
@@ -93,29 +117,103 @@ function withoutFailure(payment: CommerceModel.OrderPayment): CommerceModel.Orde
   return next
 }
 
-/** The merchant's connected account, when it can take card payments now. */
+/** The store's selling account for an in-person card, and how it sells. */
+export interface PosMerchant {
+  accountId: string
+  chargeModel: SaleChargeModel
+}
+
+/**
+ * The merchant's connected account and its charge model, when it can take
+ * card payments now. The ONE door every in-person card route reads the
+ * store's account through; where the account is recorded is
+ * `sellerPaymentAccount`'s business, not this file's.
+ */
 export async function posMerchantAccount(
   hostId: string,
   org: Record<string, any> | null,
-): Promise<string | null> {
-  const ownerUid = String(org?.['ownerUid'] ?? '')
-  if (!ownerUid) return null
-  const profile = await firebaseAdmin.app().firestore().collection('profiles').doc(ownerUid).get()
-  const accountId = profile.get('stripeAccountId')
+): Promise<PosMerchant | null> {
+  const seller = await sellerPaymentAccount(hostId, org)
+  if (!seller) return null
   if (
     !merchantAccountIsReady(
       {
-        accountId,
-        chargesEnabled: profile.get('stripeChargesEnabled'),
-        accountLivemode: profile.get('stripeAccountLivemode'),
+        accountId: seller.accountId,
+        chargesEnabled: seller.chargesEnabled,
+        accountLivemode: seller.accountLivemode,
       },
       { subject: `POS card payment host ${hostId}` },
     )
   ) {
     return null
   }
-  return String(accountId)
+  return { accountId: seller.accountId, chargeModel: seller.chargeModel }
 }
+
+/**
+ * The account the site's Terminal objects belong on NOW: the store's own for
+ * a direct-charge store, null (the platform) for every other. Not gated on
+ * readiness: a Location or a reader belongs where the store will sell.
+ */
+export async function posTerminalAccount(
+  hostId: string,
+  org?: Record<string, any> | null,
+): Promise<string | null> {
+  const seller = await sellerPaymentAccount(hostId, org)
+  return seller?.chargeModel === 'direct' ? seller.accountId : null
+}
+
+/** The account a stored Terminal id was made on; null for the platform. */
+function recordedAccount(value: unknown): string | null {
+  const id = typeof value === 'string' ? value.trim() : ''
+  return id || null
+}
+
+/** The account a card payment's Stripe objects live on; null for the platform. */
+export function posPaymentAccount(
+  payment: Pick<CommerceModel.OrderPayment, 'chargeModel' | 'stripeAccountId'>,
+): string | null {
+  return payment.chargeModel === 'direct' ? recordedAccount(payment.stripeAccountId) : null
+}
+
+/** The account a reader is registered on; null for the platform. */
+export function posReaderAccount(reader: Pick<PosTerminalReader, 'stripeAccount'>): string | null {
+  return recordedAccount(reader.stripeAccount)
+}
+
+/** What a cashier reads when a reader sits on another account than the store sells on. */
+export const POS_READER_ON_OTHER_ACCOUNT =
+  'This card reader was set up before the store started taking payments on its own Stripe account. Remove it in Registers and devices, then add it again with the new code it shows.'
+
+/**
+ * The site's Location, when it was made on `account` (null: the platform).
+ * A Location made on another account is no Location for this one.
+ */
+function locationOnAccount(
+  config: { get(field: string): unknown },
+  account: string | null,
+): string | null {
+  const locationId = String(config.get('stripeLocationId') ?? '')
+  if (!locationId) return null
+  return recordedAccount(config.get('stripeLocationAccount')) === account ? locationId : null
+}
+
+/**
+ * Everything on the site's terminal document that describes the Location's
+ * ONE Configuration. Cleared when the Location is made again on another
+ * account, so tipping, offline mode, the start-up screen and 4G are written
+ * onto a configuration on the new account rather than answered from flags
+ * that describe the old one.
+ */
+const LOCATION_BOUND_FIELDS = [
+  'stripeConfigurationId',
+  'stripeConfigurationAssigned',
+  'tippingKey',
+  'offlineEnabled',
+  'offlineConfigurationId',
+  'splashAppliedKey',
+  'splashAppliedAtMs',
+] as const
 
 function terminalConfigRef(hostId: string) {
   return firebaseAdmin
@@ -195,26 +293,62 @@ export function posTerminalLocationKey(hostId: string, displayName: string, addr
   return `pos-location:${hostId}:${fingerprint}`
 }
 
+/** A Location's address as Stripe returns it, in the console's shape. */
+function locationAddressOf(location: any): PosTerminalAddress | undefined {
+  const address = location?.address
+  if (!address || typeof address !== 'object') return undefined
+  const text = (value: unknown) => (typeof value === 'string' ? value : '')
+  return {
+    line1: text(address.line1),
+    ...(text(address.line2) ? { line2: text(address.line2) } : {}),
+    city: text(address.city),
+    ...(text(address.state) ? { state: text(address.state) } : {}),
+    postalCode: text(address.postal_code),
+    country: text(address.country),
+  }
+}
+
 /**
- * The site's Terminal Location, created on first use (on the PLATFORM, with
- * the merchant named in metadata). Its address is the store's, because Stripe
- * uses it to configure the reader for the right country.
+ * The site's Terminal Location, created on first use, on the account the
+ * store sells on ({@link posTerminalAccount}): the PLATFORM for a destination
+ * store, with the merchant named in metadata, or the store's OWN account for
+ * a direct-charge store. Its address is the store's, because Stripe uses it
+ * to configure the reader for the right country.
+ *
+ * A Location recorded on another account (a store that sold through the
+ * platform before it moved to its own account) is made again on the store's
+ * account, at the address given or else the old Location's own, and the
+ * configuration it carried is set up again there.
  */
 export async function ensurePosTerminalLocation(options: {
   hostId: string
   orgId: string
   displayName: string
   address?: PosTerminalAddress
+  /** The account to make it on, when the caller already asked; else asked here. */
+  account?: string | null
 }): Promise<{ ok: true; locationId: string } | { ok: false; status: number; error: string }> {
+  const account =
+    options.account !== undefined ? options.account : await posTerminalAccount(options.hostId)
   const ref = terminalConfigRef(options.hostId)
   const existing = await ref.get()
   const known = String(existing.get('stripeLocationId') ?? '')
-  if (known) return { ok: true, locationId: known }
-  const problem = posTerminalAddressProblem(options.address)
+  const knownAccount = recordedAccount(existing.get('stripeLocationAccount'))
+  if (known && knownAccount === account) return { ok: true, locationId: known }
+  let addressGiven = options.address
+  if (known && !addressGiven) {
+    const previous = await posStripe('GET', `terminal/locations/${known}`, { stripeAccount: knownAccount })
+    if (previous.ok) addressGiven = locationAddressOf(previous.body)
+  }
+  const problem = posTerminalAddressProblem(addressGiven)
   if (problem) return { ok: false, status: 400, error: problem }
-  const address = options.address as PosTerminalAddress
+  const address = addressGiven as PosTerminalAddress
+  const locationKey = posTerminalLocationKey(options.hostId, options.displayName, address)
   const created = await posStripe('POST', 'terminal/locations', {
-    idempotencyKey: posTerminalLocationKey(options.hostId, options.displayName, address),
+    // A direct store's key names its account: the same address once made on
+    // the platform must never replay the platform's Location.
+    idempotencyKey: account ? `${locationKey}:${account}` : locationKey,
+    ...(account ? { stripeAccount: account } : {}),
     params: {
       display_name: options.displayName.slice(0, 100) || 'Store',
       'address[line1]': address.line1,
@@ -234,14 +368,38 @@ export async function ensurePosTerminalLocation(options: {
       error: posStripeErrorMessage(created.body, 'The reader location could not be set up.'),
     }
   }
+  const replaced = Boolean(known)
   await ref.set(
     {
       stripeLocationId: String(created.body.id),
       livemode: Boolean(created.body.livemode),
       createdAtMs: Date.now(),
+      ...(account ? { stripeLocationAccount: account } : {}),
+      ...(replaced
+        ? {
+            ...(account ? {} : { stripeLocationAccount: firebaseAdmin.firestore.FieldValue.delete() }),
+            ...Object.fromEntries(
+              LOCATION_BOUND_FIELDS.map((field) => [field, firebaseAdmin.firestore.FieldValue.delete()]),
+            ),
+            replacedLocation: { id: known, account: knownAccount ?? 'platform', atMs: Date.now() },
+          }
+        : {}),
     },
     { merge: true },
   )
+  // 4G was on for the old Location's readers: it is turned on again on the
+  // new one's configuration, so readers registered there keep it (AGL-4038).
+  if (replaced && existing.get('cellularEnabled') === true) {
+    const saved = await savePosReaderConfiguration(options.hostId, { 'cellular[enabled]': true }, 'cellular-on')
+    if ('error' in saved) {
+      console.error('[pos-terminal] 4G not turned on for the new location', options.hostId, saved.error)
+    } else {
+      await ref.set({ cellularConfigurationId: saved.configurationId }, { merge: true })
+      await import('./pos-cellular')
+        .then((cellular) => cellular.syncPosCellularReaders({ hostId: options.hostId, orgId: options.orgId }))
+        .catch((error) => console.error('[pos-terminal] 4G records not moved', options.hostId, error))
+    }
+  }
   // A new Location starts with the store's reader start-up screen (AGL-4048).
   // Never fatal, and loaded only here: it draws images.
   await import('./pos-reader-splash')
@@ -284,21 +442,28 @@ export async function savePosReaderConfiguration(
   const config = await ref.get()
   const locationId = String(config.get('stripeLocationId') ?? '')
   if (!locationId) return { ok: false, error: 'no-location' }
+  // The configuration lives where its Location does: the store's own account
+  // for a direct-charge store's Location, the platform otherwise.
+  const account = recordedAccount(config.get('stripeLocationAccount'))
+  const onAccount = account ? { stripeAccount: account } : {}
   const known = String(config.get('stripeConfigurationId') ?? '')
   if (known) {
-    const updated = await posStripe('POST', `terminal/configurations/${known}`, { params })
+    const updated = await posStripe('POST', `terminal/configurations/${known}`, { params, ...onAccount })
     if (!updated.ok) return { ok: false, error: String(updated.body?.error?.code ?? updated.status) }
     // A configuration recorded before AGL-4048 was only ever recorded once
     // it was assigned, so only an explicit `false` still owes the assignment.
     if (config.get('stripeConfigurationAssigned') === false) {
-      const assigned = await assignPosReaderConfiguration(hostId, locationId, known)
+      const assigned = await assignPosReaderConfiguration(hostId, locationId, known, account)
       if (!assigned) return { ok: false, error: 'assignment' }
     }
     return { ok: true, configurationId: known }
   }
   const created = await posStripe('POST', 'terminal/configurations', {
     params,
-    idempotencyKey: `pos-configuration:${hostId}:${createKey}`,
+    idempotencyKey: account
+      ? `pos-configuration:${hostId}:${account}:${createKey}`
+      : `pos-configuration:${hostId}:${createKey}`,
+    ...onAccount,
   })
   if (!created.ok || !created.body?.id) {
     return { ok: false, error: String(created.body?.error?.code ?? created.status) }
@@ -319,12 +484,12 @@ export async function savePosReaderConfiguration(
       return createdId
     })
   if (winner !== createdId) {
-    const updated = await posStripe('POST', `terminal/configurations/${winner}`, { params })
-    await posStripe('DELETE', `terminal/configurations/${createdId}`).catch(() => undefined)
+    const updated = await posStripe('POST', `terminal/configurations/${winner}`, { params, ...onAccount })
+    await posStripe('DELETE', `terminal/configurations/${createdId}`, onAccount).catch(() => undefined)
     if (!updated.ok) return { ok: false, error: String(updated.body?.error?.code ?? updated.status) }
     return { ok: true, configurationId: winner }
   }
-  const assigned = await assignPosReaderConfiguration(hostId, locationId, createdId)
+  const assigned = await assignPosReaderConfiguration(hostId, locationId, createdId, account)
   return assigned ? { ok: true, configurationId: createdId } : { ok: false, error: 'assignment' }
 }
 
@@ -332,9 +497,11 @@ async function assignPosReaderConfiguration(
   hostId: string,
   locationId: string,
   configurationId: string,
+  account: string | null,
 ): Promise<boolean> {
   const assigned = await posStripe('POST', `terminal/locations/${locationId}`, {
     params: { configuration_overrides: configurationId },
+    ...(account ? { stripeAccount: account } : {}),
   })
   if (!assigned.ok) {
     console.error('[pos-terminal] configuration assignment failed', hostId, assigned.body?.error)
@@ -377,8 +544,10 @@ export async function syncPosReaderTipping(
 export async function refreshPosReaderStatus(
   hostId: string,
   readerId: string,
+  /** The account the reader is registered on ({@link posReaderAccount}); null for the platform. */
+  account: string | null = null,
 ): Promise<{ status: string; action: any } | null> {
-  const fetched = await posStripe('GET', `terminal/readers/${readerId}`)
+  const fetched = await posStripe('GET', `terminal/readers/${readerId}`, account ? { stripeAccount: account } : {})
   if (!fetched.ok) return null
   const status = String(fetched.body?.status ?? 'offline')
   await readerRef(hostId, readerId)
@@ -480,10 +649,30 @@ async function patchCardPayment(
   })
 }
 
+/** Whether a store sells by direct charge, for the fee and the request. */
+function isDirect(merchant: PosMerchant): boolean {
+  return merchant.chargeModel === 'direct'
+}
+
+/** The `posStripe` option that puts a request on a direct store's account. */
+function onMerchant(merchant: PosMerchant): { stripeAccount?: string } {
+  return isDirect(merchant) ? { stripeAccount: merchant.accountId } : {}
+}
+
+/** The `posStripe` option for a recorded account (null: the platform). */
+function onAccount(account: string | null): { stripeAccount?: string } {
+  return account ? { stripeAccount: account } : {}
+}
+
+/** What a direct card payment records about where it lives; nothing for a destination one. */
+function directPaymentFields(merchant: PosMerchant): Partial<CommerceModel.OrderPayment> {
+  return isDirect(merchant) ? { chargeModel: 'direct', stripeAccountId: merchant.accountId } : {}
+}
+
 function paymentIntentParams(
   start: CardStart,
   payment: CommerceModel.OrderPayment,
-  destination: string,
+  merchant: PosMerchant,
   extra: Record<string, string | number | boolean | undefined | readonly string[]>,
 ) {
   const chargeCents = start.amountCents + start.tipCents
@@ -493,17 +682,24 @@ function paymentIntentParams(
     chargeCents,
     // A reader's card is in person; a typed card is an online card (AGL-4198).
     inPerson: Array.isArray(methodTypes) && methodTypes.includes('card_present'),
+    ...(isDirect(merchant) ? { direct: true } : {}),
   })
   return {
     amount: chargeCents,
     currency: POS_CURRENCY,
-    'transfer_data[destination]': destination,
+    // A DESTINATION charge is made on the platform and transferred on; a
+    // DIRECT one is made on the store's own account (the request's
+    // `Stripe-Account`), whose money it already is, so nothing is transferred.
+    ...(isDirect(merchant) ? {} : { 'transfer_data[destination]': merchant.accountId }),
     ...(fee > 0 ? { application_fee_amount: fee } : {}),
     'metadata[kind]': 'pos',
     'metadata[hostId]': start.hostId,
     'metadata[orderId]': start.orderId,
     'metadata[paymentId]': start.paymentId,
     'metadata[tipCents]': String(start.tipCents),
+    // Lets the Connect delivery of this intent's events through the webhook's
+    // direct-sale gate (`connectEventIsForDirectSale`).
+    ...(isDirect(merchant) ? { 'metadata[chargeModel]': 'direct' } : {}),
     ...extra,
   }
 }
@@ -511,9 +707,11 @@ function paymentIntentParams(
 /**
  * Creates (or finds) the card-present PaymentIntent for one payment WITHOUT
  * choosing how the card is collected: reserves the amount in the ledger and
- * creates a manual-capture destination charge to the merchant (settled on
- * Aglyn's platform account, with no `on_behalf_of`, as ToS §10.7 states),
- * keyed by the payment so a retry returns the same intent.
+ * creates a manual-capture charge, keyed by the payment so a retry returns
+ * the same intent. For a destination store it is a destination charge to the
+ * merchant (settled on Aglyn's platform account, with no `on_behalf_of`, as
+ * ToS §10.7 states); for a direct-charge store it is made ON the store's own
+ * account (ToS v24 §10.2(a)) with Aglyn's take as the application fee.
  *
  * Two collectors use it. {@link startCardPresentPayment} pushes the intent
  * to a smart reader the site owns; a native companion app (AGL-3618)
@@ -523,7 +721,7 @@ function paymentIntentParams(
  * metadata, from the register's poll or the webhook alike.
  */
 export async function createCardPresentIntent(
-  start: CardStart & { readerId?: string },
+  start: CardStart & { readerId?: string; readerAccount?: string | null },
 ): Promise<PosPaymentOutcome & { clientSecret?: string; paymentIntentId?: string }> {
   // Live card-present payments wait for Terminal to be switched on for the
   // platform (`STRIPE_TERMINAL_LIVE_ENABLED`); the hidden controls are not
@@ -531,13 +729,18 @@ export async function createCardPresentIntent(
   if (!posTerminalAvailable()) {
     return { ok: false, status: 409, error: 'Card readers are not available for this store yet.' }
   }
-  const destination = await posMerchantAccount(start.hostId, start.org)
-  if (!destination) return { ok: false, status: 409, error: 'Card payments not set up' }
-  const reserved = await reserveCardPayment(
-    start,
-    'card_present',
-    start.readerId ? { readerId: start.readerId } : {},
-  )
+  const merchant = await posMerchantAccount(start.hostId, start.org)
+  if (!merchant) return { ok: false, status: 409, error: 'Card payments not set up' }
+  // A reader answers only to the account it is registered on, and the intent
+  // is made on the store's: a reader registered on the platform cannot take
+  // a direct store's card. Refused before anything is reserved.
+  if (start.readerId && (start.readerAccount ?? null) !== (isDirect(merchant) ? merchant.accountId : null)) {
+    return { ok: false, status: 409, error: POS_READER_ON_OTHER_ACCOUNT }
+  }
+  const reserved = await reserveCardPayment(start, 'card_present', {
+    ...(start.readerId ? { readerId: start.readerId } : {}),
+    ...directPaymentFields(merchant),
+  })
   if (!reserved.ok || !reserved.payment) return reserved
   const payment = reserved.payment
   if (payment.status !== 'pending') return reserved
@@ -545,7 +748,8 @@ export async function createCardPresentIntent(
   // intent Stripe already made rather than opening another.
   const intent = await posStripe('POST', 'payment_intents', {
     idempotencyKey: `pos-pi:${payment.id}`,
-    params: paymentIntentParams(start, payment, destination, {
+    ...onMerchant(merchant),
+    params: paymentIntentParams(start, payment, merchant, {
       payment_method_types:
         POS_CURRENCY === 'usd' ? ['card_present'] : ['card_present', 'interac_present'],
       capture_method: 'manual',
@@ -589,7 +793,11 @@ export async function startCardPresentPayment(
   await syncPosReaderTipping(start.hostId, start.settings).catch((error) =>
     console.error('[pos-terminal] tipping sync failed', error),
   )
-  const created = await createCardPresentIntent({ ...start, readerId: reader.id })
+  const created = await createCardPresentIntent({
+    ...start,
+    readerId: reader.id,
+    readerAccount: posReaderAccount(reader),
+  })
   if (!created.ok || !created.payment || !created.paymentIntentId) return created
   if (created.payment.status !== 'pending') return created
   return await sendToReader({
@@ -597,6 +805,7 @@ export async function startCardPresentPayment(
     orderId: start.orderId,
     paymentId: created.payment.id,
     readerId: reader.id,
+    account: posPaymentAccount(created.payment),
     paymentIntentId: created.paymentIntentId,
     // A tip the customer already chose on the display is in the amount;
     // asking again on the reader would ask twice.
@@ -605,10 +814,27 @@ export async function startCardPresentPayment(
   })
 }
 
-/** The site's Terminal Location id, or null before a reader was ever set up. */
-export async function posTerminalLocationId(hostId: string): Promise<string | null> {
+/** The site's recorded Location id on any account, or null before a reader was ever set up. */
+export async function posTerminalRecordedLocationId(hostId: string): Promise<string | null> {
   const config = await terminalConfigRef(hostId).get()
   return String(config.get('stripeLocationId') ?? '') || null
+}
+
+/**
+ * The site's Terminal Location id on the account the store sells on now, or
+ * null before a reader was ever set up there. A Location made on another
+ * account (the platform, for a store now on its own) is not this store's
+ * Location any more: {@link ensurePosTerminalLocation} makes it again.
+ */
+export async function posTerminalLocationId(
+  hostId: string,
+  account?: string | null,
+): Promise<string | null> {
+  const [config, current] = await Promise.all([
+    terminalConfigRef(hostId).get(),
+    account !== undefined ? Promise.resolve(account) : posTerminalAccount(hostId),
+  ])
+  return locationOnAccount(config, current)
 }
 
 /**
@@ -617,14 +843,22 @@ export async function posTerminalLocationId(hostId: string): Promise<string | nu
  * keeps one store's app from discovering another store's readers: Stripe
  * only lets a location-scoped token connect to readers in that Location.
  * Null when the site has no Location yet, never an unscoped token.
+ *
+ * A direct-charge store's token is minted ON its own account (the
+ * `Stripe-Account` header), as Stripe's Terminal-with-direct-charges guide
+ * asks: the SDK then sees that account's Location and readers, collects the
+ * intents this server made there, and creates any intent of its own (a card
+ * taken offline) on that account too.
  */
 export async function createPosTerminalConnectionToken(
   hostId: string,
 ): Promise<{ secret: string; locationId: string } | null> {
-  const locationId = await posTerminalLocationId(hostId)
+  const account = await posTerminalAccount(hostId)
+  const locationId = await posTerminalLocationId(hostId, account)
   if (!locationId) return null
   const token = await posStripe('POST', 'terminal/connection_tokens', {
     params: { location: locationId },
+    ...onAccount(account),
   })
   if (!token.ok || !token.body?.secret) return null
   return { secret: String(token.body.secret), locationId }
@@ -635,6 +869,8 @@ async function sendToReader(input: {
   orderId: string
   paymentId: string
   readerId: string
+  /** The account the payment (and so its reader) is on; null for the platform. */
+  account: string | null
   paymentIntentId: string
   skipTipping: boolean
   attempt: number
@@ -644,6 +880,7 @@ async function sendToReader(input: {
     `terminal/readers/${input.readerId}/process_payment_intent`,
     {
       idempotencyKey: `pos-process:${input.paymentId}:${input.attempt}`,
+      ...onAccount(input.account),
       params: {
         payment_intent: input.paymentIntentId,
         'process_config[enable_customer_cancellation]': true,
@@ -683,6 +920,9 @@ export async function retryCardPresentPayment(input: {
   if (payment.status === 'succeeded') return { ok: true, order, payment, completed: false, changed: false }
   const reader = await ownedTerminalReader(input.hostId, payment.readerId)
   if (!reader) return { ok: false, status: 404, error: 'That card reader is not on this site.' }
+  if (posReaderAccount(reader) !== posPaymentAccount(payment)) {
+    return { ok: false, status: 409, error: POS_READER_ON_OTHER_ACCOUNT }
+  }
   // Back to pending first, so the amount is reserved again before the reader
   // is asked; a sale paid meanwhile by another tender refuses here.
   const rearmed = await applyPosPayment({
@@ -712,6 +952,7 @@ export async function retryCardPresentPayment(input: {
     orderId: input.orderId,
     paymentId: input.paymentId,
     readerId: reader.id,
+    account: posPaymentAccount(payment),
     paymentIntentId: payment.paymentIntentId,
     skipTipping: !input.settings.tippingEnabled || Number(payment.tipCents ?? 0) > 0,
     attempt,
@@ -725,20 +966,21 @@ export async function retryCardPresentPayment(input: {
  */
 export async function startCardKeyedPayment(
   start: CardStart & { paymentMethodId?: string },
-): Promise<PosPaymentOutcome & { clientSecret?: string }> {
+): Promise<PosPaymentOutcome & { clientSecret?: string; stripeAccount?: string }> {
   const paymentMethodId = start.paymentMethodId ?? ''
   if (paymentMethodId && !isPaymentMethodId(paymentMethodId)) {
     return { ok: false, status: 400, error: 'The card could not be read. Enter it again.' }
   }
-  const destination = await posMerchantAccount(start.hostId, start.org)
-  if (!destination) return { ok: false, status: 409, error: 'Card payments not set up' }
-  const reserved = await reserveCardPayment(start, 'card_keyed', {})
+  const merchant = await posMerchantAccount(start.hostId, start.org)
+  if (!merchant) return { ok: false, status: 409, error: 'Card payments not set up' }
+  const reserved = await reserveCardPayment(start, 'card_keyed', directPaymentFields(merchant))
   if (!reserved.ok || !reserved.payment) return reserved
   const payment = reserved.payment
   if (payment.status !== 'pending') return reserved
   const intent = await posStripe('POST', 'payment_intents', {
     idempotencyKey: `pos-pi:${payment.id}`,
-    params: paymentIntentParams(start, payment, destination, {
+    ...onMerchant(merchant),
+    params: paymentIntentParams(start, payment, merchant, {
       payment_method_types: ['card'],
       description: 'In-store purchase (typed card)',
       // 3-D Secure from the one seam every card payment shares (AGL-3360).
@@ -759,8 +1001,22 @@ export async function startCardKeyedPayment(
         paymentIntentId: String(intent.body.id),
         livemode: Boolean(intent.body.livemode),
       }))
-  if (!paymentMethodId) return { ...updated, clientSecret: String(intent.body.client_secret) }
-  return await confirmKeyedCard(start, payment.id, String(intent.body.id), paymentMethodId)
+  if (!paymentMethodId) {
+    // A direct store's intent lives on its own account, so the console's
+    // Payment Element must load Stripe for that account to confirm it.
+    return {
+      ...updated,
+      clientSecret: String(intent.body.client_secret),
+      ...(isDirect(merchant) ? { stripeAccount: merchant.accountId } : {}),
+    }
+  }
+  return await confirmKeyedCard(
+    start,
+    payment.id,
+    String(intent.body.id),
+    paymentMethodId,
+    isDirect(merchant) ? merchant.accountId : null,
+  )
 }
 
 /** A PaymentMethod id as Stripe mints them; anything else never reaches Stripe. */
@@ -777,7 +1033,10 @@ export const KEYED_CARD_NEEDS_AUTHENTICATION =
  * sent the number to Stripe alone, which answered with a PaymentMethod, and
  * hands this route only its id. The server confirms the intent with it, with
  * the platform's secret key, and records the payment from Stripe's answer as
- * every card payment is. A card whose bank asks for the cardholder's approval
+ * every card payment is. The device made that PaymentMethod with the
+ * PLATFORM's publishable key, so for a direct-charge store's intent it is
+ * first cloned onto the store's account (Stripe's PaymentMethod cloning for
+ * direct charges) and the clone confirms it. A card whose bank asks for the cardholder's approval
  * (3-D Secure) cannot be approved at the register, so that intent is released
  * and the payment fails with words that point at Card (QR).
  */
@@ -786,16 +1045,38 @@ async function confirmKeyedCard(
   paymentId: string,
   intentId: string,
   paymentMethodId: string,
+  account: string | null,
 ): Promise<PosPaymentOutcome> {
   const input = { hostId: start.hostId, orderId: start.orderId, paymentId }
+  let method = paymentMethodId
+  if (account) {
+    const cloned = await posStripe('POST', 'payment_methods', {
+      idempotencyKey: `pos-keyed-clone:${account}:${paymentMethodId}`,
+      stripeAccount: account,
+      params: { payment_method: paymentMethodId },
+    })
+    if (!cloned.ok || !cloned.body?.id) {
+      const message = posStripeErrorMessage(cloned.body, 'The card was not accepted.')
+      await posStripe('POST', `payment_intents/${intentId}/cancel`, {
+        idempotencyKey: `pos-cancel:${intentId}`,
+        stripeAccount: account,
+      })
+      return await patchCardPayment(start.hostId, start.orderId, paymentId, (current) =>
+        current.status === 'pending' ? { ...current, status: 'failed', failureMessage: message } : null,
+      )
+    }
+    method = String(cloned.body.id)
+  }
   const confirmed = await posStripe('POST', `payment_intents/${intentId}/confirm`, {
     idempotencyKey: `pos-keyed-confirm:${intentId}:${paymentMethodId}`,
-    params: { payment_method: paymentMethodId },
+    params: { payment_method: method },
+    ...onAccount(account),
   })
   const status = String(confirmed.body?.status ?? confirmed.body?.error?.payment_intent?.status ?? '')
   if (status === 'requires_action') {
     await posStripe('POST', `payment_intents/${intentId}/cancel`, {
       idempotencyKey: `pos-cancel:${intentId}`,
+      ...onAccount(account),
     })
     return await patchCardPayment(start.hostId, start.orderId, paymentId, (current) =>
       current.status === 'pending'
@@ -808,6 +1089,7 @@ async function confirmKeyedCard(
     const message = posStripeErrorMessage(confirmed.body, 'The card was not accepted.')
     await posStripe('POST', `payment_intents/${intentId}/cancel`, {
       idempotencyKey: `pos-cancel:${intentId}`,
+      ...onAccount(account),
     })
     return await patchCardPayment(start.hostId, start.orderId, paymentId, (current) =>
       current.status === 'pending' ? { ...current, status: 'failed', failureMessage: message } : null,
@@ -825,9 +1107,9 @@ async function confirmKeyedCard(
 export async function startCardLinkPayment(
   start: CardStart & { returnUrl: string },
 ): Promise<PosPaymentOutcome> {
-  const destination = await posMerchantAccount(start.hostId, start.org)
-  if (!destination) return { ok: false, status: 409, error: 'Card payments not set up' }
-  const reserved = await reserveCardPayment(start, 'card_link', {})
+  const merchant = await posMerchantAccount(start.hostId, start.org)
+  if (!merchant) return { ok: false, status: 409, error: 'Card payments not set up' }
+  const reserved = await reserveCardPayment(start, 'card_link', directPaymentFields(merchant))
   if (!reserved.ok || !reserved.payment) return reserved
   const payment = reserved.payment
   if (payment.checkoutSessionId || payment.status !== 'pending') return reserved
@@ -836,9 +1118,11 @@ export async function startCardLinkPayment(
     chargeCents: start.amountCents + start.tipCents,
     // A card link is paid online, on the customer's own phone (AGL-4198).
     inPerson: false,
+    ...(isDirect(merchant) ? { direct: true } : {}),
   })
   const session = await posStripe('POST', 'checkout/sessions', {
     idempotencyKey: `pos-link:${payment.id}`,
+    ...onMerchant(merchant),
     params: {
       mode: 'payment',
       ...checkoutSessionCardAuthenticationParams('payment'),
@@ -855,8 +1139,9 @@ export async function startCardLinkPayment(
             'line_items[1][price_data][product_data][name]': 'Tip',
           }
         : {}),
-      'payment_intent_data[transfer_data][destination]': destination,
+      ...(isDirect(merchant) ? {} : { 'payment_intent_data[transfer_data][destination]': merchant.accountId }),
       ...(fee > 0 ? { 'payment_intent_data[application_fee_amount]': fee } : {}),
+      ...(isDirect(merchant) ? { 'payment_intent_data[metadata][chargeModel]': 'direct' } : {}),
       'payment_intent_data[metadata][kind]': 'pos',
       'payment_intent_data[metadata][hostId]': start.hostId,
       'payment_intent_data[metadata][orderId]': start.orderId,
@@ -868,6 +1153,7 @@ export async function startCardLinkPayment(
       'metadata[hostId]': start.hostId,
       'metadata[orderId]': start.orderId,
       'metadata[paymentId]': payment.id,
+      ...(isDirect(merchant) ? { 'metadata[chargeModel]': 'direct' } : {}),
     },
   })
   if (!session.ok || !session.body?.url) {
@@ -922,6 +1208,9 @@ export function posCaptureFeeCents(payment: CommerceModel.OrderPayment, intent: 
     chargeCents: Math.max(0, Math.round(Number(intent?.amount ?? 0))),
     // The intent says how it was paid: a reader's card is in person (AGL-4198).
     inPerson: !Array.isArray(methodTypes) || methodTypes.includes('card_present'),
+    // On a direct store's own account Stripe bills the store its card fee,
+    // so the fee is the take alone (a tip never adds to it).
+    ...(payment.chargeModel === 'direct' ? { direct: true } : {}),
   })
 }
 
@@ -944,9 +1233,11 @@ export async function refreshPosCardPayment(input: {
   if (!CommerceModel.isCardPaymentMethod(payment.method)) {
     return { ok: true, order, payment, completed: false, changed: false }
   }
+  // Every object of this payment lives where it was made (null: the platform).
+  const on = onAccount(posPaymentAccount(payment))
   let paymentIntentId = payment.paymentIntentId ?? ''
   if (!paymentIntentId && payment.checkoutSessionId) {
-    const session = await posStripe('GET', `checkout/sessions/${payment.checkoutSessionId}`)
+    const session = await posStripe('GET', `checkout/sessions/${payment.checkoutSessionId}`, on)
     if (session.ok && session.body?.status === 'expired' && payment.status === 'pending') {
       return await patchCardPayment(input.hostId, input.orderId, payment.id, (current) =>
         current.status === 'pending' ? { ...current, status: 'canceled' } : null,
@@ -958,6 +1249,7 @@ export async function refreshPosCardPayment(input: {
   let intent = (
     await posStripe('GET', `payment_intents/${paymentIntentId}`, {
       params: { 'expand[]': 'latest_charge' },
+      ...on,
     })
   ).body
   if (!intent?.id) return { ok: true, order, payment, completed: false, changed: false }
@@ -970,6 +1262,7 @@ export async function refreshPosCardPayment(input: {
       // Nothing to capture into: the sale is gone. Release the hold.
       await posStripe('POST', `payment_intents/${intent.id}/cancel`, {
         idempotencyKey: `pos-release:${intent.id}`,
+        ...on,
       })
       return { ok: true, order, payment, completed: false, changed: false }
     }
@@ -980,6 +1273,7 @@ export async function refreshPosCardPayment(input: {
         ...(fee > 0 ? { application_fee_amount: fee } : {}),
         'expand[]': 'latest_charge',
       },
+      ...on,
     })
     if (captured.ok && captured.body?.id) intent = captured.body
     else {
@@ -1030,7 +1324,7 @@ export async function refreshPosCardPayment(input: {
   // card removed, a cancel on the reader) says so on the reader, not the
   // intent, so ask the reader too.
   if (payment.method === 'card_present' && payment.readerId && payment.status === 'pending') {
-    const reader = await refreshPosReaderStatus(input.hostId, payment.readerId)
+    const reader = await refreshPosReaderStatus(input.hostId, payment.readerId, posPaymentAccount(payment))
     const action = reader?.action
     if (
       action?.type === 'process_payment_intent' &&
@@ -1068,8 +1362,9 @@ export async function cancelPosCardPayment(input: {
   if (!refreshed.ok || !refreshed.payment) return refreshed
   const payment = refreshed.payment
   if (payment.status === 'succeeded' || payment.status === 'canceled') return refreshed
+  const on = onAccount(posPaymentAccount(payment))
   if (payment.method === 'card_present' && payment.readerId) {
-    const cleared = await posStripe('POST', `terminal/readers/${payment.readerId}/cancel_action`)
+    const cleared = await posStripe('POST', `terminal/readers/${payment.readerId}/cancel_action`, on)
     if (!cleared.ok && cleared.body?.error?.code === 'terminal_reader_busy') {
       return {
         ok: false,
@@ -1081,11 +1376,13 @@ export async function cancelPosCardPayment(input: {
   if (payment.paymentIntentId) {
     await posStripe('POST', `payment_intents/${payment.paymentIntentId}/cancel`, {
       idempotencyKey: `pos-cancel:${payment.paymentIntentId}`,
+      ...on,
     })
   }
   if (payment.checkoutSessionId) {
     await posStripe('POST', `checkout/sessions/${payment.checkoutSessionId}/expire`, {
       idempotencyKey: `pos-expire:${payment.checkoutSessionId}`,
+      ...on,
     })
   }
   // Re-read: a payment that completed in the gap is recorded as paid.
@@ -1122,6 +1419,7 @@ export async function simulatePosReaderTap(input: {
     'POST',
     `test_helpers/terminal/readers/${reader.id}/present_payment_method`,
     {
+      ...onAccount(posReaderAccount(reader)),
       params: {
         type: 'card_present',
         ...(input.cardNumber && /^[0-9]{12,19}$/.test(input.cardNumber)
@@ -1163,17 +1461,23 @@ function posPaymentRef(
  * by trusting the event's own copy (whose API version predates the tip
  * fields). Returns the site when the event was the register's, so the
  * dispatcher can count it as claimed; null for every other event.
+ *
+ * `account` is the connected account a Connect-delivered event came from
+ * (`connectEventAccount`): a direct-charge store's reader and intents live
+ * there, so the reader event's intent is read there. The settlement itself
+ * reads the account the payment recorded, never the event's word.
  */
 export async function handlePosStripeEvent(input: {
   type: string
   object: any
+  account?: string | null
 }): Promise<{ hostId: string } | null> {
   const { type, object } = input
   let ref: { hostId: string; orderId: string; paymentId: string } | null = null
   if (type === 'terminal.reader.action_succeeded' || type === 'terminal.reader.action_failed') {
     const intentId = String(object?.action?.process_payment_intent?.payment_intent ?? '')
     if (object?.action?.type !== 'process_payment_intent' || !intentId) return null
-    const intent = await posStripe('GET', `payment_intents/${intentId}`)
+    const intent = await posStripe('GET', `payment_intents/${intentId}`, onAccount(input.account ?? null))
     if (!intent.ok || intent.body?.metadata?.kind !== 'pos') return null
     ref = posPaymentRef(intent.body.metadata)
   } else if (
@@ -1250,12 +1554,18 @@ function offlineCardIntent(body: any): PosOfflineCardIntent {
   }
 }
 
-/** Reads one offline card's PaymentIntent, with its charge's card details. */
+/**
+ * Reads one offline card's PaymentIntent, with its charge's card details, on
+ * `account` (a direct-charge store's own, where its app's SDK made it) or
+ * the platform.
+ */
 export async function retrievePosOfflineCardIntent(
   paymentIntentId: string,
+  account: string | null = null,
 ): Promise<{ ok: true; intent: PosOfflineCardIntent } | { ok: false; error: string }> {
   const fetched = await posStripe('GET', `payment_intents/${encodeURIComponent(paymentIntentId)}`, {
     params: { 'expand[]': ['latest_charge'] },
+    ...onAccount(account),
   })
   if (!fetched.ok) return { ok: false, error: posStripeErrorMessage(fetched.body, 'The card payment could not be read.') }
   return { ok: true, intent: offlineCardIntent(fetched.body) }
@@ -1266,9 +1576,11 @@ export async function capturePosOfflineCardIntent(
   paymentIntentId: string,
   applicationFeeCents: number,
   idempotencyKey: string,
+  account: string | null = null,
 ): Promise<{ ok: true; intent: PosOfflineCardIntent } | { ok: false; error: string; status: number }> {
   const captured = await posStripe('POST', `payment_intents/${encodeURIComponent(paymentIntentId)}/capture`, {
     idempotencyKey,
+    ...onAccount(account),
     params: {
       ...(applicationFeeCents > 0 ? { application_fee_amount: applicationFeeCents } : {}),
       'expand[]': ['latest_charge'],
