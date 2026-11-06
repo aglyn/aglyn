@@ -117,9 +117,16 @@ export type PosHardwareSkuId =
 export interface PosHardwareSku {
   id: PosHardwareSkuId
   kind: 'reader' | 'accessory'
-  /** What Stripe's hardware shop calls it, for the staff member ordering it. */
+  /**
+   * What the supplier's hardware shop calls it, for the staff member ordering
+   * it. Staff-only: the merchant never sees it.
+   */
   stripeProductName: string
-  /** What the merchant sees. */
+  /**
+   * What the merchant sees, everywhere: shop, Hardware card, booth register,
+   * emails and receipts. A plain name with the model in brackets, never the
+   * maker's name; the record keeps the exact model in `sku` for support.
+   */
   displayName: string
   /** One line on what it is for. */
   use: string
@@ -135,38 +142,39 @@ export const POS_HARDWARE_SKUS: readonly PosHardwareSku[] = [
     id: 'stripe-reader-s710',
     kind: 'reader',
     stripeProductName: 'Stripe Reader S710',
-    displayName: 'Stripe Reader S710',
-    // 4G needs Stripe's cellular service, billed monthly per reader, which a
-    // store turns on for its S710s where it is offered (AGL-4038): the reader
-    // alone does not bring a connection.
-    use: 'Handheld for events and parking lots; 4G needs Stripe’s cellular service, billed monthly',
+    // Plain names with the model in brackets, no maker's name (AGL-4038).
+    // "4G-capable", never "with 4G": 4G is a separate per-store monthly
+    // service, turned on where it is offered, and the reader alone does not
+    // bring a connection.
+    displayName: 'Touchscreen reader, 4G-capable (S710)',
+    use: 'Handheld for events and parking lots, on Wi-Fi. 4G is a separate monthly service, where offered',
   },
   {
     id: 'stripe-reader-s700',
     kind: 'reader',
     stripeProductName: 'Stripe Reader S700',
-    displayName: 'Stripe Reader S700',
+    displayName: 'Touchscreen reader (S700)',
     use: 'Handheld or countertop reader on Wi-Fi',
   },
   {
     id: 'stripe-reader-t600',
     kind: 'reader',
     stripeProductName: 'Stripe Reader T600',
-    displayName: 'Stripe Reader T600',
+    displayName: 'Countertop reader (T600)',
     use: 'Countertop reader on Wi-Fi, or on Ethernet with the hub',
   },
   {
     id: 'bbpos-wisepos-e',
     kind: 'reader',
     stripeProductName: 'BBPOS WisePOS E',
-    displayName: 'BBPOS WisePOS E',
+    displayName: 'Countertop reader (WisePOS E)',
     use: 'Countertop reader on Wi-Fi',
   },
   {
     id: 'stripe-reader-m2',
     kind: 'reader',
     stripeProductName: 'Stripe Reader M2',
-    displayName: 'Stripe Reader M2',
+    displayName: 'Pocket reader (M2)',
     use: `Pairs with the ${PLATFORM_BRAND_NAME} POS app on your phone or tablet by Bluetooth`,
   },
   {
@@ -201,7 +209,7 @@ export const POS_HARDWARE_SKUS: readonly PosHardwareSku[] = [
     id: 'stripe-reader-charger',
     kind: 'accessory',
     stripeProductName: 'Stripe Reader Charger',
-    displayName: 'Charger for Stripe readers',
+    displayName: 'Charger for card readers',
     use: 'A spare wall charger',
   },
   {

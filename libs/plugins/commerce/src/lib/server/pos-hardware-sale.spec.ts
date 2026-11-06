@@ -147,7 +147,7 @@ describe('status: is this store the platform’s hardware seller', () => {
     expect(result.status).toBe(200)
     expect(result.body.seller).toBe(true)
     expect(result.body.items.map((item: any) => item.sku)).toEqual(POS_HARDWARE_SKUS.map((sku) => sku.id))
-    expect(result.body.items[0]).toEqual({ sku: 'stripe-reader-s710', name: 'Stripe Reader S710', kind: 'reader' })
+    expect(result.body.items[0]).toEqual({ sku: 'stripe-reader-s710', name: 'Touchscreen reader, 4G-capable (S710)', kind: 'reader' })
   })
 
   it('says no, and nothing else, on any other store or while the sale is off', async () => {
@@ -390,7 +390,7 @@ describe('the To attach list', () => {
         offline: false,
         totalCents: 32_475,
         contactEmail: 'receipt@example.com',
-        lines: [{ sku: S710, name: 'Stripe Reader S710', quantity: 1 }],
+        lines: [{ sku: S710, name: 'Touchscreen reader, 4G-capable (S710)', quantity: 1 }],
       }),
     ])
   })

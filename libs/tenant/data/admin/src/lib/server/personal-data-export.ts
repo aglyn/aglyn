@@ -303,7 +303,7 @@ export const PERSONAL_DATA_SOURCES: readonly ExportSourceSpec[] = [
     keyedBy: 'field',
     subjects: ['org'],
     exported: true,
-    note: 'Each Stripe Reader S710 a store turned 4G on for (AGL-4038): the site, the Stripe reader and its serial number, the Terminal configuration, and when it had 4G. The organization’s own record of what it is charged for; it names no person.',
+    note: 'Each S710 reader a store turned 4G on for (AGL-4038): the site, the reader’s id and its serial number, the Terminal configuration, and when it had 4G. The organization’s own record of what it is charged for; it names no person.',
   },
   {
     collection: 'posCellularCharges',

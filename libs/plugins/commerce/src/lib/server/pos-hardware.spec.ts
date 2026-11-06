@@ -1299,7 +1299,7 @@ describe('closing a workspace or the buying account with an unshipped order (AGL
       context: {
         orderNumber: 'HW-012345',
         amount: expect.stringContaining('231.20'),
-        items: '1 × Stripe Reader S710, 1 × Stripe Reader M2',
+        items: '1 × Touchscreen reader, 4G-capable (S710), 1 × Pocket reader (M2)',
         reason: 'its workspace org-1 was deleted',
         stripeOrder: ' (Stripe order thor_1)',
       },

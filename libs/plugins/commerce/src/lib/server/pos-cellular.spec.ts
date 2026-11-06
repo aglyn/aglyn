@@ -16,7 +16,7 @@
  */
 
 /**
- * 4G for Stripe Reader S710s (AGL-4038): the POS devices card's switch on
+ * 4G for S710 readers (AGL-4038): the POS devices card's switch on
  * the card readers route, the per-reader records it keeps, the monthly
  * charge, and the workspace erasure turning it off.
  */
@@ -368,7 +368,7 @@ describe('the monthly 4G charge (AGL-4038)', () => {
         // (2 × 1000 + 30) / 0.971, rounded up.
         amountCents: 2_091,
         currency: 'usd',
-        description: '4G for 2 Stripe Reader S710 card readers, October 2026',
+        description: '4G for 2 S710 card readers, October 2026',
         idempotencyKey: 'pos-cellular-org-1-2026-10',
         metadata: expect.objectContaining({ kind: 'pos-cellular', month: '2026-10', readers: '2' }),
       }),
@@ -878,7 +878,7 @@ describe('a workspace deleted mid-month is charged for that final month (AGL-403
       expect.objectContaining({
         orgId: 'org-1',
         amountCents: 1_061,
-        description: '4G for 1 Stripe Reader S710 card reader, November 2026',
+        description: '4G for 1 S710 card reader, November 2026',
         idempotencyKey: 'pos-cellular-org-1-2026-11',
       }),
     ])
