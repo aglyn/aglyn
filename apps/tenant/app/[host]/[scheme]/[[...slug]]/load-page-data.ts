@@ -22,6 +22,7 @@ import {
   getDomainLockdown,
   getPlatformLockdown,
   getRealmPluginInstalls,
+  isServerReleaseFlagOnForOrg,
   verifyCollectionPreviewToken,
 } from '@aglyn/tenant-data-admin'
 import composeScreenNodes from '@aglyn/tenant-runtime/compose-screen-nodes'
@@ -1545,6 +1546,18 @@ const composePageResult = async (
     // of composition and could surface as an `unhandledRejection` before the
     // `await` below ever sees it. This marks it handled without consuming it.
     enabledPluginsPromise.catch(() => undefined)
+    // Whether a YouTube film with no poster shows YouTube's own still
+    // (AGL-4140), per org. The org document and the template it reads are the
+    // ones the release gate above just cached, so this costs no second read;
+    // a read that fails shows no still, which is the shipped page.
+    const videoEmbedPostersPromise = Promise.resolve()
+      .then(() =>
+        isServerReleaseFlagOnForOrg(
+          'release_video_embed_posters',
+          (orgRes.org as { $id?: string })?.$id ?? null,
+        ),
+      )
+      .catch(() => false)
 
     // The card the head shares: the screen's image, then the site default.
     // Their documents join the composition's one facts batch (AGL-2850), so
@@ -1631,6 +1644,7 @@ const composePageResult = async (
     // bypass; fail-open inside falls back to registry defaults.
     const enabledPlugins = await enabledPluginsPromise
     timer.mark('filterEnabledPluginsByReleaseFlags')
+    const videoEmbedPosters = await videoEmbedPostersPromise
 
     const props = {
       data: JSON.parse(
@@ -1651,6 +1665,9 @@ const composePageResult = async (
       ...(realmPlugins.length ? { realmPlugins } : {}),
       showBranding,
       branding,
+      // Sent only when on, so a page whose workspace shows no still carries
+      // no new byte (AGL-4140).
+      ...(videoEmbedPosters ? { videoEmbedPosters: true } : {}),
       ...enriched.props,
       ...card.collected(),
       // The full composed document, before the AGL-1285 prune in `page.tsx`:

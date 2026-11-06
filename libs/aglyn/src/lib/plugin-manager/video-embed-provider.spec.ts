@@ -21,6 +21,8 @@ import {
   videoEmbedOf,
   videoEmbedPlayerOrigins,
   videoEmbedPlayerSrc,
+  videoEmbedPosterOrigins,
+  videoEmbedPosterSrc,
   videoEmbedProviderLabels,
   videoEmbedProviders,
   videoEmbedUrl,
@@ -82,6 +84,8 @@ const LINKED: ResolvedVideoEmbedProvider = {
     { param: 'list', option: 'loop', on: '{id}' },
     { param: 'ref', value: 'site-{id}' },
   ],
+  posterOrigin: 'https://stills.example.net',
+  posterPath: '/still/{id}/large.jpg',
 }
 const HOSTS = [PLAYER, OTHER]
 
@@ -227,5 +231,33 @@ describe('what the published page and the console read', () => {
       expect(provider.playerOrigin.startsWith('https://')).toBe(true)
       expect(videoEmbedPlayerOrigins()).toContain(provider.playerOrigin)
     }
+  })
+})
+
+describe('a host that publishes its own still of each film (AGL-4140)', () => {
+  it('rebuilds the still from the id alone, on the declared origin', () => {
+    expect(videoEmbedPosterSrc('https://tube.example/watch?v=Ab3_-x9Z&t=42', [LINKED])).toBe(
+      'https://stills.example.net/still/Ab3_-x9Z/large.jpg',
+    )
+    expect(videoEmbedPosterSrc('https://tu.example/Ab3_-x9Z', [LINKED])).toBe(
+      'https://stills.example.net/still/Ab3_-x9Z/large.jpg',
+    )
+  })
+
+  it('has no still for a host that declares none, or a link no host declares', () => {
+    expect(videoEmbedPosterSrc('https://player.example.net/watch/abc123', HOSTS)).toBeUndefined()
+    expect(videoEmbedPosterSrc('https://videos.example.com/film.mp4', [LINKED])).toBeUndefined()
+    expect(videoEmbedPosterSrc(undefined, [LINKED])).toBeUndefined()
+  })
+
+  it('names each still origin once, and only a declared one, for img-src', () => {
+    expect(videoEmbedPosterOrigins([...HOSTS, LINKED, { ...LINKED, id: 'again' }])).toEqual([
+      'https://stills.example.net',
+    ])
+    expect(videoEmbedPosterOrigins(HOSTS)).toEqual([])
+  })
+
+  it('reads the compiled list by default, every still origin https', () => {
+    for (const origin of videoEmbedPosterOrigins()) expect(origin.startsWith('https://')).toBe(true)
   })
 })

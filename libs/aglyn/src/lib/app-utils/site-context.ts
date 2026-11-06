@@ -57,6 +57,15 @@ export interface SiteContextValue {
    * Absent in the besigner/preview, so blocks must keep working without it.
    */
   pageData?: Record<string, unknown>
+  /**
+   * Whether a hosted film with no poster shows its host's own still
+   * (AGL-4140): `release_video_embed_posters`, as the tenant loader read it
+   * for the site's workspace. The still loads from the host's own image
+   * origin on page load, which the published page's `img-src` admits only
+   * where the same flag is on, so absent (the canvas, Preview, an older
+   * page) shows no still.
+   */
+  videoEmbedPosters?: boolean
 }
 
 export const SiteContext = createContext<SiteContextValue>({})

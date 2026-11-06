@@ -1208,6 +1208,8 @@ export function aiImportedPageCheck(
     ...aiLayoutListingContext(input.context, input.targets),
     ownWords: true,
     ...(input.rewritten?.length ? { rewritten: input.rewritten } : {}),
+    // A YouTube film with no poster shows YouTube's own still, as its wave was stamped (AGL-4140).
+    ...(input.doc.videoPosters ? { hostStills: true } : {}),
   }
   const plan = {
     title: input.screen.title,

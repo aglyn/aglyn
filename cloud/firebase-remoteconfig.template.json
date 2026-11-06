@@ -202,6 +202,13 @@
       },
       "description": "Create site asks the person to choose a starter, every option a marketplace listing any publisher may list and price, the platform's own included (AGL-4049). OFF by default: Create site makes the default site.",
       "valueType": "JSON"
+    },
+    "release_video_embed_posters": {
+      "defaultValue": {
+        "value": "{\"enabled\": false, \"rolloutPercent\": 0}"
+      },
+      "description": "A YouTube film with no poster shows YouTube's own thumbnail, loaded by each visitor's browser from i.ytimg.com (AGL-4140). OFF until the Subprocessors page disclosing it is published.",
+      "valueType": "JSON"
     }
   },
   "version": {

@@ -128,6 +128,19 @@ describe('the flag (AGL-4152)', () => {
     // Through the job's input, as the page step reads it.
     expect(aiSiteImportDocumentOf({ [AI_LAYOUT_IMPORTED_SECTIONS_INPUT]: JSON.parse(JSON.stringify(redesigned)) })?.generative).toBe(true)
   })
+
+  it("stamps YouTube's own still on a wave under either finish, and carries it to the page's document (AGL-4140)", () => {
+    for (const finish of ['keep', 'improve'] as const) {
+      const on = aiSiteImportWaveStamped(state({ finish, wording: false }), 1, { videoPosters: true })
+      expect(on.waves[0]?.videoPosters).toBe(true)
+      const doc = aiSiteImportDocumentFor(on, on.pages[0] as AiSiteImportPage)
+      expect(doc?.videoPosters).toBe(true)
+      expect(aiSiteImportDocumentOf({ [AI_LAYOUT_IMPORTED_SECTIONS_INPUT]: JSON.parse(JSON.stringify(doc)) })?.videoPosters).toBe(true)
+    }
+    const off = aiSiteImportWaveStamped(state({ finish: 'keep', wording: false }), 1)
+    expect(Object.keys(off.waves[0] ?? {})).not.toContain('videoPosters')
+    expect(Object.keys(aiSiteImportDocumentFor(off, off.pages[0] as AiSiteImportPage) ?? {})).not.toContain('videoPosters')
+  })
 })
 
 describe('Keep my site and today’s Improve it, to the byte', () => {

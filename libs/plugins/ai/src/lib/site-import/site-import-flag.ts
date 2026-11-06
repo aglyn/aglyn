@@ -31,3 +31,13 @@ export const SITE_IMPORT_RELEASE_FLAG = 'release_ai_site_import' as const
  * exactly today's: no new call, tool, text, theme or screen.
  */
 export const SITE_IMPORT_GENERATIVE_RELEASE_FLAG = 'release_ai_site_import_generative' as const
+
+/**
+ * YouTube's own still as a poster (AGL-4140): read per org when a wave
+ * starts, and stamped on the wave, so its pages place a YouTube film whose
+ * poster the library could not hold, with no poster, for the published page
+ * to draw YouTube's still in. Off, such a film is left out as it always was.
+ * The published page reads the same flag, so a page built while it was on
+ * asks for a poster again if it is turned off.
+ */
+export const SITE_IMPORT_VIDEO_POSTERS_RELEASE_FLAG = 'release_video_embed_posters' as const

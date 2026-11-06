@@ -2150,6 +2150,16 @@ describe('rule 16 — the smallest document that does the job', () => {
     expect(codes(detectHeavyDocument(video, 'page'))).toEqual(['autoplay-video'])
   })
 
+  it("passes a poster-less YouTube film only where the page shows the host's own still (AGL-4140)", () => {
+    const film = (src: string) => tree(page({ componentId: 'video', props: { src } }))
+    const youtube = film('https://www.youtube.com/watch?v=dQw4w9WgXcQ')
+    expect(codes(detectHeavyDocument(youtube, 'page'))).toEqual(['autoplay-video'])
+    expect(codes(detectHeavyDocument(youtube, 'page', { hostStills: true }))).toEqual([])
+    // Vimeo publishes no still, and a file plays from its own bytes: both still need a poster.
+    expect(codes(detectHeavyDocument(film('https://vimeo.com/76979871'), 'page', { hostStills: true }))).toEqual(['autoplay-video'])
+    expect(codes(detectHeavyDocument(film(IMAGE), 'page', { hostStills: true }))).toEqual(['autoplay-video'])
+  })
+
   describe('a third-party player (AGL-3433)', () => {
     const YOUTUBE = 'https://www.youtube.com/watch?v=dQw4w9WgXcQ'
     const player = (url?: string) => ({ componentId: 'videoEmbed', props: url ? { url } : {} })

@@ -84,6 +84,12 @@ export interface Props {
   /** Free-tier "Made with Aglyn" badge (AGL-69, removeBranding gate). */
   showBranding?: boolean
   /**
+   * `release_video_embed_posters` is on for the site's workspace (AGL-4140):
+   * a YouTube film with no poster shows YouTube's own still. Read into
+   * `SiteContext`; absent is off.
+   */
+  videoEmbedPosters?: boolean
+  /**
    * Present while the site is in its leaving-notice window (AGL-3452): links
    * to other domains go through the notice on the site's own host. Read
    * into `ScreenLinkContext`; see `@aglyn/aglyn/app-utils/leaving-notice`.

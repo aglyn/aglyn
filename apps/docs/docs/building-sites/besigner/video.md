@@ -79,7 +79,8 @@ and the host's player loads only when a visitor presses it, so someone who never
 play never contacts the host, unless you turn on **Load the player with the page**
 (below). The player opens in the lightbox when **Open in a lightbox** is on, and in place
 of the poster when it is off. Without a poster the element asks for one instead of
-loading the player.
+loading the player, except where a YouTube video
+[shows YouTube's own thumbnail](#video-youtube-thumbnail).
 
 Each host's player brings its own controls. In the lightbox, `Esc` closes it until you
 move into the player; from inside the player, `Shift`+`Tab` reaches the close button.
@@ -111,6 +112,21 @@ from their first visit. Google's crawler normally visits from the US, so it is t
 the same way. In *Opt-in everywhere* mode, search engines get the poster. A site
 without Google Analytics or Google Tag Manager, or with the consent banner turned off,
 records no consent, so every visitor there gets the poster.
+
+### A YouTube video without a poster {#video-youtube-thumbnail}
+
+**YouTube thumbnails as posters are rolling out**, so your workspace may not have them
+yet. Once it does, a YouTube video with no **Poster image** shows YouTube's own thumbnail
+of the video as its poster on your published site, and pressing it plays the video as
+any poster does. A YouTube video that **Bring my site** brings in without a poster of
+its own is placed the same way. In the Besigner the element still asks for a poster
+image.
+
+Each visitor's browser loads that thumbnail from YouTube's image server (`i.ytimg.com`)
+as the page loads, so YouTube receives the visitor's IP address and browser details
+even if they never press play. The page's address is not sent with it. To keep a page
+from contacting YouTube until someone presses play, pick your own **Poster image**.
+Vimeo and Wistia videos always need a poster of your own.
 
 ## Starting the film from a button {#video-play-from-a-button}
 

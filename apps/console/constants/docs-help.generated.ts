@@ -1185,7 +1185,7 @@ export const DOCS_HELP_ANCHORS = {
   useShippingeasy: ['#before-you-start', '#connect', '#what-is-sent', '#ship', '#manage', '#troubleshooting', '#related'],
   useShipstation: ['#connect', '#what-imports', '#ship', '#manage', '#troubleshooting', '#related'],
   versionsAndPublishing: ['#the-versions-dialog', '#publish--roll-back', '#layout-versions', '#scheduled-publishing', '#plan-requirements', '#related'],
-  video: ['#video-source', '#video-preload', '#video-captions', '#video-lightbox', '#video-wistia', '#video-play-from-a-button', '#video-seo', '#related'],
+  video: ['#video-source', '#video-preload', '#video-captions', '#video-lightbox', '#video-wistia', '#video-youtube-thumbnail', '#video-play-from-a-button', '#video-seo', '#related'],
   views: ['#the-views-control', '#a-view-is-a-link', '#filters', '#filters-on-the-contacts-list', '#filters-on-the-other-lists', '#columns-and-sort', '#segments-and-views', '#who-sees-what', '#related'],
   waivers: ['#your-waivers', '#write-a-waiver', '#versions', '#how-long-a-signature-lasts', '#share-it-before-riders-arrive', '#signing-electronically', '#on-your-site', '#sign-at-the-window', '#at-check-in', '#how-a-rider-is-matched', '#on-the-customer-display', '#minors', '#paper-waivers', '#find-a-signature', '#a-signatures-record', '#contacts', '#privacy', '#keeping-signed-waivers', '#related'],
   webhooks: ['#outbound-webhooks', '#slack', '#inbound-webhooks', '#tips', '#related'],
