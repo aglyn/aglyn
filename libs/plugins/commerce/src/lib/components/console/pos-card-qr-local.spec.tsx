@@ -185,6 +185,9 @@ jest.mock('@aglyn/aglyn', () => ({
   // failing on an undefined function rather than on anything it tests.
   checkHostRegisterQuota: () => ({ limit: 5 }),
   checkQuota: () => ({ limit: 5 }),
+  // The point of sale's plan prompt (AGL-4038): on the plan, so no prompt.
+  checkEntitlement: () => true,
+  planLabelGrantingFeature: () => 'Pro',
 }))
 
 import { PosConsolePage } from './pos-page.component'
