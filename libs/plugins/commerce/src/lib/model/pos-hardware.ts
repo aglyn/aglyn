@@ -702,22 +702,41 @@ export interface PosHardwareTaxLine {
 }
 
 /**
- * Where an order was sold (AGL-4038): the Hardware card's checkout, or the
- * platform's own register, in person. Absent on every order sold before the
- * in-person sale existed, which were all online; read it through
- * {@link posHardwareOrderSource}.
+ * Where an order was sold (AGL-4038): the Hardware card's checkout
+ * (`online`), the platform's own register, in person (`in_person`), or the
+ * platform's own online store, its product pages and cart (`storefront`).
+ * Absent on every order sold before the in-person sale existed, which were
+ * all from the Hardware card; read it through {@link posHardwareOrderSource}.
  */
-export type PosHardwareOrderSource = 'online' | 'in_person'
+export type PosHardwareOrderSource = 'online' | 'in_person' | 'storefront'
 
 export function posHardwareOrderSource(
   order: { source?: unknown } | null | undefined,
 ): PosHardwareOrderSource {
-  return order?.source === 'in_person' ? 'in_person' : 'online'
+  return order?.source === 'in_person' ? 'in_person' : order?.source === 'storefront' ? 'storefront' : 'online'
 }
 
 /**
- * The register sale an in-person order came from: the platform's own store,
- * the register order and its number, and how it was rung.
+ * Whether an order was sold by the platform's own store (AGL-4038), at its
+ * register or online: paid into that store's own account, with the store's
+ * order behind it (`posSale`), and whose buyer may still be to attach. It is
+ * attached, refunded and counted on the tax return the same way either way.
+ */
+export function isPosHardwareSellerStoreSale(order: { source?: unknown } | null | undefined): boolean {
+  const source = posHardwareOrderSource(order)
+  return source === 'in_person' || source === 'storefront'
+}
+
+/** Whether an order is shipped to its buyer, rather than handed over at a register. */
+export function posHardwareShips(order: { source?: unknown } | null | undefined): boolean {
+  return posHardwareOrderSource(order) !== 'in_person'
+}
+
+/**
+ * The store order an order sold by the platform's own store came from: the
+ * store, the order and its number, and how it was rung. For a `storefront`
+ * order it is the store's online order, with no register, and
+ * `paymentLinkSessionId` is the Checkout Session it was paid through.
  */
 export interface PosHardwareRegisterSale {
   hostId: string
@@ -1060,8 +1079,9 @@ export interface PosHardwareSaleRecord {
   posOrderId: string | null
   /**
    * Where the money went: `platform` for the Hardware card's checkout, on
-   * the platform's own Stripe account; `seller_store` for an in-person sale,
-   * the selling store's own takings ({@link PosHardwarePaidTo}).
+   * the platform's own Stripe account; `seller_store` for a sale by the
+   * platform's own store, in person or online, the selling store's own
+   * takings ({@link PosHardwarePaidTo}).
    */
   paidTo: { account: 'platform' } | PosHardwarePaidTo
   /**
@@ -1275,7 +1295,7 @@ export function posHardwareSaleSetOptions(order: PosHardwareOrder): { mergeField
 /** Where a sale's money went, picked by name: never a buyer detail. */
 function salePaidTo(order: Pick<PosHardwareOrder, 'source' | 'paidTo'>): PosHardwareSaleRecord['paidTo'] {
   const paidTo = order.paidTo
-  if (posHardwareOrderSource(order) !== 'in_person' || paidTo?.account !== 'seller_store') {
+  if (!isPosHardwareSellerStoreSale(order) || paidTo?.account !== 'seller_store') {
     return { account: 'platform' }
   }
   return {

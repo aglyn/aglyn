@@ -22,6 +22,7 @@ import type { PluginApiHandler } from '@aglyn/aglyn/server'
 import { firebaseAdmin, readOrgBilling } from '@aglyn/tenant-data-admin'
 import { hostConsoleUrl } from '@aglyn/tenant-data-admin/server/host-console-link'
 import {
+  isPosHardwareSellerStoreSale,
   encodePosHardwareLines,
   isPosHardwareShippingMethod,
   POS_HARDWARE_ANCHOR,
@@ -277,7 +278,8 @@ export async function waitingInPersonReaders(orgId: string, hostId: string) {
     // workspace's people look.
     orders: orders.docs
       .map((doc: any) => ({ id: String(doc.id), order: doc.data() as PosHardwareOrder }))
-      .filter(({ order }) => order.source === 'in_person')
+      // Bought from the platform's own store, at an event or online (AGL-4038).
+      .filter(({ order }) => isPosHardwareSellerStoreSale(order))
       .sort((a, b) => Number(b.order.hostId === hostId) - Number(a.order.hostId === hostId))
       .map(({ id, order }) => ({
         ...merchantHardwareOrderView(id, order),

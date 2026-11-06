@@ -97,6 +97,7 @@ import {
 import { raiseOrderEvent } from './order-events'
 import { handlePosStripeEvent } from './pos-terminal'
 import { notifyPosSaleCompleted } from './pos-sale'
+import { recordSellerStoreSaleHardware, sellerStoreOrderHardwareFields } from './pos-hardware-sale-fields'
 import { posOrderRefundStripeId } from './pos-order-refund-ids'
 
 /**
@@ -2158,6 +2159,28 @@ const SELLER_SHARE_NOT_REVERSED_NOTE: Record<TransferReversalFailure, string> = 
  * every section is idempotent by doc key and self-selects on
  * `object.metadata.type`, exactly as the inline route sections did.
  */
+/**
+ * A Stripe address as an order stores it: only the parts Stripe filled.
+ * Stripe sends an empty part as `null`, and the Admin SDK here refuses an
+ * `undefined` value outright (no `ignoreUndefinedProperties`), so a part is
+ * left out rather than written as `undefined`: an address with no second
+ * line used to fail the whole order write.
+ */
+function stripeOrderAddress(name: unknown, address: any): CommerceModel.OrderAddress {
+  const parts: Record<string, unknown> = {
+    name,
+    line1: address?.line1,
+    line2: address?.line2,
+    city: address?.city,
+    state: address?.state,
+    postalCode: address?.postal_code,
+    country: address?.country,
+  }
+  return Object.fromEntries(
+    Object.entries(parts).filter(([, value]) => typeof value === 'string' && value !== ''),
+  ) as CommerceModel.OrderAddress
+}
+
 export const commerceBillingWebhookHandler: BillingWebhookHandler = async ({
   type,
   object,
@@ -3031,16 +3054,7 @@ export const commerceBillingWebhookHandler: BillingWebhookHandler = async ({
                 null,
               ...(invoiceShipping?.address
                 ? {
-                    shippingAddress: {
-                      name: invoiceShipping?.name ?? undefined,
-                      line1: invoiceShipping.address.line1 ?? undefined,
-                      line2: invoiceShipping.address.line2 ?? undefined,
-                      city: invoiceShipping.address.city ?? undefined,
-                      state: invoiceShipping.address.state ?? undefined,
-                      postalCode:
-                        invoiceShipping.address.postal_code ?? undefined,
-                      country: invoiceShipping.address.country ?? undefined,
-                    },
+                    shippingAddress: stripeOrderAddress(invoiceShipping?.name, invoiceShipping.address),
                   }
                 : {}),
               amountCents: paidCents,
@@ -3651,6 +3665,20 @@ export const commerceBillingWebhookHandler: BillingWebhookHandler = async ({
           console.error('commerce cart local fulfillment unreadable', String(object.id), error)
           return null
         })
+        // Card reader hardware sold online by the platform's own store
+        // (AGL-4038): marked, with the terms the buyer ticked, so it becomes
+        // a hardware order once written. Nothing on any other store.
+        const cartHardware = await sellerStoreOrderHardwareFields({
+          hostId: String(hostId),
+          lineItems,
+          products: productsById,
+          metadata: object?.metadata,
+          createdSeconds: object?.created,
+          orgIdOf: async () => {
+            const owner = await getOrgForHost(String(hostId))
+            return owner?.orgId ?? owner?.org?.id ?? null
+          },
+        })
         const created = await firestore.runTransaction(async (transaction) => {
           const [existing, counter] = await Promise.all([
             transaction.get(orderRef),
@@ -3785,15 +3813,7 @@ export const commerceBillingWebhookHandler: BillingWebhookHandler = async ({
             // billing address Stripe falls back to is not where it goes.
             ...(shipping?.address && cartLocalFulfillment?.fields.fulfillmentMethod !== 'pickup'
               ? {
-                  shippingAddress: {
-                    name: shipping?.name ?? undefined,
-                    line1: shipping.address.line1 ?? undefined,
-                    line2: shipping.address.line2 ?? undefined,
-                    city: shipping.address.city ?? undefined,
-                    state: shipping.address.state ?? undefined,
-                    postalCode: shipping.address.postal_code ?? undefined,
-                    country: shipping.address.country ?? undefined,
-                  },
+                  shippingAddress: stripeOrderAddress(shipping?.name, shipping.address),
                 }
               : {}),
             // How it reaches the buyer, and the list fields the pickup and
@@ -3802,6 +3822,7 @@ export const commerceBillingWebhookHandler: BillingWebhookHandler = async ({
             ...(couponCode ? { couponCode } : {}),
             amountCents: Number(object?.amount_total ?? 0),
             feeCents: Number(feeCents ?? 0),
+            ...cartHardware,
             createdAtMs: Date.now(),
             createdAt: firebaseAdmin.firestore.FieldValue.serverTimestamp(),
           }))
@@ -3812,6 +3833,11 @@ export const commerceBillingWebhookHandler: BillingWebhookHandler = async ({
         // the non-idempotent effects below (inventory / coupon / gift-card
         // decrements) that would otherwise double-apply.
         if (!created) return
+        // Its hardware order, by the register's own recorder (AGL-4038). A
+        // miss stays marked and the To attach sweep records it.
+        if (cartHardware.hardwareSalePending) {
+          await recordSellerStoreSaleHardware({ hostId: String(hostId), orderId: String(object.id) })
+        }
         const cartOrderLabel = CommerceModel.formatOrderNumber(
           { number: cartOrderNumber },
           String(object.id),
@@ -4711,15 +4737,7 @@ export const commerceBillingWebhookHandler: BillingWebhookHandler = async ({
                 : {}),
               ...(shipTo?.address
                 ? {
-                    shippingAddress: {
-                      name: shipTo.name ?? undefined,
-                      line1: shipTo.address.line1 ?? undefined,
-                      line2: shipTo.address.line2 ?? undefined,
-                      city: shipTo.address.city ?? undefined,
-                      state: shipTo.address.state ?? undefined,
-                      postalCode: shipTo.address.postal_code ?? undefined,
-                      country: shipTo.address.country ?? undefined,
-                    },
+                    shippingAddress: stripeOrderAddress(shipTo.name, shipTo.address),
                   }
                 : {}),
             },
@@ -5082,6 +5100,19 @@ export const commerceBillingWebhookHandler: BillingWebhookHandler = async ({
           console.error('commerce buy-now local fulfillment unreadable', String(object.id), error)
           return null
         })
+        // Card reader hardware sold online by the platform's own store
+        // (AGL-4038), as the cart branch marks it.
+        const buyNowHardware = await sellerStoreOrderHardwareFields({
+          hostId: String(hostId),
+          lineItems: buyNowLineItems.map((line) => ({ ...line, productId: String(productId) })),
+          products: new Map([[String(productId), liftedForSnapshot]]),
+          metadata: object?.metadata,
+          createdSeconds: object?.created,
+          orgIdOf: async () => {
+            const owner = await getOrgForHost(String(hostId))
+            return owner?.orgId ?? owner?.org?.id ?? null
+          },
+        })
         const created = await firestore.runTransaction(async (transaction) => {
           const [existing, counter] = await Promise.all([
             transaction.get(orderRef),
@@ -5129,15 +5160,7 @@ export const commerceBillingWebhookHandler: BillingWebhookHandler = async ({
             // billing address is not where a parcel goes.
             ...(object?.shipping_details?.address
               ? {
-                  shippingAddress: {
-                    name: object.shipping_details.name ?? undefined,
-                    line1: object.shipping_details.address.line1 ?? undefined,
-                    line2: object.shipping_details.address.line2 ?? undefined,
-                    city: object.shipping_details.address.city ?? undefined,
-                    state: object.shipping_details.address.state ?? undefined,
-                    postalCode: object.shipping_details.address.postal_code ?? undefined,
-                    country: object.shipping_details.address.country ?? undefined,
-                  },
+                  shippingAddress: stripeOrderAddress(object.shipping_details.name, object.shipping_details.address),
                 }
               : {}),
             // How it reaches the buyer, and the queue fields (AGL-3624).
@@ -5149,6 +5172,7 @@ export const commerceBillingWebhookHandler: BillingWebhookHandler = async ({
             feeCents: Number(feeCents ?? 0),
             customerEmail: object?.customer_details?.email ?? null,
             ...(couponCode ? { couponCode } : {}),
+            ...buyNowHardware,
             createdAt: firebaseAdmin.firestore.FieldValue.serverTimestamp(),
           }))
           return true
@@ -5156,6 +5180,10 @@ export const commerceBillingWebhookHandler: BillingWebhookHandler = async ({
         // Redelivery guard (AGL-498): skip the notification + fulfilment side
         // effects when this order already existed.
         if (!created) return
+        // Its hardware order, by the register's own recorder (AGL-4038).
+        if (buyNowHardware.hardwareSalePending) {
+          await recordSellerStoreSaleHardware({ hostId: String(hostId), orderId: String(object.id) })
+        }
         const buyNowOrderLabel = CommerceModel.formatOrderNumber(
           { number: buyNowOrderNumber },
           String(object.id),

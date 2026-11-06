@@ -332,7 +332,7 @@ function ToAttachDialog(props: {
               <ListItemText
                 primary={`${row.lines.map((line) => `${line.quantity} × ${line.name}`).join(', ')} · ${formatPosHardwareCents(row.totalCents)}`}
                 secondary={[
-                  row.registerNumber ? `Sale #${row.registerNumber}` : row.number,
+                  row.registerNumber ? `${row.online ? 'Online order' : 'Sale'} #${row.registerNumber}` : row.number,
                   new Date(row.createdAtMs).toLocaleString(),
                   row.kiosk ? 'at the kiosk' : null,
                   row.offline ? 'rung offline' : null,

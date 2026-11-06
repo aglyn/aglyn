@@ -261,6 +261,8 @@ interface Scenario {
   billing?: string
   /** What the shopper declared, exactly as it arrives over the wire. */
   shippingCountry?: unknown
+  /** The terms of sale answers, for card reader hardware (AGL-4038). */
+  hardwareTerms?: unknown
 }
 
 /** Seeds a host that can sell one 400g $30 physical product. */
@@ -303,6 +305,7 @@ async function runCheckout(scenario: Scenario = {}) {
       ...('shippingCountry' in scenario
         ? { shippingCountry: scenario.shippingCountry }
         : {}),
+      ...('hardwareTerms' in scenario ? { hardwareTerms: scenario.hardwareTerms } : {}),
     },
     cookies: {},
     headers: { host: 'shop.example.com' },
@@ -622,5 +625,68 @@ describe('buy-now checkout shipping options (AGL-1720)', () => {
     expect(body?.get('metadata[discountCents]')).toBe('0')
     expect(body?.get('automatic_tax[enabled]')).toBe('true')
     expect(shippingOptions(body)).toHaveLength(1)
+  })
+})
+
+/*
+ * Buy-now of card reader hardware on the platform's own store (AGL-4038),
+ * as the cart reads it: the terms of sale ticked, never a subscription, taxed
+ * as goods, the acceptance carried on the session.
+ */
+describe('buying card reader hardware now on the platform’s own store (AGL-4038)', () => {
+  const SELLER = {
+    POS_HARDWARE_IN_PERSON_ENABLED: 'true',
+    POS_HARDWARE_SELLER_HOST_ID: 'host-1',
+    POS_HARDWARE_SELLER_ORG_ID: 'org-1',
+  }
+  const realFetch = global.fetch
+  const realKey = process.env.STRIPE_SECRET_KEY
+  beforeAll(() => {
+    global.fetch = fetchMock as unknown as typeof fetch
+    process.env.STRIPE_SECRET_KEY = 'sk_test_fake_never_used'
+  })
+  afterAll(() => {
+    global.fetch = realFetch
+    process.env.STRIPE_SECRET_KEY = realKey as string
+  })
+  beforeEach(() => Object.assign(process.env, SELLER))
+  afterEach(() => {
+    for (const name of Object.keys(SELLER)) delete process.env[name]
+  })
+  const reader = { hardwareSku: 'stripe-reader-s700', name: 'Touchscreen reader (S700)' }
+
+  it('refuses it without the terms of sale and business use, before Stripe', async () => {
+    const { result, body } = await runCheckout({ product: reader })
+    expect(result.status).toBe(400)
+    expect(result.body.needsHardwareTerms).toBe(true)
+    expect(body).toBeNull()
+  })
+
+  it('taxes it as goods and carries the acceptance once both are ticked', async () => {
+    const { result, body } = await runCheckout({
+      product: reader,
+      hardwareTerms: { accepted: true, businessUse: true },
+    })
+    expect(result.status).toBe(200)
+    expect(body!.get('line_items[0][price_data][product_data][tax_code]')).toBe('txcd_99999999')
+    expect(body!.get('metadata[hardwareTermsBusinessUse]')).toBe('true')
+    expect(body!.get('metadata[type]')).toBe('commerce-order')
+  })
+
+  it('refuses it as a subscription', async () => {
+    const { result, body } = await runCheckout({
+      product: { ...reader, subscription: { interval: 'month' } },
+      hardwareTerms: { accepted: true, businessUse: true },
+    })
+    expect(result.status).toBe(400)
+    expect(result.body.error).toBe('Card reader hardware is bought once, not by subscription.')
+    expect(body).toBeNull()
+  })
+
+  it('leaves every other product alone', async () => {
+    const { result, body } = await runCheckout({})
+    expect(result.status).toBe(200)
+    expect(body!.get('line_items[0][price_data][product_data][tax_code]')).toBeNull()
+    expect(body!.get('metadata[hardwareTermsVersion]')).toBeNull()
   })
 })

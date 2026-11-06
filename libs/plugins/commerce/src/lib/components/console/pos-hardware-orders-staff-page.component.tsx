@@ -99,7 +99,14 @@ const TENDER_LABELS: Record<string, string> = {
   credit: 'store credit',
 }
 
-/** Whose an in-person order is, in a line (AGL-4038). */
+/** Where an order was sold, as the list says it (AGL-4038). */
+const SOLD_LABELS: Record<string, string> = {
+  online: 'Online',
+  in_person: 'In person',
+  storefront: 'Online store',
+}
+
+/** Whose an order sold by our own store is, in a line (AGL-4038). */
 function attachedTo(order: StaffHardwareOrderRow): string {
   const attachment = order.attachment
   if (!attachment) return '—'
@@ -296,7 +303,7 @@ export function PosHardwareOrdersStaffPage(props: ConsoleStaffPageProps) {
         headerName: 'Sold',
         minWidth: 110,
         valueGetter: (_value: unknown, row: StaffHardwareOrderRow) =>
-          row.source === 'in_person' ? (row.attachment?.state === 'pending' ? 'In person · to attach' : 'In person') : 'Online',
+          `${SOLD_LABELS[row.source] ?? SOLD_LABELS.online}${row.source !== 'online' && row.attachment?.state === 'pending' ? ' · to attach' : ''}`,
       },
       {
         field: 'createdAtMs',
@@ -373,6 +380,9 @@ export function PosHardwareOrdersStaffPage(props: ConsoleStaffPageProps) {
   )
 
   const inPerson = open?.source === 'in_person'
+  // Sold by our own store, at its register or online (AGL-4038): the store
+  // order behind it, whose it is, and the store's account it was paid into.
+  const sellerStore = inPerson || open?.source === 'storefront'
   const next = open ? nextPosHardwareStatus(open.status) : null
   const closed = open ? open.status === 'canceled' || open.status === 'refunded' : true
   // A reader sold in person refunds what is left of it, its own way, until
@@ -454,17 +464,25 @@ export function PosHardwareOrdersStaffPage(props: ConsoleStaffPageProps) {
         <DialogTitle>{open ? `Hardware order ${open.number}` : ''}</DialogTitle>
         {open ? (
           <DialogContent sx={{ display: 'flex', flexDirection: 'column', gap: 2 }}>
-            {inPerson ? (
+            {sellerStore ? (
               <Stack spacing={0.5} sx={{ mt: 1 }}>
-                <Typography variant="subtitle2">{'Sold in person'}</Typography>
-                {open.lines.map((line) => (
-                  <Typography key={line.sku} variant="body2">
-                    {`${line.quantity} × ${line.name}`}
-                  </Typography>
-                ))}
+                <Typography variant="subtitle2">{inPerson ? 'Sold in person' : 'Sold on our online store'}</Typography>
+                {inPerson
+                  ? open.lines.map((line) => (
+                      <Typography key={line.sku} variant="body2">
+                        {`${line.quantity} × ${line.name}`}
+                      </Typography>
+                    ))
+                  : null}
                 <Typography variant="body2" color="text.secondary">
                   {[
-                    open.posSale?.number ? `Register sale #${open.posSale.number}` : 'Register sale',
+                    inPerson
+                      ? open.posSale?.number
+                        ? `Register sale #${open.posSale.number}`
+                        : 'Register sale'
+                      : open.posSale?.number
+                        ? `Online order #${open.posSale.number}`
+                        : 'Online order',
                     open.posSale?.kiosk ? 'at the kiosk' : null,
                     open.posSale?.offline ? 'rung offline' : null,
                     `paid ${formatPosHardwareCents(open.totalCents)}`,
@@ -496,7 +514,7 @@ export function PosHardwareOrdersStaffPage(props: ConsoleStaffPageProps) {
                       : `Return request ${open.returnRequest.state}${open.returnRequest.note ? `: ${open.returnRequest.note}` : ''}.`}
                   </Alert>
                 ) : null}
-                {open.contactEmail ? (
+                {inPerson && open.contactEmail ? (
                   <Typography variant="body2" color="text.secondary">
                     {open.contactEmail}
                   </Typography>
@@ -566,7 +584,7 @@ export function PosHardwareOrdersStaffPage(props: ConsoleStaffPageProps) {
               </Button>
             </Guarded>
           ) : null}
-          {inPerson && (open?.contactEmail || open?.attachment?.email || open?.attachment?.uid) ? (
+          {sellerStore && (open?.contactEmail || open?.attachment?.email || open?.attachment?.uid) ? (
             <Guarded reason={writeReason}>
               <Button color="error" disabled={busy} onClick={() => void forgetBuyer()}>
                 {"Remove buyer's details"}
@@ -631,9 +649,11 @@ export function PosHardwareOrdersStaffPage(props: ConsoleStaffPageProps) {
                 ? `${formatPosHardwareCents(Math.max(0, returnCents - (centsOf(returning.restockingFee ?? '') ?? 0)))} goes back to the card it was paid with: the items and their tax. The original shipping is not refunded, and a restocking fee Stripe charged for the return comes off.`
                 : open?.source === 'in_person'
                 ? `${formatPosHardwareCents(open.totalCents - open.refundedCents)} goes back to the card the register sale was paid with, from the selling store's own account. Under the hardware terms of sale the buyer sends the reader back at their cost.`
-                : open
-                  ? `${formatPosHardwareCents(open.totalCents)} goes back to the card it was paid with. Cancel the order in the Stripe Dashboard too if it was already placed there.`
-                  : ''}
+                : open?.source === 'storefront'
+                  ? `${formatPosHardwareCents(open.totalCents - open.refundedCents)} goes back to the card it was paid with, from the selling store's own account. Cancel the order with the supplier too if it was already placed there.`
+                  : open
+                    ? `${formatPosHardwareCents(open.totalCents)} goes back to the card it was paid with. Cancel the order in the Stripe Dashboard too if it was already placed there.`
+                    : ''}
             </DialogContentText>
             {returning?.action === 'refund-return' ? (
               <TextField

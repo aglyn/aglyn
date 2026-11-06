@@ -56,6 +56,8 @@ export interface ToAttachRow {
   registerOrderId: string | null
   registerNumber: number | null
   kiosk: boolean
+  /** Bought from the store's own product pages or cart (AGL-4038), not at the register. */
+  online?: boolean
   offline: boolean
   lines: Array<{ sku: PosHardwareSkuId; name: string; quantity: number }>
   totalCents: number

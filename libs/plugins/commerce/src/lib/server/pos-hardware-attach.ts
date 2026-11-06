@@ -22,6 +22,7 @@ import {
 } from '@aglyn/tenant-data-admin/server/auth-pools'
 import type { OrderHardwareBuyer } from '../model/commerce-orders'
 import {
+  isPosHardwareSellerStoreSale,
   POS_HARDWARE_ORDER_ID,
   posHardwareBuyerAddress,
   posHardwareSaleRecord,
@@ -200,8 +201,8 @@ async function moveRecordedOrder(input: {
     const from = await transaction.get(fromRef)
     if (!from.exists) throw new PosHardwareAttachRefusal('No such card reader sale.', 404)
     const before = from.data() as PosHardwareOrder
-    if (before.source !== 'in_person' || before.posSale?.hostId !== config.sellerHostId) {
-      throw new PosHardwareAttachRefusal('Only a card reader sold in person here can be attached.', 409)
+    if (!isPosHardwareSellerStoreSale(before) || before.posSale?.hostId !== config.sellerHostId) {
+      throw new PosHardwareAttachRefusal('Only a card reader sold by this store can be attached.', 409)
     }
     if (before.status === 'canceled' || before.status === 'refunded') {
       throw new PosHardwareAttachRefusal('This sale was refunded and can no longer be attached.', 409)
@@ -407,8 +408,8 @@ export async function detachPosHardwareSale(input: {
     const from = await transaction.get(fromRef)
     if (!from.exists) throw new PosHardwareAttachRefusal('No such card reader sale.', 404)
     const before = from.data() as PosHardwareOrder
-    if (before.source !== 'in_person' || before.posSale?.hostId !== config.sellerHostId) {
-      throw new PosHardwareAttachRefusal('Only a card reader sold in person here can be detached.', 409)
+    if (!isPosHardwareSellerStoreSale(before) || before.posSale?.hostId !== config.sellerHostId) {
+      throw new PosHardwareAttachRefusal('Only a card reader sold by this store can be detached.', 409)
     }
     if (before.attachment?.state !== 'attached') return { order: before }
     if ((before.units ?? []).some((unit) => unit.readerId)) {

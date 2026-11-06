@@ -40,6 +40,10 @@ import {
   type CarrierShippingPlan,
 } from './carrier-shipping'
 import { readCartId } from './cart-cookie'
+import { readClientIp } from '@aglyn/aglyn/app-utils/request-ip'
+import { POS_HARDWARE_TAX_CODE } from '../model/pos-hardware'
+import { posHardwareTermsMetadata } from '../model/pos-hardware-terms'
+import { sellerStoreHardwareCheckout } from './pos-hardware-sale-fields'
 import { readStoreDay } from './store-day'
 import { resolveManualTaxRateId } from './manual-tax-rate'
 import {
@@ -405,6 +409,33 @@ export const cartCheckoutHandler: PluginApiHandler = async (req, res) => {
         `${product.name}${lineLabel ? ` (${lineLabel})` : ''}`.slice(0, 120),
       )
     })
+
+    // CARD READER HARDWARE ON THE PLATFORM'S OWN STORE (AGL-4038): taxed as
+    // goods, the terms of sale and business use ticked, the online order
+    // limits held, and the acceptance carried for the order. Above the
+    // claim, like the line refusals, so a refusal keeps the key. Every other
+    // store is answered from the environment alone.
+    const hardware = sellerStoreHardwareCheckout({
+      hostId,
+      orgId: String(ownerOrg?.org?.id ?? ownerOrg?.orgId ?? ''),
+      lines: cart.lines,
+      products: productsById,
+      hardwareTerms: body.hardwareTerms,
+    })
+    if (hardware.refusal) {
+      const { status: refusedStatus, ...refusal } = hardware.refusal
+      return res.status(refusedStatus).json(refusal)
+    }
+    if (hardware.hardware) {
+      hardware.skus.forEach((sku, index) => {
+        if (sku) params.set(`line_items[${index}][price_data][product_data][tax_code]`, POS_HARDWARE_TAX_CODE)
+      })
+      const terms = posHardwareTermsMetadata({
+        ip: readClientIp(req.headers as never) ?? null,
+        userAgent: String(req.headers?.['user-agent'] ?? '') || null,
+      })
+      for (const [key, value] of Object.entries(terms)) params.set(`metadata[${key}]`, value)
+    }
 
     // GIFT CARDS ARE A CASH-OUT (AGL-3363): a ceiling per order, and per
     // visitor per day, lower while the workspace is young. Above the claim,

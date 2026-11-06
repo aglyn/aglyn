@@ -282,7 +282,11 @@ export function posHardwareTaxSummary(
  * fall either side of a period's edge still meet.
  *=========================================*/
 
-/** The part of a storefront row an in-person hardware record accounts for. */
+/**
+ * The part of a storefront row a hardware record of the platform's own store
+ * accounts for: an in-person sale's payment-link row, or an online order's
+ * own row (AGL-4038), filed under its Checkout Session id the same way.
+ */
 export interface PosHardwareStorefrontPart {
   storefrontTaxRowId: string
   /** The hardware's share of the register sale, tax included. */
@@ -301,7 +305,8 @@ export function posHardwareStorefrontParts(
   }>,
 ): PosHardwareStorefrontPart[] {
   return records.flatMap((record) =>
-    record.source === 'in_person' &&
+    // A sale by the platform's own store, at its register or online (AGL-4038).
+    (record.source === 'in_person' || record.source === 'storefront') &&
     record.livemode === true &&
     typeof record.storefrontTaxRowId === 'string' &&
     record.storefrontTaxRowId
