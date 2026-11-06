@@ -15,6 +15,8 @@ content on the marketing site and is written separately.
 
 ### Added
 
+- **commerce:** product builder on storefront product pages ([AGL-4205](https://linear.app/aglyn/issue/AGL-4205))
+- **commerce:** a storefront line takes up to 9,999, not 99 ([AGL-4205](https://linear.app/aglyn/issue/AGL-4205))
 - **commerce:** in-person card payments on the store's own Stripe account
 - **besigner:** table rows, columns and cell formatting on the canvas ([AGL-4203](https://linear.app/aglyn/issue/AGL-4203))
 - **commerce:** a Photo fit setting on the Product grid and Related products
@@ -45,8 +47,9 @@ content on the marketing site and is written separately.
 - **outreach:** the sync job reads an organization's watched enrollments once per run ([AGL-4121](https://linear.app/aglyn/issue/AGL-4121))
 
 <details>
-<summary>Also in this release: 2 test, 3 chore, 1 docs</summary>
+<summary>Also in this release: 2 test, 3 chore, 2 docs</summary>
 
+- **commerce:** picture cards, combos and free mockup requests ([AGL-4205](https://linear.app/aglyn/issue/AGL-4205))
 - **native:** regenerate the contracts for the direct-charge payment fields
 - **self-host:** name AGLYN_DEBUG_MIDDLEWARE in the environment reference ([AGL-4121](https://linear.app/aglyn/issue/AGL-4121))
 - **console:** the video-upload gate spec reads the org through a field-masked getAll ([AGL-4121](https://linear.app/aglyn/issue/AGL-4121))
