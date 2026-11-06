@@ -159,7 +159,10 @@ const MUI_UTILS_SURFACE = ['createSvgIcon']
  * - registration (`defineUiFeatureBundle`, console extensions and slots);
  * - the React contexts an element reads (the declaring files, not the
  *   `contexts` re-export, which reaches every context core has);
- * - site functions and variables, which an element may run in the browser.
+ * - site functions and variables, which an element may run in the browser;
+ * - the record of a connection the plugin declares (AGL-4195): the hook
+ *   alone, never the context it reads, so a bundle cannot hand itself
+ *   another listing's record.
  */
 const CORE_SURFACE = [
   'aglyn',
@@ -175,6 +178,7 @@ const CORE_SURFACE = [
   'app-utils/functions',
   'app-utils/variables',
   'app-utils/binding-tokens',
+  'app-utils/plugin-connection-record',
 ]
 
 function workspaceAliases() {

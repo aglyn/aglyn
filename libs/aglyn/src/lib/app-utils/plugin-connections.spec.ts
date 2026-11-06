@@ -23,9 +23,13 @@ import {
   preparePluginConnectionRequest,
   readPluginConnectionPath,
   validatePluginConnections,
+  pluginConnectionRecordVariables,
+  pluginConnectionVariableId,
+  PLUGIN_MAX_IMAGE_HOSTS,
   validatePluginImageHosts,
   type PluginConnectionDeclaration,
 } from './plugin-connections'
+import { resolveBindings } from './variables'
 
 /**
  * Declared connections (AGL-4193): the manifest block a marketplace plugin
@@ -239,6 +243,76 @@ describe('validatePluginImageHosts (AGL-4193)', () => {
     expect(validatePluginImageHosts(['*.com']).ok).toBe(false)
     expect(validatePluginImageHosts(['http://lh3.example.com']).ok).toBe(false)
     expect(validatePluginImageHosts(Array.from({ length: 11 }, (_, i) => `h${i}.example.com`)).ok).toBe(false)
+  })
+
+  it('holds a plugin to five https hosts, one wildcard label at most, never data: (AGL-4195)', () => {
+    expect(PLUGIN_MAX_IMAGE_HOSTS).toBe(5)
+    const five = Array.from({ length: 5 }, (_, i) => `h${i}.example.com`)
+    expect(validatePluginImageHosts(five).ok).toBe(true)
+    expect(validatePluginImageHosts([...five, 'h5.example.com']).ok).toBe(false)
+    for (const refused of ['data:', 'data:image/png', 'https://lh3.example.com', 'lh3.example.com:443', 'lh3.example.com/a', '*.*.example.com', '*', '*.com', 'LH3.example.com', '127.0.0.1', 'localhost']) {
+      expect(validatePluginImageHosts([refused]).ok).toBe(false)
+    }
+    expect(validatePluginImageHosts(['*.googleusercontent.com']).ok).toBe(true)
+  })
+})
+
+describe('site variables from a connection record (AGL-4195)', () => {
+  const [connection] = (validatePluginConnections([REVIEWS_CONNECTION]) as { value: PluginConnectionDeclaration[] }).value
+
+  it('names each summary field {listingId}__{connectionId}-{field}', () => {
+    expect(pluginConnectionVariableId('Kq3listing', 'reviews', 'averageRating')).toBe('Kq3listing__reviews-averageRating')
+  })
+
+  it('never spells two fields, or a site’s own Firestore id, the same', () => {
+    // A listing id may hold `_` and `-`; a connection id never holds `_`; a field never holds `-`.
+    const ids = [
+      pluginConnectionVariableId('a_', 'bb-cc', 'd'),
+      pluginConnectionVariableId('a', 'bb-cc', 'd'),
+      pluginConnectionVariableId('a__bb', 'cc', 'd'),
+      pluginConnectionVariableId('a', 'bb', 'cc__d'),
+      pluginConnectionVariableId('a-bb', 'cc', 'd'),
+      pluginConnectionVariableId('a', 'bb-cc-d', 'e'),
+      pluginConnectionVariableId('a', 'bb-cc', 'd_e'),
+    ]
+    expect(ids.every((id) => typeof id === 'string')).toBe(true)
+    expect(new Set(ids).size).toBe(ids.length)
+    for (const id of ids) expect(id).toMatch(/__/)
+    // A Firestore auto id is twenty letters and digits.
+    expect(ids.some((id) => /^[A-Za-z0-9]{20}$/.test(String(id)))).toBe(false)
+  })
+
+  it('has no variable for a field whose id would not fit a token, or a malformed part', () => {
+    expect(pluginConnectionVariableId('x'.repeat(50), 'reviews', 'averageRating')).toBeNull()
+    expect(pluginConnectionVariableId('listing', 'Reviews', 'rating')).toBeNull()
+    expect(pluginConnectionVariableId('listing', 'reviews', 'bad-field')).toBeNull()
+    expect(pluginConnectionVariableId('list/ing', 'reviews', 'rating')).toBeNull()
+  })
+
+  it('types each declared summary field and leaves the rest out', () => {
+    const withDate = clone(connection) as PluginConnectionDeclaration
+    withDate.sync!.record.fields!['updated'] = { request: 'reviews', type: 'datetime', path: 'updateTime' }
+    withDate.sync!.record.fields!['open'] = { request: 'reviews', type: 'boolean', path: 'open' }
+    const variables = pluginConnectionRecordVariables('L1', withDate, {
+      averageRating: 4.8,
+      totalReviewCount: 'not a number',
+      updated: Date.UTC(2026, 10, 1),
+      open: true,
+      undeclared: 'never shown',
+    })
+    expect(variables).toEqual({
+      'L1__reviews-averageRating': { name: 'L1__reviews-averageRating', type: 'number', value: '4.8' },
+      'L1__reviews-updated': { name: 'L1__reviews-updated', type: 'date', value: '2026-11-01T00:00:00.000Z' },
+      'L1__reviews-open': { name: 'L1__reviews-open', type: 'boolean', value: 'true' },
+    })
+    expect(pluginConnectionRecordVariables('L1', withDate, null)).toEqual({})
+  })
+
+  it('resolves as {{var:…}} through the site’s own binding', () => {
+    const variables = pluginConnectionRecordVariables('L1', connection, { averageRating: 4.8, totalReviewCount: 212 })
+    expect(resolveBindings('{{var:L1__reviews-averageRating}} from {{var:L1__reviews-totalReviewCount}} reviews', variables)).toBe(
+      '4.8 from 212 reviews',
+    )
   })
 })
 
