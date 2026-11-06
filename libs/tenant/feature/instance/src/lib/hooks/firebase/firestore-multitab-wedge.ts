@@ -636,6 +636,132 @@ export function createWedgeEscalation(
 }
 
 /**
+ * A TAB THAT IS STILL BOOTING DOES NOT WAIT 37 SECONDS TO FIND THE LOCK
+ * (AGL-4201).
+ *
+ * The rescue above is tuned for a tab that already has a page on it. It runs
+ * only once a reader has stalled (`FIRESTORE_STALL_MS`, 8 s), reads the lease
+ * promptly (1 s), settles (3 s) and then gives the lock {@link WEDGE_LOCK_MS}
+ * (20 s) before it believes it, because a tab that is merely busy holds the
+ * store for about 15 s and reloading one loses what was typed into it
+ * (AGL-4135). Plus the reload, that is about 37 s, and it is exactly what a
+ * tab opened while another tab held the store sat through on the site gate's
+ * spinner: measured in production on 2026-11-06, two reloads in three.
+ *
+ * A tab that is still booting has none of what that budget protects. Its
+ * client has had no answer from the server, so nothing it shows came from the
+ * server and nothing typed into it has been read back. And it is waiting on the
+ * same lock either way: its persistence cannot start while another tab's
+ * transaction holds every store (the booting tab had no `clientMetadata` row
+ * 17 s in). So once, about {@link BOOT_WEDGE_CHECK_DELAY_MS} after the client
+ * is created, a visible online tab whose client has not heard from the server
+ * reads the lease, and a store that stays locked for
+ * {@link BOOT_WEDGE_LOCK_MS} moves it to the memory cache straight away,
+ * sharing the lock with the tabs that open next (AGL-4090).
+ *
+ * - **Only a lock.** A lapsed or stale lease at boot is the normal state after
+ *   the last tab went quiet, and a freshly started tab wins it at its first
+ *   election (AGL-3373). Only a store nobody can read is evidence here.
+ * - **Only before the first server answer**, checked before the read and again
+ *   after it. A tab the server has answered is working and is left to the
+ *   stall watch, whose budget is the one that protects a page in use.
+ * - **Only when someone is looking.** A tab opened in the background runs the
+ *   check when it is first shown, which is when its spinner starts costing
+ *   anyone anything.
+ * - **Once per tab.** Never on a tab already on the fallback.
+ *
+ * A false verdict costs a reload of a page with nothing on it, onto the memory
+ * cache, which every lock verdict already costs today, 30 s later.
+ */
+export const BOOT_WEDGE_CHECK_DELAY_MS = 2_000
+
+/**
+ * How long the boot check's lease read may wait before the store counts as
+ * locked. The SDK's own transactions take milliseconds; the read answered in
+ * 1-5 ms on the same production cache once the lock had lifted.
+ */
+export const BOOT_WEDGE_LOCK_MS = 3_000
+
+/** What the boot check did (AGL-4201). */
+export type BootWedgeOutcome =
+  /** The store was locked: this tab is moving to the memory cache. */
+  | 'fell-back'
+  /** The server answered this client first: it is booting fine. */
+  | 'answered'
+  /** The store answered: nothing holds it. */
+  | 'clear'
+  /** The browser reports no network. */
+  | 'offline'
+  /** This tab is already on the fallback. */
+  | 'fallback-active'
+  /** The client does not run the durable multi-tab cache. */
+  | 'not-multi-tab'
+  /** Something unexpected; the stall watch stays in charge. */
+  | 'error'
+
+export interface BootWedgeCheckDeps {
+  /** Reads the lease, bounded by {@link BOOT_WEDGE_LOCK_MS}. */
+  probe: () => Promise<PrimaryLeaseProbe>
+  /** Moves this tab off the shared cache. */
+  fallBack: (evidence: WedgeEvidence) => void
+  /** Whether the server has confirmed anything for this client yet. */
+  hasServerAnswered: () => boolean
+  isFallbackActive?: () => boolean
+  isOnline?: () => boolean
+  /** Resolves once the document is visible, at once when it already is. */
+  whenVisible?: () => Promise<void>
+  wait?: (ms: number) => Promise<void>
+  delayMs?: number
+}
+
+const whenDocumentVisible = (): Promise<void> =>
+  new Promise((resolve) => {
+    if (typeof document === 'undefined' || document.visibilityState !== 'hidden') {
+      resolve()
+      return
+    }
+    const onChange = () => {
+      if (document.visibilityState === 'hidden') return
+      document.removeEventListener('visibilitychange', onChange)
+      resolve()
+    }
+    document.addEventListener('visibilitychange', onChange)
+  })
+
+/** The boot check, with its browser parts injected. Never rejects. */
+export async function runBootWedgeCheck(
+  deps: BootWedgeCheckDeps,
+): Promise<BootWedgeOutcome> {
+  const {
+    probe,
+    fallBack,
+    hasServerAnswered,
+    isFallbackActive = () => memoryCacheFallbackActive(),
+    isOnline = browserOnline,
+    whenVisible = whenDocumentVisible,
+    wait = (ms) => new Promise<void>((resolve) => setTimeout(resolve, ms)),
+    delayMs = BOOT_WEDGE_CHECK_DELAY_MS,
+  } = deps
+  try {
+    if (isFallbackActive()) return 'fallback-active'
+    await wait(delayMs)
+    await whenVisible()
+    if (hasServerAnswered()) return 'answered'
+    if (!isOnline()) return 'offline'
+    const read = await probe()
+    if (read.state !== 'locked') return 'clear'
+    // The read took up to its whole budget; the client may have come through.
+    if (hasServerAnswered()) return 'answered'
+    if (!isOnline()) return 'offline'
+    if (isFallbackActive()) return 'fallback-active'
+    fallBack({ reason: 'lease-locked' })
+    return 'fell-back'
+  } catch {
+    return 'error'
+  }
+}
+
+/**
  * Records the fallback for this tab and reloads it onto the memory cache.
  * When the record cannot be written it does not reload: without it, the
  * reloaded tab would open the same locked database and hang again.
@@ -827,4 +953,27 @@ export function browserLeaseCheckFor(
       return { state: 'silent' }
     }
   }
+}
+
+/**
+ * Runs the boot check (AGL-4201) for `firestore`, which
+ * {@link markMultiTabFirestore} has registered. Call it right after
+ * registering. `hasServerAnswered` is the stall watch's record of server
+ * answers (`firestoreHasServerAnswered`), passed in so this module does not
+ * import the one that imports it. Fire and forget: it never rejects.
+ */
+export function startBootWedgeCheck(
+  firestore: Firestore,
+  hasServerAnswered: () => boolean,
+): Promise<BootWedgeOutcome> {
+  const databaseName = multiTabDatabases.get(firestore)
+  if (databaseName === undefined) return Promise.resolve('not-multi-tab')
+  return runBootWedgeCheck({
+    probe: () =>
+      probePrimaryLease(browserIndexedDb(), databaseName, {
+        timeoutMs: BOOT_WEDGE_LOCK_MS,
+      }),
+    fallBack: (evidence) => fallBackToMemoryCache(evidence, { databaseName }),
+    hasServerAnswered,
+  })
 }

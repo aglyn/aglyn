@@ -9,6 +9,15 @@ content on the marketing site and is written separately.
 
 <!-- releases below -->
 
+## v1.15.1 — 2026-11-06
+
+[Compare with the previous release](https://github.com/aglyn/aglyn/compare/6515249f8...v1.15.1)
+
+### Fixed
+
+- **console:** a page opened while another tab holds the cache loads in seconds ([AGL-4201](https://linear.app/aglyn/issue/AGL-4201), [AGL-3428](https://linear.app/aglyn/issue/AGL-3428), [AGL-4135](https://linear.app/aglyn/issue/AGL-4135), [AGL-4090](https://linear.app/aglyn/issue/AGL-4090))
+- **mui:** over-hero sticky header stays pinned; dropdown panels stay on screen ([AGL-4200](https://linear.app/aglyn/issue/AGL-4200))
+
 ## v1.15.0 — 2026-11-06
 
 [Compare with the previous release](https://github.com/aglyn/aglyn/compare/v1.14.0...v1.15.0)
@@ -68,8 +77,9 @@ content on the marketing site and is written separately.
 - **pricing:** site care project price list on /pricing, and its publish script
 
 <details>
-<summary>Also in this release: 5 test, 6 chore</summary>
+<summary>Also in this release: 6 test, 6 chore</summary>
 
+- **guards:** the emulator sweep runs the commerce plugin's hardware-order spec ([AGL-4038](https://linear.app/aglyn/issue/AGL-4038))
 - **guards:** classify the subscriptions list, dataset rail and Improve it prompt
 - **linear:** raise the issue ceiling to AGL-4199, read from the workspace ([AGL-4199](https://linear.app/aglyn/issue/AGL-4199))
 - **selfhost:** allow the Site Care price publish script's preview link

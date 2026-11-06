@@ -82,7 +82,9 @@ import type { ListenHandle } from '../helpers/listen-confirmation'
 import {
   confirmSharedCacheLock,
   markMultiTabFirestore,
+  startBootWedgeCheck,
 } from './firestore-multitab-wedge'
+import { firestoreHasServerAnswered } from './firestore-stall-recovery'
 import { firestorePersistencePrefix } from './firestore-shared-client-state'
 import { startFirestoreTabHandoff } from './firestore-tab-handoff'
 
@@ -502,6 +504,11 @@ function bootFirebaseCore(
         // so only it gets the lease check after a stalled recovery.
         if (firestoreCacheClass === 'durable' && persistencePrefix && databaseName) {
           markMultiTabFirestore(getFirestore(app), databaseName)
+          // A tab still booting finds another tab's lock in seconds, not
+          // the ~37 s the in-use rescue budgets (AGL-4201).
+          void startBootWedgeCheck(getFirestore(app), () =>
+            firestoreHasServerAnswered(getFirestore(app)),
+          )
           // A visible tab opened while a background tab holds the shared
           // cache's lease takes the lease at boot instead of routing every
           // query through the background tab until its lease lapses
