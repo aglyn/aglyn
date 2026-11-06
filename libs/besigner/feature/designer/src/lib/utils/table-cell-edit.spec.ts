@@ -17,9 +17,23 @@
 
 import { FieldComponentType } from '@aglyn/aglyn'
 import {
+  parseDataTableRows,
+  readDataTableAlignments,
+} from '@aglyn/shared-data-enums'
+import {
+  canvasContextMenuTableCell,
+  clearCanvasContextMenu,
+  requestCanvasContextMenu,
+} from './canvas-context-menu'
+import {
+  dataTableCellActions,
+  dataTableCellValueFromEdit,
   findDataTableAttributeName,
   findDataTableCellAtPoint,
   readDataTableCell,
+  readDataTableCellForEdit,
+  withDataTableShapeEdit,
+  withDataTableStarted,
   writeDataTableCell,
 } from './table-cell-edit'
 
@@ -89,5 +103,114 @@ describe('table cell edit', () => {
     expect(hit?.element.textContent).toBe('D')
     expect(findDataTableCellAtPoint(host, 500, 500)).toBe(undefined)
     host.remove()
+  })
+})
+
+describe('table rows, columns and formatted cells on the canvas (AGL-4203)', () => {
+  it('opens a formatted cell with its words and its markup', () => {
+    const grid = 'A | B\n<b>Yes</b> &amp; more | plain'
+    expect(readDataTableCellForEdit(grid, 1, 0)).toEqual({
+      text: 'Yes & more',
+      html: '<b>Yes</b> &amp; more',
+    })
+    expect(readDataTableCellForEdit(grid, 1, 1)).toEqual({
+      text: 'plain',
+      html: '',
+    })
+  })
+
+  it('stores markup only when there is formatting, or text that reads as markup', () => {
+    expect(dataTableCellValueFromEdit('Yes', 'Yes')).toBe('Yes')
+    expect(dataTableCellValueFromEdit('Yes', '<b>Yes</b>')).toBe('<b>Yes</b>')
+    // Typed literally, `&amp;` must not render as `&`.
+    expect(dataTableCellValueFromEdit('AT&amp;T', 'AT&amp;amp;T')).toBe(
+      'AT&amp;amp;T',
+    )
+    // Ordinary text with a `<` or an `&` stays plain.
+    expect(dataTableCellValueFromEdit('a < b & c', 'a &lt; b &amp; c')).toBe(
+      'a < b & c',
+    )
+  })
+
+  it('writes a formatted cell into the grid without breaking the row', () => {
+    const next = writeDataTableCell(
+      GRID,
+      2,
+      1,
+      '<a href="https://x.test/?a|b" rel="noopener noreferrer">Yes</a>',
+    )
+    // Row 2 of the parsed grid: the divider is not a row.
+    expect(parseDataTableRows(next)[2]).toEqual([
+      'Self-hostable',
+      '<a href="https://x.test/?a|b" rel="noopener noreferrer">Yes</a>',
+      'No',
+    ])
+  })
+
+  it('moves the emphasized column with its column', () => {
+    const props = { rows: GRID, emphasizeColumn: 2, headerRow: true }
+    const inserted = withDataTableShapeEdit(props, 'rows', {
+      kind: 'insertColumn',
+      at: 0,
+    })
+    expect(inserted['emphasizeColumn']).toBe(3)
+    expect(inserted['headerRow']).toBe(true)
+    expect(readDataTableAlignments(inserted['rows'], 4)).toEqual([
+      'left',
+      'left',
+      'center',
+      'right',
+    ])
+    const removed = withDataTableShapeEdit(props, 'rows', {
+      kind: 'removeColumn',
+      at: 1,
+    })
+    expect(removed['emphasizeColumn']).toBe(0)
+    // A row edit leaves the emphasis exactly as stored.
+    const row = withDataTableShapeEdit(
+      { rows: GRID, emphasizeColumn: '2' },
+      'rows',
+      { kind: 'insertRow', at: 1 },
+    )
+    expect(row['emphasizeColumn']).toBe('2')
+    expect(parseDataTableRows(row['rows'])).toHaveLength(4)
+  })
+
+  it('offers the six cell actions, with the last row and column kept', () => {
+    const labels = dataTableCellActions(GRID, 1, 2).map((a) => a.label)
+    expect(labels).toEqual([
+      'Insert row above',
+      'Insert row below',
+      'Insert column left',
+      'Insert column right',
+      'Delete row',
+      'Delete column',
+    ])
+    const below = dataTableCellActions(GRID, 1, 2)[1]
+    expect(below.edit).toEqual({ kind: 'insertRow', at: 2 })
+    const single = dataTableCellActions('Only', 0, 0)
+    expect(single.find((a) => a.key === 'row-delete')?.disabled).toBe(true)
+    expect(single.find((a) => a.key === 'column-delete')?.disabled).toBe(true)
+  })
+
+  it('starts an empty table with the Attributes grid\'s starter', () => {
+    const started = withDataTableStarted({ rows: '', headerRow: true }, 'rows')
+    expect(parseDataTableRows(started['rows'])[0]).toEqual([
+      'Feature',
+      'Us',
+      'Them',
+    ])
+    expect(started['headerRow']).toBe(true)
+  })
+
+  it('remembers the right-clicked cell for that node only, until the menu closes', () => {
+    requestCanvasContextMenu('table-1', { row: 2, column: 1 })
+    expect(canvasContextMenuTableCell('table-1')).toEqual({ row: 2, column: 1 })
+    expect(canvasContextMenuTableCell('other')).toBe(null)
+    requestCanvasContextMenu('table-1')
+    expect(canvasContextMenuTableCell('table-1')).toBe(null)
+    requestCanvasContextMenu('table-1', { row: 0, column: 0 })
+    clearCanvasContextMenu()
+    expect(canvasContextMenuTableCell('table-1')).toBe(null)
   })
 })

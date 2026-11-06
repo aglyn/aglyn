@@ -17,6 +17,8 @@
 
 import * as Aglyn from '@aglyn/aglyn'
 import {
+  DATA_TABLE_EMPHASIS_PROP,
+  isDataTableCellMarkup,
   normalizeEmphasisColumn,
   parseDataTableRows,
   readDataTableAlignments,
@@ -44,6 +46,40 @@ const TABLE_REGION_LABEL = 'Table'
 
 // The component and its preset show the same drawer glyph.
 const TABLE_ICON = { path: mdiTable.path, sx: { color: '#0288d1' } }
+
+/**
+ * What a formatted cell may draw (AGL-4203): the inline elements a label
+ * may, plus links — a table cell is not a control, so an anchor inside it is
+ * valid, and "see the docs" is a thing comparison tables say.
+ *
+ * Built on first use rather than at module load, so importing this file never
+ * depends on `@aglyn/aglyn` having finished evaluating.
+ */
+let cellElements: ReadonlySet<string> | undefined
+function tableCellElements(): ReadonlySet<string> {
+  cellElements ??= new Set([...Aglyn.INLINE_AUTHOR_HTML_ELEMENTS, 'a'])
+  return cellElements
+}
+
+/**
+ * A cell's content as TableCell props: its text, or — for a cell formatted
+ * on the canvas — its markup, re-sanitized on every render by the same pure
+ * sanitizer Typography uses, so the server and the browser draw the same
+ * bytes and a value written straight to the document cannot plant script.
+ */
+function cellContent(cell: string): {
+  children?: string
+  dangerouslySetInnerHTML?: { __html: string }
+} {
+  if (!isDataTableCellMarkup(cell)) return { children: cell }
+  return {
+    dangerouslySetInnerHTML: {
+      __html: Aglyn.sanitizeAuthorHtml(cell, undefined, {
+        allowedElements: tableCellElements(),
+      }),
+    },
+  }
+}
 
 export interface DataTableProps {
   /**
@@ -111,7 +147,7 @@ const DataTable = forwardRef<HTMLDivElement, DataTableProps>((props, ref) => {
           ...nodeSx,
         ]}
       >
-        {'Table — add rows in Attributes'}
+        {'Table — right-click it to start a table'}
       </Box>
     )
   }
@@ -152,9 +188,8 @@ const DataTable = forwardRef<HTMLDivElement, DataTableProps>((props, ref) => {
                 key={columnIndex}
                 align={alignments[columnIndex]}
                 sx={{ fontWeight: 700, ...cellSx(columnIndex) }}
-              >
-                {cell}
-              </TableCell>
+                {...cellContent(cell)}
+              />
             ))}
           </TableRow>
         </TableHead>
@@ -167,9 +202,8 @@ const DataTable = forwardRef<HTMLDivElement, DataTableProps>((props, ref) => {
                 key={columnIndex}
                 align={alignments[columnIndex]}
                 sx={cellSx(columnIndex)}
-              >
-                {cell}
-              </TableCell>
+                {...cellContent(cell)}
+              />
             ))}
           </TableRow>
         ))}
@@ -205,7 +239,9 @@ export const dataTableSchema: Aglyn.ComponentSchema<DataTableProps> = {
       label: 'First row is a header',
     },
     {
-      name: 'emphasizeColumn',
+      // `DATA_TABLE_EMPHASIS_PROP`: a canvas column edit moves it with its
+      // column (AGL-4203), so the name is shared rather than repeated.
+      name: DATA_TABLE_EMPHASIS_PROP,
       description:
         'Highlight one column — on a comparison table, usually your own. 0 for none.',
       component: Aglyn.FieldComponentType.TEXT_FIELD,

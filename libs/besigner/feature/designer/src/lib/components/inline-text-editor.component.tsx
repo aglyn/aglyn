@@ -23,9 +23,20 @@ import {
   REUSABLE_INSTANCE_PROP_VALUES_KEY,
   RICH_TEXT_COMMANDS,
 } from '@aglyn/aglyn'
-import { mdiCodeBraces } from '@aglyn/shared-data-mdi'
+import type { DataTableShapeEdit } from '@aglyn/shared-data-enums'
+import { mdiCodeBraces, mdiTable } from '@aglyn/shared-data-mdi'
 import { MdiIcon } from '@aglyn/shared-ui-jsx'
-import { Box, Button, IconButton, Paper, useTheme } from '@mui/material'
+import {
+  Box,
+  Button,
+  IconButton,
+  ListItemIcon,
+  ListItemText,
+  Menu,
+  MenuItem,
+  Paper,
+  useTheme,
+} from '@mui/material'
 import type { Theme } from '@mui/material/styles'
 import type { SystemStyleObject } from '@mui/system'
 import isEqual from 'lodash-es/isEqual.js'
@@ -50,7 +61,12 @@ import {
   withoutCaretStops,
 } from '../utils/in-place-edit-surface'
 import { inlineTextEdit } from '../utils/inline-text-edit.store'
-import { writeDataTableCell } from '../utils/table-cell-edit'
+import {
+  dataTableCellActions,
+  dataTableCellValueFromEdit,
+  withDataTableShapeEdit,
+  writeDataTableCell,
+} from '../utils/table-cell-edit'
 import {
   RICH_COMMANDS,
   richTextCommandGroups,
@@ -129,6 +145,15 @@ const EMPTY_RECT = { left: 0, top: 0, width: 0, height: 0 }
  * each other; covering what it stands on is honest, blending with it is not.
  * Everything else edits the canvas leaf itself and needs no surface here.
  */
+/**
+ * What a Table cell's toolbar offers (AGL-4203): bold, italic, underline and
+ * a link. No lists — a cell is one line of a pipe grid.
+ */
+const TABLE_CELL_COMMANDS: ReadonlySet<RICH_TEXT_COMMANDS> = new Set([
+  RICH_TEXT_COMMANDS.EMPHASIS,
+  RICH_TEXT_COMMANDS.LINK,
+])
+
 const BOXED_SURFACE_SX = {
   p: 0.5,
   bgcolor: 'background.paper',
@@ -218,6 +243,18 @@ export const InlineTextEditorComponent = observer(
      * no caret and no typing.
      */
     const seededRef = useRef(false)
+    /**
+     * A row or column action picked from a Table cell's toolbar menu
+     * (AGL-4203), applied by the commit it triggers. A ref rather than an
+     * argument: `commit` is also a click handler and a key handler, and
+     * would be handed their events.
+     */
+    const pendingShapeEditRef = useRef<DataTableShapeEdit | undefined>(
+      undefined,
+    )
+    /** Where the Table cell's row and column menu hangs, while it is open. */
+    const [tableMenuAnchor, setTableMenuAnchor] =
+      useState<HTMLElement | null>(null)
     /** The canvas leaf while it IS the editing surface — see beginInPlaceEdit. */
     const inPlaceRef = useRef<InPlaceEditSurface | undefined>(undefined)
     /**
@@ -279,9 +316,9 @@ export const InlineTextEditorComponent = observer(
     // A prop edit is formatted when every element the prop fills draws
     // markup (decided where the edit opens): its markup rides the instance's
     // own `propHtml`, as a node's rides `html`.
-    // A Table cell stores plain text, so its edit is never formatted.
+    // A Table cell is formatted text (AGL-4203): inline formatting and links.
     const rich = cellTarget
-      ? false
+      ? true
       : propTarget
       ? Boolean(propTarget.rich)
       : ((node?.componentSchema?.flags?.richTextEditable ??
@@ -292,9 +329,11 @@ export const InlineTextEditorComponent = observer(
     // What THIS component's schema allows (AGL-2557); a schema that names
     // nothing allows everything, which is what leaves Typography alone. For a
     // prop edit that is the schema of the element the prop fills.
-    const commandGroups = richTextCommandGroups(
-      propTarget ? propTarget.schema : node?.componentSchema,
-    )
+    const commandGroups = cellTarget
+      ? TABLE_CELL_COMMANDS
+      : richTextCommandGroups(
+          propTarget ? propTarget.schema : node?.componentSchema,
+        )
     /**
      * The surface may hold phrasing content only.
      *
@@ -304,10 +343,15 @@ export const InlineTextEditorComponent = observer(
      * sanitizer, the Enter key and the toolbar all need. Two ways to say it
      * would eventually say two different things.
      */
+    //
+    // A Table cell is the one surface that is phrasing-only AND takes links
+    // (AGL-4203): it is a line of a pipe grid, so no block fits in it, but
+    // it is not a control, so an anchor does.
     const phrasingOnly =
       rich &&
-      !commandGroups.has(RICH_TEXT_COMMANDS.LIST) &&
-      !commandGroups.has(RICH_TEXT_COMMANDS.LINK)
+      (Boolean(cellTarget) ||
+        (!commandGroups.has(RICH_TEXT_COMMANDS.LIST) &&
+          !commandGroups.has(RICH_TEXT_COMMANDS.LINK)))
 
     const activeEditable = useCallback(
       () =>
@@ -396,7 +440,11 @@ export const InlineTextEditorComponent = observer(
       const resolve = (token: string) =>
         resolveTokenLabel(token, labelContextRef.current)
 
-      const markup = propTarget ? propTarget.initialHtml : props?.html
+      const markup = cellTarget
+        ? cellTarget.initialHtml
+        : propTarget
+          ? propTarget.initialHtml
+          : props?.html
       const build = (target: HTMLElement) => {
         if (rich) {
           const initial =
@@ -534,6 +582,9 @@ export const InlineTextEditorComponent = observer(
         // text — the markup beside it.
         let plain: string | undefined
         let markup: string | undefined
+        // The whole sanitized surface, markup or not — a Table cell needs it
+        // to store literal `<` as typed (see `dataTableCellValueFromEdit`).
+        let sanitizedSurface: string | undefined
         if (rich && surface) {
           // Pills serialize back to raw tokens BEFORE sanitizing (the
           // sanitizer strips attributes, and pill labels must never
@@ -545,8 +596,12 @@ export const InlineTextEditorComponent = observer(
           // it — so the commit strips it first and what is stored is what
           // the page will draw.
           const sanitized = withoutCaretStops(
-            sanitizeRichText(clone.innerHTML, { phrasingOnly }),
+            sanitizeRichText(clone.innerHTML, {
+              phrasingOnly,
+              links: Boolean(inlineTextEdit.cellTarget),
+            }),
           )
+          sanitizedSurface = sanitized
           plain = richTextToPlain(sanitized)
           if (/<[a-z]/i.test(sanitized)) markup = sanitized
         } else if (surface) {
@@ -561,19 +616,25 @@ export const InlineTextEditorComponent = observer(
         if (plain !== undefined && cell) {
           // One Table cell: rewrite that cell inside the grid string, and
           // leave every other cell, the alignments and the rest of the
-          // props as they were.
+          // props as they were. A row or column action picked from the
+          // toolbar rides the SAME write (AGL-4203), so the text typed so
+          // far and the new row are one undo step, not two.
           const stored = (current.props as Record<string, unknown> | undefined)?.[
             cell.attribute
           ]
-          nextWrite = {
+          const withCell: Record<string, unknown> = {
             ...toJS(current.props),
             [cell.attribute]: writeDataTableCell(
               stored,
               cell.row,
               cell.column,
-              plain,
+              dataTableCellValueFromEdit(plain, sanitizedSurface ?? plain),
             ),
           }
+          const shapeEdit = pendingShapeEditRef.current
+          nextWrite = shapeEdit
+            ? withDataTableShapeEdit(withCell, cell.attribute, shapeEdit)
+            : withCell
         } else if (plain !== undefined && target) {
           // Instance prop override (AGL-1304): the edit rides the
           // INSTANCE's nested propValues, never the grafted leaf (which
@@ -631,6 +692,7 @@ export const InlineTextEditorComponent = observer(
           }
         }
       }
+      pendingShapeEditRef.current = undefined
       // Give the element back to React BEFORE the write — see `nextWrite`.
       inPlaceRef.current?.dispose()
       inPlaceRef.current = undefined
@@ -1088,6 +1150,24 @@ export const InlineTextEditorComponent = observer(
       activeEditable()?.focus()
     }, [activeEditable])
 
+    /** Closes the cell's row and column menu and goes back to typing. */
+    const closeTableMenu = useCallback(() => {
+      setTableMenuAnchor(null)
+      menuOpenRef.current = false
+      activeEditable()?.focus()
+    }, [activeEditable])
+
+    /** Applies a row or column action, with the cell's text, as one commit. */
+    const pickShapeEdit = useCallback(
+      (edit: DataTableShapeEdit) => {
+        setTableMenuAnchor(null)
+        menuOpenRef.current = false
+        pendingShapeEditRef.current = edit
+        commit()
+      },
+      [commit],
+    )
+
     const handleInsertPick = useCallback(
       (token: string) => {
         const editable = activeEditable()
@@ -1311,6 +1391,24 @@ export const InlineTextEditorComponent = observer(
               {'\u{1F517}'}
             </IconButton>
           ) : null}
+          {cellTarget ? (
+            <IconButton
+              size="small"
+              title="Rows and columns"
+              aria-label="Rows and columns"
+              aria-haspopup="menu"
+              onMouseDown={keepFocus}
+              onClick={(event) => {
+                // Up BEFORE the menu takes focus: the blur that follows must
+                // not read as the author leaving the cell.
+                menuOpenRef.current = true
+                setTableMenuAnchor(event.currentTarget)
+              }}
+              sx={{ width: toolSize, height: toolSize, borderRadius: 0.5 }}
+            >
+              <MdiIcon path={mdiTable.path} fontSize="small" />
+            </IconButton>
+          ) : null}
           {insertButton}
           <Button
             size="small"
@@ -1349,6 +1447,33 @@ export const InlineTextEditorComponent = observer(
             sx={plainSurfaceSx}
           />
         )}
+        {cellTarget ? (
+          <Menu
+            anchorEl={tableMenuAnchor}
+            open={Boolean(tableMenuAnchor)}
+            onClose={closeTableMenu}
+            slotProps={{ list: { dense: true } }}
+          >
+            {dataTableCellActions(
+              (node.props as Record<string, unknown> | undefined)?.[
+                cellTarget.attribute
+              ],
+              cellTarget.row,
+              cellTarget.column,
+            ).map((action) => (
+              <MenuItem
+                key={action.key}
+                disabled={action.disabled}
+                onClick={() => pickShapeEdit(action.edit)}
+              >
+                <ListItemIcon>
+                  <MdiIcon fontSize="inherit" path={action.icon} />
+                </ListItemIcon>
+                <ListItemText>{action.label}</ListItemText>
+              </MenuItem>
+            ))}
+          </Menu>
+        ) : null}
         <InsertTokenMenu
           anchorEl={insertMenu?.anchorEl ?? null}
           open={Boolean(insertMenu)}

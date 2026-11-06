@@ -34,6 +34,13 @@
  * a copied markdown table has.
  */
 
+/**
+ * The Table element's 1-based "emphasize column" prop. Named here because a
+ * shape edit made outside the element (the canvas) has to move it with its
+ * column — see {@link emphasisAfterShapeEdit}.
+ */
+export const DATA_TABLE_EMPHASIS_PROP = 'emphasizeColumn'
+
 /** Column alignments the editor offers and the renderer honours. */
 export const DATA_TABLE_ALIGNMENTS = ['left', 'center', 'right'] as const
 
@@ -265,5 +272,150 @@ export function withCellSet(
     r === rowIndex
       ? row.map((cell, c) => (c === columnIndex ? value : cell))
       : row,
+  )
+}
+
+/**
+ * A cell that holds FORMATTED text: inline markup (bold, italic, underline,
+ * a link, a line break), written by the canvas's in-place cell editor.
+ *
+ * A cell is otherwise plain text, and both kinds live in the same pipe grid:
+ * nothing about the storage changes, and a table nobody formats is
+ * byte-for-byte what it always was. The test is "starts a tag or spells a
+ * character reference", which is what the editor writes for ANY cell whose
+ * text could be misread as markup (it stores `a &lt; b` rather than `a < b`
+ * when the text happens to spell a tag), so the reading is never a guess
+ * about what an author meant.
+ */
+export function isDataTableCellMarkup(cell: unknown): boolean {
+  return (
+    typeof cell === 'string' &&
+    /<[a-z/!]|&(#\d+|#x[0-9a-f]+|[a-z][a-z0-9]*);/i.test(cell)
+  )
+}
+
+const CELL_ENTITIES: Record<string, string> = {
+  amp: '&',
+  lt: '<',
+  gt: '>',
+  quot: '"',
+  apos: "'",
+  nbsp: ' ',
+}
+
+/**
+ * The words a cell shows, without its formatting — what a field that can
+ * only hold plain text (the Attributes grid) displays for a formatted cell.
+ */
+export function dataTableCellText(cell: unknown): string {
+  const text = typeof cell === 'string' ? cell : ''
+  if (!isDataTableCellMarkup(text)) return text
+  return text
+    .replace(/<br\s*\/?>/gi, ' ')
+    .replace(/<[^>]*>/g, '')
+    .replace(/&(#\d+|#x[0-9a-f]+|[a-z][a-z0-9]*);/gi, (whole, name: string) => {
+      if (name[0] === '#') {
+        const code =
+          name[1] === 'x' || name[1] === 'X'
+            ? parseInt(name.slice(2), 16)
+            : parseInt(name.slice(1), 10)
+        return Number.isFinite(code) ? String.fromCodePoint(code) : whole
+      }
+      return CELL_ENTITIES[name.toLowerCase()] ?? whole
+    })
+    .replace(/\s+/g, ' ')
+    .trim()
+}
+
+/** One change to a table's shape, as the canvas and the Attributes grid make it. */
+export type DataTableShapeEdit =
+  | { kind: 'insertRow'; at: number }
+  | { kind: 'removeRow'; at: number }
+  | { kind: 'insertColumn'; at: number }
+  | { kind: 'removeColumn'; at: number }
+
+/**
+ * The stored value after one shape edit, with each column's ALIGNMENT moving
+ * with its column.
+ *
+ * Inserting or removing a column by rows alone leaves the alignments where
+ * they were by index, so every column after the edit takes its neighbour's
+ * alignment: a centred "Us" column turns left-aligned the moment a column is
+ * inserted before it. The alignment is spliced at the same index as the
+ * cells, and a new column starts at the default.
+ */
+export function editDataTableShape(
+  value: unknown,
+  edit: DataTableShapeEdit,
+): string {
+  const rows = parseDataTableRows(value)
+  const width = rows[0]?.length ?? 0
+  const alignments = readDataTableAlignments(value, width)
+  switch (edit.kind) {
+    case 'insertRow':
+      return serializeDataTable(withRowAdded(rows, edit.at), alignments)
+    case 'removeRow':
+      return serializeDataTable(withRowRemoved(rows, edit.at), alignments)
+    case 'insertColumn': {
+      const at = Math.max(0, Math.min(edit.at, width))
+      const next = [...alignments]
+      next.splice(at, 0, DATA_TABLE_ALIGNMENT_DEFAULT)
+      return serializeDataTable(withColumnAdded(rows, at), next)
+    }
+    case 'removeColumn': {
+      if (width <= 1) return serializeDataTable(rows, alignments)
+      return serializeDataTable(
+        withColumnRemoved(rows, edit.at),
+        alignments.filter((_, index) => index !== edit.at),
+      )
+    }
+  }
+}
+
+/**
+ * The emphasised column after a shape edit, so the highlight stays on the
+ * column it was put on (1-based, `0` for none — see
+ * {@link normalizeEmphasisColumn}).
+ *
+ * Inserting a column before "Us" moves "Us" one to the right, and the
+ * highlight goes with it. Removing the emphasised column removes the
+ * highlight rather than handing it to whichever column slid into the gap.
+ */
+export function emphasisAfterShapeEdit(
+  emphasis: unknown,
+  columnCount: number,
+  edit: DataTableShapeEdit,
+): number {
+  const current = normalizeEmphasisColumn(emphasis, columnCount)
+  if (current === 0) return 0
+  const index = current - 1
+  if (edit.kind === 'insertColumn') {
+    return edit.at <= index ? current + 1 : current
+  }
+  if (edit.kind === 'removeColumn') {
+    if (columnCount <= 1) return current
+    if (edit.at === index) return 0
+    return edit.at < index ? current - 1 : current
+  }
+  return current
+}
+
+/**
+ * What "Start a table" writes into an empty Table, wherever it is offered:
+ * a header row and one blank row, with the two comparison columns centred.
+ */
+export const DATA_TABLE_STARTER = {
+  rows: [
+    ['Feature', 'Us', 'Them'],
+    ['', '', ''],
+  ],
+  alignments: ['left', 'center', 'center'] as DataTableAlignment[],
+}
+
+/** {@link DATA_TABLE_STARTER} in its stored form. */
+export function dataTableStarterValue(): string {
+  return serializeDataTable(
+    DATA_TABLE_STARTER.rows,
+    DATA_TABLE_STARTER.alignments,
   )
 }
