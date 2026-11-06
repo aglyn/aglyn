@@ -1707,6 +1707,7 @@ export function HostDatasetsCard(props: HostDatasetsCardProps) {
   const recordPanel =
     selected && routeRecordId ? (
       <CardDisplay
+        help={pluginDocsHelp('datasets', { anchor: '#organization-data-page' })}
         header={
           <Stack spacing={1} sx={{ alignItems: 'flex-start' }}>
             {datasetHref ? (
