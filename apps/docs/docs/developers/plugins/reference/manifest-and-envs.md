@@ -196,7 +196,7 @@ sees a token.
         "idPath": "name", "labelPath": "title", "maxItems": 50
       }
     ],
-    "sync": {                        // validated and checked; see below
+    "sync": {                        // run by the platform; see below
       "intervalHours": 6,            // at least 1
       "requests": [
         {
@@ -244,9 +244,54 @@ How it runs:
    provider that refuses the grant marks the connection *reconnect required*
    until the owner connects again.
 
-`sync` is part of the schema: the manifest validator accepts it and checks
-every rule in the table below (its requests, its interval and its `record`
-fields), and a manifest that breaks one is refused.
+4. **The platform syncs it.** Once every resource is chosen, the platform
+   runs your `sync` for the site, then again every `intervalHours`, and
+   writes what it read into the site's **record** (below). The site owner
+   can also run it at once with **Sync now** on the connection's card.
+
+#### How the sync runs {#connection-sync}
+
+- **When.** The console checks for due connections every 15 minutes and
+  runs a sync once `intervalHours` have passed since the last one that
+  succeeded, so a 6-hour interval runs about every 6 hours. A few connections
+  run at a time and the rest wait for the next check, oldest first. **Sync
+  now** runs it at once; it is refused within a minute of the last sync.
+- **With what.** The declaration of the version the site has installed and
+  the site's own token, refreshed when it is about to expire and once more if
+  your API answers 401 or 403. Each request in `requests` that the `record`
+  reads is filled from the site's choices and checked against `apiHosts`
+  again before it is sent; a request the record never reads is not sent.
+- **How much.** Pages are followed through `pagination` up to `maxPages`, and
+  stop once the record has `items.maxItems` entries. Every answer is read up
+  to 2 MB, each attempt times out after 30 seconds (a 429 or 5xx is retried
+  twice), a redirect is refused rather than followed, and no new page is
+  started once a sync has run for a minute.
+- **The record.** The answers are mapped into exactly the fields you declare:
+  summary `fields` from the first page of the request they name, and one
+  entry per item for `items`. Nothing you did not declare is copied. A
+  `string` is cut to its `maxLength`; a `url` is kept only when it is `https`,
+  carries no credentials and fits its `maxLength` whole; a `datetime` becomes
+  epoch milliseconds; a value a `map` does not list is dropped. A declared
+  field with no usable value is `null`, so every entry has the same keys. The
+  record is replaced whole on every sync, and trailing items are dropped if it
+  would pass 512 KB. It is stored with the site on the server and is never
+  readable by a browser.
+- **When it fails.** If your provider refuses the grant (`invalid_grant`, or a
+  401 that a fresh token does not cure), the connection becomes *reconnect
+  required* and is not synced again until the site owner connects again. Any
+  other failure is shown on the card with your provider's message and tried
+  again after 15 minutes, then 30, then an hour, doubling up to your
+  `intervalHours`. The last good record stays in place either way.
+- **When it pauses.** A workspace whose plan does not include connections,
+  and a version the marketplace revoked, keep their connection and their last
+  record but are not synced.
+- **When it goes.** Uninstalling the plugin, or moving the site to a version
+  that no longer declares the connection, revokes the grant at your
+  `revocationUrl` and deletes the connection and its record. So does
+  disconnecting it.
+
+The validator checks every rule in the table below (the requests, the
+interval and the `record` fields), and a manifest that breaks one is refused.
 
 A connection runs under the declaration of the version the site has
 **installed**, never the listing's newest, and a revoked version's
