@@ -80,6 +80,7 @@ import {
   isNodeRevealedOnCanvas,
 } from '../utils/canvas-reveal'
 import { stripMutedClasses } from '../utils/muted-classes'
+import ConnectionRecordsScope from './connection-records-scope'
 import DraggableDroppable from './dnd/draggable-droppable'
 import EmptyDocumentSlot from './empty-document-slot'
 import { REPEAT_COPY_ATTR } from '../utils/repeat-copy'
@@ -108,7 +109,11 @@ export const MediaFactsLeaf = forwardRef<any, LeafProps>((props, ref) => {
   // What the site's own values hide is not on the published page (AGL-4119),
   // and these nodes are never selected, so here it is simply not drawn.
   if (host && isNodeHiddenByHost(node?.props, host)) return null
-  return <Leaf ref={ref} node={shown} {...rest} />
+  return (
+    <ConnectionRecordsScope node={node}>
+      <Leaf ref={ref} node={shown} {...rest} />
+    </ConnectionRecordsScope>
+  )
 })
 MediaFactsLeaf.displayName = 'MediaFactsLeaf'
 
@@ -911,7 +916,10 @@ export const NodeLeaf = observer(
       [hostHidden, leafNode],
     )
 
+    // A signed element reads its connection's record here as on the
+    // published page (AGL-4196); the drag wrapper keeps its own indent.
     return (
+      <ConnectionRecordsScope node={node}>
       <DraggableDroppable
         node={node}
         type={Besigner.DragType.CANVAS}
@@ -1037,6 +1045,7 @@ export const NodeLeaf = observer(
           {showEmptyDocumentSlot ? <EmptyDocumentSlot /> : null}
         </Leaf>
       </DraggableDroppable>
+      </ConnectionRecordsScope>
     )
   }),
 )

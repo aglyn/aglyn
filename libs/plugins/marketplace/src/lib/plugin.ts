@@ -27,6 +27,7 @@ import HostPluginsCard from './components/host-plugins-card.component'
 import PluginSiteSetPanel from './components/plugin-site-set-panel.component'
 import OrgPluginInstallsCard from './components/org-plugin-installs-card.component'
 import PluginInstallStatus from './components/plugin-install-status.component'
+import EditorConnectionsProvider from './components/editor-connections-provider.component'
 import StaffMarketplaceOverview from './components/staff-marketplace-overview.component'
 import StarterPickerShelf from './components/starter-picker-shelf.component'
 import TemplateGalleryShelf from './components/template-gallery-shelf.component'
@@ -162,6 +163,13 @@ export function registerMarketplaceConsole(): void {
      * page has to do anyway for one deleted while a link to it was still in
      * someone's inbox.
      */
+    /*
+     * The site's declared connections in the editor (AGL-4196): the records a
+     * signed element reads, and the variables the binding picker lists, on
+     * the Besigner and Preview only. Core declares the context; this plugin
+     * runs the connections, so it fills it.
+     */
+    providers: [EditorConnectionsProvider],
     orgNavItems: [
       {
         label: 'Marketplace',
