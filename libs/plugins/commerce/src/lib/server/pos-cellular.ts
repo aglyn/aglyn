@@ -181,6 +181,9 @@ export async function syncPosCellularReaders(input: {
   ])
   const enabled = terminal.get('cellularEnabled') === true
   const configurationId = String(terminal.get('stripeConfigurationId') ?? '') || null
+  // The account that configuration lives on: the store's own for a
+  // direct-charge store's Location, absent for the platform's.
+  const configurationAccount = String(terminal.get('stripeLocationAccount') ?? '').trim() || null
   const capable = new Map<string, { serialNumber: string | null }>()
   for (const doc of readers.docs as Array<{ id: string; get: (field: string) => unknown }>) {
     if (isPosCellularDeviceType(doc.get('deviceType'))) {
@@ -206,6 +209,7 @@ export async function syncPosCellularReaders(input: {
             readerId,
             serialNumber: reader.serialNumber,
             stripeConfigurationId: configurationId,
+            ...(configurationAccount ? { stripeConfigurationAccount: configurationAccount } : {}),
           },
           existing,
           now,
@@ -216,7 +220,8 @@ export async function syncPosCellularReaders(input: {
           existing.periods.some((period) => period.toMs === null) &&
           existing.orgId === input.orgId &&
           existing.serialNumber === reader.serialNumber &&
-          existing.stripeConfigurationId === configurationId
+          existing.stripeConfigurationId === configurationId &&
+          (existing.stripeConfigurationAccount ?? null) === configurationAccount
         if (unchanged) continue
         transaction.set(cellularReadersRef().doc(id), next)
       }
@@ -337,10 +342,15 @@ export async function setPosStoreCellular(
  * or workspace that is being deleted, whose settings may be gone already.
  * True when Stripe took it, or the Configuration no longer exists.
  */
-export async function turnOffPosCellularConfiguration(configurationId: string): Promise<boolean> {
+export async function turnOffPosCellularConfiguration(
+  configurationId: string,
+  /** The store's own account the Configuration is on; null for the platform. */
+  stripeAccount: string | null = null,
+): Promise<boolean> {
   if (!/^tmc_[A-Za-z0-9]+$/.test(configurationId)) return false
   const answer = await posStripe('POST', `terminal/configurations/${configurationId}`, {
     params: { 'cellular[enabled]': false },
+    ...(stripeAccount ? { stripeAccount } : {}),
   })
   return answer.ok || answer.status === 404
 }

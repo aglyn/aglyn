@@ -565,8 +565,14 @@ export const refundHandler: PluginApiHandler = async (req, res) => {
     // A direct-charge order is refunded on the seller's own account, from
     // their balance; `createStripeRefund` falls back to the platform when that
     // account does not know the payment.
+    // A register card taken on the store's own account names it on the payment.
+    const cardPayment = CommerceModel.orderPayments(order).find(
+      (payment) => payment.paymentIntentId === String(paymentIntentId),
+    )
     const refundAccount =
-      (order as { chargeModel?: string }).chargeModel === 'direct'
+      cardPayment?.chargeModel === 'direct' && cardPayment.stripeAccountId
+        ? cardPayment.stripeAccountId
+        : (order as { chargeModel?: string }).chargeModel === 'direct'
         ? String((order as { stripeAccountId?: string }).stripeAccountId ?? '') ||
           (await directSellerAccountForHost(hostId))
         : await directSellerAccountForHost(hostId)

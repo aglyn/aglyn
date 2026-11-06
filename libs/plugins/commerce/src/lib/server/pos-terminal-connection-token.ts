@@ -24,6 +24,7 @@ import {
   ensurePosTerminalLocation,
   posMerchantAccount,
   posTerminalLocationId,
+  posTerminalRecordedLocationId,
   type PosTerminalAddress,
 } from './pos-terminal'
 
@@ -78,9 +79,11 @@ async function hostName(hostId: string): Promise<string> {
 /** Readiness as the native POS app's readers panel draws it. */
 export async function terminalReadiness(staff: PosStaff) {
   const available = posTerminalAvailable()
+  // Any recorded Location counts: one made on the platform before the store
+  // moved to its own Stripe account is made again there at the next token.
   const [merchant, locationId] = await Promise.all([
     posMerchantAccount(staff.hostId, staff.org),
-    posTerminalLocationId(staff.hostId),
+    posTerminalRecordedLocationId(staff.hostId),
   ])
   return {
     available,
@@ -100,14 +103,25 @@ async function mintToken(staff: PosStaff, res: Res) {
   }
   // A reader that connects for a store that cannot take card payments would
   // only fail at the first sale, in front of a customer.
-  const merchantAccountId = await posMerchantAccount(staff.hostId, staff.org)
-  if (!merchantAccountId) {
+  const merchant = await posMerchantAccount(staff.hostId, staff.org)
+  if (!merchant) {
     return res.status(409).json({
       error: 'Finish setting up payments in the console before taking cards.',
       code: 'merchant-not-ready',
     })
   }
-  const token = await createPosTerminalConnectionToken(staff.hostId)
+  let token = await createPosTerminalConnectionToken(staff.hostId)
+  if (!token && !(await posTerminalLocationId(staff.hostId))) {
+    // A Location made on the platform before the store moved to its own
+    // Stripe account is made again there, at the same address, so the app
+    // keeps working without asking the store for it again.
+    const moved = await ensurePosTerminalLocation({
+      hostId: staff.hostId,
+      orgId: staff.orgId,
+      displayName: await hostName(staff.hostId),
+    })
+    if (moved.ok) token = await createPosTerminalConnectionToken(staff.hostId)
+  }
   if (!token) {
     const locationId = await posTerminalLocationId(staff.hostId)
     return locationId
@@ -120,10 +134,11 @@ async function mintToken(staff: PosStaff, res: Res) {
   return res.status(200).json({
     secret: token.secret,
     locationId: token.locationId,
-    // Identifies the merchant only. It is never the SDK's `onBehalfOf`:
-    // card-present charges settle on Aglyn's platform account (AGL-3607), and
-    // an intent collected under a different account would be refused.
-    merchantAccountId,
+    // Identifies the merchant only. It is never the SDK's `onBehalfOf`: a
+    // destination store's card-present charges settle on Aglyn's platform
+    // account (AGL-3607), and a direct store's token above was minted ON its
+    // own account, so the SDK already works there.
+    merchantAccountId: merchant.accountId,
     merchantDisplayName: await hostName(staff.hostId),
     testMode: posStripeTestMode(),
   })

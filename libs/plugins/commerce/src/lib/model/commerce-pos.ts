@@ -123,6 +123,14 @@ export interface OrderPayment {
   failureMessage?: string
   /** Whether Stripe moved real money; absent for tenders Stripe never saw. */
   livemode?: boolean
+  /**
+   * `direct` when the card was charged ON the store's own Stripe account
+   * (ToS v24 section 10.2(a)), with that account in `stripeAccountId`: its
+   * capture, cancel and refund are made there. Absent for a destination
+   * charge on the platform, every register payment before the switch.
+   */
+  chargeModel?: 'direct'
+  stripeAccountId?: string
   /** The console user who took the payment. */
   cashierId?: string
 }

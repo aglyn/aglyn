@@ -42,6 +42,13 @@ export interface BookingInPersonPayment {
   paidAtMs?: number
   /** Which start request made it, so a retried start returns it again. */
   attempt?: string
+  /**
+   * `direct` when the intent was made ON the store's own Stripe account
+   * (`stripeAccountId`), where its capture, cancel and refund go. Absent for
+   * a destination charge on the platform.
+   */
+  chargeModel?: 'direct'
+  stripeAccountId?: string
 }
 
 /** The fields of a booking this reads; any booking document has them. */

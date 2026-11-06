@@ -25,6 +25,7 @@ import {
 } from '@aglyn/tenant-data-admin'
 import recordCapturedContact from '@aglyn/aglyn/plugin-manager/record-captured-contact'
 import { merchantAccountIsReady } from '@aglyn/tenant-data-admin/server/payment-provider'
+import { sellerPaymentAccount } from '@aglyn/tenant-data-admin/server/seller-payment-account'
 import { checkoutSessionCardAuthenticationParams } from '@aglyn/tenant-data-admin/server/stripe-card-authentication'
 import {
   buildRoute,
@@ -856,17 +857,27 @@ export const posOrderHandler: PluginApiHandler = async (req, res) => {
 
     if (payment === 'link') {
       // QR payment link on the merchant account, completed by webhook.
-      const ownerProfile = await firestore
-        .collection('profiles')
-        .doc(String(ownerOrg?.org?.ownerUid ?? ''))
-        .get()
-      const accountId = ownerProfile.get('stripeAccountId')
+      const seller = await sellerPaymentAccount(
+        hostId,
+        (ownerOrg?.org as Record<string, any> | undefined) ?? null,
+      )
+      const accountId = seller?.accountId
+      // A store on its own Stripe account (ToS v24 section 10.2(a)) takes a
+      // register QR payment through the open sale's Card (QR) tender, made on
+      // its own account (`pos-terminal.ts`). This one-shot path makes a
+      // DESTINATION charge on the platform, which is never that store's.
+      if (seller?.chargeModel === 'direct') {
+        await releaseDiscountSlot()
+        return res.status(409).json({
+          error: 'Open the sale at the register and take the card with Card (QR).',
+        })
+      }
       if (
         !merchantAccountIsReady(
           {
             accountId,
-            chargesEnabled: ownerProfile.get('stripeChargesEnabled'),
-            accountLivemode: ownerProfile.get('stripeAccountLivemode'),
+            chargesEnabled: seller?.chargesEnabled,
+            accountLivemode: seller?.accountLivemode,
           },
           { subject: `POS payment link host ${hostId}` },
         )

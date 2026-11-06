@@ -278,11 +278,13 @@ export function PosQrDialog(props: { url: string; amountCents: number; onClose: 
 
 const stripePromises = new Map<string, Promise<Stripe | null>>()
 
-function stripeFor(publishableKey: string): Promise<Stripe | null> {
-  let promise = stripePromises.get(publishableKey)
+/** Stripe for the key, on the store's own account when it sells on one. */
+function stripeFor(publishableKey: string, stripeAccount: string): Promise<Stripe | null> {
+  const key = `${publishableKey}|${stripeAccount}`
+  let promise = stripePromises.get(key)
   if (!promise) {
-    promise = loadStripe(publishableKey)
-    stripePromises.set(publishableKey, promise)
+    promise = stripeAccount ? loadStripe(publishableKey, { stripeAccount }) : loadStripe(publishableKey)
+    stripePromises.set(key, promise)
   }
   return promise
 }
@@ -296,13 +298,15 @@ function stripeFor(publishableKey: string): Promise<Stripe | null> {
 export function PosKeyedCardDialog(props: {
   clientSecret: string
   publishableKey: string
+  /** A direct-charge store's own account, where its intent lives; empty for the platform. */
+  stripeAccount?: string
   amountCents: number
   onClose: () => void
   onConfirmed: () => void
 }) {
   const stripe = useMemo(
-    () => (props.publishableKey ? stripeFor(props.publishableKey) : null),
-    [props.publishableKey],
+    () => (props.publishableKey ? stripeFor(props.publishableKey, props.stripeAccount ?? '') : null),
+    [props.publishableKey, props.stripeAccount],
   )
   return (
     <Dialog open={Boolean(props.clientSecret)} onClose={props.onClose} maxWidth="sm" fullWidth>

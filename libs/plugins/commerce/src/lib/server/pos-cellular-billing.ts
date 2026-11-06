@@ -126,7 +126,7 @@ export interface PosCellularBillingDeps {
   config?: PosCellularConfig | null
   charge?: Charge
   readBilling?: (orgId: string) => Promise<{ stripeCustomerId?: unknown }>
-  turnOff?: (configurationId: string) => Promise<boolean>
+  turnOff?: (configurationId: string, stripeAccount?: string | null) => Promise<boolean>
   alert?: typeof raiseOperatorAlert
   /** Stripe's word on a charge's invoice now, or null when it cannot be asked. */
   invoiceStatus?: InvoiceStatus
@@ -219,7 +219,7 @@ async function turnOffConfigurations(
   let off = 0
   let failed = 0
   for (const [configurationId, record] of configurations) {
-    const done = await deps.turnOff(configurationId).catch(() => false)
+    const done = await deps.turnOff(configurationId, record.stripeConfigurationAccount ?? null).catch(() => false)
     if (done) {
       off += 1
       continue
@@ -478,7 +478,7 @@ async function enforcePosCellularGrace(context: {
   config: PosCellularConfig
   now: number
   alert: typeof raiseOperatorAlert
-  turnOff: (configurationId: string) => Promise<boolean>
+  turnOff: (configurationId: string, stripeAccount?: string | null) => Promise<boolean>
   invoiceStatus: InvoiceStatus
   notify: NonNullable<PosCellularBillingDeps['notify']>
   warn: NonNullable<PosCellularBillingDeps['warn']>
@@ -611,7 +611,7 @@ async function finishSuspension(
   context: {
     now: number
     alert: typeof raiseOperatorAlert
-    turnOff: (configurationId: string) => Promise<boolean>
+    turnOff: (configurationId: string, stripeAccount?: string | null) => Promise<boolean>
     notify: NonNullable<PosCellularBillingDeps['notify']>
   },
 ): Promise<void> {

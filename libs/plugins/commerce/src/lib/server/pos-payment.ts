@@ -64,6 +64,7 @@ import {
 import {
   cancelPosCardPayment,
   createCardPresentIntent,
+  posPaymentAccount,
   refreshPosCardPayment,
   retryCardPresentPayment,
   simulatePosReaderTap,
@@ -71,6 +72,7 @@ import {
   startCardLinkPayment,
   startCardPresentPayment,
 } from './pos-terminal'
+import { isNoApplicationFeeToRefund } from './stripe-refund'
 
 /**
  * `POST /api/commerce/pos-payment` (AGL-3607): every tender against an OPEN
@@ -86,17 +88,17 @@ export const posPaymentHandler: PluginApiHandler = async (req, res) => {
   // `sale` is a read and may be a GET, so a register re-reading its sale does
   // not spend the console's write budget; everything else moves money.
   const body = req.method === 'GET' ? posQueryBody(req) : posRequestBody(req)
-  if (
-    !(
-      req.method === 'POST' ||
-      (req.method === 'GET' && (body['action'] === 'sale' || body['action'] === 'context'))
-    )
-  ) {
+  if (!(
+    req.method === 'POST' ||
+    (req.method === 'GET' &&
+      (body['action'] === 'sale' || body['action'] === 'context'))
+  )) {
     return res.status(405).json({ error: 'Method not allowed' })
   }
   const hostId = String(body['hostId'] ?? '')
   const gate = await authorizePosStaff(req, hostId, 'posSell')
-  if ('error' in gate) return res.status(gate.status).json({ error: gate.error })
+  if ('error' in gate)
+    return res.status(gate.status).json({ error: gate.error })
   let staff = gate.staff
   const action = String(body['action'] ?? '')
   const orderId = String(body['orderId'] ?? '')
@@ -129,16 +131,25 @@ export const posPaymentHandler: PluginApiHandler = async (req, res) => {
             livemode: Boolean(doc.get('livemode')),
           }))
         : []
-      const config = await getPluginConfig(staff.orgId || undefined, 'commerce', { hostId })
+      const config = await getPluginConfig(
+        staff.orgId || undefined,
+        'commerce',
+        { hostId },
+      )
       return res.status(200).json({
         settings: posRegisterSettings(config),
         // The register's own rules (AGL-3609): the shift it requires, the
         // idle lock and the refund limit. The console reads the same config
         // client-side; the native apps read it here.
         ops: posOpsSettings(config),
-        terminal: { available: posTerminalAvailable(), testMode: posStripeTestMode() },
+        terminal: {
+          available: posTerminalAvailable(),
+          testMode: posStripeTestMode(),
+        },
         readers,
-        publishableKey: String(process.env.NEXT_PUBLIC_STRIPE_PUBLISHABLE_KEY ?? ''),
+        publishableKey: String(
+          process.env.NEXT_PUBLIC_STRIPE_PUBLISHABLE_KEY ?? '',
+        ),
         // A text receipt is offered only when an SMS provider is on (AGL-3610).
         smsReceipts: pluginSmsAvailable(),
         // Store credit other plugins keep — rewards (AGL-3640) — offered here.
@@ -180,12 +191,24 @@ export const posPaymentHandler: PluginApiHandler = async (req, res) => {
     const settings = posRegisterSettings(
       await getPluginConfig(staff.orgId || undefined, 'commerce', { hostId }),
     )
-    let outcome: (PosPaymentOutcome & { clientSecret?: string; paymentIntentId?: string }) | null = null
+    let outcome:
+      | (PosPaymentOutcome & {
+          clientSecret?: string
+          paymentIntentId?: string
+          stripeAccount?: string
+        })
+      | null = null
     switch (action) {
       case 'sale': {
         const order = await readPosSale(hostId, orderId)
         if (!order) return res.status(404).json({ error: 'Unknown sale' })
-        outcome = { ok: true, order, payment: null, completed: false, changed: false }
+        outcome = {
+          ok: true,
+          order,
+          payment: null,
+          completed: false,
+          changed: false,
+        }
         break
       }
       case 'cash':
@@ -238,7 +261,9 @@ export const posPaymentHandler: PluginApiHandler = async (req, res) => {
           org: staff.org,
           // The register's own card fields send the PaymentMethod Stripe
           // made from the card, never the card; the server confirms with it.
-          ...(body['paymentMethodId'] ? { paymentMethodId: String(body['paymentMethodId']) } : {}),
+          ...(body['paymentMethodId']
+            ? { paymentMethodId: String(body['paymentMethodId']) }
+            : {}),
         })
         break
       case 'card-link':
@@ -260,7 +285,12 @@ export const posPaymentHandler: PluginApiHandler = async (req, res) => {
         outcome = await cancelPosCardPayment({ hostId, orderId, paymentId })
         break
       case 'retry':
-        outcome = await retryCardPresentPayment({ hostId, orderId, paymentId, settings })
+        outcome = await retryCardPresentPayment({
+          hostId,
+          orderId,
+          paymentId,
+          settings,
+        })
         break
       case 'simulate':
         outcome = await simulatePosReaderTap({
@@ -279,22 +309,38 @@ export const posPaymentHandler: PluginApiHandler = async (req, res) => {
       default:
         return res.status(400).json({ error: 'Unknown action' })
     }
-    if ('error' in outcome) return res.status(outcome.status).json({ error: outcome.error })
+    if ('error' in outcome)
+      return res.status(outcome.status).json({ error: outcome.error })
     return res.status(200).json({
       sale: posSaleSummary(outcome.order),
       ...(outcome.payment ? { paymentId: outcome.payment.id } : {}),
       completed: outcome.order.status === 'paid',
       ...(outcome.clientSecret ? { clientSecret: outcome.clientSecret } : {}),
-      ...(outcome.paymentIntentId ? { paymentIntentId: outcome.paymentIntentId } : {}),
+      ...(outcome.paymentIntentId
+        ? { paymentIntentId: outcome.paymentIntentId }
+        : {}),
       // The key the typed-card form loads Stripe with, beside the secret it
       // confirms, so a register whose context read failed can still take it.
       ...(action === 'card-keyed' && outcome.clientSecret
-        ? { publishableKey: String(process.env.NEXT_PUBLIC_STRIPE_PUBLISHABLE_KEY ?? '') }
+        ? {
+            publishableKey: String(
+              process.env.NEXT_PUBLIC_STRIPE_PUBLISHABLE_KEY ?? '',
+            ),
+          }
+        : {}),
+      // A direct-charge store's typed-card intent lives on its own account:
+      // the form loads Stripe for that account to confirm it.
+      ...(action === 'card-keyed' &&
+      outcome.clientSecret &&
+      outcome.stripeAccount
+        ? { stripeAccount: outcome.stripeAccount }
         : {}),
     })
   } catch (error) {
     console.error('[pos-payment]', action, error)
-    return res.status(500).json({ error: 'Payment failed — check the sale before trying again' })
+    return res
+      .status(500)
+      .json({ error: 'Payment failed — check the sale before trying again' })
   }
 }
 
@@ -306,7 +352,12 @@ async function registerReturnUrl(
 ): Promise<string> {
   const origin = `https://${String(requestHost ?? '')}`
   const subdomain = (
-    await firebaseAdmin.app().firestore().collection('hostIndex').doc(hostId).get()
+    await firebaseAdmin
+      .app()
+      .firestore()
+      .collection('hostIndex')
+      .doc(hostId)
+      .get()
   ).get('subdomain') as string | undefined
   const orgSlug = staff.org?.['slug'] as string | undefined
   return orgSlug && subdomain
@@ -319,10 +370,17 @@ function tenderable(
   order: PosLiftedOrder,
   payments: CommerceModel.OrderPayment[],
 ): number {
-  return CommerceModel.posTenderableCents(Number(order.totals?.totalCents ?? 0), payments)
+  return CommerceModel.posTenderableCents(
+    Number(order.totals?.totalCents ?? 0),
+    payments,
+  )
 }
 
-const NOT_OPEN = { kind: 'refuse' as const, status: 409, error: 'This sale is no longer open' }
+const NOT_OPEN = {
+  kind: 'refuse' as const,
+  status: 409,
+  error: 'This sale is no longer open',
+}
 
 /**
  * Cash: the amount defaults to whatever is left, the change is what the
@@ -345,14 +403,29 @@ async function takeCash(
       if (existing) return { kind: 'keep' }
       if (order.status !== 'pending') return NOT_OPEN
       if (!Number.isFinite(tenderedCents) || tenderedCents <= 0) {
-        return { kind: 'refuse', status: 400, error: 'Enter the cash received.' }
+        return {
+          kind: 'refuse',
+          status: 400,
+          error: 'Enter the cash received.',
+        }
       }
       const open = tenderable(order, payments)
-      if (open <= 0) return { kind: 'refuse', status: 409, error: 'Nothing is left to pay on this sale.' }
+      if (open <= 0)
+        return {
+          kind: 'refuse',
+          status: 409,
+          error: 'Nothing is left to pay on this sale.',
+        }
       const amountCents =
-        askedCents > 0 ? Math.min(askedCents, open) : Math.min(open, Math.max(0, tenderedCents - tipCents))
+        askedCents > 0
+          ? Math.min(askedCents, open)
+          : Math.min(open, Math.max(0, tenderedCents - tipCents))
       if (!(amountCents > 0)) {
-        return { kind: 'refuse', status: 400, error: 'The cash received does not cover the tip.' }
+        return {
+          kind: 'refuse',
+          status: 400,
+          error: 'The cash received does not cover the tip.',
+        }
       }
       const tipProblem = CommerceModel.posTipProblem(tipCents, amountCents)
       if (tipProblem) return { kind: 'refuse', status: 400, error: tipProblem }
@@ -409,13 +482,16 @@ async function giftCardBalance(
     windowMs: 60_000,
   })
   if (!rate.allowed) {
-    return res.status(429).json({ error: 'Too many balance checks. Wait a minute and try again.' })
+    return res
+      .status(429)
+      .json({ error: 'Too many balance checks. Wait a minute and try again.' })
   }
   if (CommerceModel.giftCardCodeProblem(code)) {
     return res.status(404).json({ error: 'No gift card has that code.' })
   }
   const snapshot = await giftCardRef(staff.hostId, code).get()
-  if (!snapshot.exists) return res.status(404).json({ error: 'No gift card has that code.' })
+  if (!snapshot.exists)
+    return res.status(404).json({ error: 'No gift card has that code.' })
   const card = snapshot.data() as CommerceModel.HostGiftCard
   return res.status(200).json({
     availableCents: CommerceModel.giftCardAvailableCents(card, Date.now()),
@@ -450,12 +526,19 @@ async function takeGiftCard(
     paymentId,
     prepare: async (transaction) => {
       const snapshot = await transaction.get(cardRef)
-      return snapshot.exists ? (snapshot.data() as CommerceModel.HostGiftCard) : null
+      return snapshot.exists
+        ? (snapshot.data() as CommerceModel.HostGiftCard)
+        : null
     },
     decide: ({ order, payments, existing, context: card }) => {
       if (existing) return { kind: 'keep' }
       if (order.status !== 'pending') return NOT_OPEN
-      if (!card) return { kind: 'refuse', status: 404, error: 'No gift card has that code.' }
+      if (!card)
+        return {
+          kind: 'refuse',
+          status: 404,
+          error: 'No gift card has that code.',
+        }
       const available = CommerceModel.giftCardAvailableCents(card, Date.now())
       if (available <= 0) {
         return {
@@ -467,9 +550,17 @@ async function takeGiftCard(
         }
       }
       const open = tenderable(order, payments)
-      const amountCents = Math.min(available, open, askedCents > 0 ? askedCents : open)
+      const amountCents = Math.min(
+        available,
+        open,
+        askedCents > 0 ? askedCents : open,
+      )
       if (!(amountCents > 0)) {
-        return { kind: 'refuse', status: 409, error: 'Nothing is left to pay on this sale.' }
+        return {
+          kind: 'refuse',
+          status: 409,
+          error: 'Nothing is left to pay on this sale.',
+        }
       }
       const now = Date.now()
       return {
@@ -498,7 +589,10 @@ async function takeGiftCard(
       transaction.set(
         cardRef,
         {
-          balanceCents: Math.max(0, Number(card?.balanceCents ?? 0) - payment.amountCents),
+          balanceCents: Math.max(
+            0,
+            Number(card?.balanceCents ?? 0) - payment.amountCents,
+          ),
           lastUsedAtMs: Date.now(),
         },
         { merge: true },
@@ -513,21 +607,42 @@ async function takeGiftCard(
  * Only staff reach it — `authorizePosStaff` above — so a provider may look
  * accounts up by email here, which it never does for a shopper.
  */
-async function creditLookup(staff: PosStaff, body: Record<string, any>, res: any) {
+async function creditLookup(
+  staff: PosStaff,
+  body: Record<string, any>,
+  res: any,
+) {
   const entry = checkoutCreditProvider(String(body['providerId'] ?? ''))
-  if (!entry?.provider.lookup) return res.status(404).json({ error: 'That kind of credit is not taken here.' })
+  if (!entry?.provider.lookup)
+    return res
+      .status(404)
+      .json({ error: 'That kind of credit is not taken here.' })
   const rate = await consumeRateLimit(`pos-credit-lookup:${staff.uid}`, {
     limit: 60,
     windowMs: 60_000,
   })
-  if (!rate.allowed) return res.status(429).json({ error: 'Too many lookups. Wait a moment.' })
-  if (!(await entry.provider.offered({ hostId: staff.hostId, channel: 'pos' }).catch(() => false))) {
-    return res.status(404).json({ error: 'That kind of credit is not taken here.' })
+  if (!rate.allowed)
+    return res.status(429).json({ error: 'Too many lookups. Wait a moment.' })
+  if (
+    !(await entry.provider
+      .offered({ hostId: staff.hostId, channel: 'pos' })
+      .catch(() => false))
+  ) {
+    return res
+      .status(404)
+      .json({ error: 'That kind of credit is not taken here.' })
   }
   const found = await entry.provider
-    .lookup({ hostId: staff.hostId, query: String(body['query'] ?? '').slice(0, 120) })
+    .lookup({
+      hostId: staff.hostId,
+      query: String(body['query'] ?? '').slice(0, 120),
+    })
     .catch((error: unknown) => {
-      console.error('[pos-payment] credit lookup failed', entry.providerId, error)
+      console.error(
+        '[pos-payment] credit lookup failed',
+        entry.providerId,
+        error,
+      )
       return []
     })
   const accounts = found
@@ -554,9 +669,22 @@ async function takeCredit(
   const entry = code
     ? checkoutCreditProviderForCode(code)
     : checkoutCreditProvider(String(body['providerId'] ?? ''))
-  if (!entry) return { ok: false, status: 404, error: 'That code is not one this store takes.' }
-  if (!(await entry.provider.offered({ hostId: staff.hostId, channel: 'pos' }).catch(() => false))) {
-    return { ok: false, status: 404, error: 'That kind of credit is not taken here.' }
+  if (!entry)
+    return {
+      ok: false,
+      status: 404,
+      error: 'That code is not one this store takes.',
+    }
+  if (
+    !(await entry.provider
+      .offered({ hostId: staff.hostId, channel: 'pos' })
+      .catch(() => false))
+  ) {
+    return {
+      ok: false,
+      status: 404,
+      error: 'That kind of credit is not taken here.',
+    }
   }
   const sale = await readPosSale(staff.hostId, orderId)
   if (!sale) return { ok: false, status: 404, error: 'Unknown sale' }
@@ -566,15 +694,21 @@ async function takeCredit(
         hostId: staff.hostId,
         ...(code ? { code } : { reference: String(body['reference'] ?? '') }),
         channel: 'pos',
-        customerEmail: (sale as { customerEmail?: string | null }).customerEmail ?? null,
+        customerEmail:
+          (sale as { customerEmail?: string | null }).customerEmail ?? null,
         staff: true,
       })
       .catch((error: unknown) => {
-        console.error('[pos-payment] credit resolve failed', entry.providerId, error)
+        console.error(
+          '[pos-payment] credit resolve failed',
+          entry.providerId,
+          error,
+        )
         return null
       }),
   )
-  if ('error' in account) return { ok: false, status: account.status, error: account.error }
+  if ('error' in account)
+    return { ok: false, status: account.status, error: account.error }
   const askedCents = Math.round(Number(body['amountCents'] ?? 0))
   return await applyPosPayment<CheckoutCreditStage | null>({
     hostId: staff.hostId,
@@ -591,12 +725,30 @@ async function takeCredit(
     decide: ({ order, payments, existing, context: stage }) => {
       if (existing) return { kind: 'keep' }
       if (order.status !== 'pending') return NOT_OPEN
-      if (!stage) return { kind: 'refuse', status: 404, error: `That ${account.label.toLowerCase()} account no longer exists.` }
+      if (!stage)
+        return {
+          kind: 'refuse',
+          status: 404,
+          error: `That ${account.label.toLowerCase()} account no longer exists.`,
+        }
       const open = tenderable(order, payments)
-      if (open <= 0) return { kind: 'refuse', status: 409, error: 'Nothing is left to pay on this sale.' }
-      const amountCents = Math.min(stage.availableCents, open, askedCents > 0 ? askedCents : open)
+      if (open <= 0)
+        return {
+          kind: 'refuse',
+          status: 409,
+          error: 'Nothing is left to pay on this sale.',
+        }
+      const amountCents = Math.min(
+        stage.availableCents,
+        open,
+        askedCents > 0 ? askedCents : open,
+      )
       if (!(amountCents > 0)) {
-        return { kind: 'refuse', status: 409, error: `This ${account.label.toLowerCase()} account has nothing to spend.` }
+        return {
+          kind: 'refuse',
+          status: 409,
+          error: `This ${account.label.toLowerCase()} account has nothing to spend.`,
+        }
       }
       const now = Date.now()
       return {
@@ -627,9 +779,18 @@ async function takeCredit(
       // The stage writes through the sale's own transaction. Taking less than
       // the payment records would leave the sale paid by money that did not
       // move, so a short debit aborts the whole commit instead.
-      const taken = stage ? stage.debit({ cents: payment.amountCents, key: payment.id, orderId, channel: 'pos' }) : 0
+      const taken = stage
+        ? stage.debit({
+            cents: payment.amountCents,
+            key: payment.id,
+            orderId,
+            channel: 'pos',
+          })
+        : 0
       if (taken !== payment.amountCents) {
-        throw new Error(`credit debit ${taken} short of payment ${payment.amountCents}`)
+        throw new Error(
+          `credit debit ${taken} short of payment ${payment.amountCents}`,
+        )
       }
     },
   })
@@ -662,15 +823,21 @@ async function takeFolio(
     hostId: staff.hostId,
     orderId,
     paymentId,
-    prepare: async (transaction) => (await transaction.get(stayRef)).exists as boolean,
+    prepare: async (transaction) =>
+      (await transaction.get(stayRef)).exists as boolean,
     decide: ({ order, payments, existing, context: stayExists }) => {
       if (existing) return { kind: 'keep' }
       if (order.status !== 'pending') return NOT_OPEN
-      if (!stayExists) return { kind: 'refuse', status: 404, error: 'Unknown reservation' }
+      if (!stayExists)
+        return { kind: 'refuse', status: 404, error: 'Unknown reservation' }
       const open = tenderable(order, payments)
       const amountCents = Math.min(open, askedCents > 0 ? askedCents : open)
       if (!(amountCents > 0)) {
-        return { kind: 'refuse', status: 409, error: 'Nothing is left to pay on this sale.' }
+        return {
+          kind: 'refuse',
+          status: 409,
+          error: 'Nothing is left to pay on this sale.',
+        }
       }
       const now = Date.now()
       return {
@@ -693,7 +860,10 @@ async function takeFolio(
           feeCents: 0,
           cashierId: staff.uid,
         },
-        event: { event: 'folio', detail: `Charged to reservation ${reservationId}` },
+        event: {
+          event: 'folio',
+          detail: `Charged to reservation ${reservationId}`,
+        },
       }
     },
     write: (transaction, _stay, payment) => {
@@ -727,7 +897,8 @@ export async function voidPosSale(
   const hostId = staff.hostId
   const order = await readPosSale(hostId, orderId)
   if (!order) return { ok: false, status: 404, error: 'Unknown sale' }
-  if (order.status === 'cancelled') return { ok: true, order, payment: null, completed: false, changed: false }
+  if (order.status === 'cancelled')
+    return { ok: true, order, payment: null, completed: false, changed: false }
   if (order.status !== 'pending' || !Array.isArray(order.payments)) {
     return {
       ok: false,
@@ -736,8 +907,15 @@ export async function voidPosSale(
     }
   }
   for (const payment of CommerceModel.orderPayments(order)) {
-    if (payment.status === 'pending' && CommerceModel.isCardPaymentMethod(payment.method)) {
-      const cancelled = await cancelPosCardPayment({ hostId, orderId, paymentId: payment.id })
+    if (
+      payment.status === 'pending' &&
+      CommerceModel.isCardPaymentMethod(payment.method)
+    ) {
+      const cancelled = await cancelPosCardPayment({
+        hostId,
+        orderId,
+        paymentId: payment.id,
+      })
       if (!cancelled.ok) return cancelled
     }
   }
@@ -748,7 +926,8 @@ export async function voidPosSale(
     return {
       ok: false,
       status: 409,
-      error: 'The last card payment went through and the sale is paid. Refund it from the order instead.',
+      error:
+        'The last card payment went through and the sale is paid. Refund it from the order instead.',
     }
   }
   for (const payment of CommerceModel.orderPayments(current)) {
@@ -757,21 +936,32 @@ export async function voidPosSale(
     if (!reversed.ok) return reversed
   }
   const firestore = firebaseAdmin.app().firestore()
-  const orderRef = firestore.collection('hosts').doc(hostId).collection('orders').doc(orderId)
+  const orderRef = firestore
+    .collection('hosts')
+    .doc(hostId)
+    .collection('orders')
+    .doc(orderId)
   const cancelled = await firestore.runTransaction(async (transaction: any) => {
     const fresh = {
-      ...(CommerceModel.liftLegacyOrder(((await transaction.get(orderRef)).data() ?? {}) as any) as any),
+      ...(CommerceModel.liftLegacyOrder(
+        ((await transaction.get(orderRef)).data() ?? {}) as any,
+      ) as any),
       $id: orderId,
     } as PosLiftedOrder
     if (fresh.status !== 'pending') return null
     const open = CommerceModel.orderPayments(fresh).some(
-      (payment) => payment.status === 'pending' || payment.status === 'succeeded',
+      (payment) =>
+        payment.status === 'pending' || payment.status === 'succeeded',
     )
     if (open) return null
     const next = {
       ...fresh,
       status: 'cancelled' as const,
-      timeline: CommerceModel.appendOrderEvent(fresh, 'pos-sale-voided', 'Voided at the register'),
+      timeline: CommerceModel.appendOrderEvent(
+        fresh,
+        'pos-sale-voided',
+        'Voided at the register',
+      ),
     }
     transaction.set(
       orderRef,
@@ -786,10 +976,20 @@ export async function voidPosSale(
     return next
   })
   if (!cancelled) {
-    return { ok: false, status: 409, error: 'A payment on this sale changed. Check it and try again.' }
+    return {
+      ok: false,
+      status: 409,
+      error: 'A payment on this sale changed. Check it and try again.',
+    }
   }
   await releasePosSaleDiscount(hostId, current)
-  return { ok: true, order: cancelled, payment: null, completed: false, changed: true }
+  return {
+    ok: true,
+    order: cancelled,
+    payment: null,
+    completed: false,
+    changed: true,
+  }
 }
 
 /** Hands one settled payment back, recording `reversed` in the same commit. */
@@ -801,39 +1001,69 @@ async function reversePayment(
   const hostId = staff.hostId
   if (CommerceModel.isCardPaymentMethod(payment.method)) {
     if (!payment.paymentIntentId) {
-      return { ok: false, status: 409, error: 'A card payment on this sale has no charge to refund.' }
+      return {
+        ok: false,
+        status: 409,
+        error: 'A card payment on this sale has no charge to refund.',
+      }
     }
-    const refund = await posStripe('POST', 'refunds', {
-      idempotencyKey: `pos-void:${payment.id}`,
-      params: {
-        payment_intent: payment.paymentIntentId,
-        reverse_transfer: true,
-        refund_application_fee: true,
-        'metadata[kind]': 'pos-void',
-        'metadata[orderId]': order.$id,
-      },
-    })
+    // A direct charge is refunded ON the store's own account, from its
+    // balance, with nothing to reverse; a destination charge on the platform
+    // pulls the transfer back.
+    const account = posPaymentAccount(payment)
+    const voidRefund = (withFee: boolean) =>
+      posStripe('POST', 'refunds', {
+        idempotencyKey: withFee
+          ? `pos-void:${payment.id}`
+          : `pos-void:${payment.id}:no-fee`,
+        params: {
+          payment_intent: payment.paymentIntentId,
+          ...(account ? {} : { reverse_transfer: true }),
+          ...(withFee ? { refund_application_fee: true } : {}),
+          'metadata[kind]': 'pos-void',
+          'metadata[orderId]': order.$id,
+        },
+        ...(account ? { stripeAccount: account } : {}),
+      })
+    let refund = await voidRefund(true)
+    // A card payment that carried no platform fee (a 0% plan) cannot have one
+    // refunded: void it again without the flag.
+    if (!refund.ok && isNoApplicationFeeToRefund(refund.body))
+      refund = await voidRefund(false)
     if (!refund.ok) {
       return {
         ok: false,
         status: 502,
-        error: posStripeErrorMessage(refund.body, 'The card refund failed. The sale is still open.'),
+        error: posStripeErrorMessage(
+          refund.body,
+          'The card refund failed. The sale is still open.',
+        ),
       }
     }
   }
-  const cardRef = payment.giftCardId ? giftCardRef(hostId, payment.giftCardId) : null
-  const stayRef = payment.reservationId ? reservationRef(hostId, payment.reservationId) : null
+  const cardRef = payment.giftCardId
+    ? giftCardRef(hostId, payment.giftCardId)
+    : null
+  const stayRef = payment.reservationId
+    ? reservationRef(hostId, payment.reservationId)
+    : null
   // Store credit goes back to the plugin that keeps it (AGL-3640), in the
   // same commit as the reversal. A provider that is gone cannot take it
   // back, so the void stops with the sale still open rather than cancelling
   // over credit that did not come back.
   const creditEntry =
-    payment.method === 'credit' && payment.creditProviderId ? checkoutCreditProvider(payment.creditProviderId) : null
-  if (payment.method === 'credit' && (!creditEntry || !payment.creditReference)) {
+    payment.method === 'credit' && payment.creditProviderId
+      ? checkoutCreditProvider(payment.creditProviderId)
+      : null
+  if (
+    payment.method === 'credit' &&
+    (!creditEntry || !payment.creditReference)
+  ) {
     return {
       ok: false,
       status: 409,
-      error: 'The store credit on this sale cannot be handed back right now. The sale is still open.',
+      error:
+        'The store credit on this sale cannot be handed back right now. The sale is still open.',
     }
   }
   return await applyPosPayment({
@@ -843,13 +1073,29 @@ async function reversePayment(
     prepare: async (transaction) => {
       if (payment.method === 'gift_card' && cardRef) {
         const snapshot = await transaction.get(cardRef)
-        return { card: snapshot.exists ? (snapshot.data() as CommerceModel.HostGiftCard) : null, folio: null, credit: null }
+        return {
+          card: snapshot.exists
+            ? (snapshot.data() as CommerceModel.HostGiftCard)
+            : null,
+          folio: null,
+          credit: null,
+        }
       }
       if (payment.method === 'folio' && stayRef) {
         const snapshot = await transaction.get(stayRef)
-        return { card: null, folio: snapshot.exists ? ((snapshot.get('folio') ?? []) as any[]) : null, credit: null }
+        return {
+          card: null,
+          folio: snapshot.exists
+            ? ((snapshot.get('folio') ?? []) as any[])
+            : null,
+          credit: null,
+        }
       }
-      if (payment.method === 'credit' && creditEntry && payment.creditReference) {
+      if (
+        payment.method === 'credit' &&
+        creditEntry &&
+        payment.creditReference
+      ) {
         const credit = await creditEntry.provider.stage({
           transaction,
           hostId,
@@ -862,7 +1108,8 @@ async function reversePayment(
       return { card: null, folio: null, credit: null }
     },
     decide: ({ existing }) => {
-      if (!existing) return { kind: 'refuse', status: 404, error: 'Unknown payment' }
+      if (!existing)
+        return { kind: 'refuse', status: 404, error: 'Unknown payment' }
       if (existing.status !== 'succeeded') return { kind: 'keep' }
       return {
         kind: 'put',
@@ -880,13 +1127,18 @@ async function reversePayment(
       if (reversed.method === 'gift_card' && cardRef && context.card) {
         transaction.set(
           cardRef,
-          { balanceCents: Number(context.card.balanceCents ?? 0) + reversed.amountCents },
+          {
+            balanceCents:
+              Number(context.card.balanceCents ?? 0) + reversed.amountCents,
+          },
           { merge: true },
         )
       }
       if (reversed.method === 'folio' && stayRef && context.folio) {
         transaction.update(stayRef, {
-          folio: context.folio.filter((entry) => entry?.paymentId !== reversed.id),
+          folio: context.folio.filter(
+            (entry) => entry?.paymentId !== reversed.id,
+          ),
         })
       }
       if (reversed.method === 'credit' && context.credit) {
@@ -909,9 +1161,15 @@ export async function recordReceiptChoice(
   orderId: string,
   body: Record<string, any>,
 ): Promise<PosPaymentOutcome> {
-  const channel = String(body['channel'] ?? '') as CommerceModel.PosReceiptChannel
+  const channel = String(
+    body['channel'] ?? '',
+  ) as CommerceModel.PosReceiptChannel
   if (!['email', 'sms', 'print', 'none'].includes(channel)) {
-    return { ok: false, status: 400, error: 'Choose email, text, print or no receipt.' }
+    return {
+      ok: false,
+      status: 400,
+      error: 'Choose email, text, print or no receipt.',
+    }
   }
   const to =
     channel === 'email'
@@ -923,15 +1181,26 @@ export async function recordReceiptChoice(
     return {
       ok: false,
       status: 400,
-      error: channel === 'email' ? 'Enter a valid email address.' : 'Enter a valid phone number.',
+      error:
+        channel === 'email'
+          ? 'Enter a valid email address.'
+          : 'Enter a valid phone number.',
     }
   }
   if (channel === 'sms' && !pluginSmsAvailable()) {
-    return { ok: false, status: 409, error: 'Text receipts are not set up for this store.' }
+    return {
+      ok: false,
+      status: 409,
+      error: 'Text receipts are not set up for this store.',
+    }
   }
   const marketingOptIn = channel === 'email' && body['marketingOptIn'] === true
   const firestore = firebaseAdmin.app().firestore()
-  const orderRef = firestore.collection('hosts').doc(staff.hostId).collection('orders').doc(orderId)
+  const orderRef = firestore
+    .collection('hosts')
+    .doc(staff.hostId)
+    .collection('orders')
+    .doc(orderId)
   const order = await firestore.runTransaction(async (transaction: any) => {
     const snapshot = await transaction.get(orderRef)
     if (!snapshot.exists) return null
@@ -950,7 +1219,9 @@ export async function recordReceiptChoice(
       String(previous.to ?? '') === to &&
       Date.now() - Number(previous.atMs ?? 0) < RECEIPT_REPEAT_WINDOW_MS
     ) {
-      return { ...fresh, repeated: true } as PosLiftedOrder & { repeated?: boolean }
+      return { ...fresh, repeated: true } as PosLiftedOrder & {
+        repeated?: boolean
+      }
     }
     const receiptRequest = {
       channel,
@@ -965,7 +1236,10 @@ export async function recordReceiptChoice(
         ...(channel === 'email' && !fresh.customerEmail
           ? {
               customerEmail: to,
-              ...CommerceModel.orderListFields({ ...fresh, customerEmail: to }, orderId),
+              ...CommerceModel.orderListFields(
+                { ...fresh, customerEmail: to },
+                orderId,
+              ),
             }
           : {}),
         // The receipt door texts `customerPhone` (AGL-3610).
@@ -973,10 +1247,13 @@ export async function recordReceiptChoice(
       },
       { merge: true },
     )
-    return { ...fresh, receiptRequest } as PosLiftedOrder & { repeated?: boolean }
+    return { ...fresh, receiptRequest } as PosLiftedOrder & {
+      repeated?: boolean
+    }
   })
   if (!order) return { ok: false, status: 404, error: 'Unknown sale' }
-  if (order.repeated) return { ok: true, order, payment: null, completed: false, changed: false }
+  if (order.repeated)
+    return { ok: true, order, payment: null, completed: false, changed: false }
   if (order.status === 'paid' && channel === 'print') {
     // Chosen after the sale completed: printed now on the register's receipt
     // printer, under the sale's own key so it never prints twice (AGL-3609).
@@ -984,11 +1261,16 @@ export async function recordReceiptChoice(
   }
   // A kiosk's own receipt screen (AGL-3623) is not the register's display:
   // the display may be asking the cashier's customer right now.
-  if (order.status === 'paid' && order.registerId && order.posSource !== 'kiosk') {
+  if (
+    order.status === 'paid' &&
+    order.registerId &&
+    order.posSource !== 'kiosk'
+  ) {
     // The customer has answered (or the cashier for them): the display says
     // thank you and drops the address they typed (AGL-3608).
-    await finishPosDisplayReceipt(staff.hostId, order.registerId).catch((error: unknown) =>
-      console.error('[pos-payment] display finish failed', error),
+    await finishPosDisplayReceipt(staff.hostId, order.registerId).catch(
+      (error: unknown) =>
+        console.error('[pos-payment] display finish failed', error),
     )
   }
   if (order.status === 'paid' && (channel === 'email' || channel === 'sms')) {
@@ -1013,22 +1295,30 @@ export async function recordReceiptChoice(
             POS_CURRENCY,
           )})`,
         },
-      }).catch((error: unknown) => console.error('[pos-payment] contact capture failed', error))
+      }).catch((error: unknown) =>
+        console.error('[pos-payment] contact capture failed', error),
+      )
     }
     if (sent !== 'sent') {
       // A failed send is not a repeat: the cashier's retry goes out.
       await orderRef
         .set({ receiptRequest: { atMs: 0 } }, { merge: true })
-        .catch((error: unknown) => console.error('[pos-payment] receipt retry reset failed', error))
+        .catch((error: unknown) =>
+          console.error('[pos-payment] receipt retry reset failed', error),
+        )
     }
     if (sent === 'not_configured') {
       return {
         ok: false,
         status: 409,
-        error: channel === 'sms' ? 'Text receipts are not set up for this store.' : 'Email is not set up.',
+        error:
+          channel === 'sms'
+            ? 'Text receipts are not set up for this store.'
+            : 'Email is not set up.',
       }
     }
-    if (sent !== 'sent') return { ok: false, status: 502, error: 'The receipt could not be sent.' }
+    if (sent !== 'sent')
+      return { ok: false, status: 502, error: 'The receipt could not be sent.' }
   }
   return { ok: true, order, payment: null, completed: false, changed: true }
 }
