@@ -44,7 +44,11 @@ import {
  *   hosts/{hostId}/pluginConnections/{listingId}__{connectionId}
  *       a site's grant: sealed tokens, its choices, status, sync times;
  *   hosts/{hostId}/pluginConnections/oauth-{hash}
- *       a pending connect's single-use state record.
+ *       a pending connect's single-use state record;
+ *   hosts/{hostId}/pluginConnections/record-{listingId}__{connectionId}
+ *       the record a connection's declared sync last wrote (AGL-4192):
+ *       written only by the sync, read only on the server (the site's page
+ *       render and the console's routes), never by a client rule.
  */
 
 /** Top-level collection of the publisher OAuth app credentials, one per listing and connection. */
@@ -56,6 +60,37 @@ export const PLUGIN_CONNECTIONS_HOST_COLLECTION = 'pluginConnections'
 /** The id shared by a listing's credentials and a site's connection: `{listingId}__{connectionId}`. */
 export function pluginConnectionDocId(listingId: string, connectionId: string): string {
   return `${listingId}__${connectionId}`
+}
+
+/**
+ * The id of the record a connection's sync writes, beside the connection in
+ * `hosts/{hostId}/pluginConnections` (AGL-4192). The `record-` prefix keeps
+ * it apart from the connection (`{listingId}__{connectionId}`) and from a
+ * pending connect (`oauth-…`).
+ */
+export function pluginConnectionRecordDocId(listingId: string, connectionId: string): string {
+  return `record-${pluginConnectionDocId(listingId, connectionId)}`
+}
+
+/** One value of a record, typed by its declared field (`datetime` is epoch ms, `url` an https string). */
+export type PluginConnectionRecordValue = string | number | boolean | null
+
+/**
+ * The record a connection's declared sync last wrote for one site: the
+ * declared summary `fields` and the declared `items`, each holding only the
+ * keys the manifest's `sync.record` declares, already capped to its limits.
+ * The sync replaces it whole; a site with no successful sync has none.
+ */
+export interface PluginConnectionRecordDoc {
+  kind: 'record'
+  listingId: string
+  connectionId: string
+  /** The listing version whose manifest declared the schema this was mapped with. */
+  version: string
+  /** When the sync that wrote it finished, epoch ms. */
+  syncedAtMs: number
+  fields: Record<string, PluginConnectionRecordValue>
+  items: Array<Record<string, PluginConnectionRecordValue>>
 }
 
 /** The console API paths (served at `/api/<path>`). The callback is registered at providers; never rename it. */
