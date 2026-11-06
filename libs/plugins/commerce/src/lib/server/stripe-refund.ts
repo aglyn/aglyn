@@ -39,6 +39,23 @@
  * refunded on the platform as a destination charge, so a caller may pass the
  * site's direct-charge account without first asking which kind the sale was.
  */
+/**
+ * Stripe's answer when `refund_application_fee` is sent on a charge that
+ * carried no application fee: a direct sale on a plan whose take is 0%
+ * sends no fee at all. The refund is then sent again without the flag
+ * (there is nothing of the platform's to hand back), never failed.
+ */
+export function isNoApplicationFeeToRefund(body: unknown): boolean {
+  const error = (
+    body as { error?: { param?: string; message?: string } } | null
+  )?.error
+  if (!error) return false
+  return (
+    error.param === 'refund_application_fee' ||
+    /no application fee to refund/i.test(String(error.message ?? ''))
+  )
+}
+
 export type StripeRefundResult =
   | { ok: true; refundId: string }
   | { ok: false; status: number; error: string; code: string }
@@ -58,15 +75,20 @@ export async function createStripeRefund(input: {
 }): Promise<StripeRefundResult> {
   const secretKey = input.secretKey ?? process.env.STRIPE_SECRET_KEY
   if (!secretKey) {
-    return { ok: false, status: 501, error: 'Payments are not configured.', code: 'not_configured' }
+    return {
+      ok: false,
+      status: 501,
+      error: 'Payments are not configured.',
+      code: 'not_configured',
+    }
   }
   const send = input.fetch ?? fetch
-  const post = (stripeAccount: string | null) => {
+  const post = (stripeAccount: string | null, withFee = true) => {
     const params = new URLSearchParams({
       payment_intent: input.paymentIntentId,
       amount: String(Math.round(input.amountCents)),
       ...(stripeAccount ? {} : { reverse_transfer: 'true' }),
-      refund_application_fee: 'true',
+      ...(withFee ? { refund_application_fee: 'true' } : {}),
     })
     for (const [key, value] of Object.entries(input.metadata ?? {})) {
       params.set(`metadata[${key}]`, value)
@@ -76,7 +98,14 @@ export async function createStripeRefund(input: {
       headers: {
         Authorization: `Bearer ${secretKey}`,
         'Content-Type': 'application/x-www-form-urlencoded',
-        ...(input.idempotencyKey ? { 'Idempotency-Key': input.idempotencyKey } : {}),
+        // The no-fee resend is a different request, so it gets its own key.
+        ...(input.idempotencyKey
+          ? {
+              'Idempotency-Key': withFee
+                ? input.idempotencyKey
+                : `${input.idempotencyKey}:no-fee`,
+            }
+          : {}),
         ...(stripeAccount ? { 'Stripe-Account': stripeAccount } : {}),
       },
       body: params.toString(),
@@ -94,7 +123,8 @@ export async function createStripeRefund(input: {
     (await Promise.resolve()
       .then(() => sent.json())
       .catch(() => ({}))) as RefundBody
-  let response = await post(stripeAccount)
+  let target = stripeAccount
+  let response = await post(target)
   let refund = await read(response)
   // Not the seller's payment: a destination sale on the platform. Stripe
   // answers a payment intent another account owns as `resource_missing`, and
@@ -106,7 +136,14 @@ export async function createStripeRefund(input: {
       (refund?.error?.code === 'resource_missing' &&
         (refund?.error?.param ?? 'payment_intent') === 'payment_intent'))
   ) {
-    response = await post(null)
+    target = null
+    response = await post(target)
+    refund = await read(response)
+  }
+  // No platform fee on the charge (a 0% plan): refund without the flag, on
+  // the account the last attempt reached.
+  if (!response.ok && isNoApplicationFeeToRefund(refund)) {
+    response = await post(target, false)
     refund = await read(response)
   }
   if (!response.ok) {
@@ -122,7 +159,12 @@ export async function createStripeRefund(input: {
           'refund any remainder once it settles.',
       }
     }
-    return { ok: false, status: 502, code, error: refund?.error?.message ?? 'Refund failed' }
+    return {
+      ok: false,
+      status: 502,
+      code,
+      error: refund?.error?.message ?? 'Refund failed',
+    }
   }
   return { ok: true, refundId: String(refund?.id ?? '') }
 }

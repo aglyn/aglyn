@@ -108,7 +108,10 @@ export const bookingRefundHandler: PluginApiHandler = async (req, res) => {
   if (!hostId || !bookingId) {
     return res.status(400).json({ error: 'Missing hostId or bookingId' })
   }
-  if (amountCents != null && !(Number.isFinite(amountCents) && amountCents > 0)) {
+  if (
+    amountCents != null &&
+    !(Number.isFinite(amountCents) && amountCents > 0)
+  ) {
     return res.status(400).json({ error: 'Invalid refund amount' })
   }
 
@@ -123,7 +126,9 @@ export const bookingRefundHandler: PluginApiHandler = async (req, res) => {
     // "Refund bookings" (AGL-4047), not merely a member: this moves money.
     // Its preset is the site Admin, the gate `commerce/refund.ts` applies.
     if (!holdsBookingsSiteKey(hostSnapshot, decoded.uid, 'bookings.refunds')) {
-      return res.status(403).json({ error: bookingsSitePermissionRefusal('bookings.refunds') })
+      return res
+        .status(403)
+        .json({ error: bookingsSitePermissionRefusal('bookings.refunds') })
     }
     const bookingRef = hostRef.collection('bookings').doc(bookingId)
     const bookingSnapshot = await bookingRef.get()
@@ -131,7 +136,10 @@ export const bookingRefundHandler: PluginApiHandler = async (req, res) => {
       return res.status(404).json({ error: 'Unknown booking' })
     }
     // As it stood before this refund, for the event a full refund raises.
-    const bookingBefore = (bookingSnapshot.data() ?? {}) as Record<string, unknown>
+    const bookingBefore = (bookingSnapshot.data() ?? {}) as Record<
+      string,
+      unknown
+    >
     const paymentIntentId = String(bookingSnapshot.get('paymentIntentId') ?? '')
     const paidCents = Math.max(
       0,
@@ -259,18 +267,37 @@ export const bookingRefundHandler: PluginApiHandler = async (req, res) => {
           // appointment earned the platform nothing.
           refund_application_fee: 'true',
         })
-    const response = await fetch('https://api.stripe.com/v1/refunds', {
-      method: 'POST',
-      headers: {
-        Authorization: `Bearer ${process.env.STRIPE_SECRET_KEY}`,
-        'Content-Type': 'application/x-www-form-urlencoded',
-        ...(claimRef ? { 'Idempotency-Key': claimRef.id } : {}),
-        // A direct booking's payment is on the seller's account.
-        ...(direct ? { 'Stripe-Account': chargeAccountId } : {}),
-      },
-      body: params.toString(),
-    })
-    const refund = await response.json().catch(() => ({}) as any)
+    const send = (body: URLSearchParams, keySuffix = '') =>
+      fetch('https://api.stripe.com/v1/refunds', {
+        method: 'POST',
+        headers: {
+          Authorization: `Bearer ${process.env.STRIPE_SECRET_KEY}`,
+          'Content-Type': 'application/x-www-form-urlencoded',
+          ...(claimRef
+            ? { 'Idempotency-Key': `${claimRef.id}${keySuffix}` }
+            : {}),
+          // A direct booking's payment is on the seller's account.
+          ...(direct ? { 'Stripe-Account': chargeAccountId } : {}),
+        },
+        body: body.toString(),
+      })
+    let response = await send(params)
+    let refund = await response.json().catch(() => ({}) as any)
+    // NO PLATFORM FEE ON THE CHARGE. A direct booking on a plan whose take is
+    // 0% carried no application fee, and Stripe refuses
+    // `refund_application_fee` on it. There is nothing of the platform's to
+    // hand back, so the same refund goes again without the flag, under its
+    // own key (a different request).
+    const noFee = (refund as any)?.error
+    if (
+      !response.ok &&
+      (noFee?.param === 'refund_application_fee' ||
+        /no application fee to refund/i.test(String(noFee?.message ?? '')))
+    ) {
+      params.delete('refund_application_fee')
+      response = await send(params, ':no-fee')
+      refund = await response.json().catch(() => ({}) as any)
+    }
     if (!response.ok) {
       console.error('Stripe booking refund error', (refund as any)?.error)
       // Stripe said no, so we KNOW no money moved: give the reservation back
