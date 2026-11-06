@@ -9,6 +9,15 @@ content on the marketing site and is written separately.
 
 <!-- releases below -->
 
+## v1.15.1 — 2026-11-06
+
+[Compare with the previous release](https://github.com/aglyn/aglyn/compare/6515249f8...v1.15.1)
+
+### Fixed
+
+- **console:** a page opened while another tab holds the cache loads in seconds ([AGL-4201](https://linear.app/aglyn/issue/AGL-4201), [AGL-3428](https://linear.app/aglyn/issue/AGL-3428), [AGL-4135](https://linear.app/aglyn/issue/AGL-4135), [AGL-4090](https://linear.app/aglyn/issue/AGL-4090))
+- **mui:** over-hero sticky header stays pinned; dropdown panels stay on screen ([AGL-4200](https://linear.app/aglyn/issue/AGL-4200))
+
 ## v1.15.0 — 2026-11-06
 
 [Compare with the previous release](https://github.com/aglyn/aglyn/compare/v1.14.0...v1.15.0)
