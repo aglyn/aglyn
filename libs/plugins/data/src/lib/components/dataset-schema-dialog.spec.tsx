@@ -627,4 +627,31 @@ describe('DatasetSchemaDialog shares with all sites except some (AGL-4047)', () 
     expect(offered).toContain('Every site')
     expect(offered).not.toContain('Chosen sites')
   })
+
+  it('tells two reference targets of one name apart by who they are shared with (AGL-4047)', () => {
+    render(
+      <DatasetSchemaDialog
+        orgId="org-1"
+        dataset={{
+          ...dataset,
+          visibleTo: ['org'],
+          model: { fields: { link: { name: 'Link', type: 'reference' } }, order: ['link'] },
+        } as never}
+        datasets={[
+          { $id: 'wide', displayName: 'Services', fields: ['name', 'price'], visibleTo: ['org'] },
+          { $id: 'also', displayName: 'Services', fields: ['name'], visibleTo: ['org'] },
+          { $id: 'menu', displayName: 'Menu', fields: ['name'], visibleTo: ['org'] },
+        ] as never}
+        recordCount={0}
+        seedFromCache={false}
+        onClose={jest.fn()}
+      />,
+    )
+
+    fireEvent.click(screen.getByRole('button', { name: 'Edit' }))
+    fireEvent.mouseDown(screen.getByLabelText(/Target|Dataset|Collection/))
+    const offered = screen.getAllByRole('option').map((option) => option.textContent)
+    // Both are on every site, so their field counts tell them apart.
+    expect(offered).toEqual(['Services · All sites · 2 fields', 'Services · All sites · 1 field', 'Menu'])
+  })
 })

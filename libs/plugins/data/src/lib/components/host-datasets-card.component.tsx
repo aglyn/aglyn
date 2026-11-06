@@ -123,6 +123,7 @@ import {
   type DatasetRailEntry,
   datasetCreatedLabel,
   datasetNameMatches,
+  datasetPickerLabelsOf,
   datasetRailName,
   datasetRecordTitle,
   datasetRailSecondary,
@@ -1614,6 +1615,8 @@ export function HostDatasetsCard(props: HostDatasetsCardProps) {
       group.datasets.map((item) => tab(item, group.label)),
     )
   }, [basePath, railDatasets, hostNames, grouped])
+  /** The join dialog's names, told apart where two match (AGL-4047). */
+  const joinLabels = useMemo(() => datasetPickerLabelsOf(datasets, hostNames), [datasets, hostNames])
   const offerSharedWith =
     !pageHostId && orgSites.length > 1 && (datasets.length > DATASET_RAIL_GROUP_AT || Boolean(sharedWith))
   const sitesByName = useMemo(
@@ -2247,7 +2250,8 @@ export function HostDatasetsCard(props: HostDatasetsCardProps) {
             >
               {datasets.map((item) => (
                 <MenuItem key={item.$id} value={item.$id}>
-                  {datasetDisplayName(item)}
+                  {/* Who it is shared with only where two share a name (AGL-4047). */}
+                  {joinLabels[item.$id]}
                 </MenuItem>
               ))}
             </TextField>

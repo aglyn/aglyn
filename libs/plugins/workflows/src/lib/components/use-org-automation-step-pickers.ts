@@ -20,8 +20,10 @@ import { scopeCovers } from '@aglyn/aglyn/app-utils/scope-tokens'
 import { pluginContainerKind } from '@aglyn/aglyn/plugin-manager/plugin-containers'
 import {
   pluginRecordListQuery,
+  pluginRecordPickerLabels,
   pluginRecordsFromRows,
 } from '@aglyn/aglyn/plugin-manager/plugin-record-lists'
+import type { PluginIndexedRecord } from '@aglyn/aglyn/plugin-manager/plugin-record-index'
 import {
   useFirestore,
   useFirestoreCollection,
@@ -38,6 +40,18 @@ import {
 import { collection } from 'firebase/firestore'
 import { useMemo } from 'react'
 import type { AutomationStepPickers } from './automation-step-fields.component'
+
+/**
+ * The datasets an org automation can write to, by name, each told apart from
+ * another of its name by who it is shared with, as their owner says it
+ * (AGL-4047).
+ */
+function datasetOptionsOf(records: readonly PluginIndexedRecord[]) {
+  const labels = pluginRecordPickerLabels('dataset', records)
+  return records
+    .map((dataset) => ({ id: dataset.id, name: dataset.name, label: labels[dataset.id] }))
+    .sort((a, b) => a.name.localeCompare(b.name))
+}
 import {
   type AutomationStepPickerData,
   EDITOR_OPTION_CEILING,
@@ -124,10 +138,11 @@ export function useOrgAutomationStepPickers(
       workflowOptions: [],
       overlayOptions: [],
       webhookOptions: [],
-      datasetOptions: pluginRecordsFromRows('dataset', datasetRows)
-        .filter((dataset) => scopeCovers(dataset.facts['visibleTo'] as string[] | undefined, placement))
-        .map((dataset) => ({ id: dataset.id, name: dataset.name }))
-        .sort((a, b) => a.name.localeCompare(b.name)),
+      datasetOptions: datasetOptionsOf(
+        pluginRecordsFromRows('dataset', datasetRows).filter((dataset) =>
+          scopeCovers(dataset.facts['visibleTo'] as string[] | undefined, placement),
+        ),
+      ),
       listOptions: (listDocs ?? [])
         .filter((list: any) => !list.deletedAt && list.name)
         .map((list: any) => ({ id: list.$id as string, name: list.name as string }))
