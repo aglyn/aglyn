@@ -15,6 +15,7 @@
  * limitations under the License.
  */
 
+import { firebaseAdmin, getOrgForHost } from '@aglyn/tenant-data-admin'
 import { saleChargeModel } from '@aglyn/tenant-data-admin/server/payment-provider'
 
 /*==========================================
@@ -36,11 +37,6 @@ export async function directSellerAccountForHost(
 ): Promise<string | null> {
   if (!hostId) return null
   try {
-    // Loaded on use: the routes that import this only need Firebase on the
-    // path that actually reads a profile, and their specs load without it.
-    const { firebaseAdmin, getOrgForHost } = await import(
-      '@aglyn/tenant-data-admin'
-    )
     const ownerOrg = await getOrgForHost(hostId)
     const ownerUid = String(ownerOrg?.org?.ownerUid ?? '')
     if (!ownerUid) return null

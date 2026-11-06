@@ -150,7 +150,7 @@ const PLATFORM_RELEASE_FLAGS: readonly ReleaseFlagDefinition[] = [
       '(Stripe bills it, Stripe Dashboard included), and its site sales, ' +
       'quotes, invoices and bookings are charged directly on that account: ' +
       'the store is the seller of record, owns refunds, disputes and sales ' +
-      'tax, and Aglyn keeps only its plan take as an application fee. The ' +
+      'tax, and the platform keeps only its plan take as an application fee. The ' +
       'register, Tap to Pay and plugin marketplace sales stay on the ' +
       'platform account. Off: new stores get the platform-managed account ' +
       'and destination charges, as before. Accounts already created keep ' +
