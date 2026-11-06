@@ -51,7 +51,8 @@
  *    the stream unreadable: measured over the 48 hours to 2026-09-09, 229 of
  *    the 251 entries in this log were `/api/health/*` reporting degraded and
  *    22 were the only real outage in the window. See `isLockdownNoticeEntry`
- *    and `isHealthContractEntry` (AGL-2709).
+ *    and `isHealthContractEntry` (AGL-2709). A closed site's notice is the
+ *    third: `isSiteNoticeEntry`.
  * 5. **A per-instance budget per window**, with suppression REPORTED. A
  *    monitoring path that hides its own lossiness is the bug shape this repo
  *    keeps rediscovering.
@@ -361,6 +362,37 @@ export function isHealthContractEntry(entry: VercelDrainEntry): boolean {
 }
 
 /**
+ * The path Vercel stamps on an entry the MIDDLEWARE wrote (`source: edge`,
+ * `type: middleware-invocation`), rather than a route pattern.
+ */
+export const MIDDLEWARE_ENTRY_PATH = '_middleware'
+
+/**
+ * Is this the middleware sending a closed site's notice as its 503?
+ *
+ * Since AGL-4110 a site in maintenance or preview answers the public with its
+ * own notice page AS a 503 with `Retry-After`, and the middleware is the only
+ * layer that can set that status, so the drain sees it as a `_middleware`
+ * entry with status 503. Forwarded, every visit to a closed site paged the
+ * operator as "Server errors": on 2026-11-05 nine of them came from two demo
+ * sites in maintenance and kept the AGL-1921 policy's incident open all day.
+ *
+ * The middleware has no other 503. The platform's own middleware failures
+ * are `MIDDLEWARE_INVOCATION_FAILED` (500) and `MIDDLEWARE_INVOCATION_TIMEOUT`
+ * (504), and a crash is `-1` or a `fatal` line, so all of those still
+ * forward. Narrow in the same three ways as {@link isLockdownNoticeEntry}.
+ */
+export function isSiteNoticeEntry(entry: VercelDrainEntry): boolean {
+  if (entry.level === 'fatal' || entry.type === 'fatal') return false
+  const statuses = [entry.statusCode, entry.proxy?.statusCode].filter(
+    (status): status is number => typeof status === 'number',
+  )
+  if (!statuses.length || statuses.some((status) => status !== 503))
+    return false
+  return entry.path === MIDDLEWARE_ENTRY_PATH
+}
+
+/**
  * THE COST GATE (requirement 3). Everything false here is dropped unwritten.
  *
  * What counts as a server error:
@@ -407,6 +439,7 @@ export function selectForwardableEntries(
       !isReceiverEntry(entry) &&
       !isLockdownNoticeEntry(entry) &&
       !isHealthContractEntry(entry) &&
+      !isSiteNoticeEntry(entry) &&
       isServerErrorEntry(entry),
   )
 }
