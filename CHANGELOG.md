@@ -28,6 +28,7 @@ content on the marketing site and is written separately.
 - **console:** a page opened while another tab holds the cache loads in seconds ([AGL-4201](https://linear.app/aglyn/issue/AGL-4201), [AGL-3428](https://linear.app/aglyn/issue/AGL-3428), [AGL-4135](https://linear.app/aglyn/issue/AGL-4135), [AGL-4090](https://linear.app/aglyn/issue/AGL-4090))
 - **mui:** over-hero sticky header stays pinned; dropdown panels stay on screen ([AGL-4200](https://linear.app/aglyn/issue/AGL-4200))
 - **commerce:** a trial's subscription row no longer says $0.00 paid so far ([AGL-4191](https://linear.app/aglyn/issue/AGL-4191))
+- **commerce:** no checkout offers buy-now-pay-later, and every sale passes through the card rate, 2.9% + 30¢, never below what Stripe charges ([AGL-4198](https://linear.app/aglyn/issue/AGL-4198))
 
 ### Documentation
 
