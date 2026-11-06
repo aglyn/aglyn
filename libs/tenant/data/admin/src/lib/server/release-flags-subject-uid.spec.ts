@@ -42,6 +42,8 @@ jest.mock('./firebase-admin', () => ({
       remoteConfig: () => ({ getTemplate: mockGetTemplate }),
       firestore: () => ({
         collection: () => ({ doc: () => ({ get: mockOrgGet }) }),
+        // The org read is a masked `getAll` (AGL-4121).
+        getAll: async (ref: { get: () => Promise<unknown> }) => [await ref.get()],
       }),
       auth: () => ({ verifyIdToken: mockVerifyIdToken }),
     }),
