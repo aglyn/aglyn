@@ -72,10 +72,12 @@ import {
   AI_SITE_START_TYPES,
   aiSiteStartInspirationTyped,
   aiSiteStartKind,
+  aiSiteStartStarterLookLine,
   aiSiteStartStyleAnswer,
   type AiSiteStartAnswers,
   type AiSiteStartExtraKey,
 } from '../model/ai-site-start'
+import { aiSiteStarterLookLine } from '../model/ai-site-starter-look'
 import {
   AI_SITE_START_MORE_FIELDS,
   AI_SITE_START_STEP_LABELS,
@@ -295,8 +297,9 @@ export function AudienceStep({ answers, answer, tracker, errors, fieldRef }: Ste
  * answer suggests is the one used, and the card says which.
  *
  * Questions filled in from an AI starter arrive with its style chosen, and
- * `starterStyle` names that card: it says which starter it came from, and
- * that it is the person's to change.
+ * `starterStyle` names that card: it says which starter it came from, what
+ * the starter's look is set in (AGL-4049), and that it is the person's to
+ * change. Another card drops that look, base theme and fonts both.
  */
 export function StyleStep({
   answers,
@@ -311,6 +314,9 @@ export function StyleStep({
   starterStyle?: { id: string; name: string } | null
 }) {
   const suggested = aiSiteStartKind({ ...answers, kind: null })
+  // What the starter's look is set in, said on its card whichever card is chosen.
+  const starterLine =
+    starterStyle && answers.starterLook?.style === starterStyle.id ? aiSiteStarterLookLine(answers.starterLook.look) : null
   const cards = (
     <OptionCardGrid
       label="Style of site"
@@ -325,7 +331,7 @@ export function StyleStep({
         },
         ...aiSiteStyleCards().map((card) =>
           card.id === starterStyle?.id
-            ? { ...card, description: `From ${starterStyle.name}. Change it if you like.` }
+            ? { ...card, description: `From ${starterStyle.name}. ${starterLine ?? 'Change it if you like.'}` }
             : card,
         ),
       ]}
@@ -944,13 +950,22 @@ export function ReviewStep({
 }) {
   const liked = aiSiteStartInspirationTyped(answers)
   const kind = aiSiteStartKind(answers)
+  // An AI starter's look, while its card is the one chosen (AGL-4049).
+  const starterLine = aiSiteStartStarterLookLine(answers)
   const submissions = AI_SITE_SUBMISSION_CHOICES.find((option) => option.id === answers.submissions)
   const rows: Array<{ label: string; value: ReactNode; step: AiSiteStartStep }> = [
     { label: 'Kind of site', value: answers.siteType.trim(), step: 'kind' },
     { label: 'Who it is for', value: answers.audience.trim() || 'Anyone (not said)', step: 'audience' },
     {
       label: 'Style',
-      value: answers.style === null ? 'Not chosen yet' : answers.kind ? kind.label : `${kind.label}, picked for you`,
+      value:
+        answers.style === null
+          ? 'Not chosen yet'
+          : answers.kind
+            ? starterLine
+              ? `${kind.label}. ${starterLine}`
+              : kind.label
+            : `${kind.label}, picked for you`,
       step: 'style',
     },
     ...(inspiration

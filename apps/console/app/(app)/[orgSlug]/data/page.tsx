@@ -20,6 +20,8 @@ import { ICON_VARIANT_APP_SETTINGS } from '@aglyn/shared-data-enums'
 import { AppLink, Container } from '@aglyn/shared-ui-jsx'
 import type { NextPageWithLayout } from '@aglyn/shared-ui-next'
 import { Alert, Box, CircularProgress } from '@mui/material'
+import { useParams } from 'next/navigation'
+import { useMemo } from 'react'
 import FeatureGate from '../../../../components/feature-gate.component'
 import PluginWidgetSlot from '../../../../components/plugin-widget-slot.component'
 import ConsoleMediaPickerProvider from '../../../../components/console-media-picker-provider.component'
@@ -40,12 +42,24 @@ import useCurrentOrg from '../../../../hooks/use-current-org'
  */
 const OrgData: NextPageWithLayout<Record<string, never>> = () => {
   const orgSlug = useOrgSlug()
+  // Each dataset is a tab of this page, at `/data/<id>`, and each record has
+  // a page beneath it at `/data/<id>/records/<recordId>` (AGL-4047): this
+  // file serves the bare page and the two routes below re-export it. The
+  // plugin reads the segments; the page only hands them down.
+  const params = useParams<{ id?: string; recordId?: string }>()
+  const openId = params?.id
+  const recordId = params?.recordId
+  const segments = useMemo(
+    () => (openId ? (recordId ? [openId, 'records', recordId] : [openId]) : []),
+    [openId, recordId],
+  )
+  const basePath = buildRoute(Route.ORG_DATA, { orgSlug })
   const { currentOrg, loading } = useOrgScope()
   const { org, ready: orgReady } = useCurrentOrg()
   return (
     <DashboardLayout
       breadcrumbItems={[
-        { children: 'Data', href: buildRoute(Route.ORG_DATA, { orgSlug }) },
+        { children: 'Data', href: basePath },
       ]}
       help={{ topic: 'datasets', anchor: '#organization-data-page' }}
       header={{
@@ -132,6 +146,8 @@ const OrgData: NextPageWithLayout<Record<string, never>> = () => {
                     slot="orgData"
                     orgId={currentOrg.$id}
                     org={org}
+                    basePath={basePath}
+                    segments={segments}
                   />
                 </ConsoleMediaPickerProvider>
               </>

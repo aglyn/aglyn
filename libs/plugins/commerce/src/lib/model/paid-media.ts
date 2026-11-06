@@ -60,6 +60,25 @@ export const PAID_MEDIA_COPY: Record<
   },
 }
 
+/**
+ * The question's title, naming the file when it is known (AGL-4189): the
+ * question can open seconds after the pick, over a picker where another file
+ * is selected, so "this file" alone could be read as that one.
+ */
+export function paidMediaTitle(kind: PaidMediaKind, fileName?: string): string {
+  const name = fileName?.trim()
+  if (!name) return PAID_MEDIA_COPY[kind].title
+  return kind === 'video' ? `Make the video “${name}” private?` : `Make “${name}” private?`
+}
+
+/** What shows while the where-used check runs, so the pick is not met with silence (AGL-4189). */
+export function paidMediaCheckingNotice(fileName?: string): string {
+  const name = fileName?.trim()
+  return name
+    ? `Checking where else “${name}” is used…`
+    : 'Checking where else this file is used…'
+}
+
 /** The request body that names an asset's library to the media routes. */
 export function paidMediaScopeBody(
   scope: string,

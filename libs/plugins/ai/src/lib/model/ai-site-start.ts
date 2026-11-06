@@ -26,7 +26,7 @@ import {
   type AiSiteDetailKey,
   type AiSiteDetails,
 } from './ai-site-details'
-import { aiSiteKind, aiSiteKindFor, type AiSiteKind } from './ai-site-kinds'
+import { aiSiteFontPairing, aiSiteKind, aiSiteKindFor, type AiSiteKind } from './ai-site-kinds'
 import {
   AI_SITE_INSPIRATION_INPUT,
   aiSiteInspirationInput,
@@ -41,6 +41,21 @@ import {
   type AiSiteJobInputs,
   type AiSiteSubmissions,
 } from './ai-site-job'
+import {
+  AI_SITE_STARTER_LOOK_INPUT,
+  aiSiteStarterLookFromInput,
+  aiSiteStarterLookInput,
+  aiSiteStarterLookLine,
+  aiSiteStarterLookOf,
+  type AiSiteStarterLook,
+} from './ai-site-starter-look'
+
+export {
+  AI_SITE_STARTER_LOOK_INPUT,
+  AI_SITE_STARTER_LOOK_MAX_CHARS,
+  aiSiteStarterLookFromInput,
+  type AiSiteStarterLook,
+} from './ai-site-starter-look'
 
 /**
  * The guided start (AGL-2918): the questions a person answers on a site they
@@ -185,6 +200,14 @@ export interface AiSiteStartAnswers extends AiSiteDetails {
    * for none. Asked only while `release_ai_site_inspiration` is on.
    */
   inspiration?: string[]
+  /**
+   * The look an AI starter promised (AGL-4049): its base theme, font pairing
+   * and style tokens, held while the Style card is the starter's own
+   * (`style` is that card), and dropped, base and fonts both, while another
+   * is chosen ({@link aiSiteStartHeldStarterLook}). Absent on a start from
+   * no starter.
+   */
+  starterLook?: { style: string; look: AiSiteStarterLook }
 }
 
 /**
@@ -385,7 +408,8 @@ export function aiSiteStartBrief(answers: AiSiteStartAnswers): string {
  */
 export function aiSiteStartInputs(
   answers: AiSiteStartAnswers,
-): Omit<AiSiteJobInputs, 'batchId' | 'inspiration' | AiSiteDetailKey> & Partial<AiSiteDetails> & { inspiration?: string } {
+): Omit<AiSiteJobInputs, 'batchId' | 'inspiration' | AiSiteDetailKey> &
+  Partial<AiSiteDetails> & { inspiration?: string; [AI_SITE_STARTER_LOOK_INPUT]?: string } {
   const example = aiSiteStartExample(answers)
   const kind = aiSiteStartKind(answers)
   // The details are sent only where given (AGL-3979): the plan step lists
@@ -399,6 +423,8 @@ export function aiSiteStartInputs(
   // The sites they like travel only when there are some (AGL-3975), so a
   // start without them asks for exactly what it always did.
   const inspiration = aiSiteInspirationInput(aiSiteStartInspirationTyped(answers))
+  // An AI starter's look travels while its card is the one chosen (AGL-4049).
+  const starterLook = aiSiteStartHeldStarterLook(answers)
   return {
     businessType: answers.siteType.trim(),
     audience: answers.audience.trim(),
@@ -412,6 +438,7 @@ export function aiSiteStartInputs(
     welcomeEmail: answers.welcomeEmail,
     ...details,
     ...(inspiration ? { [AI_SITE_INSPIRATION_INPUT]: inspiration } : {}),
+    ...(starterLook ? { [AI_SITE_STARTER_LOOK_INPUT]: aiSiteStarterLookInput(starterLook) } : {}),
   }
 }
 
@@ -429,6 +456,7 @@ export const AI_SITE_START_INPUT_KEYS = [
   'welcomeEmail',
   ...AI_SITE_DETAIL_KEYS,
   AI_SITE_INSPIRATION_INPUT,
+  AI_SITE_STARTER_LOOK_INPUT,
 ] as const
 
 /** A site job's scalar inputs, and nothing else its inputs carry; `null` when it has none. */
@@ -462,12 +490,15 @@ export function aiSiteStartAnswersFromInputs(
   const pages = typeof inputs?.['pages'] === 'number' ? Math.round(inputs['pages'] as number) : AI_SITE_START_ANSWERS.pages
   const starter = text('starter')
   const submissions = text('submissions')
+  // A start that ran had its style chosen: its kind, or "Pick for me".
+  const style = aiSiteStartStyleAnswer(aiSiteKind(text('siteKind'))?.id ?? SITE_STYLE_AUTO)
+  // An AI starter's look comes back on the card it was sent with (AGL-4049).
+  const starterLook = style.kind ? aiSiteStarterLookFromInput(inputs?.[AI_SITE_STARTER_LOOK_INPUT]) : null
   return {
     siteType,
     audience: text('audience'),
     example: AI_SITE_START_EXAMPLES.some((entry) => entry.id === starter) ? starter : null,
-    // A start that ran had its style chosen: its kind, or "Pick for me".
-    ...aiSiteStartStyleAnswer(aiSiteKind(text('siteKind'))?.id ?? SITE_STYLE_AUTO),
+    ...style,
     pages: Math.min(band.max, Math.max(band.min, pages)),
     submissions: (AI_SITE_SUBMISSIONS as readonly string[]).includes(submissions)
       ? (submissions as AiSiteSubmissions)
@@ -480,6 +511,7 @@ export function aiSiteStartAnswersFromInputs(
     ...(text(AI_SITE_INSPIRATION_INPUT)
       ? { inspiration: text(AI_SITE_INSPIRATION_INPUT).split(/\s+/).filter(Boolean).slice(0, aiSiteInspirationLimit(options.freeTaste)) }
       : {}),
+    ...(starterLook && style.kind ? { starterLook: { style: style.kind, look: starterLook } } : {}),
   }
 }
 
@@ -507,13 +539,16 @@ const isAnswersRecord = (value: unknown): value is Readonly<Record<string, unkno
  *    workspace's band. A description of the pages is the kind's own guidance,
  *    which the kind already carries to the plan.
  *  - `brief` → what the site is for, as typed on the first question.
+ *  - `style` and `fonts` → the look the listing promised, `starterLook`:
+ *    the style's base theme, pairing and tokens, with `fonts` winning over
+ *    the style's own pairing where it names one this deployment has. A base,
+ *    pairing or token this deployment does not know is left out, and a
+ *    starter whose kind chooses no card holds no look, since the look holds
+ *    only while its card is chosen ({@link aiSiteStartHeldStarterLook}).
  *
- * Anything else a starter carries is left out — `style`'s finer tokens and
- * `fonts` included: the questions ask neither, and the kind's look and the
- * brand color are what carry a starter's look into the job. Every other
- * answer starts where the questions start, so a starter never answers for
- * the person what it does not say. Anything that is not a set of answers
- * reads as none.
+ * Anything else a starter carries is left out. Every other answer starts
+ * where the questions start, so a starter never answers for the person what
+ * it does not say. Anything that is not a set of answers reads as none.
  */
 export function aiSiteStartAnswersFromStarter(
   answers: Readonly<Record<string, unknown>> | null | undefined,
@@ -526,16 +561,43 @@ export function aiSiteStartAnswersFromStarter(
   const primary = typeof colors['primary'] === 'string' ? colors['primary'].trim() : ''
   const pages = answers['pages']
   const brief = typeof answers['brief'] === 'string' ? answers['brief'] : ''
+  const style = isAnswersRecord(answers['style']) ? answers['style'] : {}
+  const look = kind
+    ? aiSiteStarterLookOf({ ...style, ...(aiSiteFontPairing(answers['fonts']) ? { fonts: answers['fonts'] } : {}) })
+    : null
   return {
     ...AI_SITE_START_ANSWERS,
     siteType: bounded(brief, AI_SITE_INPUT_MAX_CHARS),
     ...(kind ? aiSiteStartStyleAnswer(kind.id) : {}),
+    ...(kind && look ? { starterLook: { style: kind.id, look } } : {}),
     pages:
       typeof pages === 'number' && Number.isInteger(pages)
         ? Math.min(band.max, Math.max(band.min, pages))
         : Math.min(band.max, Math.max(band.min, AI_SITE_START_ANSWERS.pages)),
     brand: STARTER_BRAND_HEX.test(primary) ? primary.toLowerCase() : '',
   }
+}
+
+/**
+ * The AI starter's look the answers hold (AGL-4049), while the Style card
+ * chosen is the starter's own; `null` from any other card, "Pick for me"
+ * included, so a person who picks another style gets that style's look,
+ * its base theme and fonts with it.
+ */
+export function aiSiteStartHeldStarterLook(
+  answers: Pick<AiSiteStartAnswers, 'style' | 'starterLook'>,
+): AiSiteStarterLook | null {
+  const held = answers.starterLook
+  return held && answers.style === held.style ? held.look : null
+}
+
+/**
+ * What the starter's look is set in, as the Style card and the review say it
+ * (AGL-4049): "Set in Bootstrap with Fraunces and Inter; pick another style
+ * to change it." `null` while it is not held.
+ */
+export function aiSiteStartStarterLookLine(answers: Pick<AiSiteStartAnswers, 'style' | 'starterLook'>): string | null {
+  return aiSiteStarterLookLine(aiSiteStartHeldStarterLook(answers))
 }
 
 // ── A build staff run for a client (AGL-3958) ───────────────────────────────

@@ -20,7 +20,6 @@ import {
   getCustomFieldType,
   listCustomFieldTypes,
   describeSharing,
-  HOST_ACCESS_ROLES,
   narrowsScope,
   scopeSharingOf,
   sharingCovers,
@@ -52,11 +51,10 @@ import {
   TextField,
   Typography,
 } from '@mui/material'
-import { collection, doc, limit, query, updateDoc, where } from 'firebase/firestore'
+import { doc, updateDoc } from 'firebase/firestore'
 import { type ReactNode, useCallback, useEffect, useMemo, useState } from 'react'
 import {
   useFirestore,
-  useFirestoreCollection,
   useOrgDataScope,
   useScopeTokens,
   useUser,
@@ -64,8 +62,10 @@ import {
   type ListenHandle,
 } from '@aglyn/tenant-feature-instance'
 import { DATASET_AUTHORABLE_FIELD_TYPES, DATASET_FIELD_TYPES, DATASET_FIELD_TYPE_LABELS, type DatasetFieldDefinition, type DatasetFieldType, type DatasetModel, effectiveDatasetModel } from '../model/dataset-models'
-import { datasetDisplayName, defaultDatasetFieldId, validateDatasetFieldId } from '../model/datasets'
+import { datasetDisplayName, datasetNameLower, defaultDatasetFieldId, validateDatasetFieldId } from '../model/datasets'
 import { RECORD_PAGE_ADDRESS_FIELD_TYPE, isRecordAddressField } from '../record-pages/record-pages'
+import { useOrgSites } from './use-org-sites'
+import { type DatasetRailEntry, datasetPickerLabelsOf } from '../model/dataset-rail'
 
 /** Types surfaced in the picker; the rest exist for compat, not authoring. */
 const AUTHORABLE_TYPES = DATASET_AUTHORABLE_FIELD_TYPES
@@ -197,41 +197,10 @@ export function DatasetSchemaDialog(props: DatasetSchemaDialogProps) {
   const { orgWide: viewerOrgWide, loaded: scopeLoaded } = useScopeTokens(
     orgId ?? undefined,
   )
-  // Sites in this org, for naming what a narrowing would cost. Queried
-  // here rather than via the console's useOrgHosts — this component lives
-  // in a lib and cannot import from an app — so it must repeat that hook's
-  // membership filter, which is the part this was missing (AGL-1145).
-  //
-  // `/hosts/{hostId}` is gated per document on `memberRoles.{uid}`, and
-  // Firestore evaluates a LIST against the QUERY rather than its results: it
-  // refuses to run one that COULD return a denied document, whatever today's
-  // data happens to hold. So filtering on `orgId` alone was not a partial
-  // result, it was a flat denial for every non-staff caller — including one
-  // who is a member of every site in the org. Proved in the emulator
-  // (cloud/hosts-list-constraint.spec.mjs); the reason nobody hit it is that
-  // staff match the rule's other branch, and staff are who tested it.
+  // Sites in this org, for naming what a narrowing would cost: the Data
+  // card's own query (`useOrgSites`), so the two share one listener.
+  const { sites: orgHostList, ready: sitesReady, hostNames } = useOrgSites(orgId)
   const { data: user } = useUser()
-  const uid = (user as { uid?: string } | undefined)?.uid
-  const { data: orgHostDocs } = useFirestoreCollection<any>(
-    // Hold rather than substitute a placeholder while the uid resolves. The
-    // old `orgId ?? '-none-'` fired a real query on every mount before the
-    // scope was known; a sentinel is still a question asked of the server,
-    // and here it is one that gets denied.
-    () =>
-      uid && orgId
-        ? query(
-            collection(firestore, 'hosts'),
-            where(`memberRoles.${uid}`, 'in', HOST_ACCESS_ROLES),
-            where('orgId', '==', orgId),
-            limit(200),
-          )
-        : null,
-    [firestore, orgId, uid],
-    { idField: '$id' },
-  )
-  const orgHostList: Array<{ $id: string; name?: string; subdomain?: string }> =
-    useMemo(() => orgHostDocs ?? [], [orgHostDocs])
-  const sitesReady = Array.isArray(orgHostDocs)
   const sharingSites = useMemo(
     () => orgHostList.map((host) => ({ id: host.$id, name: host.name ?? host.subdomain ?? host.$id })),
     [orgHostList],
@@ -530,8 +499,12 @@ export function DatasetSchemaDialog(props: DatasetSchemaDialogProps) {
                 singular: names.singular.trim(),
                 plural: names.plural.trim(),
               },
+              // The name's search key moves with it (AGL-4047).
               ...(names.plural.trim()
-                ? { displayName: names.plural.trim() }
+                ? {
+                    displayName: names.plural.trim(),
+                    nameLower: datasetNameLower(names.plural),
+                  }
                 : {}),
               // v1 compat: keep the flat column list mirroring the model order
               // so unmigrated consumers (AGL-103 bindings) keep working.
@@ -1019,7 +992,8 @@ export function DatasetSchemaDialog(props: DatasetSchemaDialogProps) {
                   )
                 }
               >
-                {(datasets ?? [])
+                {(() => {
+                  const targets = (datasets ?? [])
                   .filter((target) => target.$id !== dataset?.$id)
                   // Only targets this dataset's sites can actually resolve
                   // (AGL-1044). A reference to a dataset a site cannot see
@@ -1033,11 +1007,14 @@ export function DatasetSchemaDialog(props: DatasetSchemaDialogProps) {
                         editorDefinition?.reference?.datasetId ||
                       sharingCovers(target as Record<string, unknown>, sharingPreview as Record<string, unknown>),
                   )
-                  .map((target) => (
+                  // Who a target is shared with only where two share a name (AGL-4047).
+                  const labels = datasetPickerLabelsOf(targets as DatasetRailEntry[], hostNames)
+                  return targets.map((target) => (
                     <MenuItem key={target.$id} value={target.$id}>
-                      {datasetDisplayName(target) || target.$id}
+                      {labels[target.$id] || datasetDisplayName(target) || target.$id}
                     </MenuItem>
-                  ))}
+                  ))
+                })()}
               </TextField>
               {(() => {
                 // Flag an EXISTING reference that this dataset's scope has

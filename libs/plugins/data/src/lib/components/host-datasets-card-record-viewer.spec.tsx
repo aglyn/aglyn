@@ -57,7 +57,8 @@ import {
   waitFor,
   within,
 } from '@testing-library/react'
-import type { ReactNode } from 'react'
+import { type ReactNode, useMemo, useState } from 'react'
+import { PageHeaderActionsContext } from '@aglyn/aglyn/app-utils/page-header-actions-context'
 import { HostDatasetsCard } from './host-datasets-card.component'
 
 const ORG = { $id: 'org-1', plan: 'scale' } as any
@@ -122,6 +123,29 @@ let recordDocs: any[] = [RECORD_FULL, RECORD_NULLED]
 
 const DATA_SCOPE = { scope: ['orgs', 'org-1'], orgId: 'org-1' }
 const FIRESTORE = {}
+
+/**
+ * The page header the card publishes Add dataset and Add join collection into
+ * (AGL-4047), drawn above the card as the console's layout draws it.
+ */
+function WithPageHeader(props: { children?: ReactNode }) {
+  const [actions, setHeaderActions] = useState<ReactNode>(null)
+  const value = useMemo(() => ({ setHeaderActions }), [])
+  return (
+    <PageHeaderActionsContext.Provider value={value}>
+      <div data-testid="page-header">{actions}</div>
+      {props.children}
+    </PageHeaderActionsContext.Provider>
+  )
+}
+
+/** The Data page's route (AGL-4047): the card reads the router to open a dataset's tab. */
+const mockRouter = { push: jest.fn(), replace: jest.fn(), prefetch: jest.fn() }
+jest.mock('next/navigation', () => ({
+  useRouter: () => mockRouter,
+  usePathname: () => '/acme/data',
+  useSearchParams: () => new URLSearchParams(),
+}))
 
 jest.mock('@aglyn/tenant-feature-instance', () => ({
   useFirestoreDoc: () => ({ data: undefined, status: 'loading' }),
@@ -198,7 +222,26 @@ jest.mock('@aglyn/shared-ui-snackstack', () => ({
 /** Rejects, so `Delete` never proceeds past its prompt. */
 const confirm = jest.fn().mockRejectedValue(new Error('cancelled'))
 jest.mock('@aglyn/shared-ui-jsx', () => ({
-  CardDisplay: ({ children }: { children: ReactNode }) => <div>{children}</div>,
+  CardDisplay: ({ children, header, HeaderProps }: any) => (
+    <div>
+      {header}
+      {HeaderProps?.action}
+      {HeaderProps?.subheader}
+      {children}
+    </div>
+  ),
+  GridItems: ({ items }: any) => (
+    <div>
+      {items.map((item: any, index: number) => (
+        <div key={index}>{item.children}</div>
+      ))}
+    </div>
+  ),
+  AppLink: ({ children, href, componentVariant: _variant, ...rest }: any) => (
+    <a href={href} {...rest}>
+      {children}
+    </a>
+  ),
   MdiIcon: () => null,
   useConfirmationContext: () => ({ confirm }),
 }))
@@ -212,7 +255,7 @@ beforeEach(() => {
   recordDocs = [RECORD_FULL, RECORD_NULLED]
 })
 
-const mount = () => render(<HostDatasetsCard orgId="org-1" org={ORG} />)
+const mount = () => render(<HostDatasetsCard orgId="org-1" org={ORG} />, { wrapper: WithPageHeader })
 
 /** The grid row holding a cell with this text. */
 const rowFor = (text: string) => {

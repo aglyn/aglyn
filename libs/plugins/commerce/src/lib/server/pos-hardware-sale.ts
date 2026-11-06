@@ -285,6 +285,8 @@ export function toAttachView(id: string, order: PosHardwareOrder) {
     registerOrderId: order.posSale?.orderId ?? null,
     registerNumber: order.posSale?.number ?? null,
     kiosk: order.posSale?.kiosk === true,
+    /** Bought from the store's own product pages or cart (AGL-4038), not at the register. */
+    online: order.source === 'storefront',
     offline: order.posSale?.offline === true,
     lines: (order.lines ?? []).map((line) => ({ sku: line.sku, name: line.name, quantity: line.quantity })),
     totalCents: order.totalCents ?? 0,

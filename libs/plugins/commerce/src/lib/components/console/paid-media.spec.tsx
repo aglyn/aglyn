@@ -54,8 +54,12 @@ jest.mock('@aglyn/shared-ui-jsx', () => ({
 }))
 
 const mockEnqueueSnackbar = jest.fn()
+const mockCloseSnackbar = jest.fn()
 jest.mock('@aglyn/shared-ui-snackstack', () => ({
-  useSnackbar: () => ({ enqueueSnackbar: mockEnqueueSnackbar }),
+  useSnackbar: () => ({
+    enqueueSnackbar: mockEnqueueSnackbar,
+    closeSnackbar: mockCloseSnackbar,
+  }),
 }))
 
 jest.mock('@aglyn/tenant-feature-instance', () => ({
@@ -123,7 +127,8 @@ async function attach(picked: PickedMedia) {
 beforeEach(() => {
   mockAuthorizedFetch.mockReset()
   mockConfirm.mockReset().mockResolvedValue(undefined)
-  mockEnqueueSnackbar.mockReset()
+  mockEnqueueSnackbar.mockReset().mockReturnValue('snack-checking')
+  mockCloseSnackbar.mockReset()
 })
 
 describe('the pure pieces', () => {
@@ -197,9 +202,58 @@ describe('AGL-2847 · adding a paid download', () => {
     expect(await attachDownload({ ...publicFilm, fileName: 'guide.pdf' })).toBe(
       'media:org:acme/med-film',
     )
-    expect(mockConfirm.mock.calls[0][0].title).toBe('Make this file private?')
+    expect(mockConfirm.mock.calls[0][0].title).toBe('Make “guide.pdf” private?')
     expect(mockConfirm.mock.calls[0][0].description).toContain(
       'Paid downloads are private',
+    )
+  })
+
+  it('says at once that it is checking the file, and closes that once the question can open (AGL-4189)', async () => {
+    let checkedWhileNoticeShown = false
+    routes({
+      references: () => {
+        checkedWhileNoticeShown =
+          mockEnqueueSnackbar.mock.calls.some(
+            ([message]) => message === 'Checking where else “guide.pdf” is used…',
+          ) && mockCloseSnackbar.mock.calls.length === 0
+        return answer(200, { references: [], complete: true })
+      },
+      folders: () => answer(200, { ok: true, rawUrlCleared: true }),
+    })
+    mockConfirm.mockImplementation(async () => {
+      expect(mockCloseSnackbar).toHaveBeenCalledWith('snack-checking')
+    })
+    await attachDownload({ ...publicFilm, fileName: 'guide.pdf' })
+    expect(checkedWhileNoticeShown).toBe(true)
+    expect(mockEnqueueSnackbar).toHaveBeenCalledWith(
+      'Checking where else “guide.pdf” is used…',
+      expect.objectContaining({ variant: 'info', persist: true }),
+    )
+    expect(mockConfirm).toHaveBeenCalledTimes(1)
+  })
+
+  it('closes the checking notice when the check fails, and still asks', async () => {
+    routes({
+      references: () => {
+        throw new Error('network down')
+      },
+      folders: () => answer(200, { ok: true, rawUrlCleared: true }),
+    })
+    await attachDownload({ ...publicFilm, fileName: 'guide.pdf' })
+    expect(mockCloseSnackbar).toHaveBeenCalledWith('snack-checking')
+    expect(mockConfirm).toHaveBeenCalledTimes(1)
+  })
+
+  it('asks about "this file" when the pick carries no name', async () => {
+    routes({
+      references: () => answer(200, { references: [], complete: true }),
+      folders: () => answer(200, { ok: true, rawUrlCleared: true }),
+    })
+    const { fileName: _unnamed, ...unnamed } = publicFilm
+    await attachDownload(unnamed)
+    expect(mockConfirm.mock.calls[0][0].title).toBe('Make this file private?')
+    expect(mockEnqueueSnackbar.mock.calls[0][0]).toBe(
+      'Checking where else this file is used…',
     )
   })
 

@@ -1485,6 +1485,7 @@ public struct HostOrderCustomerRecord: Codable, Hashable, Sendable {
 
 public struct HostOrderHardwareTermsAcceptance: Codable, Hashable, Sendable {
   public var atMs: Double
+  public var businessUse: Bool?
   public var ip: String?
   public var method: PosHardwareTermsMethod
   public var sections: String
@@ -1492,8 +1493,9 @@ public struct HostOrderHardwareTermsAcceptance: Codable, Hashable, Sendable {
   public var userAgent: String?
   public var version: String
 
-  public init(atMs: Double, ip: String? = nil, method: PosHardwareTermsMethod, sections: String, staffUid: String? = nil, userAgent: String? = nil, version: String) {
+  public init(atMs: Double, businessUse: Bool? = nil, ip: String? = nil, method: PosHardwareTermsMethod, sections: String, staffUid: String? = nil, userAgent: String? = nil, version: String) {
     self.atMs = atMs
+    self.businessUse = businessUse
     self.ip = ip
     self.method = method
     self.sections = sections
@@ -1564,8 +1566,9 @@ public struct HostProduct: Codable, Hashable, Sendable {
   public var type: ProductType?
   public var updatedAtMs: Double?
   public var variants: [ProductVariant]?
+  public var videoAccessProductIds: [String]?
 
-  public init(categoryIds: [String]? = nil, channel: ProductChannelFacts? = nil, checkIn: ProductCheckIn? = nil, collectionIds: [String]? = nil, createdAtMs: Double? = nil, description: String? = nil, digitalFiles: [HostProductDigitalFilesItem]? = nil, downloadLimit: Double? = nil, gatedVideos: [HostProductGatedVideosItem]? = nil, giftCard: Bool? = nil, hardwareSku: String? = nil, imageUrl: String? = nil, inStoreReviews: HostProductInStoreReviews? = nil, inventory: Double? = nil, lowStockThreshold: Double? = nil, mediaUrls: [String]? = nil, modifierGroups: [ProductModifierGroup]? = nil, name: String? = nil, offerOnKiosk: Bool? = nil, options: [ProductOption]? = nil, oversellPolicy: HostProductOversellPolicy? = nil, posQuickKey: Bool? = nil, priceUsd: Double? = nil, relatedProductIds: [String]? = nil, sample: Bool? = nil, sellOnline: Bool? = nil, seo: HostProductSeo? = nil, shipping: ProductShippingFacts? = nil, slug: String? = nil, status: ProductStatus? = nil, subscription: HostProductSubscription? = nil, subscriptionOptional: Bool? = nil, supplierId: String? = nil, tags: [String]? = nil, taxExempt: Bool? = nil, type: ProductType? = nil, updatedAtMs: Double? = nil, variants: [ProductVariant]? = nil) {
+  public init(categoryIds: [String]? = nil, channel: ProductChannelFacts? = nil, checkIn: ProductCheckIn? = nil, collectionIds: [String]? = nil, createdAtMs: Double? = nil, description: String? = nil, digitalFiles: [HostProductDigitalFilesItem]? = nil, downloadLimit: Double? = nil, gatedVideos: [HostProductGatedVideosItem]? = nil, giftCard: Bool? = nil, hardwareSku: String? = nil, imageUrl: String? = nil, inStoreReviews: HostProductInStoreReviews? = nil, inventory: Double? = nil, lowStockThreshold: Double? = nil, mediaUrls: [String]? = nil, modifierGroups: [ProductModifierGroup]? = nil, name: String? = nil, offerOnKiosk: Bool? = nil, options: [ProductOption]? = nil, oversellPolicy: HostProductOversellPolicy? = nil, posQuickKey: Bool? = nil, priceUsd: Double? = nil, relatedProductIds: [String]? = nil, sample: Bool? = nil, sellOnline: Bool? = nil, seo: HostProductSeo? = nil, shipping: ProductShippingFacts? = nil, slug: String? = nil, status: ProductStatus? = nil, subscription: HostProductSubscription? = nil, subscriptionOptional: Bool? = nil, supplierId: String? = nil, tags: [String]? = nil, taxExempt: Bool? = nil, type: ProductType? = nil, updatedAtMs: Double? = nil, variants: [ProductVariant]? = nil, videoAccessProductIds: [String]? = nil) {
     self.categoryIds = categoryIds
     self.channel = channel
     self.checkIn = checkIn
@@ -1604,6 +1607,7 @@ public struct HostProduct: Codable, Hashable, Sendable {
     self.type = type
     self.updatedAtMs = updatedAtMs
     self.variants = variants
+    self.videoAccessProductIds = videoAccessProductIds
   }
 }
 
@@ -4079,6 +4083,7 @@ public struct PosDisplayStateTip: Codable, Hashable, Sendable {
 public enum PosHardwareTermsMethod: String, Codable, CaseIterable, Hashable, Sendable {
   case display = "display"
   case notice = "notice"
+  case online = "online"
   case tablet = "tablet"
   case unknown = ""
 

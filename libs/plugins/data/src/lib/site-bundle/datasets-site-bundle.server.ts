@@ -27,6 +27,7 @@ import type {
 import { firebaseAdmin, scopedToHost } from '@aglyn/tenant-data-admin'
 import { loadCustomFieldTypes } from '../server/custom-field-types'
 import { datasetIntegrityFields, effectiveDatasetModel, validateDocument } from '../model/dataset-models'
+import { datasetDisplayName, datasetNameLower } from '../model/datasets'
 
 /**
  * A site's datasets in its whole-site backup (AGL-163), answered by the plugin
@@ -199,7 +200,16 @@ export async function importSiteDatasets(
   for (const item of items) {
     if (!item?.$id) continue
     const path = `orgs/${orgId}/datasets/${String(item.$id)}`
-    await write(path, { ...restorable(DATASET_RESTORE_FIELDS, item), ...stamps(), ...scope })
+    // The name's search key is derived on the way in, never carried, so a
+    // bundle from before the key, or one edited by hand, still lands findable
+    // by name (AGL-4047). Stamped even when blank: a list ordered by
+    // `nameLower` leaves out a document that lacks the field.
+    await write(path, {
+      ...restorable(DATASET_RESTORE_FIELDS, item),
+      nameLower: datasetNameLower(datasetDisplayName(item)),
+      ...stamps(),
+      ...scope,
+    })
     const model = effectiveDatasetModel(item)
     await loadCustomFieldTypes(model, request.loadPluginSurfaces)
     const records: SiteBundleItem[] = Array.isArray(item['records']) ? item['records'] : []

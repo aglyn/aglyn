@@ -348,7 +348,7 @@ export function ErrorScreensCard(props: ErrorScreensCardProps) {
               }
             />
           }
-          label="Maintenance mode — show the 503 page at every address"
+          label="Maintenance mode — show visitors the 503 page at every address"
         />
         {/*
           Preview (AGL-4086), beside maintenance because the two answer the

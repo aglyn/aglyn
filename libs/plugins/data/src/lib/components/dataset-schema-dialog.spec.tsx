@@ -155,6 +155,9 @@ describe('DatasetSchemaDialog field names & descriptions (AGL-560)', () => {
     })
     expect(payload.model.order).toEqual(['title'])
     expect(payload.fields).toEqual(['title'])
+    // The collection's name, with its search key beside it (AGL-4047).
+    expect(payload.displayName).toBe('Products')
+    expect(payload.nameLower).toBe('products')
   })
 
   it('drops a whitespace-only description instead of persisting it', async () => {
@@ -522,7 +525,7 @@ describe('DatasetSchemaDialog shares with all sites except some (AGL-4047)', () 
     await waitFor(() => expect(mockFetch).toHaveBeenCalledTimes(1))
     expect(sharingCalls()[0].choice).toEqual({ mode: 'allExcept', exceptHostIds: ['h2'] })
     const [, payload] = (updateDoc as jest.Mock).mock.calls[0]
-    expect(Object.keys(payload).sort()).toEqual(['displayName', 'fields', 'model', 'names'])
+    expect(Object.keys(payload).sort()).toEqual(['displayName', 'fields', 'model', 'nameLower', 'names'])
   })
 
   it('from chosen sites, leaves out the ones not chosen', () => {
@@ -623,5 +626,32 @@ describe('DatasetSchemaDialog shares with all sites except some (AGL-4047)', () 
     const offered = screen.getAllByRole('option').map((option) => option.textContent)
     expect(offered).toContain('Every site')
     expect(offered).not.toContain('Chosen sites')
+  })
+
+  it('tells two reference targets of one name apart by who they are shared with (AGL-4047)', () => {
+    render(
+      <DatasetSchemaDialog
+        orgId="org-1"
+        dataset={{
+          ...dataset,
+          visibleTo: ['org'],
+          model: { fields: { link: { name: 'Link', type: 'reference' } }, order: ['link'] },
+        } as never}
+        datasets={[
+          { $id: 'wide', displayName: 'Services', fields: ['name', 'price'], visibleTo: ['org'] },
+          { $id: 'also', displayName: 'Services', fields: ['name'], visibleTo: ['org'] },
+          { $id: 'menu', displayName: 'Menu', fields: ['name'], visibleTo: ['org'] },
+        ] as never}
+        recordCount={0}
+        seedFromCache={false}
+        onClose={jest.fn()}
+      />,
+    )
+
+    fireEvent.click(screen.getByRole('button', { name: 'Edit' }))
+    fireEvent.mouseDown(screen.getByLabelText(/Target|Dataset|Collection/))
+    const offered = screen.getAllByRole('option').map((option) => option.textContent)
+    // Both are on every site, so their field counts tell them apart.
+    expect(offered).toEqual(['Services · All sites · 2 fields', 'Services · All sites · 1 field', 'Menu'])
   })
 })

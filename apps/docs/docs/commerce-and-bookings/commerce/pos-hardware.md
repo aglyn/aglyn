@@ -28,16 +28,16 @@ printers, scanners or customer displays.
 
 ## Card readers
 
-The register takes card-present payments on Stripe's smart readers:
+The register takes card-present payments on these smart readers:
 
 | Reader | Notes |
 | --- | --- |
-| **Stripe Reader S700** / **S710** | Android-based smart reader for the countertop or the hand. |
-| **Stripe Reader T600** | Countertop smart reader, on Wi-Fi or on Ethernet with the hub. |
-| **BBPOS WisePOS E** | Countertop smart reader. |
+| **Touchscreen reader (S700)** / **Touchscreen reader, 4G-capable (S710)** | Android-based smart reader for the countertop or the hand. |
+| **Countertop reader (T600)** | Countertop smart reader, on Wi-Fi or on Ethernet with the hub. |
+| **Countertop reader (WisePOS E)** | Countertop smart reader. |
 
-All are sold by Stripe. They are smart readers: each one talks to Stripe
-over its own internet connection, so it does not need to be plugged into
+They are smart readers: each one takes payments over its own internet
+connection, so it does not need to be plugged into
 or paired by Bluetooth with the device the register runs on. Card readers
 are shown in the console only when they are available for your store.
 
@@ -51,7 +51,7 @@ else before: generating a new pairing code on the reader and adding it
 here moves it to your store.
 
 Where the **Hardware** card is available, you can buy a reader from Aglyn
-instead and have Stripe ship it to you; see
+instead and have it shipped to you; see
 [Buy a reader from Aglyn](#buy-a-reader-from-aglyn).
 
 Stripe sells its readers through the Terminal hardware shop in the Stripe
@@ -62,10 +62,10 @@ only register a reader to the Stripe account that ordered it.
 
 **Setting one up**
 
-1. Charge the reader and switch it on. Stripe recommends leaving it plugged
-   in and on, even when not in use, so it receives software updates.
+1. Charge the reader and switch it on. Leave it plugged in and on, even
+   when not in use, so it receives software updates.
 2. Connect it to the internet: Wi-Fi from the reader's **Settings**, or
-   Ethernet through Stripe's optional dock or hub. Stripe's setup guides for
+   Ethernet through the optional dock or hub. Stripe's setup guides for
    the [S700/S710](https://docs.stripe.com/terminal/payments/setup-reader/stripe-reader-s700)
    and the [WisePOS E](https://docs.stripe.com/terminal/payments/setup-reader/bbpos-wisepos-e)
    show where each setting is, including the admin passcode the reader's
@@ -87,11 +87,11 @@ only register a reader to the Stripe account that ordered it.
   check that it is on and connected, cancel the payment, and take it again
   — or use **Card (QR)** or **Type card** for that sale.
 
-### 4G for the Stripe Reader S710 {#reader-4g}
+### 4G for the S710 reader {#reader-4g}
 
-Where it's available, the **POS devices** card of a store with a Stripe
-Reader S710 shows **4G (cellular)**. Select **Turn on 4G** to give every
-S710 at that store Stripe's cellular service, which it uses whenever Wi-Fi
+Where it's available, the **POS devices** card of a store with an S710
+reader shows **4G (cellular)**. Select **Turn on 4G** to give every
+S710 at that store 4G service, which it uses whenever Wi-Fi
 and Ethernet aren't available. The card shows the monthly price for each
 reader, and you agree to it before 4G turns on.
 
@@ -122,8 +122,8 @@ reader, and you agree to it before 4G turns on.
 
 ### Reader start-up screen {#reader-start-up-screen}
 
-While a Stripe Reader S700, S710 or BBPOS WisePOS E waits for a payment, it
-shows a start-up screen. Choose what yours show under **Reader start-up
+While a Touchscreen reader (S700 or S710) or Countertop reader (WisePOS E)
+waits for a payment, it shows a start-up screen. Choose what yours show under **Reader start-up
 screen** on the **POS devices** card:
 
 - **The Aglyn start-up screen** — the default.
@@ -156,25 +156,26 @@ sale**; buy a reader from Stripe and add it with its pairing code, as in
 [Getting a reader](#card-readers).
 :::
 
-The **Hardware** card on **Products → Point of sale** sells Stripe's card readers
-and their accessories. Aglyn places the order with Stripe, and Stripe ships it
-straight to you. Because Aglyn sells it, the reader is ready to take payments
-through Aglyn: add it to a register with its pairing code when it arrives.
+The **Hardware** card on **Products → Point of sale** sells card readers and
+their accessories. Aglyn sets each reader up for you and ships your order to you.
+Because Aglyn sells it, the reader is ready to take payments through Aglyn.
 
 **What's on offer**
 
 | Item | What it's for |
 | --- | --- |
-| **Stripe Reader S710** | Handheld for events and parking lots. It can use 4G with Stripe's cellular service, which is billed monthly for each reader; without it, the S710 uses Wi-Fi |
-| **Stripe Reader S700** | Handheld or countertop reader on Wi-Fi |
-| **Stripe Reader T600** | Countertop reader on Wi-Fi, or on Ethernet with the hub |
-| **BBPOS WisePOS E** | Countertop reader on Wi-Fi |
-| **Stripe Reader M2** | Pairs with the Aglyn POS app on your phone or tablet by Bluetooth |
+| **Touchscreen reader, 4G-capable (S710)** | Handheld for events and parking lots, on Wi-Fi. 4G is a separate service, billed monthly for each reader, where it's offered; see [4G for the S710 reader](#reader-4g) |
+| **Touchscreen reader (S700)** | Handheld or countertop reader on Wi-Fi |
+| **Countertop reader (T600)** | Countertop reader on Wi-Fi, or on Ethernet with the hub |
+| **Countertop reader (WisePOS E)** | Countertop reader on Wi-Fi |
+| **Pocket reader (M2)** | Pairs with the Aglyn POS app on your phone or tablet by Bluetooth |
 | Charging docks for the S700/S710, the WisePOS E and the M2, and the M2 mount | Keep a reader charged and in place at the counter |
-| The Stripe Reader Hub | Connects an S700, S710 or T600 to Ethernet and power |
+| A hub for the S700, S710 and T600 | Connects the reader to Ethernet and power |
 | A case for the S700/S710, and spare cables and chargers | Protect a handheld reader, or replace a lost cable or charger |
 
-The card shows only what is available to order, with its price.
+The card shows only what is available to order, with its price. An item that
+Aglyn's own online store also sells costs the same on the card as on the
+store's product page.
 
 **Place an order**
 
@@ -182,7 +183,11 @@ The card shows only what is available to order, with its price.
 2. Choose a quantity for each item, up to 10 of each and 20 items in one order.
 3. Choose a shipping speed. The summary shows the items, shipping and, where tax
    applies, says it is calculated at checkout.
-4. Select **Check out** in the card's header. Enter the shipping address, a
+4. Tick **I accept the hardware terms of sale**, which links to Sections
+   4.26–4.32 of the [Terms](https://aglyn.com/legal/terms), and **I am buying
+   this hardware for use in my business**. Both are required: until they are
+   ticked, **Check out** says so. The order records your acceptance.
+5. Select **Check out** in the card's header. Enter the shipping address, a
    phone number for the carrier, and your card on the secure checkout page, and
    pay.
 
@@ -211,8 +216,8 @@ newest first, and sorts by any column. Each order moves through:
 
 | Status | Meaning |
 | --- | --- |
-| **Order received** | Paid. Aglyn is placing it with Stripe. |
-| **Being prepared** | Stripe has the order and is getting it ready to ship. |
+| **Order received** | Paid. |
+| **Being prepared** | Aglyn has your hardware on its way in, or in hand and is setting each reader up: its serial number recorded and, where your store is ready for it, the reader registered to your store. |
 | **Shipped** | On its way. The tracking number links to the carrier's tracking page. |
 | **Delivered** | It has arrived. |
 | **Set up** | The reader is registered for your store. |
@@ -233,12 +238,42 @@ and you get an email with what was refunded.
 
 **When it arrives**
 
-Set the reader up as in [Setting one up](#card-readers): charge it, connect it to
-Wi-Fi, generate a pairing code on the reader, and add it on the **POS devices**
-card. A Stripe Reader M2 pairs by Bluetooth from the Aglyn POS app instead.
+If Aglyn registered the reader to your store before it shipped, charge it,
+switch it on and connect it to Wi-Fi: it is already on the **POS devices** card,
+and the order reads **Set up** once it is delivered. Otherwise set it up as in
+[Setting one up](#card-readers): charge it, connect it to Wi-Fi, generate a
+pairing code on the reader, and add it on the **POS devices** card. Aglyn
+recorded its serial number, so the order moves to **Set up** by itself as soon as
+you add it. A Pocket reader (M2) pairs by Bluetooth from the Aglyn POS app
+instead. The delivery email says which applies.
 
 **Who can buy:** a member with the **Buy point of sale hardware** permission for
 the site, on a plan that includes POS.
+
+### Bought from Aglyn's online store {#bought-from-our-online-store}
+
+Aglyn's own website also sells its card readers and accessories, from their
+product pages and the cart, to anyone, with or without an Aglyn account.
+
+**The terms of sale.** When the cart holds a card reader or an accessory, it
+asks you to tick **I accept the hardware terms of sale**, which links to
+Sections 4.26–4.32 of the [Terms](https://aglyn.com/legal/terms), and **I am
+buying this hardware for use in my business**. Checkout needs both. Your order
+records the acceptance.
+
+Then:
+
+- **If you don't have an account yet**, you get an email inviting you to create
+  one with the address you paid with. Once you create your workspace, the order
+  is in it.
+- **If you already have an account**, Aglyn's team attaches the order to your
+  workspace, or it joins your workspace on its own when you add its reader to
+  one of your stores with the reader's pairing code.
+
+The order then moves through the same statuses as one from the **Hardware**
+card, and you get the same emails as it ships and arrives. Until it joins your
+workspace, the links in those emails take you to sign in. To return it once it
+has shipped, use **Request a return** on the order under **Your orders**.
 
 ### Bought from us in person {#bought-from-us-in-person}
 
@@ -294,7 +329,7 @@ still needs:
 
 If Aglyn's staff took the reader's serial number when you bought it, the order
 moves to **Set up** by itself as soon as you add the reader. Otherwise, or for a
-Stripe Reader M2 you pair by Bluetooth, select **Mark set up** when it is done.
+Pocket reader (M2) you pair by Bluetooth, select **Mark set up** when it is done.
 Staff can also add the reader to your store for you at the event, by its pairing
 code, while you are there. If your store has no address for card readers yet,
 they can enter it with you, and it is saved to your store as if you had added it

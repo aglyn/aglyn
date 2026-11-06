@@ -161,6 +161,17 @@ export interface PluginRecordListSource {
     firestore: Firestore,
     request: PluginRecordListScope & { id: string },
   ): DocumentReference<DocumentData> | null
+  /**
+   * What each record is called in a picker beside the others it lists
+   * (AGL-4047): its name, with what tells it apart where two in the list share
+   * one, by id. Optional: without it a picker shows names. `hostNames` (site id
+   * to name) is what the reader knows of the workspace's sites, for a label
+   * that names one.
+   */
+  pickerLabels?(
+    records: readonly PluginIndexedRecord[],
+    context?: { hostNames?: Readonly<Record<string, string>> },
+  ): Readonly<Record<string, string>>
 }
 
 export const PLUGIN_RECORD_LISTS = definePluginServiceContract<PluginRecordListSource>(
@@ -275,4 +286,18 @@ export function pluginRecordsFromRows(
   return (rows ?? [])
     .map((row) => source.record(String(row[idField] ?? ''), row, request))
     .filter((record): record is PluginIndexedRecord => record !== null)
+}
+
+/**
+ * What each of `records` is called in a picker beside the others (AGL-4047),
+ * by id: the owner's answer where it gives one, else the record's name. A
+ * kind no plugin keeps here answers names.
+ */
+export function pluginRecordPickerLabels(
+  kind: string,
+  records: readonly PluginIndexedRecord[],
+  context?: { hostNames?: Readonly<Record<string, string>> },
+): Record<string, string> {
+  const labels = pluginRecordListSource(kind)?.source.pickerLabels?.(records, context) ?? {}
+  return Object.fromEntries(records.map((record) => [record.id, labels[record.id] || record.name]))
 }

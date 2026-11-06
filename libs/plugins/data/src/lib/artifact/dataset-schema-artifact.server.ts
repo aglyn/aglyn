@@ -41,6 +41,7 @@ import {
   summarizeSchemaChange,
   type PublishedDatasetSchema,
 } from './dataset-schema'
+import { datasetNameLower } from '../model/datasets'
 
 /**
  * A dataset's schema as an installable artifact (AGL-657), answered by the
@@ -252,8 +253,10 @@ export async function prepareDatasetSchemaInstall(
           const live = (await tx.get(datasetsRef.count())).data().count
           const authoritative = checkDatasetQuota(org, live)
           if (!authoritative.allowed) return overDatasetQuota(authoritative.limit)
+          const displayName = String(listing.displayName ?? 'Dataset').slice(0, 120)
           tx.create(datasetsRef.doc(datasetId), {
-            displayName: String(listing.displayName ?? 'Dataset').slice(0, 120),
+            displayName,
+            nameLower: datasetNameLower(displayName),
             ...(listing.description ? { description: listing.description } : {}),
             // `fields` is the v1 flat list the older editor still reads; keep it
             // in step with the model so both readers agree (AGL-102).

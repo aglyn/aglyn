@@ -21,7 +21,7 @@ import { posCustomerHandler } from './pos-customer'
 import { posDayReportHandler } from './pos-day-report'
 import { registerPosSalePrinting } from './pos-print'
 import { onPosSaleCompleted } from './pos-sale'
-import { parsePosHardwareInPersonConfig } from '../model/pos-hardware'
+import { recordSellerStoreSaleHardware } from './pos-hardware-sale-fields'
 import { posReturnHandler } from './pos-return'
 import { posShiftHandler } from './pos-shift'
 import { posStaffPinHandler } from './pos-staff-pin'
@@ -65,12 +65,5 @@ let hardwareSubscribed = false
 function registerPosSaleHardware(): void {
   if (hardwareSubscribed) return
   hardwareSubscribed = true
-  onPosSaleCompleted(async (event) => {
-    if (parsePosHardwareInPersonConfig(process.env)?.sellerHostId !== event.hostId) return
-    try {
-      await (await import('./pos-hardware-in-person')).recordCompletedSaleHardware(event)
-    } catch (error) {
-      console.error('[pos-hardware-in-person] recorder not loaded', event.orderId, error)
-    }
-  })
+  onPosSaleCompleted((event) => recordSellerStoreSaleHardware(event))
 }

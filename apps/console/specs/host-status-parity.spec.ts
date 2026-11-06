@@ -78,7 +78,7 @@ describe('describeHostStatus', () => {
     const status = describeHostStatus({ screens: { s1: '/' }, preview: true })
     expect(status.label).toBe('In preview')
     expect(status.detail).toContain('Only your team')
-    // Maintenance still outranks it: nobody at all sees the site then.
+    // Maintenance still outranks it: the pill names the stronger switch.
     expect(
       describeHostStatus({ screens: { s1: '/' }, preview: true, maintenance: true }).label,
     ).toBe('Maintenance')

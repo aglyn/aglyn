@@ -386,6 +386,24 @@ const BUTTON_BASE = {
   },
 } as typeof DEFAULT_SITE_THEME
 
+describe('an AI starter pins its base theme (AGL-4049)', () => {
+  it('keeps a pinned base on every draw, drawing every other dimension exactly as without it', () => {
+    const answer: AiSiteLookAnswer = { base: 'carbon', fonts: 'oswald' }
+    for (const seed of [1, 7, 4049, 0x5bd1e995]) {
+      const free = aiSiteStyleFor({ kind: kind('restaurant'), answer, seed })
+      const pinned = aiSiteStyleFor({ kind: kind('restaurant'), answer, seed, pins: { base: 'bootstrap' } })
+      expect(pinned.base).toBe('bootstrap')
+      expect({ ...pinned, base: free.base }).toEqual(free)
+    }
+  })
+
+  it('keeps the base when the look is drawn apart from the workspace’s other sites', () => {
+    const others = [aiSiteStyleFor({ kind: kind('trades'), answer: {}, seed: 3 })]
+    const pinned = aiSiteStyleFor({ kind: kind('trades'), answer: {}, seed: 3, avoid: others, pins: { base: others[0]!.base === 'fluent' ? 'cupertino' : 'fluent' } })
+    expect(pinned.base).toBe(others[0]!.base === 'fluent' ? 'cupertino' : 'fluent')
+  })
+})
+
 describe('a style saved before Keep my site (AGL-4152)', () => {
   it('draws exactly the colors and the theme it drew before, on a base with button styles of its own or none', () => {
     const styles = stylesBefore()

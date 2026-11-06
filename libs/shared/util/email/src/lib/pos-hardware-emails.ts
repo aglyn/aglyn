@@ -69,7 +69,7 @@ function tokens(origin: string): Record<string, SystemEmailMergeToken> {
     items: {
       name: 'order.items',
       description: 'What was ordered, one line per item',
-      sample: 'Stripe Reader S710 × 1\nCharging dock for the S700 and S710 × 1',
+      sample: 'Touchscreen reader, 4G-capable (S710) × 1\nCharging dock for the S700 and S710 × 1',
     },
     total: { name: 'order.total', description: 'What was charged, shipping and tax included', sample: '$123.45' },
     shipTo: {
@@ -120,6 +120,12 @@ function tokens(origin: string): Record<string, SystemEmailMergeToken> {
       description: 'What a return did not refund: the original shipping and any restocking fee',
       sample: '$25.00',
     },
+    setupSteps: {
+      name: 'order.setupSteps',
+      description: 'How to start taking payments with what arrived: the steps to pair it, or that it is already set up on the store',
+      sample:
+        '1. Charge it and switch it on.\n2. Connect it to Wi-Fi from the reader’s Settings.\n3. On the reader, generate a pairing code.\n4. On the POS devices card, choose Add card reader and enter the code.',
+    },
     signUpUrl: {
       name: 'order.signUpUrl',
       description: 'Where to create an account with this address',
@@ -148,7 +154,7 @@ export function posHardwareSystemEmailTemplates(
       defaultBody: [
         { block: 'text', text: '{{site.name}} · Order {{order.number}}', variant: 'eyebrow' },
         { block: 'text', text: 'Your hardware order is in', variant: 'heading' },
-        { block: 'text', text: 'Thanks for your order. We place it with Stripe, which makes the readers and ships them straight to you. We will email you again with tracking as soon as it ships.', variant: 'body' },
+        { block: 'text', text: 'Thanks for your order. We prepare your hardware, set each reader up for you and ship it to you. We will email you again with tracking as soon as it ships.', variant: 'body' },
         { block: 'text', text: '{{order.items}}\nShipping: {{order.shippingMethod}}\nTotal charged: {{order.total}}', variant: 'details' },
         { block: 'text', text: 'Shipping to', variant: 'subheading' },
         { block: 'text', text: '{{order.shipTo}}', variant: 'details' },
@@ -174,11 +180,11 @@ export function posHardwareSystemEmailTemplates(
       defaultBody: [
         { block: 'text', text: '{{site.name}} · Order {{order.number}}', variant: 'eyebrow' },
         { block: 'text', text: 'Your hardware is on its way', variant: 'heading' },
-        { block: 'text', text: 'Your order left Stripe’s warehouse and is with {{order.carrier}}. Someone may need to sign for it, so keep an eye on the tracking page for the delivery day.', variant: 'body' },
+        { block: 'text', text: 'Your order is on its way with {{order.carrier}}. Someone may need to sign for it, so keep an eye on the tracking page for the delivery day.', variant: 'body' },
         { block: 'text', text: '{{order.items}}\nCarrier: {{order.carrier}}\nTracking number: {{order.trackingNumber}}', variant: 'details' },
         { block: 'button', label: 'Track your parcel', href: '{{order.trackingUrl}}' },
         { block: 'text', text: 'Before it arrives', variant: 'subheading' },
-        { block: 'text', text: 'Pick the spot where the reader will live: it needs power and Wi-Fi, or a cellular signal for the S710. Once it is delivered, you add it to a register on the POS devices card in a minute.', variant: 'body' },
+        { block: 'text', text: 'Pick the spot where the reader will live: it needs power and Wi-Fi. When it arrives, the delivery email says how to start taking payments with it.', variant: 'body' },
         { block: 'text', text: 'Shipping to: {{order.shipTo}}', variant: 'caption' },
       ],
       footerReason: footer,
@@ -192,14 +198,14 @@ export function posHardwareSystemEmailTemplates(
         'with the way to set the reader up at a register.',
       deliveredBy: 'resend',
       defaultSubject: 'Your card reader order {{order.number}} was delivered',
-      mergeTokens: [t.org, t.site, t.number, t.items, t.setupUrl, t.ordersUrl],
+      mergeTokens: [t.org, t.site, t.number, t.items, t.setupSteps, t.setupUrl, t.ordersUrl],
       defaultBody: [
         { block: 'text', text: '{{site.name}} · Order {{order.number}}', variant: 'eyebrow' },
         { block: 'text', text: 'Your hardware has arrived', variant: 'heading' },
         { block: 'text', text: 'Your order was delivered. Here is how to start taking payments with it.', variant: 'body' },
         { block: 'text', text: '{{order.items}}', variant: 'details' },
         { block: 'text', text: 'Set up your reader', variant: 'subheading' },
-        { block: 'text', text: '1. Charge it and switch it on.\n2. Connect it to Wi-Fi from the reader’s Settings.\n3. On the reader, generate a pairing code.\n4. On the POS devices card, choose Add card reader and enter the code.', variant: 'details' },
+        { block: 'text', text: '{{order.setupSteps}}', variant: 'details' },
         { block: 'button', label: 'Set up your reader', href: '{{order.setupUrl}}' },
         { block: 'text', text: 'The M2 pairs by Bluetooth from the {{brand.productName}} POS app instead. If anything arrived damaged, contact support: {{brand.supportUrl}}', variant: 'caption' },
       ],

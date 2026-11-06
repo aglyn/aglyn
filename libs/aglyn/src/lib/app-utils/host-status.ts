@@ -90,7 +90,7 @@ export function describeHostStatus(host: {
     return {
       label: 'Maintenance',
       color: 'warning',
-      detail: 'Every path serves the maintenance page.',
+      detail: 'Only your team can see this site. Visitors see the 503 page.',
     }
   }
   // A site in preview (AGL-4086) is not live to its visitors whatever it has

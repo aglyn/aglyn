@@ -277,8 +277,8 @@ to start the next one.
 
 A card reader takes card payments at the counter: the customer taps,
 inserts or swipes, and the reader can ask for a tip. The register works
-with Stripe's smart readers, the **Stripe Reader S700** (and S710) and
-the **BBPOS WisePOS E**. Card readers are shown only when they are
+with smart readers: the **Touchscreen reader (S700)** (and S710) and
+the **Countertop reader (WisePOS E)**. Card readers are shown only when they are
 available for your store; when they are not, the **POS devices** card has
 no card reader controls and the register has no **Card reader** button.
 

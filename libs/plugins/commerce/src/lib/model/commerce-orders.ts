@@ -545,16 +545,20 @@ export interface HostOrder {
   /**
    * How the buyer of a register sale of hardware agreed to the terms of sale
    * (AGL-4038, `model/pos-hardware-terms.ts`): on the tablet, on the
-   * customer display, or by the receipt-and-sign notice. The first one stands.
+   * customer display, or by the receipt-and-sign notice; or, on an order
+   * from the platform's own online store, ticked at checkout (`online`) with
+   * business use confirmed. The first one stands.
    */
   hardwareTermsAcceptance?: {
     version: string
     sections: string
-    method: 'tablet' | 'display' | 'notice'
+    method: 'tablet' | 'display' | 'notice' | 'online'
     atMs: number
     staffUid: string | null
     ip: string | null
     userAgent: string | null
+    /** The buyer confirmed business use, at an online checkout. */
+    businessUse?: boolean
   }
   /** Who put the terms of sale on the customer display, and when: the acceptance names them. */
   hardwareTermsRequest?: { by: string; atMs: number }

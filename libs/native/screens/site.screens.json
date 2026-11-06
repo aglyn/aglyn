@@ -1068,7 +1068,7 @@
           "type": "form",
           "id": "unavailable",
           "title": "503 · Maintenance",
-          "footer": "Shown everywhere while maintenance mode is on, and to visitors while the site is in preview.",
+          "footer": "Shown to visitors while maintenance mode is on or the site is in preview.",
           "when": "site.can[site.publish]",
           "fields": [
             {

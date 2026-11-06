@@ -247,3 +247,118 @@ describe('Staff → Hardware orders, canceling or refunding', () => {
     expect(action().mock.calls[0][1]).toMatchObject({ action: 'refund', notifyBuyer: true, orgId: 'org-seller' })
   })
 })
+
+describe('Staff → Hardware orders, sold on our online store (AGL-4038)', () => {
+  const storefront = {
+    ...inPerson,
+    id: 'hw_cccccccccccccccccccc',
+    number: 'HW-CCCCCC',
+    status: 'paid',
+    contactEmail: 'buyer@example.com',
+    source: 'storefront',
+    shipping: {
+      method: 'standard',
+      label: 'Standard shipping',
+      cents: 2_000,
+      name: 'Pat Lee',
+      phone: null,
+      address: { line1: '12 Main St', city: 'Springfield', state: 'IL', postalCode: '62701', country: 'US' },
+    },
+    posSale: { ...inPerson.posSale, registerId: null, kiosk: false, number: 41, paymentLinkSessionId: 'cs_1' },
+    paidTo: { ...inPerson.paidTo, tenders: ['card_link'] },
+    attachment: { ...inPerson.attachment, email: 'buyer@example.com', invitedAtMs: 1 },
+  }
+
+  beforeEach(() => {
+    requested.length = 0
+    rows = [storefront]
+  })
+
+  it('lists it as an online store sale still to attach', async () => {
+    render(<PosHardwareOrdersStaffPage basePath="/admin" />)
+    expect((await screen.findByTestId('order-row')).textContent).toContain('Online store · to attach')
+  })
+
+  it('shows the store order, whose it is and the store’s account, and the shipping and tracking to fulfill it', async () => {
+    render(<PosHardwareOrdersStaffPage basePath="/admin" />)
+    fireEvent.click(await screen.findByTestId('order-row'))
+    const dialog = await screen.findByRole('dialog')
+    expect(within(dialog).getByText('Sold on our online store')).toBeTruthy()
+    expect(within(dialog).getByText(/Online order #41 · paid \$324\.75 · by payment link/)).toBeTruthy()
+    expect(within(dialog).getByText(/Into the store's own account/)).toBeTruthy()
+    expect(within(dialog).getByText('To attach: invited buyer@example.com')).toBeTruthy()
+    expect(within(dialog).getByText(/12 Main St/)).toBeTruthy()
+    expect(within(dialog).getByLabelText('Tracking number')).toBeTruthy()
+    expect(within(dialog).getByRole('button', { name: 'Cancel and refund' })).toBeTruthy()
+    expect(within(dialog).getByRole('button', { name: "Remove buyer's details" })).toBeTruthy()
+  })
+
+  it('says a cancel comes back out of the store’s own account', async () => {
+    render(<PosHardwareOrdersStaffPage basePath="/admin" />)
+    fireEvent.click(await screen.findByTestId('order-row'))
+    fireEvent.click(within(await screen.findByRole('dialog')).getByRole('button', { name: 'Cancel and refund' }))
+    const confirm = await screen.findByRole('dialog', { name: 'Cancel and refund this order?' })
+    expect(within(confirm).getByText(/\$324\.75 goes back to the card it was paid with, from the selling store's own account/)).toBeTruthy()
+  })
+})
+
+describe('Staff → Hardware orders, setting an order up before it ships (AGL-4038)', () => {
+  const received = {
+    ...inPerson,
+    id: 'hw_dddddddddddddddddddd',
+    number: 'HW-DDDDDD',
+    orgId: 'org-buyer',
+    hostId: 'host-buyer',
+    status: 'received',
+    source: 'online',
+    shipping: { method: 'standard', label: 'Standard shipping', cents: 1_000, name: 'Pat Lee', phone: null, address: null },
+    stripePaymentIntentId: 'pi_test_1',
+    posSale: null,
+    paidTo: null,
+    attachment: null,
+    units: [
+      { sku: 'stripe-reader-s700', serialNumber: 'WSC-1', readerId: 'tmr_1', hostId: 'host-buyer', registeredAtMs: 1 },
+      { sku: 'stripe-reader-s700', serialNumber: null, readerId: null, hostId: null, registeredAtMs: null },
+    ],
+  }
+  const action = () => jest.requireMock('./pos/pos-hardware-api').staffHardwareOrderAction as jest.Mock
+
+  beforeEach(() => {
+    requested.length = 0
+    rows = [received]
+    action().mockReset()
+    action().mockImplementation(async () => ({ ok: true, order: received }))
+  })
+
+  it('shows a serial field per reader, keeps a registered one, and saves the serials', async () => {
+    render(<PosHardwareOrdersStaffPage basePath="/admin" />)
+    fireEvent.click(await screen.findByTestId('order-row'))
+    const dialog = await screen.findByRole('dialog')
+    expect(within(dialog).getByText('Set up')).toBeTruthy()
+    const first = within(dialog).getByLabelText(/Serial number, reader 1/) as HTMLInputElement
+    expect(first.value).toBe('WSC-1')
+    expect(first.disabled).toBe(true)
+    expect(within(dialog).getByText('Registered to the buyer’s store')).toBeTruthy()
+    fireEvent.change(within(dialog).getByLabelText(/Serial number, reader 2/), { target: { value: 'WSC-2' } })
+    fireEvent.click(within(dialog).getByRole('button', { name: 'Save serial numbers' }))
+    await waitFor(() => expect(action()).toHaveBeenCalledTimes(1))
+    expect(action().mock.calls[0][1]).toEqual({ action: 'serials', serials: ['WSC-1', 'WSC-2'], orgId: 'org-buyer', orderId: 'hw_dddddddddddddddddddd' })
+  })
+
+  it('registers a reader to the buyer’s store by the code it shows', async () => {
+    render(<PosHardwareOrdersStaffPage basePath="/admin" />)
+    fireEvent.click(await screen.findByTestId('order-row'))
+    const dialog = await screen.findByRole('dialog')
+    fireEvent.change(within(dialog).getByLabelText('Pairing code the reader shows'), { target: { value: ' quick-fox ' } })
+    fireEvent.click(within(dialog).getByRole('button', { name: 'Register to the buyer’s store' }))
+    await waitFor(() => expect(action()).toHaveBeenCalledTimes(1))
+    expect(action().mock.calls[0][1]).toMatchObject({ action: 'register-reader', registrationCode: 'quick-fox' })
+  })
+
+  it('offers Mark received after Ordered, then Mark shipped', async () => {
+    rows = [{ ...received, status: 'ordered' }]
+    render(<PosHardwareOrdersStaffPage basePath="/admin" />)
+    fireEvent.click(await screen.findByTestId('order-row'))
+    expect(within(await screen.findByRole('dialog')).getByRole('button', { name: 'Mark received' })).toBeTruthy()
+  })
+})

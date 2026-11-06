@@ -176,7 +176,7 @@ async function tellBillingManagers(
   return told || recipients.length === 0
 }
 
-const readersText = (readers: number) => `${readers} Stripe Reader S710${readers === 1 ? '' : 's'}`
+const readersText = (readers: number) => `${readers} S710 reader${readers === 1 ? '' : 's'}`
 
 /**
  * The day a month's charge is left open: it is due, and 4G turns off for the

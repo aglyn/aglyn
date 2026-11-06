@@ -22,6 +22,7 @@
  * second generator.
  */
 
+import { SITE_STYLE_AUTO } from '@aglyn/aglyn/app-utils/site-styles'
 import { STARTER_TEMPLATES } from '@aglyn/aglyn/app-utils/starter-templates'
 import * as start from './ai-site-start'
 import * as copy from './ai-job-failure-copy'
@@ -422,6 +423,7 @@ describe('an AI starter’s answers fill the questions (AGL-4049)', () => {
       style: 'restaurant',
       kind: 'restaurant',
       brand: mapped.brand,
+      starterLook: mapped.starterLook,
     })
     // So the questions still ask the one answer with no default.
     expect(aiSiteStartRefusal(mapped)).toBe('Say what kind of site this is.')
@@ -488,5 +490,100 @@ describe('an AI starter’s answers fill the questions (AGL-4049)', () => {
     const mapped = { ...start.aiSiteStartAnswersFromStarter(seeded('restaurant', { pages: 6 })), siteType: 'a corner bistro' }
     const inputs = parseAiSiteJobInputs(aiSiteStartInputs(mapped))
     expect(inputs).toMatchObject({ siteKind: 'restaurant', pages: 6, brand: mapped.brand })
+  })
+})
+
+/**
+ * An AI starter's look reaches the job (AGL-4049): the base theme, font
+ * pairing and finer style tokens its listing carries become the start's
+ * `starterLook`, held while the Style card is the starter's, and travel to
+ * the look unit as one input it reads strictly.
+ */
+describe('an AI starter’s look travels with its answers (AGL-4049)', () => {
+  const restaurant = AI_SITE_KINDS.find((kind) => kind.id === 'restaurant')!
+  const look = aiSiteKindDefaultLook(restaurant, { presetIds: new Set(['theme-presets.material3', 'theme-presets.bootstrap']) })
+  const listing = (patch: Record<string, unknown> = {}) => ({
+    kind: 'restaurant',
+    style: { base: 'bootstrap', hue: 20, ground: 'warm', fonts: 'inter', corners: 'soft', buttons: 'pill' },
+    fonts: 'editorial',
+    brandColors: { primary: '#8A3B12' },
+    pages: 5,
+    brief: 'a corner bistro',
+    ...patch,
+  })
+
+  it('keeps the starter’s base, pairing and style tokens, its own fonts winning over the style’s', () => {
+    const mapped = start.aiSiteStartAnswersFromStarter(listing())
+    // Red before: the starter's style and fonts were dropped.
+    expect(mapped.starterLook).toEqual({
+      style: 'restaurant',
+      look: { base: 'bootstrap', fonts: 'editorial', hue: 20, ground: 'warm', corners: 'soft', buttons: 'pill' },
+    })
+    // The seeded listings' own shape reads whole.
+    const seeded = start.aiSiteStartAnswersFromStarter({ kind: 'restaurant', style: look.answerStyle, fonts: look.theme.fonts })
+    expect(seeded.starterLook?.look).toMatchObject({ base: look.answerStyle.base, fonts: look.theme.fonts, ground: look.answerStyle.ground })
+  })
+
+  it('drops a base, pairing or token this deployment does not know, and holds no look without a style card', () => {
+    const odd = start.aiSiteStartAnswersFromStarter(
+      listing({ style: { base: 'windows-95', hue: 'red', ground: 'plaid', fonts: 'comic', corners: 'blobby', buttons: 'glow' }, fonts: 'nope' }),
+    )
+    expect(odd.starterLook).toBeUndefined()
+    // An unknown pairing of its own leaves the style's pairing standing.
+    expect(start.aiSiteStartAnswersFromStarter(listing({ fonts: 'nope' })).starterLook?.look.fonts).toBe('inter')
+    expect(start.aiSiteStartAnswersFromStarter(listing({ style: { base: 'carbon', hue: 400, corners: 'round' } })).starterLook?.look).toEqual({
+      base: 'carbon',
+      fonts: 'editorial',
+      corners: 'round',
+    })
+    // A kind this deployment does not know chooses no card, so no look is held.
+    expect(start.aiSiteStartAnswersFromStarter(listing({ kind: 'nope' })).starterLook).toBeUndefined()
+  })
+
+  it('sends the look as its own input while the starter’s card is chosen, and drops it, base and fonts both, once another is', () => {
+    const mapped = start.aiSiteStartAnswersFromStarter(listing())
+    const sent = aiSiteStartInputs(mapped)[start.AI_SITE_STARTER_LOOK_INPUT]
+    expect(typeof sent).toBe('string')
+    expect(start.aiSiteStarterLookFromInput(sent)).toEqual(mapped.starterLook?.look)
+    // The door admits it beside the rest.
+    expect(parseAiSiteJobInputs(aiSiteStartInputs(mapped))).toMatchObject({ siteKind: 'restaurant' })
+    for (const other of ['yoga', SITE_STYLE_AUTO]) {
+      const changed = { ...mapped, ...start.aiSiteStartStyleAnswer(other) }
+      expect(aiSiteStartInputs(changed)).not.toHaveProperty(start.AI_SITE_STARTER_LOOK_INPUT)
+      expect(start.aiSiteStartStarterLookLine(changed)).toBeNull()
+    }
+    // A start with no starter sends exactly what it always did.
+    expect(aiSiteStartInputs(answered({ ...start.aiSiteStartStyleAnswer('restaurant') }))).not.toHaveProperty(start.AI_SITE_STARTER_LOOK_INPUT)
+  })
+
+  it('says what the look is set in, and how to change it', () => {
+    const mapped = start.aiSiteStartAnswersFromStarter(listing())
+    expect(start.aiSiteStartStarterLookLine(mapped)).toBe(
+      'Set in Bootstrap with Playfair Display and Source Sans 3; pick another style to change it.',
+    )
+    const fontsOnly = start.aiSiteStartAnswersFromStarter(listing({ style: {}, fonts: 'inter' }))
+    expect(start.aiSiteStartStarterLookLine(fontsOnly)).toBe('Set in Inter; pick another style to change it.')
+    const starterBase = start.aiSiteStartAnswersFromStarter(listing({ style: { base: 'starter' }, fonts: null }))
+    expect(start.aiSiteStartStarterLookLine(starterBase)).toBe('Set in the starter theme; pick another style to change it.')
+    expect(start.aiSiteStartStarterLookLine(answered())).toBeNull()
+  })
+
+  it('comes back with a start that is tried again', () => {
+    const mapped = { ...start.aiSiteStartAnswersFromStarter(listing()), siteType: 'a corner bistro' }
+    const reopened = start.aiSiteStartAnswersFromInputs(aiSiteStartInputs(mapped))
+    expect(reopened?.starterLook).toEqual(mapped.starterLook)
+    expect(start.aiSiteStartInputsOf(aiSiteStartInputs(mapped))).toHaveProperty(start.AI_SITE_STARTER_LOOK_INPUT)
+  })
+
+  it('is read strictly: text holding a look in the vocabulary, or none', () => {
+    const read = start.aiSiteStarterLookFromInput
+    expect(read(JSON.stringify({ base: 'fluent', fonts: 'inter', buttons: 'caps' }))).toEqual({ base: 'fluent', fonts: 'inter', buttons: 'caps' })
+    for (const value of [undefined, null, 7, '', 'bootstrap', '[]', '{"base":"Bootstrap"}', '{"hue":12.5}', { base: 'fluent' }, `{"base":"fluent","x":"${'y'.repeat(500)}"}`]) {
+      expect(read(value)).toBeNull()
+    }
+    // The door refuses a look that is not text.
+    expect(parseAiSiteJobInputs({ businessType: 'a bistro', pages: 5, [start.AI_SITE_STARTER_LOOK_INPUT]: 7 })).toBe(
+      `${start.AI_SITE_STARTER_LOOK_INPUT} must be text under ${start.AI_SITE_STARTER_LOOK_MAX_CHARS} characters`,
+    )
   })
 })

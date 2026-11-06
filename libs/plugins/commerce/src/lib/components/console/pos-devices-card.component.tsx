@@ -287,7 +287,7 @@ export function PosDevicesCard({
               <Typography variant="body2" color="text.secondary">
                 {answer?.testMode
                   ? 'No card readers yet. In test mode, add one with the code "simulated-wpe" to try a simulated reader.'
-                  : 'No card readers yet. Add a Stripe Reader S700 or BBPOS WisePOS E with the code it shows on screen.'}
+                  : 'No card readers yet. Add a Touchscreen reader (S700) or Countertop reader (WisePOS E) with the code it shows on screen.'}
               </Typography>
             ) : (
               readers.map((reader) => (
@@ -509,7 +509,7 @@ export function PosDevicesCard({
           </Typography>
           {answer?.cellular?.enabled ? (
             <Typography variant="body2" color="text.secondary">
-              {'4G is on at this store: a Stripe Reader S710 you add gets it too, and is charged for it each month.'}
+              {'4G is on at this store: an S710 reader you add gets it too, and is charged for it each month.'}
             </Typography>
           ) : null}
           <TextField

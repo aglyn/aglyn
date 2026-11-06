@@ -447,6 +447,15 @@ describe('PATCH /v1/datasets/{id} (AGL-2126)', () => {
       name: 'Leads',
       fields: ['name', 'email'],
     })
+    // The name's search key moves with the name (AGL-4047).
+    expect(mockDocs.get(`${DATASETS}/ds_1`)?.nameLower).toBe('leads')
+  })
+
+  it("stamps the name's search key on create, and leaves it alone when the name is not sent (AGL-4047)", async () => {
+    await createDataset(VALID)
+    expect(mockDocs.get(`${DATASETS}/ds_1`)?.nameLower).toBe('customers')
+    await patchDataset('ds_1', { fields: ['company'] })
+    expect(mockDocs.get(`${DATASETS}/ds_1`)?.nameLower).toBe('customers')
   })
 
   it('replaces fields when they are sent', async () => {

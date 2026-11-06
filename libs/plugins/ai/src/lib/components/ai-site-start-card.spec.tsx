@@ -82,6 +82,7 @@ import {
 } from '../model/ai-site-job'
 import { AI_CREDITS_CONFIRM_CODE, aiCreditsPromptText, aiCreditRangeText } from '../model/ai-credit-estimate'
 import { AI_SITE_KINDS } from '../model/ai-site-kinds'
+import { AI_SITE_STARTER_LOOK_INPUT } from '../model/ai-site-starter-look'
 import { AI_SITE_START_ANSWERS, aiSiteStartBrief, aiSiteStartInputs, type AiSiteStartAnswers } from '../model/ai-site-start'
 import { AI_SITE_STYLE_PREVIEW_ALTS } from './ai-site-style-previews'
 import { resetAiModelOptionReadsForTests } from './use-ai-model-choice'
@@ -1973,8 +1974,8 @@ describe('an AI starter fills the questions (AGL-4049)', () => {
     displayName: NAME,
     answers: {
       kind: 'restaurant',
-      style: { base: 'starter', ground: 'warm', fonts: 'fraunces-inter', corners: 'soft', buttons: 'rounded' },
-      fonts: 'fraunces-inter',
+      style: { base: 'bootstrap', ground: 'warm', fonts: 'inter', corners: 'soft', buttons: 'rounded' },
+      fonts: 'fraunces',
       brandColors: { primary: '#8A3B12' },
       pages: 6,
       brief: 'a corner bistro',
@@ -1991,8 +1992,10 @@ describe('an AI starter fills the questions (AGL-4049)', () => {
     ...patch,
   })
   const restaurant = AI_SITE_KINDS.findIndex((kind) => kind.id === 'restaurant')
+  /** What the starter's look is set in (AGL-4049), as its card and the review say it. */
+  const SET_IN = 'Set in Bootstrap with Fraunces and Inter; pick another style to change it.'
   const starterCard = () =>
-    screen.getByRole('radio', { name: `${AI_SITE_KINDS[restaurant].label}: From ${NAME}. Change it if you like.` })
+    screen.getByRole('radio', { name: `${AI_SITE_KINDS[restaurant].label}: From ${NAME}. ${SET_IN}` })
 
   /** Draws the start the way the shell does after an AI pick. */
   async function openFromStarter(site: ReturnType<typeof pendingSite>, verdict: Record<string, unknown> = { jobs: [] }) {
@@ -2048,7 +2051,7 @@ describe('an AI starter fills the questions (AGL-4049)', () => {
     }
     const review = screen.getByRole('list', { name: 'Your answers' }).textContent ?? ''
     expect(review).toMatch(/Kind of sitea corner bistro/)
-    expect(review).toMatch(new RegExp(`Style${AI_SITE_KINDS[restaurant].label}Edit`))
+    expect(review).toContain(`Style${AI_SITE_KINDS[restaurant].label}. ${SET_IN}Edit`)
     expect(review).toMatch(/Pages6/)
     // A color the swatches do not name is shown as chosen, never as a code.
     expect(review).toMatch(/Brand colorChosen color/)
@@ -2076,6 +2079,14 @@ describe('an AI starter fills the questions (AGL-4049)', () => {
     expect(inputs).toEqual(
       expect.objectContaining({ businessType: 'a corner bistro', siteKind: 'restaurant', pages: 6, brand: '#8a3b12' }),
     )
+    // The look its listing promised travels with it (AGL-4049): base, pairing and tokens.
+    expect(JSON.parse(inputs[AI_SITE_STARTER_LOOK_INPUT])).toEqual({
+      base: 'bootstrap',
+      fonts: 'fraunces',
+      ground: 'warm',
+      corners: 'soft',
+      buttons: 'rounded',
+    })
     // Answers and a look, never the starter's pages: the job is the one the questions always start.
     expect(brief).toBe(
       aiSiteStartBrief({
@@ -2087,6 +2098,31 @@ describe('an AI starter fills the questions (AGL-4049)', () => {
         brand: '#8a3b12',
       }),
     )
+  })
+
+  it('drops the starter’s base and fonts once another style is picked, on the review and in the job', async () => {
+    const site = pendingSite()
+    await openFromStarter(site)
+    for (const step of ['audience', 'style'] as const) {
+      pressNext()
+      await onStep(step)
+    }
+    const yoga = AI_SITE_KINDS.findIndex((kind) => kind.id === 'yoga')
+    fireEvent.click(kindCard(yoga))
+    for (const step of ['details', 'review'] as const) {
+      pressNext()
+      await onStep(step)
+    }
+    const review = screen.getByRole('list', { name: 'Your answers' }).textContent ?? ''
+    expect(review).toContain(`Style${AI_SITE_KINDS[yoga].label}Edit`)
+    expect(review).not.toContain('Set in')
+    mockFetch.mockResolvedValueOnce(json({ ok: true }))
+    mockFetch.mockResolvedValueOnce(json({ job: siteJob({ hostId: 'host-new' }) }))
+    fireEvent.click(screen.getByRole('button', { name: 'Plan my site' }))
+    await waitFor(() => expect(mockPush).toHaveBeenCalled())
+    const { inputs } = JSON.parse(postCall()[1].body)
+    expect(inputs).toMatchObject({ siteKind: 'yoga' })
+    expect(inputs).not.toHaveProperty(AI_SITE_STARTER_LOOK_INPUT)
   })
 
   it('holds a Free start to its band, the starter’s page count included', async () => {

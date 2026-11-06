@@ -40,6 +40,7 @@ import {
 } from '@aglyn/tenant-data-admin/server/organizations'
 import { isServerReleaseFlagOnForOrg } from '@aglyn/tenant-data-admin/server/release-flags'
 import { BUNDLE_ID } from '../constants/bundle-common'
+import { datasetNameLower } from '../model/datasets'
 import {
   coerceDocumentValues,
   datasetIntegrityFields,
@@ -550,6 +551,7 @@ export function createDatasetDraftWriter(deps: DatasetDraftWriterDeps = {}): Plu
         if (!quota.allowed) return { ok: false, status: 403, error: datasetDraftLimitRefusal(quota) }
         tx.create(datasetRef, {
           displayName: name,
+          nameLower: datasetNameLower(name),
           fields: [...model.order],
           model,
           ...newResourceScopeFields(visibleTo),

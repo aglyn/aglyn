@@ -77,6 +77,8 @@ export type AiSiteCorners = 'sharp' | 'soft' | 'round' | 'pill'
 export const AI_SITE_CORNERS: readonly AiSiteCorners[] = ['sharp', 'soft', 'round', 'pill']
 /** How buttons are drawn: on the corner radius, as pills, square, in capitals, or with quiet buttons as underlined links. */
 export type AiSiteButtons = 'rounded' | 'pill' | 'square' | 'caps' | 'link'
+/** Button shapes and casing; `link` draws quiet buttons as underlined links. */
+export const AI_SITE_BUTTONS: readonly AiSiteButtons[] = ['rounded', 'pill', 'square', 'caps', 'link']
 /**
  * How a site's pages alternate their bands: calm (mostly plain, one soft),
  * alternating (plain and soft by turns), or bold (brand and dark bands for
