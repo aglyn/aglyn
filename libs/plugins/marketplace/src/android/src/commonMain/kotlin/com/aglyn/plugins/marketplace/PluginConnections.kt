@@ -212,6 +212,13 @@ fun pluginConnectionTooSoonText(label: String, retryAfterMs: Double?): String =
   if (retryAfterMs == null || retryAfterMs <= 0) "$label synced moments ago. You can sync it again in a minute."
   else "$label synced moments ago. You can sync it again in ${kotlin.math.ceil(retryAfterMs / 1000).toInt()} seconds."
 
+/** The failed-sync sentence (`pluginConnectionSyncFailedText`): the provider's own sentence without its closing period. */
+fun pluginConnectionSyncFailedText(lastError: String?): String {
+  val reason = lastError.orEmpty().trim().trimEnd('.', '!', '?', ' ')
+  return if (reason.isEmpty()) "The last sync did not work. It tries again on schedule, or you can sync now."
+  else "The last sync did not work: $reason. It tries again on schedule, or you can sync now."
+}
+
 /** Where a connection's data goes and comes from (`pluginConnectionSharesText`). */
 fun pluginConnectionSharesText(hosts: List<String>): String? = if (hosts.isEmpty()) null else "Shares data with: ${hosts.joinToString(", ")}"
 
@@ -307,8 +314,11 @@ fun SitePluginConnectionsCard(context: NativePluginContext) {
     val current = load
     when {
       keyRefused || (current is ConnectionsLoad.Failed && current.refused) -> connections.forEach { one ->
-        SectionCard(title = one.label, action = { Button(onClick = {}, enabled = false) { Text("Connect") } }) {
-          NoticeBanner(com.aglyn.contracts.permissionRefusalText(PLUGIN_CONNECTIONS_SITE_KEY), StatusTone.INFO)
+        SectionCard(title = one.label) {
+          Column(verticalArrangement = Arrangement.spacedBy(space(1f))) {
+            NoticeBanner(com.aglyn.contracts.permissionRefusalText(PLUGIN_CONNECTIONS_SITE_KEY), StatusTone.INFO)
+            Button(onClick = {}, enabled = false) { Text("Connect") }
+          }
         }
       }
       current is ConnectionsLoad.Failed -> NoticeBanner(current.message, StatusTone.ERROR) { TextButton(onClick = { nonce++ }) { Text("Try again") } }
@@ -430,55 +440,58 @@ private fun SitePluginConnection(
     }
   }
 
-  SectionCard(
-    title = label,
-    action = {
-      Row(horizontalArrangement = Arrangement.spacedBy(space(1f)), verticalAlignment = Alignment.CenterVertically) {
-        if (resource != null) {
-          Button(
-            onClick = { choose(resource) }, enabled = !runner.busy && picked.isNotEmpty() && planReason == null,
-            modifier = Modifier.testTag("plugin-connection-use-${entry.connectionId}"),
-          ) { Text(if (runner.busy) "Saving…" else "Use this ${resource.label.lowercase()}") }
-          if (changing != null) TextButton(onClick = { changing = null }, enabled = !runner.busy) { Text("Cancel") }
-          disconnectButton()
-        } else {
-          when (phase) {
-            PluginConnectionPhase.NOT_CONFIGURED, PluginConnectionPhase.NOT_SET_UP, PluginConnectionPhase.NOT_CONNECTED ->
-              Button(
-                onClick = { connect() }, enabled = !runner.busy && phase == PluginConnectionPhase.NOT_CONNECTED && planReason == null,
-                modifier = Modifier.testTag("plugin-connection-connect-${entry.connectionId}"),
-              ) { Text(if (runner.busy) "Opening…" else "Connect") }
-            PluginConnectionPhase.RECONNECT -> {
-              Button(
-                onClick = { connect() }, enabled = !runner.busy && planReason == null && entry.credentialsSet,
-                modifier = Modifier.testTag("plugin-connection-reconnect-${entry.connectionId}"),
-              ) { Text(if (runner.busy) "Opening…" else "Reconnect") }
-              disconnectButton()
-            }
-            else -> {
-              if (!declaresSync) {
-                Unit
-              } else if (phase == PluginConnectionPhase.ERROR) {
-                Button(onClick = { sync() }, enabled = !runner.busy && planReason == null, modifier = Modifier.testTag("plugin-connection-sync-${entry.connectionId}")) {
-                  Text(if (runner.busy) "Syncing…" else "Sync now")
-                }
-              } else {
-                OutlinedButton(onClick = { sync() }, enabled = !runner.busy && planReason == null, modifier = Modifier.testTag("plugin-connection-sync-${entry.connectionId}")) {
-                  Text(if (runner.busy) "Syncing…" else "Sync now")
-                }
+  // The actions sit under the card's content, as the Figma frames and the iOS screen have them: in the header they
+  // squeezed the connection's name into three lines on a phone.
+  val actions: @Composable () -> Unit = {
+    Row(horizontalArrangement = Arrangement.spacedBy(space(1f)), verticalAlignment = Alignment.CenterVertically) {
+      if (resource != null) {
+        Button(
+          onClick = { choose(resource) }, enabled = !runner.busy && picked.isNotEmpty() && planReason == null,
+          modifier = Modifier.testTag("plugin-connection-use-${entry.connectionId}"),
+        ) { Text(if (runner.busy) "Saving…" else "Use this ${resource.label.lowercase()}") }
+        if (changing != null) TextButton(onClick = { changing = null }, enabled = !runner.busy) { Text("Cancel") }
+        disconnectButton()
+      } else {
+        when (phase) {
+          PluginConnectionPhase.NOT_CONFIGURED, PluginConnectionPhase.NOT_SET_UP, PluginConnectionPhase.NOT_CONNECTED ->
+            Button(
+              onClick = { connect() }, enabled = !runner.busy && phase == PluginConnectionPhase.NOT_CONNECTED && planReason == null,
+              modifier = Modifier.testTag("plugin-connection-connect-${entry.connectionId}"),
+            ) { Text(if (runner.busy) "Opening…" else "Connect") }
+          PluginConnectionPhase.RECONNECT -> {
+            Button(
+              onClick = { connect() }, enabled = !runner.busy && planReason == null && entry.credentialsSet,
+              modifier = Modifier.testTag("plugin-connection-reconnect-${entry.connectionId}"),
+            ) { Text(if (runner.busy) "Opening…" else "Reconnect") }
+            disconnectButton()
+          }
+          else -> {
+            if (!declaresSync) {
+              Unit
+            } else if (phase == PluginConnectionPhase.ERROR) {
+              Button(onClick = { sync() }, enabled = !runner.busy && planReason == null, modifier = Modifier.testTag("plugin-connection-sync-${entry.connectionId}")) {
+                Text(if (runner.busy) "Syncing…" else "Sync now")
               }
-              if (entry.resources.isNotEmpty()) {
-                OutlinedButton(onClick = { changing = 0 }, enabled = !runner.busy && planReason == null) { Text("Change") }
+            } else {
+              OutlinedButton(onClick = { sync() }, enabled = !runner.busy && planReason == null, modifier = Modifier.testTag("plugin-connection-sync-${entry.connectionId}")) {
+                Text(if (runner.busy) "Syncing…" else "Sync now")
               }
-              disconnectButton()
             }
+            if (entry.resources.isNotEmpty()) {
+              OutlinedButton(onClick = { changing = 0 }, enabled = !runner.busy && planReason == null) { Text("Change") }
+            }
+            disconnectButton()
           }
         }
       }
-    },
+    }
+  }
+
+  SectionCard(
+    title = label,
+    action = { StatusChip(phase.chip, phase.tone) },
   ) {
     Column(verticalArrangement = Arrangement.spacedBy(space(1f)), modifier = Modifier.testTag("plugin-connection-${entry.connectionId}")) {
-      StatusChip(phase.chip, phase.tone)
       entry.description?.let { Text(it, style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurfaceVariant) }
       runner.error?.let { NoticeBanner(it, StatusTone.ERROR) }
       runner.notice?.let { NoticeBanner(it, StatusTone.SUCCESS) }
@@ -498,11 +511,7 @@ private fun SitePluginConnection(
           style = MaterialTheme.typography.bodyMedium, color = MaterialTheme.colorScheme.onSurfaceVariant,
         )
         PluginConnectionPhase.RECONNECT -> NoticeBanner("$label no longer accepts this connection. Nothing syncs until you reconnect.", StatusTone.WARNING)
-        PluginConnectionPhase.ERROR -> NoticeBanner(
-          (entry.connection?.lastError?.let { "The last sync did not work: $it. " } ?: "The last sync did not work. ") +
-            "It tries again on schedule, or you can sync now.",
-          StatusTone.ERROR,
-        )
+        PluginConnectionPhase.ERROR -> NoticeBanner(pluginConnectionSyncFailedText(entry.connection?.lastError), StatusTone.ERROR)
         else -> Unit
       }
       if (opened && (phase == PluginConnectionPhase.NOT_CONNECTED || phase == PluginConnectionPhase.RECONNECT)) {
@@ -542,7 +551,8 @@ private fun SitePluginConnection(
           val small = MaterialTheme.typography.bodySmall
           val muted = MaterialTheme.colorScheme.onSurfaceVariant
           Text(connection.lastSyncAtMs?.let { "Last synced ${connectionTime(it)}" } ?: "Not synced yet", style = small, color = muted)
-          when (val next = pluginConnectionNextSync(connection, intervalHours)) {
+          // A plan without connections is never run by the scheduled sync, so it has no next one to show.
+          when (val next = if (planAllows) pluginConnectionNextSync(connection, intervalHours) else null) {
             is PluginConnectionNextSync.At -> Text("Next sync ${connectionTime(next.ms)}", style = small, color = muted)
             PluginConnectionNextSync.Soon -> Text("Next sync: within the hour", style = small, color = muted)
             null -> Unit
@@ -552,6 +562,7 @@ private fun SitePluginConnection(
       pluginConnectionSharesText(entry.hosts)?.let {
         Text(it, style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurfaceVariant)
       }
+      actions()
     }
   }
 

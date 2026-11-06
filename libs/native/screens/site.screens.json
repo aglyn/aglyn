@@ -1511,13 +1511,14 @@
     {
 
       "id": "core.site.plugin",
-      "title": "{data.plugins.rows[id=params.pluginId].label|params.pluginId}",
+      "title": "{data.plugins.rows[id=params.pluginId].label|data.pin.displayName|params.pluginId}",
       "label": "Plugin",
       "icon": "puzzlepiece.extension|extension",
       "scope": "site",
       "links": ["/admin/plugins/:pluginId"],
       "load": {
         "plugins": { "switchboard": "site" },
+        "pin": { "doc": "hosts/{site.id}/installs/{params.pluginId}", "optional": true },
         "host": { "doc": "hosts/{site.id}", "when": "params.pluginId == accounts", "optional": true },
         "authPages": { "query": { "collection": "hosts/{site.id}/screens", "limit": 200 }, "when": "params.pluginId == accounts", "optional": true }
       },
