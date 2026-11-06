@@ -125,7 +125,7 @@ describe('the quote email says what it is and what to do next (AGL-4097)', () =>
     expect(text).toContain('Revision: 1')
     expect(text).toContain('Total: $1,250.00')
     expect(text).toContain('Also with this revision: banner.ai. See it on your quote page.')
-    expect(text).toContain('Look over the proof, then approve it on your quote page. Once you approve it, you can pay there.')
+    expect(text).toContain('Look over the proof, then approve it on your quote page: you confirm you checked it and type your name. Once you approve it, you can pay there.')
     expect(text).toContain(`Review and approve: ${PAY_URL}`)
     expect(text).toContain('Reply to this email to reach Northwind Signs.')
     expect(text).not.toContain('View and pay')
@@ -144,7 +144,7 @@ describe('the quote email says what it is and what to do next (AGL-4097)', () =>
     expect(content.approvalFirst).toBe(false)
     const { text } = render(content)
     expect(text).toContain(`View and pay $1,250.00: ${PAY_URL}`)
-    expect(text).toContain('On your quote page you can approve the proof or ask for changes, and pay whenever you’re ready.')
+    expect(text).toContain('On your quote page you can approve the proof (you confirm you checked it and type your name) or reject it with changes, and pay whenever you’re ready.')
     expect(text).not.toContain('Review and approve')
   })
 
@@ -274,7 +274,7 @@ describe('a proof with no price yet (AGL-4184)', () => {
       'quote.total': '',
       'quote.heading': 'Your proof from Northwind Signs',
       'quote.intro': 'Northwind Signs sent you a proof to look over.',
-      'quote.nextStep': 'Look over the proof, then approve it or ask for changes on your proof page.',
+      'quote.nextStep': 'Look over the proof, then approve it or reject it with changes on your proof page. To approve, you confirm you checked it and type your name.',
       'quote.buttonLabel': 'Review the proof',
     })
     const { html, text } = render(content)
@@ -303,7 +303,7 @@ describe('a proof with no price yet (AGL-4184)', () => {
 
   it('says an approved proof is approved, and that changes can still be asked for', () => {
     const content = quoteEmailContent(input({ order: proofOnly({ approvedRevision: 1 }) }))
-    expect(content.tokens['quote.nextStep']).toBe('You approved this proof. You can still ask for changes on your proof page.')
+    expect(content.tokens['quote.nextStep']).toBe('You approved this proof. You can still reject it with changes on your proof page.')
   })
 
   it('goes back to a quote’s words the moment it has a line', () => {
@@ -311,5 +311,40 @@ describe('a proof with no price yet (AGL-4184)', () => {
     expect(content.proofOnly).toBe(false)
     expect(content.tokens['quote.label']).toBe('Quote')
     expect(content.tokens['quote.total']).toBe('$1,250.00')
+  })
+})
+
+describe('a customer who signs in to see the proof (AGL-4206)', () => {
+  it('draws no picture of the proof, names the files, and says to sign in first', () => {
+    const asked: string[] = []
+    const content = quoteEmailContent(
+      input({
+        order: order({
+          requireProofSignIn: true,
+          proofs: [proof('p1', 'banner-front.png', 'image/png'), proof('p2', 'banner.ai', 'application/postscript')],
+        }),
+        signInFirst: true,
+        proofUrl: (id) => {
+          asked.push(id)
+          return `https://northwind.example/api/commerce/quote-proof?file=${id}`
+        },
+      }),
+    )
+    expect(asked).toEqual([])
+    expect(content.tokens['quote.proofImages']).toBe('')
+    expect(content.tokens['quote.proofFiles']).toBe(
+      'Proofs: banner-front.png and banner.ai. Sign in to your account with Northwind Signs on your quote page to see them.',
+    )
+    expect(content.tokens['quote.nextStep']).toMatch(/^Sign in to your account with Northwind Signs to see the proof\. /)
+    const { html } = render(content)
+    expect(html).not.toContain('quote-proof?file=')
+  })
+
+  it('draws the pictures as before for a customer who uses the link', () => {
+    const content = quoteEmailContent(
+      input({ order: order({ requireProofSignIn: true, proofs: [proof('p1', 'banner-front.png', 'image/png')] }) }),
+    )
+    expect(content.tokens['quote.proofImages']).toContain('quote-proof')
+    expect(content.tokens['quote.nextStep']).not.toMatch(/Sign in/)
   })
 })

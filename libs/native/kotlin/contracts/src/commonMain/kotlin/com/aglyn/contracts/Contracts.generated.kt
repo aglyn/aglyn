@@ -2156,6 +2156,7 @@ data class OrderQuote(
     val request: QuoteRequestRef? = null,
     val requestFiles: List<QuoteResponseFile>? = null,
     val requireProofApproval: Boolean? = null,
+    val requireProofSignIn: Boolean? = null,
     val responses: List<QuoteCustomerResponse>? = null,
     val revision: Double,
     val sends: List<QuoteSendRecord>? = null,
@@ -3240,6 +3241,7 @@ data class ProductVariant(
 @Serializable
 data class QuoteApproval(
     val atMs: Double,
+    val confirmed: List<String>? = null,
     val ip: String? = null,
     val name: String,
     val revision: Double,
@@ -3267,6 +3269,7 @@ data class QuoteCustomerResponse(
     val action: QuoteCustomerResponseAction,
     val atMs: Double,
     val comment: String? = null,
+    val confirmed: List<String>? = null,
     val files: List<QuoteResponseFile>? = null,
     val ip: String? = null,
     val name: String? = null,

@@ -235,7 +235,7 @@ describe('what a quote is', () => {
   it('is numbered as the order it becomes and shows its stage until paid', () => {
     expect(formatQuoteNumber({ number: 1042 })).toBe('Quote #1042')
     expect(quoteDisplayStatus({ status: 'pending', quote: { stage: 'draft' } })).toEqual({ key: 'draft', label: 'Draft' })
-    expect(quoteDisplayStatus({ status: 'pending', quote: { stage: 'changes_requested' } }).label).toBe('Changes requested')
+    expect(quoteDisplayStatus({ status: 'pending', quote: { stage: 'changes_requested' } }).label).toBe('Rejected with changes')
     expect(quoteDisplayStatus({ status: 'fulfilled', quote: { stage: 'approved' } })).toEqual({ key: 'paid', label: 'Paid' })
   })
 

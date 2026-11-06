@@ -438,8 +438,9 @@ export function commerceTenantEmails(): readonly TenantEmailEntry[] {
         },
         {
           name: 'quote.nextStep',
-          description: 'What to do next: approve the proof first, or pay when ready; for a proof with no price yet, approve it or ask for changes',
-          sample: 'Look over the proof, then approve it on your quote page. Once you approve it, you can pay there.',
+          description: 'What to do next: approve the proof first, or pay when ready; for a proof with no price yet, approve it or reject it with changes',
+          sample:
+            'Look over the proof, then approve it on your quote page: you confirm you checked it and type your name. Once you approve it, you can pay there.',
         },
         {
           name: 'quote.buttonLabel',

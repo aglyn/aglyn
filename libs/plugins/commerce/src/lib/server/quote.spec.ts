@@ -431,6 +431,16 @@ describe('creating a quote', () => {
     expect(quoteDocs().map(([, data]) => data.quote.requireProofApproval)).toEqual([true, false])
   })
 
+  it('starts with the store’s sign-in default, and an edit keeps the quote’s own (AGL-4206)', async () => {
+    docs.set('hosts/site1/settings/store', { ...docs.get('hosts/site1/settings/store'), quotes: { requireProofSignIn: true } })
+    await handleQuote(deps, request('admin', { action: 'create', hostId: 'site1', quote: { lines: [CUSTOM] } }, 'a'))
+    await handleQuote(
+      deps,
+      request('admin', { action: 'create', hostId: 'site1', quote: { lines: [CUSTOM], requireProofSignIn: false } }, 'b'),
+    )
+    expect(quoteDocs().map(([, data]) => data.quote.requireProofSignIn)).toEqual([true, false])
+  })
+
   it('leaves the tax to the payment on Stripe Tax', async () => {
     docs.set('hosts/site1/settings/store', { tax: { mode: 'stripe' } })
     await handleQuote(deps, request('admin', { action: 'create', hostId: 'site1', quote: { lines: [CUSTOM] } }, 'k'))
@@ -1128,6 +1138,29 @@ describe('sending the quote by email (AGL-4097)', () => {
     expect(quote['emailThread']).toEqual({ messageId, references: [root, messageId], subject: 'Quote #1042 from Acme Signs' })
     expect(quote['updatedAtMs']).toBe(1_000)
     expect(stored(path)['timeline'].at(-1)).toMatchObject({ event: 'quote-sent', atMs: 7_000 })
+  })
+
+  it('draws no proof picture for a customer who signs in to see it, and draws it for a guest (AGL-4206)', async () => {
+    const IMAGE = { id: 'p1', revision: 1, name: 'Banner.png', contentType: 'image/png', size: 2_000, path: 'x', addedAtMs: 1, addedBy: 'a' }
+    const asked: string[] = []
+    const withAccount = (id: string | null) => ({
+      ...deps,
+      customerAccount: async ({ email }: { email: string }) => {
+        asked.push(email)
+        return id ? { id } : null
+      },
+    })
+    const { quoteId, path } = await created()
+    const doc = stored(path)
+    docs.set(path, { ...doc, quote: { ...doc['quote'], requireProofSignIn: true, proofs: [IMAGE] } })
+    const sendWith = (using: typeof deps) =>
+      handleQuote(using, request('admin', { action: 'send', hostId: 'site1', quoteId, message: 'Here.' }, `s-${++attempt}`))
+    expect((await sendWith(withAccount('m1'))).status).toBe(200)
+    expect(asked).toEqual(['jane@example.com'])
+    expect(renderedTokens[0]['quote.proofImages']).toBe('')
+    expect(renderedTokens[0]['quote.nextStep']).toMatch(/^Sign in to your account with Acme Signs to see the proof\. /)
+    expect((await sendWith(withAccount(null))).status).toBe(200)
+    expect(renderedTokens[1]['quote.proofImages']).toContain('quote-proof')
   })
 
   it('answers to the person sending when the site has no contact email', async () => {
