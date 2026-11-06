@@ -41,8 +41,9 @@ content on the marketing site and is written separately.
 - **outreach:** the sync job reads an organization's watched enrollments once per run ([AGL-4121](https://linear.app/aglyn/issue/AGL-4121))
 
 <details>
-<summary>Also in this release: 1 test, 2 chore</summary>
+<summary>Also in this release: 2 test, 2 chore</summary>
 
+- **console:** the video-upload gate spec reads the org through a field-masked getAll ([AGL-4121](https://linear.app/aglyn/issue/AGL-4121))
 - **tenant:** close the preview bar inventory declaration
 - **tenant:** declare the preview bar's height style in the image-sink inventory ([AGL-4152](https://linear.app/aglyn/issue/AGL-4152))
 - **commerce:** close the Photo fit setting
