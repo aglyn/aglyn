@@ -25,6 +25,7 @@ import {
   type PluginApiHandler,
 } from '@aglyn/aglyn/server'
 import { siteCreateReturnQuery } from '@aglyn/aglyn/app-utils/site-create-return'
+import { excludeBuyNowPayLater } from '@aglyn/aglyn/app-utils/buy-now-pay-later'
 import { resolveOrgPermissions } from '@aglyn/tenant-runtime/org-permissions'
 import { readStarterCheckoutReturn } from '../model/starter-query'
 import { MARKETPLACE_TAX_CODE, resolveSale } from './sale'
@@ -271,6 +272,9 @@ export const checkoutHandler: PluginApiHandler = async (req, res) => {
         : {}),
       ...(decoded.email ? { customer_email: decoded.email } : {}),
     })
+    // No buy-now-pay-later on a listing either (AGL-4198): a card or a
+    // card-rate wallet, which the listing floor more than covers.
+    excludeBuyNowPayLater(params)
     // Point of no return (AGL-1697). The purchase check above closes the
     // SEQUENTIAL duplicate — a second buy after the webhook has written the
     // first purchase — and cannot close the concurrent one, because between two

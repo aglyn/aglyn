@@ -538,7 +538,9 @@ describe('a declined offline card, collected later at the register (AGL-4039)', 
     seedDeclinedOffline(false)
     await act({ action: 'card-keyed', amountCents: 10_000, paymentMethodId: 'pm_cardVisa1234' }, 'k-old')
     const create = stripeCalls.find((call) => call.path === 'payment_intents')!
-    expect(Number(create.params.get('application_fee_amount'))).toBe(posCardProcessingCostCents(10_000))
+    // No take, so the fee is what Stripe charges the platform for an online
+    // card and its payout (AGL-4198): 2.9% + 30¢ and 0.25% + 25¢.
+    expect(Number(create.params.get('application_fee_amount'))).toBe(290 + 30 + 25 + 25)
   })
 })
 
@@ -684,6 +686,8 @@ describe('typed card and the QR link', () => {
     expect(create.params.get('amount')).toBe('6000')
     expect(create.params.getAll('payment_method_types[]')).toEqual(['card'])
     expect(create.params.get('capture_method')).toBeNull()
+    // 2.9% + 30¢ passes through on a typed card and a reader's card alike (AGL-4198).
+    expect(posCardProcessingCostCents(6000)).toBe(174 + 30)
     expect(Number(create.params.get('application_fee_amount'))).toBe(100 + posCardProcessingCostCents(6000))
   })
 

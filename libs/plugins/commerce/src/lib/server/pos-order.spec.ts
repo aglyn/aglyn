@@ -21,7 +21,7 @@ import type {
   PluginApiRequest,
   PluginApiResponse,
 } from '@aglyn/aglyn/server'
-import { saleProcessingCostCents } from '@aglyn/aglyn/server'
+import { saleApplicationFeeCents, salePlatformCostCents } from '@aglyn/aglyn/server'
 import { posOrderHandler } from './pos-order'
 import { withPosKioskPrincipal } from './pos-kiosk-principal'
 import { defaultPosOpsDeps, mintPosAssertion } from './pos-ops-gate'
@@ -504,6 +504,13 @@ describe('the POS card sale tax witness (AGL-1953)', () => {
     // The charge itself is unchanged — this is a witness, not a second tax.
     expect(stripeCalls[0].body.get('line_items[0][price_data][unit_amount]'))
       .toBe('433')
+    // The card link offers no buy-now-pay-later (AGL-4198).
+    const body = stripeCalls[0].body as URLSearchParams
+    expect(
+      [...body.keys()]
+        .filter((key) => key.startsWith('excluded_payment_method_types['))
+        .map((key) => body.get(key)),
+    ).toEqual(['klarna', 'afterpay_clearpay', 'affirm'])
   })
 
   /** It agrees with the order document, which is the other half of the join. */
@@ -759,7 +766,7 @@ describe('POS card sales carry the platform fee (AGL-2110)', () => {
     // 8¢ is the take. The rest is Stripe's own fee on this charge, which on a
     // DESTINATION charge is debited from the PLATFORM's balance — sending the
     // take alone left Aglyn 54¢ down on a 400¢ sale (AGL-2152).
-    const expected = 8 + saleProcessingCostCents(400)
+    const expected = saleApplicationFeeCents(8, 400)
     expect(
       stripeCalls[0].body.get('payment_intent_data[application_fee_amount]'),
     ).toBe(String(expected))
@@ -778,7 +785,7 @@ describe('POS card sales carry the platform fee (AGL-2110)', () => {
     // The take halves with the goods; the card cost is recomputed on the
     // discounted charge rather than scaled, because Stripe bills it on what
     // the card actually runs for.
-    const expected = 4 + saleProcessingCostCents(200)
+    const expected = saleApplicationFeeCents(4, 200)
     expect(
       stripeCalls[0].body.get('payment_intent_data[application_fee_amount]'),
     ).toBe(String(expected))
@@ -810,7 +817,7 @@ describe('POS card sales carry the platform fee (AGL-2110)', () => {
     // The card cost rides the whole 1400¢ basket once (AGL-2152).
     expect(
       stripeCalls[0].body.get('payment_intent_data[application_fee_amount]'),
-    ).toBe(String(8 + saleProcessingCostCents(1400)))
+    ).toBe(String(saleApplicationFeeCents(8, 1400)))
   })
 
   /**
@@ -832,13 +839,13 @@ describe('POS card sales carry the platform fee (AGL-2110)', () => {
     })
     const result = await post({ payment: 'link' })
     expect(result.status).toBe(200)
-    const expected = saleProcessingCostCents(400)
+    const expected = saleApplicationFeeCents(0, 400)
     expect(
       stripeCalls[0].body.get('payment_intent_data[application_fee_amount]'),
     ).toBe(String(expected))
     expect(stripeCalls[0].body.get('metadata[feeCents]')).toBe(String(expected))
     // The take really is zero: the whole fee is the cost recovery.
-    expect(expected - saleProcessingCostCents(400)).toBe(0)
+    expect(expected).toBe(salePlatformCostCents(400))
   })
 
   /**
@@ -2194,7 +2201,7 @@ describe('a POS platform fee that rounds to zero (AGL-2256)', () => {
     // The 1¢ floor is what this issue is about; the rest is Stripe's cost on
     // the same charge, added since AGL-2152 and subtracted here so the floor
     // is still the thing being asserted.
-    const expected = 1 + saleProcessingCostCents(30)
+    const expected = saleApplicationFeeCents(1, 30)
     expect(
       stripeCalls[0].body.get('payment_intent_data[application_fee_amount]'),
     ).toBe(String(expected))
@@ -2215,7 +2222,7 @@ describe('a POS platform fee that rounds to zero (AGL-2256)', () => {
     expect(result.status).toBe(200)
     expect(
       stripeCalls[0].body.get('payment_intent_data[application_fee_amount]'),
-    ).toBe(String(1 + saleProcessingCostCents(15)))
+    ).toBe(String(saleApplicationFeeCents(1, 15)))
   })
 
   /**
@@ -2232,7 +2239,7 @@ describe('a POS platform fee that rounds to zero (AGL-2256)', () => {
     const sent = Number(
       stripeCalls[0].body.get('payment_intent_data[application_fee_amount]'),
     )
-    expect(sent - saleProcessingCostCents(30)).toBe(0)
+    expect(sent).toBe(saleApplicationFeeCents(0, 30))
     expect(stripeCalls[0].body.get('metadata[feeCents]')).toBe(String(sent))
   })
 

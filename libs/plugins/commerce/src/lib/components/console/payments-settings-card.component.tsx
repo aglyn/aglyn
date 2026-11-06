@@ -315,23 +315,18 @@ export function PaymentsSettingsCard(props: PaymentsSettingsCardProps) {
                 which used to be absorbed silently out of the platform's
                 balance rather than passed through.
 
-                Named as a range rather than one number because the buyer
-                chooses the payment method after the session is created:
-                cards settle at the low end, buy-now-pay-later at the high
-                end, and the deduction is sized for the dearest so a sale can
-                never cost more to process than it collects. A quote's or an
-                invoice's pay link offers no buy-now-pay-later, so it carries
-                the card rate alone (`PAY_LINK_PROCESSING_PERCENT`). */}
+                One rate, online and on a card reader (AGL-4198): no checkout
+                on a site offers buy-now-pay-later. Stripe's payout charge and
+                Stripe Tax come out of the platform fee first; a fee too small
+                to cover them is topped up to what Stripe charges, never more. */}
             <Typography variant="body2" color="text.secondary">
               {'Card processing is passed through at cost on top of that: ' +
-                `${Aglyn.CARD_PROCESSING_PERCENT}–` +
-                `${Aglyn.BNPL_PROCESSING_PERCENT}% + ` +
-                `${Aglyn.PROCESSING_FIXED_CENTS}¢ per online ` +
-                'sale, what Stripe charges to take the payment. It is not a ' +
-                `${Aglyn.PLATFORM_BRAND_LEGAL_NAME} margin. Quotes and invoices ` +
-                'are paid by card or wallet, never buy-now-pay-later, so they carry ' +
-                `${Aglyn.PAY_LINK_PROCESSING_PERCENT}% + ` +
-                `${Aglyn.PROCESSING_FIXED_CENTS}¢.`}
+                `${Aglyn.SALE_PROCESSING_PERCENT}% + ${Aglyn.SALE_PROCESSING_FIXED_CENTS}¢ per card sale, ` +
+                'online or on a card reader, what Stripe charges to take the payment. It is not a ' +
+                `${Aglyn.PLATFORM_BRAND_LEGAL_NAME} margin. Where the platform fee is smaller than ` +
+                `what Stripe charges to pay you out (${Aglyn.CONNECT_PAYOUT_PERCENT}% + ` +
+                `${Aglyn.CONNECT_PAYOUT_FIXED_CENTS}¢ a payout, and ${Aglyn.STRIPE_TAX_PERCENT}% where ` +
+                'Stripe Tax works out the tax), the fee is that cost instead.'}
             </Typography>
             {/* WHICH REGISTER TENDERS CARRY THE FEE, AND HOW EACH IS
                 COLLECTED (AGL-2111, AGL-4036).

@@ -36,10 +36,13 @@ import {
  * seller is transferred $0.80, $0.08 is owed to the state, Aglyn keeps $0.20
  * and pays Stripe about $0.33. Net −$0.13.
  *
- * Break-even is computed from the dearest payment method the platform's
- * configuration enables (`BNPL_PROCESSING_PERCENT`), because a marketplace
- * session pins no `payment_method_types`. IF BNPL IS EVER TURNED OFF FOR
- * MARKETPLACE SESSIONS, the rate these default to is what has to move with it.
+ * Break-even is computed at the buy-now-pay-later rate
+ * (`BNPL_PROCESSING_PERCENT`, 6%). Since AGL-4198 a marketplace session
+ * excludes buy-now-pay-later, so the dearest a buyer can pay with is a card,
+ * at 2.9%, and this floor holds a margin above break-even rather than sitting
+ * on it ($3 at 6% against $2 at the card rate, at today's lowest take).
+ * Lowering the floor to the card rate is a pricing decision of its own, left
+ * to the account owner; passing `CARD_PROCESSING_PERCENT` is the whole change.
  *
  * Nothing is billed from these figures — the charged amounts are the plan's
  * take rate and Stripe's own invoicing — so changing one changes a sentence

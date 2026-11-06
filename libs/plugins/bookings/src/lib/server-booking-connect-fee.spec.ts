@@ -81,6 +81,9 @@ jest.mock('@aglyn/aglyn/server', () => ({
   saleProcessingCostCents: jest.requireActual(
     '../../../../aglyn/src/lib/app-utils/plan-entitlements',
   ).saleProcessingCostCents,
+  saleApplicationFeeCents: jest.requireActual(
+    '../../../../aglyn/src/lib/app-utils/plan-entitlements',
+  ).saleApplicationFeeCents,
 }))
 
 jest.mock('@aglyn/tenant-runtime', () => ({
@@ -252,6 +255,7 @@ import { standInTaxProfile } from './testing/stand-in-tax-profile'
 import { computeOpenSlots } from './model'
 import {
   resolveTransactionFeePct,
+  saleApplicationFeeCents,
   saleProcessingCostCents,
 } from '@aglyn/aglyn/server'
 
@@ -376,6 +380,14 @@ async function book(): Promise<URLSearchParams> {
 }
 
 describe('a paid booking pays the MERCHANT (AGL-2315)', () => {
+  it('offers no buy-now-pay-later, so the card-rate fee covers what the guest pays with (AGL-4198)', async () => {
+    const params = await book()
+    const excluded = [...params.keys()]
+      .filter((key) => key.startsWith('excluded_payment_method_types['))
+      .map((key) => params.get(key))
+    expect(excluded).toEqual(['klarna', 'afterpay_clearpay', 'affirm'])
+  })
+
   it('sends a destination charge to the merchant’s connected account', async () => {
     const params = await book()
     // The defect: this key was absent entirely, so the charge settled on the
@@ -511,13 +523,13 @@ describe('the take rate is the storefront ladder’s (AGL-2315)', () => {
       const sent = Number(
         params.get('payment_intent_data[application_fee_amount]'),
       )
-      const takeSent = sent - saleProcessingCostCents(7500)
       // Always emitted now: even a 0% tier owes Stripe for the charge, so
-      // there is always a real amount to send.
+      // there is always a real amount to send. The take plus 2.9% + 30¢, or
+      // what Stripe charges the platform where that is more (AGL-4198).
       expect(params.has('payment_intent_data[application_fee_amount]')).toBe(
         true,
       )
-      expect(takeSent).toBe(expectedFeeCents ?? 0)
+      expect(sent).toBe(saleApplicationFeeCents(expectedFeeCents ?? 0, 7500))
       // Recorded on the session too — the figure a refund reverses.
       expect(params.get('metadata[feeCents]')).toBe(String(sent))
 
@@ -544,8 +556,7 @@ describe('the take rate is the storefront ladder’s (AGL-2315)', () => {
       const storefrontPct = resolveTransactionFeePct({ plan } as never, 'service')
       expect(params.get('payment_intent_data[application_fee_amount]')).toBe(
         String(
-          Math.max(1, Math.round((7500 * storefrontPct) / 100)) +
-            saleProcessingCostCents(7500),
+          saleApplicationFeeCents(Math.max(1, Math.round((7500 * storefrontPct) / 100)), 7500),
         ),
       )
       stripePosts.length = 0
@@ -563,7 +574,7 @@ describe('the take rate is the storefront ladder’s (AGL-2315)', () => {
     mockAdmin.__state.org = { id: 'org-1', ownerUid: 'owner-1', plan: 'scale' }
     const params = await book()
     expect(params.get('payment_intent_data[application_fee_amount]')).toBe(
-      String(1 + saleProcessingCostCents(60)),
+      String(saleApplicationFeeCents(1, 60)),
     )
     expect(
       params.get('payment_intent_data[transfer_data][destination]'),

@@ -482,14 +482,16 @@ describe('cart checkout extras (AGL-3635)', () => {
     ])
   })
 
-  it('takes no platform cut on the extra: only the card cost of carrying it', async () => {
+  it('takes no platform cut on the extra: only the cost of carrying it', async () => {
     offerProtection(198)
     const without = await runCheckout(null)
     const feeWithout = Number(without.body?.get('payment_intent_data[application_fee_amount]') ?? 0)
     const withExtra = await runCheckout(null, { extras: ['post-purchase.package-protection'] })
     const feeWith = Number(withExtra.body?.get('payment_intent_data[application_fee_amount]') ?? 0)
+    // A 0% plan's fee is what Stripe charges the platform (AGL-4198), so the
+    // extra adds its card and payout cost and nothing else.
     expect(feeWith - feeWithout).toBe(
-      Aglyn.saleProcessingCostCents(6000 + 198) - Aglyn.saleProcessingCostCents(6000),
+      Aglyn.saleApplicationFeeCents(0, 6000 + 198) - Aglyn.saleApplicationFeeCents(0, 6000),
     )
   })
 

@@ -247,7 +247,10 @@ async function start(
     'Service tax',
   )
   const amountCents = serviceCents + tax.taxCents
-  const feeCents = resolveTransactionFeeCents(staff.org as never, 'service', serviceCents, amountCents)
+  // A reader's card, priced at the in-person rate (AGL-4198).
+  const feeCents = resolveTransactionFeeCents(staff.org as never, 'service', serviceCents, amountCents, {
+    inPerson: true,
+  })
 
   // A pending intent for this booking that is not this attempt's: release it
   // first, so one booking never has two cards in flight.
