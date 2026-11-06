@@ -634,7 +634,7 @@ describe('POST commerce/quote-message: the customer writes on the quote page (AG
           label: 'Customer message',
           actionLabel: 'View quote',
           title: 'Jordan Lee wrote about Quote #1042 on {site}',
-          body: 'Can the logo be bigger?\n\nReply from the quote in Aglyn, or reply to this email to reach them.',
+          body: 'Can the logo be bigger?\n\nReply from the quote, or reply to this email to reach them.',
           link: '/site1/products/orders?quote=q-1',
         }),
         expect.objectContaining({

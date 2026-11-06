@@ -216,7 +216,7 @@ export function quoteMessageNotice(input: {
       label: 'Customer message',
       actionLabel: 'View quote',
       title: `${customer} wrote about ${number} on {site}`,
-      body: `${excerpt}\n\nReply from the quote in Aglyn, or reply to this email to reach them.`,
+      body: `${excerpt}\n\nReply from the quote, or reply to this email to reach them.`,
       link: `/${hostId}/products/orders?quote=${encodeURIComponent(quoteId)}`,
     },
     options: {
