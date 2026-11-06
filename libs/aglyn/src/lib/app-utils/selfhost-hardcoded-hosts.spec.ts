@@ -604,6 +604,12 @@ const ALLOWED: Array<{ file: string; count: number; reason: string }> = [
       'Renders Aglyn own marketing blog covers. Internal tool.',
   },
   {
+    file: 'tools/scripts/publish-pricing-site-care-project-prices.mjs',
+    count: 1,
+    reason:
+      "Publishes the Site Care project price list onto Aglyn's own marketing /pricing screen; the literal is the console preview link it prints when done. Internal tool, never shipped to a self-host operator.",
+  },
+  {
     file: 'tools/scripts/lib/provisioned-mailboxes.mjs',
     count: 22,
     reason:
