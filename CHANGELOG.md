@@ -15,6 +15,8 @@ content on the marketing site and is written separately.
 
 ### Added
 
+- **commerce:** reply to a quote's customer and let them write on the quote page ([AGL-4207](https://linear.app/aglyn/issue/AGL-4207))
+- **commerce:** deliberate proof approval, reject with changes, proof sign-in control ([AGL-4206](https://linear.app/aglyn/issue/AGL-4206))
 - **commerce:** product builder on storefront product pages ([AGL-4205](https://linear.app/aglyn/issue/AGL-4205))
 - **commerce:** a storefront line takes up to 9,999, not 99 ([AGL-4205](https://linear.app/aglyn/issue/AGL-4205))
 - **commerce:** in-person card payments on the store's own Stripe account
@@ -25,6 +27,11 @@ content on the marketing site and is written separately.
 
 ### Fixed
 
+- **commerce:** quote messages take a platform id; catalogs and Linear floor regenerated ([AGL-4207](https://linear.app/aglyn/issue/AGL-4207))
+- **commerce:** customer message notice names no product ([AGL-4207](https://linear.app/aglyn/issue/AGL-4207))
+- **commerce:** price quote editor add-on labels for the picked size ([AGL-4206](https://linear.app/aglyn/issue/AGL-4206))
+- **commerce:** product builder back inside the plugin budget; declare its image sinks ([AGL-4205](https://linear.app/aglyn/issue/AGL-4205))
+- **commerce:** back-in-stock alert in its own chunk ([AGL-4205](https://linear.app/aglyn/issue/AGL-4205))
 - **commerce:** refund a direct sale that carried no platform fee
 - **commerce:** payments card describes Stripe billing a direct store
 - **deps:** upgrade DOMPurify to 3.4.17 for the SAFE_FOR_TEMPLATES bypass advisory ([AGL-4204](https://linear.app/aglyn/issue/AGL-4204))
@@ -47,8 +54,10 @@ content on the marketing site and is written separately.
 - **outreach:** the sync job reads an organization's watched enrollments once per run ([AGL-4121](https://linear.app/aglyn/issue/AGL-4121))
 
 <details>
-<summary>Also in this release: 2 test, 4 chore, 2 docs</summary>
+<summary>Also in this release: 3 test, 5 chore, 2 docs</summary>
 
+- **commerce:** connect-mode gate coverage follows the shared account lookup
+- **native:** regenerate the contracts for the quote-message email ([AGL-4207](https://linear.app/aglyn/issue/AGL-4207))
 - **native:** regenerate the contracts for the product builder fields ([AGL-4205](https://linear.app/aglyn/issue/AGL-4205))
 - **commerce:** picture cards, combos and free mockup requests ([AGL-4205](https://linear.app/aglyn/issue/AGL-4205))
 - **native:** regenerate the contracts for the direct-charge payment fields
