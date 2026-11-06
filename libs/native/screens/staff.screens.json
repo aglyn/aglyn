@@ -15892,6 +15892,11 @@
               "sample": "Touchscreen reader, 4G-capable (S710) × 1\nCharging dock for the S700 and S710 × 1"
             },
             {
+              "name": "order.setupSteps",
+              "description": "How to start taking payments with what arrived: the steps to pair it, or that it is already set up on the store",
+              "sample": "1. Charge it and switch it on.\n2. Connect it to Wi-Fi from the reader’s Settings.\n3. On the reader, generate a pairing code.\n4. On the POS devices card, choose Add card reader and enter the code."
+            },
+            {
               "name": "order.setupUrl",
               "description": "The POS devices card, where a reader is added to a register",
               "sample": "https://app.aglyn.com/test-org/hosts/test-bakery/products/pos#pos-devices"
