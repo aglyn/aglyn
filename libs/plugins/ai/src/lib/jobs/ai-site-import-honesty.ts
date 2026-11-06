@@ -61,6 +61,10 @@ export interface AiSiteImportHonestyScope {
   /** Where a link may go, as an answer writes it, and the ledger's links' own destinations. */
   destinations: ReadonlyMap<string, string>
   framing?: AiCopyFraming | null
+  /** Words the platform's own request put to the answer, no one's name or fact (`siteImportFactScope`). */
+  vocabulary?: readonly string[]
+  /** This page's own `page:<id>`, where it has one: a link the source makes to the page it is on asks nothing of the answer. */
+  own?: string | null
 }
 
 /** Words past a sentence's first that are no one's name, in any heading: the short form of a question list. */
@@ -104,9 +108,9 @@ export interface AiSiteImportHonestyFacts {
   said: string
 }
 
-/** What every line of an answer is checked against. */
-export function aiSiteImportHonestyFacts(scope: readonly string[]): AiSiteImportHonestyFacts {
-  const facts = siteImportFactScope(scope)
+/** What every line of an answer is checked against; `vocabulary` is said, and names and claims nothing. */
+export function aiSiteImportHonestyFacts(scope: readonly string[], vocabulary: readonly string[] = []): AiSiteImportHonestyFacts {
+  const facts = siteImportFactScope(scope, vocabulary)
   return { facts, tokens: new Set(scope.flatMap((text) => siteImportFactTokens(text, facts, false))), said: scope.join(' \n ') }
 }
 
@@ -160,7 +164,7 @@ const dropped = (message: string): AiDoctrineViolation => ({ rule: null, code: A
  * violation is a redesign that may be built; each one names its line.
  */
 export function aiSiteImportHonesty(sections: readonly AiSiteImportImprovedSection[], input: AiSiteImportHonestyScope): AiDoctrineViolation[] {
-  const held = aiSiteImportHonestyFacts(input.scope)
+  const held = aiSiteImportHonestyFacts(input.scope, input.vocabulary ?? [])
   const contacts = input.scope.join(' \n ')
   const out: AiDoctrineViolation[] = []
   const refs = new Map(input.ledger.items.map((item) => [item.ref, item]))
@@ -207,7 +211,7 @@ export function aiSiteImportHonesty(sections: readonly AiSiteImportImprovedSecti
   const keptLines = new Set(input.ledger.items.filter((item) => kept.has(item.ref)).flatMap((item) => item.lines))
   for (const link of input.ledger.links) {
     const to = input.destinations.get(link.ref)
-    if (!to || links.has(to) || keptLines.has(link.line)) continue
+    if (!to || to === input.own || links.has(to) || keptLines.has(link.line)) continue
     out.push(dropped(`${link.ref} ("${link.text.slice(0, 60)}") goes nowhere on the page. Link to it from a button or an item.`))
   }
   return out

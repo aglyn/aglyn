@@ -3037,6 +3037,20 @@ built page against what the reader read of its source.
   ΔE 0.1 of the source's color (`SITE_IMPORT_OUTLINE_DELTA`; a grey or black is
   the theme's ink). Improve it's score adds none of these and reads a band by its
   color alone (`section.absoluteBand`), as the design answer's text does.
+- **A generative redesign's misses (AGL-4152).** A redesign that falls back logs
+  each miss's code with the line it names, and the page's record keeps them
+  (`redesignMissedWhy`, at most 8 of 300 characters): the answer itself is
+  never stored. `meaning` is held over the source's lines of four content words
+  or more (a label is written again freely), and a contact page's at
+  `SITE_IMPORT_MEANING_FLOOR` (`AI_SITE_IMPORT_ROLE_MEANING`), its form, contact
+  lines and facts held whole on their own lines. A page that draws its form asks
+  with it: the form in the first two sections opens `cta`, in the last two closes
+  it, and counts as its group for `columns`. A source's link to the page it is on
+  asks nothing; a button to it goes to the page's form, or is left out. The
+  honesty scope adds the plan's words, the site's picture alt text, the site's
+  name as a visitor says it (`aiSiteImportNameVariants`), the role's own words
+  as vocabulary (said, naming and claiming nothing), every word by its stem, and
+  no function word ("Us") is a name.
 - **Reported, not scored, by name.** An icon standing alone in the source,
   which the build leaves out (a film's play mark is its facade's own, read
   with the film, AGL-4140); a button that goes nowhere a page can send a visitor

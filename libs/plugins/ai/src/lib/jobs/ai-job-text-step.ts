@@ -174,7 +174,7 @@ export interface AiJobStepOutcome {
    */
   wording?: AiSiteImportWords
   /** How a generative Improve it came out (AGL-4152): what its row says, what it added and what it shows. */
-  redesign?: { status: AiSiteImportRedesign; added: AiSiteImportAddedSection[]; pictures: AiSiteImportPagePictures | null; missed?: string[] }
+  redesign?: { status: AiSiteImportRedesign; added: AiSiteImportAddedSection[]; pictures: AiSiteImportPagePictures | null; missed?: string[]; why?: string[] }
   /**
    * A `site` job's pictures left on a starter photo after this pass
    * (AGL-3988), whole: what its late photo pass fills before the site is
