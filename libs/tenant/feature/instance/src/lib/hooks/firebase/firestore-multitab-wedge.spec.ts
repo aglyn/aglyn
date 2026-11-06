@@ -37,6 +37,8 @@ import { memoryLocalCache, persistentLocalCache } from 'firebase/firestore'
 
 import { firestoreCacheClassFor, localCacheFor } from './firestore-cache'
 import {
+  BOOT_WEDGE_CHECK_DELAY_MS,
+  BOOT_WEDGE_LOCK_MS,
   confirmSharedCacheLock,
   createWedgeEscalation,
   fallBackToMemoryCache,
@@ -52,6 +54,9 @@ import {
   readMemoryCacheFallback,
   readSharedCacheLock,
   recordSharedCacheLock,
+  runBootWedgeCheck,
+  startBootWedgeCheck,
+  markMultiTabFirestore,
   SHARED_CACHE_LOCK_KEY,
   SHARED_CACHE_LOCK_TTL_MS,
   STALE_PRIMARY_LEASE_MS,
@@ -876,5 +881,149 @@ describe('a tab whose Firestore queue has failed recovers onto the memory cache 
     stop()
     target.dispatchEvent(rejection(new Error(B815)))
     expect(fallBack).not.toHaveBeenCalled()
+  })
+})
+
+describe('a tab still booting finds another tab\'s lock in seconds (AGL-4201)', () => {
+  beforeEach(() => {
+    window.sessionStorage.clear()
+    window.localStorage.clear()
+    jest.clearAllMocks()
+  })
+
+  /** The deps of a visible, online, booting tab; override what a case is about. */
+  const booting = (overrides: Partial<Parameters<typeof runBootWedgeCheck>[0]> = {}) => ({
+    probe: jest.fn(async (): Promise<{ state: 'locked' }> => ({ state: 'locked' })),
+    fallBack: jest.fn(),
+    hasServerAnswered: () => false,
+    isFallbackActive: () => false,
+    isOnline: () => true,
+    whenVisible: async () => undefined,
+    wait: jest.fn(async () => undefined),
+    ...overrides,
+  })
+
+  /**
+   * The budget the in-use rescue spends before a lock verdict (8 s stall, 1 s
+   * prompt read, 3 s settle, 20 s lock) was the whole 37 s measured on a booting
+   * tab in production. The boot check must land well inside it.
+   */
+  it('reaches a verdict in a few seconds, far inside the in-use budget', () => {
+    expect(BOOT_WEDGE_CHECK_DELAY_MS + BOOT_WEDGE_LOCK_MS).toBeLessThanOrEqual(6_000)
+    expect(BOOT_WEDGE_LOCK_MS).toBeLessThan(WEDGE_LOCK_MS)
+  })
+
+  it('moves a booting tab to the memory cache when the store stays locked', async () => {
+    const deps = booting()
+
+    await expect(runBootWedgeCheck(deps)).resolves.toBe('fell-back')
+    expect(deps.wait).toHaveBeenCalledWith(BOOT_WEDGE_CHECK_DELAY_MS)
+    expect(deps.fallBack).toHaveBeenCalledWith({ reason: 'lease-locked' })
+  })
+
+  /**
+   * A stale lease at boot is what every tab finds once the last one went
+   * quiet (production: 200 s stale while the store answered in 1-5 ms), and a
+   * fresh tab wins it at its first election. It is never a reason to leave.
+   */
+  it('leaves a stale or vacant lease to the election', async () => {
+    for (const read of [
+      { state: 'leased' as const, ownerId: 'gone', ageMs: 200_000 },
+      { state: 'vacant' as const },
+      { state: 'unknown' as const },
+    ]) {
+      const deps = booting({ probe: jest.fn(async () => read) })
+      await expect(runBootWedgeCheck(deps)).resolves.toBe('clear')
+      expect(deps.fallBack).not.toHaveBeenCalled()
+    }
+  })
+
+  it('never touches a tab the server has already answered, before or after the read', async () => {
+    const before = booting({ hasServerAnswered: () => true })
+    await expect(runBootWedgeCheck(before)).resolves.toBe('answered')
+    expect(before.probe).not.toHaveBeenCalled()
+
+    let answered = false
+    const during = booting({
+      hasServerAnswered: () => answered,
+      probe: jest.fn(async () => {
+        answered = true
+        return { state: 'locked' as const }
+      }),
+    })
+    await expect(runBootWedgeCheck(during)).resolves.toBe('answered')
+    expect(during.fallBack).not.toHaveBeenCalled()
+  })
+
+  it('stands down offline and on a tab already on the fallback', async () => {
+    const offline = booting({ isOnline: () => false })
+    await expect(runBootWedgeCheck(offline)).resolves.toBe('offline')
+    expect(offline.probe).not.toHaveBeenCalled()
+
+    const fallen = booting({ isFallbackActive: () => true })
+    await expect(runBootWedgeCheck(fallen)).resolves.toBe('fallback-active')
+    expect(fallen.wait).not.toHaveBeenCalled()
+  })
+
+  it('waits for a background tab to be shown before reading the lease', async () => {
+    let show: () => void = () => undefined
+    const deps = booting({ whenVisible: () => new Promise<void>((resolve) => (show = resolve)) })
+
+    const outcome = runBootWedgeCheck(deps)
+    await Promise.resolve()
+    await Promise.resolve()
+    expect(deps.probe).not.toHaveBeenCalled()
+    show()
+    await expect(outcome).resolves.toBe('fell-back')
+  })
+
+  it('never rejects', async () => {
+    const deps = booting({ probe: jest.fn(async () => { throw new Error('boom') }) })
+    await expect(runBootWedgeCheck(deps)).resolves.toBe('error')
+    expect(deps.fallBack).not.toHaveBeenCalled()
+  })
+
+  it('does nothing for a client that does not run the durable multi-tab cache', async () => {
+    await expect(startBootWedgeCheck({} as never, () => false)).resolves.toBe('not-multi-tab')
+  })
+
+  /**
+   * The browser wiring end to end, against a store another tab holds: the read
+   * is bounded by the boot budget, the tab records its fallback, the lock is
+   * shared with the tabs that open next (AGL-4090), and the tab reloads.
+   */
+  it('wires the browser: a locked store records the fallback, shares the lock and reloads the tab', async () => {
+    jest.useFakeTimers()
+    const idb = fakeIndexedDb({ locked: true })
+    const original = Object.getOwnPropertyDescriptor(window, 'indexedDB')
+    Object.defineProperty(window, 'indexedDB', { configurable: true, value: idb.factory })
+    const warn = jest.spyOn(console, 'warn').mockImplementation(() => undefined)
+    // jsdom answers `location.reload()` with a not-implemented console error.
+    const error = jest.spyOn(console, 'error').mockImplementation(() => undefined)
+    try {
+      const firestore = {} as never
+      markMultiTabFirestore(firestore, DATABASE)
+      const outcome = startBootWedgeCheck(firestore, () => false)
+
+      await jest.advanceTimersByTimeAsync(BOOT_WEDGE_CHECK_DELAY_MS + BOOT_WEDGE_LOCK_MS + 500)
+
+      await expect(outcome).resolves.toBe('fell-back')
+      expect(readMemoryCacheFallback(window.sessionStorage, Date.now())).toMatchObject({
+        reason: 'lease-locked',
+      })
+      expect(readSharedCacheLock(window.localStorage, DATABASE, Date.now())).toMatchObject({
+        reason: 'lease-locked',
+        databaseName: DATABASE,
+      })
+      expect(warn).toHaveBeenCalledWith(
+        expect.stringContaining('reloading this tab on the memory cache'),
+        expect.anything(),
+      )
+    } finally {
+      warn.mockRestore()
+      error.mockRestore()
+      if (original) Object.defineProperty(window, 'indexedDB', original)
+      jest.useRealTimers()
+    }
   })
 })
