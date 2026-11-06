@@ -115,8 +115,8 @@ describe('listingInclusions', () => {
 
   it('does not call a realm-trusted plugin sandboxed', () => {
     expect(labels({ artifactType: 'plugin' })[0]).toContain('sandboxed')
-    expect(labels({ artifactType: 'plugin' }, { realmTrusted: true })[0]).toBe(
-      'A plugin, reviewed and signed by Aglyn to run with your site',
-    )
+    const realm = labels({ artifactType: 'plugin' }, { realmTrusted: true })[0]
+    expect(realm).toMatch(/^A plugin, reviewed and signed by .+ to run with your site$/)
+    expect(realm).not.toContain('sandboxed')
   })
 })

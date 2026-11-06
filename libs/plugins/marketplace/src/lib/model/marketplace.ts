@@ -31,6 +31,7 @@ import {
 } from '@aglyn/aglyn/app-utils/media-ref'
 import { marketplaceMinPriceUsd } from './listing-price-floor'
 import { pluginConnectionsPlanNote } from './plugin-connections'
+import { PLATFORM_BRAND_NAME } from '@aglyn/aglyn/app-utils/platform-brand'
 import { landsInPublisherWorkspace } from './own-listing'
 import type { InstallableArtifactType as MarketplaceArtifactType } from '@aglyn/aglyn/app-utils/artifact-provenance'
 import type { ListingVerificationRequest } from './listing-verification'
@@ -947,8 +948,7 @@ const ARTIFACT_INSTALL_RESULT: Record<MarketplaceArtifactType, string> = {
 }
 
 /** A plugin version staff signed to run with the site's own code (`trust: 'realm'`). */
-const REALM_PLUGIN_INSTALL_RESULT =
-  'A plugin, reviewed and signed by Aglyn to run with your site'
+const REALM_PLUGIN_INSTALL_RESULT = `A plugin, reviewed and signed by ${PLATFORM_BRAND_NAME} to run with your site`
 
 /**
  * The `WHAT'S INCLUDED` checklist the marketplace listing mockup shows
