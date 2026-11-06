@@ -1207,7 +1207,13 @@ export const cartCheckoutHandler: PluginApiHandler = async (req, res) => {
         shippingCeilingCents
       feeCents = Math.min(
         chargeCents,
-        feeCents + Aglyn.saleProcessingCostCents(chargeCents),
+        feeCents +
+          Aglyn.saleProcessingCostCents(chargeCents, {
+            // Stripe Tax bills the platform on the sale it calculates (AGL-4198).
+            stripeTax:
+              CommerceModel.storefrontTaxDecision({ settings: cartTaxSettings }).kind ===
+              'stripe-automatic',
+          }),
       )
     }
     // THE CONNECT SPLIT IS EMITTED BELOW, NOT HERE (AGL-1956). It used to be

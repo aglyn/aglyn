@@ -311,10 +311,12 @@ describe('Pay', () => {
     // (goods, Texas tax and shipping), never the 6% buy-now-pay-later rate.
     const fee = Number(params.get('payment_intent_data[application_fee_amount]'))
     expect(fee).toBe(resolveTransactionFeeCents(ORG as never, 'physical', 270_000, 296_775))
-    // Business takes 0% on physical goods, so the fee is the card cost alone:
-    // 2.9% of $2,967.75, rounded up, plus 30¢.
-    expect(fee).toBe(Math.ceil((296_775 * CARD_PROCESSING_PERCENT) / 100) + PROCESSING_FIXED_CENTS)
-    expect(fee).toBe(8_637)
+    // Business takes 0% on physical goods, so the fee is what the platform
+    // pays Stripe alone: the card's 2.9% + 30¢ and the payout's 0.25% + 25¢ on
+    // $2,967.75, rounded up.
+    expect(CARD_PROCESSING_PERCENT).toBe(2.9)
+    expect(fee).toBe(Math.ceil((296_775 * 3.15) / 100) + PROCESSING_FIXED_CENTS + 25)
+    expect(fee).toBe(9_404)
     expect(params.get('metadata[feeCents]')).toBe(String(fee))
   })
 

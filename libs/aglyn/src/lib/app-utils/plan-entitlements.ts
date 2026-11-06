@@ -4153,7 +4153,10 @@ export function resolveTransactionFeePct(
 /**
  * Stripe's processing cost on ONE destination-charge sale, in cents
  * (AGL-2152) — a storefront order, a booking deposit, a quote or an invoice —
- * the dearest method the session can offer, a card, plus the fixed 30¢, rounded UP on the percentage so the
+ * what Stripe charges the platform for it: the dearest method the session
+ * can offer, a card, plus Connect's payout, `SALE_PROCESSING_PERCENT` +
+ * `SALE_PROCESSING_FIXED_CENTS` (3.15% + 55¢), with Stripe Tax's 0.5% when the
+ * session runs it, or the in-person rate for a reader's card, rounded UP on the percentage so the
  * answer is never a cent short of what Stripe actually debits.
  *
  * WHO PAYS THIS. Every storefront charge is a DESTINATION charge:
@@ -4189,12 +4192,43 @@ export function resolveTransactionFeePct(
 // beside the processing constants they are defined from, further down this
 // file — a `const` cannot be read before its declaration is evaluated, and
 // this function is only ever CALLED, never evaluated at import.
-export function saleProcessingCostCents(chargeCents: number): number {
+export function saleProcessingCostCents(
+  chargeCents: number,
+  options: SaleProcessingOptions = {},
+): number {
   if (!Number.isFinite(chargeCents) || chargeCents <= 0) return 0
+  if (options.inPerson) {
+    return (
+      Math.ceil((chargeCents * IN_PERSON_PROCESSING_PERCENT) / 100) +
+      IN_PERSON_PROCESSING_FIXED_CENTS
+    )
+  }
   return (
-    Math.ceil((chargeCents * SALE_PROCESSING_PERCENT) / 100) +
+    Math.ceil((chargeCents * saleProcessingPercent(options)) / 100) +
     SALE_PROCESSING_FIXED_CENTS
   )
+}
+
+/** What a sale's session does that changes what the platform pays for it. */
+export interface SaleProcessingOptions {
+  /**
+   * The session runs Stripe Tax (`automatic_tax[enabled]`), which bills the
+   * platform `STRIPE_TAX_PERCENT` of the transaction where it is registered.
+   */
+  stripeTax?: boolean
+  /**
+   * A card read by a Stripe Terminal reader (`card_present`), which Stripe
+   * prices below an online card: recovered at `IN_PERSON_PROCESSING_PERCENT`
+   * + `IN_PERSON_PROCESSING_FIXED_CENTS`.
+   */
+  inPerson?: boolean
+}
+
+/** The recovery percent for a sale: `SALE_PROCESSING_PERCENT`, plus Stripe Tax's when it runs. */
+export function saleProcessingPercent(options: SaleProcessingOptions = {}): number {
+  return options.stripeTax
+    ? (Math.round(SALE_PROCESSING_PERCENT * 100) + Math.round(STRIPE_TAX_PERCENT * 100)) / 100
+    : SALE_PROCESSING_PERCENT
 }
 
 /**
@@ -4228,6 +4262,7 @@ export function resolveTransactionFeeCents(
   productType: 'physical' | 'digital' | 'service',
   feeBaseCents: number,
   chargeCents: number = feeBaseCents,
+  options: SaleProcessingOptions = {},
 ): number {
   const charge =
     Number.isFinite(chargeCents) && chargeCents > 0 ? Math.round(chargeCents) : 0
@@ -4240,7 +4275,7 @@ export function resolveTransactionFeeCents(
   // The `Math.max(1, …)` every door already applied: a rate above zero on
   // goods the shopper pays for is a fee however small it rounds to.
   const take = pct > 0 && base > 0 ? Math.max(1, Math.round((base * pct) / 100)) : 0
-  return Math.min(charge, take + saleProcessingCostCents(charge))
+  return Math.min(charge, take + saleProcessingCostCents(charge, options))
 }
 
 /**
@@ -4256,8 +4291,8 @@ export function resolveTransactionFeeCents(
  *     percent = rate + fixed ÷ amount
  *
  * which is why a smaller recurring price carries a HIGHER percent: the 30¢
- * is a bigger share of it. At 2.9% + 30¢ a $10 price carries 5.9%, $25
- * carries 4.1% and $100 carries 3.2%.
+ * is a bigger share of it. At 3.15% + 55¢ (AGL-4198) a $10 price carries
+ * 8.65%, $25 carries 5.35% and $100 carries 3.7%.
  *
  * Computed in hundredths of a percent on integers and rounded UP to the next
  * hundredth. Up, for the reason the one-time helper rounds its percentage
@@ -4271,12 +4306,13 @@ export function resolveTransactionFeeCents(
  */
 export function saleProcessingPassThroughPercent(
   amountCents: number,
+  options: SaleProcessingOptions = {},
 ): number {
   const amount =
     Number.isFinite(amountCents) && amountCents > 0 ? Math.round(amountCents) : 0
   if (amount <= 0) return 0
-  const rateHundredths = Math.round(SALE_PROCESSING_PERCENT * 100)
-  // 30¢ ÷ amount is a fraction; × 100 makes it a percent, × 100 again makes
+  const rateHundredths = Math.round(saleProcessingPercent(options) * 100)
+  // The fixed cents ÷ amount is a fraction; × 100 makes it a percent, × 100 again makes
   // it hundredths of one.
   const fixedHundredths = (SALE_PROCESSING_FIXED_CENTS * 10_000) / amount
   return Math.min(100, Math.ceil(rateHundredths + fixedHundredths) / 100)
@@ -4305,12 +4341,13 @@ export function resolveSubscriptionFeePercent(
   org: Partial<AglynOrgBilling> | null | undefined,
   productType: 'physical' | 'digital' | 'service',
   amountCents: number,
+  options: SaleProcessingOptions = {},
 ): number {
   const amount =
     Number.isFinite(amountCents) && amountCents > 0 ? Math.round(amountCents) : 0
   if (amount <= 0) return 0
   const take = resolveTransactionFeePct(org, productType)
-  const passThrough = saleProcessingPassThroughPercent(amount)
+  const passThrough = saleProcessingPassThroughPercent(amount, options)
   return Math.min(
     100,
     (Math.round(take * 100) + Math.round(passThrough * 100)) / 100,
@@ -4401,26 +4438,73 @@ export function bindingMarketplaceFeePct(): number {
 export const CARD_PROCESSING_PERCENT = 2.9
 /** Klarna/Afterpay/Affirm (standard plans), roughly. No site checkout offers them since AGL-4198. */
 export const BNPL_PROCESSING_PERCENT = 6
-/** Stripe's per-transaction fixed component, in cents. */
+/** Stripe's per-transaction fixed component on a card, in cents. */
 export const PROCESSING_FIXED_CENTS = 30
 
 /**
- * The processing rate every destination charge a site takes is priced against
- * (AGL-2152): storefront orders, bookings, quotes, invoices, a register's
- * card link and subscriptions. The card rate, because every one of those
- * sessions excludes buy-now-pay-later (AGL-4198), so no method a buyer can
- * still choose costs Stripe more: a card, Apple Pay, Google Pay, Link, Cash
- * App Pay and Amazon Pay are 2.9% + 30¢ on Stripe's published US pricing, and
- * stablecoins 1.5%.
- *
- * Its own name rather than a direct use of `CARD_PROCESSING_PERCENT`: if a
- * dearer method is ever offered on a site's checkout again, this is the one
- * identifier that moves with it, and the marketplace listing floor, a
- * different flow, does not move by accident.
+ * What Stripe Connect bills the PLATFORM for paying a seller out (AGL-4198).
+ * Sellers are Express accounts (`commerce/server/connect.ts`), and on the
+ * "you handle pricing" model Stripe charges the platform 0.25% + 25¢ on every
+ * payout sent and $2 for every account that is paid out in a month
+ * (stripe.com/connect/pricing, read 2026-11-06). Every sale's money leaves
+ * through a payout, so the percent rides every sale. The 25¢ is per payout,
+ * which with daily payouts and one sale a day is one per sale: that is the
+ * figure recovered, and a seller with several sales a day over-recovers it.
+ * The $2 a month is not recovered per sale; the seller's paid plan, which
+ * selling requires, carries it.
  */
-export const SALE_PROCESSING_PERCENT = CARD_PROCESSING_PERCENT
-/** Stripe's per-transaction fixed component, in cents. Not rate-dependent. */
-export const SALE_PROCESSING_FIXED_CENTS = PROCESSING_FIXED_CENTS
+export const CONNECT_PAYOUT_PERCENT = 0.25
+/** Stripe Connect's fixed charge per payout sent, in cents. */
+export const CONNECT_PAYOUT_FIXED_CENTS = 25
+
+/**
+ * Stripe Tax's charge on a Checkout transaction it calculates where the
+ * platform is registered: 0.5% (stripe.com/tax/pricing, read 2026-11-06).
+ * The platform is the account that runs `automatic_tax` on a site's session,
+ * so a sale whose session runs it carries this too (`SaleProcessingOptions`).
+ */
+export const STRIPE_TAX_PERCENT = 0.5
+
+/**
+ * The processing percent RECOVERED on every online sale a site takes
+ * (AGL-2152, AGL-4198): storefront orders, bookings, quotes, invoices, a
+ * register's card link and subscriptions. Not Stripe's card rate on its
+ * own, which is `CARD_PROCESSING_PERCENT` and stays honest: this is that rate
+ * plus Connect's payout percent, so a plan whose take is 0% still nets zero
+ * or more on a sale rather than paying the payout out of its own pocket.
+ *
+ * The card rate binds because every one of those sessions excludes
+ * buy-now-pay-later (AGL-4198), so no method a buyer can still choose costs
+ * Stripe more: a card, Apple Pay, Google Pay, Link, Cash App Pay and Amazon
+ * Pay are 2.9% + 30¢ on Stripe's published US pricing, and stablecoins 1.5%.
+ * A card issued abroad adds Stripe's 1.5% surcharge, which is not recovered.
+ *
+ * Composed in hundredths so 2.9 + 0.25 is 3.15, not 3.1500000000000004.
+ */
+export const SALE_PROCESSING_PERCENT =
+  (Math.round(CARD_PROCESSING_PERCENT * 100) + Math.round(CONNECT_PAYOUT_PERCENT * 100)) / 100
+/** The fixed cents recovered on every online sale: the card's 30¢ and the payout's 25¢. */
+export const SALE_PROCESSING_FIXED_CENTS = PROCESSING_FIXED_CENTS + CONNECT_PAYOUT_FIXED_CENTS
+
+/**
+ * Stripe Terminal's in-person card rate, US: 2.7% + 5¢, plus 10¢ for a Tap to
+ * Pay authorization (stripe.com/terminal, read 2026-11-06).
+ */
+export const TERMINAL_PROCESSING_PERCENT = 2.7
+/** Terminal's fixed cents per in-person card payment, Tap to Pay's 10¢ included (5¢ + 10¢). */
+export const TERMINAL_PROCESSING_FIXED_CENTS = 15
+
+/**
+ * What a register's IN-PERSON card payment recovers (AGL-4198): Terminal's
+ * rate plus Connect's payout, 2.95% + 40¢, by the rule `SALE_PROCESSING_PERCENT`
+ * follows online. A register's card LINK is an online sale and recovers at
+ * `SALE_PROCESSING_PERCENT`.
+ */
+export const IN_PERSON_PROCESSING_PERCENT =
+  (Math.round(TERMINAL_PROCESSING_PERCENT * 100) + Math.round(CONNECT_PAYOUT_PERCENT * 100)) / 100
+/** The fixed cents an in-person card payment recovers: Terminal's 15¢ and the payout's 25¢. */
+export const IN_PERSON_PROCESSING_FIXED_CENTS =
+  TERMINAL_PROCESSING_FIXED_CENTS + CONNECT_PAYOUT_FIXED_CENTS
 
 /**
  * The cheapest plan whose BASE features include `feature`, in ladder order —

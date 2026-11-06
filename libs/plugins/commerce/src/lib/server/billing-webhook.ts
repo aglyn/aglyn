@@ -3169,6 +3169,9 @@ export const commerceBillingWebhookHandler: BillingWebhookHandler = async ({
                   | 'digital'
                   | 'service',
                 recurringBasisCents,
+                // The same Stripe Tax recovery the sale priced in (AGL-4198),
+                // read off the invoice so a renewal never re-prices it away.
+                { stripeTax: (object as { automatic_tax?: { enabled?: boolean } })?.automatic_tax?.enabled === true },
               ),
             )
           }

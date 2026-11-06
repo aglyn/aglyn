@@ -315,14 +315,15 @@ export function PaymentsSettingsCard(props: PaymentsSettingsCardProps) {
                 which used to be absorbed silently out of the platform's
                 balance rather than passed through.
 
-                One rate, the card rate: no checkout on a site offers
-                buy-now-pay-later (AGL-4198), so every method a customer can
-                pay with costs Stripe that much or less. */}
+                The card rate plus Connect's payout (AGL-4198): no checkout on
+                a site offers buy-now-pay-later, so every method a customer
+                can pay with costs Stripe that much or less. */}
             <Typography variant="body2" color="text.secondary">
-              {'Card processing is passed through at cost on top of that: ' +
-                `${Aglyn.SALE_PROCESSING_PERCENT}% + ` +
-                `${Aglyn.SALE_PROCESSING_FIXED_CENTS}¢ per online ` +
-                'sale, what Stripe charges to take the payment. It is not a ' +
+              {"Stripe's processing and payout costs are passed through at cost on top of that: " +
+                `${Aglyn.SALE_PROCESSING_PERCENT}% + ${Aglyn.SALE_PROCESSING_FIXED_CENTS}¢ per online sale, ` +
+                `${Aglyn.IN_PERSON_PROCESSING_PERCENT}% + ${Aglyn.IN_PERSON_PROCESSING_FIXED_CENTS}¢ on a card reader, ` +
+                `and ${Aglyn.STRIPE_TAX_PERCENT}% more where Stripe Tax works out the tax. ` +
+                'They are what Stripe charges to take the payment and pay you out, not a ' +
                 `${Aglyn.PLATFORM_BRAND_LEGAL_NAME} margin.`}
             </Typography>
             {/* WHICH REGISTER TENDERS CARRY THE FEE, AND HOW EACH IS

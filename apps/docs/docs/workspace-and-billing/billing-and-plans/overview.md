@@ -837,9 +837,12 @@ of the recurring price, rounded up to two decimals, so a $10-a-month membership 
 a higher percentage than a $100-a-month one. The platform take itself does not move,
 and Custom still takes 0%.
 
-**Every online sale carries 2.9% + 30¢**, Stripe's card rate: storefront orders,
-bookings, quotes, invoices and memberships. No checkout offers buy-now-pay-later
-(Klarna, Afterpay or Affirm), so no way your customer can pay costs Stripe more. See
+**Every online sale carries 3.15% + 55¢**: storefront orders, bookings, quotes,
+invoices and memberships. That is Stripe's card rate (2.9% + 30¢) and the cost of
+paying you out (0.25% + 25¢ a payout). A payment on a card reader carries 2.95% + 40¢,
+and a sale where Stripe Tax works out the tax carries 0.5% more, which is what Stripe
+charges for it. No checkout offers buy-now-pay-later (Klarna, Afterpay or Affirm), so
+no way your customer can pay costs more. See
 [payment methods](../../commerce-and-bookings/commerce/overview.md#payment-methods).
 
 **At the register, cash, gift cards and store credit carry no platform fee.** Card

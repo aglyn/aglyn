@@ -501,6 +501,7 @@ export const draftOrderHandler: PluginApiHandler = async (req, res) => {
       product.type ?? 'physical',
       chargedItemsCents,
       chargedItemsCents + taxCents + shippingCeilingCents,
+      { stripeTax: useStripeTax },
     )
     // Stripe Tax mode leaves the tax 0 at composition time and the webhook
     // folds the computed figure in — the same additive shape AGL-1792 used for

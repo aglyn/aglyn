@@ -16,7 +16,7 @@
  */
 
 import { BUY_NOW_PAY_LATER_PAYMENT_METHOD_TYPES, excludeBuyNowPayLater } from './buy-now-pay-later'
-import { CARD_PROCESSING_PERCENT, SALE_PROCESSING_PERCENT } from './plan-entitlements'
+import { BNPL_PROCESSING_PERCENT, SALE_PROCESSING_PERCENT } from './plan-entitlements'
 
 /** No checkout on a site offers buy-now-pay-later (AGL-4198). */
 
@@ -61,8 +61,8 @@ describe('excludeBuyNowPayLater', () => {
     expect(excludedOf(params)).toEqual([])
   })
 
-  it('is why the processing pass-through is the card rate', () => {
+  it('is why the processing pass-through is priced off the card rate, not 6%', () => {
     expect(BUY_NOW_PAY_LATER_PAYMENT_METHOD_TYPES).toEqual(['klarna', 'afterpay_clearpay', 'affirm'])
-    expect(SALE_PROCESSING_PERCENT).toBe(CARD_PROCESSING_PERCENT)
+    expect(SALE_PROCESSING_PERCENT).toBeLessThan(BNPL_PROCESSING_PERCENT)
   })
 })

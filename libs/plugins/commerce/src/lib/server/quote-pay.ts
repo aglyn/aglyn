@@ -535,6 +535,7 @@ export async function handleQuotePay(deps: QuotePayDeps, req: PluginApiRequest):
     charge.feeProductType,
     charge.goodsCents,
     charge.totalCents + dearestRateCents,
+    { stripeTax: charge.taxAtPayment },
   )
   const nativeMode = await deps.nativeMode(String(owner?.id ?? ''))
   const site = host as SiteReturnHost

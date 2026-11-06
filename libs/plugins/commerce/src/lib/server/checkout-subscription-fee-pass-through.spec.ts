@@ -294,13 +294,14 @@ describe('a storefront subscription carries the card cost as a percent (AGL-2655
   /**
    * THE ISSUE ITSELF. Advanced advertises 0% on digital goods, and before
    * this the session went out with no fee parameter at all. The pass-through
-   * at the card rate, 2.9% + 30¢ (AGL-4198; 6% before), is 5.9% of $10, 4.1%
-   * of $25 and 3.2% of $100 — the 30¢ is a bigger share of a smaller price.
+   * at the card rate plus Connect's payout, 3.15% + 55¢ (AGL-4198; 6% + 30¢
+   * before), is 8.65% of $10, 5.35% of $25 and 3.7% of $100 — the 55¢ is a
+   * bigger share of a smaller price.
    */
   it.each([
-    [10, '5.9'],
-    [25, '4.1'],
-    [100, '3.2'],
+    [10, '8.65'],
+    [25, '5.35'],
+    [100, '3.7'],
   ])('a 0% tier at $%i carries exactly the pass-through, %s%%', async (priceUsd, percent) => {
     const { result, body } = await runCheckout({ plan: 'advanced', priceUsd })
     expect(result.status).toBe(200)
@@ -315,19 +316,19 @@ describe('a storefront subscription carries the card cost as a percent (AGL-2655
 
   /**
    * THE RULE MIRRORED FROM AGL-2152: a fee tier carries its take PLUS the
-   * pass-through. Business digital is 2%, so $100 goes out at 5.2% and the
+   * pass-through. Business digital is 2%, so $100 goes out at 5.7% and the
    * recorded `feeCents` is what that percent takes of the opening goods.
    */
   it('a fee tier carries its take plus the pass-through', async () => {
     const { result, body } = await runCheckout({ plan: 'business', priceUsd: 100 })
     expect(result.status).toBe(200)
-    expect(body?.get('subscription_data[application_fee_percent]')).toBe('5.2')
-    expect(body?.get('metadata[feeCents]')).toBe('520')
+    expect(body?.get('subscription_data[application_fee_percent]')).toBe('5.7')
+    expect(body?.get('metadata[feeCents]')).toBe('570')
   })
 
   it('the 0% tier records what the pass-through takes of the opening cycle', async () => {
     const { body } = await runCheckout({ plan: 'advanced', priceUsd: 25 })
-    // 4.1% of $25 is $1.025, kept as $1.03 — the figure `metadata[feeCents]` records.
-    expect(body?.get('metadata[feeCents]')).toBe('103')
+    // 5.35% of $25 is $1.3375, kept as $1.34 — the figure `metadata[feeCents]` records.
+    expect(body?.get('metadata[feeCents]')).toBe('134')
   })
 })

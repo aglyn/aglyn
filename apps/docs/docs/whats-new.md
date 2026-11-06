@@ -12,11 +12,11 @@ for the how-to.
 
 ## November 2026 — Aglyn 1.0 (newest)
 
-- **Card-rate processing on every sale, and no buy-now-pay-later.** [Payment methods](commerce-and-bookings/commerce/overview.md#payment-methods)
+- **Lower processing on every sale, and no buy-now-pay-later.** [Payment methods](commerce-and-bookings/commerce/overview.md#payment-methods)
   — storefront checkout, bookings, quotes, invoices and memberships pass through
-  Stripe's card rate, 2.9% + 30¢, where online sales used to carry 6% + 30¢. Klarna,
-  Afterpay and Affirm are no longer offered at any checkout; cards, Apple Pay, Google
-  Pay, Link, Cash App Pay, Amazon Pay and stablecoins stay.
+  Stripe's card rate and payout cost, 3.15% + 55¢, where online sales used to carry
+  6% + 30¢. Klarna, Afterpay and Affirm are no longer offered at any checkout; cards,
+  Apple Pay, Google Pay, Link, Cash App Pay, Amazon Pay and stablecoins stay.
 - **Card readers by plain name.** [POS hardware](commerce-and-bookings/commerce/pos-hardware.md#buy-a-reader-from-aglyn)
   — the **Hardware** card, the register, emails and receipts name each reader by what
   it is, with its model: **Pocket reader (M2)**, **Touchscreen reader (S700)**,

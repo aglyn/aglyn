@@ -439,14 +439,14 @@ describe('the platform fee on a split sale (AGL-4036)', () => {
     expect(card.status).toBe(200)
     const create = stripeCalls.find((call) => call.path === 'payment_intents')!
     // 60% of the $2.00 take, plus Stripe's cost on the $60.00 charge.
-    expect(Number(create.params.get('application_fee_amount'))).toBe(120 + posCardProcessingCostCents(6000))
+    expect(Number(create.params.get('application_fee_amount'))).toBe(120 + posCardProcessingCostCents(6000, false))
     const paid = await act({ action: 'cash', tenderedCents: 4000 }, 'c1')
     expect(paid.body.completed).toBe(true)
     expect(sale().payments.map((payment: any) => [payment.method, payment.takeFeeCents])).toEqual([
       ['card_keyed', 120],
       ['cash', 0],
     ])
-    expect(sale().totals.feeCents).toBe(120 + posCardProcessingCostCents(6000))
+    expect(sale().totals.feeCents).toBe(120 + posCardProcessingCostCents(6000, false))
     expect(accrual()).toBeUndefined()
   })
 
@@ -456,12 +456,12 @@ describe('the platform fee on a split sale (AGL-4036)', () => {
     const card = await act({ action: 'card-keyed', amountCents: 7500, paymentMethodId: 'pm_cardVisa1234' }, 'k1')
     expect(card.body.completed).toBe(true)
     const create = stripeCalls.find((call) => call.path === 'payment_intents')!
-    expect(Number(create.params.get('application_fee_amount'))).toBe(150 + posCardProcessingCostCents(7500))
+    expect(Number(create.params.get('application_fee_amount'))).toBe(150 + posCardProcessingCostCents(7500, false))
     expect(sale().payments.map((payment: any) => [payment.method, payment.takeFeeCents])).toEqual([
       ['gift_card', 0],
       ['card_keyed', 150],
     ])
-    expect(sale().totals.feeCents).toBe(150 + posCardProcessingCostCents(7500))
+    expect(sale().totals.feeCents).toBe(150 + posCardProcessingCostCents(7500, false))
     expect(accrual()).toBeUndefined()
   })
 
@@ -517,9 +517,9 @@ describe('a declined offline card, collected later at the register (AGL-4039)', 
     const paid = await act({ action: 'card-keyed', amountCents: 10_000, paymentMethodId: 'pm_cardVisa1234' }, 'k-later')
     expect(paid.body.completed).toBe(true)
     const create = stripeCalls.find((call) => call.path === 'payment_intents')!
-    expect(Number(create.params.get('application_fee_amount'))).toBe(200 + posCardProcessingCostCents(10_000))
+    expect(Number(create.params.get('application_fee_amount'))).toBe(200 + posCardProcessingCostCents(10_000, false))
     expect(sale().status).toBe('paid')
-    expect(sale().totals.feeCents).toBe(200 + posCardProcessingCostCents(10_000))
+    expect(sale().totals.feeCents).toBe(200 + posCardProcessingCostCents(10_000, false))
     expect(sale().paymentIntentId).toBe(sale().payments[1].paymentIntentId)
     expect(mockDecrement).not.toHaveBeenCalled()
     expect(mockSaleCompleted).toEqual(['sale-1'])
@@ -538,7 +538,7 @@ describe('a declined offline card, collected later at the register (AGL-4039)', 
     seedDeclinedOffline(false)
     await act({ action: 'card-keyed', amountCents: 10_000, paymentMethodId: 'pm_cardVisa1234' }, 'k-old')
     const create = stripeCalls.find((call) => call.path === 'payment_intents')!
-    expect(Number(create.params.get('application_fee_amount'))).toBe(posCardProcessingCostCents(10_000))
+    expect(Number(create.params.get('application_fee_amount'))).toBe(posCardProcessingCostCents(10_000, false))
   })
 })
 
@@ -684,7 +684,11 @@ describe('typed card and the QR link', () => {
     expect(create.params.get('amount')).toBe('6000')
     expect(create.params.getAll('payment_method_types[]')).toEqual(['card'])
     expect(create.params.get('capture_method')).toBeNull()
-    expect(Number(create.params.get('application_fee_amount'))).toBe(100 + posCardProcessingCostCents(6000))
+    // A typed card is an online card: 3.15% + 55¢ on the charge, not the
+    // reader's 2.95% + 40¢ (AGL-4198).
+    expect(posCardProcessingCostCents(6000, false)).toBe(189 + 55)
+    expect(posCardProcessingCostCents(6000)).toBe(177 + 40)
+    expect(Number(create.params.get('application_fee_amount'))).toBe(100 + posCardProcessingCostCents(6000, false))
   })
 
   it("confirms a card typed into the register's own fields by its PaymentMethod, never seeing the card", async () => {

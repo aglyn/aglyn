@@ -496,7 +496,8 @@ your card is not available for storefronts yet.
 offered anywhere a customer pays you: storefront checkout, bookings, reservation
 deposits, quotes, invoices, draft order links and the register's card link. Every
 method on the card costs Stripe no more than a card does, so the processing passed
-through on each sale is Stripe's card rate, 2.9% + 30¢.
+through on each sale is Stripe's card rate and payout cost, 3.15% + 55¢ (see
+[processing costs](../../workspace-and-billing/billing-and-plans/overview.md)).
 
 Anyone holding **Manage orders**
 can read the card; changing it takes **Manage payment methods**, which a site's admins
