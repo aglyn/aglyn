@@ -216,6 +216,11 @@ describe('marketplace checkout take rate + sale-time gates (AGL-1543)', () => {
     const { params } = stripeCalls[0]
     expect(params.get('line_items[0][price_data][unit_amount]')).toBe('10000')
     expect(params.get('metadata[feeCents]')).toBe('2000')
+    // No buy-now-pay-later on a listing (AGL-4198).
+    const excluded = [...params.keys()]
+      .filter((key) => key.startsWith('excluded_payment_method_types['))
+      .map((key) => params.get(key))
+    expect(excluded).toEqual(['klarna', 'afterpay_clearpay', 'affirm'])
   })
 
   it('honors a negotiated per-org fee override from entitlements', async () => {

@@ -994,6 +994,7 @@ export const checkoutHandler: PluginApiHandler = async (req, res) => {
           ownerOrg.org as any,
           lifted.type ?? 'physical',
           amountCents,
+          { stripeTax: useStripeTax },
         )
       : 0
     const feeCents = isSubscription
@@ -1008,6 +1009,7 @@ export const checkoutHandler: PluginApiHandler = async (req, res) => {
           lifted.type ?? 'physical',
           amountCents,
           amountCents + taxCents + shippingCeilingCents,
+          { stripeTax: useStripeTax },
         )
 
     // The unit price Stripe actually charges — the coupon is priced INTO it

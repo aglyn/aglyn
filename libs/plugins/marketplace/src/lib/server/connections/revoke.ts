@@ -15,6 +15,7 @@
  * limitations under the License.
  */
 
+import type { PluginConnectionDeclaration } from '@aglyn/aglyn/app-utils/plugin-connections'
 import { firebaseAdmin } from '@aglyn/tenant-data-admin'
 import { readPluginConnectionsKeyring } from './config'
 import { openToken, type PluginConnectionRecord } from './connection-store'
@@ -26,23 +27,36 @@ import { revokePluginConnectionToken } from './provider-http'
  * Revokes a record's grant at the provider, best effort: a grant that cannot
  * be revoked is still forgotten here, and the owner can remove the app on the
  * provider's side. Never throws. Shared with the erasers.
+ *
+ * The revocation endpoint is the one the site's pinned version declares. A
+ * caller that has already lost the pin — an uninstall, a version that no
+ * longer declares the connection (AGL-4194) — passes the declaration it read
+ * before the pin moved.
  */
-export async function revokeRecord(record: PluginConnectionRecord, orgId: string | null): Promise<boolean> {
+export async function revokeRecord(
+  record: PluginConnectionRecord,
+  orgId: string | null,
+  declaration?: PluginConnectionDeclaration | null,
+): Promise<boolean> {
   const keyring = readPluginConnectionsKeyring()
   if (!keyring) return false
   try {
-    const found = await installedConnection(firebaseAdmin.app().firestore(), {
-      hostId: record.hostId,
-      orgId,
-      listingId: record.listingId,
-      connectionId: record.connectionId,
-    })
-    if (!found?.connection.revocationUrl) return false
+    const connection =
+      declaration ??
+      (
+        await installedConnection(firebaseAdmin.app().firestore(), {
+          hostId: record.hostId,
+          orgId,
+          listingId: record.listingId,
+          connectionId: record.connectionId,
+        })
+      )?.connection
+    if (!connection?.revocationUrl) return false
     const client = await openCredentials(firebaseAdmin.app().firestore(), keyring, record.listingId, record.connectionId).catch(() => null)
     const token = record.sealedRefreshToken
       ? openToken(keyring, record, 'refresh').token
       : openToken(keyring, record, 'access').token
-    return await revokePluginConnectionToken(found.connection, client, token)
+    return await revokePluginConnectionToken(connection, client, token)
   } catch (error) {
     console.warn('plugin-connections: revoke failed', error instanceof Error ? error.message : error)
     return false

@@ -46,6 +46,7 @@ import { needsReseal, openSecret, sealSecret, type SecretBoxKeyring } from '@agl
 import type { PluginConnectionDeclaration } from '@aglyn/aglyn/app-utils/plugin-connections'
 import {
   pluginConnectionDocId,
+  pluginConnectionRecordDocId,
   type PluginConnectionChoice,
   type PluginConnectionStatus,
   type PluginConnectionView,
@@ -83,6 +84,8 @@ export interface PluginConnectionRecord {
   /** When the scheduled sync should next run this connection; `null` while it waits for choices. */
   nextSyncAtMs: number | null
   lastError: string | null
+  /** Scheduled syncs that failed in a row since the last one that ran; sets the backoff (AGL-4194). */
+  syncFailures?: number
   updatedAtMs: number
 }
 
@@ -102,6 +105,16 @@ export function connectionRef(
   connectionId: string,
 ): FirebaseFirestore.DocumentReference {
   return connectionsCollection(firestore, hostId).doc(pluginConnectionDocId(listingId, connectionId))
+}
+
+/** The record the connection's sync writes, beside it (AGL-4192, AGL-4194). Server-only, like the rest. */
+export function connectionRecordRef(
+  firestore: FirebaseFirestore.Firestore,
+  hostId: string,
+  listingId: string,
+  connectionId: string,
+): FirebaseFirestore.DocumentReference {
+  return connectionsCollection(firestore, hostId).doc(pluginConnectionRecordDocId(listingId, connectionId))
 }
 
 type TokenOwner = Pick<PluginConnectionRecord, 'hostId' | 'listingId' | 'connectionId'>
@@ -163,6 +176,7 @@ export function readConnection(data: Record<string, unknown> | undefined): Plugi
     lastSyncAtMs: Number(record.lastSyncAtMs) || null,
     nextSyncAtMs: Number(record.nextSyncAtMs) || null,
     lastError: typeof record.lastError === 'string' ? record.lastError : null,
+    syncFailures: Math.max(0, Math.trunc(Number(record.syncFailures) || 0)),
   }
 }
 
@@ -394,6 +408,7 @@ export async function markConnectionSynced(
     lastSyncAtMs: input.nowMs,
     nextSyncAtMs: input.nextSyncAtMs,
     lastError: null,
+    syncFailures: 0,
     updatedAtMs: input.nowMs,
   })
 }
@@ -407,12 +422,13 @@ export async function markConnectionSynced(
 export async function markConnectionError(
   firestore: FirebaseFirestore.Firestore,
   record: TokenOwner,
-  input: { nowMs: number; message: string; reconnect: boolean; nextSyncAtMs?: number | null },
+  input: { nowMs: number; message: string; reconnect: boolean; nextSyncAtMs?: number | null; syncFailures?: number },
 ): Promise<void> {
   await connectionRef(firestore, record.hostId, record.listingId, record.connectionId).update({
     status: input.reconnect ? 'reconnect_required' : 'error',
     lastError: input.message.slice(0, 300),
     nextSyncAtMs: input.reconnect ? null : (input.nextSyncAtMs ?? null),
+    ...(input.syncFailures !== undefined ? { syncFailures: input.syncFailures } : {}),
     updatedAtMs: input.nowMs,
   })
 }

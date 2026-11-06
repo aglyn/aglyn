@@ -16,8 +16,8 @@
  */
 
 import {
-  CARD_PROCESSING_PERCENT,
-  PROCESSING_FIXED_CENTS,
+  saleApplicationFeeCents,
+  saleProcessingCostCents,
 } from '@aglyn/aglyn/app-utils/plan-entitlements'
 import { NATIVE_CHECKOUT_STRIPE_VERSION } from './native-checkout'
 
@@ -118,32 +118,33 @@ export function posTerminalAvailable(): boolean {
 }
 
 /**
- * Stripe's processing cost on a register CARD payment, passed through at cost
- * beside the platform's take (the AGL-2152 rule, on the register's tenders).
- *
- * At the CARD rate, not `saleProcessingCostCents`'s dearest-method rate: every
- * register card payment pins its payment method types to `card` or
- * `card_present`, so no buy-now-pay-later method can be chosen and 2.9% + 30¢
- * is at least what Stripe debits (an in-person tap costs less). The base is
+ * The card processing a register CARD payment passes through beside the
+ * platform's take (the AGL-2152 rule, on the register's tenders): 2.9% + 30¢,
+ * the same online rate a site sale passes through, on a reader's card and a
+ * typed card alike (AGL-4198). Every register card payment pins `card` or
+ * `card_present`, so no buy-now-pay-later method can be chosen. The base is
  * the whole CHARGE, tip included, because Stripe's own fee is on the whole
  * charge; the platform's take is not.
  */
 export function posCardProcessingCostCents(chargeCents: number): number {
-  if (!Number.isFinite(chargeCents) || chargeCents <= 0) return 0
-  return (
-    Math.ceil((chargeCents * CARD_PROCESSING_PERCENT) / 100) + PROCESSING_FIXED_CENTS
-  )
+  return saleProcessingCostCents(chargeCents)
 }
 
 /** The `application_fee_amount` for a register card payment. */
 export function posCardApplicationFeeCents(input: {
   takeShareCents: number
   chargeCents: number
+  /** False for a typed card or a card link, which Stripe prices as online cards. */
+  inPerson?: boolean
 }): number {
   // The processing half is owed even on a plan whose take is 0%: Stripe debits
-  // it from the platform on every destination charge (AGL-2071).
-  const take = Math.max(0, Math.round(input.takeShareCents))
-  return take + posCardProcessingCostCents(input.chargeCents)
+  // it from the platform on every destination charge (AGL-2071). The fee never
+  // falls below what Stripe charges the platform for the payment (AGL-4198):
+  // Terminal's rate for a reader's card, the online rate for a typed card, and
+  // the payout either way, all out of the take first.
+  return saleApplicationFeeCents(input.takeShareCents, input.chargeCents, {
+    inPerson: input.inPerson ?? true,
+  })
 }
 
 /** A refusal Stripe sent, in words a cashier can read out. */

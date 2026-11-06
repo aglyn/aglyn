@@ -293,23 +293,23 @@ describe.each([
   ['buy now', buyNow],
   ['cart', cartCheckout],
 ])('%s: the merchant’s payment methods reach the session', (_label, run) => {
-  it('a store on the defaults excludes only crypto, and hides no wallet', async () => {
+  it('a store on the defaults excludes buy-now-pay-later and crypto, and hides no wallet', async () => {
     seed()
     goNative()
     const result = await run()
     expect(result.status).toBe(200)
     const params = sessionParams()
-    expect(excluded(params)).toEqual(['crypto'])
+    expect(excluded(params)).toEqual(['klarna', 'afterpay_clearpay', 'affirm', 'crypto'])
     expect(params.get('wallet_options[link][display]')).toBeNull()
     expect(result.body.wallets).toBeUndefined()
   })
 
   it('excludes what the merchant switched off, on the hosted path too', async () => {
-    seed({ klarna: false, affirm: false, crypto: true })
+    seed({ cashapp: false, amazon_pay: false, crypto: true })
     const result = await run()
     expect(result.status).toBe(200)
     expect(result.body.url).toContain('checkout.stripe.com')
-    expect(excluded(sessionParams())).toEqual(['klarna', 'affirm'])
+    expect(excluded(sessionParams())).toEqual(['klarna', 'afterpay_clearpay', 'affirm', 'cashapp', 'amazon_pay'])
   })
 
   it('hides Link on the session and tells the Payment Element which wallets are off', async () => {
