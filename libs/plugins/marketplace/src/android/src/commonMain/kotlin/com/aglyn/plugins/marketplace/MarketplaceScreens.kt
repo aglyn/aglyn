@@ -360,6 +360,8 @@ private fun ListingBody(
       StatTile("Rating", if (listing.ratingCount > 0 && listing.ratingAverage != null) com.aglyn.pluginhost.jsNumber(listing.ratingAverage) + " ★" else "—", Modifier.weight(1f), if (listing.ratingCount > 0) "${listing.ratingCount} ratings" else "Not yet rated")
       StatTile("Installs", (listing.activeInstalls ?: listing.installCount).toString(), Modifier.weight(1f), "${listing.installCount} all time")
     }
+    // The publisher's OAuth app for each connection the plugin declares (AGL-4196), for the listing's own workspace only.
+    if (mine && plugin) ListingConnectionCredentialsCards(context, listing.id)
     if (listing.description.isNotBlank()) SectionCard("About") { Text(listing.description) }
     listing.readme?.let { readme -> SectionCard("Read me") { Text(readme.take(4000), style = MaterialTheme.typography.bodyMedium) } }
     SectionCard("Versions") {
