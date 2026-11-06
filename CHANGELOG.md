@@ -15,6 +15,7 @@ content on the marketing site and is written separately.
 
 ### Added
 
+- **commerce:** in-person card payments on the store's own Stripe account
 - **besigner:** table rows, columns and cell formatting on the canvas ([AGL-4203](https://linear.app/aglyn/issue/AGL-4203))
 - **commerce:** a Photo fit setting on the Product grid and Related products
 - **native:** publishers set a listing's connection credentials in the apps ([AGL-4196](https://linear.app/aglyn/issue/AGL-4196))
@@ -22,6 +23,8 @@ content on the marketing site and is written separately.
 
 ### Fixed
 
+- **commerce:** refund a direct sale that carried no platform fee
+- **commerce:** payments card describes Stripe billing a direct store
 - **deps:** upgrade DOMPurify to 3.4.17 for the SAFE_FOR_TEMPLATES bypass advisory ([AGL-4204](https://linear.app/aglyn/issue/AGL-4204))
 - **console:** preview snapshots expire after a day and stay under 1 M characters ([AGL-4204](https://linear.app/aglyn/issue/AGL-4204))
 - **console:** a background tab hands the shared Firestore cache to the visible tab ([AGL-4204](https://linear.app/aglyn/issue/AGL-4204), [AGL-3788](https://linear.app/aglyn/issue/AGL-3788))
