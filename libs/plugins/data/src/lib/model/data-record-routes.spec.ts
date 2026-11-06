@@ -30,7 +30,8 @@ describe('the dataset record route', () => {
   it('lists a site’s datasets on its Data page, and the organization’s on the org Data page', () => {
     expect(pluginRecordListHref('dataset', { orgSlug: 'acme', host: 'shop' })).toBe('/acme/hosts/shop/data')
     expect(pluginRecordListHref('dataset', { orgSlug: 'acme', host: null })).toBe('/acme/data')
-    // No page of one dataset: a record opens the list.
-    expect(pluginRecordHref('dataset', { orgSlug: 'acme', host: 'shop' }, 'ds-1')).toBe('/acme/hosts/shop/data')
+    // A dataset opens its own tab of the page (AGL-4047).
+    expect(pluginRecordHref('dataset', { orgSlug: 'acme', host: 'shop' }, 'ds-1')).toBe('/acme/hosts/shop/data/ds-1')
+    expect(pluginRecordHref('dataset', { orgSlug: 'acme', host: null }, 'ds-1')).toBe('/acme/data/ds-1')
   })
 })

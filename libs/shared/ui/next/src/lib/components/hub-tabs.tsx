@@ -232,6 +232,13 @@ export interface HubSection {
    * unnamed group, drawn without words.
    */
   group?: string
+  /**
+   * A second line under the label, in secondary text (AGL-4047): what tells
+   * a section apart from a neighbor of the same name, such as which sites a
+   * dataset is shared with. Left off on the stacked strip, where a tab is one
+   * line in one scrolling row.
+   */
+  secondary?: string
 }
 
 export interface HubSectionsProps {
@@ -248,7 +255,24 @@ export interface HubSectionsProps {
    * selected tab.
    */
   wide?: boolean
+  /**
+   * Drawn in the rail's card above its tabs (AGL-4047): a search box or a
+   * filter for a rail long enough to need one.
+   */
+  railHeader?: ReactNode
+  /** Drawn in the rail's card below its tabs: a note, or the control that loads more. */
+  railFooter?: ReactNode
+  /**
+   * The tabs scroll inside the rail's card rather than growing the page
+   * (AGL-4047), for a rail whose sections are the reader's own records and so
+   * have no upper bound. The selected tab is scrolled into view. The vertical
+   * rail only: the stacked strip already scrolls sideways.
+   */
+  scrollRail?: boolean
 }
+
+/** How tall a scrolling rail's tabs may grow before they scroll, in theme spacing units. */
+const SCROLL_RAIL_MAX_HEIGHT = 80
 
 /**
  * The same rail, choosing a section by ROUTE rather than by panel (AGL-2501).
@@ -392,6 +416,24 @@ function HubSectionGroupStart(props: {
  * The rail's children: a tab per shown section, with a group start wherever
  * the group changes, and above the first section when it names a group.
  */
+/**
+ * A section's label with its second line beneath it (AGL-4047), stacked in
+ * one span so the tab keeps a plain tab's classes, as a locked label does.
+ */
+function SecondaryLineLabel(props: { label: ReactNode; secondary: string }) {
+  return (
+    <Box
+      component="span"
+      sx={{ display: 'flex', flexDirection: 'column', alignItems: 'flex-start', textAlign: 'start' }}
+    >
+      {props.label}
+      <Typography component="span" variant="caption" color="text.secondary">
+        {props.secondary}
+      </Typography>
+    </Box>
+  )
+}
+
 function hubSectionRailItems(
   shown: readonly HubSection[],
   activeHref: string | null,
@@ -417,15 +459,20 @@ function hubSectionRailItems(
           stacked={stacked}
         />,
       )
+    const label = section.locked ? (
+      <LockedSectionLabel label={section.label} />
+    ) : (
+      section.label
+    )
     items.push(
       <Tab
         key={section.href}
         value={section.href}
         label={
-          section.locked ? (
-            <LockedSectionLabel label={section.label} />
+          section.secondary && !stacked ? (
+            <SecondaryLineLabel label={label} secondary={section.secondary} />
           ) : (
-            section.label
+            label
           )
         }
         component={AppLink}
@@ -438,8 +485,32 @@ function hubSectionRailItems(
 }
 
 export function HubSections(props: HubSectionsProps) {
-  const { sections, children, navHeader = 'Navigation', wide = false } = props
+  const {
+    sections,
+    children,
+    navHeader = 'Navigation',
+    wide = false,
+    railHeader,
+    railFooter,
+    scrollRail = false,
+  } = props
   const { narrow, stacked, tabsProps } = useRailLayout(wide)
+  const theme = useTheme()
+  /*
+   * A scrolling rail is MUI's own scrollable tabs, turned upright: the tabs
+   * scroll inside a capped height, the scrollbar stays visible so the reader
+   * can tell there is more, and MUI scrolls the selected tab into view.
+   */
+  const railTabsProps =
+    scrollRail && !stacked
+      ? {
+          ...tabsProps,
+          variant: 'scrollable' as const,
+          scrollButtons: false,
+          visibleScrollbar: true,
+          sx: { ...tabsProps.sx, maxHeight: theme.spacing(SCROLL_RAIL_MAX_HEIGHT) },
+        }
+      : tabsProps
   const shown = useMemo(
     () => sections.filter((section) => section.visible !== false),
     [sections],
@@ -456,6 +527,7 @@ export function HubSections(props: HubSectionsProps) {
           size: wide ? { xs: 12 } : { xs: 12, md: 3 },
           children: (
             <CardDisplay header={narrow ? undefined : navHeader}>
+              {railHeader}
               {/*
                 * `Tabs`, not `TabList`: there is no `TabContext` here because
                 * there are no panels to bind to — the content is a routed
@@ -464,12 +536,13 @@ export function HubSections(props: HubSectionsProps) {
                 * whichever tab happens to be first.
                 */}
               <Tabs
-                {...tabsProps}
+                {...railTabsProps}
                 aria-label={navHeader}
                 value={activeHref ?? false}
               >
                 {hubSectionRailItems(shown, activeHref, stacked)}
               </Tabs>
+              {railFooter}
             </CardDisplay>
           ),
         },

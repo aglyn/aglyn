@@ -119,6 +119,9 @@ export function registerDataConsole(): void {
       {
         label: 'Data',
         href: '/data',
+        // Each dataset is a tab of the page, at `/data/<datasetId>` (AGL-4047).
+        ownsSubtree: true,
+        recordTitle: 'Dataset',
         // Reuse the existing release-flag nav-tab so staff-preview gating is
         // unchanged now that the tab comes from the plugin (AGL-395).
         navTabId: 'nav-tab-data',

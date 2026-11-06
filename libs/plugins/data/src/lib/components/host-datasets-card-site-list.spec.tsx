@@ -34,7 +34,8 @@
 import { act, fireEvent, render, screen, waitFor, within } from '@testing-library/react'
 
 import { projectMemberScopeTokens } from '@aglyn/aglyn/app-utils/organizations'
-import type { ReactNode } from 'react'
+import { type ReactNode, useMemo, useState } from 'react'
+import { PageHeaderActionsContext } from '@aglyn/aglyn/app-utils/page-header-actions-context'
 import { HostDatasetsCard } from './host-datasets-card.component'
 import { holdsDatasetPermission } from './use-dataset-writes-blocked'
 
@@ -85,6 +86,29 @@ const deleteDocSpy = jest.fn(async (_ref: unknown) => undefined)
 
 const DATA_SCOPE = { scope: ['orgs', 'org-1'], orgId: 'org-1' }
 const FIRESTORE = {}
+
+/**
+ * The page header the card publishes Add dataset and Add join collection into
+ * (AGL-4047), drawn above the card as the console's layout draws it.
+ */
+function WithPageHeader(props: { children?: ReactNode }) {
+  const [actions, setHeaderActions] = useState<ReactNode>(null)
+  const value = useMemo(() => ({ setHeaderActions }), [])
+  return (
+    <PageHeaderActionsContext.Provider value={value}>
+      <div data-testid="page-header">{actions}</div>
+      {props.children}
+    </PageHeaderActionsContext.Provider>
+  )
+}
+
+/** The Data page's route (AGL-4047): the card reads the router to open a dataset's tab. */
+const mockRouter = { push: jest.fn(), replace: jest.fn(), prefetch: jest.fn() }
+jest.mock('next/navigation', () => ({
+  useRouter: () => mockRouter,
+  usePathname: () => '/acme/data',
+  useSearchParams: () => new URLSearchParams(),
+}))
 
 jest.mock('@aglyn/tenant-feature-instance', () => ({
   useFirestore: () => FIRESTORE,
@@ -148,7 +172,26 @@ jest.mock('@aglyn/shared-ui-snackstack', () => ({
   useSnackbar: () => ({ enqueueSnackbar }),
 }))
 jest.mock('@aglyn/shared-ui-jsx', () => ({
-  CardDisplay: ({ children }: { children: ReactNode }) => <div>{children}</div>,
+  CardDisplay: ({ children, header, HeaderProps }: any) => (
+    <div>
+      {header}
+      {HeaderProps?.action}
+      {HeaderProps?.subheader}
+      {children}
+    </div>
+  ),
+  GridItems: ({ items }: any) => (
+    <div>
+      {items.map((item: any, index: number) => (
+        <div key={index}>{item.children}</div>
+      ))}
+    </div>
+  ),
+  AppLink: ({ children, href, componentVariant: _variant, ...rest }: any) => (
+    <a href={href} {...rest}>
+      {children}
+    </a>
+  ),
   MdiIcon: () => null,
   useConfirmationContext: () => ({ confirm: jest.fn() }),
 }))
@@ -173,21 +216,21 @@ beforeEach(() => {
 })
 
 const mountCard = async (props: Record<string, unknown>) => {
-  render(<HostDatasetsCard org={{ $id: 'org-1', plan: 'scale' } as any} {...props} />)
+  // On the bare page, as the rail draws it (AGL-4047).
+  render(<HostDatasetsCard org={{ $id: 'org-1', plan: 'scale' } as any} basePath="/acme/data" {...props} />, {
+    wrapper: WithPageHeader,
+  })
   await act(async () => {
     await Promise.resolve()
   })
 }
 
 /** The names the Dataset picker offers. */
-const listed = () => {
-  fireEvent.mouseDown(screen.getByRole('combobox', { name: 'Dataset' }))
-  const names = within(screen.getByRole('listbox'))
-    .getAllByRole('option')
-    .map((option) => option.textContent)
-  fireEvent.keyDown(screen.getByRole('listbox'), { key: 'Escape' })
-  return names
-}
+/** The datasets the rail has a tab for, by the name each tab leads with (AGL-4047). */
+const listed = () =>
+  within(screen.getByRole('tablist', { name: 'Datasets' }))
+    .queryAllByRole('tab')
+    .map((tab) => tab.firstElementChild?.firstChild?.textContent ?? '')
 
 describe("a site's Data page lists what is shared with that site", () => {
   it('shows an org-wide member only site B’s and the workspace-wide ones on site B', async () => {
@@ -217,7 +260,10 @@ describe("a site's Data page lists what is shared with that site", () => {
     const key = JSON.parse(String(ceiling.mock.calls[0]?.[0]))
     expect(key).toEqual([
       { field: 'visibleTo', op: 'array-contains-any', value: ['org', 'host:site-b'] },
-      { limit: 100 },
+      // A walk by document name that reaches every dataset, and one past the
+      // window to say whether there are more (AGL-4047).
+      { orderBy: '__name__' },
+      { limit: 101 },
     ])
   })
 })

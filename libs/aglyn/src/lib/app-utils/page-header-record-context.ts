@@ -56,6 +56,13 @@ export interface PageHeaderRecordValue {
    * the route's own heading stands, which already names the surface.
    */
   title?: string
+  /**
+   * Name the record in the trail only, and leave the heading as the route
+   * built it (AGL-4047). For a surface whose heading names the place rather
+   * than the record — a page of tabs, where the record is the open tab and
+   * the heading stays the page's.
+   */
+  keepHeading?: boolean
 }
 
 export interface PageHeaderRecordContextValue {
@@ -105,12 +112,12 @@ export type PageHeaderRecordProps = PageHeaderRecordValue
  * would be an option that silently does nothing.
  */
 export function PageHeaderRecord(props: PageHeaderRecordProps): null {
-  const { title } = props
+  const { title, keepHeading } = props
   const { setHeaderRecord } = usePageHeaderRecord()
   useEffect(() => {
-    setHeaderRecord?.(title ? { title } : null)
+    setHeaderRecord?.(title ? { title, ...(keepHeading ? { keepHeading } : {}) } : null)
     return () => setHeaderRecord?.(null)
-  }, [setHeaderRecord, title])
+  }, [setHeaderRecord, title, keepHeading])
   return null
 }
 PageHeaderRecord.displayName = 'PageHeaderRecord'

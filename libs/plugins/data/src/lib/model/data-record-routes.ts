@@ -30,8 +30,8 @@ import { BUNDLE_ID } from '../constants/bundle-common'
  * for `dataset` rather than spelling this plugin's nav slug, and gets `null`
  * (text instead of a link) where it is not loaded. A dataset belongs to the
  * organization and is shared with sites: a site's Data page lists the ones it
- * can see, and the organization's lists them all. Neither has a page of one
- * dataset, so a record opens the list.
+ * can see, and the organization's lists them all. Each dataset is a tab of
+ * those pages at `/data/<datasetId>` (AGL-4047), so a record opens its tab.
  */
 
 /** The nav slug the shell resolves this plugin's site page by. */
@@ -48,5 +48,15 @@ function list({ orgSlug, host }: PluginRecordRouteContext): string | null {
  * calls the registrar directly.
  */
 export function registerDataRecordRoutes(): void {
-  registerPluginRecordRoute('dataset', { list, record: (context) => list(context) }, { pluginId: BUNDLE_ID })
+  registerPluginRecordRoute(
+    'dataset',
+    {
+      list,
+      record: (context, id) => {
+        const page = list(context)
+        return page && id ? `${page}/${encodeURIComponent(id)}` : page
+      },
+    },
+    { pluginId: BUNDLE_ID },
+  )
 }
