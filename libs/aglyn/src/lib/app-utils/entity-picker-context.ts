@@ -24,6 +24,12 @@ export interface EntityOption {
   id: string
   /** Current display name, resolved at edit time. */
   label: string
+  /**
+   * The entity's own name, where `label` says more than it (AGL-4047): two
+   * of one name are labelled apart by their owner, and a node that stored the
+   * name rather than the id still matches by the name.
+   */
+  name?: string
 }
 
 /**

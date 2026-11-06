@@ -32,6 +32,7 @@ import { RecordTemplateSection } from './record-template-section.component'
 const BINDING = { screenId: 'scr-service', datasetId: 'ds-services', base: 'services', slugField: 'slug' }
 const BINDINGS = [BINDING]
 const NO_DOCS: unknown[] = []
+let datasetDocs: unknown[] = NO_DOCS
 
 const confirm = jest.fn()
 const enqueueSnackbar = jest.fn()
@@ -51,7 +52,7 @@ jest.mock('@aglyn/shared-util-http/authorized-token', () => ({
 }))
 jest.mock('@aglyn/tenant-feature-instance', () => ({
   useFirestore: () => ({}),
-  useFirestoreCollection: () => ({ data: NO_DOCS }),
+  useFirestoreCollection: () => ({ data: datasetDocs }),
   useOrgDataScope: () => ({ scope: null }),
   // A plan not yet read skips the entitlement notice, so the section renders its form.
   useOrgPlan: () => ({ org: null, ready: false }),
@@ -61,6 +62,13 @@ jest.mock('./record-page-source', () => ({
   useSiteRecordPageBindings: () => ({ bindings: BINDINGS, loading: false }),
   useRecordPagePreview: () => ({ status: 'idle' }),
 }))
+const ONE_FIELD = { order: ['name'], fields: { name: { name: 'Name', type: 'text' } } }
+const SITE_DATASETS = [
+  { $id: 'ds-wide', displayName: 'Services', model: ONE_FIELD, visibleTo: ['org'] },
+  { $id: 'ds-here', displayName: 'Services', model: ONE_FIELD, visibleTo: ['host:host-1'] },
+  { $id: 'ds-menu', displayName: 'Menu', model: ONE_FIELD, visibleTo: ['org'] },
+]
+
 jest.mock('@aglyn/shared-ui-jsx', () => ({
   useConfirmationContext: () => ({ confirm }),
 }))
@@ -79,6 +87,7 @@ beforeEach(() => {
   enqueueSnackbar.mockReset()
   requests.length = 0
   refuse = {}
+  datasetDocs = NO_DOCS
 })
 
 function stopServing() {
@@ -137,4 +146,15 @@ it('offers nothing when stopping fails, so a page is never made from a template 
   )
   expect(confirm).toHaveBeenCalledTimes(1)
   expect(requests.map((request) => request.path)).toEqual(['/api/hosts/record-pages'])
+})
+
+it('tells two datasets of one name apart in its Dataset picker, and calls one on this site alone this site’s (AGL-4047)', () => {
+  datasetDocs = SITE_DATASETS
+  render(<RecordTemplateSection hostId="host-1" orgId="org-1" screenId="scr-other" screenKind="template" />)
+  fireEvent.mouseDown(screen.getByRole('combobox', { name: 'Dataset' }))
+  expect(screen.getAllByRole('option').map((option) => option.textContent)).toEqual([
+    'Menu',
+    'Services · All sites',
+    'Services · This site only',
+  ])
 })

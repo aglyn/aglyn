@@ -17,7 +17,7 @@
 
 import { nameSearchKey } from '@aglyn/aglyn/app-utils/name-search'
 import { describeSharing } from '@aglyn/aglyn/app-utils/scope-tokens'
-import { type DatasetModel, effectiveDatasetModel, formatDatasetValue } from './dataset-models'
+import { type DatasetModel, datasetPickerLabels, effectiveDatasetModel, formatDatasetValue } from './dataset-models'
 import { datasetDisplayName, type HostDataset } from './datasets'
 
 /**
@@ -159,4 +159,22 @@ export function datasetRecordTitle(model: DatasetModel, values: Readonly<Record<
     if (shown) return shown
   }
   return 'Untitled record'
+}
+
+/**
+ * The picker labels for a list of datasets (AGL-4047), through the pure
+ * `datasetPickerLabels`: the name alone unless it collides in the list.
+ */
+export function datasetPickerLabelsOf(
+  datasets: readonly DatasetRailEntry[],
+  hostNames: Readonly<Record<string, string>> = {},
+): Record<string, string> {
+  return datasetPickerLabels(
+    datasets.map((dataset) => ({
+      id: dataset.$id,
+      name: datasetRailName(dataset),
+      sharing: datasetSharingLabel(dataset, hostNames),
+      fields: effectiveDatasetModel(dataset).order.length,
+    })),
+  )
 }

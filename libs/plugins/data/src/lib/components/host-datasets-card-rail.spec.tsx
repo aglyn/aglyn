@@ -440,3 +440,16 @@ describe('a record opens on its own page (AGL-4047)', () => {
     expect(screen.getAllByText('Downtown secret').length).toBeGreaterThan(0)
   })
 })
+
+describe('the join dialog tells two of one name apart (AGL-4047)', () => {
+  it('names who each is shared with only where names collide', async () => {
+    await mount({ segments: ['ds-products'] })
+    fireEvent.click(within(screen.getByTestId('page-header')).getByRole('button', { name: 'Add join collection' }))
+    fireEvent.mouseDown(screen.getByRole('combobox', { name: 'First collection' }))
+    expect(screen.getAllByRole('option').map((option) => option.textContent)).toEqual([
+      'Products',
+      'Services · Bakery only',
+      'Services · Downtown only',
+    ])
+  })
+})

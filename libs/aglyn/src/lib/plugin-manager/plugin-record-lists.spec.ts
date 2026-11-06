@@ -22,6 +22,7 @@ import {
   pluginRecordListByIdsQuery,
   pluginRecordListQuery,
   pluginRecordListSource,
+  pluginRecordPickerLabels,
   pluginRecordsFromRows,
   registerPluginRecordListSource,
   type PluginRecordListSource,
@@ -176,5 +177,28 @@ describe('records by name', () => {
     registerPluginRecordListSource('bottle', source('cellar'), { pluginId: 'cellar' })
     expect(pluginRecordListByIdsQuery('bottle', FIRESTORE, { hostId: 'h1', ids: ['b1'] })).toBeNull()
     expect(pluginRecordListByIdsQuery('glass', FIRESTORE, { hostId: 'h1', ids: ['g1'] })).toBeNull()
+  })
+})
+
+describe('picker labels (AGL-4047)', () => {
+  const records = [
+    { id: 'a', name: 'Services', facts: {} },
+    { id: 'b', name: 'Services', facts: {} },
+  ]
+
+  it('asks the owner what to call each record beside the others, and hands it what the reader knows', () => {
+    const pickerLabels = jest.fn(() => ({ a: 'Services · Bakery only', b: 'Services · Downtown only' }))
+    registerPluginRecordListSource('bottle', { ...source('cellar'), pickerLabels }, { pluginId: 'cellar' })
+    expect(pluginRecordPickerLabels('bottle', records, { hostNames: { h1: 'Bakery' } })).toEqual({
+      a: 'Services · Bakery only',
+      b: 'Services · Downtown only',
+    })
+    expect(pickerLabels).toHaveBeenCalledWith(records, { hostNames: { h1: 'Bakery' } })
+  })
+
+  it('answers names where the owner gives none, or no plugin keeps the kind', () => {
+    registerPluginRecordListSource('bottle', source('cellar'), { pluginId: 'cellar' })
+    expect(pluginRecordPickerLabels('bottle', records)).toEqual({ a: 'Services', b: 'Services' })
+    expect(pluginRecordPickerLabels('nobody', records)).toEqual({ a: 'Services', b: 'Services' })
   })
 })

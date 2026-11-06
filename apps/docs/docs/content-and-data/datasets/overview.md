@@ -45,6 +45,10 @@ its sections:
 - Each tab shows the dataset's name and, under it, who it's shared with and how many
   fields it has (`Bakery only · 5 fields`), so two datasets with the same name are
   easy to tell apart.
+  Wherever else you pick a dataset (a repeat or form in the page editor, a record
+  page, an automation step, a join collection or a reference field's target), two
+  with the same name are told apart the same way: `Services · Bakery only`, then the
+  field count if that still matches.
 - **Search datasets by name** above the list narrows it to the names that start with
   what you type.
 - When there are more than ten, the list is grouped by who each dataset is shared with,

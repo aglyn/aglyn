@@ -65,6 +65,7 @@ import { DATASET_AUTHORABLE_FIELD_TYPES, DATASET_FIELD_TYPES, DATASET_FIELD_TYPE
 import { datasetDisplayName, datasetNameLower, defaultDatasetFieldId, validateDatasetFieldId } from '../model/datasets'
 import { RECORD_PAGE_ADDRESS_FIELD_TYPE, isRecordAddressField } from '../record-pages/record-pages'
 import { useOrgSites } from './use-org-sites'
+import { type DatasetRailEntry, datasetPickerLabelsOf } from '../model/dataset-rail'
 
 /** Types surfaced in the picker; the rest exist for compat, not authoring. */
 const AUTHORABLE_TYPES = DATASET_AUTHORABLE_FIELD_TYPES
@@ -198,7 +199,7 @@ export function DatasetSchemaDialog(props: DatasetSchemaDialogProps) {
   )
   // Sites in this org, for naming what a narrowing would cost: the Data
   // card's own query (`useOrgSites`), so the two share one listener.
-  const { sites: orgHostList, ready: sitesReady } = useOrgSites(orgId)
+  const { sites: orgHostList, ready: sitesReady, hostNames } = useOrgSites(orgId)
   const { data: user } = useUser()
   const sharingSites = useMemo(
     () => orgHostList.map((host) => ({ id: host.$id, name: host.name ?? host.subdomain ?? host.$id })),
@@ -991,7 +992,8 @@ export function DatasetSchemaDialog(props: DatasetSchemaDialogProps) {
                   )
                 }
               >
-                {(datasets ?? [])
+                {(() => {
+                  const targets = (datasets ?? [])
                   .filter((target) => target.$id !== dataset?.$id)
                   // Only targets this dataset's sites can actually resolve
                   // (AGL-1044). A reference to a dataset a site cannot see
@@ -1005,11 +1007,14 @@ export function DatasetSchemaDialog(props: DatasetSchemaDialogProps) {
                         editorDefinition?.reference?.datasetId ||
                       sharingCovers(target as Record<string, unknown>, sharingPreview as Record<string, unknown>),
                   )
-                  .map((target) => (
+                  // Who a target is shared with only where two share a name (AGL-4047).
+                  const labels = datasetPickerLabelsOf(targets as DatasetRailEntry[], hostNames)
+                  return targets.map((target) => (
                     <MenuItem key={target.$id} value={target.$id}>
-                      {datasetDisplayName(target) || target.$id}
+                      {labels[target.$id] || datasetDisplayName(target) || target.$id}
                     </MenuItem>
-                  ))}
+                  ))
+                })()}
               </TextField>
               {(() => {
                 // Flag an EXISTING reference that this dataset's scope has

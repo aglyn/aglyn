@@ -837,3 +837,64 @@ describe('the picker context says why a list is empty', () => {
     ])
   })
 })
+
+describe('two entities of one name are told apart by their owner (AGL-4047)', () => {
+  const SERVICES = [
+    { $id: 'ds-a', displayName: 'Services', visibleTo: ['org'] },
+    { $id: 'ds-b', displayName: 'Services', visibleTo: ['host:h1'] },
+    { $id: 'ds-c', displayName: 'Menu', visibleTo: ['org'] },
+  ]
+  const asked: unknown[] = []
+
+  beforeEach(() => {
+    asked.length = 0
+    // The owner's answer, as the data plugin gives it: who it is shared with,
+    // named where the reader knows the site.
+    registerPluginRecordListSource(
+      'dataset',
+      {
+        query: () => null,
+        record: (id, data) => ({ id, name: String(data['displayName'] ?? id), facts: { visibleTo: data['visibleTo'] } }),
+        pickerLabels: (records, context) => {
+          asked.push(context)
+          return { 'ds-a': 'Services · All sites', 'ds-b': `Services · ${context?.hostNames?.['h1']} only`, 'ds-c': 'Menu' }
+        },
+      },
+      { pluginId: 'data' },
+    )
+  })
+
+  it('labels the colliding ones, keeps their names, and calls a single-site one this site’s', () => {
+    docsFor['orgs/org-1/datasets'] = SERVICES
+    statusFor['orgs/org-1/datasets'] = 'success'
+    let latest = {} as Aglyn.EntityPickerContextValue
+    render(
+      <EntityPickerProvider hostId="h1">
+        <Consumer kinds={['datasets']} />
+        <Capture onValue={(value) => (latest = value)} />
+      </EntityPickerProvider>,
+    )
+    expect(latest.options?.datasets).toEqual([
+      { id: 'ds-a', label: 'Services · All sites', name: 'Services' },
+      { id: 'ds-b', label: 'Services · This site only', name: 'Services' },
+      { id: 'ds-c', label: 'Menu' },
+    ])
+    expect(asked.at(-1)).toEqual({ hostNames: { h1: 'This site' } })
+  })
+
+  it('THE CONTROL: a kind whose entities are no record kind keeps its names', () => {
+    docsFor['hosts/h1/forms'] = [
+      { $id: 'f1', displayName: 'Contact' },
+      { $id: 'f2', displayName: 'Contact' },
+    ]
+    statusFor['hosts/h1/forms'] = 'success'
+    let latest = {} as Aglyn.EntityPickerContextValue
+    render(
+      <EntityPickerProvider hostId="h1">
+        <Consumer kinds={['forms']} />
+        <Capture onValue={(value) => (latest = value)} />
+      </EntityPickerProvider>,
+    )
+    expect(latest.options?.forms?.map((form) => form.label)).toEqual(['Contact', 'Contact'])
+  })
+})
