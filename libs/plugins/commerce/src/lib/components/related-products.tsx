@@ -28,6 +28,12 @@ import { BUNDLE_ID } from '../constants/bundle-common'
 import { generatePresetId } from '../utils/generate-preset-id'
 import { formatOrderMoney } from '../model/buyer-notifications'
 import { ProductImagePlaceholder } from './product-image-placeholder'
+import {
+  PRODUCT_PHOTO_FIT_ATTRIBUTE,
+  productPhotoFit,
+  productPhotoFitSx,
+  type ProductPhotoFit,
+} from './product-photo-fit'
 
 // Component ids are persisted in screen documents; never rename.
 export const ID: Aglyn.ComponentId = 'related-products'
@@ -43,6 +49,12 @@ export interface RelatedProductsProps {
    * them in a grid of up to four across — the product grid's photo look.
    */
   layout?: 'strip' | 'grid'
+  /**
+   * How each card draws its photo: `cover`, the default, fills the frame and
+   * crops what does not fit; `contain` shows the whole photo inside the same
+   * frame. Blank or unknown is `cover`.
+   */
+  photoFit?: ProductPhotoFit
 }
 
 interface CatalogItem {
@@ -62,7 +74,7 @@ interface CatalogItem {
  */
 const RelatedProducts = forwardRef<HTMLDivElement, RelatedProductsProps>(
   (props, ref) => {
-    const { productId: productIdProp, heading, maxItems, layout, ...rest } = props
+    const { productId: productIdProp, heading, maxItems, layout, photoFit, ...rest } = props
     // Node styles ride the renderer-merged sx; recompose (stack.ts pattern).
     const nodeSx = Array.isArray(props['sx']) ? props['sx'] : [props['sx']]
     const site = Aglyn.useSite()
@@ -136,6 +148,7 @@ const RelatedProducts = forwardRef<HTMLDivElement, RelatedProductsProps>(
     if (!items || items.length === 0) return <Box ref={ref} {...rest} />
 
     const grid = layout === 'grid'
+    const photoFitSx = productPhotoFitSx(productPhotoFit(photoFit))
     return (
       <Box ref={ref} {...rest}>
         <Typography variant={grid ? 'h5' : 'h6'} component="h2" gutterBottom sx={grid ? { mb: 2 } : undefined}>
@@ -179,7 +192,7 @@ const RelatedProducts = forwardRef<HTMLDivElement, RelatedProductsProps>(
                       component="img"
                       image={imageUrl}
                       alt={item.name}
-                      sx={{ ...mediaSx, objectFit: 'cover' }}
+                      sx={{ ...mediaSx, ...photoFitSx }}
                       // Deferred (AGL-2486). A related-products rail sits at
                       // the BOTTOM of a product page by construction, and it
                       // was fetching eagerly against the gallery hero above
@@ -255,6 +268,7 @@ export const schema: Aglyn.ComponentSchema<RelatedProductsProps> = {
         { label: 'Photo grid', value: 'grid' },
       ],
     },
+    PRODUCT_PHOTO_FIT_ATTRIBUTE,
   ],
 }
 

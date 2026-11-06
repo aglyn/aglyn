@@ -4876,6 +4876,10 @@ export const AI_PALETTE: Record<string, AiPaletteEntry> = {
           type: 'string',
           enum: ['outlined', 'photo'],
         },
+        photoFit: {
+          type: 'string',
+          enum: ['cover', 'contain'],
+        },
         quickAdd: {
           type: 'boolean',
         },
@@ -4915,6 +4919,7 @@ export const AI_PALETTE: Record<string, AiPaletteEntry> = {
       showPriceFilter: 'checkbox',
       pageSize: 'text-field',
       cardStyle: 'select',
+      photoFit: 'select',
       quickAdd: 'checkbox',
     },
     textLimits: {
@@ -5072,6 +5077,10 @@ export const AI_PALETTE: Record<string, AiPaletteEntry> = {
           type: 'string',
           enum: ['strip', 'grid'],
         },
+        photoFit: {
+          type: 'string',
+          enum: ['cover', 'contain'],
+        },
       },
       required: [],
       additionalProperties: false,
@@ -5084,6 +5093,7 @@ export const AI_PALETTE: Record<string, AiPaletteEntry> = {
       heading: 'text-field',
       maxItems: 'text-field',
       layout: 'select',
+      photoFit: 'select',
     },
     textLimits: {
       heading: 200,
