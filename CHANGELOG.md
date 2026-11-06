@@ -38,14 +38,16 @@ content on the marketing site and is written separately.
 
 ### Performance
 
+- **tenant:** tenant pages take a one-day ISR ceiling ([AGL-4121](https://linear.app/aglyn/issue/AGL-4121))
 - **tenant:** stop the per-request middleware trace reaching the log drain ([AGL-4121](https://linear.app/aglyn/issue/AGL-4121))
 - **tenant:** project the realm-install join to the fields it uses ([AGL-4121](https://linear.app/aglyn/issue/AGL-4121))
 - **tenant:** read the org once in the lockdown verdict, masked elsewhere ([AGL-4121](https://linear.app/aglyn/issue/AGL-4121))
 - **outreach:** the sync job reads an organization's watched enrollments once per run ([AGL-4121](https://linear.app/aglyn/issue/AGL-4121))
 
 <details>
-<summary>Also in this release: 2 test, 2 chore, 1 docs</summary>
+<summary>Also in this release: 2 test, 3 chore, 1 docs</summary>
 
+- **native:** regenerate the contracts for the direct-charge payment fields
 - **self-host:** name AGLYN_DEBUG_MIDDLEWARE in the environment reference ([AGL-4121](https://linear.app/aglyn/issue/AGL-4121))
 - **console:** the video-upload gate spec reads the org through a field-masked getAll ([AGL-4121](https://linear.app/aglyn/issue/AGL-4121))
 - **tenant:** close the preview bar inventory declaration
