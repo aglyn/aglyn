@@ -30,8 +30,10 @@ import { storefrontTaxDecision, type StorefrontTaxMode } from './commerce-tax-de
 import { allocateCentsByWeight } from './commerce-tax-engine'
 import {
   lineLabelWithModifiers,
+  modifierOptionPriceCents,
   resolveLineModifiers,
   type ModifierSelection,
+  type ProductModifierOption,
 } from './product-modifiers'
 
 /*==========================================
@@ -354,6 +356,20 @@ export interface QuoteStoreSettings {
    * {@link QUOTE_DEFAULT_APPROVAL_STATEMENTS}.
    */
   approvalStatements?: string[]
+}
+
+/**
+ * An add-on as the quote editor's menu names it: `Back wall (+$150.00)`,
+ * priced for the size or option picked on the line (`variantId`), as the
+ * server prices the line; a free one is its name alone.
+ */
+export function quoteModifierOptionLabel(
+  option: Pick<ProductModifierOption, 'name' | 'priceCents' | 'priceCentsByVariant'>,
+  variantId: string | null | undefined,
+  money: (cents: number) => string,
+): string {
+  const cents = modifierOptionPriceCents(option, variantId)
+  return cents ? `${option.name} (+${money(cents)})` : option.name
 }
 
 /** Whether new quotes start out asking the customer to approve the proof first. */

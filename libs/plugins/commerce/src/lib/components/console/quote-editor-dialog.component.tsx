@@ -1130,7 +1130,7 @@ function QuoteLineEditor(props: {
                   {group.max > 1 ? null : <MenuItem value="">{'None'}</MenuItem>}
                   {group.options.map((option) => (
                     <MenuItem key={option.id} value={option.id}>
-                      {option.priceCents ? `${option.name} (+${money(option.priceCents)})` : option.name}
+                      {CommerceModel.quoteModifierOptionLabel(option, line.kind === 'catalog' ? line.variantId : null, money)}
                     </MenuItem>
                   ))}
                 </TextField>
