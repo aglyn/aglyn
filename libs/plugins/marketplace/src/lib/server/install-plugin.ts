@@ -136,20 +136,25 @@ async function forgetUndeclaredConnections(
 }
 
 /**
- * Tells the live sites a pin changed (AGL-3741).
+ * Tells the live sites a pin changed (AGL-3741, AGL-4121).
  *
- * The tenant caches each site's resolved plugins under its
- * `tenant-data:{hostId}` tag, and an install or uninstall used to reach live
- * pages only when that entry expired — which is why it expired every minute,
- * re-reading the install pins, listings, versions and revocations of every
- * site sixty times an hour. An org-tier pin applies to every site in the org,
- * so it is those sites that are told. Best effort and never throws, like the
- * revocation fan-out it shares: the pin itself is already written.
+ * The tenant caches each site's resolved plugins, and every page that read
+ * them, under the site's plugin tag, and an install or uninstall reaches live
+ * pages only through this drop — the cache behind it is held for the
+ * platform's week-long backstop. An org-tier pin applies to every site in the
+ * org, so it is those sites that are told.
+ *
+ * `plugins: 'host'` makes the tenant expire the plugin set immediately rather
+ * than stale-while-revalidate, so an uninstalled bundle does not run for one
+ * more visitor. The app stages each drop in its durable outbox first, so a
+ * refused call is retried; the answer is `false` only when a drop neither
+ * landed nor was queued, which the caller reports as a failure. Never throws:
+ * the pin itself is already written.
  */
 async function announcePinChange(
   firestore: FirebaseFirestore.Firestore,
   options: { scope: 'org' | 'host'; hostId: string; orgId: string | null; reason: string },
-): Promise<void> {
+): Promise<boolean> {
   try {
     const hostIds =
       options.scope === 'org' && options.orgId
@@ -157,11 +162,21 @@ async function announcePinChange(
             await firestore.collection('hosts').where('orgId', '==', options.orgId).get()
           ).docs.map((doc) => doc.id)
         : [options.hostId]
-    await dropPluginSiteCache({ hostIds, reason: options.reason })
+    const result = await dropPluginSiteCache({
+      hostIds,
+      reason: options.reason,
+      plugins: 'host',
+    })
+    return result.complete
   } catch (error) {
     console.error('[marketplace] the sites running a changed pin were not told', error)
+    return false
   }
 }
+
+/** What an uninstall answers when its live-site drop was lost (AGL-4121). */
+const PIN_DROP_LOST_ERROR =
+  'The plugin was removed, but the live site could not be refreshed. Try again to finish removing it from published pages.'
 
 export const installPluginHandler: PluginApiHandler = async (req, res) => {
   if (req.method !== 'POST') {
@@ -236,13 +251,16 @@ export const installPluginHandler: PluginApiHandler = async (req, res) => {
           listingId,
           previousPin: pinSnapshot?.data(),
         })
-        await announcePinChange(firestore, {
-          scope: req.body?.scope === 'org' ? 'org' : 'host',
-          hostId,
-          orgId,
-          reason: `marketplace listing ${listingId} uninstalled`,
-        })
       }
+      // Announced even when no pin was found (AGL-4121): a retry after a lost
+      // drop finds the pin already gone, and it is the retry that has to
+      // reach the live pages. A repeat drop is a no-op.
+      const told = await announcePinChange(firestore, {
+        scope: req.body?.scope === 'org' ? 'org' : 'host',
+        hostId,
+        orgId,
+        reason: `marketplace listing ${listingId} uninstalled`,
+      })
       if (pinExisted) {
         const listingRef = firestore
           .collection('marketplaceListings')
@@ -269,6 +287,7 @@ export const installPluginHandler: PluginApiHandler = async (req, res) => {
         listingId,
         'remove-if-unpinned',
       )
+      if (!told) return res.status(503).json({ error: PIN_DROP_LOST_ERROR })
       return res.status(200).json({ ok: true })
     }
 

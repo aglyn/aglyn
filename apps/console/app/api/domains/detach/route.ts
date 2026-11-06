@@ -123,6 +123,9 @@ async function handler(request: Request): Promise<Response> {
       subdomain: released.subdomain,
       hostId,
       cname: released.domain,
+      // Staged in the publish outbox first (AGL-4121): the alias entry is
+      // held for a week, so a refused expiry is retried by the drain.
+      firestore: firebaseAdmin.app().firestore(),
     })
     return Response.json({ detached: true }, { status: 200 })
   } catch (error) {

@@ -26,9 +26,14 @@
  * this single small document is the entire reason a published page keeps
  * serving the old one for the rest of the window.
  *
- * These hold that asymmetry down from both sides. The expensive read keeps the
- * hour the cost review bought; the pointer does not, and the two must not
- * quietly be collapsed back onto one constant.
+ * These held that asymmetry down from both sides until AGL-4121, which found
+ * the shorter pointer TTL was what regenerated every page every ten minutes (a
+ * TTL read in the render lowers the page's own window). The lost-announce case
+ * it bounded is now closed at the source: every pointer move rides the publish
+ * outbox, whose drain retries a refused announce. So the pointer takes the
+ * shared backstop, and what is held here is the direction that must never
+ * flip — the pointer never staler than the data it points at — and that the
+ * announce, not the TTL, is still the mechanism.
  */
 
 const screenDoc: { fields: Record<string, unknown> | null } = { fields: null }
@@ -117,15 +122,15 @@ beforeEach(() => {
   versionDoc.fields = { displayName: 'Home', nodes: [] }
 })
 
-describe('the version pointer is not held for an hour (AGL-2573)', () => {
+describe('the version pointer is never staler than its data (AGL-2573, AGL-4121)', () => {
   it('reads the screen document under the pointer TTL, not the site-data one', async () => {
     await getScreen({ screenId: 'screen-1' as never, hostId: 'host-1' as never })
 
     expect(captured).toHaveLength(1)
     expect(captured[0].revalidate).toBe(PUBLISH_POINTER_TTL_SECONDS)
-    // Named explicitly so collapsing this back onto the shared hour is a
-    // failing test rather than a one-word edit nobody reviews.
-    expect(captured[0].revalidate).not.toBe(PUBLISHED_SITE_DATA_TTL_SECONDS)
+    // Never staler than the data it points at (AGL-4121: equal, at the
+    // backstop, now that every pointer move is announced durably).
+    expect(captured[0].revalidate).toBeLessThanOrEqual(PUBLISHED_SITE_DATA_TTL_SECONDS)
   })
 
   it('keeps the pointer keyed by screen, which is why its TTL has to be short', async () => {
@@ -156,11 +161,11 @@ describe('the version pointer is not held for an hour (AGL-2573)', () => {
     expect(captured[0].key).toContain('v2')
   })
 
-  it('holds the pointer for less time than the data it points at', async () => {
+  it('never holds the pointer longer than the data it points at', async () => {
     // The invariant behind both numbers: a stale pointer serves the wrong
     // version entirely, while stale version data is only stale within the
-    // version somebody chose.
-    expect(PUBLISH_POINTER_TTL_SECONDS).toBeLessThan(
+    // version somebody chose. Equal since AGL-4121; never the other way.
+    expect(PUBLISH_POINTER_TTL_SECONDS).toBeLessThanOrEqual(
       PUBLISHED_SITE_DATA_TTL_SECONDS,
     )
   })

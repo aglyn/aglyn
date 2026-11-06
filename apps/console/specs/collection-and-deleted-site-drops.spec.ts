@@ -238,13 +238,17 @@ describe('a deleted site', () => {
     const bodies = fetchMock.mock.calls.map((call) =>
       JSON.parse((call[1] as { body: string }).body),
     )
-    expect(bodies).toEqual(
-      expect.arrayContaining([
-        { host: 'acme', hostId: 'host-1', paths: ['/', '/pricing'] },
-        { host: 'cname--acme.com', hostId: 'host-1', paths: ['/', '/pricing'] },
-        { host: 'acme', hostId: 'host-1', paths: [], aliases: ['cname--acme.com'] },
-      ]),
-    )
+    // The names ride the page drop itself since AGL-4121: one call expires
+    // the subdomain's pages and both names, and a second the domain's pages.
+    expect(bodies).toEqual([
+      {
+        host: 'acme',
+        hostId: 'host-1',
+        paths: ['/', '/pricing'],
+        aliases: ['cname--acme.com'],
+      },
+      { host: 'cname--acme.com', hostId: 'host-1', paths: ['/', '/pricing'] },
+    ])
   })
 
   it('does nothing for a site that never had a subdomain', async () => {

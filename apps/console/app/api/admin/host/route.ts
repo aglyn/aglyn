@@ -176,6 +176,8 @@ async function handler(request: Request): Promise<Response> {
         subdomain,
         hostId,
         aliases: [String(before)],
+        // Durable (AGL-4121): a refused expiry is retried by the drain.
+        firestore,
       })
     }
 

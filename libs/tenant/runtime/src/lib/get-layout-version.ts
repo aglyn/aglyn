@@ -23,6 +23,7 @@ import {
 } from '@aglyn/tenant-data-admin'
 import {
   PUBLISHED_SITE_DATA_TTL_SECONDS,
+  capRenderWindow,
   tenantDataTag,
   withRenderCache,
 } from '@aglyn/tenant-data-admin/render-cache'
@@ -36,6 +37,20 @@ import applyDuePublishSchedule from './apply-publish-schedule'
  * own ISR window did.
  */
 const LAYOUT_VERSION_TTL_SECONDS = PUBLISHED_SITE_DATA_TTL_SECONDS
+
+/**
+ * The window a page keeps while its layout waits on a publish schedule
+ * (AGL-4121): the five minutes every page had before the backstop moved, so a
+ * scheduled layout lands within that of its time, as it did.
+ */
+export const PENDING_SCHEDULE_WINDOW_SECONDS = 300
+
+function hasPendingSchedule(layout: unknown): boolean {
+  return (
+    (layout as { publishSchedule?: { status?: string } } | undefined)
+      ?.publishSchedule?.status === 'pending'
+  )
+}
 
 /**
  * Fetches a layout's published version (the `versionId` pointer on the
@@ -112,8 +127,17 @@ export async function getPublishedLayoutVersion(options: {
       store: (value) =>
         !value.error &&
         value.layout !== undefined &&
-        (value.layout as { publishSchedule?: { status?: string } })
-          .publishSchedule?.status !== 'pending',
+        !hasPendingSchedule(value.layout),
+    }).then(async (value) => {
+      // A layout schedule applies lazily, in a render (the publish-schedule
+      // beat handles screens only). Not storing the read does not shorten the
+      // PAGE, which would hold the old chrome for the week-long backstop, so
+      // a page whose layout is waiting on a schedule keeps a short window
+      // until it applies (AGL-4121) — and only that page.
+      if (hasPendingSchedule(value.layout)) {
+        await capRenderWindow(PENDING_SCHEDULE_WINDOW_SECONDS)
+      }
+      return value
     })
   } catch (error) {
     // The cache wrapper itself failed; degrade to the uncached read so a

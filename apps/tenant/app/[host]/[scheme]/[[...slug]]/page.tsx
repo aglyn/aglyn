@@ -63,18 +63,21 @@ import type { Props } from './types'
  * shortest TTL it saw (`withRenderCache` in `render-cache.ts`; Next's
  * `unstable_cache` writes it to the prerender store, which is what the ISR
  * entry is stamped with). So the window a page actually gets is the MINIMUM of
- * this value and every render-cache TTL its render read. As of AGL-4121:
+ * this value and every render-cache TTL its render read.
  *
- *   - a full page reads `getRealmPluginInstalls` at 300s, the security bound
- *     on a revoked plugin (`realm-plugins.ts`), so it regenerates every 300s;
- *   - the screen pointer is read at `PUBLISH_POINTER_TTL_SECONDS` (600s);
- *   - the host document and everything on `PUBLISHED_SITE_DATA_TTL_SECONDS`
- *     sit at 3600s, which caps even a 404, a redirect or a maintenance page.
+ * #2459 set this to a day and measured that it changed nothing: the realm
+ * plugin read (300s), the publish pointer (600s) and the published-data reads
+ * (3600s) held every page below it. AGL-4121 made each of those change-driven
+ * — every write that changes them drops them, and the plugin removals,
+ * disables, takedowns and trust withdrawals are staged in the publish outbox
+ * so a refused drop is retried — and moved them all to
+ * `TENANT_CACHE_BACKSTOP_SECONDS`, the same seven days as this line.
  *
- * 86400 is the decided ceiling for a tenant page. It takes effect only as
- * those TTLs are raised to match, and the 300s one is a security decision,
- * not a cost knob. Raise none of them without first confirming every source
- * the page bakes in announces its own change.
+ * ⛔ `tenant-page-window.spec.ts` holds that: it sweeps every cached read in
+ * the render path and fails on any TTL below this value that is not a named,
+ * justified exception. A pending publish schedule is the one deliberate one:
+ * `capRenderWindow` holds only that page on a short window until the
+ * schedule applies.
  *
  * At 60s a page is stale again a minute after it is built, so any path requested
  * less often than that regenerates on essentially EVERY visit and pays the full
@@ -126,7 +129,8 @@ import type { Props } from './types'
  * regenerating per visit; that is the floor, not a defect. Re-read
  * Write Utilization before moving this again — above 1.0x means the window is
  * paying for itself, and the raw write count on its own says nothing.
- *
+ */
+/*
  * ## 86400 (AGL-4121)
  *
  * ISR writes ran about as often as reads, so the ceiling moved from an hour to
@@ -134,8 +138,16 @@ import type { Props } from './types'
  * and new address), site-wide settings, layouts, components, redirects,
  * plugin pins and content entries all drop their pages on demand. Read the
  * ceiling note above before expecting this number to show in the bill.
+ *
+ * ## 604800 (AGL-4121, change-driven)
+ *
+ * Seven days, equal to `TENANT_CACHE_BACKSTOP_SECONDS` (a literal here because
+ * Next reads route segment config statically). With every read under it on the
+ * same backstop, this is now the window a page actually gets; a page that
+ * nothing changes regenerates once a week, and one that changes regenerates
+ * the moment its change is announced.
  */
-export const revalidate = 86400
+export const revalidate = 604800
 export const dynamicParams = true
 
 /**

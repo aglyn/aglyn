@@ -69,6 +69,20 @@ const WOFF2_USER_AGENT =
 /** How long one process trusts a stylesheet, a file size or a choice. */
 const STYLESHEET_TTL_MS = 24 * 60 * 60 * 1000
 
+/**
+ * How long Next's data cache keeps Google's stylesheet (AGL-4121).
+ *
+ * This fetch runs inside the site layout's render, and a `fetch` revalidate
+ * lowers the page's ISR window exactly as a cached read does: at a day it held
+ * every tenant page on a one-day window under the seven-day backstop. Google
+ * serves versioned font file URLs, so a week-old sheet still points at files
+ * that load; the process cache above keeps its own day.
+ */
+// `TENANT_CACHE_BACKSTOP_SECONDS`, spelled as a number: importing the render
+// cache would pull `next/cache` into every client spec that loads this module.
+// `tenant-page-window.spec.ts` holds the two equal.
+const STYLESHEET_FETCH_TTL_SECONDS = 604800
+
 /** How long a failed fetch is remembered before it is tried again. */
 const FAILURE_TTL_MS = 5 * 60 * 1000
 
@@ -121,7 +135,7 @@ function fetchFaces(url: string, ms: number): Promise<GoogleFontFace[] | null> {
       fetch(url, {
         headers: { 'User-Agent': WOFF2_USER_AGENT },
         signal,
-        next: { revalidate: STYLESHEET_TTL_MS / 1000 },
+        next: { revalidate: STYLESHEET_FETCH_TTL_SECONDS },
       } as RequestInit)
         .then(async (response) => {
           if (!response.ok) return null

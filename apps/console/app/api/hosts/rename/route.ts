@@ -200,7 +200,13 @@ async function handler(request: Request): Promise<Response> {
     // expired, and at an hour's TTL that is an hour of a name the owner has
     // given up still serving their site.
     if (previous) {
-      await revalidateHostAliases({ subdomain, hostId, aliases: [previous] })
+      await revalidateHostAliases({
+        subdomain,
+        hostId,
+        aliases: [previous],
+        // Durable (AGL-4121): a refused expiry is retried by the drain.
+        firestore,
+      })
     }
 
     return Response.json({ ok: true, subdomain }, { status: 200 })

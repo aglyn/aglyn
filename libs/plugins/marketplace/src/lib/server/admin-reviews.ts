@@ -1416,6 +1416,8 @@ async function handler(request: Request): Promise<Response> {
       const listing = listingSnapshot.data()
       const sha256 = String(versionSnapshot.get('sha256') ?? '')
       const approving = action === 'approve-version'
+      // Read before the verdict write clears it (AGL-4121, below).
+      const hadRealmTrust = Boolean(versionSnapshot.get('trust'))
       if (approving) {
         const outstanding = outstandingChecklistItems(
           versionSnapshot.get('reviewChecklist'),
@@ -1488,6 +1490,13 @@ async function handler(request: Request): Promise<Response> {
         },
         { merge: true },
       )
+      // Withdrawn realm trust changes what loads on every site running this
+      // version, and the tenant resolves trust once per site and caches it
+      // with the page (AGL-4121). Only when there was trust to withdraw: a
+      // rejection of an unsigned version changes nothing a site loads.
+      if (!approving && hadRealmTrust) {
+        await dropCachesForListing(firestore, listingId)
+      }
 
       // A plugin with its first approved version becomes browsable. Later
       // approvals never change listing status — that is the point: an
