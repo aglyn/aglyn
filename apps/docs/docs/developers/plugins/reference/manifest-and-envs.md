@@ -21,7 +21,7 @@ description: The plugin manifest schema, the marketplace listing/version documen
     "props": ["title"],       // host props the bridge forwards
     "events": ["submitted"],  // events the host will accept
     "size": { "height": 240 }, // declared frame size
-    "imageHosts": ["images.example.com"] // hosts your elements show images from
+    "imageHosts": ["images.example.com"] // image hosts (validated; see "connections")
   },
   "connections": [ /* see "connections" below */ ],
   "contributes": {            // what register() adds, and where
@@ -155,10 +155,10 @@ every site inherits.
 ### `connections` — an OAuth connection the platform runs for you {#connections}
 
 Your bundle runs sandboxed in the visitor's browser and never on Aglyn's
-servers, so it cannot hold an OAuth grant, refresh it or call a provider on a
-schedule. A **declared connection** is how a plugin gets all of that anyway:
-you describe the provider, the hosts, the picker and the scheduled fetch as
-data, and the platform runs them. Your code never sees a token.
+servers, so it cannot hold an OAuth grant. A **declared connection** is how a
+plugin gets one anyway: you describe the provider, the hosts and the picker as
+data, and the platform runs the connect and holds the grant. Your code never
+sees a token.
 
 ```jsonc
 "connections": [
@@ -196,7 +196,7 @@ data, and the platform runs them. Your code never sees a token.
         "idPath": "name", "labelPath": "title", "maxItems": 50
       }
     ],
-    "sync": {                        // the scheduled fetch
+    "sync": {                        // validated and checked; see below
       "intervalHours": 6,            // at least 1
       "requests": [
         {
@@ -205,7 +205,7 @@ data, and the platform runs them. Your code never sees a token.
           "itemsPath": "reviews"
         }
       ],
-      "record": {                    // the PUBLIC record your element reads
+      "record": {                    // typed, bounded record fields
         "fields": {
           "averageRating": { "request": "reviews", "type": "number", "path": "averageRating" }
         },
@@ -240,11 +240,13 @@ How it runs:
    sealed, on the site.
 3. **They pick what to connect.** Each of `resources` is listed in order with
    the site's token, and a later one may name an earlier choice as
-   `{{resource.<id>}}`. Choosing again clears the choices after it.
-4. **The sync.** `sync` declares how often the site's record is refreshed
-   (`intervalHours`), which requests fill it, and how each answer maps into
-   the public record your element reads. A provider that refuses the grant
-   marks the connection *reconnect required* until the owner connects again.
+   `{{resource.<id>}}`. Choosing again clears the choices after it. A
+   provider that refuses the grant marks the connection *reconnect required*
+   until the owner connects again.
+
+`sync` is part of the schema: the manifest validator accepts it and checks
+every rule in the table below (its requests, its interval and its `record`
+fields), and a manifest that breaks one is refused.
 
 A connection runs under the declaration of the version the site has
 **installed**, never the listing's newest, and a revoked version's
@@ -267,16 +269,15 @@ whole):
 | `resources` | At most 3; `maxItems` 1 to 200 (100 when absent). |
 | `sync.intervalHours` | A whole number from 1 to 168. |
 | `sync.requests` | 1 to 3. |
-| `record` | `fields`, `items` or both; at most 20 fields each; `items.maxItems` 1 to 100. A `string` field needs a `maxLength` up to 5,000 and a `url` field one up to 2,048. `map` translates a provider's value (at most 32 entries), and a value not in it is dropped. |
+| `record` | `fields`, `items` or both; at most 20 fields each; `items.maxItems` 1 to 100. A field's `type` is `string`, `number`, `boolean`, `datetime` or `url`. A `string` field needs a `maxLength` up to 5,000 and a `url` field one up to 2,048. `map` has at most 32 entries of short strings, numbers or booleans. |
 | The whole block | At most 4 connections, 32,000 characters serialized. |
 
 Your bundle must never call a connection's hosts itself: the verifier refuses
 a bundle that calls an `apiHosts`, `tokenUrl` or `authorizationUrl` host, and a
 manifest that lists one under `capabilities.network`.
 
-`capabilities.imageHosts` declares the hosts your elements show images from
-(at most 10, the same host rule as `apiHosts`), such as the host of a
-reviewer's profile photo.
+`capabilities.imageHosts` is accepted and checked by the manifest validator:
+at most 10 hosts, each under the same host rule as `apiHosts`.
 
 ## Listing & version documents
 
