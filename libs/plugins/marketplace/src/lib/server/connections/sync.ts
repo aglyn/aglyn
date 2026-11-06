@@ -40,6 +40,7 @@ import {
   type PluginConnectionRecord,
   type PluginConnectionTokenDeps,
 } from './connection-store'
+import { announceConnectionRecordChange, connectionRecordChanged } from './record-announce'
 import { openCredentials } from './credentials-store'
 import { latestListingConnections } from './installed-connection'
 import {
@@ -266,6 +267,7 @@ export async function runConnectionSync(input: RunConnectionSyncInput): Promise<
       syncedAtMs: nowMs,
     })
     const recordRef = connectionRecordRef(db, record.hostId, record.listingId, record.connectionId)
+    const before = (await recordRef.get()).data() as Record<string, unknown> | undefined
     // Whole, never merged: a key the new schema dropped must not survive.
     await recordRef.set(doc)
     const marked = await updateIfPresent(() =>
@@ -274,7 +276,12 @@ export async function runConnectionSync(input: RunConnectionSyncInput): Promise<
     if (!marked) {
       // Disconnected while it ran: the record must not outlive the grant.
       await recordRef.delete()
+      await announceConnectionRecordChange(record.hostId, `plugin connection ${record.listingId}/${record.connectionId} gone`)
       return 'gone'
+    }
+    // The site's pages show the new values (AGL-4195); an unchanged record says nothing.
+    if (connectionRecordChanged(before, doc as unknown as Record<string, unknown>)) {
+      await announceConnectionRecordChange(record.hostId, `plugin connection ${record.listingId}/${record.connectionId} synced`)
     }
     return 'synced'
   } catch (error) {

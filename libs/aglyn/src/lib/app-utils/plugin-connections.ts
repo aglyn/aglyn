@@ -44,6 +44,8 @@
  * all read this one module, so a declaration cannot pass one and fail another.
  */
 
+import type { HostVariable, HostVariableType } from './variables'
+
 /** A request method a template may use. */
 export type PluginConnectionMethod = 'GET' | 'POST'
 
@@ -204,8 +206,11 @@ export const PLUGIN_CONNECTION_MAX_URL_LENGTH = 2048
 export const PLUGIN_CONNECTION_MAX_MAP_ENTRIES = 32
 /** The whole block, serialized: a ceiling on everything the lists above multiply to. */
 export const PLUGIN_CONNECTION_MAX_DECLARATION_CHARS = 32_000
-/** `capabilities.imageHosts`, at most. */
-export const PLUGIN_MAX_IMAGE_HOSTS = 10
+/**
+ * `capabilities.imageHosts`, at most (AGL-4195). Each one widens the `img-src`
+ * of every site that installs the plugin, so the list is kept short.
+ */
+export const PLUGIN_MAX_IMAGE_HOSTS = 5
 
 const TEXT_MAX = 300
 const LABEL_MAX = 80
@@ -912,8 +917,12 @@ export function validatePluginConnections(raw: unknown): Verdict<PluginConnectio
 
 /**
  * Validates `capabilities.imageHosts`: the hosts a plugin's element may show
- * images from on a published site (validation only here; the tenant's CSP
- * reads it). Same host rule as `apiHosts`.
+ * images from on a published site. The tenant admits each, as an `https://`
+ * source, to the `img-src` of the sites that install the plugin (AGL-4195),
+ * so the rule is strict: a bare lowercase public hostname, or `*.` over one
+ * label of a domain (never `*.com`), no scheme (so never `data:` or `http:`),
+ * no port, no path, at most {@link PLUGIN_MAX_IMAGE_HOSTS}. Same host rule as
+ * `apiHosts`.
  */
 export function validatePluginImageHosts(raw: unknown): Verdict<string[]> {
   if (raw === undefined) return { ok: true, value: [] }
@@ -958,4 +967,89 @@ export function pluginConnectionAuthorizeUrl(
   url.searchParams.set('scope', connection.scopes.join(connection.scopeSeparator ?? ' '))
   url.searchParams.set('state', options.state)
   return url.toString()
+}
+
+/* ------------------------------------------------------------------ */
+/* Site variables from a record (AGL-4195)                              */
+/* ------------------------------------------------------------------ */
+
+/** The longest id a `{{var:…}}` token carries (`binding-tokens.ts`). */
+const VARIABLE_ID_MAX = 64
+const VARIABLE_ID_REF = /^[A-Za-z0-9_-]{1,64}$/
+
+/**
+ * The `{{var:…}}` id a record's SUMMARY field resolves under on a site:
+ * `{listingId}__{connectionId}-{field}`, e.g. `Kq3…__reviews-rating`.
+ *
+ * Chosen so it can never be a site's own variable and can never be two
+ * fields at once:
+ *
+ *   - a site's own variables carry Firestore auto ids (letters and digits),
+ *     and this id always holds `__` and `-`;
+ *   - a field name never holds `-` (`[A-Za-z][A-Za-z0-9_]*`), so the field is
+ *     what follows the LAST `-`; a connection id never holds `_`, so the
+ *     connection is what follows the last `__` before it, and the listing is
+ *     the rest. Two different triples therefore never spell the same id.
+ *
+ * `null` when the id would not fit a token (64 characters): such a field
+ * has no variable, rather than one that no token could name.
+ */
+export function pluginConnectionVariableId(
+  listingId: string,
+  connectionId: string,
+  field: string,
+): string | null {
+  if (!PLUGIN_CONNECTION_ID_PATTERN.test(connectionId) || !IDENTIFIER.test(field)) return null
+  const id = `${listingId}__${connectionId}-${field}`
+  return id.length <= VARIABLE_ID_MAX && VARIABLE_ID_REF.test(id) ? id : null
+}
+
+/** How a record value of each declared type is held as a site variable. */
+const VARIABLE_TYPE_OF: Readonly<Record<PluginConnectionFieldType, HostVariableType>> = {
+  string: 'text',
+  url: 'text',
+  number: 'number',
+  boolean: 'boolean',
+  datetime: 'date',
+}
+
+/**
+ * The site variables one connection's record gives a site: one per declared
+ * SUMMARY field (`sync.record.fields`) holding a value, under
+ * {@link pluginConnectionVariableId}. A field the record does not hold, or
+ * holds as a value of another type than declared, has no variable, so its
+ * token renders empty as any unknown variable does. Items never become
+ * variables: a list has no single value to print.
+ *
+ * Each variable's `name` is its id. Names are what a function's expressions
+ * read, and an id with `-` in it is not a name an expression can spell, so
+ * these never shadow one of the site's own variables in a function.
+ */
+export function pluginConnectionRecordVariables(
+  listingId: string,
+  connection: Pick<PluginConnectionDeclaration, 'id' | 'sync'>,
+  fields: Readonly<Record<string, unknown>> | null | undefined,
+): Record<string, HostVariable> {
+  const out: Record<string, HostVariable> = {}
+  const declared = connection.sync?.record.fields ?? {}
+  for (const [field, declaration] of Object.entries(declared)) {
+    const value = fields?.[field]
+    const id = pluginConnectionVariableId(listingId, connection.id, field)
+    if (!id || value === null || value === undefined) continue
+    const type = VARIABLE_TYPE_OF[declaration.type]
+    let stored: string | null = null
+    if (declaration.type === 'number' && typeof value === 'number' && Number.isFinite(value)) {
+      stored = String(value)
+    } else if (declaration.type === 'boolean' && typeof value === 'boolean') {
+      stored = value ? 'true' : 'false'
+    } else if (declaration.type === 'datetime' && typeof value === 'number' && Number.isFinite(value)) {
+      const date = new Date(value)
+      stored = Number.isNaN(date.getTime()) ? null : date.toISOString()
+    } else if ((declaration.type === 'string' || declaration.type === 'url') && typeof value === 'string') {
+      stored = value
+    }
+    if (stored === null) continue
+    out[id] = { name: id, type, value: stored }
+  }
+  return out
 }

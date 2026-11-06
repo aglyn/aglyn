@@ -47,6 +47,11 @@ import { AglynEvent } from '@aglyn/aglyn/emit-manager/emit-manager'
 import { EnabledPluginsContext } from '@aglyn/aglyn/app-utils/enabled-plugins-context'
 import { pluginArtifactPath } from '@aglyn/aglyn/app-utils/plugin-artifact-path'
 import { RealmElementsContext } from '@aglyn/aglyn/app-utils/realm-elements-context'
+import {
+  PLUGIN_CONNECTION_RECORDS_PROP,
+  type PluginConnectionRecordsPageData,
+} from '@aglyn/aglyn/app-utils/plugin-connection-records'
+import { PluginConnectionRecordsContext } from '@aglyn/aglyn/app-utils/plugin-connection-records-context'
 import { presenceIds } from '@aglyn/aglyn/plugin-manager/plugin-contributions'
 import { DEFAULT_ENABLED_PLUGINS } from '@aglyn/aglyn/plugin-manager/enabled-plugins'
 // The plugin-manager barrel is reachable from `@aglyn/aglyn/server`, and a
@@ -552,6 +557,14 @@ const CatchAllPage = observer(function CatchAllPage(props: Props) {
     [host?.$id, props.pageData, props.videoEmbedPosters],
   )
 
+  // The records of the declared connections the page's signed elements read
+  // (AGL-4195), as the server enricher wrote them. A gated page's arrive with
+  // its nodes. Undefined on every page with no such element.
+  const connectionRecords = (gatedPageProps?.[PLUGIN_CONNECTION_RECORDS_PROP] ??
+    props[PLUGIN_CONNECTION_RECORDS_PROP]) as
+    | PluginConnectionRecordsPageData
+    | undefined
+
   // Password-protected screens render an unlock form; the composed nodes
   // arrive from /api/protection/unlock after verification (AGL-87).
   // Membership sign-in/up/recovery (AGL-109/552): the theme-wrapped
@@ -626,7 +639,9 @@ const CatchAllPage = observer(function CatchAllPage(props: Props) {
         <ScreenLinkContext.Provider value={screenLinks}>
           <EnabledPluginsContext.Provider value={renderedPlugins}>
             <RealmElementsContext.Provider value={realmLoadFor}>
-              <AglynNodeRenderer node={canvas.getNode(NODE_ROOT_ID)} />
+              <PluginConnectionRecordsContext.Provider value={connectionRecords}>
+                <AglynNodeRenderer node={canvas.getNode(NODE_ROOT_ID)} />
+              </PluginConnectionRecordsContext.Provider>
             </RealmElementsContext.Provider>
           </EnabledPluginsContext.Provider>
         </ScreenLinkContext.Provider>
@@ -783,7 +798,9 @@ const CatchAllPage = observer(function CatchAllPage(props: Props) {
           {/* Static subtrees keep their server HTML and hydrate as the
               visitor nears them (AGL-3581); anything interactive, and every
               element that has not declared otherwise, hydrates now. */}
-          <AglynNodeRenderer node={canvas.getNode(NODE_ROOT_ID)} deferHydration />
+          <PluginConnectionRecordsContext.Provider value={connectionRecords}>
+            <AglynNodeRenderer node={canvas.getNode(NODE_ROOT_ID)} deferHydration />
+          </PluginConnectionRecordsContext.Provider>
         </RealmElementsContext.Provider>
       </EnabledPluginsContext.Provider>
       {props.showBranding ? (
