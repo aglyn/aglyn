@@ -280,11 +280,15 @@ async function resolveRealmPluginInstalls(options: {
   // keeps the list in step; toggling one off disables it without
   // uninstalling). Absent field = default-open, so pre-switchboard
   // installs keep loading.
+  //
+  // Masked to that one field (AGL-4121): the org document is among the largest
+  // the tenant reads, and this is the only field the join uses from it.
   let enabledFilter: readonly string[] | null = null
   if (orgId) {
-    const configured = (
-      await firestore.collection('orgs').doc(orgId).get()
-    ).get('enabledPlugins')
+    const [org] = await firestore.getAll(firestore.collection('orgs').doc(orgId), {
+      fieldMask: ['enabledPlugins'],
+    })
+    const configured = org?.get('enabledPlugins')
     if (Array.isArray(configured)) enabledFilter = configured.map(String)
   }
 
@@ -292,7 +296,9 @@ async function resolveRealmPluginInstalls(options: {
   const collect = async (
     ref: FirebaseFirestore.CollectionReference,
   ): Promise<void> => {
-    const snapshot = await ref.get()
+    // Only the pin's `version` is used; an install doc carries its manifest
+    // copy too, so the rest is projected away (AGL-4121).
+    const snapshot = await ref.select('version').get()
     for (const doc of snapshot.docs) {
       const version = doc.get('version')
       if (typeof version === 'string' && version) {
