@@ -13,10 +13,23 @@ content on the marketing site and is written separately.
 
 [Compare with the previous release](https://github.com/aglyn/aglyn/compare/6515249f8...v1.15.1)
 
+### Added
+
+- **marketplace:** declared connections for marketplace plugins ([AGL-4193](https://linear.app/aglyn/issue/AGL-4193))
+
 ### Fixed
 
+- **billing:** a re-quote carries the proposal's code until its answer lands ([AGL-4199](https://linear.app/aglyn/issue/AGL-4199))
+- **marketplace:** plugin connection keys reach the native contracts ([AGL-4193](https://linear.app/aglyn/issue/AGL-4193))
+- **marketplace:** the permission guard sees the plugin-connections site key ([AGL-4193](https://linear.app/aglyn/issue/AGL-4193))
+- **plugins:** validatePluginManifest keeps a valid config block ([AGL-4193](https://linear.app/aglyn/issue/AGL-4193))
+- **mui,commerce:** menu panels drop their trigger's text styles; cart icon inherits color ([AGL-4200](https://linear.app/aglyn/issue/AGL-4200))
 - **console:** a page opened while another tab holds the cache loads in seconds ([AGL-4201](https://linear.app/aglyn/issue/AGL-4201), [AGL-3428](https://linear.app/aglyn/issue/AGL-3428), [AGL-4135](https://linear.app/aglyn/issue/AGL-4135), [AGL-4090](https://linear.app/aglyn/issue/AGL-4090))
 - **mui:** over-hero sticky header stays pinned; dropdown panels stay on screen ([AGL-4200](https://linear.app/aglyn/issue/AGL-4200))
+
+### Documentation
+
+- **plugins:** connections docs describe only what runs today ([AGL-4193](https://linear.app/aglyn/issue/AGL-4193))
 
 ## v1.15.0 — 2026-11-06
 
