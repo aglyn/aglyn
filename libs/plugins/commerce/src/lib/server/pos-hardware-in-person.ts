@@ -16,6 +16,7 @@
  */
 
 import { firebaseAdmin, getOrgForHost } from '@aglyn/tenant-data-admin'
+import { findUserByEmailAcrossPools } from '@aglyn/tenant-data-admin/server/auth-pools'
 import * as CommerceModel from '../model'
 import {
   isPosHardwareSkuId,
@@ -103,7 +104,6 @@ async function storeStripeAccount(hostId: string): Promise<string | null> {
 /** Whether an account already uses this address; an unanswerable lookup reads as yes, so no stray sign-up invitation goes out. */
 async function buyerHasAccount(email: string): Promise<boolean> {
   try {
-    const { findUserByEmailAcrossPools } = await import('@aglyn/tenant-data-admin/server/auth-pools')
     return Boolean(await findUserByEmailAcrossPools(email))
   } catch (error) {
     console.error('[pos-hardware-in-person] account lookup failed', error)
