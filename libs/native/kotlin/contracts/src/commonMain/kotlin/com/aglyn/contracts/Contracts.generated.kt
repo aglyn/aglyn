@@ -986,6 +986,7 @@ data class HostOrderCustomerRecord(
 @Serializable
 data class HostOrderHardwareTermsAcceptance(
     val atMs: Double,
+    val businessUse: Boolean? = null,
     val ip: String? = null,
     val method: PosHardwareTermsMethod,
     val sections: String,
@@ -2666,6 +2667,7 @@ data class PosDisplayStateTip(
 enum class PosHardwareTermsMethod(val raw: String) {
     DISPLAY("display"),
     NOTICE("notice"),
+    ONLINE("online"),
     TABLET("tablet"),
     UNKNOWN(""),
 }

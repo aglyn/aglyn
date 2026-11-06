@@ -174,7 +174,9 @@ through Aglyn: add it to a register with its pairing code when it arrives.
 | The Stripe Reader Hub | Connects an S700, S710 or T600 to Ethernet and power |
 | A case for the S700/S710, and spare cables and chargers | Protect a handheld reader, or replace a lost cable or charger |
 
-The card shows only what is available to order, with its price.
+The card shows only what is available to order, with its price. An item that
+Aglyn's own online store also sells costs the same on the card as on the
+store's product page.
 
 **Place an order**
 
@@ -182,7 +184,11 @@ The card shows only what is available to order, with its price.
 2. Choose a quantity for each item, up to 10 of each and 20 items in one order.
 3. Choose a shipping speed. The summary shows the items, shipping and, where tax
    applies, says it is calculated at checkout.
-4. Select **Check out** in the card's header. Enter the shipping address, a
+4. Tick **I accept the hardware terms of sale**, which links to Sections
+   4.26–4.32 of the [Terms](https://aglyn.com/legal/terms), and **I am buying
+   this hardware for use in my business**. Both are required: until they are
+   ticked, **Check out** says so. The order records your acceptance.
+5. Select **Check out** in the card's header. Enter the shipping address, a
    phone number for the carrier, and your card on the secure checkout page, and
    pay.
 

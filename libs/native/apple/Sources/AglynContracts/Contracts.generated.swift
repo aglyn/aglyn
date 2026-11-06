@@ -1485,6 +1485,7 @@ public struct HostOrderCustomerRecord: Codable, Hashable, Sendable {
 
 public struct HostOrderHardwareTermsAcceptance: Codable, Hashable, Sendable {
   public var atMs: Double
+  public var businessUse: Bool?
   public var ip: String?
   public var method: PosHardwareTermsMethod
   public var sections: String
@@ -1492,8 +1493,9 @@ public struct HostOrderHardwareTermsAcceptance: Codable, Hashable, Sendable {
   public var userAgent: String?
   public var version: String
 
-  public init(atMs: Double, ip: String? = nil, method: PosHardwareTermsMethod, sections: String, staffUid: String? = nil, userAgent: String? = nil, version: String) {
+  public init(atMs: Double, businessUse: Bool? = nil, ip: String? = nil, method: PosHardwareTermsMethod, sections: String, staffUid: String? = nil, userAgent: String? = nil, version: String) {
     self.atMs = atMs
+    self.businessUse = businessUse
     self.ip = ip
     self.method = method
     self.sections = sections
@@ -4081,6 +4083,7 @@ public struct PosDisplayStateTip: Codable, Hashable, Sendable {
 public enum PosHardwareTermsMethod: String, Codable, CaseIterable, Hashable, Sendable {
   case display = "display"
   case notice = "notice"
+  case online = "online"
   case tablet = "tablet"
   case unknown = ""
 

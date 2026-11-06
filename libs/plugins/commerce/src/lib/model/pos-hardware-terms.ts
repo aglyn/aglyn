@@ -72,8 +72,13 @@ export const POS_HARDWARE_TERMS_SUMMARY: readonly string[] = [
   'Apart from that warranty, the hardware is provided as is, and our liability for it is limited to the amount you paid for it.',
 ]
 
-/** How a buyer agreed to the terms of sale. */
-export type PosHardwareTermsMethod = 'tablet' | 'display' | 'notice'
+/**
+ * How a buyer agreed to the terms of sale: at the booth on the register
+ * tablet or the customer display, by the receipt-and-sign notice, or ONLINE
+ * (AGL-4038) by ticking the terms and business use at checkout, in the
+ * platform's own store or on the Hardware card.
+ */
+export type PosHardwareTermsMethod = 'tablet' | 'display' | 'notice' | 'online'
 
 /** `hardwareTermsAcceptance` on a register sale, and `termsAcceptance` on the hardware order. */
 export interface PosHardwareTermsAcceptance {
@@ -86,9 +91,15 @@ export interface PosHardwareTermsAcceptance {
   /** The address and browser of the device the buyer accepted on; null for a notice. */
   ip: string | null
   userAgent: string | null
+  /**
+   * The buyer confirmed they are buying for use in a business (AGL-4038):
+   * asked on its own at an online checkout, beside the terms. Absent on an
+   * acceptance at the booth, where the terms the buyer reads say so.
+   */
+  businessUse?: boolean
 }
 
-const METHODS: readonly PosHardwareTermsMethod[] = ['tablet', 'display', 'notice']
+const METHODS: readonly PosHardwareTermsMethod[] = ['tablet', 'display', 'notice', 'online']
 
 /** An acceptance as stored, or null for anything that is not one. */
 export function posHardwareTermsAcceptanceOf(raw: unknown): PosHardwareTermsAcceptance | null {
@@ -107,6 +118,7 @@ export function posHardwareTermsAcceptanceOf(raw: unknown): PosHardwareTermsAcce
     staffUid: text('staffUid', 128),
     ip: text('ip', 100),
     userAgent: text('userAgent', 400),
+    ...(value['businessUse'] === true ? { businessUse: true } : {}),
   }
 }
 
@@ -126,6 +138,82 @@ export function posHardwareTermsAcceptance(input: {
     staffUid: input.method === 'notice' ? null : (input.staffUid ?? null),
     ip: input.method === 'notice' ? null : (input.ip ?? null)?.slice(0, 100) ?? null,
     userAgent: input.method === 'notice' ? null : (input.userAgent ?? null)?.slice(0, 400) ?? null,
+  }
+}
+
+/*==========================================
+ * ACCEPTING THE TERMS OF SALE ONLINE (AGL-4038).
+ *
+ * A checkout that sells hardware, in the platform's own store or on the
+ * Hardware card, asks two things beside the order: that the buyer accepts the
+ * terms of sale (Terms 4.26–4.32, linked), and that they are buying for use
+ * in a business. Both are required; a checkout without them is refused with
+ * {@link POS_HARDWARE_TERMS_REQUIRED}. The acceptance rides the Checkout
+ * Session's metadata ({@link posHardwareTermsMetadata}), because the order is
+ * written only once Stripe says the session is paid, and the webhook writes
+ * it onto the order as the booth's acceptance is.
+ *=========================================*/
+
+/** The plain sentence a checkout without the acceptance is refused with. */
+export const POS_HARDWARE_TERMS_REQUIRED =
+  `To buy card reader hardware, accept the hardware terms of sale (Terms, Sections ${POS_HARDWARE_TERMS_SECTIONS}) and confirm you are buying it for your business.`
+
+/**
+ * Whether a checkout request carries the buyer's acceptance: the request's
+ * `hardwareTerms` says both `accepted` and `businessUse`, each literally true.
+ */
+export function posHardwareTermsConfirmed(raw: unknown): boolean {
+  const value = (raw && typeof raw === 'object' ? raw : {}) as Record<string, unknown>
+  return value['accepted'] === true && value['businessUse'] === true
+}
+
+/** The metadata keys an online acceptance rides the Checkout Session under. */
+const TERMS_METADATA = {
+  version: 'hardwareTermsVersion',
+  businessUse: 'hardwareTermsBusinessUse',
+  ip: 'hardwareTermsIp',
+  userAgent: 'hardwareTermsUserAgent',
+} as const
+
+/**
+ * An online acceptance as Checkout Session metadata, every value within
+ * Stripe's 500-character limit. The caller prefixes each key as its params
+ * need (`metadata[...]`). No time: the session's own creation is when the
+ * buyer accepted, and a value that changed between two presses of one
+ * attempt would make Stripe refuse the idempotent retry.
+ */
+export function posHardwareTermsMetadata(input: {
+  ip?: string | null
+  userAgent?: string | null
+}): Record<string, string> {
+  return {
+    [TERMS_METADATA.version]: POS_HARDWARE_TERMS_VERSION,
+    [TERMS_METADATA.businessUse]: 'true',
+    ...(input.ip ? { [TERMS_METADATA.ip]: String(input.ip).slice(0, 100) } : {}),
+    ...(input.userAgent ? { [TERMS_METADATA.userAgent]: String(input.userAgent).slice(0, 400) } : {}),
+  }
+}
+
+/**
+ * The online acceptance a paid session's metadata carries, or null when it
+ * carries none. `atMs` is when the session was created (Stripe's `created`,
+ * in milliseconds), which is when the buyer pressed to pay having accepted.
+ */
+export function posHardwareTermsFromMetadata(metadata: unknown, atMs: number): PosHardwareTermsAcceptance | null {
+  const value = (metadata && typeof metadata === 'object' ? metadata : {}) as Record<string, unknown>
+  const version = typeof value[TERMS_METADATA.version] === 'string' ? (value[TERMS_METADATA.version] as string) : ''
+  if (!version || !Number.isFinite(atMs) || atMs <= 0 || value[TERMS_METADATA.businessUse] !== 'true') return null
+  const text = (field: string, max: number) =>
+    typeof value[field] === 'string' && (value[field] as string) ? (value[field] as string).slice(0, max) : null
+  return {
+    version: version.slice(0, 20),
+    sections: POS_HARDWARE_TERMS_SECTIONS,
+    method: 'online',
+    atMs,
+    staffUid: null,
+    ip: text(TERMS_METADATA.ip, 100),
+    userAgent: text(TERMS_METADATA.userAgent, 400),
+    businessUse: true,
   }
 }
 
