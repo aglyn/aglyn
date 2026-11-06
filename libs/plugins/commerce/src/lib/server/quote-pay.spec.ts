@@ -19,7 +19,6 @@
 
 import {
   CARD_PROCESSING_PERCENT,
-  PAY_LINK_PROCESSING_PERCENT,
   PROCESSING_FIXED_CENTS,
   resolveTransactionFeeCents,
   type PluginApiRequest,
@@ -309,13 +308,13 @@ describe('Pay', () => {
     expect(params.get('wallet_options[link][display]')).toBeNull()
 
     // The plan's take on the goods plus 2.9% + 30¢ on the whole charge
-    // (goods, Texas tax and shipping), never the 6% storefront rate.
-    expect(PAY_LINK_PROCESSING_PERCENT).toBe(CARD_PROCESSING_PERCENT)
+    // (goods, Texas tax and shipping), never the 6% buy-now-pay-later rate.
     const fee = Number(params.get('payment_intent_data[application_fee_amount]'))
-    const atCard = resolveTransactionFeeCents(ORG as never, 'physical', 270_000, 296_775, CARD_PROCESSING_PERCENT)
-    const atStorefront = resolveTransactionFeeCents(ORG as never, 'physical', 270_000, 296_775)
-    expect(fee).toBe(atCard)
-    expect(atStorefront - fee).toBe(Math.ceil(296_775 * 0.06) - Math.ceil((296_775 * CARD_PROCESSING_PERCENT) / 100))
+    expect(fee).toBe(resolveTransactionFeeCents(ORG as never, 'physical', 270_000, 296_775))
+    // Business takes 0% on physical goods, so the fee is the card cost alone:
+    // 2.9% of $2,967.75, rounded up, plus 30¢.
+    expect(fee).toBe(Math.ceil((296_775 * CARD_PROCESSING_PERCENT) / 100) + PROCESSING_FIXED_CENTS)
+    expect(fee).toBe(8_637)
     expect(params.get('metadata[feeCents]')).toBe(String(fee))
   })
 

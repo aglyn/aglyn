@@ -504,6 +504,13 @@ describe('the POS card sale tax witness (AGL-1953)', () => {
     // The charge itself is unchanged — this is a witness, not a second tax.
     expect(stripeCalls[0].body.get('line_items[0][price_data][unit_amount]'))
       .toBe('433')
+    // The card link offers no buy-now-pay-later (AGL-4198).
+    const body = stripeCalls[0].body as URLSearchParams
+    expect(
+      [...body.keys()]
+        .filter((key) => key.startsWith('excluded_payment_method_types['))
+        .map((key) => body.get(key)),
+    ).toEqual(['klarna', 'afterpay_clearpay', 'affirm'])
   })
 
   /** It agrees with the order document, which is the other half of the join. */

@@ -376,6 +376,14 @@ async function book(): Promise<URLSearchParams> {
 }
 
 describe('a paid booking pays the MERCHANT (AGL-2315)', () => {
+  it('offers no buy-now-pay-later, so the card-rate fee covers what the guest pays with (AGL-4198)', async () => {
+    const params = await book()
+    const excluded = [...params.keys()]
+      .filter((key) => key.startsWith('excluded_payment_method_types['))
+      .map((key) => params.get(key))
+    expect(excluded).toEqual(['klarna', 'afterpay_clearpay', 'affirm'])
+  })
+
   it('sends a destination charge to the merchant’s connected account', async () => {
     const params = await book()
     // The defect: this key was absent entirely, so the charge settled on the

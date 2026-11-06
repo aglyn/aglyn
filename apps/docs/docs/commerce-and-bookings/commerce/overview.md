@@ -485,9 +485,6 @@ country it serves.
 | Apple Pay | Safari on a Mac, iPhone or iPad with a card in Apple Wallet | Same as cards |
 | Google Pay | Chrome or an Android device with a card in Google Pay | Same as cards |
 | Link | A card or bank saved with Link | Same as cards |
-| Klarna | A US shopper paying in USD | From $10 |
-| Afterpay | A US shopper paying in USD | $1 to $4,000, one-time purchases only |
-| Affirm | A US shopper paying in USD | $50 to $30,000, one-time purchases only |
 | Cash App Pay | A US shopper with Cash App | USD only |
 | Amazon Pay | An Amazon account with a saved card | USD only |
 | Stablecoins | A crypto wallet holding USDC or another supported stablecoin | USD only, up to $10,000 |
@@ -495,11 +492,13 @@ country it serves.
 The card only lists the methods the platform offers. A method missing from
 your card is not available for storefronts yet.
 
-**Quotes and invoices never offer buy-now-pay-later.** A quote's or an invoice's
-**Pay** offers a card and the wallets you leave on (Apple Pay, Google Pay, Link,
-Cash App Pay, Amazon Pay, and stablecoins if you turn them on), and never Klarna,
-Afterpay or Affirm, whatever this card says. The same goes for a draft order's
-payment link. That keeps their processing at Stripe's card rate, 2.9% + 30¢. Anyone holding **Manage orders**
+**No checkout offers buy-now-pay-later.** Klarna, Afterpay and Affirm are not
+offered anywhere a customer pays you: storefront checkout, bookings, reservation
+deposits, quotes, invoices, draft order links and the register's card link. Every
+method on the card costs Stripe no more than a card does, so the processing passed
+through on each sale is Stripe's card rate, 2.9% + 30¢.
+
+Anyone holding **Manage orders**
 can read the card; changing it takes **Manage payment methods**, which a site's admins
 hold by default.
 
@@ -508,8 +507,7 @@ first**, and a note at the top of the card links to the **Payments** card
 above it, where you connect. You can still choose your methods in the
 meantime; they show at checkout once Stripe is connected and approves them.
 
-**What each chip means.** Buy-now-pay-later, Cash App Pay, Amazon Pay and
-stablecoins also need Stripe to enable them on your payout account. Saving the
+**What each chip means.** Cash App Pay, Amazon Pay and stablecoins also need Stripe to enable them on your payout account. Saving the
 card asks Stripe for that. **Stripe is reviewing** means it is still checking,
 and **Stripe needs more details** means Stripe wants more information. The
 organization owner presses **Finish in Stripe** on that method to give it.

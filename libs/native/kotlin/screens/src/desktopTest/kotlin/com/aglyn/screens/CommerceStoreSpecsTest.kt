@@ -246,9 +246,9 @@ class CommerceStoreSpecsTest : SpecTestBase() {
 
   @Test
   fun paymentMethodsListWhatTheStripeAccountOffersAndSwitchEachOneThroughTheRoute() {
-    val view = """{"accountConnected":true,"canEdit":true,"canFinish":true,"warnings":["Klarna needs a business address."],
-      "methods":[{"id":"apple_pay","on":true,"platform":"on","capability":null},{"id":"klarna","on":true,"platform":"on","capability":"inactive"},
-                 {"id":"affirm","on":false,"platform":"unavailable","capability":null},{"id":"crypto","on":false,"platform":null,"capability":null},{"id":"cashapp","on":true,"platform":null,"capability":"active"}],
+    val view = """{"accountConnected":true,"canEdit":true,"canFinish":true,"warnings":["Amazon Pay needs a business address."],
+      "methods":[{"id":"apple_pay","on":true,"platform":"on","capability":null},{"id":"amazon_pay","on":true,"platform":"on","capability":"inactive"},
+                 {"id":"google_pay","on":false,"platform":"unavailable","capability":null},{"id":"crypto","on":false,"platform":null,"capability":null},{"id":"cashapp","on":true,"platform":null,"capability":"active"}],
       "domains":[{"domain":"shop.test","enabled":true,"status":{"applePay":"active"}},{"domain":"new.test","enabled":false,"lastError":"dns"}]}"""
     val model = model("commerce.paymentMethods", """{"view":$view}""")
     val list = model.block("methods")
@@ -260,7 +260,7 @@ class CommerceStoreSpecsTest : SpecTestBase() {
     assertEquals(listOf("Ready"), badges(model, "methods", model.row("data.view.methods", 4)))
     assertEquals(listOf("finish"), model.rowActions("methods").filter { ScreenValues.condition(it.whenCondition, model.row("data.view.methods", 1)) }.map { it.id })
     val toggle = list.raw.jsonObject["toggle"]!!.jsonObject
-    assertEquals(json("""{"hostId":"h1","methods":{"klarna":false}}"""), ScreenValues.resolveBody(ActionSpec.parse(toggle["off"])!!.body!!, model.row("data.view.methods", 1)))
+    assertEquals(json("""{"hostId":"h1","methods":{"amazon_pay":false}}"""), ScreenValues.resolveBody(ActionSpec.parse(toggle["off"])!!.body!!, model.row("data.view.methods", 1)))
     assertEquals(listOf("Apple Pay ready", "Retrying"), (0..1).map { i -> badges(model, "domains", model.row("data.view.domains", i)).single() })
     assertTrue(ScreenValues.render(list.raw.jsonObject["toggle"]!!.jsonObject["disabled"]!!.let { (it as JsonPrimitive).content }, model.context).isNotEmpty())
   }

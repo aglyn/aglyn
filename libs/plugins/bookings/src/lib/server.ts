@@ -19,6 +19,7 @@ import {
   type SiteReturnHost,
   siteReturnOrigin,
 } from '@aglyn/aglyn/app-utils/site-return-url'
+import { excludeBuyNowPayLater } from '@aglyn/aglyn/app-utils/buy-now-pay-later'
 import { checkEntitlement,
   type PluginJobHostGate,
   registerPluginConfigSchema,
@@ -797,6 +798,9 @@ export const bookHandler: PluginApiHandler = async (req, res) => {
           : {}),
         expires_at: String(Math.floor(Date.now() / 1000) + 30 * 60),
       })
+      // No buy-now-pay-later on a booking (AGL-4198), so the fee above,
+      // priced at the card rate, covers whatever the guest pays with.
+      excludeBuyNowPayLater(params)
       const stripeResponse = await fetch(
         'https://api.stripe.com/v1/checkout/sessions',
         {

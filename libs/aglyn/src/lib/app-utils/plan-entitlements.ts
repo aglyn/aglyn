@@ -4152,8 +4152,8 @@ export function resolveTransactionFeePct(
 
 /**
  * Stripe's processing cost on ONE destination-charge sale, in cents
- * (AGL-2152) — a storefront order, a booking deposit — the dearest enabled
- * method's percentage plus the fixed 30¢, rounded UP on the percentage so the
+ * (AGL-2152) — a storefront order, a booking deposit, a quote or an invoice —
+ * the dearest method the session can offer, a card, plus the fixed 30¢, rounded UP on the percentage so the
  * answer is never a cent short of what Stripe actually debits.
  *
  * WHO PAYS THIS. Every storefront charge is a DESTINATION charge:
@@ -4173,36 +4173,26 @@ export function resolveTransactionFeePct(
  * fixed 30¢ is why a percentage alone can never reach break-even on small
  * orders, and why this returns a CENTS amount rather than a rate.
  *
- * WHY THE DEAREST METHOD AND NOT 2.9%. The shopper picks how to pay AFTER the
- * session is created, and `application_fee_amount` is a fixed number Stripe
- * will not let us revise once the charge settles. No storefront or booking
- * path pins `payment_method_types` or excludes buy-now-pay-later, so the platform's payment method configuration
- * decides the set — and per AGL-2343 that configuration has `klarna` and
- * `affirm` on beside the card family. Pricing this at the card rate would be
- * wrong exactly on the orders where it cost the most, which is the same
- * reasoning the marketplace listing floor applies; both are defined from the
- * SAME processing constants so the two cannot drift.
- *
- * THE ONE-LINE LEVER. On a card-family order this over-recovers by the spread
- * between the two rates. Pinning `payment_method_types` on the storefront
- * sessions to the card family would make 2.9% the true binding rate, and
- * `SALE_PROCESSING_PERCENT` below is then the single identifier to
- * repoint. That is a product decision about which payment methods a storefront
- * offers, not this one; it is recorded on AGL-2152 and in the Pricing Decision
- * Log so it can be taken deliberately. Quote and invoice pay links have taken
- * it: they exclude buy-now-pay-later and pass `PAY_LINK_PROCESSING_PERCENT`.
+ * WHY THE DEAREST METHOD. The shopper picks how to pay AFTER the session is
+ * created, and `application_fee_amount` is a fixed number Stripe will not let
+ * us revise once the charge settles, so the fee is sized for the dearest
+ * method the session can offer. Until AGL-4198 that was buy-now-pay-later, at
+ * 6%: the platform's payment method configuration has `klarna` and `affirm`
+ * on beside the card family (AGL-2343), and no storefront or booking session
+ * excluded them. Every Checkout Session a site opens now excludes them
+ * (`excludeBuyNowPayLater`, `buy-now-pay-later.ts`), which makes the card
+ * rate the binding one, and `SALE_PROCESSING_PERCENT` below points at it.
+ * A card issued abroad adds Stripe's 1.5% international surcharge, which is
+ * not recovered, as on the register.
  */
 // `SALE_PROCESSING_PERCENT` and `SALE_PROCESSING_FIXED_CENTS` are declared
 // beside the processing constants they are defined from, further down this
 // file — a `const` cannot be read before its declaration is evaluated, and
 // this function is only ever CALLED, never evaluated at import.
-export function saleProcessingCostCents(
-  chargeCents: number,
-  processingPercent: number = SALE_PROCESSING_PERCENT,
-): number {
+export function saleProcessingCostCents(chargeCents: number): number {
   if (!Number.isFinite(chargeCents) || chargeCents <= 0) return 0
   return (
-    Math.ceil((chargeCents * processingPercent) / 100) +
+    Math.ceil((chargeCents * SALE_PROCESSING_PERCENT) / 100) +
     SALE_PROCESSING_FIXED_CENTS
   )
 }
@@ -4231,19 +4221,13 @@ export function saleProcessingCostCents(
  * Clamped to `chargeCents` because Stripe rejects an application fee larger
  * than the charge. That clamp can only bind below ~32¢, under Stripe's own 50¢
  * charge minimum, so it never trims a real order's fee.
- *
- * `processingPercent` is the rate the processing half is priced at. It
- * defaults to `SALE_PROCESSING_PERCENT`, the dearest method a storefront or
- * booking session may offer. A quote's or an invoice's pay link passes
- * `PAY_LINK_PROCESSING_PERCENT`, the card rate, because those sessions never
- * offer buy-now-pay-later.
+
  */
 export function resolveTransactionFeeCents(
   org: Partial<AglynOrgBilling> | null | undefined,
   productType: 'physical' | 'digital' | 'service',
   feeBaseCents: number,
   chargeCents: number = feeBaseCents,
-  processingPercent: number = SALE_PROCESSING_PERCENT,
 ): number {
   const charge =
     Number.isFinite(chargeCents) && chargeCents > 0 ? Math.round(chargeCents) : 0
@@ -4256,7 +4240,7 @@ export function resolveTransactionFeeCents(
   // The `Math.max(1, …)` every door already applied: a rate above zero on
   // goods the shopper pays for is a fee however small it rounds to.
   const take = pct > 0 && base > 0 ? Math.max(1, Math.round((base * pct) / 100)) : 0
-  return Math.min(charge, take + saleProcessingCostCents(charge, processingPercent))
+  return Math.min(charge, take + saleProcessingCostCents(charge))
 }
 
 /**
@@ -4272,8 +4256,8 @@ export function resolveTransactionFeeCents(
  *     percent = rate + fixed ÷ amount
  *
  * which is why a smaller recurring price carries a HIGHER percent: the 30¢
- * is a bigger share of it. At 6% + 30¢ a $10 price carries 9%, $25 carries
- * 7.2% and $100 carries 6.3%.
+ * is a bigger share of it. At 2.9% + 30¢ a $10 price carries 5.9%, $25
+ * carries 4.1% and $100 carries 3.2%.
  *
  * Computed in hundredths of a percent on integers and rounded UP to the next
  * hundredth. Up, for the reason the one-time helper rounds its percentage
@@ -4406,55 +4390,35 @@ export function bindingMarketplaceFeePct(): number {
  * they exist only as inputs to a platform take and to figures a seller reads;
  * changing one never changes a price list.
  *
- * THE BNPL RATE IS THE ONE THAT BINDS on a storefront, a booking and a
- * marketplace listing, and it is not hypothetical: the live default payment
- * method configuration has `klarna` and `affirm` enabled alongside `card`,
- * `cashapp`, `link`, `amazon_pay` and `apple_pay`, and those sessions do not
- * exclude them, so a buyer may pay by either. A cost computed from the
- * cheapest method would be wrong exactly when it mattered. A quote's or an
- * invoice's pay link is the exception: it excludes every BNPL method and so
- * is priced at the card rate (`PAY_LINK_PROCESSING_PERCENT`).
+ * The live default payment method configuration has `klarna` and `affirm`
+ * enabled alongside `card`, `cashapp`, `link`, `amazon_pay` and `apple_pay`.
+ * Since AGL-4198 every Checkout Session a site opens excludes
+ * buy-now-pay-later (`buy-now-pay-later.ts`), so the CARD rate binds on
+ * storefront orders, bookings, quotes, invoices and subscriptions. The BNPL
+ * rate is kept for the marketplace listing floor, which still prices against
+ * it as a margin (see `listing-price-floor.ts`).
  */
 export const CARD_PROCESSING_PERCENT = 2.9
-/** Klarna/Affirm, roughly. See the note above — this is the binding one. */
+/** Klarna/Afterpay/Affirm (standard plans), roughly. No site checkout offers them since AGL-4198. */
 export const BNPL_PROCESSING_PERCENT = 6
 /** Stripe's per-transaction fixed component, in cents. */
 export const PROCESSING_FIXED_CENTS = 30
 
 /**
- * The processing rate a storefront or booking destination charge is priced
- * against (AGL-2152), and the one identifier to repoint if those sessions'
- * payment method set changes.
+ * The processing rate every destination charge a site takes is priced against
+ * (AGL-2152): storefront orders, bookings, quotes, invoices, a register's
+ * card link and subscriptions. The card rate, because every one of those
+ * sessions excludes buy-now-pay-later (AGL-4198), so no method a buyer can
+ * still choose costs Stripe more: a card, Apple Pay, Google Pay, Link, Cash
+ * App Pay and Amazon Pay are 2.9% + 30¢ on Stripe's published US pricing, and
+ * stablecoins 1.5%.
  *
- * Deliberately its OWN name rather than a direct use of the binding rate,
- * while being defined as it: every seller shares Stripe's published rates and
- * today shares the platform's payment method configuration, but each surface
- * is a separate product decision. A future choice to pin
- * `payment_method_types` on storefront sessions to the card family — and so
- * to recover at `CARD_PROCESSING_PERCENT` — must not silently lower the
- * marketplace listing floor, which is derived from the binding rate for a
- * different flow.
+ * Its own name rather than a direct use of `CARD_PROCESSING_PERCENT`: if a
+ * dearer method is ever offered on a site's checkout again, this is the one
+ * identifier that moves with it, and the marketplace listing floor, a
+ * different flow, does not move by accident.
  */
-export const SALE_PROCESSING_PERCENT = BNPL_PROCESSING_PERCENT
-
-/**
- * The processing rate a QUOTE's or an INVOICE's pay link is priced against:
- * the card rate, 2.9% + 30¢.
- *
- * Those sessions always exclude Klarna, Afterpay and Affirm
- * (`payLinkPaymentMethodControls` in the commerce plugin), so what a buyer
- * can still choose is the card family: a card, Apple Pay, Google Pay, Link,
- * Cash App Pay and Amazon Pay, all 2.9% + 30¢ on Stripe's published US
- * pricing, and stablecoins, at 1.5% when a seller turns them on. The card
- * rate is therefore the dearest a pay link can cost, as `SALE_PROCESSING_PERCENT`
- * is for a storefront. An international card adds Stripe's 1.5% surcharge,
- * which this does not recover, the same as the register's card payments.
- *
- * Its own name for the reason `SALE_PROCESSING_PERCENT` has one: a storefront,
- * a booking and the marketplace floor stay on the rate their own sessions can
- * cost, and repointing this one moves pay links only.
- */
-export const PAY_LINK_PROCESSING_PERCENT = CARD_PROCESSING_PERCENT
+export const SALE_PROCESSING_PERCENT = CARD_PROCESSING_PERCENT
 /** Stripe's per-transaction fixed component, in cents. Not rate-dependent. */
 export const SALE_PROCESSING_FIXED_CENTS = PROCESSING_FIXED_CENTS
 

@@ -20,7 +20,6 @@ import {
   PROCESSING_FIXED_CENTS,
   BNPL_PROCESSING_PERCENT,
   CARD_PROCESSING_PERCENT,
-  PAY_LINK_PROCESSING_PERCENT,
   PLAN_ENTITLEMENTS,
   SALE_PROCESSING_PERCENT,
   resolveTransactionFeeCents,
@@ -93,7 +92,7 @@ describe('storefront processing recovery (AGL-2152)', () => {
             cents,
           )
           const net =
-            fee - stripeCostCents(cents, BNPL_PROCESSING_PERCENT)
+            fee - stripeCostCents(cents, SALE_PROCESSING_PERCENT)
           expect({ plan, productType, cents, net: net >= 0 }).toEqual({
             plan,
             productType,
@@ -117,7 +116,7 @@ describe('storefront processing recovery (AGL-2152)', () => {
       const cents = 10000
       const fee = resolveTransactionFeeCents(orgOn(plan), 'physical', cents, cents)
       const net =
-        fee - stripeCostCents(cents, BNPL_PROCESSING_PERCENT)
+        fee - stripeCostCents(cents, SALE_PROCESSING_PERCENT)
       expect(net).toBeGreaterThanOrEqual(Math.round((cents * pct) / 100))
     }
   })
@@ -183,10 +182,10 @@ describe('storefront processing recovery (AGL-2152)', () => {
     )
     expect(onCharge).toBeGreaterThan(onGoods)
     expect(
-      onGoods - stripeCostCents(chargeCents, BNPL_PROCESSING_PERCENT),
+      onGoods - stripeCostCents(chargeCents, SALE_PROCESSING_PERCENT),
     ).toBeLessThan(0)
     expect(
-      onCharge - stripeCostCents(chargeCents, BNPL_PROCESSING_PERCENT),
+      onCharge - stripeCostCents(chargeCents, SALE_PROCESSING_PERCENT),
     ).toBeGreaterThanOrEqual(0)
   })
 
@@ -223,42 +222,27 @@ describe('storefront processing recovery (AGL-2152)', () => {
 
   /** Rounded UP, so the recovery is never a cent short of Stripe's debit. */
   it('rounds the percentage up rather than to nearest', () => {
-    // 101¢ × 6% = 6.06¢ — a `Math.round` would answer 6 and leave a cent short.
+    // 101¢ × 2.9% = 2.929¢ — a `Math.round` would answer 3 by luck; 2.9% of
+    // 120¢ is 3.48¢, where it would answer 3 and leave a cent short.
+    expect(saleProcessingCostCents(120)).toBe(4 + PROCESSING_FIXED_CENTS)
     expect(saleProcessingCostCents(101)).toBe(
-      Math.ceil((101 * BNPL_PROCESSING_PERCENT) / 100) +
+      Math.ceil((101 * SALE_PROCESSING_PERCENT) / 100) +
         PROCESSING_FIXED_CENTS,
     )
     expect(saleProcessingCostCents(101)).toBeGreaterThanOrEqual(
-      (101 * BNPL_PROCESSING_PERCENT) / 100 +
+      (101 * SALE_PROCESSING_PERCENT) / 100 +
         PROCESSING_FIXED_CENTS,
     )
   })
 })
 
-describe('a quote’s or an invoice’s pay link is priced at the card rate', () => {
-  it('passes 2.9% + 30¢ through on the charge, while a storefront sale stays on the dearest rate', () => {
-    expect(PAY_LINK_PROCESSING_PERCENT).toBe(CARD_PROCESSING_PERCENT)
-    expect(SALE_PROCESSING_PERCENT).toBe(BNPL_PROCESSING_PERCENT)
+describe('every site checkout is priced at the card rate (AGL-4198)', () => {
+  it('passes 2.9% + 30¢ through, because no site checkout offers buy-now-pay-later', () => {
+    expect(SALE_PROCESSING_PERCENT).toBe(CARD_PROCESSING_PERCENT)
+    expect(SALE_PROCESSING_PERCENT).toBeLessThan(BNPL_PROCESSING_PERCENT)
     // $4,000 of goods on Pro: physical 0.5% take, service 3%.
     const pro = orgOn('pro')
-    expect(resolveTransactionFeeCents(pro, 'physical', 400_000, 400_000, PAY_LINK_PROCESSING_PERCENT)).toBe(
-      2_000 + 11_600 + 30,
-    )
-    expect(resolveTransactionFeeCents(pro, 'service', 400_000, 400_000, PAY_LINK_PROCESSING_PERCENT)).toBe(
-      12_000 + 11_600 + 30,
-    )
-    expect(resolveTransactionFeeCents(pro, 'physical', 400_000)).toBe(2_000 + 24_000 + 30)
-    expect(saleProcessingCostCents(101, PAY_LINK_PROCESSING_PERCENT)).toBe(3 + PROCESSING_FIXED_CENTS)
-  })
-
-  it('never costs the platform more than it recovers on a card, at any plan or size', () => {
-    for (const plan of Object.keys(PLAN_ENTITLEMENTS) as OrgPlan[]) {
-      for (const cents of [STRIPE_MIN_CHARGE_CENTS, 99, 1_000, 12_345, 400_000, 2_500_000]) {
-        for (const type of ['physical', 'digital', 'service'] as const) {
-          const fee = resolveTransactionFeeCents(orgOn(plan), type, cents, cents, PAY_LINK_PROCESSING_PERCENT)
-          expect(fee - stripeCostCents(cents, CARD_PROCESSING_PERCENT)).toBeGreaterThanOrEqual(0)
-        }
-      }
-    }
+    expect(resolveTransactionFeeCents(pro, 'physical', 400_000)).toBe(2_000 + 11_600 + 30)
+    expect(resolveTransactionFeeCents(pro, 'service', 400_000)).toBe(12_000 + 11_600 + 30)
   })
 })
