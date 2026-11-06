@@ -857,6 +857,10 @@ async function hostReportFrom(db: Dict, load: (file: string) => Promise<Dict>, a
       frames.length ? framesTable(frames) : 'Not built yet.',
       '',
       ...(short.length ? ['## Short of the source', '', ...short, ''] : []),
+      // How each generative redesign came out, and why a layout was kept, by its internal codes (AGL-4152).
+      ...(chosen.some((page) => page.redesign)
+        ? ['## Redesigns', '', ...chosen.filter((page) => page.redesign).map((page) => `- ${page.path}: ${page.redesign}${page.redesignMissed?.length ? ` (${(page.redesignMissed as string[]).join(', ')})` : ''}`), '']
+        : []),
       ...(left.length ? ['## Not scored', '', ...left.map(({ page, why }) => `- ${page}: ${why}`), ''] : []),
       '## The ledger',
       '',

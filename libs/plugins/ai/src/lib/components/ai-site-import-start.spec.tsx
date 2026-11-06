@@ -114,6 +114,9 @@ describe('how should your new site look?', () => {
     expect(screen.queryByRole('switch', { name: 'Also improve my wording' })).toBeNull()
     expect(screen.getByText(/never makes up a name, number, price, date, testimonial, client, award, credential, address or guarantee/)).toBeTruthy()
     expect(screen.getByText(/Off, every word stays as you wrote it, and your layout and menu are still redesigned/)).toBeTruthy()
+    // Quoted as the redesign new copy is, as the import's own page quotes it.
+    expect(screen.getByText('About 32 more AI credits for each main page.')).toBeTruthy()
+    expect(screen.queryByText('About 25 more AI credits for each main page.')).toBeNull()
     fireEvent.click(screen.getByRole('switch', { name: 'Also write new copy' }))
     const body = await readMySite()
     expect(body['inputs']).toEqual({ domain: 'harbor-dental.com', finish: 'improve', wording: false })

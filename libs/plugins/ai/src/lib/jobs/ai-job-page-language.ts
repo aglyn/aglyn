@@ -104,6 +104,7 @@ import {
   aiSiteImportImproveReaskTokens,
   aiSiteImportImproveRoleLines,
   aiSiteImportImproveTokensWithin,
+  aiSiteImportImproveOnlySoft,
   aiSiteImportNewSectionsWanted,
   aiSiteImportPageRoleOf,
   type AiSiteImportImproved,
@@ -660,7 +661,14 @@ export interface AiLayoutPageBuilt {
    * answer, or its layout kept where the redesign did not pass; what it added
    * and what it shows. Absent on every other page.
    */
-  redesign?: { status: AiSiteImportRedesign; added: AiSiteImportAddedSection[]; pictures: AiSiteImportPagePictures | null; names?: string[] }
+  redesign?: {
+    status: AiSiteImportRedesign
+    added: AiSiteImportAddedSection[]
+    pictures: AiSiteImportPagePictures | null
+    names?: string[]
+    /** Why its layout was kept, or the design lines a redesign was taken missing, by internal code (AGL-4152): the row keeps them, the owner never reads them. */
+    missed?: string[]
+  }
 }
 
 export interface AiLayoutPageCheckInput {
@@ -1485,6 +1493,33 @@ async function aiRunImprovedPage(scope: {
     input: aiSiteImportImproveInputUsage({ systemChars: instructions.reduce((sum, block) => sum + block.text.length, 0), promptChars: prompt.length }),
     most,
   })
+  const checkOf = (lenient: boolean) =>
+    aiSiteImportImproveCheck<AiLayoutPageBuilt>({
+      doc,
+      ledger,
+      design,
+      scope: facts,
+      formId: input.targets.forms.length === 1 ? (input.targets.forms[0]?.id ?? null) : null,
+      framing: input.context.framing ?? null,
+      plan: doc.plan ?? null,
+      theme,
+      needs,
+      ...(lenient ? { lenient: true } : {}),
+      build: (page) =>
+        aiImportedPageCheck({
+          ...checkInput,
+          doc,
+          given: page.given,
+          rewritten: page.written,
+          screen: { ...input.screen, sections: page.names.map((name) => ({ name, uses: [], items: 0 })) },
+          sectionIds: page.names.map((_, index) => input.sectionIds[index] ?? aiPageSectionNodeId(input.job.$id, index)),
+        })(null),
+      score: (built, destinations) => {
+        const tree: SiteImportFidelityTree = { rootId: CANVAS_ROOT_ELEMENT_ID, nodes: built.nodes as unknown as SiteImportFidelityTree['nodes'] }
+        const report = siteImportFidelity(source, tree, { finish: 'improve', words: 'improved', theme, improved: { scope: facts, destinations, forms: savedForms, ...(doc.proposed ? { proposed: true } : {}) } })
+        return aiSiteImportImprovedMisses(report)
+      },
+    })
   const answered = await runValidatedGeneration<AiSiteImportImproved<AiLayoutPageBuilt>>(AI_SITE_IMPORT_IMPROVE_KIND, {
     step: 'job.page',
     model: input.model,
@@ -1496,42 +1531,25 @@ async function aiRunImprovedPage(scope: {
     reaskTokens: (spent, last) => aiSiteImportImproveReaskTokens({ model: input.model, spent, lastOutput: last.outputTokens, most }),
     cutOff: { noun: 'page', smaller: 'Write shorter copy, and fewer sections.' },
     ...AI_LAYOUT_LANGUAGE_THINKING,
-    check: observe(
-      aiSiteImportImproveCheck<AiLayoutPageBuilt>({
-        doc,
-        ledger,
-        design,
-        scope: facts,
-        formId: input.targets.forms.length === 1 ? (input.targets.forms[0]?.id ?? null) : null,
-        framing: input.context.framing ?? null,
-        plan: doc.plan ?? null,
-        theme,
-        needs,
-        build: (page) =>
-          aiImportedPageCheck({
-            ...checkInput,
-            doc,
-            given: page.given,
-            rewritten: page.written,
-            screen: { ...input.screen, sections: page.names.map((name) => ({ name, uses: [], items: 0 })) },
-            sectionIds: page.names.map((_, index) => input.sectionIds[index] ?? aiPageSectionNodeId(input.job.$id, index)),
-          })(null),
-        score: (built, destinations) => {
-          const tree: SiteImportFidelityTree = { rootId: CANVAS_ROOT_ELEMENT_ID, nodes: built.nodes as unknown as SiteImportFidelityTree['nodes'] }
-          const report = siteImportFidelity(source, tree, { finish: 'improve', words: 'improved', theme, improved: { scope: facts, destinations, forms: savedForms, ...(doc.proposed ? { proposed: true } : {}) } })
-          return aiSiteImportImprovedMisses(report)
-        },
-      }),
-    ),
+    check: observe(checkOf(false)),
     ...(input.signal ? { signal: input.signal } : {}),
   })
   const spent = spentTogether(spend, answered)
+  // Its last answer, where no re-ask was left and it missed only how it is planned or drawn: taken, its misses on its row (AGL-4152).
+  const taken = answered.status === 'needs_input' && answered.answer && aiSiteImportImproveOnlySoft(answered.violations) ? checkOf(true)(answered.answer) : null
+  if (taken?.value) {
+    const { built, page, missed } = taken.value
+    console.info('ai imported page: its redesign taken with design lines missed', { codes: missed ?? [] })
+    return {
+      ...spent,
+      status: 'ok',
+      value: { ...built, words: 'improved', redesign: { status: 'redesigned', added: page.added, pictures: page.pictures, names: page.names, ...(missed?.length ? { missed } : {}) } },
+    }
+  }
   if (answered.status !== 'ok') {
+    const codes = answered.status === 'needs_input' ? [...new Set(answered.violations.map((violation) => violation.code))] : [answered.status]
     // Logged by its codes alone: an answer's words are the site's content.
-    console.info('ai imported page: its redesign did not pass, its layout kept', {
-      status: answered.status,
-      codes: answered.status === 'needs_input' ? [...new Set(answered.violations.map((violation) => violation.code))] : [],
-    })
+    console.info('ai imported page: its redesign did not pass, its layout kept', { status: answered.status, codes })
     // A new page has no words of its own to fall back on: it is left out, and its row says why.
     if (doc.proposed) return { ...spent, status: 'needs_input', violations: answered.status === 'needs_input' ? answered.violations : [], message: AI_SITE_IMPORT_PROPOSED_NOT_WRITTEN, answer: null }
     return {
@@ -1541,7 +1559,8 @@ async function aiRunImprovedPage(scope: {
         ...plain,
         settled: [...plain.settled, { at: 'page', what: AI_SITE_IMPORT_LAYOUT_KEPT }],
         words: 'kept',
-        redesign: { status: 'layout-kept', added: [], pictures: null },
+        // Why, by internal code, for the job's row and the report (AGL-4152): never shown to the owner as it is.
+        redesign: { status: 'layout-kept', added: [], pictures: null, missed: codes },
       },
     }
   }

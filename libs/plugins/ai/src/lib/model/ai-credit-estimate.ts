@@ -139,6 +139,13 @@ export const AI_MEASURED_IMPORT_CREDITS = {
    * (`AI_MEASURED_REWORDED_AT`), mean 35.8, median 34.5, p90 50, most 70.
    */
   reworded: { median: 35, p90: 50 },
+  /**
+   * A main page redesigned from its ledger with new copy under a generative
+   * Improve it (AGL-4152), its one answer in place of the design and wording
+   * answers: the second paid eval's 26 pages (`AI_MEASURED_REDESIGNED_AT`),
+   * median 42, p90 79, most 88.
+   */
+  redesigned: { median: 42, p90: 79 },
   /** A page copied as it is: no model. It spends only where its source left its listing empty, which the 1 at the p90 covers. */
   copied: { median: 0, p90: 1 },
 } as const satisfies Record<string, AiMeasuredCredits>
@@ -148,6 +155,9 @@ export const AI_MEASURED_IMPORT_AT = { read: '2026-11-01', job: 'mxOkjt2ff7', ar
 
 /** When the `reworded` row of `AI_MEASURED_IMPORT_CREDITS` was read, from which import, over how many pages. */
 export const AI_MEASURED_REWORDED_AT = { read: '2026-11-05', job: 'S_JkQp-XbT', reworded: 10 } as const
+
+/** When the `redesigned` row of `AI_MEASURED_IMPORT_CREDITS` was read: the generative eval's second run, over how many answers. */
+export const AI_MEASURED_REDESIGNED_AT = { read: '2026-11-05', eval: 'import-improve, run 2', redesigned: 26 } as const
 
 /**
  * When the table above was read, and from when its jobs ran. Both tables

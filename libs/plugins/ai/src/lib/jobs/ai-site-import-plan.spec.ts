@@ -605,15 +605,17 @@ describe('the frame a plan draws', () => {
     expect(aiSiteImportLogoHoldsName({ aspect: 1.6, alt: 'Larkspur logo', siteName: 'Larkspur' })).toBe(true)
     expect(aiSiteImportLogoHoldsName({ aspect: 1, alt: 'Larkspur', siteName: 'Larkspur' })).toBe(false)
     expect(aiSiteImportLogoHoldsName({ aspect: null, alt: 'Larkspur', siteName: 'Larkspur' })).toBe(false)
-    expect(aiSiteImportLogoHeight(1)).toBe('48px')
-    expect(aiSiteImportLogoHeight(2)).toBe('40px')
-    expect(aiSiteImportLogoHeight(8)).toBe('28px')
+    expect(aiSiteImportLogoHeight(1)).toBe('56px')
+    // A lockup about twice as wide as tall stands as tall as the bar holds; a wordmark reads about 150 across.
+    expect(aiSiteImportLogoHeight(1.8)).toBe('56px')
+    expect(aiSiteImportLogoHeight(4)).toBe('38px')
+    expect(aiSiteImportLogoHeight(8)).toBe('32px')
     expect(aiSiteImportLogoHeight(null)).toBe('40px')
 
     const state = accepted()
     const wave = state.waves[0] as AiSiteImportState['waves'][number]
     const brand = aiLayoutSiteBrandOf(aiSiteImportFrameJob(importJob(state, []), state, wave, []).inputs)
-    expect(brand).toMatchObject({ name: false, height: '40px', aspect: 4 })
+    expect(brand).toMatchObject({ name: false, height: '38px', aspect: 4 })
     // Off, the name beside the logo and its one height, as they were.
     const today = aiLayoutSiteBrandOf(aiSiteImportFrameJob(importJob(state, []), state, { ...wave, generative: undefined } as never, []).inputs)
     expect(today).toMatchObject({ name: true })
@@ -711,16 +713,16 @@ describe('what a generative Improve it is quoted at', () => {
     return { ...state, waves: state.waves.map((wave, index) => (index === 0 ? { ...wave, status: 'waiting' as const, startedAt: null, generative: undefined } : wave)) } as AiSiteImportState
   }
 
-  it('quotes the plan on its measured row, each redesigned page on the reworded row, and the page it may propose', () => {
+  it('quotes the plan on its measured row, each redesigned page on the redesigned row, and the page it may propose', () => {
     const state = waiting()
     const wave = state.waves[0] as AiSiteImportState['waves'][number]
     const owed = aiSiteImportWaveOwed(state, wave)
     expect(owed).toMatchObject({ plan: true, proposed: 1, arranged: 5, reworded: 4, frame: false })
     const { plan } = AI_MEASURED_PAID_SITE_CREDITS
-    const { reworded, arranged } = AI_MEASURED_IMPORT_CREDITS
+    const { redesigned, arranged } = AI_MEASURED_IMPORT_CREDITS
     const range = aiSiteImportWaveCreditRange(state, wave)
-    expect(range.likely).toBe(plan.median + 5 * reworded.median + arranged.median)
-    expect(range.p90).toBe(plan.p90 + 5 * reworded.p90 + arranged.p90)
+    expect(range.likely).toBe(plan.median + 5 * redesigned.median + arranged.median)
+    expect(range.p90).toBe(plan.p90 + 5 * redesigned.p90 + arranged.p90)
     expect(aiSiteImportWaveQuote({ items: null, siteImport: state } as never, wave)).toMatch(/your site’s plan, 4 pages redesigned by Aglyn AI, 1 arranged by Aglyn AI, a new page if the plan proposes one/)
   })
 
