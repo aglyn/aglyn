@@ -211,6 +211,7 @@ internal object BookingFieldAskSerializer :
 data class BookingInPersonPayment(
     val amountCents: Long,
     val attempt: String? = null,
+    val chargeModel: String? = null,
     val feeCents: Long,
     val paidAtMs: Long? = null,
     val paymentIntentId: String,
@@ -218,6 +219,7 @@ data class BookingInPersonPayment(
     val startedAtMs: Long,
     val startedBy: String,
     val status: BookingInPersonPaymentStatus,
+    val stripeAccountId: String? = null,
     val taxCents: Long,
 )
 
@@ -2061,6 +2063,7 @@ data class OrderPayment(
     val cashierId: String? = null,
     val cashTenderedCents: Double? = null,
     val changeCents: Double? = null,
+    val chargeModel: String? = null,
     val checkoutSessionId: String? = null,
     val checkoutUrl: String? = null,
     val creditLabel: String? = null,
@@ -2079,6 +2082,7 @@ data class OrderPayment(
     val reservationId: String? = null,
     val settledAtMs: Double? = null,
     val status: OrderPaymentStatus,
+    val stripeAccountId: String? = null,
     val takeFeeCents: Double? = null,
     val tipCents: Double? = null,
 )
