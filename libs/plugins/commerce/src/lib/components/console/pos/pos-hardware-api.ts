@@ -237,7 +237,11 @@ export function staffHardwareOrders(user: User, filter: StaffHardwareFilter, aft
 export function staffHardwareOrderAction(
   user: User,
   body: {
-    action: 'update' | 'cancel' | 'refund' | 'refund-return' | 'forget-buyer' | 'decline-return'
+    action: 'update' | 'cancel' | 'refund' | 'refund-return' | 'forget-buyer' | 'decline-return' | 'serials' | 'register-reader'
+    /** Setting the order up before it ships (AGL-4038): its readers' serial numbers, in reader order. */
+    serials?: string[]
+    /** The code a reader shows, to register it to the buyer's store (AGL-4038). */
+    registrationCode?: string
     /** An online return's restocking fee, in cents (AGL-4038). */
     restockingFeeCents?: number
     note?: string

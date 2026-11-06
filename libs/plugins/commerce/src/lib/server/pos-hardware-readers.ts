@@ -24,6 +24,7 @@ import {
   POS_HARDWARE_ORDERS_COLLECTION,
   posHardwareSaleRecord,
   posHardwareSaleSetOptions,
+  posHardwareOrderUnits,
   posHardwareSku,
   type PosHardwareInPersonConfig,
   type PosHardwareOrder,
@@ -148,8 +149,10 @@ export async function matchRegisteredPosHardwareReader(input: {
       const from = await transaction.get(fromRef)
       if (!from.exists) return false
       const before = from.data() as PosHardwareOrder
-      if (!isPosHardwareSellerStoreSale(before) || before.status === 'canceled' || before.status === 'refunded') return false
-      const pending = before.attachment?.state !== 'attached'
+      if (before.status === 'canceled' || before.status === 'refunded') return false
+      // Only a sale of the platform's own store can be nobody's yet; any
+      // other order is its workspace's (AGL-4038), set up before it shipped.
+      const pending = isPosHardwareSellerStoreSale(before) && before.attachment?.state !== 'attached'
       if (!pending && fromOrgId !== input.orgId) return false
       const units = withRegisteredUnit(before.units ?? [], serial, input.readerId, input.hostId, now)
       if (!units) return false
@@ -255,16 +258,7 @@ export async function recordPosHardwareSerials(input: {
     if (!isPosHardwareSellerStoreSale(before) || before.posSale?.hostId !== input.config.sellerHostId) {
       throw new PosHardwareReaderRefusal('Only a card reader sold by this store takes serial numbers here.', 409)
     }
-    const units = before.units ?? []
-    if (serials.length > units.length) {
-      throw new PosHardwareReaderRefusal(`This sale has ${units.length} reader${units.length === 1 ? '' : 's'}.`, 400)
-    }
-    // Serials fill the readers not yet set up, in order; a registered one keeps its own.
-    const open = units.map((unit, index) => ({ unit, index })).filter(({ unit }) => !unit.readerId)
-    const next = [...units]
-    open.forEach(({ index }, position) => {
-      next[index] = { ...units[index], serialNumber: serials[position] ?? null }
-    })
+    const next = withPosHardwareSerials(before.units ?? [], serials)
     transaction.update(ref, {
       units: next,
       serialNumbers: next.flatMap((unit) => (unit.serialNumber ? [unit.serialNumber] : [])),
@@ -272,6 +266,215 @@ export async function recordPosHardwareSerials(input: {
     })
     return { orderId, serials, recorded: true }
   })
+}
+
+/**
+ * The units with `serials` filling the readers not yet set up, in order; a
+ * registered reader keeps its own. Refuses more serials than readers.
+ */
+function withPosHardwareSerials(units: readonly PosHardwareUnit[], serials: readonly string[]): PosHardwareUnit[] {
+  if (serials.length > units.length) {
+    throw new PosHardwareReaderRefusal(`This order has ${units.length} reader${units.length === 1 ? '' : 's'}.`, 400)
+  }
+  const open = units.map((unit, index) => ({ unit, index })).filter(({ unit }) => !unit.readerId)
+  const next = [...units]
+  open.forEach(({ index }, position) => {
+    next[index] = { ...units[index], serialNumber: serials[position] ?? null }
+  })
+  return next
+}
+
+/** Serial numbers as given: normalized, each once, none already on another order. */
+async function checkedSerials(raw: unknown, orderId: string): Promise<string[]> {
+  const serials = (Array.isArray(raw) ? raw : []).map(normalizePosHardwareSerial).filter(Boolean)
+  if (new Set(serials).size !== serials.length) {
+    throw new PosHardwareReaderRefusal('A serial number is listed twice.', 400)
+  }
+  for (const serial of serials) {
+    const elsewhere = await firestore()
+      .collectionGroup(POS_HARDWARE_ORDERS_COLLECTION)
+      .where('serialNumbers', 'array-contains', serial)
+      .limit(2)
+      .get()
+    if (elsewhere.docs.some((doc: any) => String(doc.id) !== orderId)) {
+      throw new PosHardwareReaderRefusal(`Serial number ${serial} is already on another order.`, 409)
+    }
+  }
+  return serials
+}
+
+/*==========================================
+ * SETTING AN ORDER UP BEFORE IT SHIPS (AGL-4038).
+ *
+ * The platform buys the readers in, receives them, sets them up and ships
+ * them to the buyer. Setting one up, on the staff Hardware orders page, is:
+ *
+ *   - its serial number recorded on the order
+ *     ({@link recordPosHardwareOrderSerials}), so the reader is matched to
+ *     the order the moment the buyer pairs it on their store, and an order
+ *     nobody is attached to yet joins the workspace that pairs it;
+ *   - and, where the buyer's store can already take a reader (its plan
+ *     includes the point of sale), the reader registered to that store by
+ *     the code it shows ({@link registerPosHardwareOrderReader}), the same
+ *     registration the booth and the POS devices card make.
+ *
+ * Both only while the order is still with the platform (paid, ordered or
+ * received), and shipping waits until every reader has its serial
+ * (`posHardwareReadyToShip`).
+ *=========================================*/
+
+/** The statuses an order is still with the platform in, and can be set up. */
+const BEFORE_SHIPPING = new Set(['paid', 'ordered', 'received'])
+
+/** Records the serial numbers of an order's readers, from the staff page. */
+export async function recordPosHardwareOrderSerials(input: {
+  orgId: string
+  orderId: string
+  serials: unknown
+}): Promise<PosHardwareOrder> {
+  if (!POS_HARDWARE_ORDER_ID.test(input.orderId)) throw new PosHardwareReaderRefusal('No such order.', 404)
+  const serials = await checkedSerials(input.serials, input.orderId)
+  const ref = hardwareOrdersRef(input.orgId).doc(input.orderId)
+  return firestore().runTransaction(async (transaction: any) => {
+    const snapshot = await transaction.get(ref)
+    if (!snapshot.exists) throw new PosHardwareReaderRefusal('No such order.', 404)
+    const before = snapshot.data() as PosHardwareOrder
+    if (!BEFORE_SHIPPING.has(before.status)) {
+      throw new PosHardwareReaderRefusal('Serial numbers are recorded before the order ships.', 409)
+    }
+    const units = withPosHardwareSerials(posHardwareOrderUnits(before), serials)
+    const after: PosHardwareOrder = {
+      ...before,
+      units,
+      serialNumbers: units.flatMap((unit) => (unit.serialNumber ? [unit.serialNumber] : [])),
+      updatedAtMs: Date.now(),
+    }
+    transaction.set(ref, after)
+    transaction.set(posHardwareSaleRef(input.orderId), posHardwareSaleRecord(input.orderId, after), posHardwareSaleSetOptions(after))
+    return after
+  })
+}
+
+/**
+ * Registers one of an order's readers to the buyer's store by the code it
+ * shows, from the staff page, before it ships. The order must name the
+ * buyer's store (an order from our own store is attached first, from the
+ * register's To attach list), and the store's plan must include the point of
+ * sale; a store with no reader Location yet is refused with
+ * `needs-address`, since only the buyer can say where it is, and the reader
+ * is then set up when they pair it.
+ */
+export async function registerPosHardwareOrderReader(input: {
+  orgId: string
+  orderId: string
+  registrationCode: unknown
+  label?: unknown
+  uid: string
+}): Promise<{ order: PosHardwareOrder; readerId: string }> {
+  if (!POS_HARDWARE_ORDER_ID.test(input.orderId)) throw new PosHardwareReaderRefusal('No such order.', 404)
+  const snapshot = await hardwareOrdersRef(input.orgId).doc(input.orderId).get()
+  const order = snapshot.data() as PosHardwareOrder | undefined
+  if (!order) throw new PosHardwareReaderRefusal('No such order.', 404)
+  if (!BEFORE_SHIPPING.has(order.status)) {
+    throw new PosHardwareReaderRefusal('A reader is registered here before the order ships.', 409)
+  }
+  if (isPosHardwareSellerStoreSale(order) && order.attachment?.state !== 'attached') {
+    throw new PosHardwareReaderRefusal(
+      'Attach the order to the buyer’s workspace first, from To attach on our store’s register, or ship it and the reader joins their store when they pair it.',
+      409,
+    )
+  }
+  if (!order.hostId) throw new PosHardwareReaderRefusal('The buyer has not chosen a store for it yet.', 409)
+  if (!posHardwareOrderUnits(order).some((unit) => !unit.readerId)) {
+    throw new PosHardwareReaderRefusal('Every reader on this order is registered.', 409)
+  }
+  return registerReaderOnOrder({
+    orgId: input.orgId,
+    orderId: input.orderId,
+    hostId: order.hostId,
+    registrationCode: input.registrationCode,
+    label: input.label,
+    uid: input.uid,
+    storeAddress: null,
+  })
+}
+
+/**
+ * The registration itself, for the booth and the staff page: the store's
+ * plan and Location checked, the reader registered, and the order's first
+ * reader not yet set up (or the one with its serial) marked registered.
+ */
+async function registerReaderOnOrder(input: {
+  orgId: string
+  orderId: string
+  hostId: string
+  registrationCode: unknown
+  label?: unknown
+  uid: string
+  storeAddress: PosTerminalAddress | null
+}): Promise<{ order: PosHardwareOrder; readerId: string }> {
+  const { orgId, hostId } = input
+  const readiness = await posHardwareStoreReadiness(hostId)
+  if (!readiness.posPlan) {
+    throw new PosHardwareReaderRefusal(
+      'Their workspace needs a plan with the point of sale before a reader can be added. They can add it, then set the reader up themselves.',
+      409,
+    )
+  }
+  if (!readiness.hasLocation && !input.storeAddress) {
+    throw new PosHardwareReaderRefusal(
+      'Their store has no address for card readers yet. Enter the store’s address to register the reader now, or they add it when they set the reader up on the POS devices card.',
+      409,
+      'needs-address',
+    )
+  }
+  const { registerPosTerminalReader } = await import('./pos-readers')
+  const registered = await registerPosTerminalReader({
+    hostId,
+    orgId,
+    uid: input.uid,
+    registrationCode: input.registrationCode,
+    label: input.label,
+    ...(input.storeAddress ? { address: input.storeAddress } : {}),
+  })
+  if ('error' in registered) throw new PosHardwareReaderRefusal(registered.error, registered.status)
+  // A reader with a serial matched its unit as it registered. One without
+  // (or not on the order) takes the first reader of the order not set up yet.
+  const ref = hardwareOrdersRef(orgId).doc(input.orderId)
+  const after = await firestore().runTransaction(async (transaction: any) => {
+    const now = (await transaction.get(ref)).data() as PosHardwareOrder
+    const units = posHardwareOrderUnits(now)
+    if (units.some((unit) => unit.readerId === registered.id)) return now
+    const at = units.findIndex((unit) => !unit.readerId && posHardwareSku(unit.sku)?.kind === 'reader')
+    if (at < 0) return now
+    const stamp = Date.now()
+    const next = units.map((unit, index) =>
+      index === at
+        ? {
+            ...unit,
+            serialNumber:
+              unit.serialNumber ??
+              (registered.reader.serialNumber ? normalizePosHardwareSerial(registered.reader.serialNumber) : null),
+            readerId: registered.id,
+            hostId,
+            registeredAtMs: stamp,
+          }
+        : unit,
+    )
+    const done = everyReaderRegistered(next)
+    const updated: PosHardwareOrder = {
+      ...now,
+      units: next,
+      serialNumbers: next.flatMap((unit) => (unit.serialNumber ? [unit.serialNumber] : [])),
+      ...(done && now.status === 'delivered' ? { status: 'registered' as const, registeredAtMs: stamp } : {}),
+      updatedAtMs: stamp,
+    }
+    transaction.set(ref, updated)
+    transaction.set(posHardwareSaleRef(input.orderId), posHardwareSaleRecord(input.orderId, updated), posHardwareSaleSetOptions(updated))
+    return updated
+  })
+  await fillPosHardwareBuyerAddress({ orgId, orderId: input.orderId })
+  return { order: after, readerId: registered.id }
 }
 
 /** An in-person order of this workspace, for a change by its own people. */
@@ -383,71 +586,21 @@ export async function registerPosHardwareAtBooth(input: {
   const hostId = order.hostId
   if (!hostId) throw new PosHardwareReaderRefusal('Choose the buyer’s store first.', 409)
   const readiness = await posHardwareStoreReadiness(hostId)
-  if (!readiness.posPlan) {
-    throw new PosHardwareReaderRefusal(
-      'Their workspace needs a plan with the point of sale before a reader can be added. They can add it, then set the reader up themselves.',
-      409,
-    )
-  }
   // The store's address, only for a store with no Location: one that has
   // its Location keeps it, whatever was sent.
   const storeAddress = readiness.hasLocation ? null : boothStoreAddress(input.address)
-  if (!readiness.hasLocation) {
-    if (!storeAddress) {
-      throw new PosHardwareReaderRefusal(
-        'Their store has no address for card readers yet. Enter the store’s address to register the reader now, or they add it when they set the reader up on the POS devices card.',
-        409,
-        'needs-address',
-      )
-    }
+  if (storeAddress) {
     const problem = (await import('./pos-terminal')).posTerminalAddressProblem(storeAddress)
     if (problem) throw new PosHardwareReaderRefusal(problem, 400, 'needs-address')
   }
-  const { registerPosTerminalReader } = await import('./pos-readers')
-  const registered = await registerPosTerminalReader({
-    hostId,
+  const { order: after, readerId } = await registerReaderOnOrder({
     orgId,
-    uid: input.uid,
+    orderId: input.orderId,
+    hostId,
     registrationCode: input.registrationCode,
     label: input.label,
-    ...(storeAddress ? { address: storeAddress } : {}),
+    uid: input.uid,
+    storeAddress,
   })
-  if ('error' in registered) throw new PosHardwareReaderRefusal(registered.error, registered.status)
-  // A reader with a serial matched its unit as it registered. One without
-  // (or not on the sale) takes the first reader of the sale not set up yet.
-  const ref = hardwareOrdersRef(orgId).doc(input.orderId)
-  const after = await firestore().runTransaction(async (transaction: any) => {
-    const now = (await transaction.get(ref)).data() as PosHardwareOrder
-    const units = now.units ?? []
-    if (units.some((unit) => unit.readerId === registered.id)) return now
-    const at = units.findIndex(
-      (unit) => !unit.readerId && posHardwareSku(unit.sku)?.kind === 'reader',
-    )
-    if (at < 0) return now
-    const stamp = Date.now()
-    const next = units.map((unit, index) =>
-      index === at
-        ? {
-            ...unit,
-            serialNumber: unit.serialNumber ?? (registered.reader.serialNumber ? normalizePosHardwareSerial(registered.reader.serialNumber) : null),
-            readerId: registered.id,
-            hostId,
-            registeredAtMs: stamp,
-          }
-        : unit,
-    )
-    const done = everyReaderRegistered(next)
-    const updated: PosHardwareOrder = {
-      ...now,
-      units: next,
-      serialNumbers: next.flatMap((unit) => (unit.serialNumber ? [unit.serialNumber] : [])),
-      ...(done && now.status === 'delivered' ? { status: 'registered' as const, registeredAtMs: stamp } : {}),
-      updatedAtMs: stamp,
-    }
-    transaction.set(ref, updated)
-    transaction.set(posHardwareSaleRef(input.orderId), posHardwareSaleRecord(input.orderId, updated), posHardwareSaleSetOptions(updated))
-    return updated
-  })
-  await fillPosHardwareBuyerAddress({ orgId, orderId: input.orderId })
-  return { order: after, readerId: registered.id, storeAddress }
+  return { order: after, readerId, storeAddress }
 }

@@ -42,6 +42,7 @@ import { carrierLabelFor } from '../model/tracking-url'
 import {
   formatPosHardwareCents,
   POS_HARDWARE_ANCHOR,
+  posHardwareOrderUnits,
   type PosHardwareCancelReason,
   type PosHardwareOrder,
 } from '../model/pos-hardware'
@@ -144,6 +145,25 @@ function staffReasonText(reason: PosHardwareCancelReason, orgId: string): string
   return 'staff canceled it'
 }
 
+/** The steps the delivered email gives: pair the reader, or it is already set up. */
+export function posHardwareSetupSteps(order: Pick<PosHardwareOrder, 'units' | 'lines'>): string {
+  const units = posHardwareOrderUnits(order)
+  if (units.length && units.every((unit) => unit.readerId)) {
+    return (
+      'We set your reader up on your store before it shipped.\n' +
+      '1. Charge it and switch it on.\n' +
+      '2. Connect it to Wi-Fi from the reader’s Settings.\n' +
+      '3. It shows on the POS devices card, ready for a register.'
+    )
+  }
+  return (
+    '1. Charge it and switch it on.\n' +
+    '2. Connect it to Wi-Fi from the reader’s Settings.\n' +
+    '3. On the reader, generate a pairing code.\n' +
+    '4. On the POS devices card, choose Add card reader and enter the code.'
+  )
+}
+
 /** The merge values for one order's emails. Exported for the render spec. */
 export async function posHardwareEmailMerge(
   orderId: string,
@@ -169,6 +189,9 @@ export async function posHardwareEmailMerge(
     'order.trackingUrl': order.tracking?.url ?? ordersUrl,
     'order.ordersUrl': ordersUrl,
     'order.setupUrl': order.hostId ? `${path}#pos-devices` : path,
+    // What arrived: readers registered to the store before they shipped
+    // (AGL-4038) only need power and Wi-Fi; any other is paired by its code.
+    'order.setupSteps': posHardwareSetupSteps(order),
     // What Stripe reported refunding, or the whole charge where it has not.
     'order.refunded': formatPosHardwareCents(order.refundedCents ?? order.totalCents ?? 0),
     // This refund alone, for an order refunded in parts; the whole of it otherwise.
@@ -372,7 +395,7 @@ export async function raisePosHardwareRefundFailedAlert(
         error: error || 'no reason given',
         paymentIntentId: order.stripePaymentIntentId ?? 'for this order (no payment id is recorded on it)',
         orderedNote:
-          order.status === 'ordered'
+          order.status === 'ordered' || order.status === 'received'
             ? `. It had already been placed with Stripe${stripeOrderId ? ` as ${stripeOrderId}` : ''}, so cancel it there too before it ships`
             : '',
       },

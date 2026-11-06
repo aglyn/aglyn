@@ -290,6 +290,11 @@ function paidSession(overrides: Record<string, unknown> = {}) {
 }
 
 const ORDER_ID = 'hw_0123456789abcdef0123'
+/** The order's two readers, their serials recorded: set up, so it may ship (AGL-4038). */
+const SET_UP_UNITS = [
+  { sku: 'stripe-reader-s710', serialNumber: 'WSC1', readerId: null, hostId: null, registeredAtMs: null },
+  { sku: 'stripe-reader-m2', serialNumber: 'STRM1', readerId: null, hostId: null, registeredAtMs: null },
+]
 const ORDER_PATH = `orgs/org-1/hardwareOrders/${ORDER_ID}`
 const SALE_PATH = `posHardwareSales/${ORDER_ID}`
 
@@ -829,7 +834,7 @@ describe('the staff route', () => {
   })
 
   it('needs a tracking number to mark an order shipped, then emails the buyer once', async () => {
-    seedOrder({ status: 'ordered' })
+    seedOrder({ status: 'received', units: SET_UP_UNITS, serialNumbers: ['WSC1', 'STRM1'] })
     const bare = await staff('staff-super', {
       method: 'POST',
       body: { action: 'update', orgId: 'org-1', orderId: ORDER_ID, status: 'shipped' },
@@ -909,7 +914,7 @@ describe('the staff route', () => {
   })
 
   it('blocks shipping while a refund is in progress', async () => {
-    seedOrder({ status: 'ordered', ...({ refundRequestedAtMs: 5 } as object) })
+    seedOrder({ status: 'received', units: SET_UP_UNITS, ...({ refundRequestedAtMs: 5 } as object) })
     const answer = await staff('staff-super', {
       method: 'POST',
       body: { action: 'update', orgId: 'org-1', orderId: ORDER_ID, status: 'shipped', tracking: { carrier: 'UPS', number: '1Z' } },
@@ -1073,6 +1078,14 @@ describe('an account erasure of the buyer (AGL-4038)', () => {
     })
     await staff('staff-super', {
       method: 'POST',
+      body: { action: 'update', orgId: 'org-1', orderId: ORDER_ID, status: 'received' },
+    })
+    await staff('staff-super', {
+      method: 'POST',
+      body: { action: 'serials', orgId: 'org-1', orderId: ORDER_ID, serials: ['WSC1', 'STRM1'] },
+    })
+    await staff('staff-super', {
+      method: 'POST',
       body: { action: 'update', orgId: 'org-1', orderId: ORDER_ID, tracking: { carrier: 'UPS', number: '1Z 999' } },
     })
     // Shipped, so the closure cancels nothing and only the redaction is left.
@@ -1228,10 +1241,17 @@ describe('closing a workspace or the buying account with an unshipped order (AGL
   const sale = () => fakeDocs.get(SALE_PATH) as PosHardwareSaleRecord
 
   /** Paid, and, for `ordered`, placed with Stripe by staff. */
-  async function placeOrder(status: 'paid' | 'ordered' | 'shipped' | 'delivered' | 'registered') {
+  async function placeOrder(status: 'paid' | 'ordered' | 'received' | 'shipped' | 'delivered' | 'registered') {
     await deliver(paidSession())
-    const steps = ['ordered', 'shipped', 'delivered', 'registered']
+    const steps = ['ordered', 'received', 'shipped', 'delivered', 'registered']
     for (const step of steps.slice(0, steps.indexOf(status) + 1)) {
+      // Set up before it ships (AGL-4038): each reader's serial recorded.
+      if (step === 'shipped') {
+        await staff('staff-super', {
+          method: 'POST',
+          body: { action: 'serials', orgId: 'org-1', orderId: ORDER_ID, serials: ['WSC1', 'STRM1'] },
+        })
+      }
       await staff('staff-super', {
         method: 'POST',
         body: {

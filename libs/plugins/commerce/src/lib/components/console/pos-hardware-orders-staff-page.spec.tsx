@@ -301,3 +301,64 @@ describe('Staff → Hardware orders, sold on our online store (AGL-4038)', () =>
     expect(within(confirm).getByText(/\$324\.75 goes back to the card it was paid with, from the selling store's own account/)).toBeTruthy()
   })
 })
+
+describe('Staff → Hardware orders, setting an order up before it ships (AGL-4038)', () => {
+  const received = {
+    ...inPerson,
+    id: 'hw_dddddddddddddddddddd',
+    number: 'HW-DDDDDD',
+    orgId: 'org-buyer',
+    hostId: 'host-buyer',
+    status: 'received',
+    source: 'online',
+    shipping: { method: 'standard', label: 'Standard shipping', cents: 1_000, name: 'Pat Lee', phone: null, address: null },
+    stripePaymentIntentId: 'pi_test_1',
+    posSale: null,
+    paidTo: null,
+    attachment: null,
+    units: [
+      { sku: 'stripe-reader-s700', serialNumber: 'WSC-1', readerId: 'tmr_1', hostId: 'host-buyer', registeredAtMs: 1 },
+      { sku: 'stripe-reader-s700', serialNumber: null, readerId: null, hostId: null, registeredAtMs: null },
+    ],
+  }
+  const action = () => jest.requireMock('./pos/pos-hardware-api').staffHardwareOrderAction as jest.Mock
+
+  beforeEach(() => {
+    requested.length = 0
+    rows = [received]
+    action().mockReset()
+    action().mockImplementation(async () => ({ ok: true, order: received }))
+  })
+
+  it('shows a serial field per reader, keeps a registered one, and saves the serials', async () => {
+    render(<PosHardwareOrdersStaffPage basePath="/admin" />)
+    fireEvent.click(await screen.findByTestId('order-row'))
+    const dialog = await screen.findByRole('dialog')
+    expect(within(dialog).getByText('Set up')).toBeTruthy()
+    const first = within(dialog).getByLabelText(/Serial number, reader 1/) as HTMLInputElement
+    expect(first.value).toBe('WSC-1')
+    expect(first.disabled).toBe(true)
+    expect(within(dialog).getByText('Registered to the buyer’s store')).toBeTruthy()
+    fireEvent.change(within(dialog).getByLabelText(/Serial number, reader 2/), { target: { value: 'WSC-2' } })
+    fireEvent.click(within(dialog).getByRole('button', { name: 'Save serial numbers' }))
+    await waitFor(() => expect(action()).toHaveBeenCalledTimes(1))
+    expect(action().mock.calls[0][1]).toEqual({ action: 'serials', serials: ['WSC-1', 'WSC-2'], orgId: 'org-buyer', orderId: 'hw_dddddddddddddddddddd' })
+  })
+
+  it('registers a reader to the buyer’s store by the code it shows', async () => {
+    render(<PosHardwareOrdersStaffPage basePath="/admin" />)
+    fireEvent.click(await screen.findByTestId('order-row'))
+    const dialog = await screen.findByRole('dialog')
+    fireEvent.change(within(dialog).getByLabelText('Pairing code the reader shows'), { target: { value: ' quick-fox ' } })
+    fireEvent.click(within(dialog).getByRole('button', { name: 'Register to the buyer’s store' }))
+    await waitFor(() => expect(action()).toHaveBeenCalledTimes(1))
+    expect(action().mock.calls[0][1]).toMatchObject({ action: 'register-reader', registrationCode: 'quick-fox' })
+  })
+
+  it('offers Mark received after Ordered, then Mark shipped', async () => {
+    rows = [{ ...received, status: 'ordered' }]
+    render(<PosHardwareOrdersStaffPage basePath="/admin" />)
+    fireEvent.click(await screen.findByTestId('order-row'))
+    expect(within(await screen.findByRole('dialog')).getByRole('button', { name: 'Mark received' })).toBeTruthy()
+  })
+})

@@ -24,6 +24,9 @@
 
 import {
   POS_HARDWARE_TAX_CODE,
+  POS_HARDWARE_UNSHIPPED_STATUSES,
+  posHardwareOrderUnits,
+  posHardwareReadyToShip,
   posHardwareOfferUnitCents,
   decodePosHardwareLines,
   encodePosHardwareLines,
@@ -328,9 +331,10 @@ describe('the lines a Checkout Session carries', () => {
 })
 
 describe('an order moves forward, and is refunded only before it ships', () => {
-  it('steps paid → ordered → shipped → delivered → registered', () => {
+  it('steps paid → ordered → received → shipped → delivered → registered (AGL-4038)', () => {
     expect(nextPosHardwareStatus('paid')).toBe('ordered')
-    expect(nextPosHardwareStatus('ordered')).toBe('shipped')
+    expect(nextPosHardwareStatus('ordered')).toBe('received')
+    expect(nextPosHardwareStatus('received')).toBe('shipped')
     expect(nextPosHardwareStatus('shipped')).toBe('delivered')
     expect(nextPosHardwareStatus('delivered')).toBe('registered')
     expect(nextPosHardwareStatus('registered')).toBeNull()
@@ -338,8 +342,34 @@ describe('an order moves forward, and is refunded only before it ships', () => {
     expect(nextPosHardwareStatus('refunded')).toBeNull()
   })
 
-  it('refunds only a paid or ordered order', () => {
-    expect(POS_HARDWARE_ORDER_STATUSES.filter(posHardwareRefundable)).toEqual(['paid', 'ordered'])
+  it('refunds only an order that has not shipped: paid, ordered or received', () => {
+    expect(POS_HARDWARE_ORDER_STATUSES.filter(posHardwareRefundable)).toEqual(['paid', 'ordered', 'received'])
+    expect(POS_HARDWARE_UNSHIPPED_STATUSES).toEqual(['paid', 'ordered', 'received'])
+  })
+})
+
+describe('an order is set up before it ships (AGL-4038)', () => {
+  const lines = [
+    { sku: 'stripe-reader-s700' as const, name: 'S700', quantity: 2, unitCents: 1, lineCents: 2 },
+    { sku: 'stripe-reader-s700-dock' as const, name: 'Dock', quantity: 1, unitCents: 1, lineCents: 1 },
+  ]
+  const unit = (serialNumber: string | null) => ({ sku: 'stripe-reader-s700' as const, serialNumber, readerId: null, hostId: null, registeredAtMs: null })
+
+  it('has one unit per reader, from its lines when none were kept', () => {
+    expect(posHardwareOrderUnits({ lines })).toEqual([unit(null), unit(null)])
+    expect(posHardwareOrderUnits({ lines, units: [unit('A'), unit('B')] })).toEqual([unit('A'), unit('B')])
+  })
+
+  it('ships once every reader has its serial, and an order of accessories alone at once', () => {
+    expect(posHardwareReadyToShip({ lines })).toBe('Set every reader up first: 2 of 2 still need a serial number.')
+    expect(posHardwareReadyToShip({ lines, units: [unit('A'), unit(null)] })).toBe(
+      'Set every reader up first: 1 of 2 still need a serial number.',
+    )
+    expect(posHardwareReadyToShip({ lines: [lines[0]].map((line) => ({ ...line, quantity: 1 })) })).toBe(
+      'Set the reader up first: record its serial number.',
+    )
+    expect(posHardwareReadyToShip({ lines, units: [unit('A'), unit('B')] })).toBeNull()
+    expect(posHardwareReadyToShip({ lines: [lines[1]] })).toBeNull()
   })
 })
 

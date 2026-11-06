@@ -71,6 +71,7 @@ export const POS_HARDWARE_STATUS_COLOR: Record<
 > = {
   paid: 'info',
   ordered: 'info',
+  received: 'info',
   shipped: 'primary',
   delivered: 'success',
   registered: 'success',
@@ -410,7 +411,7 @@ export function PosHardwareCard({
     <CardDisplay
       id={POS_HARDWARE_ANCHOR}
       header={'Hardware'}
-      subheader={'Card readers and accessories, shipped to you'}
+      subheader={'Card readers and accessories, set up and shipped to you'}
       help={pluginDocsHelp('posHardware', { anchor: '#buy-a-reader-from-aglyn' })}
       HeaderProps={{
         action: (
@@ -443,7 +444,7 @@ export function PosHardwareCard({
           </Alert>
         ) : null}
         <Typography variant="body2" color="text.secondary">
-          {'Choose the readers and accessories you need. They ship to the address you enter at checkout, and you add each reader to a register on the POS devices card when it arrives.'}
+          {'Choose the readers and accessories you need. We set each reader up and ship your order to the address you enter at checkout. The delivery email says how to start taking payments with it.'}
         </Typography>
         <Box
           sx={{

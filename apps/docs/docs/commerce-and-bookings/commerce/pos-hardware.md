@@ -157,8 +157,8 @@ sale**; buy a reader from Stripe and add it with its pairing code, as in
 :::
 
 The **Hardware** card on **Products → Point of sale** sells card readers and
-their accessories, and ships them to you. Because Aglyn sells it, the reader is ready to take payments
-through Aglyn: add it to a register with its pairing code when it arrives.
+their accessories. Aglyn sets each reader up for you and ships your order to you.
+Because Aglyn sells it, the reader is ready to take payments through Aglyn.
 
 **What's on offer**
 
@@ -216,8 +216,8 @@ newest first, and sorts by any column. Each order moves through:
 
 | Status | Meaning |
 | --- | --- |
-| **Order received** | Paid. Aglyn is placing it with Stripe. |
-| **Being prepared** | Stripe has the order and is getting it ready to ship. |
+| **Order received** | Paid. |
+| **Being prepared** | Aglyn has your hardware on its way in, or in hand and is setting each reader up: its serial number recorded and, where your store is ready for it, the reader registered to your store. |
 | **Shipped** | On its way. The tracking number links to the carrier's tracking page. |
 | **Delivered** | It has arrived. |
 | **Set up** | The reader is registered for your store. |
@@ -238,9 +238,14 @@ and you get an email with what was refunded.
 
 **When it arrives**
 
-Set the reader up as in [Setting one up](#card-readers): charge it, connect it to
-Wi-Fi, generate a pairing code on the reader, and add it on the **POS devices**
-card. A Pocket reader (M2) pairs by Bluetooth from the Aglyn POS app instead.
+If Aglyn registered the reader to your store before it shipped, charge it,
+switch it on and connect it to Wi-Fi: it is already on the **POS devices** card,
+and the order reads **Set up** once it is delivered. Otherwise set it up as in
+[Setting one up](#card-readers): charge it, connect it to Wi-Fi, generate a
+pairing code on the reader, and add it on the **POS devices** card. Aglyn
+recorded its serial number, so the order moves to **Set up** by itself as soon as
+you add it. A Pocket reader (M2) pairs by Bluetooth from the Aglyn POS app
+instead. The delivery email says which applies.
 
 **Who can buy:** a member with the **Buy point of sale hardware** permission for
 the site, on a plan that includes POS.

@@ -786,7 +786,7 @@ export const DOCS_HELP_SECTION_EXCERPTS: {
   },
   posHardware: {
     '#bought-from-us-in-person': 'At an event, Aglyn may sell you a reader in person. You pay at Aglyn\'s register, take the reader with you, and the order joins your workspace.',
-    '#buy-a-reader-from-aglyn': 'The Hardware card on Products → Point of sale sells card readers and their accessories, and ships them to you.',
+    '#buy-a-reader-from-aglyn': 'The Hardware card on Products → Point of sale sells card readers and their accessories.',
     '#card-readers-to-set-up': 'A reader bought in person waits on Products → Point of sale, in a Card readers to set up card, until you set it up on a store.',
     '#hardware-purchase-records': 'Aglyn is the seller of these readers, so it keeps a record of each sale for tax and accounting: the items and their prices, shipping, tax, the total, the order\'s status dates, Stripe\'s payment references, and the…',
     '#reader-start-up-screen': 'While a Touchscreen reader (S700 or S710) or Countertop reader (WisePOS E) waits for a payment, it shows a start-up screen.',
