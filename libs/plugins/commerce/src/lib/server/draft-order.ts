@@ -470,7 +470,9 @@ export const draftOrderHandler: PluginApiHandler = async (req, res) => {
         : shippingPlan.options
 
     // THE PLATFORM FEE (AGL-2152) — the advertised take PLUS Stripe's card
-    // cost, passed through at cost. A payment link is a destination charge, so
+    // cost, passed through at cost, at the CARD rate: the link excludes every
+    // buy-now-pay-later method, as an invoice's later pay links do
+    // (`payLinkPaymentMethodControls`). A payment link is a destination charge, so
     // Stripe debits 2.9% + 30¢ from the PLATFORM's balance; the old take-only
     // figure meant every tier carrying a 0% rate invoiced a buyer at a loss to
     // Aglyn, and Starter's 2% is below 2.9% so it lost money at every size too.
@@ -499,6 +501,7 @@ export const draftOrderHandler: PluginApiHandler = async (req, res) => {
       product.type ?? 'physical',
       chargedItemsCents,
       chargedItemsCents + taxCents + shippingCeilingCents,
+      Aglyn.PAY_LINK_PROCESSING_PERCENT,
     )
     // Stripe Tax mode leaves the tax 0 at composition time and the webhook
     // folds the computed figure in — the same additive shape AGL-1792 used for
@@ -766,11 +769,15 @@ export const draftOrderHandler: PluginApiHandler = async (req, res) => {
     // The payment methods the merchant switched off reach the payment link
     // too (AGL-3629). A hosted Stripe page shows Apple Pay and Google Pay by
     // device and cannot hide them per merchant; everything else follows.
+    // Klarna, Afterpay and Affirm are excluded whatever the store chose: the
+    // link is an invoice, priced at the card rate above.
     CommerceModel.appendStorefrontPaymentMethodParams(
       params,
-      CommerceModel.resolveStorefrontPaymentMethodControls(
-        CommerceModel.normalizeStorefrontPaymentMethodSettings(
-          storeSettings.get('paymentMethods'),
+      CommerceModel.payLinkPaymentMethodControls(
+        CommerceModel.resolveStorefrontPaymentMethodControls(
+          CommerceModel.normalizeStorefrontPaymentMethodSettings(
+            storeSettings.get('paymentMethods'),
+          ),
         ),
       ),
     )

@@ -211,6 +211,13 @@ jest.mock('@aglyn/tenant-data-admin', () => {
 
 const sentEmails: any[] = []
 
+/** The hardware recorder the webhook hands a seller-store order to (AGL-4038). */
+const mockRecordHardware = jest.fn<Promise<undefined>, [{ hostId: string; orderId: string }]>(async () => undefined)
+jest.mock('./pos-hardware-sale-fields', () => ({
+  ...jest.requireActual('./pos-hardware-sale-fields'),
+  recordSellerStoreSaleHardware: (event: { hostId: string; orderId: string }) => mockRecordHardware(event),
+}))
+
 jest.mock('@aglyn/shared-util-email', () => ({
   isEmailConfigured: () => false,
   sendEmail: async (options: any) => {
@@ -409,5 +416,61 @@ describe('a paid cart order reaches its dropship suppliers (AGL-3773)', () => {
     expect(queued()).toHaveLength(0)
     expect(sentEmails.some((mail) => mail.context === 'dropship supplier notice')).toBe(false)
     expect(order()).toBeDefined()
+  })
+})
+
+/*
+ * The platform's own store sells card reader hardware online (AGL-4038): its
+ * cart order is written marked, with the terms the buyer ticked, and handed
+ * to the hardware recorder once. Any other store's order is not.
+ */
+describe('a cart order of card reader hardware on the platform’s own store (AGL-4038)', () => {
+  const SELLER = {
+    POS_HARDWARE_IN_PERSON_ENABLED: 'true',
+    POS_HARDWARE_SELLER_HOST_ID: 'host-1',
+    POS_HARDWARE_SELLER_ORG_ID: 'org-1',
+  }
+  const session = {
+    ...CART_SESSION,
+    created: 1_762_300_000,
+    metadata: { ...CART_SESSION.metadata, hardwareTermsVersion: 'v21', hardwareTermsBusinessUse: 'true' },
+  }
+  beforeEach(() => {
+    Object.assign(process.env, SELLER)
+    mockRecordHardware.mockClear()
+    docs.set('hosts/host-1/products/product-3', {
+      name: 'Pocket reader (M2)',
+      type: 'physical',
+      hardwareSku: 'stripe-reader-m2',
+      variants: [{ id: 'default', priceUsd: 20 }],
+    })
+  })
+  afterEach(() => {
+    for (const name of Object.keys(SELLER)) delete process.env[name]
+  })
+
+  it('writes the order marked, with the terms of sale, and records its hardware once', async () => {
+    await deliver(session)
+    expect(order()).toMatchObject({
+      hardwareSalePending: true,
+      hardwareTermsAcceptance: {
+        method: 'online',
+        version: 'v21',
+        atMs: 1_762_300_000_000,
+        businessUse: true,
+      },
+    })
+    expect(mockRecordHardware.mock.calls).toEqual([[{ hostId: 'host-1', orderId: 'cs_cart_dropship_1' }]])
+    // Redelivered: the order exists, and nothing is recorded twice.
+    await deliver(session)
+    expect(mockRecordHardware).toHaveBeenCalledTimes(1)
+  })
+
+  it('leaves another store’s order alone, whatever its products say', async () => {
+    process.env.POS_HARDWARE_SELLER_HOST_ID = 'host-elsewhere'
+    await deliver(session)
+    expect(order().hardwareSalePending).toBeUndefined()
+    expect(order().hardwareTermsAcceptance).toBeUndefined()
+    expect(mockRecordHardware).not.toHaveBeenCalled()
   })
 })

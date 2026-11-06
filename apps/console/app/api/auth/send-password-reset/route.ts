@@ -119,12 +119,37 @@ async function handler(request: Request): Promise<Response> {
     // an address belongs to would be an enumeration oracle. Never capped.
     await meterPlatformEmail()
   } catch (error) {
-    // Includes `auth/user-not-found`, which is the ordinary case for a typo
-    // and the one this endpoint most needs to stay quiet about. Logged, never
-    // surfaced.
-    console.error('[auth/send-password-reset] failed', error)
+    // Never surfaced to the caller either way. An address with no account is
+    // the ordinary case (a typo, an uptime probe) and is not an error, so it
+    // is not logged as one: it was 19 of 19 "failures" on 2026-11-05.
+    if (isNoAccountError(error)) {
+      console.info('[auth/send-password-reset] no account for that address')
+    } else {
+      console.error('[auth/send-password-reset] failed', error)
+    }
   }
   return ok()
+}
+
+/**
+ * Did minting the link fail only because no account has that address?
+ *
+ * The Admin SDK says so in one of two ways. Without email enumeration
+ * protection it throws `auth/user-not-found`. With it on, identitytoolkit
+ * answers 200 with no link at all, and the SDK throws `auth/internal-error`
+ * "INTERNAL ASSERT FAILED: Unable to create the email action link" (seen in
+ * production with the response body carrying only `kind` and `email`).
+ */
+function isNoAccountError(error: unknown): boolean {
+  const code = String((error as { code?: unknown })?.code ?? '')
+  const message = String((error as { message?: unknown })?.message ?? '')
+  if (code === 'auth/user-not-found' || message.includes('auth/user-not-found')) {
+    return true
+  }
+  return (
+    code === 'auth/internal-error' &&
+    message.includes('Unable to create the email action link')
+  )
 }
 
 export const dynamic = 'force-dynamic'

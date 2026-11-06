@@ -23,7 +23,7 @@ public struct HostStatus: Equatable, Sendable {
 
   /// The console's `describeHostStatus`. Order matters: a suspended site is
   /// not live whatever it has published, and a site in maintenance serves
-  /// the maintenance page rather than its pages.
+  /// visitors the maintenance page rather than its pages.
   public static func describe(_ host: [String: Any]?, now: Date = Date()) -> HostStatus {
     let published = publishedScreenCount(host)
     if let suspendedAt = millis(host?["suspendedAt"]), suspendedAt != 0 {
@@ -36,7 +36,7 @@ public struct HostStatus: Equatable, Sendable {
     }
     if host?["maintenance"] as? Bool == true {
       return HostStatus(
-        kind: .maintenance, label: "Maintenance", detail: "Every path serves the maintenance page.",
+        kind: .maintenance, label: "Maintenance", detail: "Only your team can see this site. Visitors see the 503 page.",
         publishedPages: published)
     }
     // A site in preview (AGL-4086) is not live to its visitors whatever it has published.

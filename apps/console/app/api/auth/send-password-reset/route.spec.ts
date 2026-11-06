@@ -241,6 +241,36 @@ describe('send-password-reset fails soft', () => {
     expect(mockSendEmail).not.toHaveBeenCalled()
   })
 
+  it('logs an address with no account as info, and a real failure as an error', async () => {
+    const error = jest.spyOn(console, 'error').mockImplementation(() => undefined)
+    const info = jest.spyOn(console, 'info').mockImplementation(() => undefined)
+    try {
+      // Email enumeration protection on: identitytoolkit returns no link.
+      mockGenerateLink.mockRejectedValueOnce(
+        Object.assign(
+          new Error('INTERNAL ASSERT FAILED: Unable to create the email action link'),
+          { code: 'auth/internal-error' },
+        ),
+      )
+      expect((await post({ origin: 'https://app.aglyn.com' })).status).toBe(200)
+      mockGenerateLink.mockRejectedValueOnce(new Error('auth/user-not-found'))
+      expect((await post({ origin: 'https://app.aglyn.com' })).status).toBe(200)
+      expect(error).not.toHaveBeenCalled()
+      expect(info).toHaveBeenCalledTimes(2)
+      // The address is never written to the log.
+      expect(JSON.stringify(info.mock.calls)).not.toContain('@')
+
+      mockGenerateLink.mockRejectedValueOnce(
+        Object.assign(new Error('quota exceeded'), { code: 'auth/internal-error' }),
+      )
+      expect((await post({ origin: 'https://app.aglyn.com' })).status).toBe(200)
+      expect(error).toHaveBeenCalledTimes(1)
+    } finally {
+      error.mockRestore()
+      info.mockRestore()
+    }
+  })
+
   it('answers 200, and sends nothing, when rate limited or unconfigured', async () => {
     mockRateLimitAllowed = false
     expect((await post({ origin: 'https://app.aglyn.com' })).status).toBe(200)

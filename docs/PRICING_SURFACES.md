@@ -470,6 +470,40 @@ Owed by other lanes, in the order above:
 - **The AI credits block** (Lane B) replaces the six AI tiers and their
   per-plan legacy env.
 
+### 2026-11-05 — the Site Care project price list goes on `/pricing`
+
+The Pricing Decision Log entry of 2026-11-05 gives nineteen Site Care projects
+one flat price each (landing page and logo or brand kit become flat at $249
+and $349; redesign stays "from $749"). No code constant, Stripe price or
+calculator variable carries a project figure, so the page is the surface, and
+the Terms point at it rather than restate it.
+
+- `/pricing` (screen `v0clP6xQl-`) went from `d4QVrkm2vn` to `TWPqpAD3gb`,
+  "Site Care project prices panel (Pricing Decision Log, 2026-11-05)",
+  published 2026-11-05 22:36Z and revalidated: a full-width "Site Care
+  project prices" panel under the add-on cards (three columns, Pages / Store
+  and content / Brand and setup, stacking below `md`), built from the
+  section's own card, eyebrow, title and sentence nodes; the Site Care card's
+  project sentence (`mlO4E8cgvQ`) shortened to "Bigger jobs have one flat
+  price, agreed up front:" holding a text-style button, "see project prices
+  ↓", whose click scrolls to the panel (an element interaction: a bare
+  `#fragment` goes nowhere, AGL-2867); and the Managed sentence
+  (`Ee7idKukUk`) ending "Bigger jobs are priced flat up front, from the
+  project prices above." Three nodes changed, 68 added, none removed. The
+  section exists once and serves every breakpoint, so there is no mobile
+  copy to keep in step. The SEO description quotes no project price.
+- `tools/scripts/publish-pricing-site-care-project-prices.mjs` wrote it: one
+  constant per price, dry run by default, `--write` cuts the version,
+  `--publish` re-checks it against live and moves the pointer. A price change
+  on the list owes the page a new version through the same shape.
+- `tools/marketing/pricing-copy/copy-*.json`: the card and Managed strings.
+  The Figma frames still carry the old sentences and no panel; re-extracting
+  before they catch up would bring the old strings back.
+- Terms §4.24 (Google Doc revision 26) now prices a listed job from the
+  published list; its page version publishes separately.
+
+Revert: point `v0clP6xQl-`'s `versionId` back at `d4QVrkm2vn` and revalidate.
+
 ## Enterprise has no price here, but it has bands
 
 `PLAN_ENTITLEMENTS.enterprise` is a row of **finite fallbacks** — twice

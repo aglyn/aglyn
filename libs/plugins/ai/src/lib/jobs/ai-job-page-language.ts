@@ -66,8 +66,9 @@ import {
 import type { AiLoadEstimate } from '../runtime/ai-palette'
 import { aiSiteKindDesignLines, aiSiteKindOfInputs } from '../model/ai-site-kinds'
 import { aiSiteSeed } from '../model/ai-site-look'
-import type { AiLayoutDesign } from '../layout-language/ai-layout-design'
+import { aiLayoutPlannedChoicesOf, type AiLayoutDesign } from '../layout-language/ai-layout-design'
 import { aiOriginJobId } from './ai-job-draft-ids'
+import { aiPageSectionNodeId } from './ai-job-page-sections'
 import type { AiSystemBlock } from '../runtime/ai-runtime'
 import { aiGenerationWorstCaseOnTierMs, aiJobStepBudget } from './ai-job-budget'
 import { aiJobBriefLine, aiPlanReferenceLines } from './ai-job-generation'
@@ -80,10 +81,33 @@ import {
   aiCompileImportedPage,
   aiSiteImportDesignText,
   aiSiteImportFinishOf,
+  aiSiteImportLayoutOf,
   aiSiteImportSectionNames,
+  type AiSiteImportDesigned,
 } from './ai-site-import-compile'
-import { aiSiteImportPageIsLegal, type AiSiteImportWords } from '../model/ai-site-import'
+import { aiSiteImportPageIsLegal, AI_SITE_IMPORT_LAYOUT_KEPT, AI_SITE_IMPORT_PROPOSED_NOT_WRITTEN, type AiSiteImportAddedSection, type AiSiteImportPagePictures, type AiSiteImportRedesign, type AiSiteImportWords } from '../model/ai-site-import'
+import { siteImportFidelity, type SiteImportFidelityTheme, type SiteImportFidelityTree } from '../model/ai-site-import-fidelity'
 import { aiGenerationMaxTokensWithin, aiGenerationWorstCaseMs } from './ai-job-budget'
+import {
+  AI_SITE_IMPORT_IMPROVE_KIND,
+  AI_SITE_IMPORT_IMPROVE_MOST_TOKENS,
+  AI_SITE_IMPORT_IMPROVE_TOOL,
+  aiSiteImportImproveCheck,
+  aiSiteImportImproveDestinations,
+  aiSiteImportImproveDigest,
+  aiSiteImportImproveInstructions,
+  aiSiteImportImproveLedger,
+  aiSiteImportImprovePrompt,
+  aiSiteImportImproveScope,
+  aiSiteImportImprovedMisses,
+  aiSiteImportImproveInputUsage,
+  aiSiteImportImproveReaskTokens,
+  aiSiteImportImproveRoleLines,
+  aiSiteImportImproveTokensWithin,
+  aiSiteImportNewSectionsWanted,
+  aiSiteImportPageRoleOf,
+  type AiSiteImportImproved,
+} from './ai-site-import-improve'
 import {
   AI_SITE_IMPORT_WORDING_INSTRUCTIONS,
   AI_SITE_IMPORT_WORDING_KIND,
@@ -587,7 +611,9 @@ export function aiLayoutDesignOf(job: Pick<AiJob, '$id' | 'inputs'>, slug: strin
   if (!kind) return null
   const style = job.inputs?.['siteStyle'] as Record<string, unknown> | undefined
   const seed = typeof style?.['seed'] === 'number' && Number.isFinite(style['seed']) ? (style['seed'] as number) >>> 0 : aiSiteSeed(aiOriginJobId(job))
-  return { kind: kind.id, seed, home: aiLayoutIsHomeSlug(slug) }
+  // What a site's plan chose for every page of it (AGL-4152).
+  const planned = aiLayoutPlannedChoicesOf(style?.['planned'])
+  return { kind: kind.id, seed, home: aiLayoutIsHomeSlug(slug), ...(planned ? { planned } : {}) }
 }
 
 /**
@@ -629,6 +655,12 @@ export interface AiLayoutPageBuilt {
    * where none was. Absent on every other page.
    */
   words?: AiSiteImportWords
+  /**
+   * How a generative Improve it came out (AGL-4152): redesigned from its
+   * answer, or its layout kept where the redesign did not pass; what it added
+   * and what it shows. Absent on every other page.
+   */
+  redesign?: { status: AiSiteImportRedesign; added: AiSiteImportAddedSection[]; pictures: AiSiteImportPagePictures | null; names?: string[] }
 }
 
 export interface AiLayoutPageCheckInput {
@@ -1168,12 +1200,16 @@ export function aiImportedPageCheck(
     doc: AiSiteImportDocument
     language?: string
     rewritten?: readonly string[]
+    /** Sections a generative Improve it planned (AGL-4152), drawn in place of the source's layout. */
+    given?: AiSiteImportDesigned | null
   },
 ): (answer: Record<string, unknown> | null) => { value: AiLayoutPageBuilt | null; violations: AiDoctrineViolation[] } {
   const context = {
     ...aiLayoutListingContext(input.context, input.targets),
     ownWords: true,
     ...(input.rewritten?.length ? { rewritten: input.rewritten } : {}),
+    // A YouTube film with no poster shows YouTube's own still, as its wave was stamped (AGL-4140).
+    ...(input.doc.videoPosters ? { hostStills: true } : {}),
   }
   const plan = {
     title: input.screen.title,
@@ -1189,6 +1225,7 @@ export function aiImportedPageCheck(
       answer: design,
       // Kept as it is or improved, as the page's wave was asked (AGL-4152).
       finish: aiSiteImportFinishOf(input.doc),
+      ...(input.given ? { given: input.given } : {}),
       ...(input.language ? { language: input.language } : {}),
     })
     // A film's Video element keeps its id, as a section's root does: the button that plays it names it (AGL-4140).
@@ -1308,6 +1345,8 @@ async function aiRunImportedPage(input: AiLayoutPageRunInput, doc: AiSiteImportD
     return { ...spend, status: 'needs_input', violations: plain.violations, message: aiDoctrineNeedsInputMessage(plain.violations), answer: null }
   }
   if (doc.build === 'copied') return { ...spend, status: 'ok', value: plain.value }
+  // Redesigned from its ledger (AGL-4152), where its wave was stamped so: one answer in place of design and wording.
+  if (doc.generative && aiImportedPageRewords(doc, input.screen)) return aiRunImprovedPage({ input, doc, checkInput, plain: plain.value, spend })
   const observe = input.observe ?? ((inner) => inner)
   // The design answer the page was drawn with, which its reworded page is drawn with too.
   const drawn: { answer: Record<string, unknown> | null } = { answer: null }
@@ -1390,4 +1429,126 @@ async function aiRunImportedPageWording(scope: {
   const notes = refused.map((refusal) => ({ at: `line ${refusal.line}`, what: `kept as written, refused twice: ${refusal.code}` }))
   if (!rewrites.size) return { ...kept, ...spent, value: { ...kept.value, settled: [...kept.value.settled, ...notes] } }
   return { ...spent, status: 'ok', value: { ...built, settled: [...built.settled, ...notes], words: 'improved' } }
+}
+
+/**
+ * The ceiling a redesign is asked at on this model (AGL-4152): what the page
+ * step's time holds of a whole page's design and words, and its one re-ask.
+ */
+export function aiSiteImportImproveMaxTokens(model: string): number {
+  return aiGenerationMaxTokensWithin({ model, budgetMs: AI_JOB_PAGE_LANGUAGE_BUDGET.minimumMs, cap: AI_SITE_IMPORT_IMPROVE_MOST_TOKENS, lookups: 0 })
+}
+
+/**
+ * A page redesigned from its ledger (AGL-4152): one `submit_improved_page`
+ * answer on the page step's tier in place of the design and wording answers,
+ * held by the honesty validator, the kept ledger and the design lines, with the
+ * one re-ask naming what missed. An answer that misses again, is refused or is
+ * cut off leaves the page as today's compile draws it, every word the source's,
+ * and its row says the layout was kept.
+ */
+async function aiRunImprovedPage(scope: {
+  input: AiLayoutPageRunInput
+  doc: AiSiteImportDocument
+  checkInput: Pick<AiLayoutPageCheckInput, 'screen' | 'sectionIds' | 'targets' | 'context' | 'motion' | 'design'> & { language?: string }
+  plain: AiLayoutPageBuilt
+  spend: AiGenerationSpend
+}): Promise<AiValidatedGeneration<AiLayoutPageBuilt>> {
+  const { input, doc, checkInput, plain, spend } = scope
+  const ledger = aiSiteImportImproveLedger(doc)
+  const named = input.job.inputs?.['businessName']
+  const siteName = typeof named === 'string' ? named : null
+  const facts = aiSiteImportImproveScope(doc, siteName)
+  const theme = (doc.theme as unknown as SiteImportFidelityTheme | null | undefined) ?? null
+  const design = importedDesign(checkInput.design, input.screen)
+  const source = { layout: aiSiteImportLayoutOf(doc), blocks: doc.blocks, photos: doc.photos }
+  const savedForms = doc.forms ? doc.forms.filter((form) => form.formId).length : input.targets.forms.length ? 1 : 0
+  const observe = (input.observe ?? ((inner) => inner)) as (check: AiGenerationCheck<AiSiteImportImproved<AiLayoutPageBuilt>>) => AiGenerationCheck<AiSiteImportImproved<AiLayoutPageBuilt>>
+  // What the page is for, and the new sections it has room for (AGL-4152).
+  const role = aiSiteImportPageRoleOf(doc, input.screen.slug)
+  const needs = { role, wanted: aiSiteImportNewSectionsWanted(role, ledger, !!doc.proposed) }
+  const instructions = aiSiteImportImproveInstructions(aiSiteImportImproveDigest({ siteName, scope: doc.siteLines ?? [], plan: doc.plan ?? null }))
+  const prompt = aiSiteImportImprovePrompt({
+    screen: input.screen,
+    doc,
+    ledger,
+    destinations: aiSiteImportImproveDestinations(doc, ledger),
+    kindLines: aiSiteKindDesignLines(input.job.inputs),
+    seed: input.job.$id.slice(-6),
+    roleLines: aiSiteImportImproveRoleLines({ ...needs, folded: ledger.folded, kind: doc.plan?.site.kind ?? null, seed: aiSiteSeed(input.job.$id) }),
+  })
+  // The page's ceiling holds in code: the answer asks no more than it buys, and a re-ask it cannot pay for is not asked.
+  const most = aiSiteImportImproveMaxTokens(input.model)
+  const first = aiSiteImportImproveTokensWithin({
+    model: input.model,
+    spent: spend.usage,
+    input: aiSiteImportImproveInputUsage({ systemChars: instructions.reduce((sum, block) => sum + block.text.length, 0), promptChars: prompt.length }),
+    most,
+  })
+  const answered = await runValidatedGeneration<AiSiteImportImproved<AiLayoutPageBuilt>>(AI_SITE_IMPORT_IMPROVE_KIND, {
+    step: 'job.page',
+    model: input.model,
+    instructions,
+    messages: [{ role: 'user', content: prompt }],
+    tool: AI_SITE_IMPORT_IMPROVE_TOOL,
+    maxTokens: Math.max(1, first),
+    // Nothing is spent before it: a page brought in is compiled with no model first.
+    reaskTokens: (spent, last) => aiSiteImportImproveReaskTokens({ model: input.model, spent, lastOutput: last.outputTokens, most }),
+    cutOff: { noun: 'page', smaller: 'Write shorter copy, and fewer sections.' },
+    ...AI_LAYOUT_LANGUAGE_THINKING,
+    check: observe(
+      aiSiteImportImproveCheck<AiLayoutPageBuilt>({
+        doc,
+        ledger,
+        design,
+        scope: facts,
+        formId: input.targets.forms.length === 1 ? (input.targets.forms[0]?.id ?? null) : null,
+        framing: input.context.framing ?? null,
+        plan: doc.plan ?? null,
+        theme,
+        needs,
+        build: (page) =>
+          aiImportedPageCheck({
+            ...checkInput,
+            doc,
+            given: page.given,
+            rewritten: page.written,
+            screen: { ...input.screen, sections: page.names.map((name) => ({ name, uses: [], items: 0 })) },
+            sectionIds: page.names.map((_, index) => input.sectionIds[index] ?? aiPageSectionNodeId(input.job.$id, index)),
+          })(null),
+        score: (built, destinations) => {
+          const tree: SiteImportFidelityTree = { rootId: CANVAS_ROOT_ELEMENT_ID, nodes: built.nodes as unknown as SiteImportFidelityTree['nodes'] }
+          const report = siteImportFidelity(source, tree, { finish: 'improve', words: 'improved', theme, improved: { scope: facts, destinations, forms: savedForms, ...(doc.proposed ? { proposed: true } : {}) } })
+          return aiSiteImportImprovedMisses(report)
+        },
+      }),
+    ),
+    ...(input.signal ? { signal: input.signal } : {}),
+  })
+  const spent = spentTogether(spend, answered)
+  if (answered.status !== 'ok') {
+    // Logged by its codes alone: an answer's words are the site's content.
+    console.info('ai imported page: its redesign did not pass, its layout kept', {
+      status: answered.status,
+      codes: answered.status === 'needs_input' ? [...new Set(answered.violations.map((violation) => violation.code))] : [],
+    })
+    // A new page has no words of its own to fall back on: it is left out, and its row says why.
+    if (doc.proposed) return { ...spent, status: 'needs_input', violations: answered.status === 'needs_input' ? answered.violations : [], message: AI_SITE_IMPORT_PROPOSED_NOT_WRITTEN, answer: null }
+    return {
+      ...spent,
+      status: 'ok',
+      value: {
+        ...plain,
+        settled: [...plain.settled, { at: 'page', what: AI_SITE_IMPORT_LAYOUT_KEPT }],
+        words: 'kept',
+        redesign: { status: 'layout-kept', added: [], pictures: null },
+      },
+    }
+  }
+  const { built, page } = answered.value
+  return {
+    ...spent,
+    status: 'ok',
+    value: { ...built, words: 'improved', redesign: { status: 'redesigned', added: page.added, pictures: page.pictures, names: page.names } },
+  }
 }

@@ -198,6 +198,14 @@ describe('the org default reaches a dataset created in a site', () => {
     expect(mockCreates[0]['visibleTo']).toEqual(['org'])
   })
 
+  it("stamps the name's search key beside the name (AGL-4047)", async () => {
+    const response = await createDataset({ displayName: '  Guest   Speakers ' })
+
+    expect(response.status).toBe(200)
+    expect(mockCreates[0]['displayName']).toBe('Guest   Speakers')
+    expect(mockCreates[0]['nameLower']).toBe('guest speakers')
+  })
+
   it('stamps All sites for an org that never chose, which is the default', async () => {
     const response = await createDataset({ hostId: 'host-a' })
 

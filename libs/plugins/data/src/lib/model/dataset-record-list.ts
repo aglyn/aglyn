@@ -15,7 +15,7 @@
  * limitations under the License.
  */
 
-import { scopeTokensForHost } from '@aglyn/aglyn/app-utils/scope-tokens'
+import { describeSharing, scopeTokensForHost } from '@aglyn/aglyn/app-utils/scope-tokens'
 import {
   registerPluginRecordListSource,
   type PluginRecordListSource,
@@ -30,6 +30,7 @@ import {
 } from 'firebase/firestore'
 import { BUNDLE_ID } from '../constants/bundle-common'
 import { datasetIndexedRecord } from './dataset-record'
+import { datasetPickerLabels } from './dataset-model-core'
 
 /**
  * The `visibleTo` tokens a list of datasets asks for, or `null` for no filter.
@@ -83,6 +84,20 @@ export const datasetRecordListSource: PluginRecordListSource = {
     )
   },
   record: datasetIndexedRecord,
+  /**
+   * A dataset's name alone, unless another in the list has it too (AGL-4047):
+   * then who it is shared with, and where that matches too, its field count.
+   */
+  pickerLabels(records, context) {
+    return datasetPickerLabels(
+      records.map((record) => ({
+        id: record.id,
+        name: record.name,
+        sharing: describeSharing(record.facts, context?.hostNames ?? {}),
+        fields: Array.isArray(record.facts['fields']) ? record.facts['fields'].length : 0,
+      })),
+    )
+  },
 }
 
 /** Called from the console registrar, owner named for a spec that calls it directly. */

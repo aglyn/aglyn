@@ -31,7 +31,8 @@ import Tab from '@mui/material/Tab'
 import Tabs from '@mui/material/Tabs'
 import TextField from '@mui/material/TextField'
 import Typography from '@mui/material/Typography'
-import { forwardRef, useCallback, useEffect, useState } from 'react'
+import { forwardRef, lazy, Suspense, useCallback, useEffect, useState } from 'react'
+import type { AccountSubscription } from './account-subscriptions'
 import { BUNDLE_ID } from '../constants/bundle-common'
 import { returnRequestHref } from '../constants/return-request'
 import { generatePresetId } from '../utils/generate-preset-id'
@@ -56,12 +57,7 @@ interface AccountData {
     url: string
     licenseKeys?: string[]
   }>
-  subscriptions?: Array<{
-    id: string
-    productName: string
-    status: string
-    currentPeriodEndMs?: number | null
-  }>
+  subscriptions?: AccountSubscription[]
   orders: Array<{
     id: string
     number: string
@@ -72,6 +68,8 @@ interface AccountData {
     tracking?: { carrier?: string; trackingNumber?: string }
   }>
 }
+
+const AccountSubscriptions = lazy(() => import('./account-subscriptions'))
 
 const usd = (cents: number) => `$${(cents / 100).toFixed(2)}`
 
@@ -359,44 +357,16 @@ const CustomerAccount = forwardRef<HTMLDivElement, CustomerAccountProps>(
         )}
 
         {(account.subscriptions?.length ?? 0) > 0 ? (
-          <>
-            <Divider textAlign="left">{'Subscriptions'}</Divider>
-            {account.subscriptions!.map((subscription) => (
-              <Box
-                key={subscription.id}
-                sx={{ display: 'flex', gap: 1, alignItems: 'center' }}
-              >
-                <Typography variant="body2" sx={{ flex: 1 }} noWrap>
-                  {subscription.productName}
-                </Typography>
-                <Chip
-                  label={subscription.status}
-                  size="small"
-                  variant="outlined"
-                  color={
-                    subscription.status === 'active' ? 'success' : 'default'
-                  }
-                />
-                <Button
-                  size="small"
-                  onClick={async () => {
-                    const response = await siteFetch(
-                      '/api/commerce/subscription-portal',
-                      {
-                        method: 'POST',
-                        headers: { 'Content-Type': 'application/json' },
-                        body: JSON.stringify({ hostId }),
-                      },
-                    ).catch(() => null)
-                    const payload = await response?.json().catch(() => ({}))
-                    if (payload?.url) window.location.assign(payload.url)
-                  }}
-                >
-                  {'Manage'}
-                </Button>
-              </Box>
-            ))}
-          </>
+          // Loaded on demand (AGL-4191): it only ever appears after the
+          // signed-in account has loaded in the browser, so it need not be in
+          // the storefront's first download.
+          <Suspense fallback={null}>
+            <AccountSubscriptions
+              hostId={hostId}
+              subscriptions={account.subscriptions!}
+              siteFetch={siteFetch}
+            />
+          </Suspense>
         ) : null}
         {(account.downloads?.length ?? 0) > 0 ? (
           <>

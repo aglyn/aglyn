@@ -111,7 +111,7 @@ tells them it's undergoing maintenance. If both are on, visitors get the mainten
 on the site shows your 503 page to every visitor, including anyone who already has a
 link, and pages you add later are covered too. You and your team still see the whole site.
 
-![The Error pages card, with the four error-page pickers and the "Maintenance mode — show the 503 page at every address" switch beneath them](/img/site-protection/setup-error-pages.png)
+![The Error pages card, with the four error-page pickers and the "Maintenance mode — show visitors the 503 page at every address" switch beneath them](/img/site-protection/setup-error-pages.png)
 
 1. *(Optional)* Design a **503 · Maintenance** page in the Besigner, such as a short
    "Coming soon" with your logo, and assign it in **Admin → Error pages**. See

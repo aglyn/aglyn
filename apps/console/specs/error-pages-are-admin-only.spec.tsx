@@ -170,7 +170,7 @@ const ADMIN_ERROR_PAGES =
 const SITE_MANAGE_REFUSAL =
   'Your role does not include "Manage site settings" — ask an organization admin'
 const MAINTENANCE_LABEL =
-  'Maintenance mode — show the 503 page at every address'
+  'Maintenance mode — show visitors the 503 page at every address'
 
 /** The Error pages section, mounted inside the layout that guards it. */
 const openTheSection = () =>

@@ -39,6 +39,7 @@ import {
 import type { AiTool } from '../runtime/ai-runtime'
 import {
   AI_SITE_BASES,
+  AI_SITE_BUTTONS,
   AI_SITE_CORNERS,
   AI_SITE_FONT_PAIRINGS,
   AI_SITE_GROUNDS,
@@ -95,8 +96,8 @@ export type AiSiteEyebrow = (typeof AI_SITE_EYEBROWS)[number]
 /** What sets a plain header bar off the page. */
 export const AI_SITE_HEADERS = ['line', 'shadow', 'flat'] as const
 export type AiSiteHeader = (typeof AI_SITE_HEADERS)[number]
-/** Button shapes and casing; `link` draws quiet buttons as underlined links. */
-export const AI_SITE_BUTTONS: readonly AiSiteButtons[] = ['rounded', 'pill', 'square', 'caps', 'link']
+/** Button shapes and casing, from the kinds' own vocabulary (`ai-site-kinds.ts`). */
+export { AI_SITE_BUTTONS }
 const DENSITIES: readonly AiSiteDensity[] = ['compact', 'regular', 'airy']
 
 /**
@@ -142,6 +143,14 @@ export interface AiSiteStyle {
    * shows. Absent on every other style, which draws as it always did.
    */
   finish?: 'keep' | 'improve'
+  /**
+   * A generative Improve it (AGL-4152): a brand too bright to carry white words
+   * fills the theme's filled buttons as it is, under the label that reads on it,
+   * so the site's real color shows, while links and words take the primary at
+   * the nearest shade that reads on the page. Absent, the brand is deepened for
+   * both, as every other style draws it.
+   */
+  brandFill?: true
   /**
    * A site brought in's own page ground (AGL-4108), `#rrggbb`: the color its
    * source's pages sit on, where it is light enough for the theme's text.
@@ -240,7 +249,8 @@ export type AiSiteLookAnswer = Partial<
 
 /**
  * The dimensions the sites a person likes pin (AGL-3975,
- * `jobs/ai-site-inspiration.ts`): each one present is KEPT, whatever the
+ * `jobs/ai-site-inspiration.ts`), and an AI starter's look (AGL-4049,
+ * `model/ai-site-starter-look.ts`): each one present is KEPT, whatever the
  * model or the seed would choose, and every other dimension is chosen as it
  * always is. A brand the person gave in the brief still wins over a pinned
  * brand color, and the hue pinned with it.
@@ -248,6 +258,8 @@ export type AiSiteLookAnswer = Partial<
 export type AiSiteLookPins = Partial<
   Pick<
     AiSiteStyle,
+    // The base theme an AI starter is set in (AGL-4049).
+    | 'base'
     | 'brand'
     | 'hue'
     | 'accent'
@@ -802,12 +814,15 @@ function colorsOf(style: AiSiteStyle): { light: HostThemeSchemeColors; dark: Hos
 
   // A site brought in's filled buttons (AGL-4152): their fill, and their words' nearest shade that reads on it,
   // or where no shade on their side does, the label that reads on the other: the fill is what a visitor knows.
-  const buttonFill = solid(style.buttonFill)
-  const buttonText = solid(style.buttonText)
+  // A generative Improve it's brand, too bright to carry white words, is that fill itself (AGL-4152).
+  const brightBrand = style.brandFill && brand && ratio(white, style.brand as string) < 4.5 ? solid(style.brand) : null
+  const buttonFill = solid(style.buttonFill) ?? brightBrand
+  const buttonText = solid(style.buttonText) ?? (brightBrand ? crossedLabelOn(brightBrand) : null)
   const label = buttonFill && buttonText ? (shadeOn(buttonText, buttonFill, 4.5) ?? crossedLabelOn(buttonFill)) : null
   // The fill is the brand: drawn as the brand where its words read on it and it reads on the page.
   const fillIsBrand = !!buttonFill && !!brand && buttonFill === solid(style.brand)
-  const ownPrimary = !!label && fillIsBrand && ratio(buttonFill as string, background) >= 3
+  // A generative Improve it's primary is links and words too, so it is the fill only where it reads at 4.5 (AGL-4152).
+  const ownPrimary = !!label && fillIsBrand && ratio(buttonFill as string, background) >= (brightBrand ? 4.5 : 3)
   // The dark scheme's brand is words and links too, so it is the fill only where it reads at 4.5.
   const fillReadsOnDark = fillIsBrand && ratio(buttonFill as string, darkBackground) >= 4.5
   // Else the filled buttons alone are drawn in it, where it is a fill of its own on the page: under
@@ -817,7 +832,7 @@ function colorsOf(style: AiSiteStyle): { light: HostThemeSchemeColors; dark: Hos
     buttonFill && ownLabel && !(ownPrimary && fillReadsOnDark) && aiOklabDistance(buttonFill, background) >= OWN_FILL_APART ? apartFrom(buttonFill, darkBackground, COMMON[ownLabel]) : null
   const button: AiSiteOwnButton | null =
     ownLabel && darkButtonFill
-      ? { label: ownLabel, outlined: ratio(buttonFill as string, background) >= 3 && ratio(darkButtonFill, darkBackground) >= 3 }
+      ? { label: ownLabel, outlined: ratio(buttonFill as string, background) >= (brightBrand ? 4.5 : 3) && ratio(darkButtonFill, darkBackground) >= 3 }
       : null
 
   // The brand color: a button label reads on it, so it reads on the page too.
@@ -1268,8 +1283,10 @@ export function aiSiteTheme(style: AiSiteStyle, base: HostTheme): HostTheme {
  * both style one; last, the filled buttons in the source's own fill.
  */
 function withKeptButtons(components: Record<string, HostThemeComponentOverride>, style: AiSiteStyle, button: AiSiteOwnButton | null): Record<string, HostThemeComponentOverride> {
-  if (style.finish !== 'keep') return components
   const own = components['MuiButton'] ?? {}
+  // A generative Improve it's bright brand fills its buttons (AGL-4152); nothing else of Keep my site's holds.
+  if (style.brandFill && style.finish === 'improve' && button) return { ...components, MuiButton: { ...own, variants: [...(own.variants ?? []), ...ownButtonVariants(button)] } }
+  if (style.finish !== 'keep') return components
   return { ...components, MuiButton: { ...own, variants: [...(own.variants ?? []), ...keptButtonVariants(style), ...(button ? ownButtonVariants(button) : [])] } }
 }
 

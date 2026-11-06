@@ -395,6 +395,19 @@ export const FLAG_DOC_PAGES: Partial<
     },
   ],
 
+  // AGL-4152. A generative Improve it is a section of the page about Bring my
+  // site, which is itself released: the section discloses beside what it says,
+  // tied to its heading by the window.
+  release_ai_site_import_generative: [
+    {
+      path: 'docs/ai/bring-my-site.md',
+      disclosure: [
+        /### A planned, rewritten Improve it[\s\S]{0,60}\*\*A planned, rewritten Improve it is rolling out\*\*,[\s\S]{0,40}may not have it yet\./,
+      ],
+      checkNoPriceClaim: true,
+    },
+  ],
+
   // AGL-3614. The flag closes the organization's Accounting tab, and each of
   // the three guides is ABOUT connecting one ledger to it, so all take the
   // admonition, whole-file. They are also `unlisted: true` until the flag is
@@ -406,6 +419,18 @@ export const FLAG_DOC_PAGES: Partial<
   // ("a card with a price"), never an amount. Create a site covers every way
   // a site starts, so it discloses beside its own mention, tied to it by the
   // window.
+  // AGL-4140. The flag shows YouTube's own thumbnail as the poster of a
+  // YouTube film with none. The Video page covers every way the element
+  // plays a film, so it discloses beside the one section about it.
+  release_video_embed_posters: [
+    {
+      path: 'docs/building-sites/besigner/video.md',
+      disclosure: [
+        /### A YouTube video without a poster[\s\S]{0,80}\*\*YouTube thumbnails as posters are rolling out\*\*,[\s\S]{0,40}may not have them\s+yet\./,
+      ],
+      checkNoPriceClaim: true,
+    },
+  ],
   release_site_starters: [
     {
       path: 'docs/building-sites/site-templates/site-starters.md',

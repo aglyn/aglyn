@@ -158,6 +158,8 @@ export const FIRST_PARTY_VIDEO_EMBED_PROVIDERS: readonly ResolvedVideoEmbedProvi
         "option": "loop",
         "on": "{id}"
       }
-    ]
+    ],
+    "posterOrigin": "https://i.ytimg.com",
+    "posterPath": "/vi/{id}/hqdefault.jpg"
   },
 ]

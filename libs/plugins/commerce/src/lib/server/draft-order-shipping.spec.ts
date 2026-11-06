@@ -606,16 +606,23 @@ describe('draft-order payment links honor the merchant’s payment methods (AGL-
 
   it('excludes the methods switched off, and crypto until it is chosen', async () => {
     const { result, body } = await runDraft({
-      settings: { paymentMethods: { klarna: false, link: false } },
+      settings: { paymentMethods: { cashapp: false, link: false } },
     })
     expect(result.status).toBe(200)
-    expect(excluded(body)).toEqual(['klarna', 'crypto'])
+    expect(excluded(body)).toEqual(['klarna', 'afterpay_clearpay', 'affirm', 'cashapp', 'crypto'])
     expect(body?.get('wallet_options[link][display]')).toBe('never')
   })
 
-  it('sends only the crypto exclusion for a store on the defaults', async () => {
+  it('never offers buy-now-pay-later on the link, whatever the store chose', async () => {
+    const { body } = await runDraft({
+      settings: { paymentMethods: { klarna: true, afterpay_clearpay: true, affirm: true, crypto: true } },
+    })
+    expect(excluded(body)).toEqual(['klarna', 'afterpay_clearpay', 'affirm'])
+  })
+
+  it('sends the buy-now-pay-later and crypto exclusions for a store on the defaults', async () => {
     const { body } = await runDraft()
-    expect(excluded(body)).toEqual(['crypto'])
+    expect(excluded(body)).toEqual(['klarna', 'afterpay_clearpay', 'affirm', 'crypto'])
     expect(body?.get('wallet_options[link][display]')).toBeNull()
   })
 })

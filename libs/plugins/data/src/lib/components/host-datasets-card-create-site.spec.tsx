@@ -43,7 +43,8 @@
 
 import { act, fireEvent, render, screen, waitFor, within } from '@testing-library/react'
 
-import type { ReactNode } from 'react'
+import { type ReactNode, useMemo, useState } from 'react'
+import { PageHeaderActionsContext } from '@aglyn/aglyn/app-utils/page-header-actions-context'
 import { HostDatasetsCard } from './host-datasets-card.component'
 
 const ATTENDEES = {
@@ -76,6 +77,29 @@ const ORG = { $id: 'org-1', plan: 'scale' }
 
 /** What the org Data page's lookup would answer — every mount is org-1's. */
 const useOrgDataScopeSpy = jest.fn((_options: unknown) => DATA_SCOPE)
+
+/**
+ * The page header the card publishes Add dataset and Add join collection into
+ * (AGL-4047), drawn above the card as the console's layout draws it.
+ */
+function WithPageHeader(props: { children?: ReactNode }) {
+  const [actions, setHeaderActions] = useState<ReactNode>(null)
+  const value = useMemo(() => ({ setHeaderActions }), [])
+  return (
+    <PageHeaderActionsContext.Provider value={value}>
+      <div data-testid="page-header">{actions}</div>
+      {props.children}
+    </PageHeaderActionsContext.Provider>
+  )
+}
+
+/** The Data page's route (AGL-4047): the card reads the router to open a dataset's tab. */
+const mockRouter = { push: jest.fn(), replace: jest.fn(), prefetch: jest.fn() }
+jest.mock('next/navigation', () => ({
+  useRouter: () => mockRouter,
+  usePathname: () => '/acme/data',
+  useSearchParams: () => new URLSearchParams(),
+}))
 
 jest.mock('@aglyn/tenant-feature-instance', () => ({
   useFirestoreDoc: () => ({ data: undefined, status: 'loading' }),
@@ -141,7 +165,26 @@ jest.mock('@aglyn/shared-ui-snackstack', () => ({
   useSnackbar: () => ({ enqueueSnackbar }),
 }))
 jest.mock('@aglyn/shared-ui-jsx', () => ({
-  CardDisplay: ({ children }: { children: ReactNode }) => <div>{children}</div>,
+  CardDisplay: ({ children, header, HeaderProps }: any) => (
+    <div>
+      {header}
+      {HeaderProps?.action}
+      {HeaderProps?.subheader}
+      {children}
+    </div>
+  ),
+  GridItems: ({ items }: any) => (
+    <div>
+      {items.map((item: any, index: number) => (
+        <div key={index}>{item.children}</div>
+      ))}
+    </div>
+  ),
+  AppLink: ({ children, href, componentVariant: _variant, ...rest }: any) => (
+    <a href={href} {...rest}>
+      {children}
+    </a>
+  ),
   MdiIcon: () => null,
   useConfirmationContext: () => ({ confirm: jest.fn() }),
 }))
@@ -153,7 +196,7 @@ beforeEach(() => {
 
 /** Mounted and settled: the two count aggregates resolve off the mount. */
 const mountCard = async (props: Record<string, unknown>) => {
-  render(<HostDatasetsCard org={ORG as any} {...props} />)
+  render(<HostDatasetsCard org={ORG as any} {...props} />, { wrapper: WithPageHeader })
   await act(async () => {
     await Promise.resolve()
   })
@@ -272,6 +315,8 @@ describe('the caption says what a new dataset starts on', () => {
       hostId: 'host-a',
       org: { ...ORG, defaultResourceScope: 'host' },
     })
+    // Said where a dataset is made, in the New dataset dialog (AGL-4047).
+    fireEvent.click(screen.getByText('Add dataset'))
     expect(screen.getByText(SITE_ONLY)).toBeTruthy()
     expect(screen.queryByText(EVERY_SITE)).toBeNull()
   })
@@ -281,6 +326,8 @@ describe('the caption says what a new dataset starts on', () => {
       hostId: 'host-a',
       org: { ...ORG, defaultResourceScope: 'org' },
     })
+    // Said where a dataset is made, in the New dataset dialog (AGL-4047).
+    fireEvent.click(screen.getByText('Add dataset'))
     expect(screen.getByText(EVERY_SITE)).toBeTruthy()
     expect(screen.queryByText(SITE_ONLY)).toBeNull()
   })
@@ -291,6 +338,8 @@ describe('the caption says what a new dataset starts on', () => {
       orgId: 'org-1',
       org: { ...ORG, defaultResourceScope: 'host' },
     })
+    // Said where a dataset is made, in the New dataset dialog (AGL-4047).
+    fireEvent.click(screen.getByText('Add dataset'))
     expect(screen.getByText(EVERY_SITE)).toBeTruthy()
     expect(screen.queryByText(SITE_ONLY)).toBeNull()
   })

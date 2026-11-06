@@ -12,6 +12,11 @@ for the how-to.
 
 ## November 2026 — Aglyn 1.0 (newest)
 
+- **Card readers by plain name.** [POS hardware](commerce-and-bookings/commerce/pos-hardware.md#buy-a-reader-from-aglyn)
+  — the **Hardware** card, the register, emails and receipts name each reader by what
+  it is, with its model: **Pocket reader (M2)**, **Touchscreen reader (S700)**,
+  **Touchscreen reader, 4G-capable (S710)**, **Countertop reader (T600)** and
+  **Countertop reader (WisePOS E)**. Your order records keep the exact model.
 - **Share a dataset with all sites except some.** [Datasets](content-and-data/datasets/overview.md#who-a-dataset-is-shared-with)
   — tick the sites to leave out, and every other site shares it, including any site you add later.
 - **Four plans: Free, Starter, Pro and Custom.** [Billing & plans](workspace-and-billing/billing-and-plans/overview.md#tiers--entitlements)

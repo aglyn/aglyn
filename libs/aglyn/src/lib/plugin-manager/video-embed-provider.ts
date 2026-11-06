@@ -164,6 +164,23 @@ export interface VideoEmbedProviderDeclaration {
   playerPath: string
   /** The query every player address carries, in this order. */
   playerQuery?: readonly VideoEmbedPlayerParam[]
+  /**
+   * The one origin the host serves its own still of each film from
+   * (AGL-4140), for a host that publishes one at an address built from the
+   * media id alone. With {@link posterPath}, or neither: a host with no
+   * public still keeps asking the author for a poster.
+   *
+   * A visitor's browser loads the still from here on page load, before any
+   * press, so a page that shows one sends the host the visitor's IP address
+   * and user-agent. That is a recipient the platform chooses, not the author:
+   * the Video element shows it only where `release_video_embed_posters` is on
+   * for the site's workspace (`SiteContextValue.videoEmbedPosters`), and the
+   * published page's `img-src` admits {@link videoEmbedPosterOrigins} only
+   * there.
+   */
+  posterOrigin?: string
+  /** The still's path on {@link posterOrigin}; `{id}` is the media id. */
+  posterPath?: string
 }
 
 /** A declaration, with the plugin that made it. */
@@ -327,6 +344,37 @@ export function videoEmbedPlayerOrigins(
   providers: readonly ResolvedVideoEmbedProvider[] = videoEmbedProviders(),
 ): string[] {
   return [...new Set(providers.map((provider) => provider.playerOrigin))]
+}
+
+/**
+ * The host's own still of the film a declared host's link names
+ * (AGL-4140), rebuilt from the media id and the declaration alone, or
+ * `undefined` for a host that publishes none and for any other value.
+ */
+export function videoEmbedPosterSrc(
+  value: unknown,
+  providers?: readonly ResolvedVideoEmbedProvider[],
+): string | undefined {
+  const embed = videoEmbedOf(value, providers)
+  const { posterOrigin, posterPath } = embed?.provider ?? {}
+  if (!embed || !posterOrigin || !posterPath) return undefined
+  return `${posterOrigin}${posterPath.replace(ID_PLACEHOLDER, embed.mediaId)}`
+}
+
+/**
+ * Every origin a declared host serves its stills from: what a published
+ * page's `img-src` admits, where the site's workspace shows them.
+ */
+export function videoEmbedPosterOrigins(
+  providers: readonly ResolvedVideoEmbedProvider[] = videoEmbedProviders(),
+): string[] {
+  return [
+    ...new Set(
+      providers.flatMap((provider) =>
+        provider.posterOrigin && provider.posterPath ? [provider.posterOrigin] : [],
+      ),
+    ),
+  ]
 }
 
 /** The declared hosts' names, as an author knows them. */

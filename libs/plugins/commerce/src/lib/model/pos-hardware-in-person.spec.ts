@@ -38,9 +38,11 @@ describe('the hardware share of a register sale', () => {
       taxCents: 4_867,
     })
     expect(share).toEqual({
-      lines: [{ sku: 'stripe-reader-s710', name: 'Stripe Reader S710', quantity: 2, unitCents: 30_000, lineCents: 60_000 }],
+      lines: [{ sku: 'stripe-reader-s710', name: 'Touchscreen reader, 4G-capable (S710)', quantity: 2, unitCents: 30_000, lineCents: 60_000 }],
       itemsCents: 60_000,
       discountCents: 1_001,
+      // A register sale ships nothing.
+      shippingCents: 0,
       taxableCents: 58_999,
       taxCents: 4_867,
       totalCents: 63_866,

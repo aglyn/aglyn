@@ -217,6 +217,13 @@ const LOAD_MORE_ALLOWED = [
   // first six. Nothing is loaded and nothing grows past the one answer, so
   // there is no page to turn.
   'libs/plugins/domains/src/lib/components/domain-search.component.tsx',
+  // The Data page's dataset rail (AGL-4047): the datasets as vertical TABS,
+  // each at its own address, with the open dataset's records table (which
+  // pages on the shared footer) beside them. "Show more datasets" widens the
+  // rail's query by DATASET_LIST_WINDOW so a workspace with more than one
+  // window of datasets can reach every tab; a pager under a tab rail would
+  // hide the open dataset's own tab whenever the reader turned it.
+  'libs/plugins/data/src/lib/components/host-datasets-card.component.tsx',
 ]
 
 /**
@@ -1427,11 +1434,6 @@ const NOT_A_LIST: Array<[string, string]> = [
       'Bounded by what the plan sells, not by how long the store has traded.',
   ],
   [
-    'libs/plugins/data/src/lib/components/dataset-schema-dialog.component.tsx',
-    'One row per FIELD of the dataset being edited, which is the schema the ' +
-      'author is defining in the dialog above the rows.',
-  ],
-  [
     'libs/plugins/logic/src/lib/components/host-reference-health-card.component.tsx',
     'A diagnostic: one row per BROKEN reference found across a fixed set of ' +
       'collections. A healthy site renders none, and a site with hundreds ' +
@@ -2108,7 +2110,9 @@ describe('a table with rows under it has a footer under those (AGL-2501)', () =>
     // (AGL-4040): a workspace holds at most 25 names, and a zone is read whole.
     // 86 with the tax return's own-sales breakdown (AGL-4038): a row per kind
     // of the operator's own sales and jurisdiction, under the return's row cap.
-    expect(NOT_A_LIST).toHaveLength(86)
+    // 85 once the dataset schema dialog stopped drawing its fields as a table
+    // (AGL-4047, the Data page's vertical tabs), so its entry went.
+    expect(NOT_A_LIST).toHaveLength(85)
   })
 })
 

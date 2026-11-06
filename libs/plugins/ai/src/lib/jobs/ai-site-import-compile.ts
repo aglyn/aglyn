@@ -57,6 +57,7 @@
  * here, from its lines, one section at each second-level heading.
  *=========================================*/
 
+import { videoEmbedPosterSrc } from '@aglyn/aglyn/plugin-manager/video-embed-provider'
 import {
   aiCompileLayoutPage,
   type AiLayoutCompiledPage,
@@ -429,7 +430,7 @@ function ownHeroOf(section: Pick<SiteImportLayoutSection, 'align'>, place: SiteI
   return section.align === 'center' ? 'column' : 'editorial'
 }
 
-interface MapScope {
+export interface MapScope {
   doc: AiSiteImportDocument
   layout: SiteImportLayout
   /** Lines taken into a block, by index of the page's blocks. */
@@ -455,7 +456,7 @@ interface MapScope {
 }
 
 /** Where a link of the source goes on the new site, in the compiler's words; `undefined` where it can go nowhere a page may send a visitor. */
-function linkTo(scope: Pick<MapScope, 'doc' | 'pathTo'>, href: string | undefined): string | undefined {
+export function aiSiteImportLinkTo(scope: Pick<MapScope, 'doc' | 'pathTo'>, href: string | undefined): string | undefined {
   const value = (href ?? '').trim()
   if (/^mailto:[^\s@]+@[^\s@]+$/i.test(value) || /^tel:\+?[\d\s().-]{3,}$/i.test(value)) return value
   let url: URL
@@ -516,7 +517,7 @@ function pictureFitOf(photo: AiSiteImportPhoto, fit: SiteImportPictureFit | unde
 }
 
 /** A picture line as the library holds it; marks it taken, and missing where the library holds none. */
-function takePicture(scope: MapScope, ref: SiteImportLineRef | undefined, href?: string, fit?: SiteImportPictureFit): AiLayoutPicture | null {
+export function aiSiteImportTakePicture(scope: MapScope, ref: SiteImportLineRef | undefined, href?: string, fit?: SiteImportPictureFit): AiLayoutPicture | null {
   if (ref === undefined || scope.used.has(ref)) return null
   const block = scope.doc.blocks[ref]
   if (!block || block.kind !== 'image') return null
@@ -528,7 +529,7 @@ function takePicture(scope: MapScope, ref: SiteImportLineRef | undefined, href?:
   }
   const alt = clean(block.alt || photo.alt || '').slice(0, 200)
   const ratio = photo.width && photo.height ? photo.width / photo.height : 0
-  const to = linkTo(scope, href)
+  const to = aiSiteImportLinkTo(scope, href)
   const framed = pictureFitOf(photo, fit)
   return { src: photo.src, alt, ...(ratio > 0 ? { ratio } : {}), ...(to ? { to } : {}), ...(framed ? { fit: framed } : {}) }
 }
@@ -606,7 +607,7 @@ function textBlocks(kind: 'text' | 'lede' | 'note', text: string): AiLayoutBlock
 
 /** A link of the source: a button where its words fit one, a link in a list where they run longer, its words where it goes nowhere. */
 function linkBlocks(scope: MapScope, text: string, href: string, style: AiLayoutStyle): AiLayoutBlock[] {
-  const to = linkTo(scope, href)
+  const to = aiSiteImportLinkTo(scope, href)
   if (text.length <= AI_SITE_IMPORT_LABEL_CHARS) return [{ kind: 'button', text, ...(to ? { to } : {}), style }]
   if (to) return [{ kind: 'list', items: [{ title: text, text: '', to }] }]
   return textBlocks('text', text)
@@ -617,7 +618,7 @@ function lineBlocks(scope: MapScope, node: SiteImportLayoutLine): AiLayoutBlock[
   const block = scope.doc.blocks[node.line]
   if (!block || scope.used.has(node.line)) return []
   if (block.kind === 'image') {
-    const picture = takePicture(scope, node.line)
+    const picture = aiSiteImportTakePicture(scope, node.line)
     return picture ? [{ kind: 'image', picture }] : []
   }
   const text = take(scope, node.line)
@@ -677,7 +678,7 @@ function itemOf(scope: MapScope, group: SiteImportLayoutGroup, item: SiteImportL
     const block = scope.doc.blocks[ref]
     const text = take(scope, ref)
     if (!text) return
-    const to = block?.kind === 'link' ? linkTo(scope, block.href) : undefined
+    const to = block?.kind === 'link' ? aiSiteImportLinkTo(scope, block.href) : undefined
     if (text.length <= AI_SITE_IMPORT_LABEL_CHARS) links.push({ text, ...(to ? { to } : {}), style: itemLinkStyle(group, item, ref) })
     else paragraphs.push(text)
   }
@@ -692,7 +693,7 @@ function itemOf(scope: MapScope, group: SiteImportLayoutGroup, item: SiteImportL
     // A figure stands alone: its tag, if it has one, is among its words.
     else if (ref === item.badge && kind !== 'stats') out.badge = take(scope, ref)
     else if (ref === item.image || (block.kind === 'image' && !named.has(ref))) {
-      const picture = takePicture(scope, ref, undefined, ref === item.image ? item.imageFit : undefined)
+      const picture = aiSiteImportTakePicture(scope, ref, undefined, ref === item.image ? item.imageFit : undefined)
       if (picture && !out.picture) out.picture = picture
     } else if (item.list?.includes(ref)) {
       const line = take(scope, ref)
@@ -724,7 +725,7 @@ function itemOf(scope: MapScope, group: SiteImportLayoutGroup, item: SiteImportL
     out.picture = { ...out.picture, video: film }
     return out
   }
-  const to = linkTo(scope, item.to)
+  const to = aiSiteImportLinkTo(scope, item.to)
   if (to) out.to = to
   return out
 }
@@ -837,11 +838,11 @@ function groupBlocks(scope: MapScope, group: SiteImportLayoutGroup): AiLayoutBlo
       const linked = item.lines.map((ref) => scope.doc.blocks[ref]).find((block) => block?.kind === 'link')
       const words = item.lines.map((ref) => take(scope, ref)).filter(Boolean).join(' ')
       for (const ref of item.lines) {
-        if (scope.doc.blocks[ref]?.kind === 'image') takePicture(scope, ref)
+        if (scope.doc.blocks[ref]?.kind === 'image') aiSiteImportTakePicture(scope, ref)
       }
       if (!words) return []
       const icon = iconAt(scope, item.icon)
-      const to = linkTo(scope, item.to ?? (linked?.kind === 'link' ? linked.href : undefined))
+      const to = aiSiteImportLinkTo(scope, item.to ?? (linked?.kind === 'link' ? linked.href : undefined))
       return [{ title: words, text: '', ...(icon ? { iconPath: icon } : {}), ...(to ? { to } : {}) }]
     })
     return items.length ? [{ kind: 'list', items, columns }] : []
@@ -851,7 +852,7 @@ function groupBlocks(scope: MapScope, group: SiteImportLayoutGroup): AiLayoutBlo
       let picture: AiLayoutPicture | null = null
       const words: string[] = []
       for (const ref of item.lines) {
-        if (scope.doc.blocks[ref]?.kind === 'image') picture = picture ?? takePicture(scope, ref)
+        if (scope.doc.blocks[ref]?.kind === 'image') picture = picture ?? aiSiteImportTakePicture(scope, ref)
         else {
           const line = take(scope, ref)
           if (line) words.push(line)
@@ -859,7 +860,7 @@ function groupBlocks(scope: MapScope, group: SiteImportLayoutGroup): AiLayoutBlo
       }
       if (picture && !words.length) return [{ title: '', text: '', picture }]
       // A strip of linked tags keeps its links (AGL-4138): a blog's categories go to their pages.
-      const to = picture ? undefined : linkTo(scope, item.to)
+      const to = picture ? undefined : aiSiteImportLinkTo(scope, item.to)
       return words.length ? [{ title: words.join(' '), text: '', ...(picture ? { picture } : {}), ...(to ? { to } : {}) }] : picture ? [{ title: '', text: '', picture }] : []
     })
     // A gallery is its photos in the source's columns (AGL-4152), not a strip of marks.
@@ -881,7 +882,7 @@ function groupBlocks(scope: MapScope, group: SiteImportLayoutGroup): AiLayoutBlo
 }
 
 /** A section's nodes in the layout language, a row of columns placed by `col` where the section may still take one. */
-function nodeBlocks(scope: MapScope, nodes: readonly SiteImportLayoutNode[], row: { cols: number[] | null; allowed: boolean }): AiLayoutBlock[] {
+export function aiSiteImportNodeBlocks(scope: MapScope, nodes: readonly SiteImportLayoutNode[], row: { cols: number[] | null; allowed: boolean }): AiLayoutBlock[] {
   const out: AiLayoutBlock[] = []
   for (const node of nodes) {
     switch (node.kind) {
@@ -889,7 +890,7 @@ function nodeBlocks(scope: MapScope, nodes: readonly SiteImportLayoutNode[], row
         out.push(...lineBlocks(scope, node))
         break
       case 'picture': {
-        const picture = takePicture(scope, node.line, node.button ? undefined : node.href, node.fit)
+        const picture = aiSiteImportTakePicture(scope, node.line, node.button ? undefined : node.href, node.fit)
         if (picture) out.push({ kind: 'image', picture })
         break
       }
@@ -923,15 +924,15 @@ function nodeBlocks(scope: MapScope, nodes: readonly SiteImportLayoutNode[], row
           const weights = node.cells.map((cell, index) => ({ cell, weight: node.cols[index] ?? 1 })).filter((entry) => entry.cell.nodes.length)
           row.cols = weights.map((entry) => Math.min(12, Math.max(1, Math.round(entry.weight))))
           weights.forEach((entry, col) => {
-            for (const block of nodeBlocks(scope, entry.cell.nodes, { cols: null, allowed: false })) out.push({ ...block, col })
+            for (const block of aiSiteImportNodeBlocks(scope, entry.cell.nodes, { cols: null, allowed: false })) out.push({ ...block, col })
           })
         } else if (cells.length >= 2 && cells.length <= AI_LAYOUT_MAX_COLS) {
           // A second row of a section, or one inside a column (AGL-4152): in its columns too.
-          const columns = node.cells.map((cell, index) => ({ weight: Math.min(12, Math.max(1, Math.round(node.cols[index] ?? 1))), blocks: nodeBlocks(scope, cell.nodes, { cols: null, allowed: false }) }))
+          const columns = node.cells.map((cell, index) => ({ weight: Math.min(12, Math.max(1, Math.round(node.cols[index] ?? 1))), blocks: aiSiteImportNodeBlocks(scope, cell.nodes, { cols: null, allowed: false }) }))
           out.push({ kind: 'row', row: columns.filter((column) => column.blocks.length) })
         } else {
-          // Wider than a row may be: its cells one under another.
-          for (const cell of node.cells) out.push(...nodeBlocks(scope, cell.nodes, { cols: null, allowed: false }))
+          // Wider than a row may be, or a second row inside a column: its cells one under another.
+          for (const cell of node.cells) out.push(...aiSiteImportNodeBlocks(scope, cell.nodes, { cols: null, allowed: false }))
         }
         break
       }
@@ -948,7 +949,7 @@ function nodeBlocks(scope: MapScope, nodes: readonly SiteImportLayoutNode[], row
           const label = tab.label === null ? '' : take(scope, tab.label)
           // A panel sets its first row side by side, as a section does (AGL-4114).
           const panelRow = { cols: null as number[] | null, allowed: true }
-          const blocks = mergeLists(nodeBlocks(scope, tab.panel, panelRow))
+          const blocks = mergeLists(aiSiteImportNodeBlocks(scope, tab.panel, panelRow))
           return {
             label,
             ...(tab.selected ? { selected: true } : {}),
@@ -970,23 +971,27 @@ function nodeBlocks(scope: MapScope, nodes: readonly SiteImportLayoutNode[], row
  * A video of the source, where it sat (AGL-4140): the Video element, its
  * poster the library's copy of the source's, where the Video element can play
  * the film. One on a host it cannot play is its poster, linking to where the
- * film plays; with no poster either, nothing of it can be shown.
+ * film plays; with no poster either, nothing of it can be shown. A film on a
+ * host that publishes its own still (YouTube) needs no poster where the
+ * page's wave was stamped so: the page draws the host's still.
  */
 function videoBlocks(scope: MapScope, node: Pick<SiteImportLayoutVideo, 'video' | 'poster' | 'fit' | 'shadow'>): AiLayoutBlock[] {
   const film = scope.films.get(node.video)
   if (film) {
     // A film is pressed to play from its poster: with none, the Video element has nothing to show, and it is left out.
-    const picture = filmPlaces(scope, node.video, node.poster) ? takePicture(scope, node.poster, undefined, node.fit) : null
-    if (!picture) {
-      scope.settled.push({ at: scope.at, what: 'a video left out: it has no poster picture' })
-      return []
-    }
+    const picture = filmPlaces(scope, node.video, node.poster) ? aiSiteImportTakePicture(scope, node.poster, undefined, node.fit) : null
     const video: AiLayoutVideo = { ...film, ...(node.shadow ? { shadow: true } : {}) }
-    return [{ kind: 'video', video, picture }]
+    if (picture) return [{ kind: 'video', video, picture }]
+    if (filmShowsHostStill(scope, node.video)) {
+      scope.settled.push({ at: scope.at, what: 'a video placed with its host’s own still as its poster' })
+      return [{ kind: 'video', video }]
+    }
+    scope.settled.push({ at: scope.at, what: 'a video left out: it has no poster picture' })
+    return []
   }
   const source = scope.doc.videos?.[node.video]
   const where = source?.embed ?? source?.src
-  const picture = takePicture(scope, node.poster, where, node.fit)
+  const picture = aiSiteImportTakePicture(scope, node.poster, where, node.fit)
   const host = (() => {
     try {
       return where ? new URL(where).hostname.replace(/^www\./, '') : ''
@@ -1024,12 +1029,25 @@ function filmPlaces(scope: Pick<MapScope, 'films' | 'doc' | 'photos'>, video: nu
   return scope.films.has(video) && block?.kind === 'image' && scope.photos.has(block.url)
 }
 
+/**
+ * Whether a film the library holds no poster for is still drawn as the Video
+ * element (AGL-4140): the page's wave was stamped with
+ * `release_video_embed_posters`, and the film plays on a host that publishes
+ * its own still of it (YouTube's, from its media id), which the published
+ * page draws as the poster. Only where the film stands alone: an item's film
+ * plays from the item's picture.
+ */
+function filmShowsHostStill(scope: Pick<MapScope, 'films' | 'doc'>, video: number): boolean {
+  const film = scope.films.get(video)
+  return scope.doc.videoPosters === true && !!film && !!videoEmbedPosterSrc(film.src)
+}
+
 /** The first film of a list of nodes drawn as the Video element, rows, tabs and items opened. */
 function firstFilm(scope: Pick<MapScope, 'films' | 'doc' | 'photos'>, nodes: readonly SiteImportLayoutNode[]): number | null {
   for (const node of nodes) {
     const found =
       node.kind === 'video'
-        ? filmPlaces(scope, node.video, node.poster)
+        ? filmPlaces(scope, node.video, node.poster) || filmShowsHostStill(scope, node.video)
           ? node.video
           : null
         : node.kind === 'row'
@@ -1064,8 +1082,8 @@ function bylineOf(scope: MapScope, cells: ReadonlyArray<{ nodes: SiteImportLayou
   }, 0)
   if (count === 0 || count > BYLINE_MAX_WORDS) return null
   const node = cells[at].nodes[0] as Extract<SiteImportLayoutNode, { kind: 'picture' }>
-  const picture = takePicture(scope, node.line, node.button ? undefined : node.href, node.fit)
-  return [...(picture ? [{ kind: 'image' as const, picture: { ...picture, small: true } }] : []), ...nodeBlocks(scope, words, { cols: null, allowed: false })]
+  const picture = aiSiteImportTakePicture(scope, node.line, node.button ? undefined : node.href, node.fit)
+  return [...(picture ? [{ kind: 'image' as const, picture: { ...picture, small: true } }] : []), ...aiSiteImportNodeBlocks(scope, words, { cols: null, allowed: false })]
 }
 
 /** Paragraphs past which a section is reading copy, set at the start whatever its source centers. */
@@ -1105,7 +1123,7 @@ function heroOf(
   index: number,
   answer: AiLayoutDesignSection | null,
   settled: AiLayoutSettlement[],
-  drawn: { band: SiteImportLayoutSection['band']; finish: AiSiteImportFinish },
+  drawn: { band: SiteImportLayoutSection['band']; finish: AiSiteImportFinish; planned?: AiLayoutImportHero },
 ): AiLayoutImportHero | undefined {
   if (index !== 0 || !section.hero?.picture) return undefined
   const place = section.hero.picture
@@ -1114,15 +1132,17 @@ function heroOf(
     if (answer?.hero && answer.hero !== 'none' && answer.hero !== own) settled.push({ at: 'sections[0]', what: `the ${answer.hero} hero set aside: the page keeps its source's own opening, a ${own} hero` })
     return own
   }
+  // A site's plan draws every page's opening alike (AGL-4152), whatever one page's answer asks.
+  const asked = drawn.planned ?? answer?.hero
   // An answer of "none" keeps the opening as the source lays it out.
-  if (answer?.hero === 'none') return undefined
+  if (asked === 'none') return undefined
   const own = HERO_FOR[place]
   // Dimmed words need a dark ground: the section's own, or on a page its owner asked improved, the answer's (AGL-4152).
-  if (answer?.hero && DIMMED_HEROES.has(answer.hero) && drawn.band !== 'dark' && place !== 'behind') {
-    settled.push({ at: 'sections[0]', what: `the ${answer.hero} hero set aside: the section keeps its own lighter ground` })
+  if (asked && DIMMED_HEROES.has(asked) && drawn.band !== 'dark' && place !== 'behind') {
+    settled.push({ at: 'sections[0]', what: `the ${asked} hero set aside: the section keeps its own lighter ground` })
     return own
   }
-  return answer?.hero ?? own
+  return asked ?? own
 }
 
 /** How a page is finished (AGL-4152): the finish asked of it, else its document's, else kept as it is. */
@@ -1150,24 +1170,11 @@ export interface AiSiteImportDesigned {
   settled: AiLayoutSettlement[]
 }
 
-/**
- * The page's sections in the layout language (AGL-4107): the source's layout,
- * each section in its own band (or the answer's, where the source gave none),
- * its row, its groups and their items, its tables, tabs and pictures, every
- * line taken exactly once and every line the layout placed nowhere added at
- * its section's end.
- */
-export function aiSiteImportDesignedSections(
-  doc: AiSiteImportDocument,
-  answer?: AiLayoutDesignAnswer | null,
-  options: { formId?: string | null; finish?: AiSiteImportFinish | null } = {},
-): AiSiteImportDesigned {
-  const layout = aiSiteImportLayoutOf(doc)
-  const finish = aiSiteImportFinishOf(doc, options.finish)
-  const improve = finish === 'improve'
-  const scope: MapScope = {
+/** A page's lines as the layout language takes them (AGL-4107), each marked as it is taken. */
+export function aiSiteImportMapScope(doc: AiSiteImportDocument, options: { formId?: string | null; finish: AiSiteImportFinish }): MapScope {
+  return {
     doc,
-    layout,
+    layout: aiSiteImportLayoutOf(doc),
     used: new Set(),
     missing: new Set(),
     photos: new Map(doc.photos.flatMap((photo) => (photo.from ? [[photo.from, photo] as const] : []))),
@@ -1180,8 +1187,26 @@ export function aiSiteImportDesignedSections(
     at: '',
     films: filmsOf(doc),
     film: null,
-    finish,
+    finish: options.finish,
   }
+}
+
+/**
+ * The page's sections in the layout language (AGL-4107): the source's layout,
+ * each section in its own band (or the answer's, where the source gave none),
+ * its row, its groups and their items, its tables, tabs and pictures, every
+ * line taken exactly once and every line the layout placed nowhere added at
+ * its section's end.
+ */
+export function aiSiteImportDesignedSections(
+  doc: AiSiteImportDocument,
+  answer?: AiLayoutDesignAnswer | null,
+  options: { formId?: string | null; finish?: AiSiteImportFinish | null; plannedHero?: AiLayoutImportHero } = {},
+): AiSiteImportDesigned {
+  const layout = aiSiteImportLayoutOf(doc)
+  const finish = aiSiteImportFinishOf(doc, options.finish)
+  const improve = finish === 'improve'
+  const scope = aiSiteImportMapScope(doc, { formId: options.formId ?? null, finish })
   const backdropOf = (section: SiteImportLayoutSection) => (section.backdrop?.kind === 'video' ? section.backdrop : null)
   const pageFilm = layout.sections.reduce<number | null>((found, section) => found ?? firstFilm(scope, section.nodes), null)
   const sections = layout.sections.map((section, index): AiLayoutSection => {
@@ -1194,9 +1219,9 @@ export function aiSiteImportDesignedSections(
     const row = { cols: null as number[] | null, allowed: true }
     // A film playing on its own behind the section's words is drawn as its poster there (AGL-4140): the
     // opening's hero lays it behind them. A film that starts on its own is one rule 16 refuses.
-    const poster = behind ? takePicture(scope, behind.poster) : null
+    const poster = behind ? aiSiteImportTakePicture(scope, behind.poster) : null
     if (behind) scope.settled.push({ at: scope.at, what: 'a film playing behind the words drawn as its poster' })
-    const blocks = [...(poster ? [{ kind: 'image' as const, picture: poster }] : []), ...nodeBlocks(scope, section.nodes, row)]
+    const blocks = [...(poster ? [{ kind: 'image' as const, picture: poster }] : []), ...aiSiteImportNodeBlocks(scope, section.nodes, row)]
     // Every line the layout placed nowhere, at the section's end, as its kind says.
     for (const ref of section.lines) {
       if (scope.used.has(ref)) continue
@@ -1208,7 +1233,7 @@ export function aiSiteImportDesignedSections(
     // Kept, its band against its page's ground (AGL-4152); improved, as its color alone reads.
     const own = improve ? (section.absoluteBand ?? section.band) : section.band
     const band = given?.band && (improve || (section.background === null && !section.backdrop)) ? given.band : own
-    const hero = heroOf(section, index, given, scope.settled, { band: improve ? band : section.band, finish })
+    const hero = heroOf(section, index, given, scope.settled, { band: improve ? band : section.band, finish, ...(options.plannedHero ? { planned: options.plannedHero } : {}) })
     // A long read is set at the start, as text is read, whatever its source centers.
     const reading = blocks.filter((block) => block.kind === 'text').length > READING_PARAGRAPHS
     const source = reading ? 'start' : section.align
@@ -1248,6 +1273,8 @@ export interface AiSiteImportCompileInput {
   answer?: AiLayoutDesignAnswer | null
   /** How the page is finished (AGL-4152); absent is `keep`. */
   finish?: AiSiteImportFinish | null
+  /** Sections a generative Improve it planned (AGL-4152), drawn in place of the source's layout. */
+  given?: AiSiteImportDesigned | null
 }
 
 export interface AiSiteImportCompiled extends Pick<AiLayoutCompiledPage, 'tree' | 'sectionRoots' | 'videoIds'> {
@@ -1273,7 +1300,8 @@ export function aiCompileImportedPage(input: AiSiteImportCompileInput): AiSiteIm
   const { doc } = input
   const formId = input.targets.forms.length === 1 ? input.targets.forms[0].id : null
   const finish = aiSiteImportFinishOf(doc, input.finish)
-  const designed = aiSiteImportDesignedSections(doc, input.answer ?? null, { formId, finish })
+  const plannedHero = AI_LAYOUT_IMPORT_HEROES.find((hero) => hero === input.design?.planned?.hero)
+  const designed = input.given ?? aiSiteImportDesignedSections(doc, input.answer ?? null, { formId, finish, ...(plannedHero ? { plannedHero } : {}) })
   const compile = (sections: readonly AiLayoutSection[]) =>
     aiCompileLayoutPage(sections, input.plan, input.targets, {
       // A page brought in draws its repeats as its source does (AGL-4107).
@@ -1281,6 +1309,8 @@ export function aiCompileImportedPage(input: AiSiteImportCompileInput): AiSiteIm
       sectionIds: input.sectionIds,
       verbatim: true,
       finish,
+      // A planned page keeps its grounds apart whatever the site's seed draws (AGL-4152).
+      ...(input.given ? { bandRhythm: 'alternate' as const } : {}),
       ...(input.design ? { design: input.design } : {}),
       ...(input.language ? { language: input.language } : {}),
     })
@@ -1294,7 +1324,7 @@ export function aiCompileImportedPage(input: AiSiteImportCompileInput): AiSiteIm
     compiled = compile(sections)
   }
   const dropped = new Set<number>()
-  if (cut) {
+  if (cut && !input.given) {
     const layout = aiSiteImportLayoutOf(doc)
     layout.sections.forEach((section, index) => {
       if (!sections[index]?.blocks.length) for (const ref of section.lines) dropped.add(ref)

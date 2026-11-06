@@ -55,6 +55,15 @@ export const POS_HARDWARE_SHIP_COUNTRIES: readonly string[] = ['US']
 export const POS_HARDWARE_MAX_PER_LINE = 10
 export const POS_HARDWARE_MAX_UNITS = 20
 
+/**
+ * The Stripe Tax code every hardware line carries (AGL-4038): "General -
+ * Tangible Goods" (https://docs.stripe.com/tax/tax-codes), the physical good
+ * a reader or an accessory is. Without it a line takes the account's default
+ * code, which is software as a service, and would be taxed as software.
+ * Stripe's list has no narrower code for a card reader.
+ */
+export const POS_HARDWARE_TAX_CODE = 'txcd_99999999'
+
 /** The env names the shop reads, named once for the reader and the docs. */
 export const POS_HARDWARE_ENV = {
   /** `true` releases the shop. Absent or anything else keeps it hidden. */
@@ -108,9 +117,16 @@ export type PosHardwareSkuId =
 export interface PosHardwareSku {
   id: PosHardwareSkuId
   kind: 'reader' | 'accessory'
-  /** What Stripe's hardware shop calls it, for the staff member ordering it. */
+  /**
+   * What the supplier's hardware shop calls it, for the staff member ordering
+   * it. Staff-only: the merchant never sees it.
+   */
   stripeProductName: string
-  /** What the merchant sees. */
+  /**
+   * What the merchant sees, everywhere: shop, Hardware card, booth register,
+   * emails and receipts. A plain name with the model in brackets, never the
+   * maker's name; the record keeps the exact model in `sku` for support.
+   */
   displayName: string
   /** One line on what it is for. */
   use: string
@@ -126,38 +142,39 @@ export const POS_HARDWARE_SKUS: readonly PosHardwareSku[] = [
     id: 'stripe-reader-s710',
     kind: 'reader',
     stripeProductName: 'Stripe Reader S710',
-    displayName: 'Stripe Reader S710',
-    // 4G needs Stripe's cellular service, billed monthly per reader, which a
-    // store turns on for its S710s where it is offered (AGL-4038): the reader
-    // alone does not bring a connection.
-    use: 'Handheld for events and parking lots; 4G needs Stripe’s cellular service, billed monthly',
+    // Plain names with the model in brackets, no maker's name (AGL-4038).
+    // "4G-capable", never "with 4G": 4G is a separate per-store monthly
+    // service, turned on where it is offered, and the reader alone does not
+    // bring a connection.
+    displayName: 'Touchscreen reader, 4G-capable (S710)',
+    use: 'Handheld for events and parking lots, on Wi-Fi. 4G is a separate monthly service, where offered',
   },
   {
     id: 'stripe-reader-s700',
     kind: 'reader',
     stripeProductName: 'Stripe Reader S700',
-    displayName: 'Stripe Reader S700',
+    displayName: 'Touchscreen reader (S700)',
     use: 'Handheld or countertop reader on Wi-Fi',
   },
   {
     id: 'stripe-reader-t600',
     kind: 'reader',
     stripeProductName: 'Stripe Reader T600',
-    displayName: 'Stripe Reader T600',
+    displayName: 'Countertop reader (T600)',
     use: 'Countertop reader on Wi-Fi, or on Ethernet with the hub',
   },
   {
     id: 'bbpos-wisepos-e',
     kind: 'reader',
     stripeProductName: 'BBPOS WisePOS E',
-    displayName: 'BBPOS WisePOS E',
+    displayName: 'Countertop reader (WisePOS E)',
     use: 'Countertop reader on Wi-Fi',
   },
   {
     id: 'stripe-reader-m2',
     kind: 'reader',
     stripeProductName: 'Stripe Reader M2',
-    displayName: 'Stripe Reader M2',
+    displayName: 'Pocket reader (M2)',
     use: `Pairs with the ${PLATFORM_BRAND_NAME} POS app on your phone or tablet by Bluetooth`,
   },
   {
@@ -192,7 +209,7 @@ export const POS_HARDWARE_SKUS: readonly PosHardwareSku[] = [
     id: 'stripe-reader-charger',
     kind: 'accessory',
     stripeProductName: 'Stripe Reader Charger',
-    displayName: 'Charger for Stripe readers',
+    displayName: 'Charger for card readers',
     use: 'A spare wall charger',
   },
   {
@@ -265,6 +282,13 @@ export interface PosHardwareConfig {
   markupBps: number
   shipping: Array<{ method: PosHardwareShippingMethod; cents: number }>
   automaticTax: boolean
+  /**
+   * The price each item is listed at in the platform's own store, in cents
+   * (AGL-4038), where the server read one: the shop then charges that, so
+   * the Hardware card and the store's product page quote one price
+   * ({@link posHardwareOfferUnitCents}). Never read from the environment.
+   */
+  listedCents?: Partial<Record<PosHardwareSkuId, number>>
 }
 
 /** The highest single figure the parser accepts, in cents: $10,000. */
@@ -410,6 +434,28 @@ export function posHardwareUnitCents(costCents: number, markupBps: number): numb
   return costCents + Math.floor((costCents * markupBps + 5_000) / 10_000)
 }
 
+/**
+ * ONE PRICE FOR ONE ITEM (AGL-4038). The platform's own store lists the same
+ * readers on its product pages, at prices set on the products, and the
+ * Hardware card prices them from the environment, Stripe's cost plus the
+ * markup. Two sources would quote two prices for one reader. So the item's
+ * listed price is the price wherever it is listed, and the Hardware card
+ * charges exactly what the product page shows. It never sells below cost: a
+ * listed price under Stripe's cost is a mistake on the product, and the card
+ * keeps the marked-up price for it instead. An item the store does not list
+ * is priced from the environment as before.
+ */
+export function posHardwareOfferUnitCents(
+  config: Pick<PosHardwareConfig, 'costs' | 'markupBps' | 'listedCents'>,
+  sku: PosHardwareSkuId,
+): number {
+  const cost = config.costs[sku]
+  if (cost === undefined) return 0
+  const listed = config.listedCents?.[sku]
+  if (typeof listed === 'number' && Number.isSafeInteger(listed) && listed >= cost) return listed
+  return posHardwareUnitCents(cost, config.markupBps)
+}
+
 /** An item as the shop offers it: the merchant's price, never Stripe's. */
 export interface PosHardwareOffer {
   sku: PosHardwareSkuId
@@ -430,7 +476,7 @@ export function posHardwareOffers(config: PosHardwareConfig): PosHardwareOffer[]
         kind: sku.kind,
         name: sku.displayName,
         use: sku.use,
-        unitCents: posHardwareUnitCents(cost, config.markupBps),
+        unitCents: posHardwareOfferUnitCents(config, sku.id),
       },
     ]
   })
@@ -536,6 +582,7 @@ export function decodePosHardwareLines(encoded: unknown): PosHardwareLine[] | nu
 export type PosHardwareOrderStatus =
   | 'paid'
   | 'ordered'
+  | 'received'
   | 'shipped'
   | 'delivered'
   | 'registered'
@@ -545,6 +592,7 @@ export type PosHardwareOrderStatus =
 export const POS_HARDWARE_ORDER_STATUSES: readonly PosHardwareOrderStatus[] = [
   'paid',
   'ordered',
+  'received',
   'shipped',
   'delivered',
   'registered',
@@ -560,6 +608,7 @@ export function isPosHardwareOrderStatus(value: unknown): value is PosHardwareOr
 export const POS_HARDWARE_STATUS_LABELS: Record<PosHardwareOrderStatus, string> = {
   paid: 'Order received',
   ordered: 'Being prepared',
+  received: 'Being prepared',
   shipped: 'Shipped',
   delivered: 'Delivered',
   registered: 'Set up',
@@ -571,6 +620,7 @@ export const POS_HARDWARE_STATUS_LABELS: Record<PosHardwareOrderStatus, string> 
 export const POS_HARDWARE_STAFF_STATUS_LABELS: Record<PosHardwareOrderStatus, string> = {
   paid: 'Paid',
   ordered: 'Ordered from Stripe',
+  received: 'Received',
   shipped: 'Shipped',
   delivered: 'Delivered',
   registered: 'Registered',
@@ -579,13 +629,19 @@ export const POS_HARDWARE_STAFF_STATUS_LABELS: Record<PosHardwareOrderStatus, st
 }
 
 /**
- * The forward steps staff may move an order through. Canceling and refunding
- * are separate acts with their own rule ({@link posHardwareRefundable}),
- * because each returns money.
+ * The forward steps staff may move an order through (AGL-4038): ordered from
+ * the supplier, received at the platform, set up, shipped with tracking,
+ * delivered, and set up on the buyer's store. Setting it up is not a status
+ * of its own: it is each reader's serial number recorded and, where the
+ * buyer's store can take it, the reader registered to that store
+ * ({@link posHardwareReadyToShip}), which shipping waits for. Canceling and
+ * refunding are separate acts with their own rule
+ * ({@link posHardwareRefundable}), because each returns money.
  */
 const NEXT_STATUS: Partial<Record<PosHardwareOrderStatus, PosHardwareOrderStatus>> = {
   paid: 'ordered',
-  ordered: 'shipped',
+  ordered: 'received',
+  received: 'shipped',
   shipped: 'delivered',
   delivered: 'registered',
 }
@@ -602,8 +658,11 @@ export function nextPosHardwareStatus(
  * the hardware, which is a separate process this phase does not automate.
  */
 export function posHardwareRefundable(status: PosHardwareOrderStatus): boolean {
-  return status === 'paid' || status === 'ordered'
+  return status === 'paid' || status === 'ordered' || status === 'received'
 }
+
+/** The statuses of an order that has not shipped yet, which a closure cancels and refunds. */
+export const POS_HARDWARE_UNSHIPPED_STATUSES: readonly PosHardwareOrderStatus[] = ['paid', 'ordered', 'received']
 
 export interface PosHardwareAddress {
   line1: string
@@ -656,22 +715,41 @@ export interface PosHardwareTaxLine {
 }
 
 /**
- * Where an order was sold (AGL-4038): the Hardware card's checkout, or the
- * platform's own register, in person. Absent on every order sold before the
- * in-person sale existed, which were all online; read it through
- * {@link posHardwareOrderSource}.
+ * Where an order was sold (AGL-4038): the Hardware card's checkout
+ * (`online`), the platform's own register, in person (`in_person`), or the
+ * platform's own online store, its product pages and cart (`storefront`).
+ * Absent on every order sold before the in-person sale existed, which were
+ * all from the Hardware card; read it through {@link posHardwareOrderSource}.
  */
-export type PosHardwareOrderSource = 'online' | 'in_person'
+export type PosHardwareOrderSource = 'online' | 'in_person' | 'storefront'
 
 export function posHardwareOrderSource(
   order: { source?: unknown } | null | undefined,
 ): PosHardwareOrderSource {
-  return order?.source === 'in_person' ? 'in_person' : 'online'
+  return order?.source === 'in_person' ? 'in_person' : order?.source === 'storefront' ? 'storefront' : 'online'
 }
 
 /**
- * The register sale an in-person order came from: the platform's own store,
- * the register order and its number, and how it was rung.
+ * Whether an order was sold by the platform's own store (AGL-4038), at its
+ * register or online: paid into that store's own account, with the store's
+ * order behind it (`posSale`), and whose buyer may still be to attach. It is
+ * attached, refunded and counted on the tax return the same way either way.
+ */
+export function isPosHardwareSellerStoreSale(order: { source?: unknown } | null | undefined): boolean {
+  const source = posHardwareOrderSource(order)
+  return source === 'in_person' || source === 'storefront'
+}
+
+/** Whether an order is shipped to its buyer, rather than handed over at a register. */
+export function posHardwareShips(order: { source?: unknown } | null | undefined): boolean {
+  return posHardwareOrderSource(order) !== 'in_person'
+}
+
+/**
+ * The store order an order sold by the platform's own store came from: the
+ * store, the order and its number, and how it was rung. For a `storefront`
+ * order it is the store's online order, with no register, and
+ * `paymentLinkSessionId` is the Checkout Session it was paid through.
  */
 export interface PosHardwareRegisterSale {
   hostId: string
@@ -846,6 +924,8 @@ export interface PosHardwareOrder {
   updatedAtMs: number
   paidAtMs: number
   orderedAtMs?: number
+  /** When the platform received it from the supplier (AGL-4038). */
+  receivedAtMs?: number
   shippedAtMs?: number
   deliveredAtMs?: number
   registeredAtMs?: number
@@ -867,9 +947,10 @@ export interface PosHardwareOrder {
   /** Whose an in-person order is, or that staff have still to say. */
   attachment?: PosHardwareAttachment
   /**
-   * How the buyer of an in-person order agreed to the terms of sale
-   * (AGL-4038): copied from the register sale, or the receipt-and-sign
-   * notice when they did not accept electronically.
+   * How the buyer agreed to the terms of sale (AGL-4038): for an in-person
+   * order, copied from the register sale, or the receipt-and-sign notice
+   * when they did not accept electronically; for an order paid online,
+   * ticked at checkout with business use confirmed (`online`).
    */
   termsAcceptance?: PosHardwareTermsAcceptance
   /** Each reader of an in-person order, with its serial when one was taken. */
@@ -892,6 +973,7 @@ export interface PosHardwareOrder {
 export const POS_HARDWARE_STATUS_STAMP: Record<PosHardwareOrderStatus, keyof PosHardwareOrder> = {
   paid: 'paidAtMs',
   ordered: 'orderedAtMs',
+  received: 'receivedAtMs',
   shipped: 'shippedAtMs',
   delivered: 'deliveredAtMs',
   registered: 'registeredAtMs',
@@ -901,6 +983,31 @@ export const POS_HARDWARE_STATUS_STAMP: Record<PosHardwareOrderStatus, keyof Pos
 
 /** The Hardware card's anchor: Checkout returns to it and the emails link at it. */
 export const POS_HARDWARE_ANCHOR = 'pos-hardware'
+
+/**
+ * What the point of sale adds to a reader (AGL-4038), for the prompt a
+ * workspace without it sees: anyone may buy readers, and a reader takes
+ * payments at the register, which comes with the point of sale.
+ */
+export const POS_PLAN_ADDS =
+  'registers that ring up sales, card payments on your readers, cash with change due, receipts and shift reports'
+
+/**
+ * The prompt to add the point of sale (AGL-4038), never a refusal: on the
+ * Hardware card before anything has arrived, naming the orders that have
+ * arrived once one has, and at the register.
+ */
+export function posPlanPrompt(where: { arrived?: readonly string[]; atRegister?: boolean } = {}): string {
+  const arrived = where.arrived ?? []
+  if (where.atRegister) {
+    return `A card reader takes payments at the register, which comes with the point of sale: ${POS_PLAN_ADDS}. Add it to start selling.`
+  }
+  if (arrived.length) {
+    const one = arrived.length === 1
+    return `${arrived.join(', ')} ${one ? 'has' : 'have'} arrived. To take payments with ${one ? 'it' : 'them'}, add the point of sale: ${POS_PLAN_ADDS}.`
+  }
+  return `You can buy readers on any plan. To take payments with them, add the point of sale: ${POS_PLAN_ADDS}.`
+}
 
 /** The collection under `orgs/{orgId}`, named once. */
 export const POS_HARDWARE_ORDERS_COLLECTION = 'hardwareOrders'
@@ -1001,6 +1108,7 @@ export interface PosHardwareSaleRecord {
   updatedAtMs: number
   paidAtMs: number | null
   orderedAtMs: number | null
+  receivedAtMs: number | null
   shippedAtMs: number | null
   deliveredAtMs: number | null
   registeredAtMs: number | null
@@ -1013,8 +1121,9 @@ export interface PosHardwareSaleRecord {
   posOrderId: string | null
   /**
    * Where the money went: `platform` for the Hardware card's checkout, on
-   * the platform's own Stripe account; `seller_store` for an in-person sale,
-   * the selling store's own takings ({@link PosHardwarePaidTo}).
+   * the platform's own Stripe account; `seller_store` for a sale by the
+   * platform's own store, in person or online, the selling store's own
+   * takings ({@link PosHardwarePaidTo}).
    */
   paidTo: { account: 'platform' } | PosHardwarePaidTo
   /**
@@ -1195,6 +1304,7 @@ export function posHardwareSaleRecord(orderId: string, order: PosHardwareOrder):
     updatedAtMs: order.updatedAtMs ?? order.createdAtMs ?? 0,
     paidAtMs: stampOrNull(order.paidAtMs),
     orderedAtMs: stampOrNull(order.orderedAtMs),
+    receivedAtMs: stampOrNull(order.receivedAtMs),
     shippedAtMs: stampOrNull(order.shippedAtMs),
     deliveredAtMs: stampOrNull(order.deliveredAtMs),
     registeredAtMs: stampOrNull(order.registeredAtMs),
@@ -1228,7 +1338,7 @@ export function posHardwareSaleSetOptions(order: PosHardwareOrder): { mergeField
 /** Where a sale's money went, picked by name: never a buyer detail. */
 function salePaidTo(order: Pick<PosHardwareOrder, 'source' | 'paidTo'>): PosHardwareSaleRecord['paidTo'] {
   const paidTo = order.paidTo
-  if (posHardwareOrderSource(order) !== 'in_person' || paidTo?.account !== 'seller_store') {
+  if (!isPosHardwareSellerStoreSale(order) || paidTo?.account !== 'seller_store') {
     return { account: 'platform' }
   }
   return {
@@ -1306,4 +1416,37 @@ export const POS_HARDWARE_ORDER_ID = /^hw_[a-f0-9]{20}$/
 export function formatPosHardwareCents(cents: number): string {
   const value = Number.isFinite(cents) ? cents : 0
   return new Intl.NumberFormat('en-US', { style: 'currency', currency: 'USD' }).format(value / 100)
+}
+
+/**
+ * Every reader an order ships, one unit each (AGL-4038): the units it holds,
+ * or, for an order recorded before units were kept for shipped orders, one
+ * per reader on its lines with nothing recorded yet. Accessories have none.
+ */
+export function posHardwareOrderUnits(order: Pick<PosHardwareOrder, 'units' | 'lines'>): PosHardwareUnit[] {
+  if (Array.isArray(order.units) && order.units.length) return order.units
+  const units: PosHardwareUnit[] = []
+  for (const line of order.lines ?? []) {
+    if (posHardwareSku(line.sku)?.kind !== 'reader') continue
+    for (let index = 0; index < line.quantity; index += 1) {
+      units.push({ sku: line.sku, serialNumber: null, readerId: null, hostId: null, registeredAtMs: null })
+    }
+  }
+  return units
+}
+
+/**
+ * Why an order may not ship yet, or null when it may (AGL-4038): every
+ * reader on it is set up first, its serial number recorded, so the buyer's
+ * reader is matched to its order the moment they pair it, if it was not
+ * registered to their store already. An order of accessories alone ships as
+ * it is.
+ */
+export function posHardwareReadyToShip(order: Pick<PosHardwareOrder, 'units' | 'lines'>): string | null {
+  const units = posHardwareOrderUnits(order)
+  const missing = units.filter((unit) => !unit.serialNumber).length
+  if (!missing) return null
+  return missing === units.length && units.length === 1
+    ? 'Set the reader up first: record its serial number.'
+    : `Set every reader up first: ${missing} of ${units.length} still need a serial number.`
 }

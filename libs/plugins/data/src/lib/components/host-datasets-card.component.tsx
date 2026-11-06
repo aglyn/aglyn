@@ -24,10 +24,17 @@ import {
   checkEntitlement,
   checkQuota,
   getCustomFieldType,
+  PageHeaderActions,
+  PageHeaderRecord,
   pluginDocsHelp,
+  scopeTokensForHost,
   useTransferLauncher,
+  visibleToHost,
 } from '@aglyn/aglyn'
-import { CardDisplay, useConfirmationContext } from '@aglyn/shared-ui-jsx'
+import { nameSearchKey } from '@aglyn/aglyn/app-utils/name-search'
+import { HubSections, type HubSection } from '@aglyn/shared-ui-next/components/hub-tabs'
+import { AppLink, CardDisplay, MdiIcon, useConfirmationContext } from '@aglyn/shared-ui-jsx'
+import { mdiArrowLeft } from '@aglyn/shared-data-mdi'
 import ListFilterChips from '@aglyn/shared-ui-jsx/components/list-filter-chips.component'
 import { ListPagination } from '@aglyn/shared-ui-jsx/components/list-pagination.component'
 import ListQueryNotices, {
@@ -44,6 +51,7 @@ import { useSnackbar } from '@aglyn/shared-ui-snackstack'
 import { Timestamp } from '@aglyn/shared-util-timestamp'
 import {
   Alert,
+  Box,
   Button,
   Chip,
   Dialog,
@@ -61,20 +69,26 @@ import {
   deleteDoc,
   deleteField,
   doc,
+  documentId,
+  endAt,
   getCountFromServer,
   getDoc,
   getDocs,
   limit,
+  orderBy,
   query,
+  startAt,
   where,
   setDoc,
   writeBatch,
 } from 'firebase/firestore'
+import { useRouter } from 'next/navigation'
 import { useCallback, useEffect, useMemo, useState } from 'react'
 import { useListColumnSort } from '@aglyn/shared-ui-jsx/hooks/use-list-column-sort'
 import {
   useFirestore,
   useFirestoreCollection,
+  useFirestoreDoc,
   useHostActivityLogger,
   useOrgDataScope,
   usePagedCollection,
@@ -84,7 +98,7 @@ import {
 import { listQueryConstraints } from '@aglyn/tenant-feature-instance/hooks/use-list-query'
 import { authorizedFetch } from '@aglyn/shared-util-http/authorized-token'
 import { DatasetSchemaDialog } from './dataset-schema-dialog.component'
-import { DatasetRecordDialog } from './dataset-record-dialog.component'
+import { DatasetRecordDialog, DatasetRecordFieldList } from './dataset-record-dialog.component'
 import { DatasetRecordSiteContext } from './dataset-field-inputs.component'
 import {
   datasetRecordFilter,
@@ -104,6 +118,21 @@ import {
 } from './use-dataset-writes-blocked'
 import { DATASET_SAMPLE_RECORD_NOTE, datasetDisplayName, isSampleDatasetRecord, parseDatasetFieldEntries } from '../model/datasets'
 import { datasetTransferResourceKey } from '../transfer/dataset-transfer-key'
+import {
+  DATASET_RAIL_GROUP_AT,
+  type DatasetRailEntry,
+  datasetCreatedLabel,
+  datasetNameMatches,
+  datasetPickerLabelsOf,
+  datasetRailName,
+  datasetRecordTitle,
+  datasetRailSecondary,
+  datasetSharingLabel,
+  datasetSourceLabel,
+  groupDatasetsBySharing,
+  sortDatasetsByName,
+} from '../model/dataset-rail'
+import { useOrgSites } from './use-org-sites'
 
 export interface HostDatasetsCardProps {
   /** Host context: resolves the owning org and logs host activity. */
@@ -120,6 +149,18 @@ export interface HostDatasetsCardProps {
    * without console-app org/session hooks (AGL-395).
    */
   org?: Partial<AglynOrgBilling>
+  /**
+   * The Data page's own address (AGL-4047): each dataset is a tab of the
+   * page's rail, at `<basePath>/<datasetId>`. Handed down by both callers —
+   * the site's plugin route and the organization Data page.
+   */
+  basePath?: string
+  /**
+   * The path beneath {@link basePath}: `[datasetId]` on a dataset's tab,
+   * `[datasetId, 'records', recordId]` on one of its records, and empty on the
+   * bare page, which opens the first dataset.
+   */
+  segments?: readonly string[]
 }
 
 /**
@@ -141,8 +182,23 @@ const EXPORT_OFF_TOOLBAR = {
 /** Stable, so an empty answer does not re-render the card. */
 const NO_DATASETS: any[] = []
 
-/** The most datasets the card lists, and the most a delete's reference check walks. */
+/**
+ * The datasets the rail loads at a time, and the most a delete's reference
+ * check walks. "Show more datasets" loads the next window, so the rail
+ * reaches every dataset however many there are (AGL-4047).
+ */
 const DATASET_LIST_WINDOW = 100
+
+/**
+ * TODO(AGL-4047): switch to true once the `datasets (visibleTo, nameLower)`
+ * index is READY and `tools/scripts/backfill-dataset-name-lower.mjs --apply`
+ * has run in production. Then the rail is ordered by `nameLower` on the query
+ * and the search asks a `nameLower` prefix of the server, rather than the
+ * rail walking datasets in document order and matching names among the ones
+ * it has loaded. Until both are confirmed, ordering on a field a dataset may
+ * lack would leave that dataset off the rail.
+ */
+const DATASET_NAMES_ON_SERVER = false
 
 /** A dataset read off its document, as the card's rows carry it. */
 const datasetRow = (snapshot: { id: string; data(): unknown }) => ({
@@ -167,7 +223,8 @@ export function newDatasetSharingNote(siteOnly: boolean): string {
  * the pre-migration fallback for hosts not yet org-wired.
  */
 export function HostDatasetsCard(props: HostDatasetsCardProps) {
-  const { hostId } = props
+  const { hostId, basePath, segments } = props
+  const router = useRouter()
   // `dataScope` is null until the async org lookup settles (AGL-1061), and
   // for a host with no owning org — there is no host fallback to act on
   // any more (AGL-1050), so every path built from it is guarded rather
@@ -298,6 +355,25 @@ export function HostDatasetsCard(props: HostDatasetsCardProps) {
     [callDatasetApi],
   )
 
+  /**
+   * The rail's search and its Shared with filter (AGL-4047).
+   *
+   * The filter is a query clause: one site the reader reaches, asked by that
+   * site's scope tokens in place of the page's own, which they sit inside —
+   * a site the reader is a member of is one their own tokens already reach,
+   * so the narrower query is still one the rules can prove. Offered on the
+   * organization Data page only: a site's page already lists that site's.
+   */
+  const [nameSearch, setNameSearch] = useState('')
+  const [sharedWith, setSharedWith] = useState('')
+  const [railWindow, setRailWindow] = useState(DATASET_LIST_WINDOW)
+  const railScope = useMemo(
+    () => (sharedWith && !pageHostId ? scopeTokensForHost(sharedWith) : listScope),
+    [sharedWith, pageHostId, listScope],
+  )
+  const serverNameKey = DATASET_NAMES_ON_SERVER ? nameSearchKey(nameSearch) : ''
+  const { hostNames, sites: orgSites } = useOrgSites(orgId)
+
   const {
     data: datasetDocs,
     status: datasetsStatus,
@@ -317,26 +393,113 @@ export function HostDatasetsCard(props: HostDatasetsCardProps) {
       dataScope && scopeReady
         ? query(
             collection(firestore, dataScope[0], dataScope[1], 'datasets'),
-            ...(listScope
-              ? [where('visibleTo', 'array-contains-any', [...listScope])]
+            ...(railScope
+              ? [where('visibleTo', 'array-contains-any', [...railScope])]
               : []),
-            limit(DATASET_LIST_WINDOW),
+            /*
+             * A walk that reaches every dataset (AGL-4047). The document's
+             * name is on every dataset, so ordering on it leaves none out,
+             * and the automatic index serves it beside the scope clause. One
+             * row past the window says whether there are more.
+             */
+            ...(DATASET_NAMES_ON_SERVER
+              ? [
+                  orderBy('nameLower'),
+                  ...(serverNameKey ? [startAt(serverNameKey), endAt(`${serverNameKey}\uf8ff`)] : []),
+                ]
+              : [orderBy(documentId())]),
+            limit(railWindow + 1),
           )
         : null,
-    [firestore, dataScope, listScope, scopeReady],
+    [firestore, dataScope, railScope, scopeReady, railWindow, serverNameKey],
     { idField: '$id' },
   )
+  /** The loaded window in name order: what the join dialog and the reference checks read. */
   const datasets = useMemo(
-    () =>
-      [...(datasetDocs ?? [])].sort((a, b) =>
-        datasetDisplayName(a).localeCompare(datasetDisplayName(b)),
-      ),
-    [datasetDocs],
+    () => sortDatasetsByName<any>([...(datasetDocs ?? [])].slice(0, railWindow)),
+    [datasetDocs, railWindow],
   )
+  const moreDatasets = (datasetDocs?.length ?? 0) > railWindow
+  /** The rail: the loaded window, narrowed by the search among the names it holds. */
+  const railDatasets = useMemo(
+    () =>
+      DATASET_NAMES_ON_SERVER
+        ? datasets
+        : datasets.filter((item: DatasetRailEntry) => datasetNameMatches(item, nameSearch)),
+    [datasets, nameSearch],
+  )
+  /**
+   * Whether the loaded window is short of everything this page lists: a
+   * filter narrowed it, or there are more. A check that must see every
+   * dataset — what references a record about to be deleted — reads for
+   * itself then.
+   */
+  const railNarrowed = Boolean(pageHostId) || Boolean(sharedWith) || moreDatasets
+
+  /**
+   * The open dataset (AGL-4047): the one the address names, or, on the bare
+   * page, none until the page moves to the first. The card is also mounted
+   * without an address by callers outside the console's routes, which pick
+   * one by state.
+   */
+  const routeDatasetId = basePath ? segments?.[0] : undefined
+  /** The record the address opens on its own page (AGL-4047), beneath its dataset's tab. */
+  const routeRecordId = basePath && segments?.[1] === 'records' ? segments?.[2] : undefined
   const [selectedId, setSelectedId] = useState<string | null>(null)
-  const [schemaOpen, setSchemaOpen] = useState(false)
+  const wantedId = routeDatasetId ?? selectedId ?? undefined
+  const listed = wantedId ? datasets.find((item) => item.$id === wantedId) : undefined
+  const listAnswered = datasetDocs !== undefined
+  /*
+   * A dataset the address names that the loaded window does not hold — past
+   * the window, outside the filter, or only just created — is read on its
+   * own, live, so its tab still opens and a save still seeds from a listener.
+   */
+  const linkedRead = useFirestoreDoc<any>(
+    () =>
+      dataScope && scopeReady && wantedId && listAnswered && !listed
+        ? doc(firestore, dataScope[0], dataScope[1], 'datasets', wantedId)
+        : null,
+    [firestore, dataScope, scopeReady, wantedId, listAnswered, Boolean(listed)],
+  )
+  // Keyed by the id it was read under, as the list's rows are.
+  const linked = useMemo(
+    () => (!listed && wantedId && linkedRead.data ? { ...linkedRead.data, $id: wantedId } : undefined),
+    [listed, wantedId, linkedRead.data],
+  )
+  /** A site's page refuses a dataset that is not shared with the site (#2341). */
+  const notSharedHere = Boolean(
+    pageHostId && linked && !visibleToHost((linked as { visibleTo?: string[] }).visibleTo, pageHostId),
+  )
+  const notFound = Boolean(
+    wantedId &&
+      listAnswered &&
+      !listed &&
+      !linked &&
+      (linkedRead.status === 'error' || (linkedRead.status !== 'loading' && !linkedRead.fromCache)),
+  )
   const selected =
-    datasets.find((item) => item.$id === selectedId) ?? datasets[0]
+    listed ??
+    (linked && !notSharedHere ? linked : undefined) ??
+    (wantedId ? undefined : datasets[0])
+  /** Which listener the open dataset came from, for the schema dialog's freshness guard. */
+  const seed = listed || !linked
+    ? { fromCache: datasetsFromCache, unreadable: datasetsStatus === 'error', listen: datasetsListen }
+    : { fromCache: linkedRead.fromCache, unreadable: linkedRead.status === 'error', listen: linkedRead.listen }
+  /** Opens a dataset: its own address on a routed page, the card's state elsewhere. */
+  const openDataset = useCallback(
+    (id: string | null) => {
+      if (basePath) router.push(id ? `${basePath}/${id}` : basePath)
+      else setSelectedId(id)
+    },
+    [basePath, router],
+  )
+  // The bare page opens the first dataset, as a hub opens its first section,
+  // so the rail always has a tab lit and the address names what is open.
+  const landing = basePath && !routeDatasetId && datasets[0] ? `${basePath}/${datasets[0].$id}` : null
+  useEffect(() => {
+    if (landing) router.replace(landing)
+  }, [landing, router])
+  const [schemaOpen, setSchemaOpen] = useState(false)
   // What this member may do with THIS dataset (AGL-4047): one placed on one site
   // answers to that site.
   const blocked = useDatasetWritesBlocked(orgId, selected as ScopePlaced | undefined)
@@ -447,7 +610,8 @@ export function HostDatasetsCard(props: HostDatasetsCardProps) {
     setPageSize: setRecordPageSize,
   } = usePagedCollection<any>(
     (pageLimit) =>
-      dataScope && selected?.$id && !blocked.records
+      // A record's own page shows no table, so it reads none (AGL-4047).
+      dataScope && selected?.$id && !blocked.records && !routeRecordId
         ? query(
             collection(
               firestore,
@@ -461,8 +625,30 @@ export function HostDatasetsCard(props: HostDatasetsCardProps) {
             limit(pageLimit),
           )
         : null,
-    [firestore, dataScope, selected?.$id, recordPlanKey, blocked.records],
+    [firestore, dataScope, selected?.$id, recordPlanKey, blocked.records, routeRecordId],
     { idField: '$id' },
+  )
+  /**
+   * The record a record's own page opens (AGL-4047), read on its own and live,
+   * so a deep link to a record on no loaded page still opens and an edit shows
+   * as soon as it lands. Asked only of a member who may view the records.
+   */
+  const routeRecordRead = useFirestoreDoc<any>(
+    () =>
+      dataScope && selected?.$id && routeRecordId && !blocked.records
+        ? doc(firestore, dataScope[0], dataScope[1], 'datasets', selected.$id, 'records', routeRecordId)
+        : null,
+    [firestore, dataScope, selected?.$id, routeRecordId, blocked.records],
+  )
+  // Keyed by the id it was read under, as the table's rows are.
+  const routeRecord = useMemo(
+    () => (routeRecordId && routeRecordRead.data ? { ...routeRecordRead.data, $id: routeRecordId } : null),
+    [routeRecordId, routeRecordRead.data],
+  )
+  const routeRecordMissing = Boolean(
+    routeRecordId &&
+      !routeRecord &&
+      (routeRecordRead.status === 'error' || (routeRecordRead.status !== 'loading' && !routeRecordRead.fromCache)),
   )
   const recordRefusals = useMemo(
     () =>
@@ -645,7 +831,7 @@ export function HostDatasetsCard(props: HostDatasetsCardProps) {
       })
     }
     setCreator(null)
-    setSelectedId(id)
+    openDataset(id)
     setDatasetCountEpoch((epoch) => epoch + 1)
     enqueueSnackbar(`Dataset "${creator.name.trim()}" created`, {
       variant: 'success',
@@ -656,7 +842,7 @@ export function HostDatasetsCard(props: HostDatasetsCardProps) {
       id,
       name: creator.name.trim(),
     })
-  }, [creator, creatorEntries, creatorFields, orgId, createdFrom, callDatasetApi, enqueueSnackbar, logActivity])
+  }, [creator, creatorEntries, creatorFields, orgId, createdFrom, callDatasetApi, enqueueSnackbar, logActivity, openDataset])
 
   // Join collection template (AGL-180): extrinsic many-to-many as a
   // visible, editable collection of FKey pairs — no magic.
@@ -703,14 +889,14 @@ export function HostDatasetsCard(props: HostDatasetsCardProps) {
       })
     }
     setJoiner(null)
-    setSelectedId(id)
+    openDataset(id)
     // A join collection IS a dataset and consumes the same quota.
     setDatasetCountEpoch((epoch) => epoch + 1)
     enqueueSnackbar('Join collection created', {
       variant: 'success',
       persist: false,
     })
-  }, [joiner, datasets, orgId, createdFrom, callDatasetApi, enqueueSnackbar])
+  }, [joiner, datasets, orgId, createdFrom, callDatasetApi, enqueueSnackbar, openDataset])
 
   const handleDeleteDataset = useCallback(async () => {
     if (!selected) return
@@ -758,7 +944,7 @@ export function HostDatasetsCard(props: HostDatasetsCardProps) {
         persist: false,
       })
     }
-    setSelectedId(null)
+    openDataset(null)
     setDatasetCountEpoch((epoch) => epoch + 1)
     enqueueSnackbar('Dataset deleted', { variant: 'success', persist: false })
     logActivity('Deleted dataset', {
@@ -775,6 +961,7 @@ export function HostDatasetsCard(props: HostDatasetsCardProps) {
     user,
     enqueueSnackbar,
     logActivity,
+    openDataset,
   ])
 
   /**
@@ -788,7 +975,7 @@ export function HostDatasetsCard(props: HostDatasetsCardProps) {
   const [outsideTargets, setOutsideTargets] = useState<any[]>(NO_DATASETS)
   useEffect(() => {
     let active = true
-    const missing = pageHostId
+    const missing = railNarrowed
       ? [
           ...new Set(
             model.order
@@ -814,7 +1001,7 @@ export function HostDatasetsCard(props: HostDatasetsCardProps) {
     return () => {
       active = false
     }
-  }, [pageHostId, model, datasets, firestore, dataScope])
+  }, [railNarrowed, model, datasets, firestore, dataScope])
   const knownDatasets = useMemo(
     () => (outsideTargets.length ? [...datasets, ...outsideTargets] : datasets),
     [datasets, outsideTargets],
@@ -918,6 +1105,18 @@ export function HostDatasetsCard(props: HostDatasetsCardProps) {
    * query's answer.
    */
   const [viewerId, setViewerId] = useState<string | null>(null)
+  /**
+   * Opens a record (AGL-4047): on its own page beneath the dataset's tab
+   * where the Data page is routed, in the View record dialog elsewhere.
+   */
+  const datasetHref = basePath && selected?.$id ? `${basePath}/${selected.$id}` : null
+  const openRecord = useCallback(
+    (id: string) => {
+      if (datasetHref) router.push(`${datasetHref}/records/${encodeURIComponent(id)}`)
+      else setViewerId(id)
+    },
+    [datasetHref, router],
+  )
   const viewerRecord = useMemo(
     () =>
       viewerId
@@ -1060,7 +1259,7 @@ export function HostDatasetsCard(props: HostDatasetsCardProps) {
     logActivity,
   ])
   const handleDeleteRecord = useCallback(
-    (record: any) => async () => {
+    (record: any, afterDelete?: () => void) => async () => {
       // Datasets whose records this delete rewrites through a reference
       // fixup, beside the one the record belongs to. Each has pages of its
       // own to refresh (AGL-3113).
@@ -1103,7 +1302,7 @@ export function HostDatasetsCard(props: HostDatasetsCardProps) {
        * at the moment of the delete, and refuses if it cannot.
        */
       let referencing: any[] = datasets
-      if (pageHostId) {
+      if (railNarrowed) {
         try {
           const reach = await getDocs(
             query(
@@ -1201,11 +1400,12 @@ export function HostDatasetsCard(props: HostDatasetsCardProps) {
         await announceRecords(datasetId)
       }
       enqueueSnackbar('Record deleted', { variant: 'success', persist: false })
+      afterDelete?.()
     },
     [
       selected,
       datasets,
-      pageHostId,
+      railNarrowed,
       reachScope,
       firestore,
       dataScope,
@@ -1317,7 +1517,7 @@ export function HostDatasetsCard(props: HostDatasetsCardProps) {
                 direction="row"
                 sx={{ height: '100%', alignItems: 'center', justifyContent: 'flex-end' }}
               >
-                <Button size="small" onClick={() => setViewerId(record.$id)}>
+                <Button size="small" onClick={() => openRecord(record.$id)}>
                   {'View'}
                 </Button>
                 <BlockedControl blocked={blocked.writes} reason={blocked.writesReason}>
@@ -1349,6 +1549,7 @@ export function HostDatasetsCard(props: HostDatasetsCardProps) {
       referenceLabel,
       handleOpenRecord,
       handleDeleteRecord,
+      openRecord,
       recordFilter,
       blocked.writes,
       blocked.writesReason,
@@ -1394,50 +1595,213 @@ export function HostDatasetsCard(props: HostDatasetsCardProps) {
     headers: recordSortHeaders,
   })
 
-  return (
+  /**
+   * The rail (AGL-4047): one tab per dataset, at the dataset's own address,
+   * with a second line that tells two of one name apart. Past
+   * {@link DATASET_RAIL_GROUP_AT} the tabs are grouped by who they are shared
+   * with, and the organization page offers the Shared with filter.
+   */
+  const grouped = railDatasets.length > DATASET_RAIL_GROUP_AT
+  const railSections = useMemo<HubSection[]>(() => {
+    if (!basePath) return []
+    const tab = (item: DatasetRailEntry, group?: string): HubSection => ({
+      href: `${basePath}/${item.$id}`,
+      label: datasetRailName(item),
+      secondary: datasetRailSecondary(item, { hostNames, grouped }),
+      ...(group ? { group } : {}),
+    })
+    if (!grouped) return railDatasets.map((item: DatasetRailEntry) => tab(item))
+    return groupDatasetsBySharing(railDatasets, hostNames).flatMap((group) =>
+      group.datasets.map((item) => tab(item, group.label)),
+    )
+  }, [basePath, railDatasets, hostNames, grouped])
+  /** The join dialog's names, told apart where two match (AGL-4047). */
+  const joinLabels = useMemo(() => datasetPickerLabelsOf(datasets, hostNames), [datasets, hostNames])
+  const offerSharedWith =
+    !pageHostId && orgSites.length > 1 && (datasets.length > DATASET_RAIL_GROUP_AT || Boolean(sharedWith))
+  const sitesByName = useMemo(
+    () => [...orgSites].sort((a, b) => (hostNames[a.$id] ?? '').localeCompare(hostNames[b.$id] ?? '')),
+    [orgSites, hostNames],
+  )
+  const railHeader =
+    datasets.length || nameSearch || sharedWith ? (
+      <Stack spacing={1.5} sx={{ mb: 1 }}>
+        <TextField
+          size="small"
+          fullWidth
+          placeholder="Search datasets by name"
+          value={nameSearch}
+          onChange={(event) => setNameSearch(event.target.value)}
+          slotProps={{ htmlInput: { 'aria-label': 'Search datasets by name' } }}
+        />
+        {offerSharedWith ? (
+          <TextField
+            select
+            size="small"
+            fullWidth
+            label="Shared with"
+            value={sharedWith}
+            onChange={(event) => {
+              setSharedWith(event.target.value)
+              setRailWindow(DATASET_LIST_WINDOW)
+            }}
+          >
+            <MenuItem value="">{'Any site'}</MenuItem>
+            {sitesByName.map((site) => (
+              <MenuItem key={site.$id} value={site.$id}>
+                {hostNames[site.$id]}
+              </MenuItem>
+            ))}
+          </TextField>
+        ) : null}
+      </Stack>
+    ) : null
+  const railFooter = (
+    <>
+      {listAnswered && datasets.length > 0 && railDatasets.length === 0 ? (
+        <Typography variant="body2" color="text.secondary" sx={{ px: 2, py: 1 }}>
+          {moreDatasets ? 'None of the loaded datasets match.' : 'No datasets match.'}
+        </Typography>
+      ) : null}
+      {moreDatasets ? (
+        <Button size="small" sx={{ mt: 1 }} onClick={() => setRailWindow((window) => window + DATASET_LIST_WINDOW)}>
+          {'Show more datasets'}
+        </Button>
+      ) : null}
+    </>
+  )
+
+  /** The open dataset's facts, under its name. */
+  const facts: Array<[string, string]> = selected
+    ? [
+        ['Shared with', datasetSharingLabel(selected, hostNames)],
+        ['Fields', String(fields.length)],
+        ['Records', blocked.records ? '--' : recordCount.toLocaleString()],
+        ['Source', datasetSourceLabel(selected)],
+        ['Created', datasetCreatedLabel(selected)],
+      ]
+    : []
+
+  /** Label-over-value facts, under a heading. */
+  const factsRow = (pairs: Array<[string, string]>) => (
+    <Stack direction="row" spacing={3} useFlexGap sx={{ flexWrap: 'wrap', mt: 1 }}>
+      {pairs.map(([label, value]) => (
+        <Box key={label}>
+          <Typography variant="caption" color="text.secondary" component="div">
+            {label}
+          </Typography>
+          <Typography variant="body2" color="text.primary" component="div" sx={{ overflowWrap: 'anywhere' }}>
+            {value}
+          </Typography>
+        </Box>
+      ))}
+    </Stack>
+  )
+
+  /**
+   * A record's own page (AGL-4047): back to its dataset, its fields, and
+   * today's record actions with today's gates. It takes the place of the View
+   * record dialog where the Data page is routed.
+   */
+  const recordTitle = routeRecord ? datasetRecordTitle(model, routeRecord.values) : undefined
+  const recordPanel =
+    selected && routeRecordId ? (
+      <CardDisplay
+        help={pluginDocsHelp('datasets', { anchor: '#organization-data-page' })}
+        header={
+          <Stack spacing={1} sx={{ alignItems: 'flex-start' }}>
+            {datasetHref ? (
+              <Button
+                size="small"
+                component={AppLink}
+                href={datasetHref}
+                startIcon={<MdiIcon path={mdiArrowLeft.path} size={0.8} />}
+              >
+                {datasetRailName(selected)}
+              </Button>
+            ) : null}
+            {recordTitle ? <span>{recordTitle}</span> : null}
+          </Stack>
+        }
+        contentGutterX
+        contentGutterY
+        contentBordered="top"
+        HeaderProps={{
+          action: routeRecord ? (
+            <Stack direction="row" spacing={1} useFlexGap sx={{ alignItems: 'center', flexWrap: 'wrap', justifyContent: 'flex-end' }}>
+              <BlockedControl blocked={blocked.writes} reason={blocked.writesReason}>
+                <Button size="small" onClick={handleOpenRecord(routeRecord)}>
+                  {'Edit record'}
+                </Button>
+              </BlockedControl>
+              <BlockedControl blocked={blocked.writes} reason={blocked.writesReason}>
+                <Button
+                  size="small"
+                  color="error"
+                  onClick={handleDeleteRecord(routeRecord, () => {
+                    if (datasetHref) router.push(datasetHref)
+                  })}
+                >
+                  {'Delete'}
+                </Button>
+              </BlockedControl>
+            </Stack>
+          ) : undefined,
+          subheader: factsRow([
+            ['Record ID', routeRecordId],
+            ['Dataset', `${datasetRailName(selected)} · ${datasetSharingLabel(selected, hostNames)}`],
+          ]),
+        }}
+      >
+        <Stack spacing={1.5}>
+          {blocked.records ? (
+            <Typography variant="body2" color="text.secondary">
+              {DATASETS_VIEW_RECORDS_REFUSAL}
+            </Typography>
+          ) : routeRecordMissing ? (
+            <Alert severity="info">{'This record doesn’t exist, or you can’t open it.'}</Alert>
+          ) : routeRecord ? (
+            <DatasetRecordFieldList
+              record={routeRecord}
+              model={model}
+              resolveReference={resolveReferenceLabel}
+              divided
+            />
+          ) : null}
+        </Stack>
+      </CardDisplay>
+    ) : null
+
+  const panel = notSharedHere ? (
+    <Alert severity="info">{'This dataset isn’t shared with this site.'}</Alert>
+  ) : notFound ? (
+    <Alert severity="info">{'This dataset doesn’t exist, or you can’t open it.'}</Alert>
+  ) : recordPanel ? (
+    recordPanel
+  ) : !selected ? (
+    listAnswered && datasets.length === 0 && !sharedWith ? (
+      <CardDisplay contentGutterX contentGutterY>
+        <Typography variant="body2" color="text.secondary">
+          {'Create a dataset, like Products, then add a repeating section ' +
+            'to any page to show one item per record.'}
+        </Typography>
+      </CardDisplay>
+    ) : null
+  ) : (
     <CardDisplay
-      header={'Data'}
+      header={datasetRailName(selected)}
       help={pluginDocsHelp('datasets', { anchor: '#filter-records' })}
       contentGutterX
       contentGutterY
-      contentBordered="all"
-    >
-      <Stack spacing={1.5}>
-        {orgId ? (
-          <Typography variant="caption" color="text.secondary">
-            {/* Ownership and visibility are separate facts (AGL-1044), and
-                what a new dataset starts on depends on where it is made. */}
-            {newDatasetSharingNote(createsSiteOnly)}
-          </Typography>
-        ) : null}
-        {datasets.length === 0 ? (
-          <Typography variant="body2" color="text.secondary">
-            {'Create a dataset, like Products, then add a repeating section ' +
-              'to any page to show one item per record.'}
-          </Typography>
-        ) : (
+      contentBordered="top"
+      HeaderProps={{
+        action: (
           <Stack
             direction="row"
             spacing={1}
             useFlexGap
-            sx={{ alignItems: 'center', flexWrap: 'wrap' }}
+            sx={{ alignItems: 'center', flexWrap: 'wrap', justifyContent: 'flex-end' }}
           >
-            {/* A scope, not a filter: it picks which collection the table
-                walks, and the grid's own Filters panel narrows within it. */}
-            <TextField
-              select
-              size="small"
-              label="Dataset"
-              value={selected?.$id ?? ''}
-              onChange={(event) => setSelectedId(event.target.value)}
-              sx={{ minWidth: 180 }}
-            >
-              {datasets.map((item) => (
-                <MenuItem key={item.$id} value={item.$id}>
-                  {datasetDisplayName(item)}
-                </MenuItem>
-              ))}
-            </TextField>
             <BlockedControl blocked={blocked.writes} reason={blocked.writesReason}>
               <Button
                 size="small"
@@ -1486,7 +1850,11 @@ export function HostDatasetsCard(props: HostDatasetsCardProps) {
               </Button>
             </BlockedControl>
           </Stack>
-        )}
+        ),
+        subheader: factsRow(facts),
+      }}
+    >
+      <Stack spacing={1.5}>
         {/* The per-dataset record cap, standing rather than only on refusal
             (AGL-2113). `recordCount` is the dataset's real size — the same
             number `handleOpenRecord` and the importer hand to `checkQuota`,
@@ -1518,10 +1886,13 @@ export function HostDatasetsCard(props: HostDatasetsCardProps) {
           />
           <ListTable
             aria-label="Records"
+            // Edit and Delete stay in reach when the columns scroll sideways
+            // in the panel beside the rail (AGL-4047).
+            pinActions
             rows={recordColumnSort.rows}
             columnSort={recordColumnSort}
             columns={recordGridColumns}
-            onOpen={(id) => setViewerId(id)}
+            onOpen={(id) => openRecord(id)}
             // One page of the walk, turned by the footer below: the grid
             // neither slices nor filters it.
             hideFooter
@@ -1555,31 +1926,48 @@ export function HostDatasetsCard(props: HostDatasetsCardProps) {
             {'No records yet.'}
           </Typography>
         ) : null}
-        <Stack
-          direction="row"
-          spacing={1}
-          useFlexGap
-          sx={{ flexWrap: 'wrap' }}
-        >
+      </Stack>
+    </CardDisplay>
+  )
+
+  return (
+    <>
+      {/* The page's own actions, in the page header beside its title. */}
+      <PageHeaderActions>
+        <Stack direction="row" spacing={1} useFlexGap sx={{ flexWrap: 'wrap' }}>
           <BlockedControl blocked={blocked.creates} reason={DATASETS_WRITE_REFUSAL}>
-            <Button
-              size="small"
-              variant="outlined"
-              color="primary"
-              onClick={handleOpenCreator}
-            >
+            <Button variant="outlined" color="primary" onClick={handleOpenCreator}>
               {'Add dataset'}
             </Button>
           </BlockedControl>
           {datasets.length >= 2 ? (
             <BlockedControl blocked={blocked.creates} reason={DATASETS_WRITE_REFUSAL}>
-              <Button size="small" onClick={() => setJoiner({ a: '', b: '' })}>
-                {'Add join collection'}
-              </Button>
+              <Button onClick={() => setJoiner({ a: '', b: '' })}>{'Add join collection'}</Button>
             </BlockedControl>
           ) : null}
         </Stack>
-      </Stack>
+      </PageHeaderActions>
+      {/* The open dataset ends the trail; the heading stays the page's. */}
+      {/* On a record's page the trail runs dataset, linked, then record. */}
+      {routeRecordId && selected && datasetHref ? (
+        <PageHeaderRecord
+          title={recordTitle}
+          keepHeading
+          parentTitle={datasetRailName(selected)}
+          parentHref={datasetHref}
+        />
+      ) : (
+        <PageHeaderRecord title={selected && routeDatasetId ? datasetRailName(selected) : undefined} keepHeading />
+      )}
+      <HubSections
+        sections={railSections}
+        navHeader="Datasets"
+        railHeader={railHeader}
+        railFooter={railFooter}
+        scrollRail
+      >
+        {panel}
+      </HubSections>
       <Dialog
         open={Boolean(creator)}
         onClose={() => setCreator(null)}
@@ -1590,6 +1978,13 @@ export function HostDatasetsCard(props: HostDatasetsCardProps) {
         <DialogContent
           sx={{ display: 'flex', flexDirection: 'column', gap: 2 }}
         >
+          {orgId ? (
+            <Typography variant="body2" color="text.secondary" sx={{ mt: 1 }}>
+              {/* Ownership and visibility are separate facts (AGL-1044), and
+                  what a new dataset starts on depends on where it is made. */}
+              {newDatasetSharingNote(createsSiteOnly)}
+            </Typography>
+          ) : null}
           <TextField
             label="Name"
             value={creator?.name ?? ''}
@@ -1856,7 +2251,8 @@ export function HostDatasetsCard(props: HostDatasetsCardProps) {
             >
               {datasets.map((item) => (
                 <MenuItem key={item.$id} value={item.$id}>
-                  {datasetDisplayName(item)}
+                  {/* Who it is shared with only where two share a name (AGL-4047). */}
+                  {joinLabels[item.$id]}
                 </MenuItem>
               ))}
             </TextField>
@@ -1885,14 +2281,14 @@ export function HostDatasetsCard(props: HostDatasetsCardProps) {
         // dialog warns "N documents exist" before a narrowing type change,
         // and 500 was the cap talking, not the collection.
         recordCount={recordCount}
-        seedFromCache={datasetsFromCache}
-        seedUnreadable={datasetsStatus === 'error'}
-        seedListen={datasetsListen}
+        seedFromCache={seed.fromCache}
+        seedUnreadable={seed.unreadable}
+        seedListen={seed.listen}
         canChangeSharing={!blocked.creates}
         {...(blocked.sharingOnly ? { sharingOnlyReason: blocked.writesReason } : {})}
         onClose={() => setSchemaOpen(false)}
       />
-    </CardDisplay>
+    </>
   )
 }
 HostDatasetsCard.displayName = 'HostDatasetsCard'

@@ -67,14 +67,14 @@ export interface PosReaderSplashFamily {
 export const POS_READER_SPLASH_FAMILIES: readonly PosReaderSplashFamily[] = [
   {
     id: 'portrait-large',
-    label: 'Stripe Reader S700 and S710',
+    label: 'Touchscreen readers (S700 and S710)',
     width: 1080,
     height: 1920,
     deviceTypes: ['stripe_s700', 'stripe_s710'],
   },
   {
     id: 'portrait-small',
-    label: 'BBPOS WisePOS E',
+    label: 'Countertop reader (WisePOS E)',
     width: 720,
     height: 1280,
     deviceTypes: ['bbpos_wisepos_e'],

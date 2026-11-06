@@ -54,6 +54,8 @@ import { useFirestore, useUser } from '@aglyn/tenant-feature-instance'
 import { useFirestoreCollection } from '@aglyn/tenant-feature-instance'
 import { listQueryConstraints } from '@aglyn/tenant-feature-instance/hooks/use-list-query'
 import { useOrgPlan } from '@aglyn/tenant-feature-instance'
+import { resolvePlanFeatureLock } from '@aglyn/tenant-feature-instance/hooks/plan-feature-lock'
+import { EntitlementUpsell } from './entitlement-gate.component'
 import {
   newAttemptKey,
   openPosSale,
@@ -87,7 +89,7 @@ import {
   useConsoleWidgetSlot,
 } from '@aglyn/aglyn/app-utils/console-widget-slot-context'
 import { POS_ORDERS_ZONE } from './pos-zones'
-import { isPosHardwareSkuId } from '../../model/pos-hardware'
+import { isPosHardwareSkuId, posPlanPrompt } from '../../model/pos-hardware'
 
 /**
  * Card reader sales at the platform's own store (AGL-4038): attaching the
@@ -332,6 +334,15 @@ export function PosConsolePage({ hostId, basePath, permissions }: ConsolePluginP
   const registerCap = Aglyn.checkHostRegisterQuota(org, hostId, registers.length).limit
   const withinCap = CommerceModel.registersWithinCap(registers, registerCap)
   const usableRegisters = planReady ? registers.filter((r: any) => withinCap.has(r.$id)) : []
+  // A workspace that bought a reader without the point of sale (AGL-4038)
+  // is told what adding it gives it, from the org doc already held and the
+  // workspace in this page's own path (`/{org}/hosts/{host}/pos`): no read.
+  const posPlan = resolvePlanFeatureLock({
+    org,
+    ready: planReady,
+    feature: 'pos',
+    orgSlug: /^\/([^/]+)\/hosts\//.exec(basePath ?? '')?.[1],
+  })
   /*
    * The stays a sale can be charged to, asked for BY STATUS (AGL-3321).
    */
@@ -750,6 +761,10 @@ export function PosConsolePage({ hostId, basePath, permissions }: ConsolePluginP
     <Typography variant="body2" color="text.secondary">
       {'Checking your plan…'}
     </Typography>
+  ) : posPlan.locked ? (
+    <EntitlementUpsell planLabel={posPlan.planLabel} upgradeHref={posPlan.upgradeHref}>
+      {posPlanPrompt({ atRegister: true })}
+    </EntitlementUpsell>
   ) : usableRegisters.length === 0 ? (
     registers.length > 0 ? (
       <Typography variant="body2" color="warning.main">

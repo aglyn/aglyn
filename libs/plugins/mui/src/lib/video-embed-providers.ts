@@ -139,6 +139,17 @@ const WISTIA: VideoEmbedProviderDeclaration = {
  * the element's switches; YouTube loops a single film only as a playlist of
  * itself, hence `playlist={id}` beside `loop=1`. `playsinline=1` keeps the
  * film in the page on a phone, as the element's own player does.
+ *
+ * ## The still
+ *
+ * YouTube publishes a still of every public film at
+ * `i.ytimg.com/vi/{id}/hqdefault.jpg` (480 by 360, letterboxed for a wide
+ * film), the picture its own players show before a press. A film placed
+ * with no poster shows it as the poster (AGL-4140), where the site's
+ * workspace has `release_video_embed_posters` on: the visitor's browser
+ * loads it from Google with the page, with no referrer, and nothing of
+ * YouTube's player until a press. `hqdefault` rather than `maxresdefault`,
+ * which a film uploaded below 720p does not have.
  */
 const YOUTUBE: VideoEmbedProviderDeclaration = {
   id: 'youtube',
@@ -164,6 +175,8 @@ const YOUTUBE: VideoEmbedProviderDeclaration = {
     { param: 'loop', option: 'loop', on: '1' },
     { param: 'playlist', option: 'loop', on: '{id}' },
   ],
+  posterOrigin: 'https://i.ytimg.com',
+  posterPath: '/vi/{id}/hqdefault.jpg',
 }
 
 /**
@@ -192,6 +205,12 @@ const YOUTUBE: VideoEmbedProviderDeclaration = {
  *
  * `autoplay` stated both ways, `muted` and `loop` from the element's
  * switches.
+ *
+ * ## No still
+ *
+ * Vimeo serves a film's still only from an address its API answers with,
+ * not one built from the id, so no still is declared: a Vimeo film with no
+ * poster keeps asking the author for one.
  */
 const VIMEO: VideoEmbedProviderDeclaration = {
   id: 'vimeo',

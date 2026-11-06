@@ -49,7 +49,7 @@ import { dataPermissionRefusal } from '../model/dataset-access'
 import { announceDatasetRecords as announceDatasetChange } from './announce-dataset-records'
 import { datasetRefusalPermission, memberMayActOnDataset } from './dataset-access.server'
 import { coerceDocumentValues, datasetIntegrityFields, datasetIntegrityUpdate, effectiveDatasetModel, validateDocument } from '../model/dataset-models'
-import { defaultDatasetFieldId } from '../model/datasets'
+import { datasetNameLower, defaultDatasetFieldId } from '../model/datasets'
 import { planReferenceFixups, referencingFieldIds, restrictedDeleteMessage } from '../model/dataset-record-delete-plan'
 import {
   RECORD_PAGE_ADDRESS_FIELD_TYPE,
@@ -387,6 +387,7 @@ export const datasetsHandler: PluginWebApiHandler = async (request) => {
           if (!authoritative.allowed) return overDatasetQuota(authoritative)
           tx.create(datasetsRef.doc(id), {
             displayName,
+            nameLower: datasetNameLower(displayName),
             fields,
             ...(model ? { model } : {}),
             // The scope decided above. Stamping SOMETHING is mandatory: an

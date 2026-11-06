@@ -372,6 +372,11 @@ const DECLARED: Readonly<Record<string, DeclaredSinkFile>> = {
     guard: 'off-tenant',
     why: "Not a sink, and never on a tenant render: Bring my site's page compiler (AGL-4107), imported only by the AI job steps that build a page (jobs/ai-job-import-step.ts, ai-job-page-step.ts, ai-job-page-language.ts) and the layout language that reads its document, all run for a job on the console's AI job runner. The marker is `icons: []` in the layout it reads from a page's lines when the reader drew none: an empty list of the old page's inline SVG shapes, never an address. What it returns is screen data the job saves; the tenant renders the saved nodes through the ordinary element path.",
   },
+  'libs/plugins/ai/src/lib/jobs/ai-site-import-improve.ts': {
+    markers: 1,
+    guard: 'off-tenant',
+    why: "Not a sink, and never on a tenant render: generative Improve it (AGL-4152), behind `release_ai_site_import_generative`, imported only by the page language (jobs/ai-job-page-language.ts) for a job on the console's AI job runner. The marker is a line of the model's prompt, `- image: text describes a picture the page should have…`, explaining the image block kind; it reads as a JSON-LD `image:` and is handed to the model as words, never an address. What the job returns is screen data it saves; the tenant renders the saved nodes through the ordinary element path.",
+  },
   'libs/plugins/ai/src/lib/jobs/ai-site-import-look.ts': {
     markers: 1,
     guard: 'off-tenant',

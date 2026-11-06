@@ -36,7 +36,8 @@ organization **Data** page (or any site's Data page — both edit the same data)
    (say `Survey responses`) and a comma-separated list of **Fields**
    (`satisfaction, visit, topics, comments`) — at least one, or **Create** stays
    disabled. Create it.
-2. Select your new dataset in the **Dataset** dropdown and open **Schema**.
+2. The new dataset opens as its own tab in the **Datasets** list on the left.
+   Open **Schema**.
    The **Schema** dialog lists each field with its display name, generated
    field id, and a type chip.
 3. Use **Add field** / **Edit** to type the fields properly:

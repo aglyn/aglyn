@@ -100,6 +100,9 @@ import {
   pluginSiteCspPluginsToRead,
   type PluginSiteCspDirective,
 } from '@aglyn/aglyn/plugin-manager/plugin-site-csp'
+// The leaf module, not the barrel: the verdict asks one per-org flag, and the
+// barrel's own mocks in the middleware specs name none of it.
+import { isServerReleaseFlagOnForOrg } from '@aglyn/tenant-data-admin/server/release-flags'
 import { CNAME_HOST_PREFIX, getHost } from '../../../utils/get-host'
 import { getOrgBilling } from '../../../utils/get-org-billing'
 
@@ -183,6 +186,7 @@ function lockedVerdict(
     preview?: boolean
     previewPaths?: string[]
     maintenance?: boolean
+    videoEmbedPosters?: boolean
   },
 ): Response {
   const notice = lockdownNotice(state)
@@ -204,6 +208,7 @@ function lockedVerdict(
       preview: facts.preview ?? false,
       previewPaths: facts.previewPaths ?? [],
       maintenance: facts.maintenance ?? false,
+      videoEmbedPosters: facts.videoEmbedPosters ?? false,
       mode: lockdownMode(state),
       reason: state.reason,
       title: notice.title,
@@ -467,6 +472,24 @@ export async function GET(request: Request): Promise<Response> {
      * maintenance is what every one of its addresses says.
      */
     const maintenance = isHostInMaintenance(hostRes.host as never)
+    /**
+     * Video host stills (AGL-4140): a NINTH answer, whether this site's
+     * workspace has `release_video_embed_posters` on, so the middleware's
+     * `img-src` admits the hosts' still origins exactly where the page shows
+     * a still. Read through the per-org verdict the loader reads, so the
+     * policy and the page agree. A flag read that fails answers false, the
+     * shipped behavior. The outage answer below leaves the field out, so the
+     * middleware keeps the last answer it had, as it does `runsMeasurement`:
+     * a cached page that shows a still must not lose it to a verdict blip.
+     *
+     * Same disclosure posture as the rest: whether a public page shows a
+     * film's still is what loading it shows.
+     */
+    const orgId = (hostRes.host as { orgId?: unknown }).orgId
+    const videoEmbedPosters =
+      typeof orgId === 'string' && orgId
+        ? await isServerReleaseFlagOnForOrg('release_video_embed_posters', orgId).catch(() => false)
+        : false
     const state = resolveLockdown(
       {
         platform: await getPlatformLockdown(),
@@ -494,6 +517,7 @@ export async function GET(request: Request): Promise<Response> {
           preview,
           previewPaths,
           maintenance,
+          videoEmbedPosters,
         },
         { status: 200 },
       )
@@ -513,6 +537,7 @@ export async function GET(request: Request): Promise<Response> {
       preview,
       previewPaths,
       maintenance,
+      videoEmbedPosters,
     })
   } catch (error) {
     console.error('[lockdown-verdict] failed', error)

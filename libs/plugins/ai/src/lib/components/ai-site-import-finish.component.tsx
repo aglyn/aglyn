@@ -32,7 +32,7 @@ import {
 } from '@mui/material'
 import { useId, type ComponentProps } from 'react'
 import { aiSiteImportFinishOf, type AiSiteImportFinish } from '../model/ai-site-import'
-import { AI_SITE_IMPORT_FINISH_COPY, type AiSiteImportFinishField } from '../model/ai-site-import-view'
+import { AI_SITE_IMPORT_FINISH_COPY, AI_SITE_IMPORT_FINISH_COPY_GENERATIVE, type AiSiteImportFinishField } from '../model/ai-site-import-view'
 
 export interface AiSiteImportFinishProps {
   value: AiSiteImportFinishField
@@ -42,6 +42,8 @@ export interface AiSiteImportFinishProps {
   /** The guide's section on the choice, beside the question. */
   help?: ComponentProps<typeof HelpTip>
   disabled?: boolean
+  /** A generative Improve it is on for this workspace (AGL-4152): its words for the option and the switch. */
+  generative?: boolean
 }
 
 /**
@@ -53,11 +55,11 @@ export interface AiSiteImportFinishProps {
  * The switch sits outside the radio group, so the group holds its two radios
  * and nothing else, and it shows only under Improve it.
  */
-export function AiSiteImportFinish({ value, onChange, wordingCredits, help, disabled }: AiSiteImportFinishProps) {
+export function AiSiteImportFinish({ value, onChange, wordingCredits, help, disabled, generative }: AiSiteImportFinishProps) {
   const id = useId()
   const labelId = `${id}-label`
   const wordingId = `${id}-wording`
-  const copy = AI_SITE_IMPORT_FINISH_COPY
+  const copy = generative ? AI_SITE_IMPORT_FINISH_COPY_GENERATIVE : AI_SITE_IMPORT_FINISH_COPY
 
   const option = (finish: AiSiteImportFinish) => {
     const text = copy[finish]

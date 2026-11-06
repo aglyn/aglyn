@@ -56,6 +56,12 @@ import { generatePresetId } from '../utils/generate-preset-id'
 import { useStorefrontPurchaseEvent } from '../utils/use-storefront-purchase-event'
 import { addToCart } from '../utils/add-to-cart'
 import { CartFulfillmentChoice, useCartFulfillment } from './cart-fulfillment'
+import {
+  HardwareTermsConsent,
+  hardwareTermsAnswered,
+  NO_HARDWARE_TERMS_ANSWER,
+  type HardwareTermsAnswer,
+} from './hardware-terms-consent'
 import { ID as PRODUCT_REVIEWS_ID } from './product-reviews'
 import { ID as RELATED_PRODUCTS_ID } from './related-products'
 import { readLocalWishlist, toggleWishlist } from './wishlist'
@@ -413,6 +419,10 @@ const ProductDetail = forwardRef<HTMLDivElement, ProductDetailProps>(
       'idle' | 'sending' | 'error' | 'ask' | 'unconfigured'
     >('idle')
     const [message, setMessage] = useState('')
+    // The terms of sale and business use, once a checkout of card reader
+    // hardware asked for them (AGL-4038).
+    const [hardwareTerms, setHardwareTerms] = useState<HardwareTermsAnswer>(NO_HARDWARE_TERMS_ANSWER)
+    const [hardwareTermsAsked, setHardwareTermsAsked] = useState(false)
     // Buy-now's half of AGL-1721: asked only when the server refuses to price
     // shipping without a destination, so a digital product, a subscription, or
     // a merchant whose rates are the same everywhere never shows it. `null` is
@@ -629,6 +639,8 @@ const ProductDetail = forwardRef<HTMLDivElement, ProductDetailProps>(
             // legacy coupons second, and refuses a code it cannot apply with a
             // reason — never a silent full-price charge.
             ...(coupon.trim() ? { couponCode: coupon.trim() } : {}),
+            // The buyer's answers for card reader hardware (AGL-4038), once asked.
+            ...(hardwareTermsAsked ? { hardwareTerms } : {}),
             // The visitor's advertising consent and the vendors' browser ids, only
             // where that consent grants advertising (AGL-3694); absent otherwise.
             ...advertisingConsentField(hostId),
@@ -677,6 +689,13 @@ const ProductDetail = forwardRef<HTMLDivElement, ProductDetailProps>(
             }),
           )
           window.location.assign(payload.url)
+          return
+        }
+        // Card reader hardware needs the terms of sale ticked (AGL-4038).
+        if (payload?.needsHardwareTerms) {
+          setHardwareTermsAsked(true)
+          setMessage(String(payload?.error ?? ''))
+          setStatus('ask')
           return
         }
         // Buy-now's half of AGL-2019. The server's own 501 wording is not
@@ -1084,7 +1103,9 @@ const ProductDetail = forwardRef<HTMLDivElement, ProductDetailProps>(
                 // Asked but unanswered: the server would only refuse again.
                 (fulfillment.method === 'shipping' && shipCountries !== null && !shipTo) ||
                 (fulfillment.method === 'shipping' && askPostal && !shipPostal.trim()) ||
-                !fulfillment.ready
+                !fulfillment.ready ||
+                // Card reader hardware: both boxes ticked (AGL-4038).
+                (hardwareTermsAsked && !hardwareTermsAnswered(hardwareTerms))
               }
               onClick={handleBuy}
               sx={{ flex: 1 }}
@@ -1185,6 +1206,7 @@ const ProductDetail = forwardRef<HTMLDivElement, ProductDetailProps>(
               sx={{ mb: 2 }}
             />
           ) : null}
+          {hardwareTermsAsked ? <HardwareTermsConsent answer={hardwareTerms} onChange={setHardwareTerms} /> : null}
           {status === 'ask' || status === 'unconfigured' ? (
             <Alert severity="info" sx={{ mb: 2 }}>
               {message}

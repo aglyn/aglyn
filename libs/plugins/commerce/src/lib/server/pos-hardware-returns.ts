@@ -22,6 +22,7 @@ import { posOrderRefundRecord, POS_ORDER_REFUNDS_COLLECTION } from '../model/com
 import { POS_STRIPE_TENDERS, type PosTenderSource } from '../model/commerce-pos-ops'
 import {
   formatPosHardwareCents,
+  isPosHardwareSellerStoreSale,
   isPosHardwareSkuId,
   POS_HARDWARE_ORDER_ID,
   POS_HARDWARE_RETURN_REASON_MAX,
@@ -181,15 +182,20 @@ export async function recordRegisterHardwareReturn(input: {
 }
 
 /**
- * Refunds what is left of an in-person order from the staff page (way 2),
- * through the register sale's own card refund. Refused for a sale paid by
- * anything Stripe cannot refund, which goes back at the register instead.
+ * Refunds what is left of an order sold by the platform's own store from the
+ * staff page (way 2), through the store order's own card refund: an
+ * in-person sale's register sale, or an online order's Checkout payment
+ * (AGL-4038), both destination charges into the store's account. Refused
+ * for a sale paid by anything Stripe cannot refund, which goes back at the
+ * register instead. `amountCents` refunds less than what is left: a return
+ * of an online order keeps the original shipping and any restocking fee.
  */
 export async function refundInPersonPosHardwareOrder(input: {
   config: PosHardwareInPersonConfig | null
   orgId: string
   orderId: string
   actorUid: string
+  amountCents?: number
   now?: number
 }): Promise<{ before: PosHardwareOrder; order: PosHardwareOrder }> {
   const { config } = input
@@ -198,11 +204,13 @@ export async function refundInPersonPosHardwareOrder(input: {
   const snapshot = await ref.get()
   if (!snapshot.exists) throw new PosHardwareReturnRefusal('No such order', 404)
   const before = snapshot.data() as PosHardwareOrder
-  if (before.source !== 'in_person' || before.posSale?.hostId !== config.sellerHostId) {
-    throw new PosHardwareReturnRefusal('Only a card reader sold in person here is refunded this way.', 409)
+  if (!isPosHardwareSellerStoreSale(before) || before.posSale?.hostId !== config.sellerHostId) {
+    throw new PosHardwareReturnRefusal('Only a card reader sold by our own store is refunded this way.', 409)
   }
   if (before.status === 'refunded' || before.status === 'canceled') return { before, order: before }
-  const cents = Math.max(0, (before.totalCents ?? 0) - (before.refundedCents ?? 0))
+  const left = Math.max(0, (before.totalCents ?? 0) - (before.refundedCents ?? 0))
+  const cents =
+    input.amountCents === undefined ? left : Math.min(left, Math.max(0, Math.round(Number(input.amountCents) || 0)))
   if (!cents) throw new PosHardwareReturnRefusal('Nothing is left to refund on this order.', 409)
   const registerOrderId = String(before.posSale?.orderId ?? '')
   const registerRef = firestore().collection('hosts').doc(config.sellerHostId).collection('orders').doc(registerOrderId)
@@ -447,6 +455,30 @@ export async function refundReturnedOnlinePosHardwareOrder(input: {
   if (!POS_HARDWARE_ORDER_ID.test(input.orderId)) throw new PosHardwareReturnRefusal('No such order', 404)
   const now = input.now ?? Date.now
   const ref = hardwareOrdersRef(input.orgId).doc(input.orderId)
+  // Bought from the platform's own online store (AGL-4038): the money is in
+  // that store's account, so it goes back through the store order's own
+  // refund, under the same return rule — the items and their tax, less the fee.
+  const current = (await ref.get()).data() as PosHardwareOrder | undefined
+  if (current && current.source === 'storefront') {
+    if (current.returnRequest?.state !== 'requested') {
+      throw new PosHardwareReturnRefusal('There is no open return request on this order.', 409)
+    }
+    if (!POS_HARDWARE_ONLINE_RETURNABLE.includes(current.status)) {
+      throw new PosHardwareReturnRefusal('Only an order that has shipped is refunded as a return.', 409)
+    }
+    const cents = posHardwareReturnRefundableCents(current) - fee
+    if (cents <= 0) throw new PosHardwareReturnRefusal('The restocking fee leaves nothing to refund.', 400)
+    const { posHardwareInPersonConfig } = await import('./pos-hardware')
+    const refunded = await refundInPersonPosHardwareOrder({
+      config: posHardwareInPersonConfig(),
+      orgId: input.orgId,
+      orderId: input.orderId,
+      actorUid: input.actorUid,
+      amountCents: cents,
+      now: now(),
+    })
+    return { ...refunded, cents }
+  }
   const claimed = await firestore().runTransaction(async (transaction: any) => {
     const snapshot = await transaction.get(ref)
     if (!snapshot.exists) throw new PosHardwareReturnRefusal('No such order', 404)

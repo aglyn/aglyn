@@ -23,6 +23,7 @@ import com.aglyn.core.FirestoreTimestamp
 import com.aglyn.core.FirestoreWriter
 import com.aglyn.core.field
 import com.aglyn.core.jsonBody
+import com.aglyn.core.listquery.nameSearchKey
 import com.aglyn.core.listquery.toFirestoreQuery
 import com.aglyn.core.plainJson
 import com.aglyn.ui.Load
@@ -300,7 +301,11 @@ class DataApi(private val api: ConsoleApiClient, private val writer: FirestoreWr
       "names" to mapOf("singular" to singular.trim(), "plural" to plural.trim()),
       "fields" to model.order.orEmpty(),
     )
-    if (plural.isNotBlank()) data["displayName"] = plural.trim()
+    // The name's search key moves with it, as the web dialog writes it (AGL-4047).
+    if (plural.isNotBlank()) {
+      data["displayName"] = plural.trim()
+      data["nameLower"] = nameSearchKey(plural)
+    }
     if (visibleTo != null) data["visibleTo"] = visibleTo
     writer.update("${datasetsPath(orgId)}/${dataset.id}", data)
   }

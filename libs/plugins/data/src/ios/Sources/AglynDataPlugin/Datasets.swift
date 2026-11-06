@@ -366,7 +366,11 @@ struct DataAPI {
       "names": ["singular": singular.trimmingCharacters(in: .whitespacesAndNewlines), "plural": plural.trimmingCharacters(in: .whitespacesAndNewlines)],
       "fields": model.order ?? [],
     ]
-    if !plural.trimmingCharacters(in: .whitespaces).isEmpty { data["displayName"] = plural.trimmingCharacters(in: .whitespacesAndNewlines) }
+    // The name's search key moves with it, as the web dialog writes it (AGL-4047).
+    if !plural.trimmingCharacters(in: .whitespaces).isEmpty {
+      data["displayName"] = plural.trimmingCharacters(in: .whitespacesAndNewlines)
+      data["nameLower"] = nameSearchKey(plural)
+    }
     if let visibleTo { data["visibleTo"] = visibleTo }
     try await writer.update(datasetsPath(orgID) + [dataset.id], data)
   }

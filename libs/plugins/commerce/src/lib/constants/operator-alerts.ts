@@ -229,7 +229,7 @@ export const COMMERCE_POS_HARDWARE_RETURN_REQUESTED: OperatorAlertDefinition = {
 }
 
 /**
- * A workspace's monthly 4G charge for its Stripe Reader S710s did not
+ * A workspace's monthly 4G charge for its S710 readers did not
  * collect (AGL-4038): the card declined or asked for authentication (the
  * invoice is left open on their Billing page, which nothing retries), or
  * the workspace has no Stripe customer to bill. Stripe still bills the
@@ -240,7 +240,7 @@ export const COMMERCE_POS_CELLULAR_CHARGE_FAILED: OperatorAlertDefinition = {
   pluginId: BUNDLE_ID,
   label: '4G charge for card readers not collected',
   description:
-    'A workspace’s monthly charge for 4G on its Stripe Reader S710s did not collect. Stripe still bills the platform for those readers. Follow up with the workspace, or turn 4G off for its stores.',
+    'A workspace’s monthly charge for 4G on its S710 readers did not collect. Stripe still bills the platform for those readers. Follow up with the workspace, or turn 4G off for its stores.',
   tier: 'should',
   category: 'payments',
   title: '4G charge for {{month}} not collected: {{amount}}',
@@ -262,7 +262,7 @@ export const COMMERCE_POS_CELLULAR_TURN_OFF_FAILED: OperatorAlertDefinition = {
   pluginId: BUNDLE_ID,
   label: '4G not turned off for a deleted store',
   description:
-    'A store with 4G on its Stripe Reader S710s was deleted, with its workspace or on its own, and Stripe refused to turn cellular off on its Terminal configuration. Turn it off in the Stripe Dashboard, or Stripe keeps billing the platform for it.',
+    'A store with 4G on its S710 readers was deleted, with its workspace or on its own, and Stripe refused to turn cellular off on its Terminal configuration. Turn it off in the Stripe Dashboard, or Stripe keeps billing the platform for it.',
   tier: 'must',
   category: 'payments',
   title: 'Turn off 4G on Terminal configuration {{configurationId}}',
@@ -284,7 +284,7 @@ export const COMMERCE_POS_CELLULAR_TURNED_OFF_UNPAID: OperatorAlertDefinition = 
   pluginId: BUNDLE_ID,
   label: '4G turned off for an unpaid charge',
   description:
-    'A workspace’s monthly 4G charge for its Stripe Reader S710s was still unpaid after the grace period, so 4G was turned off for its stores and the people who manage its billing were emailed. Follow up if the workspace asks; it turns 4G on again itself once the invoice is paid.',
+    'A workspace’s monthly 4G charge for its S710 readers was still unpaid after the grace period, so 4G was turned off for its stores and the people who manage its billing were emailed. Follow up if the workspace asks; it turns 4G on again itself once the invoice is paid.',
   tier: 'should',
   category: 'payments',
   title: '4G turned off for workspace {{orgId}}: {{month}} unpaid ({{amount}})',

@@ -320,6 +320,7 @@ import { registerAiJobAdmission } from '../jobs/ai-job-admission'
 import { createAiSiteJobAdmission } from '../jobs/ai-job-site-step'
 import { aiFreeCreditsResetOn, aiFreeSitePrompt } from '../model/ai-site-job'
 import { aiSiteImportInventory, type AiSiteImportState } from '../model/ai-site-import'
+import { AI_SITE_STARTER_LOOK_INPUT, AI_SITE_STARTER_LOOK_MAX_CHARS } from '../model/ai-site-starter-look'
 import { AI_CREDITS_CONFIRM_CODE, aiCreditsPromptText } from '../model/ai-credit-estimate'
 
 const ORG = 'org-1'
@@ -1567,5 +1568,64 @@ describe('a Free workspace’s AI credits before and after a start (AGL-3660)', 
     })
     expect(siteRunner).toHaveBeenCalledTimes(1)
     expect(planRunner).toHaveBeenCalledTimes(1)
+  })
+})
+
+/**
+ * An AI starter's look rides the guided start's job (AGL-4049): the door
+ * stores it as sent, for the look unit to read, and refuses one that is not
+ * text, as it refuses any site input of the wrong shape.
+ */
+describe('POST /api/ai/jobs — an AI starter’s look (AGL-4049)', () => {
+  const planRunner = jest.fn()
+  const spend = { usage: USAGE, estCostUsd: 0.006, model: 'claude-sonnet-5', stopReason: 'tool_use' }
+  const siteRunner = jest.fn()
+  const LOOK = JSON.stringify({ base: 'bootstrap', fonts: 'editorial', ground: 'warm' })
+  const start = (look: unknown) =>
+    createJob(
+      post({
+        ...VALID,
+        kind: 'site',
+        brief: 'A site for a corner bistro.',
+        inputs: { businessType: 'a corner bistro', siteKind: 'restaurant', pages: 5, [AI_SITE_STARTER_LOOK_INPUT]: look },
+      }),
+    )
+
+  beforeAll(() => {
+    registerAiJobStep('site', (context) => siteRunner(context))
+    registerAiJobStep('page', (context) => siteRunner(context))
+  })
+  beforeEach(() => {
+    mockDocs.set('hosts/host-1', { orgId: ORG })
+    mockResolveOwner.mockResolvedValue(ORG)
+    planRunner.mockReset().mockImplementation(async ({ now }: { now: Date }) => ({
+      outputs: [],
+      ...spend,
+      plan: { reuse: [], create: [], screens: [], status: 'proposed', labels: {}, proposedAt: now, confirmedAt: null, confirmedBy: null },
+      review: { reason: 'plan', message: 'The plan is ready.', findings: [] },
+    }))
+    registerAiJobPlanStep((context) => planRunner(context))
+    registerAiJobAdmission('site', createAiSiteJobAdmission())
+  })
+  afterEach(() => {
+    registerAiJobPlanStep(null)
+    registerAiJobAdmission('site', null)
+    mockResolveOwner.mockResolvedValue(null)
+  })
+
+  it('stores the look on the job as the start sent it', async () => {
+    const response = await start(LOOK)
+    expect(response.status).toBe(200)
+    const [[, stored]] = jobDocs() as Array<[string, { inputs: Record<string, unknown> }]>
+    expect(stored.inputs[AI_SITE_STARTER_LOOK_INPUT]).toBe(LOOK)
+  })
+
+  it('refuses a look that is not text, and creates nothing', async () => {
+    const response = await start(7)
+    expect(response.status).toBe(400)
+    expect((await response.json()).error).toBe(
+      `${AI_SITE_STARTER_LOOK_INPUT} must be text under ${AI_SITE_STARTER_LOOK_MAX_CHARS} characters`,
+    )
+    expect(jobDocs()).toEqual([])
   })
 })

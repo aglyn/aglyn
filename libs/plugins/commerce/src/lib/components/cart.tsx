@@ -58,6 +58,12 @@ import { StorefrontPaymentElementFallback } from './storefront-payment-element-f
 import { CheckoutReturnNotice } from './checkout-return-notice'
 import { CartExtras, useCartExtras } from './cart-extras'
 import { CartFulfillmentChoice, useCartFulfillment } from './cart-fulfillment'
+import {
+  HardwareTermsConsent,
+  hardwareTermsAnswered,
+  NO_HARDWARE_TERMS_ANSWER,
+  type HardwareTermsAnswer,
+} from './hardware-terms-consent'
 
 /**
  * The Payment Element (AGL-1944), lazily. Stripe.js and its React wrapper are
@@ -111,6 +117,8 @@ interface CartView {
   lines: CartLineView[]
   count: number
   subtotalCents: number
+  /** The cart holds card reader hardware the platform's own store sells (AGL-4038). */
+  hardwareTerms?: boolean
 }
 
 const usd = (cents: number) => `$${(cents / 100).toFixed(2)}`
@@ -176,6 +184,11 @@ function CartLines(props: {
     'idle' | 'sending' | 'error' | 'paused' | 'ask' | 'unconfigured'
   >('idle')
   const [message, setMessage] = useState('')
+  // The terms of sale and business use, for card reader hardware (AGL-4038):
+  // asked when the cart says it holds some, or when a checkout was refused
+  // for want of them.
+  const [hardwareTerms, setHardwareTerms] = useState<HardwareTermsAnswer>(NO_HARDWARE_TERMS_ANSWER)
+  const [hardwareTermsAsked, setHardwareTermsAsked] = useState(false)
   /**
    * The in-page checkout session (AGL-1944). Null unless the server chose
    * native mode, which needs both the release flag and a publishable key.
@@ -309,6 +322,9 @@ function CartLines(props: {
           ...(shipPostal.trim() && !fulfillment.request ? { shippingPostalCode: shipPostal.trim() } : {}),
           // Which offers, never their price: the server asks the provider again.
           ...(extras.chosenIds.length ? { extras: extras.chosenIds } : {}),
+          // The buyer's answers, never trusted for what the cart holds: the
+          // server reads the products and refuses hardware without both.
+          ...(cart?.hardwareTerms || hardwareTermsAsked ? { hardwareTerms } : {}),
           // Where and when, never the fee: the server decides it again.
           ...(fulfillment.request ? { fulfillment: fulfillment.request } : {}),
           // The visitor's advertising consent and the vendors' browser ids, only
@@ -398,6 +414,14 @@ function CartLines(props: {
         setStatus('error')
         return
       }
+      // Card reader hardware needs the terms of sale ticked (AGL-4038): show
+      // the boxes with the server's sentence.
+      if (payload?.needsHardwareTerms) {
+        setHardwareTermsAsked(true)
+        setMessage(String(payload?.error ?? ''))
+        setStatus('ask')
+        return
+      }
       // The pickup location or delivery time went away while the cart was
       // open (AGL-3624): ask again and let the shopper choose.
       if (payload?.fulfillmentChanged) {
@@ -438,7 +462,7 @@ function CartLines(props: {
     // subtotal and the OLD lines. The pre-AGL-1591 raw call had the same bug
     // in the `value` alone, where a wrong number is indistinguishable from a
     // right one.
-  }, [hostId, cart, coupon, email, optIn, giftCard, creditCode, shipTo, shipPostal, status, siteFetch, extras.chosenIds, extras.reload, extras.credits.length, fulfillment.request, fulfillment.reload])
+  }, [hostId, cart, coupon, email, optIn, giftCard, creditCode, shipTo, shipPostal, status, siteFetch, extras.chosenIds, extras.reload, extras.credits.length, fulfillment.request, fulfillment.reload, hardwareTerms, hardwareTermsAsked])
 
   if (!cart || cart.lines.length === 0) {
     return (
@@ -629,6 +653,9 @@ function CartLines(props: {
           slotProps={{ htmlInput: { autoComplete: 'shipping postal-code', maxLength: 12 } }}
         />
       ) : null}
+      {cart.hardwareTerms || hardwareTermsAsked ? (
+        <HardwareTermsConsent answer={hardwareTerms} onChange={setHardwareTerms} />
+      ) : null}
       {status === 'paused' || status === 'ask' || status === 'unconfigured' ? (
         <Alert severity="info">{message}</Alert>
       ) : null}
@@ -651,7 +678,9 @@ function CartLines(props: {
           (fulfillment.method === 'shipping' && shipCountries !== null && !shipTo) ||
           (fulfillment.method === 'shipping' && askPostal && !shipPostal.trim()) ||
           // Pickup needs a location, delivery a zone and a time (AGL-3624).
-          !fulfillment.ready
+          !fulfillment.ready ||
+          // Card reader hardware: both boxes ticked (AGL-4038).
+          ((Boolean(cart.hardwareTerms) || hardwareTermsAsked) && !hardwareTermsAnswered(hardwareTerms))
         }
         onClick={handleCheckout}
       >

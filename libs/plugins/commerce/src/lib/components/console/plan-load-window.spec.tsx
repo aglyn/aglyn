@@ -338,6 +338,30 @@ describe('POS page, plan not yet known', () => {
     )
     expect(screen.queryByRole('button', { name: 'Pair display' })).toBeNull()
   })
+
+  // AGL-4038: anyone may buy a reader; at the register a workspace without
+  // the point of sale is told what adding it gives it, not that it has no
+  // register or that its registers exceed the plan.
+  it('prompts a plan without the point of sale to add it, naming what it adds', () => {
+    orgPlan.org = { plan: 'starter', ownerUid: 'uid-owner' }
+    orgPlan.ready = true
+    registerDocs.push({ $id: 'r1', name: 'Front counter' })
+    render(<PosConsolePage hostId="host-1" entitled basePath="/acme/hosts/shop/pos" />)
+    expect(
+      screen.getByText(
+        /A card reader takes payments at the register, which comes with the point of sale: registers that ring up sales, card payments on your readers, cash with change due, receipts and shift reports\. Add it to start selling\. Included from Pro\./,
+      ),
+    ).toBeTruthy()
+    expect(screen.getByText('Upgrade').closest('a')?.getAttribute('href')).toBe('/acme/billing#plans')
+    expect(screen.queryByText(/registers exceed your plan/i)).toBeNull()
+    expect(screen.queryByText(/No POS register yet/)).toBeNull()
+  })
+
+  it('prompts nobody whose plan includes the point of sale', () => {
+    planLands()
+    render(<PosConsolePage hostId="host-1" entitled basePath="/acme/hosts/shop/pos" />)
+    expect(screen.queryByText(/comes with the point of sale/)).toBeNull()
+  })
 })
 
 /**

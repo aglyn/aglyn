@@ -63,6 +63,23 @@ export const SITE_THEME_BASES = [
 ] as const
 export type SiteThemeBase = (typeof SITE_THEME_BASES)[number]
 
+/**
+ * Each base as a person reads it (AGL-4049): the name the themes plugin's
+ * preset carries (its `presets.spec.ts` holds the two equal), and `Starter`
+ * for the theme a new site is born with.
+ */
+export const SITE_THEME_BASE_NAMES: Readonly<Record<SiteThemeBase, string>> = {
+  starter: 'Starter',
+  'material-ui': 'Material UI',
+  bootstrap: 'Bootstrap',
+  minimal: 'Minimal',
+  material3: 'Material 3',
+  'ant-design': 'Ant Design',
+  fluent: 'Fluent',
+  carbon: 'Carbon',
+  cupertino: 'Cupertino',
+}
+
 /** Whether a value names one of the {@link SITE_THEME_BASES}. */
 export function isSiteThemeBase(value: unknown): value is SiteThemeBase {
   return typeof value === 'string' && (SITE_THEME_BASES as readonly string[]).includes(value)

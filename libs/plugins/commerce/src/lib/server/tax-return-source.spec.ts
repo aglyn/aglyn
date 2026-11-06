@@ -73,6 +73,7 @@ function mockQuery(
         (data) => {
           const held = data[field]
           if (op === '==') return held === value
+          if (op === 'in') return Array.isArray(value) && value.includes(held)
           // A number ranges against a number (the hardware records' `…AtMs`).
           if (typeof held === 'number' && typeof value === 'number') {
             if (op === '>=') return held >= value

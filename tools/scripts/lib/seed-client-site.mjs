@@ -16,7 +16,7 @@
  */
 
 import { putMediaDocument } from './media-counter.mjs'
-import { displayNameSearchFields } from './name-search-tokens.mjs'
+import { displayNameSearchFields, nameSearchKey } from './name-search-tokens.mjs'
 import { datasetFilterFields, effectiveModel } from './record-filter-keys.mjs'
 
 /**
@@ -525,6 +525,8 @@ export async function seedClientSite({
   const projectFields = ['name', 'kind', 'location']
   await put(projects, {
     name: 'Projects',
+    // The Data page's name key, which every dataset writer stamps (AGL-4047).
+    nameLower: nameSearchKey('Projects'),
     fields: projectFields,
     visibleTo: ['org'],
     createdAt: now,

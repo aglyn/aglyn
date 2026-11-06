@@ -96,7 +96,10 @@ the slug `account`, which is where commerce gates point anonymous visitors:
   your configurable **Signed-out heading** above.
 - **Signed in**, it renders the member's profile with **Sign out**, plus
   sections for **Orders** (with status chips and tracking), **Subscriptions**
-  (each with a **Manage** button that opens the Stripe Billing Portal),
+  (each with its price, the next date that matters — **Renews**, **Trial
+  ends**, **Ends** after the member cancels, or **Ended** — a **Manage**
+  button that opens the Stripe Billing Portal, and **Billing history** with
+  each paid invoice and a link to Stripe's copy),
   **Downloads** (digital purchases and license keys), and **Addresses**.
 
 ![The account page on the live site: the Customer account block's signed-out state with sign-in and create-account tabs](/img/guides/members-account-screen.png)
@@ -137,6 +140,10 @@ can hold both the pitch and the members-only part:
   member's player gets expires, so a link copied out of the page stops working
   on its own; see
   [Members videos are private files](../content-and-data/media/overview.md#members-videos-are-private).
+  To share one video library across several plans, add the videos to one
+  product and pick the other plans under **Members videos are also open to
+  buyers of** in that product's editor. Buyers and active subscribers of any
+  of them can then watch.
 - **Member feed** — posts only entitled members can see, newest first, with a
   **Heading**, **Empty text** for when there are none, and a cap on how many
   show. Non-members never receive the posts, not merely a hidden copy of them.
@@ -187,7 +194,9 @@ Click a member to open the **member drawer**:
   status, total, date, any refunded amount, and the Stripe payment reference.
   Needs the **See orders and webhooks** permission on the site, which its admins and
   editors hold by default.
-- **Subscriptions** — each with its renewal date and status chip.
+- **Subscriptions** — each with its price, renewal date and status chip. Takes
+  the same **See orders and webhooks** permission. **Products → Subscriptions**
+  lists every member's subscriptions together.
 - **Addresses** — the member's saved addresses.
 
 ![The member drawer open over the Users page showing lifetime purchases, orders with payment references, and the Suspend member action](/img/guides/members-member-drawer.png)

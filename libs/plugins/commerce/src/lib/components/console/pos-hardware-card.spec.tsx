@@ -21,6 +21,11 @@
  * the shop open it offers the priced items, totals the basket, starts
  * Checkout with the basket and the chosen speed, and lists the site's orders
  * with their status and tracking.
+ *
+ * ANYONE CAN BUY (AGL-4038): a workspace without the point of sale buys
+ * like any other, and is prompted to add it, above the shop and, once an
+ * order from the card has arrived, naming it. The prompt never switches
+ * Check out off; only the buy key does.
  */
 
 import { fireEvent, render, screen, waitFor, within } from '@testing-library/react'
@@ -28,6 +33,8 @@ import type { ReactNode } from 'react'
 
 let catalogAnswer: any
 let ordersAnswer: any
+/** Whether the workspace's plan lacks the point of sale, as the shared lock answers it. */
+let posLocked = false
 const calls: Array<{ url: string; body: any; headers: Record<string, string> }> = []
 const assign = jest.fn()
 
@@ -81,6 +88,23 @@ jest.mock('@aglyn/shared-util-http/authorized-token', () => ({
   },
 }))
 
+jest.mock('./entitlement-gate.component', () => ({
+  useCommerceEntitlement: (_hostId: string, feature: string) => ({
+    ready: true,
+    entitled: feature !== 'pos' || !posLocked,
+    locked: feature === 'pos' && posLocked,
+    planLabel: 'Pro',
+    upgradeHref: '/acme/billing#plans',
+  }),
+  EntitlementUpsell: ({ children, planLabel, upgradeHref }: { children: ReactNode; planLabel?: string; upgradeHref?: string }) => (
+    <div role="note" aria-label="Plan prompt">
+      {children}
+      {planLabel ? ` Included from ${planLabel}.` : null}
+      <a href={upgradeHref}>{'Upgrade'}</a>
+    </div>
+  ),
+}))
+
 jest.mock('./pos/pos-hardware-api', () => ({
   ...jest.requireActual('./pos/pos-hardware-api'),
   openPosHardwareCheckout: (url: string) => assign(url),
@@ -107,7 +131,33 @@ beforeEach(() => {
   assign.mockClear()
   catalogAnswer = OPEN_CATALOG
   ordersAnswer = { orders: [] }
+  posLocked = false
 })
+
+/** An order from the card, or bought from the platform's own store, at `status`. */
+function hardwareOrder(number: string, status: string, source: 'online' | 'in_person' = 'online') {
+  return {
+    id: `hw_${number.toLowerCase().replace(/[^a-z0-9]/g, '')}00000000000000`,
+    number,
+    status,
+    source,
+    lines: [{ sku: 'stripe-reader-s710', name: 'Stripe Reader S710', quantity: 1, unitCents: 13_000, lineCents: 13_000 }],
+    subtotalCents: 13_000,
+    shippingCents: 1_000,
+    shippingLabel: 'Standard shipping',
+    taxCents: 0,
+    totalCents: 14_000,
+    tracking: null,
+    createdAtMs: 1,
+    updatedAtMs: 2,
+  }
+}
+
+/** Ticks the terms of sale and business use (AGL-4038). */
+function acceptTerms() {
+  fireEvent.click(screen.getByRole('checkbox', { name: /I accept the/ }))
+  fireEvent.click(screen.getByRole('checkbox', { name: /for use in my business/ }))
+}
 
 describe('the Hardware card', () => {
   it('draws nothing while the shop is not open and nothing was bought', async () => {
@@ -171,6 +221,7 @@ describe('the Hardware card', () => {
     await waitFor(() => expect(screen.getByText('No hardware orders yet.')).toBeTruthy())
     fireEvent.mouseDown(screen.getAllByRole('combobox', { name: /Quantity/ })[0])
     fireEvent.click(within(screen.getByRole('listbox')).getByText('1'))
+    acceptTerms()
     fireEvent.click(screen.getByRole('button', { name: 'Check out' }))
     await waitFor(() => expect(assign).toHaveBeenCalled())
     expect(calls.find((call) => call.body?.action === 'checkout')).toBeTruthy()
@@ -197,6 +248,24 @@ describe('the Hardware card', () => {
     expect(calls.find((call) => call.body?.action === 'checkout')).toBeUndefined()
   })
 
+  it('keeps Check out off, with the reason, until the terms of sale and business use are both ticked (AGL-4038)', async () => {
+    render(<PosHardwareCard hostId="host-1" canManagePos />)
+    await waitFor(() => expect(screen.getByText('Stripe Reader S710')).toBeTruthy())
+    fireEvent.mouseDown(screen.getAllByRole('combobox', { name: /Quantity/ })[0])
+    fireEvent.click(within(screen.getByRole('listbox')).getByText('1'))
+    const button = () => screen.getByRole('button', { name: 'Check out' }) as HTMLButtonElement
+    expect(button().disabled).toBe(true)
+    expect(screen.getByLabelText(/Accept the hardware terms of sale/)).toBeTruthy()
+    const link = screen.getByRole('link', { name: /hardware terms of sale \(Terms, Sections 4\.26–4\.32\)/ })
+    expect(link.getAttribute('href')).toMatch(/\/legal\/terms$/)
+    fireEvent.click(screen.getByRole('checkbox', { name: /I accept the/ }))
+    expect(button().disabled).toBe(true)
+    fireEvent.click(screen.getByRole('checkbox', { name: /for use in my business/ }))
+    expect(button().disabled).toBe(false)
+    fireEvent.click(button())
+    await waitFor(() => expect(assign).toHaveBeenCalled())
+  })
+
   it('totals the basket and starts Checkout with the basket and speed', async () => {
     render(<PosHardwareCard hostId="host-1" canManagePos />)
     await waitFor(() => expect(screen.getByText('Stripe Reader S710')).toBeTruthy())
@@ -205,6 +274,7 @@ describe('the Hardware card', () => {
     const summary = screen.getByLabelText('Order summary')
     await waitFor(() => expect(within(summary).getByText('$260.00')).toBeTruthy())
     expect(within(summary).getByText('$270.00')).toBeTruthy()
+    acceptTerms()
     fireEvent.click(screen.getByRole('button', { name: 'Check out' }))
     await waitFor(() => expect(assign).toHaveBeenCalledWith('https://checkout.stripe.com/c/pay/cs_test_1'))
     const checkout = calls.find((call) => call.body?.action === 'checkout')
@@ -213,6 +283,7 @@ describe('the Hardware card', () => {
       hostId: 'host-1',
       lines: [{ sku: 'stripe-reader-s710', quantity: 2 }],
       shippingMethod: 'standard',
+      hardwareTerms: { accepted: true, businessUse: true },
     })
     expect(checkout?.headers['Idempotency-Key']).toBeTruthy()
   })
@@ -244,5 +315,77 @@ describe('the Hardware card', () => {
     expect(within(row).getByRole('link', { name: '1Z999' }).getAttribute('href')).toBe(
       'https://www.ups.com/track?tracknum=1Z999',
     )
+  })
+
+  describe('without the point of sale on the plan (AGL-4038)', () => {
+    beforeEach(() => {
+      posLocked = true
+    })
+
+    it('prompts to add it, naming what it adds, and still checks out', async () => {
+      render(<PosHardwareCard hostId="host-1" canManagePos canBuyHardware />)
+      await waitFor(() => expect(screen.getByText('Stripe Reader S710')).toBeTruthy())
+      const prompt = screen.getByRole('note', { name: 'Plan prompt' })
+      expect(prompt.textContent).toContain('You can buy readers on any plan.')
+      expect(prompt.textContent).toContain(
+        'registers that ring up sales, card payments on your readers, cash with change due, receipts and shift reports',
+      )
+      expect(prompt.textContent).toContain('Included from Pro.')
+      expect(within(prompt).getByRole('link', { name: 'Upgrade' }).getAttribute('href')).toBe('/acme/billing#plans')
+      fireEvent.mouseDown(screen.getAllByRole('combobox', { name: /Quantity/ })[0])
+      fireEvent.click(within(screen.getByRole('listbox')).getByText('1'))
+      acceptTerms()
+      const checkout = screen.getByRole('button', { name: 'Check out' }) as HTMLButtonElement
+      expect(checkout.disabled).toBe(false)
+      fireEvent.click(checkout)
+      await waitFor(() => expect(assign).toHaveBeenCalledWith('https://checkout.stripe.com/c/pay/cs_test_1'))
+    })
+
+    it('names an order from the card once it has arrived, and not one bought in person, which the setup card prompts', async () => {
+      ordersAnswer = {
+        orders: [
+          hardwareOrder('HW-AAAAAA', 'delivered'),
+          hardwareOrder('HW-BBBBBB', 'shipped'),
+          hardwareOrder('HW-CCCCCC', 'delivered', 'in_person'),
+        ],
+      }
+      render(<PosHardwareCard hostId="host-1" canManagePos />)
+      await waitFor(() => expect(screen.getAllByTestId('order-row')).toHaveLength(3))
+      const prompts = screen.getAllByRole('note', { name: 'Plan prompt' })
+      expect(prompts).toHaveLength(1)
+      expect(prompts[0].textContent).toContain('HW-AAAAAA has arrived. To take payments with it, add the point of sale:')
+      expect(prompts[0].textContent).not.toContain('HW-BBBBBB')
+      expect(prompts[0].textContent).not.toContain('HW-CCCCCC')
+    })
+
+    it('names an arrived order with the shop closed too', async () => {
+      catalogAnswer = { available: false }
+      ordersAnswer = { orders: [hardwareOrder('HW-AAAAAA', 'registered'), hardwareOrder('HW-DDDDDD', 'delivered')] }
+      render(<PosHardwareCard hostId="host-1" canManagePos />)
+      await waitFor(() => expect(screen.getAllByTestId('order-row')).toHaveLength(2))
+      expect(screen.getByRole('note', { name: 'Plan prompt' }).textContent).toContain(
+        'HW-AAAAAA, HW-DDDDDD have arrived. To take payments with them, add the point of sale:',
+      )
+    })
+
+    it('still refuses Check out, naming the permission, to someone without the buy key', async () => {
+      render(<PosHardwareCard hostId="host-1" canManagePos canBuyHardware={false} />)
+      await waitFor(() => expect(screen.getByText('Stripe Reader S710')).toBeTruthy())
+      fireEvent.mouseDown(screen.getAllByRole('combobox', { name: /Quantity/ })[0])
+      fireEvent.click(within(screen.getByRole('listbox')).getByText('1'))
+      acceptTerms()
+      const checkout = screen.getByRole('button', { name: 'Check out' }) as HTMLButtonElement
+      expect(checkout.disabled).toBe(true)
+      expect(screen.getByLabelText(/Buy point of sale hardware/)).toBeTruthy()
+      fireEvent.click(checkout)
+      expect(calls.find((call) => call.body?.action === 'checkout')).toBeUndefined()
+    })
+  })
+
+  it('prompts nobody whose plan includes the point of sale', async () => {
+    ordersAnswer = { orders: [hardwareOrder('HW-AAAAAA', 'delivered')] }
+    render(<PosHardwareCard hostId="host-1" canManagePos />)
+    await waitFor(() => expect(screen.getAllByTestId('order-row')).toHaveLength(1))
+    expect(screen.queryByRole('note', { name: 'Plan prompt' })).toBeNull()
   })
 })

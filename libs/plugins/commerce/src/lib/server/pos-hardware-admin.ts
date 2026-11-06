@@ -24,12 +24,15 @@ import {
 import { addAdminAudit } from '@aglyn/tenant-data-admin/server/admin-audit-write'
 import { invalidIdTokenResponse } from '@aglyn/tenant-data-admin/server/id-token-refusal'
 import {
+  isPosHardwareSellerStoreSale,
   isPosHardwareOrderStatus,
   nextPosHardwareStatus,
   POS_HARDWARE_ORDER_ID,
   POS_HARDWARE_ORDERS_COLLECTION,
   POS_HARDWARE_STATUS_STAMP,
   posHardwareBuyerErasedPatch,
+  posHardwareOrderUnits,
+  posHardwareReadyToShip,
   posHardwareOrderSource,
   posHardwareSaleRecord,
   posHardwareSaleSetOptions,
@@ -52,12 +55,15 @@ import { sendPosHardwareEmail, sendPosHardwareEmailOnce } from './pos-hardware-n
  * hardware shop, for the Hardware orders staff page.
  *
  *   GET   every workspace's orders, newest first, optionally one status,
- *         or `?attach=pending`: the in-person sales nobody has said whose
- *         they are yet (AGL-4038), after recording any paid sale on the
- *         seller store still waiting to be recorded
+ *         or `?attach=pending`: the sales of the platform's own store nobody
+ *         has said whose they are yet (AGL-4038). Any paid sale on the
+ *         seller store still waiting to be recorded is recorded first.
  *   POST  update  record Stripe's order id and the tracking, or move the
- *                 order one step on (Ordered → Shipped → Delivered →
- *                 Registered); Shipped needs a tracking number
+ *                 order one step on (Ordered → Received → Shipped →
+ *                 Delivered → Registered); Shipped needs a tracking number
+ *                 and every reader's serial (set up, AGL-4038), and an
+ *                 order whose readers were all registered before it shipped
+ *                 reads Registered once delivered
  *         cancel  cancel and refund in full, before it ships
  *         refund  refund in full, before it ships
  *         refund  an order sold in person (AGL-4038): what is left of it,
@@ -69,6 +75,10 @@ import { sendPosHardwareEmail, sendPosHardwareEmailOnce } from './pos-hardware-n
  *         same claim a closure sends it under; false sends nothing. Absent
  *         reads as the dialog's default, true. It is in the audit row.
  *         decline-return  decline a buyer's open return request, with a note
+ *         serials  record the serial numbers of an order's readers before it
+ *                 ships (AGL-4038): setting it up
+ *         register-reader  register one of its readers to the buyer's store
+ *                 by the code it shows, before it ships (AGL-4038)
  *         forget-buyer  take the buyer's address and account off an order
  *                 sold in person (AGL-4038), for a privacy request from
  *                 someone who never made an account
@@ -118,7 +128,8 @@ function staffView(id: string, order: PosHardwareOrder) {
     posSale: order.posSale ?? null,
     paidTo: order.paidTo ?? null,
     attachment: order.attachment ?? null,
-    units: order.units ?? [],
+    // Every reader the order ships, for its serial and its store (AGL-4038).
+    units: posHardwareOrderUnits(order),
     refundedCents: order.refundedCents ?? 0,
     refunds: order.refunds ?? [],
     returnRequest: order.returnRequest ?? null,
@@ -174,15 +185,17 @@ async function handler(request: Request): Promise<Response> {
       if (attach && attach !== 'pending') return json({ error: 'Unknown filter' }, 400)
       const returns = String(query?.['returns'] ?? '')
       if (returns && returns !== 'requested') return json({ error: 'Unknown filter' }, 400)
+      // A sale on the platform's own store whose recording was missed — at
+      // its register or online (AGL-4038) — is recorded before any list is
+      // read, so it is on the Paid list and To attach both.
+      const config = posHardwareInPersonConfig()
+      if (config) await (await import('./pos-hardware-in-person')).sweepInPersonPosHardwareSales(config)
       let ordersQuery: any = firestore.collectionGroup(POS_HARDWARE_ORDERS_COLLECTION)
       if (returns === 'requested') {
         // Buyers' open return requests (AGL-4038), oldest waiting first in the
         // newest-first list like every other filter.
         ordersQuery = ordersQuery.where('returnRequest.state', '==', 'requested')
       } else if (attach === 'pending') {
-        // A sale whose recording was missed is recorded before the list is read.
-        const config = posHardwareInPersonConfig()
-        if (config) await (await import('./pos-hardware-in-person')).sweepInPersonPosHardwareSales(config)
         ordersQuery = ordersQuery.where('attachment.state', '==', 'pending')
       } else if (requested) {
         if (!isPosHardwareOrderStatus(requested)) return json({ error: 'Unknown status' }, 400)
@@ -229,6 +242,7 @@ async function handler(request: Request): Promise<Response> {
     const notifyBuyer = notifyRaw !== false
 
     if (action === 'update') return await updateOrder(firestore, ref, orgId, orderId, input, actor)
+    if (action === 'serials' || action === 'register-reader') return await setUpOrder(firestore, orgId, orderId, action, input, actor)
     if (action === 'forget-buyer') return await forgetBuyer(firestore, ref, orgId, orderId, actor)
     if (action === 'decline-return') return await inPersonReturn(firestore, orgId, orderId, action, input, actor)
     if (action === 'refund-return') return await onlineReturnRefund(firestore, orgId, orderId, input, actor, notifyBuyer)
@@ -290,9 +304,19 @@ async function updateOrder(
       if (advanceTo === 'shipped' && !trackingAfter?.number) {
         throw new Refusal('Add the tracking number before marking the order shipped.', 400)
       }
+      // Set up before it ships (AGL-4038): every reader's serial recorded.
+      const notReady = advanceTo === 'shipped' ? posHardwareReadyToShip(before) : null
+      if (notReady) throw new Refusal(notReady, 409)
       patch['status'] = advanceTo
       patch[POS_HARDWARE_STATUS_STAMP[advanceTo]] = now
       reached = advanceTo
+      // Every reader was registered to the buyer's store before it shipped:
+      // delivered is set up, so it reads Set up at once.
+      const units = posHardwareOrderUnits(before)
+      if (advanceTo === 'delivered' && units.length && units.every((unit) => unit.readerId)) {
+        patch['status'] = 'registered'
+        patch[POS_HARDWARE_STATUS_STAMP.registered] = now
+      }
     }
     const after = { ...before, ...patch } as PosHardwareOrder
     transaction.update(ref, patch)
@@ -322,6 +346,53 @@ async function updateOrder(
   if (outcome.reached === 'shipped') await sendPosHardwareEmail('shipped', orderId, outcome.after)
   if (outcome.reached === 'delivered') await sendPosHardwareEmail('delivered', orderId, outcome.after)
   return json({ ok: true, order: staffView(orderId, outcome.after) })
+}
+
+/**
+ * Sets an order up before it ships (AGL-4038): its readers' serial numbers,
+ * or one reader registered to the buyer's store by the code it shows
+ * (`pos-hardware-readers.ts`). Audited.
+ */
+async function setUpOrder(
+  firestore: any,
+  orgId: string,
+  orderId: string,
+  action: 'serials' | 'register-reader',
+  input: Record<string, unknown>,
+  actor: Actor,
+): Promise<Response> {
+  const readers = await import('./pos-hardware-readers')
+  try {
+    const outcome =
+      action === 'serials'
+        ? { order: await readers.recordPosHardwareOrderSerials({ orgId, orderId, serials: input['serials'] }), readerId: null }
+        : await readers.registerPosHardwareOrderReader({
+            orgId,
+            orderId,
+            registrationCode: input['registrationCode'],
+            label: input['label'],
+            uid: actor.actorUid,
+          })
+    await addAdminAudit(firestore, {
+      action: action === 'serials' ? 'pos-hardware-order-serials' : 'pos-hardware-order-register-reader',
+      ...actor,
+      scope: 'posHardwareOrder',
+      target: `orgs/${orgId}/${POS_HARDWARE_ORDERS_COLLECTION}/${orderId}`,
+      orgId,
+      before: null,
+      after:
+        action === 'serials'
+          ? { serials: outcome.order.serialNumbers ?? [] }
+          : { readerId: outcome.readerId, hostId: outcome.order.hostId },
+      at: firebaseAdmin.firestore.FieldValue.serverTimestamp(),
+    })
+    return json({ ok: true, order: staffView(orderId, outcome.order) })
+  } catch (error) {
+    if (error instanceof readers.PosHardwareReaderRefusal) {
+      return json({ error: error.message, ...(error.reason ? { reason: error.reason } : {}) }, error.status)
+    }
+    throw error
+  }
 }
 
 /** Whether an order was sold in person (AGL-4038), which refunds its own way. */
@@ -449,8 +520,8 @@ async function forgetBuyer(firestore: any, ref: any, orgId: string, orderId: str
     const snapshot = await transaction.get(ref)
     if (!snapshot.exists) throw new Refusal('No such order', 404)
     const before = snapshot.data() as PosHardwareOrder
-    if (posHardwareOrderSource(before) !== 'in_person') {
-      throw new Refusal('Only an order sold in person has a buyer to remove here.', 409)
+    if (!isPosHardwareSellerStoreSale(before)) {
+      throw new Refusal('Only an order sold by our own store has a buyer to remove here.', 409)
     }
     const patch = posHardwareBuyerErasedPatch(before, Date.now())
     const next = { ...before, ...patch } as PosHardwareOrder

@@ -33,8 +33,10 @@ import {
   aiSiteStyleFor,
   aiSiteTheme,
   type AiSiteLookAnswer,
+  type AiSiteLookPins,
   type AiSiteStyle,
 } from '../model/ai-site-look'
+import { AI_SITE_STARTER_LOOK_INPUT, aiSiteStarterLookFromInput } from '../model/ai-site-starter-look'
 import { AI_SITE_MOTION_STYLE_RANGES, aiSiteMotionStylesFor } from '../layout-language/ai-layout-motion'
 import { aiCatalogEntry, aiDefaultModelFor } from '../providers/catalog'
 import { aiModelForStep } from '../providers/routing'
@@ -312,11 +314,17 @@ export async function aiRunSiteLook(
   const avoid = await others(context.firestore, { orgId: job.orgId, hostId: job.hostId })
   // What the sites the person likes pin (AGL-3975), read off the plan's
   // signals the scaffold hands its look unit; none on a start without them.
-  const pins = aiSiteInspirationLookPins(aiReadSiteInspiration(job.inputs?.[AI_SITE_INSPIRATION_SIGNALS_INPUT]), {
+  const inspired = aiSiteInspirationLookPins(aiReadSiteInspiration(job.inputs?.[AI_SITE_INSPIRATION_SIGNALS_INPUT]), {
     kind,
     seed: aiSiteSeed(origin),
   })
+  // The look an AI starter's listing promised (AGL-4049), read strictly; it
+  // outranks the sites they like, and the person's own brand outranks both.
+  const starter: AiSiteLookPins = aiSiteStarterLookFromInput(job.inputs?.[AI_SITE_STARTER_LOOK_INPUT]) ?? {}
+  const pins: AiSiteLookPins = { ...inspired, ...starter }
   const pinned = Object.keys(pins)
+  const fromStarter = Object.keys(starter)
+  const fromInspiration = Object.keys(inspired).filter((key) => !(key in starter))
   const style = aiSiteStyleFor({ kind, answer, seed: aiSiteSeed(origin), brand, avoid, ...(pinned.length ? { pins } : {}) })
   const saved = await save(context.firestore, { hostId: job.hostId, jobId: origin, style })
   if (saved.write === 'missing') throw new Error(`site ${job.hostId} vanished while its look was chosen`)
@@ -328,7 +336,14 @@ export async function aiRunSiteLook(
       saved.write === 'kept'
         ? 'Kept the theme you chose for this site'
         : lookLabel(style, saved.baseName),
-    proposal: JSON.parse(JSON.stringify({ style, write: saved.write, ...(pinned.length ? { inspired: pinned } : {}) })) as Record<string, unknown>,
+    proposal: JSON.parse(
+      JSON.stringify({
+        style,
+        write: saved.write,
+        ...(fromInspiration.length ? { inspired: fromInspiration } : {}),
+        ...(fromStarter.length ? { starter: fromStarter } : {}),
+      }),
+    ) as Record<string, unknown>,
   }
   return { ...spent, outputs: [output] }
 }

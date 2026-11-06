@@ -699,7 +699,8 @@ export async function readStorefrontTaxRows(request: TaxReturnSourceRequest): Pr
     // `source, paidAtMs`).
     firestore
       .collection(POS_HARDWARE_SALES_COLLECTION)
-      .where('source', '==', 'in_person')
+      // In person or online from its own store (AGL-4038): the same index.
+      .where('source', 'in', ['in_person', 'storefront'])
       .where('paidAtMs', '>=', request.start.getTime() - IN_PERSON_ROW_MARGIN_MS)
       .where('paidAtMs', '<', request.end.getTime() + IN_PERSON_ROW_MARGIN_MS)
       .limit(request.rowCap)

@@ -16,11 +16,13 @@
  */
 
 import { createHash } from 'crypto'
+import { readClientIp } from '@aglyn/aglyn/app-utils/request-ip'
 import * as Aglyn from '@aglyn/aglyn/server'
 import type { PluginApiHandler } from '@aglyn/aglyn/server'
 import { firebaseAdmin, readOrgBilling } from '@aglyn/tenant-data-admin'
 import { hostConsoleUrl } from '@aglyn/tenant-data-admin/server/host-console-link'
 import {
+  isPosHardwareSellerStoreSale,
   encodePosHardwareLines,
   isPosHardwareShippingMethod,
   POS_HARDWARE_ANCHOR,
@@ -32,6 +34,8 @@ import {
   POS_HARDWARE_SALES_COLLECTION,
   POS_HARDWARE_SHIP_COUNTRIES,
   POS_HARDWARE_SHIPPING_LABELS,
+  POS_HARDWARE_SKUS,
+  POS_HARDWARE_TAX_CODE,
   posHardwareOffers,
   posHardwareOrderSource,
   posHardwareSku,
@@ -39,7 +43,13 @@ import {
   type PosHardwareConfig,
   type PosHardwareInPersonConfig,
   type PosHardwareOrder,
+  type PosHardwareSkuId,
 } from '../model/pos-hardware'
+import {
+  POS_HARDWARE_TERMS_REQUIRED,
+  posHardwareTermsConfirmed,
+  posHardwareTermsMetadata,
+} from '../model/pos-hardware-terms'
 import { mayVisitPosHardwareShop } from '../model/plugin-permissions'
 import { authorizePosStaff, posIdempotencyKey, posRequestBody } from './pos-auth'
 import { posStripe, posTerminalAvailable } from './pos-stripe'
@@ -52,8 +62,9 @@ import { posStripe, posTerminalAvailable } from './pos-stripe'
  *   checkout  a Stripe Checkout Session for the basket, on the PLATFORM
  *   orders    this site's hardware orders, newest first
  *
- * Gated like the register (`authorizePosStaff`, on a plan with POS), because
- * the readers it sells are the register's, with one difference (AGL-4047):
+ * Gated like the register (`authorizePosStaff`) but on ANY plan (AGL-4038):
+ * a workspace buys its readers first and adds the point of sale when it sets
+ * them up. The readers it sells are the register's, with one difference (AGL-4047):
  * the shop admits whoever works the register (`managePos`) AND whoever may
  * buy hardware (`posBuyHardware`), which stands on its own — a bookkeeper
  * with no register orders the store's readers. A checkout needs
@@ -86,6 +97,51 @@ export function posHardwareInPersonConfig(
   env: Record<string, string | undefined> = process.env,
 ): PosHardwareInPersonConfig | null {
   return parsePosHardwareInPersonConfig(env)
+}
+
+/**
+ * The price each hardware item is listed at in the platform's own store
+ * (AGL-4038), in cents: an active product there whose `hardwareSku` names
+ * the item, at its first variant's price. Where two products name one item,
+ * the lower price, so no page the store shows quotes less than the shop
+ * charges. Empty while no seller store is configured. A failed read throws:
+ * the shop does not quote a price it cannot check against the store's.
+ */
+export async function posHardwareListedCents(
+  inPerson: PosHardwareInPersonConfig | null = posHardwareInPersonConfig(),
+): Promise<Partial<Record<PosHardwareSkuId, number>>> {
+  if (!inPerson) return {}
+  const snapshot = await firebaseAdmin
+    .app()
+    .firestore()
+    .collection('hosts')
+    .doc(inPerson.sellerHostId)
+    .collection('products')
+    .where(
+      'hardwareSku',
+      'in',
+      POS_HARDWARE_SKUS.map((sku) => sku.id),
+    )
+    .get()
+  const listed: Partial<Record<PosHardwareSkuId, number>> = {}
+  for (const doc of snapshot.docs as Array<{ data: () => Record<string, unknown> }>) {
+    const product = doc.data()
+    const sku = posHardwareSku(String(product['hardwareSku'] ?? ''))
+    if (!sku || (product['status'] ?? 'active') !== 'active') continue
+    const variants = Array.isArray(product['variants']) ? (product['variants'] as Array<{ priceUsd?: unknown }>) : []
+    const priceUsd = Number(variants.length ? variants[0]?.priceUsd : product['priceUsd'])
+    if (!Number.isFinite(priceUsd) || priceUsd <= 0) continue
+    const cents = Math.round(priceUsd * 100)
+    listed[sku.id] = Math.min(listed[sku.id] ?? cents, cents)
+  }
+  return listed
+}
+
+/** The shop's config with the platform's own store's listed prices, or `null` while it is hidden. */
+export async function posHardwarePricedConfig(): Promise<PosHardwareConfig | null> {
+  const config = posHardwareConfig()
+  if (!config) return null
+  return { ...config, listedCents: await posHardwareListedCents() }
 }
 
 /** Whether a store, owned by `orgId`, is the platform's own hardware seller. */
@@ -223,7 +279,8 @@ export async function waitingInPersonReaders(orgId: string, hostId: string) {
     // workspace's people look.
     orders: orders.docs
       .map((doc: any) => ({ id: String(doc.id), order: doc.data() as PosHardwareOrder }))
-      .filter(({ order }) => order.source === 'in_person')
+      // Bought from the platform's own store, at an event or online (AGL-4038).
+      .filter(({ order }) => isPosHardwareSellerStoreSale(order))
       .sort((a, b) => Number(b.order.hostId === hostId) - Number(a.order.hostId === hostId))
       .map(({ id, order }) => ({
         ...merchantHardwareOrderView(id, order),
@@ -231,6 +288,13 @@ export async function waitingInPersonReaders(orgId: string, hostId: string) {
         serialsTaken: (order.units ?? []).filter((unit) => unit.serialNumber && !unit.readerId).length,
       })),
   }
+}
+
+const LISTED_READ_FAILED = Symbol('listed-read-failed')
+
+function listedReadFailed(error: unknown): typeof LISTED_READ_FAILED {
+  console.error('[pos-hardware] the store\'s listed prices could not be read', error)
+  return LISTED_READ_FAILED
 }
 
 export const posHardwareHandler: PluginApiHandler = async (req, res) => {
@@ -244,23 +308,28 @@ export const posHardwareHandler: PluginApiHandler = async (req, res) => {
   // `managePos` until a role or the member sets it, and may be granted
   // without it — starts a checkout that the workspace pays for.
   //
-  // A READER BOUGHT IN PERSON (AGL-4038): `waiting` is read without the
-  // point of sale plan, because a workspace without it is exactly the one
-  // that must be told to add it first; choosing its store and marking it set
-  // up are setting up devices (`posDevices`) on the store named.
+  // ANYONE CAN BUY (AGL-4038): browsing, checking out, the orders, a return
+  // request and the readers waiting to be set up are open whatever the
+  // workspace's plan. A reader takes payments at the register, which comes
+  // with the point of sale, so the card, a delivered order and the register
+  // prompt to add it; the key above still decides who may buy. Setting a
+  // reader up — choosing its store, marking it set up — is setting up
+  // devices (`posDevices`) on the store named, and asks the plan.
   const settingUp = action === 'choose-store' || action === 'mark-set-up'
   const gate = await authorizePosStaff(
     req,
     hostId,
     action === 'checkout' ? 'posBuyHardware' : settingUp ? 'posDevices' : undefined,
     mayVisitPosHardwareShop,
-    // A workspace whose plan lost the point of sale still sees what it bought
-    // and may ask to return a reader bought in person.
-    action === 'waiting' || action === 'orders' || action === 'request-return' ? { planRequired: false } : {},
+    { planRequired: settingUp },
   )
   if ('error' in gate) return res.status(gate.status).json({ error: gate.error })
   const staff = gate.staff
-  const config = posHardwareConfig()
+  // Priced by the store's listed prices only where a price is quoted or charged.
+  const config = action === 'catalog' || action === 'checkout' ? await posHardwarePricedConfig().catch(listedReadFailed) : posHardwareConfig()
+  if (config === LISTED_READ_FAILED) {
+    return res.status(503).json({ error: 'The hardware shop could not check its prices. Try again in a moment.' })
+  }
   try {
     switch (action) {
       case 'waiting':
@@ -344,6 +413,14 @@ export const posHardwareHandler: PluginApiHandler = async (req, res) => {
           ? config.shipping.find((option) => option.method === method)
           : undefined
         if (!shipping) return res.status(400).json({ error: 'Choose a shipping speed.' })
+        // The terms of sale and business use, both ticked (AGL-4038).
+        if (!posHardwareTermsConfirmed(body['hardwareTerms'])) {
+          return res.status(400).json({ error: POS_HARDWARE_TERMS_REQUIRED, needsHardwareTerms: true })
+        }
+        const terms = posHardwareTermsMetadata({
+          ip: readClientIp(req.headers as never) ?? null,
+          userAgent: String(req.headers?.['user-agent'] ?? '') || null,
+        })
 
         const orderId = posHardwareOrderId(staff.orgId, staff.hostId, attemptKey)
         const billing = await readOrgBilling(staff.orgId).catch(() => ({}))
@@ -370,6 +447,7 @@ export const posHardwareHandler: PluginApiHandler = async (req, res) => {
           'metadata[shippingMethod]': shipping.method,
           'metadata[shippingCents]': shipping.cents,
           'metadata[subtotalCents]': priced.subtotalCents,
+          ...Object.fromEntries(Object.entries(terms).map(([key, value]) => [`metadata[${key}]`, value])),
           'payment_intent_data[description]': `Card reader order ${posHardwareOrderNumber(orderId)}`,
           'payment_intent_data[metadata][type]': POS_HARDWARE_METADATA_TYPE,
           'payment_intent_data[metadata][orderId]': orderId,
@@ -395,6 +473,8 @@ export const posHardwareHandler: PluginApiHandler = async (req, res) => {
           params[`line_items[${index}][price_data][product_data][name]`] = line.name
           if (sku) params[`line_items[${index}][price_data][product_data][description]`] = sku.use
           params[`line_items[${index}][price_data][product_data][metadata][sku]`] = line.sku
+          // Taxed as the physical good it is, never as the account's default (software).
+          params[`line_items[${index}][price_data][product_data][tax_code]`] = POS_HARDWARE_TAX_CODE
           if (config.automaticTax) params[`line_items[${index}][price_data][tax_behavior]`] = 'exclusive'
         })
         const created = await posStripe('POST', 'checkout/sessions', {

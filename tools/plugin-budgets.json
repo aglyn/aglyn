@@ -26,8 +26,9 @@
     "note": "AGL-3649: re-measured as eager bytes. Was 35 KB as one unsplit bundle (AGL-436); its barrel now reaches 243 KB, none of it lazy."
   },
   "data": {
-    "baseline": 69457,
-    "budget": 87040
+    "baseline": 91296,
+    "budget": 114688,
+    "note": "AGL-4191: re-baselined after AGL-4047 (datasets as vertical tabs, a record on its own page) grew the eager bundle from 85 KB to 89.2 KB."
   },
   "email": {
     "baseline": 32515,

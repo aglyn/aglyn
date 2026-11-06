@@ -35,6 +35,10 @@ import {
 } from './carrier-shipping'
 import { readActiveMemberSession } from './membership'
 import { readStoreDay } from './store-day'
+import { readClientIp } from '@aglyn/aglyn/app-utils/request-ip'
+import { POS_HARDWARE_TAX_CODE } from '../model/pos-hardware'
+import { posHardwareTermsMetadata } from '../model/pos-hardware-terms'
+import { sellerStoreHardwareCheckout } from './pos-hardware-sale-fields'
 import { resolveManualTaxRateId } from './manual-tax-rate'
 import { taxEngineSessionMetadata } from '../model/commerce-tax-engine'
 import { quoteSaleTaxWithEngine } from './tax-engine-quote'
@@ -291,6 +295,35 @@ export const checkoutHandler: PluginApiHandler = async (req, res) => {
         error: planRequiredMessage('Subscription products', 'storefrontSubscriptions'),
       })
     }
+    // CARD READER HARDWARE ON THE PLATFORM'S OWN STORE (AGL-4038), as the
+    // cart reads it: the terms of sale and business use ticked, the online
+    // order limits held, never by subscription, taxed as goods, and the
+    // acceptance carried for the order. Before anything is held or claimed.
+    const hardware = sellerStoreHardwareCheckout({
+      hostId,
+      orgId: String(ownerOrg?.org?.id ?? ownerOrg?.orgId ?? ''),
+      lines: [{ productId: String(productId), quantity }],
+      products: new Map([[String(productId), lifted]]),
+      hardwareTerms: body.hardwareTerms,
+      subscription: isSubscription,
+    })
+    if (hardware.refusal) {
+      const { status: refusedStatus, ...refusal } = hardware.refusal
+      return res.status(refusedStatus).json(refusal)
+    }
+    const hardwareParams: Record<string, string> = hardware.hardware
+      ? {
+          'line_items[0][price_data][product_data][tax_code]': POS_HARDWARE_TAX_CODE,
+          ...Object.fromEntries(
+            Object.entries(
+              posHardwareTermsMetadata({
+                ip: readClientIp(req.headers as never) ?? null,
+                userAgent: String(req.headers?.['user-agent'] ?? '') || null,
+              }),
+            ).map(([key, value]) => [`metadata[${key}]`, value]),
+          ),
+        }
+      : {}
     // ALREADY SUBSCRIBED? (AGL-1849)
     //
     // The idempotency key closes the RETRY shape: one attempt, one key, one
@@ -1169,6 +1202,8 @@ export const checkoutHandler: PluginApiHandler = async (req, res) => {
       ...(modifiersMetadata ? { 'metadata[modifiers]': modifiersMetadata } : {}),
       'metadata[quantity]': String(quantity),
       'metadata[feeCents]': String(feeCents),
+      // Card reader hardware on the platform's own store (AGL-4038).
+      ...hardwareParams,
       // The postal code live carrier rates were quoted for (AGL-3612).
       ...(shippingPlan.quotedPostalCode
         ? { 'metadata[shippingQuotePostalCode]': shippingPlan.quotedPostalCode }

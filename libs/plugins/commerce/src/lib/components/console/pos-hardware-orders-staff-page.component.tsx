@@ -50,6 +50,7 @@ import {
   nextPosHardwareStatus,
   POS_HARDWARE_ORDER_STATUSES,
   POS_HARDWARE_STAFF_STATUS_LABELS,
+  posHardwareReadyToShip,
   posHardwareRefundable,
   posHardwareSku,
   type PosHardwareOrderStatus,
@@ -99,7 +100,14 @@ const TENDER_LABELS: Record<string, string> = {
   credit: 'store credit',
 }
 
-/** Whose an in-person order is, in a line (AGL-4038). */
+/** Where an order was sold, as the list says it (AGL-4038). */
+const SOLD_LABELS: Record<string, string> = {
+  online: 'Online',
+  in_person: 'In person',
+  storefront: 'Online store',
+}
+
+/** Whose an order sold by our own store is, in a line (AGL-4038). */
 function attachedTo(order: StaffHardwareOrderRow): string {
   const attachment = order.attachment
   if (!attachment) return '—'
@@ -155,6 +163,9 @@ export function PosHardwareOrdersStaffPage(props: ConsoleStaffPageProps) {
   const [open, setOpen] = useState<StaffHardwareOrderRow | null>(null)
   const [busy, setBusy] = useState(false)
   const [form, setForm] = useState({ stripeHardwareOrderId: '', carrier: '', number: '', url: '' })
+  /** Setting it up before it ships (AGL-4038): each reader's serial, and a code to register one. */
+  const [serialDrafts, setSerialDrafts] = useState<string[]>([])
+  const [registrationCode, setRegistrationCode] = useState('')
   /** The note for declining a return request, while its dialog is open. */
   const [declineNote, setDeclineNote] = useState<string | null>(null)
   /**
@@ -202,6 +213,8 @@ export function PosHardwareOrdersStaffPage(props: ConsoleStaffPageProps) {
       number: order.tracking?.number ?? '',
       url: order.tracking?.url ?? '',
     })
+    setSerialDrafts((order.units ?? []).map((unit) => unit.serialNumber ?? ''))
+    setRegistrationCode('')
   }
 
   const act = async (
@@ -241,6 +254,14 @@ export function PosHardwareOrdersStaffPage(props: ConsoleStaffPageProps) {
       },
       advance ? `Marked ${POS_HARDWARE_STAFF_STATUS_LABELS[advance].toLowerCase()}` : 'Saved',
     )
+  }
+
+  const saveSerials = () =>
+    void act({ action: 'serials', serials: serialDrafts.map((serial) => serial.trim()).filter(Boolean) }, 'Serial numbers saved')
+
+  const registerReader = async () => {
+    await act({ action: 'register-reader', registrationCode: registrationCode.trim() }, 'Reader registered to the buyer’s store')
+    setRegistrationCode('')
   }
 
   const forgetBuyer = async () => {
@@ -296,7 +317,7 @@ export function PosHardwareOrdersStaffPage(props: ConsoleStaffPageProps) {
         headerName: 'Sold',
         minWidth: 110,
         valueGetter: (_value: unknown, row: StaffHardwareOrderRow) =>
-          row.source === 'in_person' ? (row.attachment?.state === 'pending' ? 'In person · to attach' : 'In person') : 'Online',
+          `${SOLD_LABELS[row.source] ?? SOLD_LABELS.online}${row.source !== 'online' && row.attachment?.state === 'pending' ? ' · to attach' : ''}`,
       },
       {
         field: 'createdAtMs',
@@ -373,6 +394,9 @@ export function PosHardwareOrdersStaffPage(props: ConsoleStaffPageProps) {
   )
 
   const inPerson = open?.source === 'in_person'
+  // Sold by our own store, at its register or online (AGL-4038): the store
+  // order behind it, whose it is, and the store's account it was paid into.
+  const sellerStore = inPerson || open?.source === 'storefront'
   const next = open ? nextPosHardwareStatus(open.status) : null
   const closed = open ? open.status === 'canceled' || open.status === 'refunded' : true
   // A reader sold in person refunds what is left of it, its own way, until
@@ -389,6 +413,22 @@ export function PosHardwareOrdersStaffPage(props: ConsoleStaffPageProps) {
     Boolean(open) && !inPerson && returnRequested && ['shipped', 'delivered', 'registered'].includes(String(open?.status))
   const returnCents = open ? Math.max(0, open.totalCents - (open.shipping?.cents ?? 0)) : 0
   const writeReason = gate.blocked ? gate.reason : undefined
+  // Setting it up before it ships (AGL-4038).
+  const beforeShipping = Boolean(open) && ['paid', 'ordered', 'received'].includes(String(open?.status))
+  const units = open?.units ?? []
+  const readerUnits = units.filter((unit) => posHardwareSku(unit.sku)?.kind === 'reader')
+  const registerReason = !open
+    ? undefined
+    : !beforeShipping
+      ? 'A reader is registered here before the order ships.'
+      : open.attachment && open.attachment.state !== 'attached'
+        ? 'Attach the order to the buyer’s workspace first, from To attach on our store’s register. Or ship it, and the reader joins their store when they pair it.'
+        : !open.hostId
+          ? 'The buyer has not chosen a store for it yet.'
+          : readerUnits.every((unit) => unit.readerId)
+            ? 'Every reader on this order is registered.'
+            : undefined
+  const notReady = open && next === 'shipped' ? posHardwareReadyToShip(open) : null
 
   return (
     <CardDisplay
@@ -454,17 +494,25 @@ export function PosHardwareOrdersStaffPage(props: ConsoleStaffPageProps) {
         <DialogTitle>{open ? `Hardware order ${open.number}` : ''}</DialogTitle>
         {open ? (
           <DialogContent sx={{ display: 'flex', flexDirection: 'column', gap: 2 }}>
-            {inPerson ? (
+            {sellerStore ? (
               <Stack spacing={0.5} sx={{ mt: 1 }}>
-                <Typography variant="subtitle2">{'Sold in person'}</Typography>
-                {open.lines.map((line) => (
-                  <Typography key={line.sku} variant="body2">
-                    {`${line.quantity} × ${line.name}`}
-                  </Typography>
-                ))}
+                <Typography variant="subtitle2">{inPerson ? 'Sold in person' : 'Sold on our online store'}</Typography>
+                {inPerson
+                  ? open.lines.map((line) => (
+                      <Typography key={line.sku} variant="body2">
+                        {`${line.quantity} × ${line.name}`}
+                      </Typography>
+                    ))
+                  : null}
                 <Typography variant="body2" color="text.secondary">
                   {[
-                    open.posSale?.number ? `Register sale #${open.posSale.number}` : 'Register sale',
+                    inPerson
+                      ? open.posSale?.number
+                        ? `Register sale #${open.posSale.number}`
+                        : 'Register sale'
+                      : open.posSale?.number
+                        ? `Online order #${open.posSale.number}`
+                        : 'Online order',
                     open.posSale?.kiosk ? 'at the kiosk' : null,
                     open.posSale?.offline ? 'rung offline' : null,
                     `paid ${formatPosHardwareCents(open.totalCents)}`,
@@ -496,7 +544,7 @@ export function PosHardwareOrdersStaffPage(props: ConsoleStaffPageProps) {
                       : `Return request ${open.returnRequest.state}${open.returnRequest.note ? `: ${open.returnRequest.note}` : ''}.`}
                   </Alert>
                 ) : null}
-                {open.contactEmail ? (
+                {inPerson && open.contactEmail ? (
                   <Typography variant="body2" color="text.secondary">
                     {open.contactEmail}
                   </Typography>
@@ -525,6 +573,51 @@ export function PosHardwareOrdersStaffPage(props: ConsoleStaffPageProps) {
                     {[open.shipping?.phone, open.contactEmail].filter(Boolean).join(' · ')}
                   </Typography>
                 </Stack>
+                {readerUnits.length ? (
+                  <Stack spacing={1} aria-label="Set up">
+                    <Typography variant="subtitle2">{'Set up'}</Typography>
+                    <Typography variant="body2" color="text.secondary">
+                      {'Record each reader’s serial number before it ships. Where the buyer’s store is ready, register the reader to it with the code it shows; otherwise it joins their store when they pair it.'}
+                    </Typography>
+                    {readerUnits.map((unit, index) => (
+                      <TextField
+                        key={`${unit.sku}-${index}`}
+                        size="small"
+                        label={`Serial number, reader ${index + 1} (${posHardwareSku(unit.sku)?.displayName ?? unit.sku})`}
+                        value={serialDrafts[index] ?? ''}
+                        disabled={!beforeShipping || Boolean(unit.readerId)}
+                        helperText={unit.readerId ? 'Registered to the buyer’s store' : undefined}
+                        onChange={(event) =>
+                          setSerialDrafts((drafts) => {
+                            const nextDrafts = [...drafts]
+                            nextDrafts[index] = event.target.value
+                            return nextDrafts
+                          })
+                        }
+                      />
+                    ))}
+                    <Guarded reason={writeReason ?? (beforeShipping ? undefined : 'Serial numbers are recorded before the order ships.')}>
+                      <Button size="small" disabled={busy} onClick={saveSerials} sx={{ alignSelf: 'flex-start' }}>
+                        {'Save serial numbers'}
+                      </Button>
+                    </Guarded>
+                    <Stack direction={{ xs: 'column', sm: 'row' }} spacing={1} sx={{ alignItems: { sm: 'center' } }}>
+                      <TextField
+                        size="small"
+                        label="Pairing code the reader shows"
+                        value={registrationCode}
+                        disabled={Boolean(registerReason)}
+                        onChange={(event) => setRegistrationCode(event.target.value)}
+                        sx={{ flex: 1 }}
+                      />
+                      <Guarded reason={writeReason ?? registerReason ?? (registrationCode.trim() ? undefined : 'Enter the code the reader shows.')}>
+                        <Button size="small" disabled={busy} onClick={() => void registerReader()}>
+                          {'Register to the buyer’s store'}
+                        </Button>
+                      </Guarded>
+                    </Stack>
+                  </Stack>
+                ) : null}
                 <TextField
                   label="Stripe hardware order id"
                   value={form.stripeHardwareOrderId}
@@ -566,7 +659,7 @@ export function PosHardwareOrdersStaffPage(props: ConsoleStaffPageProps) {
               </Button>
             </Guarded>
           ) : null}
-          {inPerson && (open?.contactEmail || open?.attachment?.email || open?.attachment?.uid) ? (
+          {sellerStore && (open?.contactEmail || open?.attachment?.email || open?.attachment?.uid) ? (
             <Guarded reason={writeReason}>
               <Button color="error" disabled={busy} onClick={() => void forgetBuyer()}>
                 {"Remove buyer's details"}
@@ -603,7 +696,7 @@ export function PosHardwareOrdersStaffPage(props: ConsoleStaffPageProps) {
             <Guarded
               reason={
                 writeReason ??
-                (next === 'shipped' && !form.number.trim() ? 'Add the tracking number first.' : undefined)
+                (next === 'shipped' && !form.number.trim() ? 'Add the tracking number first.' : (notReady ?? undefined))
               }
             >
               <Button variant="contained" disabled={busy} onClick={() => save(next)}>
@@ -631,9 +724,11 @@ export function PosHardwareOrdersStaffPage(props: ConsoleStaffPageProps) {
                 ? `${formatPosHardwareCents(Math.max(0, returnCents - (centsOf(returning.restockingFee ?? '') ?? 0)))} goes back to the card it was paid with: the items and their tax. The original shipping is not refunded, and a restocking fee Stripe charged for the return comes off.`
                 : open?.source === 'in_person'
                 ? `${formatPosHardwareCents(open.totalCents - open.refundedCents)} goes back to the card the register sale was paid with, from the selling store's own account. Under the hardware terms of sale the buyer sends the reader back at their cost.`
-                : open
-                  ? `${formatPosHardwareCents(open.totalCents)} goes back to the card it was paid with. Cancel the order in the Stripe Dashboard too if it was already placed there.`
-                  : ''}
+                : open?.source === 'storefront'
+                  ? `${formatPosHardwareCents(open.totalCents - open.refundedCents)} goes back to the card it was paid with, from the selling store's own account. Cancel the order with the supplier too if it was already placed there.`
+                  : open
+                    ? `${formatPosHardwareCents(open.totalCents)} goes back to the card it was paid with. Cancel the order in the Stripe Dashboard too if it was already placed there.`
+                    : ''}
             </DialogContentText>
             {returning?.action === 'refund-return' ? (
               <TextField

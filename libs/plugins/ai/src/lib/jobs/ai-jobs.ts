@@ -2412,7 +2412,7 @@ export async function runAiJobStep(
   const runStarted = Date.now()
   try {
     outcome = await runner({
-      job, stepIndex, now, signal: stepSignal.signal, firestore, org, modelFor,
+      job, stepIndex, now, signal: stepSignal.signal, firestore, org, modelFor, reservation,
     })
   } catch (error) {
     // The provider refused the request or the budget ended before it

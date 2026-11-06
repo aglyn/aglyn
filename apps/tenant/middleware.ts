@@ -65,7 +65,10 @@ import { boundedAwait } from '@aglyn/shared-util-http/bounded-await'
 import { resolveSchemeRouteSegment } from '@aglyn/shared-ui-theme/util/scheme-route-segment'
 // Deep import for the same reason: the declared video hosts' player origins,
 // compiled data with no plugin behind it, which `frame-src` must admit.
-import { videoEmbedPlayerOrigins } from '@aglyn/aglyn/plugin-manager/video-embed-provider'
+import {
+  videoEmbedPlayerOrigins,
+  videoEmbedPosterOrigins,
+} from '@aglyn/aglyn/plugin-manager/video-embed-provider'
 import {
   parseThemeModeCookie,
   THEME_MODE_COOKIE,
@@ -338,6 +341,7 @@ const lockdownVerdicts = new Map<
     preview: boolean
     previewPaths: string[]
     maintenance: boolean
+    videoEmbedPosters: boolean
   }
 >()
 
@@ -417,6 +421,7 @@ async function hostVerdict(
   preview: boolean
   previewPaths: string[]
   maintenance: boolean
+  videoEmbedPosters: boolean
 }> {
   const cached = lockdownVerdicts.get(tenantHost)
   if (cached && Date.now() - cached.at < LOCKDOWN_VERDICT_TTL_MS) {
@@ -436,6 +441,7 @@ async function hostVerdict(
       preview: cached.preview,
       previewPaths: cached.previewPaths,
       maintenance: cached.maintenance,
+      videoEmbedPosters: cached.videoEmbedPosters,
     }
   }
   let blocked = false
@@ -522,6 +528,11 @@ async function hostVerdict(
   // always went, a 200, rather than holding a 503 on a site that may have come
   // back while the verdict was away. An outage is not a maintenance window.
   let maintenance = false
+  // Video host stills (AGL-4140): stale-retentive with `runsMeasurement`. A
+  // page cached while the flag was on shows a still, and a verdict outage
+  // must not refuse it; a cold instance that never read a verdict starts off,
+  // the shipped policy.
+  let videoEmbedPosters: boolean = cached?.videoEmbedPosters ?? false
   try {
     // The body is read inside the deadline too: a verdict that never answers,
     // or answers with a body that never ends, is the outage case below — not
@@ -556,6 +567,7 @@ async function hostVerdict(
         preview?: unknown
         previewPaths?: unknown
         maintenance?: unknown
+        videoEmbedPosters?: unknown
       } | null
       blocked = data?.locked === true && data?.mode !== 'read-only'
       attribution = data?.attribution === true
@@ -598,6 +610,9 @@ async function hostVerdict(
         )
       }
       if (typeof data?.preview === 'boolean') preview = data.preview
+      if (typeof data?.videoEmbedPosters === 'boolean') {
+        videoEmbedPosters = data.videoEmbedPosters
+      }
       maintenance = data?.maintenance === true
       if (Array.isArray(data?.previewPaths)) {
         previewPaths = strings(data.previewPaths)
@@ -623,6 +638,7 @@ async function hostVerdict(
     preview,
     previewPaths,
     maintenance,
+    videoEmbedPosters,
   })
   return {
     blocked,
@@ -640,6 +656,7 @@ async function hostVerdict(
     preview,
     previewPaths,
     maintenance,
+    videoEmbedPosters,
   }
 }
 
@@ -1574,6 +1591,9 @@ export const middleware: NextMiddleware = async (req, event) => {
       verdict.approvedImageHosts,
       verdict.runsMeasurement,
       verdict.siteOrigins,
+      // A declared video host's stills (AGL-4140), only where the site's
+      // workspace shows them; `tenantImgSrcDirective` says why.
+      verdict.videoEmbedPosters ? videoEmbedPosterOrigins() : [],
     )}; ${tenantMediaSrcDirective(
       process.env.NODE_ENV === 'production',
       verdict.approvedMediaHosts,

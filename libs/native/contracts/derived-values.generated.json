@@ -2709,6 +2709,11 @@
       "rolloutPercent": 0,
       "plans": []
     },
+    "release_ai_site_import_generative": {
+      "enabled": false,
+      "rolloutPercent": 0,
+      "plans": []
+    },
     "release_crm_assist_whole_record": {
       "enabled": true,
       "rolloutPercent": 0,
@@ -2725,6 +2730,11 @@
       "plans": []
     },
     "release_site_starters": {
+      "enabled": false,
+      "rolloutPercent": 0,
+      "plans": []
+    },
+    "release_video_embed_posters": {
       "enabled": false,
       "rolloutPercent": 0,
       "plans": []

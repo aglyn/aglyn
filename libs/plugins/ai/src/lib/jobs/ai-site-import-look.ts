@@ -56,13 +56,15 @@
  * its name.
  *=========================================*/
 
+import { DEFAULT_SITE_THEME } from '@aglyn/aglyn/app-utils/default-site'
 import type { PluginMediaIngest } from '@aglyn/aglyn/plugin-manager/plugin-media-ingest'
 import { themeFontFacts, type ThemeFontFacts } from '@aglyn/aglyn/plugin-manager/plugin-theme-font-catalog'
 import { syncHostProjectionForMembers } from '@aglyn/tenant-data-admin/server/host-memberships'
 import { aiSiteListingSeeded } from '../model/ai-site-entity'
 import type { AiSiteImportFinish, AiSiteImportHome, AiSiteImportLook, AiSiteImportLookFrom, AiSiteImportPhoto, SiteImportLookFacts } from '../model/ai-site-import'
 import { aiSiteKindFor } from '../model/ai-site-kinds'
-import { aiHexOklch, aiSiteSeed, aiSiteStyleFor, type AiSiteLookPins, type AiSiteSourceFont, type AiSiteStyle } from '../model/ai-site-look'
+import { siteImportFidelityThemeOf } from '../model/ai-site-import-fidelity'
+import { aiHexOklch, aiSiteSeed, aiSiteStyleFor, aiSiteTheme, type AiSiteLookPins, type AiSiteSourceFont, type AiSiteStyle } from '../model/ai-site-look'
 import { aiSiteIsStarterSrc } from '../model/ai-site-photos'
 import { AGLYN_BOT_USER_AGENT, siteImportOrigins, type SiteImportCrawlSeams } from '../site-import/site-import-crawl'
 import { siteImportReadStylesheets } from '../site-import/site-import-css'
@@ -224,6 +226,8 @@ export function aiSiteImportStyle(
     finish?: AiSiteImportFinish | null
     pictures?: readonly string[]
     draw?: boolean
+    /** Under a generative Improve it (AGL-4152): a bright brand fills the buttons as it is, its links and words at a shade that reads. */
+    generative?: boolean
   },
 ): AiSiteStyle | null {
   const facts = input.facts ?? null
@@ -262,7 +266,7 @@ export function aiSiteImportStyle(
   if (!pins.brand && !input.draw) return null
   const style = aiSiteStyleFor({ kind, answer: {}, seed: input.seed, brand: pins.brand, avoid: input.avoid ?? [], pins })
   const fonts = input.fonts ? { sourceFonts: input.fonts } : {}
-  if (finish === 'improve') return { ...style, finish, ...fonts }
+  if (finish === 'improve') return { ...style, finish, ...fonts, ...(input.generative ? { brandFill: true as const } : {}) }
   // Keep my site (AGL-4152): its grounds, its buttons' case, and its filled buttons as it draws them.
   const page = solidHex(facts?.background)
   const darkPage = solidHex(facts?.darkBackground)
@@ -428,6 +432,8 @@ export interface AiSiteImportLookInput {
   signal?: AbortSignal
   /** How the site is finished (AGL-4152): Keep my site keeps more of the source's look. Absent is `keep`. */
   finish?: AiSiteImportFinish | null
+  /** Its first wave is a generative Improve it (AGL-4152). */
+  generative?: boolean
 }
 
 async function readHostDoc(firestore: FirebaseFirestore.Firestore, hostId: string): Promise<Record<string, unknown> | null> {
@@ -547,7 +553,7 @@ export async function aiRunSiteImportLook(input: AiSiteImportLookInput, deps: Ai
       }
     }
   }
-  const described = { seed, description: `${home.siteName} ${home.description}`, avoid, facts, fonts, finish: input.finish ?? null, pictures }
+  const described = { seed, description: `${home.siteName} ${home.description}`, avoid, facts, fonts, finish: input.finish ?? null, pictures, ...(input.generative ? { generative: true } : {}) }
   let style = aiSiteImportStyle(site, described)
   // Nothing anywhere to read a color from: the seed's look for its kind, never the stock theme.
   if (!style) {
@@ -610,7 +616,9 @@ export async function aiRunSiteImportLook(input: AiSiteImportLookInput, deps: Ai
     ...(typeof style.motion === 'string' ? { motion: style.motion } : {}),
   }
   const colors = [...new Set([...(facts ? [facts.buttonFill, facts.link, facts.eyebrow, ...(facts.palette ?? [])].filter(colorful).map((hex) => hex.toLowerCase()) : []), ...pictures, ...(site?.colors ?? [])])]
-  return { at: input.at, theme, from, colors, logo, ...(menuPictures.length ? { pictures: menuPictures } : {}), seo, seed: style.seed, style: drawn }
+  // The colors a redesign is held to as it is asked (AGL-4152), where this look is the site's.
+  const heldTo = input.generative && theme === 'applied' ? siteImportFidelityThemeOf(aiSiteTheme(style, DEFAULT_SITE_THEME), 'style') : null
+  return { at: input.at, theme, from, colors, logo, ...(menuPictures.length ? { pictures: menuPictures } : {}), seo, seed: style.seed, style: drawn, ...(heldTo ? { drawn: heldTo as unknown as Record<string, unknown> } : {}) }
 }
 
 /**

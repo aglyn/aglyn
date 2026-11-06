@@ -428,6 +428,7 @@ export const DOCS_HELP_SECTION_EXCERPTS: {
     '#categories-and-tags': 'The Categories & collections card, in the products hub\'s catalog, organizes your products into categories and collections that storefront pages and filters use.',
     '#review-moderation': 'The Review moderation card, in the products hub\'s Promotions section, lists your reviews so you can publish, hide and reply to them.',
     '#review-settings': 'The Reviews card on Products → Promotions decides who can review your products and when customers are asked for a review.',
+    '#subscriptions-list': 'Products → Subscriptions lists every subscription on the site, newest first.',
   },
   commerce: {
     '#commerce-analytics': 'The Commerce analytics card, in the Analytics section of the products hub, shows the last 30 days of revenue, orders and average order value, a 14-day revenue trend and your top products.',
@@ -786,10 +787,10 @@ export const DOCS_HELP_SECTION_EXCERPTS: {
   },
   posHardware: {
     '#bought-from-us-in-person': 'At an event, Aglyn may sell you a reader in person. You pay at Aglyn\'s register, take the reader with you, and the order joins your workspace.',
-    '#buy-a-reader-from-aglyn': 'The Hardware card on Products → Point of sale sells Stripe\'s card readers and their accessories.',
+    '#buy-a-reader-from-aglyn': 'The Hardware card on Products → Point of sale sells card readers and their accessories.',
     '#card-readers-to-set-up': 'A reader bought in person waits on Products → Point of sale, in a Card readers to set up card, until you set it up on a store.',
     '#hardware-purchase-records': 'Aglyn is the seller of these readers, so it keeps a record of each sale for tax and accounting: the items and their prices, shipping, tax, the total, the order\'s status dates, Stripe\'s payment references, and the…',
-    '#reader-start-up-screen': 'While a Stripe Reader S700, S710 or BBPOS WisePOS E waits for a payment, it shows a start-up screen.',
+    '#reader-start-up-screen': 'While a Touchscreen reader (S700 or S710) or Countertop reader (WisePOS E) waits for a payment, it shows a start-up screen.',
     '#receipt-printers': 'A cloud receipt printer collects its work from Aglyn over the internet, so a receipt prints from the register on any device, even one with no printer driver, and even when the printer is on a different network.',
   },
   posOperations: {

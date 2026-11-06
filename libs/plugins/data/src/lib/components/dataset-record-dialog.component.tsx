@@ -182,8 +182,23 @@ function RecordFieldValue(props: { field: DatasetRecordField }) {
 }
 RecordFieldValue.displayName = 'RecordFieldValue'
 
-export function DatasetRecordDialog(props: DatasetRecordDialogProps) {
-  const { record, model, resolveReference, onClose, onEdit } = props
+/**
+ * A record's fields, read-only: each field's label, its value, what the model
+ * says is wrong with it, and its description (AGL-4047). Shared by the View
+ * record dialog and a record's own page on the Data page, so the two read a
+ * record alike. Reads nothing: every value is a prop.
+ */
+export function DatasetRecordFieldList(props: {
+  record: { $id: string; values?: Record<string, unknown> } | null
+  model: DatasetModel
+  resolveReference?: DatasetReferenceResolver
+  /**
+   * Drawn as a page draws it: a caption over each value and a divider between
+   * fields. The dialog draws overline labels with no dividers.
+   */
+  divided?: boolean
+}) {
+  const { record, model, resolveReference, divided = false } = props
   const values = record?.values
   const fields = useMemo(
     () => (record ? datasetRecordFields(model, values, resolveReference) : []),
@@ -199,6 +214,71 @@ export function DatasetRecordDialog(props: DatasetRecordDialogProps) {
     () => (record ? validateDocument(model, values ?? {}) : {}),
     [record, model, values],
   )
+  return (
+    <>
+      {fields.map((field) => (
+        <Box
+          key={field.fieldId}
+          sx={divided ? { pb: 1.5, borderBottom: 1, borderColor: 'divider' } : undefined}
+        >
+          <Stack
+            useFlexGap
+            direction="row"
+            spacing={1}
+            sx={{ alignItems: 'baseline', flexWrap: 'wrap' }}
+          >
+            <Typography
+              variant={divided ? 'caption' : 'overline'}
+              color="text.secondary"
+              component="div"
+            >
+              {field.label}
+            </Typography>
+            {field.source === 'extra' ? (
+              <Tooltip
+                title={
+                  'Stored on this record with no field in the ' +
+                  'collection’s schema. The table cannot show it, and ' +
+                  'the next save through the editor removes it.'
+                }
+              >
+                <Typography
+                  variant="caption"
+                  color="warning.main"
+                  sx={{ cursor: 'help' }}
+                >
+                  {'not in schema'}
+                </Typography>
+              </Tooltip>
+            ) : null}
+          </Stack>
+          <RecordFieldValue field={field} />
+          {mismatches[field.fieldId] ? (
+            <Typography variant="caption" color="warning.main">
+              {mismatches[field.fieldId]}
+            </Typography>
+          ) : null}
+          {field.description ? (
+            <Typography
+              variant="caption"
+              color="text.secondary"
+              component="div"
+            >
+              {field.description}
+            </Typography>
+          ) : null}
+        </Box>
+      ))}
+      {record && fields.length === 0 ? (
+        <Alert severity="info">{'This record holds no fields.'}</Alert>
+      ) : null}
+    </>
+  )
+}
+DatasetRecordFieldList.displayName = 'DatasetRecordFieldList'
+
+export function DatasetRecordDialog(props: DatasetRecordDialogProps) {
+  const { record, model, resolveReference, onClose, onEdit } = props
 
   return (
     <Dialog
@@ -223,59 +303,7 @@ export function DatasetRecordDialog(props: DatasetRecordDialogProps) {
               {record?.$id ?? ''}
             </Typography>
           </Box>
-          {fields.map((field) => (
-            <Box key={field.fieldId}>
-              <Stack
-                useFlexGap
-                direction="row"
-                spacing={1}
-                sx={{ alignItems: 'baseline', flexWrap: 'wrap' }}
-              >
-                <Typography
-                  variant="overline"
-                  color="text.secondary"
-                  component="div"
-                >
-                  {field.label}
-                </Typography>
-                {field.source === 'extra' ? (
-                  <Tooltip
-                    title={
-                      'Stored on this record with no field in the ' +
-                      'collection’s schema. The table cannot show it, and ' +
-                      'the next save through the editor removes it.'
-                    }
-                  >
-                    <Typography
-                      variant="caption"
-                      color="warning.main"
-                      sx={{ cursor: 'help' }}
-                    >
-                      {'not in schema'}
-                    </Typography>
-                  </Tooltip>
-                ) : null}
-              </Stack>
-              <RecordFieldValue field={field} />
-              {mismatches[field.fieldId] ? (
-                <Typography variant="caption" color="warning.main">
-                  {mismatches[field.fieldId]}
-                </Typography>
-              ) : null}
-              {field.description ? (
-                <Typography
-                  variant="caption"
-                  color="text.secondary"
-                  component="div"
-                >
-                  {field.description}
-                </Typography>
-              ) : null}
-            </Box>
-          ))}
-          {fields.length === 0 ? (
-            <Alert severity="info">{'This record holds no fields.'}</Alert>
-          ) : null}
+          <DatasetRecordFieldList record={record} model={model} resolveReference={resolveReference} />
         </Stack>
       </DialogContent>
       <DialogActions>

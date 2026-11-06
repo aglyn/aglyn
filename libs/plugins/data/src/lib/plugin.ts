@@ -15,7 +15,6 @@
  * limitations under the License.
  */
 
-import HostDatasetsCard from './components/host-datasets-card.component'
 import { datasetInstanceImportAccess } from './components/use-dataset-writes-blocked'
 import * as Aglyn from '@aglyn/aglyn'
 import { registerRepeatSource } from '@aglyn/aglyn/app-utils/repeat-sources'
@@ -38,6 +37,11 @@ import RecordTemplateSection from './record-pages/record-template-section.compon
 
 /** Code-split: the Data console page only loads when opened. */
 const DataConsolePage = lazy(() => import('./components/data-console-page'))
+/**
+ * The org datasets card, split the same way: it loads where the `orgData`
+ * slot mounts it (or inside the Data page's own chunk), not with the plugin.
+ */
+export const HostDatasetsCard = lazy(() => import('./components/host-datasets-card.component'))
 
 /**
  * Data feature plugin (AGL-395). Console-only — datasets are org-shared
@@ -119,6 +123,9 @@ export function registerDataConsole(): void {
       {
         label: 'Data',
         href: '/data',
+        // Each dataset is a tab of the page, at `/data/<datasetId>` (AGL-4047).
+        ownsSubtree: true,
+        recordTitle: 'Dataset',
         // Reuse the existing release-flag nav-tab so staff-preview gating is
         // unchanged now that the tab comes from the plugin (AGL-395).
         navTabId: 'nav-tab-data',
@@ -134,5 +141,4 @@ export function registerDataConsole(): void {
   })
 }
 
-export { default as HostDatasetsCard } from './components/host-datasets-card.component'
 export type { HostDatasetsCardProps } from './components/host-datasets-card.component'

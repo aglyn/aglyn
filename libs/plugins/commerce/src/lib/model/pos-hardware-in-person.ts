@@ -43,6 +43,7 @@ import type { OrderHardwareBuyer } from './commerce-orders'
 import {
   POS_HARDWARE_CURRENCY,
   POS_HARDWARE_IN_PERSON_SHIPPING_LABEL,
+  POS_HARDWARE_SHIPPING_LABELS,
   posHardwareBuyerAddress,
   posHardwareSku,
   type PosHardwareAttachment,
@@ -67,7 +68,9 @@ export interface PosHardwareRegisterShare {
   /** The hardware lines at the prices rung. */
   itemsCents: number
   discountCents: number
-  /** What tax was charged on: the items less the discount. */
+  /** The hardware's share of an online order's shipping; 0 at a register. */
+  shippingCents: number
+  /** What tax was charged on: the items less the discount, plus the shipping share. */
   taxableCents: number
   taxCents: number
   totalCents: number
@@ -87,12 +90,19 @@ function shareOf(amount: number, part: number, of: number): number {
 
 /**
  * The hardware's share of a register sale, or `null` when the sale sold no
- * hardware. `discountCents` and `taxCents` are the SALE's.
+ * hardware. `discountCents`, `taxCents` and `shippingCents` are the SALE's.
+ *
+ * An online order of the platform's own store (AGL-4038) also charged
+ * shipping: the hardware takes its share of it by the same proportion as the
+ * discount, and the tax falls on the items less the discount plus the
+ * shipping, in proportion, as it was charged on the whole order. A register
+ * sale has no shipping, so its share is exactly as before.
  */
 export function posHardwareRegisterShare(input: {
   lines: readonly PosHardwareRegisterLine[]
   discountCents: number
   taxCents: number
+  shippingCents?: number
 }): PosHardwareRegisterShare | null {
   const lines: PosHardwareLine[] = []
   let saleItemsCents = 0
@@ -108,9 +118,11 @@ export function posHardwareRegisterShare(input: {
   const itemsCents = lines.reduce((sum, line) => sum + line.lineCents, 0)
   const saleDiscountCents = Math.min(whole(input.discountCents), saleItemsCents)
   const discountCents = shareOf(saleDiscountCents, itemsCents, saleItemsCents)
-  const taxableCents = Math.max(0, itemsCents - discountCents)
-  const taxCents = shareOf(whole(input.taxCents), taxableCents, saleItemsCents - saleDiscountCents)
-  return { lines, itemsCents, discountCents, taxableCents, taxCents, totalCents: taxableCents + taxCents }
+  const saleShippingCents = whole(input.shippingCents)
+  const shippingCents = shareOf(saleShippingCents, itemsCents, saleItemsCents)
+  const taxableCents = Math.max(0, itemsCents - discountCents) + shippingCents
+  const taxCents = shareOf(whole(input.taxCents), taxableCents, saleItemsCents - saleDiscountCents + saleShippingCents)
+  return { lines, itemsCents, discountCents, shippingCents, taxableCents, taxCents, totalCents: taxableCents + taxCents }
 }
 
 /**
@@ -194,6 +206,18 @@ export interface InPersonRegisterSale {
    * the register sale; absent, the receipt-and-sign notice at the sale.
    */
   termsAcceptance?: unknown
+  /**
+   * Set for an ONLINE order of the platform's own store (AGL-4038): where it
+   * ships and who to. The order is then paid, not handed over: it waits to be
+   * prepared and shipped like one from the Hardware card, its tax is sourced
+   * where it ships, and the terms are the ones ticked at checkout (never the
+   * booth's notice).
+   */
+  storefront?: {
+    name: string | null
+    phone: string | null
+    address: unknown
+  }
 }
 
 /**
@@ -209,7 +233,15 @@ export function inPersonPosHardwareOrder(sale: InPersonRegisterSale): PosHardwar
   const attachment = posHardwareAttachmentOf(sale.buyer)
   const attached = attachment.state === 'attached'
   const units = posHardwareUnits(sale.share.lines, sale.serials ?? [])
-  const state = sale.taxRegion?.state ?? null
+  const online = Boolean(sale.storefront)
+  const shipTo = online ? posHardwareBuyerAddress(sale.storefront?.address) : null
+  // Online, sourced where it ships; at the counter, where the store is.
+  const taxRegion: PosHardwareTaxRegion | null = online
+    ? shipTo
+      ? { country: shipTo.country, state: shipTo.state?.toUpperCase() ?? null, postalCode: shipTo.postalCode }
+      : null
+    : sale.taxRegion
+  const state = taxRegion?.state ?? null
   const taxLines: PosHardwareTaxLine[] =
     sale.share.taxCents > 0
       ? [
@@ -224,6 +256,12 @@ export function inPersonPosHardwareOrder(sale: InPersonRegisterSale): PosHardwar
           },
         ]
       : []
+  const acceptance =
+    posHardwareTermsAcceptanceOf(sale.termsAcceptance) ??
+    // Online, the checkout refuses without an acceptance, so there is no
+    // notice to fall back to; at the counter, paying under the receipt's and
+    // the booth sign's notice is agreeing (Terms 4.28).
+    (online ? null : posHardwareTermsAcceptance({ method: 'notice', atMs: sale.paidAtMs }))
   return {
     orgId: attached ? (attachment.orgId as string) : sale.sellerOrgId,
     // The buyer's store once they chose one; until then the workspace's,
@@ -234,16 +272,25 @@ export function inPersonPosHardwareOrder(sale: InPersonRegisterSale): PosHardwar
     lines: sale.share.lines,
     subtotalCents: sale.share.itemsCents,
     discountCents: sale.share.discountCents,
-    shipping: {
-      method: 'in_person',
-      label: POS_HARDWARE_IN_PERSON_SHIPPING_LABEL,
-      cents: 0,
-      name: null,
-      phone: null,
-      address: null,
-      // Sold at the counter: taxed where the store is, as every sale it rings.
-      taxRegion: sale.taxRegion,
-    },
+    shipping: online
+      ? {
+          method: 'standard',
+          label: POS_HARDWARE_SHIPPING_LABELS.standard,
+          cents: sale.share.shippingCents,
+          name: sale.storefront?.name ?? null,
+          phone: sale.storefront?.phone ?? null,
+          address: shipTo,
+        }
+      : {
+          method: 'in_person',
+          label: POS_HARDWARE_IN_PERSON_SHIPPING_LABEL,
+          cents: 0,
+          name: null,
+          phone: null,
+          address: null,
+          // Sold at the counter: taxed where the store is, as every sale it rings.
+          taxRegion: sale.taxRegion,
+        },
     taxCents: sale.share.taxCents,
     totalCents: sale.share.totalCents,
     currency: sale.currency ?? POS_HARDWARE_CURRENCY,
@@ -253,18 +300,15 @@ export function inPersonPosHardwareOrder(sale: InPersonRegisterSale): PosHardwar
     stripePaymentIntentId: null,
     stripeHardwareOrderId: null,
     tracking: null,
-    status: 'delivered',
+    // Handed over at the sale, or paid online and waiting to be prepared.
+    status: online ? 'paid' : 'delivered',
     livemode: sale.livemode,
     createdAtMs: sale.paidAtMs,
     updatedAtMs: sale.paidAtMs,
     paidAtMs: sale.paidAtMs,
-    deliveredAtMs: sale.paidAtMs,
-    source: 'in_person',
-    // Accepted on the tablet or the display before paying, or else agreed by
-    // paying under the receipt's and the booth sign's notice (Terms 4.28).
-    termsAcceptance:
-      posHardwareTermsAcceptanceOf(sale.termsAcceptance) ??
-      posHardwareTermsAcceptance({ method: 'notice', atMs: sale.paidAtMs }),
+    ...(online ? {} : { deliveredAtMs: sale.paidAtMs }),
+    source: online ? 'storefront' : 'in_person',
+    ...(acceptance ? { termsAcceptance: acceptance } : {}),
     posSale: {
       hostId: sale.sellerHostId,
       orgId: sale.sellerOrgId,

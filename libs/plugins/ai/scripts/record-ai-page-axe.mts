@@ -437,6 +437,11 @@ function jsonFiles(dir: string): string[] {
     .sort()
 }
 
+/** The eval's cases: a generative Improve it's recordings sit beside them (AGL-4152), read by its own live spec, and hold no candidate. */
+function caseFiles(dir: string): string[] {
+  return jsonFiles(dir).filter((file) => !file.slice(file.lastIndexOf('/') + 1).startsWith('import-improve-'))
+}
+
 /** The golden pages the page step's evals replay from a site's inventory, and how each site builds. */
 function goldenPages(briefs: Dict): Array<{ fixture: Dict; reusableComponents: boolean }> {
   return [
@@ -479,7 +484,7 @@ async function recordGoldenPages(loaded: Dict, tab: Dict): Promise<Dict[]> {
 async function recordEvalAnswers(loaded: Dict, tab: Dict, files: string[]): Promise<Dict[]> {
   const answers: Dict[] = []
   const cases = new Map<string, Dict>()
-  for (const file of jsonFiles(CASES_DIR)) {
+  for (const file of caseFiles(CASES_DIR)) {
     const evalCase = loaded.evals.readAiEvalCase(JSON.parse(readFileSync(file, 'utf8')), relative(ROOT, file))
     cases.set(evalCase.id, evalCase)
   }
@@ -602,7 +607,7 @@ async function main(): Promise<void> {
 
     const recordings = jsonFiles(RECORDINGS_DIR).filter((file) => file !== RECORDINGS_OUT)
     for (const [file, sources, label] of [
-      [CASES_OUT, jsonFiles(CASES_DIR), 'the eval cases'],
+      [CASES_OUT, caseFiles(CASES_DIR), 'the eval cases'],
       ...(recordings.length ? [[RECORDINGS_OUT, recordings, 'the live recordings']] : []),
     ] as Array<[string, string[], string]>) {
       console.log(`Rendering ${label}`)

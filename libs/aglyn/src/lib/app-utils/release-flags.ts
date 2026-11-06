@@ -47,10 +47,12 @@ export type ReleaseFlagKey =
   | 'release_video_delivery'
   | 'release_ai_generative'
   | 'release_ai_site_import'
+  | 'release_ai_site_import_generative'
   | 'release_crm_assist_whole_record'
   | 'release_ai_site_inspiration'
   | 'release_ad_audience_sync'
   | 'release_site_starters'
+  | 'release_video_embed_posters'
 
 export interface ReleaseFlagDefinition {
   key: ReleaseFlagKey
@@ -250,6 +252,25 @@ const PLATFORM_RELEASE_FLAGS: readonly ReleaseFlagDefinition[] = [
       'off, the ownership and crawl doors answer 404.',
     defaultEnabled: true,
   },
+  // Improve it, generative (AGL-4152): under Bring my site's Improve it, the
+  // site is planned before anything is built, its menu and design drawn to it,
+  // and with new copy on a page is redesigned from a ledger of what the source
+  // holds, with new sections. Off by default and off everywhere in production
+  // until its paid eval and the owner's read pass; a test organization gets it
+  // with the per-org override, `orgs/{orgId}.releaseFlags`. Off, Improve it is
+  // exactly what `release_ai_site_import` ships today.
+  {
+    key: 'release_ai_site_import_generative',
+    label: 'Bring my site: generative Improve it',
+    description:
+      'Under Improve it, the site is planned before anything is built: its ' +
+      'menu, footer, design and one proposed page. With new copy on, each main ' +
+      'page is redesigned from what the source holds: sections added, new copy ' +
+      'written and checked so that it invents no name, number, price or ' +
+      'credential (AGL-4152). OFF by default; on for one organization by its per-org ' +
+      'override while it is evaluated. Off, Improve it is unchanged.',
+    defaultEnabled: false,
+  },
   // What CRM assistance hands the model provider, not whether it runs:
   // `release_ai_generative` opens the doors, this widens what a record sends
   // through them. Per org, with no staff preview — the data is the customer's,
@@ -311,6 +332,21 @@ const PLATFORM_RELEASE_FLAGS: readonly ReleaseFlagDefinition[] = [
       `option, ${PLATFORM_BRAND_NAME}\u2019s own included, is a marketplace listing any ` +
       'publisher may list and price, for a base start or an AI start. OFF ' +
       'by default: Create site makes the default site as it always has.',
+    defaultEnabled: false,
+  },
+  // Per org (AGL-4140): the tenant loader reads it for the site's workspace
+  // into `SiteContextValue.videoEmbedPosters`, the lockdown verdict reads it
+  // for the middleware's `img-src`, and a site import stamps it on each wave
+  // as the wave starts. Off, a poster-less YouTube film asks for a poster,
+  // as it always has.
+  {
+    key: 'release_video_embed_posters',
+    label: 'YouTube thumbnails as video posters',
+    description:
+      'A YouTube film placed or imported with no poster shows YouTube\u2019s ' +
+      'own thumbnail (AGL-4140), which each visitor\u2019s browser loads from ' +
+      'i.ytimg.com with the page. OFF by default: nothing is requested from ' +
+      'Google until the Subprocessors page that discloses it is published.',
     defaultEnabled: false,
   },
 ]

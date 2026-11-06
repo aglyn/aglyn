@@ -64,6 +64,44 @@ const HEADERS = {
 const b64url = (value) => Buffer.from(value).toString('base64url')
 
 /**
+ * GITHUB'S OWN 5xx IS RETRIED HERE, NOT IN CLOUD SCHEDULER.
+ *
+ * On 2026-11-05 at 23:22Z and 23:25Z the workflow-dispatch API answered 500
+ * twice, three minutes apart, and both scheduler jobs failed and opened a
+ * "Cloud Scheduler job run failed" alert. The next dispatch, 15 minutes later,
+ * went through. A scheduler-level retry would not have helped the alert: the
+ * failed first attempt is still logged at ERROR, and that is what the policy
+ * matches. So a 5xx, a 429 or a network error gets two more tries a few
+ * seconds apart, inside the one request Cloud Scheduler sees.
+ *
+ * A 4xx other than 429 is never retried. A bad key, a missing workflow or a
+ * removed installation answers the same way every time, and it must fail
+ * loudly on the first try.
+ */
+const RETRY_DELAYS_MS = [2_000, 6_000]
+
+const isTransient = (status) => status === 429 || status >= 500
+
+async function fetchWithRetry(url, init) {
+  for (let attempt = 0; ; attempt += 1) {
+    let response
+    try {
+      response = await fetch(url, init)
+    } catch (error) {
+      if (attempt >= RETRY_DELAYS_MS.length) throw error
+      console.log(`GitHub unreachable (${error?.message ?? error}), retrying`)
+      await new Promise((resolve) => setTimeout(resolve, RETRY_DELAYS_MS[attempt]))
+      continue
+    }
+    if (!isTransient(response.status) || attempt >= RETRY_DELAYS_MS.length) {
+      return response
+    }
+    console.log(`GitHub answered ${response.status}, retrying`)
+    await new Promise((resolve) => setTimeout(resolve, RETRY_DELAYS_MS[attempt]))
+  }
+}
+
+/**
  * A ten-minute app JWT.
  *
  * `iat` is backdated a minute because GitHub rejects a token whose issue time
@@ -83,7 +121,7 @@ function appJwt() {
 }
 
 async function installationToken() {
-  const response = await fetch(
+  const response = await fetchWithRetry(
     `${API}/app/installations/${INSTALLATION_ID}/access_tokens`,
     { method: 'POST', headers: { ...HEADERS, Authorization: `Bearer ${appJwt()}` } },
   )
@@ -101,7 +139,7 @@ async function installationToken() {
 }
 
 async function dispatch(token) {
-  const response = await fetch(
+  const response = await fetchWithRetry(
     `${API}/repos/${REPO}/actions/workflows/${WORKFLOW}/dispatches`,
     {
       method: 'POST',

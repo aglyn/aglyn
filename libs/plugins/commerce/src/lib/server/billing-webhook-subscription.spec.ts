@@ -395,6 +395,54 @@ describe('storefront subscription sale record (AGL-1732)', () => {
   })
 
   /**
+   * AGL-4191: a subscriber who cancels in the billing portal keeps access to
+   * the period end and is not charged again. The record must say so, or the
+   * Subscriptions list and the account page promise a renewal.
+   */
+  it('records a cancellation at the period end, and clears it on a resume', async () => {
+    const status = (cancel: boolean) => ({
+      id: 'sub_1',
+      status: 'active',
+      cancel_at_period_end: cancel,
+      current_period_end: 1800000000,
+      metadata: { type: 'commerce-subscription', hostId: 'host-1' },
+    })
+    await deliver(status(true), 'customer.subscription.updated')
+    expect((subscriptionDocs()[0] as any).cancelAtPeriodEnd).toBe(true)
+    await deliver(status(false), 'customer.subscription.updated')
+    expect((subscriptionDocs()[0] as any).cancelAtPeriodEnd).toBe(false)
+  })
+
+  it('reads the period end from the item on newer Stripe API versions', async () => {
+    await deliver(
+      {
+        id: 'sub_1',
+        status: 'active',
+        items: { data: [{ current_period_end: 1800000000 }] },
+        metadata: { type: 'commerce-subscription', hostId: 'host-1' },
+      },
+      'customer.subscription.updated',
+    )
+    expect((subscriptionDocs()[0] as any).currentPeriodEndMs).toBe(1800000000000)
+  })
+
+  it('a deleted subscription is canceled and no longer "ending"', async () => {
+    await deliver(
+      {
+        id: 'sub_1',
+        status: 'canceled',
+        cancel_at_period_end: true,
+        current_period_end: 1800000000,
+        metadata: { type: 'commerce-subscription', hostId: 'host-1' },
+      },
+      'customer.subscription.deleted',
+    )
+    const stored = subscriptionDocs()[0] as any
+    expect(stored.status).toBe('canceled')
+    expect(stored.cancelAtPeriodEnd).toBe(false)
+  })
+
+  /**
    * A subscription session created before the AGL-1711 metadata snapshot
    * existed carries `quantity` and nothing else, so the unit price falls back
    * to what Stripe charged per unit. It must still store a coherent record

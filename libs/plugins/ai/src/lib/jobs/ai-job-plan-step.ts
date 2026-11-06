@@ -19,6 +19,7 @@ import { aiSiteKindOfInputs } from '../model/ai-site-kinds'
 import { aiSiteHomeArc, aiSiteHomeArcSentence, type AiSiteHomeArc } from '../model/ai-site-home-arcs'
 import { aiSiteSeed } from '../model/ai-site-look'
 import { AI_SITE_INSPIRATION_INPUT } from '../model/ai-site-inspiration'
+import { AI_SITE_STARTER_LOOK_INPUT } from '../model/ai-site-starter-look'
 import {
   aiSiteInspirationBriefHasFigures,
   aiSiteInspirationHomeOrder,
@@ -236,8 +237,9 @@ export function aiJobPlanPrompt(
 ): string {
   const lines = [`Job kind: ${job.kind}`, `Brief: ${job.brief.slice(0, AI_JOB_BRIEF_MAX_CHARS)}`]
   for (const [key, value] of Object.entries(job.inputs ?? {})) {
-    // The sites a person likes are read by code, never shown (AGL-3975).
-    if (key === AI_SITE_INSPIRATION_INPUT) continue
+    // The sites a person likes (AGL-3975) and an AI starter's look
+    // (AGL-4049) are read by code, never shown.
+    if (key === AI_SITE_INSPIRATION_INPUT || key === AI_SITE_STARTER_LOOK_INPUT) continue
     if (typeof value === 'string' || typeof value === 'number' || typeof value === 'boolean') {
       lines.push(`${key}: ${String(value)}`)
     }

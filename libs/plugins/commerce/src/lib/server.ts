@@ -303,7 +303,7 @@ registerPluginJob({
 })
 
 /**
- * The monthly 4G charge for Stripe Reader S710s (AGL-4038): each workspace
+ * The monthly 4G charge for S710 readers (AGL-4038): each workspace
  * whose readers had 4G in the month just ended is charged once, through
  * core's usage-invoice charge. Every six hours, so the charge goes out early
  * on the 1st and one that could not reach Stripe is tried again the same
@@ -316,7 +316,7 @@ registerPluginJob({
   name: 'pos-cellular-billing',
   intervalMinutes: 6 * 60,
   description:
-    'Charge each workspace for 4G on its Stripe Reader S710s for the month just ended, once (AGL-4038).',
+    'Charge each workspace for 4G on its S710 readers for the month just ended, once (AGL-4038).',
   lockdown: { scope: 'per-host' },
   handler: async (gate) => {
     if (!process.env.STRIPE_SECRET_KEY || !process.env.POS_CELLULAR_MONTHLY_COST_CENTS) return

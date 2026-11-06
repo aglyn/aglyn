@@ -28,11 +28,13 @@ import {
   Button,
   Card,
   CardContent,
+  Checkbox,
   Chip,
   Dialog,
   DialogActions,
   DialogContent,
   DialogTitle,
+  FormControlLabel,
   Link,
   MenuItem,
   Stack,
@@ -46,9 +48,12 @@ import {
   POS_HARDWARE_ANCHOR,
   POS_HARDWARE_MAX_PER_LINE,
   POS_HARDWARE_STATUS_LABELS,
+  posPlanPrompt,
   type PosHardwareOrderStatus,
   type PosHardwareShippingMethod,
 } from '../../model/pos-hardware'
+import { POS_HARDWARE_TERMS_SECTIONS, posHardwareTermsUrl } from '../../model/pos-hardware-terms'
+import { EntitlementUpsell, useCommerceEntitlement } from './entitlement-gate.component'
 import { newAttemptKey } from './pos/pos-api'
 import {
   openPosHardwareCheckout,
@@ -68,6 +73,7 @@ export const POS_HARDWARE_STATUS_COLOR: Record<
 > = {
   paid: 'info',
   ordered: 'info',
+  received: 'info',
   shipped: 'primary',
   delivered: 'success',
   registered: 'success',
@@ -109,6 +115,9 @@ export interface PosHardwareCardProps {
 const BUY_KEY_REASON =
   'Only a member with the "Buy point of sale hardware" permission can place an order. Ask an organization admin.'
 
+/** Why Check out waits on the two boxes below the summary (AGL-4038). */
+const TERMS_REASON = 'Accept the hardware terms of sale and confirm the hardware is for your business first.'
+
 /**
  * The Hardware card (AGL-4038): Stripe card readers and accessories sold by
  * the platform and shipped by Stripe straight to the store, with the store's
@@ -118,6 +127,11 @@ const BUY_KEY_REASON =
  * gate only the platform can lift, so naming it would point at a step nobody
  * on the workspace can take. The route answers `available: false` until
  * every price, the markup and the shipping figures are configured.
+ *
+ * ANYONE CAN BUY (AGL-4038): the shop is open on every plan. A workspace
+ * without the point of sale is prompted to add it, because a reader takes
+ * payments at the register: above the shop, and once an order has arrived,
+ * naming it. The prompt never switches Check out off.
  */
 export function PosHardwareCard({
   hostId,
@@ -132,9 +146,15 @@ export function PosHardwareCard({
   const [shippingMethod, setShippingMethod] = useState<PosHardwareShippingMethod | ''>('')
   const [busy, setBusy] = useState(false)
   const [returned, setReturned] = useState<'placed' | 'canceled' | null>(null)
+  // The terms of sale and business use, ticked before checkout (AGL-4038).
+  const [termsAccepted, setTermsAccepted] = useState(false)
+  const [businessUse, setBusinessUse] = useState(false)
   const uid = user?.uid ?? ''
   // The route's own door (AGL-4047): the register, or the key to buy.
   const mayVisit = canManagePos || canBuyHardware
+  // The point of sale, which a reader takes payments with (AGL-4038). Only
+  // `locked` prompts: a plan still loading prompts nobody.
+  const posPlan = useCommerceEntitlement(hostId, 'pos')
 
   useEffect(() => {
     if (!user || !mayVisit) return
@@ -241,10 +261,15 @@ export function PosHardwareCard({
   const attemptKey = useMemo(() => newAttemptKey(), [basketKey])
 
   const checkout = async () => {
-    if (!user || !shippingMethod || !lines.length) return
+    if (!user || !shippingMethod || !lines.length || !termsAccepted || !businessUse) return
     setBusy(true)
     try {
-      const { url } = await posHardwareCheckout(user, attemptKey, { hostId, lines, shippingMethod })
+      const { url } = await posHardwareCheckout(user, attemptKey, {
+        hostId,
+        lines,
+        shippingMethod,
+        hardwareTerms: { accepted: termsAccepted, businessUse },
+      })
       openPosHardwareCheckout(url)
     } catch (error) {
       enqueueSnackbar(
@@ -333,9 +358,26 @@ export function PosHardwareCard({
     [],
   )
 
+  /*
+   * Orders shipped from this card that have arrived, for the prompt. A reader
+   * bought from the platform's own store, at an event or online, is prompted
+   * on the Card readers to set up card instead, so it is not named twice.
+   */
+  const arrived = posPlan.locked
+    ? (orders ?? [])
+        .filter((order) => (order.source ?? 'online') === 'online' && (order.status === 'delivered' || order.status === 'registered'))
+        .map((order) => order.number)
+    : []
+  const planPrompt = (text: string) => (
+    <EntitlementUpsell planLabel={posPlan.planLabel} upgradeHref={posPlan.upgradeHref}>
+      {text}
+    </EntitlementUpsell>
+  )
+
   const ordersSection = (
     <Stack spacing={1}>
       <Typography variant="subtitle2">{'Your orders'}</Typography>
+      {arrived.length ? planPrompt(posPlanPrompt({ arrived })) : null}
       {orders && orders.length === 0 ? (
         <Typography variant="body2" color="text.secondary">
           {'No hardware orders yet.'}
@@ -396,11 +438,14 @@ export function PosHardwareCard({
     <CardDisplay
       id={POS_HARDWARE_ANCHOR}
       header={'Hardware'}
-      subheader={'Card readers from Stripe, shipped straight to you'}
+      subheader={'Card readers and accessories, set up and shipped to you'}
       help={pluginDocsHelp('posHardware', { anchor: '#buy-a-reader-from-aglyn' })}
       HeaderProps={{
         action: (
-          <BlockedControl blocked={!canBuyHardware} reason={BUY_KEY_REASON}>
+          <BlockedControl
+            blocked={!canBuyHardware || !termsAccepted || !businessUse}
+            reason={!canBuyHardware ? BUY_KEY_REASON : TERMS_REASON}
+          >
             <Button
               size="small"
               variant="contained"
@@ -425,8 +470,9 @@ export function PosHardwareCard({
             {'Checkout was canceled. Nothing was charged.'}
           </Alert>
         ) : null}
+        {posPlan.locked && !arrived.length ? planPrompt(posPlanPrompt()) : null}
         <Typography variant="body2" color="text.secondary">
-          {'Choose the readers and accessories you need. Stripe ships them to the address you enter at checkout, and you add each reader to a register on the POS devices card when it arrives.'}
+          {'Choose the readers and accessories you need. We set each reader up and ship your order to the address you enter at checkout. The delivery email says how to start taking payments with it.'}
         </Typography>
         <Box
           sx={{
@@ -496,6 +542,24 @@ export function PosHardwareCard({
         <Typography variant="caption" color="text.secondary">
           {'Ships to street addresses in the United States. P.O. boxes and military addresses are not accepted.'}
         </Typography>
+        <Stack>
+          <FormControlLabel
+            control={<Checkbox checked={termsAccepted} onChange={(event) => setTermsAccepted(event.target.checked)} />}
+            label={
+              <Typography variant="body2">
+                {'I accept the '}
+                <Link href={posHardwareTermsUrl()} target="_blank" rel="noopener noreferrer">
+                  {`hardware terms of sale (Terms, Sections ${POS_HARDWARE_TERMS_SECTIONS})`}
+                </Link>
+                {'.'}
+              </Typography>
+            }
+          />
+          <FormControlLabel
+            control={<Checkbox checked={businessUse} onChange={(event) => setBusinessUse(event.target.checked)} />}
+            label={<Typography variant="body2">{'I am buying this hardware for use in my business.'}</Typography>}
+          />
+        </Stack>
         {ordersSection}
       </Stack>
     </CardDisplay>

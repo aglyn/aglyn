@@ -97,7 +97,20 @@ import {
 import { raiseOrderEvent } from './order-events'
 import { handlePosStripeEvent } from './pos-terminal'
 import { notifyPosSaleCompleted } from './pos-sale'
+import { recordSellerStoreSaleHardware, sellerStoreOrderHardwareFields } from './pos-hardware-sale-fields'
 import { posOrderRefundStripeId } from './pos-order-refund-ids'
+
+/**
+ * A Stripe subscription's current period end, in seconds (AGL-4191). Older API
+ * versions carry it on the subscription; newer ones moved it to each item.
+ * Exported for the spec.
+ */
+export function subscriptionPeriodEnd(object: any): number | null {
+  const own = Number(object?.current_period_end)
+  if (Number.isFinite(own) && own > 0) return own
+  const item = Number(object?.items?.data?.[0]?.current_period_end)
+  return Number.isFinite(item) && item > 0 ? item : null
+}
 
 /**
  * Assigns unassigned license keys for a digital product (AGL-308):
@@ -2158,6 +2171,28 @@ const SELLER_SHARE_NOT_REVERSED_NOTE: Record<TransferReversalFailure, string> = 
  * every section is idempotent by doc key and self-selects on
  * `object.metadata.type`, exactly as the inline route sections did.
  */
+/**
+ * A Stripe address as an order stores it: only the parts Stripe filled.
+ * Stripe sends an empty part as `null`, and the Admin SDK here refuses an
+ * `undefined` value outright (no `ignoreUndefinedProperties`), so a part is
+ * left out rather than written as `undefined`: an address with no second
+ * line used to fail the whole order write.
+ */
+function stripeOrderAddress(name: unknown, address: any): CommerceModel.OrderAddress {
+  const parts: Record<string, unknown> = {
+    name,
+    line1: address?.line1,
+    line2: address?.line2,
+    city: address?.city,
+    state: address?.state,
+    postalCode: address?.postal_code,
+    country: address?.country,
+  }
+  return Object.fromEntries(
+    Object.entries(parts).filter(([, value]) => typeof value === 'string' && value !== ''),
+  ) as CommerceModel.OrderAddress
+}
+
 export const commerceBillingWebhookHandler: BillingWebhookHandler = async ({
   type,
   object,
@@ -2342,9 +2377,18 @@ export const commerceBillingWebhookHandler: BillingWebhookHandler = async ({
                   type === 'customer.subscription.deleted'
                     ? 'canceled'
                     : String(object?.status ?? 'active'),
-                currentPeriodEndMs: object?.current_period_end
-                  ? object.current_period_end * 1000
+                // Newer Stripe API versions keep the period on the item, not
+                // the subscription; either answers the same question.
+                currentPeriodEndMs: subscriptionPeriodEnd(object)
+                  ? Number(subscriptionPeriodEnd(object)) * 1000
                   : null,
+                // Cancelled in the billing portal: access runs to the period
+                // end and nothing more is charged (AGL-4191). Without this the
+                // account page and the Subscriptions list would promise a
+                // renewal that will not happen.
+                cancelAtPeriodEnd:
+                  type !== 'customer.subscription.deleted' &&
+                  object?.cancel_at_period_end === true,
               },
               { merge: true },
             )
@@ -3031,16 +3075,7 @@ export const commerceBillingWebhookHandler: BillingWebhookHandler = async ({
                 null,
               ...(invoiceShipping?.address
                 ? {
-                    shippingAddress: {
-                      name: invoiceShipping?.name ?? undefined,
-                      line1: invoiceShipping.address.line1 ?? undefined,
-                      line2: invoiceShipping.address.line2 ?? undefined,
-                      city: invoiceShipping.address.city ?? undefined,
-                      state: invoiceShipping.address.state ?? undefined,
-                      postalCode:
-                        invoiceShipping.address.postal_code ?? undefined,
-                      country: invoiceShipping.address.country ?? undefined,
-                    },
+                    shippingAddress: stripeOrderAddress(invoiceShipping?.name, invoiceShipping.address),
                   }
                 : {}),
               amountCents: paidCents,
@@ -3188,10 +3223,9 @@ export const commerceBillingWebhookHandler: BillingWebhookHandler = async ({
         if (!isOpeningInvoice && paidCents > 0) {
           const renewalEmail =
             object?.customer_email ?? soldSnapshot.get('customerEmail') ?? null
-          // A physical cycle now lands in Orders (AGL-1750), but the console
-          // still has no Subscriptions tab, so for a digital or service
-          // subscription this notification remains the only place a merchant
-          // learns the money arrived at all.
+          // A physical cycle lands in Orders (AGL-1750); every cycle, digital
+          // and service ones too, is listed under the subscription in
+          // Products → Subscriptions (AGL-4191), which this links to.
           const renewalPrice = `$${(paidCents / 100).toFixed(2)}${
             interval ? `/${interval}` : ''
           }`
@@ -3203,7 +3237,7 @@ export const commerceBillingWebhookHandler: BillingWebhookHandler = async ({
               `${renewalEmail ? `${String(renewalEmail)}'s` : 'A'} ` +
               `subscription to ${snapshot.name || 'a product'} on {site} ` +
               `renewed for ${renewalPrice}.`,
-            link: `/${invoiceHostId}/products`,
+            link: `/${invoiceHostId}/products/subscriptions?subscription=${encodeURIComponent(subscriptionId)}`,
           })
           // RFM (AGL-328): a subscriber in month 12 has paid twelve times, and
           // counting only the first charge ranks them as a one-purchase
@@ -3651,6 +3685,20 @@ export const commerceBillingWebhookHandler: BillingWebhookHandler = async ({
           console.error('commerce cart local fulfillment unreadable', String(object.id), error)
           return null
         })
+        // Card reader hardware sold online by the platform's own store
+        // (AGL-4038): marked, with the terms the buyer ticked, so it becomes
+        // a hardware order once written. Nothing on any other store.
+        const cartHardware = await sellerStoreOrderHardwareFields({
+          hostId: String(hostId),
+          lineItems,
+          products: productsById,
+          metadata: object?.metadata,
+          createdSeconds: object?.created,
+          orgIdOf: async () => {
+            const owner = await getOrgForHost(String(hostId))
+            return owner?.orgId ?? owner?.org?.id ?? null
+          },
+        })
         const created = await firestore.runTransaction(async (transaction) => {
           const [existing, counter] = await Promise.all([
             transaction.get(orderRef),
@@ -3785,15 +3833,7 @@ export const commerceBillingWebhookHandler: BillingWebhookHandler = async ({
             // billing address Stripe falls back to is not where it goes.
             ...(shipping?.address && cartLocalFulfillment?.fields.fulfillmentMethod !== 'pickup'
               ? {
-                  shippingAddress: {
-                    name: shipping?.name ?? undefined,
-                    line1: shipping.address.line1 ?? undefined,
-                    line2: shipping.address.line2 ?? undefined,
-                    city: shipping.address.city ?? undefined,
-                    state: shipping.address.state ?? undefined,
-                    postalCode: shipping.address.postal_code ?? undefined,
-                    country: shipping.address.country ?? undefined,
-                  },
+                  shippingAddress: stripeOrderAddress(shipping?.name, shipping.address),
                 }
               : {}),
             // How it reaches the buyer, and the list fields the pickup and
@@ -3802,6 +3842,7 @@ export const commerceBillingWebhookHandler: BillingWebhookHandler = async ({
             ...(couponCode ? { couponCode } : {}),
             amountCents: Number(object?.amount_total ?? 0),
             feeCents: Number(feeCents ?? 0),
+            ...cartHardware,
             createdAtMs: Date.now(),
             createdAt: firebaseAdmin.firestore.FieldValue.serverTimestamp(),
           }))
@@ -3812,6 +3853,11 @@ export const commerceBillingWebhookHandler: BillingWebhookHandler = async ({
         // the non-idempotent effects below (inventory / coupon / gift-card
         // decrements) that would otherwise double-apply.
         if (!created) return
+        // Its hardware order, by the register's own recorder (AGL-4038). A
+        // miss stays marked and the To attach sweep records it.
+        if (cartHardware.hardwareSalePending) {
+          await recordSellerStoreSaleHardware({ hostId: String(hostId), orderId: String(object.id) })
+        }
         const cartOrderLabel = CommerceModel.formatOrderNumber(
           { number: cartOrderNumber },
           String(object.id),
@@ -4711,15 +4757,7 @@ export const commerceBillingWebhookHandler: BillingWebhookHandler = async ({
                 : {}),
               ...(shipTo?.address
                 ? {
-                    shippingAddress: {
-                      name: shipTo.name ?? undefined,
-                      line1: shipTo.address.line1 ?? undefined,
-                      line2: shipTo.address.line2 ?? undefined,
-                      city: shipTo.address.city ?? undefined,
-                      state: shipTo.address.state ?? undefined,
-                      postalCode: shipTo.address.postal_code ?? undefined,
-                      country: shipTo.address.country ?? undefined,
-                    },
+                    shippingAddress: stripeOrderAddress(shipTo.name, shipTo.address),
                   }
                 : {}),
             },
@@ -5082,6 +5120,19 @@ export const commerceBillingWebhookHandler: BillingWebhookHandler = async ({
           console.error('commerce buy-now local fulfillment unreadable', String(object.id), error)
           return null
         })
+        // Card reader hardware sold online by the platform's own store
+        // (AGL-4038), as the cart branch marks it.
+        const buyNowHardware = await sellerStoreOrderHardwareFields({
+          hostId: String(hostId),
+          lineItems: buyNowLineItems.map((line) => ({ ...line, productId: String(productId) })),
+          products: new Map([[String(productId), liftedForSnapshot]]),
+          metadata: object?.metadata,
+          createdSeconds: object?.created,
+          orgIdOf: async () => {
+            const owner = await getOrgForHost(String(hostId))
+            return owner?.orgId ?? owner?.org?.id ?? null
+          },
+        })
         const created = await firestore.runTransaction(async (transaction) => {
           const [existing, counter] = await Promise.all([
             transaction.get(orderRef),
@@ -5129,15 +5180,7 @@ export const commerceBillingWebhookHandler: BillingWebhookHandler = async ({
             // billing address is not where a parcel goes.
             ...(object?.shipping_details?.address
               ? {
-                  shippingAddress: {
-                    name: object.shipping_details.name ?? undefined,
-                    line1: object.shipping_details.address.line1 ?? undefined,
-                    line2: object.shipping_details.address.line2 ?? undefined,
-                    city: object.shipping_details.address.city ?? undefined,
-                    state: object.shipping_details.address.state ?? undefined,
-                    postalCode: object.shipping_details.address.postal_code ?? undefined,
-                    country: object.shipping_details.address.country ?? undefined,
-                  },
+                  shippingAddress: stripeOrderAddress(object.shipping_details.name, object.shipping_details.address),
                 }
               : {}),
             // How it reaches the buyer, and the queue fields (AGL-3624).
@@ -5149,6 +5192,7 @@ export const commerceBillingWebhookHandler: BillingWebhookHandler = async ({
             feeCents: Number(feeCents ?? 0),
             customerEmail: object?.customer_details?.email ?? null,
             ...(couponCode ? { couponCode } : {}),
+            ...buyNowHardware,
             createdAt: firebaseAdmin.firestore.FieldValue.serverTimestamp(),
           }))
           return true
@@ -5156,6 +5200,10 @@ export const commerceBillingWebhookHandler: BillingWebhookHandler = async ({
         // Redelivery guard (AGL-498): skip the notification + fulfilment side
         // effects when this order already existed.
         if (!created) return
+        // Its hardware order, by the register's own recorder (AGL-4038).
+        if (buyNowHardware.hardwareSalePending) {
+          await recordSellerStoreSaleHardware({ hostId: String(hostId), orderId: String(object.id) })
+        }
         const buyNowOrderLabel = CommerceModel.formatOrderNumber(
           { number: buyNowOrderNumber },
           String(object.id),

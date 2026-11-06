@@ -27,16 +27,23 @@
 
 import { PLATFORM_BRAND_NAME } from '@aglyn/aglyn/app-utils/platform-brand'
 import { aiCreditRangeText } from './ai-credit-estimate'
+import { aiMediaCreditsPerPicture } from './ai-media-credits'
 import type { AiJobItemLedger, AiJobSummary } from './ai-jobs.types'
 import {
   AI_SITE_IMPORT_FRAME_SLOT,
+  AI_SITE_IMPORT_GENERATED_PICTURES_PER_PAGE,
+  AI_SITE_IMPORT_LAYOUT_KEPT,
+  AI_SITE_IMPORT_PLAN_FELL_BACK,
   AI_SITE_IMPORT_LEFT_OUT_COPY,
   AI_SITE_IMPORT_LEFT_OUT_REASONS,
   AI_SITE_IMPORT_DEFAULT_CHOICE,
   AI_SITE_IMPORT_UNREAD_REASONS,
   aiSiteImportChoiceOf,
+  aiSiteImportGeneratedPicturesOn,
   aiSiteImportNextWave,
   aiSiteImportPagesText,
+  aiSiteImportPlanAccepted,
+  aiSiteImportPlanAwaits,
   aiSiteImportQuoteText,
   aiSiteImportReadStops,
   aiSiteImportReadVerdictMessage,
@@ -46,6 +53,7 @@ import {
   aiSiteImportRunningWave,
   aiSiteImportWaveChoice,
   aiSiteImportWaveCreditRange,
+  aiSiteImportWaveIsGenerative,
   aiSiteImportWaveOwed,
   aiSiteImportWordingCredits,
   aiSiteImportWordingPages,
@@ -189,8 +197,16 @@ export interface AiSiteImportRowView {
    * "Copied as it is" or "Arranged by Aglyn AI", once the step has chosen;
    * "Arranged and reworded by Aglyn AI" once its wave improved its words, and
    * "Arranged by Aglyn AI · Words kept" for a policy page on such a wave (AGL-4152).
+   * Under a generative Improve it: "Redesigned by Aglyn AI · 2 new sections",
+   * or "Layout kept: the redesign did not pass".
    */
   build: string | null
+  /** "New: Why us, FAQ (4)": the sections a redesign added (AGL-4152). */
+  added?: string | null
+  /** "1 stock photo, 1 generated picture": the pictures a redesign took beside its own (AGL-4152). */
+  pictures?: string | null
+  /** A page the site's plan proposed (AGL-4152): it has no old page to open. */
+  isNew?: boolean
 }
 
 function rowState(row: AiJobItemLedger | undefined, active: boolean): AiSiteImportRowState {
@@ -230,6 +246,8 @@ export function aiSiteImportPhotosText(
 const BUILD_COPY = {
   copied: 'Copied as it is',
   arranged: `Arranged by ${PLATFORM_BRAND_NAME} AI`,
+  /** A main page redesigned from its ledger (AGL-4152). */
+  redesigned: `Redesigned by ${PLATFORM_BRAND_NAME} AI`,
   /** A main page whose wording was improved (AGL-4152). */
   reworded: `Arranged and reworded by ${PLATFORM_BRAND_NAME} AI`,
   /** A policy page on a wave that improved the wording of the rest: it keeps every word. */
@@ -237,11 +255,36 @@ const BUILD_COPY = {
 } as const
 
 /** A page's build as its row says it, with whether its words were improved where its wave improved wording (AGL-4152). */
-function buildCopy(page: AiSiteImportPage, choice: AiSiteImportChoice): string | null {
+function buildCopy(page: AiSiteImportPage, choice: AiSiteImportChoice, generative = false): string | null {
   if (!page.build) return null
+  // A redesign that did not pass (AGL-4152): today's compile drew the page.
+  if (page.redesign === 'layout-kept') return AI_SITE_IMPORT_LAYOUT_KEPT
+  if (page.redesign === 'redesigned') {
+    const added = page.added?.length ?? 0
+    return added ? `${BUILD_COPY.redesigned} · ${added} new ${added === 1 ? 'section' : 'sections'}` : BUILD_COPY.redesigned
+  }
+  if (generative && page.build === 'arranged' && page.wording === 'improved') return BUILD_COPY.redesigned
   if (page.build === 'arranged' && page.wording === 'improved') return BUILD_COPY.reworded
   if (page.build === 'arranged' && page.wording === 'kept' && choice.wording) return BUILD_COPY.wordsKept
   return BUILD_COPY[page.build]
+}
+
+/** "New: Why us, FAQ (4)": the sections a redesign added, as its row says (AGL-4152). */
+export function aiSiteImportAddedText(page: Pick<AiSiteImportPage, 'added'>): string | null {
+  const added = page.added ?? []
+  return added.length ? `New: ${added.map((section) => (section.items ? `${section.heading} (${section.items})` : section.heading)).join(', ')}` : null
+}
+
+/** "1 stock photo, 1 generated picture": what a redesign's pictures came from beside the page's own (AGL-4152). */
+export function aiSiteImportPicturesText(page: Pick<AiSiteImportPage, 'pictures'>): string | null {
+  const pictures = page.pictures
+  if (!pictures) return null
+  const parts = [
+    pictures.stock ? `${pictures.stock} stock ${pictures.stock === 1 ? 'photo' : 'photos'}` : '',
+    pictures.generated ? `${pictures.generated} generated ${pictures.generated === 1 ? 'picture' : 'pictures'}` : '',
+    pictures.unplaced.length ? `${pictures.unplaced.length} of your photos not placed` : '',
+  ].filter(Boolean)
+  return parts.length ? parts.join(', ') : null
 }
 
 /** What the row of a page whose words were improved says in place of its word count (AGL-4152). */
@@ -263,6 +306,7 @@ export function aiSiteImportWaveRows(
   }
   const rows: AiSiteImportRowView[] = []
   const choice = aiSiteImportWaveChoice(state, wave)
+  const generative = aiSiteImportWaveIsGenerative(state, wave)
   if (wave.frame && state.frame) {
     const row = items.get(AI_SITE_IMPORT_FRAME_SLOT)
     rows.push({
@@ -290,17 +334,21 @@ export function aiSiteImportWaveRows(
       to: page.slug === '/' ? '/' : `/${page.slug}`,
       state: rowState(row, active(row)),
       note: row?.failure?.message ?? row?.note ?? (page.refused ? AI_SITE_IMPORT_LEFT_OUT_COPY[page.refused] : null),
+      // What a generative Improve it says of a page beside its build (AGL-4152).
+      ...(aiSiteImportAddedText(page) ? { added: aiSiteImportAddedText(page) } : {}),
+      ...(aiSiteImportPicturesText(page) ? { pictures: aiSiteImportPicturesText(page) } : {}),
+      ...(page.origin === 'proposed' ? { isNew: true } : {}),
       photos: aiSiteImportPhotosText(page.photos),
       outputId: row?.outputs[0] ?? null,
       oldPage: page.url,
       // Beside the old page's own words, its main region's as the wave read them: its menu and footer are the site's (AGL-4084).
       // A page whose words were improved keeps its facts, not its count (AGL-4152).
-      words: page.brought
+      words: page.brought && page.origin !== 'proposed'
         ? page.wording === 'improved'
           ? AI_SITE_IMPORT_REWORDED_WORDS
           : `${page.brought.words.toLocaleString('en-US')} of ${(page.read?.words ?? page.words).toLocaleString('en-US')} words`
         : null,
-      build: buildCopy(page, choice),
+      build: buildCopy(page, choice, generative),
     })
   }
   return rows
@@ -314,7 +362,7 @@ export function aiSiteImportWaveRows(
 export function aiSiteImportWaveQuote(job: Pick<AiJobSummary, 'items' | 'siteImport'>, wave: AiSiteImportWave): string {
   const state = job.siteImport as AiSiteImportState
   const range = aiSiteImportWaveCreditRange(state, wave, job.items ?? null)
-  return aiSiteImportQuoteText(range, aiSiteImportWaveOwed(state, wave, job.items ?? null))
+  return aiSiteImportQuoteText(range, aiSiteImportWaveOwed(state, wave, job.items ?? null), aiSiteImportWaveIsGenerative(state, wave) ? { generative: true } : {})
 }
 
 /** What a wave cost, its pages' credits less what was given back. */
@@ -444,15 +492,33 @@ export const AI_SITE_IMPORT_FINISH_COPY = {
   change: 'Change',
 } as const
 
-/** The choice in a few words: "Keep my site", "Improve it", or "Improve it, and my wording". */
-export function aiSiteImportChoiceText(choice: AiSiteImportChoice): string {
+/**
+ * The same choice under a generative Improve it (AGL-4152): the improve option's
+ * and the switch's words; everything else stands. Only drawn under the flag.
+ */
+export const AI_SITE_IMPORT_FINISH_COPY_GENERATIVE = {
+  ...AI_SITE_IMPORT_FINISH_COPY,
+  improve: {
+    label: 'Improve it',
+    description: `${PLATFORM_BRAND_NAME} AI plans your menu and footer, and redesigns each page with your pictures and forms, in a theme built around your brand. It shows you the plan before anything is built.`,
+  },
+  wording: {
+    label: 'Also write new copy',
+    description: `${PLATFORM_BRAND_NAME} AI writes new headings, paragraphs and sections for your main pages from what your site says. It never makes up a name, number, price, date, testimonial, client, award, credential, address or guarantee. Off, every word stays as you wrote it, and your layout and menu are still redesigned.`,
+  },
+} as const
+
+/** The choice in a few words: "Keep my site", "Improve it", or "Improve it, and my wording"; under a generative Improve it, "Improve it, with new copy". */
+export function aiSiteImportChoiceText(choice: AiSiteImportChoice, options: { generative?: boolean } = {}): string {
   if (choice.finish === 'keep') return AI_SITE_IMPORT_FINISH_COPY.keep.label
-  return choice.wording ? `${AI_SITE_IMPORT_FINISH_COPY.improve.label}, and my wording` : AI_SITE_IMPORT_FINISH_COPY.improve.label
+  if (!choice.wording) return AI_SITE_IMPORT_FINISH_COPY.improve.label
+  return options.generative ? `${AI_SITE_IMPORT_FINISH_COPY.improve.label}, with new copy` : `${AI_SITE_IMPORT_FINISH_COPY.improve.label}, and my wording`
 }
 
-/** How a wave was built, as its heading says it: "Keep my site", "Improved", or "Improved, wording too". */
-export function aiSiteImportBuiltText(choice: AiSiteImportChoice): string {
+/** How a wave was built, as its heading says it: "Keep my site", "Improved", or "Improved, wording too"; under a generative Improve it, "Redesigned" or "Redesigned, new copy". */
+export function aiSiteImportBuiltText(choice: AiSiteImportChoice, options: { generative?: boolean } = {}): string {
   if (choice.finish === 'keep') return AI_SITE_IMPORT_FINISH_COPY.keep.label
+  if (options.generative) return choice.wording ? 'Redesigned, new copy' : 'Redesigned'
   return choice.wording ? 'Improved, wording too' : 'Improved'
 }
 
@@ -463,13 +529,14 @@ export function aiSiteImportBuiltText(choice: AiSiteImportChoice): string {
  */
 export function aiSiteImportWaveHeading(state: Pick<AiSiteImportState, 'finish' | 'wording'> | null | undefined, wave: AiSiteImportWave): string {
   if (!wave.startedAt) return wave.label
-  return `${wave.label} · ${aiSiteImportBuiltText(aiSiteImportWaveChoice(state, wave))}`
+  return `${wave.label} · ${aiSiteImportBuiltText(aiSiteImportWaveChoice(state, wave), wave.generative ? { generative: true } : {})}`
 }
 
 /** What a running wave's page says it does with each page, the way the wave is built (AGL-4152). */
-export function aiSiteImportRunningLede(choice: AiSiteImportChoice): string {
+export function aiSiteImportRunningLede(choice: AiSiteImportChoice, options: { generative?: boolean } = {}): string {
   const review = 'You review the wave when it is in.'
   if (choice.finish === 'keep') return `Each page keeps its layout and every word as you wrote it, in your site’s own look. ${review}`
+  if (options.generative && choice.wording) return `${PLATFORM_BRAND_NAME} AI redesigns each page and writes new copy from what your site says, making up no name, number, price or date. ${review}`
   return choice.wording
     ? `${PLATFORM_BRAND_NAME} AI redesigns each page and improves its wording, keeping every name, price, number, date, address, phone number and email as you wrote it. ${review}`
     : `${PLATFORM_BRAND_NAME} AI redesigns each page with its own words, pictures, menus and forms. ${review}`
@@ -508,4 +575,108 @@ export function aiSiteImportFinishFieldOf(state: Pick<AiSiteImportState, 'finish
 /** The choice a field asks for: its wording only under Improve it. */
 export function aiSiteImportFieldChoice(field: AiSiteImportFinishField): AiSiteImportChoice {
   return { finish: field.finish, wording: field.finish === 'improve' && field.wording }
+}
+
+/*------------------------------------------
+ * Your new site (AGL-4152)
+ *-----------------------------------------*/
+
+/** The "Your new site" panel's words: what the site is, its menu, its main button, its footer, and what its owner may switch. */
+export interface AiSiteImportPlanView {
+  what: string
+  audience: string
+  /** Each menu entry: its label and the pages under it; one page is a plain link. */
+  menu: Array<{ label: string; pages: string[] }>
+  /** "Book a visit → Contact". */
+  cta: string | null
+  footer: Array<{ label: string; pages: string[] }>
+  /** The page it proposes, whether it was kept or switched off. */
+  proposed: { title: string; purpose: string; address: string } | null
+  /** Whether the owner still decides: the plan waits on them. */
+  editable: boolean
+}
+
+/** The panel's fixed words, one place for its specs and its screen. */
+export const AI_SITE_IMPORT_PLAN_COPY_TEXT = {
+  heading: 'Your new site',
+  menu: 'Menu',
+  cta: 'Main button',
+  footer: 'Footer',
+  addPage: 'Add this new page',
+  addPageHelp: 'One new page, written from what your site says. It counts toward your plan’s page limit.',
+  pictures: 'Create pictures with AI where needed',
+  build: 'Build my new site',
+  whatsNew: 'What’s new',
+} as const
+
+/** The panel as a plan reads, or `null` with none: every import the flag is off for, and every plan that did not pass. */
+export function aiSiteImportPlanViewOf(state: AiSiteImportState | null | undefined): AiSiteImportPlanView | null {
+  const plan = state?.plan
+  if (!state || !plan) return null
+  const name = (id: string) => (plan.proposed?.draftId === id ? plan.proposed.title : (state.pages.find((page) => page.draftId === id)?.title ?? ''))
+  const named = (groups: ReadonlyArray<{ label: string; pages: string[] }>) => groups.map((group) => ({ label: group.label, pages: group.pages.map(name).filter(Boolean) })).filter((group) => group.pages.length)
+  const cta = plan.nav.primaryCta
+  const where = !cta ? '' : cta.target === 'phone' ? 'your phone number' : name(cta.target === 'form' ? (cta.page ?? '') : cta.target)
+  return {
+    what: plan.site.what,
+    audience: plan.site.audience,
+    menu: named(plan.nav.groups),
+    cta: cta && where ? `${cta.label} → ${where}` : null,
+    footer: named(plan.nav.footer),
+    proposed: plan.proposed && (aiSiteImportPlanAwaits(state) || plan.proposed.on) ? { title: plan.proposed.title, purpose: plan.proposed.purpose, address: `/${plan.proposed.slug}` } : null,
+    editable: aiSiteImportPlanAwaits(state),
+  }
+}
+
+/** What the plan that did not pass says, or `null`: a plan that passed, and every import with none asked. */
+export function aiSiteImportPlanFellBackText(state: Pick<AiSiteImportState, 'plan'> | null | undefined): string | null {
+  return state?.plan === null ? AI_SITE_IMPORT_PLAN_FELL_BACK : null
+}
+
+/** The credits a generated picture is quoted at, on a paid plan: an import is one. */
+export const aiSiteImportPictureCredits = (): number => aiMediaCreditsPerPicture('photo', undefined, '1K')
+
+/** What the generated pictures switch says it adds: how many at most, and what each costs, before it is on. */
+export function aiSiteImportPicturesSwitchText(state: AiSiteImportState): string {
+  const pages = state.pages.filter((page) => page.wording === 'improved' && !page.refused).length
+  const each = aiSiteImportPictureCredits()
+  const most = pages * AI_SITE_IMPORT_GENERATED_PICTURES_PER_PAGE
+  return `Only where your own photos and the stock library have nothing that fits: a page’s opening picture or a section’s lead, up to ${AI_SITE_IMPORT_GENERATED_PICTURES_PER_PAGE} a page. About ${each.toLocaleString('en-US')} AI credits each${most ? `, so at most ${(most * each).toLocaleString('en-US')} for this wave` : ''}. A picture that is not made costs nothing.`
+}
+
+/** Whether generated pictures are switched on now, for the panel's first draw. */
+export function aiSiteImportPlanFieldOf(state: AiSiteImportState | null | undefined): { addPage: boolean; pictures: boolean } {
+  return { addPage: state?.plan?.proposed?.on !== false, pictures: aiSiteImportGeneratedPicturesOn(state) }
+}
+
+/** Whether a plan's generated pictures switch means anything: only pages with new copy ask for a picture. */
+export function aiSiteImportPlanTakesPictures(state: Pick<AiSiteImportState, 'pages'>): boolean {
+  return state.pages.some((page) => page.wording === 'improved' && !page.refused)
+}
+
+/** The wave's quote as the plan's switches stand now (AGL-4152), before they are saved: with or without its new page, and its pictures. */
+export function aiSiteImportPlanQuote(job: Pick<AiJobSummary, 'items' | 'siteImport'>, field: { addPage: boolean; pictures: boolean }): string | null {
+  const state = job.siteImport ?? null
+  const plan = state?.plan
+  if (!state || !plan) return null
+  const asked: AiSiteImportState = { ...state, generatedPictures: field.pictures, plan: { ...plan, proposed: plan.proposed ? { ...plan.proposed, on: field.addPage } : null } }
+  const next = aiSiteImportPlanAccepted(asked, job.items ?? [])
+  const wave = aiSiteImportRunningWave(next.state)
+  return wave ? aiSiteImportWaveQuote({ items: next.items, siteImport: next.state }, wave) : null
+}
+
+/** One page's lines of a wave's "What's new" (AGL-4152): its new sections, and its pictures. */
+export interface AiSiteImportWhatsNewLine {
+  page: string
+  lines: string[]
+}
+
+/** A wave's "What's new" (AGL-4152): what its redesigns added, page by page. Empty on every other wave. */
+export function aiSiteImportWhatsNew(state: AiSiteImportState, wave: AiSiteImportWave): AiSiteImportWhatsNewLine[] {
+  return wave.slots.flatMap((slot) => {
+    const page = state.pages.find((entry) => entry.slot === slot)
+    if (!page || page.redesign !== 'redesigned') return []
+    const lines = [page.origin === 'proposed' ? 'A new page, written from what your site says' : '', aiSiteImportAddedText(page) ?? '', aiSiteImportPicturesText(page) ?? ''].filter(Boolean)
+    return lines.length ? [{ page: page.title, lines }] : []
+  })
 }

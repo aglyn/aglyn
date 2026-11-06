@@ -297,6 +297,12 @@ function SendEmailReplySwitch({
 export interface AutomationStepPickerOption {
   id: string
   name: string
+  /**
+   * What the picker shows, where it is more than the name (AGL-4047): a
+   * dataset is told apart from another of its name by who it is shared with.
+   * `name` stays what a step stores and matches by.
+   */
+  label?: string
 }
 
 /** Everything on the site a step can be pointed at. */
@@ -604,7 +610,7 @@ export function AutomationStepFields({
             >
               {datasetOptions.map((option) => (
                 <MenuItem key={option.id} value={option.id}>
-                  {option.name}
+                  {option.label ?? option.name}
                 </MenuItem>
               ))}
             </TextField>

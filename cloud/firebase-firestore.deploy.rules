@@ -4196,6 +4196,18 @@ allow update, delete: if isStaff() ||
 match /returns/{returnId} {
 allow read: if isStaff() || canReadHostSensitive(hostId);
 }
+
+
+
+
+
+
+match /subscriptions/{subscriptionId} {
+allow read: if isStaff() || canReadHostSensitive(hostId);
+}
+match /subscriptions/{subscriptionId}/invoices/{invoiceId} {
+allow read: if isStaff() || canReadHostSensitive(hostId);
+}
 match /orderWebhooks/{endpointId} {
 allow read: if isStaff() || canReadHostSensitive(hostId);
 }
@@ -4372,7 +4384,7 @@ subcollection != 'reviewTokens' &&
 (isStaff() || (isHostMember(hostId) &&
 !(subcollection in ['webhooks', 'orders', 'mediaTombstones', 'packageImports',
 'returns', 'orderWebhooks', 'orderWebhookSecrets', 'orderWebhookDeliveries', 'funnelJourneys', 'funnelResults',
-'checkIns', 'checkInDays'])));
+'checkIns', 'checkInDays', 'subscriptions'])));
 
 
 
@@ -4534,7 +4546,7 @@ subcollection != 'reviewTokens' && (isStaff() ||
 'printJobs', 'returns', 'orderWebhooks',
 'orderWebhookSecrets', 'orderWebhookDeliveries', 'funnels', 'funnelJourneys', 'funnelResults',
 'aiMemory', 'reviews', 'reviewTokens', 'checkIns', 'checkInDays',
-'waiverTitles', 'reservations', 'resources']) &&
+'waiverTitles', 'reservations', 'resources', 'subscriptions']) &&
 
 
 
@@ -4705,7 +4717,7 @@ subcollection != 'reviewTokens' && (isStaff() ||
 'printJobs', 'returns', 'orderWebhooks',
 'orderWebhookSecrets', 'orderWebhookDeliveries', 'funnels', 'funnelJourneys', 'funnelResults',
 'aiMemory', 'reviews', 'reviewTokens', 'checkIns', 'checkInDays',
-'waiverTitles', 'reservations', 'resources'])));
+'waiverTitles', 'reservations', 'resources', 'subscriptions'])));
 
 
 
@@ -4764,7 +4776,7 @@ subcollection != 'reviewTokens' && (isStaff() ||
 'posStaffPins', 'posOfflineSales', 'salesChannels', 'recordPages', 'printers', 'printJobs', 'returns',
 'orderWebhooks',
 'orderWebhookSecrets', 'orderWebhookDeliveries', 'funnels', 'funnelJourneys', 'funnelResults', 'reviews', 'reviewTokens',
-'checkIns', 'checkInDays', 'waiverTitles', 'reservations', 'resources'])));
+'checkIns', 'checkInDays', 'waiverTitles', 'reservations', 'resources', 'subscriptions'])));
 }
 
 

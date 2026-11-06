@@ -127,6 +127,7 @@ import {
   posHardwareSaleRecord,
   type PosHardwareOrder,
   type PosHardwareSaleRecord,
+  type PosHardwareUnit,
 } from '../model/pos-hardware'
 import {
   COMMERCE_POS_HARDWARE_CANCELED_AFTER_ORDERING,
@@ -207,14 +208,23 @@ function response() {
   return { res, result }
 }
 
+const ACCEPTED_TERMS = { accepted: true, businessUse: true }
+
 async function shop(body: Record<string, unknown>, options: { token?: string; attemptKey?: string } = {}) {
   const { res, result } = response()
   const req: PluginApiRequest = {
     method: 'POST',
     query: {},
-    body: { hostId: 'host-1', ...body },
+    body: {
+      hostId: 'host-1',
+      // A checkout carries the terms of sale and business use, both ticked
+      // (AGL-4038), unless the test says otherwise.
+      ...(body['action'] === 'checkout' && !('hardwareTerms' in body) ? { hardwareTerms: ACCEPTED_TERMS } : {}),
+      ...body,
+    },
     headers: {
       authorization: `Bearer ${options.token ?? 'manager'}`,
+      'user-agent': 'Mozilla/5.0 (test)',
       ...(options.attemptKey ? { 'idempotency-key': options.attemptKey } : {}),
     },
     cookies: {},
@@ -281,6 +291,11 @@ function paidSession(overrides: Record<string, unknown> = {}) {
 }
 
 const ORDER_ID = 'hw_0123456789abcdef0123'
+/** The order's two readers, their serials recorded: set up, so it may ship (AGL-4038). */
+const SET_UP_UNITS: PosHardwareUnit[] = [
+  { sku: 'stripe-reader-s710', serialNumber: 'WSC1', readerId: null, hostId: null, registeredAtMs: null },
+  { sku: 'stripe-reader-m2', serialNumber: 'STRM1', readerId: null, hostId: null, registeredAtMs: null },
+]
 const ORDER_PATH = `orgs/org-1/hardwareOrders/${ORDER_ID}`
 const SALE_PATH = `posHardwareSales/${ORDER_ID}`
 
@@ -484,6 +499,164 @@ describe('the shop route', () => {
     expect(stripeCalls).toHaveLength(0)
   })
 
+  it.each([
+    ['no answer at all', undefined],
+    ['the terms without business use', { accepted: true, businessUse: false }],
+    ['business use without the terms', { accepted: false, businessUse: true }],
+    ['a truthy string for each', { accepted: 'yes', businessUse: 'yes' }],
+  ])('refuses a checkout with %s, in a plain sentence, before Stripe (AGL-4038)', async (_label, hardwareTerms) => {
+    const answer = await shop(
+      { action: 'checkout', lines: [{ sku: 'stripe-reader-m2', quantity: 1 }], shippingMethod: 'standard', hardwareTerms },
+      { attemptKey: 'attempt-terms' },
+    )
+    expect(answer.status).toBe(400)
+    expect(answer.body.needsHardwareTerms).toBe(true)
+    expect(answer.body.error).toBe(
+      'To buy card reader hardware, accept the hardware terms of sale (Terms, Sections 4.26–4.32) and confirm you are buying it for your business.',
+    )
+    expect(stripeCalls).toHaveLength(0)
+  })
+
+  it('carries the acceptance on the session and taxes every line as tangible goods (AGL-4038)', async () => {
+    await shop(
+      {
+        action: 'checkout',
+        lines: [
+          { sku: 'stripe-reader-s710', quantity: 1 },
+          { sku: 'stripe-reader-m2', quantity: 2 },
+        ],
+        shippingMethod: 'standard',
+      },
+      { attemptKey: 'attempt-tax' },
+    )
+    const [call] = stripeCalls
+    expect(call.params.get('line_items[0][price_data][product_data][tax_code]')).toBe('txcd_99999999')
+    expect(call.params.get('line_items[1][price_data][product_data][tax_code]')).toBe('txcd_99999999')
+    expect(call.params.get('metadata[hardwareTermsVersion]')).toBe('v21')
+    expect(call.params.get('metadata[hardwareTermsBusinessUse]')).toBe('true')
+    expect(call.params.get('metadata[hardwareTermsUserAgent]')).toBe('Mozilla/5.0 (test)')
+    // Nothing that changes between two presses of one attempt rides the
+    // session, so Stripe replays the first one rather than refusing the key.
+    await shop(
+      {
+        action: 'checkout',
+        lines: [
+          { sku: 'stripe-reader-s710', quantity: 1 },
+          { sku: 'stripe-reader-m2', quantity: 2 },
+        ],
+        shippingMethod: 'standard',
+      },
+      { attemptKey: 'attempt-tax' },
+    )
+    expect(stripeCalls[1].params.toString()).toBe(call.params.toString())
+    expect(stripeCalls[1].key).toBe(call.key)
+  })
+
+  describe('one price with the platform’s own store (AGL-4038)', () => {
+    const SELLER_ENV = {
+      [POS_HARDWARE_ENV.inPersonEnabled]: 'true',
+      [POS_HARDWARE_ENV.sellerHostId]: 'seller-host',
+      [POS_HARDWARE_ENV.sellerOrgId]: 'seller-org',
+    }
+    const product = (sku: string, priceUsd: number, extra: Record<string, unknown> = {}) => ({
+      name: sku,
+      status: 'active',
+      hardwareSku: sku,
+      variants: [{ id: 'default', priceUsd }],
+      ...extra,
+    })
+
+    beforeEach(() => setShopEnv({ ...SHOP_ENV, ...SELLER_ENV }))
+
+    it('quotes and charges the price the store lists, so the card never differs from the page', async () => {
+      fakeDocs.set('hosts/seller-host/products/p-s710', product('stripe-reader-s710', 130.5))
+      const catalog = await shop({ action: 'catalog' })
+      expect(catalog.body.offers.map((offer: any) => [offer.sku, offer.unitCents])).toEqual([
+        ['stripe-reader-s710', 13_050],
+        // Not listed in the store: the marked-up price, as before.
+        ['stripe-reader-m2', 7_670],
+      ])
+      await shop(
+        { action: 'checkout', lines: [{ sku: 'stripe-reader-s710', quantity: 1 }], shippingMethod: 'standard' },
+        { attemptKey: 'attempt-listed' },
+      )
+      expect(stripeCalls[0].params.get('line_items[0][price_data][unit_amount]')).toBe('13050')
+      expect(stripeCalls[0].params.get('metadata[lines]')).toBe('stripe-reader-s710*1*13050')
+    })
+
+    it('takes the lower of two listings, and ignores drafts and other stores', async () => {
+      fakeDocs.set('hosts/seller-host/products/p-1', product('stripe-reader-s710', 140))
+      fakeDocs.set('hosts/seller-host/products/p-2', product('stripe-reader-s710', 135))
+      fakeDocs.set('hosts/seller-host/products/p-3', product('stripe-reader-s710', 101, { status: 'draft' }))
+      fakeDocs.set('hosts/host-1/products/p-4', product('stripe-reader-s710', 101))
+      const catalog = await shop({ action: 'catalog' })
+      expect(catalog.body.offers[0]).toMatchObject({ sku: 'stripe-reader-s710', unitCents: 13_500 })
+    })
+
+    it('never sells below Stripe’s cost: a listing under it keeps the marked-up price', async () => {
+      fakeDocs.set('hosts/seller-host/products/p-s710', product('stripe-reader-s710', 99.99))
+      const catalog = await shop({ action: 'catalog' })
+      expect(catalog.body.offers[0]).toMatchObject({ sku: 'stripe-reader-s710', unitCents: 13_000 })
+    })
+  })
+
+  describe('on a plan without the point of sale (AGL-4038): anyone can buy', () => {
+    beforeEach(() => {
+      mockPlan = 'starter'
+    })
+
+    it('browses, checks out, gets the order recorded by the webhook, and sees it under its orders', async () => {
+      const catalog = await shop({ action: 'catalog' })
+      expect(catalog.status).toBe(200)
+      expect(catalog.body.available).toBe(true)
+      const checkout = await shop(
+        { action: 'checkout', lines: [{ sku: 'stripe-reader-s710', quantity: 1 }, { sku: 'stripe-reader-m2', quantity: 1 }], shippingMethod: 'standard' },
+        { attemptKey: 'attempt-no-plan' },
+      )
+      expect(checkout.status).toBe(200)
+      expect(checkout.body.url).toBe('https://checkout.stripe.com/c/pay/cs_test_1')
+      const session = stripeCalls.find((call) => call.path === 'checkout/sessions')
+      const orderId = String(session?.params.get('metadata[orderId]'))
+      expect(orderId).toBe(posHardwareOrderId('org-1', 'host-1', 'attempt-no-plan'))
+      // Stripe says it is paid: the webhook records the order as for any workspace.
+      const recorded = await posHardwareBillingWebhookHandler({
+        type: 'checkout.session.completed',
+        object: paidSession({ metadata: { ...paidSession().metadata, orderId } }),
+        event: { type: 'checkout.session.completed', data: { object: {} } },
+      })
+      expect(recorded).toEqual({ claimed: true, hostId: 'host-1' })
+      expect(fakeDocs.get(`orgs/org-1/hardwareOrders/${orderId}`)).toMatchObject({ orgId: 'org-1', status: 'paid' })
+      const orders = await shop({ action: 'orders' })
+      expect(orders.status).toBe(200)
+      expect(orders.body.orders.map((order: any) => [order.id, order.status])).toEqual([[orderId, 'paid']])
+      // A return can be asked for, and the readers waiting to be set up read, without it too.
+      expect((await shop({ action: 'waiting' })).status).toBe(200)
+      expect((await shop({ action: 'request-return', orderId })).status).not.toBe(403)
+    })
+
+    it('still refuses a member without the buy key, naming the permission, before Stripe', async () => {
+      mockBuyHardware = false
+      const refused = await shop(
+        { action: 'checkout', lines: [{ sku: 'stripe-reader-m2', quantity: 1 }], shippingMethod: 'standard' },
+        { attemptKey: 'attempt-no-plan-denied' },
+      )
+      expect(refused.status).toBe(403)
+      expect(refused.body.error).toBe('Your role does not include "Buy point of sale hardware" — ask an organization admin')
+      expect(stripeCalls).toHaveLength(0)
+      // And someone who may neither work the register nor buy is shut out of the shop.
+      mockManagePos = false
+      expect((await shop({ action: 'catalog' })).status).toBe(403)
+    })
+
+    it('still asks the plan to set a reader up on a store', async () => {
+      for (const action of ['choose-store', 'mark-set-up']) {
+        const answer = await shop({ action, orderId: ORDER_ID })
+        expect(answer.status).toBe(403)
+        expect(answer.body.error).toBe('POS requires the Pro plan or above')
+      }
+    })
+  })
+
   it('lists this site’s orders without Stripe ids', async () => {
     fakeDocs.set(ORDER_PATH, { hostId: 'host-1', status: 'shipped', totalCents: 100, stripePaymentIntentId: 'pi_secret', lines: [] })
     fakeDocs.set('orgs/org-1/hardwareOrders/hw_ffffffffffffffffffff', { hostId: 'host-2', status: 'paid', lines: [] })
@@ -610,6 +783,24 @@ describe('the webhook', () => {
     expect(mockSendEmail).not.toHaveBeenCalled()
   })
 
+  it('writes the terms of sale the buyer ticked onto the order, dated when the session was made (AGL-4038)', async () => {
+    const session = paidSession({ created: 1_762_300_000 })
+    ;(session.metadata as Record<string, string>)['hardwareTermsVersion'] = 'v21'
+    ;(session.metadata as Record<string, string>)['hardwareTermsBusinessUse'] = 'true'
+    ;(session.metadata as Record<string, string>)['hardwareTermsIp'] = '203.0.113.9'
+    await deliver(session)
+    expect((fakeDocs.get(ORDER_PATH) as PosHardwareOrder).termsAcceptance).toEqual({
+      version: 'v21',
+      sections: '4.26–4.32',
+      method: 'online',
+      atMs: 1_762_300_000_000,
+      staffUid: null,
+      ip: '203.0.113.9',
+      userAgent: null,
+      businessUse: true,
+    })
+  })
+
   it('ignores every other session and event', async () => {
     expect(await deliver(paidSession({ metadata: { type: 'commerce-cart' } }))).toBeUndefined()
     expect(await deliver(paidSession(), 'checkout.session.expired')).toBeUndefined()
@@ -701,7 +892,7 @@ describe('the staff route', () => {
   })
 
   it('needs a tracking number to mark an order shipped, then emails the buyer once', async () => {
-    seedOrder({ status: 'ordered' })
+    seedOrder({ status: 'received', units: SET_UP_UNITS, serialNumbers: ['WSC1', 'STRM1'] })
     const bare = await staff('staff-super', {
       method: 'POST',
       body: { action: 'update', orgId: 'org-1', orderId: ORDER_ID, status: 'shipped' },
@@ -781,7 +972,7 @@ describe('the staff route', () => {
   })
 
   it('blocks shipping while a refund is in progress', async () => {
-    seedOrder({ status: 'ordered', ...({ refundRequestedAtMs: 5 } as object) })
+    seedOrder({ status: 'received', units: SET_UP_UNITS, ...({ refundRequestedAtMs: 5 } as object) })
     const answer = await staff('staff-super', {
       method: 'POST',
       body: { action: 'update', orgId: 'org-1', orderId: ORDER_ID, status: 'shipped', tracking: { carrier: 'UPS', number: '1Z' } },
@@ -945,6 +1136,14 @@ describe('an account erasure of the buyer (AGL-4038)', () => {
     })
     await staff('staff-super', {
       method: 'POST',
+      body: { action: 'update', orgId: 'org-1', orderId: ORDER_ID, status: 'received' },
+    })
+    await staff('staff-super', {
+      method: 'POST',
+      body: { action: 'serials', orgId: 'org-1', orderId: ORDER_ID, serials: ['WSC1', 'STRM1'] },
+    })
+    await staff('staff-super', {
+      method: 'POST',
       body: { action: 'update', orgId: 'org-1', orderId: ORDER_ID, tracking: { carrier: 'UPS', number: '1Z 999' } },
     })
     // Shipped, so the closure cancels nothing and only the redaction is left.
@@ -1100,10 +1299,17 @@ describe('closing a workspace or the buying account with an unshipped order (AGL
   const sale = () => fakeDocs.get(SALE_PATH) as PosHardwareSaleRecord
 
   /** Paid, and, for `ordered`, placed with Stripe by staff. */
-  async function placeOrder(status: 'paid' | 'ordered' | 'shipped' | 'delivered' | 'registered') {
+  async function placeOrder(status: 'paid' | 'ordered' | 'received' | 'shipped' | 'delivered' | 'registered') {
     await deliver(paidSession())
-    const steps = ['ordered', 'shipped', 'delivered', 'registered']
+    const steps = ['ordered', 'received', 'shipped', 'delivered', 'registered']
     for (const step of steps.slice(0, steps.indexOf(status) + 1)) {
+      // Set up before it ships (AGL-4038): each reader's serial recorded.
+      if (step === 'shipped') {
+        await staff('staff-super', {
+          method: 'POST',
+          body: { action: 'serials', orgId: 'org-1', orderId: ORDER_ID, serials: ['WSC1', 'STRM1'] },
+        })
+      }
       await staff('staff-super', {
         method: 'POST',
         body: {
@@ -1171,7 +1377,7 @@ describe('closing a workspace or the buying account with an unshipped order (AGL
       context: {
         orderNumber: 'HW-012345',
         amount: expect.stringContaining('231.20'),
-        items: '1 × Stripe Reader S710, 1 × Stripe Reader M2',
+        items: '1 × Touchscreen reader, 4G-capable (S710), 1 × Pocket reader (M2)',
         reason: 'its workspace org-1 was deleted',
         stripeOrder: ' (Stripe order thor_1)',
       },
