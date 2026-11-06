@@ -63,7 +63,6 @@ const status = (overrides: Partial<AccountingStatusResponse> = {}): AccountingSt
 const connection = (overrides: Partial<AccountingConnectionView> = {}): AccountingConnectionView => ({
   provider: 'quickbooks',
   status: 'connected',
-  tenantId: '9130',
   tenantName: 'Sandbox Company',
   homeCurrency: 'USD',
   multiCurrency: false,

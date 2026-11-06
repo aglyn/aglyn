@@ -50,6 +50,7 @@ import {
   withoutCaretStops,
 } from '../utils/in-place-edit-surface'
 import { inlineTextEdit } from '../utils/inline-text-edit.store'
+import { writeDataTableCell } from '../utils/table-cell-edit'
 import {
   RICH_COMMANDS,
   richTextCommandGroups,
@@ -173,6 +174,7 @@ export const InlineTextEditorComponent = observer(
     const node = inlineTextEdit.node
     const rect = inlineTextEdit.rect
     const propTarget = inlineTextEdit.propTarget
+    const cellTarget = inlineTextEdit.cellTarget
     // Follows the element as the canvas scrolls or resizes (AGL-1644). Called
     // unconditionally, above the `!node || !rect` bail-out further down, so the
     // hook order is stable whether or not an edit is open.
@@ -277,7 +279,10 @@ export const InlineTextEditorComponent = observer(
     // A prop edit is formatted when every element the prop fills draws
     // markup (decided where the edit opens): its markup rides the instance's
     // own `propHtml`, as a node's rides `html`.
-    const rich = propTarget
+    // A Table cell stores plain text, so its edit is never formatted.
+    const rich = cellTarget
+      ? false
+      : propTarget
       ? Boolean(propTarget.rich)
       : ((node?.componentSchema?.flags?.richTextEditable ??
           FEATURE_FLAG.DISABLED) &
@@ -381,7 +386,9 @@ export const InlineTextEditorComponent = observer(
       savedRangeRef.current = null
       seededRef.current = false
       const props = { ...node.props, ...node.resolvedProps } as any
-      const text = propTarget
+      const text = cellTarget
+        ? cellTarget.initialText
+        : propTarget
         ? propTarget.initialText
         : typeof props?.children === 'string'
           ? (props.children as string)
@@ -467,7 +474,7 @@ export const InlineTextEditorComponent = observer(
         seededRef.current = true
       })
       return () => cancelAnimationFrame(raf)
-    }, [node, rich, propTarget, anchor])
+    }, [node, rich, propTarget, cellTarget, anchor])
 
     /**
      * Writes `next` only when it is a different document (AGL-2486).
@@ -550,7 +557,24 @@ export const InlineTextEditorComponent = observer(
           if (plain === '\n') plain = ''
         }
         const target = inlineTextEdit.propTarget
-        if (plain !== undefined && target) {
+        const cell = inlineTextEdit.cellTarget
+        if (plain !== undefined && cell) {
+          // One Table cell: rewrite that cell inside the grid string, and
+          // leave every other cell, the alignments and the rest of the
+          // props as they were.
+          const stored = (current.props as Record<string, unknown> | undefined)?.[
+            cell.attribute
+          ]
+          nextWrite = {
+            ...toJS(current.props),
+            [cell.attribute]: writeDataTableCell(
+              stored,
+              cell.row,
+              cell.column,
+              plain,
+            ),
+          }
+        } else if (plain !== undefined && target) {
           // Instance prop override (AGL-1304): the edit rides the
           // INSTANCE's nested propValues, never the grafted leaf (which
           // is not a canvas node). An emptied value REMOVES the key —

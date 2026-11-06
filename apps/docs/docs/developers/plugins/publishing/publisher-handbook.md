@@ -292,6 +292,21 @@ every installer who reads it on your listing's changelog tab before
 deciding to update. On a **first** version there is nothing to compare
 against — say what the plugin does instead, or leave it empty.
 
+### Connection credentials {#connection-credentials}
+
+A plugin whose manifest declares `connections` signs site owners in to another service
+with **your** OAuth app. Once the listing is published, its page in the marketplace has a
+**Connection credentials** card for each declared connection:
+
+- Register the **redirect URI** the card shows at the provider, exactly as shown.
+- Enter the app's **client ID** and **client secret** and press **Save**. Neither is ever
+  shown again: the card only says **Set** or **Not set**. **Replace** enters a new pair
+  and **Clear** removes it.
+
+Until a connection's credentials are set, every site that installs the plugin sees
+that connection as waiting on the publisher. Setting them needs the **Set a listing’s
+connection credentials** permission in the publishing workspace.
+
 ### Before you publish
 
 The last section of the page asks you to confirm a short checklist, in

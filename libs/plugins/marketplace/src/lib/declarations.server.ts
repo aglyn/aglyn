@@ -17,6 +17,7 @@
 
 // The registry from its own module, not the plugin-manager barrel: boot needs
 // the registry and nothing else.
+import { registerVariableComputer } from '@aglyn/aglyn/plugin-manager/computed-variables'
 import { registerCustomFieldType } from '@aglyn/aglyn/plugin-manager/custom-fields'
 import {
   listPluginOrgErasers,
@@ -24,7 +25,9 @@ import {
 } from '@aglyn/aglyn/plugin-manager/plugin-org-erasure'
 import { registerPluginRevocationReader } from '@aglyn/aglyn/plugin-manager/plugin-revocations'
 import { registerPluginSiteResourceEraser } from '@aglyn/aglyn/plugin-manager/plugin-site-resources'
+import { registerPluginSiteCspSource } from '@aglyn/aglyn/plugin-manager/plugin-site-csp'
 import { registerPluginSiteStarterSource } from '@aglyn/aglyn/plugin-manager/plugin-site-starters'
+import { registerSitePageEnricherService } from '@aglyn/aglyn/plugin-manager/site-page-enricher-services'
 import { BUNDLE_ID } from './constants/bundle-common'
 import { RATING_FIELD } from './model/rating-field'
 
@@ -119,6 +122,43 @@ export function registerMarketplaceServerDeclarations(): void {
       installed: async (choice, viewer, site) => (await starters()).installed(choice, viewer, site),
       describe: async (choice, viewer) => (await starters()).describe(choice, viewer),
     },
+    { pluginId: BUNDLE_ID },
+  )
+  registerPluginConnectionsSite()
+}
+
+/** The site's readers of a site's declared connections (AGL-4195), loaded with their first use. */
+const siteRecords = () => import('./server/connections/site-records-platform')
+
+/**
+ * What a published site shows of its plugins' declared connections
+ * (AGL-4195), registered wherever these declarations run and used by the
+ * tenant's page render and policy verdict:
+ *
+ *   - the page enricher hands each signed element on the page its own
+ *     listing's connection records, server-rendered; it reads nothing on a
+ *     page without a marketplace element;
+ *   - the variable computer gives each record's declared summary fields to
+ *     the page as `{{var:…}}` values;
+ *   - the CSP source admits the image hosts the site's signed plugins
+ *     declare, on those sites only.
+ *
+ * All three go through the plugin-service registry, which `instrumentation.ts`
+ * and the page route share (a module-scope list filled at boot is empty in
+ * the route, AGL-3947), and each names this plugin as its owner, so the
+ * page's "who contributed" narrowing still holds. Registering again replaces.
+ */
+function registerPluginConnectionsSite(): void {
+  registerSitePageEnricherService(
+    async (context) => (await siteRecords()).connectionRecordsEnricher(context),
+    { pluginId: BUNDLE_ID, key: 'connection-records' },
+  )
+  registerVariableComputer(
+    { prepare: async (hostId) => (await siteRecords()).connectionVariableComputer.prepare(hostId) },
+    { pluginId: BUNDLE_ID },
+  )
+  registerPluginSiteCspSource(
+    { hosts: async (input) => (await siteRecords()).pluginImageHostsSource.hosts(input) },
     { pluginId: BUNDLE_ID },
   )
 }

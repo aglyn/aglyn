@@ -446,6 +446,13 @@ export const PERSONAL_DATA_SOURCES: readonly ExportSourceSpec[] = [
     note: 'Replay keys. The document id is a SHA-256 of the org id and the caller’s Idempotency-Key, and the row names a record id and nothing about a person. Disclosed as a COUNT so the export does not silently omit a collection the erasure destroys.',
   },
   {
+    collection: 'pluginConnectionCredentials',
+    keyedBy: 'field',
+    subjects: ['org'],
+    exported: true,
+    note: 'EXISTENCE ONLY for the credential — the OAuth app a publishing workspace registered for each declared connection of its marketplace listing (AGL-4193): the listing and connection ids, and when and by which member the pair was last set. The sealed client secret carries `secret` in its name and is redacted (see redactSecrets); the sealed client id is named as an id, which defuses the shape gate, so the export redacts it explicitly. The document id is the listing id and the connection id, derived from no secret.',
+  },
+  {
     collection: 'stripeCustomers',
     keyedBy: 'field',
     subjects: ['org'],
@@ -1221,6 +1228,19 @@ export async function exportOrgData(
 
   // Where each short tracking link the org's sequences sent points (AGL-3297).
   data['outreachLinks'] = await readByField(db, 'outreachLinks', 'orgId', orgId)
+
+  // A marketplace listing's OAuth app per declared connection (AGL-4193),
+  // keyed by the publishing workspace's `orgId`. `sealedClientSecret` is
+  // withheld by `redactSecrets` on its name; `sealedClientId` is named as an
+  // id, which defuses the shape gate, so it is withheld here by name.
+  data['pluginConnectionCredentials'] = (
+    await readByField(db, 'pluginConnectionCredentials', 'orgId', orgId)
+  ).map((row) => {
+    const fields = row.data as Record<string, unknown> | null
+    return fields && 'sealedClientId' in fields
+      ? { ...row, data: { ...fields, sealedClientId: redactedMarker(true) } }
+      : row
+  })
 
   // Shipping (AGL-3612), tax services (AGL-3631), marketing platforms
   // (AGL-3639) and help desks (AGL-3824): top-level and keyed by `orgId`, the bound their

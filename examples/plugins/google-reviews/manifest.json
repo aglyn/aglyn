@@ -1,0 +1,110 @@
+{
+  "id": "google-reviews",
+  "name": "Google reviews",
+  "version": "1.0.0",
+  "entry": "plugin.bundle.mjs",
+  "hostAbi": 1,
+  "description": "Show your Google rating and reviews on your site, kept up to date from your Google Business Profile.",
+  "capabilities": {
+    "network": [],
+    "events": [],
+    "imageHosts": ["lh3.googleusercontent.com"]
+  },
+  "connections": [
+    {
+      "id": "google",
+      "provider": "google",
+      "label": "Google Business Profile",
+      "description": "Show your Google rating and reviews on your site.",
+      "authorizationUrl": "https://accounts.google.com/o/oauth2/v2/auth",
+      "tokenUrl": "https://oauth2.googleapis.com/token",
+      "revocationUrl": "https://oauth2.googleapis.com/revoke",
+      "scopes": ["https://www.googleapis.com/auth/business.manage"],
+      "authParams": { "access_type": "offline", "prompt": "consent" },
+      "tokenAuthMethod": "body",
+      "apiHosts": [
+        "mybusinessaccountmanagement.googleapis.com",
+        "mybusinessbusinessinformation.googleapis.com",
+        "mybusiness.googleapis.com"
+      ],
+      "resources": [
+        {
+          "id": "accounts",
+          "label": "Account",
+          "request": {
+            "method": "GET",
+            "url": "https://mybusinessaccountmanagement.googleapis.com/v1/accounts",
+            "query": { "pageSize": "20" },
+            "itemsPath": "accounts",
+            "pagination": { "cursorPath": "nextPageToken", "cursorParam": "pageToken", "maxPages": 5 }
+          },
+          "idPath": "name",
+          "labelPath": "accountName",
+          "maxItems": 100
+        },
+        {
+          "id": "locations",
+          "label": "Location",
+          "request": {
+            "method": "GET",
+            "url": "https://mybusinessbusinessinformation.googleapis.com/v1/{{resource.accounts}}/locations",
+            "query": { "readMask": "name,title", "pageSize": "100" },
+            "itemsPath": "locations",
+            "pagination": { "cursorPath": "nextPageToken", "cursorParam": "pageToken", "maxPages": 2 }
+          },
+          "idPath": "name",
+          "labelPath": "title",
+          "maxItems": 200
+        }
+      ],
+      "sync": {
+        "intervalHours": 6,
+        "requests": [
+          {
+            "id": "location",
+            "method": "GET",
+            "url": "https://mybusinessbusinessinformation.googleapis.com/v1/{{resource.locations}}",
+            "query": { "readMask": "metadata" }
+          },
+          {
+            "id": "reviews",
+            "method": "GET",
+            "url": "https://mybusiness.googleapis.com/v4/{{resource.accounts}}/{{resource.locations}}/reviews",
+            "query": { "pageSize": "50", "orderBy": "updateTime desc" },
+            "itemsPath": "reviews",
+            "pagination": { "cursorPath": "nextPageToken", "cursorParam": "pageToken", "maxPages": 2 }
+          }
+        ],
+        "record": {
+          "fields": {
+            "rating": { "request": "reviews", "type": "number", "path": "averageRating" },
+            "reviewCount": { "request": "reviews", "type": "number", "path": "totalReviewCount" },
+            "reviewUrl": { "request": "location", "type": "url", "path": "metadata.newReviewUri", "maxLength": 2048 }
+          },
+          "items": {
+            "request": "reviews",
+            "maxItems": 50,
+            "fields": {
+              "reviewer": { "type": "string", "path": "reviewer.displayName", "maxLength": 100 },
+              "photo": { "type": "url", "path": "reviewer.profilePhotoUrl", "maxLength": 2048 },
+              "anonymous": { "type": "boolean", "path": "reviewer.isAnonymous" },
+              "stars": {
+                "type": "number",
+                "path": "starRating",
+                "map": { "ONE": 1, "TWO": 2, "THREE": 3, "FOUR": 4, "FIVE": 5 }
+              },
+              "comment": { "type": "string", "path": "comment", "maxLength": 4000 },
+              "createdAt": { "type": "datetime", "path": "createTime" },
+              "reply": { "type": "string", "path": "reviewReply.comment", "maxLength": 2000 }
+            }
+          }
+        }
+      }
+    }
+  ],
+  "contributes": {
+    "site": {
+      "components": ["aglyn.google-reviews.reviews"]
+    }
+  }
+}

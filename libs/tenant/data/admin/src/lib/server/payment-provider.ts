@@ -224,3 +224,84 @@ export function merchantAccountIsReady(
   }
   return readiness === 'ready'
 }
+
+/*==========================================
+ * WHO IS THE SELLER OF RECORD ON A SITE SALE
+ *
+ * Two shapes, decided by the seller's connected account, never by a flag the
+ * request carries:
+ *
+ *   - `direct`: the sale is created ON the seller's own Stripe account
+ *     (`Stripe-Account` header). The seller is the merchant of record: the
+ *     money lands in their balance, Stripe bills them its card fee, refunds
+ *     and chargebacks debit their balance, and Stripe Tax computes against
+ *     THEIR registrations. Aglyn takes its plan take as an
+ *     `application_fee_amount` and is charged nothing by Stripe for the sale.
+ *     Every account created from now on has this shape
+ *     (`DIRECT_CHARGE_ACCOUNT_PARAMS`).
+ *   - `destination`: the sale is created on AGLYN's account and transferred
+ *     on. Kept for the Express accounts created before the switch (Stripe
+ *     discourages direct charges on Express, whose dashboard cannot refund or
+ *     answer a dispute), for the register and Tap to Pay, which stay on the
+ *     platform account, and for plugin marketplace sales.
+ *
+ * The shape is recorded on the profile as `stripeChargeModel` by the connect
+ * route, which reads it off the account Stripe returns. An absent value is
+ * `destination`: the conservative reading, because a direct charge against an
+ * Express account would put a refund and a dispute where nobody can act.
+ *=========================================*/
+export type SaleChargeModel = 'direct' | 'destination'
+
+/**
+ * The `/v1/accounts` parameters for a new seller account: a full Stripe
+ * account that Stripe bills and Stripe underwrites (the Standard shape, by
+ * controller properties). The dashboard type cannot be changed later, which
+ * is why it is set here and nowhere else.
+ */
+export const DIRECT_CHARGE_ACCOUNT_PARAMS: Readonly<Record<string, string>> = {
+  'controller[fees][payer]': 'account',
+  'controller[losses][payments]': 'stripe',
+  'controller[requirement_collection]': 'stripe',
+  'controller[stripe_dashboard][type]': 'full',
+}
+
+/** The charge shape a Stripe Account object supports. */
+export function accountChargeModel(account: unknown): SaleChargeModel {
+  const controller = (account as any)?.controller
+  return controller?.fees?.payer === 'account' &&
+    controller?.stripe_dashboard?.type === 'full'
+    ? 'direct'
+    : 'destination'
+}
+
+/** The charge shape recorded on a seller's profile (`stripeChargeModel`). */
+export function saleChargeModel(recorded: unknown): SaleChargeModel {
+  return recorded === 'direct' ? 'direct' : 'destination'
+}
+
+/**
+ * The header that creates (or reads) a Stripe object ON the seller's account
+ * for a direct charge, and nothing for a destination charge.
+ */
+export function connectedAccountHeader(
+  model: SaleChargeModel,
+  accountId: unknown,
+): Record<string, string> {
+  const id = typeof accountId === 'string' ? accountId.trim() : ''
+  return model === 'direct' && id ? { 'Stripe-Account': id } : {}
+}
+
+/**
+ * The split for a DIRECT charge: Aglyn's take as the application fee, and no
+ * `transfer_data`, because the money is already the seller's. Stripe rejects
+ * a zero application fee, so a 0% plan sends no key at all.
+ */
+export function directChargeParams(
+  feeCents: number,
+  prefix: 'payment_intent_data' | '' = 'payment_intent_data',
+): Record<string, string> {
+  const fee = Number.isFinite(feeCents) ? Math.max(0, Math.round(feeCents)) : 0
+  if (fee <= 0) return {}
+  const key = prefix ? `${prefix}[application_fee_amount]` : 'application_fee_amount'
+  return { [key]: String(fee) }
+}

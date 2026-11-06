@@ -182,8 +182,8 @@ export async function resolveNativeCheckoutMode(
  * `return_url`: Stripe rejects the pair outright on a `ui_mode` session, and a
  * 400 here would surface to the shopper as "Checkout failed" on a store that
  * was working an hour ago. Everything else in the param set — line items, the
- * tax line, `automatic_tax`, shipping options, the Connect destination, the
- * application fee, every `metadata[…]` key the webhook reads — is left exactly
+ * tax line, `automatic_tax`, shipping options, the Connect destination (or the
+ * `Stripe-Account` header a direct charge's caller sends), the application fee, every `metadata[…]` key the webhook reads — is left exactly
  * as the caller built it. That is the point: this function must be incapable of
  * changing what the shopper is charged.
  *
@@ -234,6 +234,13 @@ export interface NativeCheckoutPayload {
    * defaults answers exactly what it answered before.
    */
   wallets?: StorefrontCheckoutWallets
+  /**
+   * The seller's connected account, present only for a DIRECT charge: the
+   * session was created on that account, so Stripe.js must be booted with
+   * `stripeAccount` or the client secret does not resolve. Absent for a
+   * destination sale, whose session lives on the platform account.
+   */
+  stripeAccount?: string
 }
 
 export interface HostedCheckoutPayload {
@@ -256,13 +263,18 @@ export function readCheckoutSessionPayload(
   session: { url?: string; id?: string; client_secret?: string },
   mode: NativeCheckoutMode,
   wallets?: StorefrontCheckoutWallets,
+  stripeAccount?: string,
 ): NativeCheckoutPayload | HostedCheckoutPayload | null {
+  // The hosted page needs nothing more: Stripe's own URL already knows which
+  // account the session is on.
   if (!mode.native) return session?.url ? { url: session.url } : null
   if (!session?.client_secret || !session?.id) return null
+  const account = String(stripeAccount ?? '').trim()
   return {
     clientSecret: String(session.client_secret),
     publishableKey: mode.publishableKey,
     sessionId: String(session.id),
     ...(wallets && storefrontWalletsHideAny(wallets) ? { wallets } : {}),
+    ...(account ? { stripeAccount: account } : {}),
   }
 }

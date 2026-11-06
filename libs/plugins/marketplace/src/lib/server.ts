@@ -282,11 +282,17 @@ function registerPluginConnectionsApi(): void {
     [PLUGIN_CONNECTIONS_API_ROUTES.disconnect, (routes) => routes.disconnectRoute],
     [PLUGIN_CONNECTIONS_API_ROUTES.status, (routes) => routes.statusRoute],
     [PLUGIN_CONNECTIONS_API_ROUTES.credentials, (routes) => routes.credentialsRoute],
+    [PLUGIN_CONNECTIONS_API_ROUTES.sync, (routes) => routes.syncNowRoute],
   ]
   for (const [path, pick] of routes) {
     const handler = connectionRoute(pick)
     registerPluginApiRoute(path, { web: (request) => handler(request) })
   }
+  // The record a connection's sync last wrote, for the editor's canvas
+  // (AGL-4195); a published page has it with the page.
+  registerPluginApiRoute(PLUGIN_CONNECTIONS_API_ROUTES.record, {
+    web: async (request) => (await import('./server/connections/record-routes')).recordRoute(request),
+  })
   const callback = connectionRoute((routes) => routes.connectCallbackRoute)
   registerPluginApiRoute(
     PLUGIN_CONNECTIONS_API_ROUTES.connectCallback,

@@ -33,15 +33,18 @@ import {
   PLUGIN_CONNECTIONS_PLAN_REFUSAL,
   PLUGIN_CONNECTIONS_SITE_PERMISSION,
   PLUGIN_CONNECTIONS_SITE_ROLE_PRESET,
+  pluginConnectionHosts,
   pluginConnectionsPermissionRefusal,
   type PluginConnectionCredentialsStatus,
   type PluginConnectionStatusEntry,
 } from '../../model/plugin-connections'
 import { publisherPermissionVerdict } from '../publisher-permissions'
 import { isHostId, isListingId, readPluginConnectionsKeyring } from './config'
+import { announceConnectionRecordChange } from './record-announce'
 import {
   connectionAccessToken,
   connectionReady,
+  connectionRecordRef,
   connectionRef,
   getConnection,
   listHostConnections,
@@ -74,6 +77,7 @@ import {
   type PluginConnectionClient,
 } from './provider-http'
 import { revokeRecord } from './revoke'
+import { runConnectionSync } from './sync'
 
 /**
  * THE DECLARED CONNECTIONS' ROUTES (AGL-4193), served by the console for every
@@ -85,6 +89,7 @@ import { revokeRecord } from './revoke'
  *   POST     plugin-connections/choose            the resource the site reads       (site key, plan)
  *   POST     plugin-connections/disconnect        revoke and forget the grant       (site key, any plan)
  *   GET      plugin-connections/status            each declared connection, no token (site key)
+ *   POST     plugin-connections/sync              run the declared sync once ("Sync now") (site key, plan)
  *   GET|POST plugin-connections/credentials       the listing's OAuth app, write-only (publisher key)
  *
  * The site key is "Manage a site's plugin connections"
@@ -216,6 +221,8 @@ async function resolveConnection(
   | {
       listingId: string
       displayName: string
+      /** The pinned version the declaration is read from. */
+      version: string
       connection: PluginConnectionDeclaration
       client: PluginConnectionClient
     }
@@ -237,7 +244,13 @@ async function resolveConnection(
   if (!client) {
     return routeError(409, 'The plugin’s publisher has not finished setting up this connection yet.', { reason: 'credentials' })
   }
-  return { listingId, displayName: found.installed.displayName, connection: found.connection, client }
+  return {
+    listingId,
+    displayName: found.installed.displayName,
+    version: found.installed.version,
+    connection: found.connection,
+    client,
+  }
 }
 
 const activityTarget = (connection: PluginConnectionDeclaration, listingId: string) =>
@@ -415,6 +428,7 @@ async function connectedRoute(
       actor: SiteActor
       keyring: SecretBoxKeyring
       listingId: string
+      version: string
       connection: PluginConnectionDeclaration
       client: PluginConnectionClient
       record: PluginConnectionRecord
@@ -433,7 +447,16 @@ async function connectedRoute(
   if (record.status === 'reconnect_required') {
     return routeError(409, `${resolved.connection.label} needs to be connected again.`, { reason: 'reconnect' })
   }
-  return { params, actor, keyring, listingId: resolved.listingId, connection: resolved.connection, client: resolved.client, record }
+  return {
+    params,
+    actor,
+    keyring,
+    listingId: resolved.listingId,
+    version: resolved.version,
+    connection: resolved.connection,
+    client: resolved.client,
+    record,
+  }
 }
 
 /** A resource's items, refreshing the token once on a refusal. */
@@ -532,7 +555,14 @@ export async function disconnectRoute(request: Request): Promise<Response> {
   const record = await getConnection(firestore(), actor.hostId, listingId, connectionId)
   if (!record) return routeJson({ connection: null })
   const revoked = await revokeRecord(record, actor.orgId)
-  await connectionRef(firestore(), actor.hostId, listingId, connectionId).delete()
+  // The record goes with the grant (AGL-4194): what was read with a grant the
+  // owner withdrew is not shown on their site afterwards.
+  await Promise.all([
+    connectionRef(firestore(), actor.hostId, listingId, connectionId).delete(),
+    connectionRecordRef(firestore(), actor.hostId, listingId, connectionId).delete(),
+  ])
+  // The site's pages stop showing it now, not when their cache expires (AGL-4195).
+  await announceConnectionRecordChange(actor.hostId, `plugin connection ${listingId}/${connectionId} disconnected`)
   await logHostActivity(actor.hostId, { uid: actor.uid }, `Disconnected a plugin connection (${record.provider})`, {
     type: 'marketplace:plugin-connection',
     id: `${listingId}/${connectionId}`,
@@ -570,10 +600,63 @@ export async function statusRoute(request: Request): Promise<Response> {
         connection: record ? toConnectionView(record, connection) : null,
         credentialsSet: set[connection.id]?.set ?? false,
         planAllows: actor.planAllows,
+        hosts: pluginConnectionHosts(connection),
       })
     }
   }
   return routeJson({ configured: Boolean(readPluginConnectionsKeyring()), planAllows: actor.planAllows, connections: entries })
+}
+
+/* ------------------------------------------------------------------ */
+/* Sync now                                                             */
+/* ------------------------------------------------------------------ */
+
+/** A second "Sync now" within this of the last sync that ran is answered with the connection as it is. */
+export const PLUGIN_CONNECTION_SYNC_NOW_COOLDOWN_MS = 60_000
+
+/** How long a "Sync now" may keep starting pages: the console's request has to answer. */
+const SYNC_NOW_BUDGET_MS = 45_000
+
+/**
+ * POST `{ hostId, listingId, connectionId }` (AGL-4194): runs the
+ * connection's declared sync once, now, as the scheduled sync would, and
+ * answers `{ connection, synced }` — the view after the run, which carries a
+ * failure as `status` and `lastError`, so a provider error is a 200 with
+ * `synced: false`, not a 502. Site key and plan.
+ *
+ *   409 `not-connected`, `reconnect`, `choose-first` (a resource not chosen)
+ *       or `no-sync` (the pinned version declares no sync)
+ *   429 `too-soon` within a minute of the last sync, with the view
+ */
+export async function syncNowRoute(request: Request): Promise<Response> {
+  const context = await connectedRoute(request, 'POST')
+  if (context instanceof Response) return context
+  const { actor, connection, record, listingId, keyring, client, version } = context
+  if (!connection.sync) {
+    return routeError(409, `${connection.label} declares nothing to sync.`, { reason: 'no-sync' })
+  }
+  const missing = (connection.resources ?? []).find((resource) => !record.choices[resource.id])
+  if (missing) {
+    return routeError(409, `Choose the ${missing.label.toLowerCase()} first.`, { reason: 'choose-first', resource: missing.id })
+  }
+  const nowMs = pluginConnectionRuntime.now()
+  if (record.lastSyncAtMs && nowMs - record.lastSyncAtMs < PLUGIN_CONNECTION_SYNC_NOW_COOLDOWN_MS) {
+    return routeError(429, `${connection.label} synced less than a minute ago.`, {
+      reason: 'too-soon',
+      retryAfterMs: PLUGIN_CONNECTION_SYNC_NOW_COOLDOWN_MS - (nowMs - record.lastSyncAtMs),
+      connection: toConnectionView(record, connection),
+    })
+  }
+  const outcome = await runConnectionSync({
+    keyring,
+    record,
+    connection,
+    version,
+    client,
+    deadlineMs: nowMs + SYNC_NOW_BUDGET_MS,
+  })
+  const next = await getConnection(firestore(), actor.hostId, listingId, connection.id)
+  return routeJson({ connection: next ? toConnectionView(next, connection) : null, synced: outcome === 'synced' })
 }
 
 /* ------------------------------------------------------------------ */

@@ -52,15 +52,19 @@
  *
  * ## The four invariants
  *
- * **1. Settlement stays on Aglyn's platform account.** No money-collecting
- * request may carry `on_behalf_of` or a `Stripe-Account` header. Either one
- * moves the settlement account — and with it the merchant of record, the
- * statement descriptor and the Stripe Tax liability party — onto the connected
- * account. That is a DIRECT charge, it is a different legal posture from the
- * one §10.7 states, and it would silently make the published Terms false.
- * Whether Aglyn should eventually move to direct charges is a real open
- * question (AGL-1794); drifting there one call site at a time, without the
- * Terms moving with it, is not how it should happen.
+ * **1. Settlement moves only where the Terms say it does.** `on_behalf_of`
+ * appears nowhere: it keeps the charge on Aglyn's account while naming the
+ * merchant as the settlement merchant, a hybrid no published Terms describe.
+ * A `Stripe-Account` header moves the settlement account — and with it the
+ * merchant of record, the statement descriptor and the Stripe Tax liability
+ * party — onto the connected account: a DIRECT charge. Since Legal v24
+ * (2026-11-06, AGL-1794 decided: the owner chose direct charges on the
+ * store's own full Stripe account, behind `release_direct_charges`) ToS
+ * §10.2(a) describes exactly that for a store on its own account, and §10.6
+ * and §10.7 split disputes and sales tax the same way. So the header is
+ * allowed in the files listed in `DIRECT_CHARGE_SITES` below, each with the
+ * reason, and nowhere else: a new direct-charge path is still a decision
+ * someone writes down here, never a drift one call site at a time.
  *
  * **2. Stripe Tax and the fee form never meet.** A file that sets
  * `automatic_tax[enabled]` may not also emit
@@ -227,6 +231,67 @@ const CONNECTED_ACCOUNT_READS = new Map([
   ],
 ])
 
+/**
+ * Files that create or act on a sale ON the store's own Stripe account (a
+ * DIRECT charge, ToS v24 §10.2(a)), and why. Every one of them sends the header
+ * only for a store whose account is a full Stripe account
+ * (`stripeChargeModel: 'direct'`, read off the account's `controller`), and
+ * keeps the destination shape byte-identical for every other store. Invariant
+ * 1 still fails `on_behalf_of` in any of them.
+ */
+const DIRECT_CHARGE_SITES = new Map([
+  [
+    'libs/tenant/data/admin/src/lib/server/payment-provider.ts',
+    '`connectedAccountHeader`: the one place the header is built for a ' +
+      'direct-charge store, and `{}` for every other.',
+  ],
+  [
+    'libs/plugins/commerce/src/lib/server/seller-stripe-account.ts',
+    'Reads a site sale back (status, expiry, portal) on the seller\'s account ' +
+      'first, then the platform; and asks whether the seller\'s own Stripe Tax ' +
+      'is set up before a direct sale turns `automatic_tax` on.',
+  ],
+  [
+    'libs/plugins/commerce/src/lib/server/manual-tax-rate.ts',
+    'A direct-charge session lives on the seller\'s account, so the store\'s ' +
+      'own tax rate is minted there; the platform\'s rate id would not resolve.',
+  ],
+  [
+    'libs/plugins/commerce/src/lib/server/quote-pay.ts',
+    'Quote and invoice Pay sessions for a direct-charge store, and expiring ' +
+      'the session the pay page opened on that account.',
+  ],
+  [
+    'libs/plugins/commerce/src/lib/server/draft-order.ts',
+    'A draft order\'s payment link for a direct-charge store.',
+  ],
+  [
+    'libs/plugins/commerce/src/lib/server/checkout-session-expiry.ts',
+    'Expires a direct-charge session on the seller\'s account before the ' +
+      'platform, so a replaced link is never a second way to pay.',
+  ],
+  [
+    'libs/plugins/commerce/src/lib/server/payment-method-domains.ts',
+    'Apple Pay and Google Pay must know the site\'s domain on the account the ' +
+      'session lives on: the seller\'s, for a direct-charge store.',
+  ],
+  [
+    'libs/plugins/commerce/src/lib/server/stripe-refund.ts',
+    'Refunds a direct sale from the seller\'s balance (ToS §10.2(a)), with no ' +
+      'transfer to reverse; falls back to the platform refund otherwise.',
+  ],
+  [
+    'libs/plugins/commerce/src/lib/server/billing-webhook.ts',
+    'Acts on a direct-charge subscription where it lives (the lapse stop, the ' +
+      'fee re-price, the charge read behind the goods-only fee correction).',
+  ],
+  [
+    'libs/plugins/bookings/src/lib/server/refund.ts',
+    'Refunds an online booking sold by direct charge from the seller\'s ' +
+      'balance, with no transfer to reverse.',
+  ],
+])
+
 /** Whether a file's code is only reads: no write method and no money parameter. */
 export function readsOnly(code) {
   return !/['"](POST|PUT|PATCH|DELETE)['"]/.test(code) &&
@@ -366,19 +431,24 @@ export function inspect(path, code) {
 
   // 1. Settlement stays on the platform account.
   const connectedRead = CONNECTED_ACCOUNT_READS.has(path) && readsOnly(code)
+  const directSite = DIRECT_CHARGE_SITES.has(path)
   for (const needle of ['on_behalf_of', 'Stripe-Account']) {
-    if (needle === 'Stripe-Account' && connectedRead) continue
+    if (needle === 'Stripe-Account' && (connectedRead || directSite)) continue
     for (const hit of hits(code, needle)) {
       problems.push({
         invariant: 1,
         path,
         line: hit.line,
         message:
-          `${needle} appears in CODE. That moves settlement onto the ` +
-          'connected account — a direct charge — and ToS §10.7 tells every ' +
-          'merchant the tax is collected into Aglyn’s account and ' +
-          'remitted by Aglyn. Moving the charge model is an AGL-1794 ' +
-          'decision that the Terms have to move with.',
+          (needle === 'on_behalf_of'
+            ? 'on_behalf_of appears in CODE. It names the merchant as the ' +
+              'settlement merchant of a charge that stays on Aglyn\'s account, ' +
+              'a shape no published Terms describe.'
+            : 'Stripe-Account appears in CODE outside DIRECT_CHARGE_SITES. ' +
+              'That moves settlement onto the connected account — a direct ' +
+              'charge. ToS v24 §10.2(a) allows it for a store on its own ' +
+              'Stripe account; a new path that does it is added to ' +
+              'DIRECT_CHARGE_SITES with its reason, never silently.'),
         evidence: hit.text,
       })
     }
@@ -550,6 +620,18 @@ function runSelfTest() {
   ok(
     'an unlisted file reading with Stripe-Account IS a violation',
     only("await get(url, { method: 'GET', headers: { 'Stripe-Account': acct } })\n", 1).length === 1,
+  )
+
+  // The direct-charge paths ToS v24 §10.2(a) describes.
+  const DIRECT = 'libs/plugins/commerce/src/lib/server/stripe-refund.ts'
+  ok(
+    'a DIRECT_CHARGE_SITES file sending Stripe-Account is not a violation',
+    only("await post(url, { method: 'POST', headers: { 'Stripe-Account': acct } })\n", 1, DIRECT)
+      .length === 0,
+  )
+  ok(
+    'a DIRECT_CHARGE_SITES file sending on_behalf_of IS a violation',
+    only("params.set('payment_intent_data[on_behalf_of]', acct)\n", 1, DIRECT).length === 1,
   )
 
   // Invariant 2 — the AGL-1956 defect itself.

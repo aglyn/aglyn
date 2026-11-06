@@ -20,6 +20,7 @@ Peer dependencies: `react`, `@mui/material`, `firebase`, `next`, and `firebase-a
 - `orgPluginInstalls`: the workspace's installed marketplace plugins, on its Plugins page.
 - `pluginInstallStatus`: whether an installation runs the newest installable version, on its installation page.
 - `pluginSiteSet`: which sites one installation applies to.
+- `sitePluginConnections`: a site's connections to the services an installed plugin's manifest declares (connect, choose, sync, disconnect), on the site's page for that plugin.
 - `staffOverview`: recent purchases and the refund-reversal recovery queue, on the staff overview.
 - `templateGallery`: the "Marketplace templates" shelf of a site's template gallery, installing through `install-template`.
 - `templateInstallStatus`: "Update available" on a library row whose template it installed, re-installing through `install-template`.

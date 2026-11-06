@@ -801,6 +801,17 @@ export const CONSOLE_WIDGET_SLOTS = {
    */
   pluginInstallStatus: 'pluginInstallStatus',
   /**
+   * A site's page for one plugin some plugin INSTALLED, below its settings
+   * (AGL-4196): the services that plugin's manifest declares it connects to,
+   * and where this site stands with each. Props:
+   * {@link ConsoleSitePluginConnectionsZoneProps}.
+   *
+   * The installing plugin runs the connections — the sign-in at the other
+   * service, what the owner picks there, the scheduled sync — so it draws
+   * them. A widget draws nothing for a plugin that declares none.
+   */
+  sitePluginConnections: 'sitePluginConnections',
+  /**
    * The template gallery — "Start from a template" on a site's Screens,
    * Layouts and Components pages — below the site's own templates and the
    * starters (AGL-3080): a shelf of templates a plugin offers to INSTALL.
@@ -1572,6 +1583,21 @@ export interface ConsolePluginInstallStatusZoneProps {
    * One pin of the installation — org-wide if there is one, else any site's.
    * Every pin carries the same version and manifest, which is what a status
    * is about.
+   */
+  pin: Readonly<Record<string, unknown>>
+}
+
+/** What the `sitePluginConnections` zone hands each widget (AGL-4196). */
+export interface ConsoleSitePluginConnectionsZoneProps {
+  /** The site whose page this is. */
+  hostId: string
+  /** Path slug for building `/[orgSlug]/…` links. */
+  orgSlug: string
+  /** The installation's id: the segment of the page, which is the pin's key. */
+  pluginRef: string
+  /**
+   * The pin the site runs — its own, else the workspace's — whose manifest
+   * says what it connects to.
    */
   pin: Readonly<Record<string, unknown>>
 }

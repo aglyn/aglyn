@@ -21,7 +21,7 @@ description: The plugin manifest schema, the marketplace listing/version documen
     "props": ["title"],       // host props the bridge forwards
     "events": ["submitted"],  // events the host will accept
     "size": { "height": 240 }, // declared frame size
-    "imageHosts": ["images.example.com"] // image hosts (validated; see "connections")
+    "imageHosts": ["images.example.com"] // hosts your elements show images from; see "connections"
   },
   "connections": [ /* see "connections" below */ ],
   "contributes": {            // what register() adds, and where
@@ -196,7 +196,7 @@ sees a token.
         "idPath": "name", "labelPath": "title", "maxItems": 50
       }
     ],
-    "sync": {                        // validated and checked; see below
+    "sync": {                        // run by the platform; see below
       "intervalHours": 6,            // at least 1
       "requests": [
         {
@@ -244,9 +244,56 @@ How it runs:
    provider that refuses the grant marks the connection *reconnect required*
    until the owner connects again.
 
-`sync` is part of the schema: the manifest validator accepts it and checks
-every rule in the table below (its requests, its interval and its `record`
-fields), and a manifest that breaks one is refused.
+4. **The platform syncs it.** Once every resource is chosen, the platform
+   runs your `sync` for the site, then again every `intervalHours`, and
+   writes what it read into the site's **record** (below). A member with
+   the site's connections permission can also press **Sync now** on the
+   connection's card, on the site's page for your plugin under **Site Admin →
+   Plugins**, to run it at once.
+
+#### How the sync runs {#connection-sync}
+
+- **When.** The console checks for due connections every 15 minutes and
+  runs a sync once `intervalHours` have passed since the last one that
+  succeeded, so a 6-hour interval runs about every 6 hours. A few connections
+  run at a time and the rest wait for the next check, oldest first. **Sync
+  now** runs it at once; it is refused within a minute of the last sync.
+- **With what.** The declaration of the version the site has installed and
+  the site's own token, refreshed when it is about to expire and once more if
+  your API answers 401 or 403. Each request in `requests` that the `record`
+  reads is filled from the site's choices and checked against `apiHosts`
+  again before it is sent; a request the record never reads is not sent.
+- **How much.** Pages are followed through `pagination` up to `maxPages`, and
+  stop once the record has `items.maxItems` entries. Every answer is read up
+  to 2 MB, each attempt times out after 30 seconds (a 429 or 5xx is retried
+  twice), a redirect is refused rather than followed, and no new page is
+  started once a sync has run for a minute.
+- **The record.** The answers are mapped into exactly the fields you declare:
+  summary `fields` from the first page of the request they name, and one
+  entry per item for `items`. Nothing you did not declare is copied. A
+  `string` is cut to its `maxLength`; a `url` is kept only when it is `https`,
+  carries no credentials and fits its `maxLength` whole; a `datetime` becomes
+  epoch milliseconds; a value a `map` does not list is dropped. A declared
+  field with no usable value is `null`, so every entry has the same keys. The
+  record is replaced whole on every sync, and trailing items are dropped if it
+  would pass 512 KB. It is stored with the site on the server and is never
+  readable by a browser.
+- **When it fails.** If your provider refuses the grant (`invalid_grant`, or a
+  401 that a fresh token does not cure), the connection becomes *reconnect
+  required* and is not synced again until the site owner connects again. Any
+  other failure is shown on the card with your provider's message and tried
+  again after 15 minutes, then 30, then an hour, doubling up to your
+  `intervalHours`. The last good record stays in place either way.
+- **When it pauses.** A workspace whose plan does not include connections,
+  and a version the marketplace revoked, keep their connection and their last
+  record but are not synced.
+- **When it goes.** Uninstalling the plugin, or moving the site to a version
+  that no longer declares the connection, revokes the grant at your
+  `revocationUrl` and deletes the connection and its record. So does
+  disconnecting it.
+
+The validator checks every rule in the table below (the requests, the
+interval and the `record` fields), and a manifest that breaks one is refused.
 
 A connection runs under the declaration of the version the site has
 **installed**, never the listing's newest, and a revoked version's
@@ -276,8 +323,77 @@ Your bundle must never call a connection's hosts itself: the verifier refuses
 a bundle that calls an `apiHosts`, `tokenUrl` or `authorizationUrl` host, and a
 manifest that lists one under `capabilities.network`.
 
-`capabilities.imageHosts` is accepted and checked by the manifest validator:
-at most 10 hosts, each under the same host rule as `apiHosts`.
+#### Showing the record in a site element {#connection-record}
+
+A signed plugin's site element reads its connection's record with
+`usePluginConnectionRecord`, from the host's `@aglyn/aglyn` surface:
+
+```js
+import { createElement as h } from 'react'
+import { usePluginConnectionRecord } from '@aglyn/aglyn'
+
+function ReviewsBadge() {
+  const record = usePluginConnectionRecord('reviews') // a connection id from YOUR manifest
+  if (!record) return null
+  const { averageRating, totalReviewCount } = record.fields
+  return h('p', null, `${averageRating} stars from ${totalReviewCount} reviews`)
+}
+```
+
+- **The record arrives with the page.** The platform reads it on the server
+  and renders your element into the page's HTML, so visitors and search
+  engines see the rating in the first response. Your element never fetches it.
+- **It is your own listing's record, always.** The hook takes a connection id
+  and nothing else. Which listing it reads is the listing your element belongs
+  to, so one plugin's element can never read another plugin's record.
+- **Its shape is your `record` declaration.** `record.fields` holds the
+  declared summary fields, `record.items` the declared list (at most its
+  `maxItems`), and `record.syncedAtMs` when it was written. Keys you did not
+  declare are never present. A `datetime` value is epoch milliseconds.
+- **`null` means there is nothing to show yet**: the site has not connected,
+  no record has been written, or the workspace's plan does not include
+  connections. Decide what your element draws then; drawing nothing is
+  usually right.
+
+In the editor, the console reads the same record from
+`GET /api/plugin-connections/record?hostId=&listingId=&connectionId=`, which
+answers `{ record }` (or `{ record: null }`) to a member holding **Manage a
+site's plugin connections**.
+
+#### Record values as site variables {#connection-variables}
+
+Each declared **summary** field (`record.fields`) is also a site variable on
+every site that installs your plugin, so a page can print it anywhere with a
+`{{var:…}}` token, inside any element:
+
+```text
+{{var:<listingId>__<connectionId>-<field>}}     e.g. {{var:Kq3vR7mXa2Lp9sT4bNw1__reviews-averageRating}}
+```
+
+- The id is your listing's id, two underscores, the connection id, a hyphen,
+  and the field name. It can never be the same as a site's own variable or
+  another plugin's field.
+- An id longer than 64 characters has no variable, so keep connection ids and
+  summary field names short.
+- `number`, `boolean` and `datetime` fields become number, true/false and date
+  variables; `string` and `url` fields become text. A field the record does not
+  hold prints nothing, like any unknown variable.
+- `items` never become variables: a list has no single value to print.
+
+#### Image hosts {#image-hosts}
+
+`capabilities.imageHosts` names the hosts your elements show images from, such
+as a reviewer's profile photo. On every site that installs your signed plugin,
+the platform adds each one to the page's `img-src` policy as an `https://`
+source; every other site's policy is unchanged. The rules:
+
+- At most 5 hosts.
+- An exact lowercase public hostname (`lh3.example.com`), or `*.` and a domain
+  (`*.example.com`), which covers exactly one label.
+- No scheme, port or path. `data:`, `http:` and IP addresses are refused.
+
+A manifest that breaks a rule is refused at publish and by
+`verify-plugin-bundle.mjs`.
 
 ## Listing & version documents
 

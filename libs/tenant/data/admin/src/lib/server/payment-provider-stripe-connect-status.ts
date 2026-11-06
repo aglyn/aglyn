@@ -16,6 +16,7 @@
  */
 
 import { firebaseAdmin } from './firebase-admin'
+import { accountChargeModel } from './payment-provider'
 import { sendGa4StripeConnected } from './ga4-measurement-protocol'
 import { updateExisting } from './update-existing'
 
@@ -87,7 +88,15 @@ export async function syncConnectAccountStatus(
 ): Promise<number> {
   const accountId = typeof account?.id === 'string' ? account.id.trim() : ''
   if (!accountId) return 0
-  const patch: Record<string, boolean> = {}
+  const patch: Record<string, boolean | string> = {}
+  // The charge shape (direct or destination) is read off the account's
+  // `controller`, the same rule the connect route applies, so an
+  // `account.updated` keeps it true without anyone re-opening setup. Only a
+  // storefront binding records it: plugin marketplace sales are always
+  // destination charges.
+  if (collection === 'profiles' && (account as any)?.controller) {
+    patch['stripeChargeModel'] = accountChargeModel(account)
+  }
   if (typeof account?.charges_enabled === 'boolean') {
     patch['stripeChargesEnabled'] = account.charges_enabled
   }

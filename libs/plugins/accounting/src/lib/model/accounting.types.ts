@@ -164,11 +164,10 @@ export interface AccountingTaxOption {
   ratePercent: number | null
 }
 
-/** A connection as the console page reads it: no token, ever. */
+/** A connection as the console page reads it: no token and no company id, ever. */
 export interface AccountingConnectionView {
   provider: AccountingProviderId
   status: AccountingConnectionStatus
-  tenantId: string | null
   tenantName: string | null
   /** The Xero organizations a grant reaches, while a pick is owed. */
   tenants?: ReadonlyArray<{ id: string; name: string }>

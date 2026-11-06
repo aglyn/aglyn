@@ -18,6 +18,7 @@
 import { type SiteReturnHost, siteOwnHosts } from '@aglyn/aglyn/app-utils/site-return-url'
 import { TENANT_APEX } from '@aglyn/aglyn/app-utils/tenant-apex'
 import { firebaseAdmin } from '@aglyn/tenant-data-admin'
+import { directSellerAccountForHost } from './seller-stripe-account'
 
 /**
  * Stripe payment method domains for storefronts (AGL-3629).
@@ -34,9 +35,14 @@ import { firebaseAdmin } from '@aglyn/tenant-data-admin'
  * registered for the user running the charge." Storefront charges are
  * DESTINATION charges created by the platform with no `Stripe-Account` header
  * and no `on_behalf_of`, so the platform runs them and the platform's key
- * registers the domain, with no `Stripe-Account` header. A direct-charge flow
- * would register on the connected account instead; there is none today, and
- * `registerOnPlatform` is named for that reason.
+ * registers the domain, with no `Stripe-Account` header.
+ *
+ * A DIRECT-charge seller runs its own charges: the session is created on the
+ * seller's connected account, so Apple Pay and Google Pay show only on a
+ * domain registered ON THAT ACCOUNT (`Stripe-Account` header). Every entry
+ * point below takes the seller's account for that case, and the platform's
+ * registration is left as it is, because the seller's hardware purchases and
+ * any sale from before the switch still run on the platform.
  *
  * ## When
  *
@@ -58,8 +64,10 @@ import { firebaseAdmin } from '@aglyn/tenant-data-admin'
  * `paymentMethodDomains/{mode}~{domain}` records what Stripe last said, so a
  * checkout costs one document read rather than a Stripe round trip. The mode is
  * in the id because a test key and a live key register in different worlds and
- * a domain registered in one is not registered in the other. Server-only: the
- * rules deny every client.
+ * a domain registered in one is not registered in the other. A seller's
+ * registration is cached under its own id, `{mode}~{account}~{domain}`,
+ * because it is a different Stripe object from the platform's for the same
+ * name. Server-only: the rules deny every client.
  */
 
 export const PAYMENT_METHOD_DOMAINS_COLLECTION = 'paymentMethodDomains'
@@ -84,6 +92,11 @@ export interface PaymentMethodDomainStatus {
 export interface PaymentMethodDomainRecord {
   domain: string
   mode: StripeMode
+  /**
+   * The connected account the domain is registered on, for a direct-charge
+   * seller; absent or null for the platform's own registration.
+   */
+  stripeAccount?: string | null
   stripeId: string | null
   enabled: boolean
   status: PaymentMethodDomainStatus
@@ -128,9 +141,23 @@ export function registrableDomain(input: unknown): string | null {
   return value
 }
 
-/** The cache document id for a domain in a mode. */
-export function paymentMethodDomainDocId(mode: StripeMode, domain: string): string {
-  return `${mode}~${domain}`
+/**
+ * The cache document id for a domain in a mode, on the platform or on one
+ * seller's connected account.
+ */
+export function paymentMethodDomainDocId(
+  mode: StripeMode,
+  domain: string,
+  stripeAccount?: string | null,
+): string {
+  const account = accountOrNull(stripeAccount)
+  return account ? `${mode}~${account}~${domain}` : `${mode}~${domain}`
+}
+
+/** A usable connected-account id, or null for "the platform". */
+function accountOrNull(value: unknown): string | null {
+  const id = typeof value === 'string' ? value.trim() : ''
+  return /^acct_[A-Za-z0-9]+$/.test(id) ? id : null
 }
 
 /**
@@ -158,7 +185,11 @@ async function stripeRequest<T>(
   method: 'GET' | 'POST',
   path: string,
   params?: Record<string, string>,
-  options: { idempotencyKey?: string; signal?: AbortSignal } = {},
+  options: {
+    idempotencyKey?: string
+    signal?: AbortSignal
+    stripeAccount?: string | null
+  } = {},
 ): Promise<T> {
   const query = method === 'GET' && params ? `?${new URLSearchParams(params)}` : ''
   const response = await fetch(`https://api.stripe.com/v1/${path}${query}`, {
@@ -168,8 +199,10 @@ async function stripeRequest<T>(
       ...(method === 'POST' && {
         'Content-Type': 'application/x-www-form-urlencoded',
       }),
-      // The platform's own key and NO `Stripe-Account`: destination charges
-      // are run by the platform, so the platform holds the registration.
+      // The platform's own key and NO `Stripe-Account` for the platform's
+      // registration (destination charges are run by the platform); the
+      // seller's account for a direct-charge seller, who runs its own.
+      ...(options.stripeAccount && { 'Stripe-Account': options.stripeAccount }),
       ...(options.idempotencyKey && { 'Idempotency-Key': options.idempotencyKey }),
     },
     ...(method === 'POST' && params && { body: new URLSearchParams(params).toString() }),
@@ -187,12 +220,13 @@ async function stripeRequest<T>(
 async function findOnStripe(
   domain: string,
   signal?: AbortSignal,
+  stripeAccount?: string | null,
 ): Promise<StripeDomainObject | null> {
   const list = await stripeRequest<{ data?: StripeDomainObject[] }>(
     'GET',
     'payment_method_domains',
     { domain_name: domain, limit: '1' },
-    { signal },
+    { signal, stripeAccount },
   )
   return list.data?.find((entry) => entry.domain_name === domain) ?? null
 }
@@ -207,14 +241,36 @@ export async function registerOnPlatform(
   domain: string,
   signal?: AbortSignal,
 ): Promise<StripeDomainObject> {
-  const existing = await findOnStripe(domain, signal)
+  return registerDomain(domain, { signal })
+}
+
+/**
+ * Register (or re-enable) one domain on a direct-charge seller's connected
+ * account: the same steps as {@link registerOnPlatform}, each sent with the
+ * seller's `Stripe-Account`.
+ */
+export async function registerOnAccount(
+  domain: string,
+  stripeAccount: string,
+  signal?: AbortSignal,
+): Promise<StripeDomainObject> {
+  return registerDomain(domain, { signal, stripeAccount })
+}
+
+async function registerDomain(
+  domain: string,
+  options: { signal?: AbortSignal; stripeAccount?: string | null },
+): Promise<StripeDomainObject> {
+  const { signal } = options
+  const stripeAccount = accountOrNull(options.stripeAccount)
+  const existing = await findOnStripe(domain, signal, stripeAccount)
   if (existing) {
     if (existing.enabled) return existing
     return stripeRequest<StripeDomainObject>(
       'POST',
       `payment_method_domains/${encodeURIComponent(existing.id)}`,
       { enabled: 'true' },
-      { signal },
+      { signal, stripeAccount },
     )
   }
   try {
@@ -222,32 +278,50 @@ export async function registerOnPlatform(
       'POST',
       'payment_method_domains',
       { domain_name: domain, enabled: 'true' },
-      { idempotencyKey: `aglyn-pmd-register:${domain}`, signal },
+      {
+        // Stripe scopes the key per account; the account is in it anyway so
+        // a log line names which registration it was.
+        idempotencyKey: stripeAccount
+          ? `aglyn-pmd-register:${stripeAccount}:${domain}`
+          : `aglyn-pmd-register:${domain}`,
+        signal,
+        stripeAccount,
+      },
     )
   } catch (error) {
     // Lost a race to a create that landed between the lookup and this call:
     // the registration exists, which is what was wanted.
-    const raced = await findOnStripe(domain, signal).catch(() => null)
+    const raced = await findOnStripe(domain, signal, stripeAccount).catch(() => null)
     if (raced) return raced
     throw error
   }
 }
 
-function docRef(mode: StripeMode, domain: string) {
+function docRef(mode: StripeMode, domain: string, stripeAccount?: string | null) {
   return firebaseAdmin
     .app()
     .firestore()
     .collection(PAYMENT_METHOD_DOMAINS_COLLECTION)
-    .doc(paymentMethodDomainDocId(mode, domain))
+    .doc(paymentMethodDomainDocId(mode, domain, stripeAccount))
 }
 
 async function record(
   mode: StripeMode,
   domain: string,
   patch: Partial<PaymentMethodDomainRecord>,
+  stripeAccount?: string | null,
 ): Promise<void> {
-  await docRef(mode, domain).set(
-    { domain, mode, checkedAtMs: Date.now(), ...patch },
+  const account = accountOrNull(stripeAccount)
+  await docRef(mode, domain, account).set(
+    {
+      domain,
+      mode,
+      // Only a seller's registration names an account, so the platform's
+      // documents are written exactly as before.
+      ...(account ? { stripeAccount: account } : {}),
+      checkedAtMs: Date.now(),
+      ...patch,
+    },
     { merge: true },
   )
 }
@@ -268,16 +342,23 @@ export interface EnsureDomainResult {
  */
 export async function ensurePaymentMethodDomain(
   rawDomain: string,
-  options: { hostId?: string | null; signal?: AbortSignal; force?: boolean } = {},
+  options: {
+    hostId?: string | null
+    signal?: AbortSignal
+    force?: boolean
+    /** Register on this direct-charge seller's account, not the platform. */
+    stripeAccount?: string | null
+  } = {},
 ): Promise<EnsureDomainResult> {
   const domain = registrableDomain(rawDomain)
   const mode = stripeModeOfKey(process.env.STRIPE_SECRET_KEY)
   if (!domain || !mode) {
     return { domain: String(rawDomain ?? ''), outcome: 'skipped' }
   }
+  const account = accountOrNull(options.stripeAccount)
   try {
     if (!options.force) {
-      const cached = await docRef(mode, domain).get()
+      const cached = await docRef(mode, domain, account).get()
       const data = cached.data?.() as PaymentMethodDomainRecord | undefined
       if (
         cached.exists &&
@@ -288,10 +369,13 @@ export async function ensurePaymentMethodDomain(
         return { domain, outcome: 'cached', record: data }
       }
     }
-    const object = await registerOnPlatform(domain, options.signal)
+    const object = account
+      ? await registerOnAccount(domain, account, options.signal)
+      : await registerOnPlatform(domain, options.signal)
     const next: PaymentMethodDomainRecord = {
       domain,
       mode,
+      ...(account ? { stripeAccount: account } : {}),
       stripeId: object.id,
       enabled: object.enabled !== false,
       status: statusOf(object),
@@ -299,15 +383,20 @@ export async function ensurePaymentMethodDomain(
       checkedAtMs: Date.now(),
       lastError: null,
     }
-    await record(mode, domain, next)
+    await record(mode, domain, next, account)
     return { domain, outcome: 'registered', record: next }
   } catch (error) {
     const message = error instanceof Error ? error.message : String(error)
-    await record(mode, domain, {
-      enabled: false,
-      hostId: options.hostId ?? null,
-      lastError: message.slice(0, 500),
-    }).catch(() => undefined)
+    await record(
+      mode,
+      domain,
+      {
+        enabled: false,
+        hostId: options.hostId ?? null,
+        lastError: message.slice(0, 500),
+      },
+      account,
+    ).catch(() => undefined)
     return { domain, outcome: 'failed', error: message }
   }
 }
@@ -320,14 +409,16 @@ export async function ensurePaymentMethodDomain(
  */
 export async function disablePaymentMethodDomain(
   rawDomain: string,
+  options: { stripeAccount?: string | null } = {},
 ): Promise<{ domain: string; outcome: 'disabled' | 'absent' | 'skipped' | 'failed'; error?: string }> {
   const domain = registrableDomain(rawDomain)
   const mode = stripeModeOfKey(process.env.STRIPE_SECRET_KEY)
   if (!domain || !mode) return { domain: String(rawDomain ?? ''), outcome: 'skipped' }
+  const account = accountOrNull(options.stripeAccount)
   try {
-    const existing = await findOnStripe(domain)
+    const existing = await findOnStripe(domain, undefined, account)
     if (!existing) {
-      await record(mode, domain, { enabled: false, stripeId: null, lastError: null })
+      await record(mode, domain, { enabled: false, stripeId: null, lastError: null }, account)
       return { domain, outcome: 'absent' }
     }
     const object = existing.enabled
@@ -335,14 +426,20 @@ export async function disablePaymentMethodDomain(
           'POST',
           `payment_method_domains/${encodeURIComponent(existing.id)}`,
           { enabled: 'false' },
+          { stripeAccount: account },
         )
       : existing
-    await record(mode, domain, {
-      stripeId: object.id,
-      enabled: false,
-      status: statusOf(object),
-      lastError: null,
-    })
+    await record(
+      mode,
+      domain,
+      {
+        stripeId: object.id,
+        enabled: false,
+        status: statusOf(object),
+        lastError: null,
+      },
+      account,
+    )
     return { domain, outcome: 'disabled' }
   } catch (error) {
     const message = error instanceof Error ? error.message : String(error)
@@ -386,6 +483,11 @@ export async function ensureCheckoutDomain(input: {
   site: SiteReturnHost | null | undefined
   hostId: string
   budgetMs?: number
+  /**
+   * The seller's connected account when this checkout is a DIRECT charge:
+   * the session runs there, so the domain must be registered there.
+   */
+  stripeAccount?: string
 }): Promise<EnsureDomainResult | null> {
   let hostname: string
   try {
@@ -402,6 +504,7 @@ export async function ensureCheckoutDomain(input: {
     return await ensurePaymentMethodDomain(hostname, {
       hostId: input.hostId,
       signal: controller.signal,
+      ...(input.stripeAccount ? { stripeAccount: input.stripeAccount } : {}),
     })
   } finally {
     clearTimeout(timer)
@@ -423,8 +526,13 @@ export const RECONCILE_PAGE_SIZE = 200
  */
 export async function reconcileCustomDomains(
   gate: { isLocked(hostId: string): Promise<boolean> },
-  options: { maxPages?: number } = {},
+  options: {
+    maxPages?: number
+    /** The site's direct-charge seller account, or null (tests inject it). */
+    sellerAccount?: (hostId: string) => Promise<string | null>
+  } = {},
 ): Promise<{ hosts: number; registered: number; failed: number; skippedLocked: number }> {
+  const sellerAccount = options.sellerAccount ?? directSellerAccountForHost
   const result = { hosts: 0, registered: 0, failed: 0, skippedLocked: 0 }
   if (!stripeModeOfKey(process.env.STRIPE_SECRET_KEY)) return result
   const firestore = firebaseAdmin.app().firestore()
@@ -447,10 +555,18 @@ export async function reconcileCustomDomains(
         result.skippedLocked += 1
         continue
       }
+      // A direct-charge seller runs its own charges, so its domains are
+      // registered on its account as well as the platform's.
+      const account = await sellerAccount(hostDoc.id).catch(() => null)
       for (const domain of customDomainNames(hostDoc.get('cname'))) {
-        const outcome = await ensurePaymentMethodDomain(domain, { hostId: hostDoc.id })
-        if (outcome.outcome === 'registered') result.registered += 1
-        if (outcome.outcome === 'failed') result.failed += 1
+        for (const stripeAccount of account ? [null, account] : [null]) {
+          const outcome = await ensurePaymentMethodDomain(domain, {
+            hostId: hostDoc.id,
+            ...(stripeAccount ? { stripeAccount } : {}),
+          })
+          if (outcome.outcome === 'registered') result.registered += 1
+          if (outcome.outcome === 'failed') result.failed += 1
+        }
       }
     }
     cursor = String(snapshot.docs[snapshot.docs.length - 1]?.get('cname') ?? '')
@@ -460,30 +576,62 @@ export async function reconcileCustomDomains(
 }
 
 /** Core's `host.domain.attached`: register the custom domain and its twin. */
-export async function onHostDomainAttached(payload: {
-  hostId: string
-  domain: string
-}): Promise<void> {
+export async function onHostDomainAttached(
+  payload: {
+    hostId: string
+    domain: string
+  },
+  options: { sellerAccount?: (hostId: string) => Promise<string | null> } = {},
+): Promise<void> {
+  // The platform's registration as before, and the seller's own as well when
+  // the site sells by direct charges, since those sessions run on its account.
+  const account = await (options.sellerAccount ?? directSellerAccountForHost)(
+    payload.hostId,
+  ).catch(() => null)
   for (const domain of customDomainNames(payload.domain)) {
-    const outcome = await ensurePaymentMethodDomain(domain, {
-      hostId: payload.hostId,
-      force: true,
-    })
-    if (outcome.outcome === 'failed') {
-      console.warn(`[commerce] payment method domain ${domain} not registered: ${outcome.error}`)
+    for (const stripeAccount of account ? [null, account] : [null]) {
+      const outcome = await ensurePaymentMethodDomain(domain, {
+        hostId: payload.hostId,
+        force: true,
+        ...(stripeAccount ? { stripeAccount } : {}),
+      })
+      if (outcome.outcome === 'failed') {
+        console.warn(
+          `[commerce] payment method domain ${domain}${
+            stripeAccount ? ` on ${stripeAccount}` : ''
+          } not registered: ${outcome.error}`,
+        )
+      }
     }
   }
 }
 
 /** Core's `host.domain.released`: disable what no other site still serves. */
-export async function onHostDomainReleased(payload: {
-  hostId: string
-  domain: string
-}): Promise<void> {
+export async function onHostDomainReleased(
+  payload: {
+    hostId: string
+    domain: string
+  },
+  options: { sellerAccount?: (hostId: string) => Promise<string | null> } = {},
+): Promise<void> {
   const names = payload.domain.endsWith(`.${TENANT_APEX}`)
     ? [registrableDomain(payload.domain)].filter((name): name is string => Boolean(name))
     : customDomainNames(payload.domain)
+  const account = await (options.sellerAccount ?? directSellerAccountForHost)(
+    payload.hostId,
+  ).catch(() => null)
   for (const domain of names) {
+    // The PLATFORM's registration is shared by every site that answers on
+    // the name, so it waits until no other site does. The seller's own is
+    // that seller's alone, and goes with this site's release.
+    if (account) {
+      const onSeller = await disablePaymentMethodDomain(domain, { stripeAccount: account })
+      if (onSeller.outcome === 'failed') {
+        console.warn(
+          `[commerce] payment method domain ${domain} on ${account} not disabled: ${onSeller.error}`,
+        )
+      }
+    }
     if (await domainStillClaimed(domain, payload.hostId)) continue
     const outcome = await disablePaymentMethodDomain(domain)
     if (outcome.outcome === 'failed') {
@@ -495,17 +643,26 @@ export async function onHostDomainReleased(payload: {
 /** The registrations a settings card shows for one site. */
 export async function readSiteDomainRecords(
   site: SiteReturnHost | null | undefined,
+  /**
+   * The site's direct-charge seller account: its registrations are the ones
+   * the site's checkout uses, so they are the ones to show.
+   */
+  stripeAccount?: string | null,
 ): Promise<PaymentMethodDomainRecord[]> {
   const mode = stripeModeOfKey(process.env.STRIPE_SECRET_KEY)
   if (!mode) return []
+  const account = accountOrNull(stripeAccount)
   const names = siteOwnHosts(site).filter((name) => registrableDomain(name))
-  const snapshots = await Promise.all(names.map((name) => docRef(mode, name).get()))
+  const snapshots = await Promise.all(
+    names.map((name) => docRef(mode, name, account).get()),
+  )
   return snapshots.map((snapshot, index) => {
     const data = (snapshot.exists ? snapshot.data?.() : null) as PaymentMethodDomainRecord | null
     return (
       data ?? {
         domain: names[index],
         mode,
+        ...(account ? { stripeAccount: account } : {}),
         stripeId: null,
         enabled: false,
         status: { applePay: null, googlePay: null, link: null, amazonPay: null, klarna: null },

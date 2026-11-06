@@ -1706,7 +1706,8 @@
             }
           ]
         },
-        { "type": "zone", "name": "sitePluginSettings", "title": "Settings for this site", "params": { "pluginId": "{params.pluginId}" } }
+        { "type": "zone", "name": "sitePluginSettings", "title": "Settings for this site", "params": { "pluginId": "{params.pluginId}" } },
+        { "type": "zone", "name": "sitePluginConnections", "title": "Connections", "params": { "pluginId": "{params.pluginId}" } }
       ]
     }
   ]

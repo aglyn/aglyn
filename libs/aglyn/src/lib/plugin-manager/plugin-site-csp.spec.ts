@@ -16,11 +16,14 @@
  */
 
 import {
+  pluginSiteCspSourceHosts,
+  registerPluginSiteCspSource,
   pluginSiteCspHosts,
   pluginSiteCspHostsFor,
   pluginSiteCspPluginsToRead,
   type PluginSiteCspDeclaration,
 } from './plugin-site-csp'
+import { unregisterPluginServices } from './plugin-services'
 
 const CHAT: PluginSiteCspDeclaration = {
   pluginId: 'chat',
@@ -99,5 +102,37 @@ describe("a plugin's site feature widens its site's policy only while on (AGL-36
     for (const hosts of Object.values(tidio)) {
       for (const host of hosts) expect(host).toMatch(/^(\*\.)?[a-z0-9.-]+\.[a-z]{2,}$/)
     }
+  })
+})
+
+describe('per-site sources (AGL-4195)', () => {
+  afterEach(() => {
+    unregisterPluginServices('store')
+    unregisterPluginServices('broken')
+  })
+
+  it('adds nothing with no source registered', async () => {
+    expect((await pluginSiteCspSourceHosts({ hostId: 'h', orgId: null })).img).toEqual([])
+  })
+
+  it('answers each source per site, de-duplicated; a failing source and a malformed answer add nothing', async () => {
+    registerPluginSiteCspSource(
+      {
+        hosts: async ({ hostId }) =>
+          hostId === 'runs-it' ? { img: ['lh3.example.com', 'lh3.example.com', 7 as never], connect: 'x' as never } : {},
+      },
+      { pluginId: 'store' },
+    )
+    registerPluginSiteCspSource({ hosts: async () => { throw new Error('down') } }, { pluginId: 'broken' })
+    const spy = jest.spyOn(console, 'error').mockImplementation(() => undefined)
+    const runs = await pluginSiteCspSourceHosts({ hostId: 'runs-it', orgId: 'org' })
+    expect(runs.img).toEqual(['lh3.example.com'])
+    expect(runs.connect).toEqual([])
+    expect((await pluginSiteCspSourceHosts({ hostId: 'other', orgId: 'org' })).img).toEqual([])
+    spy.mockRestore()
+  })
+
+  it('refuses a source with no owner', () => {
+    expect(() => registerPluginSiteCspSource({ hosts: async () => ({}) })).toThrow(/no owner/)
   })
 })

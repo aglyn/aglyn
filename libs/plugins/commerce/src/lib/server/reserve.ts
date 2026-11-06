@@ -21,7 +21,12 @@ import * as Aglyn from '@aglyn/aglyn/server'
 import * as CommerceModel from '../model'
 import { claimAttempt } from '@aglyn/aglyn/server'
 import { firebaseAdmin, getOrgForHost } from '@aglyn/tenant-data-admin'
-import { merchantAccountIsReady } from '@aglyn/tenant-data-admin/server/payment-provider'
+import {
+  connectedAccountHeader,
+  directChargeParams,
+  merchantAccountIsReady,
+  saleChargeModel,
+} from '@aglyn/tenant-data-admin/server/payment-provider'
 import { checkoutSessionCardAuthenticationParams } from '@aglyn/tenant-data-admin/server/stripe-card-authentication'
 import {
   readLiveReservations,
@@ -98,6 +103,12 @@ export const reserveHandler: PluginApiHandler = async (req, res) => {
     ) {
       return res.status(409).json({ error: 'Payments are not set up yet' })
     }
+    // A DIRECT charge takes the deposit ON the seller's own Stripe account
+    // (`Stripe-Account`), with Aglyn's take as the application fee; the
+    // destination path below is unchanged for every other seller.
+    const chargeModel = saleChargeModel(ownerProfile?.get('stripeChargeModel'))
+    const direct = chargeModel === 'direct'
+    const onAccount = connectedAccountHeader(chargeModel, accountId)
 
     // The claim sits ABOVE the availability read, and that placement is the
     // fix for this handler's particular lie (AGL-1697): a retried attempt used
@@ -329,11 +340,15 @@ export const reserveHandler: PluginApiHandler = async (req, res) => {
     // path does. The previous single-argument form is what made this a real
     // risk: it read as "the fee base is the charge" and would have silently
     // started taxing the tax the moment a tax line appeared.
+    //
+    // A direct charge's fee is the take alone: Stripe bills the seller its
+    // own card fee and charges the platform nothing for the deposit.
     const feeCents = Aglyn.resolveTransactionFeeCents(
       ownerOrg?.org as any,
       'service',
       chargeCents,
       chargeCents + lodgingTax.taxCents,
+      direct ? { direct: true } : {},
     )
 
     // THE HOLD IS TAKEN IN A TRANSACTION (AGL-2450).
@@ -446,10 +461,16 @@ export const reserveHandler: PluginApiHandler = async (req, res) => {
             'line_items[1][price_data][product_data][name]': lodgingTax.label,
           }
         : {}),
-      ...(feeCents > 0
-        ? { 'payment_intent_data[application_fee_amount]': String(feeCents) }
-        : {}),
-      'payment_intent_data[transfer_data][destination]': String(accountId),
+      // A direct charge is the seller's money from the start: the fee is the
+      // whole split and nothing is transferred.
+      ...(direct
+        ? directChargeParams(feeCents)
+        : {
+            ...(feeCents > 0
+              ? { 'payment_intent_data[application_fee_amount]': String(feeCents) }
+              : {}),
+            'payment_intent_data[transfer_data][destination]': String(accountId),
+          }),
       ...(guestEmail ? { customer_email: guestEmail } : {}),
       success_url: `${backUrl}${separator}reserved=1`,
       cancel_url: `${backUrl}${separator}reserved=0`,
@@ -457,6 +478,9 @@ export const reserveHandler: PluginApiHandler = async (req, res) => {
       'metadata[hostId]': hostId,
       'metadata[reservationId]': reservationRef.id,
       'metadata[feeCents]': String(feeCents),
+      // What the webhook, refunds and reports read to find the payment on
+      // the seller's account rather than the platform's.
+      ...(direct ? { 'metadata[chargeModel]': 'direct' } : {}),
       // The only witness to the tax (AGL-1969). By the construction above
       // Stripe does not know the second line is tax, so it reports
       // `total_details.amount_tax: 0` — the session's own metadata is what
@@ -492,6 +516,7 @@ export const reserveHandler: PluginApiHandler = async (req, res) => {
           // one, covering the window where the claim is written but the
           // response never arrives.
           ...(claim.stripeKey ? { 'Idempotency-Key': claim.stripeKey } : {}),
+          ...onAccount,
         },
         body: params.toString(),
       },

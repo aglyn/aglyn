@@ -102,6 +102,40 @@ async function syncEnabledPlugins(
   })
 }
 /**
+ * A pin that moved takes with it the declared connections it no longer
+ * declares (AGL-4194): an uninstall, or a re-pin to a version without one.
+ * Each such connection's grant is revoked at the provider (best effort, with
+ * the endpoint the PREVIOUS pin declared, the new one having none) and the
+ * connection and its record are deleted. A site that still runs the listing
+ * through its other pin (its own, or the workspace's) keeps its connection.
+ * Never throws: the pin itself is already written.
+ */
+async function forgetUndeclaredConnections(
+  firestore: FirebaseFirestore.Firestore,
+  options: {
+    scope: 'org' | 'host'
+    hostId: string
+    orgId: string | null
+    listingId: string
+    previousPin: Record<string, unknown> | undefined
+  },
+): Promise<void> {
+  try {
+    const { pinConnections, reconcileListingConnections } = await import('./connections/cleanup')
+    const previous = pinConnections(options.previousPin)
+    if (!previous.length) return
+    const orgId = options.orgId ?? (await resolveOrgIdForHost(options.hostId)) ?? null
+    const hostIds =
+      options.scope === 'org' && orgId
+        ? (await firestore.collection('hosts').where('orgId', '==', orgId).get()).docs.map((doc) => doc.id)
+        : [options.hostId]
+    await reconcileListingConnections(firestore, { hostIds, orgId, listingId: options.listingId, previous })
+  } catch (error) {
+    console.error('[marketplace] the connections of a moved pin were not cleaned up', error)
+  }
+}
+
+/**
  * Tells the live sites a pin changed (AGL-3741).
  *
  * The tenant caches each site's resolved plugins under its
@@ -172,7 +206,8 @@ export const installPluginHandler: PluginApiHandler = async (req, res) => {
     // Uninstalls (AGL-237/424). Org pins are API-managed (rules deny
     // client writes); host uninstalls also come through here so the
     // enablement sync runs. Plugin-owned data is never deleted — only the
-    // pin (and the switchboard entry when no pin remains anywhere).
+    // pin (and the switchboard entry when no pin remains anywhere) and, the
+    // one exception, a declared connection's grant and record (AGL-4194).
     if (req.body?.action === 'uninstall') {
       const orgId = await resolveOrgIdForHost(hostId)
       if (req.body?.scope === 'org' && !orgId) {
@@ -194,6 +229,13 @@ export const installPluginHandler: PluginApiHandler = async (req, res) => {
       const pinnedVersion = pinExisted ? pinSnapshot?.get('version') : null
       if (pinRef) await pinRef.delete()
       if (pinExisted) {
+        await forgetUndeclaredConnections(firestore, {
+          scope: req.body?.scope === 'org' ? 'org' : 'host',
+          hostId,
+          orgId,
+          listingId,
+          previousPin: pinSnapshot?.data(),
+        })
         await announcePinChange(firestore, {
           scope: req.body?.scope === 'org' ? 'org' : 'host',
           hostId,
@@ -433,32 +475,43 @@ export const installPluginHandler: PluginApiHandler = async (req, res) => {
         .doc(listingId)
     }
     const existing = await installRef.get()
-    await installRef.set(
-      {
+    const pin = {
+      listingId,
+      profileId: listing.profileId,
+      displayName: listing.displayName,
+      pluginId: versionData.manifest.id,
+      version,
+      sha256: versionData.sha256,
+      objectPath: versionData.objectPath,
+      manifest: versionData.manifest,
+      // The same provenance stamp every other artifact type now carries
+      // (AGL-1015), so one reader answers "where did this come from" for
+      // pinned and copied artifacts alike. The flat pin fields stay: they
+      // are what the loader reads.
+      installedFrom: pinnedProvenance({
         listingId,
-        profileId: listing.profileId,
-        displayName: listing.displayName,
-        pluginId: versionData.manifest.id,
+        listing,
         version,
         sha256: versionData.sha256,
-        objectPath: versionData.objectPath,
-        manifest: versionData.manifest,
-        // The same provenance stamp every other artifact type now carries
-        // (AGL-1015), so one reader answers "where did this come from" for
-        // pinned and copied artifacts alike. The flat pin fields stay: they
-        // are what the loader reads.
-        installedFrom: pinnedProvenance({
-          listingId,
-          listing,
-          version,
-          sha256: versionData.sha256,
-          artifactType: 'plugin',
-        }),
-        ...(existing.exists ? {} : { installedAt: now }),
-        updatedAt: now,
-      },
-      { merge: true },
-    )
+        artifactType: 'plugin',
+      }),
+      ...(existing.exists ? {} : { installedAt: now }),
+      updatedAt: now,
+    }
+    // Each field replaced WHOLE (AGL-4194). `merge: true` merged the new
+    // version's manifest INTO the old one's, so a key the new version dropped
+    // — its `connections`, say — survived on the pin and went on being read
+    // as declared. The fields not written here are still kept.
+    await installRef.set(pin, { mergeFields: Object.keys(pin) })
+    if (existing.exists) {
+      await forgetUndeclaredConnections(firestore, {
+        scope,
+        hostId,
+        orgId: pinOrgId,
+        listingId,
+        previousPin: existing.data(),
+      })
+    }
     await announcePinChange(firestore, {
       scope,
       hostId,

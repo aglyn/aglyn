@@ -27,7 +27,7 @@
  */
 
 import type { PluginOrgErasureReport, PluginOrgErasureRequest } from '@aglyn/aglyn/plugin-manager/plugin-org-erasure'
-import { readAccountingProviderConfig } from './accounting-config'
+import { readAccountingKeyring, readAccountingProviderConfig } from './accounting-config'
 import { loadOrgConnection, openToken } from './connection-store'
 import type { AccountingProvider } from './providers/provider'
 import type { AccountingProviderId } from '../model/accounting.types'
@@ -39,7 +39,7 @@ export interface AccountingErasureDeps {
 
 export function createAccountingOrgEraser(deps: AccountingErasureDeps) {
   return async (request: PluginOrgErasureRequest): Promise<PluginOrgErasureReport> => {
-    const record = await loadOrgConnection(deps.firestore(), request.orgId)
+    const record = await loadOrgConnection(deps.firestore(), request.orgId, readAccountingKeyring())
     if (!record) return { connections: 0, revoked: 0 }
     if (request.dryRun) return { connections: 1, revoked: 0 }
     const adapter = deps.providerFor(record.provider)

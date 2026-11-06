@@ -127,6 +127,7 @@ public enum ReleaseFlagDefaults {
     "release_weglot": ReleaseFlagValue(enabled: true, rolloutPercent: 0, plans: []),
     "release_addon_store": ReleaseFlagValue(enabled: true, rolloutPercent: 0, plans: []),
     "release_native_checkout": ReleaseFlagValue(enabled: true, rolloutPercent: 0, plans: []),
+    "release_direct_charges": ReleaseFlagValue(enabled: false, rolloutPercent: 0, plans: []),
     "release_edit_bar": ReleaseFlagValue(enabled: true, rolloutPercent: 0, plans: []),
     "release_assist": ReleaseFlagValue(enabled: true, rolloutPercent: 0, plans: []),
     "release_video_uploads": ReleaseFlagValue(enabled: false, rolloutPercent: 0, plans: []),

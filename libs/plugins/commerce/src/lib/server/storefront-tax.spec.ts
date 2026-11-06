@@ -15,7 +15,11 @@
  * limitations under the License.
  */
 
-import { storefrontTaxRow } from './storefront-tax'
+import {
+  storefrontSaleIsDirect,
+  storefrontTaxOwner,
+  storefrontTaxRow,
+} from './storefront-tax'
 
 /**
  * The storefront tax decomposition (AGL-1904).
@@ -357,5 +361,57 @@ describe('storefrontTaxRow (AGL-1904)', () => {
     expect(
       storefrontTaxRow(null, { kind: 'session', hostId: 'host-1' }),
     ).toMatchObject({ taxMode: 'none', grossCents: 0, taxCents: 0 })
+  })
+})
+
+describe('a direct charge’s tax is the seller’s', () => {
+  // A Stripe Tax session created ON the seller's account: Stripe says `self`,
+  // and `self` is the seller there.
+  const directSession = {
+    id: 'cs_live_direct',
+    amount_total: 10825,
+    currency: 'usd',
+    automatic_tax: { enabled: true, liability: { type: 'self' } },
+    total_details: { amount_tax: 825 },
+    customer_details: { address: { country: 'US', state: 'TX' } },
+    metadata: { type: 'commerce-cart', hostId: 'host-1', chargeModel: 'direct' },
+  }
+
+  it('is never platform-liable, and names the seller’s account', () => {
+    const row = storefrontTaxRow(directSession, {
+      kind: 'session',
+      hostId: 'host-1',
+      connectedAccountId: 'acct_1Seller',
+    })
+    expect(row).toMatchObject({
+      taxMode: 'stripe-automatic',
+      taxLiability: 'connected-account',
+      connectedAccountId: 'acct_1Seller',
+      taxCents: 825,
+    })
+  })
+
+  it('says who owns the tax', () => {
+    expect(storefrontTaxOwner(directSession)).toBe('seller')
+    // The same session on the platform (a destination sale) is Aglyn's.
+    expect(
+      storefrontTaxOwner({
+        ...directSession,
+        metadata: { type: 'commerce-cart', hostId: 'host-1' },
+      }),
+    ).toBe('platform')
+    expect(storefrontTaxOwner({ ...directSession, automatic_tax: { enabled: false } }, 500)).toBe(
+      'seller',
+    )
+    expect(storefrontTaxOwner({ amount_total: 100 })).toBe('none')
+  })
+
+  it('reads the stamp off an invoice’s subscription too', () => {
+    expect(
+      storefrontSaleIsDirect({
+        parent: { subscription_details: { metadata: { chargeModel: 'direct' } } },
+      }),
+    ).toBe(true)
+    expect(storefrontSaleIsDirect({ metadata: {} })).toBe(false)
   })
 })

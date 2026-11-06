@@ -717,3 +717,73 @@ describe('the return URL names the checkout session (AGL-2481)', () => {
     expect(params.get('cancel_url')).not.toContain('session_id')
   })
 })
+
+/**
+ * A seller whose profile records `stripeChargeModel: 'direct'` is charged ON
+ * their own account: the session is opened with `Stripe-Account`, carries no
+ * `transfer_data`, and the application fee is Aglyn's take alone, because
+ * Stripe bills that seller its own card fee.
+ */
+describe('a DIRECT-charge seller is charged on their own account', () => {
+  beforeEach(() => {
+    mockAdmin.__state.ownerProfile = {
+      stripeAccountId: 'acct_merchant_1',
+      stripeChargesEnabled: true,
+      stripeChargeModel: 'direct',
+    }
+  })
+
+  it('opens the session on the seller’s account with no transfer', async () => {
+    const params = await book()
+    expect(stripePosts[0].headers['Stripe-Account']).toBe('acct_merchant_1')
+    expect(params.has('payment_intent_data[transfer_data][destination]')).toBe(false)
+    expect(params.has('payment_intent_data[on_behalf_of]')).toBe(false)
+    expect(params.get('metadata[chargeModel]')).toBe('direct')
+    // The idempotency key is unchanged: it names the booking attempt.
+    expect(stripePosts[0].headers['Idempotency-Key']).toMatch(/^booking-/)
+  })
+
+  it('takes the plan’s take only, with no card cost passed through', async () => {
+    // Starter: 5% of $75.00.
+    const params = await book()
+    expect(params.get('payment_intent_data[application_fee_amount]')).toBe('375')
+    expect(params.get('metadata[feeCents]')).toBe('375')
+  })
+
+  it('sends no application fee at all on a 0% tier', async () => {
+    mockAdmin.__state.org = { id: 'org-1', ownerUid: 'owner-1', plan: 'advanced' }
+    const params = await book()
+    expect(params.has('payment_intent_data[application_fee_amount]')).toBe(false)
+    expect(params.get('metadata[feeCents]')).toBe('0')
+    expect(stripePosts[0].headers['Stripe-Account']).toBe('acct_merchant_1')
+  })
+
+  it('records the model and the seller account on the hold, for the refund', async () => {
+    await book()
+    const [hold] = [...mockAdmin.__state.bookings.values()]
+    expect(hold).toMatchObject({
+      status: 'pendingPayment',
+      chargeModel: 'direct',
+      stripeAccountId: 'acct_merchant_1',
+    })
+  })
+
+  it('still refuses a seller whose charges are not enabled', async () => {
+    mockAdmin.__state.ownerProfile['stripeChargesEnabled'] = false
+    const res = makeRes()
+    await bookHandler(makeReq(), res)
+    expect(res.statusCode).toBe(409)
+    expect(stripePosts).toHaveLength(0)
+  })
+})
+
+describe('a destination seller is unchanged', () => {
+  it('sends no Stripe-Account header and records nothing about the model', async () => {
+    const params = await book()
+    expect(stripePosts[0].headers['Stripe-Account']).toBeUndefined()
+    expect(params.has('metadata[chargeModel]')).toBe(false)
+    const [hold] = [...mockAdmin.__state.bookings.values()]
+    expect(hold).not.toHaveProperty('chargeModel')
+    expect(hold).not.toHaveProperty('stripeAccountId')
+  })
+})

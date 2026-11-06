@@ -39,6 +39,11 @@ public func registerMarketplaceNative(_ r: NativePluginRegistrar) {
   r.widget("marketplace.plugin-installation", title: "Installation", order: 10, slot: "pluginInstallation") {
     PluginInstallationCard(context: $0)
   }
+  // A site's page for one installed plugin hands the marketplace the connections its manifest declares (the console's
+  // `sitePluginConnections` zone): connect, choose, sync and disconnect, for that site.
+  r.widget("marketplace.site-connections", title: "Connections", order: 10, slot: "sitePluginConnections") {
+    SitePluginConnectionsCard(context: $0)
+  }
   // A site's component and layout pages offer Publish to marketplace only where a plugin fills this slot (the console's
   // `hostArtifactPublish` zone); the publish itself is this plugin's spec screens, so the widget draws nothing of its own.
   r.widget("marketplace.artifact-publish", title: "Publish to marketplace", order: 10, slot: "hostArtifactPublish") { _ in EmptyView() }

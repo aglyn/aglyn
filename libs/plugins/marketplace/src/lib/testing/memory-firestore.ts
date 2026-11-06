@@ -26,7 +26,8 @@
  * `create()` that refuses an existing document, `update()` that refuses an
  * absent one, equality and range filters, ordering and limits, and
  * transactions whose writes are buffered and applied at commit, one body at
- * a time. Only what this plugin's server half calls.
+ * a time. Only what this plugin's server half calls. A range filter, as in
+ * Firestore, never matches a value of another type (`null <= 5` does not).
  */
 
 type Data = Record<string, any>
@@ -34,6 +35,7 @@ type Data = Record<string, any>
 export interface MemoryFirestore {
   docs: Map<string, Data>
   collection(name: string): any
+  collectionGroup(name: string): any
   runTransaction<T>(fn: (transaction: any) => Promise<T>): Promise<T>
   batch(): any
 }
@@ -111,11 +113,17 @@ export function createMemoryFirestore(): MemoryFirestore {
       create: async (value: Data) => write.create(path, value),
       delete: async () => write.delete(path),
       collection: (name: string) => collectionRef(`${path}/${name}`),
+      /** The collection it sits in, whose `parent` is the document above, or `null` at the top. */
+      get parent() {
+        const segments = path.split('/')
+        const above = segments.slice(0, -2).join('/')
+        return { id: segments[segments.length - 2], path: segments.slice(0, -1).join('/'), parent: above ? docRef(above) : null }
+      },
     }
   }
 
   function query(
-    path: string,
+    path: string | { group: string },
     filters: Array<[string, string, unknown]>,
     order: Array<[string, 'asc' | 'desc']>,
     max: number | null,
@@ -123,6 +131,8 @@ export function createMemoryFirestore(): MemoryFirestore {
     const matches = (data: Data) =>
       filters.every(([field, op, expected]) => {
         const actual = field.split('.').reduce<any>((at, key) => at?.[key], data)
+        const comparable = actual !== null && actual !== undefined && typeof actual === typeof expected
+        if (['<', '<=', '>', '>='].includes(op) && !comparable) return false
         switch (op) {
           case '==':
             return actual === expected
@@ -144,10 +154,17 @@ export function createMemoryFirestore(): MemoryFirestore {
             throw new Error(`unsupported op ${op}`)
         }
       })
-    const run = () => {
+    const inScope = (key: string) => {
+      if (typeof path !== 'string') {
+        const segments = key.split('/')
+        return segments.length % 2 === 0 && segments[segments.length - 2] === path.group
+      }
       const prefix = `${path}/`
+      return key.startsWith(prefix) && !key.slice(prefix.length).includes('/')
+    }
+    const run = () => {
       let rows = [...docs.entries()]
-        .filter(([key]) => key.startsWith(prefix) && !key.slice(prefix.length).includes('/'))
+        .filter(([key]) => inScope(key))
         .filter(([, data]) => matches(data))
         .map(([key]) => snapshot(key))
       for (const [field, direction] of [...order].reverse()) {
@@ -184,6 +201,7 @@ export function createMemoryFirestore(): MemoryFirestore {
   return {
     docs,
     collection: (name: string) => collectionRef(name),
+    collectionGroup: (name: string) => query({ group: name }, [], [], null),
     runTransaction<T>(fn: (transaction: any) => Promise<T>): Promise<T> {
       const run = queue.then(async () => {
         const buffered: Array<() => void> = []

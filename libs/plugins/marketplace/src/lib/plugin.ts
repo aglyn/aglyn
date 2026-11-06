@@ -27,6 +27,7 @@ import HostPluginsCard from './components/host-plugins-card.component'
 import PluginSiteSetPanel from './components/plugin-site-set-panel.component'
 import OrgPluginInstallsCard from './components/org-plugin-installs-card.component'
 import PluginInstallStatus from './components/plugin-install-status.component'
+import EditorConnectionsProvider from './components/editor-connections-provider.component'
 import StaffMarketplaceOverview from './components/staff-marketplace-overview.component'
 import StarterPickerShelf from './components/starter-picker-shelf.component'
 import TemplateGalleryShelf from './components/template-gallery-shelf.component'
@@ -37,6 +38,10 @@ import { BUNDLE_ID } from './constants/bundle-common'
 import { MARKETPLACE_LICENSES_SECTION_ID } from './model/marketplace-section-ids'
 import { RATING_FIELD } from './model/rating-field'
 import RatingInput from './components/rating-input.component'
+import { lazy } from 'react'
+
+/** Drawn only on a site's page for a plugin that declares connections, so it loads when it is drawn. */
+const SitePluginConnectionsCard = lazy(() => import('./components/site-plugin-connections-card.component'))
 
 /**
  * Marketplace feature plugin (AGL-395). Console-only — marketplace components
@@ -97,6 +102,15 @@ export function registerMarketplaceConsole(): void {
         widgetId: 'marketplace-plugin-install-status',
         Component: PluginInstallStatus,
       },
+      // A site's page for one installed plugin (AGL-4196): the services the
+      // pinned manifest declares it connects to. This plugin runs the
+      // connections, so it draws them; the card checks the site key itself
+      // and keeps every control on screen with the reason when it is off.
+      {
+        slot: 'sitePluginConnections',
+        widgetId: 'marketplace-site-plugin-connections',
+        Component: SitePluginConnectionsCard,
+      },
       // The staff overview (AGL-3080): recent purchases and the
       // refund-reversal recovery queue, from this plugin's own purchases.
       {
@@ -149,6 +163,13 @@ export function registerMarketplaceConsole(): void {
      * page has to do anyway for one deleted while a link to it was still in
      * someone's inbox.
      */
+    /*
+     * The site's declared connections in the editor (AGL-4196): the records a
+     * signed element reads, and the variables the binding picker lists, on
+     * the Besigner and Preview only. Core declares the context; this plugin
+     * runs the connections, so it fills it.
+     */
+    providers: [EditorConnectionsProvider],
     orgNavItems: [
       {
         label: 'Marketplace',
