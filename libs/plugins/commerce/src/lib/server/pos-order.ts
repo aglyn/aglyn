@@ -649,8 +649,7 @@ export const posOrderHandler: PluginApiHandler = async (req, res) => {
     // online doors this one recovers the cost exactly.
     const feeCents =
       payment === 'link'
-        ? tenderTakeFeeCents +
-          Aglyn.saleProcessingCostCents(chargedItemsCents + taxCents)
+        ? Aglyn.saleApplicationFeeCents(tenderTakeFeeCents, chargedItemsCents + taxCents)
         : tenderTakeFeeCents
     const totals = CommerceModel.computeOrderTotals(lineItems, {
       discountCents,

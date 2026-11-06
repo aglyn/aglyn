@@ -1680,10 +1680,11 @@ describe('a lapsed storefront stops renewing (AGL-2071)', () => {
  * Since AGL-2655 the figure re-priced to is the plan's take PLUS Stripe's
  * processing cost folded into the rate, sized on the cycle's recurring goods.
  * `RENEWAL_INVOICE` bills $90.00 of goods (`total` 9000, no tax, no shipping),
- * so at the card rate plus Connect's payout, 3.15% + 55¢ (AGL-4198; 6% + 30¢
- * before), the pass-through is `3.15 + 0.55 ÷ 90` = 3.76…%, rounded UP to 3.77%. Business digital (2%) therefore re-prices to 5.77%, and Advanced
- * (0%) to 3.77% — no longer to "unset", because the pass-through is owed on
- * every tier.
+ * so at the card rate, 2.9% + 30¢ (AGL-4198; 6% before), the pass-through is
+ * `2.9 + 0.30 ÷ 90` = 3.23…%, rounded UP to 3.24%. Business digital (2%) re-prices
+ * to 5.24%. Advanced (0%) re-prices to what Stripe charges the platform for the
+ * cycle, the card and the payout, 3.77%, since a 0% take cannot pay the payout.
+ * Neither re-prices to "unset", because the pass-through is owed on every tier.
  */
 describe('the platform fee follows the plan (AGL-2289, AGL-2655)', () => {
   const DIGITAL_SOLD = {
@@ -1732,8 +1733,8 @@ describe('the platform fee follows the plan (AGL-2289, AGL-2655)', () => {
     await deliver(RENEWAL_INVOICE)
 
     expect(feeRepriceCalls()).toHaveLength(1)
-    expect(repriceBody()).toBe('application_fee_percent=5.77')
-    expect(storedSubscription().appliedFeePct).toBe(5.77)
+    expect(repriceBody()).toBe('application_fee_percent=5.24')
+    expect(storedSubscription().appliedFeePct).toBe(5.24)
   })
 
   it('carries a subscription sold at the bare take onto the pass-through', async () => {
@@ -1746,15 +1747,15 @@ describe('the platform fee follows the plan (AGL-2289, AGL-2655)', () => {
     await deliver(RENEWAL_INVOICE)
 
     expect(feeRepriceCalls()).toHaveLength(1)
-    expect(repriceBody()).toBe('application_fee_percent=5.77')
-    expect(storedSubscription().appliedFeePct).toBe(5.77)
+    expect(repriceBody()).toBe('application_fee_percent=5.24')
+    expect(storedSubscription().appliedFeePct).toBe(5.24)
   })
 
   it('sizes the pass-through on the sale’s recurring goods when the invoice bills a fraction', async () => {
     // A proration invoice bills a slice of the cycle. A percent sized on the
     // slice would be applied to the NEXT full cycle and over-recover on it,
-    // so the sale's own lines ($50 × 2 = $100) size it instead: 3.70%, not
-    // the 58.15% a $1 slice would give.
+    // so the sale's own lines ($50 × 2 = $100) size it instead: 5.20% (2% + 3.20%), not
+    // the 32.9% a $1 slice would give.
     sellDigital(undefined)
     orgFixture = { id: 'org-1', plan: 'business', ownerUid: 'owner-1' }
 
@@ -1780,7 +1781,7 @@ describe('the platform fee follows the plan (AGL-2289, AGL-2655)', () => {
       },
     })
 
-    expect(repriceBody()).toBe('application_fee_percent=5.7')
+    expect(repriceBody()).toBe('application_fee_percent=5.2')
   })
 
   it('leaves the rate alone when neither the invoice nor the sale can size the pass-through', async () => {
@@ -1835,7 +1836,7 @@ describe('the platform fee follows the plan (AGL-2289, AGL-2655)', () => {
 
     await deliver(RENEWAL_INVOICE)
 
-    expect(repriceBody()).toBe('application_fee_percent=5.77')
+    expect(repriceBody()).toBe('application_fee_percent=5.24')
   })
 
   it('treats a malformed stored rate as unknown', async () => {
@@ -1853,7 +1854,7 @@ describe('the platform fee follows the plan (AGL-2289, AGL-2655)', () => {
 
     await deliver(RENEWAL_INVOICE)
 
-    expect(repriceBody()).toBe('application_fee_percent=5.77')
+    expect(repriceBody()).toBe('application_fee_percent=5.24')
   })
 
   /**
@@ -1862,7 +1863,7 @@ describe('the platform fee follows the plan (AGL-2289, AGL-2655)', () => {
    * feature would be satisfied by a handler that POSTs on every single cycle.
    */
   it('POSITIVE CONTROL: an agreeing rate makes no Stripe call at all', async () => {
-    sellDigital(5.77)
+    sellDigital(5.24)
     orgFixture = { id: 'org-1', plan: 'business', ownerUid: 'owner-1' }
 
     await deliver(RENEWAL_INVOICE)

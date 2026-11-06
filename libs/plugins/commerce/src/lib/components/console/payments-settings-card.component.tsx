@@ -315,16 +315,18 @@ export function PaymentsSettingsCard(props: PaymentsSettingsCardProps) {
                 which used to be absorbed silently out of the platform's
                 balance rather than passed through.
 
-                The card rate plus Connect's payout (AGL-4198): no checkout on
-                a site offers buy-now-pay-later, so every method a customer
-                can pay with costs Stripe that much or less. */}
+                One rate, online and on a card reader (AGL-4198): no checkout
+                on a site offers buy-now-pay-later. Stripe's payout charge and
+                Stripe Tax come out of the platform fee first; a fee too small
+                to cover them is topped up to what Stripe charges, never more. */}
             <Typography variant="body2" color="text.secondary">
-              {"Stripe's processing and payout costs are passed through at cost on top of that: " +
-                `${Aglyn.SALE_PROCESSING_PERCENT}% + ${Aglyn.SALE_PROCESSING_FIXED_CENTS}¢ per online sale, ` +
-                `${Aglyn.IN_PERSON_PROCESSING_PERCENT}% + ${Aglyn.IN_PERSON_PROCESSING_FIXED_CENTS}¢ on a card reader, ` +
-                `and ${Aglyn.STRIPE_TAX_PERCENT}% more where Stripe Tax works out the tax. ` +
-                'They are what Stripe charges to take the payment and pay you out, not a ' +
-                `${Aglyn.PLATFORM_BRAND_LEGAL_NAME} margin.`}
+              {'Card processing is passed through at cost on top of that: ' +
+                `${Aglyn.SALE_PROCESSING_PERCENT}% + ${Aglyn.SALE_PROCESSING_FIXED_CENTS}¢ per card sale, ` +
+                'online or on a card reader, what Stripe charges to take the payment. It is not a ' +
+                `${Aglyn.PLATFORM_BRAND_LEGAL_NAME} margin. Where the platform fee is smaller than ` +
+                `what Stripe charges to pay you out (${Aglyn.CONNECT_PAYOUT_PERCENT}% + ` +
+                `${Aglyn.CONNECT_PAYOUT_FIXED_CENTS}¢ a payout, and ${Aglyn.STRIPE_TAX_PERCENT}% where ` +
+                'Stripe Tax works out the tax), the fee is that cost instead.'}
             </Typography>
             {/* WHICH REGISTER TENDERS CARRY THE FEE, AND HOW EACH IS
                 COLLECTED (AGL-2111, AGL-4036).

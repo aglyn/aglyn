@@ -404,9 +404,8 @@ describe('a storefront sale is never a loss to the platform (AGL-2152)', () => {
     expect(body?.has('line_items[1][price_data][unit_amount]')).toBe(false)
     expect(fee).toBeGreaterThan(0)
     expect(fee - stripeCostCents(3000, SALE_PROCESSING_PERCENT)).toBeGreaterThanOrEqual(0)
-    // The card rate binds because the session offers no buy-now-pay-later; the
-    // payout's 0.25% rides on top of it (AGL-4198).
-    expect(SALE_PROCESSING_PERCENT).toBeCloseTo(CARD_PROCESSING_PERCENT + 0.25, 10)
+    // The card rate binds because the session offers no buy-now-pay-later (AGL-4198).
+    expect(SALE_PROCESSING_PERCENT).toBe(CARD_PROCESSING_PERCENT)
     const excluded = [...(body?.keys() ?? [])]
       .filter((key) => key.startsWith('excluded_payment_method_types['))
       .map((key) => body?.get(key))

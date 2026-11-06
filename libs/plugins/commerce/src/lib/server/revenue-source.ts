@@ -36,7 +36,7 @@
  * it would report the 30¢ Stripe just took as money the platform made.
  *
  * So the pass-through is recomputed with the SAME helper the fee was charged
- * from (`saleProcessingCostCents`) and subtracted. Both halves are
+ * from (`salePlatformCostCents`) and subtracted. Both halves are
  * reported, because "we collected X of which Y was Stripe's" is the sentence a
  * margin figure needs.
  *
@@ -67,7 +67,7 @@
  */
 
 import { firebaseAdmin } from '@aglyn/tenant-data-admin'
-import { saleProcessingCostCents } from '@aglyn/aglyn/server'
+import { salePlatformCostCents } from '@aglyn/aglyn/server'
 import { PLATFORM_BRAND_NAME } from '@aglyn/aglyn/app-utils/platform-brand'
 import { stripeIdIsTestMode } from '@aglyn/aglyn/app-utils/stripe-deployment-mode'
 import {
@@ -234,10 +234,13 @@ export function commerceOrderTake(row: CommerceOrderRowInput | null): {
     }
   }
   // Every fee bundles the recovery — a one-time sale's in cents, a
-  // subscription cycle's as a rate (AGL-2655). Clamped to the fee itself: the
-  // recomputed cost can exceed a fee charged under an older rate, and a
-  // negative take would subtract from another order's real margin.
-  const passThrough = Math.min(fee, saleProcessingCostCents(gross))
+  // subscription cycle's as a rate (AGL-2655). Since AGL-4198 the take also
+  // pays Stripe's payout charge first, so what the platform keeps is the fee
+  // less everything Stripe charges it for the sale, not less the card alone.
+  // Clamped to the fee itself: the recomputed cost can exceed a fee charged
+  // under an older rate, and a negative take would subtract from another
+  // order's real margin.
+  const passThrough = Math.min(fee, salePlatformCostCents(gross))
   const take = fee - passThrough
   const refunded = Math.min(gross, Math.max(0, cents(row?.refundedCents)))
   const takeRefunded = gross > 0 ? Math.round((refunded * take) / gross) : 0
@@ -321,7 +324,7 @@ export function commerceRevenueAnswer(read: {
         note: `Not all ${brand}’s — see the next line.`,
       },
       {
-        label: '— less card processing passed through at cost',
+        label: '— less card processing and payouts passed through at cost',
         cents: settled.processingPassThroughCents,
         deduction: true,
         note: `Stripe’s. On a destination charge Stripe debits ${brand}’s balance for processing, and this half of the fee recovers exactly that. It is a recovery, not earnings, and reporting it as revenue would overstate every storefront sale.`,

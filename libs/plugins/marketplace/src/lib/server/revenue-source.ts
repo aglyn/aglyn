@@ -39,7 +39,7 @@
  */
 
 import { firebaseAdmin } from '@aglyn/tenant-data-admin'
-import { saleProcessingCostCents } from '@aglyn/aglyn/server'
+import { salePlatformCostCents } from '@aglyn/aglyn/server'
 import { PLATFORM_BRAND_NAME } from '@aglyn/aglyn/app-utils/platform-brand'
 import {
   groupRevenueAttribution,
@@ -174,10 +174,11 @@ export function marketplaceCommissionCents(
     commission,
     commissionRefunded,
     commissionNet: commission - commissionRefunded,
-    // The operator's own uncovered cost on this destination charge. The same
-    // helper the storefront path recovers with, so the two cannot drift apart.
+    // The operator's own uncovered cost on this destination charge: the card
+    // and the payout (AGL-4198). The same helper the storefront path floors
+    // its fee at, so the two cannot drift apart.
     processingCost:
-      gross > refunded ? saleProcessingCostCents(gross - refunded) : 0,
+      gross > refunded ? salePlatformCostCents(gross - refunded) : 0,
   }
 }
 
@@ -272,7 +273,7 @@ export function marketplaceRevenueAnswer(read: {
       Number(settled.estimatedProcessingCostCents ?? 0) > 0
         ? [
             {
-              label: `~$${dollars(settled.estimatedProcessingCostCents)} of card processing on marketplace sales is NOT recovered — the commission above is gross of it`,
+              label: `~$${dollars(settled.estimatedProcessingCostCents)} of card processing and payouts on marketplace sales is NOT recovered — the commission above is gross of it`,
               tone: 'warning',
             },
           ]

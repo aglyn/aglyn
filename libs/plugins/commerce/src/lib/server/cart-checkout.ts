@@ -1205,16 +1205,14 @@ export const cartCheckoutHandler: PluginApiHandler = async (req, res) => {
           ? engineTax.quote.taxCents
           : Math.round((chargedItemsCents * manualTaxPct) / 100)) +
         shippingCeilingCents
-      feeCents = Math.min(
-        chargeCents,
-        feeCents +
-          Aglyn.saleProcessingCostCents(chargeCents, {
-            // Stripe Tax bills the platform on the sale it calculates (AGL-4198).
-            stripeTax:
-              CommerceModel.storefrontTaxDecision({ settings: cartTaxSettings }).kind ===
-              'stripe-automatic',
-          }),
-      )
+      // The take plus the card's 2.9% + 30¢, never below what Stripe charges
+      // the platform for the sale: the payout, and Stripe Tax where it
+      // calculates the tax, come out of the take first (AGL-4198).
+      feeCents = Aglyn.saleApplicationFeeCents(feeCents, chargeCents, {
+        stripeTax:
+          CommerceModel.storefrontTaxDecision({ settings: cartTaxSettings }).kind ===
+          'stripe-automatic',
+      })
     }
     // THE CONNECT SPLIT IS EMITTED BELOW, NOT HERE (AGL-1956). It used to be
     // written at this point, which is ABOVE the tax decision — and the shape

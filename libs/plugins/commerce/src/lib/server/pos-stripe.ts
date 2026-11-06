@@ -15,7 +15,10 @@
  * limitations under the License.
  */
 
-import { saleProcessingCostCents } from '@aglyn/aglyn/app-utils/plan-entitlements'
+import {
+  saleApplicationFeeCents,
+  saleProcessingCostCents,
+} from '@aglyn/aglyn/app-utils/plan-entitlements'
 import { NATIVE_CHECKOUT_STRIPE_VERSION } from './native-checkout'
 
 /**
@@ -115,20 +118,16 @@ export function posTerminalAvailable(): boolean {
 }
 
 /**
- * What a register CARD payment costs the platform, passed through at cost
- * beside the platform's take (the AGL-2152 rule, on the register's tenders).
- *
- * In person (`card_present`): Stripe Terminal's rate plus Connect's payout,
- * `IN_PERSON_PROCESSING_PERCENT` + `IN_PERSON_PROCESSING_FIXED_CENTS`
- * (2.95% + 40¢, AGL-4198). A typed card or a card link is an online card and
- * recovers what any online sale does, `saleProcessingCostCents` (3.15% + 55¢).
- * Every register card payment pins `card` or `card_present`, so no
- * buy-now-pay-later method can be chosen. The base is the whole CHARGE, tip
- * included, because Stripe's own fee is on the whole charge; the platform's
- * take is not.
+ * The card processing a register CARD payment passes through beside the
+ * platform's take (the AGL-2152 rule, on the register's tenders): 2.9% + 30¢,
+ * the same online rate a site sale passes through, on a reader's card and a
+ * typed card alike (AGL-4198). Every register card payment pins `card` or
+ * `card_present`, so no buy-now-pay-later method can be chosen. The base is
+ * the whole CHARGE, tip included, because Stripe's own fee is on the whole
+ * charge; the platform's take is not.
  */
-export function posCardProcessingCostCents(chargeCents: number, inPerson = true): number {
-  return saleProcessingCostCents(chargeCents, { inPerson })
+export function posCardProcessingCostCents(chargeCents: number): number {
+  return saleProcessingCostCents(chargeCents)
 }
 
 /** The `application_fee_amount` for a register card payment. */
@@ -139,9 +138,13 @@ export function posCardApplicationFeeCents(input: {
   inPerson?: boolean
 }): number {
   // The processing half is owed even on a plan whose take is 0%: Stripe debits
-  // it from the platform on every destination charge (AGL-2071).
-  const take = Math.max(0, Math.round(input.takeShareCents))
-  return take + posCardProcessingCostCents(input.chargeCents, input.inPerson ?? true)
+  // it from the platform on every destination charge (AGL-2071). The fee never
+  // falls below what Stripe charges the platform for the payment (AGL-4198):
+  // Terminal's rate for a reader's card, the online rate for a typed card, and
+  // the payout either way, all out of the take first.
+  return saleApplicationFeeCents(input.takeShareCents, input.chargeCents, {
+    inPerson: input.inPerson ?? true,
+  })
 }
 
 /** A refusal Stripe sent, in words a cashier can read out. */

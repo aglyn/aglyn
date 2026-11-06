@@ -19,7 +19,7 @@ import type {
   PluginApiRequest,
   PluginApiResponse,
 } from '@aglyn/aglyn/server'
-import { saleProcessingCostCents } from '@aglyn/aglyn/server'
+import { saleApplicationFeeCents } from '@aglyn/aglyn/server'
 import { draftOrderHandler } from './draft-order'
 
 /**
@@ -493,7 +493,7 @@ describe('a product doc with no type (AGL-2251)', () => {
     const sent = Number(
       stripeCalls[0].params.get('payment_intent_data[application_fee_amount]'),
     )
-    expect(sent - saleProcessingCostCents(90000)).toBe(0)
+    expect(sent).toBe(saleApplicationFeeCents(0, 90000))
   })
 
   it('POSITIVE CONTROL: an explicit digital product still pays 2%', async () => {
@@ -508,7 +508,7 @@ describe('a product doc with no type (AGL-2251)', () => {
 
     expect(
       stripeCalls[0].params.get('payment_intent_data[application_fee_amount]'),
-    ).toBe(String(1800 + saleProcessingCostCents(90000)))
+    ).toBe(String(saleApplicationFeeCents(1800, 90000)))
   })
 })
 

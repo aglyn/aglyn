@@ -69,7 +69,7 @@ What the email says depends on whether the order is paid:
 - **Unpaid**: "Invoice #1042 from" your business, the invoice number, its date, the
   total and what is due, and a **Pay** button. The button opens the invoice on your
   own site, where your customer pays it by card or wallet, never buy-now-pay-later
-  (processing is 3.15% + 55¢, see [Payment methods](overview.md#payment-methods)). The
+  (processing is 2.9% + 30¢, see [Payment methods](overview.md#payment-methods)). The
   same link is printed on the PDF.
 - **Paid**: the same invoice, marked paid on the day it was paid, for your
   customer's records. It has no button.
