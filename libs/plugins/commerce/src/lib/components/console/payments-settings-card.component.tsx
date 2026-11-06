@@ -74,9 +74,7 @@ export function PaymentsSettingsCard(props: PaymentsSettingsCardProps) {
     () => (ownerUid ? doc(firestore, 'profiles', ownerUid) : null),
     [firestore, ownerUid, retryNonce],
   )
-  const isOwner = Boolean(
-    org?.ownerUid && (user as any)?.uid === org.ownerUid,
-  )
+  const isOwner = Boolean(org?.ownerUid && (user as any)?.uid === org.ownerUid)
   /**
    * Three outcomes, not two (AGL-1380). An absent profile doc is the value
    * BEFORE an answer as much as it is the value of a merchant who never
@@ -107,6 +105,10 @@ export function PaymentsSettingsCard(props: PaymentsSettingsCardProps) {
     stripeState === 'loaded' && Boolean(profile?.stripeChargesEnabled)
   const modeUnverified = chargesConnected && !modeVerified
   const chargesEnabled = chargesConnected && modeVerified
+  /** The store's own Stripe account (direct charges), or none yet: every new setup is one. */
+  const ownStripeAccount =
+    stripeState === 'loaded' &&
+    (profile?.stripeChargeModel === 'direct' || !profile?.stripeAccountId)
   const physicalPct = Aglyn.resolveTransactionFeePct(org, 'physical')
   const digitalPct = Aglyn.resolveTransactionFeePct(org, 'digital')
   const commerceEnabled = Aglyn.checkEntitlement(org, 'commerce')
@@ -268,7 +270,9 @@ export function PaymentsSettingsCard(props: PaymentsSettingsCardProps) {
           <>
             {!commerceEnabled ? (
               <PrerequisiteNotice href={upgradeHref} actionLabel="See plans">
-                {'Selling needs a paid plan. Choose one on Billing, then connect Stripe here.'}
+                {
+                  'Selling needs a paid plan. Choose one on Billing, then connect Stripe here.'
+                }
               </PrerequisiteNotice>
             ) : null}
             {/*
@@ -319,15 +323,33 @@ export function PaymentsSettingsCard(props: PaymentsSettingsCardProps) {
                 on a site offers buy-now-pay-later. Stripe's payout charge and
                 Stripe Tax come out of the platform fee first; a fee too small
                 to cover them is topped up to what Stripe charges, never more. */}
-            <Typography variant="body2" color="text.secondary">
-              {'Card processing is passed through at cost on top of that: ' +
-                `${Aglyn.SALE_PROCESSING_PERCENT}% + ${Aglyn.SALE_PROCESSING_FIXED_CENTS}¢ per card sale, ` +
-                'online or on a card reader, what Stripe charges to take the payment. It is not a ' +
-                `${Aglyn.PLATFORM_BRAND_LEGAL_NAME} margin. Where the platform fee is smaller than ` +
-                `what Stripe charges to pay you out (${Aglyn.CONNECT_PAYOUT_PERCENT}% + ` +
-                `${Aglyn.CONNECT_PAYOUT_FIXED_CENTS}¢ a payout, and ${Aglyn.STRIPE_TAX_PERCENT}% where ` +
-                'Stripe Tax works out the tax), the fee is that cost instead.'}
-            </Typography>
+            {/* DIRECT CHARGES: the store's own Stripe account. Stripe bills
+                its processing (and Stripe Tax) to that account itself, so
+                nothing is passed through and the platform fee above is the
+                whole of what the platform takes. Also the wording before
+                payments are set up, because every new setup is that kind of
+                account; an account that already exists keeps its own shape,
+                so a platform-managed one keeps the pass-through paragraph. */}
+            {ownStripeAccount ? (
+              <Typography variant="body2" color="text.secondary">
+                {'Card processing is billed by Stripe straight to your Stripe ' +
+                  'account at Stripe’s standard rates, online and on a card ' +
+                  'reader, along with Stripe Tax if you use it. It is separate ' +
+                  `from the platform fee and is not a ${Aglyn.PLATFORM_BRAND_LEGAL_NAME} ` +
+                  'charge. Refunds, disputes and payouts are handled on your ' +
+                  'Stripe account.'}
+              </Typography>
+            ) : (
+              <Typography variant="body2" color="text.secondary">
+                {'Card processing is passed through at cost on top of that: ' +
+                  `${Aglyn.SALE_PROCESSING_PERCENT}% + ${Aglyn.SALE_PROCESSING_FIXED_CENTS}¢ per card sale, ` +
+                  'online or on a card reader, what Stripe charges to take the payment. It is not a ' +
+                  `${Aglyn.PLATFORM_BRAND_LEGAL_NAME} margin. Where the platform fee is smaller than ` +
+                  `what Stripe charges to pay you out (${Aglyn.CONNECT_PAYOUT_PERCENT}% + ` +
+                  `${Aglyn.CONNECT_PAYOUT_FIXED_CENTS}¢ a payout, and ${Aglyn.STRIPE_TAX_PERCENT}% where ` +
+                  'Stripe Tax works out the tax), the fee is that cost instead.'}
+              </Typography>
+            )}
             {/* WHICH REGISTER TENDERS CARRY THE FEE, AND HOW EACH IS
                 COLLECTED (AGL-2111, AGL-4036).
 
