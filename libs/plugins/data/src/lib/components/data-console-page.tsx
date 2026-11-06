@@ -32,7 +32,7 @@ import HostDatasetsCard, {
  * shell) flows into the card for its entitlement/quota checks.
  */
 export function DataConsolePage(props: ConsolePluginPageProps) {
-  const { hostId, org } = props
+  const { hostId, org, basePath, segments } = props
   // The org Data page is `/[orgSlug]/data` (AGL-621). This used to hardcode
   // `/org/data`, which stopped being a route at that migration and had been
   // a dead link ever since (AGL-685); the slug is not a prop, so resolve it
@@ -73,7 +73,8 @@ export function DataConsolePage(props: ConsolePluginPageProps) {
             ?.defaultResourceScope === 'host',
         )}
       </Alert>
-      <HostDatasetsCard hostId={hostId} org={org} />
+      {/* Each dataset is a tab, at `<basePath>/<datasetId>` (AGL-4047). */}
+      <HostDatasetsCard hostId={hostId} org={org} basePath={basePath} segments={segments} />
     </Stack>
   )
 }

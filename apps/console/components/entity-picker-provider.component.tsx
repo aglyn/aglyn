@@ -36,7 +36,11 @@ import {
   type ResolvedPluginEntityPicker,
 } from '@aglyn/aglyn/plugin-manager/plugin-entity-pickers'
 import type { PluginIndexedRecord } from '@aglyn/aglyn/plugin-manager/plugin-record-index'
-import { pluginRecordListSource } from '@aglyn/aglyn/plugin-manager/plugin-record-lists'
+import {
+  pluginRecordListSource,
+  pluginRecordPickerLabels,
+  pluginRecordsFromRows,
+} from '@aglyn/aglyn/plugin-manager/plugin-record-lists'
 import {
   collection,
   doc,
@@ -345,7 +349,7 @@ function EntityPickerKindList(props: EntityPickerKindListProps) {
   const { picker, path, hostId, text, onList } = props
   const firestore = useFirestore()
   const scope = useMemo(() => pickerScope(picker, hostId), [picker, hostId])
-  const { options, rows, state, truncated } = useEntityPickerList({
+  const { options: named, rows, state, truncated } = useEntityPickerList({
     path,
     labelField: picker.nameField,
     scope,
@@ -353,6 +357,28 @@ function EntityPickerKindList(props: EntityPickerKindListProps) {
     text,
     deps: [firestore, path?.join('/') ?? '', hostId],
   })
+  /*
+   * Two of one name, told apart by their owner (AGL-4047). A kind whose
+   * entities are records of a plugin's record kind (`fieldsFrom`) asks that
+   * owner what to call each beside the others; the label changes only where
+   * it says more than the name. A site's picker lists what the site sees, so
+   * an entity on a single site is on this one, and is called so.
+   */
+  const options = useMemo(() => {
+    const recordKind = picker.fieldsFrom
+    if (!recordKind || named.length < 2) return named
+    const labels = pluginRecordPickerLabels(
+      recordKind,
+      pluginRecordsFromRows(recordKind, rows),
+      hostId ? { hostNames: { [hostId]: 'This site' } } : undefined,
+    )
+    if (!named.some((option) => labels[option.id] && labels[option.id] !== option.label)) return named
+    return named.map((option) =>
+      labels[option.id] && labels[option.id] !== option.label
+        ? { ...option, label: labels[option.id] as string, name: option.label }
+        : option,
+    )
+  }, [picker.fieldsFrom, named, rows, hostId])
   useEffect(() => {
     onList(picker.kind, { options, rows, state, truncated })
   }, [picker.kind, options, rows, state, truncated, onList])

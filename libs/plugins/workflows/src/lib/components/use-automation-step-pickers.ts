@@ -46,6 +46,7 @@ import {
 import { collection, query, where } from 'firebase/firestore'
 import {
   pluginRecordListQuery,
+  pluginRecordPickerLabels,
   pluginRecordsFromRows,
 } from '@aglyn/aglyn/plugin-manager/plugin-record-lists'
 import { useMemo } from 'react'
@@ -237,8 +238,12 @@ export function useAutomationStepPickers(
     }))
     .sort((a, b) => a.name.localeCompare(b.name))
   // Named as the Data page names them, by their owner.
-  const datasetOptions = pluginRecordsFromRows('dataset', datasetRows)
-    .map((dataset) => ({ id: dataset.id, name: dataset.name }))
+  // Told apart where two share a name, by their owner (AGL-4047). Every one
+  // listed is this site's to see, so one on a single site is on this one.
+  const datasetRecords = pluginRecordsFromRows('dataset', datasetRows)
+  const datasetLabels = pluginRecordPickerLabels('dataset', datasetRecords, { hostNames: { [hostId]: 'This site' } })
+  const datasetOptions = datasetRecords
+    .map((dataset) => ({ id: dataset.id, name: dataset.name, label: datasetLabels[dataset.id] }))
     .sort((a, b) => a.name.localeCompare(b.name))
   // Named as the Marketing page names them, by their owner.
   const overlayOptions = pluginRecordsFromRows('overlay', overlayRows)

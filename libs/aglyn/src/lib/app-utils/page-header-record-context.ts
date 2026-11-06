@@ -56,6 +56,21 @@ export interface PageHeaderRecordValue {
    * the route's own heading stands, which already names the surface.
    */
   title?: string
+  /**
+   * Name the record in the trail only, and leave the heading as the route
+   * built it (AGL-4047). For a surface whose heading names the place rather
+   * than the record — a page of tabs, where the record is the open tab and
+   * the heading stays the page's.
+   */
+  keepHeading?: boolean
+  /**
+   * The record this one sits inside, as a crumb before it (AGL-4047): a
+   * dataset's record names the dataset, linked, then itself. Absent, the
+   * record is the trail's only addition, as before.
+   */
+  parentTitle?: string
+  /** Where {@link parentTitle} links to. Both or neither. */
+  parentHref?: string
 }
 
 export interface PageHeaderRecordContextValue {
@@ -105,12 +120,20 @@ export type PageHeaderRecordProps = PageHeaderRecordValue
  * would be an option that silently does nothing.
  */
 export function PageHeaderRecord(props: PageHeaderRecordProps): null {
-  const { title } = props
+  const { title, keepHeading, parentTitle, parentHref } = props
   const { setHeaderRecord } = usePageHeaderRecord()
   useEffect(() => {
-    setHeaderRecord?.(title ? { title } : null)
+    setHeaderRecord?.(
+      title
+        ? {
+            title,
+            ...(keepHeading ? { keepHeading } : {}),
+            ...(parentTitle && parentHref ? { parentTitle, parentHref } : {}),
+          }
+        : null,
+    )
     return () => setHeaderRecord?.(null)
-  }, [setHeaderRecord, title])
+  }, [setHeaderRecord, title, keepHeading, parentTitle, parentHref])
   return null
 }
 PageHeaderRecord.displayName = 'PageHeaderRecord'

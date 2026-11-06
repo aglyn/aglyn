@@ -69,8 +69,9 @@
 
 import { act, fireEvent, render, screen, waitFor } from '@testing-library/react'
 
-import type { ReactNode } from 'react'
+import { type ReactNode, useMemo, useState } from 'react'
 import { TABLE_PAGE_SIZE_DEFAULT } from '@aglyn/shared-ui-jsx/const/table-pagination'
+import { PageHeaderActionsContext } from '@aglyn/aglyn/app-utils/page-header-actions-context'
 import { HostDatasetsCard } from './host-datasets-card.component'
 
 /**
@@ -139,6 +140,29 @@ const DATA_SCOPE = { scope: ['orgs', 'org-1'], orgId: 'org-1' }
  * entirely to the stub. The real `useFirestore` returns one app instance.
  */
 const FIRESTORE = {}
+
+/**
+ * The page header the card publishes Add dataset and Add join collection into
+ * (AGL-4047), drawn above the card as the console's layout draws it.
+ */
+function WithPageHeader(props: { children?: ReactNode }) {
+  const [actions, setHeaderActions] = useState<ReactNode>(null)
+  const value = useMemo(() => ({ setHeaderActions }), [])
+  return (
+    <PageHeaderActionsContext.Provider value={value}>
+      <div data-testid="page-header">{actions}</div>
+      {props.children}
+    </PageHeaderActionsContext.Provider>
+  )
+}
+
+/** The Data page's route (AGL-4047): the card reads the router to open a dataset's tab. */
+const mockRouter = { push: jest.fn(), replace: jest.fn(), prefetch: jest.fn() }
+jest.mock('next/navigation', () => ({
+  useRouter: () => mockRouter,
+  usePathname: () => '/acme/data',
+  useSearchParams: () => new URLSearchParams(),
+}))
 
 jest.mock('@aglyn/tenant-feature-instance', () => ({
   useFirestoreDoc: () => ({ data: undefined, status: 'loading' }),
@@ -232,7 +256,26 @@ jest.mock('@aglyn/shared-ui-snackstack', () => ({
 }))
 const confirm = jest.fn().mockRejectedValue(new Error('cancelled'))
 jest.mock('@aglyn/shared-ui-jsx', () => ({
-  CardDisplay: ({ children }: { children: ReactNode }) => <div>{children}</div>,
+  CardDisplay: ({ children, header, HeaderProps }: any) => (
+    <div>
+      {header}
+      {HeaderProps?.action}
+      {HeaderProps?.subheader}
+      {children}
+    </div>
+  ),
+  GridItems: ({ items }: any) => (
+    <div>
+      {items.map((item: any, index: number) => (
+        <div key={index}>{item.children}</div>
+      ))}
+    </div>
+  ),
+  AppLink: ({ children, href, componentVariant: _variant, ...rest }: any) => (
+    <a href={href} {...rest}>
+      {children}
+    </a>
+  ),
   MdiIcon: () => null,
   useConfirmationContext: () => ({ confirm }),
 }))
@@ -244,7 +287,7 @@ beforeEach(() => {
   aggregate.records = SERVER_RECORDS
 })
 
-const mount = (org: any = ORG) => render(<HostDatasetsCard orgId="org-1" org={org} />)
+const mount = (org: any = ORG) => render(<HostDatasetsCard orgId="org-1" org={org} />, { wrapper: WithPageHeader })
 
 /**
  * The aggregate for `which` has ANSWERED — settled either way, and its
@@ -385,7 +428,9 @@ describe('the Data card head-counts are server aggregates (AGL-1716)', () => {
     // Fixing the head-counts must not turn a picker into 300 rows or a
     // table into 600,000. That the two questions have two answers is the
     // entire point.
-    expect(limitSpy).toHaveBeenCalledWith(100)
+    // The rail's window of 100, plus the probe row that says there are more
+    // to show (AGL-4047).
+    expect(limitSpy).toHaveBeenCalledWith(101)
     // The table's cap is its PAGE plus the probe row that decides `hasMore`
     // (AGL-2501). Read off the shared constant rather than written as a
     // number, so the rule outlives whatever the default becomes.

@@ -689,3 +689,48 @@ export function datasetDisplayName(
   }
   return ''
 }
+
+/** One dataset as a picker offers it: what tells it apart from another of its name. */
+export interface DatasetPickerEntry {
+  id: string
+  /** The name the Data page shows. */
+  name: string
+  /** Who it is shared with, as the console says it: `Bakery only`, `All sites`. */
+  sharing: string
+  /** How many fields its model has. */
+  fields: number
+}
+
+/**
+ * What each dataset is called in a picker (AGL-4047): its name alone, unless
+ * another in the same list has that name too. Then who it is shared with
+ * follows (`Services · Bakery only`), and where that still matches another,
+ * its field count (`Services · Bakery only · 5 fields`). Names are compared
+ * the way the stored search key is: trimmed, spaces collapsed, any case.
+ *
+ * A site start makes the same names on every site, shared with that site
+ * alone, so who it is shared with is what tells most of them apart. No imports,
+ * so the native apps can generate from it.
+ */
+export function datasetPickerLabels(entries: readonly DatasetPickerEntry[]): Record<string, string> {
+  const key = (text: string) => text.trim().replace(/\s+/g, ' ').toLowerCase()
+  const count = (keys: readonly string[]) => {
+    const counts = new Map<string, number>()
+    for (const each of keys) counts.set(each, (counts.get(each) ?? 0) + 1)
+    return counts
+  }
+  const names = count(entries.map((entry) => key(entry.name)))
+  const shared = (entry: DatasetPickerEntry) => `${key(entry.name)}\u0000${key(entry.sharing)}`
+  const sharings = count(entries.map(shared))
+  const labels: Record<string, string> = {}
+  for (const entry of entries) {
+    if ((names.get(key(entry.name)) ?? 0) < 2) {
+      labels[entry.id] = entry.name
+    } else if ((sharings.get(shared(entry)) ?? 0) < 2) {
+      labels[entry.id] = `${entry.name} · ${entry.sharing}`
+    } else {
+      labels[entry.id] = `${entry.name} · ${entry.sharing} · ${entry.fields} ${entry.fields === 1 ? 'field' : 'fields'}`
+    }
+  }
+  return labels
+}

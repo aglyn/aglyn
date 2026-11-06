@@ -2155,7 +2155,7 @@ const ElementPropsFormRaw = forwardRef<any, ElementPropsFormProps>(
         }
         if (typeof props.datasetName === 'string' && props.datasetName) {
           const byLabel = (fieldsKindOptions ?? []).find(
-            (dataset) => dataset.label === props.datasetName,
+            (dataset) => (dataset.name ?? dataset.label) === props.datasetName,
           )
           if (byLabel) return byLabel.id
         }
