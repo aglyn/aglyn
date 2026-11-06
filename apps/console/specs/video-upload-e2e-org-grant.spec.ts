@@ -51,6 +51,30 @@ const E2E_ORG_ID = 'e2e-owner'
 const UNGRANTED_ORG_ID = 'e2e-owner-studio'
 
 const mockGetTemplate = jest.fn()
+
+/** Keeps only the masked paths (`a.b` reaches into maps), as Firestore does. */
+function mockMask(
+  doc: Record<string, unknown>,
+  paths: string[],
+): Record<string, unknown> {
+  const out: Record<string, unknown> = {}
+  for (const path of paths) {
+    const keys = path.split('.')
+    let from: unknown = doc
+    for (const key of keys)
+      from =
+        from && typeof from === 'object'
+          ? (from as Record<string, unknown>)[key]
+          : undefined
+    if (from === undefined) continue
+    let into = out
+    keys.slice(0, -1).forEach((key) => {
+      into = (into[key] ??= {}) as Record<string, unknown>
+    })
+    into[keys[keys.length - 1]] = from
+  }
+  return out
+}
 const mockOrgDocs = new Map<string, Record<string, unknown>>()
 
 jest.mock('../../../libs/tenant/data/admin/src/lib/server/firebase-admin', () => ({
@@ -61,11 +85,33 @@ jest.mock('../../../libs/tenant/data/admin/src/lib/server/firebase-admin', () =>
       firestore: () => ({
         collection: (name: string) => ({
           doc: (id: string) => ({
+            name,
+            id,
             get: async () => ({
               data: () => (name === 'orgs' ? mockOrgDocs.get(id) : undefined),
             }),
           }),
         }),
+        // The resolver reads the org through `getAll` with a field mask
+        // (AGL-4121). Applied here as Firestore applies it, so this spec also
+        // fails if the mask ever drops a field the grant is decided on.
+        getAll: async (
+          ...args: Array<{ name: string; id: string } | { fieldMask?: string[] }>
+        ) => {
+          const last = args[args.length - 1] as { fieldMask?: string[] }
+          const mask = Array.isArray(last?.fieldMask) ? last.fieldMask : undefined
+          const refs = (mask ? args.slice(0, -1) : args) as Array<{
+            name: string
+            id: string
+          }>
+          return refs.map((ref) => ({
+            data: () => {
+              const doc =
+                ref.name === 'orgs' ? mockOrgDocs.get(ref.id) : undefined
+              return doc && mask ? mockMask(doc, mask) : doc
+            },
+          }))
+        },
       }),
     }),
   },
