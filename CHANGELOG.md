@@ -20,6 +20,10 @@ content on the marketing site and is written separately.
 - **marketplace:** sites show declared connection records, variables and image hosts; signed elements read their own connection record ([AGL-4195](https://linear.app/aglyn/issue/AGL-4195))
 - **commerce:** site sales are direct charges on the store's own Stripe account
 - **besigner:** edit table cells in place on the canvas ([AGL-4202](https://linear.app/aglyn/issue/AGL-4202))
+- **marketplace:** a connection card for sites and a credentials form for publishers; connection records and variables in the Besigner and Preview ([AGL-4196](https://linear.app/aglyn/issue/AGL-4196))
+- **native:** a site's plugin connections on iOS and Android ([AGL-4196](https://linear.app/aglyn/issue/AGL-4196))
+- **marketplace:** a Google reviews example plugin with a declared Google connection ([AGL-4197](https://linear.app/aglyn/issue/AGL-4197))
+- **legal:** Terms v24, a store can sell on its own Stripe account
 
 ### Fixed
 
@@ -38,6 +42,8 @@ content on the marketing site and is written separately.
 - **besigner:** typing in Search title or description no longer redraws the editor
 - **accounting:** the bound QuickBooks company id is sealed at rest ([AGL-3614](https://linear.app/aglyn/issue/AGL-3614))
 - **commerce:** static seller-account import and brand-neutral flag copy
+- **commerce:** a product grid's cap counts the products it shows ([AGL-4038](https://linear.app/aglyn/issue/AGL-4038))
+- **marketplace:** the listing-field guard reads only listing documents ([AGL-4196](https://linear.app/aglyn/issue/AGL-4196))
 
 ### Documentation
 
