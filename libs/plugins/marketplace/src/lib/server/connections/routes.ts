@@ -40,6 +40,7 @@ import {
 } from '../../model/plugin-connections'
 import { publisherPermissionVerdict } from '../publisher-permissions'
 import { isHostId, isListingId, readPluginConnectionsKeyring } from './config'
+import { announceConnectionRecordChange } from './record-announce'
 import {
   connectionAccessToken,
   connectionReady,
@@ -560,6 +561,8 @@ export async function disconnectRoute(request: Request): Promise<Response> {
     connectionRef(firestore(), actor.hostId, listingId, connectionId).delete(),
     connectionRecordRef(firestore(), actor.hostId, listingId, connectionId).delete(),
   ])
+  // The site's pages stop showing it now, not when their cache expires (AGL-4195).
+  await announceConnectionRecordChange(actor.hostId, `plugin connection ${listingId}/${connectionId} disconnected`)
   await logHostActivity(actor.hostId, { uid: actor.uid }, `Disconnected a plugin connection (${record.provider})`, {
     type: 'marketplace:plugin-connection',
     id: `${listingId}/${connectionId}`,

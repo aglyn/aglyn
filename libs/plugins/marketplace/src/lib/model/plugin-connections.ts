@@ -116,6 +116,8 @@ export const PLUGIN_CONNECTIONS_API_ROUTES = {
    * (AGL-4194). Site key and plan, like connect.
    */
   sync: 'plugin-connections/sync',
+  /** A site's record of one connection, for the editor's canvas (AGL-4195). */
+  record: 'plugin-connections/record',
 } as const
 
 /** The first path segment every route above shares: the plugin's API prefix. */

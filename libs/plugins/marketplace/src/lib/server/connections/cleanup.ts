@@ -28,6 +28,7 @@ import {
   type PluginConnectionRecord,
 } from './connection-store'
 import type { InstalledPluginConnections } from './installed-connection'
+import { announceConnectionRecordChange } from './record-announce'
 import { revokeRecord } from './revoke'
 
 /**
@@ -110,6 +111,7 @@ export async function forgetSiteConnection(
     connectionRef(firestore, record.hostId, record.listingId, record.connectionId).delete(),
     connectionRecordRef(firestore, record.hostId, record.listingId, record.connectionId).delete(),
   ])
+  await announceConnectionRecordChange(record.hostId, `plugin connection ${record.listingId}/${record.connectionId} removed`)
   return { revoked }
 }
 

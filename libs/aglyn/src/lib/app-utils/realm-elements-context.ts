@@ -36,3 +36,21 @@ export const RealmElementsContext = createContext<
   ((componentId: string) => Promise<void> | undefined) | undefined
 >(undefined)
 RealmElementsContext.displayName = 'RealmElementsContext'
+
+/**
+ * The node id of the signed marketplace element a leaf renders inside
+ * (AGL-3390, AGL-4195).
+ *
+ * The renderer gives each namespaced element a Suspense boundary of its own
+ * and provides its node id here around the element and everything it draws;
+ * an element nested inside another provides its own. The renderer reads it to
+ * know the inner render from the boundary's, and the connection record hook
+ * (`plugin-connection-record.ts`) reads it to know WHICH element is asking,
+ * so an element can only ever be handed its own plugin's record.
+ *
+ * Deliberately NOT on the realm host surface: a bundle that could provide it
+ * could claim to be another element. `NodeIdentityContext`, which is, says
+ * which node a component renders as and proves nothing about who asked.
+ */
+export const RealmElementNodeContext = createContext<string | undefined>(undefined)
+RealmElementNodeContext.displayName = 'RealmBoundaryContext'

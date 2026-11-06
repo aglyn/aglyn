@@ -46,6 +46,8 @@ import {
   runSitePageEnrichers,
   type SitePageContext,
 } from './site-page-hooks'
+import { registerSitePageEnricherService } from './site-page-enricher-services'
+import { unregisterPluginServices } from './plugin-services'
 
 const context = {} as SitePageContext
 
@@ -139,5 +141,36 @@ describe('the shared consent-vendors prop (AGL-3698)', () => {
     ).toEqual(['A', 'x'.repeat(60)])
     expect(consentAnalyticsVendorsOf({ consentAnalyticsVendors: 'Tidio' })).toEqual([])
     expect(consentAnalyticsVendorsOf(undefined)).toEqual([])
+  })
+})
+
+describe('boot-time enrichers on the service registry (AGL-4195)', () => {
+  afterEach(() => unregisterPluginServices('boot-plugin'))
+
+  it('runs after the route’s own, attributed to the plugin that registered it', async () => {
+    registerSitePageEnricher(async () => ({ bootOrderKey: 'route' }))
+    registerSitePageEnricherService(async () => ({ bootOrderKey: 'boot', bootOnlyKey: [1] }), {
+      pluginId: 'boot-plugin',
+    })
+    const { props, contributors } = await runSitePageEnrichers(context)
+    expect(props['bootOrderKey']).toBe('boot')
+    expect(props['bootOnlyKey']).toEqual([1])
+    expect(contributors).toContain('boot-plugin')
+  })
+
+  it('replaces the plugin’s own on a second registration, so a re-run boot does not double it', async () => {
+    let calls = 0
+    const enricher = async () => {
+      calls += 1
+      return { bootCountKey: calls }
+    }
+    registerSitePageEnricherService(enricher, { pluginId: 'boot-plugin', key: 'one' })
+    registerSitePageEnricherService(enricher, { pluginId: 'boot-plugin', key: 'one' })
+    await runSitePageEnrichers(context)
+    expect(calls).toBe(1)
+  })
+
+  it('refuses a registration with no owner', () => {
+    expect(() => registerSitePageEnricherService(async () => ({}))).toThrow(/no owner/)
   })
 })
