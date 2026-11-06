@@ -19,6 +19,11 @@
 
 import * as Aglyn from '@aglyn/aglyn'
 import ConsentBannerUi from '@aglyn/aglyn/app-utils/consent-banner-ui'
+import {
+  EditorPluginConnectionsContext,
+  editorConnectionRecordsPageData,
+} from '@aglyn/aglyn/app-utils/plugin-connection-editor'
+import { PluginConnectionRecordsContext } from '@aglyn/aglyn/app-utils/plugin-connection-records-context'
 // Deep, like the line above and for the same reason (AGL-2486): the theme
 // resolver is not on the client barrel, and the besigner editors reach it by
 // this same path. One resolver for every surface that draws a site's
@@ -65,7 +70,7 @@ import {
   query,
 } from 'firebase/firestore'
 import { observer } from 'mobx-react-lite'
-import { useEffect, useMemo, useState } from 'react'
+import { useContext, useEffect, useMemo, useState } from 'react'
 import {
   type PreviewKind,
   type PreviewStateIds,
@@ -1001,6 +1006,24 @@ function DocumentPreviewSurface(props: DocumentPreviewProps) {
   }, [])
 
   const root = Aglyn.canvas.getNode(Aglyn.NODE_ROOT_ID)
+  // A signed element reads its declared connection's record here as on the
+  // published page (AGL-4196): the plugin that runs connections provides the
+  // site's records, and the page's nodes say which element is whose.
+  const pluginConnections = useContext(EditorPluginConnectionsContext)
+  // Read on every render, not memoized on `root`: the canvas replaces nodes
+  // under the same root, and this surface renders only when they change.
+  const connectionRecords =
+    root && pluginConnections
+      ? editorConnectionRecordsPageData(
+          pluginConnections,
+          Object.values(
+            (Aglyn.canvas.toJSON().nodes ?? {}) as Record<
+              string,
+              { $id?: unknown; componentId?: unknown }
+            >,
+          ),
+        )
+      : undefined
   // Style like the live site: the snapshot carries the host theme, and the
   // scheme resolves from the shared cookie + prefers-color-scheme state so
   // the preview goes dark exactly when the tenant site would.
@@ -1093,7 +1116,9 @@ function DocumentPreviewSurface(props: DocumentPreviewProps) {
                 `preview` rides alongside so `useSiteFetch` can refuse the
                 writes that same hostId now makes possible. */}
             <Aglyn.SiteContext.Provider value={siteContext}>
-              <AglynNodeRenderer node={root} />
+              <PluginConnectionRecordsContext.Provider value={connectionRecords}>
+                <AglynNodeRenderer node={root} />
+              </PluginConnectionRecordsContext.Provider>
             </Aglyn.SiteContext.Provider>
           </Aglyn.ScreenLinkContext.Provider>
         ) : null}

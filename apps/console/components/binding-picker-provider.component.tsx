@@ -22,10 +22,11 @@ import {
   type ReusableComponentProp,
 } from '@aglyn/aglyn'
 import { describeHostTokens } from '@aglyn/aglyn/app-utils/host-tokens'
+import { EditorPluginConnectionsContext } from '@aglyn/aglyn/app-utils/plugin-connection-editor'
 import { BindingPickerContext, type BindingOption } from '@aglyn/besigner-ui'
 import { doc } from 'firebase/firestore'
 import { useParams } from 'next/navigation'
-import { useMemo } from 'react'
+import { useContext, useMemo } from 'react'
 import { useFirestore } from '@aglyn/tenant-feature-instance'
 import useFirestoreDoc from '../hooks/use-firestore-doc'
 import {
@@ -51,6 +52,9 @@ export function BindingPickerProvider(props: BindingPickerProviderProps) {
   const firestore = useFirestore()
   // The same lists every save converts typed names against (AGL-3481).
   const { variableDocs, functionDocs } = useHostBindingDocs(hostId)
+  // What the site's plugin connections give it (AGL-4196), when the plugin
+  // that runs them provides it.
+  const connections = useContext(EditorPluginConnectionsContext)
   // The site itself, for `host.*` tokens (AGL-1023). One doc, already cached
   // by every other surface on the page.
   const { data: hostDoc } = useFirestoreDoc<any>(
@@ -130,6 +134,19 @@ export function BindingPickerProvider(props: BindingPickerProviderProps) {
         ...(preview ? { preview } : {}),
       })
     }
+    // A connected service's fields (AGL-4196): by the connection's name and
+    // the field's, never the id the token carries.
+    for (const variable of connections?.variables ?? []) {
+      options.push({
+        group: 'Connections',
+        groupHint: 'Filled in from a connected service each time it syncs',
+        label: variable.label,
+        token: formatVariableIdToken(variable.id),
+        preview: variable.value
+          ? variable.value.slice(0, 60)
+          : 'Not synced yet — renders as nothing',
+      })
+    }
     for (const definition of functionDocs ?? []) {
       if (definition.deletedAt || !definition.name) continue
       const parameters = (definition.parameters ?? []).map(
@@ -179,6 +196,7 @@ export function BindingPickerProvider(props: BindingPickerProviderProps) {
     const { variables, functions } = bindingLookupsFromDocs(
       variableDocs,
       functionDocs,
+      connections,
     )
     // The same document the Site options above preview, so the canvas fills
     // `{{host.*}}` in with exactly the values the picker promised (AGL-2881).
@@ -190,7 +208,7 @@ export function BindingPickerProvider(props: BindingPickerProviderProps) {
       ...(owner ? { componentPropsOwner: owner } : {}),
       host: hostDoc,
     }
-  }, [variableDocs, functionDocs, hostDoc, componentProps, owner])
+  }, [variableDocs, functionDocs, connections, hostDoc, componentProps, owner])
 
   return (
     <BindingPickerContext.Provider value={value}>
