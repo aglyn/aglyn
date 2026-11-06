@@ -36,7 +36,28 @@ and record caps, and extra-dataset add-ons are available.
 The organization **Data** page manages every dataset in the workspace in one place —
 create a dataset, edit its schema, add and import records — and sets where new datasets
 start shared. A site's own **Data** page edits the same datasets, limited to the ones
-shared with that site.
+shared with that site. A link to a dataset the site isn't shared with opens a note
+saying so, not the dataset.
+
+Both pages list the datasets down the left, one tab each, the way **Settings** lists
+its sections:
+
+- Each tab shows the dataset's name and, under it, who it's shared with and how many
+  fields it has (`Bakery only · 5 fields`), so two datasets with the same name are
+  easy to tell apart.
+- **Search datasets by name** above the list narrows it to the names that start with
+  what you type.
+- When there are more than ten, the list is grouped by who each dataset is shared with,
+  and on the organization page a **Shared with** filter shows only the datasets one
+  site can use. The list scrolls inside its card, and **Show more datasets** loads the
+  next hundred.
+- Each dataset has its own address (`…/data/<dataset id>`), so you can bookmark or share
+  a link to it.
+
+The open dataset fills the right: its name with **Add record**, **Schema**, **Import**,
+**Export** and **Delete**, the facts about it (shared with, fields, records, source and
+created date), and its records table. **Add dataset** and **Add join collection** are at
+the top of the page.
 
 ## Model builder
 

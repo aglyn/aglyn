@@ -162,7 +162,8 @@ export function DashboardLayout(props: DashboardLayoutProps) {
    * record's name followed by the section it came from.
    */
   const resolvedHeader = useMemo(() => {
-    if (!record?.title) return header
+    // A record named for the trail only leaves the route's heading alone.
+    if (!record?.title || record.keepHeading) return header
     return { ...header, children: record.title, secondary: undefined }
   }, [header, record])
 

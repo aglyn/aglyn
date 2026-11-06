@@ -343,6 +343,13 @@ export interface ListTableProps extends DataTableProps {
    * refuses on any new caller.
    */
   columnSort?: ListColumnSort
+  /**
+   * The Actions column stays on screen when the table scrolls sideways
+   * (AGL-4047): a table of many columns in a narrow card keeps its row
+   * controls in reach rather than past the right edge. Pinned with CSS, and
+   * column virtualization is off so the column is always drawn.
+   */
+  pinActions?: boolean
 }
 
 /**
@@ -416,6 +423,24 @@ const TOOLBAR_ONLY_SX = {
  * {@link ListRowActions} so the two still read alike, which is the part a
  * reader actually compares.
  */
+/**
+ * The Actions column held at the right edge of a table that scrolls sideways
+ * (AGL-4047): sticky against the grid's scroller, on the paper the rows are
+ * drawn on so the columns passing beneath it do not show through, with a
+ * divider on its left edge.
+ */
+const PINNED_ACTIONS_SX = {
+  [`& .MuiDataGrid-cell[data-field="${LIST_ACTIONS_FIELD}"], & .MuiDataGrid-columnHeader[data-field="${LIST_ACTIONS_FIELD}"]`]:
+    {
+      position: 'sticky',
+      right: 0,
+      zIndex: 1,
+      backgroundColor: 'background.paper',
+      borderLeft: 1,
+      borderLeftColor: 'divider',
+    },
+} as const
+
 export function ListTable(props: ListTableProps) {
   const {
     onOpen,
@@ -429,6 +454,7 @@ export function ListTable(props: ListTableProps) {
     toolbarOnly = false,
     slots,
     columnSort,
+    pinActions = false,
     ...rest
   } = props
   const sortProps = columnSort
@@ -592,8 +618,10 @@ export function ListTable(props: ListTableProps) {
           },
         },
         ...(toolbarOnly ? [TOOLBAR_ONLY_SX] : []),
+        ...(pinActions ? [PINNED_ACTIONS_SX] : []),
         ...(Array.isArray(sx) ? sx : sx ? [sx] : []),
       ]}
+      {...(pinActions ? { disableColumnVirtualization: true } : {})}
       /*
        * The column menu can hide a column; only the toolbar can bring it
        * back.
