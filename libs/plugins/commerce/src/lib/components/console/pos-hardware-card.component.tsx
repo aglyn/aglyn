@@ -28,11 +28,13 @@ import {
   Button,
   Card,
   CardContent,
+  Checkbox,
   Chip,
   Dialog,
   DialogActions,
   DialogContent,
   DialogTitle,
+  FormControlLabel,
   Link,
   MenuItem,
   Stack,
@@ -49,6 +51,7 @@ import {
   type PosHardwareOrderStatus,
   type PosHardwareShippingMethod,
 } from '../../model/pos-hardware'
+import { POS_HARDWARE_TERMS_SECTIONS, posHardwareTermsUrl } from '../../model/pos-hardware-terms'
 import { newAttemptKey } from './pos/pos-api'
 import {
   openPosHardwareCheckout,
@@ -109,6 +112,9 @@ export interface PosHardwareCardProps {
 const BUY_KEY_REASON =
   'Only a member with the "Buy point of sale hardware" permission can place an order. Ask an organization admin.'
 
+/** Why Check out waits on the two boxes below the summary (AGL-4038). */
+const TERMS_REASON = 'Accept the hardware terms of sale and confirm the hardware is for your business first.'
+
 /**
  * The Hardware card (AGL-4038): Stripe card readers and accessories sold by
  * the platform and shipped by Stripe straight to the store, with the store's
@@ -132,6 +138,9 @@ export function PosHardwareCard({
   const [shippingMethod, setShippingMethod] = useState<PosHardwareShippingMethod | ''>('')
   const [busy, setBusy] = useState(false)
   const [returned, setReturned] = useState<'placed' | 'canceled' | null>(null)
+  // The terms of sale and business use, ticked before checkout (AGL-4038).
+  const [termsAccepted, setTermsAccepted] = useState(false)
+  const [businessUse, setBusinessUse] = useState(false)
   const uid = user?.uid ?? ''
   // The route's own door (AGL-4047): the register, or the key to buy.
   const mayVisit = canManagePos || canBuyHardware
@@ -241,10 +250,15 @@ export function PosHardwareCard({
   const attemptKey = useMemo(() => newAttemptKey(), [basketKey])
 
   const checkout = async () => {
-    if (!user || !shippingMethod || !lines.length) return
+    if (!user || !shippingMethod || !lines.length || !termsAccepted || !businessUse) return
     setBusy(true)
     try {
-      const { url } = await posHardwareCheckout(user, attemptKey, { hostId, lines, shippingMethod })
+      const { url } = await posHardwareCheckout(user, attemptKey, {
+        hostId,
+        lines,
+        shippingMethod,
+        hardwareTerms: { accepted: termsAccepted, businessUse },
+      })
       openPosHardwareCheckout(url)
     } catch (error) {
       enqueueSnackbar(
@@ -400,7 +414,10 @@ export function PosHardwareCard({
       help={pluginDocsHelp('posHardware', { anchor: '#buy-a-reader-from-aglyn' })}
       HeaderProps={{
         action: (
-          <BlockedControl blocked={!canBuyHardware} reason={BUY_KEY_REASON}>
+          <BlockedControl
+            blocked={!canBuyHardware || !termsAccepted || !businessUse}
+            reason={!canBuyHardware ? BUY_KEY_REASON : TERMS_REASON}
+          >
             <Button
               size="small"
               variant="contained"
@@ -496,6 +513,24 @@ export function PosHardwareCard({
         <Typography variant="caption" color="text.secondary">
           {'Ships to street addresses in the United States. P.O. boxes and military addresses are not accepted.'}
         </Typography>
+        <Stack>
+          <FormControlLabel
+            control={<Checkbox checked={termsAccepted} onChange={(event) => setTermsAccepted(event.target.checked)} />}
+            label={
+              <Typography variant="body2">
+                {'I accept the '}
+                <Link href={posHardwareTermsUrl()} target="_blank" rel="noopener noreferrer">
+                  {`hardware terms of sale (Terms, Sections ${POS_HARDWARE_TERMS_SECTIONS})`}
+                </Link>
+                {'.'}
+              </Typography>
+            }
+          />
+          <FormControlLabel
+            control={<Checkbox checked={businessUse} onChange={(event) => setBusinessUse(event.target.checked)} />}
+            label={<Typography variant="body2">{'I am buying this hardware for use in my business.'}</Typography>}
+          />
+        </Stack>
         {ordersSection}
       </Stack>
     </CardDisplay>

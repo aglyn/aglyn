@@ -207,14 +207,23 @@ function response() {
   return { res, result }
 }
 
+const ACCEPTED_TERMS = { accepted: true, businessUse: true }
+
 async function shop(body: Record<string, unknown>, options: { token?: string; attemptKey?: string } = {}) {
   const { res, result } = response()
   const req: PluginApiRequest = {
     method: 'POST',
     query: {},
-    body: { hostId: 'host-1', ...body },
+    body: {
+      hostId: 'host-1',
+      // A checkout carries the terms of sale and business use, both ticked
+      // (AGL-4038), unless the test says otherwise.
+      ...(body['action'] === 'checkout' && !('hardwareTerms' in body) ? { hardwareTerms: ACCEPTED_TERMS } : {}),
+      ...body,
+    },
     headers: {
       authorization: `Bearer ${options.token ?? 'manager'}`,
+      'user-agent': 'Mozilla/5.0 (test)',
       ...(options.attemptKey ? { 'idempotency-key': options.attemptKey } : {}),
     },
     cookies: {},
@@ -484,6 +493,107 @@ describe('the shop route', () => {
     expect(stripeCalls).toHaveLength(0)
   })
 
+  it.each([
+    ['no answer at all', undefined],
+    ['the terms without business use', { accepted: true, businessUse: false }],
+    ['business use without the terms', { accepted: false, businessUse: true }],
+    ['a truthy string for each', { accepted: 'yes', businessUse: 'yes' }],
+  ])('refuses a checkout with %s, in a plain sentence, before Stripe (AGL-4038)', async (_label, hardwareTerms) => {
+    const answer = await shop(
+      { action: 'checkout', lines: [{ sku: 'stripe-reader-m2', quantity: 1 }], shippingMethod: 'standard', hardwareTerms },
+      { attemptKey: 'attempt-terms' },
+    )
+    expect(answer.status).toBe(400)
+    expect(answer.body.needsHardwareTerms).toBe(true)
+    expect(answer.body.error).toBe(
+      'To buy card reader hardware, accept the hardware terms of sale (Terms, Sections 4.26–4.32) and confirm you are buying it for your business.',
+    )
+    expect(stripeCalls).toHaveLength(0)
+  })
+
+  it('carries the acceptance on the session and taxes every line as tangible goods (AGL-4038)', async () => {
+    await shop(
+      {
+        action: 'checkout',
+        lines: [
+          { sku: 'stripe-reader-s710', quantity: 1 },
+          { sku: 'stripe-reader-m2', quantity: 2 },
+        ],
+        shippingMethod: 'standard',
+      },
+      { attemptKey: 'attempt-tax' },
+    )
+    const [call] = stripeCalls
+    expect(call.params.get('line_items[0][price_data][product_data][tax_code]')).toBe('txcd_99999999')
+    expect(call.params.get('line_items[1][price_data][product_data][tax_code]')).toBe('txcd_99999999')
+    expect(call.params.get('metadata[hardwareTermsVersion]')).toBe('v21')
+    expect(call.params.get('metadata[hardwareTermsBusinessUse]')).toBe('true')
+    expect(call.params.get('metadata[hardwareTermsUserAgent]')).toBe('Mozilla/5.0 (test)')
+    // Nothing that changes between two presses of one attempt rides the
+    // session, so Stripe replays the first one rather than refusing the key.
+    await shop(
+      {
+        action: 'checkout',
+        lines: [
+          { sku: 'stripe-reader-s710', quantity: 1 },
+          { sku: 'stripe-reader-m2', quantity: 2 },
+        ],
+        shippingMethod: 'standard',
+      },
+      { attemptKey: 'attempt-tax' },
+    )
+    expect(stripeCalls[1].params.toString()).toBe(call.params.toString())
+    expect(stripeCalls[1].key).toBe(call.key)
+  })
+
+  describe('one price with the platform’s own store (AGL-4038)', () => {
+    const SELLER_ENV = {
+      [POS_HARDWARE_ENV.inPersonEnabled]: 'true',
+      [POS_HARDWARE_ENV.sellerHostId]: 'seller-host',
+      [POS_HARDWARE_ENV.sellerOrgId]: 'seller-org',
+    }
+    const product = (sku: string, priceUsd: number, extra: Record<string, unknown> = {}) => ({
+      name: sku,
+      status: 'active',
+      hardwareSku: sku,
+      variants: [{ id: 'default', priceUsd }],
+      ...extra,
+    })
+
+    beforeEach(() => setShopEnv({ ...SHOP_ENV, ...SELLER_ENV }))
+
+    it('quotes and charges the price the store lists, so the card never differs from the page', async () => {
+      fakeDocs.set('hosts/seller-host/products/p-s710', product('stripe-reader-s710', 130.5))
+      const catalog = await shop({ action: 'catalog' })
+      expect(catalog.body.offers.map((offer: any) => [offer.sku, offer.unitCents])).toEqual([
+        ['stripe-reader-s710', 13_050],
+        // Not listed in the store: the marked-up price, as before.
+        ['stripe-reader-m2', 7_670],
+      ])
+      await shop(
+        { action: 'checkout', lines: [{ sku: 'stripe-reader-s710', quantity: 1 }], shippingMethod: 'standard' },
+        { attemptKey: 'attempt-listed' },
+      )
+      expect(stripeCalls[0].params.get('line_items[0][price_data][unit_amount]')).toBe('13050')
+      expect(stripeCalls[0].params.get('metadata[lines]')).toBe('stripe-reader-s710*1*13050')
+    })
+
+    it('takes the lower of two listings, and ignores drafts and other stores', async () => {
+      fakeDocs.set('hosts/seller-host/products/p-1', product('stripe-reader-s710', 140))
+      fakeDocs.set('hosts/seller-host/products/p-2', product('stripe-reader-s710', 135))
+      fakeDocs.set('hosts/seller-host/products/p-3', product('stripe-reader-s710', 101, { status: 'draft' }))
+      fakeDocs.set('hosts/host-1/products/p-4', product('stripe-reader-s710', 101))
+      const catalog = await shop({ action: 'catalog' })
+      expect(catalog.body.offers[0]).toMatchObject({ sku: 'stripe-reader-s710', unitCents: 13_500 })
+    })
+
+    it('never sells below Stripe’s cost: a listing under it keeps the marked-up price', async () => {
+      fakeDocs.set('hosts/seller-host/products/p-s710', product('stripe-reader-s710', 99.99))
+      const catalog = await shop({ action: 'catalog' })
+      expect(catalog.body.offers[0]).toMatchObject({ sku: 'stripe-reader-s710', unitCents: 13_000 })
+    })
+  })
+
   it('lists this site’s orders without Stripe ids', async () => {
     fakeDocs.set(ORDER_PATH, { hostId: 'host-1', status: 'shipped', totalCents: 100, stripePaymentIntentId: 'pi_secret', lines: [] })
     fakeDocs.set('orgs/org-1/hardwareOrders/hw_ffffffffffffffffffff', { hostId: 'host-2', status: 'paid', lines: [] })
@@ -608,6 +718,24 @@ describe('the webhook', () => {
     expect(await deliver(object)).toMatchObject({ claimed: true })
     expect([...fakeDocs.keys()].filter((key) => key.includes('/hardwareOrders/'))).toHaveLength(0)
     expect(mockSendEmail).not.toHaveBeenCalled()
+  })
+
+  it('writes the terms of sale the buyer ticked onto the order, dated when the session was made (AGL-4038)', async () => {
+    const session = paidSession({ created: 1_762_300_000 })
+    ;(session.metadata as Record<string, string>)['hardwareTermsVersion'] = 'v21'
+    ;(session.metadata as Record<string, string>)['hardwareTermsBusinessUse'] = 'true'
+    ;(session.metadata as Record<string, string>)['hardwareTermsIp'] = '203.0.113.9'
+    await deliver(session)
+    expect((fakeDocs.get(ORDER_PATH) as PosHardwareOrder).termsAcceptance).toEqual({
+      version: 'v21',
+      sections: '4.26–4.32',
+      method: 'online',
+      atMs: 1_762_300_000_000,
+      staffUid: null,
+      ip: '203.0.113.9',
+      userAgent: null,
+      businessUse: true,
+    })
   })
 
   it('ignores every other session and event', async () => {

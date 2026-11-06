@@ -21,6 +21,10 @@ import { buildPosReceipt } from './commerce-pos-ops'
 import { receiptDataFromOrder } from './commerce-receipt'
 import { inPersonPosHardwareOrder, posHardwareRegisterShare } from './pos-hardware-in-person'
 import {
+  POS_HARDWARE_TERMS_REQUIRED,
+  posHardwareTermsConfirmed,
+  posHardwareTermsFromMetadata,
+  posHardwareTermsMetadata,
   posHardwareReceiptNotice,
   posHardwareTermsAcceptance,
   posHardwareTermsAcceptanceOf,
@@ -119,5 +123,47 @@ describe('the booth terms of sale name a published Terms version (AGL-4038)', ()
     expect(published).toBeDefined()
     expect(rank(POS_HARDWARE_TERMS_VERSION)).toBeGreaterThanOrEqual(20)
     expect(rank(POS_HARDWARE_TERMS_VERSION)).toBeLessThanOrEqual(Number(published))
+  })
+})
+
+describe('accepting the terms of sale online (AGL-4038)', () => {
+  it('counts only both answers, each literally true', () => {
+    expect(posHardwareTermsConfirmed({ accepted: true, businessUse: true })).toBe(true)
+    expect(posHardwareTermsConfirmed({ accepted: true })).toBe(false)
+    expect(posHardwareTermsConfirmed({ businessUse: true })).toBe(false)
+    expect(posHardwareTermsConfirmed({ accepted: 'true', businessUse: 1 })).toBe(false)
+    expect(posHardwareTermsConfirmed(null)).toBe(false)
+    expect(POS_HARDWARE_TERMS_REQUIRED).toContain(`Sections ${POS_HARDWARE_TERMS_SECTIONS}`)
+  })
+
+  it('rides the session within Stripe’s limits and comes back as the acceptance', () => {
+    const metadata = posHardwareTermsMetadata({ ip: '203.0.113.9', userAgent: 'x'.repeat(900) })
+    for (const [key, value] of Object.entries(metadata)) {
+      expect(key.length).toBeLessThanOrEqual(40)
+      expect(value.length).toBeLessThanOrEqual(500)
+    }
+    expect(posHardwareTermsFromMetadata(metadata, 1_000)).toEqual({
+      version: POS_HARDWARE_TERMS_VERSION,
+      sections: POS_HARDWARE_TERMS_SECTIONS,
+      method: 'online',
+      atMs: 1_000,
+      staffUid: null,
+      ip: '203.0.113.9',
+      userAgent: 'x'.repeat(400),
+      businessUse: true,
+    })
+  })
+
+  it('reads nothing from a session that carries no acceptance, or no business use', () => {
+    expect(posHardwareTermsFromMetadata({ type: 'commerce-cart' }, 1_000)).toBeNull()
+    const metadata = posHardwareTermsMetadata({})
+    expect(posHardwareTermsFromMetadata({ ...metadata, hardwareTermsBusinessUse: 'false' }, 1_000)).toBeNull()
+    expect(posHardwareTermsFromMetadata(metadata, 0)).toBeNull()
+  })
+
+  it('keeps business use through the stored form', () => {
+    const online = posHardwareTermsFromMetadata(posHardwareTermsMetadata({}), 5)
+    expect(posHardwareTermsAcceptanceOf(online)).toEqual(online)
+    expect(posHardwareTermsAcceptanceOf({ method: 'tablet', atMs: 5 })).not.toHaveProperty('businessUse')
   })
 })

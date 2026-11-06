@@ -29,6 +29,7 @@ import {
   type PosHardwareAddress,
   type PosHardwareOrder,
 } from '../model/pos-hardware'
+import { posHardwareTermsFromMetadata } from '../model/pos-hardware-terms'
 import { hardwareOrdersRef, posHardwareSaleRef } from './pos-hardware'
 import { raisePosHardwareOrderAlert, sendPosHardwareEmail } from './pos-hardware-notify'
 import { posStripe } from './pos-stripe'
@@ -112,6 +113,10 @@ export function posHardwareOrderFromSession(
   const totalCents =
     session?.amount_total != null ? cents(session.amount_total) : subtotalCents + shippingCents + taxCents
   const paymentIntent = session?.payment_intent
+  // The terms of sale and business use the buyer ticked on the Hardware card
+  // (AGL-4038), accepted when the session was made.
+  const createdMs = Number(session?.created) > 0 ? Number(session.created) * 1000 : now
+  const termsAcceptance = posHardwareTermsFromMetadata(metadata, createdMs)
   return {
     orderId,
     order: {
@@ -146,6 +151,7 @@ export function posHardwareOrderFromSession(
       createdAtMs: now,
       updatedAtMs: now,
       paidAtMs: now,
+      ...(termsAcceptance ? { termsAcceptance } : {}),
     },
   }
 }

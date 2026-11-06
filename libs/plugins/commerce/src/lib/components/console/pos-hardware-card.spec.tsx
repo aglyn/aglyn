@@ -109,6 +109,12 @@ beforeEach(() => {
   ordersAnswer = { orders: [] }
 })
 
+/** Ticks the terms of sale and business use (AGL-4038). */
+function acceptTerms() {
+  fireEvent.click(screen.getByRole('checkbox', { name: /I accept the/ }))
+  fireEvent.click(screen.getByRole('checkbox', { name: /for use in my business/ }))
+}
+
 describe('the Hardware card', () => {
   it('draws nothing while the shop is not open and nothing was bought', async () => {
     catalogAnswer = { available: false }
@@ -171,6 +177,7 @@ describe('the Hardware card', () => {
     await waitFor(() => expect(screen.getByText('No hardware orders yet.')).toBeTruthy())
     fireEvent.mouseDown(screen.getAllByRole('combobox', { name: /Quantity/ })[0])
     fireEvent.click(within(screen.getByRole('listbox')).getByText('1'))
+    acceptTerms()
     fireEvent.click(screen.getByRole('button', { name: 'Check out' }))
     await waitFor(() => expect(assign).toHaveBeenCalled())
     expect(calls.find((call) => call.body?.action === 'checkout')).toBeTruthy()
@@ -197,6 +204,24 @@ describe('the Hardware card', () => {
     expect(calls.find((call) => call.body?.action === 'checkout')).toBeUndefined()
   })
 
+  it('keeps Check out off, with the reason, until the terms of sale and business use are both ticked (AGL-4038)', async () => {
+    render(<PosHardwareCard hostId="host-1" canManagePos />)
+    await waitFor(() => expect(screen.getByText('Stripe Reader S710')).toBeTruthy())
+    fireEvent.mouseDown(screen.getAllByRole('combobox', { name: /Quantity/ })[0])
+    fireEvent.click(within(screen.getByRole('listbox')).getByText('1'))
+    const button = () => screen.getByRole('button', { name: 'Check out' }) as HTMLButtonElement
+    expect(button().disabled).toBe(true)
+    expect(screen.getByLabelText(/Accept the hardware terms of sale/)).toBeTruthy()
+    const link = screen.getByRole('link', { name: /hardware terms of sale \(Terms, Sections 4\.26–4\.32\)/ })
+    expect(link.getAttribute('href')).toMatch(/\/legal\/terms$/)
+    fireEvent.click(screen.getByRole('checkbox', { name: /I accept the/ }))
+    expect(button().disabled).toBe(true)
+    fireEvent.click(screen.getByRole('checkbox', { name: /for use in my business/ }))
+    expect(button().disabled).toBe(false)
+    fireEvent.click(button())
+    await waitFor(() => expect(assign).toHaveBeenCalled())
+  })
+
   it('totals the basket and starts Checkout with the basket and speed', async () => {
     render(<PosHardwareCard hostId="host-1" canManagePos />)
     await waitFor(() => expect(screen.getByText('Stripe Reader S710')).toBeTruthy())
@@ -205,6 +230,7 @@ describe('the Hardware card', () => {
     const summary = screen.getByLabelText('Order summary')
     await waitFor(() => expect(within(summary).getByText('$260.00')).toBeTruthy())
     expect(within(summary).getByText('$270.00')).toBeTruthy()
+    acceptTerms()
     fireEvent.click(screen.getByRole('button', { name: 'Check out' }))
     await waitFor(() => expect(assign).toHaveBeenCalledWith('https://checkout.stripe.com/c/pay/cs_test_1'))
     const checkout = calls.find((call) => call.body?.action === 'checkout')
@@ -213,6 +239,7 @@ describe('the Hardware card', () => {
       hostId: 'host-1',
       lines: [{ sku: 'stripe-reader-s710', quantity: 2 }],
       shippingMethod: 'standard',
+      hardwareTerms: { accepted: true, businessUse: true },
     })
     expect(checkout?.headers['Idempotency-Key']).toBeTruthy()
   })

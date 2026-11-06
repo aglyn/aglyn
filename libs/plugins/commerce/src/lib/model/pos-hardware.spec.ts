@@ -23,6 +23,8 @@
  */
 
 import {
+  POS_HARDWARE_TAX_CODE,
+  posHardwareOfferUnitCents,
   decodePosHardwareLines,
   encodePosHardwareLines,
   isPosHardwareSkuId,
@@ -596,5 +598,25 @@ describe('the buyer the sale record keeps for the reseller’s records (AGL-4038
     expect(posHardwareBuyerAddress({ ...address, country: 'USA' })).toBeNull()
     expect(posHardwareBuyerAddress('12 Main St')).toBeNull()
     expect(posHardwareBuyerAddress({ ...address, line1: 'x'.repeat(500) })?.line1).toHaveLength(200)
+  })
+})
+
+describe('one price with the platform’s own store (AGL-4038)', () => {
+  const config = { costs: { 'stripe-reader-s710': 10_000 } as const, markupBps: 3_000 }
+
+  it('is the listed price wherever the store lists the item', () => {
+    expect(posHardwareOfferUnitCents({ ...config, listedCents: { 'stripe-reader-s710': 13_050 } }, 'stripe-reader-s710')).toBe(13_050)
+    // Exactly at cost is still a price; under it is a mistake on the product.
+    expect(posHardwareOfferUnitCents({ ...config, listedCents: { 'stripe-reader-s710': 10_000 } }, 'stripe-reader-s710')).toBe(10_000)
+    expect(posHardwareOfferUnitCents({ ...config, listedCents: { 'stripe-reader-s710': 9_999 } }, 'stripe-reader-s710')).toBe(13_000)
+  })
+
+  it('is cost plus the markup where the store lists nothing, and nothing for an unpriced item', () => {
+    expect(posHardwareOfferUnitCents(config, 'stripe-reader-s710')).toBe(13_000)
+    expect(posHardwareOfferUnitCents({ ...config, listedCents: { 'stripe-reader-m2': 5_000 } }, 'stripe-reader-m2')).toBe(0)
+  })
+
+  it('names Stripe’s tangible goods tax code', () => {
+    expect(POS_HARDWARE_TAX_CODE).toBe('txcd_99999999')
   })
 })
