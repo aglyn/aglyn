@@ -86,6 +86,7 @@ import {
 } from './firestore-multitab-wedge'
 import { firestoreHasServerAnswered } from './firestore-stall-recovery'
 import { firestorePersistencePrefix } from './firestore-shared-client-state'
+import { startFirestorePrimaryYield } from './firestore-primary-yield'
 import { startFirestoreTabHandoff } from './firestore-tab-handoff'
 
 /**
@@ -515,6 +516,11 @@ function bootFirebaseCore(
           // (AGL-3660). In initializeFirestore's task: its first step
           // snapshots the other tabs before this tab's client can start.
           void startFirestoreTabHandoff(getFirestore(app), persistencePrefix)
+          // A background tab that keeps its lease live never hands it over
+          // on its own, and every tab's cache work waits on its throttled
+          // renderer. The visible tab asks; the holder lets go through the
+          // SDK's own election (AGL-4204). Same task, same snapshot rule.
+          void startFirestorePrimaryYield(getFirestore(app), persistencePrefix)
         } else if (authPersistence === 'durable' && databaseName) {
           // A durable origin's tab on the memory cache. If that is because a
           // tab saw the shared cache locked, read the lease once, read-only,
