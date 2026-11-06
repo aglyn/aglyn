@@ -38,6 +38,7 @@ const KEYS: MarketplacePublisherPermission[] = [
   'marketplace.publisherProfile',
   'marketplace.manageListings',
   'marketplace.payouts',
+  'marketplace.connectionCredentials',
 ]
 /** The gate before: the owner-or-admin role helper, and the rules' `role in ['owner', 'admin']`. */
 const before = (role: unknown) => role === 'owner' || role === 'admin'

@@ -16,6 +16,7 @@
  */
 
 import type { PluginPermission } from '@aglyn/aglyn/plugin-manager/plugin-permissions'
+import { PLUGIN_CONNECTIONS_CREDENTIALS_PERMISSION_DECLARATION } from './plugin-connections'
 
 /*
  * THE WORKSPACE AS A MARKETPLACE PUBLISHER (AGL-4047).
@@ -46,10 +47,14 @@ export type MarketplacePublisherPermission =
   | 'marketplace.publisherProfile'
   | 'marketplace.manageListings'
   | 'marketplace.payouts'
+  | 'marketplace.connectionCredentials'
 
 export const MARKETPLACE_PUBLISHER_PROFILE_PERMISSION: MarketplacePublisherPermission = 'marketplace.publisherProfile'
 export const MARKETPLACE_MANAGE_LISTINGS_PERMISSION: MarketplacePublisherPermission = 'marketplace.manageListings'
 export const MARKETPLACE_PAYOUTS_PERMISSION: MarketplacePublisherPermission = 'marketplace.payouts'
+/** Setting a listing's OAuth app credentials for its declared connections (AGL-4193). */
+export const MARKETPLACE_CONNECTION_CREDENTIALS_PERMISSION: MarketplacePublisherPermission =
+  'marketplace.connectionCredentials'
 
 /** The keys as the plugin declares them; owners and admins hold each by default. */
 export const MARKETPLACE_PUBLISHER_PERMISSIONS: readonly PluginPermission[] = [
@@ -80,6 +85,8 @@ export const MARKETPLACE_PUBLISHER_PERMISSIONS: readonly PluginPermission[] = [
     defaults: { admin: true, editor: false, viewer: false },
     groupLabel: 'Marketplace',
   },
+  // Declared connections (AGL-4193): the publisher's OAuth app per listing.
+  PLUGIN_CONNECTIONS_CREDENTIALS_PERMISSION_DECLARATION,
 ]
 
 /** The refusal a door answers without one: names the permission, never a role. */

@@ -20,8 +20,10 @@ description: The plugin manifest schema, the marketplace listing/version documen
     "network": ["https://api.example.com"], // sandbox CSP connect-src allowlist
     "props": ["title"],       // host props the bridge forwards
     "events": ["submitted"],  // events the host will accept
-    "size": { "height": 240 } // declared frame size
+    "size": { "height": 240 }, // declared frame size
+    "imageHosts": ["images.example.com"] // hosts your elements show images from
   },
+  "connections": [ /* see "connections" below */ ],
   "contributes": {            // what register() adds, and where
     "site": {
       "components": ["myBanner"], // canvas elements it registers
@@ -150,6 +152,132 @@ to its declared type — so a manifest cannot put a control the console does not
 have in front of a customer, and a mistyped default cannot become the value
 every site inherits.
 
+### `connections` — an OAuth connection the platform runs for you {#connections}
+
+Your bundle runs sandboxed in the visitor's browser and never on Aglyn's
+servers, so it cannot hold an OAuth grant, refresh it or call a provider on a
+schedule. A **declared connection** is how a plugin gets all of that anyway:
+you describe the provider, the hosts, the picker and the scheduled fetch as
+data, and the platform runs them. Your code never sees a token.
+
+```jsonc
+"connections": [
+  {
+    "id": "reviews",                 // lowercase, digits, dashes; never rename
+    "provider": "google",            // a label for people and logs
+    "label": "Google Business Profile",
+    "description": "Show your Google reviews.",
+    "authorizationUrl": "https://accounts.example.com/o/oauth2/v2/auth",
+    "tokenUrl": "https://oauth2.example.com/token",
+    "revocationUrl": "https://oauth2.example.com/revoke", // optional
+    "scopes": ["https://www.example.com/auth/business.manage"],
+    "authParams": { "access_type": "offline", "prompt": "consent" },
+    "tokenAuthMethod": "body",       // or "basic"
+    "apiHosts": ["mybusiness.example.com", "*.example.net"],
+    "resources": [                   // what the site owner picks, in order
+      {
+        "id": "accounts", "label": "Account",
+        "request": {
+          "method": "GET",
+          "url": "https://mybusiness.example.com/v1/accounts",
+          "itemsPath": "accounts",
+          "pagination": { "cursorPath": "nextPageToken", "cursorParam": "pageToken", "maxPages": 5 }
+        },
+        "idPath": "name", "labelPath": "accountName"
+      },
+      {
+        "id": "locations", "label": "Location",
+        "request": {
+          "method": "GET",
+          "url": "https://info.example.net/v1/{{resource.accounts}}/locations",
+          "query": { "readMask": "name,title" },
+          "itemsPath": "locations"
+        },
+        "idPath": "name", "labelPath": "title", "maxItems": 50
+      }
+    ],
+    "sync": {                        // the scheduled fetch
+      "intervalHours": 6,            // at least 1
+      "requests": [
+        {
+          "id": "reviews", "method": "GET",
+          "url": "https://mybusiness.example.com/v4/{{resource.accounts}}/{{resource.locations}}/reviews",
+          "itemsPath": "reviews"
+        }
+      ],
+      "record": {                    // the PUBLIC record your element reads
+        "fields": {
+          "averageRating": { "request": "reviews", "type": "number", "path": "averageRating" }
+        },
+        "items": {
+          "request": "reviews", "maxItems": 20,
+          "fields": {
+            "reviewer": { "type": "string", "path": "reviewer.displayName", "maxLength": 100 },
+            "rating": { "type": "number", "path": "starRating",
+                        "map": { "ONE": 1, "TWO": 2, "THREE": 3, "FOUR": 4, "FIVE": 5 } },
+            "createdAt": { "type": "datetime", "path": "createTime" }
+          }
+        }
+      }
+    }
+  }
+]
+```
+
+How it runs:
+
+1. **You set your OAuth app once per listing.** Your workspace enters the
+   client id and secret for each declared connection on the listing; a member
+   needs **Set a listing's connection credentials**. They are stored sealed and
+   are never shown again: the form only ever says *set* or *not set*.
+   Register the callback `https://<console>/api/plugin-connections/connect/callback`
+   as a redirect URI on your OAuth app.
+2. **A site owner connects.** On a plan that includes connections (Starter,
+   Pro and Custom), a member holding **Manage a site's plugin connections**
+   connects the site. The platform sends them to your `authorizationUrl` with
+   your client id, its own redirect, your `scopes` and a signed, single-use
+   state, then exchanges the code at your `tokenUrl`. The tokens are stored
+   sealed, on the site.
+3. **They pick what to connect.** Each of `resources` is listed in order with
+   the site's token, and a later one may name an earlier choice as
+   `{{resource.<id>}}`. Choosing again clears the choices after it.
+4. **The sync.** `sync` declares how often the site's record is refreshed
+   (`intervalHours`), which requests fill it, and how each answer maps into
+   the public record your element reads. A provider that refuses the grant
+   marks the connection *reconnect required* until the owner connects again.
+
+A connection runs under the declaration of the version the site has
+**installed**, never the listing's newest, and a revoked version's
+connections stop with it. Disconnecting revokes the grant at your
+`revocationUrl` when you declare one; deleting a site does the same.
+
+The rules, all enforced by `validatePluginManifest` at publish and by
+`verify-plugin-bundle.mjs` locally (a manifest that breaks one is refused
+whole):
+
+| Field | Rule |
+| --- | --- |
+| `authorizationUrl`, `tokenUrl`, `revocationUrl` | `https`, a public host (no IP address, no `localhost`), no credentials, port, query or fragment. Put extra parameters in `authParams`. |
+| `authParams` | At most 10 short strings. `client_id`, `client_secret`, `redirect_uri`, `response_type`, `state`, `scope`, `code`, `code_challenge`, `code_challenge_method` and `nonce` are the platform's and are refused. |
+| `scopes` | 1 to 20, no spaces or commas. |
+| `apiHosts` | 1 to 10. An exact lowercase public hostname, or `*.` followed by one (`*.example.com`), which covers exactly **one** label: `a.example.com`, not `a.b.example.com` and not `example.com`. `*.com`, `*.*.example.com` and `*api.example.com` are refused. |
+| `request.url` | `https`, on one of `apiHosts`, with its host written out literally: `{{resource.<id>}}` may appear in the path, the query and a POST `body`, never in the host. It is checked against `apiHosts` again after it is filled in, and a choice that could leave the path (`..`, `?`, `#`, `%`, `//`) is never put in a URL. |
+| Placeholders | Only `{{resource.<id>}}`, naming a resource declared **before** the request (or any resource, in `sync`). |
+| `pagination.maxPages` | 1 to 10. |
+| `resources` | At most 3; `maxItems` 1 to 200 (100 when absent). |
+| `sync.intervalHours` | A whole number from 1 to 168. |
+| `sync.requests` | 1 to 3. |
+| `record` | `fields`, `items` or both; at most 20 fields each; `items.maxItems` 1 to 100. A `string` field needs a `maxLength` up to 5,000 and a `url` field one up to 2,048. `map` translates a provider's value (at most 32 entries), and a value not in it is dropped. |
+| The whole block | At most 4 connections, 32,000 characters serialized. |
+
+Your bundle must never call a connection's hosts itself: the verifier refuses
+a bundle that calls an `apiHosts`, `tokenUrl` or `authorizationUrl` host, and a
+manifest that lists one under `capabilities.network`.
+
+`capabilities.imageHosts` declares the hosts your elements show images from
+(at most 10, the same host rule as `apiHosts`), such as the host of a
+reviewer's profile photo.
+
 ## Listing & version documents
 
 - `marketplaceListings/{listingId}` — public: `displayName`, `description`,
@@ -256,6 +384,7 @@ leaves existing ones running. **Restore listing** clears both.
 | `PLUGIN_REMOTE_SERVER` | server | `enabled` turns on remote server bundles (default off everywhere) |
 | `PLUGIN_REMOTE_SERVER_BUNDLES` | server | Per-deploy `listingId@version` allowlist |
 | `PLUGIN_JOBS_SECRET` | tenant server | Shared secret the scheduler sends to `/api/plugins/run-jobs` |
+| `PLUGIN_CONNECTIONS_TOKEN_KEY` | console server only | 32 random bytes, base64 (`NEW,OLD` to rotate): seals every publisher's OAuth app credentials and every site's connection tokens. Unset, no [declared connection](#connections) can be connected |
 | `NEXT_PUBLIC_PLUGIN_DEV_BUNDLES` | client, dev only | Unverified localhost bundle loading for the authoring loop; dead code in production builds |
 | `PLUGIN_DEV_MANIFESTS` | server, dev only | Comma-separated manifest file paths for the dev loop's bundles. Compose reads their `functionBindings` from disk, because a dev bundle has no install to carry them; never read in production builds |
 

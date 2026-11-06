@@ -19,6 +19,10 @@ import { registerPluginEntitlements } from '@aglyn/aglyn/plugin-manager/plugin-e
 import { registerPluginPermissions } from '@aglyn/aglyn/plugin-manager/plugin-permissions'
 import { MARKETPLACE_PUBLISHER_PERMISSIONS } from './model/marketplace-publisher-permissions'
 import { MARKETPLACE_SITE_PERMISSIONS } from './model/marketplace-site-permissions'
+import {
+  PLUGIN_CONNECTIONS_FEATURE_DECLARATION,
+  PLUGIN_CONNECTIONS_SITE_PERMISSION_DECLARATION,
+} from './model/plugin-connections'
 
 let declared = false
 
@@ -35,7 +39,13 @@ let declared = false
 export function registerMarketplaceDeclarations(): void {
   if (declared) return
   declared = true
-  registerPluginEntitlements({ pluginId: 'marketplace', orgPermissions: MARKETPLACE_SITE_PERMISSIONS })
+  registerPluginEntitlements({
+    pluginId: 'marketplace',
+    // Declared connections (AGL-4193): the site key that connects a plugin to
+    // another service, and the plan feature it rides (Starter, Pro, Custom).
+    orgPermissions: [...MARKETPLACE_SITE_PERMISSIONS, PLUGIN_CONNECTIONS_SITE_PERMISSION_DECLARATION],
+    features: [PLUGIN_CONNECTIONS_FEATURE_DECLARATION],
+  })
   registerPluginPermissions(MARKETPLACE_PUBLISHER_PERMISSIONS)
 }
 

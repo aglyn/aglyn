@@ -23,6 +23,7 @@ import {
   registerPluginOrgEraser,
 } from '@aglyn/aglyn/plugin-manager/plugin-org-erasure'
 import { registerPluginRevocationReader } from '@aglyn/aglyn/plugin-manager/plugin-revocations'
+import { registerPluginSiteResourceEraser } from '@aglyn/aglyn/plugin-manager/plugin-site-resources'
 import { registerPluginSiteStarterSource } from '@aglyn/aglyn/plugin-manager/plugin-site-starters'
 import { BUNDLE_ID } from './constants/bundle-common'
 import { RATING_FIELD } from './model/rating-field'
@@ -55,11 +56,39 @@ export function registerMarketplaceServerDeclarations(): void {
     registerPluginOrgEraser(
       async (request) => {
         const { createPublisherIdentityEraser } = await import('./server/publisher-erasure')
-        return createPublisherIdentityEraser()(request)
+        const identity = await createPublisherIdentityEraser()(request)
+        /*
+         * The OAuth app credentials the workspace's listings hold for their
+         * declared connections (AGL-4193). The erasure also sweeps them by
+         * `orgId`; deleting them here as well counts them on the audit
+         * record. Isolated from the REQUIRED identity share above: a failure
+         * here is reported as an unmeasured figure, never as that share
+         * failing.
+         */
+        let connectionCredentials: number | null = null
+        try {
+          const { erasePluginConnectionCredentials } = await import('./server/connections/erasure')
+          connectionCredentials = Number((await erasePluginConnectionCredentials(request))['connectionCredentials'])
+        } catch (error) {
+          console.error('[marketplace] erasing plugin connection credentials failed', error)
+        }
+        return { ...identity, connectionCredentials }
       },
       { pluginId: BUNDLE_ID },
     )
   }
+  /*
+   * A site's declared connections (AGL-4193): its grants revoked at each
+   * provider before the site's tree is deleted. Nothing is listed on the
+   * Delete site card. The Admin SDK arrives with the first delete.
+   */
+  registerPluginSiteResourceEraser(
+    {
+      preview: async () => (await import('./server/connections/erasure')).pluginConnectionsSiteEraser.preview(),
+      erase: async (request) => (await import('./server/connections/erasure')).pluginConnectionsSiteEraser.erase(request),
+    },
+    { pluginId: BUNDLE_ID },
+  )
   /*
    * The kill switch (`plugin-revocations`, AGL-3080): the send path asks it
    * before mailing a design installed from a listing, in whichever process

@@ -529,6 +529,10 @@ async function listingDetail(
       // listing page — so without it here, the `element-metadata` criterion
       // asks a reviewer to check text this page never shows (AGL-2486).
       elements: doc.get('manifest.elements') ?? [],
+      // Declared connections (AGL-4193) for THESE bytes: the OAuth provider,
+      // the hosts the platform calls with the grant and the public record a
+      // sync writes, which a reviewer reads before approving.
+      connections: doc.get('manifest.connections') ?? [],
       publishedAt: publishedAt?.toDate?.()?.toISOString() ?? null,
       // Per-version installs (AGL-1036). "How many workspaces would a revoke
       // actually hit" is a per-version question, and the listing total shown
@@ -631,6 +635,8 @@ async function listingDetail(
         // loads under its default, and review must not refuse it for a rule
         // it was never held to.
         declaredContributions: reviewEntry?.contributes ?? null,
+        // A version published before connections declares none (AGL-4193).
+        declaredConnections: reviewEntry?.connections ?? null,
       })
       verifier = result
       // Write it back so this sha is verified at most once platform-wide —

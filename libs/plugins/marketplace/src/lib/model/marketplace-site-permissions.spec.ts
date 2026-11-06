@@ -57,7 +57,12 @@ describe('the marketplace’s site keys (AGL-4047)', () => {
         roleDefaults: { owner: true, admin: true, editor: true, viewer: false },
       })
     }
-    expect(siteRolePresetPermissionKeys().filter((key) => key.startsWith('marketplace.'))).toEqual(KEYS)
+    // Beside them, the declared-connections key (AGL-4193), whose preset is the
+    // site Admin alone: `plugin-connections.spec.ts` holds it.
+    expect(siteRolePresetPermissionKeys().filter((key) => key.startsWith('marketplace.'))).toEqual([
+      ...KEYS,
+      'marketplace.siteConnections',
+    ])
     for (const key of KEYS) {
       expect(ORG_PERMISSIONS.find((entry) => entry.key === key)).toMatchObject({ pluginId: 'marketplace', scope: 'site' })
     }

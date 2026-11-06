@@ -20,6 +20,11 @@ import {
   sanitizePluginContributions,
   type PluginContributions,
 } from '../plugin-manager/plugin-contributions'
+import {
+  validatePluginConnections,
+  validatePluginImageHosts,
+  type PluginConnectionDeclaration,
+} from './plugin-connections'
 
 /**
  * Executable-plugin manifest, artifact-path, CSP, and revocation helpers
@@ -143,6 +148,13 @@ export interface PluginCapabilities {
   events?: string[]
   /** Rendered iframe region size (host reserves this box). */
   size?: { width?: number; height?: number }
+  /**
+   * Hosts the plugin's elements may show images from on a published site
+   * (AGL-4193): an exact public hostname or `*.<domain>` with one wildcard
+   * label. Validated here; the tenant's `img-src` reads it for a site that
+   * runs the plugin.
+   */
+  imageHosts?: string[]
 }
 
 export interface PluginManifest {
@@ -206,6 +218,14 @@ export interface PluginManifest {
    * page never loads the plugin anywhere the declaration does not place it.
    */
   contributes?: PluginContributions
+  /**
+   * Declared connections (AGL-4193): OAuth providers the PLATFORM connects a
+   * site to on the plugin's behalf, the hosts it may call with the grant, the
+   * picker that chooses what to connect, and the scheduled fetch that maps the
+   * provider's answer into the site's public record. The plugin's own code
+   * never sees a token. See `plugin-connections.ts`.
+   */
+  connections?: PluginConnectionDeclaration[]
 }
 
 /** A published, content-addressed version of a plugin listing. */
@@ -484,6 +504,11 @@ export function validatePluginManifest(
     if (propSchema.length) capabilities.propSchema = propSchema
   }
 
+  // Image hosts (AGL-4193): validation only here, the tenant's CSP reads it.
+  const imageHosts = validatePluginImageHosts(capabilitiesInput['imageHosts'])
+  if (imageHosts.ok === false) return { ok: false, error: imageHosts.error }
+  if (imageHosts.value.length) capabilities.imageHosts = imageHosts.value
+
   const size = capabilitiesInput['size'] as
     | { width?: unknown; height?: unknown }
     | undefined
@@ -602,6 +627,17 @@ export function validatePluginManifest(
     contributes = verdict.contributions
   }
 
+  /**
+   * Declared connections (AGL-4193). Refused whole when malformed, like
+   * `contributes`: a connection trimmed on the way in is an OAuth flow and a
+   * sync that silently do not exist.
+   */
+  const connectionsVerdict = validatePluginConnections(raw['connections'])
+  if (connectionsVerdict.ok === false) {
+    return { ok: false, error: connectionsVerdict.error }
+  }
+  const connections = connectionsVerdict.value
+
   return {
     ok: true,
     manifest: {
@@ -611,6 +647,7 @@ export function validatePluginManifest(
       entry,
       ...(hostAbi !== undefined ? { hostAbi } : {}),
       ...(contributes ? { contributes } : {}),
+      ...(connections.length ? { connections } : {}),
       ...(Object.keys(capabilities).length ? { capabilities } : {}),
       ...(elements.length ? { elements } : {}),
       ...(restrict(raw['restrictParent'])

@@ -151,6 +151,46 @@ describe('validatePluginManifest', () => {
   })
 })
 
+describe('declared connections and image hosts (AGL-4193)', () => {
+  const connection = {
+    id: 'reviews',
+    provider: 'google',
+    label: 'Reviews',
+    authorizationUrl: 'https://accounts.example.com/auth',
+    tokenUrl: 'https://oauth2.example.com/token',
+    scopes: ['business.manage'],
+    apiHosts: ['mybusiness.example.com'],
+  }
+
+  it('keeps a valid connections block and image hosts on the manifest it returns', () => {
+    const result = validatePluginManifest({
+      ...base,
+      capabilities: { imageHosts: ['lh3.example.com'] },
+      connections: [connection],
+    })
+    expect(result.ok).toBe(true)
+    const manifest = (result as { manifest: PluginManifest }).manifest
+    expect(manifest.connections?.map((entry) => entry.id)).toEqual(['reviews'])
+    expect(manifest.capabilities?.imageHosts).toEqual(['lh3.example.com'])
+  })
+
+  it('leaves both off a manifest that declares neither', () => {
+    const result = validatePluginManifest(base)
+    expect(result.ok && 'connections' in result.manifest).toBe(false)
+  })
+
+  it('refuses the whole manifest for a malformed connection or image host', () => {
+    expect(validatePluginManifest({ ...base, connections: [{ ...connection, tokenUrl: 'http://x.example.com/t' }] })).toMatchObject({
+      ok: false,
+      error: expect.stringMatching(/tokenUrl must be an https URL/),
+    })
+    expect(validatePluginManifest({ ...base, capabilities: { imageHosts: ['*.*.example.com'] } })).toMatchObject({
+      ok: false,
+      error: expect.stringMatching(/Image host/),
+    })
+  })
+})
+
 describe('pluginArtifactPath', () => {
   it('is content-addressed and immutable per version', () => {
     expect(pluginArtifactPath('l1', '1.0.0', 'abc123')).toBe(

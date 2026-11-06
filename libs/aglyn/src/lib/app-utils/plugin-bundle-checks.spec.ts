@@ -602,7 +602,7 @@ describe('per-check summary (AGL-1087)', () => {
 
   it('reports every area, not only the ones that found something', () => {
     const result = checkPluginBundle(GOOD_BUNDLE, { declaredNetwork: [] })
-    expect(result.checks).toHaveLength(13)
+    expect(result.checks).toHaveLength(14)
     expect(result.checks.every((check) => check.status === 'pass')).toBe(true)
   })
 
@@ -819,6 +819,77 @@ export function register(h) {
     expect(
       result.checks.find((check) => check.id === 'contributions')?.detail,
     ).toContain('no manifest was supplied')
+  })
+})
+
+describe('declared connections (AGL-4193)', () => {
+  const CONNECTION = {
+    id: 'reviews',
+    provider: 'google',
+    label: 'Reviews',
+    authorizationUrl: 'https://accounts.example.com/auth',
+    tokenUrl: 'https://oauth2.example.com/token',
+    scopes: ['business.manage'],
+    apiHosts: ['mybusiness.example.com'],
+  }
+  const row = (result: ReturnType<typeof checkPluginBundle>) =>
+    result.checks.find((check) => check.id === 'connections')
+  const quiet = `export function register() {}\n`
+
+  it('passes a bundle that never calls a connection’s hosts, and names what it declares', () => {
+    const result = checkPluginBundle(
+      `export function register() { fetch('https://cdn.example.org/a.json') }\n`,
+      { declaredNetwork: ['https://cdn.example.org'], declaredConnections: [CONNECTION] },
+    )
+    expect(result.ok).toBe(true)
+    expect(row(result)).toMatchObject({ status: 'pass', detail: 'declares reviews' })
+  })
+
+  it.each([
+    ['its API host', 'https://mybusiness.example.com/v4/reviews'],
+    ['its token endpoint', 'https://oauth2.example.com/token'],
+    ['its authorization endpoint', 'https://accounts.example.com/auth'],
+  ])('refuses a bundle that calls %s itself', (_name, url) => {
+    const origin = new URL(url).origin
+    const result = checkPluginBundle(`export function register() { fetch('${url}') }\n`, {
+      declaredNetwork: [origin],
+      declaredConnections: [CONNECTION],
+    })
+    expect(result.ok).toBe(false)
+    expect(row(result)?.status).toBe('fail')
+    expect(result.problems.some((problem) => problem.check === 'connections' && problem.message.includes(origin))).toBe(true)
+  })
+
+  it('refuses a manifest that declares a connection host under capabilities.network', () => {
+    const result = checkPluginBundle(quiet, {
+      declaredNetwork: ['https://mybusiness.example.com'],
+      declaredConnections: [CONNECTION],
+    })
+    expect(result.ok).toBe(false)
+    expect(result.problems.find((problem) => problem.check === 'connections')?.message).toMatch(/capabilities\.network/)
+  })
+
+  it('refuses a malformed connections block with the validator’s own words, even unparsed', () => {
+    const broken = [{ ...CONNECTION, tokenUrl: 'http://oauth2.example.com/token' }]
+    for (const source of [quiet, 'export function register() { <<< }\n']) {
+      const result = checkPluginBundle(source, { declaredNetwork: [], declaredConnections: broken })
+      expect(result.ok).toBe(false)
+      expect(row(result)?.status).toBe('fail')
+      expect(result.problems.find((problem) => problem.check === 'connections')?.message).toMatch(/tokenUrl must be an https URL/)
+    }
+  })
+
+  it('says it compared nothing when no manifest was supplied and the bundle calls out', () => {
+    const result = checkPluginBundle(`export function register() { fetch('https://api.example.com') }\n`)
+    expect(row(result)?.status).toBe('unknown')
+    expect(row(checkPluginBundle(quiet))?.status).toBe('pass')
+  })
+
+  it('reads an explicit "none" as a pass', () => {
+    expect(row(checkPluginBundle(quiet, { declaredNetwork: [], declaredConnections: null }))).toMatchObject({
+      status: 'pass',
+      detail: 'declares none',
+    })
   })
 })
 

@@ -2763,6 +2763,19 @@ allow read, write: if false;
 
 
 
+
+
+match /pluginConnectionCredentials/{credentialId} {
+allow read, write: if false;
+}
+
+
+
+
+
+
+
+
 match /commerceShipStationConnections/{hostId} {
 allow read, write: if false;
 }
@@ -4380,6 +4393,7 @@ allow read: if subcollection != 'siteMemberCredentials' &&
 subcollection != 'orderWebhookSecrets' &&
 subcollection != 'posStaffPins' &&
 subcollection != 'salesChannels' &&
+subcollection != 'pluginConnections' &&
 subcollection != 'reviewTokens' &&
 (isStaff() || (isHostMember(hostId) &&
 !(subcollection in ['webhooks', 'orders', 'mediaTombstones', 'packageImports',
@@ -4522,10 +4536,16 @@ subcollection != 'reviewTokens' &&
 
 
 
+
+
+
+
+
 allow create: if subcollection != 'siteMemberCredentials' &&
 subcollection != 'orderWebhookSecrets' &&
 subcollection != 'posStaffPins' &&
 subcollection != 'salesChannels' &&
+subcollection != 'pluginConnections' &&
 subcollection != 'reviewTokens' && (isStaff() ||
 ((canWriteHostContent(hostId) && !hostWritesFrozen(hostId)) &&
 !(subcollection in ['screens', 'layouts', 'variables',
@@ -4542,7 +4562,7 @@ subcollection != 'reviewTokens' && (isStaff() ||
 'emailAttributions', 'campaignAttributions',
 'campaignSequenceReports',
 'flowEnrollments', 'leads', 'siteMembers',
-'siteMemberCredentials', 'posStaffPins', 'posOfflineSales', 'salesChannels', 'recordPages', 'printers',
+'siteMemberCredentials', 'posStaffPins', 'posOfflineSales', 'salesChannels', 'pluginConnections', 'recordPages', 'printers',
 'printJobs', 'returns', 'orderWebhooks',
 'orderWebhookSecrets', 'orderWebhookDeliveries', 'funnels', 'funnelJourneys', 'funnelResults',
 'aiMemory', 'reviews', 'reviewTokens', 'checkIns', 'checkInDays',
@@ -4697,6 +4717,7 @@ allow update: if subcollection != 'siteMemberCredentials' &&
 subcollection != 'orderWebhookSecrets' &&
 subcollection != 'posStaffPins' &&
 subcollection != 'salesChannels' &&
+subcollection != 'pluginConnections' &&
 subcollection != 'reviewTokens' && (isStaff() ||
 ((canWriteHostContent(hostId) && !hostWritesFrozen(hostId)) &&
 !(subcollection in ['screens', 'layouts', 'components', 'installs',
@@ -4713,7 +4734,7 @@ subcollection != 'reviewTokens' && (isStaff() ||
 'emailAttributions', 'campaignAttributions',
 'campaignSequenceReports',
 'flowEnrollments', 'leads', 'siteMembers',
-'siteMemberCredentials', 'posStaffPins', 'posOfflineSales', 'salesChannels', 'recordPages', 'printers',
+'siteMemberCredentials', 'posStaffPins', 'posOfflineSales', 'salesChannels', 'pluginConnections', 'recordPages', 'printers',
 'printJobs', 'returns', 'orderWebhooks',
 'orderWebhookSecrets', 'orderWebhookDeliveries', 'funnels', 'funnelJourneys', 'funnelResults',
 'aiMemory', 'reviews', 'reviewTokens', 'checkIns', 'checkInDays',
@@ -4758,6 +4779,7 @@ allow delete: if subcollection != 'siteMemberCredentials' &&
 subcollection != 'orderWebhookSecrets' &&
 subcollection != 'posStaffPins' &&
 subcollection != 'salesChannels' &&
+subcollection != 'pluginConnections' &&
 subcollection != 'reviewTokens' && (isStaff() ||
 ((canWriteHostContent(hostId) && !hostWritesFrozen(hostId)) &&
 !(subcollection in ['screens', 'layouts', 'components',
@@ -4773,7 +4795,7 @@ subcollection != 'reviewTokens' && (isStaff() ||
 'emailAttributions', 'campaignAttributions',
 'campaignSequenceReports',
 'flowEnrollments', 'siteMembers', 'siteMemberCredentials',
-'posStaffPins', 'posOfflineSales', 'salesChannels', 'recordPages', 'printers', 'printJobs', 'returns',
+'posStaffPins', 'posOfflineSales', 'salesChannels', 'pluginConnections', 'recordPages', 'printers', 'printJobs', 'returns',
 'orderWebhooks',
 'orderWebhookSecrets', 'orderWebhookDeliveries', 'funnels', 'funnelJourneys', 'funnelResults', 'reviews', 'reviewTokens',
 'checkIns', 'checkInDays', 'waiverTitles', 'reservations', 'resources', 'subscriptions'])));

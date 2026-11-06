@@ -864,6 +864,12 @@ export const PLUGIN_HOST_COLLECTIONS_DECLARED: readonly ResolvedPluginHostCollec
     "name": "installs"
   },
   {
+    "pluginId": "marketplace",
+    "name": "pluginConnections",
+    "mediaScan": "none",
+    "mediaScanReason": "A site's declared plugin connections (AGL-4193): one document per listing and connection holding the SEALED OAuth grant, the owner's choices and sync times, and the single-use OAuth state of a connect in progress. No client reads or writes it, and nothing in it names a library asset."
+  },
+  {
     "pluginId": "crm",
     "name": "leads",
     "mediaScan": "none",
@@ -2447,6 +2453,11 @@ export const PLUGIN_ORG_KEYED_COLLECTIONS: readonly PluginOrgKeyedCollection[] =
   {
     "pluginId": "commerce",
     "name": "posCellularCharges",
+    "orgField": "orgId"
+  },
+  {
+    "pluginId": "marketplace",
+    "name": "pluginConnectionCredentials",
     "orgField": "orgId"
   },
   {
