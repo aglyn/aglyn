@@ -15,7 +15,10 @@
  * limitations under the License.
  */
 
-import type { PluginConfigField } from '../plugin-manager/plugin-config'
+import {
+  pluginConfigSchemaFromManifest,
+  type PluginConfigField,
+} from '../plugin-manager/plugin-config'
 import {
   sanitizePluginContributions,
   type PluginContributions,
@@ -638,6 +641,39 @@ export function validatePluginManifest(
   }
   const connections = connectionsVerdict.value
 
+  /**
+   * Declared settings (AGL-428). This validator rebuilds the manifest from
+   * the fields it knows, and `config` was never one of them, so a publisher's
+   * settings were dropped at publish and the console never drew the form the
+   * docs promise. Kept now, through the SAME sanitizer the console reads the
+   * pinned manifest with (`pluginConfigSchemaFromManifest`): unknown field
+   * types, duplicate keys and empty selects are dropped, at most 50 fields
+   * are kept, and every default is coerced to its field's type. A `config`
+   * that is not an object with a `fields` list is refused, a build error the
+   * publisher can see; one whose fields all drop out is left off.
+   */
+  let config: PluginManifest['config'] | undefined
+  if (raw['config'] !== undefined) {
+    const declaredConfig = raw['config'] as { fields?: unknown } | null
+    if (!declaredConfig || typeof declaredConfig !== 'object' || !Array.isArray(declaredConfig.fields)) {
+      return { ok: false, error: 'config must be an object with a fields list' }
+    }
+    const schema = pluginConfigSchemaFromManifest(id, { config: declaredConfig })
+    // No `undefined` member survives: the manifest is written to Firestore
+    // as is, and the Admin SDK refuses an undefined value.
+    if (schema) {
+      config = {
+        fields: schema.fields.map(
+          (field) =>
+            Object.fromEntries(
+              Object.entries(field).filter(([, value]) => value !== undefined),
+            ) as PluginConfigField,
+        ),
+        defaults: schema.defaults,
+      }
+    }
+  }
+
   return {
     ok: true,
     manifest: {
@@ -648,6 +684,7 @@ export function validatePluginManifest(
       ...(hostAbi !== undefined ? { hostAbi } : {}),
       ...(contributes ? { contributes } : {}),
       ...(connections.length ? { connections } : {}),
+      ...(config ? { config } : {}),
       ...(Object.keys(capabilities).length ? { capabilities } : {}),
       ...(elements.length ? { elements } : {}),
       ...(restrict(raw['restrictParent'])
