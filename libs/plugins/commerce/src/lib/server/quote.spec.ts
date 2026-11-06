@@ -69,8 +69,11 @@ function docRef(path: string): any {
 }
 
 function collectionRef(path: string): any {
-  return {
+  const ref: any = {
     doc: (id?: string) => docRef(`${path}/${id ?? `quote-${++autoId}`}`),
+    // An ordered or capped query (a quote's conversation, AGL-4207) answers the same documents.
+    orderBy: () => ref,
+    limit: () => ref,
     // The documents directly in this collection, as a query answers them.
     get: async () => ({
       docs: [...docs.keys()]
@@ -78,6 +81,7 @@ function collectionRef(path: string): any {
         .map(snapshotOf),
     }),
   }
+  return ref
 }
 
 const firestore: any = {
@@ -429,6 +433,16 @@ describe('creating a quote', () => {
       request('admin', { action: 'create', hostId: 'site1', quote: { lines: [CUSTOM], requireProofApproval: false } }, 'b'),
     )
     expect(quoteDocs().map(([, data]) => data.quote.requireProofApproval)).toEqual([true, false])
+  })
+
+  it('starts with the store’s sign-in default, and an edit keeps the quote’s own (AGL-4206)', async () => {
+    docs.set('hosts/site1/settings/store', { ...docs.get('hosts/site1/settings/store'), quotes: { requireProofSignIn: true } })
+    await handleQuote(deps, request('admin', { action: 'create', hostId: 'site1', quote: { lines: [CUSTOM] } }, 'a'))
+    await handleQuote(
+      deps,
+      request('admin', { action: 'create', hostId: 'site1', quote: { lines: [CUSTOM], requireProofSignIn: false } }, 'b'),
+    )
+    expect(quoteDocs().map(([, data]) => data.quote.requireProofSignIn)).toEqual([true, false])
   })
 
   it('leaves the tax to the payment on Stripe Tax', async () => {
@@ -1130,6 +1144,29 @@ describe('sending the quote by email (AGL-4097)', () => {
     expect(stored(path)['timeline'].at(-1)).toMatchObject({ event: 'quote-sent', atMs: 7_000 })
   })
 
+  it('draws no proof picture for a customer who signs in to see it, and draws it for a guest (AGL-4206)', async () => {
+    const IMAGE = { id: 'p1', revision: 1, name: 'Banner.png', contentType: 'image/png', size: 2_000, path: 'x', addedAtMs: 1, addedBy: 'a' }
+    const asked: string[] = []
+    const withAccount = (id: string | null) => ({
+      ...deps,
+      customerAccount: async ({ email }: { email: string }) => {
+        asked.push(email)
+        return id ? { id } : null
+      },
+    })
+    const { quoteId, path } = await created()
+    const doc = stored(path)
+    docs.set(path, { ...doc, quote: { ...doc['quote'], requireProofSignIn: true, proofs: [IMAGE] } })
+    const sendWith = (using: typeof deps) =>
+      handleQuote(using, request('admin', { action: 'send', hostId: 'site1', quoteId, message: 'Here.' }, `s-${++attempt}`))
+    expect((await sendWith(withAccount('m1'))).status).toBe(200)
+    expect(asked).toEqual(['jane@example.com'])
+    expect(renderedTokens[0]['quote.proofImages']).toBe('')
+    expect(renderedTokens[0]['quote.nextStep']).toMatch(/^Sign in to your account with Acme Signs to see the proof\. /)
+    expect((await sendWith(withAccount(null))).status).toBe(200)
+    expect(renderedTokens[1]['quote.proofImages']).toContain('quote-proof')
+  })
+
   it('answers to the person sending when the site has no contact email', async () => {
     const { quoteId } = await created()
     await send('editor', quoteId)
@@ -1675,5 +1712,97 @@ describe('a proof only quote (AGL-4184)', () => {
       status: 409,
       body: { error: 'This quote has no items and no proof on this revision yet. Add one, then send it.' },
     })
+  })
+})
+
+describe('POST commerce/quote: a reply from the quote (AGL-4207)', () => {
+  const JANE = { name: 'Jane Doe', email: 'jane@example.com' }
+  async function created(customer: Record<string, unknown> = JANE): Promise<{ quoteId: string; path: string }> {
+    const outcome = await handleQuote(
+      deps,
+      request('admin', { action: 'create', hostId: 'site1', quote: { lines: [CUSTOM], customer } }, `c-${Math.random()}`),
+    )
+    const quoteId = String(outcome.body['quoteId'])
+    return { quoteId, path: `hosts/site1/orders/${quoteId}` }
+  }
+  let attempt = 0
+  const reply = (uid: string, quoteId: string, message = 'We can make the logo bigger.', key = `reply-${++attempt}`) =>
+    handleQuote(deps, request(uid, { action: 'reply', hostId: 'site1', quoteId, message }, key))
+  const messagesOf = (path: string) =>
+    [...docs.entries()].filter(([key]) => key.startsWith(`${path}/messages/`)).map(([, data]) => data)
+
+  beforeEach(() => {
+    docs.set('hosts/site1', { ...docs.get('hosts/site1'), displayName: 'Acme Signs' })
+  })
+
+  it('emails the customer in the quote’s conversation, keeps the reply under the quote, and moves the conversation on', async () => {
+    const { quoteId, path } = await created()
+    expect((await handleQuote(deps, request('admin', { action: 'send', hostId: 'site1', quoteId, message: 'Here.' }, 'send-1'))).status).toBe(200)
+    const sentId = String(sentEmails[0].headers?.['Message-ID'])
+    nowMs = 8_000
+    expect(await reply('admin', quoteId)).toEqual({ status: 200, body: { sent: true, to: 'jane@example.com', atMs: 8_000 } })
+    expect(sentEmails).toHaveLength(2)
+    const email = sentEmails[1]
+    expect(email).toMatchObject({ to: 'jane@example.com', subject: sentEmails[0].subject, audience: 'tenant', context: 'quote' })
+    expect(email.attachments).toBeUndefined()
+    const replyId = String(email.headers?.['Message-ID'])
+    expect(email.headers).toMatchObject({ 'Message-ID': replyId, 'In-Reply-To': sentId })
+    expect(renderedTokens[1]).toMatchObject({
+      'message.body': 'We can make the logo bigger.',
+      'message.heading': 'A message about your quote',
+      'message.subject': sentEmails[0].subject,
+    })
+    expect(messagesOf(path)).toEqual([
+      expect.objectContaining({ direction: 'out', body: 'We can make the logo bigger.', atMs: 8_000, to: 'jane@example.com', by: 'admin@example.com', messageId: replyId }),
+    ])
+    const quote = docs.get(path)?.['quote']
+    expect(quote.emailThread.messageId).toBe(replyId)
+    // A reply is not an edit: what the customer is looking at did not change.
+    expect(quote.updatedAtMs).not.toBe(8_000)
+  })
+
+  it('lists the conversation for anyone who edits quotes', async () => {
+    const { quoteId, path } = await created()
+    await reply('admin', quoteId)
+    docs.set(`${path}/messages/in-1`, { direction: 'in', body: 'Thanks!', atMs: 99_000, revision: 1, name: 'Jane Doe', ip: null, userAgent: null })
+    const listed = await handleQuote(deps, request('editor', { action: 'messages', hostId: 'site1', quoteId }))
+    expect(listed.status).toBe(200)
+    expect(listed.body['to']).toBe('jane@example.com')
+    expect((listed.body['messages'] as Array<{ direction: string; body: string; label: string }>).map((entry) => [entry.direction, entry.body, entry.label])).toEqual([
+      ['out', 'We can make the logo bigger.', 'Sent to jane@example.com by admin@example.com'],
+      ['in', 'Thanks!', 'Jane Doe wrote on the quote page'],
+    ])
+  })
+
+  it.each([
+    ['author', 403],
+    ['viewer', 403],
+    ['editsOnly', 403],
+  ])('a site %s without "Send quotes and invoices to customers" replies to nobody', async (uid, status) => {
+    const { quoteId, path } = await created()
+    expect(await reply(uid, quoteId)).toEqual({
+      status,
+      body: { error: 'Your role does not include "Send quotes and invoices to customers" — ask an organization admin' },
+    })
+    expect(sentEmails).toEqual([])
+    expect(messagesOf(path)).toEqual([])
+  })
+
+  it('refuses a quote with nobody to write to, an empty message, and a press with no Idempotency-Key', async () => {
+    const walkIn = await created({ name: 'Walk-in' })
+    expect(await reply('admin', walkIn.quoteId)).toMatchObject({ status: 409, body: { error: expect.stringMatching(/no customer email/) } })
+    const { quoteId } = await created()
+    expect(await reply('admin', quoteId, '   ')).toEqual({ status: 400, body: { error: 'Write a message first.' } })
+    expect(await reply('admin', quoteId, 'Hi', '')).toMatchObject({ status: 400 })
+    expect(sentEmails).toEqual([])
+  })
+
+  it('answers a retried press from the first, so the customer gets one email', async () => {
+    const { quoteId, path } = await created()
+    const first = await reply('admin', quoteId, 'Once.', 'same')
+    const again = await reply('admin', quoteId, 'Once.', 'same')
+    expect(again).toEqual(first)
+    expect(sentEmails).toHaveLength(1)
+    expect(messagesOf(path)).toHaveLength(1)
   })
 })

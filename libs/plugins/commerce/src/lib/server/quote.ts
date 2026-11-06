@@ -157,6 +157,12 @@ export interface QuoteDeps {
    * through the core's seam; null when no plugin reads them in this process.
    */
   requestFacts(request: PluginRecordFactsRequest): Promise<PluginRecordFactsRead | null>
+  /**
+   * The customer's account on the site (AGL-4206), for a send that must not
+   * draw a proof a signed-out inbox cannot open. Absent, every customer reads
+   * as a guest.
+   */
+  customerAccount?(input: { hostId: string; host: Record<string, unknown>; email: string }): Promise<{ id: string } | null>
   now(): number
 }
 
@@ -183,6 +189,7 @@ export function defaultQuoteDeps(): QuoteDeps {
     mailer: async () => (await import('./quote-email')).quoteMailer(),
     requestFacts: async (request) =>
       (await pluginRecordFactsReader(CommerceModel.QUOTE_REQUEST_FACTS_RESOURCE)?.reader.read(request)) ?? null,
+    customerAccount: async (input) => (await import('./quote-pay')).readQuoteCustomerAccount(input),
     now: () => Date.now(),
   }
 }
@@ -256,7 +263,8 @@ function headerOf(req: PluginApiRequest, name: string): string {
 const DOC_ID = /^(?!__.*__$)[^/]{1,200}$/
 
 /** The actions under "Send quotes and invoices to customers" (`commerce.quotes.send`). */
-const SEND_ACTIONS = new Set(['pay-link', 'replace-link', 'send'])
+// A reply from the quote emails the customer, as a send does (AGL-4207).
+const SEND_ACTIONS = new Set(['pay-link', 'replace-link', 'send', 'reply'])
 
 /** The ship-to as a tax service reads it, or `null` to tax at the store's address. */
 function serviceAddress(shipTo: CommerceModel.OrderAddress | null): PluginTaxAddress | null {
@@ -277,6 +285,8 @@ interface PricedQuote {
   tax: CommerceModel.QuoteTaxBasis
   taxMode: CommerceModel.StorefrontTaxMode | undefined
   requireProofApprovalDefault: boolean
+  /** The store's default for `requireProofSignIn` (AGL-4206). */
+  requireProofSignInDefault: boolean
 }
 
 /**
@@ -363,6 +373,9 @@ async function priceQuote(
     tax,
     taxMode: CommerceModel.quoteTaxMode(tax, totals.taxCents),
     requireProofApprovalDefault: CommerceModel.quoteRequiresProofApprovalByDefault(
+      store.get('quotes') as CommerceModel.QuoteStoreSettings | undefined,
+    ),
+    requireProofSignInDefault: CommerceModel.quoteRequiresProofSignInByDefault(
       store.get('quotes') as CommerceModel.QuoteStoreSettings | undefined,
     ),
   }
@@ -459,6 +472,22 @@ export async function handleQuote(deps: QuoteDeps, req: PluginApiRequest): Promi
       hostRef,
       host: (host.data() ?? {}) as Record<string, unknown>,
       firestore,
+      actor,
+      senderEmail: decoded.email ? String(decoded.email) : null,
+    })
+  }
+
+  if (action === 'messages' || action === 'reply') {
+    const quoteId = String(body['quoteId'] ?? '')
+    if (!DOC_ID.test(quoteId)) return refuse(400, 'Missing quoteId')
+    return (await import('./quote-messages')).handleQuoteMessagesAction(deps, {
+      action,
+      req,
+      body,
+      hostId,
+      quoteId,
+      hostRef,
+      host: (host.data() ?? {}) as Record<string, unknown>,
       actor,
       senderEmail: decoded.email ? String(decoded.email) : null,
     })
@@ -664,6 +693,7 @@ export async function handleQuote(deps: QuoteDeps, req: PluginApiRequest): Promi
           ...editedQuoteFields(input),
           tax: priced.tax,
           requireProofApproval: input.requireProofApproval ?? priced.requireProofApprovalDefault,
+          requireProofSignIn: input.requireProofSignIn ?? priced.requireProofSignInDefault,
           ...(started
             ? {
                 request: started.request,
@@ -743,6 +773,7 @@ export async function handleQuote(deps: QuoteDeps, req: PluginApiRequest): Promi
             tax: priced.tax,
             requireProofApproval:
               input.requireProofApproval ?? existing.quote.requireProofApproval === true,
+            requireProofSignIn: input.requireProofSignIn ?? existing.quote.requireProofSignIn === true,
             updatedAtMs: now,
             updatedBy: actor,
           },
@@ -1158,6 +1189,11 @@ async function handleSendAction(
   await closeOpenSession(deps, prepared.closeSession, 'quote link replaced to send a revision', hostId)
 
   const payUrl = deps.payLinkUrl(host, hostId, quoteId, linkVersion) as string
+  // A customer who signs in to see the proof gets no picture of it by email: an inbox is not signed in (AGL-4206).
+  const accountEmail = order.quote?.requireProofSignIn === true ? CommerceModel.quoteCustomerAccountEmail(order.quote) : ''
+  const signInFirst = Boolean(
+    accountEmail && deps.customerAccount && (await deps.customerAccount({ hostId, host, email: accountEmail }).catch(() => null)),
+  )
   let delivered: Awaited<ReturnType<QuoteMailer['deliver']>>
   try {
     delivered = await mailer.deliver({
@@ -1171,7 +1207,8 @@ async function handleSendAction(
       subject: parsed.input.subject,
       message: parsed.input.message,
       payUrl,
-      proofUrl: (proofId) => deps.proofLinkUrl(host, hostId, quoteId, linkVersion, proofId),
+      proofUrl: (proofId) => (signInFirst ? null : deps.proofLinkUrl(host, hostId, quoteId, linkVersion, proofId)),
+      signInFirst,
       linkReplaced,
       senderEmail: context.senderEmail,
       atMs: now,

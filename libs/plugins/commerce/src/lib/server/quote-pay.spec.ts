@@ -25,6 +25,7 @@ import {
 } from '@aglyn/aglyn/server'
 import { handleQuotePay, handleQuoteView, type QuotePayDeps } from './quote-pay'
 import { mintQuoteLinkToken } from './quote-link-token'
+import { memberCookieName, mintMemberSession } from './membership'
 
 jest.mock('@aglyn/tenant-data-admin', () => ({
   firebaseAdmin: {},
@@ -71,7 +72,18 @@ function docRef(path: string): any {
 }
 
 function collectionRef(path: string): any {
-  return { doc: (id: string) => docRef(`${path}/${id}`) }
+  const ref: any = {
+    doc: (id: string) => docRef(`${path}/${id}`),
+    // A query (the page's conversation, AGL-4207) answers this collection's own documents.
+    orderBy: () => ref,
+    limit: () => ref,
+    get: async () => ({
+      docs: [...docs.keys()]
+        .filter((key) => key.startsWith(`${path}/`) && !key.slice(path.length + 1).includes('/'))
+        .map((key) => snapshotOf(key)),
+    }),
+  }
+  return ref
 }
 
 const firestore: any = {
@@ -251,6 +263,53 @@ describe('the quote page’s data', () => {
     const outcome = await handleQuoteView(deps, viewRequest({ hostId: 'site1', q: 'q-1', t: token() }))
     expect(outcome.body).toMatchObject({ status: 'paid', paidAtMs: 9_000, payable: false })
     expect(String(outcome.body['receiptUrl'])).toMatch(/^https:\/\/acme\.[a-z.]+\/order-status\?o=q-1&t=[0-9a-f]{32}$/)
+  })
+})
+
+describe('the quote page when the proof waits on a sign-in (AGL-4206)', () => {
+  const PROOFS = [{ id: 'p1', revision: 1, name: 'banner.png', contentType: 'image/png', size: 10, path: 'x' }]
+  const asking = (accountId: string | null): QuotePayDeps => ({
+    ...deps,
+    customerAccount: async () => (accountId ? { id: accountId, validFromMs: 0, suspended: false } : null),
+  })
+  const signedIn = (memberId: string) =>
+    ({
+      ...viewRequest({ hostId: 'site1', q: 'q-1', t: token() }),
+      cookies: { [memberCookieName('site1')]: mintMemberSession('site1', memberId) },
+    }) as PluginApiRequest
+
+  it('shows the quote but not the proof to a browser not signed in to the customer’s account', async () => {
+    storeQuote({ requireProofSignIn: true, proofs: PROOFS })
+    const outcome = await handleQuoteView(asking('m1'), viewRequest({ hostId: 'site1', q: 'q-1', t: token() }))
+    expect(outcome.status).toBe(200)
+    expect(outcome.body).toMatchObject({ proofAccess: 'sign-in', proofs: [], respondable: false, approvalStatements: [] })
+    expect(outcome.body['lines']).toHaveLength(3)
+  })
+
+  it('shows the proof, and what to confirm, once signed in to it', async () => {
+    storeQuote({ requireProofSignIn: true, proofs: PROOFS })
+    const outcome = await handleQuoteView(asking('m1'), signedIn('m1'))
+    expect(outcome.body).toMatchObject({ proofAccess: 'open', respondable: true })
+    expect((outcome.body['proofs'] as unknown[]).length).toBe(1)
+    expect((outcome.body['approvalStatements'] as unknown[]).length).toBe(3)
+  })
+
+  it('shows the proof to a guest’s link, and to everyone while the switch is off', async () => {
+    storeQuote({ requireProofSignIn: true, proofs: PROOFS })
+    expect((await handleQuoteView(asking(null), viewRequest({ hostId: 'site1', q: 'q-1', t: token() }))).body).toMatchObject({
+      proofAccess: 'open',
+    })
+    storeQuote({ requireProofSignIn: false, proofs: PROOFS })
+    expect((await handleQuoteView(asking('m1'), viewRequest({ hostId: 'site1', q: 'q-1', t: token() }))).body).toMatchObject({
+      proofAccess: 'open',
+    })
+  })
+
+  it('carries the store’s own statements', async () => {
+    docs.set('hosts/site1/settings/store', { ...docs.get('hosts/site1/settings/store'), quotes: { approvalStatements: ['Sizes are right.'] } })
+    storeQuote({ proofs: PROOFS })
+    const outcome = await handleQuoteView(deps, viewRequest({ hostId: 'site1', q: 'q-1', t: token() }))
+    expect(outcome.body['approvalStatements']).toEqual(['Sizes are right.'])
   })
 })
 

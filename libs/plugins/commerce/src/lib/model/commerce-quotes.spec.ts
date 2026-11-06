@@ -28,6 +28,7 @@ import {
   quoteDisplayStatus,
   quoteLineAmounts,
   quoteLineRequestFromLine,
+  quoteModifierOptionLabel,
   quoteOrderTotals,
   quotePaymentBlockedByApproval,
   quoteRequiresProofApprovalByDefault,
@@ -235,7 +236,7 @@ describe('what a quote is', () => {
   it('is numbered as the order it becomes and shows its stage until paid', () => {
     expect(formatQuoteNumber({ number: 1042 })).toBe('Quote #1042')
     expect(quoteDisplayStatus({ status: 'pending', quote: { stage: 'draft' } })).toEqual({ key: 'draft', label: 'Draft' })
-    expect(quoteDisplayStatus({ status: 'pending', quote: { stage: 'changes_requested' } }).label).toBe('Changes requested')
+    expect(quoteDisplayStatus({ status: 'pending', quote: { stage: 'changes_requested' } }).label).toBe('Rejected with changes')
     expect(quoteDisplayStatus({ status: 'fulfilled', quote: { stage: 'approved' } })).toEqual({ key: 'paid', label: 'Paid' })
   })
 
@@ -434,5 +435,23 @@ describe('pricing a quote line', () => {
       modifiers: [{ groupId: 'walls', optionId: 'side' }],
       included: true,
     })
+  })
+})
+
+describe('the quote editor’s add-on menu', () => {
+  const money = (cents: number) => `$${(cents / 100).toFixed(2)}`
+  const backWall = { name: 'Back wall', priceCents: 9_000, priceCentsByVariant: { large: 15_000 } }
+
+  it('prices an add-on for the size picked on the line, as the total does', () => {
+    expect(quoteModifierOptionLabel(backWall, 'large', money)).toBe('Back wall (+$150.00)')
+    expect(quoteModifierOptionLabel(backWall, 'small', money)).toBe('Back wall (+$90.00)')
+    expect(quoteModifierOptionLabel(backWall, '', money)).toBe('Back wall (+$90.00)')
+  })
+
+  it('names a free add-on alone, and shows the price a size gives one that is free otherwise', () => {
+    expect(quoteModifierOptionLabel({ name: 'Stakes', priceCents: 0 }, 'large', money)).toBe('Stakes')
+    expect(quoteModifierOptionLabel({ name: 'Sandbags', priceCents: 0, priceCentsByVariant: { large: 2_000 } }, 'large', money)).toBe(
+      'Sandbags (+$20.00)',
+    )
   })
 })

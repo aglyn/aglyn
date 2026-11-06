@@ -16,9 +16,11 @@
  */
 
 import {
+  ACCOUNTS_PLUGIN_ID,
   checkEntitlement,
   claimAttempt,
   deriveStripeObjectKey,
+  resolveHostEnabledPlugins,
   resolveTransactionFeeCents,
   type PluginApiHandler,
   type PluginApiRequest,
@@ -47,6 +49,7 @@ import {
   type NativeCheckoutMode,
 } from './native-checkout'
 import { orderStatusUrl } from './order-status-token'
+import { MEMBER_SESSIONS_VALID_FROM_FIELD, memberCookieName, parseMemberSession } from './membership'
 import { ensureCheckoutDomain } from './payment-method-domains'
 import { verifyQuoteLinkToken } from './quote-link-token'
 import { SELLER_STRIPE_TAX_NOT_SET_UP_MESSAGE, sellerStripeTaxActive } from './seller-stripe-account'
@@ -124,7 +127,85 @@ export interface QuotePayDeps {
   sellerTaxActive?(accountId: string): Promise<boolean>
   /** Registers the page's domain for Apple Pay; never throws. */
   ensureDomain(input: Parameters<typeof ensureCheckoutDomain>[0]): Promise<unknown>
+  /**
+   * The site account a quote's customer signs in to (AGL-4206): the member
+   * under that address, on a site that serves accounts; null for a guest.
+   * Absent, every customer reads as a guest.
+   */
+  customerAccount?(input: { hostId: string; host: Record<string, unknown>; email: string }): Promise<QuoteCustomerAccount | null>
   now(): number
+}
+
+/** A quote customer's account on the site, as the sign-in check needs it. */
+export interface QuoteCustomerAccount {
+  id: string
+  /** Sessions minted before this were revoked in bulk (AGL-914). */
+  validFromMs: number
+  suspended: boolean
+}
+
+/**
+ * The member under `email` on a site that serves accounts, or null. A site
+ * with User Accounts switched off has no sign-in page to send anyone to, so
+ * every customer of it is a guest.
+ */
+export async function readQuoteCustomerAccount(input: {
+  hostId: string
+  host: Record<string, unknown>
+  email: string
+}): Promise<QuoteCustomerAccount | null> {
+  const owner = await getOrgForHost(input.hostId)
+  if (!owner || !resolveHostEnabledPlugins(owner.org as never, input.host as never).includes(ACCOUNTS_PLUGIN_ID)) return null
+  const found = await firebaseAdmin
+    .app()
+    .firestore()
+    .collection('hosts')
+    .doc(input.hostId)
+    .collection('siteMembers')
+    .where('email', '==', input.email)
+    .limit(1)
+    .get()
+  const member = found.docs[0]
+  if (!member) return null
+  return {
+    id: member.id,
+    validFromMs: Number(member.get(MEMBER_SESSIONS_VALID_FROM_FIELD) ?? 0) || 0,
+    suspended: member.get('suspended') === true,
+  }
+}
+
+/**
+ * Whether this request may see the quote's proof and answer it (AGL-4206):
+ * `open` unless the quote asks a customer with a site account to sign in and
+ * this browser is not signed in to that account. Reads nothing for a quote
+ * that does not ask, or a customer with no address.
+ */
+export async function quoteProofAccessFor(
+  deps: QuotePayDeps,
+  req: PluginApiRequest,
+  input: { hostId: string; host: Record<string, unknown>; order: CommerceModel.HostOrder },
+): Promise<CommerceModel.QuoteProofAccess> {
+  const quote = input.order.quote
+  if (quote?.requireProofSignIn !== true) return 'open'
+  const email = CommerceModel.quoteCustomerAccountEmail(quote)
+  if (!email) return 'open'
+  const account = deps.customerAccount ? await deps.customerAccount({ hostId: input.hostId, host: input.host, email }) : null
+  const cookies = (req.cookies ?? {}) as Record<string, string | undefined>
+  const session = parseMemberSession(input.hostId, cookies[memberCookieName(input.hostId)])
+  // A session for the customer's account counts only while the account stands and the session was not revoked.
+  const signedIn =
+    session && account && session.memberId === account.id && (account.suspended || session.issuedAtMs < account.validFromMs)
+      ? null
+      : (session?.memberId ?? null)
+  return CommerceModel.quoteProofAccess({ quote, accountId: account?.id ?? null, signedInAccountId: signedIn })
+}
+
+/** A proof route's answer while the proof waits on a sign-in. */
+export function quoteProofAccessRefusal(access: Exclude<CommerceModel.QuoteProofAccess, 'open'>, storeName: string): QuoteLinkOutcome {
+  return {
+    status: 403,
+    body: { error: CommerceModel.quoteProofAccessMessage(access, storeName), reason: access },
+  }
 }
 
 export function defaultQuotePayDeps(): QuotePayDeps {
@@ -152,6 +233,7 @@ export function defaultQuotePayDeps(): QuotePayDeps {
     expireSession: (sessionId, stripeAccount) =>
       stripeAccount ? expireConnectedCheckoutSession(sessionId, stripeAccount) : expireCheckoutSession(sessionId),
     ensureDomain: (input) => ensureCheckoutDomain(input).catch(() => null),
+    customerAccount: (input) => readQuoteCustomerAccount(input),
     now: () => Date.now(),
   }
 }
@@ -372,7 +454,13 @@ export async function payLinkPayments(
  */
 export async function payLinkPageView(
   deps: QuotePayDeps,
-  input: { hostId: string; orderId: string; loaded: Pick<LoadedQuote, 'host' | 'order' | 'storeName' | 'store' | 'kind'> },
+  input: {
+    hostId: string
+    orderId: string
+    loaded: Pick<LoadedQuote, 'host' | 'order' | 'storeName' | 'store' | 'kind'>
+    /** Whether this browser may see the proof (AGL-4206); absent reads as `open`. */
+    proofAccess?: CommerceModel.QuoteProofAccess
+  },
 ): Promise<CommerceModel.QuotePageView> {
   const { hostId, orderId } = input
   const { host, order, storeName, store, kind } = input.loaded
@@ -389,7 +477,24 @@ export async function payLinkPageView(
     store: CommerceModel.payLinkStoreOf({ tax: store.get('tax') }),
     paymentsReady,
   }
-  return kind === 'quote' ? CommerceModel.buildQuotePageView(view) : CommerceModel.buildInvoicePageView(view)
+  if (kind !== 'quote') return CommerceModel.buildInvoicePageView(view)
+  const proofAccess = input.proofAccess ?? 'open'
+  // The quote's conversation rides its page (AGL-4207), an answer's view too; it waits on
+  // the same sign-in as the proof, so it is not read for a page that will not show it.
+  let messages: CommerceModel.QuotePageMessage[] = []
+  if (proofAccess === 'open' || CommerceModel.currentQuoteProofs(order.quote).length === 0) {
+    const orderRef = deps.firestore().collection('hosts').doc(hostId).collection('orders').doc(orderId)
+    const listed = await orderRef.collection('messages').orderBy('atMs', 'desc').limit(CommerceModel.QUOTE_MESSAGES_SHOWN).get()
+    messages = CommerceModel.quotePageMessages(
+      listed.docs.map((entry) => ({ id: entry.id, data: entry.data() as Partial<CommerceModel.QuoteMessage> })),
+    )
+  }
+  return CommerceModel.buildQuotePageView({
+    ...view,
+    messages,
+    approvalStatements: CommerceModel.quoteApprovalStatements(store.get('quotes')),
+    proofAccess,
+  })
 }
 
 /** `GET /api/commerce/quote-view`: the quote page's data. */
@@ -412,7 +517,11 @@ export async function handleQuoteView(deps: QuotePayDeps, req: PluginApiRequest)
     }
     return linked.outcome
   }
-  const view = await payLinkPageView(deps, { hostId, orderId: quoteId, loaded: linked.loaded })
+  const proofAccess =
+    linked.loaded.kind === 'quote'
+      ? await quoteProofAccessFor(deps, req, { hostId, host: linked.loaded.host, order: linked.loaded.order })
+      : 'open'
+  const view = await payLinkPageView(deps, { hostId, orderId: quoteId, loaded: linked.loaded, proofAccess })
   return { status: 200, body: view as unknown as Record<string, unknown> }
 }
 

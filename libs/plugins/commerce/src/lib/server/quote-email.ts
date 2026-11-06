@@ -19,6 +19,7 @@ import { siteContactEmail, resolveHostToken, type HostTokenSource } from '@aglyn
 import { resolveBrandingProfile } from '@aglyn/aglyn/app-utils/plan-entitlements'
 import {
   emailThreadAfterSend,
+  emailThreadSubject,
   isEmailConfigured,
   mintEmailMessageId,
   nextThreadHeaders,
@@ -89,6 +90,8 @@ export interface QuoteDeliveryInput {
   message: string
   payUrl: string
   proofUrl: (proofId: string) => string | null
+  /** The customer signs in to their account on the site to see the proof (AGL-4206): no pictures of it go. */
+  signInFirst?: boolean
   linkReplaced: boolean
   /** The sending member's email: the Reply-To when the site has no contact email. */
   senderEmail: string | null
@@ -137,11 +140,33 @@ export function defaultQuoteMailerDeps(): QuoteMailerDeps {
   }
 }
 
+/** What a reply from the quote hands over (AGL-4207). */
+export interface QuoteMessageDeliveryInput {
+  hostId: string
+  quoteId: string
+  order: CommerceModel.HostOrder
+  host: Record<string, unknown>
+  owner: { id?: string; org?: unknown } | null
+  to: string
+  /** The message as typed. */
+  body: string
+  /** The quote's link at its current version. */
+  url: string
+  senderEmail: string | null
+  atMs: number
+}
+
 /** What the console's Send quote reaches: whether mail can go, whether this address may be mailed, and the send. */
 export interface QuoteMailer {
   configured(): boolean
   suppression(email: string): Promise<'suppressed-platform' | null>
   deliver(input: QuoteDeliveryInput): Promise<QuoteDeliveryResult>
+  /**
+   * A reply from the quote (AGL-4207): the `quote-message` catalog email, in
+   * the quote's conversation under its subject, answering to the site as the
+   * quote email does. No PDF goes with it.
+   */
+  deliverMessage(input: QuoteMessageDeliveryInput): Promise<QuoteDeliveryResult>
 }
 
 const EMAIL = /^[^\s@]+@[^\s@]+\.[^\s@]+$/
@@ -170,24 +195,34 @@ function proofColors(theme: EmailTheme | null): QuoteEmailColors {
   return { border: read('divider'), muted: read('text.secondary') }
 }
 
-/** A refused send in the words the console shows. */
-function refusalOf(result: Extract<SendEmailResult, { sent: false }>): { status: number; error: string } {
+/** A refused send in the words the console shows, for the quote email or a reply from the quote (AGL-4207). */
+function refusalOf(
+  result: Extract<SendEmailResult, { sent: false }>,
+  what: 'quote' | 'reply' = 'quote',
+): { status: number; error: string } {
+  const notSent = what === 'quote' ? 'the quote wasn’t sent' : 'the reply wasn’t sent'
   switch (result.reason) {
     case 'unconfigured':
-      return { status: 503, error: 'Email isn’t set up here, so the quote wasn’t sent.' }
+      return { status: 503, error: `Email isn’t set up here, so ${notSent}.` }
     case 'rate-limited':
       return { status: 429, error: 'Too many emails are going out right now. Try again in a minute.' }
     case 'suppressed':
     case 'undeliverable':
-      return { status: 409, error: 'This address can’t receive email, so the quote wasn’t sent. Copy the pay link and send it another way.' }
+      return {
+        status: 409,
+        error:
+          what === 'quote'
+            ? 'This address can’t receive email, so the quote wasn’t sent. Copy the pay link and send it another way.'
+            : 'This address can’t receive email, so the reply wasn’t sent.',
+      }
     case 'unverified-domain':
-      return { status: 409, error: 'This site’s sending domain isn’t verified, so the quote wasn’t sent. Check Email settings.' }
+      return { status: 409, error: `This site’s sending domain isn’t verified, so ${notSent}. Check Email settings.` }
     case 'suspended':
-      return { status: 423, error: 'This site can’t send email right now, so the quote wasn’t sent.' }
+      return { status: 423, error: `This site can’t send email right now, so ${notSent}.` }
     case 'held-for-review':
       return { status: 409, error: `The email was held for review, so it hasn’t gone out yet.${result.detail ? ` ${result.detail}` : ''}` }
     default:
-      return { status: 502, error: 'The quote email could not be sent. Try again.' }
+      return { status: 502, error: what === 'quote' ? 'The quote email could not be sent. Try again.' : 'The reply could not be sent. Try again.' }
   }
 }
 
@@ -214,6 +249,7 @@ export function quoteMailer(deps: QuoteMailerDeps = defaultQuoteMailerDeps()): Q
         message: input.message,
         payUrl: input.payUrl,
         proofUrl: input.proofUrl,
+        signInFirst: input.signInFirst === true,
         linkReplaced: input.linkReplaced,
         colors: proofColors(theme),
         radius: theme?.buttonRadius,
@@ -276,6 +312,45 @@ export function quoteMailer(deps: QuoteMailerDeps = defaultQuoteMailerDeps()): Q
       })
       if (!result.sent) return { sent: false, ...refusalOf(result as Extract<SendEmailResult, { sent: false }>) }
       // Cost meter (AGL-1438), as every transactional site email.
+      await deps.meter(hostId).catch((error) => console.error('[commerce/quote-email] not metered', error))
+      return {
+        sent: true,
+        messageId,
+        providerId: (result as Extract<SendEmailResult, { sent: true }>).id ?? null,
+        subject,
+        replyTo,
+        thread: emailThreadAfterSend(thread, { messageId, subject }),
+      }
+    },
+    deliverMessage: async (input) => {
+      const { hostId, quoteId, order, host } = input
+      const businessName = quoteBusinessName(host)
+      const thread = readEmailThread(order.quote?.emailThread)
+      // The conversation's own subject, so the reply lands in it; a quote never emailed takes the quote email's.
+      const subject = emailThreadSubject(thread, CommerceModel.quoteEmailDefaultSubject(order, businessName, quoteId))
+      const content = CommerceModel.quoteMessageEmailTokens({ order, quoteId, businessName, subject, body: input.body, url: input.url })
+      const [identity, rendered] = await Promise.all([
+        deps.sendingIdentity(hostId),
+        deps.render(hostId, CommerceModel.QUOTE_MESSAGE_EMAIL_KEY, content.tokens),
+      ])
+      const siteHost = String(host['cname'] ?? '').trim() || null
+      const messageId = mintEmailMessageId([identity?.domain, identity?.from, siteHost], { label: 'quote-message', atMs: input.atMs })
+      const replyTo = quoteReplyTo(host, input.senderEmail)
+      const result = await deps.send({
+        to: input.to,
+        subject,
+        text: rendered?.text || content.text,
+        ...(rendered?.html ? { html: rendered.html } : {}),
+        headers: nextThreadHeaders(thread, messageId),
+        ...(replyTo ? { replyTo } : {}),
+        fromName: resolveBrandingProfile(input.owner?.org as never).fromName,
+        sendingIdentity: identity,
+        audience: 'tenant',
+        context: 'quote',
+      })
+      if (!result.sent) {
+        return { sent: false, ...refusalOf(result as Extract<SendEmailResult, { sent: false }>, 'reply') }
+      }
       await deps.meter(hostId).catch((error) => console.error('[commerce/quote-email] not metered', error))
       return {
         sent: true,

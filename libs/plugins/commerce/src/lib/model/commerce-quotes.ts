@@ -30,8 +30,10 @@ import { storefrontTaxDecision, type StorefrontTaxMode } from './commerce-tax-de
 import { allocateCentsByWeight } from './commerce-tax-engine'
 import {
   lineLabelWithModifiers,
+  modifierOptionPriceCents,
   resolveLineModifiers,
   type ModifierSelection,
+  type ProductModifierOption,
 } from './product-modifiers'
 
 /*==========================================
@@ -68,7 +70,8 @@ export type QuoteStage = 'draft' | 'sent' | 'changes_requested' | 'approved'
 export const QUOTE_STAGE_LABELS: Record<QuoteStage, string> = {
   draft: 'Draft',
   sent: 'Sent',
-  changes_requested: 'Changes requested',
+  // Stored as `changes_requested`; the customer rejected the proof and said what to change (AGL-4206).
+  changes_requested: 'Rejected with changes',
   approved: 'Approved',
 }
 
@@ -164,12 +167,21 @@ export interface QuoteCustomerResponse {
   action: 'approve' | 'changes'
   revision: number
   atMs: number
-  /** With `approve`: the name they typed. */
+  /**
+   * The name they typed: with `approve`, the approval's; with `changes`, the
+   * rejection's (AGL-4206; absent on rejections given before it was asked for).
+   */
   name?: string
-  /** With `changes`: what to change. */
+  /** With `changes`: what to change. `changes` is a rejection of the revision, with this note. */
   comment?: string
   /** With `changes`: files they sent. */
   files?: QuoteResponseFile[]
+  /**
+   * With `approve`: the statements they ticked before approving, word for
+   * word as the page showed them (AGL-4206). Absent on approvals given before
+   * the page asked for them.
+   */
+  confirmed?: string[]
   ip: string | null
   userAgent: string | null
 }
@@ -179,6 +191,8 @@ export interface QuoteApproval {
   revision: number
   name: string
   atMs: number
+  /** The statements the customer ticked, word for word (AGL-4206). Absent on older approvals. */
+  confirmed?: string[]
   ip: string | null
   userAgent: string | null
 }
@@ -286,6 +300,12 @@ export interface OrderQuote {
   tax: QuoteTaxBasis
   /** The customer approves the current revision's proof before they can pay. Absent reads as off. */
   requireProofApproval?: boolean
+  /**
+   * A customer with an account on the site signs in to that account to see
+   * the proof and answer it (AGL-4206). A customer with no account (a guest)
+   * keeps using the private link. Absent reads as off: the link is enough.
+   */
+  requireProofSignIn?: boolean
   /** The current revision's proofs; earlier revisions keep theirs in `revisions/{n}`. */
   proofs?: QuoteProof[]
   /** The customer's answers to the current revision, oldest first; the last one counts. */
@@ -328,6 +348,28 @@ export interface OrderQuote {
 export interface QuoteStoreSettings {
   /** What `requireProofApproval` a new quote starts with. Absent reads as off. */
   requireProofApproval?: boolean
+  /** What `requireProofSignIn` a new quote starts with (AGL-4206). Absent reads as off. */
+  requireProofSignIn?: boolean
+  /**
+   * What the customer ticks before Approve works (AGL-4206), in the
+   * business's own words. Absent or empty reads as
+   * {@link QUOTE_DEFAULT_APPROVAL_STATEMENTS}.
+   */
+  approvalStatements?: string[]
+}
+
+/**
+ * An add-on as the quote editor's menu names it: `Back wall (+$150.00)`,
+ * priced for the size or option picked on the line (`variantId`), as the
+ * server prices the line; a free one is its name alone.
+ */
+export function quoteModifierOptionLabel(
+  option: Pick<ProductModifierOption, 'name' | 'priceCents' | 'priceCentsByVariant'>,
+  variantId: string | null | undefined,
+  money: (cents: number) => string,
+): string {
+  const cents = modifierOptionPriceCents(option, variantId)
+  return cents ? `${option.name} (+${money(cents)})` : option.name
 }
 
 /** Whether new quotes start out asking the customer to approve the proof first. */
@@ -335,6 +377,52 @@ export function quoteRequiresProofApprovalByDefault(
   settings: QuoteStoreSettings | null | undefined,
 ): boolean {
   return settings?.requireProofApproval === true
+}
+
+/** Whether new quotes start out asking a customer with a site account to sign in for the proof (AGL-4206). */
+export function quoteRequiresProofSignInByDefault(
+  settings: QuoteStoreSettings | null | undefined,
+): boolean {
+  return settings?.requireProofSignIn === true
+}
+
+/** The most statements a customer ticks before approving. */
+export const QUOTE_MAX_APPROVAL_STATEMENTS = 5
+
+/** The longest one statement may be. */
+export const QUOTE_MAX_APPROVAL_STATEMENT = 200
+
+/**
+ * What a customer confirms before approving a proof when the business has not
+ * written its own (AGL-4206): they read the words, they checked the look, and
+ * they know approving starts the work.
+ */
+export const QUOTE_DEFAULT_APPROVAL_STATEMENTS: readonly string[] = [
+  'I checked the spelling, names and numbers.',
+  'I checked the colors, sizes and placement.',
+  'I understand production starts when I approve, and changes after that may cost extra.',
+]
+
+/**
+ * Statements as typed: each trimmed to one line and its length, blanks and
+ * repeats dropped, at most {@link QUOTE_MAX_APPROVAL_STATEMENTS}. What the
+ * Quotes card saves, and what every reader trusts nothing beyond.
+ */
+export function cleanQuoteApprovalStatements(raw: unknown): string[] {
+  if (!Array.isArray(raw)) return []
+  const kept: string[] = []
+  for (const entry of raw) {
+    const statement = typeof entry === 'string' ? entry.replace(/\s+/g, ' ').trim().slice(0, QUOTE_MAX_APPROVAL_STATEMENT) : ''
+    if (statement && !kept.includes(statement)) kept.push(statement)
+    if (kept.length >= QUOTE_MAX_APPROVAL_STATEMENTS) break
+  }
+  return kept
+}
+
+/** What the customer ticks before Approve works: the store's own statements, else the defaults. */
+export function quoteApprovalStatements(settings: QuoteStoreSettings | null | undefined): string[] {
+  const own = cleanQuoteApprovalStatements(settings?.approvalStatements)
+  return own.length ? own : [...QUOTE_DEFAULT_APPROVAL_STATEMENTS]
 }
 
 /**
@@ -640,6 +728,8 @@ export interface QuoteInput {
   shipping: QuoteShipping | null
   /** Absent: the store's default (on create) or unchanged (on update). */
   requireProofApproval?: boolean
+  /** Absent: the store's default (on create) or unchanged (on update). AGL-4206. */
+  requireProofSignIn?: boolean
 }
 
 const EMAIL = /^[^\s@]+@[^\s@]+\.[^\s@]+$/
@@ -793,6 +883,9 @@ export function parseQuoteInput(
       shipping,
       ...(typeof source['requireProofApproval'] === 'boolean'
         ? { requireProofApproval: source['requireProofApproval'] }
+        : {}),
+      ...(typeof source['requireProofSignIn'] === 'boolean'
+        ? { requireProofSignIn: source['requireProofSignIn'] }
         : {}),
     },
   }

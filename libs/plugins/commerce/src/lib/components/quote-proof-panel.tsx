@@ -29,12 +29,16 @@ import { sendVisitorUpload } from '@aglyn/aglyn/app-utils/visitor-upload-client'
 import Alert from '@mui/material/Alert'
 import Box from '@mui/material/Box'
 import Button from '@mui/material/Button'
+import Checkbox from '@mui/material/Checkbox'
 import Chip from '@mui/material/Chip'
+import FormControlLabel from '@mui/material/FormControlLabel'
+import FormGroup from '@mui/material/FormGroup'
 import Paper from '@mui/material/Paper'
 import Stack from '@mui/material/Stack'
 import TextField from '@mui/material/TextField'
 import Typography from '@mui/material/Typography'
 import { useCallback, useRef, useState, type ChangeEvent } from 'react'
+import { quoteSignInHref } from '../constants/quote-page'
 import type { QuotePageView } from '../model'
 
 /** The page's own fetch: the site's API, with the site's preview rules. */
@@ -60,18 +64,29 @@ function dateLabel(atMs: number): string {
 
 const newKey = () => globalThis.crypto?.randomUUID?.() ?? `${Date.now()}-${Math.random().toString(36).slice(2)}`
 
+/** The sign-in page, back to this very page once signed in. */
+function signInHref(): string {
+  if (typeof window === 'undefined') return quoteSignInHref('')
+  return quoteSignInHref(`${window.location.pathname}${window.location.search}`)
+}
+
 /**
  * The quote's proofs on the customer's page (AGL-4096): each image shown,
  * every other file a download, and while the quote is open for an answer,
- * "Approve this proof" (under a typed name) and "Request changes" (a comment
- * and any artwork). The latest answer is the one that counts, so a customer
- * who asked for changes can still approve, and the panel says what they last
+ * "Approve this proof" (every statement ticked and a typed name, AGL-4206)
+ * and "Reject with changes" (what to change under a typed name, and any
+ * artwork, AGL-4206). A quote that asks a
+ * customer with a site account to sign in shows a sign-in button instead of
+ * the proof until they do. The latest answer is the one that counts, so a customer
+ * who rejected it with changes can still approve, and the panel says what they last
  * said. A paid quote shows its proofs and nothing to press.
  */
 export function QuoteProofPanel(props: QuoteProofPanelProps) {
   const { view, hostId, quoteId, token, siteFetch, onView, onReload, onReplaced } = props
   const [mode, setMode] = useState<'idle' | 'approve' | 'changes'>('idle')
   const [name, setName] = useState('')
+  // The statements ticked, by their words: a reworded statement is a new box.
+  const [ticked, setTicked] = useState<string[]>([])
   const [comment, setComment] = useState('')
   const [files, setFiles] = useState<VisitorUploadFileView[]>([])
   const [uploading, setUploading] = useState<{ done: number; total: number } | null>(null)
@@ -142,8 +157,13 @@ export function QuoteProofPanel(props: QuoteProofPanelProps) {
   const respond = useCallback(async () => {
     if (sending) return
     setError('')
+    const statements = view.approvalStatements ?? []
+    if (mode === 'approve' && statements.some((statement) => !ticked.includes(statement))) {
+      return void setError('Tick each box to confirm you checked the proof.')
+    }
     if (mode === 'approve' && name.trim().length < 2) return void setError('Type your name to approve the proof.')
     if (mode === 'changes' && !comment.trim()) return void setError('Tell us what to change.')
+    if (mode === 'changes' && name.trim().length < 2) return void setError('Type your name to reject the proof.')
     setSending(true)
     // One key per answer: a retry of the same press is answered from the first.
     if (!attempt.current) attempt.current = newKey()
@@ -153,7 +173,9 @@ export function QuoteProofPanel(props: QuoteProofPanelProps) {
         {
           v: view.version,
           action: mode === 'approve' ? 'approve' : 'changes',
-          ...(mode === 'approve' ? { name: name.trim() } : { comment: comment.trim(), fileIds: files.map((file) => file.id) }),
+          ...(mode === 'approve'
+            ? { name: name.trim(), confirmed: statements.filter((statement) => ticked.includes(statement)) }
+            : { comment: comment.trim(), name: name.trim(), fileIds: files.map((file) => file.id) }),
           [VISITOR_UPLOAD_HONEYPOT_FIELD]: honeypot,
         },
         { 'Idempotency-Key': attempt.current },
@@ -162,6 +184,7 @@ export function QuoteProofPanel(props: QuoteProofPanelProps) {
       if (response.ok && payload['view']) {
         setMode('idle')
         setName('')
+        setTicked([])
         setComment('')
         setFiles([])
         onView(payload['view'] as QuotePageView)
@@ -175,10 +198,33 @@ export function QuoteProofPanel(props: QuoteProofPanelProps) {
     } finally {
       setSending(false)
     }
-  }, [sending, mode, name, comment, files, view.version, honeypot, post, onView, onReload, onReplaced])
+  }, [sending, mode, name, ticked, comment, files, view.version, view.approvalStatements, honeypot, post, onView, onReload, onReplaced])
+
+  // The quote asks this customer to sign in to their account first (AGL-4206).
+  if (view.proofAccess && view.proofAccess !== 'open') {
+    return (
+      <Paper variant="outlined" sx={{ p: { xs: 2, sm: 3 } }} data-quote-proof-sign-in="">
+        <Stack spacing={2}>
+          <Typography variant="h6" component="h2">
+            {'Your proof'}
+          </Typography>
+          <Alert severity="info">{view.proofAccessMessage}</Alert>
+          <Box>
+            <Button variant="contained" href={signInHref()}>
+              {'Sign in'}
+            </Button>
+          </Box>
+        </Stack>
+      </Paper>
+    )
+  }
 
   if (!view.proofs.length) return null
   const response = view.response
+  const statements = view.approvalStatements ?? []
+  const allTicked = statements.every((statement) => ticked.includes(statement))
+  const toggle = (statement: string, on: boolean) =>
+    setTicked((prev) => (on ? [...prev.filter((entry) => entry !== statement), statement] : prev.filter((entry) => entry !== statement)))
 
   return (
     <Paper variant="outlined" sx={{ p: { xs: 2, sm: 3 } }}>
@@ -189,7 +235,7 @@ export function QuoteProofPanel(props: QuoteProofPanelProps) {
           </Typography>
           <Typography variant="body2" color="text.secondary">
             {view.status === 'unpaid'
-              ? `Revision ${view.revision}. Look it over, then approve it or tell ${business} what to change.`
+              ? `Revision ${view.revision}. Look it over, then approve it or reject it and tell ${business} what to change.`
               : `Revision ${view.revision}.`}
           </Typography>
         </Stack>
@@ -223,10 +269,19 @@ export function QuoteProofPanel(props: QuoteProofPanelProps) {
           response.action === 'approve' ? (
             <Alert severity="success">
               {`You approved this proof on ${dateLabel(response.atMs)}${response.name ? ` as ${response.name}` : ''}.`}
+              {response.confirmed?.length ? (
+                <Box component="ul" sx={{ m: 0, mt: 0.5, pl: 2.5 }}>
+                  {response.confirmed.map((statement) => (
+                    <Typography key={statement} component="li" variant="body2">
+                      {statement}
+                    </Typography>
+                  ))}
+                </Box>
+              ) : null}
             </Alert>
           ) : (
             <Alert severity="info">
-              {`You asked for changes on ${dateLabel(response.atMs)}. ${business.charAt(0).toUpperCase()}${business.slice(1)} will send you a new proof.`}
+              {`You rejected this proof with changes on ${dateLabel(response.atMs)}${response.name ? ` as ${response.name}` : ''}. ${business.charAt(0).toUpperCase()}${business.slice(1)} will send you a new proof.`}
             </Alert>
           )
         ) : null}
@@ -252,14 +307,34 @@ export function QuoteProofPanel(props: QuoteProofPanelProps) {
                     {'Approve this proof'}
                   </Button>
                 ) : null}
-                <Button variant={response?.action === 'approve' ? 'outlined' : 'text'} onClick={() => setMode('changes')}>
-                  {'Request changes'}
+                <Button variant="outlined" color="primary" onClick={() => setMode('changes')}>
+                  {'Reject with changes'}
                 </Button>
               </Stack>
             ) : mode === 'approve' ? (
               <Stack spacing={1.5}>
                 <Typography variant="body2">
-                  {`Type your name to approve revision ${view.revision}. ${business.charAt(0).toUpperCase()}${business.slice(1)} keeps your name and the time as the record of your approval.`}
+                  {`Before you approve revision ${view.revision}, confirm each of these.`}
+                </Typography>
+                <FormGroup>
+                  {statements.map((statement) => (
+                    <FormControlLabel
+                      key={statement}
+                      sx={{ alignItems: 'flex-start', mb: 0.5 }}
+                      control={
+                        <Checkbox
+                          checked={ticked.includes(statement)}
+                          disabled={sending}
+                          onChange={(event) => toggle(statement, event.target.checked)}
+                          sx={{ pt: 0.25 }}
+                        />
+                      }
+                      label={<Typography variant="body2">{statement}</Typography>}
+                    />
+                  ))}
+                </FormGroup>
+                <Typography variant="body2">
+                  {`Then type your name. ${business.charAt(0).toUpperCase()}${business.slice(1)} keeps your name, what you confirmed and the time as the record of your approval.`}
                 </Typography>
                 <TextField
                   label="Your name"
@@ -269,16 +344,29 @@ export function QuoteProofPanel(props: QuoteProofPanelProps) {
                   slotProps={{ htmlInput: { maxLength: 120 } }}
                 />
                 <Stack direction="row" spacing={1}>
-                  <Button variant="contained" disabled={sending} onClick={() => void respond()}>
+                  <Button
+                    variant="contained"
+                    disabled={sending || !allTicked || name.trim().length < 2}
+                    onClick={() => void respond()}
+                  >
                     {sending ? 'Approving…' : 'Approve'}
                   </Button>
-                  <Button disabled={sending} onClick={() => setMode('idle')}>
+                  <Button
+                    disabled={sending}
+                    onClick={() => {
+                      setMode('idle')
+                      setTicked([])
+                    }}
+                  >
                     {'Cancel'}
                   </Button>
                 </Stack>
               </Stack>
             ) : (
               <Stack spacing={1.5}>
+                <Typography variant="body2">
+                  {`Tell ${business} what to change on revision ${view.revision}. They keep your note, your name and the time with the quote, and send you a new proof.`}
+                </Typography>
                 <TextField
                   label="What should change?"
                   value={comment}
@@ -287,6 +375,14 @@ export function QuoteProofPanel(props: QuoteProofPanelProps) {
                   required
                   onChange={(event) => setComment(event.target.value)}
                   slotProps={{ htmlInput: { maxLength: 5000 } }}
+                />
+                <TextField
+                  label="Your name"
+                  value={name}
+                  required
+                  autoComplete="name"
+                  onChange={(event) => setName(event.target.value)}
+                  slotProps={{ htmlInput: { maxLength: 120 } }}
                 />
                 <input
                   ref={picker}
@@ -327,7 +423,7 @@ export function QuoteProofPanel(props: QuoteProofPanelProps) {
                 </Box>
                 <Stack direction="row" spacing={1}>
                   <Button variant="contained" disabled={sending || Boolean(uploading)} onClick={() => void respond()}>
-                    {sending ? 'Sending…' : 'Send changes'}
+                    {sending ? 'Sending…' : 'Reject with changes'}
                   </Button>
                   <Button disabled={sending} onClick={() => setMode('idle')}>
                     {'Cancel'}
