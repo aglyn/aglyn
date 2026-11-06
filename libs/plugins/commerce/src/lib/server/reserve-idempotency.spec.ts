@@ -1221,7 +1221,7 @@ describe('an availability check that must not be crowded out (AGL-2159)', () => 
 describe('a stay honors the merchant’s payment methods (AGL-3629)', () => {
   it('excludes the methods switched off on the deposit session', async () => {
     docs.set('hosts/host-1/settings/store', {
-      paymentMethods: { afterpay_clearpay: false, crypto: true },
+      paymentMethods: { cashapp: false, crypto: true },
     })
     const result = await post()
     expect(result.status).toBe(200)
@@ -1229,6 +1229,7 @@ describe('a stay honors the merchant’s payment methods (AGL-3629)', () => {
     const excluded = [...(session?.params.keys() ?? [])]
       .filter((key) => key.startsWith('excluded_payment_method_types['))
       .map((key) => session?.params.get(key))
-    expect(excluded).toEqual(['afterpay_clearpay'])
+    // Buy-now-pay-later on every deposit (AGL-4198), then what the store turned off.
+    expect(excluded).toEqual(['klarna', 'afterpay_clearpay', 'affirm', 'cashapp'])
   })
 })

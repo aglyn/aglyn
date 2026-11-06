@@ -837,12 +837,14 @@ of the recurring price, rounded up to two decimals, so a $10-a-month membership 
 a higher percentage than a $100-a-month one. The platform take itself does not move,
 and Custom still takes 0%.
 
-An online storefront sale or booking is priced for the dearest way your customer may
-pay: 2.9% + 30¢ on a card, up to 6% + 30¢ on buy-now-pay-later, sized for 6% + 30¢
-because the customer chooses after the payment is set up. **A quote or an invoice
-your customer pays online carries 2.9% + 30¢**, Stripe's card rate, because it is paid
-by card or wallet only and never offers Klarna, Afterpay or Affirm. See
-[how your customer pays a quote](../../commerce-and-bookings/commerce/quotes-and-proofs.md#paying).
+**Card processing is 2.9% + 30¢ on every sale**, online or on a card reader:
+storefront orders, bookings, quotes, invoices and memberships. No checkout offers
+buy-now-pay-later (Klarna, Afterpay or Affirm), so no way your customer can pay costs
+more. What Stripe charges to pay you out (0.25% + 25¢ a payout), and 0.5% where Stripe
+Tax works out the tax, come out of the platform fee. Where the platform fee is smaller
+than those (a 0% fee, or a small sale), the fee on that sale is what Stripe charges
+instead, never more. See
+[payment methods](../../commerce-and-bookings/commerce/overview.md#payment-methods).
 
 **At the register, cash, gift cards and store credit carry no platform fee.** Card
 and charge-to-room payments carry the same rate as an online sale. Card payments have
