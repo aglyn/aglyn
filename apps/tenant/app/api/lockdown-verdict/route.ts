@@ -98,6 +98,8 @@ import { resolveHostEnabledPlugins } from '@aglyn/aglyn/plugin-manager/enabled-p
 import {
   pluginSiteCspHosts,
   pluginSiteCspPluginsToRead,
+  pluginSiteCspSourceHosts,
+  PLUGIN_SITE_CSP_DIRECTIVES,
   type PluginSiteCspDirective,
 } from '@aglyn/aglyn/plugin-manager/plugin-site-csp'
 // The leaf module, not the barrel: the verdict asks one per-org flag, and the
@@ -118,12 +120,48 @@ export const dynamic = 'force-dynamic'
  * costs no read at all, and a vendor's hosts reach the policy of exactly the
  * sites that switched it on.
  *
+ * A plugin whose hosts are not known at build time answers them per site
+ * through a registered source instead (AGL-4195): the marketplace names the
+ * image hosts its installed plugins declare, only on the sites that run them.
+ *
  * Added IN FRONT of the owner's own lists, which `security-origins.js` caps:
  * an owner who filled their list must not push out the hosts a feature they
  * turned on depends on. A read that fails adds nothing and is logged — the
  * lock, the cap and the owner's lists still answer.
  */
 async function pluginCspHosts(
+  hostId: string,
+  host: Parameters<typeof resolveHostEnabledPlugins>[1],
+  org: Parameters<typeof resolveHostEnabledPlugins>[0],
+): Promise<Record<PluginSiteCspDirective, string[]>> {
+  const [declared, answered] = await Promise.all([
+    declaredPluginCspHosts(hostId, host, org),
+    // The hosts a plugin answers per site (AGL-4195): an installed
+    // marketplace plugin's declared image hosts, on the sites that run it.
+    // A source that fails adds nothing, as a settings read does above.
+    pluginSiteCspSourceHosts({ hostId, orgId: orgIdOf(host) }).catch(
+      (error: unknown) => {
+        console.error('[lockdown-verdict] plugin policy sources unreadable', error)
+        return pluginSiteCspHosts([], {})
+      },
+    ),
+  ])
+  for (const directive of PLUGIN_SITE_CSP_DIRECTIVES) {
+    for (const entry of answered[directive]) {
+      if (!declared[directive].includes(entry)) declared[directive].push(entry)
+    }
+  }
+  return declared
+}
+
+/** The site's workspace, from its own document, or `null`. */
+function orgIdOf(host: unknown): string | null {
+  const orgId = (host as { orgId?: unknown } | null)?.orgId
+  return typeof orgId === 'string' && orgId ? orgId : null
+}
+
+/** The hosts the first-party plugins declare, chosen by each one's site settings (AGL-3698). */
+async function declaredPluginCspHosts(
   hostId: string,
   host: Parameters<typeof resolveHostEnabledPlugins>[1],
   org: Parameters<typeof resolveHostEnabledPlugins>[0],
