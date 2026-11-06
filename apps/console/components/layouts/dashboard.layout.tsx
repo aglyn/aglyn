@@ -149,6 +149,10 @@ export function DashboardLayout(props: DashboardLayoutProps) {
       // The record the reader is standing on, after every level the route
       // drew. A trail that names each container and not the thing itself
       // stops one step short of saying where you are.
+      // A record inside another record names that one first, linked back.
+      ...(record?.title && record.parentTitle && record.parentHref
+        ? [{ children: record.parentTitle, href: record.parentHref }]
+        : []),
       ...(record?.title ? [{ children: record.title }] : []),
     ]
   }, [breadcrumbItems, disableDefaultBreadcrumb, record])

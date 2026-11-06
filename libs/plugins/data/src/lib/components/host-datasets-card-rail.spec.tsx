@@ -26,7 +26,7 @@
  * documents, the way Firestore would. NO PRODUCTION DATA IS READ.
  */
 
-import { act, fireEvent, render, screen, within } from '@testing-library/react'
+import { act, fireEvent, render, screen, waitFor, within } from '@testing-library/react'
 import { PageHeaderActionsContext } from '@aglyn/aglyn/app-utils/page-header-actions-context'
 import { type ReactNode, useMemo, useState } from 'react'
 import { HostDatasetsCard } from './host-datasets-card.component'
@@ -69,6 +69,17 @@ const NO_RECORDS = {
 const SITE_ANSWER = { data: [] as unknown[], status: 'success', fromCache: false }
 const EMPTY_ANSWER = { data: [] as unknown[], status: 'success', fromCache: false }
 const FIRESTORE = {}
+/** An owner across every site, holding the data keys as the server stamps them. */
+const OWNER = {
+  role: 'owner',
+  allHosts: true,
+  resolvedPermissions: { 'data.manage': true, 'data.viewRecords': true, 'data.export': true },
+}
+/** What the records table's query was built as, each render; `null` when it reads none. */
+let pagedBuilt: unknown[] = []
+let pagedAnswer: Record<string, unknown> = NO_RECORDS
+/** A dataset's records, by `datasetId/recordId`, for a record's own read. */
+let storedRecords: Record<string, Record<string, unknown>> = {}
 const USER = { data: { uid: 'uid-test' } }
 const DATA_SCOPE = { scope: ['orgs', 'org-1'], orgId: 'org-1' }
 const LOADING = { data: undefined, status: 'loading', fromCache: true }
@@ -90,13 +101,17 @@ jest.mock('@aglyn/tenant-feature-instance', () => ({
     const ref = build()
     if (!ref) return LOADING
     if (!docAnswers.has(ref.path)) {
-      if (ref.path.includes('/datasets/')) {
+      if (ref.path.includes('/records/')) {
+        const [datasetId, , recordId] = ref.path.split('/').slice(-3)
+        const row = storedRecords[`${datasetId}/${recordId}`]
+        docAnswers.set(ref.path, { data: row, status: 'success', fromCache: false })
+      } else if (ref.path.includes('/datasets/')) {
         const id = ref.path.split('/').at(-1)
         const row = datasets.find((one) => one['$id'] === id)
         const { $id: _id, ...data } = row ?? {}
         docAnswers.set(ref.path, { data: row ? data : undefined, status: 'success', fromCache: false })
       } else {
-        docAnswers.set(ref.path, { data: { role: 'owner' }, status: 'success', fromCache: false })
+        docAnswers.set(ref.path, { data: OWNER, status: 'success', fromCache: false })
       }
     }
     return docAnswers.get(ref.path)
@@ -116,7 +131,10 @@ jest.mock('@aglyn/tenant-feature-instance', () => ({
     }
     return { data: answers.get(key), status: 'success', fromCache: false }
   },
-  usePagedCollection: () => NO_RECORDS,
+  usePagedCollection: (build: (limit: number) => unknown) => {
+    pagedBuilt.push(build(11))
+    return pagedAnswer
+  },
 }))
 
 jest.mock('firebase/firestore', () => ({
@@ -192,6 +210,9 @@ beforeEach(() => {
   answers.clear()
   docAnswers.clear()
   datasetQueries = []
+  pagedBuilt = []
+  pagedAnswer = NO_RECORDS
+  storedRecords = { 'ds-bakery/r1': { values: { name: 'Custom cakes', duration: '45 min' } } }
   datasets = [BAKERY_SERVICES, DOWNTOWN_SERVICES, PRODUCTS]
   viewer = ORG_WIDE
   mockPathname = '/acme/data'
@@ -361,5 +382,61 @@ describe('a site page shows what the site sees', () => {
     await mount({ hostId: 'bakery', orgId: undefined, basePath: '/acme/hosts/bakery/data', segments: ['ds-bakery'] })
     expect(heading()).toBe('Services')
     expect(screen.queryByText('This dataset isn’t shared with this site.')).toBeNull()
+  })
+})
+
+describe('a record opens on its own page (AGL-4047)', () => {
+  it('shows the record beneath its dataset: a way back, its fields and today’s record actions', async () => {
+    await mount({ segments: ['ds-bakery', 'records', 'r1'] })
+    expect(screen.getByRole('link', { name: 'Services' }).getAttribute('href')).toBe('/acme/data/ds-bakery')
+    expect(screen.getByText('Custom cakes', { selector: 'span' })).toBeTruthy()
+    for (const shown of ['Record ID', 'r1', 'Dataset', 'Services · Bakery only', 'Name', 'Duration', '45 min']) {
+      expect(screen.getAllByText(shown).length).toBeGreaterThan(0)
+    }
+    expect(screen.getByRole('button', { name: 'Edit record' })).toBeTruthy()
+    expect(screen.getByRole('button', { name: 'Delete' })).toBeTruthy()
+    // The dataset's tab stays lit beneath it.
+    expect(tabs()[1]?.getAttribute('aria-selected')).toBe('true')
+    // A record's page reads that record, and no page of the table.
+    expect(pagedBuilt.at(-1)).toBeNull()
+  })
+
+  it('opens from the table instead of the View record dialog', async () => {
+    pagedAnswer = { ...NO_RECORDS, rows: [{ $id: 'r1', values: { name: 'Custom cakes', duration: '45 min' } }] }
+    await mount({ segments: ['ds-bakery'] })
+    fireEvent.click(screen.getByRole('button', { name: 'View' }))
+    expect(mockRouter.push).toHaveBeenCalledWith('/acme/data/ds-bakery/records/r1')
+    expect(screen.queryByRole('dialog')).toBeNull()
+  })
+
+  it('returns to the dataset once the record is deleted', async () => {
+    jest.spyOn(console, 'error').mockImplementation(() => undefined)
+    await mount({ segments: ['ds-bakery', 'records', 'r1'] })
+    fireEvent.click(screen.getByRole('button', { name: 'Delete' }))
+    await waitFor(() => expect(mockRouter.push).toHaveBeenCalledWith('/acme/data/ds-bakery'))
+  })
+
+  it('says a record that does not exist cannot be opened', async () => {
+    await mount({ segments: ['ds-bakery', 'records', 'gone'] })
+    expect(screen.getByText('This record doesn’t exist, or you can’t open it.')).toBeTruthy()
+    expect(screen.queryByRole('button', { name: 'Edit record' })).toBeNull()
+  })
+
+  it('refuses a record of a dataset the site does not see', async () => {
+    storedRecords = { 'ds-downtown/r9': { values: { name: 'Downtown secret' } } }
+    await mount({
+      hostId: 'bakery',
+      orgId: undefined,
+      basePath: '/acme/hosts/bakery/data',
+      segments: ['ds-downtown', 'records', 'r9'],
+    })
+    expect(screen.getByText('This dataset isn’t shared with this site.')).toBeTruthy()
+    expect(screen.queryByText('Downtown secret')).toBeNull()
+  })
+
+  it('THE CONTROL: the same deep link opens on the workspace page', async () => {
+    storedRecords = { 'ds-downtown/r9': { values: { name: 'Downtown secret' } } }
+    await mount({ segments: ['ds-downtown', 'records', 'r9'] })
+    expect(screen.getAllByText('Downtown secret').length).toBeGreaterThan(0)
   })
 })

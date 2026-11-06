@@ -63,6 +63,14 @@ export interface PageHeaderRecordValue {
    * the heading stays the page's.
    */
   keepHeading?: boolean
+  /**
+   * The record this one sits inside, as a crumb before it (AGL-4047): a
+   * dataset's record names the dataset, linked, then itself. Absent, the
+   * record is the trail's only addition, as before.
+   */
+  parentTitle?: string
+  /** Where {@link parentTitle} links to. Both or neither. */
+  parentHref?: string
 }
 
 export interface PageHeaderRecordContextValue {
@@ -112,12 +120,20 @@ export type PageHeaderRecordProps = PageHeaderRecordValue
  * would be an option that silently does nothing.
  */
 export function PageHeaderRecord(props: PageHeaderRecordProps): null {
-  const { title, keepHeading } = props
+  const { title, keepHeading, parentTitle, parentHref } = props
   const { setHeaderRecord } = usePageHeaderRecord()
   useEffect(() => {
-    setHeaderRecord?.(title ? { title, ...(keepHeading ? { keepHeading } : {}) } : null)
+    setHeaderRecord?.(
+      title
+        ? {
+            title,
+            ...(keepHeading ? { keepHeading } : {}),
+            ...(parentTitle && parentHref ? { parentTitle, parentHref } : {}),
+          }
+        : null,
+    )
     return () => setHeaderRecord?.(null)
-  }, [setHeaderRecord, title, keepHeading])
+  }, [setHeaderRecord, title, keepHeading, parentTitle, parentHref])
   return null
 }
 PageHeaderRecord.displayName = 'PageHeaderRecord'

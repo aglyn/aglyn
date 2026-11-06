@@ -298,6 +298,24 @@ describe('a detail surface names its record in a header it does not own', () => 
     ])
   })
 
+  it('names the record a record sits inside, linked, before it (AGL-4047)', () => {
+    renderLayout(
+      <PageHeaderRecord
+        title="Custom cakes"
+        keepHeading
+        parentTitle="Services"
+        parentHref="/acme/hosts/acme-site/forms/services"
+      />,
+    )
+    expect(heading()).toBe('Forms')
+    expect(trail()).toEqual([
+      'Aglyn Marketing Website→/acme/hosts/acme-site',
+      'Forms→/acme/hosts/acme-site/forms',
+      'Services→/acme/hosts/acme-site/forms/services',
+      'Custom cakes',
+    ])
+  })
+
   it('holds the route heading until the record has a name', () => {
     // Mid-load: the document has not arrived, so there is no name to show.
     // The surface's own heading is a better answer than an empty one, and a

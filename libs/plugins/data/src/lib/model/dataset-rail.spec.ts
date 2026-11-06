@@ -19,6 +19,7 @@ import {
   type DatasetRailEntry,
   datasetCreatedLabel,
   datasetNameMatches,
+  datasetRecordTitle,
   datasetRailSecondary,
   datasetSourceLabel,
   groupDatasetsBySharing,
@@ -117,5 +118,21 @@ describe('the facts', () => {
       'Oct 2, 2026',
     )
     expect(datasetCreatedLabel(entry('a', 'x', ['org']))).toBe('--')
+  })
+})
+
+describe('a record’s own page heading', () => {
+  it('is the first field that shows a value, passing over a reference', () => {
+    const model = {
+      order: ['owner', 'name', 'duration'],
+      fields: {
+        owner: { name: 'Owner', type: 'reference', reference: { datasetId: 'people' } },
+        name: { name: 'Name', type: 'text' },
+        duration: { name: 'Duration', type: 'text' },
+      },
+    } as never
+    expect(datasetRecordTitle(model, { owner: 'p1', name: 'Custom cakes', duration: '45 min' })).toBe('Custom cakes')
+    expect(datasetRecordTitle(model, { owner: 'p1', name: '  ', duration: '45 min' })).toBe('45 min')
+    expect(datasetRecordTitle(model, {})).toBe('Untitled record')
   })
 })

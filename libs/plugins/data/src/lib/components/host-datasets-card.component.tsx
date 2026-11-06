@@ -33,7 +33,8 @@ import {
 } from '@aglyn/aglyn'
 import { nameSearchKey } from '@aglyn/aglyn/app-utils/name-search'
 import { HubSections, type HubSection } from '@aglyn/shared-ui-next/components/hub-tabs'
-import { CardDisplay, useConfirmationContext } from '@aglyn/shared-ui-jsx'
+import { AppLink, CardDisplay, MdiIcon, useConfirmationContext } from '@aglyn/shared-ui-jsx'
+import { mdiArrowLeft } from '@aglyn/shared-data-mdi'
 import ListFilterChips from '@aglyn/shared-ui-jsx/components/list-filter-chips.component'
 import { ListPagination } from '@aglyn/shared-ui-jsx/components/list-pagination.component'
 import ListQueryNotices, {
@@ -97,7 +98,7 @@ import {
 import { listQueryConstraints } from '@aglyn/tenant-feature-instance/hooks/use-list-query'
 import { authorizedFetch } from '@aglyn/shared-util-http/authorized-token'
 import { DatasetSchemaDialog } from './dataset-schema-dialog.component'
-import { DatasetRecordDialog } from './dataset-record-dialog.component'
+import { DatasetRecordDialog, DatasetRecordFieldList } from './dataset-record-dialog.component'
 import { DatasetRecordSiteContext } from './dataset-field-inputs.component'
 import {
   datasetRecordFilter,
@@ -123,6 +124,7 @@ import {
   datasetCreatedLabel,
   datasetNameMatches,
   datasetRailName,
+  datasetRecordTitle,
   datasetRailSecondary,
   datasetSharingLabel,
   datasetSourceLabel,
@@ -153,8 +155,9 @@ export interface HostDatasetsCardProps {
    */
   basePath?: string
   /**
-   * The path beneath {@link basePath}: `[datasetId]` on a dataset's tab, and
-   * empty on the bare page, which opens the first dataset.
+   * The path beneath {@link basePath}: `[datasetId]` on a dataset's tab,
+   * `[datasetId, 'records', recordId]` on one of its records, and empty on the
+   * bare page, which opens the first dataset.
    */
   segments?: readonly string[]
 }
@@ -439,6 +442,8 @@ export function HostDatasetsCard(props: HostDatasetsCardProps) {
    * one by state.
    */
   const routeDatasetId = basePath ? segments?.[0] : undefined
+  /** The record the address opens on its own page (AGL-4047), beneath its dataset's tab. */
+  const routeRecordId = basePath && segments?.[1] === 'records' ? segments?.[2] : undefined
   const [selectedId, setSelectedId] = useState<string | null>(null)
   const wantedId = routeDatasetId ?? selectedId ?? undefined
   const listed = wantedId ? datasets.find((item) => item.$id === wantedId) : undefined
@@ -604,7 +609,8 @@ export function HostDatasetsCard(props: HostDatasetsCardProps) {
     setPageSize: setRecordPageSize,
   } = usePagedCollection<any>(
     (pageLimit) =>
-      dataScope && selected?.$id && !blocked.records
+      // A record's own page shows no table, so it reads none (AGL-4047).
+      dataScope && selected?.$id && !blocked.records && !routeRecordId
         ? query(
             collection(
               firestore,
@@ -618,8 +624,30 @@ export function HostDatasetsCard(props: HostDatasetsCardProps) {
             limit(pageLimit),
           )
         : null,
-    [firestore, dataScope, selected?.$id, recordPlanKey, blocked.records],
+    [firestore, dataScope, selected?.$id, recordPlanKey, blocked.records, routeRecordId],
     { idField: '$id' },
+  )
+  /**
+   * The record a record's own page opens (AGL-4047), read on its own and live,
+   * so a deep link to a record on no loaded page still opens and an edit shows
+   * as soon as it lands. Asked only of a member who may view the records.
+   */
+  const routeRecordRead = useFirestoreDoc<any>(
+    () =>
+      dataScope && selected?.$id && routeRecordId && !blocked.records
+        ? doc(firestore, dataScope[0], dataScope[1], 'datasets', selected.$id, 'records', routeRecordId)
+        : null,
+    [firestore, dataScope, selected?.$id, routeRecordId, blocked.records],
+  )
+  // Keyed by the id it was read under, as the table's rows are.
+  const routeRecord = useMemo(
+    () => (routeRecordId && routeRecordRead.data ? { ...routeRecordRead.data, $id: routeRecordId } : null),
+    [routeRecordId, routeRecordRead.data],
+  )
+  const routeRecordMissing = Boolean(
+    routeRecordId &&
+      !routeRecord &&
+      (routeRecordRead.status === 'error' || (routeRecordRead.status !== 'loading' && !routeRecordRead.fromCache)),
   )
   const recordRefusals = useMemo(
     () =>
@@ -1076,6 +1104,18 @@ export function HostDatasetsCard(props: HostDatasetsCardProps) {
    * query's answer.
    */
   const [viewerId, setViewerId] = useState<string | null>(null)
+  /**
+   * Opens a record (AGL-4047): on its own page beneath the dataset's tab
+   * where the Data page is routed, in the View record dialog elsewhere.
+   */
+  const datasetHref = basePath && selected?.$id ? `${basePath}/${selected.$id}` : null
+  const openRecord = useCallback(
+    (id: string) => {
+      if (datasetHref) router.push(`${datasetHref}/records/${encodeURIComponent(id)}`)
+      else setViewerId(id)
+    },
+    [datasetHref, router],
+  )
   const viewerRecord = useMemo(
     () =>
       viewerId
@@ -1218,7 +1258,7 @@ export function HostDatasetsCard(props: HostDatasetsCardProps) {
     logActivity,
   ])
   const handleDeleteRecord = useCallback(
-    (record: any) => async () => {
+    (record: any, afterDelete?: () => void) => async () => {
       // Datasets whose records this delete rewrites through a reference
       // fixup, beside the one the record belongs to. Each has pages of its
       // own to refresh (AGL-3113).
@@ -1359,6 +1399,7 @@ export function HostDatasetsCard(props: HostDatasetsCardProps) {
         await announceRecords(datasetId)
       }
       enqueueSnackbar('Record deleted', { variant: 'success', persist: false })
+      afterDelete?.()
     },
     [
       selected,
@@ -1475,7 +1516,7 @@ export function HostDatasetsCard(props: HostDatasetsCardProps) {
                 direction="row"
                 sx={{ height: '100%', alignItems: 'center', justifyContent: 'flex-end' }}
               >
-                <Button size="small" onClick={() => setViewerId(record.$id)}>
+                <Button size="small" onClick={() => openRecord(record.$id)}>
                   {'View'}
                 </Button>
                 <BlockedControl blocked={blocked.writes} reason={blocked.writesReason}>
@@ -1507,6 +1548,7 @@ export function HostDatasetsCard(props: HostDatasetsCardProps) {
       referenceLabel,
       handleOpenRecord,
       handleDeleteRecord,
+      openRecord,
       recordFilter,
       blocked.writes,
       blocked.writesReason,
@@ -1637,10 +1679,101 @@ export function HostDatasetsCard(props: HostDatasetsCardProps) {
       ]
     : []
 
+  /** Label-over-value facts, under a heading. */
+  const factsRow = (pairs: Array<[string, string]>) => (
+    <Stack direction="row" spacing={3} useFlexGap sx={{ flexWrap: 'wrap', mt: 1 }}>
+      {pairs.map(([label, value]) => (
+        <Box key={label}>
+          <Typography variant="caption" color="text.secondary" component="div">
+            {label}
+          </Typography>
+          <Typography variant="body2" color="text.primary" component="div" sx={{ overflowWrap: 'anywhere' }}>
+            {value}
+          </Typography>
+        </Box>
+      ))}
+    </Stack>
+  )
+
+  /**
+   * A record's own page (AGL-4047): back to its dataset, its fields, and
+   * today's record actions with today's gates. It takes the place of the View
+   * record dialog where the Data page is routed.
+   */
+  const recordTitle = routeRecord ? datasetRecordTitle(model, routeRecord.values) : undefined
+  const recordPanel =
+    selected && routeRecordId ? (
+      <CardDisplay
+        header={
+          <Stack spacing={1} sx={{ alignItems: 'flex-start' }}>
+            {datasetHref ? (
+              <Button
+                size="small"
+                component={AppLink}
+                href={datasetHref}
+                startIcon={<MdiIcon path={mdiArrowLeft.path} size={0.8} />}
+              >
+                {datasetRailName(selected)}
+              </Button>
+            ) : null}
+            {recordTitle ? <span>{recordTitle}</span> : null}
+          </Stack>
+        }
+        contentGutterX
+        contentGutterY
+        contentBordered="top"
+        HeaderProps={{
+          action: routeRecord ? (
+            <Stack direction="row" spacing={1} useFlexGap sx={{ alignItems: 'center', flexWrap: 'wrap', justifyContent: 'flex-end' }}>
+              <BlockedControl blocked={blocked.writes} reason={blocked.writesReason}>
+                <Button size="small" onClick={handleOpenRecord(routeRecord)}>
+                  {'Edit record'}
+                </Button>
+              </BlockedControl>
+              <BlockedControl blocked={blocked.writes} reason={blocked.writesReason}>
+                <Button
+                  size="small"
+                  color="error"
+                  onClick={handleDeleteRecord(routeRecord, () => {
+                    if (datasetHref) router.push(datasetHref)
+                  })}
+                >
+                  {'Delete'}
+                </Button>
+              </BlockedControl>
+            </Stack>
+          ) : undefined,
+          subheader: factsRow([
+            ['Record ID', routeRecordId],
+            ['Dataset', `${datasetRailName(selected)} · ${datasetSharingLabel(selected, hostNames)}`],
+          ]),
+        }}
+      >
+        <Stack spacing={1.5}>
+          {blocked.records ? (
+            <Typography variant="body2" color="text.secondary">
+              {DATASETS_VIEW_RECORDS_REFUSAL}
+            </Typography>
+          ) : routeRecordMissing ? (
+            <Alert severity="info">{'This record doesn’t exist, or you can’t open it.'}</Alert>
+          ) : routeRecord ? (
+            <DatasetRecordFieldList
+              record={routeRecord}
+              model={model}
+              resolveReference={resolveReferenceLabel}
+              divided
+            />
+          ) : null}
+        </Stack>
+      </CardDisplay>
+    ) : null
+
   const panel = notSharedHere ? (
     <Alert severity="info">{'This dataset isn’t shared with this site.'}</Alert>
   ) : notFound ? (
     <Alert severity="info">{'This dataset doesn’t exist, or you can’t open it.'}</Alert>
+  ) : recordPanel ? (
+    recordPanel
   ) : !selected ? (
     listAnswered && datasets.length === 0 && !sharedWith ? (
       <CardDisplay contentGutterX contentGutterY>
@@ -1714,20 +1847,7 @@ export function HostDatasetsCard(props: HostDatasetsCardProps) {
             </BlockedControl>
           </Stack>
         ),
-        subheader: (
-          <Stack direction="row" spacing={3} useFlexGap sx={{ flexWrap: 'wrap', mt: 1 }}>
-            {facts.map(([label, value]) => (
-              <Box key={label}>
-                <Typography variant="caption" color="text.secondary" component="div">
-                  {label}
-                </Typography>
-                <Typography variant="body2" color="text.primary" component="div">
-                  {value}
-                </Typography>
-              </Box>
-            ))}
-          </Stack>
-        ),
+        subheader: factsRow(facts),
       }}
     >
       <Stack spacing={1.5}>
@@ -1768,7 +1888,7 @@ export function HostDatasetsCard(props: HostDatasetsCardProps) {
             rows={recordColumnSort.rows}
             columnSort={recordColumnSort}
             columns={recordGridColumns}
-            onOpen={(id) => setViewerId(id)}
+            onOpen={(id) => openRecord(id)}
             // One page of the walk, turned by the footer below: the grid
             // neither slices nor filters it.
             hideFooter
@@ -1824,7 +1944,17 @@ export function HostDatasetsCard(props: HostDatasetsCardProps) {
         </Stack>
       </PageHeaderActions>
       {/* The open dataset ends the trail; the heading stays the page's. */}
-      <PageHeaderRecord title={selected && routeDatasetId ? datasetRailName(selected) : undefined} keepHeading />
+      {/* On a record's page the trail runs dataset, linked, then record. */}
+      {routeRecordId && selected && datasetHref ? (
+        <PageHeaderRecord
+          title={recordTitle}
+          keepHeading
+          parentTitle={datasetRailName(selected)}
+          parentHref={datasetHref}
+        />
+      ) : (
+        <PageHeaderRecord title={selected && routeDatasetId ? datasetRailName(selected) : undefined} keepHeading />
+      )}
       <HubSections
         sections={railSections}
         navHeader="Datasets"
