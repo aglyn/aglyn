@@ -99,7 +99,7 @@ describe('App Bar over a photo hero stays pinned when Sticky (AGL-4200)', () => 
       rules[
         `body:has([data-aglyn-under-header]) &[${OVER_HERO_PINNED_ATTRIBUTE}][${OVER_HERO_SOLID_ATTRIBUTE}]`
       ],
-    ).toEqual({ position: 'fixed', top: 'var(--aglyn-admin-bar-height, 0px)' })
+    ).toEqual({ position: 'fixed', top: 'calc(var(--aglyn-admin-bar-height, 0px) + var(--aglyn-preview-bar-height, 0px))' })
   })
 })
 
@@ -237,7 +237,8 @@ describe('App Bar over a photo hero sits below the admin bar (AGL-3660)', () => 
     >
     expect(rules['body:has([data-aglyn-under-header]) &']).toMatchObject({
       position: 'absolute',
-      top: 'calc(var(--aglyn-admin-bar-height, 0px) + var(--aglyn-announcement-bar-height, 0px))',
+      // The team's preview bar too (AGL-4152): its spacer moves the hero down, so the header follows it.
+      top: 'calc(var(--aglyn-admin-bar-height, 0px) + var(--aglyn-preview-bar-height, 0px) + var(--aglyn-announcement-bar-height, 0px))',
     })
   })
 })

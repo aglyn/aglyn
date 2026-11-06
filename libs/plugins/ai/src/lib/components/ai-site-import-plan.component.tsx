@@ -43,7 +43,8 @@ function PlanGroups({ groups }: { groups: ReadonlyArray<{ label: string; pages: 
           <Typography variant="body2" component="span" sx={{ fontWeight: 600 }}>
             {group.label}
           </Typography>
-          {group.pages.length > 1 || group.pages[0] !== group.label
+          {/* A menu entry of one page is a link, its label alone; a footer column of one names its page. */}
+          {group.pages.length > 1 || (group.pages[0] && group.pages[0] !== group.label)
             ? group.pages.map((page) => <Chip key={page} label={page} size="small" variant="outlined" />)
             : null}
         </Stack>

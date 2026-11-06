@@ -619,12 +619,14 @@ export function aiSiteImportPlanViewOf(state: AiSiteImportState | null | undefin
   if (!state || !plan) return null
   const name = (id: string) => (plan.proposed?.draftId === id ? plan.proposed.title : (state.pages.find((page) => page.draftId === id)?.title ?? ''))
   const named = (groups: ReadonlyArray<{ label: string; pages: string[] }>) => groups.map((group) => ({ label: group.label, pages: group.pages.map(name).filter(Boolean) })).filter((group) => group.pages.length)
+  // A menu entry of one page is a link to it under the entry's label, as the header draws it, never a menu of one (AGL-4152).
+  const menu = named(plan.nav.groups).map((group) => (group.pages.length === 1 ? { label: group.label, pages: [] } : group))
   const cta = plan.nav.primaryCta
   const where = !cta ? '' : cta.target === 'phone' ? 'your phone number' : name(cta.target === 'form' ? (cta.page ?? '') : cta.target)
   return {
     what: plan.site.what,
     audience: plan.site.audience,
-    menu: named(plan.nav.groups),
+    menu,
     cta: cta && where ? `${cta.label} → ${where}` : null,
     footer: named(plan.nav.footer),
     proposed: plan.proposed && (aiSiteImportPlanAwaits(state) || plan.proposed.on) ? { title: plan.proposed.title, purpose: plan.proposed.purpose, address: `/${plan.proposed.slug}` } : null,

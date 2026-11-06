@@ -1086,6 +1086,13 @@ export interface AiSiteImportPage {
    * report; its row reads in words, never these.
    */
   redesignMissed?: string[] | null
+  /**
+   * Why its layout was kept, line by line (AGL-4152): each miss's code and
+   * what it says of the line it found, cut to 300 characters, at most 8. The
+   * answer is never stored, so this is what a later read of the job has to
+   * diagnose a miss by. For the job's record; its row never shows it.
+   */
+  redesignMissedWhy?: string[] | null
 }
 
 /** How a page's generative Improve it came out (AGL-4152). */
@@ -1222,8 +1229,8 @@ export function aiSiteImportSaid(said: readonly string[] | null | undefined, rea
   for (const read of reads) {
     if (typeof read === 'string') continue
     for (const block of read.blocks ?? []) {
-      if (block.kind === 'image') continue
-      const line = block.text.replace(/\s+/g, ' ').trim()
+      // A picture's words are what it says (AGL-4152): a crew, a town, a kind of work a later page may name.
+      const line = ((block.kind === 'image' ? block.alt : block.text) || '').replace(/\s+/g, ' ').trim()
       if (!line || seen.has(line) || chars + line.length > AI_SITE_IMPORT_SAID_MAX_CHARS) continue
       seen.add(line)
       out.push(line)
@@ -2348,8 +2355,19 @@ export function aiSiteImportRedesignOf(
   added?: readonly AiSiteImportAddedSection[],
   pictures?: AiSiteImportPagePictures | null,
   missed?: readonly string[] | null,
+  why?: readonly string[] | null,
 ): AiSiteImportState {
-  const next = withPage(state, slot, { redesign, ...(added?.length ? { added: [...added] } : {}), ...(pictures ? { pictures } : {}), ...(missed?.length ? { redesignMissed: missed.slice(0, 8).map((code) => code.slice(0, 40)) } : {}) })
+  // A page run again clears what an earlier run said of it.
+  const was = state.pages.find((page) => page.slot === slot)
+  const next = withPage(state, slot, {
+    redesign,
+    ...(was?.redesignMissed ? { redesignMissed: null } : {}),
+    ...(was?.redesignMissedWhy ? { redesignMissedWhy: null } : {}),
+    ...(added?.length ? { added: [...added] } : {}),
+    ...(pictures ? { pictures } : {}),
+    ...(missed?.length ? { redesignMissed: missed.slice(0, 8).map((code) => code.slice(0, 40)) } : {}),
+    ...(why?.length ? { redesignMissedWhy: why.slice(0, 8).map((line) => line.slice(0, 300)) } : {}),
+  })
   const left = new Set(pictures?.unplaced ?? [])
   if (!left.size) return next
   const assets = state.pages.find((page) => page.slot === slot)?.photos?.assets ?? []

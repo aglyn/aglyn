@@ -57,7 +57,14 @@ import {
 import { AI_ICON_WORDS } from '../runtime/ai-icon-library'
 import type { AiSiteImportAddedSection, AiSiteImportPagePictures, AiSiteImportPageRole, AiSiteImportPlan } from '../model/ai-site-import'
 import { aiSiteHomeArc } from '../model/ai-site-home-arcs'
-import { siteImportContentKept, siteImportContentWords, type SiteImportFidelityTheme, type SiteImportPageFidelity } from '../model/ai-site-import-fidelity'
+import {
+  SITE_IMPORT_IMPROVED_MEANING,
+  SITE_IMPORT_MEANING_FLOOR,
+  siteImportContentKept,
+  siteImportContentWords,
+  type SiteImportFidelityTheme,
+  type SiteImportPageFidelity,
+} from '../model/ai-site-import-fidelity'
 import { siteImportLedger, type SiteImportLedger, type SiteImportLedgerItem, type SiteImportLedgerLine } from '../model/ai-site-import-ledger'
 import { AI_SITE_IMPORT_PAGE_CEILING_CREDITS } from '../model/ai-site-import'
 import { estimateAiBilledUsd } from '../providers/catalog'
@@ -357,6 +364,22 @@ export function aiSiteImportImproveDestinations(doc: AiSiteImportDocument, ledge
   return out
 }
 
+/**
+ * The page's own `page:<id>` on the new site (AGL-4152), by its address: a
+ * link to it from itself goes nowhere a visitor is not already. `null` where
+ * the import plans it under no id, as the home page.
+ */
+export function aiSiteImportOwnPage(doc: Pick<AiSiteImportDocument, 'url' | 'links'>): string | null {
+  let path: string
+  try {
+    path = new URL(doc.url).pathname.replace(/\/+$/, '') || '/'
+  } catch {
+    return null
+  }
+  const own = doc.links.find((link) => link.path === path)
+  return own ? `page:${own.id}` : null
+}
+
 /** A redesign's user turn: the page, its kind of site, how its opening is drawn, and its ledger, fenced as the owner's data. */
 export function aiSiteImportImprovePrompt(input: {
   screen: { title: string; slug: string }
@@ -399,6 +422,20 @@ export const AI_SITE_IMPORT_NEW_SECTIONS: Readonly<Record<AiSiteImportPageRole, 
   other: 1,
   contact: 0,
   faq: 0,
+}
+
+/**
+ * The share of the old page's words a redesign keeps, by role (AGL-4152),
+ * where it is not `SITE_IMPORT_IMPROVED_MEANING`. A contact page is asked for
+ * a short, welcoming opening over its form: what it must keep is its form,
+ * its contact lines and its facts, each held whole on their own lines, and its
+ * intent, so its prose is held only at the floor a rewritten line is.
+ */
+export const AI_SITE_IMPORT_ROLE_MEANING: Readonly<Partial<Record<AiSiteImportPageRole, number>>> = { contact: SITE_IMPORT_MEANING_FLOOR }
+
+/** The share of its old words a page of a role keeps. */
+export function aiSiteImportMeaningShare(role: AiSiteImportPageRole): number {
+  return AI_SITE_IMPORT_ROLE_MEANING[role] ?? SITE_IMPORT_IMPROVED_MEANING
 }
 
 /** The fewest content words an old section says for a new one to be its rework (AGL-4152): fewer is a label, which any section may echo. */
@@ -629,8 +666,18 @@ const WORD_KINDS = new Set(['eyebrow', 'heading', 'lede', 'text', 'note', 'butto
 /** The longest quote a kept set of quotes sets side by side. */
 const QUOTE_ACROSS_CHARS = 220
 
-/** The frame a source's picture is cropped to where a redesign places it: wide across the page, closer in a column. */
-const FRAME: Readonly<Record<'wide' | 'column', string>> = { wide: '16 / 9', column: '4 / 3' }
+/**
+ * The height a source's picture is cropped to where a redesign places it on
+ * its own, in px (AGL-4152): wide across the page, closer in a column. A
+ * height, not a shape: the Image takes it as its own height field, so a page
+ * of pictures kept one by one repeats one style key on each (its rounding),
+ * never two, which rule 16 refuses as a repeated inline style. Pictures side
+ * by side in a row are cropped alike, whatever shapes they came in.
+ */
+export const AI_SITE_IMPORT_IMPROVE_FRAME_PX: Readonly<Record<'wide' | 'column', number>> = { wide: 420, column: 300 }
+
+/** The shape a picture on a card is cropped to (AGL-4152): every card of a row alike. */
+const CARD_FRAME = '4 / 3'
 
 export interface AiSiteImportImproveCompileInput {
   doc: AiSiteImportDocument
@@ -727,18 +774,24 @@ export function aiSiteImportImprovedPage(answer: readonly AiSiteImportImprovedSe
   const written: string[] = []
   // A brand band in a brand the theme had to deepen would read as neither: dark holds its place.
   const deepened = !!input.theme && !!input.theme.button.fill && input.theme.button.fill !== input.theme.light.brand
-  const resolve = (to: string | undefined): string | undefined => {
+  // A link to the page it is on, or to the section it sits in, goes nowhere (AGL-4152): to the page's form where it
+  // keeps one, which is what a contact page's "Request a quote" means, else it is left out.
+  const own = aiSiteImportOwnPage(doc)
+  const resolve = (to: string | undefined, at: number): string | undefined => {
     if (!to) return undefined
-    return destinations.get(to) ?? undefined
+    const resolved = destinations.get(to) ?? undefined
+    if (!resolved || (resolved !== own && resolved !== `#${at + 1}`)) return resolved
+    const form = destinations.get('form')
+    return form && form !== `#${at + 1}` ? form : undefined
   }
   const say = (text: string | undefined) => {
     if (text?.trim()) written.push(clean(text))
   }
-  const pictureOf = (ref: string, frame: string) => {
+  const pictureOf = (ref: string, frame: { ratio: string } | { height: number }) => {
     const item = items.get(ref)
     if (item?.kind !== 'picture') return null
     const picture = aiSiteImportTakePicture(scope, item.lines[0])
-    return picture ? { ...picture, fit: { ratio: frame, cropped: true as const, objectFit: 'cover' as const, rounded: true as const } } : null
+    return picture ? { ...picture, fit: { ...frame, cropped: true as const, objectFit: 'cover' as const, rounded: true as const } } : null
   }
   // A few short quotes kept whole sit side by side, as a designer sets them, wherever the old page stacked them; in a column, one under another.
   const across = (block: AiLayoutBlock, inColumn: boolean): Partial<AiLayoutBlock> => {
@@ -751,7 +804,7 @@ export function aiSiteImportImprovedPage(answer: readonly AiSiteImportImprovedSe
     if (!item) return []
     const placed = col !== undefined ? { col } : {}
     if (item.kind === 'picture') {
-      const picture = pictureOf(ref, col !== undefined ? FRAME.column : FRAME.wide)
+      const picture = pictureOf(ref, { height: col !== undefined ? AI_SITE_IMPORT_IMPROVE_FRAME_PX.column : AI_SITE_IMPORT_IMPROVE_FRAME_PX.wide })
       return picture ? [{ kind: 'image', picture, ...placed }] : []
     }
     if (!item.node) return []
@@ -781,8 +834,10 @@ export function aiSiteImportImprovedPage(answer: readonly AiSiteImportImprovedSe
         return [block]
       }
       if (block.kind === 'button') {
+        const to = resolve(block.to, index)
+        // A button that goes nowhere a visitor is not already is no call to action: it is left out.
+        if (block.to && !to) return []
         say(block.text)
-        const to = resolve(block.to)
         const { to: _asked, ...rest } = block
         return [{ ...rest, ...(to ? { to } : {}) }]
       }
@@ -790,8 +845,8 @@ export function aiSiteImportImprovedPage(answer: readonly AiSiteImportImprovedSe
         say(item.title)
         say(item.text)
         const given = item.ref || carded.get(block)?.[at]
-        const picture = given ? pictureOf(given, '4 / 3') : null
-        const to = resolve(item.to)
+        const picture = given ? pictureOf(given, { ratio: CARD_FRAME }) : null
+        const to = resolve(item.to, index)
         const { ref: _ref, to: _to, ...rest } = item
         return { ...rest, ...(block.kind === 'steps' ? { figure: String(at + 1) } : {}), ...(picture ? { picture } : {}), ...(to ? { to } : {}) }
       })
@@ -951,15 +1006,108 @@ export const AI_SITE_IMPORT_IMPROVE_SOFT_CODES: ReadonlySet<string> = new Set([
   'improve-framing',
 ])
 
+/** The most reasons a page's record keeps of why its redesign missed (AGL-4152). */
+export const AI_SITE_IMPORT_REDESIGN_WHY_MOST = 8
+
+/** The most characters one reason keeps: the line it names and what it says of it. */
+export const AI_SITE_IMPORT_REDESIGN_WHY_CHARS = 300
+
+/**
+ * Why a redesign missed, line by line (AGL-4152): each violation's code, its
+ * message (which names the line it found, `section 1, block 2, "…"`) and its
+ * detail, cut short, at most `AI_SITE_IMPORT_REDESIGN_WHY_MOST`. What the
+ * page's log and its record say, so a miss can be read after the job, when
+ * the answer itself is gone. For the job's record, never the owner's row.
+ */
+export function aiSiteImportRedesignWhy(violations: readonly AiDoctrineViolation[]): string[] {
+  const out: string[] = []
+  for (const violation of violations) {
+    const said = clean(`${violation.code}: ${violation.message}${violation.detail ? ` ${violation.detail}` : ''}`)
+    const line = said.length > AI_SITE_IMPORT_REDESIGN_WHY_CHARS ? `${said.slice(0, AI_SITE_IMPORT_REDESIGN_WHY_CHARS - 1)}…` : said
+    if (!out.includes(line)) out.push(line)
+    if (out.length >= AI_SITE_IMPORT_REDESIGN_WHY_MOST) break
+  }
+  return out
+}
+
 /** Whether every miss of an answer is one it may be taken with past its last re-ask. */
 export function aiSiteImportImproveOnlySoft(violations: readonly AiDoctrineViolation[]): boolean {
   return violations.length > 0 && violations.every((violation) => AI_SITE_IMPORT_IMPROVE_SOFT_CODES.has(violation.code))
 }
 
-/** Every line a redesign's facts may come from: its page, what the site says of itself, its wave's other pages, its name. */
-export function aiSiteImportImproveScope(doc: Pick<AiSiteImportDocument, 'blocks' | 'siteLines' | 'scope' | 'title'>, siteName: string | null): string[] {
+/**
+ * The words of a site's plan (AGL-4152): what it says the site is and who it
+ * is for, its menu's and footer's labels, its call to action and its proposed
+ * page. A redesign is told the plan as its digest, and the plan's own words
+ * were held to what the site says when it was made, so a redesign that
+ * repeats them invents nothing.
+ */
+export function aiSiteImportPlanLines(plan: AiSiteImportPlan | null | undefined): string[] {
+  if (!plan) return []
+  return [
+    plan.site.what,
+    plan.site.audience,
+    ...plan.nav.groups.map((group) => group.label),
+    ...plan.nav.footer.map((group) => group.label),
+    ...(plan.nav.primaryCta ? [plan.nav.primaryCta.label] : []),
+    ...(plan.proposed ? [plan.proposed.title, plan.proposed.purpose] : []),
+  ].filter((line): line is string => typeof line === 'string' && !!line.trim())
+}
+
+/** A web address's top-level part, which says nothing of a name. */
+const TLD = /\.(?:com|org|net|io|co|ai|app|dev|us|uk|ca|au|de|fr|info|biz|me|shop|store|site|online)(?:\.[a-z]{2})?$/i
+
+/**
+ * The ways a site's name is said (AGL-4152), where it is written as one run
+ * of letters: a web address ("RidgelineBuilders.com") or a name run together.
+ * Its address part dropped, its capitals and digits split ("Ridgeline
+ * Builders"), a run of capitals on its own ("ABC" of "ABCroofing"), and a run
+ * of small letters split into the words the site says elsewhere ("roofing
+ * site" of "roofingsite"). A redesign that names the business as a visitor
+ * would invents nothing.
+ */
+export function aiSiteImportNameVariants(name: string, said: ReadonlySet<string>): string[] {
+  const text = clean(name)
+  if (!text || /\s/.test(text) || text.length < 4) return []
+  const bare = text.replace(/^https?:\/\//i, '').replace(/^www\./i, '').replace(/\/.*$/, '').replace(TLD, '')
+  // A run of small letters as the words the site says, longest first; itself where they do not make it up.
+  const segment = (run: string): string[] => {
+    if (run.length < 6 || said.has(run.toLowerCase())) return [run]
+    const out: string[] = []
+    let rest = run.toLowerCase()
+    while (rest) {
+      let found = ''
+      for (let end = rest.length; end >= 3 && !found; end -= 1) if (said.has(rest.slice(0, end))) found = rest.slice(0, end)
+      if (!found) return [run]
+      out.push(found)
+      rest = rest.slice(found.length)
+    }
+    return out
+  }
+  const words = bare
+    .split(/[-_.]+|(?<=[a-z])(?=[A-Z])|(?<=[A-Za-z])(?=\d)|(?<=\d)(?=[A-Za-z])/)
+    .filter(Boolean)
+    .flatMap((part) => {
+      // A run of capitals before small letters: "ABCroofing" is "ABC" and "roofing", "ABCRoofing" "ABC" and "Roofing".
+      const lead = /^([A-Z]{2,})([a-z]+)$/.exec(part)
+      if (!lead) return segment(part)
+      const caps = lead[1] as string
+      const tail = `${caps.slice(-1)}${lead[2] as string}`
+      return said.has(tail.toLowerCase()) ? [caps.slice(0, -1), tail] : [caps, ...segment(lead[2] as string)]
+    })
+  const titled = words.map((word) => (/^[a-z]/.test(word) ? `${word[0]?.toUpperCase()}${word.slice(1)}` : word)).join(' ')
+  return [...new Set([bare, titled])].filter((variant) => variant && variant !== text)
+}
+
+/** Every line a redesign's facts may come from: its page, what the site says of itself, its wave's other pages, its plan, its name. */
+export function aiSiteImportImproveScope(doc: Pick<AiSiteImportDocument, 'blocks' | 'siteLines' | 'scope' | 'title'> & { plan?: AiSiteImportPlan | null }, siteName: string | null): string[] {
   const own = doc.blocks.flatMap((block) => (block.kind === 'image' ? (block.alt ? [block.alt] : []) : block.text ? [block.text] : []))
-  return [...own, ...(doc.siteLines ?? []), ...(doc.scope ?? []), doc.title, ...(siteName ? [siteName] : [])].map(clean).filter(Boolean)
+  const lines = [...own, ...(doc.siteLines ?? []), ...(doc.scope ?? []), ...aiSiteImportPlanLines(doc.plan), doc.title, ...(siteName ? [siteName] : [])].map(clean).filter(Boolean)
+  // The site's name as a visitor says it, where it is written as an address or run together (AGL-4152).
+  const said = new Set(lines.flatMap((line) => line.toLowerCase().match(/[\p{L}\p{N}]+/gu) ?? []))
+  const names = [...new Set([...(siteName ? [siteName] : []), ...(doc.siteLines ?? []).slice(0, 6)])]
+  const variants = names.flatMap((name) => aiSiteImportNameVariants(name, said)).filter((variant) => !lines.includes(variant))
+  return [...lines, ...variants]
 }
 
 /** What each line that missed says to the one re-ask. */
@@ -1012,6 +1160,8 @@ export function aiSiteImportImproveCheck<T>(input: {
   theme?: SiteImportFidelityTheme | null
   /** What the page is for and the new sections it needs; absent, nothing is asked of its plan. */
   needs?: AiSiteImportImproveNeeds | null
+  /** Words the platform's own request put to the answer (its role's lines), no one's name or fact. */
+  vocabulary?: readonly string[]
   build: (page: AiSiteImportImprovedPage) => { value: T | null; violations: AiDoctrineViolation[] }
   score: (built: T, destinations: readonly string[]) => AiDoctrineViolation[]
   /**
@@ -1026,7 +1176,8 @@ export function aiSiteImportImproveCheck<T>(input: {
     if (!read) return { value: null, violations: [{ rule: null, code: 'improve-unreadable', message: `The answer gave no section that can be drawn. Answer with ${AI_SITE_IMPORT_IMPROVE_TOOL.name}.` }] }
     const formAt = read.findIndex((section) => section.blocks.some((block) => block.kind === 'keep' && block.ref.startsWith('form:')))
     const destinations = aiSiteImportImproveDestinations(input.doc, input.ledger, { sections: read.length, formSection: formAt === -1 ? null : formAt })
-    const honesty = aiSiteImportHonesty(read, { ledger: input.ledger, scope: input.scope, destinations, framing: input.framing ?? null })
+    const own = aiSiteImportOwnPage(input.doc)
+    const honesty = aiSiteImportHonesty(read, { ledger: input.ledger, scope: input.scope, destinations, framing: input.framing ?? null, vocabulary: input.vocabulary ?? [], own })
     // What it lost and how it is planned, named together, so the one re-ask mends both.
     const planned = input.needs ? aiSiteImportImprovePlanMisses(read, { ledger: input.ledger, needs: input.needs }) : []
     const missed: string[] = input.lenient ? planned.map((violation) => violation.code) : []
@@ -1034,9 +1185,10 @@ export function aiSiteImportImproveCheck<T>(input: {
     const page = aiSiteImportImprovedPage(read, { doc: input.doc, ledger: input.ledger, design: input.design, destinations, formId: input.formId, plan: input.plan ?? null, theme: input.theme ?? null })
     const built = input.build(page)
     if (!built.value) return { value: null, violations: built.violations }
+    // A link the source makes to the page it is on asks nothing of the page (AGL-4152).
     const wanted = input.ledger.links.flatMap((link) => {
       const to = destinations.get(link.ref)
-      return to ? [to] : []
+      return to && to !== own ? [to] : []
     })
     const scored = input.score(built.value, [...new Set(wanted)])
     const refused = input.lenient ? scored.filter((violation) => !AI_SITE_IMPORT_IMPROVE_SOFT_CODES.has(violation.code)) : scored

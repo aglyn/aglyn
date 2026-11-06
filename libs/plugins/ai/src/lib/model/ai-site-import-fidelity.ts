@@ -291,6 +291,9 @@ export type SiteImportImprovedLineName = (typeof SITE_IMPORT_IMPROVED_LINES)[num
 /** The share of a source's content words a redesign keeps on its page (AGL-4152). */
 export const SITE_IMPORT_IMPROVED_MEANING = 0.6
 
+/** The fewest content words a source line says for its meaning to be held (AGL-4152): fewer is a label, written again freely. */
+export const SITE_IMPORT_MEANING_LEAST_WORDS = 4
+
 /** What a generative Improve it is scored against, besides its source. */
 export interface SiteImportImprovedOptions {
   /** Every other line the import read: a fact one of these says is no invention. */
@@ -303,6 +306,10 @@ export interface SiteImportImprovedOptions {
   frame?: SiteImportFidelityTree | null
   /** A page the site's plan proposed: new, so no source's facts or meaning to hold, only what it says. */
   proposed?: boolean
+  /** Words the platform's own request put to the redesign, no one's name or fact (`siteImportFactScope`). */
+  vocabulary?: readonly string[]
+  /** The share of the source's content words the page keeps; absent, `SITE_IMPORT_IMPROVED_MEANING`. */
+  meaning?: number
 }
 
 /** How a page was finished and its words kept (AGL-4152), and the theme it is drawn in. */
@@ -2082,15 +2089,30 @@ export interface SiteImportFactScope {
   names: ReadonlySet<string>
   /** Every word the source says, lowercased. */
   said: ReadonlySet<string>
+  /**
+   * Every word the source says, by its stem (AGL-4152): a heading set in title
+   * case says "Filing" where the source says "file", which is no name.
+   */
+  stems?: ReadonlySet<string>
 }
 
-/** The fact scope of a page's source lines. */
-export function siteImportFactScope(sourceTexts: readonly string[]): SiteImportFactScope {
+/**
+ * The fact scope of a page's source lines. `vocabulary` is words a rewrite
+ * may say that are no one's name and no one's fact (AGL-4152): the platform's
+ * own words for what a page tells, which its request puts to the model
+ * ("why choose it", "how it works"). They are said; they name and claim nothing.
+ */
+export function siteImportFactScope(sourceTexts: readonly string[], vocabulary: readonly string[] = []): SiteImportFactScope {
+  const said = new Set([...sourceTexts, ...vocabulary].flatMap(wordsOf).map((word) => word.toLowerCase()))
   return {
     names: new Set(sourceTexts.filter((text) => !shouted(text)).flatMap((text) => capitalsIn(text).filter((entry) => !entry.opens && entry.word.length > 1).map((entry) => entry.word))),
-    said: new Set(sourceTexts.flatMap(wordsOf).map((word) => word.toLowerCase())),
+    said,
+    stems: new Set([...said].map(stemOf)),
   }
 }
+
+/** Whether a scope says a word in any case or any of its endings. */
+const saidIn = (scope: SiteImportFactScope, word: string) => scope.said.has(word.toLowerCase()) || !!scope.stems?.has(stemOf(word))
 
 /**
  * The fact tokens one line says (G4), each as often as it says it: its
@@ -2105,7 +2127,8 @@ export function siteImportFactTokens(text: string, scope: SiteImportFactScope, o
   for (const entry of capitalsIn(text)) {
     if (scope.names.has(entry.word)) out.push(`name:${entry.word}`)
     // A name the source never says, past a sentence's first word, is one the rewrite made up.
-    else if (own && !entry.opens && entry.word.length > 1 && !shouted(text) && !scope.said.has(entry.word.toLowerCase())) out.push(`name:${entry.word}`)
+    // A word every sentence uses ("Us", "Our", "With") is no one's name, capitalized in a title or not (AGL-4152).
+    else if (own && !entry.opens && entry.word.length > 1 && !shouted(text) && !saidIn(scope, entry.word) && !STOP_WORDS.has(entry.word.toLowerCase())) out.push(`name:${entry.word}`)
   }
   return out
 }
@@ -2236,7 +2259,7 @@ function improvedScore(source: SiteImportFidelitySource, built: Built, look: Loo
   const pieces = built.pieces
   const sourceTexts = source.blocks.flatMap((block) => (isLine(block) && block.kind !== 'image' ? [clean(block.text)] : []))
   const anywhere = [...sourceTexts, ...(options.scope ?? [])]
-  const scope = siteImportFactScope(anywhere)
+  const scope = siteImportFactScope(anywhere, options.vocabulary ?? [])
   const shown = pieces.map((piece) => piece.text).filter((text) => !bareNumber(text))
   const onPage = new Set(shown.flatMap((text) => siteImportFactTokens(text, scope, false)))
   // Facts: every one the source says, at least once anywhere on the page.
@@ -2283,11 +2306,13 @@ function improvedScore(source: SiteImportFidelitySource, built: Built, look: Loo
   }))
   const destinations = options.destinations ?? []
   const missingLinks = destinations.filter((to) => !hrefs.has(to) && !hrefs.has(to.replace(/\/+$/, '')))
-  // Meaning: the source's content words, on the page.
-  const sourceWords = contentOf(sourceTexts.join(' '))
+  // Meaning: the source's content words, on the page: of what it says, not of its labels (AGL-4152). A heading or a
+  // button of a few words ("Contact us", "Visit or call") is one a redesign is asked to write again as a promise,
+  // and on a short page such as a contact page its labels alone would hold the share down; their facts are held above.
+  const sourceWords = contentOf(sourceTexts.filter((text) => contentOf(text).size >= SITE_IMPORT_MEANING_LEAST_WORDS).join(' '))
   const pageWords = contentOf(pieces.map((piece) => piece.text).join(' '))
   const kept = [...sourceWords].filter((stem) => pageWords.has(stem)).length
-  const meaningOk = options.proposed === true || sourceWords.size === 0 || kept / sourceWords.size >= SITE_IMPORT_IMPROVED_MEANING
+  const meaningOk = options.proposed === true || sourceWords.size === 0 || kept / sourceWords.size >= (options.meaning ?? SITE_IMPORT_IMPROVED_MEANING)
   const ledgerLines = {
     facts: { ...line(said.length - missingFacts.length, said.length), missing: missingFacts.slice(0, 8) },
     invented: { ...line(found.length ? 0 : 1, 1), found: found.slice(0, 8) },
@@ -2301,7 +2326,12 @@ function improvedScore(source: SiteImportFidelitySource, built: Built, look: Loo
   const closer = drawnSections[drawnSections.length - 1]
   const filled = (node: SiteImportFidelityNode) => node.componentId === 'muiButton' && node.props?.['variant'] === 'contained' && hasDestination(node)
   const asks = (node: SiteImportFidelityNode) => (node.componentId === 'muiButton' && hasDestination(node)) || node.componentId === 'form'
-  const cta = opener && closer ? line((has(opener, filled) ? 1 : 0) + (has(closer, asks) ? 1 : 0), 2) : null
+  // A page that draws its form asks with it (AGL-4152): a form in the first two sections opens on its ask, and one in
+  // the last two closes on it, as a contact page is drawn (a short opening, the form, what happens after), with no band.
+  const formAt = drawnSections.findIndex((id) => has(id, (node) => node.componentId === 'form'))
+  const opens = !!opener && (has(opener, filled) || (formAt >= 0 && formAt <= 1))
+  const closes = !!closer && (has(closer, asks) || (formAt >= 0 && formAt >= drawnSections.length - 2))
+  const cta = opener && closer ? line((opens ? 1 : 0) + (closes ? 1 : 0), 2) : null
   // Rhythm: neighbors on different grounds.
   const pairs = Math.max(0, drawnSections.length - 1)
   const bandOf = (id: string | undefined) => siteImportFidelityBandOf(id ? built.node(id) : undefined)
@@ -2335,7 +2365,7 @@ function improvedScore(source: SiteImportFidelitySource, built: Built, look: Loo
     return lines.length < 4
   }).length
   const anyRow = drawnSections.some((id) => built.under(id).some((at) => id !== at && setsSideBySide(built.node(at)) && built.children(at).length >= 2))
-  // A group: three or more cells of one grid, questions of one list, or lines of one list.
+  // A group: three or more cells of one grid, questions of one list, or lines of one list; a form's fields are its own.
   const anyGroup = drawnSections.some((id) =>
     built.under(id).some((at) => {
       const node = built.node(at)
@@ -2346,7 +2376,7 @@ function improvedScore(source: SiteImportFidelitySource, built: Built, look: Loo
     }),
   )
   const columns = drawnSections.length
-    ? line(planned, drawnSections.length, planned === drawnSections.length && (drawnSections.length < 3 || (anyRow && anyGroup)))
+    ? line(planned, drawnSections.length, planned === drawnSections.length && (drawnSections.length < 3 || (anyRow && (anyGroup || formAt >= 0))))
     : null
   // Framing: every picture at a size a screen holds, in a frame it fills.
   const natural = new Map((source.photos ?? []).flatMap((photo) => (photo.width && photo.height ? [[photo.src, photo.width / photo.height] as const] : [])))

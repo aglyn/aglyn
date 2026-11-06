@@ -31,6 +31,7 @@
 import { render, screen } from '@testing-library/react'
 import PreviewBanner, {
   PREVIEW_BANNER_ID,
+  PREVIEW_BAR_HEIGHT_VAR,
   previewSentence,
 } from '../app/[host]/[scheme]/aglyn-preview/preview-banner'
 
@@ -93,6 +94,8 @@ describe('the preview banner cannot be scrolled past or styled away', () => {
     // spacer the site's own header renders underneath the bar.
     expect(container.children).toHaveLength(2)
     expect(container.children[1].getAttribute('aria-hidden')).toBe('true')
+    // And says how tall it is, for a header laid over a photo hero, which the spacer does not move (AGL-4152).
+    expect(container.children[1].querySelector('style')?.textContent).toBe(`:root{${PREVIEW_BAR_HEIGHT_VAR}:44px}`)
   })
 
   it('announces itself to a screen reader as a status, not as decoration', () => {

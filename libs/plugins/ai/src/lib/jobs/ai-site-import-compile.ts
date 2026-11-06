@@ -885,7 +885,7 @@ function groupBlocks(scope: MapScope, group: SiteImportLayoutGroup): AiLayoutBlo
     // A gallery is its photos in the source's columns (AGL-4152), not a strip of marks.
     return items.length ? [{ kind: 'logos', items, ...(group.gallery ? { variant: 'pictures' as const, columns } : {}) }] : []
   }
-  const items = group.items.map((item) => itemOf(scope, group, item, kind))
+  const items = aiSiteImportOneFrame(group.items.map((item) => itemOf(scope, group, item, kind)), improve)
   // Whether the items are boxed: the source's, or on a page its owner asked improved, the answer's style (AGL-4152).
   const boxed = improve && answer?.style ? BOXED_STYLES.has(answer.style) : group.boxed
   if (kind === 'quotes') {
@@ -898,6 +898,50 @@ function groupBlocks(scope: MapScope, group: SiteImportLayoutGroup): AiLayoutBlo
   // A group kept apart from a list is ruled, where its boxing allows (AGL-4152).
   const style = styleFor(joins ? 'ruled' : answer?.style, group, items, scope.finish)
   return [{ kind: kind === 'steps' ? 'steps' : 'cards', items, columns, variant: style, ...drawnAs(scope, group, style) }]
+}
+
+/**
+ * The frame a group's pictures share on a page its owner asked improved
+ * (AGL-4152): photos of different shapes made cards of different heights
+ * across one row, so where they differ every picture is cropped to the one
+ * shape most of them are nearest, filled. A shape the source crops one to is
+ * the source's own and stays; a page kept as it is keeps every shape.
+ */
+export function aiSiteImportOneFrame(items: AiLayoutItem[], improve: boolean): AiLayoutItem[] {
+  if (!improve) return items
+  const ratios = items.flatMap((item) => (item.picture && !item.picture.video && !item.picture.fit?.cropped ? [ratioOf(item.picture)] : []))
+  if (ratios.length < 2 || ratios.some((ratio) => ratio === null)) return items
+  const known = ratios as number[]
+  if (Math.max(...known) / Math.min(...known) <= ONE_FRAME_SLACK) return items
+  const sorted = [...known].sort((a, b) => a - b)
+  const middle = sorted[Math.floor(sorted.length / 2)] as number
+  const frame = ONE_FRAMES.reduce((best, entry) => (Math.abs(Math.log(entry.ratio / middle)) < Math.abs(Math.log(best.ratio / middle)) ? entry : best))
+  return items.map((item) =>
+    item.picture && !item.picture.video && !item.picture.fit?.cropped
+      ? { ...item, picture: { ...item.picture, fit: { ...item.picture.fit, ratio: frame.text, cropped: true as const, objectFit: 'cover' as const } } }
+      : item,
+  )
+}
+
+/** How far apart a group's picture shapes may be and still read as one, as the widest over the narrowest. */
+const ONE_FRAME_SLACK = 1.08
+
+/** The shapes a group's pictures are cropped to, landscape to portrait. */
+const ONE_FRAMES: ReadonlyArray<{ ratio: number; text: string }> = [
+  { ratio: 16 / 9, text: '16 / 9' },
+  { ratio: 3 / 2, text: '3 / 2' },
+  { ratio: 4 / 3, text: '4 / 3' },
+  { ratio: 1, text: '1 / 1' },
+  { ratio: 4 / 5, text: '4 / 5' },
+]
+
+/** A picture's width over its height: its own, else as its frame writes it. */
+function ratioOf(picture: AiLayoutPicture): number | null {
+  if (picture.ratio && picture.ratio > 0) return picture.ratio
+  const written = picture.fit?.ratio?.split('/').map((part) => Number.parseFloat(part))
+  const [width, height] = written ?? []
+  if (!width || !(width > 0)) return null
+  return height === undefined ? width : height > 0 ? width / height : null
 }
 
 /** A section's nodes in the layout language, a row of columns placed by `col` where the section may still take one. */

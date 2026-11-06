@@ -1045,9 +1045,16 @@ export { aiLayoutSpans }
 export function compileRow(
   scope: SectionScope,
   columns: Array<{ column: AiLayoutBlock[]; weight: number }>,
-  /** How the columns sit against each other: centered on a page, top-aligned in a footer (AGL-3735). */
-  alignItems: 'center' | 'flex-start' = 'center',
+  /**
+   * How the columns sit against each other: top-aligned in a footer (AGL-3735);
+   * on a page, centered where words stand beside a picture, else top-aligned
+   * (AGL-4152): words centered beside a tall form or a long column sit under a
+   * gap as tall as the difference, which reads as a missing block.
+   */
+  alignItems?: 'center' | 'flex-start',
 ): string {
+  const pictured = columns.some((entry) => entry.column.length > 0 && entry.column.every((block) => block.kind === 'image' || block.kind === 'video'))
+  const aligned = alignItems ?? (pictured ? 'center' : 'flex-start')
   const tree = scope.page.tree
   const spans = aiLayoutSpans(columns.map((entry) => entry.weight))
   const items = columns.map((entry, position) => {
@@ -1064,7 +1071,7 @@ export function compileRow(
   return tree.add(
     'muiGrid',
     { container: true, spacing: columns.length >= 3 ? '4' : '6' },
-    { alignItems },
+    { alignItems: aligned },
     items,
     'row',
   )
@@ -1372,6 +1379,13 @@ function compileButton(
       : style === 'secondary'
         ? { variant: 'outlined', color: onBrand ? 'inherit' : 'primary' }
         : { variant: 'contained', color: onBrand ? 'secondary' : 'primary' }
+  // A filled button of a page brought in is the site's one primary (AGL-4152): on a dark band or over a photo the
+  // dark scheme's primary is a lighter shade made for words on it, so the button keeps the light scheme's, the one
+  // its header's button and every other page's are drawn in. Its fill carries its own words.
+  const oneFill = verbatim && look.variant === 'contained' && look.color === 'primary' && (scope.band === 'dark' || !!scope.overPhoto)
+  // Sized to its words, never stretched across the column a Stack would
+  // stretch it over (AGL-3660), and aligned with its section.
+  const place = { alignSelf: scope.centered ? 'center' : 'flex-start' }
   const id = scope.page.tree.add(
     'muiButton',
     {
@@ -1380,15 +1394,13 @@ function compileButton(
       size: scope.index === 0 || block.style === 'large' ? 'large' : 'medium',
       ...(destination ? destinationProps(destination) : {}),
     },
-    // Sized to its words, never stretched across the column a Stack would
-    // stretch it over (AGL-3660), and aligned with its section.
-    { alignSelf: scope.centered ? 'center' : 'flex-start' },
+    oneFill ? null : place,
     null,
     'button',
   )
   if (destination) linkTo(scope, id, destination)
   if (film !== null) (scope.page.plays ??= []).push({ id, film, label })
-  return id
+  return oneFill ? scope.page.tree.add('muiBox', { colorScheme: 'light' }, place, [id], 'buttonScheme') : id
 }
 
 /** The film a button of a page brought in plays (AGL-4140), `video:<n>`, by its index; `null` for any other destination. */
@@ -2402,7 +2414,9 @@ function designPicture(
   // carries a style: a page of many pictures repeats no inline style (rule 16).
   // A source's own picture keeps the fit the source gives it (AGL-4138); a film's poster is its Video
   // element, filling the frame as the picture would (AGL-4140).
-  const fit = scope.page.options.verbatim === true && picture.given ? picture.fit?.objectFit : undefined
+  // Under words laid over it, a photo fills the band edge to edge whatever the source fits it as (AGL-4152): a photo
+  // fitted whole leaves bars of the scrim at its sides, a boxed picture under a header drawn as if over a hero.
+  const fit = scope.page.options.verbatim === true && picture.given && role !== 'coverPhoto' ? picture.fit?.objectFit : undefined
   const image = picture.video
     ? video(scope, picture.video, picture.src ? { src: picture.src, alt: picture.alt } : undefined, 'heroVideo', { ...imageSx, ...(fit ? { objectFit: fit } : {}) })
     : designImage(scope, picture, { width: '100%', height: '100%', ...(fit ? { objectFit: fit } : {}) }, Object.keys(imageSx).length ? imageSx : null)

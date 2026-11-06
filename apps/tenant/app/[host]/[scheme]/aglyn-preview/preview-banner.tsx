@@ -20,6 +20,13 @@ import type { CSSProperties } from 'react'
 /** The id the spec reaches for, and the one an author could style around. */
 export const PREVIEW_BANNER_ID = 'aglyn-entry-preview-banner'
 
+/**
+ * The preview bar's height, on `<html>` while it is up (AGL-4152): the same
+ * contract as the admin bar's `--aglyn-admin-bar-height`, which a site header
+ * over a photo hero (`muiAppBar`'s `overHero`) adds to its `top`.
+ */
+export const PREVIEW_BAR_HEIGHT_VAR = '--aglyn-preview-bar-height'
+
 /** Its height, spent twice: on the bar and on the spacer that makes room. */
 const BAR_HEIGHT_PX = 44
 
@@ -129,7 +136,12 @@ export function PreviewBanner({
       <div
         aria-hidden="true"
         style={{ blockSize: `${BAR_HEIGHT_PX}px`, flex: '0 0 auto' }}
-      />
+      >
+        {/* The spacer's height, for a header laid over a photo hero, which is
+            absolute and so not moved by the spacer: it adds this to its top
+            so it lies on the hero, never on the page above it (AGL-4152). */}
+        <style>{`:root{${PREVIEW_BAR_HEIGHT_VAR}:${BAR_HEIGHT_PX}px}`}</style>
+      </div>
     </>
   )
 }

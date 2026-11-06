@@ -107,6 +107,8 @@ import {
   aiSiteImportImproveOnlySoft,
   aiSiteImportNewSectionsWanted,
   aiSiteImportPageRoleOf,
+  aiSiteImportMeaningShare,
+  aiSiteImportRedesignWhy,
   type AiSiteImportImproved,
 } from './ai-site-import-improve'
 import {
@@ -668,6 +670,8 @@ export interface AiLayoutPageBuilt {
     names?: string[]
     /** Why its layout was kept, or the design lines a redesign was taken missing, by internal code (AGL-4152): the row keeps them, the owner never reads them. */
     missed?: string[]
+    /** Why its layout was kept, line by line (`aiSiteImportRedesignWhy`): each miss's code and the line it names, for the job's record. */
+    why?: string[]
   }
 }
 
@@ -1246,7 +1250,10 @@ export function aiImportedPageCheck(
         violations: [{ rule: null, code: 'layout-compile', message: 'This page could not be built. Try again.', detail: stored.error }] as AiDoctrineViolation[],
       }
     }
-    const report = validateAiDoctrineTree({ rootId: CANVAS_ROOT_ELEMENT_ID, nodes: stored.nodes }, 'page', {
+    // What a rule has one answer for is settled as on every page the platform writes (AGL-4152): a style
+    // repeated on each element of one frame moves to the frame, before the check reads it.
+    const nodes = aiSettleMechanicalRules({ rootId: CANVAS_ROOT_ELEMENT_ID, nodes: stored.nodes as unknown as Record<string, AiDoctrineNode> }, 'page').nodes as unknown as typeof stored.nodes
+    const report = validateAiDoctrineTree({ rootId: CANVAS_ROOT_ELEMENT_ID, nodes }, 'page', {
       ...context,
       scrollTargetIds: input.sectionIds,
       repeatsCompiled: true,
@@ -1255,7 +1262,7 @@ export function aiImportedPageCheck(
     return {
       compiled,
       value: {
-        nodes: aiWithSiteMotion(stored.nodes, input.motion ?? input.design ?? { seed: 0 }, { sectionIds: input.sectionIds }),
+        nodes: aiWithSiteMotion(nodes, input.motion ?? input.design ?? { seed: 0 }, { sectionIds: input.sectionIds }),
         load: report.load,
         settled: compiled.settled,
         dropped: [],
@@ -1476,6 +1483,7 @@ async function aiRunImprovedPage(scope: {
   const role = aiSiteImportPageRoleOf(doc, input.screen.slug)
   const needs = { role, wanted: aiSiteImportNewSectionsWanted(role, ledger, !!doc.proposed) }
   const instructions = aiSiteImportImproveInstructions(aiSiteImportImproveDigest({ siteName, scope: doc.siteLines ?? [], plan: doc.plan ?? null }))
+  const roleLines = aiSiteImportImproveRoleLines({ ...needs, folded: ledger.folded, kind: doc.plan?.site.kind ?? null, seed: aiSiteSeed(input.job.$id) })
   const prompt = aiSiteImportImprovePrompt({
     screen: input.screen,
     doc,
@@ -1483,7 +1491,7 @@ async function aiRunImprovedPage(scope: {
     destinations: aiSiteImportImproveDestinations(doc, ledger),
     kindLines: aiSiteKindDesignLines(input.job.inputs),
     seed: input.job.$id.slice(-6),
-    roleLines: aiSiteImportImproveRoleLines({ ...needs, folded: ledger.folded, kind: doc.plan?.site.kind ?? null, seed: aiSiteSeed(input.job.$id) }),
+    roleLines,
   })
   // The page's ceiling holds in code: the answer asks no more than it buys, and a re-ask it cannot pay for is not asked.
   const most = aiSiteImportImproveMaxTokens(input.model)
@@ -1504,6 +1512,8 @@ async function aiRunImprovedPage(scope: {
       plan: doc.plan ?? null,
       theme,
       needs,
+      // The platform's own words for what the page tells ("why choose it"), which the answer may say in any case (AGL-4152).
+      vocabulary: roleLines,
       ...(lenient ? { lenient: true } : {}),
       build: (page) =>
         aiImportedPageCheck({
@@ -1516,7 +1526,12 @@ async function aiRunImprovedPage(scope: {
         })(null),
       score: (built, destinations) => {
         const tree: SiteImportFidelityTree = { rootId: CANVAS_ROOT_ELEMENT_ID, nodes: built.nodes as unknown as SiteImportFidelityTree['nodes'] }
-        const report = siteImportFidelity(source, tree, { finish: 'improve', words: 'improved', theme, improved: { scope: facts, destinations, forms: savedForms, ...(doc.proposed ? { proposed: true } : {}) } })
+        const report = siteImportFidelity(source, tree, {
+          finish: 'improve',
+          words: 'improved',
+          theme,
+          improved: { scope: facts, destinations, forms: savedForms, vocabulary: roleLines, meaning: aiSiteImportMeaningShare(role), ...(doc.proposed ? { proposed: true } : {}) },
+        })
         return aiSiteImportImprovedMisses(report)
       },
     })
@@ -1548,8 +1563,9 @@ async function aiRunImprovedPage(scope: {
   }
   if (answered.status !== 'ok') {
     const codes = answered.status === 'needs_input' ? [...new Set(answered.violations.map((violation) => violation.code))] : [answered.status]
-    // Logged by its codes alone: an answer's words are the site's content.
-    console.info('ai imported page: its redesign did not pass, its layout kept', { status: answered.status, codes })
+    // Logged with each miss's line, cut short (AGL-4152): the answer is not kept, so this is all a later read of the job has to go on.
+    const why = answered.status === 'needs_input' ? aiSiteImportRedesignWhy(answered.violations) : []
+    console.info('ai imported page: its redesign did not pass, its layout kept', { status: answered.status, codes, why })
     // A new page has no words of its own to fall back on: it is left out, and its row says why.
     if (doc.proposed) return { ...spent, status: 'needs_input', violations: answered.status === 'needs_input' ? answered.violations : [], message: AI_SITE_IMPORT_PROPOSED_NOT_WRITTEN, answer: null }
     return {
@@ -1560,7 +1576,7 @@ async function aiRunImprovedPage(scope: {
         settled: [...plain.settled, { at: 'page', what: AI_SITE_IMPORT_LAYOUT_KEPT }],
         words: 'kept',
         // Why, by internal code, for the job's row and the report (AGL-4152): never shown to the owner as it is.
-        redesign: { status: 'layout-kept', added: [], pictures: null, missed: codes },
+        redesign: { status: 'layout-kept', added: [], pictures: null, missed: codes, ...(why.length ? { why } : {}) },
       },
     }
   }
