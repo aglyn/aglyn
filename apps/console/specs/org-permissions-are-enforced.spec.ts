@@ -289,6 +289,9 @@ const ENFORCED_AS: Record<OrgPermission, readonly string[]> = {
   // "Publish a site's items to the marketplace", beside the workspace keys.
   'marketplace.siteInstall': ["'marketplace.siteInstall'"],
   'marketplace.sitePublish': ["'marketplace.sitePublish'"],
+  // Declared connections (AGL-4193): every plugin-connections site route's
+  // gate, by the constant the routes read the key through.
+  'marketplace.siteConnections': ['holdsStampedSiteKey(host, uid, PLUGIN_CONNECTIONS_SITE_PERMISSION'],
   // Workflows and Domains (AGL-4047): `automations/manage`, the org
   // automations import and the pause door's managers ask "Manage org
   // automations", the pause door "Pause org automations on a site", and the
@@ -353,7 +356,7 @@ describe('every advertised org permission is enforced server-side (AGL-2444)', (
     expect([...CATALOG].sort()).toEqual(
       Object.keys(ENFORCED_AS).sort(),
     )
-    expect(CATALOG.length).toBe(97)
+    expect(CATALOG.length).toBe(98)
   })
 
   it('the search really searches — a key nobody uses finds nothing', () => {

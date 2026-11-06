@@ -597,10 +597,12 @@ export async function credentialsRoute(request: Request): Promise<Response> {
   const listing = await firestore().collection('marketplaceListings').doc(listingId).get()
   if (!listing.exists || listing.get('deletedAt')) return routeError(404, 'Unknown listing')
   const publisherOrgId = listing.get('profileId')
+  // The key spelled out (`PLUGIN_CONNECTIONS_CREDENTIALS_PERMISSION`), so the
+  // repo's enforcement guard finds the door that asks it.
   const verdict = await publisherPermissionVerdict(
     caller.uid,
     typeof publisherOrgId === 'string' ? publisherOrgId : null,
-    PLUGIN_CONNECTIONS_CREDENTIALS_PERMISSION,
+    'marketplace.connectionCredentials',
   )
   if (verdict === 'not-a-member') return routeError(403, 'Not your listing')
   if (verdict === 'refused') {
