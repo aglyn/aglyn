@@ -42,11 +42,12 @@ import useCurrentOrg from '../../../../hooks/use-current-org'
  */
 const OrgData: NextPageWithLayout<Record<string, never>> = () => {
   const orgSlug = useOrgSlug()
-  // Each dataset is a tab of this page, at `/data/<datasetId>` (AGL-4047):
-  // this file serves the bare page and `[datasetId]/page.tsx` re-exports it.
-  const params = useParams<{ datasetId?: string }>()
-  const datasetId = params?.datasetId
-  const segments = useMemo(() => (datasetId ? [datasetId] : []), [datasetId])
+  // Each dataset is a tab of this page, at `/data/<id>` (AGL-4047): this
+  // file serves the bare page and `[id]/page.tsx` re-exports it. The plugin
+  // reads the segments; the page only hands them down.
+  const params = useParams<{ id?: string }>()
+  const openId = params?.id
+  const segments = useMemo(() => (openId ? [openId] : []), [openId])
   const basePath = buildRoute(Route.ORG_DATA, { orgSlug })
   const { currentOrg, loading } = useOrgScope()
   const { org, ready: orgReady } = useCurrentOrg()
