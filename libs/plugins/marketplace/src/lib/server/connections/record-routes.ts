@@ -16,8 +16,9 @@
  */
 
 import { firebaseAdmin } from '@aglyn/tenant-data-admin'
-import { pluginConnectionRecordDocId, type PluginConnectionRecordDoc } from '../../model/plugin-connections'
+import type { PluginConnectionRecordDoc } from '../../model/plugin-connections'
 import { isListingId } from './config'
+import { connectionRecordRef } from './connection-store'
 import { installedConnection } from './installed-connection'
 import { routeError, routeJson, siteConnectionsGate } from './routes'
 import { toSiteRecord } from './site-records'
@@ -66,12 +67,7 @@ export async function recordRoute(request: Request): Promise<Response> {
   const found = await installedConnection(firestore(), { hostId: actor.hostId, orgId: actor.orgId, listingId, connectionId })
   if (!found) return routeError(404, 'This site runs no plugin that declares that connection.')
   if (!actor.planAllows) return routeJson({ record: null, planAllows: false })
-  const snapshot = await firestore()
-    .collection('hosts')
-    .doc(actor.hostId)
-    .collection('pluginConnections')
-    .doc(pluginConnectionRecordDocId(listingId, connectionId))
-    .get()
+  const snapshot = await connectionRecordRef(firestore(), actor.hostId, listingId, connectionId).get()
   const data = snapshot.data() as Record<string, unknown> | undefined
   const held = data && data['listingId'] === listingId && data['connectionId'] === connectionId ? toSiteRecord(data, found.connection) : null
   const record: PluginConnectionRecordDoc | null = held

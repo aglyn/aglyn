@@ -34,6 +34,7 @@ import type { PluginSiteCspSource } from '@aglyn/aglyn/plugin-manager/plugin-sit
 import type { RealmPluginInstall } from '@aglyn/aglyn/plugin-manager/realm-plugins'
 import type { SitePageContext, SitePageEnricher } from '@aglyn/aglyn/plugin-manager/site-page-hooks'
 import { PLUGIN_CONNECTIONS_FEATURE, pluginConnectionRecordDocId } from '../../model/plugin-connections'
+import { connectionsCollection } from './connection-store'
 import { installedConnectionsForHost } from './installed-connection'
 
 /*
@@ -123,10 +124,7 @@ export async function readSiteConnectionRecords(
   deps: SiteConnectionRecordsReadDeps,
   hostId: string,
 ): Promise<SiteConnectionRecordEntry[]> {
-  const snapshot = await deps.firestore
-    .collection('hosts')
-    .doc(hostId)
-    .collection('pluginConnections')
+  const snapshot = await connectionsCollection(deps.firestore, hostId)
     .where('kind', '==', 'record')
     .limit(SITE_CONNECTION_RECORDS_READ)
     .get()
