@@ -28,7 +28,7 @@ import {
 } from '@aglyn/aglyn/app-utils/media-ref'
 import { ESTIMATED_PAGE_TRANSFER_BYTES } from '@aglyn/aglyn/app-utils/plan-entitlements'
 import { createIdUrlSafe } from '@aglyn/aglyn/foundation/constants/app'
-import { videoEmbedOf } from '@aglyn/aglyn/plugin-manager/video-embed-provider'
+import { videoEmbedOf, videoEmbedPosterSrc } from '@aglyn/aglyn/plugin-manager/video-embed-provider'
 import { FREE_AI_TASTE_CREDITS_PER_MONTH } from '../plan-entitlements'
 import {
   REUSABLE_INSTANCE_COMPONENT_ID,
@@ -259,6 +259,13 @@ export interface AiDoctrineTreeContext extends AiNodeTreeContext {
    * and questions are the source's, laid out as the source lays them out.
    */
   ownWords?: boolean
+  /**
+   * The page shows a video host's own still for a hosted film with no poster
+   * (AGL-4140): a page brought in whose wave was stamped with
+   * `release_video_embed_posters`. Rule 16 then passes such a film, which
+   * loads no file before a press and has the host's still for a picture.
+   */
+  hostStills?: boolean
   /**
    * Lines a model reworded on a page of its owner's own words (AGL-4152).
    * Rule 14's filler, placeholder and judgment-word checks judge copy a
@@ -3128,7 +3135,11 @@ export function detectHeavyDocument(
       node.componentId === 'video' &&
       (node.props?.['autoPlay'] === true ||
         node.props?.['preload'] === 'auto' ||
-        (typeof node.props?.['src'] === 'string' && node.props['src'] && !node.props?.['poster']))
+        (typeof node.props?.['src'] === 'string' &&
+          node.props['src'] &&
+          !node.props?.['poster'] &&
+          // A hosted film whose host's own still is its picture (AGL-4140).
+          !(context.hostStills === true && videoEmbedPosterSrc(node.props['src']))))
     ) {
       video.push(id)
     }

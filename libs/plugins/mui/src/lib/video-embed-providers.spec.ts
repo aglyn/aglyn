@@ -24,6 +24,8 @@ import {
   videoEmbedOf,
   videoEmbedPlayerOrigins,
   videoEmbedPlayerSrc,
+  videoEmbedPosterOrigins,
+  videoEmbedPosterSrc,
   videoEmbedUrl,
 } from '@aglyn/aglyn/plugin-manager/video-embed-provider'
 import { muiVideoEmbedProviders } from './video-embed-providers'
@@ -356,5 +358,25 @@ describe('the declaration reads the links Vimeo hands an author (AGL-4140)', () 
         loop: true,
       }),
     ).toBe(`${VIMEO_PLAYER_ORIGIN}/video/${VM}?autoplay=0&dnt=1&muted=1&loop=1`)
+  })
+})
+
+describe('the hosts whose own still of a film a page may show (AGL-4140)', () => {
+  const YT = 'dQw4w9WgXcQ'
+
+  it("shows YouTube's own still, rebuilt from the id alone", () => {
+    for (const link of [
+      `https://www.youtube.com/watch?v=${YT}&evil=1`,
+      `https://youtu.be/${YT}#frag`,
+      `https://www.youtube.com/shorts/${YT}`,
+    ]) {
+      expect(videoEmbedPosterSrc(link)).toBe(`https://i.ytimg.com/vi/${YT}/hqdefault.jpg`)
+    }
+  })
+
+  it('names only YouTube’s still origin: Vimeo and Wistia have no public one', () => {
+    expect(videoEmbedPosterOrigins()).toEqual(['https://i.ytimg.com'])
+    expect(videoEmbedPosterSrc('https://vimeo.com/76979871')).toBeUndefined()
+    expect(videoEmbedPosterSrc(`https://fast.wistia.net/embed/iframe/${ID}`)).toBeUndefined()
   })
 })

@@ -29,17 +29,20 @@
  * middleware sends.
  */
 
-import { videoEmbedPlayerOrigins } from '@aglyn/aglyn/plugin-manager/video-embed-provider'
+import {
+  videoEmbedPlayerOrigins,
+  videoEmbedPosterOrigins,
+} from '@aglyn/aglyn/plugin-manager/video-embed-provider'
 import { NextRequest } from 'next/server'
 
 /** See `csp-no-script-src.spec.ts` — a `.aglyn.app` host redirects under jest. */
 const HOST = 'demo.localhost:4500'
 
-async function frameSrc(): Promise<string[]> {
+async function directiveOf(name: string, host = HOST): Promise<string[]> {
   const { middleware } = await import('../middleware')
   const response = await middleware(
-    new NextRequest(new URL('/', `https://${HOST}`), {
-      headers: { host: HOST },
+    new NextRequest(new URL('/', `https://${host}`), {
+      headers: { host },
     }),
     {} as never,
   )
@@ -50,10 +53,12 @@ async function frameSrc(): Promise<string[]> {
   const directive = policy
     .split(';')
     .map((part) => part.trim())
-    .find((part) => part.startsWith('frame-src '))
-  if (!directive) throw new Error(`no frame-src in the policy: ${policy}`)
+    .find((part) => part.startsWith(`${name} `))
+  if (!directive) throw new Error(`no ${name} in the policy: ${policy}`)
   return directive.split(' ').slice(1)
 }
+
+const frameSrc = () => directiveOf('frame-src')
 
 describe('the tenant frame-src and the declared video hosts', () => {
   it('admits every declared player origin', async () => {
@@ -61,5 +66,43 @@ describe('the tenant frame-src and the declared video hosts', () => {
     expect(origins.length).toBeGreaterThan(0)
     const sources = await frameSrc()
     for (const origin of origins) expect(sources).toContain(origin)
+  })
+})
+
+/**
+ * A declared host's film stills (AGL-4140), such as YouTube's, reach the
+ * published page's `img-src` only where the site's verdict says
+ * `release_video_embed_posters` is on for its workspace. The verdict is the
+ * route's answer, read here through the same fetch the middleware makes.
+ */
+describe('the tenant img-src and the declared hosts’ film stills', () => {
+  const originalFetch = global.fetch
+  afterEach(() => {
+    global.fetch = originalFetch
+  })
+  const verdictSays = (verdict: Record<string, unknown>) => {
+    global.fetch = (async () =>
+      new Response(JSON.stringify({ locked: false, ...verdict }), {
+        status: 200,
+        headers: { 'Content-Type': 'application/json' },
+      })) as typeof global.fetch
+  }
+
+  it('admits every declared still origin where the verdict says the flag is on', async () => {
+    verdictSays({ videoEmbedPosters: true })
+    const sources = await directiveOf('img-src', 'stills-on.localhost:4500')
+    expect(videoEmbedPosterOrigins().length).toBeGreaterThan(0)
+    for (const origin of videoEmbedPosterOrigins()) expect(sources).toContain(origin)
+  })
+
+  it('admits none where the verdict says off, or says nothing of it', async () => {
+    verdictSays({ videoEmbedPosters: false })
+    const off = await directiveOf('img-src', 'stills-off.localhost:4500')
+    verdictSays({})
+    const silent = await directiveOf('img-src', 'stills-silent.localhost:4500')
+    for (const origin of videoEmbedPosterOrigins()) {
+      expect(off).not.toContain(origin)
+      expect(silent).not.toContain(origin)
+    }
   })
 })

@@ -419,6 +419,18 @@ export const FLAG_DOC_PAGES: Partial<
   // ("a card with a price"), never an amount. Create a site covers every way
   // a site starts, so it discloses beside its own mention, tied to it by the
   // window.
+  // AGL-4140. The flag shows YouTube's own thumbnail as the poster of a
+  // YouTube film with none. The Video page covers every way the element
+  // plays a film, so it discloses beside the one section about it.
+  release_video_embed_posters: [
+    {
+      path: 'docs/building-sites/besigner/video.md',
+      disclosure: [
+        /### A YouTube video without a poster[\s\S]{0,80}\*\*YouTube thumbnails as posters are rolling out\*\*,[\s\S]{0,40}may not have them\s+yet\./,
+      ],
+      checkNoPriceClaim: true,
+    },
+  ],
   release_site_starters: [
     {
       path: 'docs/building-sites/site-templates/site-starters.md',
