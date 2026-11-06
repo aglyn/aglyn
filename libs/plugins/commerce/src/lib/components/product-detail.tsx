@@ -187,6 +187,9 @@ const ProductChoiceCards = lazy(() => import('./product-choice-cards'))
  */
 const ProductBuilderMockup = lazy(() => import('./product-builder-mockup'))
 
+/** The back-in-stock alert, only on a sold-out variant (split out for AGL-4205). */
+const ProductRestockNotify = lazy(() => import('./product-restock-notify'))
+
 /** The Details and Shipping & returns folds (AGL-4205: split out), only where switched on. */
 const ProductDetailPanels = lazy(() => import('./product-detail-panels'))
 
@@ -442,8 +445,6 @@ const ProductDetail = forwardRef<HTMLDivElement, ProductDetailProps>(
     const [askPostal, setAskPostal] = useState(false)
     const [added, setAdded] = useState(false)
     const [wishlisted, setWishlisted] = useState(false)
-    const [notifyEmail, setNotifyEmail] = useState('')
-    const [notifyState, setNotifyState] = useState<'idle' | 'done'>('idle')
     // Buyer-chosen billing (AGL-545): only meaningful when the product
     // is subscriptionOptional; defaults to a one-time purchase.
     const [billing, setBilling] = useState<CommerceModel.CheckoutBillingChoice>(
@@ -1282,54 +1283,10 @@ const ProductDetail = forwardRef<HTMLDivElement, ProductDetailProps>(
             </Alert>
           ) : null}
           {variant?.soldOut && hostId ? (
-            notifyState === 'done' ? (
-              <Alert severity="success" sx={{ mb: 2 }}>
-                {'We will email you when it is back.'}
-              </Alert>
-            ) : (
-              <Box sx={{ display: 'flex', gap: 1, mb: 2 }}>
-                <TextField
-                  placeholder="you@example.com"
-                  type="email"
-                  // Third instance of the nameless-input defect (AGL-2392).
-                  // Named for its job rather than "Email address": this row
-                  // appears inside a product page that may also carry the
-                  // newsletter block, and two fields both announced as
-                  // "Email address" is barely better than none.
-                  slotProps={{
-                    htmlInput: {
-                      'aria-label': 'Email address for back-in-stock alert',
-                    },
-                  }}
-                  value={notifyEmail}
-                  onChange={(event) => setNotifyEmail(event.target.value)}
-                  size="small"
-                  sx={{ flex: 1 }}
-                />
-                <Button
-                  size="small"
-                  variant="outlined"
-                  disabled={!notifyEmail.trim()}
-                  onClick={async () => {
-                    const response = await siteFetch(
-                      '/api/commerce/notify-restock',
-                      {
-                        method: 'POST',
-                        headers: { 'Content-Type': 'application/json' },
-                        body: JSON.stringify({
-                          hostId,
-                          productId: resolved.id,
-                          email: notifyEmail,
-                        }),
-                      },
-                    ).catch(() => null)
-                    if (response?.ok) setNotifyState('done')
-                  }}
-                >
-                  {'Notify me'}
-                </Button>
-              </Box>
-            )
+            // The back-in-stock alert, only on a sold-out variant (its own chunk, AGL-4205).
+            <Suspense fallback={null}>
+              <ProductRestockNotify hostId={hostId} productId={resolved.id} siteFetch={siteFetch} />
+            </Suspense>
           ) : null}
           {!hideDescription && resolved.description ? (
             <Typography
