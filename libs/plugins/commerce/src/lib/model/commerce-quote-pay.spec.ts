@@ -260,6 +260,8 @@ describe('the customer’s page', () => {
         'proofOnly',
         // The proofs and the customer's own answer (AGL-4096).
         'proofs',
+        // The conversation with the business (AGL-4207).
+        'messages',
         'receiptUrl',
         'respondable',
         'response',

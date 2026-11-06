@@ -53,6 +53,7 @@ import { useCallback, useEffect, useMemo, useRef, useState } from 'react'
 import { downloadCommercePdf } from './commerce-pdf-download'
 import { PayLinkReadinessNoticeFor } from './pay-link-readiness-notice.component'
 import { QuotePayLinkSection } from './quote-pay-link.component'
+import { QuoteMessagesSection } from './quote-messages.component'
 import { QuoteProofsSection, QuoteRequestFilesSection } from './quote-proofs.component'
 import { QuoteSendSection } from './quote-send.component'
 
@@ -565,6 +566,8 @@ export function QuoteEditorDialog(props: QuoteEditorDialogProps) {
               }}
             />
           ) : null}
+          {/* The conversation with the customer (AGL-4207), kept with the quote through every revision. */}
+          {quote ? <QuoteMessagesSection hostId={hostId} quoteId={quote.$id} quote={quote} canSend={canSend} /> : null}
           {/* Where it came from (AGL-4098): the request, its files and its conversation. */}
           {start?.request ? (
             <QuoteStartedFromRequest

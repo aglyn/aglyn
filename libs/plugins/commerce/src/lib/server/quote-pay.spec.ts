@@ -71,7 +71,18 @@ function docRef(path: string): any {
 }
 
 function collectionRef(path: string): any {
-  return { doc: (id: string) => docRef(`${path}/${id}`) }
+  const ref: any = {
+    doc: (id: string) => docRef(`${path}/${id}`),
+    // A query (the page's conversation, AGL-4207) answers this collection's own documents.
+    orderBy: () => ref,
+    limit: () => ref,
+    get: async () => ({
+      docs: [...docs.keys()]
+        .filter((key) => key.startsWith(`${path}/`) && !key.slice(path.length + 1).includes('/'))
+        .map((key) => snapshotOf(key)),
+    }),
+  }
+  return ref
 }
 
 const firestore: any = {

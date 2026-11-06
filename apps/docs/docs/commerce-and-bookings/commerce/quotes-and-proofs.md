@@ -351,6 +351,30 @@ customer. These notices follow your settings for order notifications.
 A paid quote still shows its proofs, with nothing to press. A link you replaced shows
 nothing of the quote, proofs included, and takes no answer.
 
+## Messages with your customer {#messages}
+
+A quote keeps its own conversation with your customer, under **Messages** on the
+quote. It stays with the quote through every revision and after it's paid.
+
+- **Reply from the quote.** Write in **Messages** and choose **Send reply**. It's
+  emailed to the customer's email on the quote (or where you last emailed the quote)
+  from your site, in the same email conversation as the quote emails, with a **View
+  your quote** button. The reply is listed under **Messages** with who sent it.
+  Sending a reply needs **Send quotes and invoices to customers**; anyone who edits
+  quotes can read the conversation.
+- **Your customer writes on the quote page.** Under **Messages** on the quote page,
+  your customer writes to you and chooses **Send message**. It's listed on the quote,
+  and you're notified in Aglyn and by email as **Customer message**, with what they
+  wrote and a **View quote** button. Replying to that email reaches your customer.
+- **Your customer replies by email.** Their email answer goes to your site's contact
+  email (or yours, if the site has none), like an answer to an
+  [Inbox reply](../../content-and-data/forms/overview.md#replying-to-a-submission). It doesn't
+  appear under **Messages**: Aglyn doesn't receive email.
+
+The reply email is the **Quote message** email under **Emails**, where you can change
+its wording and colors like your other site emails. Your customer's page shows what
+each of you wrote, never an email address or who on your team sent it.
+
 ## Proof approval and paying {#approval-and-paying}
 
 Whether paying waits on the approval is up to you, quote by quote, with **Customers

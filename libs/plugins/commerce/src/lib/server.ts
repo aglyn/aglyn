@@ -481,6 +481,10 @@ export function registerCommerceApi(): void {
   registerPluginApiRoute('commerce/quote-respond', async (req, res) =>
     (await import('./server/quote-proofs')).quoteRespondHandler(req, res),
   )
+  // A customer's message on the quote page (AGL-4207), behind the same link.
+  registerPluginApiRoute('commerce/quote-message', async (req, res) =>
+    (await import('./server/quote-messages')).quoteMessageHandler(req, res),
+  )
   // What became of a session the shopper was returned from (AGL-3606).
   registerPluginApiRoute('commerce/checkout-status', checkoutStatusHandler)
   registerPluginApiRoute('commerce/product', productHandler)

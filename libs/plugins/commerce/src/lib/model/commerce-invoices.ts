@@ -416,6 +416,7 @@ export function buildInvoicePageView(input: {
     proofs: [],
     response: null,
     respondable: false,
+    messages: [],
   }
 }
 

@@ -389,7 +389,14 @@ export async function payLinkPageView(
     store: CommerceModel.payLinkStoreOf({ tax: store.get('tax') }),
     paymentsReady,
   }
-  return kind === 'quote' ? CommerceModel.buildQuotePageView(view) : CommerceModel.buildInvoicePageView(view)
+  if (kind !== 'quote') return CommerceModel.buildInvoicePageView(view)
+  // The quote's conversation rides its page (AGL-4207): every view of it, an answer's too.
+  const orderRef = deps.firestore().collection('hosts').doc(hostId).collection('orders').doc(orderId)
+  const listed = await orderRef.collection('messages').orderBy('atMs', 'desc').limit(CommerceModel.QUOTE_MESSAGES_SHOWN).get()
+  const messages = CommerceModel.quotePageMessages(
+    listed.docs.map((entry) => ({ id: entry.id, data: entry.data() as Partial<CommerceModel.QuoteMessage> })),
+  )
+  return CommerceModel.buildQuotePageView({ ...view, messages })
 }
 
 /** `GET /api/commerce/quote-view`: the quote page's data. */

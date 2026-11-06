@@ -256,7 +256,8 @@ function headerOf(req: PluginApiRequest, name: string): string {
 const DOC_ID = /^(?!__.*__$)[^/]{1,200}$/
 
 /** The actions under "Send quotes and invoices to customers" (`commerce.quotes.send`). */
-const SEND_ACTIONS = new Set(['pay-link', 'replace-link', 'send'])
+// A reply from the quote emails the customer, as a send does (AGL-4207).
+const SEND_ACTIONS = new Set(['pay-link', 'replace-link', 'send', 'reply'])
 
 /** The ship-to as a tax service reads it, or `null` to tax at the store's address. */
 function serviceAddress(shipTo: CommerceModel.OrderAddress | null): PluginTaxAddress | null {
@@ -459,6 +460,22 @@ export async function handleQuote(deps: QuoteDeps, req: PluginApiRequest): Promi
       hostRef,
       host: (host.data() ?? {}) as Record<string, unknown>,
       firestore,
+      actor,
+      senderEmail: decoded.email ? String(decoded.email) : null,
+    })
+  }
+
+  if (action === 'messages' || action === 'reply') {
+    const quoteId = String(body['quoteId'] ?? '')
+    if (!DOC_ID.test(quoteId)) return refuse(400, 'Missing quoteId')
+    return (await import('./quote-messages')).handleQuoteMessagesAction(deps, {
+      action,
+      req,
+      body,
+      hostId,
+      quoteId,
+      hostRef,
+      host: (host.data() ?? {}) as Record<string, unknown>,
       actor,
       senderEmail: decoded.email ? String(decoded.email) : null,
     })

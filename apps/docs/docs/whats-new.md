@@ -12,6 +12,11 @@ for the how-to.
 
 ## November 2026 — Aglyn 1.0 (newest)
 
+- **Messages on a quote.** [Messages with your customer](commerce-and-bookings/commerce/quotes-and-proofs.md#messages)
+  — reply to a customer from the quote, in the same email conversation as the quote,
+  and let them write to you on the quote page. You're notified of what they write,
+  and the conversation stays with the quote through every revision. The Inbox and
+  quotes share one reply box.
 - **Card-rate processing on every sale, and no buy-now-pay-later.** [Payment methods](commerce-and-bookings/commerce/overview.md#payment-methods)
   — storefront checkout, bookings, quotes, invoices and memberships pass through
   Stripe's card rate, 2.9% + 30¢, where online sales used to carry 6% + 30¢. Klarna,
