@@ -105,6 +105,8 @@ export async function loadSubscriptionsSummary(
       query(subscriptions, where('status', '==', status), where('livemode', '==', true)),
       { subscriptions: count() },
     )
+  // AGL-1715-EXEMPT: four separate count queries, one per figure on the card;
+  // the status words are each query's own filter, not a membership set.
   const [monthly, yearly, trials, pastDue] = await Promise.all([
     paying('month'),
     paying('year'),

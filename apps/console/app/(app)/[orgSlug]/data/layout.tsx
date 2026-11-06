@@ -17,11 +17,14 @@
 
 import type { Metadata } from 'next'
 import type { ReactNode } from 'react'
+import { segmentTitle } from '../../../page-title'
 
 // Title-only shell (AGL-1059): the page is a client component, and a client
 // component cannot export `metadata` — so its title lives here, in the
-// nearest server layout. The suffix comes from the root title template.
-export const metadata: Metadata = { title: 'Organization data' }
+// nearest server layout. The suffix comes from the root title template, and
+// `segmentTitle` re-declares it because a dataset's tab and a record's page
+// are titled below this one (AGL-4047).
+export const metadata: Metadata = { title: segmentTitle('Organization data') }
 
 export default function OrgDataTitleLayout({
   children,

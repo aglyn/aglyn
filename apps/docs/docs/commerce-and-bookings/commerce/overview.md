@@ -493,7 +493,13 @@ country it serves.
 | Stablecoins | A crypto wallet holding USDC or another supported stablecoin | USD only, up to $10,000 |
 
 The card only lists the methods the platform offers. A method missing from
-your card is not available for storefronts yet. Anyone holding **Manage orders**
+your card is not available for storefronts yet.
+
+**Quotes and invoices never offer buy-now-pay-later.** A quote's or an invoice's
+**Pay** offers a card and the wallets you leave on (Apple Pay, Google Pay, Link,
+Cash App Pay, Amazon Pay, and stablecoins if you turn them on), and never Klarna,
+Afterpay or Affirm, whatever this card says. The same goes for a draft order's
+payment link. That keeps their processing at Stripe's card rate, 2.9% + 30¢. Anyone holding **Manage orders**
 can read the card; changing it takes **Manage payment methods**, which a site's admins
 hold by default.
 
