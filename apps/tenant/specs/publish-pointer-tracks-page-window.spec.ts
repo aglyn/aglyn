@@ -27,9 +27,10 @@
  *    rebuilds itself from a version pointer that is still stale. That is the
  *    exact failure the shorter TTL exists to close, and raising the page
  *    window alone would silently reopen it.
- *  - BELOW the window, the shorter TTL buys nothing at all: a page served
- *    from the ISR cache never re-runs the loader, so a fresher pointer is not
- *    read by anyone. It would be paying for reads that change no outcome.
+ *  - BELOW the window, the shorter TTL is not free: a TTL read inside the
+ *    render lowers the page's own window to match (AGL-4121, see the ceiling
+ *    note on the page's `revalidate`), so the page regenerates at the
+ *    pointer's pace, not its own.
  *
  * Both numbers are read as source text rather than imported. The page module
  * cannot be imported outside a Next server context, and importing the constant

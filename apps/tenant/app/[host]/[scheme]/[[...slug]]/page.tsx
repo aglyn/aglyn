@@ -54,10 +54,27 @@ import type { Props } from './types'
 /**
  * 60s WAS THE BACKSTOP SET TO THE REQUEST RATE (AGL-1152).
  *
- * This is the only value that controls ISR on this route. The `revalidate`
- * fields the loader returns are INERT — Pages Router leftovers that nothing but
- * the specs reads (see the note on `LoadPageDataResult`) — so tuning them
- * changes nothing and this line is the whole lever.
+ * The `revalidate` fields the loader returns are INERT — Pages Router
+ * leftovers that nothing but the specs reads (see the note on
+ * `LoadPageDataResult`) — so tuning them changes nothing.
+ *
+ * ⛔ This line is a CEILING, not the window (AGL-4121). Every `unstable_cache`
+ * read inside a regeneration lowers that regeneration's `revalidate` to the
+ * shortest TTL it saw (`withRenderCache` in `render-cache.ts`; Next's
+ * `unstable_cache` writes it to the prerender store, which is what the ISR
+ * entry is stamped with). So the window a page actually gets is the MINIMUM of
+ * this value and every render-cache TTL its render read. As of AGL-4121:
+ *
+ *   - a full page reads `getRealmPluginInstalls` at 300s, the security bound
+ *     on a revoked plugin (`realm-plugins.ts`), so it regenerates every 300s;
+ *   - the screen pointer is read at `PUBLISH_POINTER_TTL_SECONDS` (600s);
+ *   - the host document and everything on `PUBLISHED_SITE_DATA_TTL_SECONDS`
+ *     sit at 3600s, which caps even a 404, a redirect or a maintenance page.
+ *
+ * 86400 is the decided ceiling for a tenant page. It takes effect only as
+ * those TTLs are raised to match, and the 300s one is a security decision,
+ * not a cost knob. Raise none of them without first confirming every source
+ * the page bakes in announces its own change.
  *
  * At 60s a page is stale again a minute after it is built, so any path requested
  * less often than that regenerates on essentially EVERY visit and pays the full
@@ -109,8 +126,16 @@ import type { Props } from './types'
  * regenerating per visit; that is the floor, not a defect. Re-read
  * Write Utilization before moving this again — above 1.0x means the window is
  * paying for itself, and the raw write count on its own says nothing.
+ *
+ * ## 86400 (AGL-4121)
+ *
+ * ISR writes ran about as often as reads, so the ceiling moved from an hour to
+ * a day. The timer was only ever a backstop: publishing, route changes (old
+ * and new address), site-wide settings, layouts, components, redirects,
+ * plugin pins and content entries all drop their pages on demand. Read the
+ * ceiling note above before expecting this number to show in the bill.
  */
-export const revalidate = 3600
+export const revalidate = 86400
 export const dynamicParams = true
 
 /**
