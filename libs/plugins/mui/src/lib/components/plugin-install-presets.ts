@@ -53,6 +53,8 @@ export interface PluginInstallLike {
     name?: string
     restrictParent?: string[]
     restrictChildren?: string[]
+    /** The site elements the version registers itself, when it is signed (AGL-4196). */
+    contributes?: { site?: { components?: unknown } }
   }
 }
 
@@ -95,6 +97,22 @@ export function muiPluginInstallToPreset(
 }
 
 /**
+ * Whether the pinned version's own site elements are registered in this
+ * editor (AGL-4196): its manifest declares `contributes.site.components` and
+ * every one of them has a schema. Only a signed (realm-trusted) bundle can
+ * register a component in the app realm, so this is true exactly when the
+ * plugin loaded trusted and offers its elements itself. A sandboxed plugin,
+ * one whose signature did not verify, or one still loading keeps the generic
+ * entry. Read through the observable registry, so a caller tracking it sees
+ * the answer change when the bundle finishes loading.
+ */
+export function realmRegistersItsSiteElements(install: PluginInstallLike): boolean {
+  const declared = install.manifest?.contributes?.site?.components
+  if (!Array.isArray(declared) || !declared.length) return false
+  return declared.every((id) => typeof id === 'string' && Boolean(Aglyn.components.getSchema(id as Aglyn.ComponentId)))
+}
+
+/**
  * Every drawer preset an installed plugin contributes (AGL-1031).
  *
  * The generic Plugin element, plus one per element the PINNED version
@@ -109,7 +127,10 @@ export function muiPluginInstallToPreset(
 export function muiPluginInstallToPresets(
   install: PluginInstallLike,
 ): Aglyn.PresetSchema[] {
-  const generic = muiPluginInstallToPreset(install)
+  // A signed (realm) version that registered its own site elements offers
+  // those, under their own categories; the generic sandboxed entry beside
+  // them would place a frame that draws nothing for such a plugin (AGL-4196).
+  const generic = realmRegistersItsSiteElements(install) ? null : muiPluginInstallToPreset(install)
   const presets = generic ? [generic] : []
   const listingId = install.listingId ?? install.$id
   if (!listingId) return presets
