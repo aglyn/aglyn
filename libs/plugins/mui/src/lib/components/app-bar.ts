@@ -20,7 +20,7 @@ import { mdiPageLayoutHeader } from '@aglyn/shared-data-mdi'
 import { ScrollReaction } from '@aglyn/shared-ui-jsx/components/scroll-reaction'
 import MuiAppBar, { type AppBarProps } from '@mui/material/AppBar'
 import { type SxProps, type Theme } from '@mui/material/styles'
-import { createElement, forwardRef, type Ref } from 'react'
+import { createElement, forwardRef, useEffect, useState, type Ref } from 'react'
 import { BUNDLE_ID } from '../constants/bundle-common'
 import {
   applySemanticElement,
@@ -48,11 +48,22 @@ export interface AglynAppBarProps extends AppBarProps {
   /**
    * Sits over a photo hero (AGL-3660): on a page whose first band runs under
    * the header (a Section with `underHeader`), the bar lies over that band
-   * with no background of its own and its words in white, and scrolls away
-   * with it; on every other page it is the bar it always was.
+   * with no background of its own and its words in white. A Sticky or Fixed
+   * bar stays pinned and turns back into its own solid self once the page
+   * has scrolled (`OVER_HERO_SOLID_ATTRIBUTE`); any other bar scrolls away
+   * with the band. On every other page it is the bar it always was.
    */
   overHero?: boolean
 }
+
+/**
+ * Set on an over-hero bar that is pinned (Sticky or Fixed), and on one that
+ * has scrolled past the top and turned solid. A logo that swaps to a white
+ * version over the photo reads the second one to swap back:
+ * `body:has([data-aglyn-under-header]) header:not([data-over-hero-solid]) &`.
+ */
+export const OVER_HERO_PINNED_ATTRIBUTE = 'data-over-hero-pinned'
+export const OVER_HERO_SOLID_ATTRIBUTE = 'data-over-hero-solid'
 
 /**
  * Over a page that opens under the header, the bar lies on the photo. One
@@ -70,11 +81,27 @@ export const overHeroSx = (theme: Theme) => ({
     top: 'calc(var(--aglyn-admin-bar-height, 0px) + var(--aglyn-announcement-bar-height, 0px))',
     left: 0,
     right: 0,
+    transition: theme.transitions.create(
+      ['background-color', 'color', 'box-shadow', 'border-color'],
+      { duration: theme.transitions.duration.shorter },
+    ),
+  },
+  // Clear over the photo until a pinned bar turns solid.
+  [`body:has([${UNDER_HEADER_ATTRIBUTE}]) &:not([${OVER_HERO_SOLID_ATTRIBUTE}])`]: {
     backgroundColor: 'transparent',
     backgroundImage: 'none',
     boxShadow: 'none',
-    borderBottom: 0,
+    borderBottomColor: 'transparent',
     color: theme.palette.common.white,
+  },
+  // A Sticky or Fixed bar, once the announcement bar has scrolled away,
+  // pins to the top as the bar it is on every other page: its own
+  // background, colors and border, which the rule above no longer clears.
+  // The switch happens exactly where the absolute bar reaches the top, so
+  // nothing jumps.
+  [`body:has([${UNDER_HEADER_ATTRIBUTE}]) &[${OVER_HERO_PINNED_ATTRIBUTE}][${OVER_HERO_SOLID_ATTRIBUTE}]`]: {
+    position: 'fixed',
+    top: 'var(--aglyn-admin-bar-height, 0px)',
   },
 })
 
@@ -168,9 +195,61 @@ ScrollAwareAppBar.displayName = 'AglynScrollAwareAppBar'
  * wrapper is the only place to intercept it, since the schema's props reach
  * MUI directly. `createElement` rather than JSX keeps this a `.ts` file.
  */
+/**
+ * Has the page scrolled past where a pinned over-hero bar should turn solid?
+ * That is the announcement bar's height: until it has gone, the bar is still
+ * lying on the photo below it. Listens only for a bar that asked to be pinned
+ * over a hero; SSR and the first paint read "not yet".
+ */
+export function useOverHeroSolid(enabled: boolean): boolean {
+  const [solid, setSolid] = useState(false)
+  useEffect(() => {
+    if (!enabled || typeof window === 'undefined') return undefined
+    let frame = 0
+    let pending = false
+    const read = () => {
+      pending = false
+      const announcement =
+        parseFloat(
+          getComputedStyle(document.documentElement).getPropertyValue(
+            '--aglyn-announcement-bar-height',
+          ),
+        ) || 0
+      setSolid(window.scrollY > announcement)
+    }
+    const schedule = () => {
+      if (pending) return
+      pending = true
+      frame = window.requestAnimationFrame(read)
+    }
+    read()
+    window.addEventListener('scroll', schedule, { passive: true })
+    window.addEventListener('resize', schedule)
+    return () => {
+      window.removeEventListener('scroll', schedule)
+      window.removeEventListener('resize', schedule)
+      if (pending) window.cancelAnimationFrame(frame)
+    }
+  }, [enabled])
+  return enabled && solid
+}
+
 const AppBar = forwardRef<HTMLElement, AglynAppBarProps>(
   ({ shrinkOnScroll, hideOnScroll, overHero, ...rest }, ref) => {
-    const props = overHero ? { ...rest, sx: withOverHeroSx(rest.sx) } : rest
+    // Over a hero, Sticky and Fixed used to be silently ignored: the bar was
+    // made absolute and scrolled away with the photo (AGL-4200).
+    const pinned =
+      Boolean(overHero) &&
+      (rest.position === 'sticky' || rest.position === 'fixed')
+    const solid = useOverHeroSolid(pinned)
+    const props = overHero
+      ? ({
+          ...rest,
+          sx: withOverHeroSx(rest.sx),
+          ...(pinned ? { [OVER_HERO_PINNED_ATTRIBUTE]: '' } : {}),
+          ...(solid ? { [OVER_HERO_SOLID_ATTRIBUTE]: '' } : {}),
+        } as AppBarProps)
+      : rest
     return shrinkOnScroll || hideOnScroll
       ? createElement(ScrollAwareAppBar, {
           ...props,
@@ -222,8 +301,9 @@ export const schema: Aglyn.ComponentSchema<AglynAppBarProps> = {
       name: 'overHero',
       description:
         'On a page whose first band is set to run under the header, the bar ' +
-        'sits over that photo with no background and white words. Other ' +
-        'pages keep the bar as it is.',
+        'sits over that photo with no background and white words. A Sticky ' +
+        'or Fixed bar stays at the top and turns solid once the page ' +
+        'scrolls. Other pages keep the bar as it is.',
       component: Aglyn.FieldComponentType.SWITCH,
       label: 'Sit over a photo hero?',
     },

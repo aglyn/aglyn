@@ -18,6 +18,7 @@
 import * as Aglyn from '@aglyn/aglyn'
 import { act, fireEvent, render, screen } from '@testing-library/react'
 import NavMenu, {
+  fitPanel,
   MegaMenu,
   megaMenuPanelSx,
   megaMenuSchema,
@@ -545,5 +546,40 @@ describe('the trigger is a nav item, not a button (AGL-2542)', () => {
   it('applies to the plain dropdown trigger too', () => {
     renderLive(<NavMenu label="Product" />)
     expect(getComputedStyle(trigger()).fontSize).toBe('inherit')
+  })
+})
+
+/**
+ * AGL-4200: a wide panel is centered under its trigger with CSS alone, so a
+ * trigger near the left edge ran it off the window (the bakery's Shop menu).
+ * `fitPanel` nudges an open panel back inside, 16px from the edges.
+ */
+describe('fitPanel keeps an open panel inside the window (AGL-4200)', () => {
+  const window1440 = { width: 1440, height: 900 }
+
+  it('moves a panel that runs off the left edge back to the margin', () => {
+    expect(fitPanel({ left: -45, top: 120, width: 720, height: 300 }, window1440)).toEqual({
+      shift: 61,
+      maxHeight: null,
+    })
+  })
+
+  it('moves a panel that runs off the right edge back to the margin', () => {
+    expect(fitPanel({ left: 1000, top: 120, width: 600, height: 300 }, window1440).shift).toBe(-176)
+  })
+
+  it('leaves a panel that already fits where it is', () => {
+    expect(fitPanel({ left: 300, top: 120, width: 720, height: 300 }, window1440)).toEqual({
+      shift: 0,
+      maxHeight: null,
+    })
+  })
+
+  it('centers a panel wider than the window allows on the window', () => {
+    expect(fitPanel({ left: -500, top: 120, width: 1440, height: 300 }, window1440).shift).toBe(500)
+  })
+
+  it('lets a panel taller than the space below scroll inside itself', () => {
+    expect(fitPanel({ left: 300, top: 120, width: 720, height: 1200 }, window1440).maxHeight).toBe(764)
   })
 })
