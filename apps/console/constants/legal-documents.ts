@@ -72,7 +72,7 @@
 
 import { LEGAL_URLS } from './shared'
 
-export const LEGAL_DOCUMENT_VERSION = 'v23'
+export const LEGAL_DOCUMENT_VERSION = 'v24'
 
 export interface LegalDocumentManifestEntry {
   /** Stable key, and the snapshot's filename under `legal/{version}/`. */
@@ -1129,6 +1129,40 @@ export interface LegalDocumentManifestEntry {
  * after publication, and terms reproduced its `v22` pin (71090 bytes /
  * `df8de1…`) before.
  *
+ * v24 (2026-11-06): a store can sell on its own Stripe account.
+ *
+ *   - Terms §10.2 now describes two ways a sale is processed: (a) on the
+ *     store's own full Stripe account, where the store is the processor's
+ *     merchant, Stripe charges its fees to the store, refunds and chargebacks
+ *     come out of the store's balance, and Aglyn's fee is an application fee;
+ *     and (b) through Aglyn's account and transferred on, as before, for
+ *     in-person card sales (readers and Tap to Pay) and for every sale on an
+ *     account that is not the store's own (an Express account). §10.6 splits
+ *     disputes the same way (on (a) the processor debits the store and bills
+ *     its own dispute fee); §10.7 says the store owns, files and remits the
+ *     tax on (a) sales and keeps Aglyn's marketplace-facilitator paragraph for
+ *     (b) storefront sales; §4.3 points at §10.2 for how processing fees reach
+ *     the store. It describes the capability `release_direct_charges` gates,
+ *     so the text holds whichever way the flag is set.
+ *   - Privacy Policy unchanged, so its pin is unchanged and it is the
+ *     control. The Subprocessors page (not acceptance-pinned) changed its
+ *     commerce note and change log in the same publish.
+ *
+ * The Terms, the Subprocessors page and their `/legal` index cards move "Last
+ * updated" to November 6, 2026 (the Terms keep "Effective date: August 5,
+ * 2026"), published at 2:45 a.m. Central that day. The record is
+ * `Platform Docs/Legal/Proposed/2026-11-06-direct-charges/`.
+ *
+ * Publication-first: the Google Doc masters were edited and verified through
+ * the Docs API (Terms revision 26 to 27: the date line, §4.3's
+ * processing-fee sentence, §10.2, §10.6 and §10.7's first paragraph, nothing
+ * else), the versions were published, the live pages confirmed serving the
+ * new text on two consecutive checks, and only then was terms captured:
+ * 73964 bytes (`f0af39…`), identical across the capture's requests, and
+ * archived in `Acceptance-Snapshots/v24`. Privacy reproduced its `v23` pin,
+ * 38630 bytes / `b315fe…`, byte for byte both before and after publication,
+ * and terms reproduced its `v23` pin (71341 bytes / `48018d…`) before.
+ *
  * ## ONE snapshot in the tree, and why that is enough
  *
  * Only the CURRENT version is checked out. Superseded text is not deleted —
@@ -1188,8 +1222,8 @@ export const LEGAL_DOCUMENTS: LegalDocumentManifestEntry[] = [
     key: 'terms',
     url: LEGAL_URLS.TERMS,
     sha256:
-      '48018d1946bd3e3157cd21f672d6787f3b25ab210ceac0acd2e41c94e2d3f731',
-    bytes: 71341,
+      'f0af392a40e94272bbea006894889adddb6c0d0d4e4b01155d1efe89fabafb6b',
+    bytes: 73964,
   },
   {
     key: 'privacy',
