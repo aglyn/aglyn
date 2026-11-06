@@ -15,6 +15,7 @@
  * limitations under the License.
  */
 
+import { directSellerAccountForHost, fetchOnSellerThenPlatform } from './seller-stripe-account'
 import type { PluginApiHandler } from '@aglyn/aglyn/server'
 
 /**
@@ -68,9 +69,10 @@ export const checkoutStatusHandler: PluginApiHandler = async (req, res) => {
   }
   res.setHeader('Cache-Control', 'no-store')
   try {
-    const response = await fetch(
+    const response = await fetchOnSellerThenPlatform(
       `https://api.stripe.com/v1/checkout/sessions/${sessionId}`,
       { headers: { Authorization: `Bearer ${secretKey}` } },
+      await directSellerAccountForHost(hostId),
     )
     if (!response.ok) {
       // A test-mode id under a live key (or the reverse) is a 404 at Stripe,

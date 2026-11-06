@@ -15,6 +15,7 @@
  * limitations under the License.
  */
 
+import { directSellerAccountForHost } from './seller-stripe-account'
 import { claimAttempt, type PluginApiHandler, type PluginApiRequest } from '@aglyn/aglyn/server'
 import { createResourceUid } from '@aglyn/aglyn/app-utils/create-resource-uid'
 import { checkEntitlement } from '@aglyn/aglyn/server'
@@ -137,7 +138,8 @@ export interface QuoteDeps {
   /** The site's tax service, where one is connected; `{ quote: null }` otherwise. */
   quoteTax(request: SaleTaxEngineRequest): Promise<SaleTaxEngineResult>
   /** Closes a Checkout Session the pay page opened for the quote. */
-  expireSession(sessionId: string): Promise<CheckoutSessionExpiry>
+  /** `hostId` lets a direct-charge store's session be closed on its own account. */
+  expireSession(sessionId: string, hostId?: string): Promise<CheckoutSessionExpiry>
   /** The quote's pay link at a link version, or null when the site has no address or no signing secret. */
   payLinkUrl(host: Record<string, unknown>, hostId: string, quoteId: string, version: number): string | null
   /** One of the current revision's proofs behind that link, for the email's pictures. */
@@ -168,7 +170,11 @@ export function defaultQuoteDeps(): QuoteDeps {
     },
     searchPeople: (request) => searchPluginPeople(request),
     quoteTax: (request) => quoteSaleTaxWithEngine(request),
-    expireSession: (sessionId) => expireCheckoutSession(sessionId),
+    expireSession: async (sessionId, hostId) =>
+      expireCheckoutSession(
+        sessionId,
+        hostId ? await directSellerAccountForHost(hostId) : null,
+      ),
     payLinkUrl: (host, hostId, quoteId, version) => quotePayLinkUrl(host, hostId, quoteId, version),
     proofLinkUrl: (host, hostId, quoteId, version, proofId) => quoteProofLinkUrl(host, hostId, quoteId, version, proofId),
     quotePdf: async (input) => (await import('./commerce-pdf')).quotePdfFile(input),
@@ -205,9 +211,14 @@ async function readRequest(
 }
 
 /** Expires the session the pay page opened, when there is one; a failure is logged, never thrown. */
-async function closeOpenSession(deps: QuoteDeps, sessionId: string | undefined, context: string): Promise<void> {
+async function closeOpenSession(
+  deps: QuoteDeps,
+  sessionId: string | undefined,
+  context: string,
+  hostId?: string,
+): Promise<void> {
   if (!sessionId) return
-  const result = await deps.expireSession(sessionId).catch((): CheckoutSessionExpiry => 'open')
+  const result = await deps.expireSession(sessionId, hostId).catch((): CheckoutSessionExpiry => 'open')
   if (result === 'open') {
     console.error(`${context}: the quote's Stripe session was not expired and may still be paid`, { sessionId })
   }
@@ -429,7 +440,7 @@ export async function handleQuote(deps: QuoteDeps, req: PluginApiRequest): Promi
         return { outcome: { status: 200, body: { linkVersion: next } }, closeSession: order.checkoutSessionId }
       },
     )
-    if (answer.closeSession) await closeOpenSession(deps, answer.closeSession, 'quote link replaced')
+    if (answer.closeSession) await closeOpenSession(deps, answer.closeSession, 'quote link replaced', hostId)
     if (answer.outcome.status !== 200) return answer.outcome
     const linkVersion = Number(answer.outcome.body['linkVersion'])
     const url = deps.payLinkUrl((host.data() ?? {}) as Record<string, unknown>, hostId, quoteId, linkVersion)
@@ -560,7 +571,7 @@ export async function handleQuote(deps: QuoteDeps, req: PluginApiRequest): Promi
       return { status: 200, body: { deleted: true }, closeSession: order.checkoutSessionId }
     })
     const { closeSession, ...outcome } = deleted as Outcome & { closeSession?: string }
-    await closeOpenSession(deps, closeSession, 'quote deleted')
+    await closeOpenSession(deps, closeSession, 'quote deleted', hostId)
     // Its proofs and anything the customer sent go with it.
     if (outcome.status === 200) await removeQuoteFiles(deps, hostId, quoteId)
     return outcome
@@ -738,7 +749,7 @@ export async function handleQuote(deps: QuoteDeps, req: PluginApiRequest): Promi
         })
         return { status: 200, body: { quoteId, number: existing.number ?? null, updatedAtMs: now } }
       })
-      if (outcome.status === 200) await closeOpenSession(deps, closeSession, 'quote edited')
+      if (outcome.status === 200) await closeOpenSession(deps, closeSession, 'quote edited', hostId)
     }
     if (outcome.status === 200) await claim.record(outcome.status, outcome.body)
     else await claim.release()
@@ -960,7 +971,7 @@ async function handleProofAction(
       },
     )
     if (answer.outcome.status !== 200) await uploads.remove(kept.file.path).catch(() => undefined)
-    await closeOpenSession(deps, answer.closeSession, 'quote proof added')
+    await closeOpenSession(deps, answer.closeSession, 'quote proof added', hostId)
     return answer.outcome
   }
 
@@ -989,7 +1000,7 @@ async function handleProofAction(
       const uploads = await deps.uploads()
       await uploads.remove(answer.path).catch((error) => console.error('quote proof file was not deleted', error))
     }
-    await closeOpenSession(deps, answer.closeSession, 'quote proof removed')
+    await closeOpenSession(deps, answer.closeSession, 'quote proof removed', hostId)
     return answer.outcome
   }
 
@@ -1015,7 +1026,7 @@ async function handleProofAction(
       }
     },
   )
-  await closeOpenSession(deps, answer.closeSession, 'quote revision started')
+  await closeOpenSession(deps, answer.closeSession, 'quote revision started', hostId)
   return answer.outcome
 }
 
@@ -1144,7 +1155,7 @@ async function handleSendAction(
     return prepared.outcome
   }
   const { order, linkVersion, linkReplaced } = prepared
-  await closeOpenSession(deps, prepared.closeSession, 'quote link replaced to send a revision')
+  await closeOpenSession(deps, prepared.closeSession, 'quote link replaced to send a revision', hostId)
 
   const payUrl = deps.payLinkUrl(host, hostId, quoteId, linkVersion) as string
   let delivered: Awaited<ReturnType<QuoteMailer['deliver']>>

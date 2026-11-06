@@ -90,6 +90,7 @@ const created: Array<{ params: URLSearchParams; headers: Record<string, string> 
 const expired: string[] = []
 let expiry: Awaited<ReturnType<QuotePayDeps['expireSession']>> = 'expired'
 let sessionCount = 0
+let sellerTaxActive = true
 const taxRateId = jest.fn<Promise<string | null>, [unknown]>(async () => 'txr_store')
 
 const deps: QuotePayDeps = {
@@ -112,6 +113,7 @@ const deps: QuotePayDeps = {
     expired.push(sessionId)
     return expiry
   },
+  sellerTaxActive: async () => sellerTaxActive,
   ensureDomain: async () => null,
   now: () => 10_000,
 }
@@ -182,6 +184,7 @@ beforeEach(() => {
   native = false
   rateAllowed = true
   sessionCount = 0
+  sellerTaxActive = true
   taxRateId.mockClear()
   docs.set('hosts/site1', { subdomain: 'acme', displayName: 'Acme Tents', businessName: 'Acme Tents' })
   docs.set('hosts/site1/settings/store', {
@@ -729,5 +732,159 @@ describe('a Pay that works', () => {
     storeQuote()
     expect((await press()).status).toBe(200)
     expect(created[0].params.get('metadata[quoteTax]')).toBeNull()
+  })
+})
+
+describe('a direct charge on the seller’s own account', () => {
+  const press = (body: Record<string, unknown> = {}, key = 'press-1') =>
+    handleQuotePay(deps, payRequest({ hostId: 'site1', q: 'q-1', t: token(), v: 2_000, ...body }, key))
+
+  beforeEach(() => {
+    docs.set('profiles/owner-1', {
+      stripeAccountId: 'acct_merchant',
+      stripeChargesEnabled: true,
+      stripeAccountLivemode: false,
+      stripeChargeModel: 'direct',
+    })
+  })
+
+  it('opens the session on the seller’s account with the take as its fee and no transfer', async () => {
+    // A plan with a take on physical goods, so the fee is not zero.
+    const org = { ...ORG, plan: 'starter' }
+    const outcome = await handleQuotePay(
+      { ...deps, orgForHost: async () => ({ id: 'org-1', org }) },
+      payRequest({ hostId: 'site1', q: 'q-1', t: token(), v: 2_000 }),
+    )
+    expect(outcome.status).toBe(200)
+    const { params, headers } = created[0]
+    expect(headers['Stripe-Account']).toBe('acct_merchant')
+    expect(headers['Idempotency-Key']).toBeTruthy()
+    expect(params.get('payment_intent_data[transfer_data][destination]')).toBeNull()
+    expect(params.get('payment_intent_data[transfer_data][amount]')).toBeNull()
+    expect(params.get('payment_intent_data[on_behalf_of]')).toBeNull()
+    const fee = resolveTransactionFeeCents(org as never, 'physical', 270_000, 296_775, { direct: true })
+    expect(fee).toBeGreaterThan(0)
+    // The take alone: less than the destination fee, which carries Stripe's cost.
+    expect(fee).toBeLessThan(resolveTransactionFeeCents(org as never, 'physical', 270_000, 296_775))
+    expect(params.get('payment_intent_data[application_fee_amount]')).toBe(String(fee))
+    expect(params.get('metadata[feeCents]')).toBe(String(fee))
+    expect(params.get('metadata[chargeModel]')).toBe('direct')
+    // The store's tax rate is minted on the seller's account, where the session is.
+    expect(taxRateId).toHaveBeenCalledWith(expect.objectContaining({ stripeAccount: 'acct_merchant' }))
+    // Shipping is inline, so nothing of the platform's is referenced.
+    expect(params.get('shipping_options[0][shipping_rate_data][fixed_amount][amount]')).toBe('4500')
+  })
+
+  it('sends no application fee on a plan that takes nothing', async () => {
+    await press()
+    const { params, headers } = created[0]
+    expect(headers['Stripe-Account']).toBe('acct_merchant')
+    expect(resolveTransactionFeeCents(ORG as never, 'physical', 270_000, 296_775, { direct: true })).toBe(0)
+    expect(params.get('payment_intent_data[application_fee_amount]')).toBeNull()
+    expect(params.get('payment_intent_data[transfer_data][destination]')).toBeNull()
+    expect(params.get('metadata[feeCents]')).toBe('0')
+  })
+
+  it('leaves Stripe Tax with the seller: no transfer is fixed and none is recorded', async () => {
+    storeQuote({ tax: { kind: 'at-payment' } })
+    docs.set('hosts/site1/settings/store', { currency: 'USD', tax: { mode: 'stripe' } })
+    await press()
+    const params = created[0].params
+    expect(params.get('automatic_tax[enabled]')).toBe('true')
+    expect(params.get('payment_intent_data[transfer_data][amount]')).toBeNull()
+    expect(params.get('metadata[transferCents]')).toBeNull()
+    expect(params.get('metadata[transferShippingCents]')).toBeNull()
+    expect(taxRateId).not.toHaveBeenCalled()
+  })
+
+  it('refuses Stripe Tax at payment until the seller’s own Stripe Tax is set up, spending no press', async () => {
+    storeQuote({ tax: { kind: 'at-payment' } })
+    docs.set('hosts/site1/settings/store', { currency: 'USD', tax: { mode: 'stripe' } })
+    sellerTaxActive = false
+    const outcome = await press()
+    expect(outcome).toMatchObject({ status: 409, body: { reason: 'seller-tax' } })
+    expect(String(outcome.body['error'])).toContain('sales tax')
+    expect(created).toHaveLength(0)
+    sellerTaxActive = true
+    expect((await press()).status).toBe(200)
+  })
+
+  it('asks nothing of the seller’s Stripe Tax for a quote with its own rate', async () => {
+    sellerTaxActive = false
+    expect((await press()).status).toBe(200)
+  })
+
+  it('opens the in-page form on the seller’s account', async () => {
+    native = true
+    const outcome = await press()
+    expect(outcome.body).toEqual({
+      clientSecret: 'cs_test_new10000_secret',
+      publishableKey: 'pk_test_1',
+      sessionId: 'cs_test_new10000',
+      stripeAccount: 'acct_merchant',
+    })
+    expect(created[0].headers['Stripe-Account']).toBe('acct_merchant')
+    expect(created[0].headers['Stripe-Version']).toBeTruthy()
+  })
+
+  it('closes the last press’s session on the seller’s account', async () => {
+    const calls: Array<[string, string | undefined]> = []
+    const tracked: QuotePayDeps = {
+      ...deps,
+      expireSession: async (sessionId, stripeAccount) => {
+        calls.push([sessionId, stripeAccount])
+        return 'expired'
+      },
+    }
+    const pressWith = (key: string) =>
+      handleQuotePay(tracked, payRequest({ hostId: 'site1', q: 'q-1', t: token(), v: 2_000 }, key))
+    await pressWith('press-1')
+    await pressWith('press-2')
+    expect(calls).toEqual([['cs_test_new10000', 'acct_merchant']])
+  })
+
+  it('closes one the seller’s account does not know on the platform, opened before the switch', async () => {
+    storeQuote({}, { checkoutSessionId: 'cs_test_platform0000' })
+    const calls: Array<[string, string | undefined]> = []
+    const tracked: QuotePayDeps = {
+      ...deps,
+      expireSession: async (sessionId, stripeAccount) => {
+        calls.push([sessionId, stripeAccount])
+        return stripeAccount ? 'missing' : 'expired'
+      },
+    }
+    const outcome = await handleQuotePay(tracked, payRequest({ hostId: 'site1', q: 'q-1', t: token(), v: 2_000 }))
+    expect(outcome.status).toBe(200)
+    expect(calls).toEqual([
+      ['cs_test_platform0000', 'acct_merchant'],
+      ['cs_test_platform0000', undefined],
+    ])
+  })
+
+  it('refuses when the seller’s session was paid a moment ago', async () => {
+    storeQuote({}, { checkoutSessionId: 'cs_test_paid00000000' })
+    const tracked: QuotePayDeps = { ...deps, expireSession: async () => 'complete' }
+    const outcome = await handleQuotePay(tracked, payRequest({ hostId: 'site1', q: 'q-1', t: token(), v: 2_000 }))
+    expect(outcome).toMatchObject({ status: 409, body: { reason: 'paid' } })
+    expect(created).toHaveLength(0)
+  })
+
+  it('keeps a destination seller’s session on the platform, expired there alone', async () => {
+    docs.set('profiles/owner-1', { stripeAccountId: 'acct_merchant', stripeChargesEnabled: true, stripeAccountLivemode: false })
+    const calls: Array<[string, string | undefined]> = []
+    const tracked: QuotePayDeps = {
+      ...deps,
+      expireSession: async (sessionId, stripeAccount) => {
+        calls.push([sessionId, stripeAccount])
+        return 'expired'
+      },
+    }
+    await handleQuotePay(tracked, payRequest({ hostId: 'site1', q: 'q-1', t: token(), v: 2_000 }, 'press-1'))
+    await handleQuotePay(tracked, payRequest({ hostId: 'site1', q: 'q-1', t: token(), v: 2_000 }, 'press-2'))
+    expect(created[0].headers['Stripe-Account']).toBeUndefined()
+    expect(created[0].params.get('metadata[chargeModel]')).toBeNull()
+    expect(created[0].params.get('payment_intent_data[transfer_data][destination]')).toBe('acct_merchant')
+    expect(calls).toEqual([['cs_test_new10000', undefined]])
+    expect(taxRateId).toHaveBeenCalledWith(expect.not.objectContaining({ stripeAccount: expect.anything() }))
   })
 })

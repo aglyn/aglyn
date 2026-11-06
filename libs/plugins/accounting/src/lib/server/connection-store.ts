@@ -23,8 +23,13 @@
  * access tokens are sealed with `ACCOUNTING_TOKEN_KEY` (secret box,
  * AES-256-GCM), each bound to this document and its purpose as the seal's
  * context, so a value copied into another workspace's document refuses to
- * open there. No Firestore rule names the collection: the console page reads
- * {@link toConnectionView}, which carries no token, through `accounting/status`.
+ * open there. The company the grant is bound to (QuickBooks' realmID, Xero's
+ * tenant id) is sealed the same way, as `sealedTenantId`, so a copy of the
+ * document says neither whose books it reaches nor how to reach them:
+ * {@link toStoredConnection} seals it on every write and {@link readConnection}
+ * opens it on every read. No Firestore rule names the collection: the console
+ * page reads {@link toConnectionView}, which carries no token and no company
+ * id, through `accounting/status`.
  *
  * ## Rotation, and only one refresher
  *
@@ -137,12 +142,58 @@ export function openToken(
   return { token: opened.plaintext, reseal: needsReseal(opened, keyring) }
 }
 
-/** A stored document read defensively. */
-export function readConnection(data: Record<string, unknown> | undefined): AccountingConnectionRecord | null {
-  if (!data || typeof data['provider'] !== 'string') return null
-  const record = data as unknown as AccountingConnectionRecord
+/** The seal's context for the bound company id: this document, nothing else. */
+export const tenantContext = (orgId: string, provider: AccountingProviderId) => `accounting:${orgId}:${provider}:tenant`
+
+/** The document as Firestore holds it: the company id sealed, never in the clear. */
+export type StoredAccountingConnection = Omit<AccountingConnectionRecord, 'tenantId'> & {
+  tenantId: null
+  sealedTenantId: string | null
+}
+
+/** What a whole-document write stores for `record`. */
+export function toStoredConnection(record: AccountingConnectionRecord, keyring: SecretBoxKeyring): StoredAccountingConnection {
   return {
     ...record,
+    tenantId: null,
+    sealedTenantId: record.tenantId
+      ? sealSecret(record.tenantId, keyring.current, { context: tenantContext(record.orgId, record.provider) })
+      : null,
+  }
+}
+
+/**
+ * The bound company id: opened from its seal, or `null` when there is no key
+ * or the seal will not open here — the connection then reads as unfinished
+ * and asks to be reconnected. A document written before the id was sealed
+ * still names it in the clear, and is read as it stands.
+ */
+function openTenantId(data: Record<string, unknown>, keyring: SecretBoxKeyring | null): string | null {
+  const sealed = data['sealedTenantId']
+  if (typeof sealed !== 'string' || !sealed) return typeof data['tenantId'] === 'string' ? data['tenantId'] : null
+  if (!keyring) return null
+  try {
+    return openSecret(sealed, keyring, {
+      context: tenantContext(String(data['orgId']), data['provider'] as AccountingProviderId),
+    }).plaintext
+  } catch {
+    return null
+  }
+}
+
+/** A stored document read defensively, its company id opened with `keyring`. */
+export function readConnection(
+  data: Record<string, unknown> | undefined,
+  keyring: SecretBoxKeyring | null,
+): AccountingConnectionRecord | null {
+  if (!data || typeof data['provider'] !== 'string') return null
+  const record: AccountingConnectionRecord & { sealedTenantId?: unknown } = {
+    ...(data as unknown as AccountingConnectionRecord),
+  }
+  delete record.sealedTenantId
+  return {
+    ...record,
+    tenantId: openTenantId(data, keyring),
     tenants: Array.isArray(record.tenants) ? record.tenants : [],
     mapping: { ...EMPTY_ACCOUNTING_MAPPING, ...(record.mapping ?? {}) },
     extras: record.extras ?? {},
@@ -157,10 +208,11 @@ export function readConnection(data: Record<string, unknown> | undefined): Accou
 export async function loadOrgConnection(
   firestore: FirebaseFirestore.Firestore,
   orgId: string,
+  keyring: SecretBoxKeyring | null,
 ): Promise<AccountingConnectionRecord | null> {
   const snapshot = await firestore.collection('orgs').doc(orgId).collection(ACCOUNTING_CONNECTIONS_COLLECTION).limit(2).get()
   const records = snapshot.docs
-    .map((doc) => readConnection(doc.data()))
+    .map((doc) => readConnection(doc.data(), keyring))
     .filter((record): record is AccountingConnectionRecord => Boolean(record))
   // One provider at a time is the routes' rule; if two ever stand, the
   // newer connection is the one in force.
@@ -168,12 +220,11 @@ export async function loadOrgConnection(
   return records[0] ?? null
 }
 
-/** What the console page reads: no token, no lease, no cursor. */
+/** What the console page reads: no token, no company id, no lease, no cursor. */
 export function toConnectionView(record: AccountingConnectionRecord): AccountingConnectionView {
   return {
     provider: record.provider,
     status: record.status,
-    tenantId: record.tenantId,
     tenantName: record.tenantName,
     ...(record.status === 'choose-tenant'
       ? { tenants: record.tenants.map((tenant) => ({ id: tenant.id, name: tenant.name })) }
@@ -259,7 +310,7 @@ export async function refreshConnection(
   for (let wait = 0; wait <= LEASE_WAITS; wait += 1) {
     const claim = await deps.firestore.runTransaction(async (transaction) => {
       const snapshot = await transaction.get(ref)
-      const current = readConnection(snapshot.exists ? snapshot.data() : undefined)
+      const current = readConnection(snapshot.exists ? snapshot.data() : undefined, deps.keyring)
       if (!current || current.status === 'reconnect-required') return { kind: 'gone' as const, current }
       // Someone else refreshed since we read: use theirs.
       if (current.refreshedAtMs > startedRefreshedAt && !accessTokenStale(current, deps.now())) {

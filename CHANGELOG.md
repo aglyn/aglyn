@@ -17,6 +17,9 @@ content on the marketing site and is written separately.
 
 - **marketplace:** declared connections for marketplace plugins ([AGL-4193](https://linear.app/aglyn/issue/AGL-4193))
 - **marketplace:** where a declared connection's synced record lives ([AGL-4192](https://linear.app/aglyn/issue/AGL-4192))
+- **marketplace:** sites show declared connection records, variables and image hosts; signed elements read their own connection record ([AGL-4195](https://linear.app/aglyn/issue/AGL-4195))
+- **commerce:** site sales are direct charges on the store's own Stripe account
+- **besigner:** edit table cells in place on the canvas ([AGL-4202](https://linear.app/aglyn/issue/AGL-4202))
 
 ### Fixed
 
@@ -29,10 +32,17 @@ content on the marketing site and is written separately.
 - **mui:** over-hero sticky header stays pinned; dropdown panels stay on screen ([AGL-4200](https://linear.app/aglyn/issue/AGL-4200))
 - **commerce:** a trial's subscription row no longer says $0.00 paid so far ([AGL-4191](https://linear.app/aglyn/issue/AGL-4191))
 - **commerce:** no checkout offers buy-now-pay-later, and every sale passes through the card rate, 2.9% + 30¢, never below what Stripe charges ([AGL-4198](https://linear.app/aglyn/issue/AGL-4198))
+- **sites:** published pages stop loading the plugin manifest validators ([AGL-4201](https://linear.app/aglyn/issue/AGL-4201))
+- **privacy:** a workspace export shows a listing's OAuth app, never its secrets ([AGL-4193](https://linear.app/aglyn/issue/AGL-4193))
+- **marketplace:** a changed or removed connection record reaches site pages ([AGL-4195](https://linear.app/aglyn/issue/AGL-4195))
+- **besigner:** typing in Search title or description no longer redraws the editor
+- **accounting:** the bound QuickBooks company id is sealed at rest ([AGL-3614](https://linear.app/aglyn/issue/AGL-3614))
+- **commerce:** static seller-account import and brand-neutral flag copy
 
 ### Documentation
 
 - **plugins:** connections docs describe only what runs today ([AGL-4193](https://linear.app/aglyn/issue/AGL-4193))
+- **plugins:** what a declared connection shows on a site ([AGL-4195](https://linear.app/aglyn/issue/AGL-4195))
 
 ## v1.15.0 — 2026-11-06
 

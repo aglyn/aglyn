@@ -359,3 +359,49 @@ describe('the storefront’s revenue source', () => {
     ])
   })
 })
+
+describe('a direct-charge sale counts its whole application fee as the take', () => {
+  const org = payingOrg()
+
+  it('subtracts no pass-through, because Stripe bills the seller', () => {
+    const chargeCents = 20000
+    // The fee the direct checkout charged: the plan's take and nothing else.
+    const fee = resolveTransactionFeeCents(org, 'physical', chargeCents, chargeCents, {
+      direct: true,
+    })
+    expect(fee).toBeGreaterThan(0)
+    const out = commerceSettledSummary([
+      { id: 'o1', amountCents: chargeCents, feeCents: fee, chargeModel: 'direct' },
+    ])
+    expect(out.applicationFeeCents).toBe(fee)
+    expect(out.processingPassThroughCents).toBe(0)
+    expect(out.commissionCents).toBe(fee)
+    expect(out.commissionNetCents).toBe(fee)
+  })
+
+  it('a destination sale beside it is netted exactly as before', () => {
+    const chargeCents = 20000
+    const destinationFee = resolveTransactionFeeCents(org, 'physical', chargeCents, chargeCents)
+    const directFee = resolveTransactionFeeCents(org, 'physical', chargeCents, chargeCents, {
+      direct: true,
+    })
+    const out = commerceSettledSummary([
+      { id: 'o1', amountCents: chargeCents, feeCents: destinationFee },
+      { id: 'o2', amountCents: chargeCents, feeCents: directFee, chargeModel: 'direct' },
+    ])
+    expect(out.processingPassThroughCents).toBe(
+      Math.min(destinationFee, salePlatformCostCents(chargeCents)),
+    )
+    expect(out.commissionCents).toBe(
+      destinationFee - Math.min(destinationFee, salePlatformCostCents(chargeCents)) + directFee,
+    )
+  })
+
+  it('a refund hands back its share of the take', () => {
+    const out = commerceSettledSummary([
+      { id: 'o1', amountCents: 10000, feeCents: 500, refundedCents: 5000, chargeModel: 'direct' },
+    ])
+    expect(out.commissionRefundedCents).toBe(250)
+    expect(out.commissionNetCents).toBe(250)
+  })
+})

@@ -23,7 +23,6 @@ import {
 import { resolveSiteTheme } from '@aglyn/aglyn/app-utils/site-theme'
 import {
   SCREEN_SEO_TEXT_FIELDS,
-  SCREEN_SEO_TEXT_GUIDANCE,
   screenSeoStageKey,
   type ScreenSeoTextField,
 } from '@aglyn/aglyn/app-utils/screen-seo-fields'
@@ -150,7 +149,10 @@ import { useBindingTokenLookups } from '../../../../../../../../../../hooks/use-
 import InteractionsProvider from '../../../../../../../../../../components/interactions-provider.component'
 import usePluginDrawerRegistration from '@aglyn/tenant-feature-instance/hooks/use-plugin-drawer-registration'
 import BesignerMediaPickerProvider from '../../../../../../../../../../components/besigner-media-picker-provider.component'
-import ScreenSocialImageField from '../../../../../../../../../../components/screen-social-image-field.component'
+import ScreenSeoDraftFields, {
+  createScreenSeoDraftStore,
+  screenSeoDraftEdits,
+} from '../../../../../../../../../../components/screen-seo-draft-fields.component'
 import ScreenLayoutProperties, {
   useLayoutChainProperties,
 } from '../../../../../../../../../../components/screen-layout-properties.component'
@@ -190,10 +192,7 @@ import {
 } from '../../../../../../../../../../constants/screen-publishing'
 import { liveDescendantsToastClause } from '../../../../../../../../../../components/live-descendants-note.component'
 import { announceLiveScreenChange } from '../../../../../../../../../../constants/screen-live-announce'
-import {
-  buildScreenSeoUpdate,
-  type ScreenSocialImageDraft,
-} from '../../../../../../../../../../constants/screen-seo'
+import { buildScreenSeoUpdate } from '../../../../../../../../../../constants/screen-seo'
 import { resolveScreenLiveUrl } from '../../../../../../../../../../constants/tenant-links'
 import {
   collectionTemplatePublishMessage,
@@ -290,14 +289,13 @@ function BesignerPage(props) {
     getCanvasRoot,
   })
   const [screenDialog, setScreenDialog] = useState(false)
-  // Screen SEO fields (SEO Toolkit); null = untouched, falls back to doc.
-  const [seoTitle, setSeoTitle] = useState<string | null>(null)
-  const [seoDescription, setSeoDescription] = useState<string | null>(null)
   /**
-   * Staged social image (AGL-1337); null = untouched. The staging contract
-   * travels with the type — see `ScreenSocialImageDraft`.
+   * Screen SEO fields (SEO Toolkit) and the staged social image (AGL-1337);
+   * null = untouched, falls back to the doc. Held in a store rather than
+   * page state so a keystroke redraws the SEO fields and not the whole
+   * editor: see `ScreenSeoDraftStore`.
    */
-  const [seoImage, setSeoImage] = useState<ScreenSocialImageDraft | null>(null)
+  const [seoDrafts] = useState(createScreenSeoDraftStore)
   // Screen password protection (AGL-87); null = untouched.
   const [protectPassword, setProtectPassword] = useState<string | null>(null)
   const handleAddElementClick = useAddElementDrawerCallback()
@@ -392,13 +390,13 @@ function BesignerPage(props) {
    */
   const seoFieldSetters = useMemo(() => {
     const setters: Record<ScreenSeoTextField, (value: string) => void> = {
-      title: setSeoTitle,
-      description: setSeoDescription,
+      title: (value) => seoDrafts.set('title', value),
+      description: (value) => seoDrafts.set('description', value),
     }
     return Object.fromEntries(
       SCREEN_SEO_TEXT_FIELDS.map((field) => [screenSeoStageKey(field), setters[field]]),
     )
-  }, [])
+  }, [seoDrafts])
   useEditorSession({
     documentKind: 'screen',
     documentId: screenId,
@@ -882,11 +880,10 @@ function BesignerPage(props) {
      * makes a screen look like it has an authored social card to every reader
      * that checks presence rather than truthiness.
      */
-    const seo = buildScreenSeoUpdate((screenResult?.data as any)?.seo, {
-      title: seoTitle,
-      description: seoDescription,
-      image: seoImage,
-    })
+    const seo = buildScreenSeoUpdate(
+      (screenResult?.data as any)?.seo,
+      screenSeoDraftEdits(seoDrafts.get()),
+    )
     /**
      * Refuse a save whose seed the server never confirmed (AGL-1358).
      *
@@ -914,9 +911,7 @@ function BesignerPage(props) {
         await updateScreenDoc({ seo: seo ?? (deleteField() as any) } as any)
           .then(() => {
             enqueueSnackbar('SEO saved', { variant: 'success', persist: false })
-            setSeoTitle(null)
-            setSeoDescription(null)
-            setSeoImage(null)
+            seoDrafts.reset()
             // The live page's head is rendered from the screen document, and
             // both the page and the document are cached on the tenant — so
             // on a published screen the old title and description stay in
@@ -945,9 +940,7 @@ function BesignerPage(props) {
   }, [
     updateScreenDoc,
     screenResult,
-    seoTitle,
-    seoDescription,
-    seoImage,
+    seoDrafts,
     enqueueSnackbar,
     user,
     hostId,
@@ -2634,55 +2627,12 @@ function BesignerPage(props) {
                         {'Search and social metadata for this page. Saved separately ' +
                           'from the canvas.'}
                       </Typography>
-                      <TextField
-                        size="small"
-                        label="Search title"
-                        value={
-                          seoTitle ??
-                          (screenResult?.data as any)?.seo?.title ??
-                          ''
-                        }
-                        onChange={(e) => setSeoTitle(e.target.value)}
-                        helperText={`The whole tab/search title, published verbatim (≤${SCREEN_SEO_TEXT_GUIDANCE.title} chars works best)`}
-                      />
-                      <TextField
-                        size="small"
-                        label="Search description"
-                        multiline
-                        minRows={2}
-                        value={
-                          seoDescription ??
-                          (screenResult?.data as any)?.seo?.description ??
-                          ''
-                        }
-                        onChange={(e) => setSeoDescription(e.target.value)}
-                        helperText={`Search snippet / social share text (≤${SCREEN_SEO_TEXT_GUIDANCE.description} chars works best)`}
-                      />
-                      {/* Social image (AGL-1337), shared with the screen detail page's
-              SEO card so the two surfaces cannot drift (AGL-1368). */}
-                      <ScreenSocialImageField
+                      <ScreenSeoDraftFields
+                        store={seoDrafts}
                         hostId={hostId}
-                        saved={screenResult?.data?.seo?.image}
-                        // See the twin on the screen detail page (AGL-2417).
-                        savedAlt={screenResult?.data?.seo?.imageAlt}
-                        savedWidth={screenResult?.data?.seo?.imageWidth}
-                        savedHeight={screenResult?.data?.seo?.imageHeight}
-                        value={seoImage}
-                        onChange={setSeoImage}
+                        saved={(screenResult?.data as any)?.seo}
+                        onSave={handleSeoSave}
                       />
-                      <Button
-                        size="small"
-                        variant="outlined"
-                        onClick={handleSeoSave}
-                        disabled={
-                          seoTitle == null &&
-                          seoDescription == null &&
-                          seoImage == null
-                        }
-                        sx={{ alignSelf: 'flex-start' }}
-                      >
-                        {'Save SEO'}
-                      </Button>
                       <Typography variant="subtitle2">
                         {'Password protection'}
                       </Typography>

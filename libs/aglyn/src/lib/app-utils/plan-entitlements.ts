@@ -4212,6 +4212,14 @@ export interface SaleProcessingOptions {
    * (`TERMINAL_PROCESSING_PERCENT` + `TERMINAL_PROCESSING_FIXED_CENTS`).
    */
   inPerson?: boolean
+  /**
+   * The sale is a DIRECT charge on the seller's own connected account, which
+   * Stripe bills itself (`controller.fees.payer: account`). Stripe takes its
+   * card fee from the seller and charges the platform nothing for the sale,
+   * no Connect payout fee and no Stripe Tax, so Aglyn's application fee is
+   * the plan's take and nothing else.
+   */
+  direct?: boolean
 }
 
 /**
@@ -4259,6 +4267,7 @@ export function saleApplicationFeeCents(
     Number.isFinite(chargeCents) && chargeCents > 0 ? Math.round(chargeCents) : 0
   if (charge <= 0) return 0
   const take = Number.isFinite(takeCents) && takeCents > 0 ? Math.round(takeCents) : 0
+  if (options.direct) return Math.min(charge, take)
   return Math.min(
     charge,
     Math.max(take + saleProcessingCostCents(charge), salePlatformCostCents(charge, options)),
@@ -4378,6 +4387,7 @@ export function resolveSubscriptionFeePercent(
     Number.isFinite(amountCents) && amountCents > 0 ? Math.round(amountCents) : 0
   if (amount <= 0) return 0
   const take = resolveTransactionFeePct(org, productType)
+  if (options.direct) return Math.min(100, Math.round(take * 100) / 100)
   const passThrough = saleProcessingPassThroughPercent(amount)
   // Never below everything Stripe charges the platform for the cycle, the
   // recurring twin of `saleApplicationFeeCents`'s floor (AGL-4198).

@@ -15,8 +15,16 @@
  * limitations under the License.
  */
 
-import { firebaseAdmin, getOrgForHost } from '@aglyn/tenant-data-admin'
-import { paymentProvider } from '@aglyn/tenant-data-admin/server/payment-provider'
+import {
+  firebaseAdmin,
+  getOrgForHost,
+  isServerReleaseFlagOnForOrg,
+} from '@aglyn/tenant-data-admin'
+import {
+  accountChargeModel,
+  DIRECT_CHARGE_ACCOUNT_PARAMS,
+  paymentProvider,
+} from '@aglyn/tenant-data-admin/server/payment-provider'
 import { buildRoute, Route, type PluginApiHandler } from '@aglyn/aglyn/server'
 
 async function stripe(path: string, params?: URLSearchParams) {
@@ -84,17 +92,35 @@ export const connectHandler: PluginApiHandler = async (req, res) => {
       | string
       | undefined
     if (!accountId) {
+      // The seller's OWN Stripe account (direct charges): Stripe bills it,
+      // underwrites it and gives it the full Stripe Dashboard, so the seller
+      // is the merchant of record on every site sale and can refund, answer
+      // a dispute and manage tax registrations there. See
+      // `DIRECT_CHARGE_ACCOUNT_PARAMS`. Behind `release_direct_charges` until
+      // the Terms say so; off, the platform-managed Express account and its
+      // destination charges, exactly as before. The shape cannot be changed
+      // once the account exists, so this is the one place it is decided.
+      // Any failure to read the flag is OFF: the account it would create is
+      // the one every store had before, never a shape nobody chose.
+      let ownsAccount = false
+      try {
+        ownsAccount = await isServerReleaseFlagOnForOrg(
+          'release_direct_charges',
+          String(ownerOrg?.org?.id ?? ownerOrg?.orgId ?? '') || null,
+        )
+      } catch {
+        ownsAccount = false
+      }
       const account = await stripe(
         'accounts',
         new URLSearchParams({
-          type: 'express',
-          // Explicit capabilities (AGL-1994, mirroring the marketplace twin
-          // hardened by AGL-1547): without them the account's abilities
-          // depend on unverified dashboard platform-profile defaults, and
-          // the storefront charge is a DESTINATION charge — checkout.ts
-          // sends `payment_intent_data[transfer_data][destination]`, which
-          // requires the destination to hold `transfers`. A merchant
-          // onboarded without it takes money that can never pay out.
+          ...(ownsAccount
+            ? DIRECT_CHARGE_ACCOUNT_PARAMS
+            : { type: 'express' }),
+          // Explicit capabilities (AGL-1994): `card_payments` for the
+          // charges, and `transfers` because a destination charge (every
+          // sale on an Express account, and the register and Tap to Pay on
+          // either kind) requires the destination to hold it.
           'capabilities[card_payments][requested]': 'true',
           'capabilities[transfers][requested]': 'true',
           'metadata[profileId]': decoded.uid,
@@ -133,9 +159,14 @@ export const connectHandler: PluginApiHandler = async (req, res) => {
     // BEFORE the first sale strands funds in a Connect account that
     // cannot pay them out.
     const payoutsEnabled = Boolean(account?.payouts_enabled)
+    // Which charge shape this account takes, read off the account itself
+    // every time, so a re-onboarded seller can never inherit the last
+    // account's answer.
+    const chargeModel = accountChargeModel(account)
     await profileRef.set(
       {
         stripeChargesEnabled: chargesEnabled,
+        stripeChargeModel: chargeModel,
         stripePayoutsEnabled: payoutsEnabled,
         // ALWAYS written, and `null` when Stripe would not say (AGL-2471).
         // Writing unconditionally is what makes re-onboarding safe: a fresh
@@ -213,6 +244,16 @@ export const connectHandler: PluginApiHandler = async (req, res) => {
       // a login link is a convenience, and failing to mint one must never turn
       // a working status check into an error.
       let dashboardUrl: string | undefined
+      if (chargeModel === 'direct') {
+        // A full Stripe account signs in to Stripe itself; login links exist
+        // only for Express accounts.
+        return res.status(200).json({
+          accountId,
+          chargesEnabled: true,
+          payoutsEnabled,
+          dashboardUrl: 'https://dashboard.stripe.com/',
+        })
+      }
       try {
         const login = await stripe(
           `accounts/${accountId}/login_links`,

@@ -97,7 +97,7 @@ export async function runAccountingSyncJob(
   const snapshot = await firestore.collectionGroup(ACCOUNTING_CONNECTIONS_COLLECTION).get()
   for (const doc of snapshot.docs) {
     if (deps.now() >= context.deadlineMs) break
-    const connection = readConnection(doc.data()) as
+    const connection = readConnection(doc.data(), keyring) as
       | (AccountingConnectionRecord & { backfill?: AccountingBackfillState; payoutPolledAtMs?: number })
       | null
     if (!connection || connection.status !== 'connected') continue
@@ -116,7 +116,7 @@ export async function runAccountingSyncJob(
           connection,
         )
         if (result.refreshed) report.refreshed += 1
-        const reread = readConnection((await connectionRef(firestore, connection.orgId, connection.provider).get()).data())
+        const reread = readConnection((await connectionRef(firestore, connection.orgId, connection.provider).get()).data(), keyring)
         if (reread) Object.assign(connection, reread)
       }
 

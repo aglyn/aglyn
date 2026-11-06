@@ -15,6 +15,10 @@
  * limitations under the License.
  */
 
+import {
+  SELLER_STRIPE_TAX_NOT_SET_UP_MESSAGE,
+  sellerStripeTaxActive,
+} from './seller-stripe-account'
 import { randomUUID } from 'crypto'
 import { readSiteReturnHost, siteReturnUrl } from '@aglyn/aglyn/app-utils/site-return-url'
 import type { AttemptClaim, PluginApiHandler } from '@aglyn/aglyn/server'
@@ -32,7 +36,12 @@ import {
   getOrgForHost,
   isYoungWorkspace,
 } from '@aglyn/tenant-data-admin'
-import { merchantAccountIsReady } from '@aglyn/tenant-data-admin/server/payment-provider'
+import {
+  connectedAccountHeader,
+  directChargeParams,
+  merchantAccountIsReady,
+  saleChargeModel,
+} from '@aglyn/tenant-data-admin/server/payment-provider'
 import { checkoutSessionCardAuthenticationParams } from '@aglyn/tenant-data-admin/server/stripe-card-authentication'
 import {
   CARRIER_POSTAL_CODE_MESSAGE,
@@ -205,6 +214,17 @@ export const cartCheckoutHandler: PluginApiHandler = async (req, res) => {
         .status(409)
         .json({ error: 'This site has not enabled payments yet' })
     }
+    // DIRECT OR DESTINATION, decided by the seller's account as the profile
+    // records it, never by the request. A direct sale is created ON the
+    // seller's own Stripe account: every object this handler mints for it
+    // (the coupon, the tax rates, the session) carries `Stripe-Account`,
+    // because an id from the platform account does not resolve there. A
+    // destination seller gets an empty header and today's requests unchanged.
+    const chargeModel = saleChargeModel(ownerProfile.get('stripeChargeModel'))
+    const direct = chargeModel === 'direct'
+    const sellerAccountHeader = connectedAccountHeader(chargeModel, accountId)
+    // For the helpers that take the account and add the header themselves.
+    const sellerStripeAccount = direct ? { stripeAccount: String(accountId) } : {}
 
     // Re-price every line from its doc; any unavailable line blocks.
     const productSnapshots = await Promise.all(
@@ -1087,6 +1107,9 @@ export const cartCheckoutHandler: PluginApiHandler = async (req, res) => {
           // store-credit share names itself (AGL-3640): a balance that moved
           // between two tries is a different coupon, never a mismatch.
           ...stripeKeyHeader(creditHeldCents > 0 ? `coupon-c${creditHeldCents}` : 'coupon'),
+          // On the seller's account for a direct sale: the session's
+          // `discounts[0][coupon]` must name a coupon on its own account.
+          ...sellerAccountHeader,
         },
         body: new URLSearchParams({
           amount_off: String(Math.min(totalOffCents, itemsCents)),
@@ -1208,10 +1231,13 @@ export const cartCheckoutHandler: PluginApiHandler = async (req, res) => {
       // The take plus the card's 2.9% + 30¢, never below what Stripe charges
       // the platform for the sale: the payout, and Stripe Tax where it
       // calculates the tax, come out of the take first (AGL-4198).
+      // A direct sale is the take alone: Stripe bills the seller its card fee
+      // and charges the platform nothing for the sale.
       feeCents = Aglyn.saleApplicationFeeCents(feeCents, chargeCents, {
         stripeTax:
           CommerceModel.storefrontTaxDecision({ settings: cartTaxSettings }).kind ===
           'stripe-automatic',
+        ...(direct ? { direct: true } : {}),
       })
     }
     // THE CONNECT SPLIT IS EMITTED BELOW, NOT HERE (AGL-1956). It used to be
@@ -1292,6 +1318,20 @@ export const cartCheckoutHandler: PluginApiHandler = async (req, res) => {
       await claim.release()
       return res.status(409).json({ error: taxMisconfigured })
     }
+    // A direct-charge store's Stripe Tax runs on ITS account, against its
+    // registrations, and Stripe refuses the session where it is not set up.
+    if (
+      direct &&
+      taxDecision.kind === 'stripe-automatic' &&
+      !(await sellerStripeTaxActive(String(accountId)))
+    ) {
+      await releaseGiftCardHold()
+      await releaseCreditHold()
+      await releasePromotionHolds()
+      await releaseStock()
+      await claim.release()
+      return res.status(409).json({ error: SELLER_STRIPE_TAX_NOT_SET_UP_MESSAGE })
+    }
     if (taxDecision.kind === 'stripe-automatic') {
       params.set('automatic_tax[enabled]', 'true')
     } else if (engineTax.quote) {
@@ -1315,6 +1355,7 @@ export const cartCheckoutHandler: PluginApiHandler = async (req, res) => {
           taxPct: pct,
           taxLabel: 'Sales tax',
           headers: stripeKeyHeader(`tax-rate-engine-${Math.round(pct * 10_000)}`),
+          ...sellerStripeAccount,
         })
         if (!taxRateId) {
           // The same visible refusal as the store's own rate: never an
@@ -1354,6 +1395,7 @@ export const cartCheckoutHandler: PluginApiHandler = async (req, res) => {
           taxPct: rate.pct,
           taxLabel: rate.label || `Tax (${rate.pct}%)`,
           headers: stripeKeyHeader('tax-rate'),
+          ...sellerStripeAccount,
         })
         if (!taxRateId) {
           // A VISIBLE refusal, never a fallback to an untaxed session — that
@@ -1405,21 +1447,30 @@ export const cartCheckoutHandler: PluginApiHandler = async (req, res) => {
     // merchant. A manual-rate or untaxed cart keeps the fee form byte for
     // byte. See `commerce-connect-transfer.ts` for why only one of the two
     // knobs may ever be present.
+    //
+    // A DIRECT sale has none of that: Stripe Tax computes against the SELLER's
+    // registrations and the seller owns the tax, the money is already in the
+    // seller's balance, so there is nothing to transfer and no tax for Aglyn
+    // to hold back. The split is the take as `application_fee_amount`.
     const cartTaxOwner =
-      taxDecision.kind === 'stripe-automatic' ? 'platform' : 'merchant'
+      !direct && taxDecision.kind === 'stripe-automatic' ? 'platform' : 'merchant'
     const cartShippingFloorCents = CommerceModel.shippingFloorCents(
       shippingOptions,
     )
     Object.entries(
-      CommerceModel.destinationChargeParams({
-        accountId: String(accountId),
-        feeCents,
-        taxOwner: cartTaxOwner,
-        // The extras are the merchant's to keep and remit (AGL-3635).
-        merchantGoodsCents: chargedItemsCents + extrasCents,
-        shippingFloorCents: cartShippingFloorCents,
-      }),
+      direct
+        ? directChargeParams(feeCents)
+        : CommerceModel.destinationChargeParams({
+            accountId: String(accountId),
+            feeCents,
+            taxOwner: cartTaxOwner,
+            // The extras are the merchant's to keep and remit (AGL-3635).
+            merchantGoodsCents: chargedItemsCents + extrasCents,
+            shippingFloorCents: cartShippingFloorCents,
+          }),
     ).forEach(([key, value]) => params.set(key, value))
+    // So the webhook, refunds and reports read the sale on the right account.
+    if (direct) params.set('metadata[chargeModel]', 'direct')
     params.set('metadata[type]', 'commerce-cart')
     // How the order reaches the buyer (AGL-3624): the webhook routes it.
     if (localPlan.kind === 'pickup' || localPlan.kind === 'local_delivery') {
@@ -1505,10 +1556,15 @@ export const cartCheckoutHandler: PluginApiHandler = async (req, res) => {
     }
     // Apple Pay shows on a registered domain only (AGL-3629): registered
     // beside the session create, inside a budget, never failing the sale.
+    // A direct sale's wallets answer to the seller's account, so the domain is
+    // registered there.
     const domainRegistration = nativeMode.native
-      ? ensureCheckoutDomain({ pageUrl: backUrl, site: returnSite, hostId }).catch(
-          () => null,
-        )
+      ? ensureCheckoutDomain({
+          pageUrl: backUrl,
+          site: returnSite,
+          hostId,
+          ...sellerStripeAccount,
+        }).catch(() => null)
       : Promise.resolve(null)
     const response = await fetch(
       'https://api.stripe.com/v1/checkout/sessions',
@@ -1535,6 +1591,8 @@ export const cartCheckoutHandler: PluginApiHandler = async (req, res) => {
           ),
           // Empty on the hosted path (AGL-1944).
           ...nativeCheckoutStripeHeaders(nativeMode),
+          // The session lives on the seller's account for a direct sale.
+          ...sellerAccountHeader,
         },
         body: params.toString(),
       },
@@ -1555,6 +1613,8 @@ export const cartCheckoutHandler: PluginApiHandler = async (req, res) => {
           session,
           nativeMode,
           paymentMethodControls.wallets,
+          // The in-page form mounts a direct sale's session on that account.
+          direct ? String(accountId) : undefined,
         )
       : null
     if (!payload) {

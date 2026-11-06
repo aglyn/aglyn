@@ -190,7 +190,13 @@ async function reverseBookingSellerShare(
 export const bookingsBillingWebhookHandler: BillingWebhookHandler = async ({
   type,
   object,
+  event,
 }) => {
+    // The seller's account when this event is about a DIRECT charge: Stripe
+    // delivers those through the Connect endpoint with the account on the
+    // event itself. Empty for the platform's own (destination) charges.
+    const eventAccount =
+      typeof event?.account === 'string' ? event.account.trim() : ''
     // Fraud signals on a paid booking (AGL-3360): an issuer's early fraud
     // warning, a Radar review, or a dispute. Booking deposits never heard
     // about any of them, so the merchant learned of a chargeback from Stripe
@@ -242,6 +248,12 @@ export const bookingsBillingWebhookHandler: BillingWebhookHandler = async ({
       )
       const hostId = String(booking.ref.parent.parent?.id ?? '')
       if (outcome !== 'lost') return { claimed: true, hostId }
+      // A DIRECT charge's dispute is debited from the seller's own account by
+      // Stripe, and there was never a transfer for the platform to pull back,
+      // so a lost one is settled as recorded above and claimed.
+      if (eventAccount || booking.get('chargeModel') === 'direct') {
+        return { claimed: true, hostId }
+      }
       const recovered = await reverseBookingSellerShare(booking.ref, object)
       if (recovered.cents > 0 && hostId) {
         const recoveredText = `$${(recovered.cents / 100).toFixed(2)}`
@@ -323,6 +335,11 @@ export const bookingsBillingWebhookHandler: BillingWebhookHandler = async ({
           0,
           Math.round(Number(object?.metadata?.feeCents ?? 0)),
         )
+        // A DIRECT charge lives on the seller's account, which a refund has
+        // to be sent to. The event names that account; `server.ts` stamped it
+        // on the hold too, so an event without one leaves that stamp alone.
+        const direct =
+          object?.metadata?.chargeModel === 'direct' || Boolean(eventAccount)
         // Redelivery guard (AGL-1755), the AGL-1748 shape. This was an
         // unconditional merge-set with no status check at all — idempotent
         // only by accident, because every value it wrote was fixed. A
@@ -396,6 +413,12 @@ export const bookingsBillingWebhookHandler: BillingWebhookHandler = async ({
                 // `confirmed` while the means to refund it are missing.
                 ...(paymentIntentId ? { paymentIntentId } : {}),
                 feeCents: chargedFeeCents,
+                ...(direct
+                  ? {
+                      chargeModel: 'direct',
+                      ...(eventAccount ? { stripeAccountId: eventAccount } : {}),
+                    }
+                  : {}),
                 // WHICH CHECKOUT PAID FOR THIS (AGL-2481). The guest's browser
                 // comes back from Stripe holding a session id and nothing
                 // else — a booking id was never in the return URL — so this is
