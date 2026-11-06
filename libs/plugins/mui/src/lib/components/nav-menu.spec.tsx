@@ -583,3 +583,24 @@ describe('fitPanel keeps an open panel inside the window (AGL-4200)', () => {
     expect(fitPanel({ left: 300, top: 120, width: 720, height: 1200 }, window1440).maxHeight).toBe(764)
   })
 })
+
+/**
+ * AGL-4200: a nav item's own styles are for its trigger. They land on the
+ * wrapper the panel sits in, so an uppercase or no-wrap item made every line
+ * of its panel uppercase or unwrapped. The panel resets what it would inherit.
+ */
+describe('a menu panel does not inherit its trigger’s text styles (AGL-4200)', () => {
+  it('resets text transform, letter spacing and wrapping on the open panel', () => {
+    render(
+      <MegaMenu label="Train" panelWidth="wide" sx={{ textTransform: 'uppercase', whiteSpace: 'nowrap' }}>
+        <span>Unlimited, three a week or program only.</span>
+      </MegaMenu>,
+    )
+    fireEvent.click(screen.getByRole('button', { name: 'Train' }))
+    const panel = screen.getByLabelText('Train', { selector: '.MuiPaper-root' })
+    const style = getComputedStyle(panel)
+    expect(style.textTransform).toBe('none')
+    expect(style.whiteSpace).toBe('normal')
+    expect(style.letterSpacing).toBe('normal')
+  })
+})

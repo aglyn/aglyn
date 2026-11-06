@@ -425,6 +425,14 @@ const MenuShell = forwardRef<HTMLDivElement, MenuShellProps>((props, ref) => {
                 // A shadow alone vanishes on a dark theme or photo (AGL-4200).
                 border: 1,
                 borderColor: 'divider',
+                // The node's own styles are for its trigger, and they land on
+                // the wrapper this panel sits in. Without a reset an
+                // uppercase, letter-spaced or no-wrap nav item made every
+                // line of its panel the same (AGL-4200). Color needs no
+                // reset: Paper sets its own.
+                textTransform: 'none',
+                letterSpacing: 'normal',
+                whiteSpace: 'normal',
                 // The gap is still the menu: a pointer crossing it from the
                 // trigger stays inside, so a hover-opened menu stays open.
                 '&::before': {
