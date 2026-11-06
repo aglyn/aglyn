@@ -157,6 +157,22 @@ export const REQUIRED_CONNECT_WEBHOOK_EVENTS: readonly string[] = [
   'account.updated',
   'payout.failed',
   'payout.paid',
+  // A DIRECT-charge sale (a store on its own full Stripe account, ToS v24
+  // §10.2(a)) lives on that account, so its events reach only this
+  // destination; the commerce and bookings webhooks act on them only for an
+  // object or order recorded as a direct sale.
+  'checkout.session.completed',
+  'checkout.session.expired',
+  'charge.refunded',
+  'charge.dispute.created',
+  'charge.dispute.closed',
+  'invoice.paid',
+  'invoice.payment_failed',
+  'customer.subscription.created',
+  'customer.subscription.updated',
+  'customer.subscription.deleted',
+  'radar.early_fraud_warning.created',
+  'review.opened',
 ]
 
 /**
