@@ -30,6 +30,7 @@ import {
   describeQuoteTax,
   formatProofNumber,
   formatQuoteNumber,
+  QUOTE_DEFAULT_APPROVAL_STATEMENTS,
   quoteIsProofOnly,
   quoteLineAmounts,
   quotePaymentBlockedByApproval,
@@ -41,7 +42,13 @@ import {
   type QuoteTaxKind,
   type QuoteUnmatchedPayment,
 } from './commerce-quotes'
-import { currentQuoteProofs, latestQuoteResponse, quoteRespondRefusal } from './commerce-quote-proofs'
+import {
+  currentQuoteProofs,
+  latestQuoteResponse,
+  quoteProofAccessMessage,
+  quoteRespondRefusal,
+  type QuoteProofAccess,
+} from './commerce-quote-proofs'
 import type { TaxSettings } from './commerce-tax'
 import { storefrontTaxDecision, type StorefrontTaxMode } from './commerce-tax-decision'
 import { engineLineTaxPercentages, storeTaxAllowsEngine } from './commerce-tax-engine'
@@ -269,11 +276,13 @@ export interface QuotePageProof {
 export interface QuotePageResponse {
   action: 'approve' | 'changes'
   atMs: number
-  /** With an approval: the name it was given under. */
+  /** The name it was given under: an approval's, or a rejection's (AGL-4206). */
   name: string | null
   comment: string | null
   /** How many files came with it. */
   files: number
+  /** With an approval: what they ticked before approving (AGL-4206). */
+  confirmed: string[]
 }
 
 /**
@@ -360,8 +369,20 @@ export interface QuotePageView {
   proofs: QuotePageProof[]
   /** The customer's latest answer to it, if any. */
   response: QuotePageResponse | null
-  /** Approve and Request changes belong on the page. */
+  /** Approve and Reject with changes belong on the page. */
   respondable: boolean
+  /**
+   * What the customer ticks before Approve works (AGL-4206), word for word;
+   * Approve sends them back. Empty when the page takes no answer.
+   */
+  approvalStatements: string[]
+  /**
+   * Whether this browser may see the proof (AGL-4206): `open`, or a sign-in
+   * the quote waits on. While it waits the view carries no proofs, no answer
+   * and nothing to respond with, and `proofAccessMessage` says what to do.
+   */
+  proofAccess: QuoteProofAccess
+  proofAccessMessage: string | null
 }
 
 /** What a signed link for an older version of the quote opens: nothing of the quote. */
@@ -436,6 +457,10 @@ export function buildQuotePageView(input: {
   store?: PayLinkStore | null
   /** Whether the business can take a card payment now; absent, it is not judged here. */
   paymentsReady?: boolean
+  /** What the customer ticks before approving: the store's {@link quoteApprovalStatements}. */
+  approvalStatements?: readonly string[]
+  /** Whether this browser may see the proof ({@link quoteProofAccess}); absent reads as `open`. */
+  proofAccess?: QuoteProofAccess
 }): QuotePageView {
   const { order } = input
   const quote = order.quote
@@ -468,7 +493,7 @@ export function buildQuotePageView(input: {
   const refused = unpaid
     ? payLinkRefusalWithPayments(quotePayRefusal(order, input.orderId, input.store), input.paymentsReady)
     : null
-  return {
+  const view: QuotePageView = {
     state: 'quote',
     kind: 'quote',
     proofOnly,
@@ -510,6 +535,26 @@ export function buildQuotePageView(input: {
     response: pageResponse(quote),
     // The page is only ever a quote's, whatever the caller picked off the order.
     respondable: quoteRespondRefusal({ channel: 'quote', status: order.status, quote }) === null,
+    approvalStatements: [],
+    proofAccess: 'open',
+    proofAccessMessage: null,
+  }
+  const page: QuotePageView = {
+    ...view,
+    approvalStatements: view.respondable ? [...(input.approvalStatements ?? QUOTE_DEFAULT_APPROVAL_STATEMENTS)] : [],
+  }
+  const access = input.proofAccess ?? 'open'
+  // A revision with no proof has nothing to sign in for.
+  if (access === 'open' || page.proofs.length === 0) return page
+  // Waiting on a sign-in, the view carries nothing of the proof or the answer.
+  return {
+    ...page,
+    proofs: [],
+    response: null,
+    respondable: false,
+    approvalStatements: [],
+    proofAccess: access,
+    proofAccessMessage: quoteProofAccessMessage(access, input.storeName),
   }
 }
 
@@ -539,9 +584,10 @@ function pageResponse(quote: OrderQuote | null | undefined): QuotePageResponse |
   return {
     action: latest.action === 'approve' ? 'approve' : 'changes',
     atMs: Number(latest.atMs) || 0,
-    name: latest.action === 'approve' ? text(latest.name) : null,
+    name: text(latest.name),
     comment: latest.action === 'changes' ? text(latest.comment) : null,
     files: latest.files?.length ?? 0,
+    confirmed: latest.action === 'approve' && Array.isArray(latest.confirmed) ? latest.confirmed.map(String) : [],
   }
 }
 

@@ -3275,6 +3275,7 @@ public struct OrderQuote: Codable, Hashable, Sendable {
   public var request: QuoteRequestRef?
   public var requestFiles: [QuoteResponseFile]?
   public var requireProofApproval: Bool?
+  public var requireProofSignIn: Bool?
   public var responses: [QuoteCustomerResponse]?
   public var revision: Double
   public var sends: [QuoteSendRecord]?
@@ -3287,7 +3288,7 @@ public struct OrderQuote: Codable, Hashable, Sendable {
   public var updatedAtMs: Double
   public var updatedBy: String
 
-  public init(approval: QuoteApproval? = nil, approvedRevision: Double? = nil, billTo: OrderAddress? = nil, createdAtMs: Double, createdBy: String, customer: QuoteCustomer, discount: QuoteDiscount? = nil, emailThread: QuoteEmailThread? = nil, linkVersion: Double? = nil, notes: String? = nil, paidAtMs: Double? = nil, proofs: [QuoteProof]? = nil, request: QuoteRequestRef? = nil, requestFiles: [QuoteResponseFile]? = nil, requireProofApproval: Bool? = nil, responses: [QuoteCustomerResponse]? = nil, revision: Double, sends: [QuoteSendRecord]? = nil, shipping: QuoteShipping? = nil, shipTo: OrderAddress? = nil, stage: QuoteStage, tax: QuoteTaxBasis, terms: String? = nil, unmatchedPayments: [QuoteUnmatchedPayment]? = nil, updatedAtMs: Double, updatedBy: String) {
+  public init(approval: QuoteApproval? = nil, approvedRevision: Double? = nil, billTo: OrderAddress? = nil, createdAtMs: Double, createdBy: String, customer: QuoteCustomer, discount: QuoteDiscount? = nil, emailThread: QuoteEmailThread? = nil, linkVersion: Double? = nil, notes: String? = nil, paidAtMs: Double? = nil, proofs: [QuoteProof]? = nil, request: QuoteRequestRef? = nil, requestFiles: [QuoteResponseFile]? = nil, requireProofApproval: Bool? = nil, requireProofSignIn: Bool? = nil, responses: [QuoteCustomerResponse]? = nil, revision: Double, sends: [QuoteSendRecord]? = nil, shipping: QuoteShipping? = nil, shipTo: OrderAddress? = nil, stage: QuoteStage, tax: QuoteTaxBasis, terms: String? = nil, unmatchedPayments: [QuoteUnmatchedPayment]? = nil, updatedAtMs: Double, updatedBy: String) {
     self.approval = approval
     self.approvedRevision = approvedRevision
     self.billTo = billTo
@@ -3303,6 +3304,7 @@ public struct OrderQuote: Codable, Hashable, Sendable {
     self.request = request
     self.requestFiles = requestFiles
     self.requireProofApproval = requireProofApproval
+    self.requireProofSignIn = requireProofSignIn
     self.responses = responses
     self.revision = revision
     self.sends = sends
@@ -4995,13 +4997,15 @@ public struct ProductVariant: Codable, Hashable, Sendable {
 
 public struct QuoteApproval: Codable, Hashable, Sendable {
   public var atMs: Double
+  public var confirmed: [String]?
   public var ip: String?
   public var name: String
   public var revision: Double
   public var userAgent: String?
 
-  public init(atMs: Double, ip: String? = nil, name: String, revision: Double, userAgent: String? = nil) {
+  public init(atMs: Double, confirmed: [String]? = nil, ip: String? = nil, name: String, revision: Double, userAgent: String? = nil) {
     self.atMs = atMs
+    self.confirmed = confirmed
     self.ip = ip
     self.name = name
     self.revision = revision
@@ -5041,16 +5045,18 @@ public struct QuoteCustomerResponse: Codable, Hashable, Sendable {
   public var action: QuoteCustomerResponseAction
   public var atMs: Double
   public var comment: String?
+  public var confirmed: [String]?
   public var files: [QuoteResponseFile]?
   public var ip: String?
   public var name: String?
   public var revision: Double
   public var userAgent: String?
 
-  public init(action: QuoteCustomerResponseAction, atMs: Double, comment: String? = nil, files: [QuoteResponseFile]? = nil, ip: String? = nil, name: String? = nil, revision: Double, userAgent: String? = nil) {
+  public init(action: QuoteCustomerResponseAction, atMs: Double, comment: String? = nil, confirmed: [String]? = nil, files: [QuoteResponseFile]? = nil, ip: String? = nil, name: String? = nil, revision: Double, userAgent: String? = nil) {
     self.action = action
     self.atMs = atMs
     self.comment = comment
+    self.confirmed = confirmed
     self.files = files
     self.ip = ip
     self.name = name

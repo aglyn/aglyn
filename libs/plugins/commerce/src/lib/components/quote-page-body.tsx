@@ -479,7 +479,7 @@ const QuotePageBody = forwardRef<HTMLDivElement, QuotePageProps>((props, ref) =>
           </Stack>
         ) : null}
 
-        {proofOnly && !quote.proofs.length ? (
+        {proofOnly && !quote.proofs.length && (quote.proofAccess ?? 'open') === 'open' ? (
           <Alert severity="info">
             {`${quote.storeName || 'The business'} is working on the next version of your proof, and will send it when it’s ready.`}
           </Alert>

@@ -89,6 +89,8 @@ export interface QuoteDeliveryInput {
   message: string
   payUrl: string
   proofUrl: (proofId: string) => string | null
+  /** The customer signs in to their account on the site to see the proof (AGL-4206): no pictures of it go. */
+  signInFirst?: boolean
   linkReplaced: boolean
   /** The sending member's email: the Reply-To when the site has no contact email. */
   senderEmail: string | null
@@ -214,6 +216,7 @@ export function quoteMailer(deps: QuoteMailerDeps = defaultQuoteMailerDeps()): Q
         message: input.message,
         payUrl: input.payUrl,
         proofUrl: input.proofUrl,
+        signInFirst: input.signInFirst === true,
         linkReplaced: input.linkReplaced,
         colors: proofColors(theme),
         radius: theme?.buttonRadius,

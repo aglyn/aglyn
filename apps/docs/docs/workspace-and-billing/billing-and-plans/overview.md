@@ -362,7 +362,7 @@ customers send are still taken; see below.
 ### Files on quotes and forms {#files-on-quotes-and-forms}
 
 The proofs you attach to a [quote](../../commerce-and-bookings/commerce/quotes-and-proofs.md#proofs),
-the files your customer sends when they ask for changes, and the files a
+the files your customer sends when they reject a proof with changes, and the files a
 [File upload](../../content-and-data/forms/overview.md#file-upload) field takes count
 toward your storage exactly as files in a media library do: the same allowance, the same
 meter and alerts, and on a paid plan the same billing past it. Removing a proof, deleting a

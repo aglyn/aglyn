@@ -260,10 +260,11 @@ describe("plugins: a console card's write of something a page renders carries th
       },
     'libs/plugins/commerce/src/lib/components/console/quote-settings-card.component.tsx':
       {
-        writes: /\{\s*quotes:\s*\{\s*requireProofApproval:\s*current\s*\}\s*\}/,
+        writes: /\{\s*quotes:\s*current\s*\}/,
         why:
-          'Writes only `settings/store.quotes` (AGL-4093), which the quote ' +
-          'route reads when it creates a quote; no cached page renders it.',
+          'Writes only `settings/store.quotes` (AGL-4093, AGL-4206), which the ' +
+          'quote routes read when they create a quote or open its proof; no ' +
+          'cached page renders it.',
       },
     'libs/plugins/commerce/src/lib/components/console/local-delivery-settings-card.component.tsx':
       {

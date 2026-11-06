@@ -99,6 +99,12 @@ export interface QuoteEmailContentInput {
   payUrl: string
   /** A proof's address behind that link, or null when it has none. */
   proofUrl: (proofId: string) => string | null
+  /**
+   * The customer signs in to their account on the site to see the proof
+   * (AGL-4206). The email draws no picture of it, since an inbox is not signed
+   * in, and says to sign in on the page.
+   */
+  signInFirst?: boolean
   /** This email gives the customer a new pay link, and the earlier email's no longer opens the quote. */
   linkReplaced: boolean
   colors: QuoteEmailColors
@@ -147,8 +153,10 @@ export function quoteEmailContent(input: QuoteEmailContentInput): QuoteEmailCont
   const pictured: Array<{ name: string; url: string }> = []
   const named: string[] = []
   let morePictures = 0
+  const signInFirst = input.signInFirst === true
   for (const proof of proofs) {
-    const url = EMAIL_IMAGE_TYPES.has(String(proof.contentType ?? '').toLowerCase()) ? input.proofUrl(proof.id) : null
+    const url =
+      !signInFirst && EMAIL_IMAGE_TYPES.has(String(proof.contentType ?? '').toLowerCase()) ? input.proofUrl(proof.id) : null
     if (url && pictured.length < QUOTE_EMAIL_MAX_IMAGES) pictured.push({ name: proof.name, url })
     else if (url) morePictures += 1
     else named.push(proof.name)
@@ -157,7 +165,11 @@ export function quoteEmailContent(input: QuoteEmailContentInput): QuoteEmailCont
   const overflow = named.length - listed.length + morePictures
   const parts = [...listed, ...(overflow > 0 ? [`${plural(overflow, 'more file', 'more files')}`] : [])]
   const lead = pictured.length ? 'Also with this revision' : named.length === 1 ? 'Proof' : 'Proofs'
-  const seeIt = named.length + morePictures === 1 ? `See it on your ${noun} page.` : `See them on your ${noun} page.`
+  const seeIt = signInFirst
+    ? `Sign in to your account with ${business} on your ${noun} page to see ${named.length + morePictures === 1 ? 'it' : 'them'}.`
+    : named.length + morePictures === 1
+      ? `See it on your ${noun} page.`
+      : `See them on your ${noun} page.`
   const proofFiles = parts.length ? `${lead}: ${joinNames(parts)}. ${seeIt}` : ''
 
   const radius = Math.max(0, Math.round(Number(input.radius ?? 4)) || 0)
@@ -175,17 +187,20 @@ export function quoteEmailContent(input: QuoteEmailContentInput): QuoteEmailCont
 
   const proofed = proofs.length > 0
   const approved = proofed && Number(quote.approvedRevision) === revision
-  const nextStep = proofOnly
+  // Approving asks the customer to confirm they checked the proof (AGL-4206), so the email says so.
+  const answer = proofOnly
     ? approved
-      ? 'You approved this proof. You can still ask for changes on your proof page.'
-      : 'Look over the proof, then approve it or ask for changes on your proof page.'
+      ? 'You approved this proof. You can still reject it with changes on your proof page.'
+      : 'Look over the proof, then approve it or reject it with changes on your proof page. To approve, you confirm you checked it and type your name.'
     : approvalFirst
-    ? 'Look over the proof, then approve it on your quote page. Once you approve it, you can pay there.'
+    ? 'Look over the proof, then approve it on your quote page: you confirm you checked it and type your name. Once you approve it, you can pay there.'
     : approved
       ? 'You approved the proof. Pay on your quote page whenever you’re ready.'
       : proofed
-        ? 'Look over your quote and the proof. On your quote page you can approve the proof or ask for changes, and pay whenever you’re ready.'
+        ? 'Look over your quote and the proof. On your quote page you can approve the proof (you confirm you checked it and type your name) or reject it with changes, and pay whenever you’re ready.'
         : 'Look over your quote, and pay it on your quote page whenever you’re ready.'
+  const nextStep =
+    signInFirst && proofed && !approved ? `Sign in to your account with ${business} to see the proof. ${answer}` : answer
   const buttonLabel = proofOnly
     ? 'Review the proof'
     : approvalFirst
