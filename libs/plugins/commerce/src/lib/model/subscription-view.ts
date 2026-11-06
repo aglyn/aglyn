@@ -48,6 +48,9 @@ export const SUBSCRIPTION_STATUS_COLOR: Readonly<
 }
 
 /** The statuses the console's filter offers, in the order a merchant scans them. */
+// AGL-1715-EXEMPT: the options of the subscriptions list's status filter, a
+// display vocabulary rather than a "live" test; nothing is granted or refused
+// by membership in it.
 export const SUBSCRIPTION_FILTER_STATUSES = [
   'active',
   'trialing',
