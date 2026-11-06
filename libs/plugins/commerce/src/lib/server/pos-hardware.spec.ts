@@ -127,6 +127,7 @@ import {
   posHardwareSaleRecord,
   type PosHardwareOrder,
   type PosHardwareSaleRecord,
+  type PosHardwareUnit,
 } from '../model/pos-hardware'
 import {
   COMMERCE_POS_HARDWARE_CANCELED_AFTER_ORDERING,
@@ -291,7 +292,7 @@ function paidSession(overrides: Record<string, unknown> = {}) {
 
 const ORDER_ID = 'hw_0123456789abcdef0123'
 /** The order's two readers, their serials recorded: set up, so it may ship (AGL-4038). */
-const SET_UP_UNITS = [
+const SET_UP_UNITS: PosHardwareUnit[] = [
   { sku: 'stripe-reader-s710', serialNumber: 'WSC1', readerId: null, hostId: null, registeredAtMs: null },
   { sku: 'stripe-reader-m2', serialNumber: 'STRM1', readerId: null, hostId: null, registeredAtMs: null },
 ]
