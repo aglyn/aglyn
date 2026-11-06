@@ -86,6 +86,10 @@ pick it in the field's **Product** setting; the customer then picks just its opt
 The field sends the product and options in words, which is what your Inbox and your
 alert show, and keeps the exact product and option beside them for the quote.
 
+Inside a **Product detail** block, the field doesn't ask again: it takes the product,
+options, add-ons and quantity the customer picked on the page. See
+[A free mockup before they buy](catalog.md#free-mockup).
+
 The customer gets a confirmation email with a copy of their request, and their request
 lands in your Inbox marked **Quote request**.
 
