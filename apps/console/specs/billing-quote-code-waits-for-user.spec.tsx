@@ -31,7 +31,7 @@
  * (the Yearly / Monthly toggle) went out with no code.
  */
 
-import { render, screen, waitFor } from '@testing-library/react'
+import { act, render, screen, waitFor } from '@testing-library/react'
 import { useState } from 'react'
 
 jest.mock('@aglyn/shared-ui-jsx', () => ({
@@ -116,6 +116,68 @@ describe('the proposal code on a card that mounts before the user', () => {
     await waitFor(() => expect(screen.getByTestId('held-code').textContent).toBe('PARTNER'))
     // The base price is free, so the total is $0.00, not the list price.
     expect(screen.getByText('$0.00/mo')).toBeTruthy()
+  })
+
+  it('keeps the code on a re-quote sent before its answer lands', async () => {
+    // Production order on Billing opened from the menu: the card mounts on
+    // the page's default Yearly and quotes with the proposal's code, then the
+    // page's own effect switches to the proposal's Monthly. That re-quote
+    // went out with no code, and the code's answer was dropped as stale.
+    mockUser = { uid: 'u-1', getIdToken: async () => 'tok' }
+    const pending: Array<() => void> = []
+    global.fetch = jest.fn((_url: unknown, init: any) => {
+      const body = JSON.parse(String(init?.body ?? '{}'))
+      posted.push(body)
+      return new Promise((resolve) => {
+        pending.push(() =>
+          resolve({
+            ok: true,
+            status: 200,
+            json: async () =>
+              body.promotionCode === 'PARTNER' ? BASE_FREE : { needsBillingDetails: true },
+          } as never),
+        )
+      })
+    }) as never
+
+    function Page({ interval }: { interval: 'month' | 'year' }) {
+      const [appliedCode, setAppliedCode] = useState('')
+      return (
+        <>
+          <output data-testid="held-code">{appliedCode}</output>
+          <BillingPlanQuoteComponent
+            orgId="org-1"
+            plan="starter"
+            interval={interval}
+            canManage
+            appliedCode={appliedCode}
+            onAppliedCodeChange={setAppliedCode}
+            initialCoupon="PARTNER"
+          />
+        </>
+      )
+    }
+
+    const view = render(<Page interval="year" />)
+    await waitFor(() => expect(posted).toHaveLength(1))
+    expect(posted[0]).toMatchObject({ interval: 'year', promotionCode: 'PARTNER' })
+
+    // The page settles on Monthly before the first answer is back.
+    view.rerender(<Page interval="month" />)
+    await waitFor(() => expect(posted).toHaveLength(2))
+    expect(posted[1]).toMatchObject({ interval: 'month', promotionCode: 'PARTNER' })
+
+    // Both answers land, oldest first; only the newest counts.
+    await act(async () => {
+      for (const resolve of pending.splice(0)) resolve()
+    })
+    await waitFor(() => expect(screen.getByTestId('held-code').textContent).toBe('PARTNER'))
+    expect(screen.getByText('$0.00/mo')).toBeTruthy()
+
+    // A later toggle carries the code the page now holds.
+    view.rerender(<Page interval="year" />)
+    await waitFor(() => expect(posted).toHaveLength(3))
+    expect(posted[2]).toMatchObject({ interval: 'year', promotionCode: 'PARTNER' })
   })
 
   it('tries a code that arrives after the card mounted', async () => {

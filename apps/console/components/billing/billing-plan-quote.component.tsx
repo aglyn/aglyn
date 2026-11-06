@@ -308,6 +308,13 @@ export default function BillingPlanQuoteComponent({
   // The link's code is tried once, on the first quote, and then belongs to
   // the box like any typed code.
   const linkCoupon = useRef<string | null>(initialCoupon?.trim() || null)
+  // The link's code while its answer has not landed yet. Only the newest
+  // quote's answer lands, so a re-quote sent before it (the page settling
+  // its interval right after the card mounts) would otherwise go out with
+  // no code and the code's own answer would be dropped as stale: a proposal
+  // with a base-price-free code showed the plan's list price. A re-quote
+  // carries this code until an answer for it lands.
+  const linkCodeInFlight = useRef<string | null>(null)
   const [couponNotice, setCouponNotice] = useState<string | null>(null)
   const { data: user } = useUser()
   // Keyed by presence, not identity: a refreshed token object is the same
@@ -361,6 +368,10 @@ export default function BillingPlanQuoteComponent({
         })
         const payload = await response.json().catch(() => ({}))
         if (mine !== quoteSeq.current) return
+        // The link's code has its answer: applied or refused, it is settled.
+        if (fromLink && promotionCode === linkCodeInFlight.current) {
+          linkCodeInFlight.current = null
+        }
         const locked = parseLockdownRefusal(response.status, payload)
         if (locked) return void setLockdown(locked)
         // The link's code did not resolve: say so in one line and quote
@@ -440,9 +451,10 @@ export default function BillingPlanQuoteComponent({
     // land, the card shows the list total for the bundle as it is now.
     setQuote(null)
     onQuoted?.(null)
-    const fromLink = linkCoupon.current
+    const fromLink = linkCoupon.current ?? linkCodeInFlight.current
     linkCoupon.current = null
     if (fromLink && !appliedCode) {
+      linkCodeInFlight.current = fromLink
       setCodeInput(fromLink)
       void fetchQuote(fromLink, true)
       return
@@ -465,6 +477,7 @@ export default function BillingPlanQuoteComponent({
       linkCoupon.current = next
       return
     }
+    linkCodeInFlight.current = next
     setCodeInput(next)
     void fetchQuote(next, true)
     // eslint-disable-next-line react-hooks/exhaustive-deps
