@@ -105,6 +105,7 @@ function entry(overrides: Partial<PluginConnectionStatusEntry> = {}): PluginConn
     connection: null,
     credentialsSet: true,
     planAllows: true,
+    hosts: ['accounts.google.com', 'mybusiness.googleapis.com', 'oauth2.googleapis.com'],
     ...overrides,
   }
 }
@@ -256,7 +257,7 @@ describe('SitePluginConnectionsCard (AGL-4196)', () => {
 
   it('connected: shows the choices, last sync and next sync, with Sync now, Change and Disconnect', async () => {
     const api = stubApi(status({ connection: view() }))
-    api.sync.mockResolvedValueOnce({ connection: view({ lastSyncAtMs: Date.UTC(2026, 10, 6) }) })
+    api.sync.mockResolvedValueOnce({ connection: view({ lastSyncAtMs: Date.UTC(2026, 10, 6) }), synced: true })
     open(api)
     expect(await screen.findByText('Connected')).toBeTruthy()
     expect(screen.getByText('Candle Co')).toBeTruthy()
@@ -266,6 +267,39 @@ describe('SitePluginConnectionsCard (AGL-4196)', () => {
     fireEvent.click(button('Sync now'))
     await waitFor(() => expect(api.sync).toHaveBeenCalledWith({ listingId: 'listing-1', connectionId: 'gbp' }))
     expect(enqueueSnackbar).toHaveBeenCalledWith('Google Business Profile is up to date.', { variant: 'success' })
+    expect(screen.getByText('Shares data with: accounts.google.com, mybusiness.googleapis.com, oauth2.googleapis.com')).toBeTruthy()
+  })
+
+  it('a sync the provider refused comes back as the error state, said as a warning', async () => {
+    const api = stubApi(status({ connection: view() }))
+    api.sync.mockResolvedValueOnce({ connection: view({ status: 'error', lastError: 'The provider answered 503' }), synced: false })
+    open(api)
+    fireEvent.click(await findButton('Sync now'))
+    expect(await screen.findByText('Sync failed')).toBeTruthy()
+    expect(enqueueSnackbar).toHaveBeenCalledWith('Google Business Profile did not sync. See why below.', { variant: 'warning' })
+  })
+
+  it('Sync now within a minute of the last one is a plain-words wait, not an error', async () => {
+    const api = stubApi(status({ connection: view() }))
+    api.sync.mockRejectedValueOnce(
+      new PluginConnectionRouteError('Google Business Profile synced less than a minute ago.', 429, 'too-soon', {
+        retryAfterMs: 30_000,
+        connection: view(),
+      }),
+    )
+    open(api)
+    fireEvent.click(await findButton('Sync now'))
+    expect(await screen.findByText('Google Business Profile synced moments ago. You can sync it again in 30 seconds.')).toBeTruthy()
+    expect(screen.queryByText('Google Business Profile synced less than a minute ago.')).toBeNull()
+  })
+
+  it('a pinned version that declares no sync offers no Sync now and no sync times', async () => {
+    const pin = { ...PIN, manifest: { id: 'review-wall', connections: [{ id: 'gbp', label: 'Google Business Profile' }] } }
+    open(stubApi(status({ connection: view() })), pin)
+    expect(await screen.findByText('Connected')).toBeTruthy()
+    expect(screen.queryByRole('button', { name: 'Sync now' })).toBeNull()
+    expect(screen.queryByText(/^Last synced /)).toBeNull()
+    expect(button('Disconnect')).toBeTruthy()
   })
 
   it('a sync the route does not serve yet is an error on the card, not a crash', async () => {
@@ -293,6 +327,7 @@ describe('SitePluginConnectionsCard (AGL-4196)', () => {
     fireEvent.click(await findButton('Disconnect'))
     const dialog = await screen.findByRole('dialog')
     expect(within(dialog).getByText('Disconnect Google Business Profile?')).toBeTruthy()
+    expect(within(dialog).getByText(/what it last brought in is removed from the site/)).toBeTruthy()
     fireEvent.click(within(dialog).getByRole('button', { name: 'Disconnect' }))
     await waitFor(() => expect(api.disconnect).toHaveBeenCalledWith({ listingId: 'listing-1', connectionId: 'gbp' }))
     expect(await screen.findByText('Not connected')).toBeTruthy()

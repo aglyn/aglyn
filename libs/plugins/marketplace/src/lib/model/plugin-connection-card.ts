@@ -17,7 +17,6 @@
 
 import { platformConsoleOrigin } from '@aglyn/aglyn/app-utils/platform-brand'
 import {
-  PLUGIN_CONNECTIONS_API_PREFIX,
   PLUGIN_CONNECTIONS_API_ROUTES,
   type PluginConnectionStatusEntry,
   type PluginConnectionView,
@@ -28,14 +27,6 @@ import {
  * console card, the publisher's credentials card and their specs read one
  * answer. Pure: no Firestore, no fetch, no window.
  */
-
-/**
- * "Sync now", served by the marketplace beside the other connection routes.
- * Named here until the route table carries it; the shape is
- * `POST { hostId, listingId, connectionId }` → `{ connection }`.
- */
-export const PLUGIN_CONNECTIONS_SYNC_ROUTE: string =
-  (PLUGIN_CONNECTIONS_API_ROUTES as Readonly<Record<string, string>>)['sync'] ?? `${PLUGIN_CONNECTIONS_API_PREFIX}/sync`
 
 /** The address a publisher registers at the provider as the OAuth app's redirect URI. */
 export function pluginConnectionRedirectUri(origin: string = platformConsoleOrigin()): string {
@@ -172,7 +163,8 @@ export function pluginConnectionNextSyncAtMs(
   view: PluginConnectionCardView | null,
   intervalHours: number | null | undefined,
 ): number | 'soon' | null {
-  if (!view || view.status === 'reconnect_required' || !view.ready) return null
+  // A failed sync backs off on the server, so the interval no longer says when it runs again.
+  if (!view || view.status !== 'connected' || !view.ready) return null
   if (typeof view.nextSyncAtMs === 'number') return view.nextSyncAtMs
   if (!intervalHours || intervalHours <= 0) return null
   if (view.lastSyncAtMs === null) return 'soon'
@@ -201,6 +193,19 @@ export function declaredPluginConnections(manifest: unknown): Array<{ id: string
     if (typeof id !== 'string' || !id || typeof label !== 'string' || !label) return []
     return [{ id, label, ...(typeof description === 'string' && description ? { description } : {}) }]
   })
+}
+
+/** What a site owner is told when "Sync now" comes within a minute of the last sync. */
+export function pluginConnectionTooSoonText(label: string, retryAfterMs: number | null): string {
+  const seconds = retryAfterMs && retryAfterMs > 0 ? Math.ceil(retryAfterMs / 1000) : null
+  return seconds
+    ? `${label} synced moments ago. You can sync it again in ${seconds} seconds.`
+    : `${label} synced moments ago. You can sync it again in a minute.`
+}
+
+/** Where a connection's data goes and comes from, as the card says it. */
+export function pluginConnectionSharesText(hosts: readonly string[] | undefined): string | null {
+  return hosts && hosts.length ? `Shares data with: ${hosts.join(', ')}` : null
 }
 
 /** A date and time as the cards print it. */

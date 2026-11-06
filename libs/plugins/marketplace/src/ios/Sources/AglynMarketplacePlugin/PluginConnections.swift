@@ -77,6 +77,8 @@ struct PluginConnectionEntry: Identifiable, Equatable {
   var connection: PluginConnectionState?
   let credentialsSet: Bool
   let planAllows: Bool
+  /// Every host the connection's data goes to or comes from (`pluginConnectionHosts`).
+  let hosts: [String]
   var id: String { "\(listingID)/\(connectionID)" }
 
   init?(_ json: JSONValue) {
@@ -91,6 +93,7 @@ struct PluginConnectionEntry: Identifiable, Equatable {
     connection = PluginConnectionState(json["connection"])
     credentialsSet = json["credentialsSet"]?.boolValue ?? false
     planAllows = json["planAllows"]?.boolValue ?? false
+    hosts = (json["hosts"]?.arrayValue ?? []).compactMap(\.stringValue)
   }
 }
 
@@ -143,7 +146,8 @@ enum PluginConnectionNextSync: Equatable {
 
 /// When the next scheduled sync runs: what the sync recorded, else the last one plus the manifest's interval.
 func pluginConnectionNextSync(_ connection: PluginConnectionState?, intervalHours: Double?) -> PluginConnectionNextSync? {
-  guard let connection, connection.status != "reconnect_required", connection.ready else { return nil }
+  // A failed sync backs off on the server, so the interval no longer says when it runs again.
+  guard let connection, connection.status == "connected", connection.ready else { return nil }
   if let next = connection.nextSyncAtMs { return .at(next) }
   guard let intervalHours, intervalHours > 0 else { return nil }
   guard let last = connection.lastSyncAtMs else { return .soon }
@@ -172,6 +176,17 @@ func pluginConnectionReturnTo(origin: String, orgSlug: String?, hostSlug: String
   let trimmed = origin.hasSuffix("/") ? String(origin.dropLast()) : origin
   guard let orgSlug, let hostSlug else { return "\(trimmed)/" }
   return "\(trimmed)/\(orgSlug)/hosts/\(hostSlug)/admin/plugins/\(listingID)"
+}
+
+/// What a site owner is told when "Sync now" comes within a minute of the last sync (`pluginConnectionTooSoonText`).
+func pluginConnectionTooSoonText(_ label: String, retryAfterMs: Double?) -> String {
+  guard let retryAfterMs, retryAfterMs > 0 else { return "\(label) synced moments ago. You can sync it again in a minute." }
+  return "\(label) synced moments ago. You can sync it again in \(Int((retryAfterMs / 1000).rounded(.up))) seconds."
+}
+
+/// Where a connection's data goes and comes from (`pluginConnectionSharesText`).
+func pluginConnectionSharesText(_ hosts: [String]) -> String? {
+  hosts.isEmpty ? nil : "Shares data with: \(hosts.joined(separator: ", "))"
 }
 
 /// Why a route refused, when it says (`reason` in its JSON).
@@ -211,9 +226,11 @@ struct PluginConnectionsAPI {
     return PluginConnectionState(try await api.request(PluginConnectionsRoute.choose, method: .post, body: JSONValue.from(body))?["connection"])
   }
 
-  func sync(listingID: String, connectionID: String) async throws -> PluginConnectionState? {
+  /// Runs the declared sync once: the view after it, and whether it worked (`synced`).
+  func sync(listingID: String, connectionID: String) async throws -> (connection: PluginConnectionState?, synced: Bool) {
     let body: [String: Any] = ["hostId": hostID, "listingId": listingID, "connectionId": connectionID]
-    return PluginConnectionState(try await api.request(PluginConnectionsRoute.sync, method: .post, body: JSONValue.from(body))?["connection"])
+    let answer = try await api.request(PluginConnectionsRoute.sync, method: .post, body: JSONValue.from(body))
+    return (PluginConnectionState(answer?["connection"]), answer?["synced"]?.boolValue ?? false)
   }
 
   func disconnect(listingID: String, connectionID: String) async throws {
@@ -326,6 +343,7 @@ private struct SitePluginConnectionSection: View {
   @State private var itemsError: String?
   @State private var picked = ""
   @State private var confirmingDisconnect = false
+  @State private var wait: String?
 
   private var phase: PluginConnectionPhase { pluginConnectionPhase(entry, configured: configured) }
   private var resource: PluginConnectionChoice? {
@@ -333,6 +351,8 @@ private struct SitePluginConnectionSection: View {
     return phase == .choosing ? nextPluginConnectionResource(entry) : nil
   }
   private var label: String { entry.label }
+  /// A pinned version that declares no sync has nothing for Sync now to run, and no sync times to show.
+  private var declaresSync: Bool { intervalHours != nil }
 
   var body: some View {
     VStack(alignment: .leading, spacing: AglynSpace.one) {
@@ -344,16 +364,20 @@ private struct SitePluginConnectionSection: View {
       if let detail = entry.detail { Text(detail).font(AglynFont.caption).foregroundStyle(.secondary) }
       if let error = runner.error { AglynNotice(error, tone: .error) { runner.error = nil } }
       if let notice = runner.notice { AglynNotice(notice, tone: .success) { runner.notice = nil } }
+      if let wait { AglynNotice(wait, tone: .info) { self.wait = nil } }
       notices
       if let resource { picker(resource) }
       details
+      if let shares = pluginConnectionSharesText(entry.hosts) {
+        Text(shares).font(AglynFont.caption).foregroundStyle(.secondary)
+      }
       actions
     }
     .task(id: "\(resource?.id ?? "")/\(planAllows)") { await loadItems() }
     .confirmationDialog("Disconnect \(label)?", isPresented: $confirmingDisconnect, titleVisibility: .visible) {
       Button("Disconnect", role: .destructive) { disconnect() }
     } message: {
-      Text("\(pluginName) stops receiving updates from \(label) on this site. You can connect again at any time.")
+      Text("\(pluginName) stops receiving updates from \(label) on this site, and what it last brought in is removed from the site. You can connect again at any time.")
     }
   }
 
@@ -415,7 +439,7 @@ private struct SitePluginConnectionSection: View {
       ForEach(chosen, id: \.0) { pair in
         LabeledContent(pair.0, value: pair.1).font(AglynFont.subheadline)
       }
-      if phase == .connected || phase == .error {
+      if declaresSync, phase == .connected || phase == .error {
         Text(connection.lastSyncAtMs.map { "Last synced \(pluginConnectionTime($0))" } ?? "Not synced yet")
           .font(AglynFont.caption).foregroundStyle(.secondary)
         switch pluginConnectionNextSync(connection, intervalHours: intervalHours) {
@@ -449,7 +473,9 @@ private struct SitePluginConnectionSection: View {
             .accessibilityIdentifier("plugin-connection-reconnect-\(entry.connectionID)")
           disconnectButton
         case .connected, .error, .choosing:
-          if phase == .error {
+          if !declaresSync {
+            EmptyView()
+          } else if phase == .error {
             Button(runner.busy ? "Syncing…" : "Sync now") { sync() }
               .buttonStyle(.aglynProminent).disabled(runner.busy || planReason != nil)
               .accessibilityIdentifier("plugin-connection-sync-\(entry.connectionID)")
@@ -517,10 +543,20 @@ private struct SitePluginConnectionSection: View {
   }
 
   private func sync() {
+    wait = nil
     runner.run {
-      let connection = try await api.sync(listingID: entry.listingID, connectionID: entry.connectionID)
-      onChange(updated(connection))
-      if connection?.status == "connected" { runner.notice = "\(label) is up to date." } else { runner.error = "\(label) did not sync. See why above." }
+      do {
+        let answer = try await api.sync(listingID: entry.listingID, connectionID: entry.connectionID)
+        onChange(updated(answer.connection))
+        if answer.synced { runner.notice = "\(label) is up to date." } else { runner.error = "\(label) did not sync. See why above." }
+      } catch let error as ConsoleAPIError where pluginConnectionRefusalReason(error) == "too-soon" {
+        // Not a failure: the last sync is under a minute old. Say how long, and show what it brought.
+        wait = pluginConnectionTooSoonText(label, retryAfterMs: error.body?["retryAfterMs"]?.numberValue)
+        if let connection = PluginConnectionState(error.body?["connection"]) { onChange(updated(connection)) }
+      } catch let error as ConsoleAPIError where ["reconnect", "not-connected", "choose-first"].contains(pluginConnectionRefusalReason(error) ?? "") {
+        onStale()
+        throw error
+      }
     }
   }
 

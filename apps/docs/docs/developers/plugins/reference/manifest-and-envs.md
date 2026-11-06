@@ -247,8 +247,9 @@ How it runs:
 4. **The platform syncs it.** Once every resource is chosen, the platform
    runs your `sync` for the site, then again every `intervalHours`, and
    writes what it read into the site's **record** (below). A member with
-   the site's connections permission can also run it at once through
-   `POST /api/plugin-connections/sync`.
+   the site's connections permission can also press **Sync now** on the
+   connection's card, on the site's page for your plugin under **Site Admin →
+   Plugins**, to run it at once.
 
 #### How the sync runs {#connection-sync}
 

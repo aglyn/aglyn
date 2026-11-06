@@ -21,6 +21,7 @@ import {
   PLUGIN_CONNECTION_PHASE_CHIP,
   PLUGIN_CONNECTIONS_NOT_CONFIGURED_TEXT,
   pluginConnectionNotSetUpText,
+  pluginConnectionTooSoonText,
 } from './model/plugin-connection-card'
 import {
   PLUGIN_CONNECTIONS_API_ROUTES,
@@ -51,6 +52,13 @@ describe('the native connection screens match the console (AGL-4196)', () => {
     expect(source).toContain(before)
     expect(source).toContain(after)
     expect(source).toContain(`"${PLUGIN_CONNECTIONS_SITE_PERMISSION}"`)
+    // The too-soon wait and the hosts line, around what each fills in.
+    for (const piece of pluginConnectionTooSoonText('LABEL', 1000).split(/LABEL|1 seconds\./).filter(Boolean)) {
+      expect(source).toContain(piece)
+    }
+    expect(source).toContain('synced moments ago. You can sync it again in a minute.')
+    expect(source).toContain('Shares data with: ')
+    expect(source).toContain('and what it last brought in is removed from the site.')
   })
 
   it.each(Object.entries(NATIVES))('%s wears the console’s status chips', (_, source) => {

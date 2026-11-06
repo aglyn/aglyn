@@ -85,6 +85,15 @@ final class PluginConnectionsTests: XCTestCase {
     XCTAssertNil(pluginConnectionRefusalReason(ConsoleAPIError(status: 404, message: "Not found")))
   }
 
+  func testWaitAndShares() {
+    XCTAssertEqual(
+      pluginConnectionTooSoonText("Google Business Profile", retryAfterMs: 41_200),
+      "Google Business Profile synced moments ago. You can sync it again in 42 seconds.")
+    XCTAssertEqual(pluginConnectionSharesText(["a.example.com", "b.example.com"]), "Shares data with: a.example.com, b.example.com")
+    XCTAssertNil(pluginConnectionSharesText([]))
+    XCTAssertNil(pluginConnectionNextSync(PluginConnectionState(view(status: "error", ready: true, lastSync: 5)), intervalHours: 2))
+  }
+
   func testCopyMatchesTheConsole() {
     XCTAssertEqual(pluginConnectionsPlanRefusal, "Connecting a plugin to another service comes with the Starter, Pro and Custom plans.")
     XCTAssertEqual(pluginConnectionsSiteKey, "marketplace.siteConnections")

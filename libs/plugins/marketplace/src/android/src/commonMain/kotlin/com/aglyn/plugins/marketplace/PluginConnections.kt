@@ -119,6 +119,8 @@ data class PluginConnectionEntry(
   val connection: PluginConnectionState?,
   val credentialsSet: Boolean,
   val planAllows: Boolean,
+  /** Every host the connection's data goes to or comes from (`pluginConnectionHosts`). */
+  val hosts: List<String> = emptyList(),
 ) {
   val key: String get() = "$listingId/$connectionId"
 
@@ -130,6 +132,7 @@ data class PluginConnectionEntry(
       return PluginConnectionEntry(
         listingId, connectionId, element.field("label") ?: connectionId, element.field("description"), resources,
         PluginConnectionState.from(element["connection"]), element.boolField("credentialsSet") ?: false, element.boolField("planAllows") ?: false,
+        (element["hosts"] as? JsonArray).orEmpty().mapNotNull { (it as? JsonPrimitive)?.contentOrNull },
       )
     }
   }
@@ -178,7 +181,8 @@ sealed interface PluginConnectionNextSync {
 
 /** When the next scheduled sync runs: what the sync recorded, else the last one plus the manifest's interval. */
 fun pluginConnectionNextSync(connection: PluginConnectionState?, intervalHours: Double?): PluginConnectionNextSync? {
-  if (connection == null || connection.status == "reconnect_required" || !connection.ready) return null
+  // A failed sync backs off on the server, so the interval no longer says when it runs again.
+  if (connection == null || connection.status != "connected" || !connection.ready) return null
   connection.nextSyncAtMs?.let { return PluginConnectionNextSync.At(it) }
   if (intervalHours == null || intervalHours <= 0) return null
   val last = connection.lastSyncAtMs ?: return PluginConnectionNextSync.Soon
@@ -202,6 +206,14 @@ fun pluginConnectionReturnTo(origin: String, orgSlug: String?, hostSlug: String?
   if (orgSlug == null || hostSlug == null) return "$trimmed/"
   return "$trimmed/$orgSlug/hosts/$hostSlug/admin/plugins/$listingId"
 }
+
+/** What a site owner is told when "Sync now" comes within a minute of the last sync (`pluginConnectionTooSoonText`). */
+fun pluginConnectionTooSoonText(label: String, retryAfterMs: Double?): String =
+  if (retryAfterMs == null || retryAfterMs <= 0) "$label synced moments ago. You can sync it again in a minute."
+  else "$label synced moments ago. You can sync it again in ${kotlin.math.ceil(retryAfterMs / 1000).toInt()} seconds."
+
+/** Where a connection's data goes and comes from (`pluginConnectionSharesText`). */
+fun pluginConnectionSharesText(hosts: List<String>): String? = if (hosts.isEmpty()) null else "Shares data with: ${hosts.joinToString(", ")}"
 
 /** Why a route refused, when it says (`reason` in its JSON). */
 fun pluginConnectionRefusalReason(failure: Throwable): String? = ((failure as? ConsoleApiError)?.body as? JsonObject)?.let {
@@ -238,11 +250,11 @@ class PluginConnectionsApi(private val api: ConsoleApiClient, private val hostId
       ) as? JsonObject)?.get("connection"),
     )
 
-  suspend fun sync(listingId: String, connectionId: String): PluginConnectionState? =
-    PluginConnectionState.from(
-      (api.request(PluginConnectionsRoute.SYNC, ApiMethod.POST, jsonBody("hostId" to hostId, "listingId" to listingId, "connectionId" to connectionId)) as? JsonObject)
-        ?.get("connection"),
-    )
+  /** Runs the declared sync once: the view after it, and whether it worked (`synced`). */
+  suspend fun sync(listingId: String, connectionId: String): Pair<PluginConnectionState?, Boolean> {
+    val answer = api.request(PluginConnectionsRoute.SYNC, ApiMethod.POST, jsonBody("hostId" to hostId, "listingId" to listingId, "connectionId" to connectionId))
+    return PluginConnectionState.from((answer as? JsonObject)?.get("connection")) to (answer.boolField("synced") ?: false)
+  }
 
   suspend fun disconnect(listingId: String, connectionId: String) {
     api.request(PluginConnectionsRoute.DISCONNECT, ApiMethod.POST, jsonBody("hostId" to hostId, "listingId" to listingId, "connectionId" to connectionId))
@@ -336,6 +348,9 @@ private fun SitePluginConnection(
   var changing by remember(entry.key) { mutableStateOf<Int?>(null) }
   var opened by remember(entry.key) { mutableStateOf(false) }
   var confirmingDisconnect by remember(entry.key) { mutableStateOf(false) }
+  var wait by remember(entry.key) { mutableStateOf<String?>(null) }
+  // A pinned version that declares no sync has nothing for Sync now to run, and no sync times to show.
+  val declaresSync = intervalHours != null
   val resource = changing?.let { entry.resources.getOrNull(it) } ?: if (changing == null && phase == PluginConnectionPhase.CHOOSING) nextPluginConnectionResource(entry) else null
   var items by remember(entry.key, resource?.id) { mutableStateOf<List<PluginConnectionChoice>?>(null) }
   var itemsError by remember(entry.key, resource?.id) { mutableStateOf<String?>(null) }
@@ -377,10 +392,28 @@ private fun SitePluginConnection(
     }
   }
 
-  fun sync() = runner.run {
-    val connection = api.sync(entry.listingId, entry.connectionId)
-    onChange(updated(connection))
-    if (connection?.status == "connected") runner.notice = "$label is up to date." else runner.error = "$label did not sync. See why above."
+  fun sync() {
+    wait = null
+    runner.run {
+      try {
+        val (connection, synced) = api.sync(entry.listingId, entry.connectionId)
+        onChange(updated(connection))
+        if (synced) runner.notice = "$label is up to date." else runner.error = "$label did not sync. See why above."
+      } catch (failure: ConsoleApiError) {
+        when (pluginConnectionRefusalReason(failure)) {
+          // Not a failure: the last sync is under a minute old. Say how long, and show what it brought.
+          "too-soon" -> {
+            wait = pluginConnectionTooSoonText(label, failure.body.numberField("retryAfterMs"))
+            PluginConnectionState.from((failure.body as? JsonObject)?.get("connection"))?.let { onChange(updated(it)) }
+          }
+          "reconnect", "not-connected", "choose-first" -> {
+            onStale()
+            throw failure
+          }
+          else -> throw failure
+        }
+      }
+    }
   }
 
   fun disconnect() = runner.run {
@@ -423,7 +456,9 @@ private fun SitePluginConnection(
               disconnectButton()
             }
             else -> {
-              if (phase == PluginConnectionPhase.ERROR) {
+              if (!declaresSync) {
+                Unit
+              } else if (phase == PluginConnectionPhase.ERROR) {
                 Button(onClick = { sync() }, enabled = !runner.busy && planReason == null, modifier = Modifier.testTag("plugin-connection-sync-${entry.connectionId}")) {
                   Text(if (runner.busy) "Syncing…" else "Sync now")
                 }
@@ -447,6 +482,7 @@ private fun SitePluginConnection(
       entry.description?.let { Text(it, style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurfaceVariant) }
       runner.error?.let { NoticeBanner(it, StatusTone.ERROR) }
       runner.notice?.let { NoticeBanner(it, StatusTone.SUCCESS) }
+      wait?.let { NoticeBanner(it, StatusTone.INFO) }
       when (phase) {
         PluginConnectionPhase.NOT_CONFIGURED -> NoticeBanner(PLUGIN_CONNECTIONS_NOT_CONFIGURED_TEXT, StatusTone.INFO)
         PluginConnectionPhase.NOT_SET_UP -> NoticeBanner(pluginConnectionNotSetUpText(label), StatusTone.INFO)
@@ -502,7 +538,7 @@ private fun SitePluginConnection(
         entry.resources.forEach { one ->
           connection.choices[one.id]?.let { Text("${one.label}: ${it.label}", style = MaterialTheme.typography.bodyMedium) }
         }
-        if (phase == PluginConnectionPhase.CONNECTED || phase == PluginConnectionPhase.ERROR) {
+        if (declaresSync && (phase == PluginConnectionPhase.CONNECTED || phase == PluginConnectionPhase.ERROR)) {
           val small = MaterialTheme.typography.bodySmall
           val muted = MaterialTheme.colorScheme.onSurfaceVariant
           Text(connection.lastSyncAtMs?.let { "Last synced ${connectionTime(it)}" } ?: "Not synced yet", style = small, color = muted)
@@ -513,6 +549,9 @@ private fun SitePluginConnection(
           }
         }
       }
+      pluginConnectionSharesText(entry.hosts)?.let {
+        Text(it, style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurfaceVariant)
+      }
     }
   }
 
@@ -522,7 +561,7 @@ private fun SitePluginConnection(
       confirmLabel = "Disconnect",
       onConfirm = { disconnect() },
       onDismiss = { confirmingDisconnect = false },
-      body = "$pluginName stops receiving updates from $label on this site. You can connect again at any time.",
+      body = "$pluginName stops receiving updates from $label on this site, and what it last brought in is removed from the site. You can connect again at any time.",
       busy = runner.busy,
     )
   }

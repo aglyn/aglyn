@@ -43,6 +43,8 @@ import {
   pluginConnectionNotSetUpText,
   pluginConnectionPhase,
   pluginConnectionResultMessage,
+  pluginConnectionSharesText,
+  pluginConnectionTooSoonText,
   readPluginConnectionReturn,
   type PluginConnectionCardView,
 } from '../model/plugin-connection-card'
@@ -276,10 +278,13 @@ function SitePluginConnection(props: SitePluginConnectionProps) {
   const { confirm } = useConfirmationContext()
   const [busy, setBusy] = useState<Busy>(null)
   const [error, setError] = useState<string | null>(null)
+  const [wait, setWait] = useState<string | null>(null)
   const [changing, setChanging] = useState<number | null>(null)
   const [items, setItems] = useState<Items>({ status: 'idle' })
   const [picked, setPicked] = useState('')
   const phase = pluginConnectionPhase(entry, configured)
+  // A pinned version that declares no sync has nothing for Sync now to run, and no sync times to show.
+  const declaresSync = intervalHours !== null
   const view = entry.connection as PluginConnectionCardView | null
   const label = entry.label
   const ids = { listingId: entry.listingId, connectionId: entry.connectionId }
@@ -318,12 +323,24 @@ function SitePluginConnection(props: SitePluginConnectionProps) {
   const run = async (kind: NonNullable<Busy>, work: () => Promise<void>) => {
     setBusy(kind)
     setError(null)
+    setWait(null)
     try {
       await work()
     } catch (failure) {
+      if (failure instanceof PluginConnectionRouteError && failure.reason === 'too-soon') {
+        // Not a failure: the last sync is under a minute old. Say how long, and show what it brought.
+        const retryAfterMs = Number(failure.body['retryAfterMs'])
+        setWait(pluginConnectionTooSoonText(label, Number.isFinite(retryAfterMs) ? retryAfterMs : null))
+        const connection = failure.body['connection'] as PluginConnectionCardView | undefined
+        if (connection && typeof connection === 'object') onConnection(connection)
+        return
+      }
       const message = failure instanceof Error ? failure.message : String(failure)
       setError(message)
-      if (failure instanceof PluginConnectionRouteError && (failure.reason === 'reconnect' || failure.reason === 'not-connected')) {
+      if (
+        failure instanceof PluginConnectionRouteError &&
+        (failure.reason === 'reconnect' || failure.reason === 'not-connected' || failure.reason === 'choose-first')
+      ) {
         void onStale()
       }
     } finally {
@@ -351,19 +368,18 @@ function SitePluginConnection(props: SitePluginConnectionProps) {
 
   const sync = () =>
     run('sync', async () => {
-      const { connection } = await api.sync(ids)
+      const { connection, synced } = await api.sync(ids)
       onConnection(connection)
-      enqueueSnackbar(
-        connection?.status === 'connected' ? `${label} is up to date.` : `${label} did not sync. See why below.`,
-        { variant: connection?.status === 'connected' ? 'success' : 'warning' },
-      )
+      enqueueSnackbar(synced ? `${label} is up to date.` : `${label} did not sync. See why below.`, {
+        variant: synced ? 'success' : 'warning',
+      })
     })
 
   const disconnect = async () => {
     const ok = await Promise.resolve(
       confirm({
         title: `Disconnect ${label}?`,
-        description: `${pluginName} stops receiving updates from ${label} on this site. You can connect again at any time.`,
+        description: `${pluginName} stops receiving updates from ${label} on this site, and what it last brought in is removed from the site. You can connect again at any time.`,
         confirmationText: 'Disconnect',
         confirmationButtonProps: { color: 'warning', variant: 'contained' },
       }),
@@ -439,14 +455,16 @@ function SitePluginConnection(props: SitePluginConnectionProps) {
     )
     actions.push(disconnectButton)
   } else {
-    actions.push(
-      guarded(
-        !planAllows ? planReason : null,
-        <Button key="sync" variant={phase === 'error' ? 'contained' : 'outlined'} disabled={busy !== null} onClick={() => void sync()}>
-          {busy === 'sync' ? 'Syncing…' : 'Sync now'}
-        </Button>,
-      ),
-    )
+    if (declaresSync) {
+      actions.push(
+        guarded(
+          !planAllows ? planReason : null,
+          <Button key="sync" variant={phase === 'error' ? 'contained' : 'outlined'} disabled={busy !== null} onClick={() => void sync()}>
+            {busy === 'sync' ? 'Syncing…' : 'Sync now'}
+          </Button>,
+        ),
+      )
+    }
     if (entry.resources.length) {
       actions.push(
         guarded(
@@ -461,6 +479,7 @@ function SitePluginConnection(props: SitePluginConnectionProps) {
   }
 
   const chip = PLUGIN_CONNECTION_PHASE_CHIP[phase]
+  const shares = pluginConnectionSharesText(entry.hosts)
   const nextSync = pluginConnectionNextSyncAtMs(view, intervalHours)
   const chosen = entry.resources.filter((one) => view?.choices[one.id])
 
@@ -568,7 +587,7 @@ function SitePluginConnection(props: SitePluginConnectionProps) {
           </Stack>
         ) : null}
 
-        {view && (phase === 'connected' || phase === 'error') ? (
+        {view && declaresSync && (phase === 'connected' || phase === 'error') ? (
           <Stack spacing={0.5}>
             <Typography variant="body2" color="text.secondary">
               {view.lastSyncAtMs !== null ? `Last synced ${formatConnectionTime(view.lastSyncAtMs)}` : 'Not synced yet'}
@@ -581,6 +600,17 @@ function SitePluginConnection(props: SitePluginConnectionProps) {
           </Stack>
         ) : null}
 
+        {shares ? (
+          <Typography variant="caption" color="text.secondary">
+            {shares}
+          </Typography>
+        ) : null}
+
+        {wait ? (
+          <Alert severity="info" onClose={() => setWait(null)}>
+            {wait}
+          </Alert>
+        ) : null}
         {error ? (
           <Alert severity="error" onClose={() => setError(null)}>
             {error}

@@ -19,10 +19,11 @@ import {
   declaredPluginConnections,
   declaredSyncIntervalHours,
   nextResourceToChoose,
-  PLUGIN_CONNECTIONS_SYNC_ROUTE,
   pluginConnectionNextSyncAtMs,
   pluginConnectionPhase,
   pluginConnectionRedirectUri,
+  pluginConnectionSharesText,
+  pluginConnectionTooSoonText,
   readPluginConnectionReturn,
 } from './plugin-connection-card'
 import type { PluginConnectionStatusEntry, PluginConnectionView } from './plugin-connections'
@@ -53,6 +54,7 @@ const entry = (overrides: Partial<PluginConnectionStatusEntry> = {}): PluginConn
   connection: null,
   credentialsSet: true,
   planAllows: true,
+  hosts: [],
   ...overrides,
 })
 
@@ -62,8 +64,20 @@ describe('the connection card model (AGL-4196)', () => {
     expect(pluginConnectionRedirectUri()).toBe('https://app.aglyn.com/api/plugin-connections/connect/callback')
   })
 
-  it('Sync now is served beside the other routes', () => {
-    expect(PLUGIN_CONNECTIONS_SYNC_ROUTE).toBe('plugin-connections/sync')
+  it('a wait says how long, in plain words', () => {
+    expect(pluginConnectionTooSoonText('Google Business Profile', 41_200)).toBe(
+      'Google Business Profile synced moments ago. You can sync it again in 42 seconds.',
+    )
+    expect(pluginConnectionTooSoonText('Google Business Profile', null)).toBe(
+      'Google Business Profile synced moments ago. You can sync it again in a minute.',
+    )
+  })
+
+  it('names where the data goes, or nothing', () => {
+    expect(pluginConnectionSharesText(['mybusiness.googleapis.com', 'oauth2.googleapis.com'])).toBe(
+      'Shares data with: mybusiness.googleapis.com, oauth2.googleapis.com',
+    )
+    expect(pluginConnectionSharesText([])).toBeNull()
   })
 
   it.each([
@@ -115,6 +129,7 @@ describe('the connection card model (AGL-4196)', () => {
     expect(pluginConnectionNextSyncAtMs(view({ ready: true }), 2)).toBe('soon')
     expect(pluginConnectionNextSyncAtMs(view({ ready: false }), 2)).toBeNull()
     expect(pluginConnectionNextSyncAtMs(view({ ready: true, status: 'reconnect_required' }), 2)).toBeNull()
+    expect(pluginConnectionNextSyncAtMs(view({ ready: true, status: 'error', lastSyncAtMs: 5 }), 2)).toBeNull()
     expect(pluginConnectionNextSyncAtMs(view({ ready: true, lastSyncAtMs: 5 }), null)).toBeNull()
   })
 

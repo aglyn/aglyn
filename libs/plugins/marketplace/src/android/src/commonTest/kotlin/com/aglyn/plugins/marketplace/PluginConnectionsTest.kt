@@ -96,6 +96,15 @@ class PluginConnectionsTest {
   }
 
   @Test
+  fun waitAndShares() {
+    assertEquals("Google Business Profile synced moments ago. You can sync it again in 42 seconds.", pluginConnectionTooSoonText("Google Business Profile", 41_200.0))
+    assertEquals("Shares data with: a.example.com, b.example.com", pluginConnectionSharesText(listOf("a.example.com", "b.example.com")))
+    assertNull(pluginConnectionSharesText(emptyList()))
+    assertNull(pluginConnectionNextSync(state(view("error", ready = true, lastSync = 5.0)), 2.0))
+    assertEquals(listOf("h.example.com"), PluginConnectionEntry.from(jsonValue(mapOf("listingId" to "l", "connectionId" to "c", "hosts" to listOf("h.example.com"))))!!.hosts)
+  }
+
+  @Test
   fun copyMatchesTheConsole() {
     assertEquals("Connecting a plugin to another service comes with the Starter, Pro and Custom plans.", PLUGIN_CONNECTIONS_PLAN_REFUSAL)
     assertEquals("marketplace.siteConnections", PLUGIN_CONNECTIONS_SITE_KEY)

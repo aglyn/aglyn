@@ -19,7 +19,7 @@
 import { authorizedFetch } from '@aglyn/shared-util-http/authorized-token'
 import { useUser } from '@aglyn/tenant-feature-instance'
 import { useMemo } from 'react'
-import { PLUGIN_CONNECTIONS_SYNC_ROUTE, type PluginConnectionCardView } from '../model/plugin-connection-card'
+import type { PluginConnectionCardView } from '../model/plugin-connection-card'
 import {
   PLUGIN_CONNECTIONS_API_ROUTES,
   type PluginConnectionCredentialsStatus,
@@ -35,6 +35,8 @@ export type PluginConnectionRefusal =
   | 'reconnect'
   | 'provider'
   | 'choose-first'
+  | 'no-sync'
+  | 'too-soon'
 
 /** A route's refusal: its own sentence, its HTTP status and, when it says, why. */
 export class PluginConnectionRouteError extends Error {
@@ -42,6 +44,8 @@ export class PluginConnectionRouteError extends Error {
     message: string,
     readonly status: number,
     readonly reason: PluginConnectionRefusal | null,
+    /** The rest of the refusal's JSON: `retryAfterMs` and the view on a `too-soon`. */
+    readonly body: Readonly<Record<string, unknown>> = {},
   ) {
     super(message)
     this.name = 'PluginConnectionRouteError'
@@ -65,7 +69,7 @@ export interface PluginConnectionsApi {
   connectStart(input: { listingId: string; connectionId: string; returnTo: string }): Promise<{ authorizeUrl: string }>
   resources(input: { listingId: string; connectionId: string; resource: string }): Promise<{ items: Array<{ id: string; label: string }> }>
   choose(input: { listingId: string; connectionId: string; resource: string; id: string }): Promise<{ connection: PluginConnectionCardView | null }>
-  sync(input: { listingId: string; connectionId: string }): Promise<{ connection: PluginConnectionCardView | null }>
+  sync(input: { listingId: string; connectionId: string }): Promise<{ connection: PluginConnectionCardView | null; synced: boolean }>
   disconnect(input: { listingId: string; connectionId: string }): Promise<{ connection: null }>
 }
 
@@ -77,7 +81,17 @@ export interface PluginConnectionCredentialsApi {
 }
 
 const FALLBACK = 'That did not work. Try again.'
-const REASONS: ReadonlySet<string> = new Set(['permission', 'plan', 'credentials', 'not-connected', 'reconnect', 'provider', 'choose-first'])
+const REASONS: ReadonlySet<string> = new Set([
+  'permission',
+  'plan',
+  'credentials',
+  'not-connected',
+  'reconnect',
+  'provider',
+  'choose-first',
+  'no-sync',
+  'too-soon',
+])
 
 /** One call to a connection route: the answer, or the route's refusal as a {@link PluginConnectionRouteError}. */
 export async function callPluginConnectionsRoute<T>(
@@ -101,7 +115,7 @@ export async function callPluginConnectionsRoute<T>(
   if (!response.ok) {
     const reason = typeof data?.reason === 'string' && REASONS.has(data.reason) ? (data.reason as PluginConnectionRefusal) : null
     const message = typeof data?.error === 'string' && data.error ? data.error : FALLBACK
-    throw new PluginConnectionRouteError(message, response.status, reason)
+    throw new PluginConnectionRouteError(message, response.status, reason, data ?? {})
   }
   return (data ?? {}) as T
 }
@@ -119,7 +133,8 @@ export function usePluginConnectionsApi(hostId: string): PluginConnectionsApi {
         callPluginConnectionsRoute(user, PLUGIN_CONNECTIONS_API_ROUTES.resources, { method: 'GET', query: { hostId, ...input } }),
       choose: (input) =>
         callPluginConnectionsRoute(user, PLUGIN_CONNECTIONS_API_ROUTES.choose, { method: 'POST', body: { hostId, ...input } }),
-      sync: (input) => callPluginConnectionsRoute(user, PLUGIN_CONNECTIONS_SYNC_ROUTE, { method: 'POST', body: { hostId, ...input } }),
+      sync: (input) =>
+        callPluginConnectionsRoute(user, PLUGIN_CONNECTIONS_API_ROUTES.sync, { method: 'POST', body: { hostId, ...input } }),
       disconnect: (input) =>
         callPluginConnectionsRoute(user, PLUGIN_CONNECTIONS_API_ROUTES.disconnect, { method: 'POST', body: { hostId, ...input } }),
     }),
