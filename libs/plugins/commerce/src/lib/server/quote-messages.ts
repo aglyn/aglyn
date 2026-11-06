@@ -15,6 +15,7 @@
  * limitations under the License.
  */
 
+import { createResourceUid } from '@aglyn/aglyn/app-utils/create-resource-uid'
 import { claimAttempt, type PluginApiHandler, type PluginApiRequest } from '@aglyn/aglyn/server'
 import { checkEntitlement } from '@aglyn/aglyn/server'
 import { readClientIp } from '@aglyn/aglyn/app-utils/request-ip'
@@ -188,7 +189,7 @@ export async function handleQuoteMessagesAction(
     await firestore.runTransaction(async (transaction) => {
       const current = await transaction.get(ref)
       const latest = current.exists ? (current.data() as CommerceModel.HostOrder) : null
-      transaction.set(ref.collection('messages').doc(), message)
+      transaction.set(ref.collection('messages').doc(createResourceUid()), message)
       if (!latest?.quote) return
       transaction.set(ref, CommerceModel.quoteAfterReply(latest, { to, by: actor, atMs: now }, done.thread))
     })
@@ -285,7 +286,7 @@ export async function handleQuoteMessage(deps: QuoteProofDeps, req: PluginApiReq
     userAgent: headerOf(req, 'user-agent').slice(0, 400) || null,
   }
   try {
-    await ref.collection('messages').doc().set(message)
+    await ref.collection('messages').doc(createResourceUid()).set(message)
   } catch (error) {
     console.error('quote message failed', error)
     await claim.release()
