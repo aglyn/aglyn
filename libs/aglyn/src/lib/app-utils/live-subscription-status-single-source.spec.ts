@@ -134,6 +134,17 @@ const DOCUMENTED_COPIES: Record<string, string> = {
     "the checkout duplicate guard would have made a third. They now all import " +
     '`isTenantSubscriptionLive` from here, so the tenant side has one copy ' +
     'exactly as the org side does.',
+  'libs/plugins/commerce/src/lib/model/subscription-view.ts':
+    'Not a live test: SUBSCRIPTION_FILTER_STATUSES is the option list of the ' +
+    "console subscriptions list's status filter (AGL-4191), every status a " +
+    'merchant may want to see, in the order they scan them. Nothing is granted ' +
+    'or refused by membership in it; the tenant live test stays ' +
+    '`isTenantSubscriptionLive` in commerce-subscription-status.ts.',
+  'libs/plugins/commerce/src/lib/components/console/subscriptions-card.component.tsx':
+    'Not a set: the array is the Promise.all of four count queries on the ' +
+    'subscriptions card (AGL-4191), and `trialing` / `past_due` are the ' +
+    "filters of two of them, each counted on its own. The literal matches the " +
+    "collection shape only because the query calls sit inside one array.",
   'libs/plugins/commerce/src/lib/server/recurring-charges.ts':
     'A deliberate SUPERSET — it adds `unpaid` and `incomplete`. The question ' +
     'is "can this tenant subscription still produce a charge", so a security ' +

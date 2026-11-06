@@ -421,8 +421,6 @@ const EDITOR_WRITABLE_HOST_SUBCOLLECTIONS: Record<string, string> = {
     'subscribers read, which is the AGL-2334 `components` decision one ' +
     'collection over.',
   reviews: 'Product reviews, approved and hidden in the moderation card.',
-  subscriptions:
-    'Site membership subscriptions, adjusted from the site member drawer.',
   siteMembers:
     'Site member profiles, listed by the accounts card and the Inbox. All ' +
     'three lists exclude the name (AGL-3308) and the dedicated block ' +
