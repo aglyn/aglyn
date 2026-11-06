@@ -9,6 +9,14 @@ content on the marketing site and is written separately.
 
 <!-- releases below -->
 
+## v1.15.2 — 2026-11-06
+
+[Compare with the previous release](https://github.com/aglyn/aglyn/compare/v1.15.1...v1.15.2)
+
+### Fixed
+
+- **console:** a booting page keeps checking for another tab's lock ([AGL-4201](https://linear.app/aglyn/issue/AGL-4201))
+
 ## v1.15.1 — 2026-11-06
 
 [Compare with the previous release](https://github.com/aglyn/aglyn/compare/6515249f8...v1.15.1)
