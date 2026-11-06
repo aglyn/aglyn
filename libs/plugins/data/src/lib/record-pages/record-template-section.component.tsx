@@ -41,6 +41,7 @@ import { collection, limit, query, where } from 'firebase/firestore'
 import { useCallback, useEffect, useMemo, useState } from 'react'
 import { type DatasetModel, effectiveDatasetModel } from '../model/dataset-models'
 import { type HostDataset, datasetDisplayName } from '../model/datasets'
+import { type DatasetRailEntry, datasetPickerLabelsOf } from '../model/dataset-rail'
 import {
   type DatasetRecordPageBinding,
   isRecordAddressField,
@@ -127,6 +128,16 @@ export function RecordTemplateSection(props: ConsoleBesignerPagePropertiesZonePr
         .filter((dataset) => !dataset.deletedAt)
         .sort((a, b) => datasetDisplayName(a).localeCompare(datasetDisplayName(b))),
     [datasetDocs],
+  )
+
+  /**
+   * Who a dataset is shared with only where two share a name (AGL-4047). Every
+   * dataset listed is this site's to see, so one on a single site is on this
+   * one, and is called so without reading the site.
+   */
+  const labels = useMemo(
+    () => datasetPickerLabelsOf(datasets as DatasetRailEntry[], { [hostId]: 'This site' }),
+    [datasets, hostId],
   )
 
   const [draft, setDraft] = useState<Draft>(EMPTY_DRAFT)
@@ -321,7 +332,7 @@ export function RecordTemplateSection(props: ConsoleBesignerPagePropertiesZonePr
       >
         {datasets.map((one) => (
           <MenuItem key={one.$id} value={one.$id}>
-            {datasetDisplayName(one) || one.$id}
+            {labels[one.$id] || datasetDisplayName(one) || one.$id}
           </MenuItem>
         ))}
       </TextField>

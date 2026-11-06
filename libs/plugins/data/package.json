@@ -28,6 +28,7 @@
     "@aglyn/aglyn": "1.14.0",
     "@aglyn/shared-data-mdi": "1.14.0",
     "@aglyn/shared-ui-jsx": "1.14.0",
+    "@aglyn/shared-ui-next": "1.14.0",
     "@aglyn/shared-ui-snackstack": "1.14.0",
     "@aglyn/shared-util-http": "1.14.0",
     "@aglyn/shared-util-timestamp": "1.14.0",
@@ -40,6 +41,7 @@
     "@mui/material": "^9.3.1",
     "firebase": "^13.0.0",
     "firebase-admin": "^14.3.0",
+    "next": "^16.3.3",
     "react": "^19.2.8"
   },
   "sideEffects": false

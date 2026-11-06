@@ -18,9 +18,9 @@
 /**
  * The Data card names each dataset the way every other door onto it does
  * (`datasetDisplayName`): its `displayName`, else the `name` a dataset made
- * before AGL-536 carries. The Dataset select opens on the first dataset and
- * must show that dataset's name from the first render — it used to read
- * `displayName` alone and stood blank above the records it was listing.
+ * before AGL-536 carries. The rail's tabs and the open dataset's heading show
+ * that name from the first render — the old Dataset select read `displayName`
+ * alone and stood blank above the records it was listing.
  */
 
 import { act, fireEvent, render, screen, within } from '@testing-library/react'
@@ -30,7 +30,8 @@ import {
   type TransferAction,
   type TransferLauncher,
 } from '@aglyn/aglyn'
-import type { ReactNode } from 'react'
+import { type ReactNode, useMemo, useState } from 'react'
+import { PageHeaderActionsContext } from '@aglyn/aglyn/app-utils/page-header-actions-context'
 import { HostDatasetsCard } from './host-datasets-card.component'
 
 const MODEL = { order: ['name'], fields: { name: { name: 'Name', type: 'text' } } }
@@ -41,6 +42,29 @@ let datasetDocs: Array<Record<string, unknown>> = []
 const recordDocs = [{ $id: 'rec-1', values: { name: 'Avery Quinn' } }]
 const FIRESTORE = {}
 const DATA_SCOPE = { scope: ['orgs', 'org-1'], orgId: 'org-1' }
+
+/**
+ * The page header the card publishes Add dataset and Add join collection into
+ * (AGL-4047), drawn above the card as the console's layout draws it.
+ */
+function WithPageHeader(props: { children?: ReactNode }) {
+  const [actions, setHeaderActions] = useState<ReactNode>(null)
+  const value = useMemo(() => ({ setHeaderActions }), [])
+  return (
+    <PageHeaderActionsContext.Provider value={value}>
+      <div data-testid="page-header">{actions}</div>
+      {props.children}
+    </PageHeaderActionsContext.Provider>
+  )
+}
+
+/** The Data page's route (AGL-4047): the card reads the router to open a dataset's tab. */
+const mockRouter = { push: jest.fn(), replace: jest.fn(), prefetch: jest.fn() }
+jest.mock('next/navigation', () => ({
+  useRouter: () => mockRouter,
+  usePathname: () => '/acme/data',
+  useSearchParams: () => new URLSearchParams(),
+}))
 
 jest.mock('@aglyn/tenant-feature-instance', () => ({
   useFirestoreDoc: () => ({ data: undefined, status: 'loading' }),
@@ -82,7 +106,26 @@ jest.mock('firebase/firestore', () => ({
 
 jest.mock('@aglyn/shared-ui-snackstack', () => ({ useSnackbar: () => ({ enqueueSnackbar: jest.fn() }) }))
 jest.mock('@aglyn/shared-ui-jsx', () => ({
-  CardDisplay: ({ children }: { children: ReactNode }) => <div>{children}</div>,
+  CardDisplay: ({ children, header, HeaderProps }: any) => (
+    <div>
+      {header}
+      {HeaderProps?.action}
+      {HeaderProps?.subheader}
+      {children}
+    </div>
+  ),
+  GridItems: ({ items }: any) => (
+    <div>
+      {items.map((item: any, index: number) => (
+        <div key={index}>{item.children}</div>
+      ))}
+    </div>
+  ),
+  AppLink: ({ children, href, componentVariant: _variant, ...rest }: any) => (
+    <a href={href} {...rest}>
+      {children}
+    </a>
+  ),
   MdiIcon: () => null,
   useConfirmationContext: () => ({ confirm: jest.fn() }),
 }))
@@ -99,20 +142,29 @@ const launcher = (): jest.Mocked<TransferLauncher> => ({
 const mount = (transfer: TransferLauncher | null = null) =>
   render(
     <TransferLauncherContext.Provider value={transfer}>
-      <HostDatasetsCard orgId="org-1" org={ORG} />
+      <HostDatasetsCard orgId="org-1" org={ORG} basePath="/acme/data" />
     </TransferLauncherContext.Provider>,
+    { wrapper: WithPageHeader },
   )
+
+/** The datasets the rail has a tab for, by the name each tab leads with. */
+const tabNames = () =>
+  within(screen.getByRole('tablist', { name: 'Datasets' }))
+    .getAllByRole('tab')
+    .map((tab) => tab.firstElementChild?.firstChild?.textContent ?? '')
 
 /** Lets the record count's server aggregate land, so its update is inside `act`. */
 const settle = () => act(async () => new Promise((resolve) => setTimeout(resolve, 0)))
 
 describe('the Data card names the dataset it opens on', () => {
-  it('shows the dataset’s name in the Dataset select on first open, from `name` when that is all it has', async () => {
+  it('names the dataset it opens on, from `name` when that is all it has', async () => {
     datasetDocs = [TEAM]
     const transfer = launcher()
     mount(transfer)
     await settle()
-    expect(screen.getByRole('combobox', { name: 'Dataset' }).textContent).toBe('Team')
+    expect(tabNames()).toEqual(['Team'])
+    // The open dataset's heading, beside its actions.
+    expect(screen.getAllByText('Team')).toHaveLength(2)
     fireEvent.click(screen.getAllByRole('button', { name: 'Import' }).find((one) => one.textContent === 'Import') as HTMLElement)
     expect(transfer.openImport).toHaveBeenCalledWith(expect.objectContaining({ title: 'Import into Team' }))
   })
@@ -121,9 +173,11 @@ describe('the Data card names the dataset it opens on', () => {
     datasetDocs = [ZOO, TEAM]
     mount()
     await settle()
-    const select = screen.getByRole('combobox', { name: 'Dataset' })
-    expect(select.textContent).toBe('Team')
-    fireEvent.mouseDown(select)
-    expect(within(screen.getByRole('listbox')).getAllByRole('option').map((option) => option.textContent)).toEqual(['Team', 'Zoo'])
+    expect(tabNames()).toEqual(['Team', 'Zoo'])
+    // Each tab is the dataset's own address (AGL-4047).
+    expect(screen.getAllByRole('tab').map((tab) => tab.getAttribute('href'))).toEqual([
+      '/acme/data/seed-team',
+      '/acme/data/ds-zoo',
+    ])
   })
 })

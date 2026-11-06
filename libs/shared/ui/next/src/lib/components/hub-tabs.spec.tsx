@@ -327,3 +327,58 @@ describe('HubSections with groups (AGL-3713)', () => {
     expect(container.querySelectorAll('.MuiDivider-root')).toHaveLength(0)
   })
 })
+
+describe('HubSections for a rail of records (AGL-4047)', () => {
+  const RECORDS: readonly HubSection[] = [
+    { href: '/acme/crm/contacts', label: 'Services', secondary: 'Bakery only · 5 fields' },
+    { href: '/acme/crm/leads', label: 'Services', secondary: 'Downtown only · 4 fields' },
+  ]
+
+  function renderRecords(viewport: 'desktop' | 'phone', extra: Record<string, unknown> = {}) {
+    return render(
+      <ThemeProvider theme={themeAt(viewport)}>
+        <HubSections
+          sections={RECORDS}
+          navHeader="Datasets"
+          railHeader={<input aria-label="Search datasets by name" />}
+          railFooter={<button type="button">{'Show more datasets'}</button>}
+          {...extra}
+        >
+          {'Section body'}
+        </HubSections>
+      </ThemeProvider>,
+    )
+  }
+
+  it('draws a second line under each label, which tells two of one name apart', () => {
+    renderRecords('desktop')
+    expect(screen.getAllByRole('tab').map((tab) => tab.textContent)).toEqual([
+      'ServicesBakery only · 5 fields',
+      'ServicesDowntown only · 4 fields',
+    ])
+    expect(screen.getByText('Bakery only · 5 fields').className).toContain('MuiTypography-caption')
+  })
+
+  it('keeps the stacked strip to one line a tab', () => {
+    renderRecords('phone')
+    expect(screen.getAllByRole('tab').map((tab) => tab.textContent)).toEqual(['Services', 'Services'])
+  })
+
+  it('draws what the page puts above and below the tabs, inside the rail', () => {
+    renderRecords('desktop')
+    expect(screen.getByRole('textbox', { name: 'Search datasets by name' })).toBeTruthy()
+    expect(screen.getByRole('button', { name: 'Show more datasets' })).toBeTruthy()
+  })
+
+  it('scrolls the tabs inside the rail when asked, with a scrollbar the reader can see', () => {
+    const { container } = renderRecords('desktop', { scrollRail: true })
+    expect(container.querySelector('.MuiTabs-scrollableY')).not.toBeNull()
+    expect(container.querySelector('.MuiTabs-hideScrollbar')).toBeNull()
+  })
+
+  it('draws a rail that asks for none of it exactly as before', () => {
+    const { container } = renderRail(SECTIONS, 'desktop')
+    expect(container.querySelector('.MuiTabs-scrollableY')).toBeNull()
+    expect(container.querySelectorAll('.MuiTypography-caption')).toHaveLength(0)
+  })
+})
