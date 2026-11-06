@@ -30,6 +30,7 @@ import {
   newConnectionRecord,
   openToken,
   readConnection,
+  toStoredConnection,
   type AccountingConnectionRecord,
 } from './connection-store'
 import { AccountingProviderError } from './providers/http'
@@ -131,7 +132,7 @@ function setup(options: { provider?: AccountingProvider; mapping?: AccountingMap
     previous: null,
   })
   record.mapping = options.mapping ?? mapping
-  store.seed('orgs/org-1/accountingConnections/quickbooks', record as never)
+  store.seed('orgs/org-1/accountingConnections/quickbooks', toStoredConnection(record, keyring) as never)
   const deps: AccountingEngineDeps = {
     firestore: () => asFirestore(store),
     keyring: () => keyring,
@@ -140,7 +141,7 @@ function setup(options: { provider?: AccountingProvider; mapping?: AccountingMap
     random: () => 0.5,
     sleep: async () => undefined,
   }
-  const connection = () => readConnection(store.read('orgs/org-1/accountingConnections/quickbooks'))!
+  const connection = () => readConnection(store.read('orgs/org-1/accountingConnections/quickbooks'), keyring)!
   const item = (id: string) => store.read(`orgs/org-1/accountingSyncItems/${id}`)
   return { store, provider, deps, connection, item, advance: (ms: number) => (now += ms) }
 }
