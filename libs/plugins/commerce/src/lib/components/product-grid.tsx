@@ -47,6 +47,12 @@ import { generatePresetId } from '../utils/generate-preset-id'
 import { addToCart } from '../utils/add-to-cart'
 import { formatOrderMoney } from '../model/buyer-notifications'
 import { ProductImagePlaceholder } from './product-image-placeholder'
+import {
+  PRODUCT_PHOTO_FIT_ATTRIBUTE,
+  productPhotoFit,
+  productPhotoFitSx,
+  type ProductPhotoFit,
+} from './product-photo-fit'
 
 // Component ids are persisted in screen documents; never rename.
 export const ID: Aglyn.ComponentId = 'product-grid'
@@ -103,6 +109,12 @@ export interface ProductGridProps {
    * leads with what it sells.
    */
   cardStyle?: 'outlined' | 'photo'
+  /**
+   * How each card draws its photo: `cover`, the default, fills the frame and
+   * crops what does not fit; `contain` shows the whole photo inside the same
+   * frame. Blank or unknown is `cover`.
+   */
+  photoFit?: ProductPhotoFit
   /**
    * A compact button under each card: "Add to cart" for a product that sells
    * as one priced variant in stock, "Choose options" (to its page) for one
@@ -288,10 +300,12 @@ const ProductGrid = forwardRef<HTMLDivElement, ProductGridProps>(
       showPriceFilter,
       pageSize,
       cardStyle,
+      photoFit,
       quickAdd,
       ...rest
     } = props
     const photoCards = cardStyle === 'photo'
+    const photoFitSx = productPhotoFitSx(productPhotoFit(photoFit))
     // Node styles ride the renderer-merged sx; recompose (stack.ts pattern).
     const nodeSx = Array.isArray(props['sx']) ? props['sx'] : [props['sx']]
     const site = Aglyn.useSite()
@@ -838,13 +852,13 @@ const ProductGrid = forwardRef<HTMLDivElement, ProductGridProps>(
                       ? {
                           width: '100%',
                           aspectRatio: '4 / 5',
-                          objectFit: 'cover',
+                          ...photoFitSx,
                           borderRadius: 2,
                           // A storefront's photo answers the pointer (AGL-3676).
                           transition: 'opacity 200ms ease',
                           '.MuiCardActionArea-root:hover &': { opacity: 0.88 },
                         }
-                      : { height: 160, objectFit: 'cover' }
+                      : { height: 160, ...photoFitSx }
                   }
                   // Deferred (AGL-2486), and this is the worst offender of
                   // the set: a grid renders one image PER PRODUCT, all of
@@ -1242,6 +1256,7 @@ export const schema: Aglyn.ComponentSchema<ProductGridProps> = {
         { label: 'Photo', value: 'photo' },
       ],
     },
+    PRODUCT_PHOTO_FIT_ATTRIBUTE,
     {
       // Off by default, so no existing grid changes shape on deploy.
       name: 'quickAdd',
