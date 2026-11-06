@@ -44,6 +44,8 @@ content on the marketing site and is written separately.
 - **commerce:** static seller-account import and brand-neutral flag copy
 - **commerce:** a product grid's cap counts the products it shows ([AGL-4038](https://linear.app/aglyn/issue/AGL-4038))
 - **marketplace:** the listing-field guard reads only listing documents ([AGL-4196](https://linear.app/aglyn/issue/AGL-4196))
+- **native:** the iOS connections card loads, and the plugin pages fill their slots ([AGL-4196](https://linear.app/aglyn/issue/AGL-4196))
+- **ai-sites:** a generative redesign no longer falls back, with logo, hero and card fixes ([AGL-4152](https://linear.app/aglyn/issue/AGL-4152))
 
 ### Documentation
 
