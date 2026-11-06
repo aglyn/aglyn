@@ -26,8 +26,7 @@ import { BlockedControl } from '@aglyn/shared-ui-jsx/components/blocked-control.
 import { useFirestore, useFirestoreDoc, useUser } from '@aglyn/tenant-feature-instance'
 import { Alert, Button, Stack } from '@mui/material'
 import { doc } from 'firebase/firestore'
-import { useMemo, useState } from 'react'
-import ListingConnectionCredentialsCard from './listing-connection-credentials-card.component'
+import { lazy, Suspense, useMemo, useState } from 'react'
 import ListingDetailEditor from './listing-detail-editor.component'
 import ListingReviewStatus from './listing-review-status.component'
 import ListingVerificationRequest from './listing-verification-request.component'
@@ -37,6 +36,9 @@ import {
   MARKETPLACE_MANAGE_LISTINGS_PERMISSION,
   marketplacePublisherPermissionRefusal,
 } from '../model/marketplace-publisher-permissions'
+
+/** The publisher's connection credentials: drawn only for an owner's plugin listing, so it loads then. */
+const ListingConnectionCredentialsCard = lazy(() => import('./listing-connection-credentials-card.component'))
 
 /**
  * Org marketplace listing detail (AGL-772), at `{marketplace}/{listingId}`.
@@ -188,10 +190,12 @@ export function ListingDetailPage(props: {
                   version declares (AGL-4196). Draws nothing for a listing
                   that declares none. */}
               {isPlugin ? (
-                <ListingConnectionCredentialsCard
-                  listingId={listingId}
-                  permissions={permissions}
-                />
+                <Suspense fallback={null}>
+                  <ListingConnectionCredentialsCard
+                    listingId={listingId}
+                    permissions={permissions}
+                  />
+                </Suspense>
               ) : null}
             </>
           ) : null}

@@ -27,7 +27,6 @@ import HostPluginsCard from './components/host-plugins-card.component'
 import PluginSiteSetPanel from './components/plugin-site-set-panel.component'
 import OrgPluginInstallsCard from './components/org-plugin-installs-card.component'
 import PluginInstallStatus from './components/plugin-install-status.component'
-import SitePluginConnectionsCard from './components/site-plugin-connections-card.component'
 import StaffMarketplaceOverview from './components/staff-marketplace-overview.component'
 import StarterPickerShelf from './components/starter-picker-shelf.component'
 import TemplateGalleryShelf from './components/template-gallery-shelf.component'
@@ -38,6 +37,10 @@ import { BUNDLE_ID } from './constants/bundle-common'
 import { MARKETPLACE_LICENSES_SECTION_ID } from './model/marketplace-section-ids'
 import { RATING_FIELD } from './model/rating-field'
 import RatingInput from './components/rating-input.component'
+import { lazy } from 'react'
+
+/** Drawn only on a site's page for a plugin that declares connections, so it loads when it is drawn. */
+const SitePluginConnectionsCard = lazy(() => import('./components/site-plugin-connections-card.component'))
 
 /**
  * Marketplace feature plugin (AGL-395). Console-only — marketplace components
