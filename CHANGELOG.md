@@ -47,8 +47,9 @@ content on the marketing site and is written separately.
 - **outreach:** the sync job reads an organization's watched enrollments once per run ([AGL-4121](https://linear.app/aglyn/issue/AGL-4121))
 
 <details>
-<summary>Also in this release: 2 test, 3 chore, 2 docs</summary>
+<summary>Also in this release: 2 test, 4 chore, 2 docs</summary>
 
+- **native:** regenerate the contracts for the product builder fields ([AGL-4205](https://linear.app/aglyn/issue/AGL-4205))
 - **commerce:** picture cards, combos and free mockup requests ([AGL-4205](https://linear.app/aglyn/issue/AGL-4205))
 - **native:** regenerate the contracts for the direct-charge payment fields
 - **self-host:** name AGLYN_DEBUG_MIDDLEWARE in the environment reference ([AGL-4121](https://linear.app/aglyn/issue/AGL-4121))
