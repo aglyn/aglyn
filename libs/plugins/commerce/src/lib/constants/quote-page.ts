@@ -34,3 +34,16 @@ export function quotePageHref(quoteId: string, token: string): string {
   const query = new URLSearchParams({ q: quoteId, t: token })
   return `/${QUOTE_PAGE_PATH}?${query.toString()}`
 }
+
+/** Where the site's built-in sign-in page is (the User Accounts plugin's own route). */
+export const QUOTE_SIGN_IN_PATH = '/signin'
+
+/**
+ * The sign-in page, returning to `back` (the quote page's own path and query)
+ * once the customer signs in (AGL-4206). The sign-in block honors `continue`
+ * for same-site paths only.
+ */
+export function quoteSignInHref(back: string): string {
+  const path = back.startsWith('/') && !back.startsWith('//') ? back : `/${QUOTE_PAGE_PATH}`
+  return `${QUOTE_SIGN_IN_PATH}?${new URLSearchParams({ continue: path }).toString()}`
+}

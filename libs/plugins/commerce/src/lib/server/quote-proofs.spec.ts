@@ -20,6 +20,8 @@
  */
 
 import type { PluginApiRequest } from '@aglyn/aglyn/server'
+import { QUOTE_DEFAULT_APPROVAL_STATEMENTS } from '../model'
+import { memberCookieName, mintMemberSession } from './membership'
 import { mintQuoteLinkToken } from './quote-link-token'
 import { handleQuoteProof, handleQuoteRespond, handleQuoteUpload, type QuoteProofDeps } from './quote-proofs'
 import { handleQuoteMessage } from './quote-messages'
@@ -203,17 +205,20 @@ function storeQuote(section: Record<string, unknown> = {}, overrides: Record<str
 
 const token = (version = 1) => String(mintQuoteLinkToken('site1', 'q-1', version))
 
+/** What the customer ticks before approving, as the store asks it with no statements of its own (AGL-4206). */
+const CONFIRMED = [...QUOTE_DEFAULT_APPROVAL_STATEMENTS]
+
 function get(query: Record<string, string>): PluginApiRequest {
   return { method: 'GET', query, body: undefined, headers: {}, cookies: {}, socket: { remoteAddress: '203.0.113.9' } } as PluginApiRequest
 }
 
-function post(body: Record<string, unknown>, key = 'answer-1'): PluginApiRequest {
+function post(body: Record<string, unknown>, key = 'answer-1', cookies: Record<string, string> = {}): PluginApiRequest {
   return {
     method: 'POST',
     query: {},
     body: { hostId: 'site1', q: 'q-1', t: token(), ...body },
     headers: { ...(key ? { 'idempotency-key': key } : {}), 'user-agent': 'Spec Browser', 'x-forwarded-for': '203.0.113.9' },
-    cookies: {},
+    cookies,
     socket: { remoteAddress: '203.0.113.9' },
   } as PluginApiRequest
 }
@@ -323,7 +328,7 @@ describe('GET commerce/quote-proof', () => {
   it('leaves pay, answers and uploads on the current link version', async () => {
     storeLaterRevision()
     expect((await handleQuoteUpload(deps, post({ action: 'ticket', file: {}, t: token(1) }))).status).toBe(410)
-    expect((await handleQuoteRespond(deps, post({ action: 'approve', name: 'Jordan Lee', v: 2_000, t: token(1) }))).status).toBe(410)
+    expect((await handleQuoteRespond(deps, post({ action: 'approve', name: 'Jordan Lee', confirmed: CONFIRMED, v: 2_000, t: token(1) }))).status).toBe(410)
     expect(minted).toEqual([])
   })
 
@@ -394,13 +399,13 @@ describe('POST commerce/quote-upload', () => {
 
 describe('POST commerce/quote-respond', () => {
   it('records an approval, answers the page’s new view, and tells the managers', async () => {
-    const outcome = await handleQuoteRespond(deps, post({ v: 2_000, action: 'approve', name: 'Jordan Lee' }))
+    const outcome = await handleQuoteRespond(deps, post({ v: 2_000, action: 'approve', name: 'Jordan Lee', confirmed: CONFIRMED }))
     expect(outcome.status).toBe(200)
-    expect(outcome.body['view']).toMatchObject({ response: { action: 'approve', name: 'Jordan Lee' }, respondable: true })
+    expect(outcome.body['view']).toMatchObject({ response: { action: 'approve', name: 'Jordan Lee', confirmed: CONFIRMED }, respondable: true })
     expect(docs.get(QUOTE_PATH)?.['quote']).toMatchObject({
       stage: 'approved',
       approvedRevision: 1,
-      approval: { revision: 1, name: 'Jordan Lee', atMs: 10_000, ip: '203.0.113.9', userAgent: 'Spec Browser' },
+      approval: { revision: 1, name: 'Jordan Lee', atMs: 10_000, confirmed: CONFIRMED, ip: '203.0.113.9', userAgent: 'Spec Browser' },
       updatedAtMs: 2_000,
     })
     // The open session is the customer's to use: an answer is not an edit.
@@ -425,6 +430,7 @@ describe('POST commerce/quote-respond', () => {
             { label: 'Quote', value: 'Quote #1042' },
             { label: 'Total', value: '$400.00' },
             { label: 'Approved as', value: 'Jordan Lee' },
+            { label: 'They confirmed', value: CONFIRMED.join(' ') },
           ]),
         }),
       ],
@@ -432,7 +438,7 @@ describe('POST commerce/quote-respond', () => {
     const notice = notified[0][1]
     expect(notice.body).toBe(
       'Revision 1 is approved. The quote becomes an order when they pay. ' +
-        'The approval, with the name, time and address it was given from, is on the quote.',
+        'The approval, with the name, what they confirmed, and the time and address it was given from, is on the quote.',
     )
     expect(`${notice.title} ${notice.body} ${notice.label}`).not.toMatch(/new order/i)
   })
@@ -461,7 +467,7 @@ describe('POST commerce/quote-respond', () => {
     ])('%s', async (_name, tax, storeTax, totals, shown, atPayment) => {
       storeQuote({ tax }, { totals })
       docs.set('hosts/site1/settings/store', { currency: 'USD', tax: storeTax })
-      const outcome = await handleQuoteRespond(deps, post({ v: 2_000, action: 'approve', name: 'Jordan Lee' }))
+      const outcome = await handleQuoteRespond(deps, post({ v: 2_000, action: 'approve', name: 'Jordan Lee', confirmed: CONFIRMED }))
       expect(outcome.status).toBe(200)
       expect(notified[0][2]?.emailDetails).toContainEqual({ label: 'Total', value: shown })
       const view = outcome.body['view'] as { totals: { totalCents: number }; taxAtPayment: boolean }
@@ -472,7 +478,7 @@ describe('POST commerce/quote-respond', () => {
 
   it('records a change request with the artwork read back from this quote, by id', async () => {
     kept.set('a1', { id: 'a1', name: 'logo.ai', contentType: 'application/illustrator', size: 900, path: 'hosts/site1/private/uploads/quote-artwork/q-1/a1', uploadedAtMs: 9 })
-    const outcome = await handleQuoteRespond(deps, post({ v: 2_000, action: 'changes', comment: 'Bigger logo', fileIds: ['a1'] }))
+    const outcome = await handleQuoteRespond(deps, post({ v: 2_000, action: 'changes', comment: 'Bigger logo', name: 'Jordan Lee', fileIds: ['a1'] }))
     expect(outcome.status).toBe(200)
     const quote = docs.get(QUOTE_PATH)?.['quote']
     expect(quote.stage).toBe('changes_requested')
@@ -482,6 +488,7 @@ describe('POST commerce/quote-respond', () => {
         revision: 1,
         atMs: 10_000,
         comment: 'Bigger logo',
+        name: 'Jordan Lee',
         files: [{ id: 'a1', name: 'logo.ai', contentType: 'application/illustrator', size: 900, path: 'hosts/site1/private/uploads/quote-artwork/q-1/a1' }],
         ip: '203.0.113.9',
         userAgent: 'Spec Browser',
@@ -490,11 +497,11 @@ describe('POST commerce/quote-respond', () => {
     expect(notified[0][1]).toMatchObject({
       type: 'content.order',
       level: 'info',
-      label: 'Changes requested',
+      label: 'Rejected with changes',
       actionLabel: 'View quote',
-      title: 'Jordan Lee asked for changes to Quote #1042 on {site}',
+      title: 'Jordan Lee rejected the proof for Quote #1042 with changes on {site}',
       body:
-        'What they want changed on revision 1, and the 1 file they sent, are on the quote. ' +
+        'They rejected revision 1. What they want changed, and the 1 file they sent, are on the quote. ' +
         'Read them, then start revision 2 with new proofs and send it.',
     })
     expect(notified[0][2]?.emailDetails).toEqual(
@@ -510,13 +517,13 @@ describe('POST commerce/quote-respond', () => {
     kept.set('a1', file('a1'))
     kept.set('b2', file('b2'))
     docs.set(PENDING_PATH, { hostId: 'site1', quoteId: 'q-1', files: { a1: 9_000, b2: 9_500, c3: 9_600 }, sweepAtMs: 9_600 + DAY_MS })
-    expect((await handleQuoteRespond(deps, post({ v: 2_000, action: 'changes', comment: 'Bigger logo', fileIds: ['a1', 'b2'] }, 'k1'))).status).toBe(200)
+    expect((await handleQuoteRespond(deps, post({ v: 2_000, action: 'changes', comment: 'Bigger logo', name: 'Jordan Lee', fileIds: ['a1', 'b2'] }, 'k1'))).status).toBe(200)
     // The file attached and left out of the answer is still pending.
     expect(docs.get(PENDING_PATH)).toEqual({ hostId: 'site1', quoteId: 'q-1', files: { c3: 9_600 }, sweepAtMs: 9_600 + DAY_MS })
 
     storeQuote()
     kept.set('c3', file('c3'))
-    expect((await handleQuoteRespond(deps, post({ v: 2_000, action: 'changes', comment: 'And this', fileIds: ['c3'] }, 'k2'))).status).toBe(200)
+    expect((await handleQuoteRespond(deps, post({ v: 2_000, action: 'changes', comment: 'And this', name: 'Jordan Lee', fileIds: ['c3'] }, 'k2'))).status).toBe(200)
     expect(docs.has(PENDING_PATH)).toBe(false)
   })
 
@@ -524,59 +531,59 @@ describe('POST commerce/quote-respond', () => {
     const pending = { hostId: 'site1', quoteId: 'q-1', files: { a1: 9_000 }, sweepAtMs: 9_000 + DAY_MS }
     docs.set(PENDING_PATH, pending)
     kept.set('a1', { id: 'a1', name: 'logo.ai', contentType: 'application/illustrator', size: 900, path: 'hosts/site1/private/uploads/quote-artwork/q-1/a1', uploadedAtMs: 9 })
-    expect((await handleQuoteRespond(deps, post({ v: 1_000, action: 'changes', comment: 'x', fileIds: ['a1'] }, 'k1'))).status).toBe(409)
-    expect((await handleQuoteRespond(deps, post({ v: 2_000, action: 'approve', name: 'Jordan Lee' }, 'k2'))).status).toBe(200)
+    expect((await handleQuoteRespond(deps, post({ v: 1_000, action: 'changes', comment: 'x', name: 'Jordan Lee', fileIds: ['a1'] }, 'k1'))).status).toBe(409)
+    expect((await handleQuoteRespond(deps, post({ v: 2_000, action: 'approve', name: 'Jordan Lee', confirmed: CONFIRMED }, 'k2'))).status).toBe(200)
     expect(docs.get(PENDING_PATH)).toEqual(pending)
   })
 
   it('refuses a file id that is not this quote’s artwork', async () => {
-    const outcome = await handleQuoteRespond(deps, post({ v: 2_000, action: 'changes', comment: 'x', fileIds: ['someone-elses'] }))
+    const outcome = await handleQuoteRespond(deps, post({ v: 2_000, action: 'changes', comment: 'x', name: 'Jordan Lee', fileIds: ['someone-elses'] }))
     expect(outcome.status).toBe(400)
     expect(docs.get(QUOTE_PATH)?.['quote']?.responses).toBeUndefined()
   })
 
   it('refuses an answer to proofs the page did not show', async () => {
-    const outcome = await handleQuoteRespond(deps, post({ v: 1_000, action: 'approve', name: 'Jordan Lee' }))
+    const outcome = await handleQuoteRespond(deps, post({ v: 1_000, action: 'approve', name: 'Jordan Lee', confirmed: CONFIRMED }))
     expect(outcome).toMatchObject({ status: 409, body: { reason: 'updated' } })
     expect(docs.get(QUOTE_PATH)?.['quote']?.stage).toBe('sent')
   })
 
   it('refuses a replaced link, a paid quote and a wrong token', async () => {
     storeQuote({ linkVersion: 2 })
-    expect((await handleQuoteRespond(deps, post({ v: 2_000, action: 'approve', name: 'Jordan Lee' }))).status).toBe(410)
+    expect((await handleQuoteRespond(deps, post({ v: 2_000, action: 'approve', name: 'Jordan Lee', confirmed: CONFIRMED }))).status).toBe(410)
     storeQuote({}, { status: 'paid' })
-    expect(await handleQuoteRespond(deps, post({ v: 2_000, action: 'approve', name: 'Jordan Lee' }))).toMatchObject({
+    expect(await handleQuoteRespond(deps, post({ v: 2_000, action: 'approve', name: 'Jordan Lee', confirmed: CONFIRMED }))).toMatchObject({
       status: 409,
       body: { reason: 'paid' },
     })
     storeQuote()
-    expect((await handleQuoteRespond(deps, post({ v: 2_000, action: 'approve', name: 'Jordan Lee', t: '1.bad' }))).status).toBe(404)
+    expect((await handleQuoteRespond(deps, post({ v: 2_000, action: 'approve', name: 'Jordan Lee', confirmed: CONFIRMED, t: '1.bad' }))).status).toBe(404)
     expect(notified).toEqual([])
   })
 
   it('is rate-limited per address on the site, before the token is checked', async () => {
     rateAllowed = false
-    const outcome = await handleQuoteRespond(deps, post({ v: 2_000, action: 'approve', name: 'Jordan Lee', t: 'nonsense' }))
+    const outcome = await handleQuoteRespond(deps, post({ v: 2_000, action: 'approve', name: 'Jordan Lee', confirmed: CONFIRMED, t: 'nonsense' }))
     expect(outcome.status).toBe(429)
     expect(limited).toEqual(['commerce-quote-respond:site1:203.0.113.9'])
   })
 
   it('needs an Idempotency-Key, and answers a retried answer from the first', async () => {
-    expect((await handleQuoteRespond(deps, post({ v: 2_000, action: 'approve', name: 'Jordan Lee' }, ''))).status).toBe(400)
-    const first = await handleQuoteRespond(deps, post({ v: 2_000, action: 'approve', name: 'Jordan Lee' }, 'k1'))
-    const again = await handleQuoteRespond(deps, post({ v: 2_000, action: 'approve', name: 'Jordan Lee' }, 'k1'))
+    expect((await handleQuoteRespond(deps, post({ v: 2_000, action: 'approve', name: 'Jordan Lee', confirmed: CONFIRMED }, ''))).status).toBe(400)
+    const first = await handleQuoteRespond(deps, post({ v: 2_000, action: 'approve', name: 'Jordan Lee', confirmed: CONFIRMED }, 'k1'))
+    const again = await handleQuoteRespond(deps, post({ v: 2_000, action: 'approve', name: 'Jordan Lee', confirmed: CONFIRMED }, 'k1'))
     expect(again).toEqual(first)
     expect(docs.get(QUOTE_PATH)?.['quote']?.responses).toHaveLength(1)
   })
 
   it('refuses a quote with no proof to answer, and pretends to a bot', async () => {
     storeQuote({ proofs: [] })
-    expect(await handleQuoteRespond(deps, post({ v: 2_000, action: 'approve', name: 'Jordan Lee' }))).toMatchObject({
+    expect(await handleQuoteRespond(deps, post({ v: 2_000, action: 'approve', name: 'Jordan Lee', confirmed: CONFIRMED }))).toMatchObject({
       status: 409,
       body: { reason: 'no-proof' },
     })
     storeQuote()
-    expect(await handleQuoteRespond(deps, post({ v: 2_000, action: 'approve', name: 'Jordan Lee', website: 'x' }))).toEqual({
+    expect(await handleQuoteRespond(deps, post({ v: 2_000, action: 'approve', name: 'Jordan Lee', confirmed: CONFIRMED, website: 'x' }))).toEqual({
       status: 200,
       body: { received: true },
     })
@@ -585,7 +592,7 @@ describe('POST commerce/quote-respond', () => {
 
   it('approving is what lets a quote that asks for approval be paid', async () => {
     storeQuote({ requireProofApproval: true })
-    const outcome = await handleQuoteRespond(deps, post({ v: 2_000, action: 'approve', name: 'Jordan Lee' }))
+    const outcome = await handleQuoteRespond(deps, post({ v: 2_000, action: 'approve', name: 'Jordan Lee', confirmed: CONFIRMED }))
     expect(outcome.body['view']).toMatchObject({ approvalRequired: false, payable: true })
     expect(notified[0][1].body).toContain('Revision 1 is approved, so they can pay the quote now.')
   })
@@ -593,7 +600,7 @@ describe('POST commerce/quote-respond', () => {
   it('brings Pay back only where Pay would work: the page’s own view (AGL-4162)', async () => {
     docs.set('profiles/owner-1', { stripeChargesEnabled: false })
     storeQuote({ requireProofApproval: true })
-    const outcome = await handleQuoteRespond(deps, post({ v: 2_000, action: 'approve', name: 'Jordan Lee' }))
+    const outcome = await handleQuoteRespond(deps, post({ v: 2_000, action: 'approve', name: 'Jordan Lee', confirmed: CONFIRMED }))
     expect(outcome.body['view']).toMatchObject({
       approvalRequired: false,
       payable: false,
@@ -647,7 +654,7 @@ describe('POST commerce/quote-message: the customer writes on the quote page (AG
 
   it('keeps the conversation on the page’s own view, and an answer’s', async () => {
     docs.set(`${QUOTE_PATH}/messages/m0`, { direction: 'in', body: 'Hello', atMs: 5_000, revision: 1, name: 'Jordan Lee' })
-    const answered = await handleQuoteRespond(deps, post({ v: 2_000, action: 'approve', name: 'Jordan Lee' }))
+    const answered = await handleQuoteRespond(deps, post({ v: 2_000, action: 'approve', name: 'Jordan Lee', confirmed: CONFIRMED }))
     expect(answered.body['view']).toMatchObject({ messages: [{ id: 'm0', from: 'customer', body: 'Hello', atMs: 5_000 }] })
   })
 
@@ -675,5 +682,151 @@ describe('POST commerce/quote-message: the customer writes on the quote page (AG
     expect((await handleQuoteMessage(deps, post({ message: 'Hi' }))).status).toBe(429)
     expect(limited.some((key) => key.startsWith('commerce-quote-message:site1:'))).toBe(true)
     expect(messagesOf()).toEqual([])
+  })
+})
+
+describe('a deliberate approval (AGL-4206)', () => {
+  it('refuses an approval that leaves a statement unticked, and records nothing', async () => {
+    const outcome = await handleQuoteRespond(
+      deps,
+      post({ v: 2_000, action: 'approve', name: 'Jordan Lee', confirmed: CONFIRMED.slice(0, 2) }),
+    )
+    expect(outcome).toEqual({ status: 400, body: { error: 'Tick each box to confirm you checked the proof.' } })
+    expect(await handleQuoteRespond(deps, post({ v: 2_000, action: 'approve', name: 'Jordan Lee' }, 'k2'))).toMatchObject({
+      status: 400,
+    })
+    expect(docs.get(QUOTE_PATH)?.['quote']?.responses).toBeUndefined()
+    expect(notified).toEqual([])
+  })
+
+  it('asks for the store’s own statements, and shows the page again when they changed since it loaded', async () => {
+    const own = ['The address is right.', 'The phone number is right.']
+    docs.set('hosts/site1/settings/store', { currency: 'USD', tax: { mode: 'none' }, quotes: { approvalStatements: own } })
+    expect(await handleQuoteRespond(deps, post({ v: 2_000, action: 'approve', name: 'Jordan Lee', confirmed: CONFIRMED }))).toMatchObject({
+      status: 409,
+      body: { reason: 'updated' },
+    })
+    const outcome = await handleQuoteRespond(deps, post({ v: 2_000, action: 'approve', name: 'Jordan Lee', confirmed: own }, 'k2'))
+    expect(outcome.status).toBe(200)
+    expect(docs.get(QUOTE_PATH)?.['quote']?.approval).toMatchObject({ name: 'Jordan Lee', confirmed: own })
+  })
+
+  it('asks a rejection for what to change and a name, and none of the statements', async () => {
+    expect(await handleQuoteRespond(deps, post({ v: 2_000, action: 'changes', comment: 'Bigger logo' }, 'k0'))).toEqual({
+      status: 400,
+      body: { error: 'Type your name to reject the proof.' },
+    })
+    const outcome = await handleQuoteRespond(deps, post({ v: 2_000, action: 'changes', comment: 'Bigger logo', name: 'Jordan Lee' }))
+    expect(outcome.status).toBe(200)
+    expect(notified[0][2]?.emailDetails).toEqual(
+      expect.arrayContaining([
+        { label: 'Rejected as', value: 'Jordan Lee' },
+        { label: 'What to change', value: 'Bigger logo' },
+      ]),
+    )
+  })
+})
+
+describe('a quote whose customer signs in to see the proof (AGL-4206)', () => {
+  const MEMBER = 'member-1'
+  const signedIn = (memberId: string) => ({ [memberCookieName('site1')]: mintMemberSession('site1', memberId) })
+  const getAs = (query: Record<string, string>, cookies: Record<string, string> = {}): PluginApiRequest =>
+    ({ ...get(query), cookies }) as PluginApiRequest
+  let account: { id: string; validFromMs: number; suspended: boolean } | null
+  const lookedUp: string[] = []
+  const gated: QuoteProofDeps = {
+    ...deps,
+    customerAccount: async ({ email }) => {
+      lookedUp.push(email)
+      return account
+    },
+  }
+
+  beforeEach(() => {
+    account = { id: MEMBER, validFromMs: 0, suspended: false }
+    lookedUp.length = 0
+    storeQuote({ requireProofSignIn: true, customer: { name: 'Jordan Lee', email: 'Jordan@Example.com', emailLower: 'jordan@example.com' } })
+  })
+
+  it('keeps the proof, the upload and the answer from a browser not signed in to the customer’s account', async () => {
+    const proof = await handleQuoteProof(gated, getAs({ hostId: 'site1', q: 'q-1', t: token(), file: 'p1' }))
+    expect(proof).toMatchObject({ status: 403, body: { reason: 'sign-in' } })
+    expect(proof.file).toBeUndefined()
+    expect(
+      await handleQuoteUpload(gated, post({ action: 'ticket', file: { name: 'a.png', contentType: 'image/png', size: 10 } })),
+    ).toMatchObject({ status: 403, body: { reason: 'sign-in' } })
+    expect(
+      await handleQuoteRespond(gated, post({ v: 2_000, action: 'approve', name: 'Jordan Lee', confirmed: CONFIRMED })),
+    ).toMatchObject({ status: 403, body: { reason: 'sign-in', error: expect.stringMatching(/^Sign in to your account with .+ to see the proof and approve it\.$/) } })
+    expect(minted).toEqual([])
+    expect(docs.get(QUOTE_PATH)?.['quote']?.responses).toBeUndefined()
+    expect(lookedUp).toContain('jordan@example.com')
+  })
+
+  it('tells someone signed in to another account to use the customer’s', async () => {
+    const outcome = await handleQuoteRespond(
+      gated,
+      post({ v: 2_000, action: 'approve', name: 'Jordan Lee', confirmed: CONFIRMED }, 'k1', signedIn('member-2')),
+    )
+    expect(outcome).toMatchObject({ status: 403, body: { reason: 'other-account' } })
+  })
+
+  it('opens the proof and takes the answer once signed in to that account', async () => {
+    const proof = await handleQuoteProof(gated, getAs({ hostId: 'site1', q: 'q-1', t: token(), file: 'p1' }, signedIn(MEMBER)))
+    expect(proof.status).toBe(200)
+    const outcome = await handleQuoteRespond(
+      gated,
+      post({ v: 2_000, action: 'approve', name: 'Jordan Lee', confirmed: CONFIRMED }, 'k1', signedIn(MEMBER)),
+    )
+    expect(outcome.status).toBe(200)
+    expect(outcome.body['view']).toMatchObject({ proofAccess: 'open', response: { action: 'approve' } })
+  })
+
+  it('does not count a session revoked since, or an account the business suspended', async () => {
+    account = { id: MEMBER, validFromMs: Date.now() + 60_000, suspended: false }
+    expect(
+      (await handleQuoteProof(gated, getAs({ hostId: 'site1', q: 'q-1', t: token(), file: 'p1' }, signedIn(MEMBER)))).status,
+    ).toBe(403)
+    account = { id: MEMBER, validFromMs: 0, suspended: true }
+    expect(
+      (await handleQuoteProof(gated, getAs({ hostId: 'site1', q: 'q-1', t: token(), file: 'p1' }, signedIn(MEMBER)))).status,
+    ).toBe(403)
+  })
+
+  it('keeps the conversation behind the same sign-in, and takes a message once signed in (AGL-4207)', async () => {
+    expect(await handleQuoteMessage(gated, post({ message: 'Hello' }))).toMatchObject({ status: 403, body: { reason: 'sign-in' } })
+    expect([...docs.keys()].filter((key) => key.startsWith(`${QUOTE_PATH}/messages/`))).toEqual([])
+    expect((await handleQuoteMessage(gated, post({ message: 'Hello' }, 'k2', signedIn(MEMBER)))).status).toBe(200)
+  })
+
+  it('keeps the private link for a guest with no account', async () => {
+    account = null
+    expect((await handleQuoteProof(gated, getAs({ hostId: 'site1', q: 'q-1', t: token(), file: 'p1' }))).status).toBe(200)
+    expect(
+      (await handleQuoteRespond(gated, post({ v: 2_000, action: 'approve', name: 'Jordan Lee', confirmed: CONFIRMED }))).status,
+    ).toBe(200)
+  })
+
+  it('keeps the private link for a customer with no address, and looks nothing up', async () => {
+    storeQuote({ requireProofSignIn: true, customer: { name: 'Walk-in', phone: '555-0100' } })
+    expect((await handleQuoteProof(gated, getAs({ hostId: 'site1', q: 'q-1', t: token(), file: 'p1' }))).status).toBe(200)
+    expect(lookedUp).toEqual([])
+  })
+
+  it('changes nothing while the switch is off, and looks nothing up', async () => {
+    storeQuote({ requireProofSignIn: false, customer: { name: 'Jordan Lee', email: 'jordan@example.com' } })
+    expect((await handleQuoteProof(gated, getAs({ hostId: 'site1', q: 'q-1', t: token(), file: 'p1' }))).status).toBe(200)
+    expect(lookedUp).toEqual([])
+  })
+
+  it('still answers a replaced link as replaced, before anything about signing in', async () => {
+    storeQuote({
+      requireProofSignIn: true,
+      linkVersion: 2,
+      customer: { name: 'Jordan Lee', email: 'jordan@example.com' },
+    })
+    expect(
+      (await handleQuoteRespond(gated, post({ v: 2_000, action: 'approve', name: 'Jordan Lee', confirmed: CONFIRMED, t: token(1) }))).status,
+    ).toBe(410)
   })
 })

@@ -22,7 +22,15 @@ import { VISITOR_UPLOAD_HONEYPOT_FIELD } from '@aglyn/aglyn/app-utils/visitor-up
 import * as CommerceModel from '../model'
 import type { QuoteDeps } from './quote'
 import type { QuoteMailer } from './quote-email'
-import { limitedQuoteLink, loadLinkedQuote, quoteLinkParams, sendQuoteLinkOutcome, type QuoteLinkOutcome } from './quote-pay'
+import {
+  limitedQuoteLink,
+  loadLinkedQuote,
+  quoteLinkParams,
+  quoteProofAccessFor,
+  quoteProofAccessRefusal,
+  sendQuoteLinkOutcome,
+  type QuoteLinkOutcome,
+} from './quote-pay'
 import { defaultQuoteProofDeps, type QuoteProofDeps } from './quote-proofs'
 
 /*==========================================
@@ -33,7 +41,7 @@ import { defaultQuoteProofDeps, type QuoteProofDeps } from './quote-proofs'
  *            POST /api/commerce/quote { action: 'reply', quoteId, message } + Idempotency-Key
  *              → { sent, to, atMs }                   ("Send quotes and invoices to customers")
  *   site     POST /api/commerce/quote-message { hostId, q, t, message } + Idempotency-Key
- *              → 200 { messages } | 400 | 404 | 410 | 429
+ *              → 200 { messages } | 400 | 403 (the proof waits on a sign-in) | 404 | 410 | 429
  *
  * A reply goes by email in the quote's own conversation (`quote.emailThread`)
  * and is kept under the quote; what the customer writes on the quote page is
@@ -247,6 +255,11 @@ export async function handleQuoteMessage(deps: QuoteProofDeps, req: PluginApiReq
   if ('outcome' in linked) return linked.outcome
   const { hostRef, order } = linked.loaded
   if (linked.loaded.kind !== 'quote' || !order.quote) return { status: 404, body: { error: 'We could not find that quote. Check the link you were sent.' } }
+  // The conversation is about the proof, so it waits on the same sign-in as the proof (AGL-4206).
+  if (CommerceModel.currentQuoteProofs(order.quote).length) {
+    const access = await quoteProofAccessFor(deps, req, { hostId, host: linked.loaded.host, order })
+    if (access !== 'open') return quoteProofAccessRefusal(access, linked.loaded.storeName)
+  }
   const parsed = CommerceModel.parseQuoteMessageBody(body['message'])
   if ('error' in parsed) return { status: 400, body: { error: parsed.error } }
 

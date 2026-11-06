@@ -17,6 +17,15 @@ for the how-to.
   and let them write to you on the quote page. You're notified of what they write,
   and the conversation stays with the quote through every revision. The Inbox and
   quotes share one reply box.
+- **Approving a proof is deliberate, and you choose who can open it.** [What your customer sees of the proofs](commerce-and-bookings/commerce/quotes-and-proofs.md#customer-proofs)
+  — before **Approve** works, your customer ticks each statement you set on the
+  **Quotes** card (spelling and numbers, colors and placement, production starting on
+  approval, or your own words) and types their name; the quote keeps what they
+  confirmed. Turn on **Customers sign in to see and approve proofs** and a customer
+  with an account on your site signs in to see the proof; customers without one keep
+  the private link. See [Who can open a proof](commerce-and-bookings/commerce/quotes-and-proofs.md#proof-sign-in). **Reject with changes** is the
+  other choice: what to change and a name are required, and the quote records the
+  revision as rejected.
 - **Card-rate processing on every sale, and no buy-now-pay-later.** [Payment methods](commerce-and-bookings/commerce/overview.md#payment-methods)
   — storefront checkout, bookings, quotes, invoices and memberships pass through
   Stripe's card rate, 2.9% + 30¢, where online sales used to carry 6% + 30¢. Klarna,

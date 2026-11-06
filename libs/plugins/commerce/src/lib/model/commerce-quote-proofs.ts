@@ -18,6 +18,7 @@
 import { visitorUploadTypeOf } from '@aglyn/aglyn/app-utils/visitor-upload'
 import { appendOrderEvent, type HostOrder, type OrderAddress, type OrderLineItem, type OrderTotals } from './commerce-orders'
 import {
+  cleanQuoteApprovalStatements,
   formatQuoteNumber,
   isQuote,
   isUnpaidQuote,
@@ -40,7 +41,7 @@ import type { StorefrontTaxMode } from './commerce-tax-decision'
  *
  * A quote's REVISION is the version the customer is looking at. The business
  * attaches proofs to the current revision; the customer approves them under
- * a typed name or asks for changes; the business then starts the next
+ * a typed name or rejects them with changes; the business then starts the next
  * revision, which keeps the one before exactly as it stood in
  * `hosts/{hostId}/orders/{id}/revisions/{n}` and starts the new one with no
  * proofs and no answer. Every revision is kept.
@@ -398,36 +399,70 @@ export function quoteRespondRefusalMessage(reason: QuoteRespondRefusal, storeNam
   }
 }
 
-/** What the customer sends: approve under a name, or changes with a comment and any files. */
+/**
+ * What the customer sends: approve under a name with every statement ticked,
+ * or reject with changes (AGL-4206): what to change, under a name, with any
+ * files.
+ */
 export type QuoteResponseInput =
-  | { action: 'approve'; name: string }
-  | { action: 'changes'; comment: string; fileIds: string[] }
+  | { action: 'approve'; name: string; confirmed: string[] }
+  | { action: 'changes'; comment: string; name: string; fileIds: string[] }
 
-/** The customer's answer as the route received it, checked and trimmed, or what to fix. */
-export function parseQuoteResponseInput(raw: unknown): { ok: true; input: QuoteResponseInput } | { ok: false; error: string } {
+/** Why an answer was refused before it reached the quote: what to fix, and (for stale statements) that the page is out of date. */
+export type QuoteResponseInputProblem = { ok: false; error: string; reason?: 'statements-changed' }
+
+/**
+ * The customer's answer as the route received it, checked and trimmed, or what
+ * to fix. An approval must tick every one of `statements` (AGL-4206), the
+ * statements the store asks for now, word for word: a statement the page
+ * showed that the store has since reworded is `statements-changed`, and the
+ * page shows them again.
+ */
+export function parseQuoteResponseInput(
+  raw: unknown,
+  statements: readonly string[] = [],
+): { ok: true; input: QuoteResponseInput } | QuoteResponseInputProblem {
   const source = (raw && typeof raw === 'object' ? raw : {}) as Record<string, unknown>
+  const name = typeof source['name'] === 'string' ? source['name'].replace(/\s+/g, ' ').trim() : ''
   if (source['action'] === 'approve') {
-    const name = typeof source['name'] === 'string' ? source['name'].replace(/\s+/g, ' ').trim() : ''
+    const ticked = cleanQuoteApprovalStatements(source['confirmed'])
+    if (ticked.some((statement) => !statements.includes(statement))) {
+      return {
+        ok: false,
+        reason: 'statements-changed',
+        error: 'What you confirm before approving has changed. Read it again and tick each one.',
+      }
+    }
+    if (statements.some((statement) => !ticked.includes(statement))) {
+      return { ok: false, error: 'Tick each box to confirm you checked the proof.' }
+    }
     if (name.length < 2) return { ok: false, error: 'Type your name to approve the proof.' }
-    return { ok: true, input: { action: 'approve', name: name.slice(0, QUOTE_MAX_APPROVER_NAME) } }
+    return {
+      ok: true,
+      input: { action: 'approve', name: name.slice(0, QUOTE_MAX_APPROVER_NAME), confirmed: [...statements] },
+    }
   }
   if (source['action'] === 'changes') {
     const comment = typeof source['comment'] === 'string' ? source['comment'].trim() : ''
     if (!comment) return { ok: false, error: 'Tell us what to change.' }
+    if (name.length < 2) return { ok: false, error: 'Type your name to reject the proof.' }
     const raws = Array.isArray(source['fileIds']) ? (source['fileIds'] as unknown[]) : []
     const named = raws.map((value) => String(value ?? '')).filter((value) => /^[A-Za-z0-9_-]{1,128}$/.test(value))
     if (named.length !== raws.length) return { ok: false, error: 'One of the files could not be attached. Send it again.' }
     const fileIds = [...new Set(named)]
     if (fileIds.length > QUOTE_MAX_PROOFS) return { ok: false, error: `Send up to ${QUOTE_MAX_PROOFS} files at a time.` }
-    return { ok: true, input: { action: 'changes', comment: comment.slice(0, QUOTE_MAX_COMMENT), fileIds } }
+    return {
+      ok: true,
+      input: { action: 'changes', comment: comment.slice(0, QUOTE_MAX_COMMENT), name: name.slice(0, QUOTE_MAX_APPROVER_NAME), fileIds },
+    }
   }
-  return { ok: false, error: 'Approve the proof or ask for changes.' }
+  return { ok: false, error: 'Approve the proof or reject it with changes.' }
 }
 
 /**
  * The quote with the customer's answer recorded on its current revision.
  * Approving names the revision approved and moves the quote to Approved;
- * asking for changes moves it to Changes requested and withdraws an approval
+ * rejecting with changes moves it to Rejected with changes and withdraws an approval
  * of the same revision. The latest answer is the one that counts. The
  * business's edit stamp (`updatedAtMs`) is not touched: the quote's content
  * did not change, and the page that sent the answer can still pay it.
@@ -445,12 +480,21 @@ export function applyQuoteResponse(
   const userAgent = context.userAgent ? context.userAgent.slice(0, 400) : null
   const response: QuoteCustomerResponse =
     input.action === 'approve'
-      ? { action: 'approve', revision, atMs: context.atMs, name: input.name, ip, userAgent }
+      ? {
+          action: 'approve',
+          revision,
+          atMs: context.atMs,
+          name: input.name,
+          ...(input.confirmed?.length ? { confirmed: [...input.confirmed] } : {}),
+          ip,
+          userAgent,
+        }
       : {
           action: 'changes',
           revision,
           atMs: context.atMs,
           comment: input.comment,
+          ...(input.name ? { name: input.name } : {}),
           ...(input.files?.length ? { files: input.files } : {}),
           ip,
           userAgent,
@@ -464,7 +508,14 @@ export function applyQuoteResponse(
           responses,
           stage: 'approved',
           approvedRevision: revision,
-          approval: { revision, name: response.name ?? '', atMs: context.atMs, ip, userAgent },
+          approval: {
+            revision,
+            name: response.name ?? '',
+            atMs: context.atMs,
+            ...(response.confirmed?.length ? { confirmed: [...response.confirmed] } : {}),
+            ip,
+            userAgent,
+          },
         }
       : {
           ...quote,
@@ -483,7 +534,8 @@ export function applyQuoteResponse(
         response.action === 'approve' ? 'quote-approved' : 'quote-changes-requested',
         response.action === 'approve'
           ? `${number} revision ${revision} approved by the customer as ${response.name}`
-          : `The customer asked for changes to ${number} revision ${revision}` +
+          : `${number} revision ${revision} rejected with changes by the customer` +
+              (response.name ? ` as ${response.name}` : '') +
               (response.files?.length ? ` and sent ${response.files.length} file${response.files.length === 1 ? '' : 's'}` : ''),
         context.atMs,
       ),
@@ -492,7 +544,53 @@ export function applyQuoteResponse(
   }
 }
 
-/** One line on what the customer last said: `Approved by Jordan Lee`, `Changes requested`. */
+/** One line on what the customer last said: `Approved by Jordan Lee`, `Rejected with changes by Jordan Lee`. */
 export function describeQuoteResponse(response: Pick<QuoteCustomerResponse, 'action' | 'name'>): string {
-  return response.action === 'approve' ? `Approved by ${response.name || 'the customer'}` : 'Changes requested'
+  return response.action === 'approve'
+    ? `Approved by ${response.name || 'the customer'}`
+    : `Rejected with changes${response.name ? ` by ${response.name}` : ''}`
+}
+
+/*------------------------------------------
+ * Who may open the proof (AGL-4206)
+ *-----------------------------------------*/
+
+/**
+ * Whether the person holding the link may see the proof and answer it:
+ * `open` (the link is enough, or they are signed in to the customer's
+ * account), `sign-in` (the customer has an account on the site and this
+ * browser is not signed in to it), or `other-account` (signed in, but to
+ * someone else's account).
+ *
+ * Only a quote that asks for it (`requireProofSignIn`) and whose customer has
+ * an account on the site (`accountId`) needs a sign-in. A guest, with no
+ * account to sign in to, keeps the private link, and Replace link still
+ * shuts that off. Nothing here opens, closes or expires.
+ */
+export type QuoteProofAccess = 'open' | 'sign-in' | 'other-account'
+
+export function quoteProofAccess(input: {
+  quote: Pick<OrderQuote, 'requireProofSignIn'> | null | undefined
+  /** The customer's own account on the site, when they have one. */
+  accountId: string | null
+  /** The account this browser is signed in to on the site, if any. */
+  signedInAccountId: string | null
+}): QuoteProofAccess {
+  if (input.quote?.requireProofSignIn !== true || !input.accountId) return 'open'
+  if (input.signedInAccountId === input.accountId) return 'open'
+  return input.signedInAccountId ? 'other-account' : 'sign-in'
+}
+
+/** The address a quote's customer signs in with, lower-cased, or '' for a customer with none. */
+export function quoteCustomerAccountEmail(quote: Pick<OrderQuote, 'customer'> | null | undefined): string {
+  const email = String(quote?.customer?.emailLower || quote?.customer?.email || '').trim().toLowerCase()
+  return /^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(email) ? email : ''
+}
+
+/** What the page and the routes say when the proof waits on a sign-in. */
+export function quoteProofAccessMessage(access: Exclude<QuoteProofAccess, 'open'>, storeName: string): string {
+  const business = storeName || 'the business'
+  return access === 'other-account'
+    ? `You’re signed in to a different account. Sign in with the account ${business} sent this quote to, to see the proof and approve it.`
+    : `Sign in to your account with ${business} to see the proof and approve it.`
 }

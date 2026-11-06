@@ -778,12 +778,13 @@ describe('a quote’s proofs and revisions (AGL-4096)', () => {
     const dialog = await openQuote({
       stage: 'changes_requested',
       proofs: [PROOF],
-      responses: [{ action: 'changes', revision: 1, atMs: Date.UTC(2026, 9, 29), comment: 'Make the logo bigger', ip: '203.0.113.9', userAgent: 'UA' }],
+      responses: [{ action: 'changes', revision: 1, atMs: Date.UTC(2026, 9, 29), comment: 'Make the logo bigger', name: 'Jordan Lee', ip: '203.0.113.9', userAgent: 'UA' }],
     })
     expect(within(dialog).getByText('Proofs · Revision 1')).toBeTruthy()
     expect(within(dialog).getByText('Banner.pdf · 2 KB')).toBeTruthy()
     expect(within(dialog).getByText('Make the logo bigger')).toBeTruthy()
-    expect(within(dialog).getAllByText('Changes requested').length).toBeGreaterThan(0)
+    expect(within(dialog).getAllByText('Rejected with changes').length).toBeGreaterThan(0)
+    expect(within(dialog).getByText(/^Rejected with changes by Jordan Lee on /)).toBeTruthy()
     // Answered: the proof can no longer be taken off or added to.
     expect(within(dialog).queryByRole('button', { name: 'Remove Banner.pdf' })).toBeNull()
     expect((within(dialog).getByRole('button', { name: 'Add proof' }) as HTMLButtonElement).disabled).toBe(true)

@@ -262,6 +262,10 @@ describe('the customer’s page', () => {
         'proofs',
         // The conversation with the business (AGL-4207).
         'messages',
+        // What the customer ticks before approving, and whether the proof waits on a sign-in (AGL-4206).
+        'approvalStatements',
+        'proofAccess',
+        'proofAccessMessage',
         'receiptUrl',
         'respondable',
         'response',

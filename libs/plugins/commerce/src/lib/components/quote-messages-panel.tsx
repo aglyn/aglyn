@@ -98,7 +98,8 @@ export function QuoteMessagesPanel(props: QuoteMessagesPanelProps) {
     }
   }, [sending, message, siteFetch, hostId, quoteId, token, honeypot, onReplaced])
 
-  if (view.kind !== 'quote') return null
+  // An invoice has no conversation; a proof waiting on a sign-in keeps its conversation behind it too.
+  if (view.kind !== 'quote' || (view.proofAccess && view.proofAccess !== 'open')) return null
 
   return (
     <Paper variant="outlined" sx={{ p: { xs: 2, sm: 3 } }} data-quote-messages="">

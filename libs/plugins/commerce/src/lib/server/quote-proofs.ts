@@ -26,6 +26,8 @@ import {
   loadLinkedQuote,
   payLinkPageView,
   quoteLinkParams,
+  quoteProofAccessFor,
+  quoteProofAccessRefusal,
   sendQuoteLinkOutcome,
   type QuoteLinkOutcome,
   type QuotePayDeps,
@@ -44,9 +46,17 @@ import { quoteUploadCalls, type QuoteUploadCalls } from './quote-uploads'
  *        → { ticket, upload: { url, fields }, file }
  *   POST /api/commerce/quote-upload  { hostId, q, t, action: 'finalize', ticket }
  *        → { file: { id, name, contentType, size, uploadedAtMs } }
- *   POST /api/commerce/quote-respond { hostId, q, t, v, action: 'approve', name }
- *                                    { hostId, q, t, v, action: 'changes', comment, fileIds? }
+ *   POST /api/commerce/quote-respond { hostId, q, t, v, action: 'approve', name, confirmed }
+ *                                    { hostId, q, t, v, action: 'changes', comment, name, fileIds? }
  *        + Idempotency-Key → 200 { view } | 409 { error, reason } | 410 { replaced } | 404 | 400 | 429
+ *
+ * An approval ticks every statement the store asks for (`confirmed`, the
+ * store's words as the page showed them, AGL-4206); one that skips any is
+ * 400, and one whose words the store has since changed is 409 `updated`.
+ * A quote that asks a customer with a site account to sign in
+ * (`requireProofSignIn`) answers all three routes 403 { reason: 'sign-in' |
+ * 'other-account' } until the browser is signed in to that account; a guest
+ * keeps the link alone.
  *
  * Every route spends a per-address rate limit on the site BEFORE the token is
  * checked, answers a wrong token exactly as a missing quote, and (but for a
@@ -135,6 +145,9 @@ export async function handleQuoteProof(deps: QuoteProofDeps, req: PluginApiReque
   if (limited) return limited
   const linked = await loadLinkedQuote(deps, hostId, quoteId, token, { history: true })
   if ('outcome' in linked) return linked.outcome
+  // A customer with a site account signs in to see it, when the quote asks (AGL-4206).
+  const access = await quoteProofAccessFor(deps, req, { hostId, host: linked.loaded.host, order: linked.loaded.order })
+  if (access !== 'open') return quoteProofAccessRefusal(access, linked.loaded.storeName)
   const quote = linked.loaded.order.quote
   // The earlier revisions are read only when the current one lacks the proof.
   let proof = CommerceModel.quoteProofInHistory(quote, [], fileId)
@@ -163,6 +176,8 @@ export async function handleQuoteUpload(deps: QuoteProofDeps, req: PluginApiRequ
   const linked = await loadLinkedQuote(deps, hostId, quoteId, token)
   if ('outcome' in linked) return linked.outcome
   const { order, storeName } = linked.loaded
+  const access = await quoteProofAccessFor(deps, req, { hostId, host: linked.loaded.host, order })
+  if (access !== 'open') return quoteProofAccessRefusal(access, storeName)
   // Artwork rides an answer; a quote that cannot be answered takes none.
   const refused = CommerceModel.quoteRespondRefusal(order)
   if (refused) return reasonRefusal(409, refused, CommerceModel.quoteRespondRefusalMessage(refused, storeName))
@@ -202,7 +217,7 @@ const UPDATED_MESSAGE = 'This quote was updated since you opened it. Look it ove
  * It rides `content.order`, so whoever is told about orders (in the feed, by
  * email, by push) is told about the quotes that become them, and it names
  * itself as what it is rather than as that type: "Proof approved" or
- * "Changes requested" where the feed and the email's eyebrow would say "New
+ * "Rejected with changes" where the feed and the email's eyebrow would say "New
  * order", the customer and the quote as its heading, and "View quote" on the
  * email's button, which opens the quote's dialog on the Orders page.
  */
@@ -235,8 +250,12 @@ function noticeOf(input: {
     // A proof only quote has no price to name yet (AGL-4184).
     ...(proofOnly ? [] : [{ label: 'Total', value: total }]),
     ...(approving
-      ? [{ label: 'Approved as', value: response.name ?? '' }]
+      ? [
+          { label: 'Approved as', value: response.name ?? '' },
+          ...(response.confirmed?.length ? [{ label: 'They confirmed', value: response.confirmed.join(' ') }] : []),
+        ]
       : [
+          ...(response.name ? [{ label: 'Rejected as', value: response.name }] : []),
           { label: 'What to change', value: response.comment ?? '' },
           ...(files.length ? [{ label: 'Files sent', value: files.map((file) => file.name).join(', ') }] : []),
         ]),
@@ -247,22 +266,22 @@ function noticeOf(input: {
       type: 'content.order' as const,
       // Good news for an approval; a change request is work to read.
       level: approving ? ('success' as const) : ('info' as const),
-      label: approving ? 'Proof approved' : 'Changes requested',
+      label: approving ? 'Proof approved' : 'Rejected with changes',
       actionLabel: 'View quote',
       title: approving
         ? `${customer} approved the proof for ${number} on {site}`
-        : `${customer} asked for changes to ${number} on {site}`,
+        : `${customer} rejected the proof for ${number} with changes on {site}`,
       body: approving
         ? (proofOnly
             ? `Revision ${revision} is approved. It has no price yet: add items to the quote when you’re ready, and send it.`
             : quote.requireProofApproval === true
               ? `Revision ${revision} is approved, so they can pay the quote now. It becomes an order when they do.`
               : `Revision ${revision} is approved. The quote becomes an order when they pay.`) +
-          ' The approval, with the name, time and address it was given from, is on the quote.'
+          ' The approval, with the name, what they confirmed, and the time and address it was given from, is on the quote.'
         : files.length
-          ? `What they want changed on revision ${revision}, and the ${filesSent} they sent, are on the quote. ` +
+          ? `They rejected revision ${revision}. What they want changed, and the ${filesSent} they sent, are on the quote. ` +
             `Read them, then start revision ${revision + 1} with new proofs and send it.`
-          : `What they want changed on revision ${revision} is on the quote. ` +
+          : `They rejected revision ${revision}. What they want changed is on the quote. ` +
             `Read it, then start revision ${revision + 1} with new proofs and send it.`,
       link: `/${hostId}/products/orders?quote=${encodeURIComponent(quoteId)}`,
     },
@@ -273,7 +292,7 @@ function noticeOf(input: {
   }
 }
 
-/** `POST /api/commerce/quote-respond`: the customer approves the proof or asks for changes. */
+/** `POST /api/commerce/quote-respond`: the customer approves the proof or rejects it with changes. */
 export async function handleQuoteRespond(deps: QuoteProofDeps, req: PluginApiRequest): Promise<QuoteLinkOutcome> {
   if (req.method !== 'POST') return { status: 405, body: { error: 'Method not allowed' } }
   const body = bodyOf(req)
@@ -290,12 +309,20 @@ export async function handleQuoteRespond(deps: QuoteProofDeps, req: PluginApiReq
   const { hostRef, host, order, storeName, store } = linked.loaded
 
   // Everything the customer can be refused is decided before the claim, so
-  // none of it spends the attempt.
+  // none of it spends the attempt. A customer with a site account answers
+  // signed in to it, when the quote asks (AGL-4206).
+  const access = await quoteProofAccessFor(deps, req, { hostId, host, order })
+  if (access !== 'open') return quoteProofAccessRefusal(access, storeName)
   const seen = Number(body['v'])
   const version = Number(order.quote?.updatedAtMs) || 0
   if (!Number.isFinite(seen) || seen !== version) return reasonRefusal(409, 'updated', UPDATED_MESSAGE)
-  const parsed = CommerceModel.parseQuoteResponseInput(body)
-  if ('error' in parsed) return { status: 400, body: { error: parsed.error } }
+  // An approval ticks every statement the store asks for now, word for word (AGL-4206).
+  const parsed = CommerceModel.parseQuoteResponseInput(body, CommerceModel.quoteApprovalStatements(store.get('quotes')))
+  if ('error' in parsed) {
+    return parsed.reason === 'statements-changed'
+      ? reasonRefusal(409, 'updated', parsed.error)
+      : { status: 400, body: { error: parsed.error } }
+  }
   const refused = CommerceModel.quoteRespondRefusal(order)
   if (refused) return reasonRefusal(409, refused, CommerceModel.quoteRespondRefusalMessage(refused, storeName))
 
@@ -378,6 +405,7 @@ export async function handleQuoteRespond(deps: QuoteProofDeps, req: PluginApiReq
       hostId,
       orderId: quoteId,
       loaded: { host, order: settled.order, storeName, store, kind: 'quote' },
+      proofAccess: access,
     })
     const outcome = { status: 200, body: { view } as Record<string, unknown> }
     await claim.record(200, outcome.body)
