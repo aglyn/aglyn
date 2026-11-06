@@ -342,7 +342,10 @@ final class MarketplaceTests: XCTestCase {
         "marketplace.publishTheme", "marketplace.publishDatasetSchema", "marketplace.publishEmailTemplate", "marketplace.publishEmailStarter",
         "marketplace.publishPlugin", "marketplace.publishStarter",
       ],
-      widgets: ["marketplace.artifact-publish", "marketplace.org-installs", "marketplace.plugin-installation", "marketplace.starter-picker"],
+      widgets: [
+        "marketplace.artifact-publish", "marketplace.org-installs", "marketplace.plugin-installation", "marketplace.site-connections",
+        "marketplace.starter-picker",
+      ],
       quickActions: ["marketplace.open"],
       deepLinks: ["marketplace.listing-page", "marketplace.page"])
     let result = NativePluginLoader.load(
@@ -350,6 +353,8 @@ final class MarketplaceTests: XCTestCase {
     XCTAssertEqual(result.loaded, ["marketplace"])
     XCTAssertEqual(registry.widgets(for: .aglyn, slot: "orgPluginInstalls").map(\.id), ["marketplace.org-installs"])
     XCTAssertEqual(registry.widgets(for: .aglyn, slot: "pluginInstallation").map(\.id), ["marketplace.plugin-installation"])
+    // A site's plugin page shows its declared connections because this slot is filled (AGL-4196).
+    XCTAssertEqual(registry.widgets(for: .aglyn, slot: "sitePluginConnections").map(\.id), ["marketplace.site-connections"])
     // A site's component and layout pages offer Publish to marketplace because this slot is filled.
     XCTAssertEqual(registry.widgets(for: .aglyn, slot: "hostArtifactPublish").map(\.id), ["marketplace.artifact-publish"])
     // Create site lists the starters because this slot is filled, and never names the plugin that fills it.
