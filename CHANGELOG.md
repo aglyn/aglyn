@@ -9,6 +9,81 @@ content on the marketing site and is written separately.
 
 <!-- releases below -->
 
+## v1.15.0 — 2026-11-06
+
+[Compare with the previous release](https://github.com/aglyn/aglyn/compare/v1.14.0...v1.15.0)
+
+### Added
+
+- **commerce:** subscriptions list with recurring revenue, renewal and invoices ([AGL-4191](https://linear.app/aglyn/issue/AGL-4191))
+- **commerce:** anyone can buy card readers, prompted to add the point of sale ([AGL-4038](https://linear.app/aglyn/issue/AGL-4038))
+- **commerce:** hardware orders are received and set up before they ship ([AGL-4038](https://linear.app/aglyn/issue/AGL-4038))
+- **data:** dataset pickers tell two of one name apart ([AGL-4047](https://linear.app/aglyn/issue/AGL-4047))
+- **commerce:** online store sale of card readers becomes a hardware order ([AGL-4038](https://linear.app/aglyn/issue/AGL-4038))
+- **data:** a dataset record opens on its own page beneath its tab ([AGL-4047](https://linear.app/aglyn/issue/AGL-4047))
+- **data:** the Data page lists datasets as vertical tabs at their own address ([AGL-4047](https://linear.app/aglyn/issue/AGL-4047))
+- **commerce:** hardware card terms acceptance, goods tax code, one price ([AGL-4038](https://linear.app/aglyn/issue/AGL-4038))
+- **commerce:** plain card reader names with the model, everywhere ([AGL-4038](https://linear.app/aglyn/issue/AGL-4038))
+- **data:** every dataset writer stamps nameLower, with backfill and index ([AGL-4047](https://linear.app/aglyn/issue/AGL-4047))
+- **video:** youtube's own still as the poster of a poster-less film, behind a flag ([AGL-4140](https://linear.app/aglyn/issue/AGL-4140))
+- **ai:** an AI starter's style and fonts reach the site job ([AGL-4049](https://linear.app/aglyn/issue/AGL-4049))
+- **legal:** pin Legal v23, terms 4.24 prices projects from the Site Care list
+- **commerce:** a product's members videos can be opened to buyers of other products ([AGL-4188](https://linear.app/aglyn/issue/AGL-4188))
+- **ai:** hold generated pictures to the meter's wall ([AGL-4152](https://linear.app/aglyn/issue/AGL-4152))
+- **ai:** write generative Improve it's docs and its eval harness, not run ([AGL-4152](https://linear.app/aglyn/issue/AGL-4152))
+- **ai:** show Your new site before a generative import builds ([AGL-4152](https://linear.app/aglyn/issue/AGL-4152))
+- **ai:** plan a generative import once, and fill its slots in order ([AGL-4152](https://linear.app/aglyn/issue/AGL-4152))
+- **ai:** hold a redesign to its ledger and design lines, red to green on replays ([AGL-4152](https://linear.app/aglyn/issue/AGL-4152))
+- **ai:** redesign a page from its ledger behind the generative flag ([AGL-4152](https://linear.app/aglyn/issue/AGL-4152))
+- **ai:** per-org flag for generative Improve it, off by default ([AGL-4152](https://linear.app/aglyn/issue/AGL-4152))
+
+### Fixed
+
+- **billing:** keep the proposal's code on the pay card opened from the menu ([AGL-4199](https://linear.app/aglyn/issue/AGL-4199))
+- **commerce:** quotes and invoices pay by card or wallet at the card rate ([AGL-4198](https://linear.app/aglyn/issue/AGL-4198))
+- **auth:** log a password reset for an unknown address as info
+- **loyalty:** add the loyaltyMembers index the program totals need
+- **billing:** a Stripe refusal on staff coupons is a 400, not a 502
+- **ops:** don't page on a closed site's 503 notice ([AGL-1921](https://linear.app/aglyn/issue/AGL-1921), [AGL-4110](https://linear.app/aglyn/issue/AGL-4110))
+- **ops:** retry GitHub's 5xx inside the scheduler dispatcher
+- **commerce:** look the buyer's account up by a static import ([AGL-4038](https://linear.app/aglyn/issue/AGL-4038))
+- **data:** the org Data page's route segment is a plain id ([AGL-4047](https://linear.app/aglyn/issue/AGL-4047))
+- **commerce:** say a paid file is being checked, and name it in the question ([AGL-4189](https://linear.app/aglyn/issue/AGL-4189))
+- **media:** add the photoLinks hostId+expiresAt index the photo-link list needs ([AGL-3957](https://linear.app/aglyn/issue/AGL-3957), [AGL-4121](https://linear.app/aglyn/issue/AGL-4121))
+- **site:** maintenance wording says the team still sees the site ([AGL-4178](https://linear.app/aglyn/issue/AGL-4178))
+- **ai:** the long-page answer lives in its spec, and the axe guard skips the eval's recordings as the eval spec does ([AGL-4152](https://linear.app/aglyn/issue/AGL-4152))
+
+### Performance
+
+- **data:** load the org datasets card lazily, back under the plugin budget ([AGL-4047](https://linear.app/aglyn/issue/AGL-4047))
+
+### Changed
+
+- **ai:** keep blocks typed, no casts, in the generative redesign ([AGL-4152](https://linear.app/aglyn/issue/AGL-4152))
+
+### Documentation
+
+- **site:** reshoot the Error pages card with the new maintenance label ([AGL-4178](https://linear.app/aglyn/issue/AGL-4178))
+- **pricing:** site care project price list on /pricing, and its publish script
+
+<details>
+<summary>Also in this release: 4 test, 6 chore</summary>
+
+- **linear:** raise the issue ceiling to AGL-4199, read from the workspace ([AGL-4199](https://linear.app/aglyn/issue/AGL-4199))
+- **selfhost:** allow the Site Care price publish script's preview link
+- **budgets:** re-baseline the data plugin after the dataset tabs and record pages ([AGL-4191](https://linear.app/aglyn/issue/AGL-4191))
+- **legal:** i.ytimg.com published on the subprocessors page november 5, 2026 ([AGL-4140](https://linear.app/aglyn/issue/AGL-4140))
+- **commerce:** type the set-up units fixture ([AGL-4038](https://linear.app/aglyn/issue/AGL-4038))
+- **commerce:** regenerate the native staff screens for the setup steps token ([AGL-4038](https://linear.app/aglyn/issue/AGL-4038))
+- **video:** the thumbnail flag waits for the subprocessors publish, with no lead ([AGL-4140](https://linear.app/aglyn/issue/AGL-4140))
+- **legal:** hold - i.ytimg.com subprocessor entry, lands with the subprocessors publish ([AGL-4140](https://linear.app/aglyn/issue/AGL-4140))
+- **ai:** the pictures switch reads on by default, and the plan's cached text grows by its roles ([AGL-4152](https://linear.app/aglyn/issue/AGL-4152))
+- **ai:** the generative eval runs in node, where the provider batch has fetch ([AGL-4152](https://linear.app/aglyn/issue/AGL-4152))
+
+</details>
+
+3 commit(s) did not parse as conventional commits (merge commits and the like) and did not contribute to the version bump.
+
 ## v1.14.0 — 2026-11-05
 
 [Compare with the previous release](https://github.com/aglyn/aglyn/compare/v1.13.0...v1.14.0)
