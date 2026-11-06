@@ -304,6 +304,46 @@ describe('the drain receiver ingest path (AGL-1921)', () => {
   })
 
   /*========================================================================
+   * A CLOSED SITE'S NOTICE (AGL-4110). The middleware sends a site in
+   * maintenance or preview as its own notice page with a 503, and on
+   * 2026-11-05 that paged "Server errors" for every visit to two demo sites.
+   *======================================================================*/
+
+  it("DROPS a closed site's notice 503 from the middleware", async () => {
+    const fetchMock = mockFetch()
+    const mod = await load()
+    // Shaped like the real entry: review-juniper-cafe.aglyn.app, 2026-11-05.
+    const notice = {
+      id: '30',
+      source: 'edge',
+      type: 'middleware-invocation',
+      host: 'review-juniper-cafe.aglyn.app',
+      statusCode: 503,
+      path: mod.MIDDLEWARE_ENTRY_PATH,
+      proxy: { method: 'GET', statusCode: 503, path: '/about' },
+    }
+    const result = await mod.ingestDrainDelivery([notice])
+    expect(result).toMatchObject({ received: 1, matched: 0, forwarded: 0 })
+    expect(fetchMock).not.toHaveBeenCalled()
+  })
+
+  it('still forwards the middleware failing in any other way', async () => {
+    const mod = await load()
+    const base = { id: '31', source: 'edge', path: mod.MIDDLEWARE_ENTRY_PATH }
+    // MIDDLEWARE_INVOCATION_FAILED, MIDDLEWARE_INVOCATION_TIMEOUT, a crash.
+    for (const statusCode of [500, 504, -1]) {
+      expect(mod.isSiteNoticeEntry({ ...base, statusCode })).toBe(false)
+      expect(mod.selectForwardableEntries([{ ...base, statusCode }])).toHaveLength(1)
+    }
+    expect(
+      mod.isSiteNoticeEntry({ ...base, statusCode: 503, level: 'fatal' }),
+    ).toBe(false)
+    // A 503 from a route is not the notice.
+    expect(mod.isSiteNoticeEntry({ statusCode: 503, path: '/api/orders' })).toBe(false)
+    expect(mod.isSiteNoticeEntry({ statusCode: 503 })).toBe(false)
+  })
+
+  /*========================================================================
    * THE OTHER DELIBERATE 503, and it was NINE TENTHS OF THE STREAM
    * (AGL-2709). Every `/api/health/*` route answers 503 the moment its check
    * reports degraded. Measured over the 48 hours to 2026-09-09: 251 entries
