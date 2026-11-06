@@ -22,6 +22,7 @@ import type {
 } from '@aglyn/aglyn/plugin-manager/plugin-closure-notices'
 import { firebaseAdmin } from '@aglyn/tenant-data-admin'
 import {
+  POS_HARDWARE_UNSHIPPED_STATUSES,
   formatPosHardwareCents,
   POS_HARDWARE_ORDERS_COLLECTION,
   posHardwareRefundable,
@@ -96,7 +97,7 @@ async function unshippedOrders(
   if (subject.kind === 'workspace') {
     const orders = firestore.collection('orgs').doc(subject.orgId).collection(POS_HARDWARE_ORDERS_COLLECTION)
     // One equality query per status, as the closure reads them.
-    const found = await Promise.all(['paid', 'ordered'].map((status) => orders.where('status', '==', status).get()))
+    const found = await Promise.all(POS_HARDWARE_UNSHIPPED_STATUSES.map((status) => orders.where('status', '==', status).get()))
     return found.flatMap((snapshot) =>
       snapshot.docs.map((doc: { id: string; data: () => unknown }) => ({ orderId: doc.id, order: doc.data() as PosHardwareOrder })),
     )

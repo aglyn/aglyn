@@ -24,6 +24,7 @@ import {
   POS_HARDWARE_METADATA_TYPE,
   POS_HARDWARE_ORDER_ID,
   POS_HARDWARE_SHIPPING_LABELS,
+  posHardwareOrderUnits,
   posHardwareSaleRecord,
   posHardwareSaleSetOptions,
   type PosHardwareAddress,
@@ -152,6 +153,9 @@ export function posHardwareOrderFromSession(
       updatedAtMs: now,
       paidAtMs: now,
       ...(termsAcceptance ? { termsAcceptance } : {}),
+      // One per reader, for its serial when staff set it up before it ships.
+      units: posHardwareOrderUnits({ lines }),
+      serialNumbers: [],
     },
   }
 }

@@ -50,6 +50,7 @@ import {
   nextPosHardwareStatus,
   POS_HARDWARE_ORDER_STATUSES,
   POS_HARDWARE_STAFF_STATUS_LABELS,
+  posHardwareReadyToShip,
   posHardwareRefundable,
   posHardwareSku,
   type PosHardwareOrderStatus,
@@ -162,6 +163,9 @@ export function PosHardwareOrdersStaffPage(props: ConsoleStaffPageProps) {
   const [open, setOpen] = useState<StaffHardwareOrderRow | null>(null)
   const [busy, setBusy] = useState(false)
   const [form, setForm] = useState({ stripeHardwareOrderId: '', carrier: '', number: '', url: '' })
+  /** Setting it up before it ships (AGL-4038): each reader's serial, and a code to register one. */
+  const [serialDrafts, setSerialDrafts] = useState<string[]>([])
+  const [registrationCode, setRegistrationCode] = useState('')
   /** The note for declining a return request, while its dialog is open. */
   const [declineNote, setDeclineNote] = useState<string | null>(null)
   /**
@@ -209,6 +213,8 @@ export function PosHardwareOrdersStaffPage(props: ConsoleStaffPageProps) {
       number: order.tracking?.number ?? '',
       url: order.tracking?.url ?? '',
     })
+    setSerialDrafts((order.units ?? []).map((unit) => unit.serialNumber ?? ''))
+    setRegistrationCode('')
   }
 
   const act = async (
@@ -248,6 +254,14 @@ export function PosHardwareOrdersStaffPage(props: ConsoleStaffPageProps) {
       },
       advance ? `Marked ${POS_HARDWARE_STAFF_STATUS_LABELS[advance].toLowerCase()}` : 'Saved',
     )
+  }
+
+  const saveSerials = () =>
+    void act({ action: 'serials', serials: serialDrafts.map((serial) => serial.trim()).filter(Boolean) }, 'Serial numbers saved')
+
+  const registerReader = async () => {
+    await act({ action: 'register-reader', registrationCode: registrationCode.trim() }, 'Reader registered to the buyer’s store')
+    setRegistrationCode('')
   }
 
   const forgetBuyer = async () => {
@@ -399,6 +413,22 @@ export function PosHardwareOrdersStaffPage(props: ConsoleStaffPageProps) {
     Boolean(open) && !inPerson && returnRequested && ['shipped', 'delivered', 'registered'].includes(String(open?.status))
   const returnCents = open ? Math.max(0, open.totalCents - (open.shipping?.cents ?? 0)) : 0
   const writeReason = gate.blocked ? gate.reason : undefined
+  // Setting it up before it ships (AGL-4038).
+  const beforeShipping = Boolean(open) && ['paid', 'ordered', 'received'].includes(String(open?.status))
+  const units = open?.units ?? []
+  const readerUnits = units.filter((unit) => posHardwareSku(unit.sku)?.kind === 'reader')
+  const registerReason = !open
+    ? undefined
+    : !beforeShipping
+      ? 'A reader is registered here before the order ships.'
+      : open.attachment && open.attachment.state !== 'attached'
+        ? 'Attach the order to the buyer’s workspace first, from To attach on our store’s register. Or ship it, and the reader joins their store when they pair it.'
+        : !open.hostId
+          ? 'The buyer has not chosen a store for it yet.'
+          : readerUnits.every((unit) => unit.readerId)
+            ? 'Every reader on this order is registered.'
+            : undefined
+  const notReady = open && next === 'shipped' ? posHardwareReadyToShip(open) : null
 
   return (
     <CardDisplay
@@ -543,6 +573,51 @@ export function PosHardwareOrdersStaffPage(props: ConsoleStaffPageProps) {
                     {[open.shipping?.phone, open.contactEmail].filter(Boolean).join(' · ')}
                   </Typography>
                 </Stack>
+                {readerUnits.length ? (
+                  <Stack spacing={1} aria-label="Set up">
+                    <Typography variant="subtitle2">{'Set up'}</Typography>
+                    <Typography variant="body2" color="text.secondary">
+                      {'Record each reader’s serial number before it ships. Where the buyer’s store is ready, register the reader to it with the code it shows; otherwise it joins their store when they pair it.'}
+                    </Typography>
+                    {readerUnits.map((unit, index) => (
+                      <TextField
+                        key={`${unit.sku}-${index}`}
+                        size="small"
+                        label={`Serial number, reader ${index + 1} (${posHardwareSku(unit.sku)?.displayName ?? unit.sku})`}
+                        value={serialDrafts[index] ?? ''}
+                        disabled={!beforeShipping || Boolean(unit.readerId)}
+                        helperText={unit.readerId ? 'Registered to the buyer’s store' : undefined}
+                        onChange={(event) =>
+                          setSerialDrafts((drafts) => {
+                            const nextDrafts = [...drafts]
+                            nextDrafts[index] = event.target.value
+                            return nextDrafts
+                          })
+                        }
+                      />
+                    ))}
+                    <Guarded reason={writeReason ?? (beforeShipping ? undefined : 'Serial numbers are recorded before the order ships.')}>
+                      <Button size="small" disabled={busy} onClick={saveSerials} sx={{ alignSelf: 'flex-start' }}>
+                        {'Save serial numbers'}
+                      </Button>
+                    </Guarded>
+                    <Stack direction={{ xs: 'column', sm: 'row' }} spacing={1} sx={{ alignItems: { sm: 'center' } }}>
+                      <TextField
+                        size="small"
+                        label="Pairing code the reader shows"
+                        value={registrationCode}
+                        disabled={Boolean(registerReason)}
+                        onChange={(event) => setRegistrationCode(event.target.value)}
+                        sx={{ flex: 1 }}
+                      />
+                      <Guarded reason={writeReason ?? registerReason ?? (registrationCode.trim() ? undefined : 'Enter the code the reader shows.')}>
+                        <Button size="small" disabled={busy} onClick={() => void registerReader()}>
+                          {'Register to the buyer’s store'}
+                        </Button>
+                      </Guarded>
+                    </Stack>
+                  </Stack>
+                ) : null}
                 <TextField
                   label="Stripe hardware order id"
                   value={form.stripeHardwareOrderId}
@@ -621,7 +696,7 @@ export function PosHardwareOrdersStaffPage(props: ConsoleStaffPageProps) {
             <Guarded
               reason={
                 writeReason ??
-                (next === 'shipped' && !form.number.trim() ? 'Add the tracking number first.' : undefined)
+                (next === 'shipped' && !form.number.trim() ? 'Add the tracking number first.' : (notReady ?? undefined))
               }
             >
               <Button variant="contained" disabled={busy} onClick={() => save(next)}>

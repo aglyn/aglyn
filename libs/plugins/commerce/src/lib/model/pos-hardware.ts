@@ -582,6 +582,7 @@ export function decodePosHardwareLines(encoded: unknown): PosHardwareLine[] | nu
 export type PosHardwareOrderStatus =
   | 'paid'
   | 'ordered'
+  | 'received'
   | 'shipped'
   | 'delivered'
   | 'registered'
@@ -591,6 +592,7 @@ export type PosHardwareOrderStatus =
 export const POS_HARDWARE_ORDER_STATUSES: readonly PosHardwareOrderStatus[] = [
   'paid',
   'ordered',
+  'received',
   'shipped',
   'delivered',
   'registered',
@@ -606,6 +608,7 @@ export function isPosHardwareOrderStatus(value: unknown): value is PosHardwareOr
 export const POS_HARDWARE_STATUS_LABELS: Record<PosHardwareOrderStatus, string> = {
   paid: 'Order received',
   ordered: 'Being prepared',
+  received: 'Being prepared',
   shipped: 'Shipped',
   delivered: 'Delivered',
   registered: 'Set up',
@@ -617,6 +620,7 @@ export const POS_HARDWARE_STATUS_LABELS: Record<PosHardwareOrderStatus, string> 
 export const POS_HARDWARE_STAFF_STATUS_LABELS: Record<PosHardwareOrderStatus, string> = {
   paid: 'Paid',
   ordered: 'Ordered from Stripe',
+  received: 'Received',
   shipped: 'Shipped',
   delivered: 'Delivered',
   registered: 'Registered',
@@ -625,13 +629,19 @@ export const POS_HARDWARE_STAFF_STATUS_LABELS: Record<PosHardwareOrderStatus, st
 }
 
 /**
- * The forward steps staff may move an order through. Canceling and refunding
- * are separate acts with their own rule ({@link posHardwareRefundable}),
- * because each returns money.
+ * The forward steps staff may move an order through (AGL-4038): ordered from
+ * the supplier, received at the platform, set up, shipped with tracking,
+ * delivered, and set up on the buyer's store. Setting it up is not a status
+ * of its own: it is each reader's serial number recorded and, where the
+ * buyer's store can take it, the reader registered to that store
+ * ({@link posHardwareReadyToShip}), which shipping waits for. Canceling and
+ * refunding are separate acts with their own rule
+ * ({@link posHardwareRefundable}), because each returns money.
  */
 const NEXT_STATUS: Partial<Record<PosHardwareOrderStatus, PosHardwareOrderStatus>> = {
   paid: 'ordered',
-  ordered: 'shipped',
+  ordered: 'received',
+  received: 'shipped',
   shipped: 'delivered',
   delivered: 'registered',
 }
@@ -648,8 +658,11 @@ export function nextPosHardwareStatus(
  * the hardware, which is a separate process this phase does not automate.
  */
 export function posHardwareRefundable(status: PosHardwareOrderStatus): boolean {
-  return status === 'paid' || status === 'ordered'
+  return status === 'paid' || status === 'ordered' || status === 'received'
 }
+
+/** The statuses of an order that has not shipped yet, which a closure cancels and refunds. */
+export const POS_HARDWARE_UNSHIPPED_STATUSES: readonly PosHardwareOrderStatus[] = ['paid', 'ordered', 'received']
 
 export interface PosHardwareAddress {
   line1: string
@@ -911,6 +924,8 @@ export interface PosHardwareOrder {
   updatedAtMs: number
   paidAtMs: number
   orderedAtMs?: number
+  /** When the platform received it from the supplier (AGL-4038). */
+  receivedAtMs?: number
   shippedAtMs?: number
   deliveredAtMs?: number
   registeredAtMs?: number
@@ -958,6 +973,7 @@ export interface PosHardwareOrder {
 export const POS_HARDWARE_STATUS_STAMP: Record<PosHardwareOrderStatus, keyof PosHardwareOrder> = {
   paid: 'paidAtMs',
   ordered: 'orderedAtMs',
+  received: 'receivedAtMs',
   shipped: 'shippedAtMs',
   delivered: 'deliveredAtMs',
   registered: 'registeredAtMs',
@@ -1067,6 +1083,7 @@ export interface PosHardwareSaleRecord {
   updatedAtMs: number
   paidAtMs: number | null
   orderedAtMs: number | null
+  receivedAtMs: number | null
   shippedAtMs: number | null
   deliveredAtMs: number | null
   registeredAtMs: number | null
@@ -1262,6 +1279,7 @@ export function posHardwareSaleRecord(orderId: string, order: PosHardwareOrder):
     updatedAtMs: order.updatedAtMs ?? order.createdAtMs ?? 0,
     paidAtMs: stampOrNull(order.paidAtMs),
     orderedAtMs: stampOrNull(order.orderedAtMs),
+    receivedAtMs: stampOrNull(order.receivedAtMs),
     shippedAtMs: stampOrNull(order.shippedAtMs),
     deliveredAtMs: stampOrNull(order.deliveredAtMs),
     registeredAtMs: stampOrNull(order.registeredAtMs),
@@ -1373,4 +1391,37 @@ export const POS_HARDWARE_ORDER_ID = /^hw_[a-f0-9]{20}$/
 export function formatPosHardwareCents(cents: number): string {
   const value = Number.isFinite(cents) ? cents : 0
   return new Intl.NumberFormat('en-US', { style: 'currency', currency: 'USD' }).format(value / 100)
+}
+
+/**
+ * Every reader an order ships, one unit each (AGL-4038): the units it holds,
+ * or, for an order recorded before units were kept for shipped orders, one
+ * per reader on its lines with nothing recorded yet. Accessories have none.
+ */
+export function posHardwareOrderUnits(order: Pick<PosHardwareOrder, 'units' | 'lines'>): PosHardwareUnit[] {
+  if (Array.isArray(order.units) && order.units.length) return order.units
+  const units: PosHardwareUnit[] = []
+  for (const line of order.lines ?? []) {
+    if (posHardwareSku(line.sku)?.kind !== 'reader') continue
+    for (let index = 0; index < line.quantity; index += 1) {
+      units.push({ sku: line.sku, serialNumber: null, readerId: null, hostId: null, registeredAtMs: null })
+    }
+  }
+  return units
+}
+
+/**
+ * Why an order may not ship yet, or null when it may (AGL-4038): every
+ * reader on it is set up first, its serial number recorded, so the buyer's
+ * reader is matched to its order the moment they pair it, if it was not
+ * registered to their store already. An order of accessories alone ships as
+ * it is.
+ */
+export function posHardwareReadyToShip(order: Pick<PosHardwareOrder, 'units' | 'lines'>): string | null {
+  const units = posHardwareOrderUnits(order)
+  const missing = units.filter((unit) => !unit.serialNumber).length
+  if (!missing) return null
+  return missing === units.length && units.length === 1
+    ? 'Set the reader up first: record its serial number.'
+    : `Set every reader up first: ${missing} of ${units.length} still need a serial number.`
 }

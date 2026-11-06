@@ -23,6 +23,7 @@ import { firebaseAdmin } from '@aglyn/tenant-data-admin'
 import { addAdminAudit } from '@aglyn/tenant-data-admin/server/admin-audit-write'
 import {
   POS_HARDWARE_ORDERS_COLLECTION,
+  POS_HARDWARE_UNSHIPPED_STATUSES,
   type PosHardwareCancelReason,
   type PosHardwareOrder,
 } from '../model/pos-hardware'
@@ -66,8 +67,8 @@ type Firestore = FirebaseFirestore.Firestore
 
 export type PosHardwareClosureOutcome = 'canceled' | 'already' | 'skipped' | 'failed'
 
-/** The unshipped statuses a closure cancels. */
-const UNSHIPPED = ['paid', 'ordered'] as const
+/** The unshipped statuses a closure cancels: paid, ordered, or received and being set up. */
+const UNSHIPPED = POS_HARDWARE_UNSHIPPED_STATUSES
 
 /** The audit row's actor: the closure, never a person. */
 const CLOSURE_ACTOR: Record<Exclude<PosHardwareCancelReason, 'staff'>, string> = {
@@ -123,7 +124,7 @@ export async function closeUnshippedPosHardwareOrder(
     // Once between this and the staff page: a staff cancel that already
     // told the buyer is not told again (AGL-4038).
     await sendPosHardwareEmailOnce('canceled', orderId, result.order)
-    if (result.before.status === 'ordered') {
+    if (result.before.status === 'ordered' || result.before.status === 'received') {
       await raisePosHardwareCanceledAfterOrderingAlert(orderId, result.order, reason)
     }
     return 'canceled'
@@ -167,7 +168,7 @@ export async function closeUnshippedPosHardwareOrders(
     const outcome = await closeUnshippedPosHardwareOrder(order.orgId, orderId, reason, order)
     if (outcome === 'canceled') {
       counts.hardwareOrdersCanceled += 1
-      if (order.status === 'ordered') counts.hardwareOrdersPlacedWithStripe += 1
+      if (order.status === 'ordered' || order.status === 'received') counts.hardwareOrdersPlacedWithStripe += 1
     }
     if (outcome === 'failed') counts.hardwareRefundsFailed += 1
   }
@@ -204,7 +205,7 @@ export function createPosHardwareOrgEraser(deps: PosHardwareOrgEraserDeps): Plug
     if (dryRun) {
       return {
         hardwareOrdersCanceled: unshipped.length,
-        hardwareOrdersPlacedWithStripe: unshipped.filter(({ order }) => order.status === 'ordered').length,
+        hardwareOrdersPlacedWithStripe: unshipped.filter(({ order }) => order.status === 'ordered' || order.status === 'received').length,
         hardwareRefundsFailed: 0,
       }
     }
