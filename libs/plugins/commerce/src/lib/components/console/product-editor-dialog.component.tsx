@@ -17,6 +17,7 @@
 'use client'
 
 import * as CommerceModel from '../../model'
+import { validateProductForSave } from '../../model/product-card-rules'
 import { productOfferedOnKiosk } from '../../model/commerce-kiosk-offer'
 import { useSnackbar } from '@aglyn/shared-ui-snackstack'
 import { Timestamp } from '@aglyn/shared-util-timestamp'
@@ -1512,7 +1513,7 @@ export function ProductEditorDialog(props: ProductEditorDialogProps) {
    */
   const matrixProblem = CommerceModel.variantMatrixProblem(current.options)
   const error =
-    matrixProblem ?? (current.name ? CommerceModel.validateProduct(current) : null)
+    matrixProblem ?? (current.name ? validateProductForSave(current) : null)
 
   /**
    * Stock tracking is inert on a subscription-only product (AGL-1744) —

@@ -284,7 +284,7 @@ export function ProductChoiceCards(props: ProductChoiceCardsProps) {
         disabled={disabled || (!selected && full)}
         role={group.max === 1 ? 'radio' : 'checkbox'}
         badge={modifierOptionIsCombo(option) ? <Chip size="small" color="secondary" label="Combo" /> : null}
-        includes={option.includes}
+        includes={modifierOptionIsCombo(option) ? option.includes : undefined}
         onPress={() => onChange(withGroupAnswer(groups, value, group.id, pressChoice(group, chosen, option.id)))}
       />
     )

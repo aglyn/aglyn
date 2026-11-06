@@ -29,6 +29,7 @@ import {
 } from '@mui/material'
 import { memo, useCallback, useId, useState } from 'react'
 import * as CommerceModel from '../../model'
+import { PRODUCT_CHOICE_NOTE_MAX, PRODUCT_COMBO_ITEM_MAX, PRODUCT_COMBO_MAX_ITEMS } from '../../model/product-card-rules'
 import { CardPictureField, type ProductMediaPick } from './product-builder-fields.component'
 
 type Patch = Partial<CommerceModel.HostProduct>
@@ -114,16 +115,16 @@ export function withChoiceCard(
     else delete next.imageUrl
   }
   if ('note' in patch) {
-    const note = String(patch.note ?? '').trim().slice(0, CommerceModel.PRODUCT_CHOICE_NOTE_MAX)
+    const note = String(patch.note ?? '').trim().slice(0, PRODUCT_CHOICE_NOTE_MAX)
     if (note) next.note = note
     else delete next.note
   }
   if ('includes' in patch) {
     const items = String(patch.includes ?? '')
       .split('\n')
-      .map((item) => item.trim().slice(0, CommerceModel.PRODUCT_COMBO_ITEM_MAX))
+      .map((item) => item.trim().slice(0, PRODUCT_COMBO_ITEM_MAX))
       .filter(Boolean)
-      .slice(0, CommerceModel.PRODUCT_COMBO_MAX_ITEMS)
+      .slice(0, PRODUCT_COMBO_MAX_ITEMS)
     if (items.length) next.includes = items
     else delete next.includes
   }
@@ -370,16 +371,16 @@ export const ProductAddOnsFields = memo(function ProductAddOnsFields(
                             }),
                           )
                         }
-                        slotProps={{ htmlInput: { maxLength: CommerceModel.PRODUCT_CHOICE_NOTE_MAX } }}
+                        slotProps={{ htmlInput: { maxLength: PRODUCT_CHOICE_NOTE_MAX } }}
                       />
                       <TextField
                         label="Combo: what it includes"
                         size="small"
                         multiline
                         minRows={2}
-                        defaultValue={(option.includes ?? []).join('\n')}
+                        defaultValue={Array.isArray(option.includes) ? option.includes.join('\n') : ''}
                         placeholder={'Full wall ×2\nSteel weights ×4\nRoller bag'}
-                        helperText={`One item per line, up to ${CommerceModel.PRODUCT_COMBO_MAX_ITEMS}. Leave it empty for a single choice.`}
+                        helperText={`One item per line, up to ${PRODUCT_COMBO_MAX_ITEMS}. Leave it empty for a single choice.`}
                         onBlur={(event) =>
                           replaceOption(
                             groupIndex,

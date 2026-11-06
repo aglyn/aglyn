@@ -15,6 +15,7 @@
  * limitations under the License.
  */
 
+import { validateProductForSave } from '../model/product-card-rules'
 import {
   buildTransferPlan,
   isBlankTransferValue,
@@ -44,7 +45,6 @@ import {
   commerceSlug,
   productInventory,
   productPriceRange,
-  validateProduct,
   variantMatrixProblem,
   type HostProduct,
   type ProductOption,
@@ -98,7 +98,7 @@ import {
  *
  * The register's settings travel as plain cells (`product-register-cells.ts`).
  * A file without their columns never touches them, and an add-ons cell is
- * asked the questions the product editor's Save asks: `validateProduct` and
+ * asked the questions the product editor's Save asks: `validateProductForSave` and
  * the 100-combination rule, `variantMatrixProblem`.
  *
  * ## What a file never sets
@@ -1309,14 +1309,14 @@ export function planProductTransfer(input: BuildTransferPlanInput, context: Prod
       problem = `A product holds at most ${COMMERCE_MAX_VARIANTS} variants; this file gives it ${finalVariants.length}.`
     } else {
       const candidate = productFromRecord(productValues, finalVariants)
-      let check = validateProduct(candidate)
+      let check = validateProductForSave(candidate)
       const addOns = planned.diff.find((change) => change.fieldId === F.modifierGroups)?.after
       if (!check && !isBlankTransferValue(addOns)) {
         const variantIds = addOnVariantIds(candidate.variants)
         const resolved = modifierGroupsFromAddOnCell(addOns, [], variantIds)
         check =
           resolved.problem ??
-          validateProduct({ ...candidate, modifierGroups: resolved.groups ?? [] }) ??
+          validateProductForSave({ ...candidate, modifierGroups: resolved.groups ?? [] }) ??
           variantMatrixProblem(candidate.options)
         if (resolved.groups?.some((entry) => entry.options.some((option) => option.priceCentsByVariant))) {
           addOnVariants = variantIds

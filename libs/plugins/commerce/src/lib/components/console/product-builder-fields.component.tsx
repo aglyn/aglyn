@@ -26,6 +26,7 @@ import TextField from '@mui/material/TextField'
 import Typography from '@mui/material/Typography'
 import { memo } from 'react'
 import * as CommerceModel from '../../model'
+import { PRODUCT_CHOICE_NOTE_MAX } from '../../model/product-card-rules'
 
 /*
  * THE PRODUCT BUILDER'S FIELDS IN THE PRODUCT EDITOR (AGL-4205).
@@ -62,7 +63,7 @@ export function withVariantCard(
     for (const key of ['imageUrl', 'note'] as const) {
       if (!(key in patch)) continue
       const value = String(patch[key] ?? '').trim()
-      if (value) next[key] = key === 'note' ? value.slice(0, CommerceModel.PRODUCT_CHOICE_NOTE_MAX) : value
+      if (value) next[key] = key === 'note' ? value.slice(0, PRODUCT_CHOICE_NOTE_MAX) : value
       else delete next[key]
     }
     return next
@@ -185,7 +186,7 @@ export const ProductBuilderFields = memo(function ProductBuilderFields(props: Pr
                   sx={{ flex: 1 }}
                   slotProps={{
                     htmlInput: {
-                      maxLength: CommerceModel.PRODUCT_CHOICE_NOTE_MAX,
+                      maxLength: PRODUCT_CHOICE_NOTE_MAX,
                       'aria-label': `Note for ${label}`,
                     },
                   }}

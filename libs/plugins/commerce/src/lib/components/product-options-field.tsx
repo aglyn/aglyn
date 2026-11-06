@@ -73,7 +73,7 @@ export const schema: Aglyn.ComponentSchema<ProductOptionsFieldProps> = {
   pluginId: BUNDLE_ID,
   displayName: 'Product and options',
   description:
-    'A form field: the person picks one of your products and its options, such as size and finish. It arrives with the submission, and a quote started from it begins with that product. Inside a Product detail block it takes what the shopper picked on the page, add-ons and quantity included.',
+    'A form field: the person picks one of your products and its options, such as size and finish. It arrives with the submission, and a quote started from it begins with that product.',
   category: Aglyn.ComponentCategory.FORMS,
   icon: { path: mdiPackageVariantClosed.path, sx: { color: 'info.main' } },
   flags: { selfClosing: Aglyn.FEATURE_FLAG.ENABLED },
@@ -93,7 +93,7 @@ export const schema: Aglyn.ComponentSchema<ProductOptionsFieldProps> = {
     {
       name: 'productId',
       label: 'Product',
-      description: 'Ask about one product only: the person picks its options. Leave it empty to let them pick from your store, or, inside a Product detail block, to take the product and picks from the page.',
+      description: 'Ask about one product only: the person picks its options. Leave it empty to let them pick from your store, or in a Product detail block to use the page’s picks.',
       component: Aglyn.FieldComponentType.PRODUCT_SELECT,
     },
     {

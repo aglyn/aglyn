@@ -15,6 +15,7 @@
  * limitations under the License.
  */
 
+import { validateProductForSave } from '../model/product-card-rules'
 import { createHash } from 'node:crypto'
 import { holdsSiteKey, hostStampedSitePermission, siteKeyRefusal } from '@aglyn/aglyn/app-utils/host-permissions'
 import { isRefusedIdToken } from '@aglyn/tenant-data-admin/server/id-token-refusal'
@@ -37,7 +38,6 @@ import {
   productSaveFields,
   smartCollectionRulesOf,
   stockAdjustmentWrite,
-  validateProduct,
   variantMatrixProblem,
   type InventoryAdjustmentReason,
 } from '../model'
@@ -214,7 +214,7 @@ export function createProductSaveHandler(options: ProductsWriteDeps = {}): Plugi
       const fields = productSaveFields(product, nowMs)
       // More combinations than a product holds is refused with the count
       // (AGL-4100), never saved short of the options it names.
-      const problem = variantMatrixProblem(fields.options) ?? validateProduct(fields as never)
+      const problem = variantMatrixProblem(fields.options) ?? validateProductForSave(fields as never)
       if (problem) return res.status(400).json({ error: problem })
       const db = deps.firestore()
       const hostRef = db.collection('hosts').doc(hostId)
