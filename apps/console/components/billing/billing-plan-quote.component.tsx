@@ -310,6 +310,9 @@ export default function BillingPlanQuoteComponent({
   const linkCoupon = useRef<string | null>(initialCoupon?.trim() || null)
   const [couponNotice, setCouponNotice] = useState<string | null>(null)
   const { data: user } = useUser()
+  // Keyed by presence, not identity: a refreshed token object is the same
+  // signed-in user and must not re-quote.
+  const userReady = Boolean(user)
   const { enqueueSnackbar } = useSnackbar()
   const { queueLoading } = useLoading()
   const [quote, setQuote] = useState<QuoteState | null>(null)
@@ -425,7 +428,14 @@ export default function BillingPlanQuoteComponent({
     // preview is deliberately above the idempotency claim on the server, so
     // comparing two plans cannot burn the key that pays for one. The link's
     // coupon is tried on the first quote only.
-    if (!plan) return
+    //
+    // Only once the quote can actually be sent. The card can mount before the
+    // signed-in user (or the org) has loaded, and `fetchQuote` returns
+    // without a request then. This effect used to spend the link's code on
+    // that empty call and never re-run, so a proposal opened from the menu
+    // got no first quote and every later one went out without its code: a
+    // base-price-free partner code showed the plan's list price.
+    if (!plan || !orgId || !user) return
     // Stripe's figures were for the bundle as it was. Until the new ones
     // land, the card shows the list total for the bundle as it is now.
     setQuote(null)
@@ -439,7 +449,26 @@ export default function BillingPlanQuoteComponent({
     }
     void fetchQuote(appliedCode, false, Boolean(appliedCode))
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [plan, interval, addonsKey])
+  }, [plan, interval, addonsKey, orgId, userReady])
+
+  // A code that reaches the card after it mounted (the proposal's, read
+  // after the page first rendered, or changed while it is open) is tried
+  // the way a link's is, unless the owner already holds a code.
+  const lastInitialCoupon = useRef<string | null>(initialCoupon?.trim() || null)
+  useEffect(() => {
+    const next = initialCoupon?.trim() || null
+    if (next === lastInitialCoupon.current) return
+    lastInitialCoupon.current = next
+    if (!next || appliedCode) return
+    if (!plan || !orgId || !user) {
+      // The effect above tries it once the quote can be sent.
+      linkCoupon.current = next
+      return
+    }
+    setCodeInput(next)
+    void fetchQuote(next, true)
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [initialCoupon])
 
   if (!plan) return null
 
