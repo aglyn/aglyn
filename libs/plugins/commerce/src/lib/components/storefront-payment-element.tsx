@@ -143,6 +143,12 @@ export interface StorefrontPaymentElementProps {
   /** Stripe's instruction to the browser. Not a claim that money moved. */
   clientSecret: string
   publishableKey: string
+  /**
+   * The seller's connected account when the session is a DIRECT charge: the
+   * session lives on that account, so Stripe.js has to be opened for it or the
+   * client secret will not resolve.
+   */
+  stripeAccount?: string
   /** Shown on the pay button, so the merchant's own total reads through. */
   payLabel?: string
   /**
@@ -178,12 +184,18 @@ export interface StorefrontPaymentElementProps {
  * two different merchants; in practice it is one, and the map costs nothing.
  */
 const stripePromises = new Map<string, Promise<Stripe | null>>()
-function getStripe(publishableKey: string): Promise<Stripe | null> | null {
+function getStripe(
+  publishableKey: string,
+  stripeAccount?: string,
+): Promise<Stripe | null> | null {
   if (!publishableKey) return null
-  let promise = stripePromises.get(publishableKey)
+  const key = stripeAccount ? `${publishableKey}:${stripeAccount}` : publishableKey
+  let promise = stripePromises.get(key)
   if (!promise) {
-    promise = loadStripe(publishableKey)
-    stripePromises.set(publishableKey, promise)
+    promise = stripeAccount
+      ? loadStripe(publishableKey, { stripeAccount })
+      : loadStripe(publishableKey)
+    stripePromises.set(key, promise)
   }
   return promise
 }
@@ -554,6 +566,7 @@ function PaymentForm({
 export function StorefrontPaymentElement({
   clientSecret,
   publishableKey,
+  stripeAccount,
   payLabel,
   defaultEmail,
   onCancel,
@@ -561,7 +574,10 @@ export function StorefrontPaymentElement({
   wallets,
   defaultShippingAddress,
 }: StorefrontPaymentElementProps) {
-  const stripe = useMemo(() => getStripe(publishableKey), [publishableKey])
+  const stripe = useMemo(
+    () => getStripe(publishableKey, stripeAccount),
+    [publishableKey, stripeAccount],
+  )
   const theme = useTheme()
   // Built once per session: the provider reads its options at mount and
   // ignores later changes, so a memo keyed on the theme as well would only

@@ -15,6 +15,7 @@
  * limitations under the License.
  */
 
+import { isDirectChargeObject } from './seller-stripe-account'
 import { firebaseAdmin, getOrgForHost } from '@aglyn/tenant-data-admin'
 import { storefrontTaxRow, type StorefrontTaxRow } from './storefront-tax'
 
@@ -158,6 +159,10 @@ export async function recordStorefrontTax(
   object: any,
 ): Promise<StorefrontTaxRow | null> {
   try {
+    // A DIRECT-charge sale is the seller's own: the seller collected the tax
+    // against their own registrations and files it. It is not a facilitated
+    // sale and has no place in Aglyn's return.
+    if (isDirectChargeObject(object)) return null
     const metadataType = metadataTypeOf(object)
     const hostId = hostIdOf(object)
     if (!hostId) return null

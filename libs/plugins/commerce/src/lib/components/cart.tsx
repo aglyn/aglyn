@@ -196,6 +196,8 @@ function CartLines(props: {
   const [nativeCheckout, setNativeCheckout] = useState<{
     clientSecret: string
     publishableKey: string
+    /** The seller's account for a direct-charge session. */
+    stripeAccount?: string
     /** The wallets the merchant hid (AGL-3629). */
     wallets?: CommerceModel.StorefrontCheckoutWallets
   } | null>(null)
@@ -352,6 +354,9 @@ function CartLines(props: {
         setNativeCheckout({
           clientSecret: String(payload.clientSecret),
           publishableKey: String(payload.publishableKey),
+          ...(payload.stripeAccount
+            ? { stripeAccount: String(payload.stripeAccount) }
+            : {}),
           wallets: CommerceModel.readStorefrontCheckoutWallets(payload.wallets),
         })
         setStatus('idle')
@@ -697,6 +702,7 @@ function CartLines(props: {
           <StorefrontPaymentElement
             clientSecret={nativeCheckout.clientSecret}
             publishableKey={nativeCheckout.publishableKey}
+            stripeAccount={nativeCheckout.stripeAccount}
             wallets={nativeCheckout.wallets}
             payLabel={checkoutLabel || 'Pay now'}
             defaultEmail={email}

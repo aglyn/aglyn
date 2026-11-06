@@ -497,6 +497,35 @@ describe('readCheckoutSessionPayload', () => {
     })
   })
 
+  it('names the seller account on a direct sale so Stripe.js can mount it', () => {
+    // A direct sale's session lives on the seller's own account; a client
+    // secret from it does not resolve under the platform key alone.
+    expect(
+      readCheckoutSessionPayload(
+        { id: 'cs_1', client_secret: 'cs_1_secret_abc' },
+        { native: true, publishableKey: 'pk_test_key' },
+        undefined,
+        'acct_seller',
+      ),
+    ).toEqual({
+      clientSecret: 'cs_1_secret_abc',
+      publishableKey: 'pk_test_key',
+      sessionId: 'cs_1',
+      stripeAccount: 'acct_seller',
+    })
+  })
+
+  it('leaves the hosted payload alone on a direct sale', () => {
+    expect(
+      readCheckoutSessionPayload(
+        { id: 'cs_1', url: 'https://checkout.stripe.com/pay/cs_1' },
+        { native: false, publishableKey: '' },
+        undefined,
+        'acct_seller',
+      ),
+    ).toEqual({ url: 'https://checkout.stripe.com/pay/cs_1' })
+  })
+
   it('refuses a native session with no client secret', () => {
     expect(
       readCheckoutSessionPayload(

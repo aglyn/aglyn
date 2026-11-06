@@ -99,6 +99,7 @@ import { handlePosStripeEvent } from './pos-terminal'
 import { notifyPosSaleCompleted } from './pos-sale'
 import { recordSellerStoreSaleHardware, sellerStoreOrderHardwareFields } from './pos-hardware-sale-fields'
 import { posOrderRefundStripeId } from './pos-order-refund-ids'
+import { isDirectChargeObject } from './seller-stripe-account'
 
 /**
  * A Stripe subscription's current period end, in seconds (AGL-4191). Older API
@@ -955,6 +956,11 @@ async function stopLapsedStorefrontSubscription(
     productName: string
     org: { timeZone?: string } | null
   },
+  /**
+   * The seller's account for a DIRECT-charge subscription, which lives there
+   * rather than on the platform; absent for a destination one.
+   */
+  stripeAccount?: string | null,
 ): Promise<void> {
   const stripeKey = process.env.STRIPE_SECRET_KEY
   if (!stripeKey) {
@@ -998,6 +1004,7 @@ async function stopLapsedStorefrontSubscription(
         Authorization: `Bearer ${stripeKey}`,
         'Content-Type': 'application/x-www-form-urlencoded',
         'Idempotency-Key': `lapsed-stop-${subscriptionId}`,
+        ...(stripeAccount ? { 'Stripe-Account': stripeAccount } : {}),
       },
       body: new URLSearchParams({
         cancel_at_period_end: 'true',
@@ -1074,16 +1081,96 @@ async function stopLapsedStorefrontSubscription(
   })
 }
 
-/** One authorized GET against the Stripe API, body parsed either way. */
+/**
+ * One authorized GET against the Stripe API, body parsed either way. A
+ * `stripeAccount` reads the object ON that connected account: a direct
+ * charge's payment intent, charge and invoice live there, and the platform
+ * key alone answers 404 for them.
+ */
 async function stripeGet(
   url: string,
   stripeKey: string,
+  stripeAccount?: string | null,
 ): Promise<{ ok: boolean; status: number; body: any }> {
   const response = await fetch(url, {
-    headers: { Authorization: `Bearer ${stripeKey}` },
+    headers: {
+      Authorization: `Bearer ${stripeKey}`,
+      ...(stripeAccount ? { 'Stripe-Account': stripeAccount } : {}),
+    },
   })
   const body = await response.json().catch(() => null)
   return { ok: response.ok, status: response.status, body }
+}
+
+/**
+ * The connected account a Connect-delivered event belongs to, or null for an
+ * event on the platform's own account. Direct-charge sales are created ON the
+ * seller's account, so their events arrive through the Connect destination
+ * with the seller named at the top level.
+ */
+export function connectEventAccount(event: unknown): string | null {
+  const account = (event as { account?: unknown } | null)?.account
+  return typeof account === 'string' && account ? account : null
+}
+
+/**
+ * Event types whose object is a charge-level object (a charge, a dispute, an
+ * early fraud warning, a review) with no metadata of ours: whether a
+ * Connect-delivered one is a direct sale is decided by the order it finds.
+ */
+const CHARGE_LEVEL_EVENT_TYPES = new Set([
+  'charge.refunded',
+  'charge.dispute.created',
+  'charge.dispute.closed',
+  'radar.early_fraud_warning.created',
+  'review.opened',
+  'review.closed',
+])
+
+/**
+ * Whether this handler should act on the event at all, as far as WHOSE
+ * account it came from can say. A platform event always passes. A
+ * Connect-delivered one passes only when its object says it was sold by
+ * direct charge, or when it is a charge-level event the order lookup will
+ * judge ({@link connectEventOrderIsDirect}). Exported for the spec.
+ */
+export function connectEventIsForDirectSale(
+  type: unknown,
+  object: unknown,
+  event: unknown,
+): boolean {
+  if (!connectEventAccount(event)) return true
+  if (CHARGE_LEVEL_EVENT_TYPES.has(String(type))) return true
+  return isDirectChargeObject(object)
+}
+
+/**
+ * A charge-level event's order, judged by its delivery: a platform event
+ * always fits, and a Connect-delivered one fits only an order recorded as a
+ * direct sale. The seller's copy of a destination sale finds nothing to act
+ * on, rather than a second refund or chargeback on the platform's order.
+ */
+function connectEventOrderIsDirect(
+  event: unknown,
+  snapshot: { get(field: string): unknown },
+): boolean {
+  if (!connectEventAccount(event)) return true
+  return snapshot.get('chargeModel') === 'direct'
+}
+
+/**
+ * The fields a direct sale's records carry so every later reader can tell it
+ * apart without asking Stripe: `refund.ts` refunds on the seller's account,
+ * the revenue report counts the application fee as Aglyn's whole take, and
+ * the dispute branch leaves the transfer reversal out. Empty for a
+ * destination sale, so those documents are written exactly as before.
+ */
+export function directChargeRecordFields(
+  direct: boolean,
+  account: string | null,
+): Record<string, string> {
+  if (!direct) return {}
+  return { chargeModel: 'direct', ...(account ? { stripeAccountId: account } : {}) }
 }
 
 /**
@@ -1131,6 +1218,8 @@ async function repriceStorefrontSubscriptionFee(
   subscriptionRef: FirebaseFirestore.DocumentReference,
   subscriptionId: string,
   desiredFeePct: number,
+  /** The seller's account, for a DIRECT-charge subscription that lives there. */
+  stripeAccount?: string | null,
 ): Promise<void> {
   const stripeKey = process.env.STRIPE_SECRET_KEY
   if (!stripeKey || !subscriptionId) return
@@ -1152,6 +1241,7 @@ async function repriceStorefrontSubscriptionFee(
         // Keyed on the RATE as well as the subscription, so a later change
         // back is a new request rather than a replay of the old one.
         'Idempotency-Key': `fee-reprice-${subscriptionId}-${desiredFeePct}`,
+        ...(stripeAccount ? { 'Stripe-Account': stripeAccount } : {}),
       },
       body: new URLSearchParams({
         application_fee_percent:
@@ -1223,6 +1313,7 @@ async function reportFeeNotCorrected(
 async function resolveInvoiceChargeId(
   invoice: any,
   stripeKey: string,
+  stripeAccount?: string | null,
 ): Promise<string> {
   const direct = invoice?.charge
   if (typeof direct === 'string' && direct) return direct
@@ -1234,6 +1325,7 @@ async function resolveInvoiceChargeId(
       const intent = await stripeGet(
         `https://api.stripe.com/v1/payment_intents/${encodeURIComponent(nested)}`,
         stripeKey,
+        stripeAccount,
       )
       const latest = intent.ok ? intent.body?.latest_charge : ''
       if (typeof latest === 'string' && latest) return latest
@@ -1246,6 +1338,7 @@ async function resolveInvoiceChargeId(
         paymentIntentId,
       )}`,
       stripeKey,
+      stripeAccount,
     )
     const latest = intent.ok ? intent.body?.latest_charge : ''
     if (typeof latest === 'string' && latest) return latest
@@ -1330,6 +1423,7 @@ async function chargeSubscriptionFeeOnItemsOnly(
   invoice: any,
   hostId: string,
   invoiceId: string,
+  stripeAccount?: string | null,
 ): Promise<number> {
   const chargedCents = Math.max(
     0,
@@ -1351,7 +1445,7 @@ async function chargeSubscriptionFeeOnItemsOnly(
     await reportFeeNotCorrected(hostId, invoiceId, 'STRIPE_SECRET_KEY is not set on this deployment')
     return chargedCents
   }
-  const chargeId = await resolveInvoiceChargeId(invoice, stripeKey)
+  const chargeId = await resolveInvoiceChargeId(invoice, stripeKey, stripeAccount)
   if (!chargeId) {
     console.error(
       'Subscription fee not corrected to the items-only base: the invoice names no charge (AGL-2317)',
@@ -2217,6 +2311,15 @@ export const commerceBillingWebhookHandler: BillingWebhookHandler = async ({
     return
   }
 
+  // A CONNECT-DELIVERED EVENT IS OURS ONLY FOR A DIRECT SALE. The seller's
+  // account also sees its side of every DESTINATION sale (the `py_` payment
+  // the transfer created, the refund a transfer reversal makes), and those
+  // carry none of our metadata. The platform-side event already ran this
+  // handler for that sale, so acting on the seller's copy would record it
+  // twice. Charge-level events (refunds, disputes, fraud signals) are judged
+  // below by the order they find, which says how it was sold.
+  if (!connectEventIsForDirectSale(type, object, event)) return
+
   // THE REGISTER'S CARD PAYMENTS (AGL-3607): Terminal reader actions, register
   // PaymentIntents and register QR pages. Each names one payment on an open
   // sale and is settled by re-reading Stripe in `pos-terminal.ts`; every other
@@ -2353,7 +2456,18 @@ export const commerceBillingWebhookHandler: BillingWebhookHandler = async ({
   // AWAITED and never allowed to throw: a lost row is an understated tax
   // return, and `recordStorefrontTax` swallows its own failures precisely so
   // this cannot turn a recording problem into a redelivered billing webhook.
-  await recordStorefrontTax(String(type), object)
+  //
+  // NOT for a DIRECT charge. That session lives on the seller's own account,
+  // Stripe Tax computed it against the SELLER's registrations, and the money
+  // settled into the seller's balance: the seller owns and remits the tax,
+  // so it is no row on Aglyn's return, and Aglyn did not facilitate the sale
+  // into the buyer's state either.
+  const directSale = isDirectChargeObject(object)
+  // The seller's account for a direct sale, for every Stripe call below that
+  // touches its objects, and the fields its records carry (empty otherwise).
+  const saleAccount = directSale ? connectEventAccount(event) : null
+  const directFields = directChargeRecordFields(directSale, saleAccount)
+  if (!directSale) await recordStorefrontTax(String(type), object)
 
   if (
     type === 'customer.subscription.created' ||
@@ -2511,6 +2625,8 @@ export const commerceBillingWebhookHandler: BillingWebhookHandler = async ({
               ...(typeof event?.livemode === 'boolean'
                 ? { livemode: event.livemode }
                 : {}),
+              // A direct sale says so, and names the seller's account.
+              ...directFields,
               createdAtMs: Date.now(),
               // WHICH TAX this subscription will bill, for as long as it
               // lives (AGL-2323).
@@ -2805,10 +2921,18 @@ export const commerceBillingWebhookHandler: BillingWebhookHandler = async ({
         // is left is the figure the ledger stores. A transient Stripe failure
         // throws here rather than filing a fee we did not end up charging —
         // the redelivery re-runs it behind the invoice-id guard below.
+        //
+        // A DIRECT-charge subscription gets the same repair: its percent is
+        // the take alone, but Stripe still applies it to the whole invoice,
+        // and the take is a share of the goods, never of the seller's own
+        // sales tax or shipping (Terms 4.3). The charge is read on the
+        // seller's account; the application fee and its refund live on the
+        // platform either way.
         const feeCentsInForce = await chargeSubscriptionFeeOnItemsOnly(
           object,
           invoiceHostId,
           invoiceId,
+          directSale ? saleAccount : null,
         )
         const { lineItems: invoiceLineItems, totals: computedInvoiceTotals } =
           CommerceModel.computeSubscriptionInvoiceOrder(object, snapshot)
@@ -3028,6 +3152,8 @@ export const commerceBillingWebhookHandler: BillingWebhookHandler = async ({
                   // through it, so inventing one would answer a question this
                   // record cannot answer.
                   reconstructedFromInvoiceId: invoiceId,
+                  // A direct sale says so, and names the seller's account.
+                  ...directFields,
                   ...rollup,
                 },
             { merge: true },
@@ -3065,6 +3191,8 @@ export const commerceBillingWebhookHandler: BillingWebhookHandler = async ({
               paymentIntentId: String(object?.payment_intent ?? '') || null,
               subscriptionId,
               invoiceId,
+              // A direct sale says so, and names the seller's account.
+              ...directFields,
               customerName:
                 object?.customer_name ??
                 currentSubscription.get('customerName') ??
@@ -3100,12 +3228,19 @@ export const commerceBillingWebhookHandler: BillingWebhookHandler = async ({
         // RECORDED — the payment is already collected, and AGL-1732's rule is
         // that money collected must never go unfiled. The redelivery then
         // re-runs the reversal alone.
-        await reverseSubscriptionTaxToPlatform(
-          object,
-          invoiceHostId,
-          subscriptionRef,
-          invoiceId,
-        )
+        //
+        // Never on a DIRECT-charge subscription: the invoice lives on the
+        // seller's account, Stripe Tax computed it on the seller's
+        // registrations, and there is no transfer to take the tax back from.
+        // The seller owns that tax.
+        if (!directSale) {
+          await reverseSubscriptionTaxToPlatform(
+            object,
+            invoiceHostId,
+            subscriptionRef,
+            invoiceId,
+          )
+        }
         // BEFORE the redelivery short-circuit, deliberately (AGL-2071): a
         // cycle Aglyn has already recorded is exactly the cycle whose renewal
         // still needs stopping, and gating the stop on `recorded` would mean a
@@ -3126,6 +3261,8 @@ export const commerceBillingWebhookHandler: BillingWebhookHandler = async ({
               productName: snapshot.name || 'a subscription product',
               org: (renewalOrg ?? null) as { timeZone?: string } | null,
             },
+            // A direct-charge subscription lives on the seller's account.
+            saleAccount,
           )
         } else if (renewalEntitled) {
           // RE-PRICE THE PLATFORM FEE (AGL-2289). `application_fee_percent` was
@@ -3171,8 +3308,14 @@ export const commerceBillingWebhookHandler: BillingWebhookHandler = async ({
                 recurringBasisCents,
                 // The same Stripe Tax recovery the sale priced in (AGL-4198),
                 // read off the invoice so a renewal never re-prices it away.
-                { stripeTax: (object as { automatic_tax?: { enabled?: boolean } })?.automatic_tax?.enabled === true },
+                // A direct-charge subscription is re-priced to the take alone,
+                // as `checkout.ts` sold it: Stripe bills the seller its own
+                // processing, so there is nothing to pass through.
+                directSale
+                  ? { direct: true }
+                  : { stripeTax: (object as { automatic_tax?: { enabled?: boolean } })?.automatic_tax?.enabled === true },
               ),
+              saleAccount,
             )
           }
         }
@@ -3348,6 +3491,8 @@ export const commerceBillingWebhookHandler: BillingWebhookHandler = async ({
                 ...(typeof event?.livemode === 'boolean'
                   ? { livemode: event.livemode }
                   : {}),
+                // A direct sale says so, and names the seller's account.
+                ...directFields,
                 paymentIntentId: String(object?.payment_intent ?? '') || null,
                 // The regime this stay carried, on the record the merchant
                 // reads (AGL-1969).
@@ -3830,6 +3975,8 @@ export const commerceBillingWebhookHandler: BillingWebhookHandler = async ({
             ...(typeof event?.livemode === 'boolean'
               ? { livemode: event.livemode }
               : {}),
+            // A direct sale says so, and names the seller's account.
+            ...directFields,
             customerName: object?.customer_details?.name ?? null,
             customerEmail: object?.customer_details?.email ?? null,
             // A pickup carries no address to deliver to (AGL-3624): the
@@ -4589,6 +4736,8 @@ export const commerceBillingWebhookHandler: BillingWebhookHandler = async ({
             paidOrder = paidQuote
             transaction.set(orderRef, {
               ...paidQuote,
+              // A direct sale says so, and names the seller's account.
+              ...directFields,
               createdAt: firebaseAdmin.firestore.FieldValue.serverTimestamp(),
             })
             return true
@@ -4731,6 +4880,8 @@ export const commerceBillingWebhookHandler: BillingWebhookHandler = async ({
                 Number(object?.metadata?.taxCents ?? 0),
               ),
               paymentIntentId: String(object?.payment_intent ?? '') || null,
+              // A direct sale says so, and names the seller's account.
+              ...directFields,
               customerEmail:
                 object?.customer_details?.email ?? lifted.customerEmail ?? null,
               timeline: CommerceModel.appendOrderEvent(lifted, 'paid'),
@@ -5176,6 +5327,8 @@ export const commerceBillingWebhookHandler: BillingWebhookHandler = async ({
             ...(typeof event?.livemode === 'boolean'
               ? { livemode: event.livemode }
               : {}),
+            // A direct sale says so, and names the seller's account.
+            ...directFields,
             customerName: object?.customer_details?.name ?? null,
             // Where it ships (AGL-3688): the address the session collected for
             // the shipping it charged. `shipping_details` only — buy-now
@@ -5643,6 +5796,8 @@ export const commerceBillingWebhookHandler: BillingWebhookHandler = async ({
       : { kind: 'not-ours' }
     if (lookup.kind !== 'order') return
     const snapshot = lookup.snapshot
+    // The seller's copy of a destination sale's refund is not a second one.
+    if (!connectEventOrderIsDirect(event, snapshot)) return
     const hostId = String(snapshot.ref.parent.parent?.id ?? '')
     const external = await recordExternalRefund(snapshot.ref, object)
     if (external && hostId) {
@@ -5709,6 +5864,7 @@ export const commerceBillingWebhookHandler: BillingWebhookHandler = async ({
       : { kind: 'not-ours' }
     if (lookup.kind !== 'order') return
     const snapshot = lookup.snapshot
+    if (!connectEventOrderIsDirect(event, snapshot)) return
     const hostId = String(snapshot.ref.parent.parent?.id ?? '')
     const order = CommerceModel.liftLegacyOrder((snapshot.data() ?? {}) as never)
     const orderCents = Number(order.totals?.totalCents ?? order.amountCents ?? 0)
@@ -5787,9 +5943,15 @@ export const commerceBillingWebhookHandler: BillingWebhookHandler = async ({
   if (type === 'charge.dispute.created' || type === 'charge.dispute.closed') {
     const dispute = (object ?? {}) as StripeDispute
     const paymentIntentId = String(dispute.payment_intent ?? '')
-    const lookup: DisputeLookup = paymentIntentId
+    const found: DisputeLookup = paymentIntentId
       ? await findOrderForDispute(paymentIntentId)
       : { kind: 'not-ours' }
+    // A Connect-delivered dispute on an order that was not a direct sale is
+    // not this order's dispute: the platform's own event is.
+    const lookup: DisputeLookup =
+      found.kind === 'order' && !connectEventOrderIsDirect(event, found.snapshot)
+        ? { kind: 'not-ours' }
+        : found
     // UNRESOLVED IS NOT NOT-OURS (AGL-2161). A lookup that could not run is
     // the platform's problem and is reported; a lookup that ran and matched
     // nothing is a marketplace, booking or platform-billing dispute, and
@@ -5810,6 +5972,11 @@ export const commerceBillingWebhookHandler: BillingWebhookHandler = async ({
     const snapshot = lookup.kind === 'order' ? lookup.snapshot : null
     if (snapshot) {
       const hostId = String(snapshot.ref.parent.parent?.id ?? '')
+      // A DIRECT-charge order was paid on the seller's own account, so the
+      // dispute is on that account too: Stripe took the money and the dispute
+      // fee from the seller's balance, and there is no transfer for Aglyn to
+      // pull back. The order says so.
+      const disputeOnSellerAccount = snapshot.get('chargeModel') === 'direct'
       if (type === 'charge.dispute.created') {
         // A chargeback's gift cards are frozen while it is open (AGL-3363).
         const disputed = CommerceModel.liftLegacyOrder((snapshot.data() ?? {}) as never)
@@ -5879,11 +6046,16 @@ export const commerceBillingWebhookHandler: BillingWebhookHandler = async ({
               ? `Chargeback lost — order ${disputedOrderLabel}`
               : 'Chargeback resolved in your favor',
             body: settled.lost
-              ? `The chargeback on order ${disputedOrderLabel} on {site} was ` +
-                'decided in the shopper\'s favor, and their bank took back ' +
-                `$${(settled.reversedCents / 100).toFixed(2)}. If part of the ` +
-                'sale had been paid out to you, a separate notice says what ' +
-                'is taken back from your balance.'
+              ? disputeOnSellerAccount
+                ? `The chargeback on order ${disputedOrderLabel} on {site} was ` +
+                  'decided in the shopper\'s favor, and their bank took back ' +
+                  `$${(settled.reversedCents / 100).toFixed(2)} from your ` +
+                  'Stripe balance.'
+                : `The chargeback on order ${disputedOrderLabel} on {site} was ` +
+                  'decided in the shopper\'s favor, and their bank took back ' +
+                  `$${(settled.reversedCents / 100).toFixed(2)}. If part of the ` +
+                  'sale had been paid out to you, a separate notice says what ' +
+                  'is taken back from your balance.'
               : `The chargeback on order ${disputedOrderLabel} on {site} ` +
                 'closed in your favor. Nothing is taken back from you for it.',
             link: `/${hostId}/products/orders`,
@@ -5937,7 +6109,10 @@ export const commerceBillingWebhookHandler: BillingWebhookHandler = async ({
         // transiently-failed reversal gets its retry — and gated inside on
         // the order's own `reversedTransferCents` marker, so it runs at most
         // once per dispute however many times Stripe delivers.
-        if (String(dispute?.status ?? '') === 'lost') {
+        //
+        // Never for a DIRECT charge: the shopper's bank already took the money
+        // from the seller's own balance, and there is no transfer to reverse.
+        if (String(dispute?.status ?? '') === 'lost' && !disputeOnSellerAccount) {
           const pulledBackCents = await reverseSellerShare(
             snapshot.ref,
             dispute,

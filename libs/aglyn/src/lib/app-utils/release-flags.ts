@@ -41,6 +41,7 @@ export type ReleaseFlagKey =
   | PluginReleaseFlagKey
   | 'release_addon_store'
   | 'release_native_checkout'
+  | 'release_direct_charges'
   | 'release_edit_bar'
   | 'release_assist'
   | 'release_video_uploads'
@@ -135,6 +136,26 @@ const PLATFORM_RELEASE_FLAGS: readonly ReleaseFlagDefinition[] = [
       'NEXT_PUBLIC_STRIPE_PUBLISHABLE_KEY, so a deployment without one keeps ' +
       'the redirect; turning this off returns every storefront to the redirect.',
     defaultEnabled: true,
+  },
+  // Off until the Terms of Service say a site's own Stripe account is the
+  // seller of record. On (globally or for one org by override), a store that
+  // sets up payments gets a full Stripe account of its own and its site sales
+  // become direct charges on it. Off changes nothing for an account already
+  // created: the account itself decides how its sales are charged.
+  {
+    key: 'release_direct_charges',
+    label: 'Sellers get their own Stripe account',
+    description:
+      'When a store sets up payments it gets a full Stripe account of its own ' +
+      '(Stripe bills it, Stripe Dashboard included), and its site sales, ' +
+      'quotes, invoices and bookings are charged directly on that account: ' +
+      'the store is the seller of record, owns refunds, disputes and sales ' +
+      'tax, and Aglyn keeps only its plan take as an application fee. The ' +
+      'register, Tap to Pay and plugin marketplace sales stay on the ' +
+      'platform account. Off: new stores get the platform-managed account ' +
+      'and destination charges, as before. Accounts already created keep ' +
+      'whichever shape they were created with.',
+    defaultEnabled: false,
   },
   // Released to every site 2026-09-16 (AGL-3041). Still the whole surface's
   // kill switch, globally or for one org by override: off, the tenant slot

@@ -73,6 +73,12 @@ import { raiseBookingEvent } from './booking-events'
  *    written inside one transaction, BEFORE Stripe is called, so a lost
  *    response leaves the amount counted and the retry refunds less, never
  *    more.
+ *
+ * A DIRECT-charge booking (`chargeModel: 'direct'`) was charged on the
+ * seller's own account, so its refund is made there (`Stripe-Account`) and is
+ * debited from the seller's balance. There is no transfer to reverse, so
+ * `reverse_transfer` is never sent; `refund_application_fee` still is, for the
+ * same reason as above.
  */
 export const bookingRefundHandler: PluginApiHandler = async (req, res) => {
   if (req.method !== 'POST') {
@@ -143,6 +149,20 @@ export const bookingRefundHandler: PluginApiHandler = async (req, res) => {
           'This booking was paid before refunds were supported here. ' +
           'Refund it in the Stripe dashboard, and tick “Reverse transfer” ' +
           'so the amount comes back from the merchant account.',
+      })
+    }
+    // Where the charge lives. A direct booking records the seller's account
+    // when it is held; without it the refund would be sent to the platform,
+    // where Stripe cannot find the payment, so refuse before reserving.
+    const direct = bookingSnapshot.get('chargeModel') === 'direct'
+    const chargeAccountId = direct
+      ? String(bookingSnapshot.get('stripeAccountId') ?? '').trim()
+      : ''
+    if (direct && !chargeAccountId) {
+      return res.status(409).json({
+        error:
+          'This booking was paid on your Stripe account. ' +
+          'Refund it in your Stripe dashboard.',
       })
     }
 
@@ -220,22 +240,33 @@ export const bookingRefundHandler: PluginApiHandler = async (req, res) => {
       return res.status(400).json({ error: 'Nothing left to refund' })
     }
 
-    const params = new URLSearchParams({
-      payment_intent: paymentIntentId,
-      amount: String(refundCents),
-      // THE SELLER SHARE COMES BACK. Without this the merchant keeps their
-      // transfer in full and Aglyn funds the entire refund.
-      reverse_transfer: 'true',
-      // ...and so does Aglyn's commission on the refunded share. A refunded
-      // appointment earned the platform nothing.
-      refund_application_fee: 'true',
-    })
+    const params = direct
+      ? new URLSearchParams({
+          payment_intent: paymentIntentId,
+          amount: String(refundCents),
+          // The money is already the seller's, so the refund comes out of
+          // their balance with no transfer to reverse. Aglyn's commission on
+          // the refunded share still goes back to them.
+          refund_application_fee: 'true',
+        })
+      : new URLSearchParams({
+          payment_intent: paymentIntentId,
+          amount: String(refundCents),
+          // THE SELLER SHARE COMES BACK. Without this the merchant keeps their
+          // transfer in full and Aglyn funds the entire refund.
+          reverse_transfer: 'true',
+          // ...and so does Aglyn's commission on the refunded share. A refunded
+          // appointment earned the platform nothing.
+          refund_application_fee: 'true',
+        })
     const response = await fetch('https://api.stripe.com/v1/refunds', {
       method: 'POST',
       headers: {
         Authorization: `Bearer ${process.env.STRIPE_SECRET_KEY}`,
         'Content-Type': 'application/x-www-form-urlencoded',
         ...(claimRef ? { 'Idempotency-Key': claimRef.id } : {}),
+        // A direct booking's payment is on the seller's account.
+        ...(direct ? { 'Stripe-Account': chargeAccountId } : {}),
       },
       body: params.toString(),
     })

@@ -465,3 +465,57 @@ describe('paid draft and POS card orders carry the resolved taxMode (AGL-2451)',
     expect(order.taxMode).toBe('stripe-automatic')
   })
 })
+
+describe('a direct-charge sale', () => {
+  const SELLER = 'acct_1Seller'
+
+  async function deliverConnect(object: any) {
+    expandedById.set(String(object?.id ?? ''), object)
+    await commerceBillingWebhookHandler({
+      type: 'checkout.session.completed',
+      object,
+      event: { id: `evt_${object.id}`, account: SELLER },
+      requestHost: 'acme.aglyn.app',
+    } as any)
+  }
+
+  const direct = (session: any, id: string) => ({
+    ...session,
+    id,
+    metadata: { ...session.metadata, chargeModel: 'direct' },
+  })
+
+  it('writes the cart order marked direct, with the seller’s account', async () => {
+    await deliverConnect(direct(CART_SESSION_STRIPE_TAX, 'cs_cart_direct'))
+    const order = docs.get('hosts/host-1/orders/cs_cart_direct') as any
+    expect(order).toMatchObject({ chargeModel: 'direct', stripeAccountId: SELLER })
+    expect(order.taxMode).toBe('stripe-automatic')
+  })
+
+  it('files no row on Aglyn’s tax record, and asks Stripe nothing', async () => {
+    await deliverConnect(direct(CART_SESSION_STRIPE_TAX, 'cs_cart_direct'))
+    expect(docs.get('storefrontTaxCollected/cs_cart_direct')).toBeUndefined()
+    expect(fetchMock).not.toHaveBeenCalled()
+  })
+
+  it('marks a buy-now and a paid draft the same way', async () => {
+    await deliverConnect(direct(BUY_NOW_SESSION_STRIPE, 'cs_buynow_direct'))
+    expect(docs.get('hosts/host-1/orders/cs_buynow_direct')).toMatchObject({
+      chargeModel: 'direct',
+      stripeAccountId: SELLER,
+    })
+    await deliverConnect(direct(DRAFT_SESSION_STRIPE_TAX, 'cs_draft_direct'))
+    expect(docs.get('hosts/host-1/orders/order-1')).toMatchObject({
+      status: 'paid',
+      chargeModel: 'direct',
+      stripeAccountId: SELLER,
+    })
+  })
+
+  it('a destination sale is written without either field', async () => {
+    await deliver(CART_SESSION_STRIPE_TAX)
+    const order = docs.get('hosts/host-1/orders/cs_cart_stripe') as any
+    expect(order.chargeModel).toBeUndefined()
+    expect(order.stripeAccountId).toBeUndefined()
+  })
+})

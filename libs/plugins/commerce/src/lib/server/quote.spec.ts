@@ -688,7 +688,7 @@ describe('a quote’s open payment goes with the version it was priced from (AGL
       request('admin', { action: 'update', hostId: 'site1', quoteId, baseUpdatedAtMs: 1_000, quote: { lines: [CANOPY] } }, 'e'),
     )
     expect(outcome.status).toBe(200)
-    expect(expireSession).toHaveBeenCalledWith('cs_test_open123456')
+    expect(expireSession).toHaveBeenCalledWith('cs_test_open123456', 'site1')
     expect(docs.get(path)?.['checkoutSessionId']).toBeUndefined()
   })
 
@@ -707,7 +707,7 @@ describe('a quote’s open payment goes with the version it was priced from (AGL
       status: 200,
       body: { deleted: true },
     })
-    expect(expireSession).toHaveBeenCalledWith('cs_test_open123456')
+    expect(expireSession).toHaveBeenCalledWith('cs_test_open123456', 'site1')
   })
 })
 
@@ -743,7 +743,7 @@ describe('the pay link in the console (AGL-4094)', () => {
     expect(stored['checkoutSessionId']).toBeUndefined()
     expect(stored['timeline'].at(-1)).toMatchObject({ event: 'quote-link-replaced', atMs: 5_000 })
     expect(stored['timeline'].at(-1).detail).toContain('editor@example.com')
-    expect(expireSession).toHaveBeenCalledWith('cs_test_open123456')
+    expect(expireSession).toHaveBeenCalledWith('cs_test_open123456', 'site1')
     expect((await link('admin', 'pay-link', quoteId)).body['linkVersion']).toBe(2)
   })
 
@@ -936,7 +936,7 @@ describe('proofs and revisions in the console (AGL-4096)', () => {
       expect.objectContaining({ id: 'proof1', path: `hosts/site1/private/uploads/quote-proof/${quoteId}/proof1` }),
     ])
     expect(stored?.['checkoutSessionId']).toBeUndefined()
-    expect(expireSession).toHaveBeenCalledWith('cs_test_open123456')
+    expect(expireSession).toHaveBeenCalledWith('cs_test_open123456', 'site1')
     expect(stored?.['timeline'].at(-1)).toMatchObject({ event: 'quote-proof-added' })
     // A retried finalize finds it there and adds nothing.
     expect((await act('admin', 'proof-finalize', quoteId, { ticket: 'ticket-1' })).status).toBe(200)
@@ -995,7 +995,7 @@ describe('proofs and revisions in the console (AGL-4096)', () => {
     })
     expect(snapshot?.['lineItems']).toEqual(docs.get(path)?.['lineItems'])
     expect(docs.get(path)?.['quote']).toMatchObject({ revision: 2, stage: 'draft', proofs: [], responses: [], updatedAtMs: 5_000 })
-    expect(expireSession).toHaveBeenCalledWith('cs_test_second12345')
+    expect(expireSession).toHaveBeenCalledWith('cs_test_second12345', 'site1')
 
     // The history lists it, and its files are still served to members.
     const history = await act('admin', 'revisions', quoteId)
@@ -1161,7 +1161,7 @@ describe('sending the quote by email (AGL-4097)', () => {
     expect(sentEmails[2].subject).toBe('Quote #1042 from Acme Signs')
     expect(renderedTokens[2]['quote.url']).toBe(`https://acme.aglyn.app/pay-quote?q=${quoteId}&t=2.sig-site1`)
     expect(renderedTokens[2]['quote.heading']).toBe('Your updated quote')
-    expect(expireSession).toHaveBeenCalledWith('cs_test_open123456')
+    expect(expireSession).toHaveBeenCalledWith('cs_test_open123456', 'site1')
     const after = stored(path)
     expect(after['checkoutSessionId']).toBeUndefined()
     expect(after['quote']['linkVersion']).toBe(2)

@@ -372,4 +372,27 @@ describe('the merchant share of a LOST booking dispute (AGL-3363)', () => {
     await expect(deliver('charge.dispute.closed', dispute)).rejects.toThrow(/503/)
     expect(booking()).not.toHaveProperty('disputeReversal')
   })
+
+  it('a DIRECT-charge booking has no transfer to pull back: settled, claimed, no Stripe call', async () => {
+    docs.set(BOOKING, { ...docs.get(BOOKING), chargeModel: 'direct', stripeAccountId: 'acct_seller' })
+    await expect(deliver('charge.dispute.closed', dispute)).resolves.toEqual({
+      claimed: true,
+      hostId: 'host-1',
+    })
+    expect(fetchMock).not.toHaveBeenCalled()
+    expect(booking()).not.toHaveProperty('disputeReversal')
+    expect(managerNotices.filter((notice) => /Payout adjusted/.test(notice.title))).toHaveLength(0)
+  })
+
+  it('a dispute delivered from the seller’s account is treated as direct', async () => {
+    await expect(
+      bookingsBillingWebhookHandler({
+        type: 'charge.dispute.closed',
+        object: dispute,
+        event: { id: 'evt_connect', account: 'acct_seller' },
+      } as any),
+    ).resolves.toEqual({ claimed: true, hostId: 'host-1' })
+    expect(fetchMock).not.toHaveBeenCalled()
+    expect(booking()).not.toHaveProperty('disputeReversal')
+  })
 })

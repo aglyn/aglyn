@@ -151,6 +151,10 @@ jest.mock('@aglyn/tenant-data-admin', () => ({
 
 let sessionBody: URLSearchParams | null = null
 let taxRateBody: URLSearchParams | null = null
+let sessionHeaders: Record<string, string> = {}
+let taxRateHeaders: Record<string, string> = {}
+/** The seller's `tax/settings` status a direct-charge Stripe Tax sale reads. */
+let sellerTaxStatus = 'active'
 /** Stripe endpoints in call order, e.g. ['tax_rates', 'sessions']. */
 let stripeCalls: string[] = []
 let taxRateResponse: { ok: boolean; body: Record<string, any> } = {
@@ -166,6 +170,7 @@ const fetchMock = jest.fn(async (url: any, init: any): Promise<any> => {
   if (target.endsWith('/v1/tax_rates')) {
     stripeCalls.push('tax_rates')
     taxRateBody = new URLSearchParams(String(init?.body ?? ''))
+    taxRateHeaders = { ...(init?.headers ?? {}) }
     return {
       ok: taxRateResponse.ok,
       json: async () => taxRateResponse.body,
@@ -174,6 +179,7 @@ const fetchMock = jest.fn(async (url: any, init: any): Promise<any> => {
   if (target.endsWith('/v1/checkout/sessions')) {
     stripeCalls.push('sessions')
     sessionBody = new URLSearchParams(String(init?.body ?? ''))
+    sessionHeaders = { ...(init?.headers ?? {}) }
     return {
       ok: true,
       json: async () => ({
@@ -181,6 +187,10 @@ const fetchMock = jest.fn(async (url: any, init: any): Promise<any> => {
         url: 'https://checkout.stripe.com/pay/cs_test_1',
       }),
     }
+  }
+  if (target.endsWith('/v1/tax/settings')) {
+    stripeCalls.push('tax_settings')
+    return { ok: true, json: async () => ({ status: sellerTaxStatus }) }
   }
   throw new Error(`Unexpected Stripe endpoint ${target}`)
 })
@@ -224,6 +234,8 @@ interface Scenario {
   billing?: string
   /** Seeded at `hosts/host-1/stripeTaxRates/{key}` before the request. */
   taxRateCache?: Record<string, Record<string, any>>
+  /** Merged over the seeded owner profile. */
+  profile?: Record<string, any>
 }
 
 /** The TX merchant: manual 8.25% tax by origin, as AGL-285's editor writes. */
@@ -241,6 +253,7 @@ async function runCheckout(scenario: Scenario = {}) {
   docs.set('profiles/owner-1', {
     stripeAccountId: 'acct_1',
     stripeChargesEnabled: true,
+    ...(scenario.profile ?? {}),
   })
   docs.set('hosts/host-1/products/p1', {
     name: 'Journal',
@@ -257,6 +270,8 @@ async function runCheckout(scenario: Scenario = {}) {
   }
   sessionBody = null
   taxRateBody = null
+  sessionHeaders = {}
+  taxRateHeaders = {}
   stripeCalls = []
   const { res, result } = makeResponse()
   const req = {
@@ -639,3 +654,89 @@ describe('a subscription session says which tax it carries (AGL-2323)', () => {
     ).toEqual([])
   })
 })
+
+describe('a direct-charge seller sells on its own Stripe account', () => {
+  const realFetch = global.fetch
+  const realKey = process.env.STRIPE_SECRET_KEY
+  const direct = { stripeChargeModel: 'direct' }
+
+  beforeAll(() => {
+    global.fetch = fetchMock as unknown as typeof fetch
+    process.env.STRIPE_SECRET_KEY = 'sk_test_fake_never_used'
+  })
+
+  afterAll(() => {
+    global.fetch = realFetch
+    process.env.STRIPE_SECRET_KEY = realKey as string
+  })
+
+  beforeEach(() => {
+    fetchMock.mockClear()
+    taxRateResponse = { ok: true, body: { id: 'txr_test_1' } }
+    sellerTaxStatus = 'active'
+  })
+
+  it('creates the session on the seller account with the take as the only split', async () => {
+    const { result, body } = await runCheckout({
+      settings: { tax: { mode: 'none' } },
+      profile: direct,
+    })
+    expect(result.status).toBe(200)
+    expect(sessionHeaders['Stripe-Account']).toBe('acct_1')
+    expect(body?.get('metadata[chargeModel]')).toBe('direct')
+    expect(body?.get('payment_intent_data[transfer_data][destination]')).toBeNull()
+    expect(body?.get('payment_intent_data[transfer_data][amount]')).toBeNull()
+    // Business takes a share of a digital sale and nothing more: Stripe bills
+    // the seller its own card fee, so the fee is below the destination fee.
+    const fee = Number(body?.get('payment_intent_data[application_fee_amount]') ?? 0)
+    expect(String(fee)).toBe(body?.get('metadata[feeCents]'))
+    const destination = await runCheckout({ settings: { tax: { mode: 'none' } } })
+    const destinationFee = Number(destination.body?.get('metadata[feeCents]'))
+    expect(fee).toBeLessThan(destinationFee)
+  })
+
+  it('leaves a destination seller exactly as it was', async () => {
+    const { body } = await runCheckout({ settings: { tax: { mode: 'none' } } })
+    expect(sessionHeaders['Stripe-Account']).toBeUndefined()
+    expect(body?.get('payment_intent_data[transfer_data][destination]')).toBe('acct_1')
+    expect(body?.get('metadata[chargeModel]')).toBeNull()
+  })
+
+  it('mints a subscription tax rate on the seller account, never reusing the platform one', async () => {
+    const { result, body } = await runCheckout({
+      settings: { tax: manualTax },
+      product: subscription,
+      profile: direct,
+      taxRateCache: {
+        'p82500-TX%20sales%20tax': { taxRateId: 'txr_platform' },
+      },
+    })
+    expect(result.status).toBe(200)
+    expect(taxRateHeaders['Stripe-Account']).toBe('acct_1')
+    expect(body?.get('line_items[0][tax_rates][0]')).toBe('txr_test_1')
+    expect(body?.get('subscription_data[transfer_data][destination]')).toBeNull()
+    expect(body?.get('subscription_data[metadata][chargeModel]')).toBe('direct')
+  })
+
+  it('runs Stripe Tax on the seller account with no platform transfer', async () => {
+    const { result, body } = await runCheckout({
+      settings: { tax: { mode: 'stripe', origin: { country: 'US', state: 'TX' } } },
+      profile: direct,
+    })
+    expect(result.status).toBe(200)
+    expect(body?.get('automatic_tax[enabled]')).toBe('true')
+    expect(body?.get('payment_intent_data[transfer_data][amount]')).toBeNull()
+    expect(body?.get('metadata[transferCents]')).toBeNull()
+  })
+
+  it('refuses a Stripe Tax sale while the seller has not set up Stripe Tax', async () => {
+    sellerTaxStatus = 'pending'
+    const { result } = await runCheckout({
+      settings: { tax: { mode: 'stripe', origin: { country: 'US', state: 'TX' } } },
+      profile: direct,
+    })
+    expect(result.status).toBe(409)
+    expect(stripeCalls).not.toContain('sessions')
+  })
+})
+

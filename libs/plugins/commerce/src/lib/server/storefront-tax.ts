@@ -90,6 +90,17 @@
  * and must be re-read with `expand[]=total_details.breakdown`; an invoice
  * carries `total_taxes[]` inline. Both land in the same `taxLines` shape.
  *
+ * ## A DIRECT charge is the seller's tax, never the platform's
+ *
+ * A seller on its own full Stripe account sells by DIRECT charge: the session
+ * is created ON the seller's account (`Stripe-Account` header) and stamped
+ * `metadata[chargeModel]=direct`. Stripe Tax on it computes against the
+ * SELLER's registrations, the tax settles into the seller's balance, and the
+ * seller remits it. Stripe still reports `liability: { type: "self" }`, but
+ * `self` is then the seller's account, so reading `self` as "the platform"
+ * would book the seller's tax as Aglyn's. A direct sale's Stripe Tax is
+ * therefore always `connected-account` here, whatever the field says.
+ *
  * Pure and total: unreadable input answers `null`, never throws — a recording
  * failure must never 500 a webhook into redelivery.
  */
@@ -112,8 +123,9 @@ export type { StorefrontTaxMode }
 /**
  * Whose registrations Stripe Tax computed against, from
  * `automatic_tax.liability.type`: `self` (the account the object lives on,
- * i.e. Aglyn's platform) or `account` (a named connected account).
- * Null whenever `taxMode` is not `stripe-automatic`.
+ * i.e. Aglyn's platform) or `account` (a named connected account). A DIRECT
+ * charge lives on the seller's account, so it is always `connected-account`
+ * (see the module note). Null whenever `taxMode` is not `stripe-automatic`.
  */
 export type StorefrontTaxLiability = 'platform' | 'connected-account'
 
@@ -248,6 +260,11 @@ export interface StorefrontTaxContext {
   kind: 'session' | 'invoice'
   hostId: string
   /**
+   * The seller's account for a DIRECT charge, which names no transfer
+   * destination: the event's `account`, when the caller has it.
+   */
+  connectedAccountId?: string | null
+  /**
    * The manual-mode tax `checkout.ts` puts over as an ordinary line item.
    * Stripe is never told it is tax, so no Stripe field carries it and the
    * session's own `metadata[taxCents]` is the only witness (AGL-1711).
@@ -329,6 +346,38 @@ export function storefrontTaxModeOf(
 }
 
 /**
+ * Whether a session, subscription or invoice was sold as a DIRECT charge on
+ * the seller's own account, from the `chargeModel` stamp the session doors
+ * write (an invoice carries its subscription's under `subscription_details`).
+ */
+export function storefrontSaleIsDirect(object: unknown): boolean {
+  const source = object as any
+  return (
+    (source?.metadata?.chargeModel ??
+      source?.subscription_details?.metadata?.chargeModel ??
+      source?.parent?.subscription_details?.metadata?.chargeModel) === 'direct'
+  )
+}
+
+/**
+ * Who owns, and remits, the tax a storefront sale carried: the SELLER for
+ * any merchant-configured rate and for every direct charge, and the PLATFORM
+ * only for Stripe Tax computed on Aglyn's own account. `none` when no tax was
+ * charged. The single answer a summary or a return should read rather than
+ * re-deriving it from the liability field.
+ */
+export function storefrontTaxOwner(
+  object: unknown,
+  manualTaxCents = 0,
+): 'platform' | 'seller' | 'none' {
+  const { automatic, taxMode } = resolveStorefrontTax(object, manualTaxCents)
+  if (taxMode === 'none') return 'none'
+  if (!automatic || storefrontSaleIsDirect(object)) return 'seller'
+  const liabilityType = asStringOrNull((object as any)?.automatic_tax?.liability?.type)
+  return liabilityType === 'account' ? 'seller' : 'platform'
+}
+
+/**
  * Decomposes a paid storefront session or invoice into the stored row, or
  * `null` when there is no host to attribute it to.
  *
@@ -349,9 +398,11 @@ export function storefrontTaxRow(
   )
 
   const liabilityType = asStringOrNull(source?.automatic_tax?.liability?.type)
+  const direct = storefrontSaleIsDirect(source)
   const taxLiability: StorefrontTaxLiability | null = !automatic
     ? null
-    : liabilityType === 'account'
+    : // A direct charge's `self` is the seller's account (module note).
+      direct || liabilityType === 'account'
       ? 'connected-account'
       : // `self`, and also an absent liability: Stripe omits the field on
         // older API versions, where the only account a session could be
@@ -375,7 +426,8 @@ export function storefrontTaxRow(
     taxLiability,
     connectedAccountId:
       asStringOrNull(transferDestination) ??
-      asStringOrNull((transferDestination as any)?.id),
+      asStringOrNull((transferDestination as any)?.id) ??
+      (direct ? asStringOrNull(context?.connectedAccountId) : null),
     grossCents,
     taxCents,
     netCents: grossCents - taxCents,

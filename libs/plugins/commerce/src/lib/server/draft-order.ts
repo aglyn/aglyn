@@ -20,13 +20,22 @@ import { commerceSitePermissionRefusal } from '../model/plugin-permissions'
 import * as Aglyn from '@aglyn/aglyn/server'
 import * as CommerceModel from '../model'
 import { firebaseAdmin, getOrgForHost } from '@aglyn/tenant-data-admin'
-import { merchantAccountIsReady } from '@aglyn/tenant-data-admin/server/payment-provider'
+import {
+  connectedAccountHeader,
+  directChargeParams,
+  merchantAccountIsReady,
+  saleChargeModel,
+} from '@aglyn/tenant-data-admin/server/payment-provider'
 import { checkoutSessionCardAuthenticationParams } from '@aglyn/tenant-data-admin/server/stripe-card-authentication'
 import {
   planCheckoutShippingWithCarriers,
   type CarrierShippingPlan,
 } from './carrier-shipping'
 import { resolveManualTaxRateId } from './manual-tax-rate'
+import {
+  SELLER_STRIPE_TAX_NOT_SET_UP_MESSAGE,
+  sellerStripeTaxActive,
+} from './seller-stripe-account'
 import { orderStatusUrl } from './order-status-token'
 import {
   type PromotionSlotHold,
@@ -168,6 +177,12 @@ export const draftOrderHandler: PluginApiHandler = async (req, res) => {
     ) {
       return res.status(409).json({ error: 'Payments are not set up yet' })
     }
+    // A DIRECT charge opens the link ON the seller's own Stripe account
+    // (`Stripe-Account`), with Aglyn's take as the application fee; the
+    // destination path below is unchanged for every other seller.
+    const chargeModel = saleChargeModel(ownerProfile?.get('stripeChargeModel'))
+    const direct = chargeModel === 'direct'
+    const onAccount = connectedAccountHeader(chargeModel, accountId)
 
     // Where Stripe returns the BUYER is the business's own site (AGL-4094):
     // the order's status page after paying, the site's home after backing
@@ -382,6 +397,16 @@ export const draftOrderHandler: PluginApiHandler = async (req, res) => {
       return res.status(409).json({ error: taxMisconfigured })
     }
     const useStripeTax = taxDecision.kind === 'stripe-automatic'
+    // Stripe refuses `automatic_tax` on a seller's account whose Stripe Tax is
+    // not set up, and a store that chose it must not sell untaxed. Above the
+    // claim and the order write with the other tax refusals.
+    if (
+      direct &&
+      useStripeTax &&
+      !(await sellerStripeTaxActive(String(accountId)))
+    ) {
+      return res.status(409).json({ error: SELLER_STRIPE_TAX_NOT_SET_UP_MESSAGE })
+    }
     const manualRate =
       taxDecision.kind === 'manual' &&
       !taxSettings.pricesIncludeTax
@@ -496,12 +521,15 @@ export const draftOrderHandler: PluginApiHandler = async (req, res) => {
     // cut of what the merchant actually sells for, and Stripe's card cost is
     // passed through on what the card actually runs for — reading `itemsCents`
     // here would invoice the merchant a fee on money nobody paid.
+    //
+    // A direct charge's fee is the take alone: Stripe bills the seller its
+    // own card fee and charges the platform nothing for the sale.
     const feeCents = Aglyn.resolveTransactionFeeCents(
       ownerOrg?.org as any,
       product.type ?? 'physical',
       chargedItemsCents,
       chargedItemsCents + taxCents + shippingCeilingCents,
-      { stripeTax: useStripeTax },
+      direct ? { direct: true } : { stripeTax: useStripeTax },
     )
     // Stripe Tax mode leaves the tax 0 at composition time and the webhook
     // folds the computed figure in — the same additive shape AGL-1792 used for
@@ -674,6 +702,10 @@ export const draftOrderHandler: PluginApiHandler = async (req, res) => {
           ...(claim.stripeKey
             ? { headers: { 'Idempotency-Key': `${claim.stripeKey}-tax-rate` } }
             : {}),
+          // A platform rate id does not resolve on the seller's account.
+          ...(onAccount['Stripe-Account']
+            ? { stripeAccount: onAccount['Stripe-Account'] }
+            : {}),
         })) ?? ''
       if (!draftTaxRateId) {
         // A VISIBLE refusal rather than an untaxed payment link — the silent
@@ -706,16 +738,22 @@ export const draftOrderHandler: PluginApiHandler = async (req, res) => {
       // `application_fee_amount`: the fee form transfers `amount_total − fee`,
       // and `amount_total` includes that tax. A manual-rate or untaxed link is
       // unchanged. See `commerce-connect-transfer.ts`.
-      ...CommerceModel.destinationChargeParams({
-        accountId: String(accountId),
-        feeCents,
-        taxOwner: useStripeTax ? 'platform' : 'merchant',
-        // The DISCOUNTED goods (AGL-305): this is what the merchant is
-        // transferred, and paying out the list price on a discounted link
-        // would move money Stripe never collected.
-        merchantGoodsCents: chargedItemsCents,
-        shippingFloorCents: CommerceModel.shippingFloorCents(shippingOptions),
-      }),
+      //
+      // A DIRECT charge is the seller's money from the start, its Stripe Tax
+      // computed on the seller's own registrations and owed by them, so the
+      // take is the whole split and nothing is transferred.
+      ...(direct
+        ? directChargeParams(feeCents)
+        : CommerceModel.destinationChargeParams({
+            accountId: String(accountId),
+            feeCents,
+            taxOwner: useStripeTax ? 'platform' : 'merchant',
+            // The DISCOUNTED goods (AGL-305): this is what the merchant is
+            // transferred, and paying out the list price on a discounted link
+            // would move money Stripe never collected.
+            merchantGoodsCents: chargedItemsCents,
+            shippingFloorCents: CommerceModel.shippingFloorCents(shippingOptions),
+          })),
       ...(email ? { customer_email: email } : {}),
       success_url: buyerStatusUrl ?? `${consoleProductsUrl}?draft=paid`,
       cancel_url: buyerSiteUrl || `${consoleProductsUrl}?draft=canceled`,
@@ -725,6 +763,9 @@ export const draftOrderHandler: PluginApiHandler = async (req, res) => {
       'metadata[productId]': productId,
       ...(variantId ? { 'metadata[variantId]': variantId } : {}),
       'metadata[feeCents]': String(feeCents),
+      // What the webhook, refunds and reports read to find the payment on
+      // the seller's account rather than the platform's.
+      ...(direct ? { 'metadata[chargeModel]': 'direct' } : {}),
       ...(shippingPlan.quotedPostalCode
         ? { 'metadata[shippingQuotePostalCode]': shippingPlan.quotedPostalCode }
         : {}),
@@ -737,8 +778,9 @@ export const draftOrderHandler: PluginApiHandler = async (req, res) => {
         : {}),
       ...(discountHoldKey ? { 'metadata[discountHoldKey]': discountHoldKey } : {}),
       // See the AGL-1956 note in `checkout.ts` — recorded only on the shape
-      // where the merchant's payout is no longer the whole charge.
-      ...(useStripeTax
+      // where the merchant's payout is no longer the whole charge, which a
+      // direct charge never is.
+      ...(useStripeTax && !direct
         ? {
             'metadata[transferCents]': String(
               CommerceModel.platformLiableTransferCents({
@@ -790,6 +832,7 @@ export const draftOrderHandler: PluginApiHandler = async (req, res) => {
           // second one on the merchant's account, which covers the window
           // where our claim is written but the response never arrives.
           ...(claim.stripeKey ? { 'Idempotency-Key': claim.stripeKey } : {}),
+          ...onAccount,
         },
         body: params.toString(),
       },

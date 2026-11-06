@@ -2679,6 +2679,11 @@
       "rolloutPercent": 0,
       "plans": []
     },
+    "release_direct_charges": {
+      "enabled": false,
+      "rolloutPercent": 0,
+      "plans": []
+    },
     "release_edit_bar": {
       "enabled": true,
       "rolloutPercent": 0,

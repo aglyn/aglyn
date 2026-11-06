@@ -563,3 +563,55 @@ describe('bookings that cannot be refunded here (AGL-2315)', () => {
     expect(stripePosts).toHaveLength(0)
   })
 })
+
+describe('a DIRECT-charge booking is refunded on the seller’s account', () => {
+  beforeEach(() => {
+    Object.assign(mockAdmin.__state.booking, {
+      chargeModel: 'direct',
+      stripeAccountId: 'acct_seller_direct',
+    })
+  })
+
+  it('sends the refund with the seller’s Stripe-Account and no transfer reversal', async () => {
+    const res = makeRes()
+    await bookingRefundHandler(makeReq({}, 'direct-full'), res)
+    expect(res.statusCode).toBe(200)
+    expect(stripePosts).toHaveLength(1)
+    const { params, headers } = stripePosts[0]
+    expect(headers['Stripe-Account']).toBe('acct_seller_direct')
+    expect(params.get('payment_intent')).toBe('pi_booking_1')
+    expect(params.get('amount')).toBe('7500')
+    // There is no transfer on a direct charge; Stripe rejects the switch.
+    expect(params.has('reverse_transfer')).toBe(false)
+    // Aglyn's take on the refunded share still goes back, as on a destination one.
+    expect(params.get('refund_application_fee')).toBe('true')
+    expect(mockAdmin.__state.booking['status']).toBe('canceled')
+  })
+
+  it('caps a partial the same way', async () => {
+    const res = makeRes()
+    await bookingRefundHandler(makeReq({ amountCents: 3000 }, 'direct-partial'), res)
+    expect(res.statusCode).toBe(200)
+    expect(stripePosts[0].params.get('amount')).toBe('3000')
+    expect(stripePosts[0].headers['Stripe-Account']).toBe('acct_seller_direct')
+    expect(mockAdmin.__state.booking['refundedCents']).toBe(3000)
+  })
+
+  it('refuses before reserving when the booking does not name the seller account', async () => {
+    delete mockAdmin.__state.booking['stripeAccountId']
+    const res = makeRes()
+    await bookingRefundHandler(makeReq({}, 'direct-no-account'), res)
+    expect(res.statusCode).toBe(409)
+    expect(stripePosts).toHaveLength(0)
+    expect(mockAdmin.__state.booking['refundedCents']).toBeUndefined()
+  })
+
+  it('leaves a destination booking without the header', async () => {
+    delete mockAdmin.__state.booking['chargeModel']
+    const res = makeRes()
+    await bookingRefundHandler(makeReq({}, 'destination-control'), res)
+    expect(res.statusCode).toBe(200)
+    expect(stripePosts[0].headers['Stripe-Account']).toBeUndefined()
+    expect(stripePosts[0].params.get('reverse_transfer')).toBe('true')
+  })
+})

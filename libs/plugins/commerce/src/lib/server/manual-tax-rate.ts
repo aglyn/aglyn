@@ -67,9 +67,10 @@
  * and for every current caller it is a visible 502 rather than a silent
  * untaxed sale.
  *
- * The rate is created on the PLATFORM account (no `Stripe-Account` header),
- * matching the session calls, because that is where the session lives — a
- * connected-account rate id would not resolve. Tax rates are immutable, so one
+ * The rate is created on the account the session lives on: the PLATFORM for
+ * a destination charge (no `Stripe-Account` header), the seller's own account
+ * for a direct charge (`stripeAccount`). A rate id from the other account
+ * would not resolve. Tax rates are immutable, so one
  * object exists per (percentage, label): a merchant who edits their zone rate
  * misses the cache and mints a fresh one, while the old object stays behind on
  * everything already carrying it, exactly as it should.
@@ -81,15 +82,23 @@ export async function resolveManualTaxRateId(options: {
   taxLabel: string
   /** Per-object idempotency header, derived by the caller (AGL-1714). */
   headers?: Record<string, string>
+  /**
+   * The seller's connected account when the sale is a DIRECT charge: the
+   * session lives on that account, so the rate has to be minted there, and it
+   * is cached apart from the platform's rates because an id from one account
+   * never resolves on another.
+   */
+  stripeAccount?: string
 }): Promise<string | null> {
   const { hostRef, taxPct, taxLabel, headers = {} } = options
+  const stripeAccount = String(options.stripeAccount ?? '').trim()
   if (!(taxPct > 0)) return null
   // ≤4 decimal places, which is all Stripe accepts on a tax rate.
   const percentage = Math.round(taxPct * 10000) / 10000
   const displayLabel = (taxLabel || `Tax (${percentage}%)`).slice(0, 50)
-  const cacheKey = `p${Math.round(percentage * 10000)}-${encodeURIComponent(
-    displayLabel,
-  )}`
+  const cacheKey = `${stripeAccount ? `${stripeAccount}-` : ''}p${Math.round(
+    percentage * 10000,
+  )}-${encodeURIComponent(displayLabel)}`
   const cacheRef = hostRef.collection('stripeTaxRates').doc(cacheKey)
   const cached = await cacheRef.get()
   const cachedId = String(cached.get('taxRateId') ?? '')
@@ -101,6 +110,7 @@ export async function resolveManualTaxRateId(options: {
       Authorization: `Bearer ${process.env.STRIPE_SECRET_KEY}`,
       'Content-Type': 'application/x-www-form-urlencoded',
       ...headers,
+      ...(stripeAccount ? { 'Stripe-Account': stripeAccount } : {}),
     },
     body: new URLSearchParams({
       display_name: displayLabel,
