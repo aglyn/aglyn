@@ -19,6 +19,8 @@
 // `/server` entry, and importing it from this shared barrel formed a cycle
 // that left the binding missing at runtime (AGL-1289).
 import { getRegisteringPluginId } from '../app-utils/registering-plugin'
+import { resolvePluginServices } from './plugin-services'
+import { SITE_PAGE_ENRICHER_SERVICES } from './site-page-enricher-services'
 
 /**
  * Tenant page-composition extension points (AGL-418): plugins hook the
@@ -216,12 +218,21 @@ export async function runSitePageEnrichers(
   // preserves — so two enrichers contributing the same key resolve exactly as
   // they did when the loop was sequential, and `contributors` keeps its
   // insertion order.
+  //
+  // The route's own list first, then the boot's (AGL-4195), each with its owner.
+  const all: Array<{ enricher: SitePageEnricher; owner: string | undefined }> = [
+    ...enrichers.map((enricher) => ({ enricher, owner: enricherOwners.get(enricher) })),
+    ...resolvePluginServices(SITE_PAGE_ENRICHER_SERVICES).map(({ impl, pluginId }) => ({
+      enricher: impl,
+      owner: pluginId,
+    })),
+  ]
   const settled = await Promise.allSettled(
-    enrichers.map(async (enricher) => (await enricher(context)) ?? {}),
+    all.map(async ({ enricher }) => (await enricher(context)) ?? {}),
   )
 
   for (const [index, outcome] of settled.entries()) {
-    const enricher = enrichers[index]
+    const { owner } = all[index]
     try {
       if (outcome.status === 'rejected') throw outcome.reason
       const result = outcome.value
@@ -242,7 +253,6 @@ export async function runSitePageEnrichers(
       // off presence would mark it a contributor everywhere and the
       // attribution would be worth nothing.
       if (Object.values(result).some((value) => !isEmptyContribution(value))) {
-        const owner = enricherOwners.get(enricher)
         if (owner) contributors.add(owner)
         else unattributed = true
       }
