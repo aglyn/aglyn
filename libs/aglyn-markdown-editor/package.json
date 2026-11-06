@@ -1,6 +1,6 @@
 {
   "name": "@aglyn/aglyn-markdown-editor",
-  "version": "1.15.1",
+  "version": "1.15.2",
   "license": "Apache-2.0",
   "homepage": "https://aglyn.com",
   "repository": {
@@ -25,7 +25,7 @@
     "./package.json": "./package.json"
   },
   "dependencies": {
-    "@aglyn/aglyn": "1.15.1",
+    "@aglyn/aglyn": "1.15.2",
     "@swc/helpers": "0.5.23"
   },
   "peerDependencies": {

@@ -20,7 +20,7 @@
 // Without a top-level import or export TypeScript treats this file as a global
 // script, so its top-level `const`s collide with identically-named ones in
 // sibling specs (TS2451/TS2393). The marker makes it a module.
-export {}
+import { REQUIRED_CONNECT_WEBHOOK_EVENTS } from '@aglyn/aglyn/app-utils/webhook-delivery'
 
 /**
  * TWO DESTINATIONS, ONE URL (AGL-1948).
@@ -124,7 +124,7 @@ const connectEndpoint = (overrides: Record<string, unknown> = {}) => ({
   id: 'we_connect',
   url: WEBHOOK_URL,
   status: 'enabled',
-  enabled_events: ['account.updated', 'payout.failed', 'payout.paid'],
+  enabled_events: [...REQUIRED_CONNECT_WEBHOOK_EVENTS],
   // The stamp setup-stripe writes. Nothing else distinguishes it.
   metadata: { aglyn_scope: 'connect' },
   ...overrides,
@@ -213,7 +213,10 @@ describe('/api/health/billing tells the two destinations apart (AGL-1948)', () =
   it('goes red when the Connect destination lost account.updated', async () => {
     const check = await probe([
       connectEndpoint({
-        enabled_events: ['account.application.deauthorized', 'payout.failed', 'payout.paid'],
+        enabled_events: [
+          'account.application.deauthorized',
+          ...REQUIRED_CONNECT_WEBHOOK_EVENTS.filter((event) => event !== 'account.updated'),
+        ],
       }),
       platformEndpoint,
     ])

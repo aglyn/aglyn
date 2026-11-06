@@ -20,7 +20,7 @@
 // Without a top-level import or export TypeScript treats this file as a global
 // script, so its top-level `const`s collide with identically-named ones in
 // sibling specs (TS2451/TS2393). The marker makes it a module.
-export {}
+import { REQUIRED_CONNECT_WEBHOOK_EVENTS } from '@aglyn/aglyn/app-utils/webhook-delivery'
 
 /**
  * STRIPE'S UNDELIVERED LIST IS NOT A LIST OF FAILURES (AGL-4133).
@@ -118,7 +118,7 @@ const HEALTHY_ENDPOINTS = [
     id: 'we_connect',
     url: WEBHOOK_URL,
     status: 'enabled',
-    enabled_events: ['account.updated', 'payout.failed', 'payout.paid'],
+    enabled_events: [...REQUIRED_CONNECT_WEBHOOK_EVENTS],
     metadata: { aglyn_scope: 'connect' },
   },
 ]

@@ -146,6 +146,23 @@ export const CONNECT_WEBHOOK_EVENTS = [
   // (No apostrophes in this list: the drift spec reads it by quote.)
   'payout.failed',
   'payout.paid',
+  // Direct-charge sales (a store on its own full Stripe account, ToS v24
+  // section 10.2(a)) are created ON that account, so their checkout, refund,
+  // dispute, invoice, subscription and fraud events reach only this
+  // destination. billing-webhook.ts acts on them only for a direct-charge
+  // object or order; the seller copy of a destination sale is ignored.
+  'checkout.session.completed',
+  'checkout.session.expired',
+  'charge.refunded',
+  'charge.dispute.created',
+  'charge.dispute.closed',
+  'invoice.paid',
+  'invoice.payment_failed',
+  'customer.subscription.created',
+  'customer.subscription.updated',
+  'customer.subscription.deleted',
+  'radar.early_fraud_warning.created',
+  'review.opened',
 ]
 
 /**

@@ -653,9 +653,10 @@ export function createWedgeEscalation(
  * server and nothing typed into it has been read back. And it is waiting on the
  * same lock either way: its persistence cannot start while another tab's
  * transaction holds every store (the booting tab had no `clientMetadata` row
- * 17 s in). So once, about {@link BOOT_WEDGE_CHECK_DELAY_MS} after the client
+ * 17 s in). So from about {@link BOOT_WEDGE_CHECK_DELAY_MS} after the client
  * is created, a visible online tab whose client has not heard from the server
- * reads the lease, and a store that stays locked for
+ * reads the lease every {@link BOOT_WEDGE_RECHECK_MS} for up to
+ * {@link BOOT_WEDGE_WINDOW_MS}, and a store that stays locked for
  * {@link BOOT_WEDGE_LOCK_MS} moves it to the memory cache straight away,
  * sharing the lock with the tabs that open next (AGL-4090).
  *
@@ -668,7 +669,9 @@ export function createWedgeEscalation(
  * - **Only when someone is looking.** A tab opened in the background runs the
  *   check when it is first shown, which is when its spinner starts costing
  *   anyone anything.
- * - **Once per tab.** Never on a tab already on the fallback.
+ * - **Until answered, then never again.** The reads stop at the first server
+ *   answer or at the end of the window, and never run on a tab already on the
+ *   fallback.
  *
  * A false verdict costs a reload of a page with nothing on it, onto the memory
  * cache, which every lock verdict already costs today, 30 s later.
@@ -681,6 +684,22 @@ export const BOOT_WEDGE_CHECK_DELAY_MS = 2_000
  * 1-5 ms on the same production cache once the lock had lifted.
  */
 export const BOOT_WEDGE_LOCK_MS = 3_000
+
+/**
+ * How often a booting tab reads the lease again while the server has not
+ * answered it (AGL-4201). The lock is not there from the start: measured in
+ * production on v1.15.1, a booting tab's first read at 2 s found the store
+ * free, another tab locked it a few seconds later, and the tab sat 35 s on the
+ * old path. One read was a coin toss; reading until the tab is answered is not.
+ */
+export const BOOT_WEDGE_RECHECK_MS = 2_000
+
+/**
+ * How long, from when the tab is first seen, a booting tab keeps reading. Past
+ * it, a tab still unanswered is left to the stall watch, which has budgets of
+ * its own for a page that is in use.
+ */
+export const BOOT_WEDGE_WINDOW_MS = 30_000
 
 /** What the boot check did (AGL-4201). */
 export type BootWedgeOutcome =
@@ -712,6 +731,9 @@ export interface BootWedgeCheckDeps {
   whenVisible?: () => Promise<void>
   wait?: (ms: number) => Promise<void>
   delayMs?: number
+  recheckMs?: number
+  windowMs?: number
+  now?: () => number
 }
 
 const whenDocumentVisible = (): Promise<void> =>
@@ -741,21 +763,34 @@ export async function runBootWedgeCheck(
     whenVisible = whenDocumentVisible,
     wait = (ms) => new Promise<void>((resolve) => setTimeout(resolve, ms)),
     delayMs = BOOT_WEDGE_CHECK_DELAY_MS,
+    recheckMs = BOOT_WEDGE_RECHECK_MS,
+    windowMs = BOOT_WEDGE_WINDOW_MS,
+    now = Date.now,
   } = deps
   try {
     if (isFallbackActive()) return 'fallback-active'
     await wait(delayMs)
     await whenVisible()
-    if (hasServerAnswered()) return 'answered'
-    if (!isOnline()) return 'offline'
-    const read = await probe()
-    if (read.state !== 'locked') return 'clear'
-    // The read took up to its whole budget; the client may have come through.
-    if (hasServerAnswered()) return 'answered'
-    if (!isOnline()) return 'offline'
-    if (isFallbackActive()) return 'fallback-active'
-    fallBack({ reason: 'lease-locked' })
-    return 'fell-back'
+    const until = now() + windowMs
+    for (;;) {
+      if (hasServerAnswered()) return 'answered'
+      if (!isOnline()) return 'offline'
+      if (isFallbackActive()) return 'fallback-active'
+      const read = await probe()
+      if (read.state === 'locked') {
+        // The read took up to its whole budget; the client may have come through.
+        if (hasServerAnswered()) return 'answered'
+        if (!isOnline()) return 'offline'
+        if (isFallbackActive()) return 'fallback-active'
+        fallBack({ reason: 'lease-locked' })
+        return 'fell-back'
+      }
+      // Free now is not free for good: another tab can take the store a
+      // moment later, and this tab is still waiting on the server.
+      if (now() >= until) return 'clear'
+      await wait(recheckMs)
+      await whenVisible()
+    }
   } catch {
     return 'error'
   }

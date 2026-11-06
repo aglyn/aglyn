@@ -39,6 +39,8 @@ import { firestoreCacheClassFor, localCacheFor } from './firestore-cache'
 import {
   BOOT_WEDGE_CHECK_DELAY_MS,
   BOOT_WEDGE_LOCK_MS,
+  BOOT_WEDGE_RECHECK_MS,
+  BOOT_WEDGE_WINDOW_MS,
   confirmSharedCacheLock,
   createWedgeEscalation,
   fallBackToMemoryCache,
@@ -899,9 +901,20 @@ describe('a tab still booting finds another tab\'s lock in seconds (AGL-4201)', 
     isFallbackActive: () => false,
     isOnline: () => true,
     whenVisible: async () => undefined,
-    wait: jest.fn(async () => undefined),
+    ...clocked(),
     ...overrides,
   })
+
+  /** A clock that each wait advances, so the read window ends. */
+  const clocked = () => {
+    let clock = 0
+    return {
+      now: () => clock,
+      wait: jest.fn(async (ms: number) => {
+        clock += ms
+      }),
+    }
+  }
 
   /**
    * The budget the in-use rescue spends before a lock verdict (8 s stall, 1 s
@@ -936,6 +949,49 @@ describe('a tab still booting finds another tab\'s lock in seconds (AGL-4201)', 
       await expect(runBootWedgeCheck(deps)).resolves.toBe('clear')
       expect(deps.fallBack).not.toHaveBeenCalled()
     }
+  })
+
+  /**
+   * Production, v1.15.1: a booting tab's read at 2 s found the store free,
+   * another tab locked it a few seconds later, and the one-read check had
+   * already stood down, so the tab sat 35 s on the old path.
+   */
+  it('keeps reading while unanswered, and falls back when a later read finds the lock', async () => {
+    const reads: Array<{ state: 'leased'; ownerId: string; ageMs: number } | { state: 'locked' }> = [
+      { state: 'leased', ownerId: 'other', ageMs: 1_000 },
+      { state: 'leased', ownerId: 'other', ageMs: 3_000 },
+      { state: 'locked' },
+    ]
+    const deps = booting({ probe: jest.fn(async () => reads.shift()!) })
+
+    await expect(runBootWedgeCheck(deps)).resolves.toBe('fell-back')
+    expect(deps.probe).toHaveBeenCalledTimes(3)
+    expect(deps.wait).toHaveBeenCalledWith(BOOT_WEDGE_RECHECK_MS)
+    expect(deps.fallBack).toHaveBeenCalledWith({ reason: 'lease-locked' })
+  })
+
+  it('stops reading at the first server answer', async () => {
+    let answered = false
+    const deps = booting({
+      hasServerAnswered: () => answered,
+      probe: jest.fn(async () => {
+        answered = true
+        return { state: 'vacant' as const }
+      }),
+    })
+
+    await expect(runBootWedgeCheck(deps)).resolves.toBe('answered')
+    expect(deps.probe).toHaveBeenCalledTimes(1)
+  })
+
+  it('stops reading at the end of the window, leaving the tab to the stall watch', async () => {
+    const deps = booting({ probe: jest.fn(async () => ({ state: 'vacant' as const })) })
+
+    await expect(runBootWedgeCheck(deps)).resolves.toBe('clear')
+    const reads = (deps.probe as jest.Mock).mock.calls.length
+    expect(reads).toBeGreaterThan(1)
+    expect(reads).toBeLessThanOrEqual(Math.ceil(BOOT_WEDGE_WINDOW_MS / BOOT_WEDGE_RECHECK_MS) + 1)
+    expect(deps.fallBack).not.toHaveBeenCalled()
   })
 
   it('never touches a tab the server has already answered, before or after the read', async () => {
