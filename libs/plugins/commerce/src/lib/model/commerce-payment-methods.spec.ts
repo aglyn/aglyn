@@ -19,8 +19,6 @@ import {
   appendStorefrontPaymentMethodParams,
   isStorefrontPaymentMethodOn,
   normalizeStorefrontPaymentMethodSettings,
-  PAY_LINK_METHOD_IDS,
-  payLinkPaymentMethodControls,
   readStorefrontCheckoutWallets,
   resolveStorefrontPaymentMethodControls,
   STOREFRONT_PAYMENT_METHODS,
@@ -52,37 +50,42 @@ describe('the catalog', () => {
 describe('settings', () => {
   it('keeps only booleans under known ids', () => {
     expect(
-      normalizeStorefrontPaymentMethodSettings({ klarna: false, affirm: 'no', paypal: true }),
-    ).toEqual({ klarna: false })
+      normalizeStorefrontPaymentMethodSettings({ cashapp: false, amazon_pay: 'no', paypal: true }),
+    ).toEqual({ cashapp: false })
     expect(normalizeStorefrontPaymentMethodSettings(null)).toEqual({})
-    expect(normalizeStorefrontPaymentMethodSettings('klarna')).toEqual({})
+    expect(normalizeStorefrontPaymentMethodSettings('cashapp')).toEqual({})
   })
 
   it('reads a choice, else the default', () => {
-    expect(isStorefrontPaymentMethodOn({}, 'klarna')).toBe(true)
-    expect(isStorefrontPaymentMethodOn({ klarna: false }, 'klarna')).toBe(false)
+    expect(isStorefrontPaymentMethodOn({}, 'cashapp')).toBe(true)
+    expect(isStorefrontPaymentMethodOn({ cashapp: false }, 'cashapp')).toBe(false)
     expect(isStorefrontPaymentMethodOn(undefined, 'crypto')).toBe(false)
     expect(isStorefrontPaymentMethodOn({ crypto: true }, 'crypto')).toBe(true)
   })
 })
 
 describe('what a session sends', () => {
-  it('on the defaults: excludes crypto alone and hides no wallet', () => {
+  it('on the defaults: excludes buy-now-pay-later and crypto, and hides no wallet', () => {
     const controls = resolveStorefrontPaymentMethodControls({})
-    expect(controls.excluded).toEqual(['crypto'])
+    expect(controls.excluded).toEqual(['klarna', 'afterpay_clearpay', 'affirm', 'crypto'])
     const params = new URLSearchParams()
     appendStorefrontPaymentMethodParams(params, controls)
-    expect([...params.entries()]).toEqual([['excluded_payment_method_types[0]', 'crypto']])
+    expect([...params.entries()]).toEqual([
+      ['excluded_payment_method_types[0]', 'klarna'],
+      ['excluded_payment_method_types[1]', 'afterpay_clearpay'],
+      ['excluded_payment_method_types[2]', 'affirm'],
+      ['excluded_payment_method_types[3]', 'crypto'],
+    ])
   })
 
   it('excludes each method turned off, and never a wallet Stripe will not exclude', () => {
     const controls = resolveStorefrontPaymentMethodControls({
-      klarna: false,
-      affirm: false,
+      cashapp: false,
+      amazon_pay: false,
       apple_pay: false,
       crypto: true,
     })
-    expect(controls.excluded).toEqual(['klarna', 'affirm'])
+    expect(controls.excluded).toEqual(['klarna', 'afterpay_clearpay', 'affirm', 'cashapp', 'amazon_pay'])
     expect(controls.wallets).toEqual({ applePay: 'never', googlePay: 'auto', link: 'auto' })
   })
 
@@ -108,44 +111,25 @@ describe('the wallets a browser reads', () => {
   })
 })
 
-describe('a quote’s or an invoice’s pay link', () => {
-  it('places every catalog method: card-rate methods may stay, buy-now-pay-later never does', () => {
-    // A method added to the catalog lands in one of these two lists on
-    // purpose, because a pay link's fee is priced at the card rate and a
-    // dearer method left on would cost the platform more than it recovers.
-    const neverOnAPayLink = ['klarna', 'afterpay_clearpay', 'affirm']
-    for (const method of STOREFRONT_PAYMENT_METHODS) {
-      const onPayLink = PAY_LINK_METHOD_IDS.includes(method.id)
-      expect([method.id, onPayLink]).toEqual([method.id, !neverOnAPayLink.includes(method.id)])
-      if (method.kind === 'bnpl') expect(onPayLink).toBe(false)
-    }
+describe('buy-now-pay-later is never offered (AGL-4198)', () => {
+  it('is not in the catalog, and the catalog holds only methods that cost no more than a card', () => {
+    // Stripe's US pricing, read 2026-11-05: the wallets are 2.9% + 30¢ and
+    // stablecoins 1.5%. A method added to the catalog lands here on purpose,
+    // because every fee is priced at the card rate.
+    const cardRateOrBelow = ['apple_pay', 'google_pay', 'link', 'cashapp', 'amazon_pay', 'crypto']
+    expect(STOREFRONT_PAYMENT_METHODS.map((method) => method.id)).toEqual(cardRateOrBelow)
   })
 
-  it('excludes Klarna, Afterpay and Affirm even when the store offers them, and keeps the store’s own exclusions', () => {
-    const offered = payLinkPaymentMethodControls(
-      resolveStorefrontPaymentMethodControls({ klarna: true, afterpay_clearpay: true, affirm: true, crypto: true }),
-    )
-    expect(offered.excluded).toEqual(['klarna', 'afterpay_clearpay', 'affirm'])
-
-    const defaults = payLinkPaymentMethodControls(resolveStorefrontPaymentMethodControls({}))
-    expect(defaults.excluded).toEqual(['klarna', 'afterpay_clearpay', 'affirm', 'crypto'])
-
-    const hidden = payLinkPaymentMethodControls(
-      resolveStorefrontPaymentMethodControls({ amazon_pay: false, apple_pay: false }),
-    )
-    expect(hidden.excluded).toEqual(['klarna', 'afterpay_clearpay', 'affirm', 'amazon_pay', 'crypto'])
-    expect(hidden.wallets).toEqual({ applePay: 'never', googlePay: 'auto', link: 'auto' })
-  })
-
-  it('reaches the session params without a duplicate key', () => {
+  it('excludes Klarna, Afterpay and Affirm on every session, a store that once offered them included', () => {
+    const before = normalizeStorefrontPaymentMethodSettings({ klarna: true, afterpay_clearpay: true, affirm: true, crypto: true })
+    expect(before).toEqual({ crypto: true })
+    expect(resolveStorefrontPaymentMethodControls(before).excluded).toEqual(['klarna', 'afterpay_clearpay', 'affirm'])
     const params = new URLSearchParams()
-    appendStorefrontPaymentMethodParams(
-      params,
-      payLinkPaymentMethodControls(resolveStorefrontPaymentMethodControls({ klarna: false })),
-    )
+    appendStorefrontPaymentMethodParams(params, resolveStorefrontPaymentMethodControls({ amazon_pay: false }))
     expect(params.toString()).toBe(
       'excluded_payment_method_types%5B0%5D=klarna&excluded_payment_method_types%5B1%5D=afterpay_clearpay' +
-        '&excluded_payment_method_types%5B2%5D=affirm&excluded_payment_method_types%5B3%5D=crypto',
+        '&excluded_payment_method_types%5B2%5D=affirm&excluded_payment_method_types%5B3%5D=amazon_pay' +
+        '&excluded_payment_method_types%5B4%5D=crypto',
     )
   })
 })

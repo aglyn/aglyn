@@ -15,6 +15,10 @@
  * limitations under the License.
  */
 
+import {
+  pluginConnectionEndpointHosts,
+  type PluginConnectionDeclaration,
+} from '@aglyn/aglyn/app-utils/plugin-connections'
 import type { HostAccessRole } from '@aglyn/aglyn/foundation/definitions/organization.types'
 import type { OrgPlan } from '@aglyn/aglyn/foundation/definitions/org-billing.types'
 import type { PluginFeatureDeclaration, PluginOrgPermissionDeclaration } from '@aglyn/aglyn/plugin-manager/plugin-entitlements'
@@ -49,6 +53,10 @@ import {
  *       the record a connection's declared sync last wrote (AGL-4192):
  *       written only by the sync, read only on the server (the site's page
  *       render and the console's routes), never by a client rule.
+ *
+ * The sync (AGL-4194) runs in the console on the fifteen-minute
+ * `plugin-console-crons` tick as the `marketplace-connection-sync` job, and
+ * for one connection on "Sync now" (`PLUGIN_CONNECTIONS_API_ROUTES.sync`).
  */
 
 /** Top-level collection of the publisher OAuth app credentials, one per listing and connection. */
@@ -102,6 +110,12 @@ export const PLUGIN_CONNECTIONS_API_ROUTES = {
   disconnect: 'plugin-connections/disconnect',
   status: 'plugin-connections/status',
   credentials: 'plugin-connections/credentials',
+  /**
+   * POST `{ hostId, listingId, connectionId }`: runs the connection's declared
+   * sync once and answers `{ connection: PluginConnectionView, synced }`
+   * (AGL-4194). Site key and plan, like connect.
+   */
+  sync: 'plugin-connections/sync',
   /** A site's record of one connection, for the editor's canvas (AGL-4195). */
   record: 'plugin-connections/record',
 } as const
@@ -158,6 +172,8 @@ export interface PluginConnectionStatusEntry {
   credentialsSet: boolean
   /** Whether the workspace's plan includes connections. */
   planAllows: boolean
+  /** Every host this connection's data goes to or comes from ({@link pluginConnectionRecipients}). */
+  hosts: string[]
 }
 
 /** Whether a listing's OAuth app credentials are set: the only thing ever read back. */
@@ -229,4 +245,42 @@ export function pluginConnectionsPermissionRefusal(
       ? PLUGIN_CONNECTIONS_SITE_PERMISSION_DECLARATION.label
       : PLUGIN_CONNECTIONS_CREDENTIALS_PERMISSION_DECLARATION.label
   return `Your role does not include "${label}" — ask an organization admin`
+}
+
+/* ------------------------------------------------------------------ */
+/* Where a listing's connections send data                              */
+/* ------------------------------------------------------------------ */
+
+/**
+ * One declared connection's recipients, derived from its declaration alone
+ * (AGL-4194): the hosts the site owner's browser is sent to for consent and
+ * the platform calls with the site's grant — the authorization, token and
+ * revocation endpoints and every `apiHosts` entry, wildcards as declared.
+ * The listing's own list of where data goes, per listing: it is never part
+ * of Aglyn's published subprocessor list, because the site owner chooses the
+ * provider and connects their own account to it.
+ */
+export interface PluginConnectionRecipient {
+  connectionId: string
+  provider: string
+  label: string
+  /** Sorted, each once. */
+  hosts: string[]
+}
+
+/** The hosts one declared connection reaches, sorted. */
+export function pluginConnectionHosts(connection: PluginConnectionDeclaration): string[] {
+  return [...new Set([...pluginConnectionEndpointHosts(connection), ...connection.apiHosts])].sort()
+}
+
+/** Each declared connection of a listing version, with the hosts it reaches. */
+export function pluginConnectionRecipients(
+  connections: readonly PluginConnectionDeclaration[],
+): PluginConnectionRecipient[] {
+  return connections.map((connection) => ({
+    connectionId: connection.id,
+    provider: connection.provider,
+    label: connection.label,
+    hosts: pluginConnectionHosts(connection),
+  }))
 }

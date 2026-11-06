@@ -18,7 +18,7 @@
 import type { PluginApiRequest, PluginApiResponse } from '@aglyn/aglyn/server'
 import {
   PROCESSING_FIXED_CENTS,
-  BNPL_PROCESSING_PERCENT,
+  SALE_PROCESSING_PERCENT,
   CARD_PROCESSING_PERCENT,
 } from '@aglyn/aglyn/server'
 import { checkoutHandler } from './checkout'
@@ -403,7 +403,13 @@ describe('a storefront sale is never a loss to the platform (AGL-2152)', () => {
     expect(body?.get('line_items[0][price_data][unit_amount]')).toBe('3000')
     expect(body?.has('line_items[1][price_data][unit_amount]')).toBe(false)
     expect(fee).toBeGreaterThan(0)
-    expect(fee - stripeCostCents(3000, BNPL_PROCESSING_PERCENT)).toBeGreaterThanOrEqual(0)
+    expect(fee - stripeCostCents(3000, SALE_PROCESSING_PERCENT)).toBeGreaterThanOrEqual(0)
+    // The card rate binds because the session offers no buy-now-pay-later (AGL-4198).
+    expect(SALE_PROCESSING_PERCENT).toBe(CARD_PROCESSING_PERCENT)
+    const excluded = [...(body?.keys() ?? [])]
+      .filter((key) => key.startsWith('excluded_payment_method_types['))
+      .map((key) => body?.get(key))
+    expect(excluded).toEqual(expect.arrayContaining(['klarna', 'afterpay_clearpay', 'affirm']))
   })
 
   /**
@@ -421,7 +427,7 @@ describe('a storefront sale is never a loss to the platform (AGL-2152)', () => {
     })
     expect(result.status).toBe(200)
     const fee = feeCents(body)
-    const net = fee - stripeCostCents(500, BNPL_PROCESSING_PERCENT)
+    const net = fee - stripeCostCents(500, SALE_PROCESSING_PERCENT)
     expect(net).toBeGreaterThanOrEqual(0)
     // And the advertised 2% is still really collected on top of the cost —
     // the take did not quietly become the cost recovery.
@@ -458,7 +464,7 @@ describe('a storefront sale is never a loss to the platform (AGL-2152)', () => {
     const worstChargeCents = 3000 + taxCents + dearestShippingCents
     expect(
       feeCents(body) -
-        stripeCostCents(worstChargeCents, BNPL_PROCESSING_PERCENT),
+        stripeCostCents(worstChargeCents, SALE_PROCESSING_PERCENT),
     ).toBeGreaterThanOrEqual(0)
   })
 

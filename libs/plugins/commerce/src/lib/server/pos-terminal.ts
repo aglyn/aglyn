@@ -487,9 +487,12 @@ function paymentIntentParams(
   extra: Record<string, string | number | boolean | undefined | readonly string[]>,
 ) {
   const chargeCents = start.amountCents + start.tipCents
+  const methodTypes = extra['payment_method_types']
   const fee = posCardApplicationFeeCents({
     takeShareCents: Number(payment.takeFeeCents ?? 0),
     chargeCents,
+    // A reader's card is in person; a typed card is an online card (AGL-4198).
+    inPerson: Array.isArray(methodTypes) && methodTypes.includes('card_present'),
   })
   return {
     amount: chargeCents,
@@ -831,6 +834,8 @@ export async function startCardLinkPayment(
   const fee = posCardApplicationFeeCents({
     takeShareCents: Number(payment.takeFeeCents ?? 0),
     chargeCents: start.amountCents + start.tipCents,
+    // A card link is paid online, on the customer's own phone (AGL-4198).
+    inPerson: false,
   })
   const session = await posStripe('POST', 'checkout/sessions', {
     idempotencyKey: `pos-link:${payment.id}`,
@@ -911,9 +916,12 @@ export function posIntentTipCents(intent: any): number {
  * card processing cost on the whole amount, tip included.
  */
 export function posCaptureFeeCents(payment: CommerceModel.OrderPayment, intent: any): number {
+  const methodTypes: unknown = intent?.payment_method_types
   return posCardApplicationFeeCents({
     takeShareCents: Number(payment.takeFeeCents ?? 0),
     chargeCents: Math.max(0, Math.round(Number(intent?.amount ?? 0))),
+    // The intent says how it was paid: a reader's card is in person (AGL-4198).
+    inPerson: !Array.isArray(methodTypes) || methodTypes.includes('card_present'),
   })
 }
 

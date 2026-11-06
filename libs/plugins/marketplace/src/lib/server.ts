@@ -282,6 +282,7 @@ function registerPluginConnectionsApi(): void {
     [PLUGIN_CONNECTIONS_API_ROUTES.disconnect, (routes) => routes.disconnectRoute],
     [PLUGIN_CONNECTIONS_API_ROUTES.status, (routes) => routes.statusRoute],
     [PLUGIN_CONNECTIONS_API_ROUTES.credentials, (routes) => routes.credentialsRoute],
+    [PLUGIN_CONNECTIONS_API_ROUTES.sync, (routes) => routes.syncNowRoute],
   ]
   for (const [path, pick] of routes) {
     const handler = connectionRoute(pick)

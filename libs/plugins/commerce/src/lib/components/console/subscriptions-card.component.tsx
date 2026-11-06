@@ -290,8 +290,10 @@ export function SubscriptionsCard(props: SubscriptionsCardProps) {
                 row.totals?.totalCents != null
                   ? `${money(Number(row.totals.totalCents) || 0)}${CommerceModel.subscriptionIntervalSuffix(row.interval)}`
                   : ''
+              // A trial's opening invoice is $0: nothing has been paid yet,
+              // so the row says nothing rather than "$0.00 paid so far".
               const paid =
-                Number(row.invoicesCount ?? 0) > 0
+                Number(row.paidCents ?? 0) > 0
                   ? `${money(Number(row.paidCents) || 0)} paid so far`
                   : ''
               return (
