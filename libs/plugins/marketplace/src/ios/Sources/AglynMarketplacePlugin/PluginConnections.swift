@@ -258,7 +258,9 @@ struct SitePluginConnectionsCard: View {
   private var keyRefused: Bool { !context.can(pluginConnectionsSiteKey) }
 
   var body: some View {
-    Group {
+    // A VStack, not a Group: the card draws nothing until the manifest is read,
+    // and a `.task` on a Group with no content never runs (GroupTaskTests).
+    VStack(spacing: 0) {
       if let declared, !declared.isEmpty {
         VStack(alignment: .leading, spacing: AglynSpace.three) {
           if keyRefused || refused {
