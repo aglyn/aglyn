@@ -59,6 +59,11 @@ The open dataset fills the right: its name with **Add record**, **Schema**, **Im
 created date), and its records table. **Add dataset** and **Add join collection** are at
 the top of the page.
 
+Choose **View** on a record, or the record's row, to open it on its own page
+(`…/data/<dataset id>/records/<record id>`): a link back to its dataset, its record ID
+and dataset, every field with its value, and **Edit record** and **Delete**. Deleting it
+takes you back to the dataset.
+
 ## Model builder
 
 Define a model in the schema dialog with **typed fields** (text, number, date, reference,

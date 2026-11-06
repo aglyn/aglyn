@@ -17,7 +17,7 @@
 
 import { nameSearchKey } from '@aglyn/aglyn/app-utils/name-search'
 import { describeSharing } from '@aglyn/aglyn/app-utils/scope-tokens'
-import { effectiveDatasetModel } from './dataset-models'
+import { type DatasetModel, effectiveDatasetModel, formatDatasetValue } from './dataset-models'
 import { datasetDisplayName, type HostDataset } from './datasets'
 
 /**
@@ -144,4 +144,19 @@ export function datasetCreatedLabel(dataset: DatasetRailEntry, locale?: string):
         : null
   if (!date || Number.isNaN(date.getTime())) return '--'
   return date.toLocaleDateString(locale, { month: 'short', day: 'numeric', year: 'numeric' })
+}
+
+/**
+ * A record's own page's heading (AGL-4047): the first field, in the model's
+ * order, that shows a value — a reference names an id, so it is passed over —
+ * or a stand-in when none does.
+ */
+export function datasetRecordTitle(model: DatasetModel, values: Readonly<Record<string, unknown>> | undefined): string {
+  for (const fieldId of model.order) {
+    const field = model.fields[fieldId]
+    if (!field || field.type === 'reference') continue
+    const shown = formatDatasetValue(field, values?.[fieldId]).trim()
+    if (shown) return shown
+  }
+  return 'Untitled record'
 }
