@@ -21,6 +21,9 @@ content on the marketing site and is written separately.
 - **native:** iOS quote editor, from New quote and Edit ([AGL-4093](https://linear.app/aglyn/issue/AGL-4093))
 - **native:** a quote's product line priced as the console prices it ([AGL-4093](https://linear.app/aglyn/issue/AGL-4093))
 - **native:** the console's quote editor totals and tax in both apps' contracts ([AGL-4093](https://linear.app/aglyn/issue/AGL-4093))
+- **besigner:** repeat any element over a plugin connection's record, and hide a part per record ([AGL-4212](https://linear.app/aglyn/issue/AGL-4212))
+- **google-reviews:** every part of the Google reviews display is an element you can style ([AGL-4212](https://linear.app/aglyn/issue/AGL-4212))
+- **workflows:** org automations run on all sites except some ([AGL-4047](https://linear.app/aglyn/issue/AGL-4047))
 
 ### Fixed
 
