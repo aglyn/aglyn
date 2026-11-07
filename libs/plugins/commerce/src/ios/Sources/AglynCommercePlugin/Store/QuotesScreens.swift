@@ -236,11 +236,18 @@ struct QuoteScreen: View {
   @State private var confirmingReplace = false
   @State private var sending = false
   @State private var invoicing = false
+  @State private var proofsModel = QuoteProofsModel()
   @Environment(\.dismiss) private var dismiss
   /// The workspace's card payments, as the quote route answers it: nil until it answers, or when it could not.
   @State private var paymentsState: String?
 
   private var hostID: String { context.hostID ?? "" }
+
+  /// The quote as last read, or nil while it loads or when it is gone.
+  private var loadedOrder: HostOrder? {
+    if case .ready(let doc?) = quote.state { return decodeOrder(doc) }
+    return nil
+  }
 
   var body: some View {
     // Above the list, not over it: the list scrolls under nothing.
@@ -297,6 +304,11 @@ struct QuoteScreen: View {
           readiness: { if !gaps.isEmpty { payLinkNotice(gaps, state: paymentsState) } }
         ) { message in notice = (message, .success) }
       }
+    }
+    .quoteProofsSheets(proofsModel, context: context)
+    .onChange(of: loadedOrder, initial: true) { _, order in
+      guard let order else { return }
+      proofsModel.configure(context: context, quoteID: quoteID, order: order) { text, tone in notice = (text, tone) }
     }
     .sheet(isPresented: $invoicing) {
       if case .ready(let doc?) = quote.state {
@@ -492,6 +504,7 @@ struct QuoteScreen: View {
       emailSection(order)
       if !gaps.isEmpty { payLinkNotice(gaps, state: state) }
       payLinkSection(order)
+      QuoteProofsSections(context: context, order: order, quoteID: quoteID, model: proofsModel)
       customerSection(order.quote)
       if !proofOnly {
         Section("Items") {

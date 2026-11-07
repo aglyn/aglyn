@@ -69,4 +69,42 @@ extension ConsoleAPIClient {
       throw ConsoleAPIError(status: response.statusCode, message: "Storage refused the upload (\(response.statusCode)).")
     }
   }
+
+  /// Sends a file to a signed upload form a route handed out (a visitor upload's ticket, which a quote's proof uses):
+  /// the policy's `fields` first and the file last, as Storage reads them, no bearer. Like the console's
+  /// `sendVisitorUpload`, it does not read the answer: the route's finalize says whether the file arrived. Throws only
+  /// when nothing reached storage.
+  public func postSignedForm(
+    _ url: String, fields: [(String, String)], fileName: String, contentType: String, data: Data,
+    transport: HTTPTransport = URLSession.shared
+  ) async throws {
+    guard url.hasPrefix("https://") || url.hasPrefix("http://"), let target = URL(string: url) else {
+      throw ConsoleAPIError(status: 0, message: "The file could not be sent. Check your connection and try again.")
+    }
+    let boundary = "aglyn-\(UUID().uuidString)"
+    var body = Data()
+    func line(_ text: String) { body.append(Data((text + "\r\n").utf8)) }
+    for (key, value) in fields {
+      line("--\(boundary)")
+      line("Content-Disposition: form-data; name=\"\(key)\"")
+      line("")
+      line(value)
+    }
+    line("--\(boundary)")
+    line("Content-Disposition: form-data; name=\"file\"; filename=\"\(fileName.replacingOccurrences(of: "\"", with: ""))\"")
+    line("Content-Type: \(contentType)")
+    line("")
+    body.append(data)
+    line("")
+    line("--\(boundary)--")
+    var request = URLRequest(url: target)
+    request.httpMethod = "POST"
+    request.setValue("multipart/form-data; boundary=\(boundary)", forHTTPHeaderField: "Content-Type")
+    request.httpBody = body
+    do {
+      _ = try await transport.send(request)
+    } catch {
+      throw ConsoleAPIError(status: 0, message: "The file could not be sent. Check your connection and try again.")
+    }
+  }
 }
