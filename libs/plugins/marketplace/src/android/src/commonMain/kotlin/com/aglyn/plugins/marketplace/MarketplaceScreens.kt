@@ -107,7 +107,7 @@ private sealed interface ListingDialog {
 
 /** The marketplace's sections, as the console's hub tabs them. */
 @Composable
-private fun SectionTabs(context: NativePluginContext, current: String) {
+internal fun SectionTabs(context: NativePluginContext, current: String) {
   ChoiceChipRow(
     listOf(
       ChipOption(MARKETPLACE_BROWSE_SCREEN, "Browse all", "storefront"),

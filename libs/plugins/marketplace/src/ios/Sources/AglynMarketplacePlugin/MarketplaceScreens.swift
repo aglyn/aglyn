@@ -14,7 +14,7 @@ import SwiftUI
 }
 
 /// The marketplace's sections, as the console's hub tabs them.
-private struct SectionTabs: View {
+struct SectionTabs: View {
   let context: NativePluginContext
   let current: String
 

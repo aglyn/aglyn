@@ -48,6 +48,19 @@ export const NATIVE_NAV_ROWS: readonly NativeNavContribution[] = [
         nativeNavHubSection('org', '/marketplace', 'browse', 'Browse All', 'marketplace.browse'),
         nativeNavHubSection('org', '/marketplace', 'installed', 'Installed', 'marketplace.installed'),
         nativeNavHubSection('org', '/marketplace', MARKETPLACE_LICENSES_SECTION_ID, 'Licenses', 'marketplace.licenses'),
+        // The seller half: publishing opens the publish hub and its eight forms; the four seller cards are the
+        // tabs of one Selling screen, opened on the card the console's section names.
+        nativeNavHubSection('org', '/marketplace', 'upload', 'Upload / Publish', 'marketplace.publish'),
+        ...(
+          [
+            ['profile', 'Publisher Profile'],
+            ['listings', 'Listings'],
+            ['payouts', 'Payouts'],
+            ['sales', 'Sales'],
+          ] as const
+        ).map(([id, label]) =>
+          nativeNavHubSection('org', '/marketplace', id, label, 'marketplace.sell', { params: { section: id } }),
+        ),
       ],
       docs: '/developers/plugins/overview',
       console: nativeNavRef('orgPluginTab', '/marketplace'),
