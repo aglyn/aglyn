@@ -153,7 +153,7 @@ import { AI_LAYOUT_IMPORTED_SECTIONS_INPUT, type AiSiteImportDocument } from './
 import { aiImportedPageListingOwed, aiSiteImportSectionNames } from './ai-site-import-compile'
 import { aiRebuildImportedForms, type AiSiteImportFormsDeps } from './ai-site-import-forms'
 import { aiRunSiteImportLook, type AiSiteImportLookDeps } from './ai-site-import-look'
-import { AI_SITE_IMPORT_PLAN_BUDGET, aiRunSiteImportPlan, aiSiteImportPlanScopeLines } from './ai-site-import-plan'
+import { AI_SITE_IMPORT_PLAN_BUDGET, AI_SITE_IMPORT_PLAN_REFUSED_WHY, aiRunSiteImportPlan, aiSiteImportPlanScopeLines, aiSiteImportPlanWhy } from './ai-site-import-plan'
 import { aiPublishImportedWave } from './ai-site-import-publish'
 import { aiUnitErrorRetryable, aiUnitFailure, aiUnitSpend } from './ai-build-unit-outcome'
 import { registerAiJobAdmission, type AiJobAdmission } from './ai-job-admission'
@@ -1402,7 +1402,7 @@ export function createAiJobImportStep(deps: AiSiteImportStepDeps = {}): AiJobSte
       // A new page is words the owner asked to have written, and takes the plan's room.
       const roomForPage = aiSiteImportChoiceOf(state).wording && aiSiteImportHasRoomForPage(state, room)
       const scope = aiSiteImportPlanScopeLines(state, aiSiteImportSiteLines(state))
-      const fellBack = (rest: Partial<AiJobStepOutcome> = {}) => unspent({ siteImport: aiSiteImportPlanIn(state, wave, null, nowIso, ''), continue: true, ...rest })
+      const fellBack = (rest: Partial<AiJobStepOutcome> = {}, why: readonly string[] = []) => unspent({ siteImport: aiSiteImportPlanIn(state, wave, null, nowIso, '', why), continue: true, ...rest })
       let answered: Awaited<ReturnType<typeof runPlan>>
       try {
         answered = await runPlan({ state, scope, required, roomForPage, model, ...(signal ? { signal } : {}) })
@@ -1415,7 +1415,8 @@ export function createAiJobImportStep(deps: AiSiteImportStepDeps = {}): AiJobSte
       if (answered.status !== 'ok') {
         // Logged by its codes alone: an answer's words are the site's content.
         console.info('ai site import: the plan did not pass, its own frame stands', { status: answered.status, codes: answered.status === 'needs_input' ? [...new Set(answered.violations.map((violation) => violation.code))] : [] })
-        return fellBack(spent)
+        // The lines themselves go on the job's own record, in the owner's workspace, never the log (AGL-4152).
+        return fellBack(spent, answered.status === 'needs_input' ? aiSiteImportPlanWhy(answered.violations) : [AI_SITE_IMPORT_PLAN_REFUSED_WHY])
       }
       const next = aiSiteImportPlanIn(state, wave, answered.value, nowIso, mintId())
       // Shown before anything is built: the job waits here for the owner to start the build.

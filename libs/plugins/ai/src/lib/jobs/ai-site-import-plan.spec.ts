@@ -292,12 +292,8 @@ describe('what holds a plan', () => {
 
   it.each([
     ['a menu entry that is no page', { nav: { ...answer().nav, groups: [{ label: 'Services', pages: ['d-nope'] }] } }, /is not a page of this site/],
-    ['a page of the old menu left out', { nav: { ...answer().nav, groups: [{ label: 'Services', pages: ['d-p1'] }], footer: [{ label: 'Help', pages: ['d-p4'] }] } }, /in the old menu and nowhere in the new one/],
-    ['the home page in the menu', { nav: { ...answer().nav, groups: [{ label: 'Home', pages: ['d-p0'] }, ...answer().nav.groups] } }, /the logo goes home/],
     ['more than six entries', { nav: { ...answer().nav, groups: Array.from({ length: 7 }, (_, at) => ({ label: `Entry ${'abcdefg'[at]}`, pages: ['d-p1', 'd-p2', 'd-p3'] })) } }, /at most 6/],
     ['a button to no page', { nav: { ...answer().nav, cta: { label: 'Go', target: 'd-nope' } } }, /is not a page of this site/],
-    ['a page of the new one nowhere', { nav: { ...answer().nav, groups: [{ label: 'Services', pages: ['d-p1', 'd-p2', 'd-p3'] }] } }, /linked from nowhere/],
-    ['the new page named with none proposed', { proposed: { title: '', slug: '', purpose: '' } }, /names the new page, and proposed is empty/],
     ['a slug already taken', { proposed: { title: 'Common questions', slug: 'about', purpose: 'What people ask.' } }, /is already a page of this site/],
     ['a slug that is no address', { proposed: { title: 'Common questions', slug: 'Common Questions', purpose: 'What people ask.' } }, /lowercase words and hyphens/],
     ['a title already a page', { proposed: { title: 'About', slug: 'about-us', purpose: 'Who we are.' } }, /is already a page of this site/],
@@ -384,6 +380,98 @@ describe('the plan’s answer, asked', () => {
     mockRunAiRequest.mockResolvedValue(toolAnswer({ site: {}, nav: {}, design: {}, proposed: {} }))
     expect((await ask()).status).toBe('needs_input')
     expect(mockRunAiRequest).toHaveBeenCalledTimes(2)
+  })
+
+  it('asks no second time for an answer its mends make whole', async () => {
+    const mendable = answer({ nav: { ...answer().nav, groups: [{ label: 'Home', pages: ['d-p0'] }, { label: 'Services', pages: ['d-p1', 'd-p1'] }], footer: [{ label: 'Help', pages: ['d-p4'] }] } })
+    mockRunAiRequest.mockResolvedValueOnce(toolAnswer(mendable))
+    const result = await ask()
+    expect(mockRunAiRequest).toHaveBeenCalledTimes(1)
+    expect(result.status).toBe('ok')
+  })
+})
+
+describe('a plan mended where the mend is mechanical', () => {
+  const nav = (groups: unknown[], footer: unknown[] = answer().nav.footer) => ({ nav: { ...answer().nav, groups, footer } })
+  const held = (patch: Record<string, unknown>, state = site()) => {
+    const { plan, violations } = hold(answer(patch), state)
+    expect(violations).toEqual([])
+    if (!plan) throw new Error('no plan')
+    return plan
+  }
+
+  it('puts a page of the old menu the answer left out in the footer, beside the pages most like it', () => {
+    // About and Contact are like neither column's pages: they join the first. The new page, linked nowhere, joins it too.
+    const plan = held(nav([{ label: 'Services', pages: ['d-p1'] }], [{ label: 'Help', pages: ['d-p4'] }]))
+    expect(plan.nav.groups).toEqual([{ label: 'Services', pages: ['d-p1'] }])
+    expect(plan.nav.footer).toEqual([{ label: 'Help', pages: ['d-p4', 'd-p2', 'd-p3', 'new'] }])
+  })
+
+  it('puts a policy page with the policies, and a page of a section with that section', () => {
+    const state = site({
+      pages: [...site().pages, page('p6', '/terms', 'Terms of service', 'The terms.'), page('p7', '/services/payroll', 'Payroll', 'Payroll for small teams.')],
+      home: { ...site().home, nav: { ...site().home?.nav, items: [...(site().home?.nav?.items ?? []), { label: 'Terms', href: 'https://x.example/terms', items: [] }, { label: 'Payroll', href: 'https://x.example/services/payroll', items: [] }] } } as never,
+    })
+    const plan = held(nav(answer().nav.groups, [{ label: 'Company', pages: ['d-p2', 'd-p3'] }, { label: 'Services', pages: ['d-p1'] }, { label: 'Help', pages: ['d-p4'] }]), state)
+    expect(plan.nav.footer).toEqual([
+      { label: 'Company', pages: ['d-p2', 'd-p3'] },
+      { label: 'Services', pages: ['d-p1', 'd-p7'] },
+      { label: 'Help', pages: ['d-p4', 'd-p6'] },
+    ])
+  })
+
+  it('heads a new column with the old menu’s own heading where no column is like the page, and with the site’s name where the footer has none', () => {
+    const resources = { label: 'Resources', href: null, items: [{ label: 'About', href: 'https://www.x.example/about/' }] }
+    const state = site({ home: { ...site().home, nav: { ...site().home?.nav, items: [...(site().home?.nav?.items ?? []), resources] } } as never })
+    const plan = held(nav([{ label: 'Services', pages: ['d-p1'] }, { label: 'Common questions', pages: ['new'] }], [{ label: 'Help', pages: ['d-p3', 'd-p4'] }]), state)
+    expect(plan.nav.footer).toEqual([
+      { label: 'Help', pages: ['d-p3', 'd-p4'] },
+      { label: 'Resources', pages: ['d-p2'] },
+    ])
+    const bare = held(nav([{ label: 'Services', pages: ['d-p1'] }, { label: 'Common questions', pages: ['new'] }], []))
+    expect(bare.nav.footer).toEqual([{ label: 'Larkspur Tax Studio', pages: ['d-p2', 'd-p3'] }])
+  })
+
+  it('takes the home page out of the menu, drops an entry left with no page, and names a page once', () => {
+    const plan = held(nav([{ label: 'Home', pages: ['d-p0'] }, { label: 'Empty', pages: [] }, { label: 'Services', pages: ['d-p1', 'd-p1', 'd-p0'] }, ...answer().nav.groups.slice(1)]))
+    expect(plan.nav.groups.map((group) => group.label)).toEqual(['Services', 'About', 'Common questions', 'Contact'])
+    expect(plan.nav.groups[0]).toEqual({ label: 'Services', pages: ['d-p1'] })
+    // The home page stays in the footer, where it is no harm.
+    expect(held(nav(answer().nav.groups, [{ label: 'Company', pages: ['d-p0', 'd-p1', 'd-p2'] }, { label: 'Help', pages: ['d-p3', 'd-p4'] }])).nav.footer[0]?.pages).toEqual(['d-p0', 'd-p1', 'd-p2'])
+  })
+
+  it('drops the new page from every entry where none is proposed', () => {
+    const plan = held({ proposed: { title: '', slug: '', purpose: '' } })
+    expect(plan.proposed).toBeNull()
+    expect(plan.nav.groups.map((group) => group.label)).toEqual(['Services', 'About', 'Contact'])
+  })
+
+  it('reads a page written by its address or exact title as its id, in the menu and on the button', () => {
+    const plan = held({ nav: { ...answer().nav, groups: [{ label: 'Services', pages: ['/services'] }, { label: 'About', pages: ['About'] }, { label: 'Common questions', pages: ['new'] }, { label: 'Contact', pages: ['contact/'] }], cta: { label: 'See services', target: 'Services' } } })
+    expect(plan.nav.groups.map((group) => group.pages)).toEqual([['d-p1'], ['d-p2'], ['new'], ['d-p3']])
+    expect(plan.nav.primaryCta).toEqual({ label: 'See services', target: 'd-p1' })
+  })
+
+  it('mends nothing the answer says: an unknown page, a long or missing label, too many entries, or an invented word still miss', () => {
+    for (const [patch, message] of [
+      [nav([{ label: 'Services', pages: ['d-nope', 'd-p1', 'd-p2', 'd-p3'] }]), /is not a page of this site/],
+      [nav([{ label: 'Everything this studio offers to you', pages: ['d-p1', 'd-p2', 'd-p3'] }]), /is over 28 characters/],
+      [nav([{ label: '', pages: ['d-p1', 'd-p2', 'd-p3'] }]), /it needs a label/],
+      [nav(Array.from({ length: 7 }, (_, at) => ({ label: `Entry ${'abcdefg'[at]}`, pages: ['d-p1', 'd-p2', 'd-p3'] }))), /at most 6/],
+      [nav([{ label: 'Home', pages: ['d-p0'] }]), /a menu needs at least one entry/],
+      [nav([{ label: 'Our Award Winners', pages: ['d-p1', 'd-p2', 'd-p3', 'new'] }]), /Award/],
+    ] as const) {
+      const { plan, violations } = hold(answer(patch))
+      expect(plan).toBeNull()
+      expect(violations.map((violation) => violation.message).join(' ')).toMatch(message)
+    }
+  })
+
+  it('leaves a missing page missing where no heading of the site’s own words fits', () => {
+    const state = site({ siteName: 'A studio name far longer than any label holds', home: { ...site().home, siteName: '' } as never })
+    const { plan, violations } = hold(answer(nav([{ label: 'Services', pages: ['d-p1'] }, { label: 'Common questions', pages: ['new'] }], [])), state)
+    expect(plan).toBeNull()
+    expect(violations.map((violation) => violation.code)).toEqual(['improve-dropped-item', 'improve-dropped-item'])
   })
 })
 
@@ -501,6 +589,34 @@ describe('the plan’s pass', () => {
     expect(aiSiteImportFrameSource(next, next.waves[0] as never)?.planned).toBeUndefined()
     expect(aiSiteImportDesignInputs(next, next.waves[0])).toEqual(aiSiteImportDesignInputs(site({ plan: null })))
     jest.restoreAllMocks()
+  })
+
+  it('keeps why a plan did not pass on the job’s record, and logs its codes alone', async () => {
+    const info = jest.spyOn(console, 'info').mockImplementation(() => undefined)
+    const violations = [
+      { rule: null, code: 'site-plan-unusable', message: 'nav.groups[0]: "Our studio, all of it, every last bit of what we do here" is over 28 characters.' },
+      { rule: 14, code: 'improve-invented-fact', message: `site.what, "Loved by every client": ${'it says what the site does not. '.repeat(20)}` },
+      ...Array.from({ length: 9 }, (_, at) => ({ rule: null, code: 'site-plan-unusable', message: `nav.footer[${at}]: it needs a label.` })),
+    ]
+    const missed = await pass(stepDeps({ plan: (async () => ({ ...spend, status: 'needs_input' as const, violations, message: 'x' })) as never }), site())
+    const why = (missed.siteImport as AiSiteImportState).planMissedWhy ?? []
+    expect(why).toHaveLength(8)
+    expect(why[0]).toBe('site-plan-unusable: nav.groups[0]: "Our studio, all of it, every last bit of what we do here" is over 28 characters.')
+    expect(why[1]?.startsWith('improve-invented-fact: site.what, "Loved by every client"')).toBe(true)
+    expect(why.every((line) => line.length <= 300)).toBe(true)
+    // The log names the codes, never a line of the site's.
+    const logged = JSON.stringify(info.mock.calls)
+    expect(logged).toContain('site-plan-unusable')
+    expect(logged).not.toContain('Our studio')
+    expect(logged).not.toContain('Loved by every client')
+    const refused = await pass(stepDeps({ plan: (async () => ({ ...spend, status: 'refused' as const })) as never }), site())
+    expect((refused.siteImport as AiSiteImportState).planMissedWhy).toEqual(['refused: the model declined to plan the site.'])
+    jest.restoreAllMocks()
+    // A plan that passes later clears what the miss said; a miss with nothing to say leaves no field.
+    const later = aiSiteImportPlanIn(missed.siteImport as AiSiteImportState, { index: 1 }, planOf(), 'x', 'd-new')
+    expect(later.planMissedWhy).toBeNull()
+    expect(later.plan?.proposed?.draftId).toBe('d-new')
+    expect('planMissedWhy' in aiSiteImportPlanIn(site(), { index: 1 }, null, 'x', '', [])).toBe(false)
   })
 
   it('asks for no new page with new copy off, or with no room', async () => {
