@@ -49,8 +49,18 @@
  * lands on their pages, and an unsolicited request to a host they do not own.
  */
 import { TENANT_APEX, screenRoutePathToUrl } from '@aglyn/aglyn/server'
-import type { Firestore } from 'firebase-admin/firestore'
+import { createResourceUid } from '@aglyn/aglyn/app-utils/create-resource-uid'
+import {
+  FieldValue,
+  type DocumentReference,
+  type Firestore,
+} from 'firebase-admin/firestore'
 import { pluginLivePaths } from '@aglyn/aglyn/plugin-manager/plugin-live-paths'
+import {
+  PUBLISH_OUTBOX_COLLECTION,
+  type PublishOutboxPluginsScope,
+} from '../../constants/publish-outbox'
+import { raiseConsoleOperatorAlert } from './raise-operator-alert'
 
 /** A publish should feel instant; a slow tenant must not hold the caller. */
 const TIMEOUT_MS = 5000
@@ -268,8 +278,18 @@ export async function postTenantRevalidate(options: {
    * `cnameCacheHost`. Omitted for a site with no domain, which costs nothing.
    */
   cname?: string
+  /**
+   * Which plugins may load changed (AGL-4121): the tenant hard-expires the
+   * plugin tags for this site (`'host'`) or for every site (`'everywhere'`).
+   * Tags are key-independent, so it rides the first call only.
+   */
+  plugins?: PublishOutboxPluginsScope | null
+  /** Alias-cache names to expire with the drop (see `revalidateHostAliases`). */
+  aliases?: readonly string[]
 }): Promise<TenantRevalidateResult> {
   const { subdomain, hostId, paths } = options
+  const plugins = options.plugins ?? null
+  const aliases = [...(options.aliases ?? [])]
   const secret = process.env['REVALIDATE_SECRET']
   const startedAt = Date.now()
   if (!secret) {
@@ -292,7 +312,13 @@ export async function postTenantRevalidate(options: {
   const primary = await sendRevalidate({
     subdomain,
     secret,
-    body: { host: subdomain, hostId, paths },
+    body: {
+      host: subdomain,
+      hostId,
+      paths,
+      ...(plugins ? { plugins } : {}),
+      ...(aliases.length ? { aliases } : {}),
+    },
     deadline,
   })
   if (!primary.ok) {
@@ -427,8 +453,10 @@ export interface WholeHostRevalidateResult extends TenantRevalidateResult {
  *    re-attach onto a DIFFERENT host is an attach that follows a detach, and
  *    paying one request to not depend on that ordering is worth it.
  *
- * Best-effort by design, exactly like `postTenantRevalidate`: a failure here
- * degrades to the TTL, which is the behavior this replaced.
+ * Retried like `postTenantRevalidate`, and DURABLE when the caller passes
+ * `firestore` (AGL-4121): the alias entry is held for the week-long backstop,
+ * so a refused expiry is staged in the publish outbox for the drain rather
+ * than left to the TTL.
  */
 export async function revalidateHostAliases(options: {
   /** Bare subdomain label (`demo`), which is what `normalizeHostAlias` yields. */
@@ -443,6 +471,14 @@ export async function revalidateHostAliases(options: {
    * `normalizeHostAlias` yields; `cname--` sentinels are built from `cname`.
    */
   aliases?: string[]
+  /**
+   * When given, the expiry is staged in the publish outbox FIRST and released
+   * only once the tenant answered `ok` (AGL-4121). The alias entry is held for
+   * the platform backstop now, a week, so a detach whose one call was refused
+   * would otherwise leave the released domain serving this site's cached pages
+   * for that long; with the entry staged the console's drain retries it.
+   */
+  firestore?: Firestore
 }): Promise<boolean> {
   const { subdomain, hostId } = options
   const secret = process.env['REVALIDATE_SECRET']
@@ -461,21 +497,36 @@ export async function revalidateHostAliases(options: {
     ),
   )
 
-  try {
-    const response = await fetch(
-      `https://${subdomain}.${TENANT_APEX}/api/revalidate`,
-      {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json', 'x-revalidate-secret': secret },
-        body: JSON.stringify({ host: subdomain, hostId, paths: [], aliases }),
-        signal: AbortSignal.timeout(TIMEOUT_MS),
-      },
-    )
-    return response.ok
-  } catch (error) {
-    console.error('AGL-1152:alias-revalidate-failed', error)
-    return false
+  const staged = options.firestore
+    ? await stageSiteDrops(options.firestore, [
+        {
+          hostId,
+          paths: ['/'],
+          aliases,
+          subdomain,
+          reason: 'host aliases released',
+        },
+      ])
+    : null
+  const result = await postTenantRevalidate({
+    subdomain,
+    hostId,
+    // The tenant refuses a call that names nothing; with no other alias the
+    // home page is the cheapest thing to name, and `host` is expired anyway.
+    paths: aliases.length ? [] : ['/'],
+    aliases,
+  })
+  if (result.reason === 'ok') {
+    await releaseSiteDrops(staged)
+    return true
   }
+  if (options.firestore && !staged) {
+    await reportLostSiteDrops({
+      reason: 'host aliases released',
+      hostIds: [hostId],
+    })
+  }
+  return false
 }
 
 /**
@@ -509,30 +560,58 @@ export function wholeHostPaths(snapshot: {
  * between the two would regenerate the page from the still-present documents
  * and cache it for another hour.
  *
- * Best effort and never throws, like everything here: the site is deleted
- * either way, and the hour-long window is the backstop.
+ * Never throws, like everything here: the site is deleted either way. With
+ * `firestore` the drop is durable (AGL-4121); without it, best effort.
  */
-export async function dropDeletedSiteCache(snapshot: {
-  id: string
-  get: (field: string) => unknown
-}): Promise<boolean> {
+export async function dropDeletedSiteCache(
+  snapshot: {
+    id: string
+    get: (field: string) => unknown
+  },
+  options: {
+    /**
+     * Stage the drop in the publish outbox first (AGL-4121), carrying the
+     * subdomain and domain the drain cannot read from a host document that
+     * no longer exists. The site's pages and names are held for the week-long
+     * backstop now, so a refused drop must be retried, not left to the TTL.
+     */
+    firestore?: Firestore
+  } = {},
+): Promise<boolean> {
   const hostId = snapshot.id
   const subdomain = String(snapshot.get('subdomain') ?? '')
   if (!hostId || !subdomain) return false
   const cname = String(snapshot.get('cname') ?? '') || undefined
+  const paths = wholeHostPaths(snapshot)
+  const cnameAlias = cnameCacheHost(cname)
+  const aliases = cnameAlias ? [cnameAlias] : []
   try {
-    const [pages] = await Promise.all([
-      postTenantRevalidate({
-        subdomain,
-        hostId,
-        paths: wholeHostPaths(snapshot),
-        ...(cname ? { cname } : {}),
-      }),
-      // The alias cache still resolves both names to the deleted host for up
-      // to an hour otherwise, and every request through it answers from the
-      // cached pages above.
-      revalidateHostAliases({ subdomain, hostId, ...(cname ? { cname } : {}) }),
-    ])
+    const staged = options.firestore
+      ? await stageSiteDrops(options.firestore, [
+          {
+            hostId,
+            paths,
+            aliases,
+            subdomain,
+            ...(cname ? { cname } : {}),
+            reason: 'site deleted',
+          },
+        ])
+      : null
+    // One call carries the pages and the names: the alias cache still
+    // resolves both names to the deleted host otherwise, and every request
+    // through it answers from the cached pages.
+    const pages = await postTenantRevalidate({
+      subdomain,
+      hostId,
+      paths,
+      aliases,
+      ...(cname ? { cname } : {}),
+    })
+    if (pages.reason === 'ok') await releaseSiteDrops(staged)
+    else if (options.firestore && !staged) {
+      await reportLostSiteDrops({ reason: 'site deleted', hostIds: [hostId] })
+    }
     return pages.reason === 'ok'
   } catch (error) {
     console.error('[tenant-revalidate] deleted-site drop failed', hostId, error)
@@ -543,7 +622,36 @@ export async function dropDeletedSiteCache(snapshot: {
 export async function revalidateEntireHost(
   firestore: Firestore,
   hostId: string,
+  options: {
+    /** Also hard-expire the site's plugin tags (AGL-4121). */
+    plugins?: PublishOutboxPluginsScope | null
+    /**
+     * Stage the drop in the publish outbox first and release it on `ok`
+     * (AGL-4121), for a caller that has not staged it itself — a server route
+     * that moved what the site serves, such as an import replacing every page.
+     */
+    durable?: { reason: string }
+  } = {},
 ): Promise<WholeHostRevalidateResult> {
+  if (options.durable) {
+    const staged = await stageSiteDrops(firestore, [
+      {
+        hostId,
+        paths: ['/'],
+        entireHost: true,
+        plugins: options.plugins ?? null,
+        reason: options.durable.reason,
+      },
+    ])
+    const result = await revalidateEntireHost(firestore, hostId, {
+      plugins: options.plugins ?? null,
+    })
+    if (result.reason === 'ok') await releaseSiteDrops(staged)
+    else if (!staged) {
+      await reportLostSiteDrops({ reason: options.durable.reason, hostIds: [hostId] })
+    }
+    return result
+  }
   const miss = (reason: TenantRevalidateResult['reason']) => ({
     hostId,
     attempted: false,
@@ -571,6 +679,7 @@ export async function revalidateEntireHost(
       // site serving its old pages on the domain visitors actually use is the
       // failure these callers exist to prevent.
       cname: String(snapshot.get('cname') ?? '') || undefined,
+      plugins: options.plugins ?? null,
     })
     return { hostId, attempted: true, ...result }
   } catch (error) {
@@ -616,8 +725,18 @@ const FANOUT_CONCURRENCY = 10
  */
 export interface SiteCacheDropResult {
   hosts: WholeHostRevalidateResult[]
-  /** Affected hosts NOT dropped because the cap bit — 0 in the normal case. */
+  /**
+   * Affected hosts NOT dropped right now because the cap bit — 0 in the
+   * normal case. Since AGL-4121 they are still staged in the publish outbox,
+   * so the drain drops them on its next run.
+   */
   hostsDropped: number
+  /**
+   * Sites whose drop neither landed nor could be staged for a retry
+   * (AGL-4121). Anything above 0 has already raised an operator alert, and a
+   * security caller must fail loudly on it.
+   */
+  lost: number
 }
 
 export async function dropSiteCaches(
@@ -626,10 +745,25 @@ export async function dropSiteCaches(
     hostIds: readonly string[]
     /** What the purge is for, for the truncation log. */
     reason: string
+    /** Also hard-expire each site's plugin tags (AGL-4121). */
+    plugins?: PublishOutboxPluginsScope | null
   },
 ): Promise<SiteCacheDropResult> {
   const all = [...new Set(options.hostIds.filter(Boolean))]
-  if (!all.length) return { hosts: [], hostsDropped: 0 }
+  if (!all.length) return { hosts: [], hostsDropped: 0, lost: 0 }
+  // EVERY site is staged, the capped ones included (AGL-4121): a site the
+  // cap holds back from the immediate fan-out is no longer left serving the
+  // stopped content until the TTL — the drain drops it on its next run.
+  const staged = await stageSiteDrops(
+    firestore,
+    all.map((hostId) => ({
+      hostId,
+      paths: ['/'],
+      entireHost: true,
+      plugins: options.plugins ?? null,
+      reason: options.reason,
+    })),
+  )
   const targets = all.slice(0, MAX_REVOKE_FANOUT_HOSTS)
   const hostsDropped = all.length - targets.length
   if (hostsDropped > 0) {
@@ -646,16 +780,16 @@ export async function dropSiteCaches(
       }),
     )
   }
-  const results: WholeHostRevalidateResult[] = []
-  for (let i = 0; i < targets.length; i += FANOUT_CONCURRENCY) {
-    const batch = targets.slice(i, i + FANOUT_CONCURRENCY)
-    results.push(
-      ...(await Promise.all(
-        batch.map((hostId) => revalidateEntireHost(firestore, hostId)),
-      )),
-    )
-  }
-  return { hosts: results, hostsDropped }
+  const results = await fanOutWholeHostDrops(firestore, targets, {
+    plugins: options.plugins ?? null,
+  })
+  const lost = await settleSiteDrops({
+    all,
+    staged,
+    results,
+    reason: options.reason,
+  })
+  return { hosts: results, hostsDropped, lost }
 }
 
 /**
@@ -680,6 +814,16 @@ export async function dropSiteCaches(
 export async function revalidateOrgHosts(
   firestore: Firestore,
   orgId: string,
+  options: {
+    /**
+     * Whether which plugins may load changed too. Defaults to `'host'`: a plan
+     * move or a switchboard toggle changes the plugin set, and an org-wide
+     * drop already regenerates every page, so expiring the plugin tags with
+     * it costs nothing extra (AGL-4121).
+     */
+    plugins?: PublishOutboxPluginsScope | null
+    reason?: string
+  } = {},
 ): Promise<WholeHostRevalidateResult[]> {
   if (!orgId) return []
   try {
@@ -687,18 +831,255 @@ export async function revalidateOrgHosts(
       .collection('hosts')
       .where('orgId', '==', orgId)
       .get()
-    const results: WholeHostRevalidateResult[] = []
-    for (let i = 0; i < hosts.docs.length; i += FANOUT_CONCURRENCY) {
-      const batch = hosts.docs.slice(i, i + FANOUT_CONCURRENCY)
-      results.push(
-        ...(await Promise.all(
-          batch.map((doc) => revalidateEntireHost(firestore, doc.id)),
-        )),
-      )
-    }
+    const hostIds = hosts.docs.map((doc) => doc.id)
+    const reason = options.reason ?? `workspace ${orgId} changed`
+    // Durable (AGL-4121): every site is staged in the publish outbox before
+    // the fan-out, and released only once its drop answered `ok`.
+    const staged = await stageSiteDrops(
+      firestore,
+      hostIds.map((hostId) => ({
+        hostId,
+        paths: ['/'],
+        entireHost: true,
+        plugins: options.plugins === undefined ? 'host' : options.plugins,
+        reason,
+      })),
+    )
+    const results = await fanOutWholeHostDrops(firestore, hostIds, {
+      plugins: options.plugins === undefined ? 'host' : options.plugins,
+    })
+    await settleSiteDrops({ all: hostIds, staged, results, reason })
     return results
   } catch (error) {
     console.error('[tenant-revalidate] org fan-out failed', orgId, error)
+    await reportLostSiteDrops({
+      reason: options.reason ?? `workspace ${orgId} changed`,
+      hostIds: [],
+      detail: 'the workspace’s sites could not be listed',
+    })
     return []
   }
+}
+
+/** Whole-host drops, `FANOUT_CONCURRENCY` at a time. Never throws. */
+async function fanOutWholeHostDrops(
+  firestore: Firestore,
+  hostIds: readonly string[],
+  options: { plugins: PublishOutboxPluginsScope | null },
+): Promise<WholeHostRevalidateResult[]> {
+  const results: WholeHostRevalidateResult[] = []
+  for (let i = 0; i < hostIds.length; i += FANOUT_CONCURRENCY) {
+    const batch = hostIds.slice(i, i + FANOUT_CONCURRENCY)
+    results.push(
+      ...(await Promise.all(
+        batch.map((hostId) =>
+          revalidateEntireHost(firestore, hostId, { plugins: options.plugins }),
+        ),
+      )),
+    )
+  }
+  return results
+}
+
+/**
+ * Drop EVERY site's plugin set at once, for a platform event (AGL-4121).
+ *
+ * A takedown, a revoked version or withdrawn realm trust changes what may load
+ * on every site running the listing. One `'everywhere'` call expires the
+ * global plugin tag on the tenant, which every plugin read and every page that
+ * made one carries, so it reaches every affected site under every cache key
+ * with no install walk, no host loop and no fan-out cap.
+ *
+ * Any site's address reaches the tenant deployment's shared cache, so the call
+ * is sent through `carrierHostIds[0]` when the caller has one, else through
+ * any site with a subdomain. Staged in the publish outbox first, so a refused
+ * call is retried by the drain; when neither lands, an operator alert is
+ * raised and `false` comes back for the caller to fail loudly on.
+ */
+export async function dropPluginsEverywhere(
+  firestore: Firestore,
+  options: { reason: string; carrierHostIds?: readonly string[] },
+): Promise<boolean> {
+  let carrier: { hostId: string; subdomain: string } | null = null
+  try {
+    carrier = await resolveCarrierHost(firestore, options.carrierHostIds ?? [])
+  } catch (error) {
+    console.error('[tenant-revalidate] no site to carry a platform drop', error)
+  }
+  if (!carrier) {
+    await reportLostSiteDrops({
+      reason: options.reason,
+      hostIds: [],
+      detail: 'no site was found to send the platform-wide plugin drop through',
+    })
+    return false
+  }
+  const staged = await stageSiteDrops(firestore, [
+    {
+      hostId: carrier.hostId,
+      paths: ['/'],
+      plugins: 'everywhere',
+      reason: options.reason,
+    },
+  ])
+  const result = await postTenantRevalidate({
+    subdomain: carrier.subdomain,
+    hostId: carrier.hostId,
+    paths: ['/'],
+    plugins: 'everywhere',
+  })
+  if (result.reason === 'ok') {
+    await releaseSiteDrops(staged)
+    return true
+  }
+  if (staged) return true
+  await reportLostSiteDrops({ reason: options.reason, hostIds: [carrier.hostId] })
+  return false
+}
+
+async function resolveCarrierHost(
+  firestore: Firestore,
+  preferred: readonly string[],
+): Promise<{ hostId: string; subdomain: string } | null> {
+  for (const hostId of preferred.slice(0, 3)) {
+    if (!hostId) continue
+    const snapshot = await firestore.collection('hosts').doc(hostId).get()
+    const subdomain = String(snapshot.get('subdomain') ?? '').trim()
+    if (snapshot.exists && subdomain) return { hostId, subdomain }
+  }
+  // `orderBy` on one field is served by the automatic single-field index and
+  // skips documents that lack it, so this is any site with an address.
+  const any = await firestore
+    .collection('hosts')
+    .orderBy('subdomain')
+    .limit(1)
+    .get()
+  const doc = any.docs[0]
+  const subdomain = String(doc?.get('subdomain') ?? '').trim()
+  return doc && subdomain ? { hostId: doc.id, subdomain } : null
+}
+
+/**
+ * One drop, written down before it is sent (AGL-4121) — the server's half of
+ * the publish outbox the browser already uses (AGL-2575, AGL-3386). The keys
+ * beyond the client's are server-only (`PUBLISH_OUTBOX_SERVER_FIELDS`).
+ */
+export interface SiteDropEntry {
+  hostId: string
+  /** Site-absolute paths; `['/']` for a site-wide drop. */
+  paths: readonly string[]
+  /** Drop every routed page, as a settings save does. */
+  entireHost?: boolean
+  plugins?: PublishOutboxPluginsScope | null
+  aliases?: readonly string[]
+  /** Where to send it when the host document is gone (a deleted site). */
+  subdomain?: string
+  cname?: string
+  /** What staged it, for an operator reading a stalled entry. */
+  reason: string
+}
+
+/** Firestore's batch ceiling. */
+const OUTBOX_BATCH_LIMIT = 400
+
+/**
+ * Stages drops in the publish outbox, one entry per drop, and answers their
+ * references in the same order — or `null` when they could not be written,
+ * which the caller treats as "nothing will retry this". Never throws.
+ */
+export async function stageSiteDrops(
+  firestore: Firestore,
+  entries: readonly SiteDropEntry[],
+): Promise<DocumentReference[] | null> {
+  if (!entries.length) return []
+  try {
+    const refs: DocumentReference[] = []
+    for (let i = 0; i < entries.length; i += OUTBOX_BATCH_LIMIT) {
+      const batch = firestore.batch()
+      for (const entry of entries.slice(i, i + OUTBOX_BATCH_LIMIT)) {
+        const ref = firestore
+          .collection(PUBLISH_OUTBOX_COLLECTION)
+          .doc(createResourceUid())
+        batch.set(ref, {
+          hostId: entry.hostId,
+          paths: entry.paths.length ? [...entry.paths] : ['/'],
+          createdAt: FieldValue.serverTimestamp(),
+          attempts: 0,
+          ...(entry.entireHost ? { entireHost: true } : {}),
+          ...(entry.plugins ? { plugins: entry.plugins } : {}),
+          ...(entry.aliases?.length ? { aliases: [...entry.aliases] } : {}),
+          ...(entry.subdomain ? { subdomain: entry.subdomain } : {}),
+          ...(entry.cname ? { cname: entry.cname } : {}),
+          reason: entry.reason.slice(0, 200),
+        })
+        refs.push(ref)
+      }
+      await batch.commit()
+    }
+    return refs
+  } catch (error) {
+    console.error('[tenant-revalidate] could not stage drops in the outbox', error)
+    return null
+  }
+}
+
+/** Releases staged entries once their drop is KNOWN to have landed. */
+export async function releaseSiteDrops(
+  refs: readonly DocumentReference[] | null | undefined,
+): Promise<void> {
+  if (!refs?.length) return
+  await Promise.all(refs.map((ref) => ref.delete().catch(() => undefined)))
+}
+
+/**
+ * Releases each staged entry whose site answered `ok`, and answers how many
+ * sites were neither dropped nor staged — reporting them loudly when any are.
+ */
+async function settleSiteDrops(options: {
+  all: readonly string[]
+  staged: readonly DocumentReference[] | null
+  results: readonly WholeHostRevalidateResult[]
+  reason: string
+}): Promise<number> {
+  const { all, staged, results, reason } = options
+  const ok = new Set(
+    results.filter((result) => result.reason === 'ok').map((result) => result.hostId),
+  )
+  if (staged) {
+    await releaseSiteDrops(staged.filter((_ref, index) => ok.has(all[index])))
+    return 0
+  }
+  const lost = all.filter((hostId) => !ok.has(hostId))
+  if (lost.length) await reportLostSiteDrops({ reason, hostIds: lost })
+  return lost.length
+}
+
+/**
+ * The loud half (AGL-4121): a drop that neither landed nor reached the outbox
+ * leaves the site serving what was just changed until the week-long backstop.
+ * Logged and raised as an operator alert, never swallowed.
+ */
+async function reportLostSiteDrops(options: {
+  reason: string
+  hostIds: readonly string[]
+  detail?: string
+}): Promise<void> {
+  const detail =
+    options.detail ??
+    `${options.hostIds.length} site(s) could not be dropped or queued for a retry`
+  console.error(
+    JSON.stringify({
+      tag: 'AGL-4121:site-drop-lost',
+      reason: options.reason,
+      hosts: options.hostIds.slice(0, 20),
+      detail,
+    }),
+  )
+  await raiseConsoleOperatorAlert('ops.pluginJobFailed', {
+    dedupeKey: 'site-drop-lost',
+    context: {
+      job: 'A live-site cache drop',
+      error: `${detail} after: ${options.reason}`.slice(0, 300),
+    },
+  })
 }

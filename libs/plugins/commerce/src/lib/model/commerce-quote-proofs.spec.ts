@@ -214,7 +214,7 @@ describe('quoteProofInHistory (AGL-4097)', () => {
 
 describe('the customer’s answer', () => {
   it('approving records the name, time, address and browser, and moves the quote to Approved', () => {
-    const answered = applyQuoteResponse(order({ proofs: [proof('p1')] }), { action: 'approve', name: 'Jordan Lee' }, CONTEXT)
+    const answered = applyQuoteResponse(order({ proofs: [proof('p1')] }), { action: 'approve', name: 'Jordan Lee', confirmed: [] }, CONTEXT)
     if (!('order' in answered)) throw new Error('refused')
     expect(answered.order.quote).toMatchObject({
       stage: 'approved',
@@ -230,19 +230,19 @@ describe('the customer’s answer', () => {
     const files = [{ id: 'a1', name: 'logo.ai', contentType: 'application/illustrator', size: 900, path: 'hosts/site1/private/uploads/quote-artwork/q-1/a1' }]
     const changed = applyQuoteResponse(
       order({ proofs: [proof('p1')] }),
-      { action: 'changes', comment: 'Use the new logo', fileIds: ['a1'], files },
+      { action: 'changes', comment: 'Use the new logo', name: 'Jordan Lee', fileIds: ['a1'], files },
       CONTEXT,
     )
     if (!('order' in changed)) throw new Error('refused')
     expect(changed.order.quote).toMatchObject({ stage: 'changes_requested', approval: null })
     expect(latestQuoteResponse(changed.order.quote)).toMatchObject({ action: 'changes', comment: 'Use the new logo', files })
     // …and they may still approve after asking for changes.
-    const approved = applyQuoteResponse(changed.order, { action: 'approve', name: 'Jordan Lee' }, { ...CONTEXT, atMs: 7_000 })
+    const approved = applyQuoteResponse(changed.order, { action: 'approve', name: 'Jordan Lee', confirmed: [] }, { ...CONTEXT, atMs: 7_000 })
     if (!('order' in approved)) throw new Error('refused')
     expect(approved.order.quote?.stage).toBe('approved')
     expect(approved.order.quote?.responses).toHaveLength(2)
     // Changes after an approval withdraw it: the latest answer is what counts.
-    const withdrawn = applyQuoteResponse(approved.order, { action: 'changes', comment: 'One more thing', fileIds: [] }, { ...CONTEXT, atMs: 8_000 })
+    const withdrawn = applyQuoteResponse(approved.order, { action: 'changes', comment: 'One more thing', name: 'Jordan Lee', fileIds: [] }, { ...CONTEXT, atMs: 8_000 })
     if (!('order' in withdrawn)) throw new Error('refused')
     expect(withdrawn.order.quote).toMatchObject({ stage: 'changes_requested', approvedRevision: null, approval: null })
   })
@@ -263,13 +263,16 @@ describe('the customer’s answer', () => {
   })
 
   it('checks what was sent: a typed name to approve, a comment to change, file ids only', () => {
-    expect(parseQuoteResponseInput({ action: 'approve', name: '  Jordan   Lee ' })).toEqual({ ok: true, input: { action: 'approve', name: 'Jordan Lee' } })
+    expect(parseQuoteResponseInput({ action: 'approve', name: '  Jordan   Lee ' })).toEqual({
+      ok: true,
+      input: { action: 'approve', name: 'Jordan Lee', confirmed: [] },
+    })
     expect(parseQuoteResponseInput({ action: 'approve', name: 'J' })).toMatchObject({ ok: false })
     expect(parseQuoteResponseInput({ action: 'changes', comment: ' ' })).toEqual({ ok: false, error: 'Tell us what to change.' })
-    expect(parseQuoteResponseInput({ action: 'changes', comment: 'x', fileIds: ['../etc'] })).toMatchObject({ ok: false })
-    expect(parseQuoteResponseInput({ action: 'changes', comment: 'x', fileIds: ['a1', 'a1'] })).toEqual({
+    expect(parseQuoteResponseInput({ action: 'changes', comment: 'x', name: 'Jordan Lee', fileIds: ['../etc'] })).toMatchObject({ ok: false })
+    expect(parseQuoteResponseInput({ action: 'changes', comment: 'x', name: 'Jordan Lee', fileIds: ['a1', 'a1'] })).toEqual({
       ok: true,
-      input: { action: 'changes', comment: 'x', fileIds: ['a1'] },
+      input: { action: 'changes', comment: 'x', name: 'Jordan Lee', fileIds: ['a1'] },
     })
     expect(parseQuoteResponseInput({ action: 'pay' })).toMatchObject({ ok: false })
   })
@@ -279,7 +282,7 @@ describe('approval and paying', () => {
   it('approving the current revision is what unlocks Pay when the business asks for approval', () => {
     const gated = order({ requireProofApproval: true, proofs: [proof('p1')] })
     expect(quotePayRefusal(gated, 'q-1')).toBe('approval-required')
-    const approved = applyQuoteResponse(gated, { action: 'approve', name: 'Jordan Lee' }, CONTEXT)
+    const approved = applyQuoteResponse(gated, { action: 'approve', name: 'Jordan Lee', confirmed: [] }, CONTEXT)
     if (!('order' in approved)) throw new Error('refused')
     expect(quotePayRefusal(approved.order, 'q-1')).toBeNull()
   })
@@ -287,17 +290,17 @@ describe('approval and paying', () => {
   it('never makes paying wait when the switch is off', () => {
     const open = order({ requireProofApproval: false, proofs: [proof('p1')] })
     expect(quotePayRefusal(open, 'q-1')).toBeNull()
-    const changed = applyQuoteResponse(open, { action: 'changes', comment: 'x', fileIds: [] }, CONTEXT)
+    const changed = applyQuoteResponse(open, { action: 'changes', comment: 'x', name: 'Jordan Lee', fileIds: [] }, CONTEXT)
     expect('order' in changed && quotePayRefusal(changed.order, 'q-1')).toBeNull()
   })
 
   it('the page shows the proofs and the latest answer, never a path, an address or a browser', () => {
-    const answered = applyQuoteResponse(order({ proofs: [proof('p1')] }), { action: 'approve', name: 'Jordan Lee' }, CONTEXT)
+    const answered = applyQuoteResponse(order({ proofs: [proof('p1')] }), { action: 'approve', name: 'Jordan Lee', confirmed: [] }, CONTEXT)
     if (!('order' in answered)) throw new Error('refused')
     const view = buildQuotePageView({ order: answered.order, orderId: 'q-1', storeName: 'Acme', currency: 'USD' })
     expect(view.revision).toBe(1)
     expect(view.proofs).toEqual([{ id: 'p1', name: 'p1.png', contentType: 'image/png', size: 100, inline: true }])
-    expect(view.response).toEqual({ action: 'approve', atMs: 6_000, name: 'Jordan Lee', comment: null, files: 0 })
+    expect(view.response).toEqual({ action: 'approve', atMs: 6_000, name: 'Jordan Lee', comment: null, files: 0, confirmed: [] })
     expect(view.respondable).toBe(true)
     const text = JSON.stringify(view)
     expect(text).not.toContain('private/uploads')

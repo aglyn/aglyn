@@ -29,6 +29,7 @@ import {
   resolveTrackedRestockLines,
   saleReleaseCaps,
 } from './restock-flag'
+import { dropStorefrontPages, soldOutMoved } from './sold-out-drop'
 
 /**
  * Cancelling an order RELEASES its stock (AGL-1808) — the opposite of what the
@@ -141,6 +142,10 @@ export const cancelOrderHandler: PluginApiHandler = async (req, res) => {
     }
     const orderRef = hostRef.collection('orders').doc(orderId)
 
+    // Whether the restock below flipped a sold-out verdict the storefront
+    // shows (AGL-4121). Set inside the transaction; a retried attempt can only
+    // make it a spurious drop, never a missed one.
+    let soldOutFlipped = false
     const outcome = await firestore.runTransaction(async (transaction) => {
       const snapshot = await transaction.get(orderRef)
       if (!snapshot.exists) {
@@ -300,6 +305,7 @@ export const cancelOrderHandler: PluginApiHandler = async (req, res) => {
           ...CommerceModel.productStockFields({ ...product, variants }),
           updatedAtMs: atMs,
         })
+        soldOutFlipped ||= soldOutMoved(product, { ...product, variants })
         for (const line of productLines) {
           transaction.create(hostRef.collection('inventoryAdjustments').doc(), {
             productId,
@@ -392,6 +398,10 @@ export const cancelOrderHandler: PluginApiHandler = async (req, res) => {
           { hostId, orderId, sessionId: expireSessionId },
         )
       }
+    }
+    // Back in stock on the storefront, if the release flipped it (AGL-4121).
+    if (soldOutFlipped && outcome.status === 200) {
+      await dropStorefrontPages({ hostId, reason: 'a cancelled order restocked a product' })
     }
     // The buyer is told (AGL-3610) — only by the request that cancelled it.
     if (outcome.status === 200 && !(outcome.body as { alreadyCancelled?: boolean }).alreadyCancelled) {

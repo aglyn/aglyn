@@ -573,7 +573,7 @@ export const PLUGIN_DOCS_SECTION_EXCERPTS: {
   },
   quotes: {
     '#make-a-quote': 'On the Orders tab, choose New quote in the Quotes card. Sending a design before it has a price?',
-    '#quote-defaults': 'The Quotes card on the Checkout settings page sets what every new quote starts with: whether customers approve the proof before they can pay.',
+    '#quote-defaults': 'The Quotes card on the Checkout settings page sets what every new quote starts with: Customers approve the proof before they can pay (see Proof approval and paying);',
   },
   redirects: {
     '#manage-redirects': 'Create, edit, and delete redirect rules from the redirect manager page.',

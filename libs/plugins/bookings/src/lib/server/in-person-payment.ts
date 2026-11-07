@@ -17,7 +17,11 @@
 
 import { createHash } from 'crypto'
 import { firebaseAdmin, getOrgForHost } from '@aglyn/tenant-data-admin'
-import { merchantAccountIsReady } from '@aglyn/tenant-data-admin/server/payment-provider'
+import {
+  merchantAccountIsReady,
+  type SaleChargeModel,
+} from '@aglyn/tenant-data-admin/server/payment-provider'
+import { sellerPaymentAccount } from '@aglyn/tenant-data-admin/server/seller-payment-account'
 import {
   checkEntitlement,
   resolveTransactionFeeCents,
@@ -41,12 +45,16 @@ import { isRefusedIdToken } from '@aglyn/tenant-data-admin/server/id-token-refus
  * owns the money; the app only presents the card:
  *
  * - `start` prices the charge (the amount staff typed, plus the merchant's
- *   own service tax), and creates a card-present PaymentIntent: a
- *   DESTINATION charge to the merchant, settled on Aglyn's platform account
- *   with no `on_behalf_of` (ToS §10.7, AGL-3607), with the take and
- *   Stripe's card cost as `application_fee_amount` — exactly the fee a paid
- *   booking already carries online (`resolveTransactionFeeCents`, `service`).
- *   Returns the intent's client secret for the app's Terminal SDK.
+ *   own service tax), and creates a card-present PaymentIntent. For a
+ *   destination store it is a DESTINATION charge to the merchant, settled on
+ *   Aglyn's platform account with no `on_behalf_of` (ToS §10.7, AGL-3607),
+ *   with the take and Stripe's card cost as `application_fee_amount`. For a
+ *   store on its own Stripe account it is a DIRECT charge made ON that
+ *   account (ToS v24 §10.2(a)), with the take alone as the application fee,
+ *   where the app's Terminal SDK (whose connection token was minted on that
+ *   account) collects it. Either way exactly the fee a paid booking carries
+ *   online (`resolveTransactionFeeCents`, `service`). Returns the intent's
+ *   client secret for the app's Terminal SDK.
  * - `settle` re-reads the intent from Stripe (never trusting the app's word),
  *   captures an authorized one, and records the booking paid with the same
  *   fields an online payment writes, so the console's refund and the dispute
@@ -97,7 +105,12 @@ export function inPersonCardsAvailable(): boolean {
 async function stripe(
   method: 'GET' | 'POST',
   path: string,
-  options: { params?: Record<string, string | number | boolean | undefined>; idempotencyKey?: string } = {},
+  options: {
+    params?: Record<string, string | number | boolean | undefined>
+    idempotencyKey?: string
+    /** A direct-charge store's own account: the request is made ON it. */
+    stripeAccount?: string | null
+  } = {},
 ): Promise<{ ok: boolean; status: number; body: any }> {
   const form = new URLSearchParams()
   for (const [key, value] of Object.entries(options.params ?? {})) {
@@ -110,6 +123,7 @@ async function stripe(
       Authorization: `Bearer ${process.env.STRIPE_SECRET_KEY}`,
       'Content-Type': 'application/x-www-form-urlencoded',
       ...(options.idempotencyKey ? { 'Idempotency-Key': options.idempotencyKey } : {}),
+      ...(options.stripeAccount ? { 'Stripe-Account': options.stripeAccount } : {}),
     },
     ...(method === 'POST' ? { body: form.toString() } : {}),
   })
@@ -190,21 +204,33 @@ function bookingRef(hostId: string, bookingId: string) {
     .doc(bookingId)
 }
 
-async function merchantAccount(org: Record<string, any> | null, hostId: string): Promise<string | null> {
-  const ownerUid = String(org?.['ownerUid'] ?? '')
-  if (!ownerUid) return null
-  const profile = await firebaseAdmin.app().firestore().collection('profiles').doc(ownerUid).get()
-  const accountId = String(profile.get('stripeAccountId') ?? '')
+/**
+ * The store's selling account and how it sells, when it can take cards now.
+ * Read through `sellerPaymentAccount`, the one place that knows where the
+ * account is recorded.
+ */
+async function merchantAccount(
+  org: Record<string, any> | null,
+  hostId: string,
+): Promise<{ accountId: string; chargeModel: SaleChargeModel } | null> {
+  const seller = await sellerPaymentAccount(hostId, org)
+  if (!seller) return null
   return merchantAccountIsReady(
     {
-      accountId,
-      chargesEnabled: profile.get('stripeChargesEnabled'),
-      accountLivemode: profile.get('stripeAccountLivemode'),
+      accountId: seller.accountId,
+      chargesEnabled: seller.chargesEnabled,
+      accountLivemode: seller.accountLivemode,
     },
     { subject: `booking in-person host ${hostId}` },
   )
-    ? accountId
+    ? { accountId: seller.accountId, chargeModel: seller.chargeModel }
     : null
+}
+
+/** The account a recorded in-person payment's intent lives on; null for the platform. */
+function paymentAccount(payment: Partial<BookingInPersonPayment> | undefined): string | null {
+  const id = String(payment?.stripeAccountId ?? '').trim()
+  return payment?.chargeModel === 'direct' && id ? id : null
 }
 
 async function start(
@@ -236,8 +262,10 @@ async function start(
     return res.status(409).json({ error: 'The customer is paying for this booking online right now.' })
   }
 
-  const destination = await merchantAccount(staff.org, staff.hostId)
-  if (!destination) return res.status(409).json({ error: 'Finish setting up payments before taking cards.' })
+  const merchant = await merchantAccount(staff.org, staff.hostId)
+  if (!merchant) return res.status(409).json({ error: 'Finish setting up payments before taking cards.' })
+  const direct = merchant.chargeModel === 'direct'
+  const account = direct ? merchant.accountId : null
 
   // The merchant's own service tax, off unless they set one (AGL-2028): the
   // same rate a paid booking is charged online.
@@ -248,8 +276,11 @@ async function start(
   )
   const amountCents = serviceCents + tax.taxCents
   // A reader's card, priced at the in-person rate (AGL-4198).
+  // On the store's own account Stripe bills the store its card fee, so the
+  // fee is the take alone (`direct`), as on a direct online booking.
   const feeCents = resolveTransactionFeeCents(staff.org as never, 'service', serviceCents, amountCents, {
     inPerson: true,
+    ...(direct ? { direct: true } : {}),
   })
 
   // A pending intent for this booking that is not this attempt's: release it
@@ -257,12 +288,14 @@ async function start(
   if (existing?.status === 'pending' && existing.paymentIntentId) {
     const sameAttempt = existing.attempt === attempt
     if (sameAttempt) {
-      const replay = await stripe('GET', `payment_intents/${existing.paymentIntentId}`)
+      const replay = await stripe('GET', `payment_intents/${existing.paymentIntentId}`, {
+        stripeAccount: paymentAccount(existing),
+      })
       if (replay.ok && replay.body?.client_secret) {
         return res.status(200).json(startAnswer(existing, String(replay.body.client_secret)))
       }
     } else {
-      const released = await releaseIntent(existing.paymentIntentId)
+      const released = await releaseIntent(existing.paymentIntentId, paymentAccount(existing))
       if (!released) {
         return res.status(409).json({
           error: 'A card was already authorized for this booking. Settle it before starting another payment.',
@@ -272,14 +305,17 @@ async function start(
   }
 
   const intent = await stripe('POST', 'payment_intents', {
-    idempotencyKey: `booking-in-person:${attempt}`,
+    idempotencyKey: direct ? `booking-in-person:${account}:${attempt}` : `booking-in-person:${attempt}`,
+    stripeAccount: account,
     params: {
       amount: amountCents,
       currency: 'usd',
       'payment_method_types[]': 'card_present',
       capture_method: 'manual',
-      'transfer_data[destination]': destination,
+      // A direct charge is the store's money already: nothing is transferred.
+      ...(direct ? {} : { 'transfer_data[destination]': merchant.accountId }),
       ...(feeCents > 0 ? { application_fee_amount: feeCents } : {}),
+      ...(direct ? { 'metadata[chargeModel]': 'direct' } : {}),
       description: `Booking: ${String(booking['serviceName'] ?? 'appointment').slice(0, 80)}`,
       'metadata[type]': 'booking-in-person',
       'metadata[hostId]': staff.hostId,
@@ -302,6 +338,7 @@ async function start(
     startedAtMs: Date.now(),
     startedBy: staff.uid,
     attempt,
+    ...(direct ? { chargeModel: 'direct' as const, stripeAccountId: merchant.accountId } : {}),
   }
   // Recorded in a transaction that re-checks the booking: a payment that
   // landed meanwhile (online, or on another device) wins, and this intent is
@@ -322,7 +359,7 @@ async function start(
     return true
   })
   if (!recorded) {
-    await releaseIntent(payment.paymentIntentId)
+    await releaseIntent(payment.paymentIntentId, account)
     return res.status(409).json({ error: 'This booking changed while the payment started. Open it again.' })
   }
   return res.status(200).json(startAnswer(payment, String(intent.body.client_secret)))
@@ -339,13 +376,14 @@ function startAnswer(payment: BookingInPersonPayment, clientSecret: string) {
 }
 
 /** Cancels an intent that holds no money yet; false when it does. */
-async function releaseIntent(paymentIntentId: string): Promise<boolean> {
-  const current = await stripe('GET', `payment_intents/${paymentIntentId}`)
+async function releaseIntent(paymentIntentId: string, account: string | null): Promise<boolean> {
+  const current = await stripe('GET', `payment_intents/${paymentIntentId}`, { stripeAccount: account })
   const status = String(current.body?.status ?? '')
   if (status === 'canceled') return true
   if (status === 'succeeded' || status === 'requires_capture' || status === 'processing') return false
   const canceled = await stripe('POST', `payment_intents/${paymentIntentId}/cancel`, {
     idempotencyKey: `booking-in-person-cancel:${paymentIntentId}`,
+    stripeAccount: account,
   })
   return canceled.ok || String(canceled.body?.status ?? '') === 'canceled'
 }
@@ -359,7 +397,9 @@ async function settle(staff: Staff, bookingId: string, res: Res) {
   if (!payment || payment.status !== 'pending' || !PAYMENT_INTENT_ID.test(String(payment.paymentIntentId))) {
     return res.status(409).json({ error: 'No card payment is in progress for this booking.' })
   }
-  let intent = (await stripe('GET', `payment_intents/${payment.paymentIntentId}`)).body
+  // The intent lives where it was made: the store's own account for a direct one.
+  const account = paymentAccount(payment)
+  let intent = (await stripe('GET', `payment_intents/${payment.paymentIntentId}`, { stripeAccount: account })).body
   // The intent must be the one this route made for THIS booking on THIS site.
   if (
     intent?.metadata?.type !== 'booking-in-person' ||
@@ -372,6 +412,7 @@ async function settle(staff: Staff, bookingId: string, res: Res) {
     const captured = await stripe('POST', `payment_intents/${payment.paymentIntentId}/capture`, {
       idempotencyKey: `booking-in-person-capture:${payment.paymentIntentId}`,
       params: payment.feeCents > 0 ? { application_fee_amount: payment.feeCents } : {},
+      stripeAccount: account,
     })
     if (!captured.ok) {
       return res.status(502).json({ error: stripeMessage(captured.body, 'The card could not be charged. Try again.') })
@@ -402,6 +443,9 @@ async function settle(staff: Staff, bookingId: string, res: Res) {
         taxMode: pluginTaxProfile().taxModeOf(intent, payment.taxCents),
         ...(payment.taxCents > 0 ? { taxCents: payment.taxCents } : {}),
         paidInPerson: true,
+        // Where the charge lives, as a direct online booking records it, so
+        // the console's refund and the dispute branch act on the store's account.
+        ...(account ? { chargeModel: 'direct', stripeAccountId: account } : {}),
         inPersonPayment: { ...payment, status: 'paid', paidAtMs },
       },
       { merge: true },
@@ -416,7 +460,7 @@ async function cancel(staff: Staff, bookingId: string, res: Res) {
   if (!snapshot.exists) return res.status(404).json({ error: 'Unknown booking' })
   const payment = snapshot.get('inPersonPayment') as BookingInPersonPayment | undefined
   if (!payment || payment.status !== 'pending') return res.status(200).json({ status: 'none' })
-  if (!(await releaseIntent(payment.paymentIntentId))) {
+  if (!(await releaseIntent(payment.paymentIntentId, paymentAccount(payment)))) {
     return res.status(409).json({ error: 'The card was already authorized. Settle the payment instead.' })
   }
   await ref.set({ inPersonPayment: { ...payment, status: 'canceled' } }, { merge: true })

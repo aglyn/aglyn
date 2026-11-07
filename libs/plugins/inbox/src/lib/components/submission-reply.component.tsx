@@ -35,6 +35,7 @@
 
 import { pluginDocsHelp } from '@aglyn/aglyn/app-utils/docs-help'
 import { CardDisplay } from '@aglyn/shared-ui-jsx'
+import { ReplyComposer, ReplyThread } from '@aglyn/shared-ui-jsx/components/reply-composer.component'
 import { useSnackbar } from '@aglyn/shared-ui-snackstack'
 import {
   useFirestore,
@@ -43,7 +44,7 @@ import {
   useUser,
 } from '@aglyn/tenant-feature-instance'
 import { authorizedFetch } from '@aglyn/shared-util-http/authorized-token'
-import { Alert, Box, Button, Stack, TextField, Typography } from '@mui/material'
+import { Alert, Stack } from '@mui/material'
 import { collection, doc, limit, orderBy, query } from 'firebase/firestore'
 import { pluginRecordListDoc } from '@aglyn/aglyn/plugin-manager/plugin-record-lists'
 import { useCallback, useEffect, useMemo, useState } from 'react'
@@ -200,72 +201,43 @@ export function SubmissionReply(props: SubmissionReplyProps) {
       sx={{ mt: 2 }}
     >
       <Stack spacing={2}>
-        <Typography variant="body2" color="text.secondary">
-          {`To ${(recipient as { email: string }).email}`}
-        </Typography>
-        <TextField
-          label="Subject"
-          value={subject}
-          onChange={(event) => setSubject(event.target.value.slice(0, REPLY_SUBJECT_MAX))}
-          fullWidth
-          size="small"
-        />
-        <TextField
-          label="Message"
-          value={message}
-          onChange={(event) => setMessage(event.target.value.slice(0, REPLY_BODY_MAX))}
-          fullWidth
-          multiline
-          minRows={4}
-          placeholder="Write your reply. The original message is quoted underneath it."
-        />
         {/*
-          The boundary, stated where the decision is made rather than in a
-          docs page nobody opens mid-task. Both halves matter: the address the
-          message LEAVES from is the platform's, because per-org sending
-          domains do not exist yet, and the address an answer COMES BACK to is
-          the merchant's own, which is the only reason the first half is
-          tolerable.
+          The composer is shared with a quote's replies (AGL-4207). The note is
+          the boundary, stated where the decision is made rather than in a docs
+          page nobody opens mid-task: the address the message LEAVES from is the
+          site's sending identity, and the address an answer COMES BACK to is the
+          merchant's own, because nothing here receives mail.
          */}
-        <Alert severity="info">
-          {`Sent from your site's name at this platform's address, with replies ` +
+        <ReplyComposer
+          to={(recipient as { email: string }).email}
+          subject={{ value: subject, onChange: setSubject, max: REPLY_SUBJECT_MAX }}
+          message={message}
+          onMessageChange={setMessage}
+          messageMax={REPLY_BODY_MAX}
+          messagePlaceholder="Write your reply. The original message is quoted underneath it."
+          note={
+            `Sent from your site's name at this platform's address, with replies ` +
             `directed to ${user?.email ?? 'your account email'}. Answers arrive ` +
-            'in your email, not in this Inbox.'}
-        </Alert>
-        <Box>
-          <Button
-            variant="contained"
-            disabled={busy || !subject.trim() || !message.trim()}
-            onClick={handleSend}
-          >
-            {busy ? 'Sending…' : 'Send reply'}
-          </Button>
-        </Box>
-        {sentReplies?.length ? (
-          <Stack spacing={1}>
-            <Typography variant="overline" color="text.secondary">
-              {'Replies sent'}
-            </Typography>
-            {sentReplies.length > SENT_REPLIES_LIMIT ? (
-              <Typography variant="caption" color="text.secondary">
-                {`Showing the ${SENT_REPLIES_LIMIT} most recent. This thread has more.`}
-              </Typography>
-            ) : null}
-            {sentReplies.slice(0, SENT_REPLIES_LIMIT).map((reply: any) => (
-              <Stack key={reply.$id} spacing={0.25}>
-                <Typography variant="caption" color="text.secondary">
-                  {`${new Date(reply.sentAtMs).toLocaleString()} · to ${reply.to}`}
-                </Typography>
-                <Typography
-                  variant="body2"
-                  sx={{ whiteSpace: 'pre-wrap', wordBreak: 'break-word' }}
-                >
-                  {reply.message}
-                </Typography>
-              </Stack>
-            ))}
-          </Stack>
-        ) : null}
+            'in your email, not in this Inbox.'
+          }
+          busy={busy}
+          onSend={() => void handleSend()}
+        />
+        <ReplyThread
+          title="Replies sent"
+          moreNote={
+            (sentReplies?.length ?? 0) > SENT_REPLIES_LIMIT
+              ? `Showing the ${SENT_REPLIES_LIMIT} most recent. This thread has more.`
+              : null
+          }
+          messages={(sentReplies ?? []).slice(0, SENT_REPLIES_LIMIT).map((reply: any) => ({
+            id: String(reply.$id),
+            atMs: Number(reply.sentAtMs),
+            direction: 'out' as const,
+            label: `to ${reply.to}`,
+            body: String(reply.message ?? ''),
+          }))}
+        />
       </Stack>
     </CardDisplay>
   )

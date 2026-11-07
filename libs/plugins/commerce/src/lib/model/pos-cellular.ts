@@ -227,6 +227,11 @@ export interface PosCellularReaderRecord {
   serialNumber: string | null
   /** The store's Terminal Configuration that carries `cellular[enabled]`. */
   stripeConfigurationId: string | null
+  /**
+   * The store's own Stripe account that Configuration is on, for a
+   * direct-charge store; absent when it is on the platform.
+   */
+  stripeConfigurationAccount?: string
   enabled: boolean
   periods: PosCellularPeriod[]
   /** The last time a period was closed, which the month's charge queries by. */

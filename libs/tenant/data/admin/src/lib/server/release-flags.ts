@@ -126,6 +126,43 @@ interface OrgReleaseFlagTargeting {
 }
 
 const orgCache = new Map<string, { at: number; targeting: OrgReleaseFlagTargeting }>()
+/** One read in flight per org: concurrent misses on one instance share it. */
+const orgPending = new Map<string, Promise<OrgReleaseFlagTargeting>>()
+
+/**
+ * The org fields the targeting answer is made of, and the only ones read
+ * (AGL-4121). `releaseFlags` is the overrides; the rest is everything
+ * `resolveEffectivePlan` consults: the stored `plan`, the subscription status
+ * (`billingStatus` mirror first, then `subscription.status`), and a staff comp
+ * (`entitlements.planComp`).
+ *
+ * This read runs once a minute per org on every warm instance that renders a
+ * page or dispatches an API call, and the org document is one of the largest
+ * the tenant reads, so fetching all of it to use five fields was paying
+ * Firestore egress for nothing. A field that `resolveEffectivePlan` starts
+ * reading must be added here: `release-flags-org-field-mask.spec.ts` resolves
+ * the plan from the masked projection and from the whole document and fails
+ * when they disagree.
+ */
+export const ORG_RELEASE_FLAG_FIELDS = [
+  'releaseFlags',
+  'plan',
+  'billingStatus',
+  'subscription.status',
+  'entitlements.planComp',
+] as const
+
+/** The targeting answer from an org document already in hand, or `null` for none. */
+function targetingFromOrgData(
+  data: Record<string, unknown> | null | undefined,
+): OrgReleaseFlagTargeting {
+  return {
+    overrides: parseOrgReleaseFlagOverrides(data?.['releaseFlags']),
+    // Only when a document actually came back. `resolveEffectivePlan` would
+    // read a missing doc as Free.
+    plan: data ? resolveEffectivePlan(data as any) : null,
+  }
+}
 
 /**
  * Both halves of the per-org answer from ONE cached document read.
@@ -141,24 +178,29 @@ export async function getOrgReleaseFlagTargeting(
   if (!orgId) return { overrides: {}, plan: null }
   const hit = orgCache.get(orgId)
   if (hit && Date.now() - hit.at < TTL_MS) return hit.targeting
-  const targeting: OrgReleaseFlagTargeting = { overrides: {}, plan: null }
-  try {
-    const snapshot = await firebaseAdmin
-      .app()
-      .firestore()
-      .collection('orgs')
-      .doc(orgId)
-      .get()
-    const data = snapshot.data()
-    targeting.overrides = parseOrgReleaseFlagOverrides(data?.['releaseFlags'])
-    // Only when a document actually came back. `snapshot.data()` is undefined
-    // for a missing doc, and `resolveEffectivePlan` would read that as Free.
-    if (data) targeting.plan = resolveEffectivePlan(data as any)
-  } catch {
-    // No Firestore here, or the doc is unreadable — inherit, never fail.
-  }
-  orgCache.set(orgId, { at: Date.now(), targeting })
-  return targeting
+  const inFlight = orgPending.get(orgId)
+  if (inFlight) return inFlight
+  const pending = (async () => {
+    let targeting: OrgReleaseFlagTargeting = { overrides: {}, plan: null }
+    try {
+      const firestore = firebaseAdmin.app().firestore()
+      const [snapshot] = await firestore.getAll(
+        firestore.collection('orgs').doc(orgId),
+        { fieldMask: [...ORG_RELEASE_FLAG_FIELDS] },
+      )
+      targeting = targetingFromOrgData(
+        snapshot?.data() as Record<string, unknown> | undefined,
+      )
+    } catch {
+      // No Firestore here, or the doc is unreadable — inherit, never fail.
+    }
+    orgCache.set(orgId, { at: Date.now(), targeting })
+    return targeting
+  })().finally(() => {
+    orgPending.delete(orgId)
+  })
+  orgPending.set(orgId, pending)
+  return pending
 }
 
 export async function getOrgReleaseFlagOverrides(
@@ -194,10 +236,38 @@ export async function isServerReleaseFlagOnForOrg(
   )
 }
 
+/**
+ * {@link isServerReleaseFlagOnForOrg} for a caller that already holds the org
+ * document (AGL-4121): the same verdict, with the targeting taken from `org`
+ * instead of a second read of the same document.
+ *
+ * For request-time callers whose copy is no older than this module's own
+ * minute — the lockdown verdict holds the org through `getOrgBilling`'s
+ * 60-second request entry — so a grant still lands within the minute it
+ * always took. `org` null means the caller looked and found none, and answers
+ * as an unreadable org does: no overrides, unknown tier.
+ */
+export async function isServerReleaseFlagOnForLoadedOrg(
+  flagKey: ReleaseFlagKey,
+  orgId: string | null | undefined,
+  org: Record<string, unknown> | null,
+): Promise<boolean> {
+  const values = await getServerReleaseFlagValues()
+  const targeting = orgId ? targetingFromOrgData(org) : { overrides: {}, plan: null }
+  return isReleaseFlagOnForOrg(
+    flagKey,
+    values[flagKey],
+    orgId ?? null,
+    targeting.overrides,
+    targeting.plan,
+  )
+}
+
 /** Test seam: drops both caches so a spec can change a verdict. */
 export function __resetReleaseFlagCaches(): void {
   cache = undefined
   orgCache.clear()
+  orgPending.clear()
 }
 
 /**

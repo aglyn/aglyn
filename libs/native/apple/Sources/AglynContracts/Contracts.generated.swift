@@ -296,6 +296,7 @@ public enum BookingFieldAsk: String, Codable, CaseIterable, Hashable, Sendable {
 public struct BookingInPersonPayment: Codable, Hashable, Sendable {
   public var amountCents: Int
   public var attempt: String?
+  public var chargeModel: String?
   public var feeCents: Int
   public var paidAtMs: Int?
   public var paymentIntentId: String
@@ -303,11 +304,13 @@ public struct BookingInPersonPayment: Codable, Hashable, Sendable {
   public var startedAtMs: Int
   public var startedBy: String
   public var status: BookingInPersonPaymentStatus
+  public var stripeAccountId: String?
   public var taxCents: Int
 
-  public init(amountCents: Int, attempt: String? = nil, feeCents: Int, paidAtMs: Int? = nil, paymentIntentId: String, serviceCents: Int, startedAtMs: Int, startedBy: String, status: BookingInPersonPaymentStatus, taxCents: Int) {
+  public init(amountCents: Int, attempt: String? = nil, chargeModel: String? = nil, feeCents: Int, paidAtMs: Int? = nil, paymentIntentId: String, serviceCents: Int, startedAtMs: Int, startedBy: String, status: BookingInPersonPaymentStatus, stripeAccountId: String? = nil, taxCents: Int) {
     self.amountCents = amountCents
     self.attempt = attempt
+    self.chargeModel = chargeModel
     self.feeCents = feeCents
     self.paidAtMs = paidAtMs
     self.paymentIntentId = paymentIntentId
@@ -315,6 +318,7 @@ public struct BookingInPersonPayment: Codable, Hashable, Sendable {
     self.startedAtMs = startedAtMs
     self.startedBy = startedBy
     self.status = status
+    self.stripeAccountId = stripeAccountId
     self.taxCents = taxCents
   }
 }
@@ -1544,6 +1548,7 @@ public struct HostProduct: Codable, Hashable, Sendable {
   public var inventory: Double?
   public var lowStockThreshold: Double?
   public var mediaUrls: [String]?
+  public var mockupRequests: Bool?
   public var modifierGroups: [ProductModifierGroup]?
   public var name: String?
   public var offerOnKiosk: Bool?
@@ -1568,7 +1573,7 @@ public struct HostProduct: Codable, Hashable, Sendable {
   public var variants: [ProductVariant]?
   public var videoAccessProductIds: [String]?
 
-  public init(categoryIds: [String]? = nil, channel: ProductChannelFacts? = nil, checkIn: ProductCheckIn? = nil, collectionIds: [String]? = nil, createdAtMs: Double? = nil, description: String? = nil, digitalFiles: [HostProductDigitalFilesItem]? = nil, downloadLimit: Double? = nil, gatedVideos: [HostProductGatedVideosItem]? = nil, giftCard: Bool? = nil, hardwareSku: String? = nil, imageUrl: String? = nil, inStoreReviews: HostProductInStoreReviews? = nil, inventory: Double? = nil, lowStockThreshold: Double? = nil, mediaUrls: [String]? = nil, modifierGroups: [ProductModifierGroup]? = nil, name: String? = nil, offerOnKiosk: Bool? = nil, options: [ProductOption]? = nil, oversellPolicy: HostProductOversellPolicy? = nil, posQuickKey: Bool? = nil, priceUsd: Double? = nil, relatedProductIds: [String]? = nil, sample: Bool? = nil, sellOnline: Bool? = nil, seo: HostProductSeo? = nil, shipping: ProductShippingFacts? = nil, slug: String? = nil, status: ProductStatus? = nil, subscription: HostProductSubscription? = nil, subscriptionOptional: Bool? = nil, supplierId: String? = nil, tags: [String]? = nil, taxExempt: Bool? = nil, type: ProductType? = nil, updatedAtMs: Double? = nil, variants: [ProductVariant]? = nil, videoAccessProductIds: [String]? = nil) {
+  public init(categoryIds: [String]? = nil, channel: ProductChannelFacts? = nil, checkIn: ProductCheckIn? = nil, collectionIds: [String]? = nil, createdAtMs: Double? = nil, description: String? = nil, digitalFiles: [HostProductDigitalFilesItem]? = nil, downloadLimit: Double? = nil, gatedVideos: [HostProductGatedVideosItem]? = nil, giftCard: Bool? = nil, hardwareSku: String? = nil, imageUrl: String? = nil, inStoreReviews: HostProductInStoreReviews? = nil, inventory: Double? = nil, lowStockThreshold: Double? = nil, mediaUrls: [String]? = nil, mockupRequests: Bool? = nil, modifierGroups: [ProductModifierGroup]? = nil, name: String? = nil, offerOnKiosk: Bool? = nil, options: [ProductOption]? = nil, oversellPolicy: HostProductOversellPolicy? = nil, posQuickKey: Bool? = nil, priceUsd: Double? = nil, relatedProductIds: [String]? = nil, sample: Bool? = nil, sellOnline: Bool? = nil, seo: HostProductSeo? = nil, shipping: ProductShippingFacts? = nil, slug: String? = nil, status: ProductStatus? = nil, subscription: HostProductSubscription? = nil, subscriptionOptional: Bool? = nil, supplierId: String? = nil, tags: [String]? = nil, taxExempt: Bool? = nil, type: ProductType? = nil, updatedAtMs: Double? = nil, variants: [ProductVariant]? = nil, videoAccessProductIds: [String]? = nil) {
     self.categoryIds = categoryIds
     self.channel = channel
     self.checkIn = checkIn
@@ -1585,6 +1590,7 @@ public struct HostProduct: Codable, Hashable, Sendable {
     self.inventory = inventory
     self.lowStockThreshold = lowStockThreshold
     self.mediaUrls = mediaUrls
+    self.mockupRequests = mockupRequests
     self.modifierGroups = modifierGroups
     self.name = name
     self.offerOnKiosk = offerOnKiosk
@@ -3127,6 +3133,7 @@ public struct OrderPayment: Codable, Hashable, Sendable {
   public var cashierId: String?
   public var cashTenderedCents: Double?
   public var changeCents: Double?
+  public var chargeModel: String?
   public var checkoutSessionId: String?
   public var checkoutUrl: String?
   public var creditLabel: String?
@@ -3145,16 +3152,18 @@ public struct OrderPayment: Codable, Hashable, Sendable {
   public var reservationId: String?
   public var settledAtMs: Double?
   public var status: OrderPaymentStatus
+  public var stripeAccountId: String?
   public var takeFeeCents: Double?
   public var tipCents: Double?
 
-  public init(amountCents: Double, atMs: Double, cardBrand: String? = nil, cashierId: String? = nil, cashTenderedCents: Double? = nil, changeCents: Double? = nil, checkoutSessionId: String? = nil, checkoutUrl: String? = nil, creditLabel: String? = nil, creditProviderId: String? = nil, creditReference: String? = nil, failureMessage: String? = nil, feeCents: Double? = nil, folioAtMs: Double? = nil, giftCardId: String? = nil, id: String, last4: String? = nil, livemode: Bool? = nil, method: OrderPaymentMethod, paymentIntentId: String? = nil, readerId: String? = nil, reservationId: String? = nil, settledAtMs: Double? = nil, status: OrderPaymentStatus, takeFeeCents: Double? = nil, tipCents: Double? = nil) {
+  public init(amountCents: Double, atMs: Double, cardBrand: String? = nil, cashierId: String? = nil, cashTenderedCents: Double? = nil, changeCents: Double? = nil, chargeModel: String? = nil, checkoutSessionId: String? = nil, checkoutUrl: String? = nil, creditLabel: String? = nil, creditProviderId: String? = nil, creditReference: String? = nil, failureMessage: String? = nil, feeCents: Double? = nil, folioAtMs: Double? = nil, giftCardId: String? = nil, id: String, last4: String? = nil, livemode: Bool? = nil, method: OrderPaymentMethod, paymentIntentId: String? = nil, readerId: String? = nil, reservationId: String? = nil, settledAtMs: Double? = nil, status: OrderPaymentStatus, stripeAccountId: String? = nil, takeFeeCents: Double? = nil, tipCents: Double? = nil) {
     self.amountCents = amountCents
     self.atMs = atMs
     self.cardBrand = cardBrand
     self.cashierId = cashierId
     self.cashTenderedCents = cashTenderedCents
     self.changeCents = changeCents
+    self.chargeModel = chargeModel
     self.checkoutSessionId = checkoutSessionId
     self.checkoutUrl = checkoutUrl
     self.creditLabel = creditLabel
@@ -3173,6 +3182,7 @@ public struct OrderPayment: Codable, Hashable, Sendable {
     self.reservationId = reservationId
     self.settledAtMs = settledAtMs
     self.status = status
+    self.stripeAccountId = stripeAccountId
     self.takeFeeCents = takeFeeCents
     self.tipCents = tipCents
   }
@@ -3265,6 +3275,7 @@ public struct OrderQuote: Codable, Hashable, Sendable {
   public var request: QuoteRequestRef?
   public var requestFiles: [QuoteResponseFile]?
   public var requireProofApproval: Bool?
+  public var requireProofSignIn: Bool?
   public var responses: [QuoteCustomerResponse]?
   public var revision: Double
   public var sends: [QuoteSendRecord]?
@@ -3277,7 +3288,7 @@ public struct OrderQuote: Codable, Hashable, Sendable {
   public var updatedAtMs: Double
   public var updatedBy: String
 
-  public init(approval: QuoteApproval? = nil, approvedRevision: Double? = nil, billTo: OrderAddress? = nil, createdAtMs: Double, createdBy: String, customer: QuoteCustomer, discount: QuoteDiscount? = nil, emailThread: QuoteEmailThread? = nil, linkVersion: Double? = nil, notes: String? = nil, paidAtMs: Double? = nil, proofs: [QuoteProof]? = nil, request: QuoteRequestRef? = nil, requestFiles: [QuoteResponseFile]? = nil, requireProofApproval: Bool? = nil, responses: [QuoteCustomerResponse]? = nil, revision: Double, sends: [QuoteSendRecord]? = nil, shipping: QuoteShipping? = nil, shipTo: OrderAddress? = nil, stage: QuoteStage, tax: QuoteTaxBasis, terms: String? = nil, unmatchedPayments: [QuoteUnmatchedPayment]? = nil, updatedAtMs: Double, updatedBy: String) {
+  public init(approval: QuoteApproval? = nil, approvedRevision: Double? = nil, billTo: OrderAddress? = nil, createdAtMs: Double, createdBy: String, customer: QuoteCustomer, discount: QuoteDiscount? = nil, emailThread: QuoteEmailThread? = nil, linkVersion: Double? = nil, notes: String? = nil, paidAtMs: Double? = nil, proofs: [QuoteProof]? = nil, request: QuoteRequestRef? = nil, requestFiles: [QuoteResponseFile]? = nil, requireProofApproval: Bool? = nil, requireProofSignIn: Bool? = nil, responses: [QuoteCustomerResponse]? = nil, revision: Double, sends: [QuoteSendRecord]? = nil, shipping: QuoteShipping? = nil, shipTo: OrderAddress? = nil, stage: QuoteStage, tax: QuoteTaxBasis, terms: String? = nil, unmatchedPayments: [QuoteUnmatchedPayment]? = nil, updatedAtMs: Double, updatedBy: String) {
     self.approval = approval
     self.approvedRevision = approvedRevision
     self.billTo = billTo
@@ -3293,6 +3304,7 @@ public struct OrderQuote: Codable, Hashable, Sendable {
     self.request = request
     self.requestFiles = requestFiles
     self.requireProofApproval = requireProofApproval
+    self.requireProofSignIn = requireProofSignIn
     self.responses = responses
     self.revision = revision
     self.sends = sends
@@ -4881,13 +4893,19 @@ public struct ProductModifierGroup: Codable, Hashable, Sendable {
 
 public struct ProductModifierOption: Codable, Hashable, Sendable {
   public var id: String
+  public var imageUrl: String?
+  public var includes: [String]?
   public var name: String
+  public var note: String?
   public var priceCents: Double
   public var priceCentsByVariant: [String: Double]?
 
-  public init(id: String, name: String, priceCents: Double, priceCentsByVariant: [String: Double]? = nil) {
+  public init(id: String, imageUrl: String? = nil, includes: [String]? = nil, name: String, note: String? = nil, priceCents: Double, priceCentsByVariant: [String: Double]? = nil) {
     self.id = id
+    self.imageUrl = imageUrl
+    self.includes = includes
     self.name = name
+    self.note = note
     self.priceCents = priceCents
     self.priceCentsByVariant = priceCentsByVariant
   }
@@ -4953,13 +4971,14 @@ public struct ProductVariant: Codable, Hashable, Sendable {
   public var imageUrl: String?
   public var inventory: Double?
   public var inventoryByLocation: [String: Double]?
+  public var note: String?
   public var offerOnKiosk: Bool?
   public var options: [String: String]?
   public var priceUsd: Double?
   public var sku: String?
   public var weightGrams: Double?
 
-  public init(barcode: String? = nil, checkIn: ProductCheckIn? = nil, compareAtPriceUsd: Double? = nil, id: String? = nil, imageUrl: String? = nil, inventory: Double? = nil, inventoryByLocation: [String: Double]? = nil, offerOnKiosk: Bool? = nil, options: [String: String]? = nil, priceUsd: Double? = nil, sku: String? = nil, weightGrams: Double? = nil) {
+  public init(barcode: String? = nil, checkIn: ProductCheckIn? = nil, compareAtPriceUsd: Double? = nil, id: String? = nil, imageUrl: String? = nil, inventory: Double? = nil, inventoryByLocation: [String: Double]? = nil, note: String? = nil, offerOnKiosk: Bool? = nil, options: [String: String]? = nil, priceUsd: Double? = nil, sku: String? = nil, weightGrams: Double? = nil) {
     self.barcode = barcode
     self.checkIn = checkIn
     self.compareAtPriceUsd = compareAtPriceUsd
@@ -4967,6 +4986,7 @@ public struct ProductVariant: Codable, Hashable, Sendable {
     self.imageUrl = imageUrl
     self.inventory = inventory
     self.inventoryByLocation = inventoryByLocation
+    self.note = note
     self.offerOnKiosk = offerOnKiosk
     self.options = options
     self.priceUsd = priceUsd
@@ -4977,13 +4997,15 @@ public struct ProductVariant: Codable, Hashable, Sendable {
 
 public struct QuoteApproval: Codable, Hashable, Sendable {
   public var atMs: Double
+  public var confirmed: [String]?
   public var ip: String?
   public var name: String
   public var revision: Double
   public var userAgent: String?
 
-  public init(atMs: Double, ip: String? = nil, name: String, revision: Double, userAgent: String? = nil) {
+  public init(atMs: Double, confirmed: [String]? = nil, ip: String? = nil, name: String, revision: Double, userAgent: String? = nil) {
     self.atMs = atMs
+    self.confirmed = confirmed
     self.ip = ip
     self.name = name
     self.revision = revision
@@ -5023,16 +5045,18 @@ public struct QuoteCustomerResponse: Codable, Hashable, Sendable {
   public var action: QuoteCustomerResponseAction
   public var atMs: Double
   public var comment: String?
+  public var confirmed: [String]?
   public var files: [QuoteResponseFile]?
   public var ip: String?
   public var name: String?
   public var revision: Double
   public var userAgent: String?
 
-  public init(action: QuoteCustomerResponseAction, atMs: Double, comment: String? = nil, files: [QuoteResponseFile]? = nil, ip: String? = nil, name: String? = nil, revision: Double, userAgent: String? = nil) {
+  public init(action: QuoteCustomerResponseAction, atMs: Double, comment: String? = nil, confirmed: [String]? = nil, files: [QuoteResponseFile]? = nil, ip: String? = nil, name: String? = nil, revision: Double, userAgent: String? = nil) {
     self.action = action
     self.atMs = atMs
     self.comment = comment
+    self.confirmed = confirmed
     self.files = files
     self.ip = ip
     self.name = name

@@ -4749,7 +4749,7 @@ export const AI_PALETTE: Record<string, AiPaletteEntry> = {
     category: 'Commerce',
     displayName: 'Product detail',
     summary: "One product's gallery, options and buy button.",
-    acceptsChildren: false,
+    acceptsChildren: true,
     propsSchema: {
       type: 'object',
       properties: {
@@ -4773,6 +4773,14 @@ export const AI_PALETTE: Record<string, AiPaletteEntry> = {
         showShipping: {
           type: 'boolean',
         },
+        choiceStyle: {
+          type: 'string',
+          enum: ['menus', 'cards'],
+        },
+        mockupLabel: {
+          type: 'string',
+          maxLength: 200,
+        },
       },
       required: [],
       additionalProperties: false,
@@ -4780,6 +4788,7 @@ export const AI_PALETTE: Record<string, AiPaletteEntry> = {
     propRoles: {
       slug: 'text',
       buyLabel: 'text',
+      mockupLabel: 'text',
     },
     propFields: {
       slug: 'text-field',
@@ -4788,10 +4797,13 @@ export const AI_PALETTE: Record<string, AiPaletteEntry> = {
       showCoupon: 'checkbox',
       showDetails: 'checkbox',
       showShipping: 'checkbox',
+      choiceStyle: 'select',
+      mockupLabel: 'text-field',
     },
     textLimits: {
       slug: 200,
       buyLabel: 200,
+      mockupLabel: 200,
     },
     presets: ['Product detail'],
   },
@@ -4876,6 +4888,10 @@ export const AI_PALETTE: Record<string, AiPaletteEntry> = {
           type: 'string',
           enum: ['outlined', 'photo'],
         },
+        photoFit: {
+          type: 'string',
+          enum: ['cover', 'contain'],
+        },
         quickAdd: {
           type: 'boolean',
         },
@@ -4915,6 +4931,7 @@ export const AI_PALETTE: Record<string, AiPaletteEntry> = {
       showPriceFilter: 'checkbox',
       pageSize: 'text-field',
       cardStyle: 'select',
+      photoFit: 'select',
       quickAdd: 'checkbox',
     },
     textLimits: {
@@ -5072,6 +5089,10 @@ export const AI_PALETTE: Record<string, AiPaletteEntry> = {
           type: 'string',
           enum: ['strip', 'grid'],
         },
+        photoFit: {
+          type: 'string',
+          enum: ['cover', 'contain'],
+        },
       },
       required: [],
       additionalProperties: false,
@@ -5084,6 +5105,7 @@ export const AI_PALETTE: Record<string, AiPaletteEntry> = {
       heading: 'text-field',
       maxItems: 'text-field',
       layout: 'select',
+      photoFit: 'select',
     },
     textLimits: {
       heading: 200,

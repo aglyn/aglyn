@@ -168,7 +168,10 @@ describe('each server route announces what it changed', () => {
     // layouts and the components at once, so "which pages changed" has no
     // answer shorter than all of them.
     const source = readRepo(IMPORT_ROUTE)
-    expect(source).toMatch(/await revalidateEntireHost\(firestore, hostId\)/)
+    // Durable since AGL-4121: staged in the publish outbox for the drain.
+    expect(source).toMatch(
+      /await revalidateEntireHost\(firestore, hostId, \{\s*durable: \{ reason: 'site package imported' \},/,
+    )
     // After the commit, not before it: announcing a write that has not landed
     // drops a cache the tenant would immediately refill from the old data.
     const commit = source.indexOf('await commit()')
@@ -182,7 +185,7 @@ describe('each server route announces what it changed', () => {
     // so there is no path list that could name the pages it changes.
     const source = readRepo(SCREENS_ROUTE)
     expect(source).toMatch(
-      /if \(response\.ok\) await revalidateEntireHost\(firestore, hostId\)/,
+      /if \(response\.ok\) \{\s*await revalidateEntireHost\(firestore, hostId, \{\s*durable: \{ reason: 'error screen changed' \},/,
     )
   })
 

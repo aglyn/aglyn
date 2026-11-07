@@ -30,6 +30,10 @@ let mockManageBilling = true
 let mockBilling: Record<string, unknown> = { stripeCustomerId: 'cus_1' }
 const mockAlerts: Array<{ type: string; options: Record<string, any> }> = []
 
+// The store's selling account, read through this spec's fake Firestore.
+jest.mock('@aglyn/tenant-data-admin/server/seller-payment-account', () =>
+  jest.requireActual('../testing/fake-seller-payment-account'),
+)
 jest.mock('@aglyn/tenant-runtime/org-permissions', () => ({
   resolveOrgPermissions: async () => ({
     permissions: { managePos: true, posDevices: mockDevices, 'billing.manage': mockManageBilling },

@@ -18,7 +18,9 @@
 import { firebaseAdmin, getOrgForHost, getRealmPluginInstalls } from '@aglyn/tenant-data-admin'
 import {
   PUBLISHED_SITE_DATA_TTL_SECONDS,
+  TENANT_CACHE_BACKSTOP_SECONDS,
   tenantDataTag,
+  tenantPluginGateTags,
   withRenderCache,
 } from '@aglyn/tenant-data-admin/render-cache'
 import {
@@ -47,8 +49,13 @@ const firestore = (): FirebaseFirestore.Firestore => firebaseAdmin.app().firesto
  */
 const SITE_CONNECTION_RECORDS_TTL_SECONDS = PUBLISHED_SITE_DATA_TTL_SECONDS
 
-/** As the site's signed installs are cached (`realm-plugins.ts`), which this reads. */
-const SITE_IMAGE_HOSTS_TTL_SECONDS = 300
+/**
+ * As the site's signed installs are cached (`realm-plugins.ts`), which this
+ * reads. It reads them INSIDE its own cached callback, where a nested cache
+ * adds no tags to the entry, so it carries the plugin tags itself: an
+ * uninstall or a takedown must expire the hosts it admitted too (AGL-4121).
+ */
+const SITE_IMAGE_HOSTS_TTL_SECONDS = TENANT_CACHE_BACKSTOP_SECONDS
 
 const realmInstalls = (hostId: string) => getRealmPluginInstalls({ hostId })
 
@@ -100,7 +107,7 @@ export async function cachedSiteImageHosts(hostId: string): Promise<string[]> {
     return await withRenderCache({
       key: ['plugin-image-hosts', hostId],
       revalidate: SITE_IMAGE_HOSTS_TTL_SECONDS,
-      tags: [tenantDataTag(hostId)],
+      tags: tenantPluginGateTags(hostId),
       read,
     })
   } catch (error) {

@@ -526,19 +526,21 @@ describe('unsubscribedRequiredEvents against the Connect list (AGL-1948)', () =>
   it('reports every Connect event missing from a bare destination', () => {
     expect(
       unsubscribedRequiredEvents([], REQUIRED_CONNECT_WEBHOOK_EVENTS),
-    ).toEqual(['account.updated', 'payout.failed', 'payout.paid'])
+    ).toEqual([...REQUIRED_CONNECT_WEBHOOK_EVENTS].sort())
   })
 
   it('reports the payout events missing from an account.updated-only destination', () => {
     expect(
       unsubscribedRequiredEvents(['account.updated'], REQUIRED_CONNECT_WEBHOOK_EVENTS),
-    ).toEqual(['payout.failed', 'payout.paid'])
+    ).toEqual(
+      REQUIRED_CONNECT_WEBHOOK_EVENTS.filter((event) => event !== 'account.updated').sort(),
+    )
   })
 
   it('is satisfied by the events themselves, and by the wildcard', () => {
     expect(
       unsubscribedRequiredEvents(
-        ['account.updated', 'payout.failed', 'payout.paid'],
+        [...REQUIRED_CONNECT_WEBHOOK_EVENTS],
         REQUIRED_CONNECT_WEBHOOK_EVENTS,
       ),
     ).toEqual([])
@@ -549,12 +551,14 @@ describe('unsubscribedRequiredEvents against the Connect list (AGL-1948)', () =>
 
   it('does NOT accept the platform subscription list as Connect coverage', () => {
     // The two destinations share a URL; if this ever passed, a Connect
-    // destination could be declared covered by the platform's ten events.
+    // destination could be declared covered by the platform's events. The
+    // direct-charge sale events are on both lists (each account delivers its
+    // own), but the account and payout events exist only on Connect.
     expect(
       unsubscribedRequiredEvents(
         [...REQUIRED_WEBHOOK_EVENTS],
         REQUIRED_CONNECT_WEBHOOK_EVENTS,
       ),
-    ).toEqual([...REQUIRED_CONNECT_WEBHOOK_EVENTS])
+    ).toEqual(expect.arrayContaining(['account.updated', 'payout.failed', 'payout.paid']))
   })
 })

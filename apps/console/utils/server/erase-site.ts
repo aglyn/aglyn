@@ -98,7 +98,7 @@ export async function eraseSiteAndRecord(
    * documents that still existed. Best effort: the site is deleted either
    * way, and the hour is the backstop.
    *=========================================*/
-  await dropDeletedSiteCache(hostSnapshot)
+  await dropDeletedSiteCache(hostSnapshot, { firestore: firebaseAdmin.app().firestore() })
 
   /*==========================================
    * TO THE ORG'S FEED, NOT THE SITE'S.

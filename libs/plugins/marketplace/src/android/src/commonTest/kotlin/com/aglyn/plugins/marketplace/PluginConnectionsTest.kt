@@ -109,4 +109,13 @@ class PluginConnectionsTest {
     assertEquals("Connecting a plugin to another service comes with the Starter, Pro and Custom plans.", PLUGIN_CONNECTIONS_PLAN_REFUSAL)
     assertEquals("marketplace.siteConnections", PLUGIN_CONNECTIONS_SITE_KEY)
   }
+
+  @Test
+  fun syncFailedTextAddsNoSecondPeriod() {
+    assertEquals(
+      "The last sync did not work: Google Business Profile did not answer: Internal error encountered. It tries again on schedule, or you can sync now.",
+      pluginConnectionSyncFailedText("Google Business Profile did not answer: Internal error encountered."),
+    )
+    assertEquals("The last sync did not work. It tries again on schedule, or you can sync now.", pluginConnectionSyncFailedText(null))
+  }
 }

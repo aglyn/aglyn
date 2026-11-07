@@ -15,6 +15,7 @@
  * limitations under the License.
  */
 
+import { validateProductForSave } from '../model/product-card-rules'
 import * as Aglyn from '@aglyn/aglyn/server'
 import { countLiveDocuments } from '@aglyn/aglyn/app-utils/live-document-count'
 import {
@@ -48,7 +49,6 @@ import {
   productCollectionIds,
   productSearchFields,
   productStockFields,
-  validateProduct,
   variantMatrixProblem,
   type HostProduct,
   type SmartCollectionRules,
@@ -494,7 +494,7 @@ export async function applyProducts(
         }
         const current = liftLegacyProduct(data as ProductDoc)
         const next = applyProductRow(current, changes, categoryIdsOf)
-        const invalid = validateProduct(next)
+        const invalid = validateProductForSave(next)
         if (invalid) throw new RowRefusal('refusedValue', invalid)
         // What the product editor's Save asks too, of the options as stored.
         if (next.modifierGroups?.length && PRODUCT_FIELD.modifierGroups in changes.product) {

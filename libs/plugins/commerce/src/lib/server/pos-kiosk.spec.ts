@@ -41,6 +41,10 @@ const mockState = {
   orderCounter: 0,
 }
 
+// The store's selling account, read through this spec's fake Firestore.
+jest.mock('@aglyn/tenant-data-admin/server/seller-payment-account', () =>
+  jest.requireActual('../testing/fake-seller-payment-account'),
+)
 jest.mock('./order-notifications', () => ({
   notifyOrderBuyer: async (_ref: any, _event: string, options: any) => ({
     outcome: 'handled',

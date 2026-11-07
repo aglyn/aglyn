@@ -88,6 +88,20 @@ export interface PluginSiteCacheRequest {
    * how to drop one, on every address the site answers at.
    */
   paths?: Readonly<Record<string, readonly string[]>>
+  /**
+   * Which plugins may load on a site changed (AGL-4121), so the app also
+   * expires the cached plugin set — immediately, not stale-while-revalidate:
+   *
+   * - `'host'`: on each named site (an uninstall, a re-pin).
+   * - `'everywhere'`: on EVERY site at once (a takedown, a revoked version,
+   *   withdrawn trust). One call, no host walk and no fan-out cap; `hostIds`
+   *   may be empty, and any named are only used to send it through.
+   *
+   * The app stages these drops in its durable outbox before sending them, so
+   * a refused call is retried; `complete: false` then means the drop neither
+   * landed nor was queued, and a stop path must fail loudly on it.
+   */
+  plugins?: 'host' | 'everywhere'
 }
 
 export interface PluginSiteCacheResult {
@@ -159,7 +173,7 @@ export async function dropPluginSiteCache(
   request: PluginSiteCacheRequest,
 ): Promise<PluginSiteCacheResult> {
   const hostIds = [...new Set(request.hostIds.filter(Boolean))]
-  if (!hostIds.length) {
+  if (!hostIds.length && request.plugins !== 'everywhere') {
     // Nothing asked for is the one case where "nothing dropped" is complete
     // on its own terms, whether or not anything is registered.
     return { dropped: 0, skipped: 0, complete: true }

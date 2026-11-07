@@ -54,8 +54,26 @@ jest.mock('next/navigation', () => ({
   usePathname: () => '/acme/hosts/shop/products/orders',
 }))
 
+/**
+ * The quote's conversation (AGL-4207), read and replied to on its own mock:
+ * its read on opening the dialog would otherwise count among every other
+ * case's calls.
+ */
+const mockMessagesFetch = jest.fn<Promise<{ ok: boolean; json: () => Promise<Record<string, unknown>> }>, unknown[]>(
+  async () => ({ ok: true, json: async () => ({ messages: [] }) }),
+)
+const isConversationCall = (args: unknown[]) => {
+  const init = args[2] as RequestInit | undefined
+  try {
+    const action = JSON.parse(String(init?.body ?? '{}'))?.action
+    return action === 'messages' || action === 'reply'
+  } catch {
+    return false
+  }
+}
+
 jest.mock('@aglyn/shared-util-http/authorized-token', () => ({
-  authorizedFetch: (...args: unknown[]) => mockFetch(...args),
+  authorizedFetch: (...args: unknown[]) => (isConversationCall(args) ? mockMessagesFetch(...args) : mockFetch(...args)),
 }))
 
 jest.mock('firebase/firestore', () => ({
@@ -143,6 +161,8 @@ const QUOTE = {
 
 beforeEach(() => {
   mockFetch.mockClear()
+  mockMessagesFetch.mockReset()
+  mockMessagesFetch.mockImplementation(async () => ({ ok: true, json: async () => ({ messages: [] }) }))
   mockQuotes = []
   mockSearch = ''
   mockPayments = PAYMENTS_READY
@@ -758,12 +778,13 @@ describe('a quote’s proofs and revisions (AGL-4096)', () => {
     const dialog = await openQuote({
       stage: 'changes_requested',
       proofs: [PROOF],
-      responses: [{ action: 'changes', revision: 1, atMs: Date.UTC(2026, 9, 29), comment: 'Make the logo bigger', ip: '203.0.113.9', userAgent: 'UA' }],
+      responses: [{ action: 'changes', revision: 1, atMs: Date.UTC(2026, 9, 29), comment: 'Make the logo bigger', name: 'Jordan Lee', ip: '203.0.113.9', userAgent: 'UA' }],
     })
     expect(within(dialog).getByText('Proofs · Revision 1')).toBeTruthy()
     expect(within(dialog).getByText('Banner.pdf · 2 KB')).toBeTruthy()
     expect(within(dialog).getByText('Make the logo bigger')).toBeTruthy()
-    expect(within(dialog).getAllByText('Changes requested').length).toBeGreaterThan(0)
+    expect(within(dialog).getAllByText('Rejected with changes').length).toBeGreaterThan(0)
+    expect(within(dialog).getByText(/^Rejected with changes by Jordan Lee on /)).toBeTruthy()
     // Answered: the proof can no longer be taken off or added to.
     expect(within(dialog).queryByRole('button', { name: 'Remove Banner.pdf' })).toBeNull()
     expect((within(dialog).getByRole('button', { name: 'Add proof' }) as HTMLButtonElement).disabled).toBe(true)
@@ -1108,5 +1129,67 @@ describe('proofs from the media library, and a proof with no price yet (AGL-4184
     expect(within(dialog).getByRole('button', { name: 'Send invoice' })).toBeTruthy()
     expect(within(dialog).getByRole('button', { name: 'Download PDF' })).toBeTruthy()
     expect(within(dialog).getByRole('button', { name: 'Remove Banner.png' })).toBeTruthy()
+  })
+})
+
+describe('a quote’s conversation with its customer (AGL-4207)', () => {
+  const THREAD = [
+    { id: 'm1', direction: 'out', body: 'The new proof is on its way.', atMs: Date.UTC(2026, 10, 1), label: 'Sent to jordan@example.com by owner@example.com' },
+    { id: 'm2', direction: 'in', body: 'Can the logo be bigger?', atMs: Date.UTC(2026, 10, 2), label: 'Jordan Lee wrote on the quote page' },
+  ]
+  async function openQuote(props: { canSend?: boolean; quote?: Record<string, unknown> } = {}) {
+    mockQuotes = [props.quote ?? QUOTE]
+    render(<HostQuotesCard hostId="site1" canEdit canSend={props.canSend ?? true} />)
+    fireEvent.click(screen.getByText('Quote #1042'))
+    return screen.findByRole('dialog')
+  }
+
+  it('lists what each side said, oldest first, from the quote’s own record', async () => {
+    mockMessagesFetch.mockImplementation(async () => ({ ok: true, json: async () => ({ messages: THREAD }) }))
+    const dialog = await openQuote()
+    expect(await within(dialog).findByText('Can the logo be bigger?')).toBeTruthy()
+    expect(within(dialog).getByText('The new proof is on its way.')).toBeTruthy()
+    expect(within(dialog).getByText(/Jordan Lee wrote on the quote page/)).toBeTruthy()
+    const [, url, init] = mockMessagesFetch.mock.calls[0] as [unknown, string, RequestInit]
+    expect(url).toBe('/api/commerce/quote')
+    expect(JSON.parse(String(init.body))).toEqual({ action: 'messages', hostId: 'site1', quoteId: 'q-1' })
+  })
+
+  it('replies to the customer’s email once per press, and lists the reply', async () => {
+    let listed: Array<Record<string, unknown>> = []
+    mockMessagesFetch.mockImplementation(async (...args: unknown[]) => {
+      const body = JSON.parse(String((args[2] as RequestInit).body))
+      if (body.action === 'reply') {
+        listed = [{ id: 'm3', direction: 'out', body: body.message, atMs: 9, label: 'Sent to jordan@example.com by you' }]
+        return { ok: true, json: async () => ({ sent: true, to: 'jordan@example.com', atMs: 9 }) }
+      }
+      return { ok: true, json: async () => ({ messages: listed }) }
+    })
+    const dialog = await openQuote()
+    const section = (await within(dialog).findByText('Messages')).closest('[data-quote-messages]') as HTMLElement
+    expect(within(section).getByText('To jordan@example.com')).toBeTruthy()
+    const send = within(section).getByRole('button', { name: 'Send reply' }) as HTMLButtonElement
+    expect(send.disabled).toBe(true)
+    fireEvent.change(within(section).getByLabelText('Message'), { target: { value: 'Yes, we can make it bigger.' } })
+    fireEvent.click(send)
+    expect(await within(section).findByText('Yes, we can make it bigger.')).toBeTruthy()
+    const replies = mockMessagesFetch.mock.calls.filter((call) => JSON.parse(String((call[2] as RequestInit).body)).action === 'reply')
+    expect(replies).toHaveLength(1)
+    const [, , init] = replies[0] as [unknown, string, RequestInit]
+    expect(JSON.parse(String(init.body))).toEqual({ action: 'reply', hostId: 'site1', quoteId: 'q-1', message: 'Yes, we can make it bigger.' })
+    expect((init.headers as Record<string, string>)['Idempotency-Key']).toBeTruthy()
+  })
+
+  it('holds the reply behind "Send quotes and invoices to customers"', async () => {
+    const dialog = await openQuote({ canSend: false })
+    const section = (await within(dialog).findByText('Messages')).closest('[data-quote-messages]') as HTMLElement
+    expect((within(section).getByRole('button', { name: 'Send reply' }) as HTMLButtonElement).disabled).toBe(true)
+    expect(within(section).getByText(/Send quotes and invoices to customers/)).toBeTruthy()
+  })
+
+  it('says there is nobody to reply to when the quote has no customer email', async () => {
+    const dialog = await openQuote({ quote: { ...QUOTE, quote: { ...(QUOTE as any).quote, customer: { name: 'Walk-in' } } } })
+    expect(await within(dialog).findByText(/This quote has no customer email, so there is nobody to reply to\./)).toBeTruthy()
+    expect(within(dialog).queryByRole('button', { name: 'Send reply' })).toBeNull()
   })
 })

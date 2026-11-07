@@ -247,6 +247,11 @@ const DECLARED: Readonly<Record<string, DeclaredSinkFile>> = {
     guard: 'media-ref',
     why: "The site favicon, the org brand favicon and its dark-tab partner (the brand profile's faviconDarkUrl, emitted as a second <link rel=icon> under prefers-color-scheme: dark — the one literal marker), the apple-touch-icons (AGL-3382) and the navigation loader logos, all through resolveMediaSrc since AGL-1407. The favicon and touch-icon sets are mapped from siteFaviconLinks / siteAppleTouchIconLinks in libs/aglyn/src/lib/app-utils/site-icon-set.ts (AGL-3484): each href is that resolved src, or the same src with an `?icon=` query naming a size our own CDN draws, so the set adds no host the resolver did not already admit. Site-relative is correct here: a page is present to resolve against. The second marker is the self-hosted theme-font `<style>` (AGL-3485): its @font-face rules are rebuilt from the theme's validated font fields and point at the site's own font route, never echoed from author text.",
   },
+  'apps/tenant/app/[host]/[scheme]/aglyn-preview/preview-banner.tsx': {
+    markers: 1,
+    guard: 'platform',
+    why: "The PREVIEW bar over a team-only preview of a site, page or unpublished entry (AGL-3205, AGL-4086). The one marker is the spacer's <style> (AGL-4152), which sets `:root{--aglyn-preview-bar-height:44px}` for muiAppBar's `overHero` offset: both halves are module constants in this file, PREVIEW_BAR_HEIGHT_VAR and BAR_HEIGHT_PX, and no prop reaches the template. The props the bar does take (status, publish time, sentence, console link) render as text and an <a href>, never into CSS, and the file has no url() anywhere, so nothing in it fetches an image.",
+  },
   'apps/tenant/app/api/_legal-intake/chrome.ts': {
     markers: 1,
     guard: 'platform',
@@ -512,6 +517,11 @@ const DECLARED: Readonly<Record<string, DeclaredSinkFile>> = {
     guard: 'off-tenant',
     why: 'The merchant editing their own catalogue in the console, picker-only. The IP at risk is the merchant\'s own.',
   },
+  'libs/plugins/commerce/src/lib/components/console/product-builder-fields.component.tsx': {
+    markers: 1,
+    guard: 'off-tenant',
+    why: "The product editor's picture-card thumbnails in the console (AGL-4205): the merchant previews the picture they chose from their own media library for a variant or an add-on choice. Picker-only, never a tenant render; the IP at risk is the merchant's own.",
+  },
   'libs/plugins/commerce/src/lib/components/console/pos/pos-product-grid.component.tsx': {
     markers: 1,
     guard: 'off-tenant',
@@ -606,6 +616,11 @@ const DECLARED: Readonly<Record<string, DeclaredSinkFile>> = {
     markers: 3,
     guard: 'raw',
     why: 'The gallery and its thumbnail strip take siteRelativeMediaSrc, but the Product JSON-LD emits resolved.mediaUrls wholesale with no resolver, deliberately — and that is the copy a crawler fetches.',
+  },
+  'libs/plugins/commerce/src/lib/components/product-choice-cards.tsx': {
+    markers: 1,
+    guard: 'media-ref',
+    why: "The product builder's picture cards (AGL-4205): a variant's or an add-on choice's imageUrl, set by the merchant from the media library, through siteRelativeMediaSrc with the site's id. Resolution only; no scheme refusal, like the gallery beside it.",
   },
   'libs/plugins/commerce/src/lib/components/product-grid.tsx': {
     markers: 1,

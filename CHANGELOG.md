@@ -9,6 +9,69 @@ content on the marketing site and is written separately.
 
 <!-- releases below -->
 
+## v1.16.0 — 2026-11-06
+
+[Compare with the previous release](https://github.com/aglyn/aglyn/compare/v1.15.2...v1.16.0)
+
+### Added
+
+- **commerce:** reply to a quote's customer and let them write on the quote page ([AGL-4207](https://linear.app/aglyn/issue/AGL-4207))
+- **commerce:** deliberate proof approval, reject with changes, proof sign-in control ([AGL-4206](https://linear.app/aglyn/issue/AGL-4206))
+- **commerce:** product builder on storefront product pages ([AGL-4205](https://linear.app/aglyn/issue/AGL-4205))
+- **commerce:** a storefront line takes up to 9,999, not 99 ([AGL-4205](https://linear.app/aglyn/issue/AGL-4205))
+- **commerce:** in-person card payments on the store's own Stripe account
+- **besigner:** table rows, columns and cell formatting on the canvas ([AGL-4203](https://linear.app/aglyn/issue/AGL-4203))
+- **commerce:** a Photo fit setting on the Product grid and Related products
+- **native:** publishers set a listing's connection credentials in the apps ([AGL-4196](https://linear.app/aglyn/issue/AGL-4196))
+- **billing:** the Connect destination carries direct-charge sale events
+
+### Fixed
+
+- **commerce:** sales, restocks and verified reviews drop the cached storefront ([AGL-4121](https://linear.app/aglyn/issue/AGL-4121))
+- **commerce:** quote messages take a platform id; catalogs and Linear floor regenerated ([AGL-4207](https://linear.app/aglyn/issue/AGL-4207))
+- **commerce:** customer message notice names no product ([AGL-4207](https://linear.app/aglyn/issue/AGL-4207))
+- **commerce:** price quote editor add-on labels for the picked size ([AGL-4206](https://linear.app/aglyn/issue/AGL-4206))
+- **commerce:** product builder back inside the plugin budget; declare its image sinks ([AGL-4205](https://linear.app/aglyn/issue/AGL-4205))
+- **commerce:** back-in-stock alert in its own chunk ([AGL-4205](https://linear.app/aglyn/issue/AGL-4205))
+- **commerce:** refund a direct sale that carried no platform fee
+- **commerce:** payments card describes Stripe billing a direct store
+- **deps:** upgrade DOMPurify to 3.4.17 for the SAFE_FOR_TEMPLATES bypass advisory ([AGL-4204](https://linear.app/aglyn/issue/AGL-4204))
+- **console:** preview snapshots expire after a day and stay under 1 M characters ([AGL-4204](https://linear.app/aglyn/issue/AGL-4204))
+- **console:** a background tab hands the shared Firestore cache to the visible tab ([AGL-4204](https://linear.app/aglyn/issue/AGL-4204), [AGL-3788](https://linear.app/aglyn/issue/AGL-3788))
+- **marketplace:** realm plugin row reads the configured brand ([AGL-4197](https://linear.app/aglyn/issue/AGL-4197))
+- **marketplace:** installed plugins read as on; listings name the plan ([AGL-4197](https://linear.app/aglyn/issue/AGL-4197))
+- **ai:** redesigns say why they fell back; contact pages and kept pictures pass ([AGL-4152](https://linear.app/aglyn/issue/AGL-4152))
+- **besigner:** a signed plugin's own elements replace its generic entry ([AGL-4196](https://linear.app/aglyn/issue/AGL-4196))
+- **native:** connection screens match Figma and say all of a failed sync ([AGL-4196](https://linear.app/aglyn/issue/AGL-4196))
+- **marketplace:** connection card copy and picker labels read right ([AGL-4196](https://linear.app/aglyn/issue/AGL-4196))
+- **tools:** emulated console seals connections and signs realm trust locally ([AGL-4196](https://linear.app/aglyn/issue/AGL-4196))
+
+### Performance
+
+- **tenant:** change-driven tenant cache on a seven-day backstop ([AGL-4121](https://linear.app/aglyn/issue/AGL-4121))
+- **tenant:** tenant pages take a one-day ISR ceiling ([AGL-4121](https://linear.app/aglyn/issue/AGL-4121))
+- **tenant:** stop the per-request middleware trace reaching the log drain ([AGL-4121](https://linear.app/aglyn/issue/AGL-4121))
+- **tenant:** project the realm-install join to the fields it uses ([AGL-4121](https://linear.app/aglyn/issue/AGL-4121))
+- **tenant:** read the org once in the lockdown verdict, masked elsewhere ([AGL-4121](https://linear.app/aglyn/issue/AGL-4121))
+- **outreach:** the sync job reads an organization's watched enrollments once per run ([AGL-4121](https://linear.app/aglyn/issue/AGL-4121))
+
+<details>
+<summary>Also in this release: 4 test, 5 chore, 2 docs</summary>
+
+- **console:** the table-footer owed list drops the Inbox replies, now a shared thread ([AGL-4207](https://linear.app/aglyn/issue/AGL-4207))
+- **commerce:** connect-mode gate coverage follows the shared account lookup
+- **native:** regenerate the contracts for the quote-message email ([AGL-4207](https://linear.app/aglyn/issue/AGL-4207))
+- **native:** regenerate the contracts for the product builder fields ([AGL-4205](https://linear.app/aglyn/issue/AGL-4205))
+- **commerce:** picture cards, combos and free mockup requests ([AGL-4205](https://linear.app/aglyn/issue/AGL-4205))
+- **native:** regenerate the contracts for the direct-charge payment fields
+- **self-host:** name AGLYN_DEBUG_MIDDLEWARE in the environment reference ([AGL-4121](https://linear.app/aglyn/issue/AGL-4121))
+- **console:** the video-upload gate spec reads the org through a field-masked getAll ([AGL-4121](https://linear.app/aglyn/issue/AGL-4121))
+- **tenant:** close the preview bar inventory declaration
+- **tenant:** declare the preview bar's height style in the image-sink inventory ([AGL-4152](https://linear.app/aglyn/issue/AGL-4152))
+- **commerce:** close the Photo fit setting
+
+</details>
+
 ## v1.15.2 — 2026-11-06
 
 [Compare with the previous release](https://github.com/aglyn/aglyn/compare/v1.15.1...v1.15.2)

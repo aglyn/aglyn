@@ -21,15 +21,18 @@ import {
   resolveOrgIdForHost, firebaseAdmin } from '@aglyn/tenant-data-admin'
 import {
   PUBLISHED_SITE_DATA_TTL_SECONDS,
-  tenantDataTag,
+  tenantPluginGateTags,
   withRenderCache,
 } from '@aglyn/tenant-data-admin/render-cache'
 
 /**
- * SECURITY-RELEVANT TTL (AGL-1302): the kill switch (keyed by listing id) is
- * folded into each resolved install, so this cache bounds how long a revoked
- * plugin keeps rendering — 60s, on par with the page ISR window that already
- * bounded it. Do not raise it.
+ * SECURITY-RELEVANT CACHE (AGL-1302, AGL-4121): the kill switch (keyed by
+ * listing id) is folded into each resolved install, so this entry decides
+ * whether a revoked plugin keeps rendering. It carries the plugin tags
+ * (`tenantPluginGateTags`), so an uninstall expires it for that site and a
+ * takedown or revoked version expires it on every site at once, with
+ * `{ expire: 0 }` and through the publish outbox. The TTL is only the
+ * backstop for an edit nothing announced.
  */
 const PLUGIN_INSTALLS_TTL_SECONDS = PUBLISHED_SITE_DATA_TTL_SECONDS
 
@@ -48,7 +51,7 @@ export async function getPluginInstalls(options: {
     return await withRenderCache({
       key: ['tenant-plugin-installs', options.hostId],
       revalidate: PLUGIN_INSTALLS_TTL_SECONDS,
-      tags: [tenantDataTag(options.hostId)],
+      tags: tenantPluginGateTags(options.hostId),
       read: () => readPluginInstalls(options),
     })
   } catch (error) {

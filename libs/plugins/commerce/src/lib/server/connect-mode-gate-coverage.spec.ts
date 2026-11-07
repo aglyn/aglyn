@@ -76,25 +76,67 @@ const DOORS = [
   'shipping/src/lib/server/label-billing.ts',
 ]
 
-const read = (relative: string) =>
-  readFileSync(join(PLUGINS, relative), 'utf8')
+/**
+ * Doors that read the seller's account through `sellerPaymentAccount()`
+ * (tenant-data-admin) instead of off the profile themselves: the in-person
+ * card doors since they moved to direct charges. The helper is the one place
+ * that reads `stripeChargesEnabled` / `stripeAccountLivemode`, so these files
+ * no longer name either field; what they must do instead is pass the
+ * helper's recorded mode into the gate. Asserted below, with the helper.
+ */
+const HELPER_DOORS = new Set([
+  'commerce/src/lib/server/pos-order.ts',
+  'commerce/src/lib/server/pos-terminal.ts',
+  'bookings/src/lib/server/in-person-payment.ts',
+])
+
+/** The one lookup the helper doors share, read relative to the libs root. */
+const SELLER_PAYMENT_ACCOUNT = join(
+  PLUGINS,
+  '..',
+  'tenant',
+  'data',
+  'admin',
+  'src',
+  'lib',
+  'server',
+  'seller-payment-account.ts',
+)
+
+const read = (relative: string) => readFileSync(join(PLUGINS, relative), 'utf8')
 
 describe('AGL-2471 connect-mode gate coverage', () => {
   it.each(DOORS)('%s consults merchantAccountIsReady', (door) => {
     expect(read(door)).toContain('merchantAccountIsReady(')
   })
 
-  it.each(DOORS)('%s no longer decides on stripeChargesEnabled alone', (door) => {
-    const source = read(door)
-    // The exact shape that shipped the defect, in both its `?.` and plain
-    // forms. A door still carrying it is a door that never asks about mode.
-    expect(source).not.toMatch(
-      /if \(!\w+ \|\| !\w+\??\.(get\('stripeChargesEnabled'\)|stripeChargesEnabled)\)/,
-    )
-  })
+  it.each(DOORS)(
+    '%s no longer decides on stripeChargesEnabled alone',
+    (door) => {
+      const source = read(door)
+      // The exact shape that shipped the defect, in both its `?.` and plain
+      // forms. A door still carrying it is a door that never asks about mode.
+      expect(source).not.toMatch(
+        /if \(!\w+ \|\| !\w+\??\.(get\('stripeChargesEnabled'\)|stripeChargesEnabled)\)/,
+      )
+    },
+  )
 
   it.each(DOORS)('%s reads the recorded mode off the profile', (door) => {
-    expect(read(door)).toContain('stripeAccountLivemode')
+    const source = read(door)
+    if (HELPER_DOORS.has(door)) {
+      // Through the shared lookup, and its recorded mode reaches the gate.
+      expect(source).toContain('sellerPaymentAccount(')
+      expect(source).toMatch(/accountLivemode:\s*\w+\??\.accountLivemode/)
+      return
+    }
+    expect(source).toContain('stripeAccountLivemode')
+  })
+
+  it('the shared lookup reads both readiness fields off the profile', () => {
+    const source = readFileSync(SELLER_PAYMENT_ACCOUNT, 'utf8')
+    expect(source).toContain("get('stripeChargesEnabled')")
+    expect(source).toContain("get('stripeAccountLivemode')")
   })
 
   it('names every door that reads stripeChargesEnabled at all', () => {
@@ -124,7 +166,9 @@ describe('AGL-2471 connect-mode gate coverage', () => {
       .filter((path: string) => !path.includes('.spec.'))
       .filter((path: string) => path.includes('/server'))
       .sort()
-    expect(hits).toEqual([...DOORS, ...NON_DOORS].sort())
+    // A helper door names neither field any more (the lookup reads them).
+    const readsFlag = DOORS.filter((door) => !HELPER_DOORS.has(door))
+    expect(hits).toEqual([...readsFlag, ...NON_DOORS].sort())
   })
 
   it('the marketplace projection carries the field its gate reads', () => {

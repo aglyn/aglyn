@@ -66,7 +66,9 @@ import {
   isNodeHiddenOnSite,
   nodePropsWithHiddenOnSite,
 } from '../utils/canvas-reveal'
+import { canvasContextMenuTableCell } from '../utils/canvas-context-menu'
 import { openSubtreeJson } from './subtree-json-dialog.component'
+import { tableMenuItems } from './table-menu-items'
 
 export interface NodeContextMenuProps extends PaperProps {
   node: Aglyn.NodeSchema<any>
@@ -343,6 +345,12 @@ export const NodeContextMenu = observer(
           >
             {node?.labelShort}
           </Typography>
+          {tableMenuItems({
+            node,
+            cell: canvasContextMenuTableCell(node?.$id),
+            multi,
+            onAction,
+          })}
           {multi ? null : (
             <MenuItem
               onClick={() => {

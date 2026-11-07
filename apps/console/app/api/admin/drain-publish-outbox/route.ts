@@ -26,7 +26,11 @@ import {
   PUBLISH_OUTBOX_DRAIN_TAG,
   PUBLISH_OUTBOX_MAX_PATHS,
   PUBLISH_OUTBOX_STALE_MS,
+  publishOutboxPluginsScope,
+  sanitizePublishOutboxAliases,
   sanitizePublishOutboxPaths,
+  widerPluginsScope,
+  type PublishOutboxPluginsScope,
 } from '../../../../constants/publish-outbox'
 import { isCronAuthorized, isCronDryRun } from '../../../../utils/cron-auth'
 import { recordCronBeat } from '../../../../utils/cron-beat'
@@ -133,6 +137,15 @@ async function handler(request: Request): Promise<Response> {
        * against the routing map below, once the host document is in hand.
        */
       entireHost: boolean
+      /**
+       * Server-staged keys (AGL-4121): the plugin set to expire with the
+       * drop, the alias names to expire, and where to send it when the host
+       * document is gone (a deleted site staged its own address).
+       */
+      plugins: PublishOutboxPluginsScope | null
+      aliases: Set<string>
+      subdomain: string
+      cname: string
     }
     const work = new Map<string, HostWork>()
     let stalled = 0
@@ -178,16 +191,28 @@ async function handler(request: Request): Promise<Response> {
         continue
       }
       const entireHost = isSiteWidePublishOutboxEntry(entry.get('entireHost'))
+      const plugins = publishOutboxPluginsScope(entry.get('plugins'))
+      const aliases = sanitizePublishOutboxAliases(entry.get('aliases'))
+      const subdomain = String(entry.get('subdomain') ?? '').trim()
+      const cname = String(entry.get('cname') ?? '').trim()
       const existing = work.get(hostId)
       if (existing) {
         for (const path of paths) existing.paths.add(path)
+        for (const alias of aliases) existing.aliases.add(alias)
         existing.refs.push(entry.ref)
         existing.entireHost ||= entireHost
+        existing.plugins = widerPluginsScope(existing.plugins, plugins)
+        existing.subdomain ||= subdomain
+        existing.cname ||= cname
       } else {
         work.set(hostId, {
           paths: new Set(paths),
           refs: [entry.ref],
           entireHost,
+          plugins,
+          aliases: new Set(aliases),
+          subdomain,
+          cname,
         })
       }
     }
@@ -203,27 +228,41 @@ async function handler(request: Request): Promise<Response> {
         .collection('hosts')
         .doc(hostId)
         .get()
-      const subdomain = String(hostSnapshot.get('subdomain') ?? '').trim()
-      if (!hostSnapshot.exists || !subdomain) {
-        // The site is gone. There is no cache left to drop and no run that
-        // will ever succeed, so this is the one case where releasing the
-        // entries loses no evidence anybody could act on.
+      const liveSubdomain = hostSnapshot.exists
+        ? String(hostSnapshot.get('subdomain') ?? '').trim()
+        : ''
+      // A deleted site's own entry carries the address it was served at
+      // (AGL-4121): its cached pages and names outlive its document, so the
+      // drop still has somewhere to go.
+      const subdomain = liveSubdomain || hostWork.subdomain
+      if (!subdomain) {
+        // The site is gone and left no address. There is no cache left to
+        // drop and no run that will ever succeed, so this is the one case
+        // where releasing the entries loses no evidence anybody could act on.
         for (const ref of hostWork.refs) await ref.delete().catch(() => undefined)
         drained += hostWork.refs.length
         continue
       }
       // A site-wide entry drops every routed page. Its named paths lead, as
       // on every other drop: the tenant keeps the first paths it is handed.
-      const paths = hostWork.entireHost
-        ? [...new Set([...hostWork.paths, ...wholeHostPaths(hostSnapshot)])]
-        : [...hostWork.paths]
+      const paths =
+        hostWork.entireHost && hostSnapshot.exists
+          ? [...new Set([...hostWork.paths, ...wholeHostPaths(hostSnapshot)])]
+          : [...hostWork.paths]
       const result = await postTenantRevalidate({
         subdomain,
         hostId,
         paths: paths.slice(0, PUBLISH_OUTBOX_MAX_PATHS),
         // The custom domain is a SECOND cache key for the same page
         // (AGL-1152) and it is the one visitors actually use.
-        cname: String(hostSnapshot.get('cname') ?? '') || undefined,
+        cname:
+          (hostSnapshot.exists ? String(hostSnapshot.get('cname') ?? '') : '') ||
+          hostWork.cname ||
+          undefined,
+        // A plugin removal, disable or takedown that the immediate call did
+        // not land (AGL-4121): the tenant hard-expires the plugin set here.
+        plugins: hostWork.plugins,
+        aliases: [...hostWork.aliases],
       })
       if (result.reason === 'ok') {
         for (const ref of hostWork.refs) await ref.delete().catch(() => undefined)

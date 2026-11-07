@@ -518,11 +518,42 @@ describe('the page step’s redesign', () => {
     expect(result.status).toBe('ok')
     if (result.status !== 'ok') return
     expect(result.value.words).toBe('kept')
-    // Why it was kept rides the row by its internal code (AGL-4152).
-    expect(result.value.redesign).toEqual({ status: 'layout-kept', added: [], pictures: null, missed: [expect.any(String)] })
+    // Why it was kept rides the row by its internal code (AGL-4152), and where an answer missed, line by line.
+    const { why, ...redesign } = result.value.redesign ?? { status: null }
+    expect(redesign).toEqual({ status: 'layout-kept', added: [], pictures: null, missed: [expect.any(String)] })
+    if (result.value.redesign?.missed?.[0] === 'refused') expect(why).toBeUndefined()
+    else expect(why).toEqual([expect.stringMatching(/^improve-unreadable: The answer gave no section/)])
     expect(result.value.settled).toEqual(expect.arrayContaining([{ at: 'page', what: AI_SITE_IMPORT_LAYOUT_KEPT }]))
     const words = Object.values(result.value.nodes as unknown as Record<string, { props?: Record<string, unknown> }>).map((node) => node.props?.['children'])
     expect(words).toContain('Keep Your Taxes Calm')
+  })
+
+  it('logs and keeps the line each miss names, so a fallback can be read after the job (AGL-4152)', async () => {
+    const bad = copied('salon')
+    ;(bad.sections[0] as Answer['sections'][number]).blocks[1] = { kind: 'lede', col: -1, text: 'Voted the best salon by 900 clients.', to: '', style: 'none', icon: '', items: [], ref: '' }
+    mockRunAiRequest.mockResolvedValue(toolAnswer('submit_improved_page', bad))
+    const info = jest.spyOn(console, 'info').mockImplementation(() => undefined)
+    const result = await runPage(generativeDoc('salon'))
+    expect(result.status).toBe('ok')
+    if (result.status !== 'ok') return
+    expect(result.value.redesign?.status).toBe('layout-kept')
+    expect(result.value.redesign?.missed).toContain(AI_SITE_IMPORT_INVENTED_FACT_CODE)
+    const why = result.value.redesign?.why ?? []
+    expect(why).toEqual(expect.arrayContaining([expect.stringMatching(/^improve-invented-fact: section 1, block 2, "Voted the best salon by 900 clients\.": /)]))
+    expect(why.every((line) => line.length <= 300)).toBe(true)
+    const logged = info.mock.calls.find((call) => call[0] === 'ai imported page: its redesign did not pass, its layout kept')?.[1] as { codes: string[]; why: string[] } | undefined
+    expect(logged?.why).toEqual(why)
+    info.mockRestore()
+    // The page's record keeps them, and a later run that redesigns it clears them.
+    const state = {
+      pages: [{ slot: 'p0', url: 'https://x.example/', path: '/', title: 'Home', group: 'main', wave: 1, draftId: 'd0', slug: '/', words: 10, images: 0, build: 'arranged' }],
+      waves: [],
+    } as unknown as AiSiteImportState
+    const kept = aiSiteImportRedesignOf(state, 'p0', 'layout-kept', [], null, result.value.redesign?.missed, why)
+    expect(kept.pages[0]?.redesignMissedWhy).toEqual(why)
+    const again = aiSiteImportRedesignOf(kept, 'p0', 'redesigned', [], null)
+    expect(again.pages[0]?.redesignMissedWhy).toBeNull()
+    expect(again.pages[0]?.redesignMissed).toBeNull()
   })
 
   // A redesign that misses only how it is planned, its re-ask spent or unaffordable, is taken: the old layout redrawn is no better on that line, and worse on every other (AGL-4152).

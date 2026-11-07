@@ -438,8 +438,9 @@ export function commerceTenantEmails(): readonly TenantEmailEntry[] {
         },
         {
           name: 'quote.nextStep',
-          description: 'What to do next: approve the proof first, or pay when ready; for a proof with no price yet, approve it or ask for changes',
-          sample: 'Look over the proof, then approve it on your quote page. Once you approve it, you can pay there.',
+          description: 'What to do next: approve the proof first, or pay when ready; for a proof with no price yet, approve it or reject it with changes',
+          sample:
+            'Look over the proof, then approve it on your quote page: you confirm you checked it and type your name. Once you approve it, you can pay there.',
         },
         {
           name: 'quote.buttonLabel',
@@ -465,6 +466,57 @@ export function commerceTenantEmails(): readonly TenantEmailEntry[] {
         { block: 'text', text: 'Reply to this email to reach {{host.businessName}}.', variant: 'caption' },
       ],
       footerReason: 'You’re receiving this because {{host.businessName}} prepared a quote or proof for you.',
+    },
+    {
+      // AGL-4207. A reply the business sends from a quote, in the quote's own
+      // conversation with the customer (`quote.emailThread`), so it lands
+      // beside the quote emails. Its tokens are composed per send by
+      // `quoteMessageEmailTokens`; nothing in it is priced.
+      key: 'quote-message',
+      name: 'Quote message',
+      description:
+        'Sends your reply to a customer about their quote or proof when you ' +
+        'write one on the quote: your message and a button back to the quote ' +
+        'on your site. It arrives in the same conversation as the quote emails, ' +
+        'and the customer can answer by email or on the quote page.',
+      pluginId: 'commerce',
+      plugin: 'Commerce',
+      control: 'besigner',
+      defaultSubject: '{{message.subject}}',
+      mergeTokens: [
+        {
+          name: 'message.subject',
+          description: 'The subject of the quote’s conversation, so the reply arrives in it',
+          sample: 'Quote #1042 from Northwind Signs',
+        },
+        { name: 'quote.label', description: '“Quote”, or “Proof” for a proof with no price yet', sample: 'Quote' },
+        { name: 'quote.number', description: 'The quote number', sample: '#1042' },
+        { name: 'quote.revision', description: 'Which revision of the quote it is on', sample: '2' },
+        { name: 'message.heading', description: '“A message about your quote”, or “proof”', sample: 'A message about your quote' },
+        {
+          name: 'message.body',
+          description: 'The message as typed on the quote',
+          sample: 'We can do the larger logo. The new proof will be ready tomorrow.',
+        },
+        { name: 'message.buttonLabel', description: '“View your quote”, or “View your proof”', sample: 'View your quote' },
+        {
+          name: 'quote.url',
+          description: 'The quote’s link on your site, where the customer can answer too',
+          sample: 'https://shop.example.com/pay-quote?q=quote_123&t=…',
+        },
+      ],
+      defaultBody: [
+        { block: 'text', text: '{{host.businessName}} · {{quote.label}} {{quote.number}}', variant: 'eyebrow' },
+        { block: 'text', text: '{{message.heading}}', variant: 'heading' },
+        { block: 'text', text: '{{message.body}}', variant: 'body' },
+        { block: 'button', label: '{{message.buttonLabel}}', href: '{{quote.url}}' },
+        {
+          block: 'text',
+          text: 'Reply to this email to reach {{host.businessName}}, or answer on the page the button opens.',
+          variant: 'caption',
+        },
+      ],
+      footerReason: 'You’re receiving this because {{host.businessName}} is preparing a quote or proof for you.',
     },
     {
       // The invoice email (AGL-4099), sent when the business chooses Send

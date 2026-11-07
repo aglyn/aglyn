@@ -58,9 +58,18 @@ const ALLOWED_TAGS = new Set([
  */
 const PHRASING_TAGS = new Set(['b', 'strong', 'i', 'em', 'u', 'br', 'span'])
 
+/**
+ * Phrasing content plus links (AGL-4203) — a Table cell. A cell is one line
+ * of a pipe grid, so it takes no block; but unlike a control's label it is
+ * not itself a control, so an anchor inside it is valid.
+ */
+const PHRASING_AND_LINK_TAGS = new Set([...PHRASING_TAGS, 'a'])
+
 /** How much markup one commit may keep — see {@link PHRASING_TAGS}. */
 export interface SanitizeRichTextOptions {
   phrasingOnly?: boolean
+  /** With `phrasingOnly`: keep links too (a Table cell). */
+  links?: boolean
 }
 
 const SAFE_HREF = /^(https?:\/\/|mailto:|tel:|sms:|\/)/i
@@ -80,7 +89,11 @@ export function sanitizeRichText(
   options?: SanitizeRichTextOptions,
 ): string {
   if (typeof document === 'undefined') return ''
-  const allowed = options?.phrasingOnly ? PHRASING_TAGS : ALLOWED_TAGS
+  const allowed = options?.phrasingOnly
+    ? options.links
+      ? PHRASING_AND_LINK_TAGS
+      : PHRASING_TAGS
+    : ALLOWED_TAGS
   const template = document.createElement('template')
   template.innerHTML = html
 

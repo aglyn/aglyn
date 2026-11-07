@@ -42,6 +42,21 @@ jest.mock('@aglyn/aglyn/plugin-manager/plugin-tax-profile', () => ({
 jest.mock('@aglyn/tenant-data-admin/server/payment-provider', () => ({
   merchantAccountIsReady: (account: { accountId?: string }) => Boolean(account.accountId),
 }))
+// The store's selling account, read from this spec's documents the way the
+// real `sellerPaymentAccount` reads the owner's profile.
+jest.mock('@aglyn/tenant-data-admin/server/seller-payment-account', () => ({
+  sellerPaymentAccount: async (_hostId: string, org: Record<string, any> | null | undefined) => {
+    const profile = docs.get(`profiles/${String(org?.['ownerUid'] ?? '')}`)
+    const accountId = String(profile?.['stripeAccountId'] ?? '').trim()
+    if (!accountId) return null
+    return {
+      accountId,
+      chargeModel: profile?.['stripeChargeModel'] === 'direct' ? 'direct' : 'destination',
+      chargesEnabled: profile?.['stripeChargesEnabled'],
+      accountLivemode: profile?.['stripeAccountLivemode'],
+    }
+  },
+}))
 let mockPlan = 'business'
 jest.mock('@aglyn/tenant-data-admin', () => {
   function snapshotOf(path: string) {
@@ -99,6 +114,8 @@ interface StripeCall {
   method: string
   path: string
   key: string | null
+  /** The `Stripe-Account` header: the store's own account for a direct charge. */
+  account: string | null
   params: URLSearchParams
 }
 const calls: StripeCall[] = []
@@ -145,7 +162,8 @@ const fetchMock = jest.fn(async (url: any, init: any) => {
   const method = String(init?.method ?? 'GET')
   const params = new URLSearchParams(String(init?.body ?? ''))
   const key = (init?.headers?.['Idempotency-Key'] as string | undefined) ?? null
-  calls.push({ method, path, key, params })
+  const account = (init?.headers?.['Stripe-Account'] as string | undefined) ?? null
+  calls.push({ method, path, key, account, params })
   if (key && replays.has(key)) return { ok: true, status: 200, json: async () => replays.get(key) }
   const body = answer(method, path, params)
   if (key) replays.set(key, body)
@@ -288,6 +306,8 @@ describe('start', () => {
     expect(created.params.get('application_fee_amount') ?? '0').toBe(String(fee))
     // Settled on the platform account (AGL-3607): never a direct charge.
     expect(created.params.has('on_behalf_of')).toBe(false)
+    expect(created.params.has('metadata[chargeModel]')).toBe(false)
+    expect(calls.every((entry) => entry.account === null)).toBe(true)
     expect(created.key).toMatch(/^booking-in-person:[0-9a-f]{40}$/)
     expect(docs.get(BOOKING)?.['inPersonPayment']).toMatchObject({
       paymentIntentId: 'pi_test1abcdef',
@@ -406,5 +426,67 @@ describe('cancel', () => {
 
   it('is a no-op with nothing in progress', async () => {
     expect((await call({ action: 'cancel' })).body).toEqual({ status: 'none' })
+  })
+})
+
+describe('a store on its own Stripe account (direct charge, ToS v24 §10.2(a))', () => {
+  beforeEach(() => {
+    docs.set('profiles/owner-1', {
+      stripeAccountId: 'acct_store',
+      stripeChargesEnabled: true,
+      stripeChargeModel: 'direct',
+    })
+  })
+
+  it('makes the intent ON the store’s account, with no transfer and the take alone as the fee', async () => {
+    const result = await call({ action: 'start', amountCents: 5000 }, { key: 'attempt-1' })
+    expect(result.status).toBe(200)
+    const created = calls.find((entry) => entry.path === 'payment_intents')!
+    expect(created.account).toBe('acct_store')
+    expect(created.params.has('transfer_data[destination]')).toBe(false)
+    expect(created.params.has('on_behalf_of')).toBe(false)
+    expect(created.params.get('metadata[chargeModel]')).toBe('direct')
+    const org = { id: 'org-1', plan: 'business', subscriptionStatus: 'active' } as never
+    const take = resolveTransactionFeeCents(org, 'service', 5000, 5000, { inPerson: true, direct: true })
+    // Stripe bills the store its card fee, so Aglyn's fee is the take only:
+    // below the destination fee, which carries the card cost too.
+    expect(take).toBeLessThan(resolveTransactionFeeCents(org, 'service', 5000, 5000, { inPerson: true }))
+    expect(created.params.get('application_fee_amount') ?? '0').toBe(String(take))
+    expect(take).toBeLessThanOrEqual(5000)
+    expect(created.key).toMatch(/^booking-in-person:acct_store:[0-9a-f]{40}$/)
+    expect(docs.get(BOOKING)?.['inPersonPayment']).toMatchObject({
+      chargeModel: 'direct',
+      stripeAccountId: 'acct_store',
+      feeCents: take,
+    })
+  })
+
+  it('reads, captures and records the payment on the store’s account, where its refund goes', async () => {
+    const started = await call({ action: 'start', amountCents: 5000 }, { key: 'attempt-1' })
+    tap(started.body.paymentIntentId)
+    const settled = await call({ action: 'settle' })
+    expect(settled.body).toEqual({ status: 'paid', amountCents: 5000 })
+    const capture = calls.find((entry) => entry.path.endsWith('/capture'))!
+    expect(capture.account).toBe('acct_store')
+    expect(capture.params.get('application_fee_amount') ?? '0').toBe(String(docs.get(BOOKING)?.['feeCents'] ?? 0))
+    expect(calls.every((entry) => entry.account === 'acct_store')).toBe(true)
+    // The same fields a direct online booking carries, so `refund.ts` and the
+    // dispute branch act on the store's account.
+    expect(docs.get(BOOKING)).toMatchObject({ chargeModel: 'direct', stripeAccountId: 'acct_store' })
+  })
+
+  it('releases an uncollected card on the store’s account', async () => {
+    const started = await call({ action: 'start', amountCents: 5000 }, { key: 'attempt-1' })
+    expect((await call({ action: 'cancel' })).body).toEqual({ status: 'canceled' })
+    expect(intents.get(started.body.paymentIntentId).status).toBe('canceled')
+    const cancel = calls.find((entry) => entry.path.endsWith('/cancel'))!
+    expect(cancel.account).toBe('acct_store')
+  })
+
+  it('never asks a fee above the charge', async () => {
+    const org = { id: 'org-1', plan: 'starter', subscriptionStatus: 'active' } as never
+    for (const cents of [50, 51, 99, 100, 5000]) {
+      expect(resolveTransactionFeeCents(org, 'service', cents, cents, { inPerson: true, direct: true })).toBeLessThanOrEqual(cents)
+    }
   })
 })

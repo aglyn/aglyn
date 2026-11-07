@@ -30,6 +30,8 @@ import {
   MEDIA_REF_PREFIX,
 } from '@aglyn/aglyn/app-utils/media-ref'
 import { marketplaceMinPriceUsd } from './listing-price-floor'
+import { pluginConnectionsPlanNote } from './plugin-connections'
+import { PLATFORM_BRAND_NAME } from '@aglyn/aglyn/app-utils/platform-brand'
 import { landsInPublisherWorkspace } from './own-listing'
 import type { InstallableArtifactType as MarketplaceArtifactType } from '@aglyn/aglyn/app-utils/artifact-provenance'
 import type { ListingVerificationRequest } from './listing-verification'
@@ -945,6 +947,9 @@ const ARTIFACT_INSTALL_RESULT: Record<MarketplaceArtifactType, string> = {
   siteStarter: 'A new site, created from these pages and this theme',
 }
 
+/** A plugin version staff signed to run with the site's own code (`trust: 'realm'`). */
+const REALM_PLUGIN_INSTALL_RESULT = `A plugin, reviewed and signed by ${PLATFORM_BRAND_NAME} to run with your site`
+
 /**
  * The `WHAT'S INCLUDED` checklist the marketplace listing mockup shows
  * (AGL-2173), derived entirely from facts the listing already carries.
@@ -969,12 +974,36 @@ export function listingInclusions(
     priceUsd?: number
     reviewStatus?: string
   },
-  options: { reviewedVersion?: boolean } = {},
+  options: {
+    reviewedVersion?: boolean
+    /**
+     * The version on offer is staff-signed to run with the site's own code
+     * (`trust: 'realm'`), so "sandboxed on its own origin" would be untrue.
+     */
+    realmTrusted?: boolean
+    /**
+     * The labels of the services the version on offer declares connections
+     * to (AGL-4197). Connecting one needs a plan that includes plugin
+     * connections, which a shopper has to know before installing.
+     */
+    connections?: readonly string[]
+  } = {},
 ): ListingInclusion[] {
   const type = listingArtifactType(listing)
   const rows: ListingInclusion[] = [
-    { label: ARTIFACT_INSTALL_RESULT[type] ?? 'An installable artifact', tone: 'included' },
+    {
+      label:
+        type === 'plugin' && options.realmTrusted
+          ? REALM_PLUGIN_INSTALL_RESULT
+          : ARTIFACT_INSTALL_RESULT[type] ?? 'An installable artifact',
+      tone: 'included',
+    },
   ]
+  const planNote =
+    type === 'plugin' ? pluginConnectionsPlanNote(options.connections ?? []) : null
+  // Right after what the install produces: it is the fact most likely to stop
+  // an install, and a note, not a tick, because it is a limit.
+  if (planNote) rows.push({ label: planNote, tone: 'note' })
   const targets = installTargetsFor(listing)
   rows.push({
     label: targets.includes('org')

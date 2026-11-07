@@ -37,6 +37,7 @@ import {
   DialogTitle,
   Divider,
   FormControlLabel,
+  FormHelperText,
   List,
   ListItemButton,
   ListItemText,
@@ -53,6 +54,7 @@ import { useCallback, useEffect, useMemo, useRef, useState } from 'react'
 import { downloadCommercePdf } from './commerce-pdf-download'
 import { PayLinkReadinessNoticeFor } from './pay-link-readiness-notice.component'
 import { QuotePayLinkSection } from './quote-pay-link.component'
+import { QuoteMessagesSection } from './quote-messages.component'
 import { QuoteProofsSection, QuoteRequestFilesSection } from './quote-proofs.component'
 import { QuoteSendSection } from './quote-send.component'
 
@@ -159,6 +161,8 @@ interface QuoteForm {
   notes: string
   terms: string
   requireProofApproval: boolean
+  /** A customer with a site account signs in to see the proof (AGL-4206). */
+  requireProofSignIn: boolean
 }
 
 let lineSequence = 0
@@ -209,6 +213,8 @@ function formFromQuote(quote: QuoteRow | null, requireProofApproval: boolean): Q
     notes: section?.notes ?? '',
     terms: section?.terms ?? '',
     requireProofApproval: section ? section.requireProofApproval === true : requireProofApproval,
+    // A new quote takes the store's default where the dialog applies it (below).
+    requireProofSignIn: section?.requireProofSignIn === true,
   }
 }
 
@@ -298,6 +304,7 @@ function quoteBody(form: QuoteForm): Record<string, unknown> {
     notes: form.notes,
     terms: form.terms,
     requireProofApproval: form.requireProofApproval,
+    requireProofSignIn: form.requireProofSignIn,
   }
 }
 
@@ -354,10 +361,15 @@ export function QuoteEditorDialog(props: QuoteEditorDialogProps) {
   // A new quote starts with the store's default, which may arrive after the
   // dialog opens; a switch set by hand keeps its setting.
   const requireProofApproval = quote || approvalSet ? form.requireProofApproval : storeDefault
+  /** Whether the sign-in switch was set by hand (AGL-4206); until then a new quote shows the store's default. */
+  const [signInSet, setSignInSet] = useState(false)
+  const signInDefault = CommerceModel.quoteRequiresProofSignInByDefault(store?.quotes)
+  const requireProofSignIn = quote || signInSet ? form.requireProofSignIn : signInDefault
 
   const update = useCallback((patch: Partial<QuoteForm>) => {
     setEdited(true)
     if ('requireProofApproval' in patch) setApprovalSet(true)
+    if ('requireProofSignIn' in patch) setSignInSet(true)
     setForm((prev) => ({ ...prev, ...patch }))
   }, [])
   const updateLine = useCallback((key: string, patch: Partial<LineForm>) => {
@@ -460,7 +472,7 @@ export function QuoteEditorDialog(props: QuoteEditorDialogProps) {
           ...(quote ? { quoteId: quote.$id, baseUpdatedAtMs } : {}),
           // A request's parts are read again by the server from here (AGL-4098).
           ...(!quote && start?.from ? { from: start.from } : {}),
-          quote: quoteBody({ ...form, requireProofApproval }),
+          quote: quoteBody({ ...form, requireProofApproval, requireProofSignIn }),
           ...(!quote && libraryProofs.length
             ? { libraryProofs: libraryProofs.map(({ mediaScope, mediaId }) => ({ mediaScope, mediaId })) }
             : {}),
@@ -478,7 +490,7 @@ export function QuoteEditorDialog(props: QuoteEditorDialogProps) {
     } finally {
       setBusy(false)
     }
-  }, [user, quote, hostId, baseUpdatedAtMs, start, form, requireProofApproval, libraryProofs, enqueueSnackbar, onClose])
+  }, [user, quote, hostId, baseUpdatedAtMs, start, form, requireProofApproval, requireProofSignIn, libraryProofs, enqueueSnackbar, onClose])
 
   const remove = useCallback(async () => {
     if (!quote) return
@@ -565,6 +577,8 @@ export function QuoteEditorDialog(props: QuoteEditorDialogProps) {
               }}
             />
           ) : null}
+          {/* The conversation with the customer (AGL-4207), kept with the quote through every revision. */}
+          {quote ? <QuoteMessagesSection hostId={hostId} quoteId={quote.$id} quote={quote} canSend={canSend} /> : null}
           {/* Where it came from (AGL-4098): the request, its files and its conversation. */}
           {start?.request ? (
             <QuoteStartedFromRequest
@@ -592,7 +606,7 @@ export function QuoteEditorDialog(props: QuoteEditorDialogProps) {
               <Typography variant="subtitle2">{'Proofs'}</Typography>
               <Typography variant="body2" color="text.secondary">
                 {'Sending a design before it has a price? Choose a proof and leave the items empty. ' +
-                  'Your customer sees the proof with no prices, and can approve it or ask for changes. Add items whenever you’re ready.'}
+                  'Your customer sees the proof with no prices, and can approve it or reject it with changes. Add items whenever you’re ready.'}
               </Typography>
               {libraryProofs.length ? (
                 <Stack direction="row" spacing={1} useFlexGap sx={{ flexWrap: 'wrap' }}>
@@ -753,6 +767,21 @@ export function QuoteEditorDialog(props: QuoteEditorDialogProps) {
                 label="Customers approve the proof before they can pay"
               />
             )}
+            <Stack spacing={0}>
+              <FormControlLabel
+                control={
+                  <Switch
+                    checked={requireProofSignIn}
+                    disabled={readOnly || paid}
+                    onChange={(event) => update({ requireProofSignIn: event.target.checked })}
+                  />
+                }
+                label="Customers sign in to see and approve proofs"
+              />
+              <FormHelperText sx={{ mt: 0 }}>
+                {'For a customer with an account on your site. A customer without one keeps using the private link.'}
+              </FormHelperText>
+            </Stack>
           </Stack>
 
           {proofOnly ? null : (
@@ -1104,7 +1133,7 @@ function QuoteLineEditor(props: {
                   {group.max > 1 ? null : <MenuItem value="">{'None'}</MenuItem>}
                   {group.options.map((option) => (
                     <MenuItem key={option.id} value={option.id}>
-                      {option.priceCents ? `${option.name} (+${money(option.priceCents)})` : option.name}
+                      {CommerceModel.quoteModifierOptionLabel(option, line.kind === 'catalog' ? line.variantId : null, money)}
                     </MenuItem>
                   ))}
                 </TextField>

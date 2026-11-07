@@ -15,7 +15,13 @@
  * limitations under the License.
  */
 
-import type { QuoteCatalogLineRequest, QuoteCustomer, QuoteEmailThread, QuoteResponseFile } from './commerce-quotes'
+import {
+  QUOTE_MAX_QUANTITY,
+  type QuoteCatalogLineRequest,
+  type QuoteCustomer,
+  type QuoteEmailThread,
+  type QuoteResponseFile,
+} from './commerce-quotes'
 
 /*==========================================
  * A QUOTE STARTED FROM A REQUEST (AGL-4098).
@@ -54,20 +60,31 @@ export interface QuoteRequestRef {
 /**
  * What the Product and options field posts beside its readable line, under
  * `{name}__data`: the product, the variant the options make, and the options
- * as picked. Add-ons are not taken from the storefront yet; when they are,
- * they ride here as `modifiers` and the quote line prices them as the editor
- * does.
+ * as picked. On a product page's builder (AGL-4205) it also carries the
+ * add-ons picked (`modifiers`) and how many (`quantity`); the quote line
+ * prices them as the editor does.
  */
 export interface ProductFieldValue {
   productId: string
   variantId?: string
   options?: Record<string, string>
   modifiers?: Array<{ groupId: string; optionId: string }>
+  /** How many the shopper asked about, 1 to {@link PRODUCT_FIELD_MAX_QUANTITY}. Absent: one. */
+  quantity?: number
 }
 
 const ID = /^(?!__.*__$)[^/]{1,200}$/
 const MAX_OPTIONS = 20
 const MAX_MODIFIERS = 50
+/** The most a request can ask about in one line: a quote line's own limit, 9,999. */
+export const PRODUCT_FIELD_MAX_QUANTITY = QUOTE_MAX_QUANTITY
+
+/** A posted quantity as a whole number from 1 to the cap; anything else is none. */
+function fieldQuantity(raw: unknown): number | null {
+  const number = typeof raw === 'number' ? raw : typeof raw === 'string' ? Number(raw) : NaN
+  if (!Number.isInteger(number) || number < 1) return null
+  return Math.min(number, PRODUCT_FIELD_MAX_QUANTITY)
+}
 
 const text = (value: unknown, max = 200): string => (typeof value === 'string' ? value.trim().slice(0, max) : '')
 
@@ -78,6 +95,7 @@ export function encodeProductFieldValue(value: ProductFieldValue): string {
     ...(value.variantId ? { variantId: value.variantId } : {}),
     ...(value.options && Object.keys(value.options).length ? { options: value.options } : {}),
     ...(value.modifiers?.length ? { modifiers: value.modifiers } : {}),
+    ...(value.quantity && value.quantity > 1 ? { quantity: value.quantity } : {}),
   })
 }
 
@@ -117,11 +135,13 @@ export function parseProductFieldValue(raw: unknown): ProductFieldValue | null {
         })
         .filter((pick) => pick.groupId && pick.optionId)
     : []
+  const quantity = fieldQuantity(source['quantity'])
   return {
     productId,
     ...(variantId && ID.test(variantId) ? { variantId } : {}),
     ...(Object.keys(options).length ? { options } : {}),
     ...(modifiers.length ? { modifiers } : {}),
+    ...(quantity && quantity > 1 ? { quantity } : {}),
   }
 }
 
@@ -129,6 +149,23 @@ export function parseProductFieldValue(raw: unknown): ProductFieldValue | null {
 export function productFieldLabel(productName: string, options: Record<string, string> | undefined): string {
   const picked = Object.values(options ?? {}).filter(Boolean)
   return picked.length ? `${productName} — ${picked.join(' / ')}` : productName
+}
+
+/**
+ * The readable line a request carries for a product page's picks (AGL-4205):
+ * the product and its options, then the add-ons, then how many —
+ * `Custom canopy — 10 × 10 ft + Full wall, Printed roof × 2`.
+ */
+export function builderPicksLabel(
+  productName: string,
+  options: Record<string, string> | undefined,
+  addOnNames: readonly string[],
+  quantity = 1,
+): string {
+  const names = addOnNames.map((name) => name.trim()).filter(Boolean)
+  const base = productFieldLabel(productName, options)
+  const withAddOns = names.length ? `${base} + ${names.join(', ')}` : base
+  return quantity > 1 ? `${withAddOns} × ${quantity}` : withAddOns
 }
 
 /** What this plugin reads of a request's facts (the forms plugin's reader documents them). */
@@ -215,7 +252,7 @@ export function quoteLinesFromFieldData(fieldData: Readonly<Record<string, strin
       kind: 'catalog',
       productId: value.productId,
       ...(value.variantId ? { variantId: value.variantId } : {}),
-      quantity: 1,
+      quantity: value.quantity ?? 1,
       ...(value.modifiers?.length ? { modifiers: value.modifiers } : {}),
     })
   }

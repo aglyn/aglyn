@@ -1080,6 +1080,9 @@ describe('what the owner reads', () => {
       proposed: { title: 'Common questions', address: '/common-questions' },
     })
     expect(view?.menu.map((entry) => entry.label)).toEqual(['Services', 'About', 'Common questions', 'Contact'])
+    // A menu entry of one page is a link under its label, never a menu of one page named almost the same (AGL-4152).
+    expect(view?.menu.find((entry) => entry.label === 'Common questions')).toEqual({ label: 'Common questions', pages: [] })
+    expect(view?.menu.every((entry) => entry.pages.length !== 1)).toBe(true)
     expect(view?.footer[1]).toEqual({ label: 'Help', pages: ['Contact', 'Privacy policy'] })
     expect(aiSiteImportPlanViewOf(accepted())?.editable).toBe(false)
     expect(aiSiteImportPlanViewOf(site())).toBeNull()

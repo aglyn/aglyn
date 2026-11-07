@@ -31,6 +31,10 @@ let mockManagePos = true
 let mockRegisterGranted: boolean | undefined
 let mockPlan = 'business'
 
+// The store's selling account, read through this spec's fake Firestore.
+jest.mock('@aglyn/tenant-data-admin/server/seller-payment-account', () =>
+  jest.requireActual('../testing/fake-seller-payment-account'),
+)
 jest.mock('@aglyn/tenant-runtime/org-permissions', () => ({
   // As the real resolver answers for a site (AGL-4047): nothing for someone
   // with no access to it, the site role's default otherwise, and a grant or
@@ -81,6 +85,8 @@ interface StripeCall {
   method: string
   path: string
   key: string | null
+  /** The `Stripe-Account` header: a direct-charge store's own account. */
+  account: string | null
   params: URLSearchParams
 }
 const stripeCalls: StripeCall[] = []
@@ -92,7 +98,19 @@ const fetchMock = jest.fn(async (url: any, init: any) => {
   const method = String(init?.method ?? 'GET')
   const params = new URLSearchParams(String(init?.body ?? ''))
   const key = (init?.headers?.['Idempotency-Key'] as string | undefined) ?? null
-  stripeCalls.push({ method, path, key, params })
+  const account = (init?.headers?.['Stripe-Account'] as string | undefined) ?? null
+  stripeCalls.push({ method, path, key, account, params })
+  if (method === 'GET' && path === 'terminal/locations/tml_ours' && !account) {
+    return {
+      ok: true,
+      status: 200,
+      json: async () => ({
+        id: 'tml_ours',
+        display_name: 'Corner Cafe',
+        address: { line1: '1 Main St', line2: null, city: 'Austin', state: 'TX', postal_code: '78701', country: 'US' },
+      }),
+    }
+  }
   if (path === 'terminal/connection_tokens') {
     return { ok: true, status: 200, json: async () => ({ secret: `pst_test_${params.get('location')}` }) }
   }
@@ -217,6 +235,8 @@ describe('token', () => {
       expect.objectContaining({ method: 'POST', path: 'terminal/connection_tokens' }),
     ])
     expect(stripeCalls[0].params.get('location')).toBe('tml_ours')
+    // A destination store's token is the platform's, exactly as before.
+    expect(stripeCalls[0].account).toBeNull()
   })
 
   it('never mints an unscoped token: no Location is a 409 the app can act on', async () => {
@@ -307,5 +327,73 @@ describe('readPosTerminalAddress', () => {
       country: 'US',
     })
     expect(readPosTerminalAddress('nope')).toBeUndefined()
+  })
+})
+
+describe('a store on its own Stripe account (direct charge, ToS v24 §10.2(a))', () => {
+  beforeEach(() => {
+    fakeDocs.set('profiles/owner-1', {
+      stripeAccountId: 'acct_store',
+      stripeChargesEnabled: true,
+      stripeChargeModel: 'direct',
+    })
+  })
+
+  it('never uses the platform’s Location: it is made again on the store’s account, at the same address, and the token is minted there', async () => {
+    fakeDocs.set('hosts/host-1/terminal/config', {
+      stripeLocationId: 'tml_ours',
+      stripeConfigurationId: 'tmc_platform',
+      stripeConfigurationAssigned: true,
+      tippingKey: '15,20,25',
+      offlineEnabled: true,
+      offlineConfigurationId: 'tmc_platform',
+    })
+    const result = await call({})
+    expect(result.status).toBe(200)
+    expect(result.body).toMatchObject({ locationId: 'tml_new1', merchantAccountId: 'acct_store' })
+    // The old Location's address is read where it was made: the platform.
+    const read = stripeCalls.find((entry) => entry.method === 'GET')!
+    expect(read).toMatchObject({ path: 'terminal/locations/tml_ours', account: null })
+    const created = stripeCalls.find((entry) => entry.method === 'POST' && entry.path === 'terminal/locations')!
+    expect(created.account).toBe('acct_store')
+    expect(created.key).toMatch(/^pos-location:host-1:[0-9a-f]{16}:acct_store$/)
+    expect(created.params.get('address[line1]')).toBe('1 Main St')
+    expect(created.params.get('address[postal_code]')).toBe('78701')
+    const tokens = stripeCalls.filter((entry) => entry.path === 'terminal/connection_tokens')
+    expect(tokens.every((entry) => entry.account === 'acct_store')).toBe(true)
+    expect(tokens.every((entry) => entry.params.get('location') === 'tml_new1')).toBe(true)
+    const config = fakeDocs.get('hosts/host-1/terminal/config')!
+    expect(config).toMatchObject({ stripeLocationId: 'tml_new1', stripeLocationAccount: 'acct_store' })
+    expect(config['replacedLocation']).toMatchObject({ id: 'tml_ours', account: 'platform' })
+    // The platform configuration's flags no longer describe these readers.
+    for (const field of ['stripeConfigurationId', 'tippingKey', 'offlineEnabled', 'offlineConfigurationId']) {
+      expect(config[field]).toBeUndefined()
+    }
+  })
+
+  it('reuses a Location already on the store’s account, and mints on it', async () => {
+    fakeDocs.set('hosts/host-1/terminal/config', { stripeLocationId: 'tml_store', stripeLocationAccount: 'acct_store' })
+    const result = await call({})
+    expect(result.body.locationId).toBe('tml_store')
+    expect(stripeCalls).toEqual([
+      expect.objectContaining({ path: 'terminal/connection_tokens', account: 'acct_store' }),
+    ])
+  })
+
+  it('makes a first Location on the store’s account', async () => {
+    fakeDocs.delete('hosts/host-1/terminal/config')
+    const first = await call({ action: 'location', address: ADDRESS })
+    expect(first.body).toEqual({ locationId: 'tml_new1' })
+    const created = stripeCalls.find((entry) => entry.path === 'terminal/locations')!
+    expect(created.account).toBe('acct_store')
+    expect(fakeDocs.get('hosts/host-1/terminal/config')?.['stripeLocationAccount']).toBe('acct_store')
+  })
+
+  it('a Location on another account whose address cannot be read asks for one, never minting there', async () => {
+    fakeDocs.set('hosts/host-1/terminal/config', { stripeLocationId: 'tml_gone' })
+    const result = await call({})
+    expect(result.status).toBe(409)
+    expect(result.body.code).toBe('location-required')
+    expect(stripeCalls.some((entry) => entry.path === 'terminal/connection_tokens')).toBe(false)
   })
 })

@@ -95,8 +95,13 @@ export interface ProductVariant {
    * denormalization. Absent = single default location.
    */
   inventoryByLocation?: Record<string, number>
-  /** Media-library image URL shown when this variant is selected. */
+  /**
+   * Media-library image URL shown when this variant is selected, and on its
+   * card when the product page shows choices as picture cards (AGL-4205).
+   */
   imageUrl?: string
+  /** A short line on the variant's picture card (AGL-4205): "Fits two tables". */
+  note?: string
   /**
    * Whether this variant needs check-in at the window (AGL-4043), over the
    * product's own setting; absent follows the product.
@@ -341,6 +346,12 @@ export interface HostProduct {
    * `product-modifiers.ts`.
    */
   modifierGroups?: ProductModifierGroup[]
+  /**
+   * The product page offers "Get a free mockup" (AGL-4205): a shopper's picks
+   * go with the request form the site placed in the product block, and a
+   * quote started from the request begins with them. Absent: not offered.
+   */
+  mockupRequests?: boolean
   /** Shown under Quick keys on the register's first screen (AGL-3607). */
   posQuickKey?: boolean
   /**

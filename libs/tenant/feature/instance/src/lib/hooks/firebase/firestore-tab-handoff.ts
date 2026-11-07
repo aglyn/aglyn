@@ -289,7 +289,7 @@ export async function runTabHandoff(
  * never creating it under the SDK (the rule `probePrimaryLease` follows) —
  * and closes on `versionchange` so an SDK upgrade is never held up.
  */
-async function openExisting(
+export async function openExisting(
   factory: IDBFactory,
   databaseName: string,
 ): Promise<IDBDatabase | undefined> {

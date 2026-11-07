@@ -26,22 +26,19 @@ import {
 import { isPaymentsNotConfigured } from '@aglyn/aglyn/app-utils/payments-configured'
 import { storefrontPaymentsNotConfiguredText } from '../constants/storefront-payments'
 import * as CommerceModel from '../model'
-import { mdiChevronDown, mdiTagOutline } from '@aglyn/shared-data-mdi'
-import Accordion from '@mui/material/Accordion'
-import AccordionDetails from '@mui/material/AccordionDetails'
-import AccordionSummary from '@mui/material/AccordionSummary'
+import { mdiTagOutline } from '@aglyn/shared-data-mdi'
 import Alert from '@mui/material/Alert'
 import Box from '@mui/material/Box'
 import Button from '@mui/material/Button'
 import Chip from '@mui/material/Chip'
 import MenuItem from '@mui/material/MenuItem'
 import Skeleton from '@mui/material/Skeleton'
-import SvgIcon from '@mui/material/SvgIcon'
 import TextField from '@mui/material/TextField'
 import ToggleButton from '@mui/material/ToggleButton'
 import ToggleButtonGroup from '@mui/material/ToggleButtonGroup'
 import Typography from '@mui/material/Typography'
 import {
+  Children,
   Suspense,
   forwardRef,
   lazy,
@@ -106,6 +103,21 @@ export interface ProductDetailProps {
    * when the store takes returns of this kind of product. Off by default.
    */
   showShipping?: boolean
+  /**
+   * How the shopper picks options and add-ons (AGL-4205): `menus`, the
+   * drop-downs and check boxes every page had, or `cards`, the product
+   * builder — a picture card per choice with its price and note, combos that
+   * fold out what they include, and a running total. Absent reads as menus,
+   * so no existing page changes shape.
+   */
+  choiceStyle?: 'menus' | 'cards'
+  /** The free-mockup button's words (AGL-4205); "Get a free mockup" when blank. */
+  mockupLabel?: string
+  /**
+   * What the site builder dropped into the block (AGL-4205): the request
+   * form a free mockup opens. Shown only for a product that offers mockups.
+   */
+  children?: ReactNode
 }
 
 interface DetailVariant {
@@ -119,6 +131,8 @@ interface DetailVariant {
   sku?: string
   /** The buyer may choose the day they will use it (AGL-4043). */
   asksUseDate?: true
+  /** A short line on the variant's picture card (AGL-4205). */
+  note?: string
 }
 
 /** What the page says where a variant with no price yet would show one (AGL-3676). */
@@ -145,6 +159,8 @@ interface Detail {
    * website ever arrive here.
    */
   modifierGroups?: CommerceModel.ProductModifierGroup[]
+  /** The page offers "Get a free mockup" (AGL-4205). */
+  mockupRequests?: true
 }
 
 /**
@@ -158,6 +174,24 @@ const UseDayPicker = lazy(() => import('./use-day-picker'))
  * add-ons on the website downloads them.
  */
 const ProductAddOns = lazy(() => import('./product-add-ons'))
+
+/**
+ * The picture cards (AGL-4205), in their own chunk: only a page set to show
+ * its choices as cards downloads them.
+ */
+const ProductChoiceCards = lazy(() => import('./product-choice-cards'))
+
+/**
+ * The free mockup's button and the request form it opens (AGL-4205), in their
+ * own chunk: only a product that offers one, or the canvas, downloads it.
+ */
+const ProductBuilderMockup = lazy(() => import('./product-builder-mockup'))
+
+/** The back-in-stock alert, only on a sold-out variant (split out for AGL-4205). */
+const ProductRestockNotify = lazy(() => import('./product-restock-notify'))
+
+/** The Details and Shipping & returns folds (AGL-4205: split out), only where switched on. */
+const ProductDetailPanels = lazy(() => import('./product-detail-panels'))
 
 /** Money on the product page, in the store's currency: `$1,250.00`, never `$1250`. */
 const money = (cents: number) => CommerceModel.formatOrderMoney(cents)
@@ -297,47 +331,6 @@ function initialSelections(
   return { ...(first?.options ?? {}) }
 }
 
-/** What the Details panel lists: only facts the product record holds. */
-export function productDetailFacts(
-  product: Pick<Detail, 'type' | 'tags'>,
-  variant: Pick<DetailVariant, 'sku'> | undefined,
-  presented: readonly OptionPresentation[],
-): Array<{ label: string; value: string }> {
-  const facts: Array<{ label: string; value: string }> = []
-  if (product.type === 'digital') facts.push({ label: 'Format', value: 'Digital product' })
-  if (product.type === 'service') facts.push({ label: 'Format', value: 'Service' })
-  for (const option of presented) {
-    if (option.mode !== 'hidden') {
-      facts.push({ label: option.name, value: option.values.join(', ') })
-    }
-  }
-  if (variant?.sku) facts.push({ label: 'SKU', value: variant.sku })
-  if (product.tags?.length) facts.push({ label: 'Tags', value: product.tags.join(', ') })
-  return facts
-}
-
-/**
- * What the Shipping & returns panel says, from the product's kind and the
- * store's own return settings — never a policy the store has not set.
- */
-export function productShippingLines(
-  product: Pick<Detail, 'type'>,
-  returns: { windowDays: number } | undefined,
-): string[] {
-  const lines: string[] = []
-  if (product.type === 'digital') lines.push('Delivered digitally after purchase — nothing ships.')
-  else if (product.type === 'service') lines.push('A service — nothing ships.')
-  else lines.push('Shipping is calculated at checkout.')
-  if (returns && returns.windowDays > 0) {
-    lines.push(
-      `Returns accepted within ${returns.windowDays} ` +
-        `${returns.windowDays === 1 ? 'day' : 'days'} of shipping — ` +
-        'request one from your order status page.',
-    )
-  }
-  return lines
-}
-
 function slugFromLocation(): string {
   if (typeof window === 'undefined') return ''
   const match = window.location.pathname.match(/\/products\/([^/?#]+)/)
@@ -360,8 +353,13 @@ const ProductDetail = forwardRef<HTMLDivElement, ProductDetailProps>(
       showCoupon,
       showDetails,
       showShipping,
+      choiceStyle,
+      mockupLabel,
+      children,
       ...rest
     } = props
+    /** The product builder (AGL-4205): choices as picture cards. */
+    const cards = choiceStyle === 'cards'
     // Node styles ride the renderer-merged sx; recompose (stack.ts pattern).
     const nodeSx = Array.isArray(props['sx']) ? props['sx'] : [props['sx']]
     const site = Aglyn.useSite()
@@ -409,6 +407,18 @@ const ProductDetail = forwardRef<HTMLDivElement, ProductDetailProps>(
     const [coupon, setCoupon] = useState('')
     // A thumbnail the shopper picked; null follows the variant's own photo.
     const [activeImage, setActiveImage] = useState<number | null>(null)
+    /** The canvas's builder sample (AGL-4205), loaded only there, only for picture cards. */
+    const [sampleBuilder, setSampleBuilder] = useState<Detail | null>(null)
+    useEffect(() => {
+      if (hostId || !cards || sampleBuilder) return
+      let active = true
+      void import('./product-builder-sample').then((module) => {
+        if (active) setSampleBuilder(module.SAMPLE_BUILDER as Detail)
+      })
+      return () => {
+        active = false
+      }
+    }, [hostId, cards, sampleBuilder])
     // `unconfigured` is not an `error` with softer words (AGL-2019). A store
     // with no Stripe key answers 501, and rendering that at `severity="error"`
     // tells a shopper their payment failed when nothing was ever attempted —
@@ -435,8 +445,6 @@ const ProductDetail = forwardRef<HTMLDivElement, ProductDetailProps>(
     const [askPostal, setAskPostal] = useState(false)
     const [added, setAdded] = useState(false)
     const [wishlisted, setWishlisted] = useState(false)
-    const [notifyEmail, setNotifyEmail] = useState('')
-    const [notifyState, setNotifyState] = useState<'idle' | 'done'>('idle')
     // Buyer-chosen billing (AGL-545): only meaningful when the product
     // is subscriptionOptional; defaults to a one-time purchase.
     const [billing, setBilling] = useState<CommerceModel.CheckoutBillingChoice>(
@@ -506,7 +514,9 @@ const ProductDetail = forwardRef<HTMLDivElement, ProductDetailProps>(
       ? detail === 'missing'
         ? null
         : detail
-      : SAMPLE
+      : cards
+        ? (sampleBuilder ?? SAMPLE)
+        : SAMPLE
 
     const variant = useMemo(() => {
       if (!resolved) return undefined
@@ -781,15 +791,6 @@ const ProductDetail = forwardRef<HTMLDivElement, ProductDetailProps>(
       { hostId },
     )
     const presentedOptions = optionPresentation(resolved.options, resolved.variants)
-    const detailFacts = showDetails
-      ? productDetailFacts(resolved, variant, presentedOptions)
-      : []
-    const shippingLines = showShipping
-      ? productShippingLines(
-          resolved,
-          seededProduct?.id === resolved.id ? seededReturns : undefined,
-        )
-      : []
 
     // Subscription framing (AGL-545): subscription-only products price as
     // $X/mo|/yr with a "Subscribe" button; subscriptionOptional products
@@ -803,6 +804,15 @@ const ProductDetail = forwardRef<HTMLDivElement, ProductDetailProps>(
     // Listed before it has a price (AGL-3676): no price to show and nothing
     // to buy; every sale door would refuse it anyway.
     const priced = typeof variant?.priceUsd === 'number'
+    // The add-ons are offered where they can be priced, and on a product that
+    // offers a free mockup, whose request carries them (AGL-4205).
+    // Live, the button shows only where the block holds a request form to
+    // open; on the canvas the block shows the space to drop one in.
+    const hasRequestForm = Children.toArray(children).length > 0
+    const offersMockup = hostId
+      ? resolved.mockupRequests === true && hasRequestForm
+      : resolved.mockupRequests === true || hasRequestForm
+    const showAddOns = addOnGroups.length > 0 && (priced || offersMockup)
 
     // schema.org Product/Offer (AGL-299). Kept ONLY for the case where this
     // block renders without server-seeded page data — the besigner preview,
@@ -986,8 +996,29 @@ const ProductDetail = forwardRef<HTMLDivElement, ProductDetailProps>(
               </ToggleButton>
             </ToggleButtonGroup>
           ) : null}
+          {cards ? (
+            // The product builder (AGL-4205): every choice a picture card.
+            <Suspense fallback={null}>
+              <ProductChoiceCards
+                options={presentedOptions.filter((option) => option.mode === 'select')}
+                variants={resolved.variants}
+                selections={variant?.options ?? selections}
+                onSelect={(name, value) => {
+                  setActiveImage(null)
+                  setSelections((prev) => ({ ...(variant?.options ?? {}), ...prev, [name]: value }))
+                }}
+                groups={showAddOns ? addOnGroups : []}
+                variantId={variant?.id}
+                value={addOns}
+                onChange={setAddOns}
+                formatCents={money}
+                unpricedLabel={PRICE_COMING_SOON_LABEL}
+                disabled={Boolean(variant?.soldOut)}
+              />
+            </Suspense>
+          ) : null}
           {presentedOptions.map((option) =>
-            option.mode === 'hidden' ? null : option.mode === 'text' ? (
+            cards && option.mode === 'select' ? null : option.mode === 'hidden' ? null : option.mode === 'text' ? (
               <Typography
                 key={option.name}
                 variant="body2"
@@ -1026,7 +1057,7 @@ const ProductDetail = forwardRef<HTMLDivElement, ProductDetailProps>(
             </TextField>
             ),
           )}
-          {addOnGroups.length && priced ? (
+          {showAddOns && !cards ? (
             <Suspense fallback={null}>
               <ProductAddOns
                 groups={addOnGroups}
@@ -1073,12 +1104,13 @@ const ProductDetail = forwardRef<HTMLDivElement, ProductDetailProps>(
                 setQuantity(
                   Math.max(
                     1,
-                    Math.min(99, Math.round(Number(event.target.value)) || 1),
+                    Math.min(CommerceModel.CART_MAX_QUANTITY, Math.round(Number(event.target.value)) || 1),
                   ),
                 )
               }
               size="small"
-              sx={{ width: 80 }}
+              // Four digits fit (AGL-4205): a line goes up to 9,999.
+              sx={{ width: (theme) => theme.spacing(12) }}
               slotProps={{ htmlInput: { inputMode: 'numeric' } }}
             />
             <Button
@@ -1131,8 +1163,8 @@ const ProductDetail = forwardRef<HTMLDivElement, ProductDetailProps>(
             The live price with add-ons (AGL-4100): one configured unit
             times the quantity, and what is still to choose.
           */}
-          {addOnGroups.length && priced ? (
-            <Box sx={{ mb: 2 }}>
+          {(addOnGroups.length || cards) && priced ? (
+            <Box sx={{ mb: 2 }} aria-live="polite">
               <Typography variant="subtitle1" component="p">
                 {quantity > 1
                   ? `Total for ${quantity}: ${money(unitCents * quantity)}`
@@ -1144,6 +1176,33 @@ const ProductDetail = forwardRef<HTMLDivElement, ProductDetailProps>(
                 </Typography>
               ) : null}
             </Box>
+          ) : null}
+          {/*
+            The free mockup (AGL-4205): on a product that offers one, the
+            button opens what the site builder dropped into this block — a
+            request form whose Product and options field reads the picks from
+            the context below. On the canvas the form stays open to design.
+          */}
+          {offersMockup ? (
+            <Suspense fallback={null}>
+              <ProductBuilderMockup
+                picks={{
+                  product: resolved,
+                  variant,
+                  addOns,
+                  quantity,
+                  ready: pageAddOns.ready,
+                  problem: pageAddOns.ready ? undefined : pageAddOns.error,
+                  total: priced ? money(unitCents * quantity) : undefined,
+                }}
+                label={mockupLabel}
+                priced={priced}
+                canvas={!hostId}
+                hasRequestForm={hasRequestForm}
+              >
+                {children}
+              </ProductBuilderMockup>
+            </Suspense>
           ) : null}
           {addRefusal ? (
             <Alert severity="warning" sx={{ mb: 2 }}>
@@ -1224,54 +1283,10 @@ const ProductDetail = forwardRef<HTMLDivElement, ProductDetailProps>(
             </Alert>
           ) : null}
           {variant?.soldOut && hostId ? (
-            notifyState === 'done' ? (
-              <Alert severity="success" sx={{ mb: 2 }}>
-                {'We will email you when it is back.'}
-              </Alert>
-            ) : (
-              <Box sx={{ display: 'flex', gap: 1, mb: 2 }}>
-                <TextField
-                  placeholder="you@example.com"
-                  type="email"
-                  // Third instance of the nameless-input defect (AGL-2392).
-                  // Named for its job rather than "Email address": this row
-                  // appears inside a product page that may also carry the
-                  // newsletter block, and two fields both announced as
-                  // "Email address" is barely better than none.
-                  slotProps={{
-                    htmlInput: {
-                      'aria-label': 'Email address for back-in-stock alert',
-                    },
-                  }}
-                  value={notifyEmail}
-                  onChange={(event) => setNotifyEmail(event.target.value)}
-                  size="small"
-                  sx={{ flex: 1 }}
-                />
-                <Button
-                  size="small"
-                  variant="outlined"
-                  disabled={!notifyEmail.trim()}
-                  onClick={async () => {
-                    const response = await siteFetch(
-                      '/api/commerce/notify-restock',
-                      {
-                        method: 'POST',
-                        headers: { 'Content-Type': 'application/json' },
-                        body: JSON.stringify({
-                          hostId,
-                          productId: resolved.id,
-                          email: notifyEmail,
-                        }),
-                      },
-                    ).catch(() => null)
-                    if (response?.ok) setNotifyState('done')
-                  }}
-                >
-                  {'Notify me'}
-                </Button>
-              </Box>
-            )
+            // The back-in-stock alert, only on a sold-out variant (its own chunk, AGL-4205).
+            <Suspense fallback={null}>
+              <ProductRestockNotify hostId={hostId} productId={resolved.id} siteFetch={siteFetch} />
+            </Suspense>
           ) : null}
           {!hideDescription && resolved.description ? (
             <Typography
@@ -1282,53 +1297,21 @@ const ProductDetail = forwardRef<HTMLDivElement, ProductDetailProps>(
               {resolved.description}
             </Typography>
           ) : null}
-          {detailFacts.length || shippingLines.length ? (
-            <Box sx={{ mt: 3 }}>
-              {detailFacts.length ? (
-                <ProductDetailPanel title="Details">
-                  <Box
-                    component="dl"
-                    sx={{
-                      m: 0,
-                      display: 'grid',
-                      gridTemplateColumns: 'auto 1fr',
-                      columnGap: 2,
-                      rowGap: 0.75,
-                    }}
-                  >
-                    {detailFacts.map((fact) => (
-                      <Box key={fact.label} sx={{ display: 'contents' }}>
-                        <Typography component="dt" variant="body2" sx={{ fontWeight: 600 }}>
-                          {fact.label}
-                        </Typography>
-                        <Typography
-                          component="dd"
-                          variant="body2"
-                          color="text.secondary"
-                          sx={{ m: 0 }}
-                        >
-                          {fact.value}
-                        </Typography>
-                      </Box>
-                    ))}
-                  </Box>
-                </ProductDetailPanel>
-              ) : null}
-              {shippingLines.length ? (
-                <ProductDetailPanel title="Shipping & returns">
-                  {shippingLines.map((line) => (
-                    <Typography
-                      key={line}
-                      variant="body2"
-                      color="text.secondary"
-                      sx={{ mb: 0.75 }}
-                    >
-                      {line}
-                    </Typography>
-                  ))}
-                </ProductDetailPanel>
-              ) : null}
-            </Box>
+          {/*
+            The Details and Shipping & returns folds, off by default, in
+            their own chunk (AGL-4205): a page that shows neither loads none.
+          */}
+          {showDetails || showShipping ? (
+            <Suspense fallback={null}>
+              <ProductDetailPanels
+                product={resolved}
+                variant={variant}
+                presented={presentedOptions}
+                returns={seededProduct?.id === resolved.id ? seededReturns : undefined}
+                showDetails={Boolean(showDetails)}
+                showShipping={Boolean(showShipping)}
+              />
+            </Suspense>
           ) : null}
         </Box>
       </Box>
@@ -1337,48 +1320,6 @@ const ProductDetail = forwardRef<HTMLDivElement, ProductDetailProps>(
 )
 ProductDetail.displayName = 'AglynProductDetail'
 
-/**
- * One fold of the panels under the buy box: a flat, divided accordion in the
- * theme's own colours — the way a designer storefront stacks Details and
- * Shipping under the description.
- */
-function ProductDetailPanel({
-  title,
-  children,
-}: {
-  title: string
-  children: ReactNode
-}) {
-  return (
-    <Accordion
-      disableGutters
-      elevation={0}
-      square
-      sx={{
-        bgcolor: 'transparent',
-        borderTop: 1,
-        borderColor: 'divider',
-        '&:last-of-type': { borderBottom: 1, borderColor: 'divider' },
-        '&::before': { display: 'none' },
-      }}
-    >
-      <AccordionSummary
-        expandIcon={
-          <SvgIcon fontSize="small">
-            <path d={mdiChevronDown.path} />
-          </SvgIcon>
-        }
-        sx={{ px: 0 }}
-      >
-        <Typography variant="subtitle1" component="h2">
-          {title}
-        </Typography>
-      </AccordionSummary>
-      <AccordionDetails sx={{ px: 0, pt: 0, pb: 2 }}>{children}</AccordionDetails>
-    </Accordion>
-  )
-}
-
 export const schema: Aglyn.ComponentSchema<ProductDetailProps> = {
   $id: ID,
   pluginId: BUNDLE_ID,
@@ -1386,7 +1327,8 @@ export const schema: Aglyn.ComponentSchema<ProductDetailProps> = {
   description: "One product's gallery, options and buy button.",
   category: Aglyn.ComponentCategory.COMMERCE,
   icon: { path: mdiTagOutline.path, sx: { color: '#2e7d32' } },
-  flags: { selfClosing: Aglyn.FEATURE_FLAG.ENABLED },
+  // Not self-closing since AGL-4205: what is dropped in is the request form
+  // "Get a free mockup" opens, shown only for a product that offers one.
   attributes: [
     {
       name: 'slug',
@@ -1434,6 +1376,25 @@ export const schema: Aglyn.ComponentSchema<ProductDetailProps> = {
         'A Shipping & returns fold: shipping priced at checkout (or digital ' +
         'delivery), and your return window when your store takes returns.',
       component: Aglyn.FieldComponentType.CHECKBOX,
+    },
+    {
+      // AGL-4205. Absent reads as menus, so no existing page changes shape.
+      name: 'choiceStyle',
+      label: 'Show choices as',
+      description:
+        'Menus, or picture cards: a card per choice with its picture, price and note, and a running total.',
+      component: Aglyn.FieldComponentType.SELECT,
+      options: [
+        { label: 'Menus', value: 'menus' },
+        { label: 'Picture cards', value: 'cards' },
+      ],
+    },
+    {
+      name: 'mockupLabel',
+      label: 'Free mockup button label',
+      description:
+        'Shown when the product offers a free mockup and this block holds a request form.',
+      component: Aglyn.FieldComponentType.TEXT_FIELD,
     },
   ],
 }

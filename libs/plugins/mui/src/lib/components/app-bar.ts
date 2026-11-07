@@ -74,11 +74,12 @@ export const OVER_HERO_SOLID_ATTRIBUTE = 'data-over-hero-solid'
 export const overHeroSx = (theme: Theme) => ({
   [`body:has([${UNDER_HEADER_ATTRIBUTE}]) &`]: {
     position: 'absolute',
-    // Below the owner's admin bar and the site's announcement bar when they
-    // are up (each publishes its live height on `<html>`), at the very top
-    // otherwise. Absolute to the initial containing block, nothing in flow
-    // moves this header — the variables are what do (AGL-3660, AGL-4176).
-    top: 'calc(var(--aglyn-admin-bar-height, 0px) + var(--aglyn-announcement-bar-height, 0px))',
+    // Below the owner's admin bar, the team's preview bar and the site's
+    // announcement bar when they are up (each publishes its height on
+    // `<html>`), at the very top otherwise. Absolute to the initial containing
+    // block, nothing in flow moves this header — the variables are what do
+    // (AGL-3660, AGL-4176, AGL-4152).
+    top: 'calc(var(--aglyn-admin-bar-height, 0px) + var(--aglyn-preview-bar-height, 0px) + var(--aglyn-announcement-bar-height, 0px))',
     left: 0,
     right: 0,
     transition: theme.transitions.create(
@@ -101,7 +102,7 @@ export const overHeroSx = (theme: Theme) => ({
   // nothing jumps.
   [`body:has([${UNDER_HEADER_ATTRIBUTE}]) &[${OVER_HERO_PINNED_ATTRIBUTE}][${OVER_HERO_SOLID_ATTRIBUTE}]`]: {
     position: 'fixed',
-    top: 'var(--aglyn-admin-bar-height, 0px)',
+    top: 'calc(var(--aglyn-admin-bar-height, 0px) + var(--aglyn-preview-bar-height, 0px))',
   },
 })
 

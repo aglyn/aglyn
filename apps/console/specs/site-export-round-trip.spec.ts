@@ -1225,7 +1225,9 @@ const runImport = async (view: any, options: { legacy?: boolean } = {}) => {
 }
 
 /** The import's own record and undo snapshot, which are not site documents. */
-const LEDGER_PATH = /^hosts\/host-1\/packageImports\//
+// The import's ledger, and the cache drop it stages in the publish outbox
+// (AGL-4121): bookkeeping, not site content.
+const LEDGER_PATH = /^(?:hosts\/host-1\/packageImports\/|publishOutbox\/)/
 
 /** Applies a mutation to every document in the bundle, at every depth. */
 const mutateEveryDocument = (bundle: any, mutate: (doc: any) => void) => {

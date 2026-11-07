@@ -69,6 +69,7 @@ import type { OutreachRuntimeDeps } from './runtime-deps'
 import { stampRecordEmailReply } from '@aglyn/aglyn/plugin-manager/plugin-record-email-state'
 import { fileOutreachEmail, fileOutreachNote, fileOutreachTask, markOutreachEmailDelivery } from './timeline'
 import { outreachUnsubscribeMailbox } from './unsubscribe-link'
+import { watchedEnrollmentsOfOrg, type WatchedEnrollments } from './watched-enrollments'
 
 /*==========================================
  * THE SYNC JOB (AGL-2981): every fifteen minutes, on the console.
@@ -186,6 +187,11 @@ interface SyncContext {
   delta: OutreachMailboxHealthDelta
   report: OutreachSyncReport
   nowMs: number
+  /**
+   * Said before any write to an enrollment, so the run's held watched set is
+   * read again rather than trusted (`./watched-enrollments`, AGL-4121).
+   */
+  touched: () => void
 }
 
 /** Runs the sync job once — see the module note. */
@@ -219,14 +225,17 @@ export async function runOutreachSyncJob(
     const orgSnapshot = await firestore.collection('orgs').doc(orgId).get()
     const org = (orgSnapshot.exists ? orgSnapshot.data() : null) as Record<string, unknown> | null
     if (!org || (await deps.orgRefusal(orgId, org))) continue
-    // Every enrollment the organization is still watching, read once per
-    // run and only when a mailbox has mail left to match (AGL-4088).
-    let orgWatched: Promise<OutreachEnrollment[]> | null = null
-    const watchedInOrg = () => (orgWatched ??= readWatchedEnrollments(firestore, orgId, context.nowMs))
+    // Every enrollment the organization is still watching, read once per run
+    // for every mailbox and the possible-reply step together, and again only
+    // after the run writes an enrollment (`./watched-enrollments`, AGL-4121).
+    const watched = watchedEnrollmentsOfOrg({
+      org: () => readWatchedEnrollmentDocs(firestore, orgId, context.nowMs),
+      mailbox: (mailboxId) => readWatchedEnrollmentDocs(firestore, orgId, context.nowMs, mailboxId),
+    })
     for (const mailbox of mailboxes) {
       if (deps.now() >= context.deadlineMs) break
       try {
-        await syncMailbox(deps, firestore, { orgId, mailbox, report, nowMs: context.nowMs, watchedInOrg })
+        await syncMailbox(deps, firestore, { orgId, mailbox, report, nowMs: context.nowMs, watched })
         report.mailboxes += 1
       } catch (error) {
         // One mailbox's failure is its own; the next mailbox is read. A grant
@@ -267,7 +276,7 @@ async function syncMailbox(
     mailbox: OutreachMailbox
     report: OutreachSyncReport
     nowMs: number
-    watchedInOrg: () => Promise<OutreachEnrollment[]>
+    watched: WatchedEnrollments<WatchedEnrollmentSnapshot>
   },
 ): Promise<void> {
   const { orgId, mailbox, report, nowMs } = input
@@ -300,17 +309,15 @@ async function syncMailbox(
     delta: emptyOutreachHealthDelta(),
     report,
     nowMs,
+    touched: input.watched.touched,
   }
 
   // The enrollments this mailbox is writing to, by thread and by address.
-  const watched = await outreachOrgCollection(firestore, orgId, 'enrollments')
-    .where('mailboxId', '==', mailbox.id)
-    .where('lastSentAtMs', '>=', nowMs - OUTREACH_SYNC_WATCH_MS)
-    .get()
+  const watched = await input.watched.forMailbox(mailbox.id)
   const byThread = new Map<string, OutreachEnrollment>()
   const byAddress = new Map<string, OutreachEnrollment>()
   const watchedEnrollments: OutreachEnrollment[] = []
-  for (const doc of watched.docs) {
+  for (const doc of watched) {
     const enrollment = readStoredOutreachEnrollment(doc.id, doc.data())
     if (!enrollment) continue
     watchedEnrollments.push(enrollment)
@@ -364,6 +371,7 @@ async function syncMailbox(
       const address = normalizeContactEmail(from)
       if (address && !context.selfAddresses.includes(address)) {
         const enrollment = byAddress.get(address) ?? null
+        context.touched()
         await recordOutreachOptOut(deps, {
           orgId,
           email: address,
@@ -396,7 +404,7 @@ async function syncMailbox(
   //     the person writing to another of our mailboxes, or a colleague.
   const leftover = inbound.filter(fresh).slice(0, POSSIBLE_REPLY_READS)
   if (leftover.length) {
-    const enrollments = await input.watchedInOrg()
+    const enrollments = enrollmentsOf(await input.watched.forOrg())
     for (const stub of leftover) {
       if (!fresh(stub)) continue
       const metadata = await context.client.getMessage(stub.id, { metadataHeaders: POSSIBLE_REPLY_HEADERS })
@@ -466,12 +474,30 @@ async function syncMailbox(
   }
 }
 
-/** Every enrollment of an organization written to within the watch window. */
-async function readWatchedEnrollments(firestore: Firestore, orgId: string, nowMs: number): Promise<OutreachEnrollment[]> {
-  const snapshot = await outreachOrgCollection(firestore, orgId, 'enrollments')
-    .where('lastSentAtMs', '>=', nowMs - OUTREACH_SYNC_WATCH_MS)
-    .get()
-  return snapshot.docs
+type WatchedEnrollmentSnapshot = FirebaseFirestore.QueryDocumentSnapshot
+
+/**
+ * Every enrollment of an organization written to within the watch window,
+ * or, given a mailbox, that mailbox's: the narrow read a mailbox falls back
+ * to once the run has written an enrollment (`./watched-enrollments`).
+ */
+async function readWatchedEnrollmentDocs(
+  firestore: Firestore,
+  orgId: string,
+  nowMs: number,
+  mailboxId?: string,
+): Promise<WatchedEnrollmentSnapshot[]> {
+  const enrollments = outreachOrgCollection(firestore, orgId, 'enrollments')
+  const query =
+    mailboxId === undefined
+      ? enrollments.where('lastSentAtMs', '>=', nowMs - OUTREACH_SYNC_WATCH_MS)
+      : enrollments.where('mailboxId', '==', mailboxId).where('lastSentAtMs', '>=', nowMs - OUTREACH_SYNC_WATCH_MS)
+  return (await query.get()).docs
+}
+
+/** The enrollments a set of watched documents holds, unreadable ones left out. */
+function enrollmentsOf(docs: readonly WatchedEnrollmentSnapshot[]): OutreachEnrollment[] {
+  return docs
     .map((doc) => readStoredOutreachEnrollment(doc.id, doc.data()))
     .filter((enrollment): enrollment is OutreachEnrollment => enrollment !== null)
 }
@@ -535,6 +561,9 @@ async function applyMessages(
   })
   const freshIds = decision.classifications.map((classification) => classification.messageId).filter(Boolean)
   if (!freshIds.length) return
+  // Everything below may write this enrollment and, through an opt-out, the
+  // address's others in the organization.
+  context.touched()
   // What they wrote, kept on the enrollment so the console can show it and
   // answer it in the thread (AGL-4020) — every message of theirs among
   // these, so a thread read whole also keeps a reply synced before they

@@ -222,3 +222,23 @@ describe('sanitizeRichText phrasing-only surfaces (AGL-2557)', () => {
     )
   })
 })
+
+describe('a Table cell keeps links as well as phrasing (AGL-4203)', () => {
+  it('keeps a safe link and drops blocks', () => {
+    const out = sanitizeRichText(
+      '<div><b>Yes</b> <a href="https://x.test">docs</a></div><ul><li>x</li></ul>',
+      { phrasingOnly: true, links: true },
+    )
+    expect(out).toBe(
+      '<b>Yes</b> <a href="https://x.test" rel="noopener noreferrer">docs</a>x',
+    )
+  })
+
+  it('still drops links on a control label', () => {
+    expect(
+      sanitizeRichText('<a href="https://x.test">docs</a>', {
+        phrasingOnly: true,
+      }),
+    ).toBe('docs')
+  })
+})

@@ -41,6 +41,10 @@ const mockNotified: any[] = []
 const mockResent: any[] = []
 const mockReceiptDoor: { next: any; resend: any } = { next: null, resend: null }
 const mockRaised: any[] = []
+// The store's selling account, read through this spec's fake Firestore.
+jest.mock('@aglyn/tenant-data-admin/server/seller-payment-account', () =>
+  jest.requireActual('../testing/fake-seller-payment-account'),
+)
 jest.mock('./order-notifications', () => ({
   notifyOrderBuyer: async (ref: any, event: string, options: any) => {
     mockNotified.push({ ref, event, options })
@@ -125,7 +129,11 @@ jest.mock('@aglyn/tenant-data-admin', () => {
 })
 
 import { posPaymentHandler } from './pos-payment'
-import { handlePosStripeEvent, KEYED_CARD_NEEDS_AUTHENTICATION } from './pos-terminal'
+import {
+  handlePosStripeEvent,
+  KEYED_CARD_NEEDS_AUTHENTICATION,
+  POS_READER_ON_OTHER_ACCOUNT,
+} from './pos-terminal'
 import { onPosSaleCompleted } from './pos-sale'
 
 /*==========================================
@@ -136,6 +144,8 @@ interface StripeCall {
   method: string
   path: string
   key: string | null
+  /** The `Stripe-Account` header: a direct-charge store's own account. */
+  account: string | null
   params: URLSearchParams
 }
 const stripeCalls: StripeCall[] = []
@@ -206,6 +216,11 @@ function stripeAnswer(method: string, path: string, params: URLSearchParams): an
     return { id: path.split('/')[2], status: 'online', action: null }
   }
   if (method === 'POST' && path === 'refunds') return { id: 're_1', status: 'succeeded' }
+  // A PaymentMethod cloned onto a connected account gets an id of its own there.
+  if (method === 'POST' && path === 'payment_methods') return { id: `${params.get('payment_method')}Clone` }
+  if (method === 'POST' && path === 'checkout/sessions') {
+    return { id: 'cs_test_1', url: 'https://checkout.stripe.com/c/pay/cs_test_1', livemode: false }
+  }
   return {}
 }
 
@@ -215,7 +230,8 @@ const fetchMock = jest.fn(async (url: any, init: any) => {
   const method = String(init?.method ?? 'GET')
   const params = new URLSearchParams(method === 'GET' ? target.search : String(init?.body ?? ''))
   const key = (init?.headers?.['Idempotency-Key'] as string | undefined) ?? null
-  stripeCalls.push({ method, path, key, params })
+  const account = (init?.headers?.['Stripe-Account'] as string | undefined) ?? null
+  stripeCalls.push({ method, path, key, account, params })
   if (key && replays.has(key)) {
     return { ok: true, status: 200, json: async () => replays.get(key) }
   }
@@ -612,6 +628,7 @@ describe('card readers', () => {
     expect(create.params.get('transfer_data[destination]')).toBe('acct_merchant')
     expect(create.params.getAll('payment_method_types[]')).toEqual(['card_present'])
     expect(create.params.get('metadata[kind]')).toBe('pos')
+    expect(create.params.has('metadata[chargeModel]')).toBe(false)
     expect(stripeCalls.some((call) => call.path.endsWith('/process_payment_intent'))).toBe(true)
 
     // The customer adds a $15 tip on the reader and taps.
@@ -639,6 +656,9 @@ describe('card readers', () => {
     expect(sale().paymentIntentId).toBe(intent.id)
     // A card carried the whole take: nothing is invoiced.
     expect(fakeDocs.get(`orgs/org-1/offlineFees/${new Date().toISOString().slice(0, 7)}`)).toBeUndefined()
+    // A destination store's every request is the platform's, as before.
+    expect(stripeCalls.every((call) => call.account === null)).toBe(true)
+    expect(sale().payments[0].chargeModel).toBeUndefined()
   })
 
   it('does nothing on a webhook replay: one capture, one completion, stock once', async () => {
@@ -867,5 +887,138 @@ describe('receipts', () => {
 describe('the gate', () => {
   it('refuses someone who is not a member of the site', async () => {
     expect((await act({ action: 'cash', tenderedCents: 100 }, 'x', 'other')).status).toBe(403)
+  })
+})
+
+describe('a store on its own Stripe account (direct charge, ToS v24 §10.2(a))', () => {
+  beforeEach(() => {
+    fakeDocs.set('profiles/owner-1', {
+      stripeAccountId: 'acct_store',
+      stripeChargesEnabled: true,
+      stripeChargeModel: 'direct',
+    })
+    fakeDocs.set('hosts/host-1/terminalReaders/tmr_store1', {
+      label: 'Counter (own account)',
+      stripeLocationId: 'tml_store',
+      stripeAccount: 'acct_store',
+      livemode: false,
+      createdAtMs: 1,
+    })
+  })
+
+  it('refuses a reader registered on the platform, with words that say to register it again', async () => {
+    const refused = await act({ action: 'card-present', amountCents: 5000, readerId: 'tmr_ours123' }, 'd0')
+    expect(refused.status).toBe(409)
+    expect(refused.body.error).toBe(POS_READER_ON_OTHER_ACCOUNT)
+    expect(stripeCalls.some((call) => call.path === 'payment_intents')).toBe(false)
+    expect(sale().payments).toHaveLength(0)
+  })
+
+  it('charges ON the store’s account with no transfer, and captures with the take alone (never the tip)', async () => {
+    const started = await act({ action: 'card-present', amountCents: 10_000, readerId: 'tmr_store1' }, 'd1')
+    expect(started.status).toBe(200)
+    const create = stripeCalls.find((call) => call.path === 'payment_intents')!
+    expect(create.account).toBe('acct_store')
+    expect(create.params.has('transfer_data[destination]')).toBe(false)
+    expect(create.params.has('on_behalf_of')).toBe(false)
+    expect(create.params.get('metadata[chargeModel]')).toBe('direct')
+    // Stripe bills the store its card fee: Aglyn's fee is the plan's take.
+    expect(create.params.get('application_fee_amount')).toBe('200')
+    const process = stripeCalls.find((call) => call.path.endsWith('/process_payment_intent'))!
+    expect(process.account).toBe('acct_store')
+    expect(sale().payments[0]).toMatchObject({ chargeModel: 'direct', stripeAccountId: 'acct_store' })
+
+    const intent = [...intents.values()][0]
+    intent.status = 'requires_capture'
+    intent.amount = 11_500
+    intent.amount_details = { tip: { amount: 1500 } }
+    const status = await act({ action: 'status', paymentId: started.body.paymentId })
+    expect(status.body.completed).toBe(true)
+    const capture = stripeCalls.find((call) => call.path.endsWith('/capture'))!
+    expect(capture.account).toBe('acct_store')
+    expect(capture.params.get('application_fee_amount')).toBe('200')
+    // Every request of the payment went to the store's account.
+    expect(stripeCalls.every((call) => call.account === 'acct_store')).toBe(true)
+    expect(sale().payments[0]).toMatchObject({ status: 'succeeded', feeCents: 200, tipCents: 1500 })
+  })
+
+  it('settles a reader event delivered through Connect by reading the intent on the store’s account', async () => {
+    await act({ action: 'card-present', amountCents: 10_000, readerId: 'tmr_store1' }, 'd2')
+    const intent = [...intents.values()][0]
+    intent.status = 'requires_capture'
+    stripeCalls.length = 0
+    const event = {
+      type: 'terminal.reader.action_succeeded',
+      object: { action: { type: 'process_payment_intent', process_payment_intent: { payment_intent: intent.id } } },
+      account: 'acct_store',
+    }
+    expect(await handlePosStripeEvent(event)).toEqual({ hostId: 'host-1' })
+    expect(stripeCalls.length).toBeGreaterThan(0)
+    expect(stripeCalls.every((call) => call.account === 'acct_store')).toBe(true)
+    expect(stripeCalls.filter((call) => call.path.endsWith('/capture'))).toHaveLength(1)
+  })
+
+  it('cancels on the store’s account: the reader’s action and the intent', async () => {
+    const started = await act({ action: 'card-present', amountCents: 4000, readerId: 'tmr_store1' }, 'd3')
+    stripeCalls.length = 0
+    const cancelled = await act({ action: 'cancel', paymentId: started.body.paymentId })
+    expect(cancelled.status).toBe(200)
+    expect(stripeCalls.some((call) => call.path.endsWith('/cancel_action'))).toBe(true)
+    expect(stripeCalls.some((call) => /payment_intents\/pi_test_\d+\/cancel$/.test(call.path))).toBe(true)
+    expect(stripeCalls.every((call) => call.account === 'acct_store')).toBe(true)
+  })
+
+  it('a typed card: the intent on the store’s account, and the form told which account to load', async () => {
+    const keyed = await act({ action: 'card-keyed', amountCents: 5000, tipCents: 1000 }, 'd4')
+    expect(keyed.body.stripeAccount).toBe('acct_store')
+    const create = stripeCalls.find((call) => call.path === 'payment_intents')!
+    expect(create.account).toBe('acct_store')
+    expect(create.params.has('transfer_data[destination]')).toBe(false)
+    // The take on $50 at 2% is $1; the tip carries none.
+    expect(create.params.get('application_fee_amount')).toBe('100')
+  })
+
+  it('a card typed into the register’s fields is cloned onto the store’s account, and the clone confirms', async () => {
+    const keyed = await act({ action: 'card-keyed', amountCents: 5000, paymentMethodId: 'pm_cardVisa1234' }, 'd5')
+    expect(keyed.status).toBe(200)
+    const clone = stripeCalls.find((call) => call.path === 'payment_methods')!
+    expect(clone).toMatchObject({ method: 'POST', account: 'acct_store' })
+    expect(clone.params.get('payment_method')).toBe('pm_cardVisa1234')
+    const confirm = stripeCalls.find((call) => call.path.endsWith('/confirm'))!
+    expect(confirm.account).toBe('acct_store')
+    expect(confirm.params.get('payment_method')).toBe('pm_cardVisa1234Clone')
+    expect(sale().payments[0]).toMatchObject({ method: 'card_keyed', status: 'succeeded', chargeModel: 'direct' })
+  })
+
+  it('a QR link: the payment page on the store’s account, the take alone as its fee', async () => {
+    const link = await act({ action: 'card-link', amountCents: 5000, tipCents: 500 }, 'd6')
+    expect(link.status).toBe(200)
+    const session = stripeCalls.find((call) => call.path === 'checkout/sessions')!
+    expect(session.account).toBe('acct_store')
+    expect(session.params.has('payment_intent_data[transfer_data][destination]')).toBe(false)
+    expect(session.params.get('payment_intent_data[application_fee_amount]')).toBe('100')
+    expect(session.params.get('payment_intent_data[metadata][chargeModel]')).toBe('direct')
+    expect(session.params.get('metadata[chargeModel]')).toBe('direct')
+  })
+
+  it('a void refunds on the store’s account, with no transfer to reverse', async () => {
+    const keyed = await act({ action: 'card-keyed', amountCents: 2000 }, 'd7')
+    const intent = intents.get(sale().payments[0].paymentIntentId)
+    intent.status = 'succeeded'
+    await act({ action: 'status', paymentId: keyed.body.paymentId })
+    const voided = await act({ action: 'void' })
+    expect(voided.status).toBe(200)
+    const refund = stripeCalls.find((call) => call.path === 'refunds')!
+    expect(refund.account).toBe('acct_store')
+    expect(refund.params.has('reverse_transfer')).toBe(false)
+    expect(refund.params.get('refund_application_fee')).toBe('true')
+  })
+
+  it('never asks a fee above the charge', async () => {
+    seedSale(60, 60)
+    fakeDocs.set('profiles/owner-1', { stripeAccountId: 'acct_store', stripeChargesEnabled: true, stripeChargeModel: 'direct' })
+    await act({ action: 'card-keyed', amountCents: 60 }, 'd8')
+    const create = stripeCalls.find((call) => call.path === 'payment_intents')!
+    expect(Number(create.params.get('application_fee_amount') ?? 0)).toBeLessThanOrEqual(60)
   })
 })

@@ -210,9 +210,37 @@ export const PLUGIN_CONNECTIONS_FEATURE_DECLARATION: PluginFeatureDeclaration = 
   defaultByPlan: PLUGIN_CONNECTIONS_BY_PLAN,
 }
 
+/**
+ * The plans the feature comes with, as every sentence about it names them: the
+ * plans on sale that `PLUGIN_CONNECTIONS_BY_PLAN` turns on. Names, never a
+ * price.
+ */
+export const PLUGIN_CONNECTIONS_PLANS = 'the Starter, Pro and Custom plans'
+
 /** What a plan without the feature is told. Names the plans, never a price. */
 export const PLUGIN_CONNECTIONS_PLAN_REFUSAL =
-  'Connecting a plugin to another service comes with the Starter, Pro and Custom plans.'
+  `Connecting a plugin to another service comes with ${PLUGIN_CONNECTIONS_PLANS}.`
+
+/**
+ * What a shopper reads on a listing whose plugin declares connections, before
+ * installing (AGL-4197): the plugin installs on any plan, but connecting it,
+ * which is what makes it useful, needs one of these plans. "Google Business
+ * Profile" → "Connecting Google Business Profile comes with the Starter, Pro
+ * and Custom plans". Null when nothing is declared.
+ */
+export function pluginConnectionsPlanNote(
+  labels: readonly string[],
+): string | null {
+  const names = Array.from(
+    new Set(labels.map((label) => String(label).trim()).filter(Boolean)),
+  )
+  if (!names.length) return null
+  const joined =
+    names.length === 1
+      ? names[0]
+      : `${names.slice(0, -1).join(', ')} and ${names[names.length - 1]}`
+  return `Connecting ${joined} comes with ${PLUGIN_CONNECTIONS_PLANS}`
+}
 
 /* ------------------------------------------------------------------ */
 /* The permission keys                                                  */

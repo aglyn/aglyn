@@ -28,6 +28,7 @@
 
 const mockAnnounceLivePaths = jest.fn()
 const mockDropSiteCaches = jest.fn()
+const mockDropPluginsEverywhere = jest.fn()
 const mockHostGet = jest.fn()
 
 jest.mock('./announce-live-paths', () => ({
@@ -35,6 +36,7 @@ jest.mock('./announce-live-paths', () => ({
 }))
 jest.mock('./tenant-revalidate', () => ({
   dropSiteCaches: (...args: unknown[]) => mockDropSiteCaches(...args),
+  dropPluginsEverywhere: (...args: unknown[]) => mockDropPluginsEverywhere(...args),
 }))
 jest.mock('@aglyn/tenant-data-admin', () => ({
   firebaseAdmin: {
@@ -57,6 +59,7 @@ beforeEach(() => {
     hostsDropped: 0,
   }))
   mockHostGet.mockReset().mockImplementation(async (hostId: string) => ({ id: hostId }))
+  mockDropPluginsEverywhere.mockReset().mockResolvedValue(true)
 })
 
 describe('the console site cache', () => {
@@ -115,5 +118,57 @@ describe('the console site cache', () => {
       hostIds: ['whole'],
       reason: 'mixed',
     })
+  })
+
+  /*
+   * WHICH PLUGINS MAY LOAD (AGL-4121). An uninstall asks for `'host'`, which
+   * rides each site's whole-site drop; a platform stop asks for
+   * `'everywhere'`, which is ONE call and no fan-out at all.
+   */
+  it('carries a site-scoped plugin change into each whole-site drop', async () => {
+    await consoleSiteCache.drop({
+      hostIds: ['h1'],
+      reason: 'uninstalled',
+      plugins: 'host',
+    })
+    expect(mockDropSiteCaches).toHaveBeenCalledWith(expect.anything(), {
+      hostIds: ['h1'],
+      reason: 'uninstalled',
+      plugins: 'host',
+    })
+  })
+
+  it('sends a platform-wide plugin change as one call, with no fan-out', async () => {
+    const result = await consoleSiteCache.drop({
+      hostIds: [],
+      reason: 'listing stopped',
+      plugins: 'everywhere',
+    })
+    expect(mockDropPluginsEverywhere).toHaveBeenCalledWith(expect.anything(), {
+      reason: 'listing stopped',
+      carrierHostIds: [],
+    })
+    expect(mockDropSiteCaches).not.toHaveBeenCalled()
+    expect(result).toEqual({ dropped: 1, skipped: 0, complete: true })
+  })
+
+  it('answers incomplete when a platform-wide drop neither landed nor was queued', async () => {
+    mockDropPluginsEverywhere.mockResolvedValue(false)
+    const result = await consoleSiteCache.drop({
+      hostIds: [],
+      reason: 'listing stopped',
+      plugins: 'everywhere',
+    })
+    expect(result.complete).toBe(false)
+  })
+
+  it('answers incomplete when a site drop was lost, so a stop path fails loudly', async () => {
+    mockDropSiteCaches.mockResolvedValue({ hosts: [], hostsDropped: 0, lost: 1 })
+    const result = await consoleSiteCache.drop({
+      hostIds: ['h1'],
+      reason: 'uninstalled',
+      plugins: 'host',
+    })
+    expect(result.complete).toBe(false)
   })
 })

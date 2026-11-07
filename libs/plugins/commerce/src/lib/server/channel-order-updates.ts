@@ -28,6 +28,7 @@ import { ORDER_FULFILLED_EVENT, ORDER_REFUNDED_EVENT } from '../model/order-even
 import { createHash } from 'node:crypto'
 import { fulfillmentEventView, stageOrderEvent } from './order-events'
 import { restockCapKey, saleReleaseCaps } from './restock-flag'
+import { dropStorefrontPages, soldOutMoved } from './sold-out-drop'
 
 /**
  * WHAT A CHANNEL SAYS AFTER ITS ORDER CAME IN (AGL-3644): commerce's half of
@@ -181,7 +182,10 @@ export async function recordChannelOrderRefund(
   const hostRef = firestore.collection('hosts').doc(request.hostId)
   const orderRef = hostRef.collection('orders').doc(request.recordId)
   const nowMs = deps.now()
-  return firestore.runTransaction(async (transaction): Promise<PluginChannelOrderRefundOutcome> => {
+  // Whether the restock flipped a sold-out verdict the storefront shows
+  // (AGL-4121); a retried attempt can only make the drop spurious.
+  let soldOutFlipped = false
+  const outcome = await firestore.runTransaction(async (transaction): Promise<PluginChannelOrderRefundOutcome> => {
     const snapshot = await transaction.get(orderRef)
     if (!snapshot.exists) return { outcome: 'no_such_record' }
     const order = CommerceModel.liftLegacyOrder((snapshot.data() ?? {}) as never)
@@ -210,6 +214,8 @@ export async function recordChannelOrderRefund(
       }
     })
 
+    // As read, before the restock below replaces each entry.
+    const originals = new Map(products)
     let restockedUnits = 0
     const restockedLines: number[] = []
     const ledger: CommerceModel.InventoryAdjustment[] = []
@@ -259,6 +265,7 @@ export async function recordChannelOrderRefund(
         ...CommerceModel.productStockFields(product),
         updatedAtMs: nowMs,
       })
+      soldOutFlipped ||= soldOutMoved(originals.get(productId), product)
     }
     for (const row of ledger) transaction.set(hostRef.collection('inventoryAdjustments').doc(createResourceUid()), row)
 
@@ -288,4 +295,8 @@ export async function recordChannelOrderRefund(
     }
     return { outcome: 'recorded', refundedCents, restockedUnits }
   })
+  if (soldOutFlipped && outcome.outcome === 'recorded') {
+    await dropStorefrontPages({ hostId: request.hostId, reason: 'a channel refund restocked a product' })
+  }
+  return outcome
 }

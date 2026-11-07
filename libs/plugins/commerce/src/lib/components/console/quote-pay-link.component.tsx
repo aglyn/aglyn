@@ -148,7 +148,7 @@ export function QuotePayLinkSection(props: QuotePayLinkSectionProps) {
         <Typography variant="subtitle2">{LinkName}</Typography>
         <Typography variant="body2" color="text.secondary">
           {proofOnly
-            ? 'Send this link to the customer. It opens the proof on your site, with no prices, where they can approve it or ask for changes. Only someone with the link can open it.'
+            ? 'Send this link to the customer. It opens the proof on your site, with no prices, where they can approve it or reject it with changes. Only someone with the link can open it.'
             : unpaid
               ? 'Send this link to the customer. It opens the quote on your site, where they can pay it.'
               : 'The link opens the paid quote and the customer’s order.'}

@@ -159,7 +159,7 @@ describe('a dataset record write announces to the live pages', () => {
     // be narrower than the change — `revalidateEntireHost` is correct here
     // and a per-dataset announce on top of it would be redundant work.
     const route = source('apps/console/app/api/hosts/import/route.ts')
-    expect(route).toContain('await revalidateEntireHost(firestore, hostId)')
+    expect(route).toMatch(/await revalidateEntireHost\(firestore, hostId(?:, \{[^)]*\})?\)/)
   })
 
   it('the tenant registers the in-process dropper at boot', () => {

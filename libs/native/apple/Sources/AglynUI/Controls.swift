@@ -237,7 +237,10 @@ public struct AglynNotice: View {
   public var body: some View {
     HStack(alignment: .top, spacing: AglynSpace.one) {
       Image(systemName: symbol).foregroundStyle(tone.color).accessibilityHidden(true)
-      Text(message).font(AglynFont.subheadline).frame(maxWidth: .infinity, alignment: .leading)
+      // Never truncated: a notice is the reason a control is off or a step failed, so all of it is read. A list row that
+      // re-measures after its content grows (a connection's failed sync) otherwise cuts the last line short.
+      Text(message).font(AglynFont.subheadline).fixedSize(horizontal: false, vertical: true)
+        .frame(maxWidth: .infinity, alignment: .leading)
       if let actionTitle, let action {
         Button(actionTitle, action: action)
           .font(AglynFont.subheadline.weight(.semibold))

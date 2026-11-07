@@ -35,6 +35,13 @@
  * prices from the product. A choice may cost more on one variant than
  * another (`priceCentsByVariant`), which is how one page sells a canopy whose
  * walls cost more at a larger size without a variant for every combination.
+ *
+ * THE PRODUCT BUILDER (AGL-4205). A choice may carry a picture and a short
+ * note, which a product page set to show its choices as picture cards draws
+ * on the choice's card. A choice that lists what it `includes` is a combo:
+ * one price for a bundle ("Weekend kit: 4 walls, 4 weights, a bag"), and the
+ * card folds its contents out. Display only: a combo is priced and sold as
+ * the one choice it is.
  *=========================================*/
 
 /** One choice in a modifier group. `priceCents` is added to the item, 0 for free. */
@@ -48,6 +55,15 @@ export interface ProductModifierOption {
    * `priceCents`. Read through {@link modifierOptionPriceCents}.
    */
   priceCentsByVariant?: Record<string, number>
+  /** A picture of the choice, from the media library, for its card (AGL-4205). */
+  imageUrl?: string
+  /** A short line under the choice on its card (AGL-4205): "Blocks wind on one side". */
+  note?: string
+  /**
+   * What a combo holds (AGL-4205), one item per entry: "Full wall ×2". A
+   * choice with any is shown as a combo whose contents fold out.
+   */
+  includes?: string[]
 }
 
 /**
@@ -88,6 +104,14 @@ export const POS_MAX_MODIFIER_GROUPS = 10
 export const POS_MAX_MODIFIER_OPTIONS = 20
 /** $1,000 on one modifier: anything larger is a product, not an add-on. */
 export const POS_MAX_MODIFIER_PRICE_CENTS = 100_000
+/** Whether a choice is a combo: it lists what it includes (AGL-4205). */
+export function modifierOptionIsCombo(option: Pick<ProductModifierOption, 'includes'>): boolean {
+  return (
+    Array.isArray(option.includes) &&
+    option.includes.length > 0 &&
+    option.includes.every((item) => typeof item === 'string')
+  )
+}
 
 function modifierPriceIsValid(price: unknown): boolean {
   return (

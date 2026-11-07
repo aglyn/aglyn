@@ -11454,9 +11454,9 @@
           "sample": "Also with this revision: banner.ai. See it on your quote page."
         },
         {
-          "description": "What to do next: approve the proof first, or pay when ready; for a proof with no price yet, approve it or ask for changes",
+          "description": "What to do next: approve the proof first, or pay when ready; for a proof with no price yet, approve it or reject it with changes",
           "name": "quote.nextStep",
-          "sample": "Look over the proof, then approve it on your quote page. Once you approve it, you can pay there."
+          "sample": "Look over the proof, then approve it on your quote page: you confirm you checked it and type your name. Once you approve it, you can pay there."
         },
         {
           "description": "“Review and approve” while an approval is needed first, “Review the proof” for a proof with no price yet, else “View and pay” with the total",
@@ -11470,6 +11470,85 @@
         }
       ],
       "name": "Quote",
+      "plugin": "Commerce",
+      "pluginId": "commerce"
+    },
+    {
+      "control": "besigner",
+      "defaultBody": [
+        {
+          "block": "text",
+          "text": "{{host.businessName}} · {{quote.label}} {{quote.number}}",
+          "variant": "eyebrow"
+        },
+        {
+          "block": "text",
+          "text": "{{message.heading}}",
+          "variant": "heading"
+        },
+        {
+          "block": "text",
+          "text": "{{message.body}}",
+          "variant": "body"
+        },
+        {
+          "block": "button",
+          "href": "{{quote.url}}",
+          "label": "{{message.buttonLabel}}"
+        },
+        {
+          "block": "text",
+          "text": "Reply to this email to reach {{host.businessName}}, or answer on the page the button opens.",
+          "variant": "caption"
+        }
+      ],
+      "defaultSubject": "{{message.subject}}",
+      "description": "Sends your reply to a customer about their quote or proof when you write one on the quote: your message and a button back to the quote on your site. It arrives in the same conversation as the quote emails, and the customer can answer by email or on the quote page.",
+      "footerReason": "You’re receiving this because {{host.businessName}} is preparing a quote or proof for you.",
+      "key": "quote-message",
+      "mergeTokens": [
+        {
+          "description": "The subject of the quote’s conversation, so the reply arrives in it",
+          "name": "message.subject",
+          "sample": "Quote #1042 from Northwind Signs"
+        },
+        {
+          "description": "“Quote”, or “Proof” for a proof with no price yet",
+          "name": "quote.label",
+          "sample": "Quote"
+        },
+        {
+          "description": "The quote number",
+          "name": "quote.number",
+          "sample": "#1042"
+        },
+        {
+          "description": "Which revision of the quote it is on",
+          "name": "quote.revision",
+          "sample": "2"
+        },
+        {
+          "description": "“A message about your quote”, or “proof”",
+          "name": "message.heading",
+          "sample": "A message about your quote"
+        },
+        {
+          "description": "The message as typed on the quote",
+          "name": "message.body",
+          "sample": "We can do the larger logo. The new proof will be ready tomorrow."
+        },
+        {
+          "description": "“View your quote”, or “View your proof”",
+          "name": "message.buttonLabel",
+          "sample": "View your quote"
+        },
+        {
+          "description": "The quote’s link on your site, where the customer can answer too",
+          "name": "quote.url",
+          "sample": "https://shop.example.com/pay-quote?q=quote_123&t=…"
+        }
+      ],
+      "name": "Quote message",
       "plugin": "Commerce",
       "pluginId": "commerce"
     },

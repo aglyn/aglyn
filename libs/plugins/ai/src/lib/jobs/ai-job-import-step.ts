@@ -812,9 +812,11 @@ export function aiSiteImportWaveLines(state: AiSiteImportState, page: AiSiteImpo
   for (const other of state.pages) {
     if (other.slot === page.slot || other.wave !== page.wave) continue
     for (const block of other.read?.blocks ?? []) {
-      if (block.kind === 'image' || !block.text.trim() || chars >= AI_SITE_IMPORT_SCOPE_MAX_CHARS) continue
-      chars += block.text.length
-      out.push(block.text)
+      // A picture's words too (AGL-4152): what its alt text says is what the site says.
+      const text = block.kind === 'image' ? block.alt : block.text
+      if (!text?.trim() || chars >= AI_SITE_IMPORT_SCOPE_MAX_CHARS) continue
+      chars += text.length
+      out.push(text)
     }
   }
   return out
@@ -1542,7 +1544,7 @@ export function createAiJobImportStep(deps: AiSiteImportStepDeps = {}): AiJobSte
       // A page whose rewrite was refused keeps its words, and its row says so (AGL-4152).
       if (page && outcome.wording === 'kept' && page.wording === 'improved') current = aiSiteImportWordsKept(current, slot)
       // How its redesign came out (AGL-4152): what its row says, what it added and what it shows.
-      if (page && outcome.redesign) current = aiSiteImportRedesignOf(current, slot, outcome.redesign.status, outcome.redesign.added, outcome.redesign.pictures, outcome.redesign.missed)
+      if (page && outcome.redesign) current = aiSiteImportRedesignOf(current, slot, outcome.redesign.status, outcome.redesign.added, outcome.redesign.pictures, outcome.redesign.missed, outcome.redesign.why)
       const spent = aiUnitSpend(outcome)
       const stopped = aiUnitFailure(slot, outcome)
       if (stopped?.status === 'running') return { ...spent, outputs: [], item: stopped, siteImport: current, continue: true }

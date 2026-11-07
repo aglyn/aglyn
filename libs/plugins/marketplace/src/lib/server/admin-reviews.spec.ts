@@ -239,6 +239,17 @@ jest.mock('@aglyn/tenant-data-admin', () => ({
   findUserByUidAcrossPools: async () => null,
 }))
 
+// The live-site drop is its own module with its own spec (AGL-4121); here
+// only whether a verdict asks for it matters.
+const mockListingDrops: string[] = []
+jest.mock('./revoke-cache-drop', () => ({
+  __esModule: true,
+  dropCachesForListing: async (_firestore: unknown, listingId: string) => {
+    mockListingDrops.push(listingId)
+    return { dropped: 1, skipped: 0, complete: true }
+  },
+}))
+
 // The fan-out is its own module with its own spec; here only the words matter.
 jest.mock('./publisher-review-email', () => ({
   __esModule: true,
@@ -1152,6 +1163,29 @@ describe('a verdict names the plugin and says what happened to it (AGL-3432)', (
     expect(email).not.toMatch(/Reason: \s*\n/)
     expect(email).not.toMatch(/Your plugin/)
     expect(notice).toBe(email)
+  })
+
+  it('rejecting a realm-trusted version drops every site’s plugin set (AGL-4121)', async () => {
+    seedListing({ profileId: PUBLISHER })
+    seedVersion()
+    const path = `marketplaceListings/${LISTING}/pluginVersions/${VERSION}`
+    docs.set(path, { ...(docs.get(path) as Record<string, unknown>), trust: 'realm' })
+    mockListingDrops.length = 0
+    const response = await POST(
+      post({ listingId: LISTING, action: 'reject-version', version: VERSION, category: 'verifier' }),
+    )
+    expect(response.status).toBe(200)
+    expect(mockListingDrops).toEqual([LISTING])
+  })
+
+  it('CONTROL: rejecting an untrusted version changes nothing a site loads, so drops nothing', async () => {
+    seedListing({ profileId: PUBLISHER })
+    seedVersion()
+    mockListingDrops.length = 0
+    await POST(
+      post({ listingId: LISTING, action: 'reject-version', version: VERSION, category: 'verifier' }),
+    )
+    expect(mockListingDrops).toEqual([])
   })
 
   it('a rejected version still running somewhere says so, without telling the publisher to uninstall it', async () => {

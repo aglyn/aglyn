@@ -288,7 +288,7 @@ describe('end to end: the webhook, the device’s sync and the sweep (Stripe moc
       afterSale: async () => undefined,
       card: {
         terminal: async () => ({ available: true, locationId: 'tml_1' }),
-        merchantAccount: async () => 'acct_merchant',
+        merchantAccount: async () => ({ accountId: 'acct_merchant', chargeModel: 'destination' as const }),
         enableOffline: async () => true,
         retrieve: async () => ({ ok: true, intent }),
         capture: async (_id, fee) => {

@@ -16,7 +16,7 @@
  */
 
 import { fireEvent, render, screen, waitFor } from '@testing-library/react'
-import { buildInvoicePageView, buildQuotePageView } from '../model'
+import { buildInvoicePageView, buildQuotePageView, QUOTE_DEFAULT_APPROVAL_STATEMENTS } from '../model'
 import QuotePage from './quote-page'
 
 /**
@@ -58,8 +58,8 @@ const ORDER = {
   },
 }
 
-const view = (order: Record<string, unknown> = ORDER) =>
-  buildQuotePageView({ order: order as never, orderId: 'q-1', storeName: 'Acme Tents', currency: 'USD' })
+const view = (order: Record<string, unknown> = ORDER, extra: Partial<Parameters<typeof buildQuotePageView>[0]> = {}) =>
+  buildQuotePageView({ order: order as never, orderId: 'q-1', storeName: 'Acme Tents', currency: 'USD', ...extra })
 
 const json = (body: unknown, ok = true) => ({ ok, json: async () => body })
 
@@ -226,20 +226,42 @@ describe('the proofs on the quote page (AGL-4096)', () => {
     expect(screen.getByText(/Revision 1\. Look it over/)).toBeTruthy()
   })
 
-  it('approves under a typed name, for the version shown, and Pay comes back', async () => {
-    const answered = proofed(
-      { requireProofApproval: true, stage: 'approved', approvedRevision: 1, responses: [{ action: 'approve', revision: 1, atMs: Date.UTC(2026, 9, 22), name: 'Jordan Lee', ip: null, userAgent: null }] },
-    )
+  it('approves with every statement ticked and a typed name, for the version shown, and Pay comes back', async () => {
+    const answered = proofed({
+      requireProofApproval: true,
+      stage: 'approved',
+      approvedRevision: 1,
+      responses: [
+        {
+          action: 'approve',
+          revision: 1,
+          atMs: Date.UTC(2026, 9, 22),
+          name: 'Jordan Lee',
+          confirmed: [...QUOTE_DEFAULT_APPROVAL_STATEMENTS],
+          ip: null,
+          userAgent: null,
+        },
+      ],
+    })
     mockSiteFetch.mockResolvedValueOnce(json(proofed({ requireProofApproval: true }))).mockResolvedValueOnce(json({ view: answered }))
     render(<QuotePage />)
     expect(await screen.findByText('Acme Tents asks you to approve the proof before you pay.')).toBeTruthy()
     fireEvent.click(screen.getByRole('button', { name: 'Approve this proof' }))
-    fireEvent.click(screen.getByRole('button', { name: 'Approve' }))
-    expect(await screen.findByText('Type your name to approve the proof.')).toBeTruthy()
-    expect(mockSiteFetch).toHaveBeenCalledTimes(1)
+    const approve = () => screen.getByRole('button', { name: 'Approve' }) as HTMLButtonElement
+    // Approve stays off until every statement is ticked and a name is typed (AGL-4206).
+    expect(approve().disabled).toBe(true)
     fireEvent.change(screen.getByLabelText('Your name'), { target: { value: 'Jordan Lee' } })
-    fireEvent.click(screen.getByRole('button', { name: 'Approve' }))
+    expect(approve().disabled).toBe(true)
+    const boxes = QUOTE_DEFAULT_APPROVAL_STATEMENTS.map((statement) => screen.getByRole('checkbox', { name: statement }))
+    boxes.slice(0, -1).forEach((box) => fireEvent.click(box))
+    expect(approve().disabled).toBe(true)
+    fireEvent.click(boxes[boxes.length - 1])
+    expect(approve().disabled).toBe(false)
+    expect(mockSiteFetch).toHaveBeenCalledTimes(1)
+    fireEvent.click(approve())
     expect(await screen.findByText(/You approved this proof on .* as Jordan Lee\./)).toBeTruthy()
+    // The page shows back what they confirmed.
+    expect(screen.getByText(QUOTE_DEFAULT_APPROVAL_STATEMENTS[0])).toBeTruthy()
     const [url, init] = mockSiteFetch.mock.calls[1] as [string, RequestInit]
     expect(url).toBe('/api/commerce/quote-respond')
     expect(JSON.parse(String(init.body))).toEqual({
@@ -249,13 +271,38 @@ describe('the proofs on the quote page (AGL-4096)', () => {
       v: Date.UTC(2026, 9, 21),
       action: 'approve',
       name: 'Jordan Lee',
+      confirmed: [...QUOTE_DEFAULT_APPROVAL_STATEMENTS],
       website: '',
     })
     expect((init.headers as Record<string, string>)['Idempotency-Key']).toBeTruthy()
     expect(screen.getByRole('button', { name: 'Pay $2,675.48' })).toBeTruthy()
   })
 
-  it('asks for changes with a comment and artwork sent through the upload', async () => {
+  it('shows the business’s own statements', async () => {
+    const own = ['The address is right.']
+    mockSiteFetch.mockResolvedValueOnce(
+      json(view({ ...ORDER, quote: { ...ORDER.quote, proofs: PROOFS } }, { approvalStatements: own })),
+    )
+    render(<QuotePage />)
+    fireEvent.click(await screen.findByRole('button', { name: 'Approve this proof' }))
+    expect(screen.getByRole('checkbox', { name: 'The address is right.' })).toBeTruthy()
+    expect(screen.queryByRole('checkbox', { name: QUOTE_DEFAULT_APPROVAL_STATEMENTS[0] })).toBeNull()
+  })
+
+  it('asks a customer with an account to sign in, and shows nothing of the proof until they do', async () => {
+    window.history.replaceState({}, '', '/pay-quote?q=q-1&t=1.tok')
+    mockSiteFetch.mockResolvedValueOnce(json(view({ ...ORDER, quote: { ...ORDER.quote, proofs: PROOFS } }, { proofAccess: 'sign-in' })))
+    render(<QuotePage />)
+    const signIn = (await screen.findByRole('link', { name: 'Sign in' })) as HTMLAnchorElement
+    expect(signIn.getAttribute('href')).toBe(`/signin?continue=${encodeURIComponent('/pay-quote?q=q-1&t=1.tok')}`)
+    expect(screen.getByText(/Sign in to your account with Acme Tents to see the proof and approve it\./)).toBeTruthy()
+    expect(screen.queryByRole('button', { name: 'Approve this proof' })).toBeNull()
+    expect(screen.queryByRole('img')).toBeNull()
+    // The conversation waits on the same sign-in (AGL-4207).
+    expect(screen.queryByRole('button', { name: 'Send message' })).toBeNull()
+  })
+
+  it('rejects with changes: a note and a name required, artwork optional, sent through the upload', async () => {
     mockSiteFetch.mockImplementation(async (url: string, init?: RequestInit) => {
       if (url.startsWith('/api/commerce/quote-view')) return json(proofed())
       const body = JSON.parse(String(init?.body))
@@ -265,22 +312,27 @@ describe('the proofs on the quote page (AGL-4096)', () => {
       if (url === '/api/commerce/quote-upload') {
         return json({ file: { id: 'a1', name: 'logo.ai', contentType: 'application/illustrator', size: 900, uploadedAtMs: 1 } })
       }
-      return json({ view: proofed({ responses: [{ action: 'changes', revision: 1, atMs: Date.UTC(2026, 9, 22), comment: 'Bigger', ip: null, userAgent: null }] }) })
+      return json({ view: proofed({ responses: [{ action: 'changes', revision: 1, atMs: Date.UTC(2026, 9, 22), comment: 'Bigger', name: 'Jordan Lee', ip: null, userAgent: null }] }) })
     })
     render(<QuotePage />)
-    fireEvent.click(await screen.findByRole('button', { name: 'Request changes' }))
-    fireEvent.click(screen.getByRole('button', { name: 'Send changes' }))
+    fireEvent.click(await screen.findByRole('button', { name: 'Reject with changes' }))
+    // The approval's statements don't apply to a rejection (AGL-4206).
+    expect(screen.queryByRole('checkbox')).toBeNull()
+    fireEvent.click(screen.getByRole('button', { name: 'Reject with changes' }))
     expect(await screen.findByText('Tell us what to change.')).toBeTruthy()
     fireEvent.change(screen.getByLabelText(/What should change\?/), { target: { value: 'Bigger logo' } })
+    fireEvent.click(screen.getByRole('button', { name: 'Reject with changes' }))
+    expect(await screen.findByText('Type your name to reject the proof.')).toBeTruthy()
+    fireEvent.change(screen.getByLabelText(/Your name/), { target: { value: 'Jordan Lee' } })
     const file = new File(['%!PS-Adobe'], 'logo.ai', { type: 'application/postscript' })
     fireEvent.change(screen.getByTestId('quote-artwork-picker'), { target: { files: [file] } })
     expect(await screen.findByText('logo.ai · 1 KB')).toBeTruthy()
     expect(storageFetch).toHaveBeenCalledWith('https://storage.example/b/', expect.objectContaining({ method: 'POST', mode: 'no-cors' }))
-    fireEvent.click(screen.getByRole('button', { name: 'Send changes' }))
-    expect(await screen.findByText(/You asked for changes on/)).toBeTruthy()
+    fireEvent.click(screen.getByRole('button', { name: 'Reject with changes' }))
+    expect(await screen.findByText(/You rejected this proof with changes on .* as Jordan Lee\./)).toBeTruthy()
     const respond = mockSiteFetch.mock.calls.find(([url]) => url === '/api/commerce/quote-respond') as [string, RequestInit]
-    expect(JSON.parse(String(respond[1].body))).toMatchObject({ action: 'changes', comment: 'Bigger logo', fileIds: ['a1'] })
-    // They may still approve after asking for changes.
+    expect(JSON.parse(String(respond[1].body))).toMatchObject({ action: 'changes', comment: 'Bigger logo', name: 'Jordan Lee', fileIds: ['a1'] })
+    // They may still approve after rejecting it with changes.
     expect(screen.getByRole('button', { name: 'Approve this proof' })).toBeTruthy()
   })
 
@@ -289,7 +341,7 @@ describe('the proofs on the quote page (AGL-4096)', () => {
     render(<QuotePage />)
     expect(await screen.findByRole('img', { name: 'Banner.png' })).toBeTruthy()
     expect(screen.queryByRole('button', { name: 'Approve this proof' })).toBeNull()
-    expect(screen.queryByRole('button', { name: 'Request changes' })).toBeNull()
+    expect(screen.queryByRole('button', { name: 'Reject with changes' })).toBeNull()
   })
 
   it('shows the quote again when it changed since the page loaded', async () => {
@@ -300,6 +352,7 @@ describe('the proofs on the quote page (AGL-4096)', () => {
     render(<QuotePage />)
     fireEvent.click(await screen.findByRole('button', { name: 'Approve this proof' }))
     fireEvent.change(screen.getByLabelText('Your name'), { target: { value: 'Jordan Lee' } })
+    QUOTE_DEFAULT_APPROVAL_STATEMENTS.forEach((statement) => fireEvent.click(screen.getByRole('checkbox', { name: statement })))
     fireEvent.click(screen.getByRole('button', { name: 'Approve' }))
     expect(await screen.findByText(/This quote was updated since you opened it/)).toBeTruthy()
     await waitFor(() => expect(mockSiteFetch).toHaveBeenCalledTimes(3))
@@ -363,7 +416,7 @@ describe('a proof with no price yet (AGL-4184)', () => {
   const proofOnly = (proofs: unknown[] = [PROOF]) =>
     view({ ...ORDER, lineItems: [], quote: { ...ORDER.quote, discount: null, shipping: null, proofs } })
 
-  it('shows the proof with Approve and Request changes, and nothing about money', async () => {
+  it('shows the proof with Approve and Reject with changes, and nothing about money', async () => {
     mockSiteFetch.mockResolvedValue(json(proofOnly()))
     render(<QuotePage heading="Your quote" />)
     expect(await screen.findByRole('heading', { name: 'Proof #1042' })).toBeTruthy()
@@ -372,7 +425,7 @@ describe('a proof with no price yet (AGL-4184)', () => {
       '/api/commerce/quote-proof?hostId=host-1&q=q-1&t=1.tok&file=p1',
     )
     expect(screen.getByRole('button', { name: 'Approve this proof' })).toBeTruthy()
-    expect(screen.getByRole('button', { name: 'Request changes' })).toBeTruthy()
+    expect(screen.getByRole('button', { name: 'Reject with changes' })).toBeTruthy()
     for (const gone of ['Items', 'Subtotal', 'Total', 'Unpaid', 'Download PDF']) {
       expect(screen.queryByText(gone)).toBeNull()
     }
@@ -400,5 +453,56 @@ describe('a proof with no price yet (AGL-4184)', () => {
     expect(await screen.findByRole('heading', { name: 'Quote #1042' })).toBeTruthy()
     expect(screen.getByRole('button', { name: 'Pay $2,675.48' })).toBeTruthy()
     expect(screen.getByRole('button', { name: 'Approve this proof' })).toBeTruthy()
+  })
+})
+
+describe('messages with the business on the quote page (AGL-4207)', () => {
+  beforeEach(() => window.history.replaceState({}, '', '/pay-quote?q=q-1&t=1.tok'))
+
+  const withMessages = (messages: Array<Record<string, unknown>>) => ({ ...view(), messages })
+
+  it('shows the conversation, the business’s replies set apart', async () => {
+    mockSiteFetch.mockResolvedValueOnce(
+      json(
+        withMessages([
+          { id: 'm1', from: 'customer', body: 'Can the logo be bigger?', atMs: Date.UTC(2026, 10, 1) },
+          { id: 'm2', from: 'business', body: 'Yes, new proof tomorrow.', atMs: Date.UTC(2026, 10, 2) },
+        ]),
+      ),
+    )
+    render(<QuotePage />)
+    expect(await screen.findByText('Yes, new proof tomorrow.')).toBeTruthy()
+    expect(screen.getByText(/Acme Tents wrote$/)).toBeTruthy()
+    expect(screen.getByText(/You wrote$/)).toBeTruthy()
+    expect(screen.getByText('To Acme Tents')).toBeTruthy()
+  })
+
+  it('sends a message once per press, and shows it in the conversation', async () => {
+    mockSiteFetch
+      .mockResolvedValueOnce(json(withMessages([])))
+      .mockResolvedValueOnce(json({ messages: [{ id: 'm1', from: 'customer', body: 'Is red available?', atMs: Date.UTC(2026, 10, 3) }] }))
+    render(<QuotePage />)
+    const send = (await screen.findByRole('button', { name: 'Send message' })) as HTMLButtonElement
+    expect(send.disabled).toBe(true)
+    fireEvent.change(screen.getByLabelText('Message'), { target: { value: 'Is red available?' } })
+    fireEvent.click(send)
+    expect(await screen.findByText('Sent. Acme Tents will get back to you.')).toBeTruthy()
+    expect(screen.getByText('Is red available?')).toBeTruthy()
+    const [url, init] = mockSiteFetch.mock.calls[1] as [string, RequestInit]
+    expect(url).toBe('/api/commerce/quote-message')
+    expect(JSON.parse(String(init.body))).toEqual({ hostId: 'host-1', q: 'q-1', t: '1.tok', message: 'Is red available?', website: '' })
+    expect((init.headers as Record<string, string>)['Idempotency-Key']).toBeTruthy()
+    expect(mockSiteFetch).toHaveBeenCalledTimes(2)
+  })
+
+  it('says what went wrong, and keeps what was typed', async () => {
+    mockSiteFetch
+      .mockResolvedValueOnce(json(withMessages([])))
+      .mockResolvedValueOnce(json({ error: 'Too many tries. Try again in a few minutes.' }, false))
+    render(<QuotePage />)
+    fireEvent.change(await screen.findByLabelText('Message'), { target: { value: 'Hello' } })
+    fireEvent.click(screen.getByRole('button', { name: 'Send message' }))
+    expect(await screen.findByText('Too many tries. Try again in a few minutes.')).toBeTruthy()
+    expect((screen.getByLabelText('Message') as HTMLTextAreaElement).value).toBe('Hello')
   })
 })

@@ -181,6 +181,10 @@ const fakeFirestore = {
 const CASHIER_UID = 'cashier-1'
 let mockPluginSettings: Record<string, unknown> | undefined
 
+// The store's selling account, read through this spec's fake Firestore.
+jest.mock('@aglyn/tenant-data-admin/server/seller-payment-account', () =>
+  jest.requireActual('../testing/fake-seller-payment-account'),
+)
 jest.mock('@aglyn/tenant-runtime/org-permissions', () => ({
   ...jest.requireActual('@aglyn/tenant-runtime/org-permissions'),
   resolveOrgPermissions: (...args: any[]) =>

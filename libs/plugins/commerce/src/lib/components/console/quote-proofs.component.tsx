@@ -194,6 +194,18 @@ function QuoteResponseNote(props: {
       <Alert severity="success">
         <Stack spacing={0.5}>
           <Typography variant="body2">{`Approved by ${response.name || 'the customer'} on ${dateTime(response.atMs)}.`}</Typography>
+          {response.confirmed?.length ? (
+            <Stack spacing={0.25} data-quote-approval-confirmed="">
+              <Typography variant="body2">{'They confirmed:'}</Typography>
+              <Box component="ul" sx={{ m: 0, pl: 2.5 }}>
+                {response.confirmed.map((statement) => (
+                  <Typography key={statement} component="li" variant="body2">
+                    {statement}
+                  </Typography>
+                ))}
+              </Box>
+            </Stack>
+          ) : null}
           <Typography variant="caption" color="text.secondary">
             {[response.ip ? `From ${response.ip}` : '', response.userAgent ?? ''].filter(Boolean).join(' · ')}
           </Typography>
@@ -204,7 +216,9 @@ function QuoteResponseNote(props: {
   return (
     <Alert severity="warning">
       <Stack spacing={1}>
-        <Typography variant="body2">{`Changes requested on ${dateTime(response.atMs)}:`}</Typography>
+        <Typography variant="body2">
+          {`Rejected with changes${response.name ? ` by ${response.name}` : ''} on ${dateTime(response.atMs)}:`}
+        </Typography>
         <Typography variant="body2" sx={{ whiteSpace: 'pre-line' }}>
           {response.comment}
         </Typography>
@@ -403,10 +417,14 @@ export function QuoteProofsSection(props: QuoteProofsSectionProps) {
         <Typography variant="subtitle2">{`Proofs · Revision ${revision}`}</Typography>
         <Typography variant="body2" color="text.secondary">
           {proofOnly
-            ? 'The customer sees these on the proof page, with no prices, and can approve them or ask for changes.'
+            ? 'The customer sees these on the proof page, with no prices, and can approve them or reject them with changes.'
             : section?.requireProofApproval
             ? 'The customer sees these on the quote page and approves them before they can pay.'
-            : 'The customer sees these on the quote page, and can approve them or ask for changes. Paying doesn’t wait on it.'}
+            : 'The customer sees these on the quote page, and can approve them or reject them with changes. Paying doesn’t wait on it.'}
+          {' To approve, they tick each statement from your Quotes settings and type their name.'}
+          {section?.requireProofSignIn
+            ? ' A customer with an account on your site signs in to see them; one without uses the private link.'
+            : ''}
         </Typography>
       </Stack>
 

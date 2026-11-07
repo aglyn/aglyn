@@ -93,7 +93,7 @@ export const schema: Aglyn.ComponentSchema<ProductOptionsFieldProps> = {
     {
       name: 'productId',
       label: 'Product',
-      description: 'Ask about one product only: the person picks its options. Leave it empty to let them pick from your store.',
+      description: 'Ask about one product only: the person picks its options. Leave it empty to let them pick from your store, or in a Product detail block to use the page’s picks.',
       component: Aglyn.FieldComponentType.PRODUCT_SELECT,
     },
     {

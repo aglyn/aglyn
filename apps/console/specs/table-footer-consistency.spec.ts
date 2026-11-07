@@ -1669,14 +1669,6 @@ const NOT_A_LIST: Array<[string, string]> = [
  */
 const OWES_A_FOOTER: Array<[string, string]> = [
   [
-    'libs/plugins/inbox/src/lib/components/submission-reply.component.tsx',
-    'Replies sent on one submission. The row count is a function of how often ' +
-      'the merchant answered, not of any taxonomy, so it is a list by this ' +
-      'file’s own test. It over-fetches by one and SAYS when the thread is ' +
-      'longer than the window — which makes the truncation honest but does ' +
-      'not make it navigable, and the eleventh reply is still unreachable.',
-  ],
-  [
     // The invoice table moved to its own section when billing was split
     // (AGL-2501). Same table, same reason, same scope decision — only the file
     // it lives in changed.
@@ -1894,7 +1886,11 @@ describe('a table with rows under it has a footer under those (AGL-2501)', () =>
     // component (AGL-3607). The entry asked for a search-first grid rather
     // than a footer, and that is the grid it is: a typed name narrows the
     // query to the whole catalog, and a scan reads one product by barcode.
-    expect(OWES_A_FOOTER).toHaveLength(12)
+    //
+    // 11 since an Inbox submission's replies left their table for the shared
+    // ReplyThread (AGL-4207), which a quote's conversation uses too. It is a
+    // thread, not a table, so this sweep no longer finds one to owe a footer.
+    expect(OWES_A_FOOTER).toHaveLength(11)
     // 37 since a site's senders became a list the composer picks from: the
     // drawer that edits one carries a picker of teammates, and a picker's
     // option list is a lookup rather than a window a reader pages through.

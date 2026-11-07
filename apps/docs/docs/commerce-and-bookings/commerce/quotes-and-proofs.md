@@ -39,12 +39,34 @@ page asks them to approve it instead of offering **Pay**, and a payment can't be
 started for it. A quote with no proof is never held. See
 [Proof approval and paying](#approval-and-paying).
 
+Each quote also keeps whether **Customers sign in to see and approve proofs**. See
+[Who can open a proof](#proof-sign-in).
+
 ## New-quote defaults {#quote-defaults}
 
 The **Quotes** card on the **Checkout** settings page sets what every new quote starts
-with: whether customers approve the proof before they can pay. Turn the switch on or
-off and choose **Save**. Each quote starts with this setting, and you can change it on
-the quote.
+with:
+
+- **Customers approve the proof before they can pay** (see
+  [Proof approval and paying](#approval-and-paying));
+- **Customers sign in to see and approve proofs** (see
+  [Who can open a proof](#proof-sign-in)).
+
+Turn a switch on or off and choose **Save**. Each new quote starts with these settings,
+and you can change them on the quote.
+
+The same card holds **Before a customer approves a proof**: the statements your
+customer ticks before **Approve** works. It starts with three suggestions:
+
+- I checked the spelling, names and numbers.
+- I checked the colors, sizes and placement.
+- I understand production starts when I approve, and changes after that may cost extra.
+
+Change the wording to suit your work, add up to five, or remove the ones you don't
+need (at least one stays). **Use the suggested statements** puts the three back.
+Choose **Save**. The statements apply to every quote from then on, including ones
+already sent: a customer who opened the page before you changed them is asked to look
+again.
 
 ## Make a quote {#make-a-quote}
 
@@ -85,6 +107,10 @@ from, then the product's options (size, color and so on). To quote one product o
 pick it in the field's **Product** setting; the customer then picks just its options.
 The field sends the product and options in words, which is what your Inbox and your
 alert show, and keeps the exact product and option beside them for the quote.
+
+Inside a **Product detail** block, the field doesn't ask again: it takes the product,
+options, add-ons and quantity the customer picked on the page. See
+[A free mockup before they buy](catalog.md#free-mockup).
 
 The customer gets a confirmation email with a copy of their request, and their request
 lands in your Inbox marked **Quote request**.
@@ -151,7 +177,7 @@ Send the quote to your customer by email, from your site, with your own message:
 5. Choose **Send**.
 
 The quote then shows **Sent** with the date and the address, and moves to **Sent**
-in the list (unless your customer has already approved it or asked for changes,
+in the list (unless your customer has already approved it or rejected it with changes,
 which it keeps showing). The email shows the quote as it was last saved, so save
 your changes first.
 
@@ -167,7 +193,8 @@ One email in your site's look, from your site's name, with:
 - the first three proof images, each opening the quote page, and the other proof
   files by name, to see on the quote page (a WebP image is named rather than shown,
   because some inboxes can't show one);
-- what to do next, and one button:
+- what to do next (approving means confirming they checked the proof and typing their
+  name), and one button:
   - **Review and approve** while
     [the proof must be approved before paying](#approval-and-paying) and isn't yet;
   - otherwise **View and pay** with the total;
@@ -177,6 +204,11 @@ One email in your site's look, from your site's name, with:
 The button opens the quote's [pay link](#pay-link). Replies go to the **Email** in your
 site's [Business details](../../getting-started/create-a-site.md#business-details), and to
 your own email when your site has none. The email ends with a line saying so.
+
+When the quote asks [a customer with an account to sign in](#proof-sign-in) and your
+customer has one, the email shows no proof images, since an inbox isn't signed in to
+your site. It names the proof files and asks your customer to sign in on the quote page
+to see them.
 
 A [proof with no price yet](#proof-only) goes out as a proof: **Your proof from** your
 business name as its heading, no total, no PDF, and a **Review the proof** button.
@@ -259,7 +291,7 @@ it, print it or pass it on. The download works only from the quote's current lin
 
 A proof shows your customer what they're getting before you make it: the canopy with
 their logo on it, the sign laid out at size. Attach proofs to a saved quote, and your
-customer sees them on the quote page, where they approve them or ask for changes.
+customer sees them on the quote page, where they approve them or reject them with changes.
 
 1. Open the quote and find **Proofs** in the editor.
 2. Choose **Add proof** and pick one or more files from your device, or choose
@@ -310,7 +342,7 @@ open it, with no account.
 4. Open it in the list, then choose **Send proof**, or **Copy proof link** to send the
    link yourself.
 
-Your customer sees the proof with **Approve this proof** and **Request changes**, and no
+Your customer sees the proof with **Approve this proof** and **Reject with changes**, and no
 items, totals, **Pay** or PDF. The email they get says the same.
 
 Add an item and choose **Save** whenever you're ready to price it. It's then a normal
@@ -327,25 +359,81 @@ it can't be emailed, and the link tells your customer the next version is on its
 When the current revision has proofs, the quote page shows them under the quote: each
 image as a picture and every other file as a download. Beside them are two choices:
 
-- **Approve this proof.** Your customer types their name and chooses **Approve**. The
-  quote keeps their name, the time, and the address and browser it came from, as the
-  record of the approval, and moves to **Approved**.
-- **Request changes.** Your customer says what should change, and can attach their own
-  artwork: up to 10 files of the same kinds and size as proofs. The quote moves to
-  **Changes requested**, with their comment and files. Files they attach and never send
-  are deleted a day later.
+- **Approve this proof.** Your customer ticks each statement you set on the
+  [Quotes card](#quote-defaults), such as "I checked the spelling, names and numbers",
+  types their name and chooses **Approve**. **Approve** stays off until every box is
+  ticked and a name is typed, and an approval that skips one is refused. The quote
+  keeps their name, the statements they confirmed, the time, and the address and
+  browser it came from, as the record of the approval, and moves to **Approved**. You
+  see the record under **Proofs** on the quote, and your customer sees it on the page.
+- **Reject with changes.** Your customer says what should change and types their name,
+  and can attach their own artwork: up to 10 files of the same kinds and size as
+  proofs. What to change and the name are required; files are optional, and the
+  statements they confirm for an approval don't apply. The quote records the revision
+  as rejected, with their note, name, files and the time, and moves to **Rejected with
+  changes**. Files they attach and never send are deleted a day later.
 
-The latest answer is the one that counts. A customer who asked for changes can still
-approve, and one who approved can still ask for changes, which withdraws the approval.
+The latest answer is the one that counts. A customer who rejected a proof with changes
+can still approve it, and one who approved can still reject it with changes, which
+withdraws the approval.
 The page tells them what they last said.
 
 You're notified of every answer, in the console and by email, as **Proof approved** or
-**Changes requested**, with the quote, the customer, the revision, the quote's total (if
-it has one) and what they said. **View quote** opens the quote, and replying to the email reaches your
+**Rejected with changes**, with the quote, the customer, the revision, the quote's total
+(if it has one) and what they said: the statements they confirmed when they approved,
+or their note, name and the names of any files when they rejected it. **View quote** opens the quote, and replying to the email reaches your
 customer. These notices follow your settings for order notifications.
 
 A paid quote still shows its proofs, with nothing to press. A link you replaced shows
 nothing of the quote, proofs included, and takes no answer.
+
+## Who can open a proof {#proof-sign-in}
+
+A proof opens from the quote's private link, so anyone your customer forwards the
+link to can see it and answer it. When that's not what you want, turn on **Customers
+sign in to see and approve proofs** on the quote (the [new-quote default](#quote-defaults)
+sets where each quote starts):
+
+- **Your customer has an account on your site** (they signed up under the email on the
+  quote): the quote page shows the quote but not the proof, with a **Sign in** button.
+  Once they sign in to that account, the page shows the proof and they can approve it
+  or reject it with changes. Someone signed in to a different account is asked to sign in
+  with the right one. The proof's files, approving and asking for changes all check
+  the sign-in, not only the page.
+- **Your customer has no account** (a phone or walk-in customer, say): the private
+  link works as it always has. **Replace link** on the quote still shuts off a link
+  that went to the wrong person.
+- **Off:** the private link is enough for everyone.
+
+Your site needs User Accounts switched on for a customer to have an account; on a site
+without them every customer uses the link. Nothing about the link expires or needs
+opening or closing. Paying never needs a sign-in.
+
+## Messages with your customer {#messages}
+
+A quote keeps its own conversation with your customer, under **Messages** on the
+quote. It stays with the quote through every revision and after it's paid.
+
+- **Reply from the quote.** Write in **Messages** and choose **Send reply**. It's
+  emailed to the customer's email on the quote (or where you last emailed the quote)
+  from your site, in the same email conversation as the quote emails, with a **View
+  your quote** button. The reply is listed under **Messages** with who sent it.
+  Sending a reply needs **Send quotes and invoices to customers**; anyone who edits
+  quotes can read the conversation.
+- **Your customer writes on the quote page.** Under **Messages** on the quote page,
+  your customer writes to you and chooses **Send message**. It's listed on the quote,
+  and you're notified in Aglyn and by email as **Customer message**, with what they
+  wrote and a **View quote** button. Replying to that email reaches your customer.
+- **Your customer replies by email.** Their email answer goes to your site's contact
+  email (or yours, if the site has none), like an answer to an
+  [Inbox reply](../../content-and-data/forms/overview.md#replying-to-a-submission). It doesn't
+  appear under **Messages**: Aglyn doesn't receive email.
+
+The reply email is the **Quote message** email under **Emails**, where you can change
+its wording and colors like your other site emails. Your customer's page shows what
+each of you wrote, never an email address or who on your team sent it.
+When the quote asks [a customer with an account to sign in](#proof-sign-in) and the
+quote has a proof, **Messages** on the quote page waits on the same sign-in.
 
 ## Proof approval and paying {#approval-and-paying}
 
@@ -357,13 +445,13 @@ where each quote starts):
   quote page shows a short line asking them to approve it in place of **Pay**, and no
   payment can be started. Approving brings **Pay** back. A new revision with new proofs
   needs its own approval.
-- **Off:** **Pay** is always there. Your customer can approve or ask for changes, and
+- **Off:** **Pay** is always there. Your customer can approve or reject with changes, and
   paying never waits on it.
 
 ## Revisions {#revisions}
 
 A quote's revision is the version your customer is looking at, starting at
-**Revision 1**. When your customer asks for changes, or you want to send different
+**Revision 1**. When your customer rejects a proof with changes, or you want to send different
 proofs, start the next one:
 
 1. Open the quote and choose **Start revision 2** (or whichever comes next) under

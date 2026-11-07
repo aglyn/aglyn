@@ -236,6 +236,10 @@ const mockOrg: any = {
   },
 }
 
+// The store's selling account, read through this spec's fake Firestore.
+jest.mock('@aglyn/tenant-data-admin/server/seller-payment-account', () =>
+  jest.requireActual('../testing/fake-seller-payment-account'),
+)
 jest.mock('@aglyn/tenant-runtime/org-permissions', () => ({
   ...jest.requireActual('@aglyn/tenant-runtime/org-permissions'),
   resolveOrgPermissions: (...args: any[]) =>
@@ -483,6 +487,21 @@ describe('a product sold in person only (AGL-4060)', () => {
     const result = await post({ payment: 'link' })
     expect(result.status).toBe(200)
     expect(orderDocs()).toHaveLength(1)
+  })
+})
+
+describe('a store on its own Stripe account (direct charge, ToS v24 §10.2(a))', () => {
+  it('is refused the one-shot QR sale, which is a destination charge on the platform', async () => {
+    docs.set('profiles/owner-1', {
+      stripeAccountId: 'acct_store',
+      stripeChargesEnabled: true,
+      stripeChargeModel: 'direct',
+    })
+    const result = await post({ payment: 'link' })
+    expect(result.status).toBe(409)
+    expect(result.body.error).toMatch(/Card \(QR\)/)
+    expect(stripeCalls).toHaveLength(0)
+    expect(orderDocs()).toHaveLength(0)
   })
 })
 

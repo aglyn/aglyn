@@ -390,6 +390,8 @@ private struct ListingBody: View {
   @State private var versions: [ListingVersion]?
   @State private var reviews = LiveQuery()
   @State private var publisher = ObservedDocument()
+  /// The publisher's OAuth app for each connection the plugin declares (AGL-4196), read for the listing's own workspace only.
+  @State private var credentials = ListingConnectionCredentialsModel()
 
   private var state: PluginInstallState {
     func version(_ doc: FirestoreDocument?) -> String? {
@@ -402,6 +404,7 @@ private struct ListingBody: View {
   }
 
   private var api: MarketplaceAPI { MarketplaceAPI(api: context.api) }
+  private var credentialsAPI: PluginConnectionCredentialsAPI { PluginConnectionCredentialsAPI(api: context.api, listingID: listing.id) }
   private var plugin: Bool { listing.artifactType == "plugin" }
   private var mine: Bool { listing.profileID != nil && listing.profileID == context.orgID }
   private var installable: Bool { canInstall(context) && context.hostID != nil }
@@ -455,6 +458,9 @@ private struct ListingBody: View {
           AglynFigureTile("Installs", value: "\(listing.activeInstalls ?? listing.installCount)", caption: "\(listing.installCount) all time")
         }
       }
+      if mine, plugin {
+        ListingConnectionCredentialsSections(context: context, model: credentials, api: credentialsAPI)
+      }
       if !listing.description.isEmpty { Section("About") { Text(listing.description) } }
       if let readme = listing.readme { Section("Read me") { Text(String(readme.prefix(4000))).font(AglynFont.body) } }
       Section("Versions") {
@@ -491,6 +497,7 @@ private struct ListingBody: View {
     .aglynListBackground()
     .accessibilityIdentifier("listing-detail")
     .task(id: listing.id) {
+      if mine, plugin { await credentials.load(credentialsAPI) }
       versions = await api.versions(listingID: listing.id)
       await reviews.bind(
         context.firestore, FirestoreQuery([listingsCollection, listing.id, "reviews"], order: [.init("__name__")], limit: 100))

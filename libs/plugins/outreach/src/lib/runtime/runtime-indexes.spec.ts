@@ -32,6 +32,9 @@ import { join } from 'node:path'
  *            .where('nextDueAtMs', '<=', now).orderBy('nextDueAtMs')
  *   sync:  orgs/{orgId}/outreachEnrollments
  *            .where('mailboxId', '==', id).where('lastSentAtMs', '>=', since)
+ *          (a mailbox's own read once the run has written an enrollment;
+ *          otherwise one `lastSentAtMs` range read serves the whole run,
+ *          `./watched-enrollments`, AGL-4121)
  *
  * The first is a COLLECTION_GROUP composite — automatic single-field indexes
  * exist at collection scope only — and the second a collection-scope one.
@@ -68,6 +71,8 @@ describe('the sending runtime’s indexes (AGL-2981)', () => {
     const send = readFileSync(join(__dirname, 'send-job.ts'), 'utf8')
     expect(send).toMatch(/\.where\('status', '==', 'active'\)\s*\.where\('nextDueAtMs', '<=', context\.nowMs\)\s*\.orderBy\('nextDueAtMs'\)/)
     const sync = readFileSync(join(__dirname, 'sync-job.ts'), 'utf8')
-    expect(sync).toMatch(/\.where\('mailboxId', '==', mailbox\.id\)\s*\.where\('lastSentAtMs', '>=', nowMs - OUTREACH_SYNC_WATCH_MS\)/)
+    // The narrow read a mailbox falls back to after the run wrote an
+    // enrollment; the organization's own read is a single-field range.
+    expect(sync).toMatch(/\.where\('mailboxId', '==', mailboxId\)\s*\.where\('lastSentAtMs', '>=', nowMs - OUTREACH_SYNC_WATCH_MS\)/)
   })
 })

@@ -327,6 +327,31 @@ async function handler(request: Request): Promise<Response> {
         `Updated enabled plugins (${enabledPlugins.length} on)`,
         { type: 'org', id: orgId },
       )
+      /*
+       * The switchboard decides which plugins every site in the workspace
+       * loads, and the live sites hold that answer, with their pages, for the
+       * week-long backstop (AGL-4121). This save used to drop nothing, so a
+       * plugin switched off here kept loading on cached pages until each one
+       * happened to regenerate. Only on an actual change, awaited rather than
+       * deferred so it cannot be lost with the instance, and staged in the
+       * publish outbox inside `revalidateOrgHosts` so a refused drop is
+       * retried by the drain.
+       */
+      const previousPlugins = Array.isArray(
+        (org as { enabledPlugins?: unknown } | null | undefined)?.enabledPlugins,
+      )
+        ? ((org as { enabledPlugins: unknown[] }).enabledPlugins).map(String)
+        : null
+      const switchboardMoved =
+        !previousPlugins ||
+        previousPlugins.length !== enabledPlugins.length ||
+        previousPlugins.some((id) => !enabledPlugins.includes(id))
+      if (switchboardMoved) {
+        await revalidateOrgHosts(firebaseAdmin.app().firestore(), orgId, {
+          plugins: 'host',
+          reason: 'workspace plugin switchboard changed',
+        })
+      }
       return Response.json({ ok: true, enabledPlugins }, { status: 200 })
     }
 
