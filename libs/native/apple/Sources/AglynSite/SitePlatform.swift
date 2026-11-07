@@ -88,6 +88,7 @@ public let sitePlatformContributes: [String: [String]] = [
   "screens": [siteSitesScreen, siteSiteScreen, sitePagesScreen, siteMediaScreen, siteSetupScreen, siteThemeScreen, siteContentScreen]
     + ArtifactKind.allCases.map(\.screen),
   "quickActions": ["site.sites-open", "site.pages-open", "site.media-open"],
+  "widgets": [pluginRunsOnWidget],
   "deepLinks": ["site.sites-page", "site.pages-page", "site.page-view", "site.page-besigner-list", "site.media-page",
     "site.setup-page", "site.setup-section-page", "site.theme-page",
     "site.content-page", "site.collection-page", "site.entry-page", "site.layouts-list-page",
@@ -109,6 +110,8 @@ public func registerSitePlatformNative(_ r: NativePluginRegistrar) {
   r.screen(sitePagesScreen, title: "Pages", requiresSite: true, icon: SiteSymbols.page) { context, params in
     PagesScreen(context: context, initialPageID: params["page"] ?? params["screenId"], startNew: params["new"] == "1")
   }
+  // Where a built-in plugin runs, on its page (`core.plugin`'s `pluginRunsOn` zone).
+  r.widget(pluginRunsOnWidget, title: "Runs on", order: 0, slot: pluginRunsOnSlot) { PluginRunsOnSection(context: $0) }
   // Media draws its own head on the Mac and iPad (the browser splits under it) and its own title row on a phone.
   AglynListColumnHead.register(siteMediaScreen)
   r.screen(siteMediaScreen, title: "Media", icon: SiteSymbols.media) { context, params in
