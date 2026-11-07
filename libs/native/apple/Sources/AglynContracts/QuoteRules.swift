@@ -16,6 +16,13 @@ public func formatQuoteNumber(_ order: HostOrder?, docId: String? = nil) -> Stri
   return "Quote"
 }
 
+/// `Quote #1042` from a save's answer, which carries the number and id alone.
+public func formatQuoteNumber(number: Double?, docId: String?) -> String {
+  if let number { return "Quote #\(jsNumberText(number))" }
+  if let docId, !docId.isEmpty { return "Quote #\(String(docId.suffix(6)).uppercased())" }
+  return "Quote"
+}
+
 /// Whether an order document is a quote nobody has paid yet, which no order list counts.
 public func isUnpaidQuote(_ order: HostOrder?) -> Bool { order?.channel == .quote && order?.status == .pending }
 

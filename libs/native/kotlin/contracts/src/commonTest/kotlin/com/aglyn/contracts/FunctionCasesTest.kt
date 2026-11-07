@@ -217,6 +217,88 @@ class FunctionCasesTest {
     assertEquals(result.jsonPrimitive.boolean, isUnpaidQuote(quoteOrder(args[0])), args.toString())
   }
 
+  private fun num(element: JsonElement?): Double? = (element as? JsonPrimitive)?.takeIf { it !is JsonNull }?.content?.toDoubleOrNull()
+  private fun bool(element: JsonElement?): Boolean = (element as? JsonPrimitive)?.content == "true"
+
+  /** A recorded JSON value as the plain map a Firestore document reads as. */
+  private fun plain(element: JsonElement?): Any? = when (element) {
+    null, is JsonNull -> null
+    is JsonObject -> element.mapValues { plain(it.value) }
+    is JsonArray -> element.map { plain(it) }
+    is JsonPrimitive -> if (element.isString) element.content else element.content.toBooleanStrictOrNull() ?: element.content.toDouble()
+  }
+
+  @Suppress("UNCHECKED_CAST")
+  private fun map(element: JsonElement?): Map<String, Any?>? = plain(element) as? Map<String, Any?>
+
+  @Test
+  fun computeQuoteTotalsCases() = cases("computeQuoteTotals").forEach { (args, result) ->
+    val input = args[0].jsonObject
+    val lines = input["lines"]!!.jsonArray.map {
+      val line = it.jsonObject
+      QuoteTotalsLine(num(line["unitAmountCents"]) ?: 0.0, num(line["quantity"]) ?: 0.0, bool(line["included"]), bool(line["taxExempt"]))
+    }
+    val discount = (input["discount"] as? JsonObject)?.let { ContractJsonFormat.decodeFromJsonElement(QuoteDiscount.serializer(), it) }
+    val tax = ContractJsonFormat.decodeFromJsonElement(QuoteTaxBasis.serializer(), input["tax"]!!)
+    val totals = computeQuoteTotals(lines, discount, num(input["shippingCents"]), tax)
+    val want = result.jsonObject
+    assertEquals(num(want["itemsCents"]), totals.itemsCents, args.toString())
+    assertEquals(num(want["discountCents"]), totals.discountCents, args.toString())
+    assertEquals(num(want["shippingCents"]), totals.shippingCents, args.toString())
+    assertEquals(num(want["taxCents"]), totals.taxCents, args.toString())
+    assertEquals(num(want["totalCents"]), totals.totalCents, args.toString())
+    assertEquals(num(want["taxableCents"]), totals.taxableCents, args.toString())
+    assertEquals(bool(want["taxAtPayment"]), totals.taxAtPayment, args.toString())
+  }
+
+  @Test
+  fun quoteTaxBasisFromSettingsCases() = cases("quoteTaxBasisFromSettings").forEach { (args, result) ->
+    val shipTo = args.getOrNull(1) as? JsonObject
+    val basis = quoteTaxBasisFromSettings(storeTaxSettingsOf(map(args[0])), str(shipTo?.get("country")), str(shipTo?.get("state")))
+    assertEquals(ContractJsonFormat.decodeFromJsonElement(QuoteTaxBasis.serializer(), result), basis, args.toString())
+  }
+
+  @Test
+  fun quoteLineRequestFromLineCases() = cases("quoteLineRequestFromLine").forEach { (args, result) ->
+    val line = ContractJsonFormat.decodeFromJsonElement(OrderLineItem.serializer(), args[0])
+    val want = result.jsonObject
+    val expected: QuoteLineRequest = if (str(want["kind"]) == "custom") {
+      QuoteLineRequest.Custom(
+        name = str(want["name"])!!, description = str(want["description"]), sku = str(want["sku"]),
+        unitAmountCents = num(want["unitAmountCents"])!!, quantity = num(want["quantity"])!!, ships = bool(want["ships"]),
+        included = bool(want["included"]),
+      )
+    } else {
+      QuoteLineRequest.Catalog(
+        productId = str(want["productId"])!!, variantId = str(want["variantId"]), quantity = num(want["quantity"])!!,
+        modifiers = (want["modifiers"] as? JsonArray).orEmpty().map { ContractJsonFormat.decodeFromJsonElement(ModifierSelection.serializer(), it) },
+        included = bool(want["included"]), description = str(want["description"]),
+      )
+    }
+    assertEquals(expected, quoteLineRequestFromLine(line), args.toString())
+  }
+
+  @Test
+  fun priceQuoteCustomLineCases() = cases("priceQuoteCustomLine").forEach { (args, result) ->
+    val req = args[0].jsonObject
+    val request = QuoteLineRequest.Custom(
+      name = str(req["name"])!!, description = str(req["description"]), sku = str(req["sku"]),
+      unitAmountCents = num(req["unitAmountCents"])!!, quantity = num(req["quantity"])!!,
+      ships = req["ships"]?.let { bool(it) } ?: true, included = bool(req["included"]),
+    )
+    assertEquals(ContractJsonFormat.decodeFromJsonElement(OrderLineItem.serializer(), result), priceQuoteCustomLine(request), args.toString())
+  }
+
+  @Test
+  fun quoteProofDefaultsCases() {
+    cases("quoteRequiresProofApprovalByDefault").forEach { (args, result) ->
+      assertEquals(result.jsonPrimitive.boolean, quoteRequiresProofApprovalByDefault(map(args[0])), args.toString())
+    }
+    cases("quoteRequiresProofSignInByDefault").forEach { (args, result) ->
+      assertEquals(result.jsonPrimitive.boolean, quoteRequiresProofSignInByDefault(map(args[0])), args.toString())
+    }
+  }
+
   @Test
   fun formatOrderMoneyCases() = cases("formatOrderMoney").forEach { (args, result) ->
     val money = if (args.size > 1) formatOrderMoney(args[0].jsonPrimitive.double, str(args[1])!!) else formatOrderMoney(args[0].jsonPrimitive.double)

@@ -13,8 +13,8 @@ import SwiftUI
  * Quotes (AGL-4093), as the console's Quotes card on the Orders page has them (host-quotes-card.component.tsx): prices
  * put to a customer before they buy. A quote is an unpaid order on the `quote` channel, so this reads
  * `hosts/{hostId}/orders` for that channel alone; the Orders list never shows one until it is paid. A quote opens
- * read-only here, with the console's "Customers can't pay this quote online yet." notice (AGL-4162); making and
- * sending quotes stays in the console for now.
+ * read-only here, with the console's "Customers can't pay this quote online yet." notice (AGL-4162). New quote and
+ * Edit open the editor (QuoteEditor.swift, AGL-4093); sending a quote stays in the console for now.
  */
 
 public let commerceQuotesScreen = "commerce.quotes"
@@ -77,12 +77,35 @@ private func storeOf(_ doc: LiveValue<FirestoreDocument?>) -> PayLinkStore? {
   }
 }
 
+/// How many products the editor's picker offers (the console's `PRODUCT_WINDOW`).
+let quoteProductWindow = 200
+
+/// The store's products the editor's picker offers, by id, leaving out deleted ones.
+func quoteProducts(_ state: LiveValue<[FirestoreDocument]>) -> [(id: String, product: HostProduct)] {
+  guard case .ready(let docs) = state else { return [] }
+  return docs.prefix(quoteProductWindow).compactMap { doc in
+    // The console leaves out a product whose `deletedAt` is set; a stored null is not set.
+    let deleted = doc.data["deletedAt"].map { !($0 is NSNull) && ($0 as? Bool) != false } ?? false
+    guard !deleted, let product = try? decodeJSONFields(HostProduct.self, doc.jsonFields) else { return nil }
+    return (doc.id, product)
+  }
+}
+
+/// The store settings document's fields, or nil.
+func quoteStoreData(_ state: LiveValue<FirestoreDocument?>) -> [String: Any]? {
+  if case .ready(let doc?) = state { return doc.data }
+  return nil
+}
+
 /// The Quotes list: number and first item, customer, total, status and when it last changed, newest first.
 struct QuotesScreen: View {
   let context: NativePluginContext
   @State private var quotes = LiveQuery()
   @State private var store = LiveDocument()
+  @State private var products = LiveQuery()
   @State private var search = ""
+  @State private var creating = false
+  @State private var notice: (text: String, tone: AglynTone)?
 
   private var hostID: String { context.hostID ?? "" }
 
@@ -97,18 +120,41 @@ struct QuotesScreen: View {
         content(docs)
       }
     }
+    .safeAreaInset(edge: .top) {
+      if let notice { AglynNotice(notice.text, tone: notice.tone) { self.notice = nil }.aglynContentEdges() }
+    }
     .navigationTitle("Quotes")
     .aglynScreenTitle("Quotes")
+    .toolbar {
+      ToolbarItem(placement: .primaryAction) {
+        Button("New quote") {
+          if context.can(quoteEditPermission) {
+            creating = true
+          } else {
+            notice = (context.refusal(quoteEditPermission), .info)
+          }
+        }
+        .accessibilityIdentifier("quotes-new")
+      }
+    }
+    .sheet(isPresented: $creating) {
+      QuoteEditorSheet(
+        context: context, quoteID: nil, order: nil, productList: quoteProducts(products.state),
+        storeData: quoteStoreData(store.state)
+      ) { message, _ in notice = (message, .success) }
+    }
     .task(id: hostID) {
       guard !hostID.isEmpty else { return }
       quotes.start(
         context.firestore,
         FirestoreQuery(["hosts", hostID, "orders"], equals: [("channel", "quote")], limit: quoteCeiling + 1))
       store.start(context.firestore, ["hosts", hostID, "settings", "store"])
+      products.start(context.firestore, FirestoreQuery(["hosts", hostID, "products"], limit: quoteProductWindow + 1))
     }
     .onDisappear {
       quotes.stop()
       store.stop()
+      products.stop()
     }
   }
 
@@ -178,6 +224,11 @@ struct QuoteScreen: View {
   let quoteID: String
   @State private var quote = LiveDocument()
   @State private var store = LiveDocument()
+  @State private var products = LiveQuery()
+  /// The quote as it was when Edit was pressed: the editor's starting point and the version its save names.
+  @State private var editing: HostOrder?
+  @State private var notice: (text: String, tone: AglynTone)?
+  @Environment(\.dismiss) private var dismiss
   /// The workspace's card payments, as the quote route answers it: nil until it answers, or when it could not.
   @State private var paymentsState: String?
 
@@ -196,12 +247,41 @@ struct QuoteScreen: View {
         content(decodeOrder(doc))
       }
     }
+    .safeAreaInset(edge: .top) {
+      if let notice { AglynNotice(notice.text, tone: notice.tone) { self.notice = nil }.aglynContentEdges() }
+    }
     .navigationTitle("Quote")
     .aglynScreenTitle("Quote")
+    .toolbar {
+      // A paid quote is an order now and can no longer be changed.
+      if case .ready(let doc?) = quote.state, isUnpaidQuote(decodeOrder(doc)) {
+        ToolbarItem(placement: .primaryAction) {
+          Button("Edit") {
+            if context.can(quoteEditPermission) {
+              editing = decodeOrder(doc)
+            } else {
+              notice = (context.refusal(quoteEditPermission), .info)
+            }
+          }
+          .accessibilityIdentifier("quote-edit")
+        }
+      }
+    }
+    .sheet(isPresented: Binding(get: { editing != nil }, set: { if !$0 { editing = nil } })) {
+      if let editing {
+        QuoteEditorSheet(
+          context: context, quoteID: quoteID, order: editing, productList: quoteProducts(products.state),
+          storeData: quoteStoreData(store.state)
+        ) { message, deleted in
+          if deleted { dismiss() } else { notice = (message, .success) }
+        }
+      }
+    }
     .task(id: "\(hostID):\(quoteID)") {
       guard !hostID.isEmpty, !quoteID.isEmpty else { return }
       quote.start(context.firestore, ["hosts", hostID, "orders", quoteID])
       store.start(context.firestore, ["hosts", hostID, "settings", "store"])
+      products.start(context.firestore, FirestoreQuery(["hosts", hostID, "products"], limit: quoteProductWindow + 1))
     }
     // Asked again each time the quote shows, so coming back from Payments reads the new answer.
     .task(id: hostID) {
@@ -211,6 +291,7 @@ struct QuoteScreen: View {
     .onDisappear {
       quote.stop()
       store.stop()
+      products.stop()
     }
   }
 
