@@ -737,7 +737,7 @@ export const ANALYTICS_DENIED_URL_PARAMS: ReadonlySet<string> = new Set([
  * campaign id is a bare run of digits; the backstop would drop exactly the
  * attribution this URL is kept for. The address test still applies to them.
  */
-const CAMPAIGN_CLICK_IDS: ReadonlySet<string> = new Set([
+const AD_CLICK_ID_PARAMS: ReadonlySet<string> = new Set([
   ...FIRST_TOUCH_CLICK_IDS,
   'gbraid',
   'wbraid',
@@ -772,7 +772,7 @@ function looksLikeToken(value: string): boolean {
 /** Whether a decoded query value may not reach GA, whatever its name. */
 function isSensitiveQueryValue(key: string, value: string): boolean {
   if (EMAIL_SHAPED.test(value)) return true
-  if (key.startsWith('utm_') || CAMPAIGN_CLICK_IDS.has(key)) return false
+  if (key.startsWith('utm_') || AD_CLICK_ID_PARAMS.has(key)) return false
   return looksLikePhone(value) || looksLikeToken(value)
 }
 
