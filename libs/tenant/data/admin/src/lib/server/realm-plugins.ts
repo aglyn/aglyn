@@ -111,6 +111,9 @@ export async function getPluginConfig(
  * the install — so this join is the single source the loaders consume:
  *
  * 1. Read the org's installs (and the host's, when a host is in scope).
+ *    When a host is in scope, drop every listing that site's own Admin ›
+ *    Plugins switch turned off (its `disabledPlugins`, AGL-4047), the same
+ *    deny-list `resolveHostEnabledPlugins` subtracts for a built-in plugin.
  * 2. Join each pin with its version document, in the store the
  *    distributing plugin declares (`PLUGIN_DISTRIBUTION`, AGL-3080 — the
  *    marketplace's listings today); only versions carrying `trust: 'realm'`
@@ -249,7 +252,11 @@ export async function resolveMarketplacePluginVersion(
  *   switchboard toggle, a plan move) expires `tenant-plugins:{hostId}` for each
  *   site it reaches;
  * - a platform event (a takedown, a revoked version, realm trust withdrawn or
- *   rejected away) expires `tenant-plugins` on every site at once.
+ *   rejected away) expires `tenant-plugins` on every site at once;
+ * - a site's own Admin › Plugins switch (AGL-4047) writes `disabledPlugins` on
+ *   the host document, a rendered field, so the console drops the whole site
+ *   and with it `tenant-data:{hostId}`, which this entry carries too
+ *   (`tenantPluginGateTags`).
  *
  * Each of those is staged in the publish outbox BEFORE it is sent, so a
  * refused call is retried by the console's drain, and an alert is raised when
@@ -280,11 +287,44 @@ export async function getRealmPluginInstalls(options: {
   }
 }
 
+/**
+ * The listings ONE site switched off on its Admin › Plugins page (AGL-4047).
+ *
+ * The site switch writes a marketplace plugin's listing id into the host's
+ * `disabledPlugins`, beside the built-in ids it holds. The built-in half was
+ * always honored (`resolveHostEnabledPlugins`); this join read only the
+ * workspace's list, so a marketplace plugin a site switched off kept loading on
+ * its published pages and kept binding its functions there.
+ *
+ * Masked to that one field, as the org read below is: the host document is the
+ * largest one a site has. Issued alongside the org resolution, so it adds a
+ * read to a cache miss and no round trip to it. A read that fails rejects the
+ * join, which every caller already answers as "no marketplace plugins", so a
+ * failure can never run a plugin the site turned off.
+ */
+async function readSiteDisabledListings(
+  firestore: FirebaseFirestore.Firestore,
+  hostId: string,
+): Promise<ReadonlySet<string>> {
+  const [host] = await firestore.getAll(firestore.collection('hosts').doc(hostId), {
+    fieldMask: ['disabledPlugins'],
+  })
+  const disabled = host?.get('disabledPlugins')
+  return new Set(Array.isArray(disabled) ? disabled.map(String) : [])
+}
+
 async function resolveRealmPluginInstalls(options: {
   orgId?: string
   hostId?: string
 }): Promise<RealmPluginInstall[]> {
   const firestore = firebaseAdmin.app().firestore()
+  // Started first and awaited last: it depends on nothing the org hop reads.
+  const siteDisabled = options.hostId
+    ? readSiteDisabledListings(firestore, options.hostId)
+    : null
+  // Marked handled now, consumed below: a rejection must not sit unobserved
+  // while the org hop is awaited.
+  siteDisabled?.catch(() => undefined)
   const orgId =
     options.orgId ??
     (options.hostId ? await resolveOrgIdForHost(options.hostId) : null)
@@ -332,6 +372,16 @@ async function resolveRealmPluginInstalls(options: {
   if (enabledFilter) {
     for (const listingId of [...pins.keys()]) {
       if (!enabledFilter.includes(listingId)) pins.delete(listingId)
+    }
+  }
+  // The site's own switch, after the workspace's (AGL-4047). A site can only
+  // narrow: it switches off what the workspace runs, never on what it does
+  // not. It covers the site's own pins too; the switch is the site's answer
+  // for that listing, wherever the pin lives.
+  if (siteDisabled) {
+    const disabled = await siteDisabled
+    for (const listingId of [...pins.keys()]) {
+      if (disabled.has(listingId)) pins.delete(listingId)
     }
   }
   if (!pins.size) return []
