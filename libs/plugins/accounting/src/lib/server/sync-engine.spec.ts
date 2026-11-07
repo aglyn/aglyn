@@ -209,6 +209,65 @@ describe('posting', () => {
     expect(provider.createSalesReceipt).toHaveBeenCalledTimes(1)
   })
 
+  describe('when the books gain a currency after they were connected', () => {
+    const path = 'orgs/org-1/accountingConnections/quickbooks'
+    const singleCurrency = { name: 'Books', homeCurrency: 'USD', multiCurrency: false }
+    const multiCurrency = { name: 'Books', homeCurrency: 'USD', multiCurrency: true }
+    /** What the page's Retry does to an item that needs attention. */
+    const retry = (store: MemoryFirestore, id: string, nowMs: number) => {
+      const itemPath = `orgs/org-1/accountingSyncItems/${id}`
+      const current = store.read(itemPath) as Record<string, unknown>
+      store.seed(itemPath, {
+        ...current,
+        status: 'pending',
+        attempts: 0,
+        generation: Number(current['generation'] ?? 0) + 1,
+        nextAttemptAtMs: nowMs,
+        errorCode: null,
+      } as never)
+    }
+
+    it('posts a refused foreign-currency item on retry once the ledger reports more than one currency', async () => {
+      const companyInfo = jest.fn(async () => singleCurrency)
+      const { deps, connection, item, store, provider } = setup({ provider: fakeProvider({ companyInfo }) })
+      store.seed(path, { ...(store.read(path) as object), homeCurrency: 'USD', multiCurrency: false } as never)
+      const euro = order({ currency: 'eur' })
+      await enqueueOrderPaid(deps, euro)
+      await runSyncPass(deps, connection(), { deadlineMs: NOW + 60_000 })
+      expect(item(saleItemId(euro))).toMatchObject({ status: 'needs_attention', errorCode: 'currency' })
+      expect(item(feeItemId(euro))).toMatchObject({ status: 'needs_attention', errorCode: 'currency' })
+      expect(provider.createSalesReceipt).not.toHaveBeenCalled()
+
+      // The merchant adds the currency in their books, then retries.
+      companyInfo.mockResolvedValue(multiCurrency)
+      retry(store, saleItemId(euro), NOW)
+      retry(store, feeItemId(euro), NOW)
+      const report = await runSyncPass(deps, connection(), { deadlineMs: NOW + 60_000 })
+      expect(report).toMatchObject({ posted: 2, needsAttention: 0 })
+      expect(item(saleItemId(euro))).toMatchObject({ status: 'synced' })
+      expect(provider.createSalesReceipt).toHaveBeenCalledTimes(1)
+      expect(store.read(path)).toMatchObject({ multiCurrency: true })
+      // Remembered: the next pass reads nothing.
+      expect(companyInfo).toHaveBeenCalledTimes(2)
+      await enqueueOrderPaid(deps, order({ orderId: 'order-3', currency: 'eur' }))
+      await runSyncPass(deps, connection(), { deadlineMs: NOW + 60_000 })
+      expect(companyInfo).toHaveBeenCalledTimes(2)
+    })
+
+    it('reads the company info at most once a pass, however many foreign items there are', async () => {
+      const companyInfo = jest.fn(async () => singleCurrency)
+      const { deps, connection, item, store } = setup({ provider: fakeProvider({ companyInfo }) })
+      store.seed(path, { ...(store.read(path) as object), homeCurrency: 'USD', multiCurrency: false } as never)
+      for (const orderId of ['order-1', 'order-2', 'order-3']) await enqueueOrderPaid(deps, order({ orderId, currency: 'eur' }))
+      const report = await runSyncPass(deps, connection(), { deadlineMs: NOW + 60_000 })
+      // Three sales and their three fees.
+      expect(report).toMatchObject({ posted: 0, needsAttention: 6 })
+      expect(companyInfo).toHaveBeenCalledTimes(1)
+      expect(item(saleItemId(order({ orderId: 'order-3' })))).toMatchObject({ errorCode: 'currency' })
+      expect(store.read(path)).toMatchObject({ multiCurrency: false })
+    })
+  })
+
   it('names what to turn on for each ledger, and refuses nothing in multi-currency books', () => {
     expect(foreignCurrencyRefusal({ provider: 'xero', homeCurrency: 'GBP', multiCurrency: false }, 'usd')).toMatch(
       /Add USD under Currencies in Xero/,

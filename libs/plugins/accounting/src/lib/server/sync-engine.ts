@@ -88,7 +88,7 @@ import {
   type AccountingConnectionRecord,
 } from './connection-store'
 import { AccountingProviderError } from './providers/http'
-import type { AccountingDocRef, AccountingProvider, AccountingSession } from './providers/provider'
+import type { AccountingCompanyInfo, AccountingDocRef, AccountingProvider, AccountingSession } from './providers/provider'
 import { XERO_DAILY_CALL_LIMIT } from './providers/xero'
 import {
   SYNC_MAX_ATTEMPTS,
@@ -165,6 +165,11 @@ interface PassContext {
   provider: AccountingProvider
   keyring: SecretBoxKeyring
   session: AccountingSession | null
+  /**
+   * The ledger's company info, read at most once a pass, and only when the
+   * stored currency setting would refuse an item: see {@link currencyRefusal}.
+   */
+  ledgerInfo?: Promise<AccountingCompanyInfo | null>
 }
 
 async function withSession<T>(context: PassContext, call: (session: AccountingSession) => Promise<T>): Promise<T> {
@@ -200,7 +205,7 @@ export async function postItem(context: PassContext, item: AccountingSyncItemRec
     }
     const doc = documentFor(item, connection)
     if (!doc) return { status: 'synced', ref: null }
-    const foreign = foreignCurrencyRefusal(connection, doc.currency)
+    const foreign = await currencyRefusal(context, doc.currency)
     if (foreign) return { status: 'needs_attention', code: 'currency', error: foreign }
     const existing = await withSession(context, (session) => provider.findByExternalId(session, doc.kind, doc.externalId))
     if (existing) return { status: 'synced', ref: existing }
@@ -243,6 +248,33 @@ export async function postItem(context: PassContext, item: AccountingSyncItemRec
     }
     return { status: 'retry', error: error instanceof Error ? error.message : String(error), retryAfterMs: null }
   }
+}
+
+/**
+ * {@link foreignCurrencyRefusal}, against what the ledger says now. The
+ * connection's `multiCurrency` is read when the books are bound, so a merchant
+ * who turns on more currencies afterward, as the refusal tells them to, would
+ * otherwise be refused again on every retry. When the stored setting would
+ * refuse, the ledger's company info is read again, once a pass however many
+ * items it holds back, and a ledger that now keeps several currencies is
+ * remembered on the connection and the item posts. The read spends two calls,
+ * within the item's share of the daily budget ({@link CALLS_PER_ITEM}). A read
+ * that fails leaves the refusal as it stood.
+ */
+async function currencyRefusal(context: PassContext, currency: string): Promise<string | null> {
+  const refusal = foreignCurrencyRefusal(context.connection, currency)
+  if (!refusal) return null
+  context.ledgerInfo ??= withSession(context, (session) => context.provider.companyInfo(session)).catch(() => null)
+  const info = await context.ledgerInfo
+  if (!info?.multiCurrency) return refusal
+  if (!context.connection.multiCurrency) {
+    context.connection.multiCurrency = true
+    await connectionRef(context.deps.firestore(), context.connection.orgId, context.connection.provider).update({
+      multiCurrency: true,
+      updatedAtMs: context.deps.now(),
+    })
+  }
+  return foreignCurrencyRefusal(context.connection, currency)
 }
 
 /**
