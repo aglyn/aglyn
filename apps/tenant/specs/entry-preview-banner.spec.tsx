@@ -29,7 +29,9 @@
  */
 
 import { render, screen } from '@testing-library/react'
+import { ADMIN_BAR_HEIGHT_VAR as ADMIN_BAR_WRITES } from '../app/[host]/admin-bar/admin-bar'
 import PreviewBanner, {
+  ADMIN_BAR_HEIGHT_VAR,
   PREVIEW_BANNER_ID,
   PREVIEW_BAR_HEIGHT_VAR,
   previewSentence,
@@ -96,6 +98,19 @@ describe('the preview banner cannot be scrolled past or styled away', () => {
     expect(container.children[1].getAttribute('aria-hidden')).toBe('true')
     // And says how tall it is, for a header laid over a photo hero, which the spacer does not move (AGL-4152).
     expect(container.children[1].querySelector('style')?.textContent).toBe(`:root{${PREVIEW_BAR_HEIGHT_VAR}:44px}`)
+  })
+
+  it('sits under the admin bar when there is one, at the very top when there is none', () => {
+    const { container } = render(
+      <PreviewBanner status="draft" publishAtSeconds={null} />,
+    )
+    const bar = container.querySelector(`#${PREVIEW_BANNER_ID}`) as HTMLElement
+    // At 0 it covered the admin bar, and a header pinned below both left a
+    // gap the admin bar's height under it (AGL-4152): the stack is admin bar,
+    // then this bar, then the site's header.
+    expect(bar.getAttribute('style')).toContain(`inset-block-start: var(${ADMIN_BAR_HEIGHT_VAR}, 0px)`)
+    // The name the admin bar writes, not a copy that could drift from it.
+    expect(ADMIN_BAR_HEIGHT_VAR).toBe(ADMIN_BAR_WRITES)
   })
 
   it('announces itself to a screen reader as a status, not as decoration', () => {
