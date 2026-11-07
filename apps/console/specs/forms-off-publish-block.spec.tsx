@@ -99,8 +99,9 @@ const EDITOR = 'apps/console/app/(editor)/[orgSlug]/hosts/[host]'
  */
 const PUBLISH_ACTIONS: Array<{ file: string; opens: string; asks: string; writes: string }> = [
   {
+    // Save & publish and the app-bar Publish share this step (AGL-4209).
     file: `${EDITOR}/screens/[screenId]/versions/[versionId]/besigner/page.tsx`,
-    opens: 'const handleSaveAndPublish = useCallback(async () => {',
+    opens: 'const saveAndPromote = useCallback(async ({',
     asks: 'if (refuseFormsOff(canvas.toJSON().nodes)) return',
     writes: 'await updateScreenDoc({ versionId } as any)',
   },
