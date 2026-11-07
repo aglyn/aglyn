@@ -574,6 +574,37 @@ describe('the register gate on the console surface (AGL-3646)', () => {
   })
 })
 
+describe('the storefront reads on the console surface, for Preview (AGL-4210)', () => {
+  const READS = ['commerce/product', 'commerce/catalog', 'commerce/related']
+
+  it('serves the public product, catalog and related reads where Preview runs', async () => {
+    // Preview renders a site on the console origin, whose dispatcher loads only
+    // the `consoleApi` surface; registered for the tenant alone, every product
+    // block in Preview read a 404 and said "Product not found".
+    const { registerCommerceConsoleApi } = await import('../server')
+    for (const path of READS) unregisterPluginApiRoute(path)
+    registerCommerceConsoleApi()
+    for (const path of READS) expect(resolvePluginApiRoute(path)).toBeDefined()
+  })
+
+  it('answers GET and HEAD only there, never a write', async () => {
+    const { storefrontReadOnly } = await import('../server')
+    const inner = jest.fn(async () => undefined)
+    const guarded = storefrontReadOnly(inner as never)
+    for (const method of ['POST', 'PUT', 'PATCH', 'DELETE']) {
+      const { res, result } = makeResponse()
+      await guarded({ method, query: {}, body: {} } as unknown as PluginApiRequest, res)
+      expect(result.status).toBe(405)
+    }
+    expect(inner).not.toHaveBeenCalled()
+    for (const method of ['GET', 'HEAD', undefined]) {
+      const { res } = makeResponse()
+      await guarded({ method, query: {}, body: {} } as unknown as PluginApiRequest, res)
+    }
+    expect(inner).toHaveBeenCalledTimes(3)
+  })
+})
+
 describe('the credential document is the only hash a mailed reset binds to (AGL-3308)', () => {
   it('binds the link to the credential document, never to a hash on the profile', async () => {
     const moved = hashMemberPassword('the moved password')
