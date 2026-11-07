@@ -194,7 +194,7 @@ describe('Xero adapter, call by call', () => {
     expect(calls).toHaveLength(0)
   })
 
-  it('looks fees and payouts up by reference, a refund only once it is settled, and a journal not at all', async () => {
+  it('looks fees and payouts up by reference, and a refund only once it is settled', async () => {
     const { adapter, calls } = provider([
       { match: '/BankTransactions', body: { BankTransactions: [{ BankTransactionID: 'bt-1' }] } },
       { match: '/BankTransfers', body: { BankTransfers: [{ BankTransferID: 'tr-1', Status: 'DELETED' }] } },
@@ -205,11 +205,36 @@ describe('Xero adapter, call by call', () => {
     await expect(adapter.findByExternalId(session, 'payout', 'PO-1')).resolves.toBeNull()
     // A credit note still holding credit is finished by the create.
     await expect(adapter.findByExternalId(session, 'refund', 'R-1')).resolves.toBeNull()
-    await expect(adapter.findByExternalId(session, 'summary', 'S-1')).resolves.toBeNull()
     expect(calls.map((call) => new URL(call.url).searchParams.get('where'))).toEqual([
       'Reference=="F-1"',
       'Reference=="PO-1"',
       'CreditNoteNumber=="R-1"',
+    ])
+  })
+
+  it('finds a daily summary by its reference on a live receive or spend, so a retry never posts it twice', async () => {
+    const { adapter, calls } = provider([
+      {
+        match: '/BankTransactions',
+        times: 1,
+        body: {
+          BankTransactions: [
+            { BankTransactionID: 'bt-gone', Type: 'RECEIVE', Status: 'DELETED' },
+            { BankTransactionID: 'bt-transfer', Type: 'SPEND-TRANSFER', Status: 'AUTHORISED' },
+            { BankTransactionID: 'bt-day', Type: 'SPEND', Status: 'AUTHORISED' },
+          ],
+        },
+      },
+      { match: '/BankTransactions', body: { BankTransactions: [] } },
+    ])
+    await expect(adapter.findByExternalId(session, 'summary', 'S-20261006-NZD')).resolves.toEqual({
+      id: 'bt-day',
+      type: 'BankTransaction',
+    })
+    await expect(adapter.findByExternalId(session, 'summary', 'S-20261007-NZD')).resolves.toBeNull()
+    expect(calls.map((call) => new URL(call.url).searchParams.get('where'))).toEqual([
+      'Reference=="S-20261006-NZD"',
+      'Reference=="S-20261007-NZD"',
     ])
   })
 })

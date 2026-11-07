@@ -189,6 +189,23 @@ describe('the Connection section', () => {
     )
     expect(await screen.findByRole('button', { name: 'Reconnect QuickBooks Online' })).toBeTruthy()
   })
+
+  it('says why payouts could not be read, on a connection that still posts', async () => {
+    const payoutError =
+      "Payouts couldn't be read from Stripe: The account is restricted. " +
+      'Sales, refunds and fees still post; payouts will be tried again in a few hours.'
+    render(
+      <AccountingConnectionSection
+        orgId="org-1"
+        api={api({
+          status: jest.fn(async () =>
+            status({ providers: { quickbooks: true, xero: false, codat: false }, connection: connection({ payoutError }) }),
+          ),
+        })}
+      />,
+    )
+    expect(await screen.findByText(payoutError)).toBeTruthy()
+  })
 })
 
 describe('the Sync activity section', () => {

@@ -31,7 +31,6 @@ import { feeItemId, feeRefundItemId, refundItemId, saleItemId } from './sync-sto
 import {
   feeRefundedFor,
   merchantShareOfRefund,
-  onOrderCancelled,
   onOrderPaid,
   onOrderRefunded,
   snapshotFromOrderEvent,
@@ -155,23 +154,36 @@ describe('the event intake', () => {
     expect(item(refundItemId({ order: { hostId: 'host-1', orderId: 'order-1' }, refundId: 'evt-refund-9' } as never))).toBeDefined()
   })
 
-  it('skips a sale not yet posted when its order is cancelled', async () => {
+  it('leaves a paid order’s sale queued when the order is cancelled: a cancel moves no money', async () => {
     const { deps, item } = setup()
-    await onOrderPaid(deps, envelope({ order: orderView }))
-    expect(await onOrderCancelled(deps, envelope({ order: orderView }, 'evt-3'))).toBe(true)
-    expect(item(saleItemId({ hostId: 'host-1', orderId: 'order-1' }))).toMatchObject({ status: 'skipped' })
-  })
-
-  it('subscribes to the three order events through the plugin event seam', async () => {
     resetPluginDomainEventsForTests()
     registerAccountingServerDeclarations()
-    for (const event of ['order.paid', 'order.refunded', 'order.cancelled']) {
+    await onOrderPaid(deps, envelope({ order: orderView }))
+    const result = await deliverPluginDomainEvent({
+      id: 'evt-3',
+      event: 'order.cancelled',
+      hostId: 'host-1',
+      orgId: null,
+      occurredAtMs: NOW,
+      payload: { order: { ...orderView, status: 'cancelled' } },
+    })
+    expect(result.delivered).not.toContain('accounting')
+    expect(item(saleItemId({ hostId: 'host-1', orderId: 'order-1' }))).toMatchObject({ status: 'pending' })
+    expect(item(feeItemId({ hostId: 'host-1', orderId: 'order-1' }))).toMatchObject({ status: 'pending' })
+    resetPluginDomainEventsForTests()
+  })
+
+  it('subscribes to the paid and refunded order events through the plugin event seam, and not to a cancel', async () => {
+    resetPluginDomainEventsForTests()
+    registerAccountingServerDeclarations()
+    for (const event of ['order.paid', 'order.refunded']) {
       expect(listPluginDomainEventSubscribers(event)).toEqual(['accounting'])
     }
+    expect(listPluginDomainEventSubscribers('order.cancelled')).toEqual([])
     // A delivery reaches the handler, which imports the intake on first use.
     const result = await deliverPluginDomainEvent({
       id: 'evt-x',
-      event: 'order.cancelled',
+      event: 'order.paid',
       hostId: 'host-none',
       orgId: 'org-none',
       occurredAtMs: NOW,

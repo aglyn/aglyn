@@ -100,6 +100,12 @@ export interface AccountingConnectionRecord {
   callCount: number
   lastSyncAtMs: number | null
   lastError: string | null
+  /**
+   * Why the last read of the merchant's Stripe payouts failed, or absent once
+   * a read succeeds. The payout read owns it alone, so a posting pass that
+   * rewrites `lastError` never clears it.
+   */
+  payoutError?: string | null
   updatedAtMs: number
 }
 
@@ -238,6 +244,7 @@ export function toConnectionView(record: AccountingConnectionRecord): Accounting
     missingRoles: missingAccountRoles(record.mapping),
     lastSyncAtMs: record.lastSyncAtMs,
     lastError: record.lastError,
+    payoutError: record.payoutError ?? null,
   }
 }
 

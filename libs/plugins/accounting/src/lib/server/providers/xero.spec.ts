@@ -18,7 +18,7 @@
  * limitations under the License.
  */
 
-import { buildRefundDoc, buildSaleDoc, buildSummaryDoc, salePostings } from '../../model/accounting-transforms'
+import { buildRefundDoc, buildSaleDoc, buildSummaryDoc, refundPostings, salePostings } from '../../model/accounting-transforms'
 import type { AccountingMapping } from '../../model/accounting.types'
 import { instantSleep, mockFetch } from '../../testing/mock-fetch'
 import { AccountingPacer } from './http'
@@ -163,16 +163,104 @@ describe('Xero adapter', () => {
     })
   })
 
-  it('posts a daily summary with debits positive and credits negative', async () => {
-    const { adapter, calls } = provider([
-      { method: 'PUT', match: '/ManualJournals', body: { ManualJournals: [{ ManualJournalID: 'mj-1' }] } },
-    ])
-    const doc = buildSummaryDoc({ date: '2026-10-06', currency: 'nzd', postings: salePostings(order), orderCount: 1 }, mapping)!
-    await adapter.createJournal(session, doc, { idempotencyKey: 'k', customerId: null, extras, homeCurrency: 'NZD' })
-    const lines = JSON.parse(calls[0].body ?? '{}').ManualJournals[0].JournalLines as Array<{ LineAmount: number }>
-    expect(lines.reduce((total, line) => total + Math.round(line.LineAmount * 100), 0)).toBe(0)
-    // Clearing has no code here, so it posts by id.
-    expect(lines.some((line) => (line as { AccountID?: string }).AccountID === 'acc-clr')).toBe(true)
+  describe('the daily summary, through the clearing bank account', () => {
+    const summaryContext = { idempotencyKey: 'k-day', customerId: 'c-aglyn', extras, homeCurrency: 'NZD' }
+    const withShipping = { ...mapping, accounts: { ...mapping.accounts, shippingIncome: 'acc-ship' } }
+    const bankTransactions = () =>
+      provider([{ method: 'PUT', match: '/BankTransactions', body: { BankTransactions: [{ BankTransactionID: 'bt-day' }] } }])
+    type Line = { UnitAmount: number; Quantity: number; AccountCode?: string; AccountID?: string }
+    const cents = (lines: Line[]) => lines.reduce((total, line) => total + Math.round(line.UnitAmount * 100) * line.Quantity, 0)
+
+    it('receives a day whose clearing nets in, every other account a signed line', async () => {
+      const { adapter, calls } = bankTransactions()
+      const withFee = { ...order, totals: { ...order.totals, feeCents: 60 } }
+      const doc = buildSummaryDoc({ date: '2026-10-06', currency: 'nzd', postings: salePostings(withFee), orderCount: 1 }, mapping)!
+      await expect(adapter.createJournal(session, doc, summaryContext)).resolves.toEqual({ id: 'bt-day', type: 'BankTransaction' })
+      expect(calls).toHaveLength(1)
+      expect(calls[0].headers['idempotency-key']).toBe('k-day')
+      const sent = JSON.parse(calls[0].body ?? '{}').BankTransactions[0]
+      expect(sent).toMatchObject({
+        Type: 'RECEIVE',
+        Contact: { ContactID: 'c-aglyn' },
+        BankAccount: { AccountID: 'acc-clr' },
+        Date: '2026-10-06',
+        Reference: doc.externalId,
+        CurrencyCode: 'NZD',
+        LineAmountTypes: 'NoTax',
+      })
+      const lines = sent.LineItems as Line[]
+      // Income and tax credited in, the fee charged against them; no clearing line.
+      expect(lines).toEqual(
+        expect.arrayContaining([
+          expect.objectContaining({ AccountCode: '200', UnitAmount: 20 }),
+          expect.objectContaining({ AccountCode: '820', UnitAmount: 3 }),
+          expect.objectContaining({ AccountCode: '404', UnitAmount: -0.6 }),
+        ]),
+      )
+      expect(lines.some((line) => line.AccountID === 'acc-clr')).toBe(false)
+      expect(lines.every((line) => !('TaxType' in line))).toBe(true)
+      expect(cents(lines)).toBe(2240)
+    })
+
+    it('spends a day whose clearing nets out, with the signs turned', async () => {
+      const { adapter, calls } = bankTransactions()
+      const shipped = {
+        ...order,
+        orderId: 'o2',
+        totals: { itemsCents: 400, shippingCents: 100, taxCents: 0, discountCents: 0, totalCents: 500, feeCents: 0 },
+      }
+      const postings = [
+        ...refundPostings({ order, refundId: 're_1', amountCents: 2300, refundedAtMs: 0, feeRefundedCents: 0 }),
+        ...salePostings(shipped),
+      ]
+      const doc = buildSummaryDoc({ date: '2026-10-07', currency: 'nzd', postings, orderCount: 1 }, withShipping)!
+      await adapter.createJournal(session, doc, summaryContext)
+      const sent = JSON.parse(calls[0].body ?? '{}').BankTransactions[0]
+      expect(sent).toMatchObject({ Type: 'SPEND', BankAccount: { AccountID: 'acc-clr' }, Reference: doc.externalId })
+      const lines = sent.LineItems as Line[]
+      // 23.00 refunded out, 5.00 sold in: 18.00 leaves clearing.
+      expect(cents(lines)).toBe(1800)
+      // Income reversed is money out, so positive; the day's shipping income is negative.
+      expect(lines).toEqual(
+        expect.arrayContaining([
+          expect.objectContaining({ AccountCode: '200', UnitAmount: 16 }),
+          expect.objectContaining({ AccountCode: '820', UnitAmount: 3 }),
+          expect.objectContaining({ AccountID: 'acc-ship', UnitAmount: -1 }),
+        ]),
+      )
+    })
+
+    it('posts a day whose clearing nets to nothing as a manual journal of the other accounts, never a zero transaction', async () => {
+      const { adapter, calls } = provider([
+        { method: 'PUT', match: '/ManualJournals', body: { ManualJournals: [{ ManualJournalID: 'mj-1' }] } },
+      ])
+      // A sale in and the same amount refunded out, the refund booked against shipping income.
+      const postings = [
+        { role: 'clearing' as const, cents: 1000 },
+        { role: 'income' as const, cents: -1000 },
+        { role: 'clearing' as const, cents: -1000 },
+        { role: 'shippingIncome' as const, cents: 1000 },
+      ]
+      const doc = buildSummaryDoc({ date: '2026-10-08', currency: 'nzd', postings, orderCount: 1 }, withShipping)!
+      await expect(adapter.createJournal(session, doc, { ...summaryContext, customerId: null })).resolves.toEqual({
+        id: 'mj-1',
+        type: 'ManualJournal',
+      })
+      expect(calls.map((call) => new URL(call.url).pathname.split('/').pop())).toEqual(['ManualJournals'])
+      const lines = JSON.parse(calls[0].body ?? '{}').ManualJournals[0].JournalLines as Array<{ LineAmount: number; AccountID?: string }>
+      expect(lines).toHaveLength(2)
+      expect(lines.reduce((total, line) => total + Math.round(line.LineAmount * 100), 0)).toBe(0)
+      expect(lines.some((line) => line.AccountID === 'acc-clr')).toBe(false)
+    })
+
+    it('refuses a day that moves money with no contact, before calling Xero', async () => {
+      const { adapter, calls } = bankTransactions()
+      const doc = buildSummaryDoc({ date: '2026-10-06', currency: 'nzd', postings: salePostings(order), orderCount: 1 }, mapping)!
+      await expect(adapter.createJournal(session, doc, { ...summaryContext, customerId: null })).rejects.toMatchObject({
+        code: 'validation',
+      })
+      expect(calls).toHaveLength(0)
+    })
   })
 
   it('reads its validation errors into the message', async () => {

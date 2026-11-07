@@ -24,11 +24,13 @@ import { asFirestore, memoryFirestore } from '../testing/memory-firestore'
 import { mockFetch } from '../testing/mock-fetch'
 import { registerPluginService, resetPluginServicesForTests } from '@aglyn/aglyn/plugin-manager/plugin-services'
 import { ORDER_HISTORY_CONTRACT, type OrderHistoryEntry, type OrderHistoryPageRequest } from '@aglyn/plugins-commerce/contracts'
+import type { AccountingOrderSnapshot } from '../model/accounting-sources'
 import { backfillRefund, runBackfillStep, snapshotFromHistoryEntry, startBackfill } from './backfill'
-import { newConnectionRecord, readConnection, toStoredConnection } from './connection-store'
+import { newConnectionRecord, readConnection, toConnectionView, toStoredConnection } from './connection-store'
 import { listPaidPayouts } from './payouts'
 import type { AccountingProvider } from './providers/provider'
-import { pollPayouts, runAccountingSyncJob, type AccountingJobDeps } from './sync-job'
+import { enqueueOrderPaid } from './sync-engine'
+import { PAYOUT_POLL_INTERVAL_MS, pollPayouts, runAccountingSyncJob, type AccountingJobDeps } from './sync-job'
 import { payoutItemId, saleItemId } from './sync-store'
 
 const NOW = Date.UTC(2026, 9, 6, 18)
@@ -149,6 +151,118 @@ describe('the tick', () => {
     const report = await runAccountingSyncJob(open.deps, { nowMs: NOW, deadlineMs: NOW + 60_000 })
     expect(report).toMatchObject({ connections: 1, payoutsQueued: 2, posted: 2 })
     expect(open.provider.createDeposit).toHaveBeenCalledTimes(2)
+  })
+
+  describe('when one step fails', () => {
+    const stripeRefuses = () =>
+      mockFetch([
+        {
+          match: 'api.stripe.com/v1/payouts',
+          status: 400,
+          body: { error: { message: 'The account acct_123 was a test account created with a testmode key.' } },
+        },
+      ])
+    const paidOrder = (orderId: string): AccountingOrderSnapshot => ({
+      orgId: 'org-1',
+      hostId: 'host-1',
+      orderId,
+      number: 1,
+      currency: 'usd',
+      paidAtMs: NOW - 60_000,
+      channel: 'online',
+      customerName: null,
+      customerEmail: null,
+      lines: [{ name: 'Mug', quantity: 1, unitAmountCents: 1000 }],
+      totals: { itemsCents: 1000, shippingCents: 0, taxCents: 0, discountCents: 0, totalCents: 1000, feeCents: 30 },
+      taxInclusive: false,
+      taxKey: null,
+    })
+    const connectionDoc = (store: ReturnType<typeof setup>['store']) => store.read('orgs/org-1/accountingConnections/quickbooks')!
+    let logged: jest.SpyInstance
+    beforeEach(() => {
+      logged = jest.spyOn(console, 'error').mockImplementation(() => undefined)
+    })
+    afterEach(() => logged.mockRestore())
+
+    it('posts what is queued in the same run when Stripe refuses the payout read', async () => {
+      const stripe = stripeRefuses()
+      const { deps, store, provider } = setup({ fetch: stripe.fetch })
+      // The sale and its fee.
+      expect(await enqueueOrderPaid(deps, paidOrder('o-1'))).toBe(2)
+      const report = await runAccountingSyncJob(deps, { nowMs: NOW, deadlineMs: NOW + 60_000 })
+      expect(report).toMatchObject({ connections: 1, payoutsQueued: 0, posted: 2, failed: 1 })
+      expect(provider.createSalesReceipt).toHaveBeenCalledTimes(1)
+      expect(provider.createExpense).toHaveBeenCalledTimes(1)
+      expect(store.read(`orgs/org-1/accountingSyncItems/${saleItemId({ hostId: 'host-1', orderId: 'o-1' })}`)).toMatchObject({
+        status: 'synced',
+      })
+      expect(logged).toHaveBeenCalledWith('[accounting] payout read failed for org org-1', expect.any(Error))
+    })
+
+    it('waits the usual interval after a refused read and says why on the connection, past the posting pass', async () => {
+      const stripe = stripeRefuses()
+      const { deps, store } = setup({ fetch: stripe.fetch })
+      await enqueueOrderPaid(deps, paidOrder('o-1'))
+      await runAccountingSyncJob(deps, { nowMs: NOW, deadlineMs: NOW + 60_000 })
+      const after = connectionDoc(store)
+      expect(after['payoutPolledAtMs']).toBe(NOW)
+      expect(after['payoutCursorMs']).toBe(NOW - 7 * 86_400_000)
+      expect(after['payoutError']).toBe(
+        "Payouts couldn't be read from Stripe: The account acct_123 was a test account created with a testmode key. " +
+          'Sales, refunds and fees still post; payouts will be tried again in a few hours.',
+      )
+      // The pass posted and wrote its own `lastError`; the payout reason stands.
+      expect(after).toMatchObject({ lastSyncAtMs: NOW, lastError: null })
+      expect(toConnectionView(readConnection(after, keyring)!).payoutError).toBe(after['payoutError'])
+    })
+
+    it('does not ask Stripe again within the interval, and clears the reason once a read succeeds', async () => {
+      const stripe = stripeRefuses()
+      const { deps, store } = setup({ fetch: stripe.fetch })
+      await runAccountingSyncJob(deps, { nowMs: NOW, deadlineMs: NOW + 60_000 })
+      expect(stripe.calls).toHaveLength(1)
+
+      const later = { ...deps, now: () => NOW + 15 * 60_000 }
+      await expect(runAccountingSyncJob(later, { nowMs: NOW + 15 * 60_000, deadlineMs: NOW + 16 * 60_000 })).resolves.toMatchObject({
+        failed: 0,
+      })
+      expect(stripe.calls).toHaveLength(1)
+      expect(connectionDoc(store)['payoutError']).toEqual(expect.stringContaining('Payouts couldn'))
+
+      const nextRead = NOW + PAYOUT_POLL_INTERVAL_MS
+      const recovered = { ...deps, now: () => nextRead, fetch: stripePayouts.fetch }
+      await expect(runAccountingSyncJob(recovered, { nowMs: nextRead, deadlineMs: nextRead + 60_000 })).resolves.toMatchObject({
+        payoutsQueued: 2,
+        failed: 0,
+      })
+      expect(connectionDoc(store)).toMatchObject({ payoutError: null, payoutPolledAtMs: nextRead })
+    })
+
+    it('still posts when a backfill page cannot be read', async () => {
+      const { deps, store, provider } = setup({ fetch: stripePayouts.fetch })
+      registerPluginService(
+        ORDER_HISTORY_CONTRACT,
+        {
+          listOrders: jest.fn(async () => {
+            throw new Error('order history unavailable')
+          }),
+        },
+        { pluginId: 'commerce' },
+      )
+      try {
+        store.seed('hosts/host-1', { orgId: 'org-1' })
+        const connection = readConnection(store.read('orgs/org-1/accountingConnections/quickbooks'), keyring)!
+        await startBackfill(asFirestore(store), connection, NOW - 30 * 86_400_000)
+        await enqueueOrderPaid(deps, paidOrder('o-1'))
+        const report = await runAccountingSyncJob(deps, { nowMs: NOW, deadlineMs: NOW + 60_000 })
+        // The sale, its fee and both payouts.
+        expect(report).toMatchObject({ backfillQueued: 0, payoutsQueued: 2, posted: 4, failed: 1 })
+        expect(provider.createSalesReceipt).toHaveBeenCalledTimes(1)
+        expect(logged).toHaveBeenCalledWith('[accounting] backfill failed for org org-1', expect.any(Error))
+      } finally {
+        resetPluginServicesForTests()
+      }
+    })
   })
 })
 
