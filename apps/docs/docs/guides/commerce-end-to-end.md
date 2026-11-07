@@ -38,14 +38,26 @@ charges enabled.
 You need a paid plan, and only the workspace owner can connect the account.
 
 1. On the **Payments** card, select **Set up payments**.
-2. Finish Stripe's Express onboarding: your business details, identity and the
-   bank account your payouts go to.
+2. Finish Stripe's onboarding for your own Stripe account: your business
+   details, identity and the bank account your payouts go to. The account is
+   yours, with its own Stripe login and the full Stripe Dashboard, and you are
+   the seller of record on every sale.
 3. Back in Aglyn, the card's **Stripe account** line reads **Charges enabled**.
    **Refresh status** checks again if it does not yet.
 
-Until then checkout says "This site has not enabled payments yet". Aglyn adds
+Until then checkout says "This site has not enabled payments yet". Aglyn takes
 its per-sale platform fee automatically per your plan, and the card shows the
-fee your plan carries.
+fee your plan carries. Stripe bills its card processing to your Stripe account
+at Stripe's standard pricing for your account; it is not part of Aglyn's fee.
+See [Who charges what](../commerce-and-bookings/commerce/overview.md#who-charges-what).
+
+:::note Set up payments before this change?
+A store that set up payments earlier keeps the platform-managed Stripe account
+it was given then, and works exactly as before: card processing is passed
+through at cost inside the platform fee, and **View payouts in Stripe** opens
+its Stripe Express dashboard. The kind of account can't be changed once it is
+created.
+:::
 
 ## 2. Create products
 
@@ -256,7 +268,7 @@ and internal notes:
   fulfilled and the buyer's account page shows the tracking. **Mark
   delivered** closes the loop, and **Packing slip** prints one.
 - **Refund** — confirms *"Refund this order?"*, then refunds the buyer through
-  Stripe (full or partial) and reverses the platform fee. It takes the **Refund
+  Stripe (full or partial) and returns the platform fee on the refunded share. It takes the **Refund
   orders** permission, which site admins hold by default.
 - **Cancel order** — for orders that shouldn't proceed (does not auto-refund).
 

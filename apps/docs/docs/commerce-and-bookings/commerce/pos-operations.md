@@ -360,8 +360,11 @@ and says what you should look at, on the order and in the register:
 
 With **Take cards offline in the point of sale app** turned on in your POS
 settings, the Aglyn POS app's own card reader saves each card while the
-connection is down, and Stripe charges it once the app is back online. The
-sale syncs right after, and:
+connection is down, and Stripe charges it once the app is back online. This
+is for stores on a platform-managed (Express) account, set up before stores got
+their own Stripe account: in the iOS and Android apps, cards can't be taken
+offline yet for a store on its own Stripe account. Cash sales rung offline work
+on both. The sale syncs right after, and:
 
 - **The card is charged like a card taken online.** The platform fee is
   deducted from that card's payout. If Stripe took less than that fee from the
