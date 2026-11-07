@@ -489,7 +489,7 @@ struct DatasetDetailView: View {
   @State private var placement = DatasetPlacement()
 
   private var dataset: DatasetRow? { datasets.first { $0.id == datasetID } }
-  private var verdict: DatasetAccess { placement.access(context, visibleTo: dataset?.visibleTo) }
+  private var verdict: DatasetAccess { placement.access(context, visibleTo: dataset?.placementScope) }
   private var canWrite: Bool { verdict.canWrite }
 
   var body: some View {
@@ -506,7 +506,7 @@ struct DatasetDetailView: View {
     }
     .navigationTitle(titled ? (dataset?.name ?? "Dataset") : "Data")
     .aglynScreenTitle(titled ? (dataset?.name ?? "Dataset") : "Data")
-    .task(id: dataset?.visibleTo) { placement.start(context, visibleTo: dataset?.visibleTo) }
+    .task(id: dataset?.placementScope) { placement.start(context, visibleTo: dataset?.placementScope) }
   }
 
   private func content(_ dataset: DatasetRow) -> some View {

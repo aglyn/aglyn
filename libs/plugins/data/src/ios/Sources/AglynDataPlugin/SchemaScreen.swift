@@ -94,7 +94,9 @@ private struct SchemaEditor: View {
   @State private var model: DatasetModel
   @State private var singular: String
   @State private var plural: String
-  @State private var visibleTo: [String]
+  /// Who it is shared with, as edited here: nil while the dataset stores none, so no choice shows as picked until
+  /// someone picks one (AGL-1484).
+  @State private var sharingChoice: ScopeSharingChoice?
   @State private var sheet: SchemaSheet?
   @State private var records = 0
   @State private var sites: [SiteChoice] = []
@@ -109,16 +111,31 @@ private struct SchemaEditor: View {
     _model = State(initialValue: dataset.model)
     _singular = State(initialValue: dataset.singular)
     _plural = State(initialValue: dataset.plural)
-    _visibleTo = State(initialValue: dataset.visibleTo ?? [])
+    _sharingChoice = State(initialValue: ScopeSharingChoice(scopeSharingOf(dataset.sharing)))
   }
 
   @State private var placement = DatasetPlacement()
-  private var verdict: DatasetAccess { placement.access(context, visibleTo: dataset.visibleTo) }
+  private var verdict: DatasetAccess { placement.access(context, visibleTo: dataset.placementScope) }
   private var canWrite: Bool { verdict.canWrite }
   private var orgWide: Bool { if case .ready(let wide, _) = access { wide } else { false } }
   private var accessKnown: Bool { if case .ready = access { true } else { false } }
   private var previousScope: [String] { dataset.visibleTo ?? [] }
-  private var scopeChanged: Bool { previousScope.sorted() != visibleTo.sorted() }
+  private var scopeChanged: Bool { sharingChoice?.key != ScopeSharingChoice(scopeSharingOf(dataset.sharing))?.key }
+  private var sitesReady: Bool { sitesQuery.state.value != nil }
+  /// What the choice would write, or why it cannot be: the route's own answer, from the workspace's sites. The sites a
+  /// choice leaves out stay known even where this member can't name them, so they aren't taken for sites that are gone.
+  private var sharingDraft: (fields: ScopeSharingFields?, problem: String?)? {
+    guard let sharing = sharingChoice else { return nil }
+    let leftOut: [String] = if case .allExcept(let ids) = sharing { ids } else { [] }
+    return sharingFromChoice(sharing, orgHostIDs: sites.map(\.id) + leftOut)
+  }
+  /// Nothing to say about leaving sites out until the sites have been read.
+  private var sharingProblem: String? {
+    if case .allExcept = sharingChoice, !sitesReady { return nil }
+    return sharingDraft?.problem
+  }
+  /// The dataset as this choice would leave it.
+  private var nextScope: [String] { sharingDraft?.fields?.visibleTo ?? [] }
   private var api: DataAPI { DataAPI(api: context.api, writer: context.writer, orgID: orgID) }
 
   var body: some View {
@@ -158,7 +175,7 @@ private struct SchemaEditor: View {
         .accessibilityIdentifier("schema-save")
       }
     }
-    .task(id: dataset.visibleTo) { placement.start(context, visibleTo: dataset.visibleTo) }
+    .task(id: dataset.placementScope) { placement.start(context, visibleTo: dataset.placementScope) }
     .formStyle(.aglynGrouped)
     .accessibilityIdentifier("schema-editor")
     .sheet(item: $sheet) { sheetView($0) }
@@ -185,32 +202,26 @@ private struct SchemaEditor: View {
       if !accessKnown {
         Text("Checking your access…").foregroundStyle(.secondary)
       } else if !orgWide {
-        Text(describeSharing(dataset.sharing, hostNames: Dictionary(uniqueKeysWithValues: sites.map { ($0.id, $0.name) }))
-          + ". Only an owner, an admin or a member with every site can change this.")
+        Text(
+          (dataset.visibleTo == nil
+            ? "Never shared — hidden from every site"
+            : describeSharing(dataset.sharing, hostNames: Dictionary(uniqueKeysWithValues: sites.map { ($0.id, $0.name) })))
+            + ". Only an owner, an admin or a member with every site can change this.")
           .foregroundStyle(.secondary)
       } else {
-        let all = visibleTo.contains(OrgAccess.orgScopeToken)
         if dataset.visibleTo == nil {
-          AglynNotice("Not shared with any site: no page can show it until you choose.", tone: .warning)
+          AglynNotice(
+            "This collection has never been shared. Nothing is stored, so it is hidden from every site and any page repeating over it renders nothing. Choose who it is shared with to fix that.",
+            tone: .warning)
         }
-        Picker("Shared with", selection: Binding(get: { all ? "org" : "hosts" }, set: { picked in
-          visibleTo = picked == "org" ? [OrgAccess.orgScopeToken] : visibleTo.filter { $0 != OrgAccess.orgScopeToken }
-        })) {
-          Text("All sites").tag("org")
-          Text("Selected sites…").tag("hosts")
-        }
-        .pickerStyle(.segmented)
+        SiteSharingField(
+          value: $sharingChoice, sites: sites.map { SharingSite(id: $0.id, name: $0.name) }, sitesReady: sitesReady,
+          problem: sharingProblem
+        )
         .accessibilityIdentifier("schema-scope")
-        if !all {
-          if sites.isEmpty { Text("No sites to pick from.").foregroundStyle(.secondary) }
-          ForEach(sites) { site in
-            let token = OrgAccess.hostScopeToken(site.id)
-            Toggle(site.name, isOn: Binding(get: { visibleTo.contains(token) }, set: { on in
-              if on { visibleTo.append(token) } else { visibleTo.removeAll { $0 == token } }
-            }))
-            .accessibilityIdentifier("scope-\(site.id)")
-          }
-        }
+        // What sharing does NOT do is the part people get wrong (AGL-1046).
+        Text("Sites you exclude cannot see or use this dataset — in the console or on their pages.")
+          .font(AglynFont.caption).foregroundStyle(.secondary)
       }
     }
   }
@@ -244,12 +255,12 @@ private struct SchemaEditor: View {
   }
 
   private func saveTapped() {
-    if orgWide && scopeChanged && narrowsScope(previousScope, visibleTo) {
+    if orgWide && scopeChanged && sharingProblem == nil && narrowsScope(previousScope, nextScope) {
       let names = Dictionary(uniqueKeysWithValues: sites.map { ($0.id, $0.name) })
       let losing = sites.map(\.id).filter { id in
         let token = OrgAccess.hostScopeToken(id)
         return (previousScope.contains(OrgAccess.orgScopeToken) || previousScope.contains(token))
-          && !(visibleTo.contains(OrgAccess.orgScopeToken) || visibleTo.contains(token))
+          && !(nextScope.contains(OrgAccess.orgScopeToken) || nextScope.contains(token))
       }.map { names[$0] ?? $0 }
       sheet = .narrow(losing)
     } else {
@@ -258,30 +269,36 @@ private struct SchemaEditor: View {
   }
 
   private func save() {
-    if (model.order ?? []).isEmpty {
+    // The sharing this save writes, through the route, or nil when it writes none: only an org-wide member may change
+    // it, and a choice that can't be stored refuses the save rather than substituting a scope.
+    let sharingWrite = orgWide && scopeChanged ? sharingChoice : nil
+    if sharingWrite != nil, let problem = sharingDraft?.problem {
+      runner.error = problem
+      return
+    }
+    // Nothing of theirs to write when the sharing did not move.
+    if !canWrite && sharingWrite == nil {
+      context.back()
+      return
+    }
+    if canWrite && (model.order ?? []).isEmpty {
       runner.error = "A collection needs at least one field"
       return
     }
-    var scopeWrite: [String]?
-    if orgWide && scopeChanged {
-      let stored = scopeToStore(visibleTo)
-      if let problem = stored.problem {
-        runner.error = problem
-        return
+    let model = model, singular = singular, plural = plural, schema = canWrite
+    // The schema goes first, because who may write it depends on where the dataset sits as it stands.
+    runner.run(success: schema ? "Schema saved" : "Sharing saved", onDone: { context.back() }) {
+      if schema { try await api.saveSchema(dataset, model: model, singular: singular, plural: plural) }
+      if let sharingWrite {
+        do {
+          try await api.setSharing(dataset, choice: sharingWrite)
+        } catch let error as ConsoleAPIError {
+          let reason = error.body?["error"]?.stringValue ?? "The sharing could not be changed."
+          throw ConsoleAPIError(
+            status: error.status == 403 ? 400 : error.status,
+            message: schema ? "Schema saved. Its sharing didn’t change: \(reason)" : reason)
+        }
       }
-      scopeWrite = stored.scope
-    }
-    let model = model, singular = singular, plural = plural
-    // A site's narrowing takes the schema, not the sharing, and one write carrying both would be refused whole.
-    guard canWrite else {
-      let sharing = scopeWrite ?? []
-      runner.run(success: "Sharing saved.", onDone: { context.back() }) {
-        try await api.saveSharing(dataset, visibleTo: sharing)
-      }
-      return
-    }
-    runner.run(success: "Schema saved.", onDone: { context.back() }) {
-      try await api.saveSchema(dataset, model: model, singular: singular, plural: plural, visibleTo: scopeWrite)
     }
   }
 

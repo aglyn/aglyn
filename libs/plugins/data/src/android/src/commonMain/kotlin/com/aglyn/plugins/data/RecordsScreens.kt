@@ -150,7 +150,7 @@ fun RecordsScreen(context: NativePluginContext, datasetId: String, initialRecord
 private fun Records(context: NativePluginContext, orgId: String, dataset: DatasetRow, initialRecordId: String?, startNew: Boolean) {
   val scope = rememberCoroutineScope()
   val model = remember(dataset.id, dataset.model) { RecordsModel(orgId, dataset, context.firestore, scope) }
-  val access = rememberDatasetAccess(context, orgId, dataset.visibleTo)
+  val access = rememberDatasetAccess(context, orgId, dataset.placementScope)
   val canWrite = access.canWrite
   LaunchedEffect(model, access.canRead) { if (access.canRead) model.reload() }
   val api = remember(orgId, context.api, context.writer) { DataApi(context.api, context.writer, orgId) }
