@@ -92,6 +92,7 @@ import {
 import { REPEAT_NODE_CAPABILITY } from '@aglyn/aglyn/app-utils/node-capabilities'
 import {
   type RepeatSource,
+  repeatKeyOptionLabel,
   repeatSourceOf,
 } from '@aglyn/aglyn/app-utils/repeat-sources'
 import { useAglynSiteTheme } from '@aglyn/aglyn-node-renderer'
@@ -1350,16 +1351,20 @@ export function browseMediaKind(options: {
 
 /**
  * Whether an element is offered the two visibility fields: inside a component
- * editor, and wherever it already carries a directive, like the logo and name
- * of a new site's header (AGL-4119), so what decides whether it shows can be
- * read and changed where the element is edited.
+ * editor, inside a repeat, where each copy reads a directive bound to an
+ * `{{item.*}}` token against its own record (AGL-4212), and wherever it
+ * already carries a directive, like the logo and name of a new site's header
+ * (AGL-4119), so what decides whether it shows can be read and changed where
+ * the element is edited.
  */
 export function offersVisibilityFields(
   nodeProps: Record<string, unknown> | null | undefined,
   inComponentEditor: boolean,
+  inRepeat = false,
 ): boolean {
   return (
     inComponentEditor ||
+    inRepeat ||
     Boolean(nodeProps?.[NODE_HIDE_IF_PROP] || nodeProps?.[NODE_HIDE_UNLESS_PROP])
   )
 }
@@ -1376,7 +1381,8 @@ export function offersVisibilityFields(
  *
  * Offered where `{{prop.*}}` exists — inside a component editor, signalled by
  * `BindingPickerContext.componentProps` exactly as the insert picker uses it —
- * and on an element that already carries one ({@link offersVisibilityFields}).
+ * where `{{item.*}}` does, inside a repeat (AGL-4212), and on an element that
+ * already carries one ({@link offersVisibilityFields}).
  * Anywhere else a directive is inert (the graft is the only thing that
  * evaluates a literal one), and a field that silently does nothing is worse
  * than no field.
@@ -1683,6 +1689,11 @@ export function buildRepeatFields(options: {
           excerpt: source.keyAttribute.description ?? '',
           href: besignerDocsUrl('repeat'),
         },
+        // A source with nothing to pick on this site (AGL-4212) is drawn
+        // only where it is already set, so the repeat can be cleared.
+        ...(source.offered === false
+          ? { condition: { when: source.keyProp, isNotEmpty: true } }
+          : {}),
       } as Record<string, unknown>),
     ),
     ...REPEAT_NODE_CAPABILITY.attributes
@@ -2167,8 +2178,11 @@ const ElementPropsFormRaw = forwardRef<any, ElementPropsFormProps>(
     // Insert-picker options + pill display-name inputs (AGL-583/586),
     // assembled from this node's ancestor context — shared with the
     // inline text editor via the extracted hook.
-    const { options: insertOptions, labelContext: tokenLabelContext } =
-      useInsertTokenOptions(node)
+    const {
+      options: insertOptions,
+      labelContext: tokenLabelContext,
+      inRepeat,
+    } = useInsertTokenOptions(node)
     // Re-render when the installed-plugin set changes (AGL-1030).
     const knownPluginInstallsVersion = useSyncExternalStore(
       subscribeKnownPluginInstalls,
@@ -2394,10 +2408,12 @@ const ElementPropsFormRaw = forwardRef<any, ElementPropsFormProps>(
     )
 
     // Visibility directives (AGL-1314). `componentProps` is the same "am I
-    // editing a definition" signal the insert picker keys `{{prop.*}}` off.
+    // editing a definition" signal the insert picker keys `{{prop.*}}` off,
+    // and `inRepeat` the one it keys `{{item.*}}` off (AGL-4212).
     const offersVisibility = offersVisibilityFields(
       nodeProps as Record<string, unknown> | undefined,
       Boolean(editedComponentProps),
+      inRepeat,
     )
     const visibilityFields = useMemo(
       () =>
@@ -2449,7 +2465,7 @@ const ElementPropsFormRaw = forwardRef<any, ElementPropsFormProps>(
       const label =
         (kind
           ? entitySelectionOption(entityOptions, kind, repeat.key)?.label
-          : undefined) ?? repeat.key
+          : repeatKeyOptionLabel(repeat.source, repeat.key)) ?? repeat.key
       return repeatScope({ props: nodeProps, nodes: node?.nodes }) === 'self'
         ? `This element renders once per record of ${repeat.source.label.toLowerCase()} "${label}" on the live site.`
         : `What is inside this element renders once per record of ${repeat.source.label.toLowerCase()} "${label}" on the live site.`

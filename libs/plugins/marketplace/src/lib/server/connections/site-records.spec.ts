@@ -23,6 +23,7 @@ import { createMemoryFirestore, type MemoryFirestore } from '../../testing/memor
 import { registerMarketplaceDeclarations } from '../../declarations'
 import {
   createConnectionRecordsEnricher,
+  createConnectionRepeatRowReader,
   createConnectionVariableComputer,
   createPluginImageHostsSource,
   readSiteConnectionRecords,
@@ -247,6 +248,68 @@ describe('the page enricher (AGL-4195)', () => {
   it('contributes nothing when the page’s elements have no records', async () => {
     const enrich = createConnectionRecordsEnricher({ realmInstalls: async () => INSTALLS, records: async () => [] })
     expect(await enrich({ hostId: HOST, host: {}, path: '/', slugSegments: [], nodes: NODES })).toBeUndefined()
+  })
+})
+
+/**
+ * The rows a published page's repeat over a connection renders (AGL-4212),
+ * gated as the enricher hands an element its records: the identity must be a
+ * signed install allowed on THIS site, and the record one its pinned version
+ * still declares, read for this site alone.
+ */
+describe('the repeat-rows reader (AGL-4212)', () => {
+  const ITEMS = 'connection:acme.reviews/reviews'
+  const SUMMARY = 'connection:acme.reviews/reviews/fields'
+  const reader = (installsFor: (hostId: string) => readonly RealmPluginInstall[] = () => INSTALLS) =>
+    createConnectionRepeatRowReader({
+      realmInstalls: async (hostId) => installsFor(hostId),
+      records: (hostId) => readSiteConnectionRecords(deps(), hostId),
+    })
+
+  it('answers one row per item, and one row of the summary, held to the declaration', async () => {
+    const rows = await reader()({ hostId: HOST, keys: [ITEMS, SUMMARY] })
+    expect(rows[ITEMS]?.records).toEqual([
+      { $id: '0', author: 'Sam' },
+      { $id: '1', author: 'Ada' },
+    ])
+    expect(rows[SUMMARY]?.records).toEqual([{ $id: 'fields', rating: 4.8, reviewCount: 212 }])
+  })
+
+  it('answers no rows for a connection with no record yet', async () => {
+    db.docs.delete(`hosts/${HOST}/pluginConnections/record-${REVIEWS_LISTING}__reviews`)
+    const rows = await reader()({ hostId: HOST, keys: [ITEMS, SUMMARY] })
+    expect(rows[ITEMS]?.records).toEqual([])
+    expect(rows[SUMMARY]?.records).toEqual([])
+  })
+
+  it('answers nothing for a plugin not installed (or not allowed) on this site', async () => {
+    const rows = await reader(() => [install(EVENTS_LISTING, 'acme.reviews.events')])({ hostId: HOST, keys: [ITEMS, SUMMARY] })
+    expect(rows).toEqual({})
+    expect(await reader(() => [])({ hostId: HOST, keys: [ITEMS] })).toEqual({})
+  })
+
+  it('never answers with another site’s record', async () => {
+    // The same plugin installed on a second site with no record of its own.
+    const rows = await reader()({ hostId: 'host-other', keys: [ITEMS, SUMMARY] })
+    expect(rows[ITEMS]?.records ?? []).toEqual([])
+    expect(rows[SUMMARY]?.records ?? []).toEqual([])
+  })
+
+  it('answers no rows for the record of a revoked version', async () => {
+    db.docs.set(`revocations/${REVIEWS_LISTING}`, { versions: ['1.0.0'] })
+    expect((await reader()({ hostId: HOST, keys: [ITEMS] }))[ITEMS]?.records).toEqual([])
+  })
+
+  it('leaves out a key that names nothing, and reads nothing for none that parse', async () => {
+    const realmInstalls = jest.fn(async () => INSTALLS)
+    const records = jest.fn(async () => [] as SiteConnectionRecordEntry[])
+    const read = createConnectionRepeatRowReader({ realmInstalls, records })
+    expect(await read({ hostId: HOST, keys: ['connection:nope', 'Team'] })).toEqual({})
+    expect(realmInstalls).not.toHaveBeenCalled()
+    expect(records).not.toHaveBeenCalled()
+    const rows = await reader()({ hostId: HOST, keys: ['connection:acme.reviews/unknown', ITEMS] })
+    expect(Object.keys(rows)).toEqual(['connection:acme.reviews/unknown', ITEMS])
+    expect(rows['connection:acme.reviews/unknown']?.records).toEqual([])
   })
 })
 

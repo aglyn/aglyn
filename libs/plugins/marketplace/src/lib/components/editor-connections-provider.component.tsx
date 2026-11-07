@@ -21,6 +21,7 @@ import {
   type EditorPluginConnections,
 } from '@aglyn/aglyn/app-utils/plugin-connection-editor'
 import type { PluginConnectionSiteRecord } from '@aglyn/aglyn/app-utils/plugin-connection-records'
+import { registerRepeatSource } from '@aglyn/aglyn/app-utils/repeat-sources'
 import { authorizedFetch } from '@aglyn/shared-util-http/authorized-token'
 import { useFirestore, useUser } from '@aglyn/tenant-feature-instance'
 import { doc, getDoc, type Firestore } from 'firebase/firestore'
@@ -33,6 +34,7 @@ import {
   type EditorRealmInstall,
 } from '../model/editor-connections'
 import { PLUGIN_CONNECTIONS_API_ROUTES } from '../model/plugin-connections'
+import { connectionRepeatSource } from '../repeat/connection-repeat-source'
 
 /** The console's editor surfaces: the Besigner and Preview of any document. */
 const EDITOR_PATH = /\/(besigner|preview)(\/|$)/
@@ -161,6 +163,17 @@ export function EditorConnectionsProvider(props: EditorConnectionsProviderProps)
     // `user` churns with token refreshes; the member, the site and the surface name the read.
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [active, orgId, hostId, uid, firestore, load])
+
+  // The repeat source follows the site (AGL-4212): its picker lists this
+  // site's connections, and its token menu their fields. Put back to the
+  // site-less source when the editor closes, as the registrar left it.
+  useEffect(() => {
+    if (!value?.repeatables?.length) return undefined
+    registerRepeatSource(connectionRepeatSource(value))
+    return () => {
+      registerRepeatSource(connectionRepeatSource())
+    }
+  }, [value])
 
   return <EditorPluginConnectionsContext.Provider value={value}>{children}</EditorPluginConnectionsContext.Provider>
 }

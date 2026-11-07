@@ -307,17 +307,22 @@ const RepeatBadge = ({
   label,
   count,
   missing,
+  keyProp,
 }: {
   nodeId: string
   label: string
   count: number
   missing?: boolean
+  /** The prop the repeat's key is under, whose field the click opens (AGL-4212). */
+  keyProp?: string
 }) => {
   const chrome = useChromeTheme()
   const [, setRightPanel] = useAglynBesignerPanel('panelRight')
   // The setter is a new function every render; the listener reads it here.
   const setRightPanelRef = useRef(setRightPanel)
   setRightPanelRef.current = setRightPanel
+  const keyPropRef = useRef(keyProp)
+  keyPropRef.current = keyProp
   const badgeRef = useRef<HTMLDivElement>(null)
   // A native listener, as everywhere on this canvas: React delegates at the
   // root container and the canvas is a closed shadow root. On the PRESS, not
@@ -330,7 +335,7 @@ const RepeatBadge = ({
     const open = (event: Event) => {
       // A secondary button opens the context menu instead.
       if (((event as PointerEvent).button ?? 0) > 0) return
-      requestAttributeFocus(nodeId, 'repeatDataset')
+      requestAttributeFocus(nodeId, keyPropRef.current ?? 'repeatDataset')
       try {
         setRightPanelRef.current((prev) => ({
           ...prev,
@@ -1012,6 +1017,7 @@ export const NodeLeaf = observer(
               label={repeatPreview.label}
               count={repeatPreview.records.length}
               missing={repeatPreview.missing}
+              keyProp={repeatPreview.keyProp}
             />
           ) : null}
           {placedForm ? (
