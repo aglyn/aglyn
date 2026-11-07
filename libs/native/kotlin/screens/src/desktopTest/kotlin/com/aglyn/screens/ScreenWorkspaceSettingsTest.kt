@@ -229,6 +229,19 @@ class ScreenWorkspaceSettingsTest {
   }
 
   @Test
+  fun aPluginsLinkOpensItsPageFromTheSchemeAndTheConsole() {
+    val page = spec("core.plugin")
+    val links = page.links.map { com.aglyn.pluginhost.NativeDeepLink("core", "plugin", it, page.id) }
+    for (link in listOf("aglyn://acme/plugins/marketing", "https://app.aglyn.com/acme/plugins/marketing")) {
+      val target = com.aglyn.pluginhost.DeepLinks.resolve(link, links)
+      assertIs<com.aglyn.pluginhost.NativeLinkTarget.Screen>(target, link)
+      assertEquals("core.plugin", target.screen)
+      assertEquals("marketing", target.params["pluginId"])
+      assertEquals("acme", target.params["orgSlug"])
+    }
+  }
+
+  @Test
   fun aMarketplacePluginsPageIsFilledByTheMarketplaceAndKeepsBuiltInBlocksToBuiltInPlugins() {
     val page = spec("core.plugin")
     val zone = page.blocks.first { it.type == "zone" && it.string("name") == "pluginInstallation" }
