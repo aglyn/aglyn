@@ -1117,6 +1117,9 @@
     {
       "id": "marketplace",
       "package": "@aglyn/plugins-marketplace",
+      "connectionRepeatSource": {
+        "id": "pluginConnection"
+      },
       "register": {
         "console": "registerMarketplaceConsole",
         "staff": "registerMarketplaceConsole",

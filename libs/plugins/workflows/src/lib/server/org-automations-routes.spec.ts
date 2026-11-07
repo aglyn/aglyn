@@ -40,6 +40,7 @@ jest.mock('firebase-admin/firestore', () => ({
     serverTimestamp: () => ({ __serverTimestamp: true }),
     arrayUnion: (...values: unknown[]) => ({ __arrayUnion: values }),
     arrayRemove: (...values: unknown[]) => ({ __arrayRemove: values }),
+    delete: () => ({ __delete: true }),
   },
 }))
 
@@ -104,6 +105,8 @@ function applyUpdate(previous: Record<string, any>, patch: Record<string, any>) 
       const list = Array.isArray(next[key]) ? [...next[key]] : []
       for (const one of value.__arrayUnion) if (!list.includes(one)) list.push(one)
       next[key] = list
+    } else if (isPlain(value) && '__delete' in value) {
+      delete next[key]
     } else if (isPlain(value) && '__arrayRemove' in value) {
       next[key] = (Array.isArray(next[key]) ? next[key] : []).filter(
         (one: unknown) => !value.__arrayRemove.includes(one),
@@ -170,6 +173,10 @@ const firestore: any = {
     const writes: Array<() => void> = []
     const outcome = await body({
       get: async (ref: any) => snapshotOf(ref.path),
+      create: (ref: any, data: Record<string, any>) => {
+        if (store.has(ref.path)) throw new Error(`already exists: ${ref.path}`)
+        writes.push(() => store.set(ref.path, data))
+      },
       update: (ref: any, patch: Record<string, any>) => {
         writes.push(() => store.set(ref.path, applyUpdate(store.get(ref.path) ?? {}, patch)))
       },
@@ -648,5 +655,179 @@ describe('automations/pause — the host level control', () => {
     expect((await call(pause, { hostId: SITE, automationId: '', paused: true })).status).toBe(400)
     expect((await call(pause, { hostId: SITE, automationId: 'a1', paused: 'yes' })).status).toBe(400)
     expect((await call(pause, { hostId: SITE, automationId: 'a1', paused: true }, null)).status).toBe(401)
+  })
+})
+
+describe('all sites except some (AGL-4047)', () => {
+  const SITE_C = 'site-c'
+  const allExcept = (...exceptHostIds: string[]) => ({ mode: 'allExcept', exceptHostIds })
+
+  beforeEach(() => {
+    // The workspace's sites, as the write reads them in its transaction.
+    store.set(`orgs/${ORG_ID}`, { hosts: { [SITE]: true, [SIBLING]: true, [SITE_C]: true } })
+  })
+
+  it('creates one on every site but those left out, with the marker the sweep keeps up', async () => {
+    const result = await call(manage, {
+      orgId: ORG_ID,
+      action: 'create',
+      automation: automation({ visibleTo: undefined, sharing: allExcept(SITE) }),
+    })
+
+    expect(result).toEqual({ status: 200, body: { automationId: 'auto-1' } })
+    const stored = store.get(automationPath('auto-1'))
+    expect(stored).toMatchObject({
+      visibleTo: [`host:${SIBLING}`, `host:${SITE_C}`],
+      scopeMode: 'allExcept',
+      scopeExcept: [`host:${SITE}`],
+      pausedHostIds: [],
+      deletedAt: null,
+    })
+    // The choice itself is never stored.
+    expect(stored).not.toHaveProperty('sharing')
+  })
+
+  it('drops a site left out that the workspace doesn’t hold, and refuses when none is left', async () => {
+    const dropped = await call(manage, {
+      orgId: ORG_ID,
+      action: 'create',
+      automation: automation({ sharing: allExcept(SITE, FOREIGN_SITE) }),
+    })
+    expect(dropped.status).toBe(200)
+    expect(store.get(automationPath('auto-1'))?.['scopeExcept']).toEqual([`host:${SITE}`])
+
+    const nothingLeft = await call(manage, {
+      orgId: ORG_ID,
+      action: 'create',
+      automation: automation({ sharing: allExcept(FOREIGN_SITE) }),
+    })
+    expect(nothingLeft).toEqual({
+      status: 400,
+      body: { error: 'Choose at least one site to leave out, or share with All sites.' },
+    })
+    expect(store.has(automationPath('auto-2'))).toBe(false)
+  })
+
+  it('refuses leaving out every site, and an empty list before any read', async () => {
+    const everything = await call(manage, {
+      orgId: ORG_ID,
+      action: 'create',
+      automation: automation({ sharing: allExcept(SITE, SIBLING, SITE_C) }),
+    })
+    expect(everything).toEqual({ status: 400, body: { error: 'Keep at least one site in, or choose the sites.' } })
+
+    const empty = await call(manage, { orgId: ORG_ID, action: 'create', automation: automation({ sharing: allExcept() }) })
+    expect(empty).toEqual({
+      status: 400,
+      body: { error: 'Choose at least one site to leave out, or run it on every site' },
+    })
+  })
+
+  it('a site left out loses its pause; the sites still in keep theirs', async () => {
+    seedAutomation('auto-9', { pausedHostIds: [SITE, SIBLING] })
+
+    const result = await call(manage, {
+      orgId: ORG_ID,
+      action: 'update',
+      automationId: 'auto-9',
+      automation: automation({ sharing: allExcept(SITE) }),
+    })
+
+    expect(result.status).toBe(200)
+    expect(store.get(automationPath('auto-9'))).toMatchObject({
+      visibleTo: [`host:${SIBLING}`, `host:${SITE_C}`],
+      scopeMode: 'allExcept',
+      scopeExcept: [`host:${SITE}`],
+      pausedHostIds: [SIBLING],
+    })
+  })
+
+  it.each([
+    ['every site', { mode: 'all' }, ['org']],
+    ['chosen sites', { mode: 'selected', hostIds: [SITE] }, [`host:${SITE}`]],
+  ])('moving to %s removes the marker as a field delete, never a stored null', async (_name, sharing, visibleTo) => {
+    seedAutomation('auto-9', {
+      visibleTo: [`host:${SIBLING}`, `host:${SITE_C}`],
+      scopeMode: 'allExcept',
+      scopeExcept: [`host:${SITE}`],
+    })
+
+    const result = await call(manage, {
+      orgId: ORG_ID,
+      action: 'update',
+      automationId: 'auto-9',
+      automation: automation({ sharing }),
+    })
+
+    expect(result.status).toBe(200)
+    const stored = store.get(automationPath('auto-9')) ?? {}
+    expect(stored['visibleTo']).toEqual(visibleTo)
+    expect(Object.keys(stored)).not.toContain('scopeMode')
+    expect(Object.keys(stored)).not.toContain('scopeExcept')
+  })
+
+  describe('a client that predates the choice, sending only `visibleTo`', () => {
+    const marked = {
+      visibleTo: [`host:${SIBLING}`, `host:${SITE_C}`],
+      scopeMode: 'allExcept',
+      scopeExcept: [`host:${SITE}`],
+    }
+
+    it('keeps the marker when it sends back the sites it was shown', async () => {
+      seedAutomation('auto-9', marked)
+      store.set(`hostIndex/${SITE_C}`, { orgId: ORG_ID })
+
+      const result = await call(manage, {
+        orgId: ORG_ID,
+        action: 'update',
+        automationId: 'auto-9',
+        automation: automation({ name: 'Renamed', visibleTo: [`host:${SITE_C}`, `host:${SIBLING}`] }),
+      })
+
+      expect(result.status).toBe(200)
+      expect(store.get(automationPath('auto-9'))).toMatchObject({ name: 'Renamed', ...marked })
+    })
+
+    it('removes it when it chooses other sites', async () => {
+      seedAutomation('auto-9', marked)
+
+      const result = await call(manage, {
+        orgId: ORG_ID,
+        action: 'update',
+        automationId: 'auto-9',
+        automation: automation({ visibleTo: [`host:${SIBLING}`] }),
+      })
+
+      expect(result.status).toBe(200)
+      const stored = store.get(automationPath('auto-9')) ?? {}
+      expect(stored['visibleTo']).toEqual([`host:${SIBLING}`])
+      expect(Object.keys(stored)).not.toContain('scopeMode')
+      expect(Object.keys(stored)).not.toContain('scopeExcept')
+    })
+  })
+
+  it('a site left out can’t pause it, as for any site it doesn’t run on; a site in can', async () => {
+    seedAutomation('auto-9', {
+      visibleTo: [`host:${SIBLING}`],
+      scopeMode: 'allExcept',
+      scopeExcept: [`host:${SITE}`],
+    })
+
+    const leftOut = await call(pause, { hostId: SITE, automationId: 'auto-9', paused: true }, 'editor')
+    expect(leftOut.status).toBe(404)
+    const kept = await call(pause, { hostId: SIBLING, automationId: 'auto-9', paused: true }, 'editor')
+    expect(kept.status).toBe(200)
+    expect(store.get(automationPath('auto-9'))?.['pausedHostIds']).toEqual([SIBLING])
+  })
+
+  it('is refused to whoever may not manage org automations, before anything is read', async () => {
+    const result = await call(
+      manage,
+      { orgId: ORG_ID, action: 'create', automation: automation({ sharing: allExcept(SITE) }) },
+      'collaborator',
+    )
+
+    expect(result.status).toBe(403)
+    expect(store.has(automationPath('auto-1'))).toBe(false)
   })
 })

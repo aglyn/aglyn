@@ -7,3 +7,10 @@
  */
 
 export const BUNDLE_ID = 'marketplace'
+
+/**
+ * The repeat source a plugin connection's synced record answers under
+ * (AGL-4212): the editor's `RepeatSource` id and the server reader's, which
+ * `plugins.config.json` declares as this plugin's `connectionRepeatSource`.
+ */
+export const CONNECTION_REPEAT_SOURCE_ID = 'pluginConnection'

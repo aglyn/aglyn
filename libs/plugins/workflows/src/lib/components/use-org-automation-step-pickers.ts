@@ -16,7 +16,7 @@
  */
 'use client'
 
-import { scopeCovers } from '@aglyn/aglyn/app-utils/scope-tokens'
+import { sharingCovers } from '@aglyn/aglyn/app-utils/scope-tokens'
 import { pluginContainerKind } from '@aglyn/aglyn/plugin-manager/plugin-containers'
 import {
   pluginRecordListQuery,
@@ -66,8 +66,9 @@ import {
  * every one of those sites can use. A dataset or a campaign shared with some
  * of the org's sites and not the others would resolve on one site and fail
  * the step on the next, so a record is offered only when its own sharing
- * covers the automation's placement (`scopeCovers`). A list belongs to the
- * whole organization and is always offered.
+ * covers the automation's placement (`sharingCovers`, which also holds for
+ * the sites all sites except some will reach later, AGL-4047). A list belongs
+ * to the whole organization and is always offered.
  *
  * The site-only pickers — workflows, overlays, webhooks — are empty: no step
  * an org automation may hold points at one.
@@ -78,7 +79,8 @@ import {
 export function useOrgAutomationStepPickers(
   orgId: string,
   editorOpened: boolean,
-  placement: readonly string[],
+  /** The automation as its placement would leave it: `visibleTo`, and the marker for all sites except some. */
+  placement: Readonly<Record<string, unknown>>,
 ): AutomationStepPickerData {
   const firestore = useFirestore()
   /*
@@ -132,15 +134,14 @@ export function useOrgAutomationStepPickers(
     ceilingedWindow<any>(campaignRead, EDITOR_OPTION_CEILING)
 
   const pickers = useMemo<AutomationStepPickers>(() => {
-    const covers = (row: any) =>
-      scopeCovers(row?.visibleTo as string[] | undefined, placement)
+    const covers = (row: any) => sharingCovers(row ?? null, placement)
     return {
       workflowOptions: [],
       overlayOptions: [],
       webhookOptions: [],
       datasetOptions: datasetOptionsOf(
         pluginRecordsFromRows('dataset', datasetRows).filter((dataset) =>
-          scopeCovers(dataset.facts['visibleTo'] as string[] | undefined, placement),
+          sharingCovers(dataset.facts, placement),
         ),
       ),
       listOptions: (listDocs ?? [])

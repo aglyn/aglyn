@@ -364,6 +364,8 @@ describe('offersVisibilityFields (AGL-4119)', () => {
     expect(offersVisibilityFields({}, true)).toBe(true)
     expect(offersVisibilityFields({ children: 'Hi' }, false)).toBe(false)
     expect(offersVisibilityFields(undefined, false)).toBe(false)
+    // Inside a repeat, a directive bound to `{{item.*}}` is read per copy (AGL-4212).
+    expect(offersVisibilityFields({ children: 'Hi' }, false, true)).toBe(true)
   })
 
   it('offers them on an element that already carries one, wherever it is', () => {

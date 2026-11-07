@@ -69,3 +69,33 @@ describe('an org automation as a package item (AGL-3535)', () => {
     ])
   })
 })
+
+describe('one that runs on all sites except some (AGL-4047)', () => {
+  const MARKED = {
+    ...STORED,
+    visibleTo: ['host:host-2', 'host:host-3'],
+    scopeMode: 'allExcept',
+    scopeExcept: ['host:host-1'],
+  }
+
+  it('carries the choice, never the marker or the sites in today', () => {
+    const content = orgAutomationPackageContent(MARKED)
+    expect(content).toMatchObject({ visibleTo: [], sharing: { mode: 'allExcept', exceptHostIds: ['host-1'] } })
+    expect(content).not.toHaveProperty('scopeMode')
+    expect(content).not.toHaveProperty('scopeExcept')
+  })
+
+  it('names the sites it leaves out, and moves them with the plan', () => {
+    const content = orgAutomationPackageContent(MARKED)
+    if (!content) throw new Error('refused')
+    expect(orgAutomationDependencies(content)).toContainEqual({ kind: 'site', id: 'host-1' })
+    const moved = remapOrgAutomationIds(rawOrgAutomationContent(content), new Map([['site/host-1', 'host-9']]))
+    expect(moved.sharing).toEqual({ mode: 'allExcept', exceptHostIds: ['host-9'] })
+    const dropped = remapOrgAutomationIds(rawOrgAutomationContent(content), new Map([['site/host-1', '']]))
+    expect(dropped.sharing).toEqual({ mode: 'allExcept', exceptHostIds: [] })
+  })
+
+  it('carries nothing new for one that doesn’t', () => {
+    expect(orgAutomationPackageContent(STORED)).not.toHaveProperty('sharing')
+  })
+})
