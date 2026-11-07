@@ -216,22 +216,7 @@ struct SettingsSection: View {
     Form {
       if let error { AglynNotice(error, tone: .error) { self.error = nil } }
       if !scope.canManage { AglynNotice(permissionRefusalText(ContractValues.shared.orgRoleGrants, key: crmSettingsKey), tone: .info) }
-      Section {
-        Text("New contacts, companies, deals and tasks are shared with").font(AglynFont.subheadline).foregroundStyle(.secondary)
-        Picker(
-          "New contacts, companies, deals and tasks are shared with",
-          selection: Binding(get: { crmDefaultScope(scope.org) ?? "org" }, set: { write(["defaultRecordScope": $0]) })
-        ) {
-          Text("All sites in the organization").tag("org")
-          Text("Only the site they came in on (keeps clients apart, for agencies)").tag("host")
-        }
-        .pickerStyle(.inline)
-        .labelsHidden()
-      } header: {
-        Text("Default sharing for new records")
-      } footer: {
-        Text("Only affects records created from now on. Datasets and media have defaults of their own, on the organization Data and Media pages.")
-      }
+      CrmDefaultSharingSection(context: context, scope: scope)
       Section {
         Toggle(
           "Make a company from a work address",
