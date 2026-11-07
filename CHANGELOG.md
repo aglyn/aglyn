@@ -20,6 +20,7 @@ content on the marketing site and is written separately.
 - **native:** the Selling tabs and workspace menu reach the publish forms ([AGL-4105](https://linear.app/aglyn/issue/AGL-4105))
 - **commerce:** release_direct_charges on by default for every store
 - **data:** the dataset rail is ordered and searched by name on the server ([AGL-4047](https://linear.app/aglyn/issue/AGL-4047))
+- **native:** an add-on choice's picture, note and combo, as the console's ([AGL-4162](https://linear.app/aglyn/issue/AGL-4162))
 
 ### Fixed
 
@@ -44,11 +45,12 @@ content on the marketing site and is written separately.
 - **commerce:** payments docs describe a store's own Stripe account
 
 <details>
-<summary>Also in this release: 1 test, 2 chores</summary>
+<summary>Also in this release: 1 test, 3 chores</summary>
 
 - **marketplace:** pin the plugin cache drop at every security call site ([AGL-4121](https://linear.app/aglyn/issue/AGL-4121))
 - **data:** skip CI on the dataset rail name-order head ([AGL-4047](https://linear.app/aglyn/issue/AGL-4047))
 - **tools:** raise the Linear id floor to AGL-4210 ([AGL-4210](https://linear.app/aglyn/issue/AGL-4210))
+- **budgets:** re-baseline commerce for two-line product names on storefront cards
 
 </details>
 
