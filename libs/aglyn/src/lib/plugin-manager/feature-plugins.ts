@@ -153,6 +153,14 @@ export interface ConsolePluginOrgHost {
   id: string
   name: string
   subdomain: string | null
+  /**
+   * The plugin ids and marketplace listing ids this site switched off for
+   * itself (its `disabledPlugins`, AGL-4047), when its document carries the
+   * list. A pin or a workspace switch says a plugin is installed; this says
+   * whether the site runs it. Read off the host document the shell already
+   * holds, so it costs no read.
+   */
+  disabledPlugins?: readonly string[]
 }
 
 /**

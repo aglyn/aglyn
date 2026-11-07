@@ -89,8 +89,16 @@ export function MarketplaceHub(props: ConsolePluginPageProps) {
 
   const orgId = orgMount?.orgId ?? null
   const orgSlug = orgMount?.orgSlug ?? ''
+  // Each site's own switch rides along (AGL-4047): the listing's
+  // installed-sites panel must not call a site that turned a plugin off a
+  // site running it.
   const hostList = useMemo(
-    () => (orgMount?.hosts ?? []).map((host) => ({ id: host.id, label: host.name })),
+    () =>
+      (orgMount?.hosts ?? []).map((host) => ({
+        id: host.id,
+        label: host.name,
+        disabledPlugins: host.disabledPlugins ?? null,
+      })),
     [orgMount?.hosts],
   )
   /**
