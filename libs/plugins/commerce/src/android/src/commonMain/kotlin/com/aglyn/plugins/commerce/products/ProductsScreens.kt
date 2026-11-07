@@ -582,7 +582,13 @@ private fun ProductDialogs(editor: ProductEditorModel) {
             Text(if (draft.options.isEmpty()) "Add options like size or color" else "Add another option", Modifier.padding(start = space(1f)))
           }
         }
-        if (draft.variants.size > 1) Text("${draft.variants.size} variants", style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurfaceVariant)
+        // More combinations than a product holds is said with the count, beside the options (AGL-4100).
+        val matrixProblem = variantMatrixProblem(draft.options)
+        if (matrixProblem != null) {
+          Text(matrixProblem, style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.tertiary, modifier = Modifier.testTag("variant-matrix-problem"))
+        } else if (draft.variants.size > 1) {
+          Text("${draft.variants.size} variants", style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurfaceVariant)
+        }
         draft.variants.forEachIndexed { index, variant ->
           fun update(next: VariantDraft) = editor.change(draft.copy(variants = draft.variants.toMutableList().also { it[index] = next }))
           if (draft.variants.size > 1) Text(variant.label, style = MaterialTheme.typography.titleSmall)
@@ -602,6 +608,7 @@ private fun ProductDialogs(editor: ProductEditorModel) {
               keyboardOptions = KeyboardOptions(keyboardType = androidx.compose.ui.text.input.KeyboardType.Number), modifier = Modifier.fillMaxWidth())
           }
         }
+        AddOnsFields(draft, editor::change)
       }
     }
   }

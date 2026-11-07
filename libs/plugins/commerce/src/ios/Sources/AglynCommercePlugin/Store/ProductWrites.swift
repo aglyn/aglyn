@@ -75,6 +75,8 @@ struct ProductDraft: Equatable {
   var type: ProductType = .physical
   var options: [OptionDraft] = []
   var variants: [VariantDraft] = [VariantDraft(id: "default", label: "Default")]
+  /// Add-ons (AGL-4100): choices added to the item that need no stock of their own.
+  var addOns: [AddOnGroupDraft] = []
 }
 
 /// A fresh product id, minted here so a retried create finds its own product.
@@ -112,7 +114,8 @@ func productDraft(_ doc: FirestoreDocument) -> ProductDraft {
   return ProductDraft(
     productID: doc.id, create: false, name: doc.string("name") ?? "", description: doc.string("description") ?? "",
     status: doc.string("status").flatMap(ProductStatus.init(rawValue:)) ?? .active,
-    type: doc.string("type").flatMap(ProductType.init(rawValue:)) ?? .physical, options: options, variants: variants)
+    type: doc.string("type").flatMap(ProductType.init(rawValue:)) ?? .physical, options: options, variants: variants,
+    addOns: addOnDrafts(data))
 }
 
 /// A price above this is refused, as the console's editor refuses it.
@@ -122,6 +125,7 @@ let maxPriceCents = 10_000_00
 func checkProductDraft(_ draft: ProductDraft) -> String? {
   if draft.name.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty { return "Product name is required" }
   if let problem = checkOptions(draft.options) { return problem }
+  if let problem = checkAddOns(draft.addOns) { return problem }
   var skus = Set<String>()
   // A product with no options has one variant, which a person knows only as "the price".
   let named = !draft.options.isEmpty && draft.variants.count > 1
@@ -186,6 +190,9 @@ func productSaveJSON(_ draft: ProductDraft, stored: [String: Any]?) -> JSONValue
       })
   }
   base["variants"] = .array(variants)
+  if !draft.addOns.isEmpty || base.keys.contains("modifierGroups") {
+    base["modifierGroups"] = addOnsJSON(draft.addOns, stored: base["modifierGroups"])
+  }
   if draft.create { base["slug"] = .string(commerceSlug(draft.name)) }
   return .object(base)
 }

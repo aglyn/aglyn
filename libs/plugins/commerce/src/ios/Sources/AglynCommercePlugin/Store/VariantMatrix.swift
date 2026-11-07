@@ -141,6 +141,6 @@ func checkOptions(_ options: [OptionDraft]) -> String? {
   if Set(options.map { $0.name.trimmingCharacters(in: .whitespacesAndNewlines) }).count != options.count {
     return "Each option needs its own name"
   }
-  if variantCountOf(options) > commerceMaxVariants { return "At most \(commerceMaxVariants) variants per product" }
+  if let problem = variantMatrixProblem(options) { return problem }
   return nil
 }
