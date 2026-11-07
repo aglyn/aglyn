@@ -37,16 +37,18 @@ content on the marketing site and is written separately.
 - **ai:** a brand's mark never fills a redesign's photo slot ([AGL-4152](https://linear.app/aglyn/issue/AGL-4152))
 - **ai:** a header button that asks to be contacted goes to the contact page ([AGL-4152](https://linear.app/aglyn/issue/AGL-4152))
 - **tenant:** the preview bar sits under the admin bar, not over it ([AGL-4152](https://linear.app/aglyn/issue/AGL-4152))
+- **commerce:** product names on storefront cards wrap to two lines
 
 ### Documentation
 
 - **commerce:** payments docs describe a store's own Stripe account
 
 <details>
-<summary>Also in this release: 1 test, 1 chore</summary>
+<summary>Also in this release: 1 test, 2 chores</summary>
 
 - **marketplace:** pin the plugin cache drop at every security call site ([AGL-4121](https://linear.app/aglyn/issue/AGL-4121))
 - **data:** skip CI on the dataset rail name-order head ([AGL-4047](https://linear.app/aglyn/issue/AGL-4047))
+- **tools:** raise the Linear id floor to AGL-4210 ([AGL-4210](https://linear.app/aglyn/issue/AGL-4210))
 
 </details>
 
