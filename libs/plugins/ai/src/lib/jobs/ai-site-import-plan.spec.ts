@@ -503,6 +503,34 @@ describe('the plan’s pass', () => {
     jest.restoreAllMocks()
   })
 
+  it('keeps why a plan did not pass on the job’s record, and logs its codes alone', async () => {
+    const info = jest.spyOn(console, 'info').mockImplementation(() => undefined)
+    const violations = [
+      { rule: null, code: 'site-plan-unusable', message: 'nav.groups[0]: "Our studio, all of it, every last bit of what we do here" is over 28 characters.' },
+      { rule: 14, code: 'improve-invented-fact', message: `site.what, "Loved by every client": ${'it says what the site does not. '.repeat(20)}` },
+      ...Array.from({ length: 9 }, (_, at) => ({ rule: null, code: 'site-plan-unusable', message: `nav.footer[${at}]: it needs a label.` })),
+    ]
+    const missed = await pass(stepDeps({ plan: (async () => ({ ...spend, status: 'needs_input' as const, violations, message: 'x' })) as never }), site())
+    const why = (missed.siteImport as AiSiteImportState).planMissedWhy ?? []
+    expect(why).toHaveLength(8)
+    expect(why[0]).toBe('site-plan-unusable: nav.groups[0]: "Our studio, all of it, every last bit of what we do here" is over 28 characters.')
+    expect(why[1]?.startsWith('improve-invented-fact: site.what, "Loved by every client"')).toBe(true)
+    expect(why.every((line) => line.length <= 300)).toBe(true)
+    // The log names the codes, never a line of the site's.
+    const logged = JSON.stringify(info.mock.calls)
+    expect(logged).toContain('site-plan-unusable')
+    expect(logged).not.toContain('Our studio')
+    expect(logged).not.toContain('Loved by every client')
+    const refused = await pass(stepDeps({ plan: (async () => ({ ...spend, status: 'refused' as const })) as never }), site())
+    expect((refused.siteImport as AiSiteImportState).planMissedWhy).toEqual(['refused: the model declined to plan the site.'])
+    jest.restoreAllMocks()
+    // A plan that passes later clears what the miss said; a miss with nothing to say leaves no field.
+    const later = aiSiteImportPlanIn(missed.siteImport as AiSiteImportState, { index: 1 }, planOf(), 'x', 'd-new')
+    expect(later.planMissedWhy).toBeNull()
+    expect(later.plan?.proposed?.draftId).toBe('d-new')
+    expect('planMissedWhy' in aiSiteImportPlanIn(site(), { index: 1 }, null, 'x', '', [])).toBe(false)
+  })
+
   it('asks for no new page with new copy off, or with no room', async () => {
     const runPlan = jest.fn(async () => ({ ...spend, status: 'refused' as const }))
     jest.spyOn(console, 'info').mockImplementation(() => undefined)

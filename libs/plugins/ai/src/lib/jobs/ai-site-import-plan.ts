@@ -50,6 +50,7 @@ import type { AiDoctrineViolation } from '../runtime/ai-doctrine-validators'
 import { aiGenerationMaxTokensWithin, aiJobStepBudget } from './ai-job-budget'
 import { AI_LAYOUT_LANGUAGE_THINKING } from './ai-job-page-language'
 import { AI_SITE_IMPORT_DROPPED_ITEM_CODE, AI_SITE_IMPORT_INVENTED_FACT_CODE, aiSiteImportHonestyFacts, aiSiteImportInventedIn } from './ai-site-import-honesty'
+import { aiSiteImportRedesignWhy } from './ai-site-import-improve'
 
 const clean = (text: unknown): string => (typeof text === 'string' ? text.replace(/\s+/g, ' ').trim() : '')
 
@@ -238,6 +239,18 @@ function groupsOf(value: unknown): Array<{ label: string; pages: string[] }> {
     return { label: clean(group['label']), pages: (Array.isArray(group['pages']) ? group['pages'] : []).map(clean).filter(Boolean) }
   })
 }
+
+/**
+ * Why a plan did not pass, line by line (AGL-4152): each miss's code and the
+ * line it names, as a redesign's (`aiSiteImportRedesignWhy`), for the job's
+ * record (`planMissedWhy`). The log names its codes alone.
+ */
+export function aiSiteImportPlanWhy(violations: readonly AiDoctrineViolation[]): string[] {
+  return aiSiteImportRedesignWhy(violations)
+}
+
+/** What the job's record says of a plan the model declined: there are no lines to name. */
+export const AI_SITE_IMPORT_PLAN_REFUSED_WHY = 'refused: the model declined to plan the site.'
 
 /** What a plan is held to. */
 export interface AiSiteImportPlanScope {

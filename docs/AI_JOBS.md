@@ -3037,6 +3037,10 @@ built page against what the reader read of its source.
   ΔE 0.1 of the source's color (`SITE_IMPORT_OUTLINE_DELTA`; a grey or black is
   the theme's ink). Improve it's score adds none of these and reads a band by its
   color alone (`section.absoluteBand`), as the design answer's text does.
+- **A site plan's misses (AGL-4152).** A plan that does not pass keeps why on
+  the job's own record (`siteImport.planMissedWhy`, at most 8 of 300
+  characters, each miss's code and the line it names; a refusal says so),
+  while the log names its codes alone.
 - **A generative redesign's misses (AGL-4152).** A redesign that falls back logs
   each miss's code with the line it names, and the page's record keeps them
   (`redesignMissedWhy`, at most 8 of 300 characters): the answer itself is
