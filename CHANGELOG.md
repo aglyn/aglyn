@@ -45,9 +45,10 @@ content on the marketing site and is written separately.
 - **commerce:** payments docs describe a store's own Stripe account
 
 <details>
-<summary>Also in this release: 1 test, 3 chores</summary>
+<summary>Also in this release: 2 tests, 3 chores</summary>
 
 - **marketplace:** pin the plugin cache drop at every security call site ([AGL-4121](https://linear.app/aglyn/issue/AGL-4121))
+- **console:** publish guard specs read the shared save-and-publish step ([AGL-4209](https://linear.app/aglyn/issue/AGL-4209))
 - **data:** skip CI on the dataset rail name-order head ([AGL-4047](https://linear.app/aglyn/issue/AGL-4047))
 - **tools:** raise the Linear id floor to AGL-4210 ([AGL-4210](https://linear.app/aglyn/issue/AGL-4210))
 - **budgets:** re-baseline commerce for two-line product names on storefront cards
