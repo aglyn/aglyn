@@ -25,7 +25,7 @@
  * one only QUEUES (`server/sync-intake.ts`): it writes sync items and reads
  * the connection's mapping, and never opens a grant or calls a ledger. The
  * console's tick posts what was queued. The intake is imported when an event
- * first arrives, so boot pays for three registrations.
+ * first arrives, so boot pays for two registrations.
  *
  * Each subscriber takes the event by commerce's token and reads its public
  * order view; the shapes come from commerce's contracts (AGL-3980). A throw
@@ -35,15 +35,18 @@
 
 import { subscribePluginDomainEvent } from '@aglyn/aglyn/plugin-manager/plugin-domain-events'
 import {
-  ORDER_CANCELLED_EVENT,
   ORDER_PAID_EVENT,
   ORDER_REFUNDED_EVENT,
   type CommerceOrderEventName,
 } from '@aglyn/plugins-commerce/contracts'
 import { ACCOUNTING_PLUGIN_ID } from './constants/bundle-common'
 
-/** The commerce events the sync takes, by name. */
-export const ACCOUNTING_SUBSCRIBED_EVENTS: readonly CommerceOrderEventName[] = ['order.paid', 'order.refunded', 'order.cancelled']
+/**
+ * The commerce events the sync takes, by name. Not `order.cancelled`: a
+ * cancel moves no money, so a paid order's sale posts whether or not it is
+ * later cancelled, and its refund, if any, reverses it.
+ */
+export const ACCOUNTING_SUBSCRIBED_EVENTS: readonly CommerceOrderEventName[] = ['order.paid', 'order.refunded']
 
 async function intake() {
   const [module, { defaultAccountingIntakeDeps }] = await Promise.all([
@@ -67,14 +70,6 @@ export function registerAccountingServerDeclarations(): void {
     async (envelope) => {
       const { module, deps } = await intake()
       await module.onOrderRefunded(deps, envelope)
-    },
-    { pluginId: ACCOUNTING_PLUGIN_ID },
-  )
-  subscribePluginDomainEvent(
-    ORDER_CANCELLED_EVENT,
-    async (envelope) => {
-      const { module, deps } = await intake()
-      await module.onOrderCancelled(deps, envelope)
     },
     { pluginId: ACCOUNTING_PLUGIN_ID },
   )

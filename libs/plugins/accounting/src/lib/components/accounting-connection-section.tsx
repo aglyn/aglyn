@@ -341,6 +341,9 @@ export function AccountingConnectionSection(props: AccountingConnectionSectionPr
           {connection.status === 'connected' && connection.missingRoles.length ? (
             <Alert severity="info">Choose your accounts below. Nothing is posted until they are set.</Alert>
           ) : null}
+          {connection.status === 'connected' && connection.payoutError ? (
+            <Alert severity="warning">{connection.payoutError}</Alert>
+          ) : null}
         </Stack>
       </CardDisplay>
       {connection.status === 'choose-tenant' ? (

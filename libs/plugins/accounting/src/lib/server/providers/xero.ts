@@ -534,7 +534,58 @@ export function createXeroProvider(config: XeroConfig, options: AccountingHttpOp
       return { id: firstId(body, 'BankTransfers', 'BankTransferID'), type: 'BankTransfer' }
     },
 
+    /**
+     * The day's summary. Xero refuses a bank account on a manual journal, and
+     * the clearing account is one (it must be, for invoice payments and spend
+     * or receive money), so the day posts as ONE bank transaction on clearing:
+     * RECEIVE when clearing nets in, SPEND when it nets out, every other
+     * account a line, signed so the lines add up to the clearing amount. A
+     * line may be negative while the total is positive; Xero takes that.
+     * `NoTax` with no `TaxType` leaves each line's amount as it stands, as a
+     * fee's bank transaction does.
+     *
+     * A day whose clearing nets to nothing (no clearing line) has no money to
+     * move: what is left only moves amounts between other accounts, and posts
+     * as a manual journal, which takes them.
+     */
     async createJournal(session, doc: AccountingJournalDoc, context) {
+      const clearing = doc.lines.find((line) => line.accountId === doc.clearingAccountId)
+      const clearingCents = clearing ? clearing.debitCents - clearing.creditCents : 0
+      if (clearingCents !== 0) {
+        if (!context.customerId) throw new AccountingProviderError('validation', 'Xero needs a contact for a daily summary.')
+        const receive = clearingCents > 0
+        const body = await put(
+          session,
+          'BankTransactions',
+          {
+            BankTransactions: [
+              {
+                Type: receive ? 'RECEIVE' : 'SPEND',
+                Contact: { ContactID: context.customerId },
+                BankAccount: { AccountID: doc.clearingAccountId },
+                Date: doc.date,
+                Reference: doc.externalId,
+                CurrencyCode: normalizeCurrency(doc.currency),
+                LineAmountTypes: 'NoTax',
+                LineItems: doc.lines
+                  .filter((line) => line !== clearing)
+                  .map((line) => {
+                    // A credit is money in on a RECEIVE; a debit is money out on a SPEND.
+                    const cents = receive ? line.creditCents - line.debitCents : line.debitCents - line.creditCents
+                    return {
+                      Description: line.description,
+                      Quantity: 1,
+                      UnitAmount: centsToDecimal(cents),
+                      ...accountRef(line.accountId, context.extras),
+                    }
+                  }),
+              },
+            ],
+          },
+          context.idempotencyKey,
+        )
+        return { id: firstId(body, 'BankTransactions', 'BankTransactionID'), type: 'BankTransaction' }
+      }
       const body = await put(
         session,
         'ManualJournals',
@@ -582,9 +633,23 @@ export function createXeroProvider(config: XeroConfig, options: AccountingHttpOp
           const row = await findOne(session, 'BankTransfers', { where: `Reference==${xeroLiteral(externalId)}` })
           return row ? { id: String(row['BankTransferID']), type: 'BankTransfer' } : null
         }
+        case 'summary': {
+          // The day's bank transaction on clearing, by its reference. A day
+          // that posted as a manual journal is not found here: a journal's
+          // narration is not a filter Xero offers, and the idempotency key
+          // and the sync log are its locks.
+          const body = await get<{ BankTransactions?: XeroRecord[] }>(session, 'BankTransactions', {
+            where: `Reference==${xeroLiteral(externalId)}`,
+          })
+          const row = (body?.BankTransactions ?? []).find(
+            (candidate) =>
+              (candidate['Type'] === 'RECEIVE' || candidate['Type'] === 'SPEND') &&
+              candidate['Status'] !== 'DELETED' &&
+              candidate['Status'] !== 'VOIDED',
+          )
+          return row ? { id: String(row['BankTransactionID']), type: 'BankTransaction' } : null
+        }
         default:
-          // A journal's narration is not a filter Xero offers; the
-          // idempotency key and the sync log are its locks.
           return null
       }
     },

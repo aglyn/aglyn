@@ -32,8 +32,10 @@
  * 5. Post what is due.
  *
  * A workspace under a lockdown is passed over, untouched, and picked up on
- * the first tick after the lift. A failure in one workspace is logged and the
- * next runs.
+ * the first tick after the lift. A failure in one step is logged and counted,
+ * and the workspace's later steps still run: a payout read Stripe refuses, or
+ * a backfill page that cannot be read, never keeps what is queued from
+ * posting. A failure in one workspace is logged and the next runs.
  */
 
 import { dateInZone } from '../model/accounting-money'
@@ -46,7 +48,7 @@ import {
   refreshConnection,
   type AccountingConnectionRecord,
 } from './connection-store'
-import { listPaidPayouts, otherConnectedOrgsOfOwner, readConnectedAccount } from './payouts'
+import { AccountingProviderError, listPaidPayouts, otherConnectedOrgsOfOwner, readConnectedAccount } from './payouts'
 import { enqueuePayout, gatherSummaries, runSyncPass, type AccountingEngineDeps } from './sync-engine'
 import { payoutItemId, syncItemsCollection } from './sync-store'
 
@@ -102,8 +104,18 @@ export async function runAccountingSyncJob(
       | null
     if (!connection || connection.status !== 'connected') continue
     report.connections += 1
+    const orgId = connection.orgId
+    /** Runs one step; a throw is logged and counted, and the next step runs. */
+    const step = async (name: string, run: () => Promise<void>) => {
+      try {
+        await run()
+      } catch (error) {
+        report.failed += 1
+        console.error(`[accounting] ${name} failed for org ${orgId}`, error)
+      }
+    }
     try {
-      if (await deps.orgLocked(connection.orgId)) {
+      if (await deps.orgLocked(orgId)) {
         report.skippedLocked += 1
         continue
       }
@@ -111,24 +123,34 @@ export async function runAccountingSyncJob(
       if (!provider) continue
 
       if (deps.now() - connection.refreshedAtMs >= PROACTIVE_REFRESH_AGE_MS) {
-        const result = await refreshConnection(
-          { firestore, keyring, provider, now: deps.now, sleep: deps.sleep },
-          connection,
-        )
-        if (result.refreshed) report.refreshed += 1
-        const reread = readConnection((await connectionRef(firestore, connection.orgId, connection.provider).get()).data(), keyring)
+        await step('grant refresh', async () => {
+          const result = await refreshConnection(
+            { firestore, keyring, provider, now: deps.now, sleep: deps.sleep },
+            connection,
+          )
+          if (result.refreshed) report.refreshed += 1
+        })
+        // Read back whatever the refresh left, a failed one included: a
+        // refused grant is now `reconnect-required`, and the pass stops on it.
+        const reread = readConnection((await connectionRef(firestore, orgId, connection.provider).get()).data(), keyring)
         if (reread) Object.assign(connection, reread)
       }
 
       if (connection.backfill && !connection.backfill.done) {
-        report.backfillQueued += await runBackfillStep(deps, connection)
+        await step('backfill', async () => {
+          report.backfillQueued += await runBackfillStep(deps, connection)
+        })
       }
 
       if (deps.now() - Number(connection.payoutPolledAtMs ?? 0) >= PAYOUT_POLL_INTERVAL_MS) {
-        report.payoutsQueued += await pollPayouts(deps, connection)
+        await step('payout read', async () => {
+          report.payoutsQueued += await pollPayouts(deps, connection)
+        })
       }
 
-      report.summaries += await gatherSummaries(deps, connection)
+      await step('daily summary', async () => {
+        report.summaries += await gatherSummaries(deps, connection)
+      })
 
       const pass = await runSyncPass(deps, connection, { deadlineMs: context.deadlineMs })
       report.posted += pass.posted
@@ -142,8 +164,28 @@ export async function runAccountingSyncJob(
 }
 
 /**
+ * What the Accounting page says while payouts cannot be read: Stripe's own
+ * reason, and that everything else still posts.
+ */
+export function payoutReadError(error: unknown): string {
+  const reason =
+    error instanceof AccountingProviderError && error.message.trim()
+      ? error.message.trim().replace(/[.\s]+$/, '')
+      : 'Stripe did not answer'
+  return (
+    `Payouts couldn't be read from Stripe: ${reason}. ` +
+    'Sales, refunds and fees still post; payouts will be tried again in a few hours.'
+  )
+}
+
+/**
  * Queues the payouts that reached the bank since the last read. A payout of
  * an account shared with another connected workspace asks a person instead.
+ *
+ * When Stripe refuses the read, the poll time still moves on, so the next
+ * read waits the usual {@link PAYOUT_POLL_INTERVAL_MS} rather than failing
+ * every tick, and `payoutError` tells the merchant why until a read succeeds.
+ * The error is thrown on for the tick to log and count.
  */
 export async function pollPayouts(
   deps: AccountingJobDeps,
@@ -154,16 +196,22 @@ export async function pollPayouts(
   const stripeKey = deps.stripeKey()
   const account = stripeKey ? await readConnectedAccount(firestore, connection.orgId) : null
   if (!stripeKey || !account) {
-    await ref.update({ payoutPolledAtMs: deps.now() })
+    await ref.update({ payoutPolledAtMs: deps.now(), payoutError: null })
     return 0
   }
-  const payouts = await listPaidPayouts({
-    stripeKey,
-    accountId: account.accountId,
-    orgId: connection.orgId,
-    sinceMs: connection.payoutCursorMs,
-    fetch: deps.fetch,
-  })
+  let payouts: Awaited<ReturnType<typeof listPaidPayouts>>
+  try {
+    payouts = await listPaidPayouts({
+      stripeKey,
+      accountId: account.accountId,
+      orgId: connection.orgId,
+      sinceMs: connection.payoutCursorMs,
+      fetch: deps.fetch,
+    })
+  } catch (error) {
+    await ref.update({ payoutPolledAtMs: deps.now(), payoutError: payoutReadError(error), updatedAtMs: deps.now() })
+    throw error
+  }
   const shared = payouts.length ? await otherConnectedOrgsOfOwner(firestore, connection.orgId, account.ownerUid) : []
   let queued = 0
   let cursor = connection.payoutCursorMs
@@ -182,6 +230,11 @@ export async function pollPayouts(
     }
     cursor = Math.max(cursor, payout.arrivedAtMs)
   }
-  await ref.update({ payoutCursorMs: cursor, payoutPolledAtMs: deps.now(), payoutDay: dateInZone(deps.now(), 'UTC') })
+  await ref.update({
+    payoutCursorMs: cursor,
+    payoutPolledAtMs: deps.now(),
+    payoutDay: dateInZone(deps.now(), 'UTC'),
+    payoutError: null,
+  })
   return queued
 }
