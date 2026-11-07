@@ -39,9 +39,18 @@ import {
   campaignSendIsMidFlight,
   campaignSendListIds,
   campaignWindowState,
+  campaignAllExceptLabel,
+  campaignPlacedOnlyOn,
+  campaignSharingChoice,
+  campaignSharingChoiceFrom,
+  campaignSharingKey,
+  campaignSharingWrite,
+  campaignSiteDeleteRefusal,
+  campaignSiteMayDelete,
   type CampaignSend,
   type EmailCampaign,
 } from './campaign-container'
+import { campaignContainerSearchFields } from './campaign-list-query'
 
 const DAY = 86_400_000
 const NOW = Date.UTC(2026, 7, 30)
@@ -458,5 +467,120 @@ describe('the utm_campaign labels a campaign answers to (AGL-3461)', () => {
       CAMPAIGN_UTM_LABELS_MAX,
     )
     expect(campaignUtmLabels(undefined)).toEqual([])
+  })
+})
+
+/*==========================================
+ * WHO A CAMPAIGN IS SHARED WITH (AGL-4047).
+ *
+ * The one answer the console asks before a save and the manage route asks
+ * again: what a choice writes, or why it cannot be written. The old silent
+ * cap kept the first thirty of a longer selection; now that is refused with
+ * the reason, and "All sites except…" has no such ceiling.
+ *=========================================*/
+describe('a campaign’s sharing', () => {
+  const ORG = ['a', 'b', 'c']
+
+  it('refuses more than thirty chosen sites with the reason, never keeping the first thirty', () => {
+    const many = Array.from({ length: 31 }, (_, at) => `s${at}`)
+    const written = campaignSharingWrite({ mode: 'selected', hostIds: many }, many)
+    expect(written.fields).toBeNull()
+    expect(written.problem).toMatch(/30 sites or fewer/)
+  })
+
+  it('reaches past thirty sites with all sites except some', () => {
+    const many = Array.from({ length: 45 }, (_, at) => `s${at}`)
+    const written = campaignSharingWrite({ mode: 'allExcept', exceptHostIds: ['s0'] }, many)
+    expect(written.fields?.visibleTo).toHaveLength(44)
+    expect(written.fields?.scopeMode).toBe('allExcept')
+    expect(written.fields?.scopeExcept).toEqual(['host:s0'])
+  })
+
+  it('drops a chosen site the workspace does not hold', () => {
+    expect(campaignSharingWrite({ mode: 'selected', hostIds: ['b', 'gone'] }, ORG).fields).toEqual({
+      visibleTo: ['host:b'],
+      scopeMode: null,
+      scopeExcept: null,
+    })
+  })
+
+  it('All sites stores the org token and no marker', () => {
+    expect(campaignSharingWrite({ mode: 'all' }, ORG).fields).toEqual({
+      visibleTo: ['org'],
+      scopeMode: null,
+      scopeExcept: null,
+    })
+  })
+
+  it('reads a stored campaign back as the choice the field edits', () => {
+    expect(campaignSharingChoice({ visibleTo: ['org'] })).toEqual({ mode: 'all' })
+    expect(campaignSharingChoice({ visibleTo: ['host:a'] })).toEqual({ mode: 'selected', hostIds: ['a'] })
+    expect(
+      campaignSharingChoice({ visibleTo: ['host:a'], scopeMode: 'allExcept', scopeExcept: ['host:b'] }),
+    ).toEqual({ mode: 'allExcept', exceptHostIds: ['b'] })
+    // Never shared: no choice shows as picked.
+    expect(campaignSharingChoice({})).toBeNull()
+    expect(campaignSharingKey({ mode: 'selected', hostIds: ['b', 'a'] })).toBe(
+      campaignSharingKey({ mode: 'selected', hostIds: ['a', 'b'] }),
+    )
+  })
+
+  it.each([
+    ['nothing', undefined],
+    ['an unknown mode', { mode: 'some' }],
+    ['a path for a site', { mode: 'allExcept', exceptHostIds: ['a/b'] }],
+    ['a token for a site', { mode: 'selected', hostIds: ['host:a'] }],
+    ['a list that is not one', { mode: 'selected', hostIds: 'a' }],
+  ])('reads %s off the wire as no choice', (_name, value) => {
+    expect(campaignSharingChoiceFrom(value)).toBeNull()
+  })
+
+  it('reads a well-formed choice off the wire as itself', () => {
+    expect(campaignSharingChoiceFrom({ mode: 'allExcept', exceptHostIds: ['a'] })).toEqual({
+      mode: 'allExcept',
+      exceptHostIds: ['a'],
+    })
+  })
+
+  it('describes a campaign shared with all sites except some by what it leaves out, and no other', () => {
+    const names = { a: 'Store', b: 'Blog' }
+    expect(
+      campaignAllExceptLabel({ visibleTo: ['host:a'], scopeMode: 'allExcept', scopeExcept: ['host:b'] }, names),
+    ).toBe('All sites except Blog')
+    expect(campaignAllExceptLabel({ visibleTo: ['host:a'] }, names)).toBeNull()
+    expect(campaignAllExceptLabel({ visibleTo: ['org'] }, names)).toBeNull()
+  })
+
+  it('a container’s search keys come from its name alone, so they never multiply by site', () => {
+    expect(Object.keys(campaignContainerSearchFields('Spring sale')).sort()).toEqual(['nameLower', 'nameTokens'])
+  })
+})
+
+describe('the one site whose verdict counts (AGL-4047)', () => {
+  it('a campaign on this site alone', () => {
+    expect(campaignPlacedOnlyOn({ visibleTo: ['host:a'] }, 'a')).toBe(true)
+    expect(campaignSiteMayDelete({ visibleTo: ['host:a'] }, 'a')).toBe(true)
+  })
+
+  it.each([
+    ['shared with all sites except some, reaching this site alone', { visibleTo: ['host:a'], scopeMode: 'allExcept', scopeExcept: ['host:b'] }],
+    ['carrying a stored null marker', { visibleTo: ['host:a'], scopeMode: null }],
+    ['carrying half a marker', { visibleTo: ['host:a'], scopeExcept: ['host:b'] }],
+    ['on several sites', { visibleTo: ['host:a', 'host:b'] }],
+    ['on every site', { visibleTo: ['org'] }],
+  ])('never a campaign %s', (_name, campaign) => {
+    expect(campaignPlacedOnlyOn(campaign, 'a')).toBe(false)
+    expect(campaignSiteMayDelete(campaign, 'a')).toBe(false)
+  })
+
+  it('says why, naming what it takes and never a role', () => {
+    const marked = campaignSiteDeleteRefusal({ scopeMode: 'allExcept', scopeExcept: ['host:b'] })
+    const wider = campaignSiteDeleteRefusal({})
+    for (const sentence of [marked, wider]) {
+      expect(sentence).toMatch(/access to every site in the workspace/)
+      expect(sentence).not.toMatch(/admin|owner|editor/i)
+    }
+    expect(marked).toMatch(/all sites except some/)
+    expect(wider).toMatch(/other sites too/)
   })
 })

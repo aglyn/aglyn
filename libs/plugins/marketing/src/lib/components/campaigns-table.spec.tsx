@@ -237,8 +237,14 @@ import { nameSearchNormalizers } from '@aglyn/aglyn/app-utils/name-search'
 import { planListQuery } from '@aglyn/shared-ui-jsx/const/list-query-plan'
 let containersBlocked = false
 let rowDeleteBlocked = false
+/** The site door's reason a row's delete is refused past the key, by row (AGL-4047). */
+let rowDeleteReach: (campaign: any) => string | null = () => null
 jest.mock('./use-campaign-containers-blocked', () => ({
-  useCampaignListAccess: () => ({ createBlocked: containersBlocked, deleteBlocked: rowDeleteBlocked }),
+  useCampaignListAccess: () => ({
+    createBlocked: containersBlocked,
+    deleteBlocked: rowDeleteBlocked,
+    deleteReachRefusal: (campaign: any) => rowDeleteReach(campaign),
+  }),
 }))
 
 import HostCampaignsCard from './campaigns-card'
@@ -265,6 +271,7 @@ beforeEach(() => {
   pushed = []
   drawerFields = []
   formValues = {}
+  rowDeleteReach = () => null
   topicsEnabled = []
   confirmAccepts = true
   posted = []
@@ -848,6 +855,26 @@ describe('without "Run email campaigns" (AGL-4047)', () => {
     expect(item.getAttribute('aria-disabled')).toBeNull()
   })
 
+  it('switches off a row the site’s door would refuse, with that row’s own reason (AGL-4047)', async () => {
+    const REACH = 'This campaign is shared with all sites except some, so it belongs to the whole workspace'
+    const marked = {
+      $id: 'camp-1',
+      name: 'Spring sale',
+      visibleTo: ['host:host-1'],
+      scopeMode: 'allExcept',
+      scopeExcept: ['host:host-2'],
+      listIds: [],
+    }
+    rowDeleteReach = (campaign) => (campaign?.scopeMode ? REACH : null)
+    served.emailCampaigns = [marked]
+    render(<HostCampaignsCard hostId="host-1" basePath="/acme/hosts/store/marketing" />)
+    await waitFor(() => expect(cells()).toContain('Spring sale'))
+    openMenuFor('Spring sale')
+    const item = screen.getAllByRole('menuitem').find((one) => one.textContent === 'Delete campaign') as HTMLElement
+    expect(item.getAttribute('aria-disabled')).toBe('true')
+    expect(screen.getByLabelText(REACH).contains(item)).toBe(true)
+  })
+
   it('switches Create campaign off with the permission named', async () => {
     containersBlocked = true
     render(<HostCampaignsCard hostId="host-1" basePath="/acme/hosts/store/marketing" />)
@@ -1058,27 +1085,32 @@ describe('the campaigns table on the org hub', () => {
     expect(rowFor('Old news').textContent).toContain('Store')
   })
 
-  it('offers a Sites picker, and places a campaign on every site by default', async () => {
-    formValues = { displayName: 'Everywhere' }
+  it('offers the sharing field, and places a campaign on every site by default', async () => {
+    formValues = { displayName: 'Everywhere', sharing: { mode: 'all' } }
     await mountAtOrg()
     fireEvent.click(screen.getAllByText('Create campaign')[0])
     await settle()
 
-    const sites = drawerFields.find((field: any) => field.name === 'siteIds')
-    expect(sites.options).toEqual([
-      { value: 'host-1', label: 'Store' },
-      { value: 'host-2', label: 'Blog' },
+    // Radios and a visible list of sites, never a dropdown (AGL-4047).
+    const sharing = drawerFields.find((field: any) => field.name === 'sharing')
+    expect(sharing.component).toBe('campaign-site-sharing')
+    expect(sharing.initialValue).toEqual({ mode: 'all' })
+    expect(sharing.sites).toEqual([
+      { id: 'host-1', name: 'Store' },
+      { id: 'host-2', name: 'Blog' },
     ])
+    expect(drawerFields.some((field: any) => field.name === 'siteIds')).toBe(false)
 
     fireEvent.click(screen.getByText('Submit campaign'))
     await waitFor(() => expect(writes).toHaveLength(1))
     expect(writes[0][0].startsWith('orgs/org-1/emailCampaigns/')).toBe(true)
     expect(writes[0][1].visibleTo).toEqual(['org'])
+    expect(posted).toHaveLength(0)
     expect(pushed[0]).toMatch(/^\/acme\/marketing\/campaigns\//)
   })
 
   it('places a campaign on the sites the creator picks', async () => {
-    formValues = { displayName: 'Blog only', siteIds: ['host-2'] }
+    formValues = { displayName: 'Blog only', sharing: { mode: 'selected', hostIds: ['host-2'] } }
     await mountAtOrg()
     fireEvent.click(screen.getAllByText('Create campaign')[0])
     await settle()
@@ -1086,6 +1118,62 @@ describe('the campaigns table on the org hub', () => {
     await waitFor(() => expect(writes).toHaveLength(1))
 
     expect(writes[0][1].visibleTo).toEqual(['host:host-2'])
+    expect(posted).toHaveLength(0)
+  })
+
+  it('creates all sites except some on today’s other sites, then has the route mark it', async () => {
+    formValues = { displayName: 'Not the blog', sharing: { mode: 'allExcept', exceptHostIds: ['host-2'] } }
+    await mountAtOrg()
+    fireEvent.click(screen.getAllByText('Create campaign')[0])
+    await settle()
+    fireEvent.click(screen.getByText('Submit campaign'))
+    await waitFor(() => expect(posted).toHaveLength(1))
+
+    // Never on the site left out, and no marker from the client: the rules refuse it.
+    expect(writes[0][1].visibleTo).toEqual(['host:host-1'])
+    expect(writes[0][1]).not.toHaveProperty('scopeMode')
+    expect(writes[0][1]).not.toHaveProperty('scopeExcept')
+    expect(posted[0][0]).toBe('/api/campaigns/manage')
+    expect(posted[0][1]).toMatchObject({
+      action: 'setSharing',
+      campaignId: writes[0][0].split('/').pop(),
+      choice: { mode: 'allExcept', exceptHostIds: ['host-2'] },
+      orgId: 'org-1',
+    })
+  })
+
+  it.each([
+    ['leaves nothing out', { mode: 'allExcept', exceptHostIds: [] }, /at least one site to leave out/],
+    ['leaves every site out', { mode: 'allExcept', exceptHostIds: ['host-1', 'host-2'] }, /Keep at least one site in/],
+    ['chooses no site', { mode: 'selected', hostIds: [] }, /at least one site/],
+  ])('refuses a choice that %s, with the reason, and writes nothing', async (_name, sharing, reason) => {
+    formValues = { displayName: 'Nowhere', sharing }
+    await mountAtOrg()
+    fireEvent.click(screen.getAllByText('Create campaign')[0])
+    await settle()
+    fireEvent.click(screen.getByText('Submit campaign'))
+    await settle()
+
+    expect(screen.getByText(reason)).toBeTruthy()
+    expect(writes).toHaveLength(0)
+    expect(posted).toHaveLength(0)
+  })
+
+  it('names a campaign shared with all sites except some by what it leaves out', async () => {
+    served.emailCampaigns = [
+      {
+        $id: 'camp-except',
+        name: 'Not on the blog',
+        visibleTo: ['host:host-1'],
+        scopeMode: 'allExcept',
+        scopeExcept: ['host:host-2'],
+        listIds: [],
+      },
+    ]
+    await mountAtOrg()
+    await waitFor(() => expect(cells()).toContain('Not on the blog'))
+
+    expect(rowFor('Not on the blog').textContent).toContain('All sites except Blog')
   })
 
   it('deletes a campaign by naming the org, not a site', async () => {

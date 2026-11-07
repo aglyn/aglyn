@@ -1232,12 +1232,95 @@ describe('a campaign on the org hub', () => {
     fireEvent.click(screen.getByRole('menuitem', { name: 'Edit campaign' }))
     await settle()
 
-    expect(screen.getByLabelText('Sites')).toBeTruthy()
+    // Radios and a visible list, never a dropdown (AGL-4047).
+    expect(screen.getByRole('radiogroup', { name: 'Shared with' })).toBeTruthy()
+    expect(screen.queryByLabelText('Sites')).toBeNull()
     fireEvent.click(screen.getByRole('button', { name: 'Save campaign' }))
     await settle()
 
     expect(writes[0][0]).toBe('orgs/org-1/emailCampaigns/camp-1')
     expect(writes[0][1]).not.toHaveProperty('visibleTo')
+    expect(posted).toHaveLength(0)
+  })
+
+  /*
+   * WHO IT IS SHARED WITH GOES THROUGH THE ROUTE (AGL-4047). The client write
+   * carries the campaign's own fields and never `visibleTo` or a marker; the
+   * choice is posted to the manage route, the marker's one writer.
+   */
+  const openEdit = async () => {
+    fireEvent.click(
+      screen.getByRole('button', { name: 'More actions for Spring sale' }),
+    )
+    fireEvent.click(screen.getByRole('menuitem', { name: 'Edit campaign' }))
+    await settle()
+  }
+
+  it('writes all sites except some through the manage route, never the client', async () => {
+    await mountAtOrg()
+    await openEdit()
+    fireEvent.click(screen.getByRole('radio', { name: /All sites except/ }))
+    fireEvent.click(screen.getByRole('checkbox', { name: 'Blog' }))
+    fireEvent.click(screen.getByRole('button', { name: 'Save campaign' }))
+    await settle()
+    await waitFor(() => expect(posted).toHaveLength(1))
+
+    expect(writes[0][1]).not.toHaveProperty('visibleTo')
+    expect(writes[0][1]).not.toHaveProperty('scopeMode')
+    expect(writes[0][1]).not.toHaveProperty('scopeExcept')
+    expect(posted[0][0]).toBe('/api/campaigns/manage')
+    expect(posted[0][1]).toEqual({
+      action: 'setSharing',
+      campaignId: 'camp-1',
+      choice: { mode: 'allExcept', exceptHostIds: ['host-2'] },
+      orgId: 'org-1',
+    })
+  })
+
+  it('refuses to leave out every site, with the reason, before anything is written', async () => {
+    await mountAtOrg()
+    await openEdit()
+    fireEvent.click(screen.getByRole('radio', { name: /All sites except/ }))
+
+    // Nothing left out yet: that choice is All sites, and the field says so.
+    expect(screen.getByText(/Choose at least one site to leave out/)).toBeTruthy()
+    expect(
+      (screen.getByRole('button', { name: 'Save campaign' }) as HTMLButtonElement).disabled,
+    ).toBe(true)
+    // The last site in cannot be left out too.
+    fireEvent.click(screen.getByRole('checkbox', { name: 'Store' }))
+    expect(
+      (screen.getByRole('checkbox', { name: /^Blog/ }) as HTMLInputElement).disabled,
+    ).toBe(true)
+    expect(writes).toHaveLength(0)
+    expect(posted).toHaveLength(0)
+  })
+
+  it('says a refused sharing change where the form still is, and keeps the rest saved', async () => {
+    postAnswer = { ok: false, body: { error: 'Refused for a reason' } }
+    await mountAtOrg()
+    await openEdit()
+    fireEvent.click(screen.getByRole('radio', { name: /^Selected sites/ }))
+    fireEvent.click(screen.getByRole('checkbox', { name: 'Store' }))
+    fireEvent.click(screen.getByRole('button', { name: 'Save campaign' }))
+    await settle()
+    await waitFor(() => expect(posted).toHaveLength(1))
+
+    expect(writes).toHaveLength(1)
+    expect(posted[0][1]['choice']).toEqual({ mode: 'selected', hostIds: ['host-1'] })
+    expect(await screen.findByText(/who it is shared with did not change: Refused for a reason/)).toBeTruthy()
+    expect(screen.getByRole('button', { name: 'Save campaign' })).toBeTruthy()
+  })
+
+  it('describes a campaign shared with all sites except some by what it leaves out', async () => {
+    Object.assign(containers['camp-1'], {
+      visibleTo: ['host:host-1'],
+      scopeMode: 'allExcept',
+      scopeExcept: ['host:host-2'],
+    })
+    await mountAtOrg()
+    expect(screen.getByText('Offered on all sites except Blog')).toBeTruthy()
+    expect(screen.queryByText('Offered on Store')).toBeNull()
   })
 
   it('deletes by naming the org, and returns to the org hub’s list', async () => {
