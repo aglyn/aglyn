@@ -38,3 +38,27 @@ export function aiSiteImportIsBrandMark(picture: { alt?: string | null; from?: s
   const split = (text: string) => text.replace(/(?<=[a-z])(?=[A-Z])|(?<=[A-Z])(?=[A-Z][a-z])/g, ' ')
   return MARK_WORDS.test(split(file)) || MARK_WORDS.test(split(picture.alt ?? ''))
 }
+
+/** A picture file's own ending: what an upload's name ends in, never a description's. */
+const FILE_ENDING = /\.(?:jpe?g|jfif|png|gif|webp|avif|heic|heif|tiff?|bmp|svg)$/i
+
+/** The names a camera, a phone or a screenshot gives a file before anyone describes it: "IMG_2459", "DSC01234", "PXL_20260927_101500". */
+const CAMERA_NAME = /^(?:img|dsc|dscn|dscf|pxl|mvimg|gopr|dji|sam|wp|vid)[\s_-]?\d[\d_-]*$/i
+
+/** A phone's or a computer's screenshot, named for when it was taken. */
+const SCREENSHOT_NAME = /^screen ?shot[\s_-]+\d{4}-\d{2}-\d{2}\b/i
+
+/** An id a phone's or a site builder's upload is named by. */
+const UUID_NAME = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i
+
+/**
+ * Whether a picture's alt text is only its file's name (AGL-4152): what a
+ * builder fills in where its owner described nothing — "IMG_2459.jpeg",
+ * "Screenshot 2026-09-27 at 10.37.16 AM.png", a phone's id. It says nothing
+ * of what the picture shows, so it is no description of it.
+ */
+export function aiSiteImportAltIsFileName(alt: string | null | undefined): boolean {
+  const text = (alt ?? '').replace(/\s+/g, ' ').trim()
+  if (!text) return false
+  return FILE_ENDING.test(text) || CAMERA_NAME.test(text) || SCREENSHOT_NAME.test(text) || UUID_NAME.test(text)
+}
