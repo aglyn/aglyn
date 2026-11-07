@@ -33,7 +33,22 @@ data class AddOnChoiceDraft(
   val name: String = "",
   val price: String = "",
   val byVariant: Map<String, String> = emptyMap(),
+  /** Its picture card (AGL-4205): a picture from the media library, a short note, and what a combo includes, one per line as typed. */
+  val imageUrl: String = "",
+  val note: String = "",
+  val includes: String = "",
 )
+
+/** A choice's note, at most this long (the console's `PRODUCT_CHOICE_NOTE_MAX`). */
+const val PRODUCT_CHOICE_NOTE_MAX = 160
+
+/** What a combo includes: at most this many items (`PRODUCT_COMBO_MAX_ITEMS`), each at most this long (`PRODUCT_COMBO_ITEM_MAX`). */
+const val PRODUCT_COMBO_MAX_ITEMS = 12
+const val PRODUCT_COMBO_ITEM_MAX = 80
+
+/** What a combo includes as stored, as the console's `withChoiceCard` reads the typed lines: trimmed, cut, blanks dropped, at most 12. */
+fun comboItems(text: String): List<String> =
+  text.split("\n").map { it.trim().take(PRODUCT_COMBO_ITEM_MAX) }.filter { it.isNotEmpty() }.take(PRODUCT_COMBO_MAX_ITEMS)
 
 /** One group as the editor holds it. `online` absent reads as register only, as the console reads it. */
 data class AddOnGroupDraft(
@@ -87,6 +102,9 @@ fun addOnDrafts(data: Map<String, Any?>): List<AddOnGroupDraft> =
             val variant = key as? String ?: return@mapNotNull null
             variant to dollarsText((value as? Number)?.toDouble()).ifEmpty { "0.00" }
           }.toMap(),
+          imageUrl = option["imageUrl"] as? String ?: "",
+          note = option["note"] as? String ?: "",
+          includes = (option["includes"] as? List<*>).orEmpty().filterIsInstance<String>().joinToString("\n"),
         )
       },
     )
@@ -141,6 +159,7 @@ fun canAddAddOnGroup(drafts: List<AddOnGroupDraft>): Boolean = drafts.size < POS
 fun addOnsJson(drafts: List<AddOnGroupDraft>, stored: JsonElement?): JsonArray {
   val storedGroups = (stored as? JsonArray).orEmpty().mapNotNull { it as? JsonObject }
   fun idOf(record: JsonObject) = (record["id"] as? JsonPrimitive)?.content
+  val choiceCards = drafts.flatMap { group -> group.choices.map { (group.id to it.id) to it } }.toMap()
   return JsonArray(
     addOnGroups(drafts).map { group ->
       val storedGroup = storedGroups.firstOrNull { idOf(it) == group.id }
@@ -160,6 +179,16 @@ fun addOnsJson(drafts: List<AddOnGroupDraft>, stored: JsonElement?): JsonArray {
           val byVariant = option.priceCentsByVariant
           if (byVariant.isNullOrEmpty()) choice.remove("priceCentsByVariant")
           else choice["priceCentsByVariant"] = JsonObject(byVariant.mapValues { JsonPrimitive(it.value.toLong()) })
+          // The picture card, as the console's `withChoiceCard` writes it: each kept only when it says something.
+          val card = choiceCards[group.id to option.id]
+          if (card != null) {
+            val url = card.imageUrl.trim()
+            if (url.isEmpty()) choice.remove("imageUrl") else choice["imageUrl"] = JsonPrimitive(url)
+            val note = card.note.trim().take(PRODUCT_CHOICE_NOTE_MAX)
+            if (note.isEmpty()) choice.remove("note") else choice["note"] = JsonPrimitive(note)
+            val items = comboItems(card.includes)
+            if (items.isEmpty()) choice.remove("includes") else choice["includes"] = JsonArray(items.map(::JsonPrimitive))
+          }
           JsonObject(choice)
         },
       )

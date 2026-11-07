@@ -4,6 +4,7 @@
 import AglynContracts
 import AglynCore
 import AglynPluginHost
+import AglynSite
 import AglynUI
 import SwiftUI
 
@@ -19,6 +20,8 @@ struct ProductEditorSheet: View {
   let context: NativePluginContext
   @State var model: ProductEditorModel
   var onSaved: (String) -> Void = { _ in }
+  /// The choice whose picture is being picked from the media library.
+  @State private var picturePick: AddOnPicturePick?
 
   var body: some View {
     AglynFormSheet(
@@ -64,6 +67,13 @@ struct ProductEditorSheet: View {
         }
       }
       addOnsSection
+    }
+    .sheet(item: $picturePick) { pick in
+      MediaChooserSheet(context: context, kind: "image") { chosen in
+        let binding = addOnChoiceBinding(groupID: pick.groupID, choiceID: pick.choiceID)
+        binding.wrappedValue.imageUrl = chosen.reference
+        picturePick = nil
+      }
     }
   }
 
@@ -215,7 +225,57 @@ struct ProductEditorSheet: View {
         }
         .accessibilityIdentifier("addon-choice-by-variant-\(current.id)")
       }
+      addOnChoiceCard(groupID: groupID, choice: choice, current: current)
     }
+  }
+
+  /// The choice's picture card (AGL-4205), as the console's "Picture & combo" has it: a picture from the media
+  /// library, a note, and what a combo includes.
+  private func addOnChoiceCard(groupID: String, choice: Binding<AddOnChoiceDraft>, current: AddOnChoiceDraft) -> some View {
+    let label = current.name.isEmpty ? "this choice" : current.name
+    let picked = !current.imageUrl.trimmingCharacters(in: .whitespaces).isEmpty
+    return DisclosureGroup("Picture & combo") {
+      Text("What “\(label)” shows on its picture card. List what it includes to make it a combo: shoppers can open the list on its card.")
+        .font(.caption)
+        .foregroundStyle(.secondary)
+      HStack(spacing: AglynSpace.two) {
+        if picked {
+          AglynRemoteImage(
+            mediaPreviewURL(current.imageUrl, origin: context.api.origin, hostID: context.hostID, width: 160), systemImage: "photo"
+          )
+          .frame(width: 56, height: 56)
+          .clipShape(RoundedRectangle(cornerRadius: AglynRadius.control, style: .continuous))
+          .accessibilityHidden(true)
+        }
+        Button(picked ? "Change picture" : "Choose picture") {
+          picturePick = AddOnPicturePick(groupID: groupID, choiceID: current.id)
+        }
+        .buttonStyle(.borderless)
+        .accessibilityLabel("\(picked ? "Change" : "Choose") the picture for \(label)")
+        .accessibilityIdentifier("addon-choice-picture-\(current.id)")
+        if picked {
+          Spacer()
+          Button("Remove") { choice.wrappedValue.imageUrl = "" }
+            .buttonStyle(.borderless)
+            .accessibilityLabel("Remove the picture for \(label)")
+        }
+      }
+      TextField(
+        "Note", text: Binding(get: { current.note }, set: { choice.wrappedValue.note = String($0.prefix(productChoiceNoteMax)) }),
+        prompt: Text("Blocks wind on one side")
+      )
+      .accessibilityIdentifier("addon-choice-note-\(current.id)")
+      VStack(alignment: .leading, spacing: 4) {
+        Text("Combo: what it includes").font(.caption).foregroundStyle(.secondary)
+        TextField("Combo: what it includes", text: choice.includes, prompt: Text("Full wall ×2\nSteel weights ×4\nRoller bag"), axis: .vertical)
+          .lineLimit(2...12)
+          .accessibilityIdentifier("addon-choice-includes-\(current.id)")
+        Text("One item per line, up to \(productComboMaxItems). Leave it empty for a single choice.")
+          .font(.caption)
+          .foregroundStyle(.secondary)
+      }
+    }
+    .accessibilityIdentifier("addon-choice-card-\(current.id)")
   }
 
   /// Up to three options, each a name and its comma-separated values; the variants below are their combinations.
@@ -325,4 +385,11 @@ struct StockAdjustSheet: View {
       }
     }
   }
+}
+
+/// The add-on choice whose picture the media library is open for.
+struct AddOnPicturePick: Identifiable {
+  let groupID: String
+  let choiceID: String
+  var id: String { "\(groupID)/\(choiceID)" }
 }

@@ -25,6 +25,11 @@ struct AddOnChoiceDraft: Identifiable, Equatable {
   var name = ""
   var price = ""
   var byVariant: [String: String] = [:]
+  /// Its picture card (AGL-4205): a picture from the media library, a short note, and what a combo includes, one per
+  /// line as typed.
+  var imageUrl = ""
+  var note = ""
+  var includes = ""
 
   /// The choice with its price on one variant set, or cleared to the choice's own price when left empty.
   func withVariantPrice(_ variantID: String, _ text: String) -> AddOnChoiceDraft {
@@ -34,6 +39,21 @@ struct AddOnChoiceDraft: Identifiable, Equatable {
     }
     return copy
   }
+}
+
+/// A choice's note, at most this long (the console's `PRODUCT_CHOICE_NOTE_MAX`).
+let productChoiceNoteMax = 160
+/// What a combo includes: at most this many items (`PRODUCT_COMBO_MAX_ITEMS`), each at most this long
+/// (`PRODUCT_COMBO_ITEM_MAX`).
+let productComboMaxItems = 12
+let productComboItemMax = 80
+
+/// What a combo includes as stored, as the console's `withChoiceCard` reads the typed lines: trimmed, cut, blanks
+/// dropped, at most 12.
+func comboItems(_ text: String) -> [String] {
+  Array(
+    text.components(separatedBy: "\n").map { String($0.trimmingCharacters(in: .whitespaces).prefix(productComboItemMax)) }
+      .filter { !$0.isEmpty }.prefix(productComboMaxItems))
 }
 
 /// One group as the editor holds it. `online` absent reads as register only, as the console reads it.
@@ -99,7 +119,9 @@ func addOnDrafts(_ data: [String: Any]) -> [AddOnGroupDraft] {
           return text.isEmpty ? "0.00" : text
         }
         return AddOnChoiceDraft(
-          id: choiceID, name: option["name"] as? String ?? "", price: dollarsText(option["priceCents"]), byVariant: byVariant)
+          id: choiceID, name: option["name"] as? String ?? "", price: dollarsText(option["priceCents"]), byVariant: byVariant,
+          imageUrl: option["imageUrl"] as? String ?? "", note: option["note"] as? String ?? "",
+          includes: (option["includes"] as? [Any] ?? []).compactMap { $0 as? String }.joined(separator: "\n"))
       })
   }
 }
@@ -157,6 +179,15 @@ func addOnsJSON(_ drafts: [AddOnGroupDraft], stored: JSONValue?) -> JSONValue {
             choice["priceCentsByVariant"] = .object(byVariant.mapValues { .number($0) })
           } else {
             choice.removeValue(forKey: "priceCentsByVariant")
+          }
+          // The picture card, as the console's `withChoiceCard` writes it: each kept only when it says something.
+          if let card = drafts.first(where: { $0.id == group.id })?.choices.first(where: { $0.id == option.id }) {
+            let url = card.imageUrl.trimmingCharacters(in: .whitespacesAndNewlines)
+            if url.isEmpty { choice.removeValue(forKey: "imageUrl") } else { choice["imageUrl"] = .string(url) }
+            let note = String(card.note.trimmingCharacters(in: .whitespacesAndNewlines).prefix(productChoiceNoteMax))
+            if note.isEmpty { choice.removeValue(forKey: "note") } else { choice["note"] = .string(note) }
+            let items = comboItems(card.includes)
+            if items.isEmpty { choice.removeValue(forKey: "includes") } else { choice["includes"] = .array(items.map { .string($0) }) }
           }
           return .object(choice)
         })

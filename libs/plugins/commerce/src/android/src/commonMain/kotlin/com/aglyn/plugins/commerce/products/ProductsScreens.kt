@@ -130,7 +130,7 @@ fun ProductsScreen(context: NativePluginContext, initialProductId: String? = nul
       else ProductDetailPane(context, selected, editor)
     },
   )
-  ProductDialogs(editor)
+  ProductDialogs(context, editor)
 }
 
 @Composable
@@ -536,7 +536,7 @@ fun ScanScreen(context: NativePluginContext) {
 }
 
 @Composable
-private fun ProductDialogs(editor: ProductEditorModel) {
+private fun ProductDialogs(context: NativePluginContext, editor: ProductEditorModel) {
   editor.draft?.let { draft ->
     // A product is a long form (options, variants, prices, codes, stock): a sheet with one Save in its header, not an alert.
     FormSheet(
@@ -608,7 +608,7 @@ private fun ProductDialogs(editor: ProductEditorModel) {
               keyboardOptions = KeyboardOptions(keyboardType = androidx.compose.ui.text.input.KeyboardType.Number), modifier = Modifier.fillMaxWidth())
           }
         }
-        AddOnsFields(draft, editor::change)
+        AddOnsFields(context, draft, editor::change)
       }
     }
   }
