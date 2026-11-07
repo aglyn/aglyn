@@ -200,7 +200,7 @@ export const DOCS_HELP_EXCERPTS = {
   redirects: 'Manage URL redirects with validation, loop detection, and hit metrics.',
   refunds: 'Refunding an organization\'s subscription charge from its org page — how much each staff role may refund before it escalates, why a refund is a loss rather than a reversal, and the audit row it writes.',
   relations: 'Link records together with reference fields, including many-to-many.',
-  repeat: 'Make any element render once per record — a list, a grid, a gallery — see the real copies on the canvas, and bound them with a filter, a sort and a limit.',
+  repeat: 'Make any element render once per record of a dataset or a connected service — a list, a grid, a gallery — see the real copies on the canvas, and bound them with a filter, a sort and a limit.',
   reportAnIssue: 'File a bug, an idea, or a question from any page in the console — on every plan, including Free.',
   reports: 'New contacts, their sources and which convert, the lead funnel and lead sources, the open pipeline and its forecast, won and lost, who logged what, and the task load — counted on the server, all exportable as CSV.',
   responsiveStyling: 'Style per breakpoint from the artboard preview, use the box stylers, custom classes, and the CSS builder.',

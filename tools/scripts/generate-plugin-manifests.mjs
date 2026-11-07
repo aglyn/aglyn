@@ -2762,6 +2762,45 @@ function repeatSourceRow() {
 }
 
 /**
+ * The plugin that answers a published page's repeats over a plugin
+ * connection's synced record (AGL-4212): the keys `repeatKey` prefixes
+ * `connection:`, which `plugin-manager/repeat-rows.ts` routes to it rather
+ * than to the `repeatSource`. Declared for the same reason that one is — a
+ * boot that did not register the reader is refused, not read as "no rows" —
+ * and with none declared a connection repeat renders no copies.
+ *
+ * Checked here: one declarer at most, an id of its own (not the
+ * `repeatSource`'s, which answers every other key), and the
+ * `serverDeclarations` entry the reader is registered from.
+ */
+function connectionRepeatSourceRow() {
+  const declared = config.plugins.filter((plugin) => plugin.connectionRepeatSource)
+  if (declared.length > 1) {
+    throw new Error(
+      `plugins.config.json: "${declared.map((plugin) => plugin.id).join('", "')}" each declare a connectionRepeatSource — ` +
+        'a connection key is answered by one reader',
+    )
+  }
+  const plugin = declared[0]
+  if (!plugin) return null
+  const where = `plugins.config.json: "${plugin.id}" connectionRepeatSource`
+  const { id } = plugin.connectionRepeatSource
+  if (typeof id !== 'string' || !/^[a-z][A-Za-z0-9-]*$/.test(id)) {
+    throw new Error(`${where}: "id" is the source's plain id`)
+  }
+  if (repeatSourceRow()?.id === id) {
+    throw new Error(`${where}: "id" is the repeatSource's — each answers its own keys under its own id`)
+  }
+  if (!plugin.register?.serverDeclarations) {
+    throw new Error(
+      `${where}: the reader is registered from a "serverDeclarations" entry, and this plugin names none — ` +
+        'a declared source nothing registers refuses every page that repeats over a connection',
+    )
+  }
+  return { pluginId: plugin.id, id }
+}
+
+/**
  * The site documents a plugin authors in the besigner (AGL-3080), served by
  * the console's one editor route for plugin documents
  * (`plugin-manager/besigner-documents.ts`).
@@ -3767,6 +3806,13 @@ export const PLUGIN_DISTRIBUTION: PluginDistribution | null = ${JSON.stringify(p
  * once, as written.
  */
 export const PLUGIN_REPEAT_SOURCE_DECLARED: RepeatSourceDeclaration | null = ${JSON.stringify(repeatSourceRow(), null, 2)}
+
+/**
+ * The plugin that answers a published page's repeats over a plugin
+ * connection's record, declared by that plugin (AGL-4212). \`null\` when none
+ * does, and such a repeat then renders no copies.
+ */
+export const PLUGIN_CONNECTION_REPEAT_SOURCE_DECLARED: RepeatSourceDeclaration | null = ${JSON.stringify(connectionRepeatSourceRow(), null, 2)}
 
 /**
  * The site documents a plugin authors in the besigner, declared by that
