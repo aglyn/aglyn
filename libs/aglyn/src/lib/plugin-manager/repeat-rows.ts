@@ -15,9 +15,15 @@
  * limitations under the License.
  */
 
-import type { RepeatableDataset } from '../app-utils/expand-repeatables'
+import {
+  REPEAT_CONNECTION_KEY_PREFIX,
+  type RepeatableDataset,
+} from '../app-utils/expand-repeatables'
 import { getRegisteringPluginId } from '../app-utils/registering-plugin'
-import { PLUGIN_REPEAT_SOURCE_DECLARED } from './first-party-plugins.generated'
+import {
+  PLUGIN_CONNECTION_REPEAT_SOURCE_DECLARED,
+  PLUGIN_REPEAT_SOURCE_DECLARED,
+} from './first-party-plugins.generated'
 import { runPluginDeclarationsRepair } from './plugin-declarations-repair'
 
 /**
@@ -62,6 +68,16 @@ import { runPluginDeclarationsRepair } from './plugin-declarations-repair'
  * or unreadable entry renders no copies of its element (AGL-3496) — never its
  * raw `{{item.*}}` template — and costs the page nothing else.
  *
+ * ## Two sources, routed by key (AGL-4212)
+ *
+ * A key `repeatKey` made from a node's `repeatConnection` starts
+ * `connection:`; it names a plugin connection's synced record, and goes to
+ * the connection source (`connectionRepeatSource` in `plugins.config.json`).
+ * Every other key goes to the `repeatSource`, exactly as before. Each source
+ * has the three cases above on its own: a page whose site has no plugin that
+ * keeps connection records gets no copies of a connection repeat, and still
+ * gets its datasets' rows.
+ *
  * Reached by path, never through a barrel: only the server composition asks.
  */
 
@@ -99,6 +115,18 @@ export interface RepeatSourceDeclaration {
 export function declaredRepeatSource(): RepeatSourceDeclaration | null {
   return PLUGIN_REPEAT_SOURCE_DECLARED
 }
+
+/**
+ * The plugin declared to answer repeats over a plugin connection's record
+ * (the `connection:` keys, AGL-4212), or `null` when none is.
+ */
+export function declaredConnectionRepeatSource(): RepeatSourceDeclaration | null {
+  return PLUGIN_CONNECTION_REPEAT_SOURCE_DECLARED
+}
+
+/** Whether a key names a plugin connection's record rather than a dataset. */
+export const isConnectionRepeatKey = (key: string): boolean =>
+  key.startsWith(REPEAT_CONNECTION_KEY_PREFIX)
 
 interface RegisteredReader {
   pluginId: string
@@ -145,12 +173,16 @@ export function registerRepeatRowReader(
         'when registering outside a plugin register fn',
     )
   }
-  const declared = declaredRepeatSource()
-  if (declared?.id === id && declared.pluginId !== pluginId) {
-    throw new Error(
-      `repeat source "${id}" is declared by "${declared.pluginId}"; ` +
-        `refused a reader from "${pluginId}"`,
-    )
+  for (const declared of [
+    declaredRepeatSource(),
+    declaredConnectionRepeatSource(),
+  ]) {
+    if (declared?.id === id && declared.pluginId !== pluginId) {
+      throw new Error(
+        `repeat source "${id}" is declared by "${declared.pluginId}"; ` +
+          `refused a reader from "${pluginId}"`,
+      )
+    }
   }
   const held = readers.get(id)
   if (held && held.pluginId !== pluginId) {
@@ -193,7 +225,8 @@ export class RepeatRowsUnavailableError extends Error {
 
 /**
  * The rows a composition's repeats render. See the module note for what each
- * of the three cases answers; with no keys it answers `{}` and asks nobody.
+ * of the three cases answers, per source; with no keys it answers `{}` and
+ * asks nobody.
  */
 export async function readRepeatRows(
   request: RepeatRowsRequest,
@@ -202,17 +235,29 @@ export async function readRepeatRows(
     ...new Set(request.keys.map((key) => key.trim()).filter(Boolean)),
   ].sort()
   if (!keys.length) return {}
-  const declared = declaredRepeatSource()
-  if (!declared) return {}
-  let registered = readers.get(declared.id)
-  if (!registered) {
+  const connectionKeys = keys.filter(isConnectionRepeatKey)
+  const datasetKeys = keys.filter((key) => !isConnectionRepeatKey(key))
+  const asks = [
+    { declared: declaredRepeatSource(), keys: datasetKeys },
+    { declared: declaredConnectionRepeatSource(), keys: connectionKeys },
+  ].filter(
+    (ask): ask is { declared: RepeatSourceDeclaration; keys: string[] } =>
+      ask.declared !== null && ask.keys.length > 0,
+  )
+  if (!asks.length) return {}
+  if (asks.some((ask) => !readers.has(ask.declared.id))) {
     try {
       await runPluginDeclarationsRepair()
     } catch (error) {
       console.error('[repeat-rows] the declarations repair failed', error)
     }
-    registered = readers.get(declared.id)
   }
-  if (!registered) throw new RepeatRowsUnavailableError(declared)
-  return registered.reader({ hostId: request.hostId, keys })
+  const answers = await Promise.all(
+    asks.map((ask) => {
+      const registered = readers.get(ask.declared.id)
+      if (!registered) throw new RepeatRowsUnavailableError(ask.declared)
+      return registered.reader({ hostId: request.hostId, keys: ask.keys })
+    }),
+  )
+  return Object.assign({}, ...answers) as RepeatRowsAnswer
 }

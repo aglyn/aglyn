@@ -227,3 +227,50 @@ describe('a placed component set to repeat (AGL-3111)', () => {
     expect(repeatScope(root)).toBe('children')
   })
 })
+
+/**
+ * A placed component repeats over a plugin connection's record too, and a
+ * part of it bound `hideUnless: '{{item.*}}'` survives the graft for the
+ * expansion to read per copy (AGL-4212): the graft strips every other
+ * directive it has read, and this one is not the graft's to read.
+ */
+describe('a placed component over a connection, hiding a part per record (AGL-4212)', () => {
+  const REPLY_CARD = {
+    rootId: 'card',
+    nodes: {
+      card: { $id: 'card', componentId: 'muiCard', nodes: ['text', 'reply'] },
+      text: {
+        $id: 'text',
+        componentId: 'muiTypography',
+        parentId: 'card',
+        props: { children: '{{item.text}}' },
+      },
+      reply: {
+        $id: 'reply',
+        componentId: 'muiTypography',
+        parentId: 'card',
+        props: { children: 'Owner: {{item.reply}}', hideUnless: '{{item.reply}}' },
+      },
+    },
+    props: [],
+  } as any
+
+  it('carries the repeat onto the root and drops the part where the record is empty', () => {
+    const grafted = composeReusableComponentNodes(
+      screenWith({ repeatConnection: 'aglyn.google-reviews/google', propValues: {} }),
+      { cardComponent: REPLY_CARD } as any,
+    )
+    expect((grafted['placed'] as any).props.repeatConnection).toBe('aglyn.google-reviews/google')
+    const expanded = expandRepeatables(grafted, {
+      'connection:aglyn.google-reviews/google': {
+        records: [
+          { $id: '0', text: 'Great', reply: 'Thanks' },
+          { $id: '1', text: 'Fine' },
+        ],
+      },
+    }) as Record<string, any>
+    expect(expanded['_root_'].nodes).toEqual(['lead', 'rep__placed__0__placed', 'rep__placed__1__placed'])
+    expect(expanded['rep__placed__0__placed'].nodes).toHaveLength(2)
+    expect(expanded['rep__placed__1__placed'].nodes).toHaveLength(1)
+  })
+})
