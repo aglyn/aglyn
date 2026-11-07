@@ -36186,6 +36186,455 @@
         }
       ]
     },
+    "planPluginRunsOn": {
+      "module": "libs/aglyn/src/lib/plugin-manager/plugin-site-exclusions.ts",
+      "cases": [
+        {
+          "args": [
+            {
+              "pluginId": "mui",
+              "choice": {
+                "mode": "all"
+              },
+              "org": null,
+              "sites": [
+                {
+                  "id": "a"
+                },
+                {
+                  "id": "b",
+                  "disabledPlugins": [
+                    "crm"
+                  ]
+                },
+                {
+                  "id": "c",
+                  "enabledPlugins": [
+                    "accounts"
+                  ]
+                }
+              ]
+            }
+          ],
+          "result": {
+            "problem": "Components runs on every site, because sites are built out of it, so it can’t be left out.",
+            "stranded": [],
+            "writes": null
+          }
+        },
+        {
+          "args": [
+            {
+              "pluginId": "crm",
+              "choice": {
+                "mode": "all"
+              },
+              "org": {
+                "enabledPlugins": [
+                  "forms"
+                ]
+              },
+              "sites": [
+                {
+                  "id": "a"
+                },
+                {
+                  "id": "b",
+                  "disabledPlugins": [
+                    "crm"
+                  ]
+                },
+                {
+                  "id": "c",
+                  "enabledPlugins": [
+                    "accounts"
+                  ]
+                }
+              ]
+            }
+          ],
+          "result": {
+            "problem": "CRM is switched off for this workspace, so it runs on no site. Switch it on first.",
+            "stranded": [],
+            "writes": null
+          }
+        },
+        {
+          "args": [
+            {
+              "pluginId": "crm",
+              "choice": {
+                "mode": "allExcept",
+                "exceptHostIds": []
+              },
+              "org": null,
+              "sites": [
+                {
+                  "id": "a"
+                },
+                {
+                  "id": "b",
+                  "disabledPlugins": [
+                    "crm"
+                  ]
+                },
+                {
+                  "id": "c",
+                  "enabledPlugins": [
+                    "accounts"
+                  ]
+                }
+              ]
+            }
+          ],
+          "result": {
+            "problem": "Choose at least one site to leave out, or choose All sites.",
+            "stranded": [],
+            "writes": null
+          }
+        },
+        {
+          "args": [
+            {
+              "pluginId": "crm",
+              "choice": {
+                "mode": "allExcept",
+                "exceptHostIds": [
+                  "a",
+                  "b",
+                  "c"
+                ]
+              },
+              "org": null,
+              "sites": [
+                {
+                  "id": "a"
+                },
+                {
+                  "id": "b",
+                  "disabledPlugins": [
+                    "crm"
+                  ]
+                },
+                {
+                  "id": "c",
+                  "enabledPlugins": [
+                    "accounts"
+                  ]
+                }
+              ]
+            }
+          ],
+          "result": {
+            "problem": "Keep at least one site in. To stop CRM on every site, switch it off for the workspace.",
+            "stranded": [],
+            "writes": null
+          }
+        },
+        {
+          "args": [
+            {
+              "pluginId": "crm",
+              "choice": {
+                "mode": "all"
+              },
+              "org": null,
+              "sites": [
+                {
+                  "id": "a"
+                },
+                {
+                  "id": "b",
+                  "disabledPlugins": [
+                    "crm"
+                  ]
+                },
+                {
+                  "id": "c",
+                  "enabledPlugins": [
+                    "accounts"
+                  ]
+                }
+              ]
+            }
+          ],
+          "result": {
+            "problem": null,
+            "stranded": [],
+            "writes": [
+              {
+                "disabledPlugins": [],
+                "hostId": "b",
+                "leftOut": false
+              }
+            ]
+          }
+        },
+        {
+          "args": [
+            {
+              "pluginId": "crm",
+              "choice": {
+                "mode": "allExcept",
+                "exceptHostIds": [
+                  "a"
+                ]
+              },
+              "org": null,
+              "sites": [
+                {
+                  "id": "a"
+                },
+                {
+                  "id": "b",
+                  "disabledPlugins": [
+                    "crm"
+                  ]
+                },
+                {
+                  "id": "c",
+                  "enabledPlugins": [
+                    "accounts"
+                  ]
+                }
+              ]
+            }
+          ],
+          "result": {
+            "problem": null,
+            "stranded": [],
+            "writes": [
+              {
+                "disabledPlugins": [
+                  "crm"
+                ],
+                "hostId": "a",
+                "leftOut": true
+              },
+              {
+                "disabledPlugins": [],
+                "hostId": "b",
+                "leftOut": false
+              }
+            ]
+          }
+        },
+        {
+          "args": [
+            {
+              "pluginId": "crm",
+              "choice": {
+                "mode": "allExcept",
+                "exceptHostIds": [
+                  "b",
+                  "gone"
+                ]
+              },
+              "org": null,
+              "sites": [
+                {
+                  "id": "a"
+                },
+                {
+                  "id": "b",
+                  "disabledPlugins": [
+                    "crm"
+                  ]
+                },
+                {
+                  "id": "c",
+                  "enabledPlugins": [
+                    "accounts"
+                  ]
+                }
+              ]
+            }
+          ],
+          "result": {
+            "problem": null,
+            "stranded": [],
+            "writes": []
+          }
+        },
+        {
+          "args": [
+            {
+              "pluginId": "commerce",
+              "choice": {
+                "mode": "allExcept",
+                "exceptHostIds": [
+                  "c"
+                ]
+              },
+              "org": null,
+              "sites": [
+                {
+                  "id": "a"
+                },
+                {
+                  "id": "b",
+                  "disabledPlugins": [
+                    "crm"
+                  ]
+                },
+                {
+                  "id": "c",
+                  "enabledPlugins": [
+                    "accounts"
+                  ]
+                }
+              ]
+            }
+          ],
+          "result": {
+            "problem": "User Accounts on c needs Commerce. Switch it off on that site first, or keep the site in.",
+            "stranded": [
+              {
+                "hostId": "c",
+                "missing": [
+                  "commerce"
+                ],
+                "pluginId": "accounts"
+              }
+            ],
+            "writes": null
+          }
+        },
+        {
+          "args": [
+            {
+              "pluginId": "commerce",
+              "choice": {
+                "mode": "allExcept",
+                "exceptHostIds": [
+                  "a"
+                ]
+              },
+              "org": null,
+              "sites": [
+                {
+                  "id": "a"
+                },
+                {
+                  "id": "b",
+                  "disabledPlugins": [
+                    "crm"
+                  ]
+                },
+                {
+                  "id": "c",
+                  "enabledPlugins": [
+                    "accounts"
+                  ]
+                }
+              ]
+            }
+          ],
+          "result": {
+            "problem": null,
+            "stranded": [],
+            "writes": [
+              {
+                "disabledPlugins": [
+                  "commerce"
+                ],
+                "hostId": "a",
+                "leftOut": true
+              }
+            ]
+          }
+        },
+        {
+          "args": [
+            {
+              "pluginId": "commerce",
+              "choice": {
+                "mode": "allExcept",
+                "exceptHostIds": [
+                  "b",
+                  "c"
+                ]
+              },
+              "org": null,
+              "sites": [
+                {
+                  "id": "a"
+                },
+                {
+                  "id": "b",
+                  "disabledPlugins": [
+                    "crm"
+                  ]
+                },
+                {
+                  "id": "c",
+                  "enabledPlugins": [
+                    "accounts"
+                  ]
+                }
+              ]
+            }
+          ],
+          "result": {
+            "problem": "User Accounts on c needs Commerce. Switch it off on that site first, or keep the site in.",
+            "stranded": [
+              {
+                "hostId": "c",
+                "missing": [
+                  "commerce"
+                ],
+                "pluginId": "accounts"
+              }
+            ],
+            "writes": null
+          }
+        },
+        {
+          "args": [
+            {
+              "pluginId": "accounts",
+              "choice": {
+                "mode": "allExcept",
+                "exceptHostIds": [
+                  "c"
+                ]
+              },
+              "org": null,
+              "sites": [
+                {
+                  "id": "a"
+                },
+                {
+                  "id": "b",
+                  "disabledPlugins": [
+                    "crm"
+                  ]
+                },
+                {
+                  "id": "c",
+                  "enabledPlugins": [
+                    "accounts"
+                  ]
+                }
+              ]
+            }
+          ],
+          "result": {
+            "problem": null,
+            "stranded": [],
+            "writes": [
+              {
+                "disabledPlugins": [
+                  "accounts"
+                ],
+                "hostId": "c",
+                "leftOut": true
+              }
+            ]
+          }
+        }
+      ]
+    },
     "pluginDependents": {
       "module": "libs/aglyn/src/lib/plugin-manager/enabled-plugins.ts",
       "cases": [
@@ -36311,6 +36760,121 @@
             "nope"
           ],
           "result": []
+        }
+      ]
+    },
+    "pluginRunsOnOf": {
+      "module": "libs/aglyn/src/lib/plugin-manager/plugin-site-exclusions.ts",
+      "cases": [
+        {
+          "args": [
+            "crm",
+            [
+              {
+                "id": "a"
+              },
+              {
+                "id": "b",
+                "disabledPlugins": [
+                  "crm"
+                ]
+              },
+              {
+                "id": "c",
+                "enabledPlugins": [
+                  "accounts"
+                ]
+              }
+            ]
+          ],
+          "result": {
+            "exceptHostIds": [
+              "b"
+            ],
+            "mode": "allExcept"
+          }
+        },
+        {
+          "args": [
+            "mui",
+            [
+              {
+                "id": "a"
+              },
+              {
+                "id": "b",
+                "disabledPlugins": [
+                  "crm"
+                ]
+              },
+              {
+                "id": "c",
+                "enabledPlugins": [
+                  "accounts"
+                ]
+              }
+            ]
+          ],
+          "result": {
+            "mode": "all"
+          }
+        },
+        {
+          "args": [
+            "crm",
+            []
+          ],
+          "result": {
+            "mode": "all"
+          }
+        },
+        {
+          "args": [
+            "accounts",
+            [
+              {
+                "id": "a"
+              },
+              {
+                "id": "b",
+                "disabledPlugins": [
+                  "crm"
+                ]
+              },
+              {
+                "id": "c",
+                "enabledPlugins": [
+                  "accounts"
+                ]
+              }
+            ]
+          ],
+          "result": {
+            "mode": "all"
+          }
+        }
+      ]
+    },
+    "pluginRunsOnOptInNote": {
+      "module": "libs/aglyn/src/lib/plugin-manager/plugin-site-exclusions.ts",
+      "cases": [
+        {
+          "args": [
+            "accounts"
+          ],
+          "result": "User Accounts still runs only on the sites that turned it on. Leaving a site out here keeps it off there even if that site turned it on."
+        },
+        {
+          "args": [
+            "crm"
+          ],
+          "result": null
+        },
+        {
+          "args": [
+            "live-chat"
+          ],
+          "result": "Live chat still runs only on the sites that turned it on. Leaving a site out here keeps it off there even if that site turned it on."
         }
       ]
     },

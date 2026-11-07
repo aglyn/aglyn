@@ -342,6 +342,10 @@
       "why": "The plugin switchboard resolvers (which plugins a workspace and a site run, what switching one off strands), ported for the native Plugins screens and replayed from function-cases (AGL-3671)."
     },
     {
+      "path": "libs/aglyn/src/lib/plugin-manager/plugin-site-exclusions.ts",
+      "why": "Where a built-in plugin runs across a workspace's sites (all sites, or all sites except some), and the site lists a choice rewrites, ported for the native plugin Runs on control and replayed from function-cases (AGL-4047)."
+    },
+    {
       "path": "libs/aglyn/src/lib/plugin-manager/first-party-plugins.generated.ts",
       "why": "Reached by enabled-plugins: the generated first-party catalog rows; every other import is type-only (AGL-3671)."
     },
