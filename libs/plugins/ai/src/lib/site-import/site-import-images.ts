@@ -43,6 +43,7 @@ import {
   type PublicFetchResult,
 } from '../jobs/ai-theme-brand-inputs'
 import type { AiSiteImportPage, AiSiteImportPhoto } from '../model/ai-site-import'
+import { aiSiteImportAltIsFileName } from '../model/ai-site-import-marks'
 import { AGLYN_BOT_USER_AGENT, type SiteImportPage } from './site-import-crawl'
 
 /** The largest picture brought in. */
@@ -156,6 +157,8 @@ export async function bringInSiteImportPhotos(
       continue
     }
     const sourceKey = siteImportImageKey(url)
+    // A file's name is no description: the library is told none, so it asks its owner for one (AGL-4152).
+    const alt = aiSiteImportAltIsFileName(image.alt) ? '' : image.alt
     try {
       const held = await ingest.findImportedPhoto({ hostId: input.hostId, sourceKey })
       if (held) {
@@ -165,7 +168,7 @@ export async function bringInSiteImportPhotos(
           src: held.src,
           ...(held.width ? { width: held.width } : {}),
           ...(held.height ? { height: held.height } : {}),
-          ...(held.alt || image.alt ? { alt: held.alt || image.alt } : {}),
+          ...(held.alt || alt ? { alt: held.alt || alt } : {}),
           from: image.url,
         })
         continue
@@ -191,7 +194,7 @@ export async function bringInSiteImportPhotos(
         fileName: siteImportImageFileName(url, contentType),
         contentType,
         bytes: fetched.data,
-        ...(image.alt ? { alt: image.alt.slice(0, 250) } : {}),
+        ...(alt ? { alt: alt.slice(0, 250) } : {}),
         importedFrom: { key: sourceKey, url, domain: input.domain },
       })
       if (!stored.ok) {
@@ -204,7 +207,7 @@ export async function bringInSiteImportPhotos(
         src: stored.src,
         ...(stored.width ? { width: stored.width } : {}),
         ...(stored.height ? { height: stored.height } : {}),
-        ...(image.alt ? { alt: image.alt.slice(0, 250) } : {}),
+        ...(alt ? { alt: alt.slice(0, 250) } : {}),
         // Where it sat on the old page, so a page copied as it is places it there (AGL-4084).
         from: image.url,
       })
