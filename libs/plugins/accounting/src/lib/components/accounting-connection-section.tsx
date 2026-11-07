@@ -333,10 +333,7 @@ export function AccountingConnectionSection(props: AccountingConnectionSectionPr
             </Typography>
           ) : null}
           {connection.status === 'reconnect-required' ? (
-            <Alert severity="warning">
-              {`${connectionTitle(connection)} no longer accepts this connection${connection.lastError ? ` (${connection.lastError})` : ''}. ` +
-                'Nothing is posted until you reconnect; what is waiting will post then.'}
-            </Alert>
+            <Alert severity="warning">{reconnectText(connection)}</Alert>
           ) : null}
           {connection.status === 'connected' && connection.missingRoles.length ? (
             <Alert severity="info">Choose your accounts below. Nothing is posted until they are set.</Alert>
@@ -350,12 +347,33 @@ export function AccountingConnectionSection(props: AccountingConnectionSectionPr
         <TenantPicker connection={connection} api={api} onPicked={refresh} />
       ) : null}
       {connection.status === 'connected' ? (
-        <MappingCard connection={connection} seenTaxKeys={data.seenTaxKeys} api={api} onSaved={refresh} />
+        <MappingCard
+          connection={connection}
+          seenTaxKeys={data.seenTaxKeys}
+          api={api}
+          onSaved={refresh}
+          onReconnectRequired={refresh}
+        />
       ) : null}
     </Stack>
   )
 }
 AccountingConnectionSection.displayName = 'AccountingConnectionSection'
+
+/**
+ * Why the connection asks to be reconnected. A reason the server wrote as a
+ * sentence ("Xero no longer lets … reach …") is shown as it stands; a bare
+ * code is shown after the general sentence.
+ */
+function reconnectText(connection: Pick<AccountingConnectionView, 'provider' | 'tenantName' | 'lastError'>): string {
+  const after = 'Nothing is posted until you reconnect; what is waiting will post then.'
+  const reason = connection.lastError?.trim() ?? ''
+  if (/\s/.test(reason) && /[.!]$/.test(reason)) return `${reason} ${after}`
+  return `${connectionTitle(connection)} no longer accepts this connection${reason ? ` (${reason})` : ''}. ${after}`
+}
+
+/** Whether a route answered that the connection now asks to be reconnected. */
+const reconnectRequired = (error: unknown) => error instanceof AccountingRouteError && error.reason === 'reconnect-required'
 
 function TenantPicker(props: { connection: AccountingConnectionView; api: AccountingApi; onPicked: () => Promise<void> }) {
   const tenants = props.connection.tenants ?? []
@@ -409,8 +427,10 @@ function MappingCard(props: {
   seenTaxKeys: string[]
   api: AccountingApi
   onSaved: () => Promise<void>
+  /** The books stopped letting the app in: read the status again, which then asks to reconnect. */
+  onReconnectRequired: () => Promise<void>
 }) {
-  const { connection, api } = props
+  const { connection, api, onReconnectRequired } = props
   const [options, setOptions] = useState<
     { status: 'loading' } | { status: 'error'; message: string } | { status: 'ready'; data: AccountingOptionsResponse }
   >({ status: 'loading' })
@@ -426,13 +446,15 @@ function MappingCard(props: {
     api
       .options()
       .then((data) => live && setOptions({ status: 'ready', data }))
-      .catch((error: unknown) =>
-        live && setOptions({ status: 'error', message: error instanceof Error ? error.message : String(error) }),
-      )
+      .catch((error: unknown) => {
+        if (!live) return
+        setOptions({ status: 'error', message: error instanceof Error ? error.message : String(error) })
+        if (reconnectRequired(error)) void onReconnectRequired()
+      })
     return () => {
       live = false
     }
-  }, [api])
+  }, [api, onReconnectRequired])
 
   const roles = useMemo(
     () =>
@@ -453,6 +475,7 @@ function MappingCard(props: {
       await props.onSaved()
     } catch (error) {
       setResult({ severity: 'error', text: error instanceof Error ? error.message : String(error) })
+      if (reconnectRequired(error)) await onReconnectRequired()
     } finally {
       setSaving(false)
     }

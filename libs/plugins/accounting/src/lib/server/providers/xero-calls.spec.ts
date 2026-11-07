@@ -26,7 +26,7 @@ import { buildFeeDoc, buildFeeRefundDoc } from '../../model/accounting-transform
 import type { AccountingMapping } from '../../model/accounting.types'
 import { instantSleep, mockFetch } from '../../testing/mock-fetch'
 import { AccountingPacer } from './http'
-import { XERO_ENDPOINTS, createXeroProvider } from './xero'
+import { XERO_ENDPOINTS, createXeroProvider, xeroConnectionGone } from './xero'
 
 const session = { accessToken: 'access-1', tenantId: 'tenant-1' }
 const mapping: AccountingMapping = {
@@ -210,6 +210,39 @@ describe('Xero adapter, call by call', () => {
       'Reference=="PO-1"',
       'CreditNoteNumber=="R-1"',
     ])
+  })
+
+  it('answers a 403 AuthenticationUnsuccessful as a lost connection: the app was removed inside Xero', async () => {
+    // As Xero answers once the organization disconnected the app, in either body shape.
+    for (const body of [
+      { Type: null, Title: 'Forbidden', Status: 403, Detail: 'AuthenticationUnsuccessful', Instance: 'i-1' },
+      { Type: 'AuthenticationUnsuccessful', Title: 'AuthenticationUnsuccessful', Status: 403 },
+    ]) {
+      const { adapter } = provider([{ match: '/Invoices', status: 403, body }])
+      await expect(adapter.findByExternalId(session, 'sale', 'S-1')).rejects.toMatchObject({ code: 'revoked', status: 403 })
+    }
+    expect(xeroConnectionGone('AuthenticationUnsuccessful', 403)).toBe(true)
+  })
+
+  it('keeps any other 403, and a missing scope, as before: a refused request, not a lost connection', async () => {
+    const plan = provider([
+      {
+        match: '/BankTransactions',
+        status: 403,
+        body: { Title: 'Forbidden', Status: 403, Detail: 'This organisation has reached the limit of its plan.' },
+      },
+    ])
+    await expect(plan.adapter.findByExternalId(session, 'fee', 'F-1')).rejects.toMatchObject({
+      code: 'validation',
+      message: 'This organisation has reached the limit of its plan.',
+      status: 403,
+    })
+    // A missing scope is authoriZation, a 401, and still goes through the refresh.
+    const scope = provider([{ match: '/Accounts', status: 401, body: { Title: 'Unauthorized', Detail: 'AuthorizationUnsuccessful' } }])
+    await expect(scope.adapter.listAccounts(session)).rejects.toMatchObject({ code: 'auth' })
+    expect(xeroConnectionGone({ Detail: 'AuthorizationUnsuccessful' }, 403)).toBe(false)
+    // The marker on any status but 403 is not read as a lost connection.
+    expect(xeroConnectionGone({ Detail: 'AuthenticationUnsuccessful' }, 400)).toBe(false)
   })
 
   it('finds a daily summary by its reference on a live receive or spend, so a retry never posts it twice', async () => {
