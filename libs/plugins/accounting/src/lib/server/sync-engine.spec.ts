@@ -21,7 +21,7 @@
 import { createSecretBoxKey, type SecretBoxKeyring } from '@aglyn/shared-util-tools/secret-box'
 import { randomBytes } from 'node:crypto'
 import type { AccountingOrderSnapshot } from '../model/accounting-sources'
-import type { AccountingMapping } from '../model/accounting.types'
+import type { AccountingMapping, AccountingProviderId } from '../model/accounting.types'
 import { asFirestore, memoryFirestore, type MemoryFirestore } from '../testing/memory-firestore'
 import {
   AccountingReconnectRequiredError,
@@ -33,8 +33,10 @@ import {
   toStoredConnection,
   type AccountingConnectionRecord,
 } from './connection-store'
-import { AccountingProviderError } from './providers/http'
+import { instantSleep, mockFetch } from '../testing/mock-fetch'
+import { AccountingPacer, AccountingProviderError } from './providers/http'
 import type { AccountingProvider } from './providers/provider'
+import { createXeroProvider } from './providers/xero'
 import {
   enqueueOrderPaid,
   enqueueOrderRefunded,
@@ -108,14 +110,24 @@ function fakeProvider(overrides: Partial<AccountingProvider> = {}) {
   return provider
 }
 
-function setup(options: { provider?: AccountingProvider; mapping?: AccountingMapping; accessExpiresAtMs?: number } = {}) {
+function setup(
+  options: {
+    provider?: AccountingProvider
+    mapping?: AccountingMapping
+    accessExpiresAtMs?: number
+    providerId?: AccountingProviderId
+    tenantName?: string
+  } = {},
+) {
   const store = memoryFirestore()
   const provider = options.provider ?? fakeProvider()
+  const providerId = options.providerId ?? 'quickbooks'
+  const connectionPath = `orgs/org-1/accountingConnections/${providerId}`
   let now = NOW
   const record = newConnectionRecord({
     keyring,
     orgId: 'org-1',
-    provider: 'quickbooks',
+    provider: providerId,
     tokens: {
       accessToken: 'access-1',
       refreshToken: 'refresh-1',
@@ -123,7 +135,7 @@ function setup(options: { provider?: AccountingProvider; mapping?: AccountingMap
       refreshExpiresAtMs: null,
       scopes: [],
     },
-    tenants: [{ id: 'realm-1', name: 'Books' }],
+    tenants: [{ id: 'realm-1', name: options.tenantName ?? 'Books' }],
     environment: 'sandbox',
     uid: 'u-1',
     email: 'owner@example.com',
@@ -131,7 +143,7 @@ function setup(options: { provider?: AccountingProvider; mapping?: AccountingMap
     previous: null,
   })
   record.mapping = options.mapping ?? mapping
-  store.seed('orgs/org-1/accountingConnections/quickbooks', toStoredConnection(record, keyring) as never)
+  store.seed(connectionPath, toStoredConnection(record, keyring) as never)
   const deps: AccountingEngineDeps = {
     firestore: () => asFirestore(store),
     keyring: () => keyring,
@@ -140,9 +152,9 @@ function setup(options: { provider?: AccountingProvider; mapping?: AccountingMap
     random: () => 0.5,
     sleep: async () => undefined,
   }
-  const connection = () => readConnection(store.read('orgs/org-1/accountingConnections/quickbooks'), keyring)!
+  const connection = () => readConnection(store.read(connectionPath), keyring)!
   const item = (id: string) => store.read(`orgs/org-1/accountingSyncItems/${id}`)
-  return { store, provider, deps, connection, item, advance: (ms: number) => (now += ms) }
+  return { store, provider, deps, connection, connectionPath, item, advance: (ms: number) => (now += ms) }
 }
 
 describe('queueing', () => {
@@ -411,6 +423,101 @@ describe('token rotation', () => {
     const session = await connectionSession({ firestore: deps.firestore(), keyring, provider, now: deps.now, sleep }, before)
     expect(session.accessToken).toBe('access-other')
     expect(provider.refresh).not.toHaveBeenCalled()
+  })
+})
+
+describe('when the app is removed inside Xero (a 403 AuthenticationUnsuccessful)', () => {
+  const DEMO = 'Demo Company (US)'
+  const PLAIN = 'Xero no longer lets Aglyn reach Demo Company (US). Reconnect to keep posting.'
+  const LOST_BODY = { Type: null, Title: 'Forbidden', Status: 403, Detail: 'AuthenticationUnsuccessful' }
+
+  /** The real Xero adapter over a scripted fetch: every call answers `status` with `body`. */
+  function xero(status: number, body: unknown) {
+    const mocked = mockFetch([{ match: 'api.xero.com', status, body }])
+    const { sleep } = instantSleep()
+    const adapter = createXeroProvider(
+      { clientId: 'client', clientSecret: 'secret' },
+      { fetch: mocked.fetch, sleep, pacer: new AccountingPacer(0, Date.now, sleep) },
+    )
+    return { adapter, calls: mocked.calls }
+  }
+
+  it('marks the connection for reconnecting in plain words, stops the pass, and leaves the items pending', async () => {
+    const lost = xero(403, LOST_BODY)
+    const { deps, connection, item } = setup({ provider: lost.adapter, providerId: 'xero', tenantName: DEMO })
+    await enqueueOrderPaid(deps, order())
+    await enqueueOrderPaid(deps, order({ orderId: 'order-2', number: 2 }))
+    const report = await runSyncPass(deps, connection(), { deadlineMs: NOW + 60_000 })
+    expect(report).toMatchObject({ posted: 0, needsAttention: 0, retried: 0, stopped: 'reconnect' })
+    // One call, then the pass stopped: no item was asked of a person.
+    expect(lost.calls).toHaveLength(1)
+    expect(connection()).toMatchObject({ status: 'reconnect-required', lastError: PLAIN })
+    for (const id of [saleItemId(order()), feeItemId(order()), saleItemId(order({ orderId: 'order-2' }))]) {
+      expect(item(id)).toMatchObject({ status: 'pending', attempts: 0 })
+    }
+    // The item the pass stopped on says why it waits.
+    const ids = [saleItemId(order()), feeItemId(order()), saleItemId(order({ orderId: 'order-2' })), feeItemId(order({ orderId: 'order-2' }))]
+    expect(ids.filter((id) => item(id)?.['lastError'] === PLAIN)).toHaveLength(1)
+    // Later passes post nothing and call nothing until someone reconnects.
+    await expect(runSyncPass(deps, connection(), { deadlineMs: NOW + 60_000 })).resolves.toMatchObject({ stopped: 'reconnect' })
+    expect(lost.calls).toHaveLength(1)
+  })
+
+  it('posts what waited once the merchant reconnects', async () => {
+    let gone = true
+    const provider = fakeProvider({
+      id: 'xero',
+      findByExternalId: jest.fn(async () => {
+        if (gone) throw new AccountingProviderError('revoked', 'AuthenticationUnsuccessful', 403)
+        return null
+      }),
+    })
+    const { deps, connection, connectionPath, store, item } = setup({ provider, providerId: 'xero', tenantName: DEMO })
+    await enqueueOrderPaid(deps, order())
+    await runSyncPass(deps, connection(), { deadlineMs: NOW + 60_000 })
+    expect(connection().status).toBe('reconnect-required')
+    // The reconnect binds the same organization again.
+    gone = false
+    store.seed(connectionPath, { ...(store.read(connectionPath) as object), status: 'connected', lastError: null } as never)
+    const report = await runSyncPass(deps, connection(), { deadlineMs: NOW + 60_000 })
+    expect(report).toMatchObject({ posted: 2, needsAttention: 0, stopped: 'done' })
+    expect(item(saleItemId(order()))).toMatchObject({ status: 'synced' })
+    expect(item(feeItemId(order()))).toMatchObject({ status: 'synced' })
+  })
+
+  it('puts back the items the raw 403 sent to needs attention before it was read as a lost connection', async () => {
+    const lost = xero(403, LOST_BODY)
+    const { deps, connection, item, store } = setup({ provider: lost.adapter, providerId: 'xero', tenantName: DEMO })
+    const held = { kind: 'sale', mode: 'per-order', status: 'needs_attention', attempts: 1, generation: 0 }
+    store.seed('orgs/org-1/accountingSyncItems/sale_old', {
+      ...held,
+      lastError: 'AuthenticationUnsuccessful',
+      errorCode: 'validation',
+    } as never)
+    store.seed('orgs/org-1/accountingSyncItems/sale_refused', {
+      ...held,
+      lastError: 'Account is inactive',
+      errorCode: 'validation',
+    } as never)
+    await enqueueOrderPaid(deps, order())
+    await runSyncPass(deps, connection(), { deadlineMs: NOW + 60_000 })
+    expect(item('sale_old')).toMatchObject({ status: 'pending', attempts: 0, errorCode: null, lastError: PLAIN, nextAttemptAtMs: NOW })
+    // A document the ledger itself refused still asks a person.
+    expect(item('sale_refused')).toMatchObject({ status: 'needs_attention', lastError: 'Account is inactive' })
+  })
+
+  it('keeps any other Xero 403 as before: the item asks a person, and the connection stays connected', async () => {
+    const refused = xero(403, { Title: 'Forbidden', Status: 403, Detail: 'This organisation has reached the limit of its plan.' })
+    const { deps, connection, item } = setup({ provider: refused.adapter, providerId: 'xero', tenantName: DEMO })
+    await enqueueOrderPaid(deps, order({ totals: { ...order().totals, feeCents: 0 } }))
+    const report = await runSyncPass(deps, connection(), { deadlineMs: NOW + 60_000 })
+    expect(report).toMatchObject({ needsAttention: 1, stopped: 'done' })
+    expect(item(saleItemId(order()))).toMatchObject({
+      status: 'needs_attention',
+      errorCode: 'validation',
+      lastError: 'This organisation has reached the limit of its plan.',
+    })
+    expect(connection().status).toBe('connected')
   })
 })
 

@@ -133,6 +133,32 @@ export function describeXeroError(body: unknown): string | null {
   return text ? text.slice(0, 500) : typeof body === 'string' ? body.slice(0, 500) : null
 }
 
+/** What Xero names a call for an organization that no longer lets the app in. */
+export const XERO_CONNECTION_GONE_MARKER = 'AuthenticationUnsuccessful'
+
+/**
+ * Whether a Xero refusal means the organization's connection to the app is
+ * gone. When a merchant removes the app inside Xero (Settings, Connected
+ * apps, Disconnect), the access token still looks valid and a refresh may
+ * still succeed, but every call for that organization answers 403 with
+ * `AuthenticationUnsuccessful` in its Type, Title or Detail. Refreshing
+ * cannot mend that; only a reconnect can.
+ *
+ * Kept to that one marker on a 403 on purpose. Any other 403 (a plan limit,
+ * a feature the organization lacks) keeps its handling as a refused request,
+ * and a missing scope is Xero's `AuthorizationUnsuccessful` (authoriZation,
+ * not authentiCation), which is not a lost connection either.
+ */
+export function xeroConnectionGone(body: unknown, status: number): boolean {
+  if (status !== 403) return false
+  if (typeof body === 'string') return body.includes(XERO_CONNECTION_GONE_MARKER)
+  if (!body || typeof body !== 'object') return false
+  const data = body as Record<string, unknown>
+  return ['Type', 'Title', 'Detail', 'Message'].some(
+    (field) => typeof data[field] === 'string' && String(data[field]).includes(XERO_CONNECTION_GONE_MARKER),
+  )
+}
+
 /** A value inside a Xero `where` string literal. */
 export function xeroLiteral(value: string): string {
   return `"${String(value).replace(/\\/g, '\\\\').replace(/"/g, '\\"')}"`
@@ -160,7 +186,7 @@ const CODED_ROLES: readonly AccountingAccountRole[] = ['income', 'shippingIncome
 
 export function createXeroProvider(config: XeroConfig, options: AccountingHttpOptions = {}): AccountingProvider {
   const pacer = options.pacer ?? new AccountingPacer(XERO_MIN_INTERVAL_MS)
-  const http = { ...options, pacer, describeError: describeXeroError }
+  const http = { ...options, pacer, describeError: describeXeroError, connectionGone: xeroConnectionGone }
   const scopes = String(config.scopes ?? '').trim() || XERO_SCOPES.join(' ')
   const now = () => Date.now()
 
