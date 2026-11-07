@@ -465,7 +465,22 @@ const ProductDetail = forwardRef<HTMLDivElement, ProductDetailProps>(
       wallets?: CommerceModel.StorefrontCheckoutWallets
     } | null>(null)
 
-    const slug = slugProp || slugFromLocation()
+    // A product-page template in Preview (AGL-4211): no product pinned and no
+    // `/products/{slug}` address, so it shows the store's first listed product
+    // (the sample when it lists none). The lookup is its own chunk.
+    const template = Boolean(site.preview && hostId && !slugProp && !slugFromLocation())
+    const [previewSlug, setPreviewSlug] = useState<string | null>(null)
+    useEffect(() => {
+      if (!template) return
+      let active = true
+      void import('./product-preview-slug')
+        .then((module) => module.firstListedProductSlug(String(hostId)))
+        .then((found) => active && setPreviewSlug(found))
+      return () => {
+        active = false
+      }
+    }, [template, hostId])
+    const slug = slugProp || slugFromLocation() || previewSlug || ''
 
     useEffect(() => {
       if (hostId && resolvedId) {
@@ -510,7 +525,9 @@ const ProductDetail = forwardRef<HTMLDivElement, ProductDetailProps>(
 
     const resolvedId =
       hostId && detail && detail !== 'missing' ? detail.id : null
-    const resolved: Detail | null = hostId
+    // The template in Preview of a store with no listed product: the sample.
+    const previewSample = template && previewSlug === ''
+    const resolved: Detail | null = hostId && !previewSample
       ? detail === 'missing'
         ? null
         : detail
@@ -746,7 +763,7 @@ const ProductDetail = forwardRef<HTMLDivElement, ProductDetailProps>(
       }
     }
 
-    if (hostId && detail === null) {
+    if (hostId && !previewSample && detail === null) {
       return (
         <Box ref={ref} {...rest} sx={[{ display: 'flex', gap: 3 }, ...nodeSx]}>
           <Skeleton variant="rectangular" width={320} height={320} />
