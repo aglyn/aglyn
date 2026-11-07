@@ -281,6 +281,65 @@ data class QuoteDraft(
   }
 }
 
+/**
+ * A new quote's start (AGL-4098): from an Inbox request, with what it carried, or from a CRM contact (the console's
+ * `QuoteEditorStart`). The request's own parts are stamped by the server from [fromSubmissionId] when the quote is
+ * created, never from here.
+ */
+data class QuoteEditorStart(
+  /** The request it is started from, which the server reads again on create; null for a contact. */
+  val fromSubmissionId: String?,
+  val draft: QuoteDraft,
+  val requestFormName: String? = null,
+  val requestReceivedAtMs: Double? = null,
+  val fileNames: List<String> = emptyList(),
+  /** Whether the request started an email conversation the quote's first email will reply into. */
+  val threaded: Boolean = false,
+) {
+  companion object {
+    /** A start for a CRM contact: the person as the page shows them is the quote's customer. */
+    fun contact(kind: String, recordId: String, name: String, email: String, phone: String, company: String) = QuoteEditorStart(
+      null, QuoteDraft(record = QuoteCustomerRecord(id = recordId, kind = kind), name = name, email = email, phone = phone, company = company),
+    )
+
+    /** A start from the route's `start-from-request` answer. */
+    fun request(submissionId: String, answer: JsonObject?): QuoteEditorStart {
+      val prefill = answer?.get("prefill") as? JsonObject
+      val customer = prefill?.get("customer") as? JsonObject
+      val record = customer?.get("record") as? JsonObject
+      fun text(o: JsonObject?, key: String) = (o?.get(key) as? JsonPrimitive)?.contentOrNull.orEmpty()
+      val lines = (prefill?.get("lines") as? JsonArray).orEmpty().mapNotNull { raw ->
+        val line = raw as? JsonObject ?: return@mapNotNull null
+        val productId = text(line, "productId").ifEmpty { return@mapNotNull null }
+        QuoteLineDraft(
+          custom = false, productId = productId, variantId = text(line, "variantId"),
+          quantity = ((line["quantity"] as? JsonPrimitive)?.doubleOrNull?.takeIf { it > 0 } ?: 1.0).toLong().toString(),
+          modifiers = (line["modifiers"] as? JsonArray).orEmpty().mapNotNull { pick ->
+            val o = pick as? JsonObject ?: return@mapNotNull null
+            com.aglyn.contracts.ModifierSelection(groupId = text(o, "groupId").ifEmpty { return@mapNotNull null }, optionId = text(o, "optionId").ifEmpty { return@mapNotNull null })
+          },
+          description = text(line, "description"), included = (line["included"] as? JsonPrimitive)?.booleanOrNull == true,
+        )
+      }
+      val recordKind = text(record, "kind")
+      val recordId = text(record, "id")
+      val request = answer?.get("request") as? JsonObject
+      return QuoteEditorStart(
+        fromSubmissionId = submissionId,
+        draft = QuoteDraft(
+          lines = lines, record = if (recordKind.isNotEmpty() && recordId.isNotEmpty()) QuoteCustomerRecord(id = recordId, kind = recordKind) else null,
+          name = text(customer, "name"), company = text(customer, "company"), email = text(customer, "email"), phone = text(customer, "phone"),
+          notes = text(prefill, "notes"),
+        ),
+        requestFormName = text(request, "formName").ifEmpty { null },
+        requestReceivedAtMs = (request?.get("receivedAtMs") as? JsonPrimitive)?.doubleOrNull,
+        fileNames = (answer?.get("files") as? JsonArray).orEmpty().mapNotNull { text(it as? JsonObject, "name").ifEmpty { null } },
+        threaded = (answer?.get("threaded") as? JsonPrimitive)?.booleanOrNull == true,
+      )
+    }
+  }
+}
+
 /** One person the workspace keeps, as `search-customers` answers. */
 private data class FoundQuoteCustomer(val record: QuoteCustomerRecord, val name: String, val company: String, val email: String, val phone: String)
 
@@ -298,6 +357,7 @@ fun QuoteEditorSheet(
   products: List<Pair<String, HostProduct>>,
   storeData: Map<String, Any?>?,
   onDismiss: () -> Unit,
+  start: QuoteEditorStart? = null,
   onDone: (String, Boolean) -> Unit,
 ) {
   val hostId = context.hostId.orEmpty()
@@ -307,7 +367,7 @@ fun QuoteEditorSheet(
   val byId = remember(products) { products.toMap() }
   @Suppress("UNCHECKED_CAST") val quotesSettings = storeData?.get("quotes") as? Map<String, Any?>
   @Suppress("UNCHECKED_CAST") val taxMap = storeData?.get("tax") as? Map<String, Any?>
-  var draft by remember { mutableStateOf(order?.let(QuoteDraft::of) ?: QuoteDraft()) }
+  var draft by remember { mutableStateOf(order?.let(QuoteDraft::of) ?: start?.draft ?: QuoteDraft()) }
   var edited by remember { mutableStateOf(false) }
   var approvalSet by remember { mutableStateOf(false) }
   var signInSet by remember { mutableStateOf(false) }
@@ -377,6 +437,10 @@ fun QuoteEditorSheet(
           body["quoteId"] = JsonPrimitive(quoteId)
           baseUpdatedAtMs?.let { body["baseUpdatedAtMs"] = JsonPrimitive(it) }
         }
+        // A request's parts are read again by the server from here (AGL-4098).
+        if (quoteId == null && order == null) start?.fromSubmissionId?.let {
+          body["from"] = JsonObject(mapOf("kind" to JsonPrimitive("submission"), "id" to JsonPrimitive(it)))
+        }
         val answer = try {
           context.api.request(QUOTE_ROUTE, ApiMethod.POST, JsonObject(body), idempotencyKey = key) as? JsonObject
         } catch (error: ConsoleApiError) {
@@ -400,6 +464,19 @@ fun QuoteEditorSheet(
         )
       }
       if (!canEdit) NoticeBanner(permissionRefusalText(QUOTE_EDIT_PERMISSION), tone = StatusTone.INFO)
+      // Where a new quote came from (the console's QuoteStartedFromRequest): the request, its files and its conversation.
+      if (order == null) start?.requestFormName?.let { formName ->
+        val whenSent = start.requestReceivedAtMs?.let { " on ${com.aglyn.contracts.formatReceiptTime(it.toLong(), com.aglyn.contracts.deviceTimeZone())}" }.orEmpty()
+        val lines = buildList {
+          add("From a request sent through “$formName”$whenSent.")
+          if (start.fileNames.isNotEmpty()) add("Their files, kept on the quote as the customer’s: ${start.fileNames.joinToString(", ")}")
+          add(
+            if (start.threaded) "When you email the quote, it replies to the confirmation they were sent, in the same conversation."
+            else "They weren’t sent a confirmation, so the quote’s email starts the conversation.",
+          )
+        }
+        NoticeBanner(lines.joinToString("\n"), tone = StatusTone.INFO)
+      }
       val enabled = !paid && canEdit && !busy.busy
 
       // Customer
