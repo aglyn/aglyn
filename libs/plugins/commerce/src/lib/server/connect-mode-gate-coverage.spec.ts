@@ -153,6 +153,10 @@ describe('AGL-2471 connect-mode gate coverage', () => {
       // `stripeAccountLivemode` or the predicate downstream is starved into a
       // constant — asserted directly below.
       'marketplace/src/lib/server/publisher-profile.ts',
+      // Answers an app whether customers can pay a quote (AGL-4162), through
+      // the mode-aware `merchantAccountReadiness`; it moves no money. The
+      // quote's Pay button is the door, `quote-pay.ts`, gated above.
+      'commerce/src/lib/server/quote.ts',
     ]
     const { execFileSync } = require('node:child_process')
     const hits = execFileSync(
