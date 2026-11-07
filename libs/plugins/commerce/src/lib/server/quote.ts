@@ -601,8 +601,11 @@ export async function handleQuote(deps: QuoteDeps, req: PluginApiRequest): Promi
     })
     const { closeSession, ...outcome } = deleted as Outcome & { closeSession?: string }
     await closeOpenSession(deps, closeSession, 'quote deleted', hostId)
-    // Its proofs and anything the customer sent go with it.
-    if (outcome.status === 200) await removeQuoteFiles(deps, hostId, quoteId)
+    // Its proofs, anything the customer sent and its conversation go with it.
+    if (outcome.status === 200) {
+      await removeQuoteFiles(deps, hostId, quoteId)
+      await removeQuoteMessages(ref)
+    }
     return outcome
   }
 
@@ -838,6 +841,27 @@ async function keepLibraryProof(
   })
   if ('error' in kept) return { outcome: refuse(kept.status, kept.error) }
   return { file: kept.file }
+}
+
+/** How many of a deleted quote's messages one read removes. */
+const QUOTE_MESSAGES_DELETE_PAGE = 200
+
+/**
+ * Deletes a quote's conversation (AGL-4207), which lives under the order and
+ * so outlives it otherwise: a draft that was never sent can still hold
+ * replies, since it has the customer's address. Never throws.
+ */
+async function removeQuoteMessages(orderRef: FirebaseFirestore.DocumentReference): Promise<void> {
+  try {
+    const messages = orderRef.collection('messages')
+    for (;;) {
+      const page = await messages.limit(QUOTE_MESSAGES_DELETE_PAGE).get()
+      if (!page.docs.length) return
+      await Promise.all(page.docs.map((message) => messages.doc(message.id).delete()))
+    }
+  } catch (error) {
+    console.error('quote messages were not removed', { orderPath: orderRef.path, error })
+  }
 }
 
 /** Deletes a quote's kept files, its proofs and the customer's artwork; never throws. */
