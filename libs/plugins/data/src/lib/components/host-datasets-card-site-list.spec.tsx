@@ -36,6 +36,7 @@ import { act, fireEvent, render, screen, waitFor, within } from '@testing-librar
 import { projectMemberScopeTokens } from '@aglyn/aglyn/app-utils/organizations'
 import { type ReactNode, useMemo, useState } from 'react'
 import { PageHeaderActionsContext } from '@aglyn/aglyn/app-utils/page-header-actions-context'
+import { datasetDisplayName, datasetNameLower } from '../model/datasets'
 import { HostDatasetsCard } from './host-datasets-card.component'
 import { holdsDatasetPermission } from './use-dataset-writes-blocked'
 
@@ -60,10 +61,13 @@ const answers = new Map<string, any[]>()
 /** The documents a built query matches, as Firestore would pick them. */
 const matching = (built: { constraints?: Array<Record<string, any>> }) => {
   const clause = built.constraints?.find((one) => one['field'] === 'visibleTo')
-  if (!clause) return datasets
-  return datasets.filter((row) =>
-    (row['visibleTo'] ?? []).some((token: string) => clause['value'].includes(token)),
-  )
+  // The name search's prefix range, over the key every writer stamps (AGL-4047).
+  const from = built.constraints?.find((one) => 'startAt' in one)?.['startAt'] as string | undefined
+  const to = built.constraints?.find((one) => 'endAt' in one)?.['endAt'] as string | undefined
+  const nameKey = (row: Record<string, any>) => datasetNameLower(datasetDisplayName(row))
+  return datasets
+    .filter((row) => !clause || (row['visibleTo'] ?? []).some((token: string) => clause['value'].includes(token)))
+    .filter((row) => (from === undefined || nameKey(row) >= from) && (to === undefined || nameKey(row) <= to))
 }
 
 const getDocsSpy = jest.fn(async (built: any) => {
@@ -147,6 +151,8 @@ jest.mock('firebase/firestore', () => ({
   limit: (value: number) => ({ limit: value }),
   orderBy: (field: unknown) => ({ orderBy: field }),
   documentId: () => '__name__',
+  startAt: (value: unknown) => ({ startAt: value }),
+  endAt: (value: unknown) => ({ endAt: value }),
   doc: (_db: unknown, ...segments: string[]) => ({ path: segments.join('/') }),
   deleteField: () => undefined,
   getCountFromServer: async () => ({ data: () => ({ count: 2 }) }),
@@ -260,9 +266,9 @@ describe("a site's Data page lists what is shared with that site", () => {
     const key = JSON.parse(String(ceiling.mock.calls[0]?.[0]))
     expect(key).toEqual([
       { field: 'visibleTo', op: 'array-contains-any', value: ['org', 'host:site-b'] },
-      // A walk by document name that reaches every dataset, and one past the
-      // window to say whether there are more (AGL-4047).
-      { orderBy: '__name__' },
+      // The rail in name order, on the key every writer stamps, and one past
+      // the window to say whether there are more (AGL-4047).
+      { orderBy: 'nameLower' },
       { limit: 101 },
     ])
   })
@@ -360,6 +366,17 @@ describe('narrowing the list does not narrow what a delete protects', () => {
     await mountCard({ hostId: 'site-b' })
     deleteRecord()
     await waitFor(() => expect(deleteDocSpy).toHaveBeenCalled())
+  })
+
+  it('reads the reach on the organization page while a name search narrows the list', async () => {
+    arm()
+    await mountCard({ orgId: 'org-1' })
+    fireEvent.change(screen.getByRole('textbox', { name: 'Search datasets by name' }), { target: { value: 'att' } })
+    expect(listed()).toEqual(['Attendees'])
+    deleteRecord()
+    await waitFor(() => expect(enqueueSnackbar).toHaveBeenCalled())
+    expect(String(enqueueSnackbar.mock.calls.at(-1)?.[0])).toContain('Bookings')
+    expect(deleteDocSpy).not.toHaveBeenCalled()
   })
 
   it('costs the organization page no extra read', async () => {
