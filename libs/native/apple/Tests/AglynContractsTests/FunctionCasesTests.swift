@@ -251,6 +251,42 @@ final class FunctionCasesTests: XCTestCase {
     }
   }
 
+  /// A recorded order with its quote's stored fields filled in, so a case that names only `stage` decodes; nil for null.
+  private func quoteOrder(_ value: Any) throws -> HostOrder? {
+    guard var record = value as? [String: Any] else { return nil }
+    if let quote = record["quote"] as? [String: Any] {
+      var filled: [String: Any] = [
+        "createdAtMs": 0, "createdBy": "u", "customer": [String: Any](), "revision": 1, "stage": "draft",
+        "tax": ["kind": "none"], "updatedAtMs": 0, "updatedBy": "u",
+      ]
+      filled.merge(quote) { _, new in new }
+      record["quote"] = filled
+    }
+    // `order` reads a missing status as paid, for the order cases; a quote case without one has none.
+    var decoded = try order(record)
+    if record["status"] == nil { decoded.status = nil }
+    return decoded
+  }
+
+  func testQuoteRulesAnswerAsTheConsoleDoes() throws {
+    for item in cases("formatQuoteNumber") {
+      let docId = item.args.count > 1 ? string(item.args[1]) : nil
+      XCTAssertEqual(formatQuoteNumber(try order(item.args[0]), docId: docId), item.result as? String, item.label)
+    }
+    for item in cases("quoteDisplayStatus") {
+      let status = quoteDisplayStatus(try quoteOrder(item.args[0]))
+      let expected = item.result as? [String: Any]
+      XCTAssertEqual(status.key, expected?["key"] as? String, item.label)
+      XCTAssertEqual(status.label, expected?["label"] as? String, item.label)
+    }
+    for item in cases("quoteIsProofOnly") {
+      XCTAssertEqual(quoteIsProofOnly(try quoteOrder(item.args[0])), item.result as? Bool, item.label)
+    }
+    for item in cases("isUnpaidQuote") {
+      XCTAssertEqual(isUnpaidQuote(try quoteOrder(item.args[0])), item.result as? Bool, item.label)
+    }
+  }
+
   func testOrderMoneyPrintsAsTheBuyerEmailsDo() {
     for item in cases("formatOrderMoney") {
       let cents = int(item.args[0])

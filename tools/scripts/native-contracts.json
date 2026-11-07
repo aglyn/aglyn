@@ -34103,6 +34103,160 @@
           }
         ]
       ]
+    },
+    "formatQuoteNumber": {
+      "module": "libs/plugins/commerce/src/lib/model/commerce-quotes.ts",
+      "args": [
+        [
+          {
+            "number": 1042
+          }
+        ],
+        [
+          {
+            "number": 7
+          },
+          "ignored"
+        ],
+        [
+          {},
+          "aBcDeF123456"
+        ],
+        [
+          {}
+        ]
+      ]
+    },
+    "quoteDisplayStatus": {
+      "module": "libs/plugins/commerce/src/lib/model/commerce-quotes.ts",
+      "args": [
+        [
+          {
+            "status": "pending",
+            "quote": {
+              "stage": "draft"
+            }
+          }
+        ],
+        [
+          {
+            "status": "pending",
+            "quote": {
+              "stage": "sent"
+            }
+          }
+        ],
+        [
+          {
+            "status": "pending",
+            "quote": {
+              "stage": "changes_requested"
+            }
+          }
+        ],
+        [
+          {
+            "status": "pending",
+            "quote": {
+              "stage": "approved"
+            }
+          }
+        ],
+        [
+          {
+            "status": "pending"
+          }
+        ],
+        [
+          {
+            "status": "paid",
+            "quote": {
+              "stage": "sent"
+            }
+          }
+        ],
+        [
+          {
+            "status": "fulfilled",
+            "quote": {
+              "stage": "approved"
+            }
+          }
+        ],
+        [
+          {
+            "status": "cancelled",
+            "quote": {
+              "stage": "sent"
+            }
+          }
+        ],
+        [
+          {
+            "status": "refunded"
+          }
+        ],
+        [
+          {}
+        ]
+      ]
+    },
+    "quoteIsProofOnly": {
+      "module": "libs/plugins/commerce/src/lib/model/commerce-quotes.ts",
+      "args": [
+        [
+          {
+            "lineItems": []
+          }
+        ],
+        [
+          {
+            "lineItems": [
+              {
+                "name": "Canopy",
+                "productId": "p",
+                "quantity": 1,
+                "unitAmountCents": 1000
+              }
+            ]
+          }
+        ],
+        [
+          {}
+        ],
+        [
+          null
+        ]
+      ]
+    },
+    "isUnpaidQuote": {
+      "module": "libs/plugins/commerce/src/lib/model/commerce-quotes.ts",
+      "args": [
+        [
+          {
+            "channel": "quote",
+            "status": "pending"
+          }
+        ],
+        [
+          {
+            "channel": "quote",
+            "status": "paid"
+          }
+        ],
+        [
+          {
+            "channel": "online",
+            "status": "pending"
+          }
+        ],
+        [
+          {}
+        ],
+        [
+          null
+        ]
+      ]
     }
   }
 }

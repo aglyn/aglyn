@@ -13,6 +13,8 @@ import kotlinx.serialization.json.jsonObject
 import kotlinx.serialization.json.jsonPrimitive
 import kotlinx.serialization.json.contentOrNull
 import kotlinx.serialization.json.long
+import kotlinx.serialization.json.buildJsonObject
+import kotlinx.serialization.json.put
 import kotlin.test.Test
 import kotlin.test.assertEquals
 import kotlin.test.assertTrue
@@ -173,6 +175,40 @@ class FunctionCasesTest {
   @Test
   fun formatOrderNumberCases() = cases("formatOrderNumber").forEach { (args, result) ->
     assertEquals(result.jsonPrimitive.content, formatOrderNumber(order(args[0]), str(args.getOrNull(1))), args.toString())
+  }
+
+  /** A recorded order with its quote's stored fields filled in, so a case that names only `stage` decodes. */
+  private fun quoteOrder(json: JsonElement): HostOrder? {
+    if (json !is JsonObject) return null
+    val quote = json["quote"] as? JsonObject ?: return order(json)
+    val filled = buildJsonObject {
+      put("createdAtMs", 0); put("createdBy", "u"); put("customer", buildJsonObject {}); put("revision", 1)
+      put("stage", "draft"); put("tax", buildJsonObject { put("kind", "none") }); put("updatedAtMs", 0); put("updatedBy", "u")
+      quote.forEach { (key, value) -> put(key, value) }
+    }
+    return order(JsonObject(json + ("quote" to filled)))
+  }
+
+  @Test
+  fun formatQuoteNumberCases() = cases("formatQuoteNumber").forEach { (args, result) ->
+    assertEquals(result.jsonPrimitive.content, formatQuoteNumber(order(args[0]), str(args.getOrNull(1))), args.toString())
+  }
+
+  @Test
+  fun quoteDisplayStatusCases() = cases("quoteDisplayStatus").forEach { (args, result) ->
+    val status = quoteDisplayStatus(quoteOrder(args[0]))
+    assertEquals(result.jsonObject["key"]!!.jsonPrimitive.content, status.key, args.toString())
+    assertEquals(result.jsonObject["label"]!!.jsonPrimitive.content, status.label, args.toString())
+  }
+
+  @Test
+  fun quoteIsProofOnlyCases() = cases("quoteIsProofOnly").forEach { (args, result) ->
+    assertEquals(result.jsonPrimitive.boolean, quoteIsProofOnly(quoteOrder(args[0])), args.toString())
+  }
+
+  @Test
+  fun isUnpaidQuoteCases() = cases("isUnpaidQuote").forEach { (args, result) ->
+    assertEquals(result.jsonPrimitive.boolean, isUnpaidQuote(quoteOrder(args[0])), args.toString())
   }
 
   @Test

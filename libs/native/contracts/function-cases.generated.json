@@ -14999,6 +14999,41 @@
         }
       ]
     },
+    "formatQuoteNumber": {
+      "module": "libs/plugins/commerce/src/lib/model/commerce-quotes.ts",
+      "cases": [
+        {
+          "args": [
+            {
+              "number": 1042
+            }
+          ],
+          "result": "Quote #1042"
+        },
+        {
+          "args": [
+            {
+              "number": 7
+            },
+            "ignored"
+          ],
+          "result": "Quote #7"
+        },
+        {
+          "args": [
+            {},
+            "aBcDeF123456"
+          ],
+          "result": "Quote #123456"
+        },
+        {
+          "args": [
+            {}
+          ],
+          "result": "Quote"
+        }
+      ]
+    },
     "formatReceiptMoney": {
       "module": "libs/plugins/commerce/src/lib/model/commerce-receipt.ts",
       "cases": [
@@ -19053,6 +19088,50 @@
         {
           "args": [
             "00b0ff"
+          ],
+          "result": false
+        },
+        {
+          "args": [
+            null
+          ],
+          "result": false
+        }
+      ]
+    },
+    "isUnpaidQuote": {
+      "module": "libs/plugins/commerce/src/lib/model/commerce-quotes.ts",
+      "cases": [
+        {
+          "args": [
+            {
+              "channel": "quote",
+              "status": "pending"
+            }
+          ],
+          "result": true
+        },
+        {
+          "args": [
+            {
+              "channel": "quote",
+              "status": "paid"
+            }
+          ],
+          "result": false
+        },
+        {
+          "args": [
+            {
+              "channel": "online",
+              "status": "pending"
+            }
+          ],
+          "result": false
+        },
+        {
+          "args": [
+            {}
           ],
           "result": false
         },
@@ -36931,6 +37010,180 @@
             []
           ],
           "result": []
+        }
+      ]
+    },
+    "quoteDisplayStatus": {
+      "module": "libs/plugins/commerce/src/lib/model/commerce-quotes.ts",
+      "cases": [
+        {
+          "args": [
+            {
+              "status": "pending",
+              "quote": {
+                "stage": "draft"
+              }
+            }
+          ],
+          "result": {
+            "key": "draft",
+            "label": "Draft"
+          }
+        },
+        {
+          "args": [
+            {
+              "status": "pending",
+              "quote": {
+                "stage": "sent"
+              }
+            }
+          ],
+          "result": {
+            "key": "sent",
+            "label": "Sent"
+          }
+        },
+        {
+          "args": [
+            {
+              "status": "pending",
+              "quote": {
+                "stage": "changes_requested"
+              }
+            }
+          ],
+          "result": {
+            "key": "changes_requested",
+            "label": "Rejected with changes"
+          }
+        },
+        {
+          "args": [
+            {
+              "status": "pending",
+              "quote": {
+                "stage": "approved"
+              }
+            }
+          ],
+          "result": {
+            "key": "approved",
+            "label": "Approved"
+          }
+        },
+        {
+          "args": [
+            {
+              "status": "pending"
+            }
+          ],
+          "result": {
+            "key": "draft",
+            "label": "Draft"
+          }
+        },
+        {
+          "args": [
+            {
+              "status": "paid",
+              "quote": {
+                "stage": "sent"
+              }
+            }
+          ],
+          "result": {
+            "key": "paid",
+            "label": "Paid"
+          }
+        },
+        {
+          "args": [
+            {
+              "status": "fulfilled",
+              "quote": {
+                "stage": "approved"
+              }
+            }
+          ],
+          "result": {
+            "key": "paid",
+            "label": "Paid"
+          }
+        },
+        {
+          "args": [
+            {
+              "status": "cancelled",
+              "quote": {
+                "stage": "sent"
+              }
+            }
+          ],
+          "result": {
+            "key": "cancelled",
+            "label": "Canceled"
+          }
+        },
+        {
+          "args": [
+            {
+              "status": "refunded"
+            }
+          ],
+          "result": {
+            "key": "refunded",
+            "label": "Refunded"
+          }
+        },
+        {
+          "args": [
+            {}
+          ],
+          "result": {
+            "key": "draft",
+            "label": "Draft"
+          }
+        }
+      ]
+    },
+    "quoteIsProofOnly": {
+      "module": "libs/plugins/commerce/src/lib/model/commerce-quotes.ts",
+      "cases": [
+        {
+          "args": [
+            {
+              "lineItems": []
+            }
+          ],
+          "result": true
+        },
+        {
+          "args": [
+            {
+              "lineItems": [
+                {
+                  "name": "Canopy",
+                  "productId": "p",
+                  "quantity": 1,
+                  "unitAmountCents": 1000
+                }
+              ]
+            }
+          ],
+          "result": false
+        },
+        {
+          "args": [
+            {}
+          ],
+          "result": false
+        },
+        {
+          "args": [
+            null
+          ],
+          "result": false
         }
       ]
     },
