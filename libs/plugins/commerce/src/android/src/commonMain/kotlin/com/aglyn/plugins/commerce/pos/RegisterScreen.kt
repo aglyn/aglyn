@@ -177,12 +177,17 @@ private fun RegisterScreenBody(context: NativePluginContext) {
     ).also { registerModel = it }
   }
   LaunchedEffect(model) { model.start() }
+  // The platform's own card reader sales (AGL-4038): on its hardware seller store only.
+  val hardwareSales = remember(hostId) { PosHardwareSales(context, PosHardwareSaleApi(context.api, hostId)) }
+  LaunchedEffect(hardwareSales) { hardwareSales.check() }
+  androidx.compose.runtime.CompositionLocalProvider(LocalPosHardwareSales provides hardwareSales) {
   RegisterContent(
     model,
     onOpenReaders = { context.navigate(COMMERCE_CARD_READERS_SCREEN) },
     ordersZone = { PosOrdersZone(context) },
     checkInPanel = { onDismiss -> PosCheckInPanel(context, hostId, model.register?.id, { model.cashier.assertion }, onDismiss = onDismiss) },
   )
+  }
 }
 
 @OptIn(ExperimentalMaterial3Api::class)
@@ -296,6 +301,8 @@ fun RegisterContent(
   }
   var opsOpen by remember { mutableStateOf(false) }
   var checkInOpen by remember { mutableStateOf(false) }
+  var toAttachOpen by remember { mutableStateOf(false) }
+  val hardwareSales = LocalPosHardwareSales.current
   Box(
     Modifier.fillMaxSize().then(keys).focusRequester(registerFocus).focusable().testTag("pos-register")
       // Any touch is the register in use: it keeps the idle lock away.
@@ -311,7 +318,7 @@ fun RegisterContent(
     if (wide) {
       Row(Modifier.fillMaxSize()) {
         Box(Modifier.weight(1f)) {
-          CatalogPane(model, query, { query = it; model.search(it) }, searchFocus, { codeOpen = true }, onCamera = camera?.let { { cameraOpen = true } }, onOps = { opsOpen = true }, onCheckIn = checkInPanel?.let { { checkInOpen = true } }, ordersZone = ordersZone)
+          CatalogPane(model, query, { query = it; model.search(it) }, searchFocus, { codeOpen = true }, onCamera = camera?.let { { cameraOpen = true } }, onOps = { opsOpen = true }, onCheckIn = checkInPanel?.let { { checkInOpen = true } }, onCardReaderSales = hardwareSales?.takeIf { it.seller }?.let { { toAttachOpen = true } }, ordersZone = ordersZone)
           // The basket is the sale now: the grid rests until it is paid or canceled.
           if (checkout != null) {
             Box(
@@ -339,7 +346,7 @@ fun RegisterContent(
       Surface(Modifier.fillMaxSize(), color = MaterialTheme.colorScheme.background) { CheckoutPane(model, checkout, onOpenReaders) }
     } else {
       Column(Modifier.fillMaxSize()) {
-        CatalogPane(model, query, { query = it; model.search(it) }, searchFocus, { codeOpen = true }, Modifier.weight(1f), onCamera = camera?.let { { cameraOpen = true } }, onOps = { opsOpen = true }, onCheckIn = checkInPanel?.let { { checkInOpen = true } }, ordersZone = ordersZone)
+        CatalogPane(model, query, { query = it; model.search(it) }, searchFocus, { codeOpen = true }, Modifier.weight(1f), onCamera = camera?.let { { cameraOpen = true } }, onOps = { opsOpen = true }, onCheckIn = checkInPanel?.let { { checkInOpen = true } }, onCardReaderSales = hardwareSales?.takeIf { it.seller }?.let { { toAttachOpen = true } }, ordersZone = ordersZone)
         BasketBar(model) { basketOpen = true }
       }
     }
@@ -363,6 +370,7 @@ fun RegisterContent(
   if (model.offlineCashOpen) OfflineSaleDialog(model)
   if (opsOpen) RegisterOpsDialog(model) { opsOpen = false }
   if (checkInOpen) checkInPanel?.invoke { checkInOpen = false }
+  if (toAttachOpen && hardwareSales != null) PosHardwareToAttachPanel(hardwareSales.api) { toAttachOpen = false }
   if (model.cashier.locked) LockedRegister(model)
   if (cameraOpen && camera != null) {
     val filter = remember { CameraScanFilter() }
@@ -403,6 +411,8 @@ private fun CatalogPane(
   onOps: () -> Unit = {},
   /** Check-in at the window (AGL-4043); none where the register has no console to ask. */
   onCheckIn: (() -> Unit)? = null,
+  /** The platform's own card reader sales to attach (AGL-4038); on its hardware seller store only. */
+  onCardReaderSales: (() -> Unit)? = null,
   /** What other plugins put in the register's `posOrders` zone, above the grid. */
   ordersZone: @Composable () -> Unit = {},
 ) {
@@ -435,6 +445,11 @@ private fun CatalogPane(
       WithTooltip("Enter a barcode or SKU") { IconButton(onClick = onEnterCode, modifier = Modifier.testTag("pos-enter-code")) {
         Icon(AglynIcons.named("barcode"), contentDescription = "Enter a barcode or SKU")
       } }
+      onCardReaderSales?.let { open ->
+        WithTooltip("Card reader sales") { IconButton(onClick = open, modifier = Modifier.testTag("pos-hardware-to-attach-open")) {
+          Icon(AglynIcons.named("credit_card"), contentDescription = "Card reader sales")
+        } }
+      }
       onCheckIn?.let { open ->
         WithTooltip("Check in") { IconButton(onClick = open, modifier = Modifier.testTag("pos-check-in-open")) {
           Icon(AglynIcons.named("event_available"), contentDescription = "Check in")

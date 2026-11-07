@@ -2,6 +2,7 @@
 // SPDX-License-Identifier: Apache-2.0
 
 import AglynHardware
+import AglynPluginHost
 import AglynUI
 import SwiftUI
 
@@ -11,6 +12,8 @@ import SwiftUI
 struct CheckoutView: View {
   let model: RegisterModel
   let checkout: Checkout
+  /// For a part another route draws inside the checkout (the platform's own card reader sale, AGL-4038).
+  var context: NativePluginContext?
   @State private var tendered = ""
   @State private var giftCode = ""
   @State private var creditText = ""
@@ -22,6 +25,10 @@ struct CheckoutView: View {
       ScrollView {
         VStack(alignment: .leading, spacing: AglynSpace.three) {
           summary
+          if let context, !isPaid {
+            PosHardwareSaleSection(
+              context: context, saleOrderID: checkout.opened.orderID, productIDs: model.cart.lines.map(\.productID))
+          }
           if let notice = checkout.notice {
             AglynNotice(notice.message, tone: notice.tone) { checkout.dismissNotice() }
           }
