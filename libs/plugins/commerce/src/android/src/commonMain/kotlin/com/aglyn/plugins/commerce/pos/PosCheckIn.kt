@@ -40,6 +40,7 @@ import com.aglyn.contracts.rainCheckLabel
 import com.aglyn.core.ApiMethod
 import com.aglyn.core.ConsoleApiError
 import com.aglyn.pluginhost.NativePluginContext
+import com.aglyn.pluginhost.SlotWidgets
 import com.aglyn.plugins.commerce.orders.RainCheckSheet
 import com.aglyn.plugins.commerce.orders.ReservationGuestsSheet
 import com.aglyn.plugins.commerce.orders.checkInTimeLabel
@@ -68,6 +69,23 @@ import kotlinx.serialization.json.contentOrNull
  * and its cashier ride every write, so a PIN's cashier is who checked them in. The route (`POS_CHECK_IN_ROUTE`) does
  * the work. The Apple kit's PosCheckIn.swift.
  */
+
+/** The register's check-in zone (`POS_CHECK_IN_ZONE`): another plugin's status or flow for one customer on one day. */
+const val POS_CHECK_IN_ZONE = "posCheckIn"
+
+/** What the zone hands a widget, as the console's `PosCheckInZone` does. */
+private fun checkInZoneProps(
+  context: NativePluginContext, hostId: String, customer: CheckInCustomer, dayKey: String, unitsDue: Int, placement: String,
+): Map<String, String> = buildMap {
+  put("hostId", hostId)
+  context.orgId?.let { put("orgId", it) }
+  customer.contactId?.ifEmpty { null }?.let { put("contactId", it) }
+  customer.email?.ifEmpty { null }?.let { put("email", it.lowercase()) }
+  put("dayKey", dayKey)
+  customer.name?.ifEmpty { null }?.let { put("name", it) }
+  put("unitsDue", unitsDue.toString())
+  put("placement", placement)
+}
 
 /** How long typing pauses before the register asks. */
 private const val SEARCH_DEBOUNCE_MS = 250L
@@ -251,6 +269,9 @@ fun PosCheckInPanel(
             "${rows.count { it.checkIn.status == CheckInStatus.CHECKED_IN }} of ${rows.size} checked in",
             if (rows.isNotEmpty() && waiting.isEmpty()) StatusTone.SUCCESS else StatusTone.NEUTRAL,
           )
+          if (dayKey.isNotEmpty()) {
+            SlotWidgets(context, POS_CHECK_IN_ZONE, props = checkInZoneProps(context, hostId, shown, dayKey, rows.size, "check-in-customer"))
+          }
           TextButton(
             onClick = { customer = null; rows = emptyList(); notice = null },
             modifier = Modifier.testTag("pos-check-in-back"),
@@ -295,6 +316,9 @@ fun PosCheckInPanel(
                   ).joinToString(" · "),
                   style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurfaceVariant,
                 )
+                if (dayKey.isNotEmpty()) {
+                  SlotWidgets(context, POS_CHECK_IN_ZONE, props = checkInZoneProps(context, hostId, one, dayKey, one.unitsDue.toInt(), "check-in-row"))
+                }
               }
             }
           }

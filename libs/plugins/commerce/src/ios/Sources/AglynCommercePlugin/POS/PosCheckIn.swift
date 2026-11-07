@@ -16,6 +16,23 @@ import SwiftUI
  * the work. The Kotlin kit's PosCheckIn.kt.
  */
 
+/// The register's check-in zone (`POS_CHECK_IN_ZONE`): another plugin's status or flow for one customer on one day.
+let posCheckInZone = "posCheckIn"
+
+/// What the zone hands a widget, as the console's `PosCheckInZone` does.
+private func checkInZoneProps(
+  context: NativePluginContext, hostID: String, customer: CheckInCustomer, dayKey: String, unitsDue: Int, placement: String
+) -> [String: String] {
+  var props: [String: String] = [
+    "hostId": hostID, "dayKey": dayKey, "unitsDue": String(unitsDue), "placement": placement,
+  ]
+  if let orgID = context.orgID { props["orgId"] = orgID }
+  if let contactID = customer.contactId, !contactID.isEmpty { props["contactId"] = contactID }
+  if let email = customer.email, !email.isEmpty { props["email"] = email.lowercased() }
+  if let name = customer.name, !name.isEmpty { props["name"] = name }
+  return props
+}
+
 /// How long typing pauses before the register asks.
 private let checkInSearchDebounce: Duration = .milliseconds(250)
 
@@ -93,6 +110,13 @@ struct PosCheckInSheet: View {
                 "\(rows.filter { $0.checkIn.status == .checkedIn }.count) of \(rows.count) checked in",
                 tone: !rows.isEmpty && waiting.isEmpty ? .success : .neutral)
             }
+            if !dayKey.isEmpty {
+              SlotWidgets(
+                context: context, slot: posCheckInZone,
+                props: checkInZoneProps(
+                  context: context, hostID: hostID, customer: customer, dayKey: dayKey, unitsDue: rows.count,
+                  placement: "check-in-customer"))
+            }
           }
           Section {
             ForEach(rows) { row in
@@ -140,6 +164,13 @@ struct PosCheckInSheet: View {
                 // A result reads as a row, not as tinted button text.
                 .buttonStyle(.plain)
                 .accessibilityIdentifier("pos-check-in-customer-\(one.customerKey)")
+                if !dayKey.isEmpty {
+                  SlotWidgets(
+                    context: context, slot: posCheckInZone,
+                    props: checkInZoneProps(
+                      context: context, hostID: hostID, customer: one, dayKey: dayKey, unitsDue: Int(one.unitsDue),
+                      placement: "check-in-row"))
+                }
               }
             } else if searched {
               Text("Nobody with that name, email, phone or order number has anything to check in today.")
@@ -154,6 +185,8 @@ struct PosCheckInSheet: View {
         if let error { Section { AglynNotice(error, tone: .warning) { self.error = nil } } }
       }
       .formStyle(.grouped)
+      // A page a zone opens (a waiver's signing page) is pushed on this sheet's own stack, over the check-in.
+      .aglynBrowserDestination()
       .navigationTitle(customer.map { $0.name.flatMap { $0.isEmpty ? nil : $0 } ?? $0.email ?? "Customer" } ?? "Check in")
       #if os(iOS)
         .navigationBarTitleDisplayMode(.inline)
