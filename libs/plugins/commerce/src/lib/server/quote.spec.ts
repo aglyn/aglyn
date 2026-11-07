@@ -1823,3 +1823,32 @@ describe('POST commerce/quote: a reply from the quote (AGL-4207)', () => {
     expect(messagesOf(path)).toHaveLength(1)
   })
 })
+
+describe('whether customers can pay, for the apps (AGL-4162)', () => {
+  const readiness = (uid: string, platformMode?: 'live' | 'test') =>
+    handleQuote(
+      { ...deps, platformMode: () => platformMode },
+      request(uid, { action: 'payments-readiness', hostId: 'site1' }),
+    )
+
+  it('answers from the workspace owner’s profile, as the console does', async () => {
+    expect(await readiness('admin', 'test')).toEqual({ status: 200, body: { state: 'not-connected' } })
+    docs.set('profiles/owner-1', { stripeAccountId: 'acct_1', stripeChargesEnabled: false })
+    expect((await readiness('admin', 'test')).body).toEqual({ state: 'charges-disabled' })
+    docs.set('profiles/owner-1', { stripeAccountId: 'acct_1', stripeChargesEnabled: true, stripeAccountLivemode: false })
+    expect((await readiness('admin', 'test')).body).toEqual({ state: 'ready' })
+  })
+
+  it('asks the live-mode question the app cannot', async () => {
+    docs.set('profiles/owner-1', { stripeAccountId: 'acct_1', stripeChargesEnabled: true })
+    expect((await readiness('admin', 'live')).body).toEqual({ state: 'mode-unverified' })
+    expect((await readiness('admin', 'test')).body).toEqual({ state: 'ready' })
+    docs.set('profiles/owner-1', { stripeAccountId: 'acct_1', stripeChargesEnabled: true, stripeAccountLivemode: false })
+    expect((await readiness('admin', 'live')).body).toEqual({ state: 'mode-mismatch' })
+  })
+
+  it('needs "Create and edit quotes"', async () => {
+    expect((await readiness('author', 'test')).status).toBe(403)
+    expect((await readiness('granted', 'test')).status).toBe(200)
+  })
+})

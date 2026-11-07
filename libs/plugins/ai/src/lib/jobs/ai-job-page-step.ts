@@ -993,7 +993,9 @@ export function createAiJobPageStep(deps: AiJobPageStepDeps = {}): AiJobStepRunn
             hostId,
             uid: job.createdBy,
             seed,
-            business: aiSiteWords(job.inputs).about,
+            // A redesign's site is what its plan says it is, and its stock is searched only where that names a world (AGL-4152).
+            business: aiSiteWords(job.inputs).about || (redesigned ? (imported?.plan?.site.what ?? '') : ''),
+            ...(redesigned ? { worldOnly: true } : {}),
             ...photoWords,
             sectionNames,
             jobId: aiOriginJobId(job),

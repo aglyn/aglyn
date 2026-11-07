@@ -69,7 +69,7 @@ func decodeOrder(_ doc: FirestoreDocument) -> HostOrder {
   fields["timeline"] = keepDecodable(fields["timeline"], as: OrderTimelineEvent.self)
   fields["fulfillments"] = keepDecodable(fields["fulfillments"], as: OrderFulfillment.self)
   fields["unresolvedLines"] = keepDecodable(fields["unresolvedLines"], as: OrderUnresolvedLine.self)
-  for key in ["dispute", "paymentRisk", "restockCheck", "receiptRequest", "customerRecord", "buyerNotifications"] {
+  for key in ["dispute", "paymentRisk", "restockCheck", "receiptRequest", "customerRecord", "buyerNotifications", "quote"] {
     // Every HostOrder member is optional, so an order of this one member
     // decodes exactly when the member does.
     if let value = fields[key], (try? decodeJSONFields(HostOrder.self, [key: value])) == nil {

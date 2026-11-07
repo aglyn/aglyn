@@ -100,7 +100,7 @@ final class ScreenSpecTests: XCTestCase {
     }
     // Every screen a spec opens or navigates to exists: a spec, or one a plugin draws by hand.
     let handWritten: Set<String> = [
-      "commerce.orders", "commerce.order", "commerce.products", "commerce.product", "commerce.sales", "marketplace.listing", "marketplace.sell", "site.pages",
+      "commerce.orders", "commerce.order", "commerce.quotes", "commerce.quote", "commerce.products", "commerce.product", "commerce.sales", "marketplace.listing", "marketplace.sell", "site.pages",
     ]
     for spec in specs {
       for target in Self.targets(spec.raw) {

@@ -927,7 +927,7 @@ export function siteImportFidelity(source: SiteImportFidelitySource, tree: SiteI
   if (improvedWords) placement.placeRewritten()
   const look = new LookOf(built, source.layout.look, theme)
 
-  const words = wordsScore(source, built)
+  const words = wordsScore(source, built, finish === 'improve')
   // Improved, a page's bands are read as its colors alone say; kept, against its page's ground (AGL-4152).
   const read = sections.map((section) => (finished && finish === 'improve' ? (section.absoluteBand ?? section.band) : section.band))
   const drawn = drawnSections.map((id) => siteImportFidelityBandOf(built.node(id)))
@@ -1015,7 +1015,9 @@ export function siteImportFidelity(source: SiteImportFidelitySource, tree: SiteI
           break
         }
         case 'group': {
-          const units = unitsOn(built, placement, node.items.map((item) => item.lines), root)
+          // Improved, a link every item repeats is shown once after the group (AGL-4152): no item holds it.
+          const shared = finish === 'improve' ? sharedLinkLines(source.blocks, node.items) : null
+          const units = unitsOn(built, placement, node.items.map((item) => (shared ? item.lines.filter((line) => !shared.has(line)) : item.lines)), root)
           // Each item's own icon and its bullets' marks, in the element that is the item.
           node.items.forEach((item, at) => {
             // Its corner arrow too (AGL-4138): a card's "↗" is an icon of its own.
@@ -1193,15 +1195,44 @@ function itemKept(built: Built, kind: SiteImportGroupKind, item: SiteImportLayou
   return true
 }
 
-/** The words: the source's lines against what the page shows, each word as often as it is said. */
-function wordsScore(source: SiteImportFidelitySource, built: Built): SiteImportFidelityWords {
+/** The link lines of a group's items that every item carries, the same words to the same place: one call to action, said on each. */
+function sharedLinkLines(blocks: readonly SiteImportBlock[], items: ReadonlyArray<{ lines: readonly SiteImportLineRef[] }>): Set<SiteImportLineRef> {
+  if (items.length < 2) return new Set()
+  const keyOf = (line: SiteImportLineRef) => {
+    const block = blocks[line]
+    return block?.kind === 'link' && !block.inline ? `${wordLine(clean(block.text)).toLowerCase()}\u0000${block.href}` : null
+  }
+  const each = items.map((item) => new Set(item.lines.flatMap((line) => keyOf(line) ?? [])))
+  const common = [...(each[0] ?? [])].filter((key) => each.every((keys) => keys.has(key)))
+  return new Set(items.flatMap((item) => item.lines.filter((line) => common.includes(keyOf(line) ?? ''))))
+}
+
+/**
+ * The words: the source's lines against what the page shows, each word as
+ * often as it is said. Improved, a link said again with the same words to the
+ * same place may be shown once or as often as it is said (AGL-4152): the page
+ * shows each call to action once, and a page drawn as before is no worse.
+ */
+function wordsScore(source: SiteImportFidelitySource, built: Built, improve = false): SiteImportFidelityWords {
   const tally = (lines: readonly string[]) => {
     const counts = new Map<string, number>()
     for (const word of lines.flatMap(wordsOf)) counts.set(word, (counts.get(word) ?? 0) + 1)
     return counts
   }
-  const said = tally(source.blocks.flatMap((block) => (isLine(block) && block.kind !== 'image' ? [clean(block.text)] : [])))
+  const links = new Set<string>()
+  const again = (block: SiteImportBlock) => {
+    if (!improve || block.kind !== 'link') return false
+    const key = `${wordLine(clean(block.text)).toLowerCase()}\u0000${block.href}`
+    if (links.has(key)) return true
+    links.add(key)
+    return false
+  }
+  const lines = source.blocks.filter((block): block is Exclude<SiteImportBlock, { kind: 'image' }> => isLine(block) && block.kind !== 'image')
+  const full = tally(lines.map((block) => clean(block.text)))
+  const least = tally(lines.filter((block) => !again(block)).map((block) => clean(block.text)))
   const shown = tally(built.pieces.map((piece) => piece.text))
+  // Each word as often as the page shows it, between the least the source asks and all it says.
+  const said = new Map([...full].map(([word, count]) => [word, Math.min(count, Math.max(least.get(word) ?? 0, shown.get(word) ?? 0))]))
   let sourceWords = 0
   let builtWords = 0
   let both = 0
@@ -2064,16 +2095,45 @@ function factsIn(text: string): string[] {
 }
 
 /** The words of a line in capitals, each with whether it opens a sentence. */
-function capitalsIn(text: string): Array<{ word: string; opens: boolean }> {
-  const out: Array<{ word: string; opens: boolean }> = []
+function capitalsIn(text: string): Array<{ word: string; opens: boolean; afterSubject: boolean }> {
+  const out: Array<{ word: string; opens: boolean; afterSubject: boolean }> = []
   let last = 0
+  let before = ''
   for (const match of text.matchAll(/[\p{L}\p{N}][\p{L}\p{N}'’]*/gu)) {
     const at = match.index ?? 0
     const opens = last === 0 || /[.!?:;•·|—–"“(]/.test(text.slice(last, at))
+    // "We Specialize in…", "We Document every job": a word straight after its sentence's subject is what it does, capitalized for show (AGL-4152).
+    const afterSubject = !opens && SUBJECTS.has(before) && /^\s+$/.test(text.slice(last, at))
     last = at + match[0].length
-    if (/^\p{Lu}/u.test(match[0])) out.push({ word: match[0], opens })
+    before = match[0].toLowerCase()
+    if (/^\p{Lu}/u.test(match[0])) out.push({ word: match[0], opens, afterSubject })
   }
   return out
+}
+
+/** A web or an email address in a run of words, whose words are written small whatever they name. */
+const ADDRESSES = /\S+@\S+|(?:https?:\/\/)?[\p{L}\p{N}-]+(?:\.[\p{L}\p{N}-]+)+(?:\/\S*)?/gu
+
+/** The words a sentence's subject is said by, which the word after it acts for: never a name before a name. */
+const SUBJECTS = new Set(['i', 'we', 'you', 'they'])
+
+/**
+ * A name as it is matched on a page (AGL-4152): its possessive, its stops and
+ * its hyphens dropped, in any case. "HEB's", "HEB", "H-E-B" and "H.E.B." are
+ * one store.
+ */
+export function siteImportNameKey(word: string): string {
+  return word
+    .replace(/['’]s$/iu, '')
+    .replace(/[^\p{L}\p{N}]/gu, '')
+    .toLowerCase()
+}
+
+/** Every name key a run of words says: each word, and each run of initials written with stops or hyphens ("H-E-B", "H.E.B."). */
+function nameKeysIn(text: string): string[] {
+  const words = wordsOf(text).map((word) => word.toLowerCase())
+  const initials = [...text.matchAll(/(?<![\p{L}\p{N}])\p{L}(?:[.-]\p{L})+\.?(?![\p{L}\p{N}])/gu)].map((match) => siteImportNameKey(match[0]))
+  return [...words, ...initials]
 }
 
 /** Whether a line is set all in capitals or in title case: its capitals say nothing of its names. */
@@ -2104,8 +2164,14 @@ export interface SiteImportFactScope {
  */
 export function siteImportFactScope(sourceTexts: readonly string[], vocabulary: readonly string[] = []): SiteImportFactScope {
   const said = new Set([...sourceTexts, ...vocabulary].flatMap(wordsOf).map((word) => word.toLowerCase()))
+  // A word the source also writes in small letters is an ordinary word, wherever it capitalizes it (AGL-4152);
+  // never in an address, where a name is written small ("example.app").
+  const small = new Set(sourceTexts.flatMap((text) => wordsOf(text.replace(ADDRESSES, ' '))).filter((word) => /^\p{Ll}/u.test(word)))
+  const names = sourceTexts
+    .filter((text) => !shouted(text))
+    .flatMap((text) => capitalsIn(text).filter((entry) => !entry.opens && entry.word.length > 1 && !entry.afterSubject && !small.has(entry.word.toLowerCase())).map((entry) => entry.word))
   return {
-    names: new Set(sourceTexts.filter((text) => !shouted(text)).flatMap((text) => capitalsIn(text).filter((entry) => !entry.opens && entry.word.length > 1).map((entry) => entry.word))),
+    names: new Set(names),
     said,
     stems: new Set([...said].map(stemOf)),
   }
@@ -2270,8 +2336,9 @@ function improvedScore(source: SiteImportFidelitySource, built: Built, look: Loo
   const said = options.proposed ? [] : [...new Set(sourceTexts.filter((text) => !bareNumber(text)).flatMap((text) => siteImportFactTokens(text, ownScope, false).filter((token) => !token.startsWith('name:') || !titleCased(text))))]
   // A name the page still says, in the sentence case a redesign writes its headings in, is kept (AGL-4152):
   // "Built on Stone" rewritten "built on stone" keeps its word, and a real name keeps its capital anyway.
-  const wordsOnPage = new Set(shown.flatMap(wordsOf).map((word) => word.toLowerCase()))
-  const missingFacts = said.filter((token) => !onPage.has(token) && !(token.startsWith('name:') && wordsOnPage.has(token.slice(5).toLowerCase())))
+  // A name is kept in any of its forms: its possessive, its initials with stops or hyphens (AGL-4152).
+  const wordsOnPage = new Set(shown.flatMap(nameKeysIn))
+  const missingFacts = said.filter((token) => !onPage.has(token) && !(token.startsWith('name:') && wordsOnPage.has(siteImportNameKey(token.slice(5)))))
   // Invented: none that nothing the import read says.
   const allowed = new Set(anywhere.flatMap((text) => siteImportFactTokens(text, scope, false)))
   const found = [...new Set(shown.flatMap((text) => siteImportFactTokens(text, scope, true)))].filter((token) => !allowed.has(token) && token !== 'name:FAQ' && token !== 'name:FAQs')

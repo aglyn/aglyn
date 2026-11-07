@@ -50,6 +50,7 @@ import type { AiDoctrineViolation } from '../runtime/ai-doctrine-validators'
 import { aiGenerationMaxTokensWithin, aiJobStepBudget } from './ai-job-budget'
 import { AI_LAYOUT_LANGUAGE_THINKING } from './ai-job-page-language'
 import { AI_SITE_IMPORT_DROPPED_ITEM_CODE, AI_SITE_IMPORT_INVENTED_FACT_CODE, aiSiteImportHonestyFacts, aiSiteImportInventedIn } from './ai-site-import-honesty'
+import { aiSiteImportRedesignWhy } from './ai-site-import-improve'
 
 const clean = (text: unknown): string => (typeof text === 'string' ? text.replace(/\s+/g, ' ').trim() : '')
 
@@ -239,6 +240,153 @@ function groupsOf(value: unknown): Array<{ label: string; pages: string[] }> {
   })
 }
 
+/*------------------------------------------
+ * The answer mended, where the mend is mechanical (AGL-4152)
+ *-----------------------------------------*/
+
+type AiSiteImportPlanGroup = { label: string; pages: string[] }
+
+const trimSlashes = (path: string): string => path.replace(/^\/+|\/+$/g, '')
+
+/**
+ * An entry as a page's id (AGL-4152): an id, or `new`, as written; else the
+ * one page whose address or exact title it is. One that names no page, or
+ * several, stays as written for the check to name.
+ */
+export function aiSiteImportPlanPageIdOf(pages: readonly AiSiteImportPage[]): (entry: string) => string {
+  return (entry) => {
+    if (entry === AI_SITE_IMPORT_PROPOSED_PAGE || pages.some((page) => page.draftId === entry)) return entry
+    const address = trimSlashes(entry).toLowerCase()
+    const title = entry.toLowerCase()
+    const hits = pages.filter((page) => trimSlashes(page.slug).toLowerCase() === address || trimSlashes(page.path).toLowerCase() === address || clean(page.title).toLowerCase() === title)
+    return hits.length === 1 && hits[0] ? hits[0].draftId : entry
+  }
+}
+
+/** Whether a link of the old menu goes to this page: its host (www or not) and its path. */
+function linksTo(href: string | null | undefined, page: AiSiteImportPage): boolean {
+  if (!href) return false
+  try {
+    const own = new URL(page.url)
+    const url = new URL(href, own)
+    const host = (value: string) => value.toLowerCase().replace(/^www\./, '')
+    return host(url.host) === host(own.host) && trimSlashes(decodeURIComponent(url.pathname)) === trimSlashes(page.path)
+  } catch {
+    return false
+  }
+}
+
+/** The heading of the old menu's dropdown that held a page, in the site's own words, or `''`. */
+function oldMenuHeadingOf(page: AiSiteImportPage, home: AiSiteImportState['home']): string {
+  const group = (home?.nav?.items ?? []).find((item) => item.items.length > 0 && item.items.some((entry) => linksTo(entry.href, page)))
+  return clean(group?.label)
+}
+
+/** How alike two pages are, for the footer column a page joins: both policies, the same section of the site, the same group of the import. */
+function likeness(page: AiSiteImportPage, other: AiSiteImportPage | undefined): number {
+  if (!other) return 0
+  const section = (entry: AiSiteImportPage) => trimSlashes(entry.path).split('/')[0]?.toLowerCase() ?? ''
+  return (
+    (aiSiteImportPageIsLegal(page) && aiSiteImportPageIsLegal(other) ? 2 : 0) +
+    (section(page) && section(page) === section(other) ? 2 : 0) +
+    (page.group !== 'main' && page.group === other.group ? 1 : 0)
+  )
+}
+
+/** What a plan's menu and footer are mended against. */
+export interface AiSiteImportPlanMendScope {
+  pages: readonly AiSiteImportPage[]
+  /** The pages the old menu reached, which must stay reachable. */
+  required: readonly string[]
+  /** Whether the answer proposes a new page. */
+  proposes: boolean
+  home: AiSiteImportState['home']
+  siteName: string
+}
+
+/**
+ * A page the new menu left unreachable, put in the footer (AGL-4152): in the
+ * column whose pages are most like it, else a new column under the heading the
+ * old menu held it under, else the first column. A footer with no column takes
+ * one headed by the site's name. Every heading is the site's own words; none
+ * is made up, and one over the label's length is not taken.
+ */
+function placeInFooter(footer: AiSiteImportPlanGroup[], page: string, input: AiSiteImportPlanMendScope): void {
+  const of = (id: string) => input.pages.find((entry) => entry.draftId === id)
+  const self = of(page)
+  const heading = self ? oldMenuHeadingOf(self, input.home) : ''
+  let best = -1
+  let bestScore = 0
+  footer.forEach((column, index) => {
+    const score = (heading && column.label.toLowerCase() === heading.toLowerCase() ? 3 : 0) + (self ? column.pages.reduce((sum, other) => sum + likeness(self, of(other)), 0) : 0)
+    if (score > bestScore) {
+      best = index
+      bestScore = score
+    }
+  })
+  const fits = (label: string) => !!label && label.length <= AI_SITE_IMPORT_PLAN_LABEL_MAX_CHARS
+  if (best >= 0) footer[best]?.pages.push(page)
+  else if (fits(heading)) footer.push({ label: heading, pages: [page] })
+  else if (footer[0]) footer[0].pages.push(page)
+  else {
+    const name = clean(input.home?.siteName) || clean(input.siteName)
+    if (fits(name)) footer.push({ label: name, pages: [page] })
+  }
+}
+
+/**
+ * A plan's menu and footer mended where the mend is mechanical and cannot
+ * change what the answer meant (AGL-4152), before it is held, so an answer
+ * that needs only these costs no re-ask:
+ *
+ *   - an entry written as a page's address or exact title reads as its id;
+ *   - a page named twice in one entry is named once;
+ *   - the home page leaves the menu (the logo goes home), and the new page
+ *     leaves every entry where none is proposed;
+ *   - an entry that then links no page is dropped;
+ *   - a page of the old menu, or the new page, that the answer left
+ *     unreachable joins the footer (`placeInFooter`).
+ *
+ * Nothing is mended in what the answer says: a label, a line, a button, or a
+ * page that is none of the site's stands as written, for the check to name.
+ */
+export function aiSiteImportPlanMended(
+  nav: { groups: readonly AiSiteImportPlanGroup[]; footer: readonly AiSiteImportPlanGroup[] },
+  input: AiSiteImportPlanMendScope,
+): { groups: AiSiteImportPlanGroup[]; footer: AiSiteImportPlanGroup[] } {
+  const ids = new Set(input.pages.map((page) => page.draftId))
+  const homeIds = new Set(input.pages.filter((page) => page.slug === '/').map((page) => page.draftId))
+  const idOf = aiSiteImportPlanPageIdOf(input.pages)
+  const tidy = (list: readonly AiSiteImportPlanGroup[], menu: boolean) =>
+    list
+      .map((group) => ({
+        label: group.label,
+        pages: [...new Set(group.pages.map(idOf))].filter((page) => (page !== AI_SITE_IMPORT_PROPOSED_PAGE || input.proposes) && !(menu && homeIds.has(page))),
+      }))
+      .filter((group) => group.pages.length > 0)
+  const groups = tidy(nav.groups, true)
+  const footer = tidy(nav.footer, false)
+  const placed = new Set([...groups, ...footer].flatMap((group) => group.pages))
+  const missing = [
+    ...new Set(input.required.filter((page) => ids.has(page) && !homeIds.has(page) && !placed.has(page))),
+    ...(input.proposes && !placed.has(AI_SITE_IMPORT_PROPOSED_PAGE) ? [AI_SITE_IMPORT_PROPOSED_PAGE] : []),
+  ]
+  for (const page of missing) placeInFooter(footer, page, input)
+  return { groups, footer }
+}
+
+/**
+ * Why a plan did not pass, line by line (AGL-4152): each miss's code and the
+ * line it names, as a redesign's (`aiSiteImportRedesignWhy`), for the job's
+ * record (`planMissedWhy`). The log names its codes alone.
+ */
+export function aiSiteImportPlanWhy(violations: readonly AiDoctrineViolation[]): string[] {
+  return aiSiteImportRedesignWhy(violations)
+}
+
+/** What the job's record says of a plan the model declined: there are no lines to name. */
+export const AI_SITE_IMPORT_PLAN_REFUSED_WHY = 'refused: the model declined to plan the site.'
+
 /** What a plan is held to. */
 export interface AiSiteImportPlanScope {
   state: Pick<AiSiteImportState, 'pages' | 'home' | 'siteName'>
@@ -267,8 +415,6 @@ export function aiSiteImportPlanRead(raw: unknown, input: AiSiteImportPlanScope)
   const cta = record(nav['cta'])
   const design = record(answer['design'])
   const proposedRaw = record(answer['proposed'])
-  const groups = groupsOf(nav['groups'])
-  const footer = groupsOf(nav['footer'])
   const out: AiDoctrineViolation[] = []
   const pages = aiSiteImportPlanPages(input.state)
   const ids = new Set(pages.map((page) => page.draftId))
@@ -278,6 +424,11 @@ export function aiSiteImportPlanRead(raw: unknown, input: AiSiteImportPlanScope)
   const slug = clean(proposedRaw['slug'])
   const purpose = clean(proposedRaw['purpose'])
   const proposes = !!(title || slug || purpose)
+  // Mended first, where the mend is mechanical: an answer that needs only that is no re-ask.
+  const { groups, footer } = aiSiteImportPlanMended(
+    { groups: groupsOf(nav['groups']), footer: groupsOf(nav['footer']) },
+    { pages, required: input.required, proposes, home: input.state.home, siteName: input.state.siteName },
+  )
   if (proposes) {
     if (!input.roomForPage) out.push(unusable('proposed: there is no room for a new page on this plan. Write title, slug and purpose as "".'))
     if (!title || !purpose) out.push(unusable('proposed: a new page needs its title and its purpose, or all three written as "".'))
@@ -317,7 +468,9 @@ export function aiSiteImportPlanRead(raw: unknown, input: AiSiteImportPlanScope)
 
   // The header's one filled button goes somewhere real.
   const ctaLabel = clean(cta['label'])
-  const target = clean(cta['target'])
+  const written = clean(cta['target'])
+  // A page written by its address or title is that page, as in the menu.
+  const target = written === 'form' || written === 'phone' || !written ? written : aiSiteImportPlanPageIdOf(pages)(written)
   let ctaPage: string | undefined
   if (!ctaLabel || !target) out.push(unusable('nav.cta: the header needs its main button, with its words and where it goes.'))
   else {

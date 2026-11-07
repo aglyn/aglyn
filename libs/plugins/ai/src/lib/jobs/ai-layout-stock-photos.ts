@@ -4562,7 +4562,21 @@ export interface AiLayoutStockPhotoSourceInput {
   avoid?: readonly string[]
   /** The most searches this source sends; a page's own bound where absent. A store's products search more (AGL-3676). */
   searches?: number
+  /**
+   * Searches only where the site's own words name its world (AGL-4152): a page
+   * brought in from its owner's site says no business type until its plan
+   * does, and the widest searches, held to no world, put an office desk on a
+   * builder's gallery. Its slots are left to its own photos, or dropped.
+   */
+  worldOnly?: boolean
   signal?: AbortSignal
+}
+
+/** Whether a stock source knows the site's world from its own words: a business, a craft or a kind of site it names (AGL-4152). */
+export function aiStockSourceNamesWorld(
+  input: Pick<AiLayoutStockPhotoSourceInput, 'business' | 'language' | 'photoWords' | 'kindWords' | 'name' | 'audience' | 'kind'>,
+): boolean {
+  return aiStockSourceTerms(input).domain.length > 0
 }
 
 export interface AiLayoutStockPhotoDeps {
@@ -5362,6 +5376,7 @@ export function aiLayoutStockPhotoSource(
   // alt texts, in its own language, name no subject a search could use.
   const english = aiStockSourceSubject(input)
   const terms = aiStockSourceTerms(input)
+  if (input.worldOnly && !terms.domain.length) return null
   // Where a picture's own world finds nothing, the wider worlds it tries (AGL-3923).
   const wider = aiStockWiderTerms(terms, input.kind ?? '')
   const unlisted = aiStockWorldIsUnlisted(terms)

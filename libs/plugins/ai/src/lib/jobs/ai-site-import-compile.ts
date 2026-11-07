@@ -107,9 +107,11 @@ import {
   type SiteImportRule,
   type AiSiteImportFinish,
 } from '../model/ai-site-import'
+import { aiSiteImportAltIsFileName } from '../model/ai-site-import-marks'
 import { aiHexOklch } from '../model/ai-site-look'
 import { aiModelAtLeastStepTier } from '../providers/routing'
 import type { SiteImportBlock } from '../site-import/site-import-html'
+import { aiSiteImportSectionActions } from './ai-site-import-actions'
 import {
   AI_SITE_IMPORT_DOC_MAX_NODES,
   AI_SITE_IMPORT_LABEL_CHARS,
@@ -531,6 +533,25 @@ function pictureFitOf(photo: AiSiteImportPhoto, fit: SiteImportPictureFit | unde
   return Object.keys(out).length ? out : undefined
 }
 
+/** A picture's alt text where it describes the picture: a file's name does not (AGL-4152). */
+const described = (alt: string | undefined): string => {
+  const text = clean(alt ?? '')
+  return text && !aiSiteImportAltIsFileName(text) ? text : ''
+}
+
+/**
+ * What a picture whose source named it only by its file is described as
+ * (AGL-4152): the page it is on and which of its pictures it is, which is
+ * all that is known of it, never a guess at what it shows. Empty where the
+ * page has no title, so the picture is drawn as decoration.
+ */
+export function aiSiteImportPhotoAlt(doc: Pick<AiSiteImportDocument, 'title' | 'blocks'>, ref: SiteImportLineRef): string {
+  const title = clean(doc.title)
+  if (!title) return ''
+  const at = doc.blocks.slice(0, ref + 1).filter((block) => block.kind === 'image').length
+  return `${title} photo ${Math.max(1, at)}`
+}
+
 /** A picture line as the library holds it; marks it taken, and missing where the library holds none. */
 export function aiSiteImportTakePicture(scope: MapScope, ref: SiteImportLineRef | undefined, href?: string, fit?: SiteImportPictureFit): AiLayoutPicture | null {
   if (ref === undefined || scope.used.has(ref)) return null
@@ -542,7 +563,7 @@ export function aiSiteImportTakePicture(scope: MapScope, ref: SiteImportLineRef 
     scope.missing.add(ref)
     return null
   }
-  const alt = clean(block.alt || photo.alt || '').slice(0, 200)
+  const alt = (described(block.alt) || described(photo.alt) || (aiSiteImportAltIsFileName(block.alt || photo.alt) ? aiSiteImportPhotoAlt(scope.doc, ref) : '')).slice(0, 200)
   const ratio = photo.width && photo.height ? photo.width / photo.height : 0
   const to = aiSiteImportLinkTo(scope, href)
   const framed = pictureFitOf(photo, fit)
@@ -1302,6 +1323,10 @@ export function aiSiteImportDesignedSections(
     const source = reading ? 'start' : section.align
     // The source's own heading measure for its opening's words, on a page kept as it is (AGL-4152).
     const measure = hero && !improve ? aiSiteImportHeroMeasure(section) : null
+    const cols = row.cols && blocks.some((block) => block.col !== undefined) ? row.cols : undefined
+    // Improved, each call to action once and in its place, as a redesign's are (AGL-4152): a page whose
+    // redesign fell back keeps its layout, never each review's own "See more reviews".
+    const tidy = improve ? aiSiteImportSectionActions({ ...(cols ? { cols } : {}), blocks: mergeLists(blocks) }, doc.plan?.nav.primaryCta?.label) : { ...(cols ? { cols } : {}), blocks: mergeLists(blocks) }
     return {
       band,
       // Kept as it is, a section keeps the source's alignment (AGL-4152); improved, the answer's.
@@ -1309,8 +1334,8 @@ export function aiSiteImportDesignedSections(
       // As wide as the source runs (AGL-4083), or the theme's own on a page its owner asked improved (AGL-4152);
       // where it sets no cap, a page's width, a long read's measure.
       width: (improve ? null : siteImportWidthOf(section.width)) ?? (reading ? 'md' : 'lg'),
-      ...(row.cols && blocks.some((block) => block.col !== undefined) ? { cols: row.cols } : {}),
-      blocks: mergeLists(blocks),
+      ...(tidy.cols ? { cols: tidy.cols } : {}),
+      blocks: tidy.blocks,
       ...(hero ? { hero } : {}),
       ...(measure ? { measure } : {}),
     }

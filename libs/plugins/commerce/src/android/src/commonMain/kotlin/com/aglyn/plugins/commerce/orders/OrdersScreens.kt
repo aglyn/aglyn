@@ -205,7 +205,7 @@ private fun OrdersList(
   }
   LaunchedEffect(nearEnd, model.hasMore) { if (nearEnd && model.hasMore) model.loadMore() }
   // The shared list screen (Figma Mac Orders 13:483): "Orders" with ☆ and New order; search and one Filter (status and
-  // sort); Select, Export for shipping, Import tracking and More filters in ⋯.
+  // sort); Select, Quotes, Export for shipping, Import tracking and More filters in ⋯.
   var advanced by remember { mutableStateOf(model.clauses.isNotEmpty()) }
   val sorts = Contracts.orderListQuery.sorts
   // Calm rule (Figma 13:483 draws no tabs): Returns and Reservations are one Filter choice away, not a tab row.
@@ -215,6 +215,8 @@ private fun OrdersList(
   val sortKey = sorts.indexOf(model.sort ?: sorts.firstOrNull()).takeIf { it >= 0 }?.let { "sort-$it" }
   val moreActions = buildList {
     add(com.aglyn.ui.MenuAction("orders-select", if (selecting) "Done selecting" else "Select orders", "fact_check") { selecting = !selecting; picked = emptySet() })
+    // Quotes sit beside the orders, as the console's Quotes card does on its Orders page (AGL-4093).
+    add(com.aglyn.ui.MenuAction("orders-quotes", "Quotes", "request_quote") { context.navigate(COMMERCE_QUOTES_SCREEN) })
     Contracts.orderShippingPresetChoices.forEach { preset ->
       add(com.aglyn.ui.MenuAction("orders-export-${preset.id}", "Export for shipping: ${preset.label}", "local_shipping") {
         val id = hostId ?: return@MenuAction

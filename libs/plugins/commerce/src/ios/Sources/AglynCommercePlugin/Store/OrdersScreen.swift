@@ -210,6 +210,13 @@ struct OrdersScreen: View {
         }
         .accessibilityIdentifier("orders-select")
       }
+      // Quotes sit beside the orders, as the console's Quotes card does on its Orders page (AGL-4093).
+      Button {
+        context.navigate(commerceQuotesScreen)
+      } label: {
+        Label("Quotes", systemImage: "doc.text")
+      }
+      .accessibilityIdentifier("orders-quotes")
       Section("Export for shipping") {
         ForEach(ContractValues.shared.orderShippingPresetChoices, id: \.id) { preset in
           Button {
