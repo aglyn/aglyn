@@ -20571,6 +20571,124 @@
             }
           },
           null
+        ],
+        [
+          [
+            {
+              "id": "h1",
+              "label": "Main site",
+              "disabledPlugins": [
+                "acme-chat"
+              ]
+            },
+            {
+              "id": "h2",
+              "label": "Blog"
+            },
+            {
+              "id": "h3",
+              "label": "Shop",
+              "disabledPlugins": [
+                "other",
+                "acme-chat"
+              ]
+            }
+          ],
+          {},
+          {
+            "version": "1.0.0"
+          },
+          "acme-chat"
+        ],
+        [
+          [
+            {
+              "id": "h1",
+              "label": "Main site",
+              "disabledPlugins": [
+                "acme-chat"
+              ]
+            },
+            {
+              "id": "h2",
+              "label": "Blog"
+            },
+            {
+              "id": "h3",
+              "label": "Shop",
+              "disabledPlugins": [
+                "other",
+                "acme-chat"
+              ]
+            }
+          ],
+          {
+            "h1": {
+              "version": "1.2.0"
+            },
+            "h2": {
+              "version": "1.2.0"
+            }
+          },
+          null,
+          "acme-chat"
+        ],
+        [
+          [
+            {
+              "id": "h1",
+              "label": "Main site",
+              "disabledPlugins": [
+                "acme-chat"
+              ]
+            },
+            {
+              "id": "h2",
+              "label": "Blog"
+            },
+            {
+              "id": "h3",
+              "label": "Shop",
+              "disabledPlugins": [
+                "other",
+                "acme-chat"
+              ]
+            }
+          ],
+          {},
+          {
+            "version": "1.0.0"
+          }
+        ],
+        [
+          [
+            {
+              "id": "h1",
+              "label": "Main site",
+              "disabledPlugins": [
+                "acme-chat"
+              ]
+            },
+            {
+              "id": "h2",
+              "label": "Blog"
+            },
+            {
+              "id": "h3",
+              "label": "Shop",
+              "disabledPlugins": [
+                "other",
+                "acme-chat"
+              ]
+            }
+          ],
+          {
+            "h3": {
+              "version": "1.1.0"
+            }
+          },
+          null,
+          "acme-chat"
         ]
       ]
     },
@@ -21064,6 +21182,197 @@
             "installedAnywhere": true
           },
           0
+        ],
+        [
+          {
+            "orgWide": true,
+            "orgVersion": "1.0.0",
+            "sites": [
+              {
+                "hostId": "h1",
+                "label": "Main site",
+                "version": "1.0.0",
+                "pinnedBy": "org",
+                "shadowed": false,
+                "switchedOff": true
+              },
+              {
+                "hostId": "h2",
+                "label": "Blog",
+                "version": "1.0.0",
+                "pinnedBy": "org",
+                "shadowed": false
+              },
+              {
+                "hostId": "h3",
+                "label": "Shop",
+                "version": "1.0.0",
+                "pinnedBy": "org",
+                "shadowed": false,
+                "switchedOff": true
+              }
+            ],
+            "hostPinnedIds": [],
+            "availableHostIds": [],
+            "installedAnywhere": true
+          },
+          3
+        ],
+        [
+          {
+            "orgWide": true,
+            "orgVersion": "1.0.0",
+            "sites": [
+              {
+                "hostId": "h1",
+                "label": "Main site",
+                "version": "1.0.0",
+                "pinnedBy": "org",
+                "shadowed": false,
+                "switchedOff": true
+              },
+              {
+                "hostId": "h2",
+                "label": "Blog",
+                "version": "1.0.0",
+                "pinnedBy": "org",
+                "shadowed": false,
+                "switchedOff": true
+              }
+            ],
+            "hostPinnedIds": [],
+            "availableHostIds": [],
+            "installedAnywhere": true
+          },
+          2
+        ],
+        [
+          {
+            "orgWide": true,
+            "orgVersion": "1.0.0",
+            "sites": [
+              {
+                "hostId": "h1",
+                "label": "Main site",
+                "version": "1.0.0",
+                "pinnedBy": "org",
+                "shadowed": false,
+                "switchedOff": true
+              },
+              {
+                "hostId": "h2",
+                "label": "Blog",
+                "version": "1.0.0",
+                "pinnedBy": "org",
+                "shadowed": false
+              }
+            ],
+            "hostPinnedIds": [],
+            "availableHostIds": [],
+            "installedAnywhere": true
+          },
+          2
+        ],
+        [
+          {
+            "orgWide": false,
+            "orgVersion": null,
+            "sites": [
+              {
+                "hostId": "h1",
+                "label": "Main site",
+                "version": "1.0.0",
+                "pinnedBy": "org",
+                "shadowed": false,
+                "switchedOff": true
+              },
+              {
+                "hostId": "h2",
+                "label": "Blog",
+                "version": "1.0.0",
+                "pinnedBy": "org",
+                "shadowed": false
+              }
+            ],
+            "hostPinnedIds": [
+              "h1",
+              "h2"
+            ],
+            "availableHostIds": [],
+            "installedAnywhere": true
+          },
+          3
+        ],
+        [
+          {
+            "orgWide": false,
+            "orgVersion": null,
+            "sites": [
+              {
+                "hostId": "h1",
+                "label": "Main site",
+                "version": "1.0.0",
+                "pinnedBy": "org",
+                "shadowed": false,
+                "switchedOff": true
+              },
+              {
+                "hostId": "h2",
+                "label": "Blog",
+                "version": "1.0.0",
+                "pinnedBy": "org",
+                "shadowed": false,
+                "switchedOff": true
+              }
+            ],
+            "hostPinnedIds": [
+              "h1",
+              "h2"
+            ],
+            "availableHostIds": [],
+            "installedAnywhere": true
+          },
+          3
+        ],
+        [
+          {
+            "orgWide": false,
+            "orgVersion": null,
+            "sites": [
+              {
+                "hostId": "h1",
+                "label": "Main site",
+                "version": "1.0.0",
+                "pinnedBy": "org",
+                "shadowed": false,
+                "switchedOff": true
+              },
+              {
+                "hostId": "h2",
+                "label": "Blog",
+                "version": "1.0.0",
+                "pinnedBy": "org",
+                "shadowed": false,
+                "switchedOff": true
+              },
+              {
+                "hostId": "h3",
+                "label": "Shop",
+                "version": "1.0.0",
+                "pinnedBy": "org",
+                "shadowed": false,
+                "switchedOff": true
+              }
+            ],
+            "hostPinnedIds": [
+              "h1",
+              "h2",
+              "h3"
+            ],
+            "availableHostIds": [],
+            "installedAnywhere": true
+          },
+          3
         ]
       ]
     },

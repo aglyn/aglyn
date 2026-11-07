@@ -293,6 +293,11 @@ class CrmApi(private val api: ConsoleApiClient, private val writer: FirestoreWri
         direction?.let { put("direction", it) }
       },
     )
+    // Under "All sites except…" the activity is stamped with the default's sites, and the server marks it (AGL-4047),
+    // as the console's log dialog asks: only the server writes the marker.
+    if (crmDefaultSharingOf(scope.org) == "allExcept") {
+      quietly { api.request(CrmRoutes.SHARING, ApiMethod.POST, taskBody("action" to "evaluate", "object" to "crmActivities", "ids" to listOf(id))) }
+    }
     return id
   }
 
