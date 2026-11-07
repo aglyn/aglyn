@@ -29,8 +29,12 @@ extension EnvironmentValues {
 extension View {
   /// A list's search: in the list's own toolbar on the Mac and iPad, the system's search bar on a phone. `onSubmit` runs
   /// when the person presses Return in it.
-  public func aglynSearchable(text: Binding<String>, prompt: String, onSubmit: (() -> Void)? = nil) -> some View {
-    modifier(AglynSearchableModifier(text: text, prompt: prompt, onSubmit: onSubmit, filter: nil))
+  /// `alwaysShown` keeps the phone's search field in place as the content scrolls, for a screen where searching is the
+  /// main way in (the register's catalog), instead of tucking it away under the title.
+  public func aglynSearchable(
+    text: Binding<String>, prompt: String, onSubmit: (() -> Void)? = nil, alwaysShown: Bool = false
+  ) -> some View {
+    modifier(AglynSearchableModifier(text: text, prompt: prompt, onSubmit: onSubmit, filter: nil, alwaysShown: alwaysShown))
   }
 
   /// A list's search with its one Filter control beside it on the Mac and iPad (Calm rule 3: the filter's chips show
@@ -38,7 +42,7 @@ extension View {
   public func aglynSearchable<Filter: View>(
     text: Binding<String>, prompt: String, onSubmit: (() -> Void)? = nil, @ViewBuilder filter: () -> Filter
   ) -> some View {
-    modifier(AglynSearchableModifier(text: text, prompt: prompt, onSubmit: onSubmit, filter: AnyView(filter())))
+    modifier(AglynSearchableModifier(text: text, prompt: prompt, onSubmit: onSubmit, filter: AnyView(filter()), alwaysShown: false))
   }
 }
 
@@ -48,12 +52,14 @@ private struct AglynSearchableModifier: ViewModifier {
   let prompt: String
   let onSubmit: (() -> Void)?
   let filter: AnyView?
+  let alwaysShown: Bool
 
-  init(text: Binding<String>, prompt: String, onSubmit: (() -> Void)?, filter: AnyView?) {
+  init(text: Binding<String>, prompt: String, onSubmit: (() -> Void)?, filter: AnyView?, alwaysShown: Bool) {
     _text = text
     self.prompt = prompt
     self.onSubmit = onSubmit
     self.filter = filter
+    self.alwaysShown = alwaysShown
   }
 
   /// A list+detail screen took the toolbar into its list column (`AglynListDetailColumns`).
@@ -71,6 +77,14 @@ private struct AglynSearchableModifier: ViewModifier {
         .safeAreaInset(edge: .top, spacing: 0) {
           if !inColumn { bar }
         }
+    } else if alwaysShown {
+      content
+        #if os(iOS)
+          .searchable(text: $text, placement: .navigationBarDrawer(displayMode: .always), prompt: prompt)
+        #else
+          .searchable(text: $text, prompt: prompt)
+        #endif
+        .onSubmit(of: .search) { onSubmit?() }
     } else {
       content
         .searchable(text: $text, prompt: prompt)

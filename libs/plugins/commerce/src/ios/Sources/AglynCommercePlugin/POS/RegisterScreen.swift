@@ -108,8 +108,13 @@ struct RegisterScreen: View {
     }
     .navigationTitle(model.storeName)
     .toolbar { toolbar }
-    .aglynSearchable(text: $query, prompt: "Search products", onSubmit: { model.search(query) })
-    .onChange(of: query) { _, text in if text.isEmpty { model.search("") } }
+    .aglynSearchable(text: $query, prompt: "Search products", onSubmit: { model.search(query) }, alwaysShown: true)
+    // As the cashier types, as on Android and in the console: a short pause, then the grid narrows. Return searches at once.
+    .task(id: query) {
+      if !query.isEmpty { try? await Task.sleep(for: .milliseconds(300)) }
+      guard !Task.isCancelled, query != model.args.search else { return }
+      model.search(query)
+    }
     .sheet(item: $model.sheet) { _ in ItemSheetView(model: model) }
     .sheet(isPresented: $showOps) { RegisterOpsSheet(model: model) }
     .sheet(isPresented: $showToAttach) {
