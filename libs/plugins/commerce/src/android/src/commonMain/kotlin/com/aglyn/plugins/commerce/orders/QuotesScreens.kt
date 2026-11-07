@@ -20,6 +20,7 @@ import androidx.compose.runtime.Composable
 import androidx.compose.runtime.collectAsState
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
+import androidx.compose.runtime.produceState
 import androidx.compose.runtime.remember
 import androidx.compose.runtime.saveable.rememberSaveable
 import androidx.compose.runtime.setValue
@@ -45,7 +46,6 @@ import com.aglyn.contracts.formatQuoteNumber
 import com.aglyn.contracts.isUnpaidQuote
 import com.aglyn.contracts.latestQuoteResponse
 import com.aglyn.contracts.merchantPaymentsBlockedReason
-import com.aglyn.contracts.merchantPaymentsStateFromProfile
 import com.aglyn.contracts.payLinkGapLine
 import com.aglyn.contracts.payLinkGaps
 import com.aglyn.contracts.payLinkNoticeTitle
@@ -54,6 +54,8 @@ import com.aglyn.contracts.quoteDisplayStatus
 import com.aglyn.contracts.quoteIsProofOnly
 import com.aglyn.contracts.quotePayTax
 import com.aglyn.contracts.quoteStatusColor
+import com.aglyn.core.ApiMethod
+import com.aglyn.core.ConsoleApiClient
 import com.aglyn.core.FilterOp
 import com.aglyn.core.FirestoreDoc
 import com.aglyn.core.FirestoreFilter
@@ -70,7 +72,8 @@ import com.aglyn.ui.SkeletonList
 import com.aglyn.ui.StatusChip
 import com.aglyn.ui.StatusTone
 import com.aglyn.ui.space
-import kotlinx.coroutines.flow.flowOf
+import kotlinx.serialization.json.JsonObject
+import kotlinx.serialization.json.JsonPrimitive
 
 /*
  * Quotes (AGL-4093), as the console's Quotes card on the Orders page has them (host-quotes-card.component.tsx): prices
@@ -210,19 +213,10 @@ fun QuoteScreen(context: NativePluginContext, quoteId: String) {
   val hostId = context.hostId ?: return EmptyState("Pick a site first", icon = AglynIcons.named("public"))
   val quote by remember(hostId, quoteId, context.firestore) { context.firestore.observeDoc("hosts/$hostId/orders/$quoteId") }.collectAsState(Live.Loading)
   val store by remember(hostId, context.firestore) { context.firestore.observeDoc("hosts/$hostId/settings/store") }.collectAsState(Live.Loading)
-  val orgId = context.orgId
-  val org by remember(orgId, context.firestore) { if (orgId != null) context.firestore.observeDoc("orgs/$orgId") else flowOf(Live.Ready(null)) }.collectAsState(Live.Loading)
-  // Card payments are the workspace OWNER's, so their profile is read, as every money route checks it.
-  val ownerUid = ((org as? Live.Ready)?.value?.data?.get("ownerUid") as? String)?.takeIf { it.isNotEmpty() }
-  val owner by remember(ownerUid, context.firestore) { if (ownerUid != null) context.firestore.observeDoc("profiles/$ownerUid") else flowOf(Live.Ready(null)) }.collectAsState(Live.Loading)
-  // The owner's payments: null while it is read. No owner reads as not connected, as the console's hook says.
-  val paymentsState: String? = when {
-    org !is Live.Ready -> null
-    ownerUid == null -> "not-connected"
-    owner !is Live.Ready -> null
-    // The apps don't know the deployment's Stripe key mode; the console's own answer for an unknown mode.
-    else -> merchantPaymentsStateFromProfile((owner as Live.Ready).value?.data, null)
-  }
+  // The workspace's card payments, as the quote route answers it (it knows the deployment's payment mode): null
+  // until it answers, or when it could not, which like the console's `error` shows no notice. Asked again each time
+  // the quote shows, so coming back from Payments reads the new answer.
+  val paymentsState by produceState<String?>(null, hostId) { value = quotePaymentsReadiness(context.api, hostId) }
   when (val value = quote) {
     Live.Loading -> SkeletonList(rows = 6, modifier = Modifier.padding(space(2f)))
     is Live.Failed -> EmptyState("Could not load this quote", body = "Check the connection and try again.", icon = AglynIcons.named("error"), tone = EmptyTone.ERROR)
@@ -325,3 +319,23 @@ private fun QuoteTotals(order: HostOrder, payTax: QuotePayTax, unpaid: Boolean) 
     line(if (atPayment) "Total before tax" else "Total", formatOrderMoney(cents(totals?.totalCents)), strong = true)
   }
 }
+
+/**
+ * Whether the workspace can take card payments (ready, not-connected, charges-disabled, mode-unverified or
+ * mode-mismatch), from the quote route, which knows the deployment's payment mode (AGL-4162). Null when it could not
+ * answer.
+ */
+suspend fun quotePaymentsReadiness(api: ConsoleApiClient, hostId: String): String? = try {
+  val answer = api.request(
+    QUOTE_ROUTE,
+    ApiMethod.POST,
+    JsonObject(mapOf("hostId" to JsonPrimitive(hostId), "action" to JsonPrimitive("payments-readiness"))),
+  ) as? JsonObject
+  (answer?.get("state") as? JsonPrimitive)?.takeIf { it.isString }?.content
+} catch (error: Throwable) {
+  if (error is kotlinx.coroutines.CancellationException) throw error
+  null
+}
+
+/** The console's quote route (`POST /api/commerce/quote`). */
+const val QUOTE_ROUTE = "/api/commerce/quote"

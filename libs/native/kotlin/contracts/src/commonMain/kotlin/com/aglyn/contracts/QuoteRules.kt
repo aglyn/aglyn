@@ -124,23 +124,9 @@ fun payLinkGaps(order: HostOrder?, paymentsReady: Boolean?, store: PayLinkStore?
 fun payLinkNoticeTitle(noun: String): String = "Customers can’t pay this $noun online yet."
 
 /**
- * Card-payment readiness from the workspace owner's profile (`merchantPaymentsStateFromProfile`): not-connected,
- * charges-disabled, mode-mismatch, mode-unverified or ready. `platformMode` is the deployment's Stripe key mode, live
- * or test; null when unknown, as the console reads a missing key.
+ * Why the workspace can't take card payments (`merchantPaymentsBlockedReason`), or null. The state is the quote route's
+ * `payments-readiness` answer, which the server works out knowing the deployment's payment mode.
  */
-fun merchantPaymentsStateFromProfile(profile: Map<String, Any?>?, platformMode: String?): String {
-  val accountId = (profile?.get("stripeAccountId") as? String)?.trim().orEmpty()
-  if (accountId.isEmpty()) return "not-connected"
-  if (profile?.get("stripeChargesEnabled") != true) return "charges-disabled"
-  val livemode = profile["stripeAccountLivemode"] as? Boolean
-  if (livemode != null) {
-    if (platformMode == null) return "ready"
-    return if (livemode == (platformMode == "live")) "ready" else "mode-mismatch"
-  }
-  return if (platformMode == "live") "mode-unverified" else "ready"
-}
-
-/** Why the workspace can't take card payments (`merchantPaymentsBlockedReason`), or null. */
 fun merchantPaymentsBlockedReason(state: String): String? = when (state) {
   "not-connected" -> "Connect Stripe to take card payments."
   "charges-disabled" -> "Finish setting up Stripe to take card payments: Stripe has not turned on charges for this account yet."
