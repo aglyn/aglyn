@@ -232,9 +232,13 @@ export async function postItem(context: PassContext, item: AccountingSyncItemRec
       case 'payout':
         ref = await withSession(context, (session) => provider.createDeposit(session, doc, { ...base, customerId: null }))
         break
-      case 'summary':
-        ref = await withSession(context, (session) => provider.createJournal(session, doc, { ...base, customerId: null }))
+      case 'summary': {
+        // Xero posts the day as a bank transaction, which names a contact:
+        // the same one a fee is paid to. Every other ledger gets none.
+        const payee = await feePayeeId(context)
+        ref = await withSession(context, (session) => provider.createJournal(session, doc, { ...base, customerId: payee }))
         break
+      }
     }
     return { status: 'synced', ref }
   } catch (error) {

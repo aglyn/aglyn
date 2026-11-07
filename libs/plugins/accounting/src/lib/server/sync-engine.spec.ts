@@ -431,6 +431,20 @@ describe('the daily summary', () => {
     expect(item(saleItemId(order()))).toMatchObject({ status: 'synced', providerDocType: 'JournalEntry' })
     expect(item(saleItemId(order({ orderId: 'order-2' })))).toMatchObject({ status: 'synced', providerDocType: 'JournalEntry' })
   })
+
+  it('hands Xero the fee payee as the day’s contact, and QuickBooks none', async () => {
+    const summaryMapping: AccountingMapping = { ...mapping, syncMode: 'daily-summary' }
+    for (const id of ['xero', 'quickbooks'] as const) {
+      const provider = fakeProvider({ id, upsertCustomer: jest.fn(async () => ({ id: 'c-aglyn' })) })
+      const { deps, connection, advance } = setup({ provider, mapping: summaryMapping })
+      await enqueueOrderPaid(deps, order())
+      advance(24 * 60 * 60 * 1000)
+      await gatherSummaries(deps, connection())
+      await runSyncPass(deps, connection(), { deadlineMs: Number.MAX_SAFE_INTEGER })
+      const [, , context] = (provider.createJournal as jest.Mock).mock.calls[0]
+      expect(context.customerId).toBe(id === 'xero' ? 'c-aglyn' : null)
+    }
+  })
 })
 
 export type { AccountingConnectionRecord, MemoryFirestore }
