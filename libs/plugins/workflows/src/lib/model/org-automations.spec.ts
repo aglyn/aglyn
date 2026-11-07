@@ -30,9 +30,11 @@ import {
   orgAutomationRunsOnHost,
   orgAutomationStepRefusal,
   orgAutomationStopReason,
+  orgAutomationStoredSharing,
   prunePausedHostIds,
   readOrgAutomation,
 } from './org-automations'
+import { reconcileAllExcept } from '@aglyn/aglyn/app-utils/scope-tokens'
 import { CLIENT_ACTION_STEP_TYPES } from '@aglyn/aglyn/app-utils/site-interactions'
 import { HOST_ACTION_STEP_LABELS } from './host-actions'
 
@@ -300,5 +302,84 @@ describe('where it runs', () => {
       'site-a',
       'site-b',
     ])
+  })
+})
+
+describe('all sites except some (AGL-4047)', () => {
+  it('reads the choice, which decides over any `visibleTo` sent beside it', () => {
+    const except = readOrgAutomation(
+      body({ visibleTo: ['org'], sharing: { mode: 'allExcept', exceptHostIds: ['a', 'a', 'b'] } }),
+    )
+    if (except.ok === false) throw new Error(except.problem)
+    // The sites in are the route's to work out, from the workspace's.
+    expect(except.value.visibleTo).toEqual([])
+    expect(except.value.sharing).toEqual({ mode: 'allExcept', exceptHostIds: ['a', 'b'] })
+
+    const all = readOrgAutomation(body({ visibleTo: ['host:a'], sharing: { mode: 'all' } }))
+    expect(all.ok && all.value.visibleTo).toEqual(['org'])
+
+    const chosen = readOrgAutomation(body({ visibleTo: ['org'], sharing: { mode: 'selected', hostIds: ['b'] } }))
+    expect(chosen.ok && chosen.value.visibleTo).toEqual(['host:b'])
+  })
+
+  it('reads a body with no choice exactly as before', () => {
+    const read = readOrgAutomation(body({ visibleTo: ['host:a'] }))
+    if (read.ok === false) throw new Error(read.problem)
+    expect(read.value).not.toHaveProperty('sharing')
+  })
+
+  it('refuses leaving nothing out, and a choice it can’t read', () => {
+    expect(readOrgAutomation(body({ sharing: { mode: 'allExcept', exceptHostIds: [] } }))).toEqual({
+      ok: false,
+      problem: 'Choose at least one site to leave out, or run it on every site',
+    })
+    for (const sharing of [
+      { mode: 'allExcept', exceptHostIds: ['host:a'] },
+      { mode: 'allExcept' },
+      { mode: 'selected', hostIds: 'a' },
+      { mode: 'some' },
+      'all',
+    ]) {
+      expect(readOrgAutomation(body({ sharing })).ok).toBe(false)
+    }
+  })
+
+  it('keeps no thirty-site cap on the sites it reaches, which the route works out', () => {
+    const many = Array.from({ length: 40 }, (_, index) => `h${index}`)
+    const read = readOrgAutomation(body({ sharing: { mode: 'allExcept', exceptHostIds: many } }))
+    expect(read.ok).toBe(true)
+  })
+
+  it('says a stored one back as the choice, read off the marker', () => {
+    expect(
+      orgAutomationStoredSharing({ visibleTo: ['host:b'], scopeMode: 'allExcept', scopeExcept: ['host:a'] }),
+    ).toEqual({ mode: 'allExcept', exceptHostIds: ['a'] })
+    expect(orgAutomationStoredSharing({ visibleTo: ['host:b'] })).toBeNull()
+    expect(orgAutomationStoredSharing({ visibleTo: ['org'], scopeMode: 'allExcept', scopeExcept: ['host:a'] })).toBeNull()
+  })
+
+  it('runs on every site but those left out, including a site added later', () => {
+    const live = {
+      enabled: true,
+      visibleTo: ['host:b'],
+      scopeMode: 'allExcept',
+      scopeExcept: ['host:a'],
+      pausedHostIds: [] as string[],
+      deletedAt: null,
+    }
+    expect(orgAutomationRunsOnHost(live, 'b')).toBe(true)
+    expect(orgAutomationStopReason(live, 'a')).toBe('the org automation no longer runs on this site')
+    expect(orgAutomationRunsOnHost(live, 'c')).toBe(false)
+
+    // A new site, as the sweep brings the automation level with it.
+    const swept = reconcileAllExcept(live, ['a', 'b', 'c'])
+    expect(swept.status).toBe('changed')
+    const after = { ...live, ...swept.fields }
+    expect(orgAutomationRunsOnHost(after, 'c')).toBe(true)
+    expect(orgAutomationRunsOnHost(after, 'a')).toBe(false)
+  })
+
+  it('drops the pause of a site left out', () => {
+    expect(prunePausedHostIds(['a', 'b'], ['host:b', 'host:c'])).toEqual(['b'])
   })
 })

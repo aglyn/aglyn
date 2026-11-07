@@ -7,7 +7,8 @@ description: Write an automation once for the whole organization and run it on t
 # Org automations
 
 An **org automation** is one automation your organization writes once and runs on the
-sites it chooses — every site, or the ones you pick. Build it at the organization level
+sites it chooses — every site, the ones you pick, or every site except the ones you
+leave out. Build it at the organization level
 under **Automation → Org automations**; each site shows the ones that run on it, and
 can pause them for itself.
 
@@ -46,16 +47,27 @@ actions from running, even when the month's runs are nearly used up.
    **Add org automation**.
 2. Name it and pick the **trigger event**. Optionally add a filter or conditions — the
    same ones the actions builder offers.
-3. Choose where it **runs on**: **Every site** — including sites you add later — or
-   **Chosen sites**, up to 30 of them.
+3. Choose where it **runs on**:
+   - **All sites** — including sites you add later;
+   - **Selected sites**, up to 30 of them — a site you add later doesn't get it until
+     you add it here;
+   - **All sites except…** — every site but the ones you tick to leave out, including
+     sites you add later. Leave out at least one site and keep at least one in. A
+     workspace with one site has nothing to leave out, so this choice is switched off
+     there, with the reason.
 4. Add the **steps**, then save.
+
+A site you leave out doesn't run it and can't pause it, because it isn't placed there.
+If that site had paused it, its pause is dropped; put the site back and it starts
+unpaused.
 
 To start from a description instead, choose **Create with AI** in the card's header: Aglyn
 AI drafts one and opens it in the editor, switched off, for you to place on sites and save.
 See [Automations with AI](../../ai/automations-with-ai.md#org-automations).
 
-Creating and editing org automations takes the **Manage org automations** permission,
-which a workspace's owners, admins and editors have. An organization holds up to 100 of them; deleting one frees its place.
+Creating and editing org automations, including choosing the sites they run on, takes
+the **Manage org automations** permission, which a workspace's owners, admins and editors
+have. An organization holds up to 100 of them; deleting one frees its place.
 
 ### Triggers
 
@@ -86,8 +98,10 @@ To hand over to something site-specific, use **Fire a custom event**: it fires o
 site the org automation is running on, and that site's own actions can start on it.
 
 A dataset or a campaign is offered only when it is shared with every site the
-automation runs on, so the step works wherever it runs. A list belongs to the whole
-organization and is always offered.
+automation runs on, so the step works wherever it runs. For an automation on **All
+sites except…**, that includes the sites you add later: the dataset or campaign has to
+be shared with **All sites**, or with all sites except no more than the ones the
+automation leaves out. A list belongs to the whole organization and is always offered.
 
 ## Pause it on one site {#pause-it-on-one-site}
 
@@ -107,7 +121,7 @@ person who is waiting waits on the site their run started on, and continues with
 steps as they were when they entered, even if the automation is edited meanwhile.
 
 Switching an org automation **off**, **deleting** it, taking a site **off** its
-placement, or **pausing** it on a site stops the people waiting inside it on the sites
+placement (including leaving it out of **All sites except…**), or **pausing** it on a site stops the people waiting inside it on the sites
 affected, on their next step — the same as switching off an action does.
 
 ## Every site's own automations {#every-sites-own-automations}

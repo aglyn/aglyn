@@ -41,7 +41,11 @@
 
 import { createResourceUid } from '@aglyn/aglyn/app-utils/create-resource-uid'
 import { holdsStampedSiteKey } from '@aglyn/aglyn/app-utils/host-permissions'
-import { hostIdsFromScope, visibleToHost } from '@aglyn/aglyn/app-utils/scope-tokens'
+import {
+  hostIdsFromScope,
+  sharingFromChoice,
+  visibleToHost,
+} from '@aglyn/aglyn/app-utils/scope-tokens'
 import { isPluginEnabled } from '@aglyn/aglyn/plugin-manager/enabled-plugins'
 import {
   type AglynOrgMember,
@@ -66,6 +70,7 @@ import {
   resolveOrgIdForHost,
   resolveOrgMembership,
 } from '@aglyn/tenant-data-admin/server/organizations'
+import { fieldsToWrite, orgHostIdsFromDoc } from '@aglyn/tenant-data-admin/server/scope-sharing-sweep'
 import { FieldValue } from 'firebase-admin/firestore'
 import { BUNDLE_ID } from '../constants/bundle-common'
 import {
@@ -209,6 +214,58 @@ export type OrgAutomationWrite = { ok: true; id: string } | { ok: false; status:
  * {@link ORG_AUTOMATIONS_MAX} live ones. The route and the package import
  * (AGL-3535) both create through here.
  */
+/** Two placements name the same sites, in any order. */
+function samePlacement(a: unknown, b: readonly string[]): boolean {
+  const before = Array.isArray(a) ? new Set(a as string[]) : null
+  return Boolean(before) && before?.size === new Set(b).size && b.every((token) => before?.has(token))
+}
+
+/**
+ * What one write stores of where an automation runs (AGL-4047), inside the
+ * write's transaction, or why it can't.
+ *
+ * All sites except some is worked out from the workspace's sites, read in the
+ * same transaction: a site being created writes that document too, so it
+ * either lands first and is on the list, or lands after and its sweep finds
+ * this automation. A site left out that the workspace doesn't hold is dropped,
+ * as the dataset route does: it may be one that has just gone.
+ *
+ * Any other placement removes a marker the automation carried, as a field
+ * delete, when the editor chose it (`sharing` set) or the sites moved. A save
+ * from a client that predates the choice, sending back the sites it was
+ * shown, keeps the marker: it changed nothing about where it runs.
+ */
+async function placementToWrite(
+  transaction: FirebaseFirestore.Transaction,
+  firestore: FirebaseFirestore.Firestore,
+  orgId: string,
+  fields: OrgAutomationFields,
+  current: Readonly<Record<string, unknown>> | undefined,
+): Promise<{ ok: true; data: Record<string, unknown>; visibleTo: string[] } | { ok: false; error: string }> {
+  if (fields.sharing?.mode === 'allExcept') {
+    const org = await transaction.get(firestore.collection('orgs').doc(orgId))
+    const shared = sharingFromChoice(fields.sharing, orgHostIdsFromDoc(org.data()))
+    if (!shared.fields) return { ok: false, error: shared.problem }
+    return { ok: true, data: fieldsToWrite(shared.fields), visibleTo: shared.fields.visibleTo }
+  }
+  const marked = current?.['scopeMode'] !== undefined && current?.['scopeMode'] !== null
+  if (!marked) return { ok: true, data: { visibleTo: fields.visibleTo }, visibleTo: fields.visibleTo }
+  if (!fields.sharing && samePlacement(current?.['visibleTo'], fields.visibleTo)) {
+    // Left exactly as the sweep keeps it.
+    return { ok: true, data: {}, visibleTo: current?.['visibleTo'] as string[] }
+  }
+  return {
+    ok: true,
+    data: fieldsToWrite({ visibleTo: fields.visibleTo, scopeMode: null, scopeExcept: null }),
+    visibleTo: fields.visibleTo,
+  }
+}
+
+/** The fields a write stores beside its placement: never the choice itself. */
+function storedFieldsOf(fields: OrgAutomationFields): Omit<OrgAutomationFields, 'sharing' | 'visibleTo'> {
+  return { name: fields.name, trigger: fields.trigger, steps: fields.steps, enabled: fields.enabled }
+}
+
 export async function createOrgAutomationRecord(
   firestore: FirebaseFirestore.Firestore,
   input: { orgId: string; id: string; fields: OrgAutomationFields; actorUid: string },
@@ -231,14 +288,29 @@ export async function createOrgAutomationRecord(
       error: `An organization holds at most ${ORG_AUTOMATIONS_MAX} org automations — delete one you no longer use first`,
     }
   }
-  await collection.doc(input.id).create({
-    ...input.fields,
+  const stamped = {
     pausedHostIds: [],
     deletedAt: null,
     createdAt: FieldValue.serverTimestamp(),
     createdBy: input.actorUid,
     updatedAt: FieldValue.serverTimestamp(),
     updatedBy: input.actorUid,
+  }
+  if (input.fields.sharing?.mode === 'allExcept') {
+    // The workspace's sites are read in the write's own transaction; see
+    // `placementToWrite`. A new document carries no marker to remove.
+    const error = await firestore.runTransaction(async (transaction) => {
+      const placed = await placementToWrite(transaction, firestore, input.orgId, input.fields, undefined)
+      if (placed.ok === false) return placed.error
+      transaction.create(collection.doc(input.id), { ...storedFieldsOf(input.fields), ...placed.data, ...stamped })
+      return null
+    })
+    return error ? { ok: false, status: 400, error } : { ok: true, id: input.id }
+  }
+  await collection.doc(input.id).create({
+    ...storedFieldsOf(input.fields),
+    visibleTo: input.fields.visibleTo,
+    ...stamped,
   })
   return { ok: true, id: input.id }
 }
@@ -255,18 +327,23 @@ export async function updateOrgAutomationRecord(
   const outcome = await firestore.runTransaction(async (transaction) => {
     const ref = collection.doc(input.id)
     const current = await transaction.get(ref)
-    if (!current.exists || current.get('deletedAt')) return 'missing'
+    if (!current.exists || current.get('deletedAt')) return { missing: true as const }
+    const placed = await placementToWrite(transaction, firestore, input.orgId, input.fields, current.data())
+    if (placed.ok === false) return { missing: false as const, error: placed.error }
     transaction.update(ref, {
-      ...input.fields,
+      ...storedFieldsOf(input.fields),
+      ...placed.data,
       // A site the automation no longer runs on has nothing left to
-      // pause: its entry goes, so a later placement starts unpaused.
-      pausedHostIds: prunePausedHostIds(orgAutomationPausedHostIds(current.data()), input.fields.visibleTo),
+      // pause: its entry goes, so a later placement starts unpaused. That
+      // includes a site left out of all sites except some (AGL-4047).
+      pausedHostIds: prunePausedHostIds(orgAutomationPausedHostIds(current.data()), placed.visibleTo),
       updatedAt: FieldValue.serverTimestamp(),
       updatedBy: input.actorUid,
     })
-    return 'updated'
+    return { missing: false as const, error: null }
   })
-  return outcome === 'missing' ? { ok: false, status: 404, error: 'Unknown org automation' } : { ok: true, id: input.id }
+  if (outcome.missing) return { ok: false, status: 404, error: 'Unknown org automation' }
+  return outcome.error ? { ok: false, status: 400, error: outcome.error } : { ok: true, id: input.id }
 }
 
 /**
