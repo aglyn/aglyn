@@ -10,6 +10,10 @@ import com.aglyn.screens.SpecScreens
 import com.aglyn.plugins.commerce.orders.COMMERCE_ORDERS_SCREEN
 import com.aglyn.plugins.commerce.orders.COMMERCE_ORDER_SCREEN
 import com.aglyn.plugins.commerce.orders.OrdersScreen
+import com.aglyn.plugins.commerce.orders.COMMERCE_QUOTES_SCREEN
+import com.aglyn.plugins.commerce.orders.COMMERCE_QUOTE_SCREEN
+import com.aglyn.plugins.commerce.orders.QuoteScreen
+import com.aglyn.plugins.commerce.orders.QuotesScreen
 import com.aglyn.plugins.commerce.orders.OrdersToShipWidget
 import com.aglyn.plugins.commerce.orders.OrdersNeedsYouWidget
 import com.aglyn.plugins.commerce.orders.orderFilterOf
@@ -97,6 +101,9 @@ fun registerCommerceNative(r: NativePluginRegistrar) {
   r.screen(COMMERCE_ORDER_SCREEN, title = "Order", requiresSite = true, icon = "receipt", layout = ScreenLayout.LIST_DETAIL) { context, params ->
     OrdersScreen(context, initialOrderId = params["order"] ?: params["orderId"])
   }
+  // Quotes (AGL-4093): the console's Quotes card on the Orders page, and one quote read-only.
+  r.screen(COMMERCE_QUOTES_SCREEN, title = "Quotes", requiresSite = true, icon = "request_quote") { context, _ -> QuotesScreen(context) }
+  r.screen(COMMERCE_QUOTE_SCREEN, title = "Quote", requiresSite = true, icon = "request_quote") { context, params -> QuoteScreen(context, params["quote"].orEmpty()) }
   r.screen(COMMERCE_PRODUCTS_SCREEN, title = "Products", requiresSite = true, icon = "inventory", layout = ScreenLayout.LIST_DETAIL) { context, params ->
     ProductsScreen(context, initialProductId = params["product"])
   }

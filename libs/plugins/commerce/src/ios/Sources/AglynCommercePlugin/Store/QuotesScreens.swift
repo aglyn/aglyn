@@ -255,7 +255,12 @@ struct QuoteScreen: View {
       if !gaps.isEmpty {
         Section {
           VStack(alignment: .leading, spacing: AglynSpace.one) {
-            Text(payLinkNoticeTitle("quote")).font(AglynFont.strongSubheadline)
+            // The look of `AglynNotice`'s warning: its icon, then the title.
+            Label {
+              Text(payLinkNoticeTitle("quote")).font(AglynFont.strongSubheadline)
+            } icon: {
+              Image(systemName: "exclamationmark.triangle.fill").foregroundStyle(AglynTone.warning.color)
+            }
             ForEach(gaps, id: \.rawValue) { gap in
               let line = payLinkGapLine(gap, paymentsReason: state.flatMap(merchantPaymentsBlockedReason), noun: "quote")
               HStack(alignment: .firstTextBaseline) {
@@ -314,20 +319,20 @@ struct QuoteScreen: View {
     // Once paid, the tax is what was charged: Stripe's figure under Stripe Tax.
     let taxLabel = unpaid || payTax.basis.kind != .atPayment ? describeQuoteTax(payTax.basis) : "Tax"
     Section {
-      LabeledContent("Items", value: formatOrderMoney(cents(totals?.itemsCents)))
+      AglynAmountRow("Items", amount: formatOrderMoney(cents(totals?.itemsCents)))
       if cents(totals?.discountCents) != 0 {
-        LabeledContent("Discount", value: "−\(formatOrderMoney(cents(totals?.discountCents)))")
+        AglynAmountRow("Discount", amount: "−\(formatOrderMoney(cents(totals?.discountCents)))")
       }
       if cents(totals?.shippingCents) != 0 {
-        LabeledContent("Shipping", value: formatOrderMoney(cents(totals?.shippingCents)))
+        AglynAmountRow("Shipping", amount: formatOrderMoney(cents(totals?.shippingCents)))
       }
       if atPayment {
         Text(taxLabel).foregroundStyle(.secondary)
       } else {
-        LabeledContent(taxLabel, value: formatOrderMoney(cents(totals?.taxCents)))
+        AglynAmountRow(taxLabel, amount: formatOrderMoney(cents(totals?.taxCents)))
       }
-      LabeledContent(atPayment ? "Total before tax" : "Total", value: formatOrderMoney(cents(totals?.totalCents)))
-        .font(AglynFont.strongSubheadline)
+      AglynAmountRow(
+        atPayment ? "Total before tax" : "Total", amount: formatOrderMoney(cents(totals?.totalCents)), emphasized: true)
     }
   }
 }
