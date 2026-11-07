@@ -188,12 +188,16 @@ final class ListingInstallsModel {
   private(set) var listing: FirestoreDocument?
   private(set) var revocation: FirestoreDocument?
   private(set) var loaded = false
+  /// Each site's own deny-list (`disabledPlugins`), so a site that switched the listing off is marked (AGL-4047).
+  private(set) var siteDisabled: [String: [String]] = [:]
+  private(set) var listingID = ""
   @ObservationIgnored private var listeners: [FirestoreListening] = []
   @ObservationIgnored private var sitesKey = ""
 
   func start(_ context: NativePluginContext, listingID: String) {
     stop()
     loaded = false
+    self.listingID = listingID
     guard let orgID = context.orgID, !listingID.isEmpty else {
       loaded = true
       return
@@ -226,15 +230,22 @@ final class ListingInstallsModel {
   /// Reads each site's own pin of the listing again (after an install, an update or a removal).
   func reloadPins(_ context: NativePluginContext, listingID: String) async {
     var found: [String: FirestoreDocument] = [:]
+    var disabled: [String: [String]] = [:]
     for site in sites {
       if let doc = try? await context.firestore.readOnce(["hosts", site.id, "installs", listingID]) { found[site.id] = doc }
+      if let host = try? await context.firestore.readOnce(["hosts", site.id]) {
+        disabled[site.id] = (host.data["disabledPlugins"] as? [Any])?.compactMap { $0 as? String }
+      }
     }
     hostPins = found
+    siteDisabled = disabled
     loaded = true
   }
 
   var summary: OrgInstallSummary {
-    resolveOrgInstallSummary(hosts: sites, hostPins: hostPins.mapValues(\.pinVersion), orgPin: orgPin?.pinVersion)
+    resolveOrgInstallSummary(
+      hosts: sites.map { SiteChoice(id: $0.id, label: $0.label, disabledPlugins: siteDisabled[$0.id]) },
+      hostPins: hostPins.mapValues(\.pinVersion), orgPin: orgPin?.pinVersion, listingID: listingID)
   }
 
   var offered: String? {
@@ -353,6 +364,8 @@ struct PluginInstallationCard: View {
           Spacer(minLength: 0)
           Text("v\(site.version ?? "—")").font(AglynFont.caption).foregroundStyle(.secondary)
           if site.shadowed { StatusChip("Overrides org", tone: .neutral) }
+          // Pinned but not running (AGL-4047): the site's own switch has it off, which the realm join honors over any pin.
+          if site.switchedOff { StatusChip("Switched off on this site", tone: .neutral) }
         }
         if site.pinnedBy == .host {
           HStack(spacing: AglynSpace.two) {
@@ -368,6 +381,12 @@ struct PluginInstallationCard: View {
           }
           .buttonStyle(.borderless).disabled(!canChange || runner.busy)
         }
+      }
+      if summary.sites.contains(where: \.switchedOff) {
+        Text(
+          "A site that switched it off turns it back on from its own Admin › Plugins page, which takes “\(orgPermissionLabel(ContractValues.shared.orgRoleGrants, key: "site.manage"))” on that site."
+        )
+        .font(AglynFont.caption).foregroundStyle(.secondary)
       }
       if let latest, !stale.isEmpty {
         let all = pluginUpdateAll(summary, stale: stale, latestVersion: latest)

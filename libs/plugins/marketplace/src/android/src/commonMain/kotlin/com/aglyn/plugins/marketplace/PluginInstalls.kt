@@ -121,7 +121,12 @@ fun pluginUpdateStatus(pin: UpdateComparablePin?, offered: String?): UpdateStatu
 /* ---- The org-wide picture ---- */
 
 /** A site of the workspace, as the install picture names it. */
-data class SiteChoice(val id: String, val label: String)
+data class SiteChoice(
+  val id: String,
+  val label: String,
+  /** The site's own deny-list (`disabledPlugins`), when the caller has it (AGL-4047). */
+  val disabledPlugins: List<String>? = null,
+)
 
 /** One site's slice of an org-scope install picture (`OrgInstallSite`). */
 data class OrgInstallSite(
@@ -133,6 +138,11 @@ data class OrgInstallSite(
   val pinnedBy: InstallTarget,
   /** This site has its own pin on top of an org pin. */
   val shadowed: Boolean,
+  /**
+   * Pinned here, but the site's own Admin › Plugins switch has it off (its `disabledPlugins` holds the listing id,
+   * AGL-4047), so it does not run here. Known only when the caller handed over the sites' lists and the listing id.
+   */
+  val switchedOff: Boolean = false,
 )
 
 /** The whole org's install picture for one listing (`OrgInstallSummary`). */
@@ -148,7 +158,11 @@ data class OrgInstallSummary(
 /** A pin's version: `hostPins[host]` is absent for a site with no pin, and a pin with or without a version otherwise. */
 data class PinVersion(val version: String?)
 
-fun resolveOrgInstallSummary(hosts: List<SiteChoice>, hostPins: Map<String, PinVersion>, orgPin: PinVersion?): OrgInstallSummary {
+/**
+ * `listingId` (AGL-4047): a site whose own switch has the listing off keeps its pin or its org coverage but runs nothing,
+ * as the realm join drops it; given the id and each site's list, such a site is marked `switchedOff`.
+ */
+fun resolveOrgInstallSummary(hosts: List<SiteChoice>, hostPins: Map<String, PinVersion>, orgPin: PinVersion?, listingId: String? = null): OrgInstallSummary {
   val orgVersion = orgPin?.version
   val sites = mutableListOf<OrgInstallSite>()
   val hostPinned = mutableListOf<String>()
@@ -160,7 +174,10 @@ fun resolveOrgInstallSummary(hosts: List<SiteChoice>, hostPins: Map<String, PinV
       available += host.id
       continue
     }
-    sites += OrgInstallSite(host.id, host.label, hostPin?.version ?: orgVersion, if (hostPin != null) InstallTarget.HOST else InstallTarget.ORG, hostPin != null && orgPin != null)
+    sites += OrgInstallSite(
+      host.id, host.label, hostPin?.version ?: orgVersion, if (hostPin != null) InstallTarget.HOST else InstallTarget.ORG, hostPin != null && orgPin != null,
+      switchedOff = !listingId.isNullOrEmpty() && host.disabledPlugins?.contains(listingId) == true,
+    )
   }
   return OrgInstallSummary(orgPin != null, orgVersion, sites, hostPinned, available, orgPin != null || hostPinned.isNotEmpty())
 }
@@ -181,9 +198,27 @@ fun staleSites(sites: List<OrgInstallSite>, latestVersion: String?): List<OrgIns
   sites.filter { (compareArtifactVersions(it.version, latestVersion) ?: 0) < 0 }
 
 /** What "Where it runs" opens with (`pluginSiteSetSummary`). */
-fun pluginSiteSetSummary(install: OrgInstallSummary, siteCount: Int): String =
-  if (install.orgWide) "Installed for the whole organization (v${install.orgVersion}) — every site, including ones you add later."
-  else "Installed on ${install.sites.size} of $siteCount sites."
+fun pluginSiteSetSummary(install: OrgInstallSummary, siteCount: Int): String {
+  // Sites whose own switch has it off (AGL-4047): pinned, but not running.
+  val off = install.sites.filter { it.switchedOff }.map { it.label }
+  if (install.orgWide) {
+    val head = "Installed for the whole organization (v${install.orgVersion})"
+    if (off.isEmpty()) return "$head — every site, including ones you add later."
+    return if (off.size == install.sites.size) {
+      "$head. Every site switched it off, so it runs only on sites you add later."
+    } else {
+      "$head. It runs on every site except ${namesList(off)}, which switched it off, and on sites you add later."
+    }
+  }
+  val head = "Installed on ${install.sites.size} of $siteCount sites"
+  if (off.isEmpty()) return "$head."
+  val running = install.sites.size - off.size
+  return "$head. ${namesList(off)} switched it off, so it runs on ${if (running > 0) running.toString() else "none of them"}."
+}
+
+/** "A", "A and B", "A, B and C". */
+private fun namesList(names: List<String>): String =
+  if (names.size < 2) names.firstOrNull().orEmpty() else "${names.dropLast(1).joinToString(", ")} and ${names.last()}"
 
 /** What the update confirmation says (`pluginUpdatePrompt`). */
 data class PluginUpdatePrompt(val title: String, val body: String, val others: String?, val note: String)

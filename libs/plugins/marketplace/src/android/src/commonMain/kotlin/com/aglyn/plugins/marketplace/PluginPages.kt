@@ -175,6 +175,13 @@ fun PluginInstallationCard(context: NativePluginContext) {
     if (sitesLive !is Live.Ready) return@produceState
     value = sites.mapNotNull { site -> runCatching { context.firestore.get("hosts/${site.id}/installs/$listingId") }.getOrNull()?.let { site.id to it } }.toMap()
   }
+  // Each site's own deny-list (`disabledPlugins`), so a site that switched the listing off is marked (AGL-4047).
+  val siteDisabled by produceState<Map<String, List<String>?>>(emptyMap(), listingId, sites.map { it.id }, nonce, sitesLive is Live.Ready) {
+    if (sitesLive !is Live.Ready) return@produceState
+    value = sites.associate { site ->
+      site.id to (runCatching { context.firestore.get("hosts/${site.id}") }.getOrNull()?.data?.get("disabledPlugins") as? List<*>)?.filterIsInstance<String>()
+    }
+  }
   val orgPin = (orgPinLive as? Live.Ready)?.value
   val listingDoc = (listing as? Live.Ready)?.value
   val revocationDoc = (revocation as? Live.Ready)?.value
@@ -189,7 +196,9 @@ fun PluginInstallationCard(context: NativePluginContext) {
     SkeletonList(rows = 3)
     return
   }
-  val summary = resolveOrgInstallSummary(sites, pins.mapValues { pinVersion(it.value) }, orgPin?.let(::pinVersion))
+  val summary = resolveOrgInstallSummary(
+    sites.map { it.copy(disabledPlugins = siteDisabled[it.id]) }, pins.mapValues { pinVersion(it.value) }, orgPin?.let(::pinVersion), listingId,
+  )
   val offered = pluginOfferedVersion(versionText(listingDoc?.data?.get("latestApprovedVersion")), Revoked.from(revocationDoc?.data))
   val pin = orgPin ?: sites.firstNotNullOfOrNull { pins[it.id] }
   val status = pluginUpdateStatus(pin?.let { UpdateComparablePin(it.data) }, offered)
@@ -262,6 +271,8 @@ fun PluginInstallationCard(context: NativePluginContext) {
             Text(site.label, Modifier.weight(1f), style = MaterialTheme.typography.bodyMedium, maxLines = 1)
             Text("v${site.version ?: "—"}", style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurfaceVariant)
             if (site.shadowed) StatusChip("Overrides org")
+            // Pinned but not running (AGL-4047): the site's own switch has it off, which the realm join honors over any pin.
+            if (site.switchedOff) StatusChip("Switched off on this site")
           }
           if (site.pinnedBy == InstallTarget.HOST) {
             Row(horizontalArrangement = Arrangement.spacedBy(space(1f))) {
@@ -277,6 +288,12 @@ fun PluginInstallationCard(context: NativePluginContext) {
               ) { Text("Remove") }
             }
           }
+        }
+        if (summary.sites.any { it.switchedOff }) {
+          Text(
+            "A site that switched it off turns it back on from its own Admin › Plugins page, which takes “${com.aglyn.contracts.orgPermissionLabel("site.manage")}” on that site.",
+            style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurfaceVariant,
+          )
         }
         if (offered != null && stale.isNotEmpty()) {
           val all = pluginUpdateAll(summary, stale, offered)
