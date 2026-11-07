@@ -144,6 +144,14 @@ describe('console page_view params (AGL-1643)', () => {
     )
   })
 
+  it('keeps the utm tags and a long gclid together on an ad landing', () => {
+    // Past the general 100-character cap, inside GA4's 1,000 for page_location.
+    const url =
+      'https://app.aglyn.com/signup?utm_source=google&utm_medium=cpc&utm_campaign=fall-2026' +
+      `&gclid=Cj0KCQiA${'x9Q6BhCDARIsACwUxu6K'.repeat(5)}_BwE`
+    expect(buildConsolePageViewParams(url).page_location).toBe(url)
+  })
+
   it('drops the one-time code from an emailed verification link', () => {
     const params = buildConsolePageViewParams(
       'https://app.aglyn.com/verify-email?mode=verifyEmail&oobCode=AbC123&apiKey=AIza&lang=en',

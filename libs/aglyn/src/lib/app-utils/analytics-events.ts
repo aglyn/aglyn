@@ -658,6 +658,31 @@ const EMAIL_SHAPED = /[^\s@]+@[^\s@]+\.[^\s@]+/
 export const ANALYTICS_PARAM_MAX_LENGTH = 100
 
 /**
+ * The params GA4 lets run past {@link ANALYTICS_PARAM_MAX_LENGTH}, at GA4's
+ * own documented limits ("Analytics collection limits", Google Analytics
+ * Help 9267744): `page_location` 1,000 characters, `page_referrer` 420,
+ * `page_title` 300.
+ *
+ * A page URL is the value most likely to be long for a good reason: a
+ * landing URL with its `utm_*` tags and a `gclid` routinely runs past 100,
+ * and cutting it there dropped exactly the attribution the query is kept
+ * for. A URL's length is measured as it is sent, already URL-encoded, which
+ * is how GA4 measures it.
+ */
+export const ANALYTICS_PARAM_MAX_LENGTH_BY_KEY: Readonly<Record<string, number>> = {
+  page_location: 1000,
+  page_referrer: 420,
+  page_title: 300,
+}
+
+/** The longest value `key` may carry: its GA4 limit, or the general 100. */
+function maxLengthFor(key: string): number {
+  return Object.prototype.hasOwnProperty.call(ANALYTICS_PARAM_MAX_LENGTH_BY_KEY, key)
+    ? ANALYTICS_PARAM_MAX_LENGTH_BY_KEY[key]
+    : ANALYTICS_PARAM_MAX_LENGTH
+}
+
+/**
  * Query parameters a URL value loses on its way into an event, matched
  * case-insensitively. Everything else in the query is kept, in the order the
  * URL spelled it: `utm_*`, `gclid`, `ref`, `plan`, `tab`, filters.
@@ -857,7 +882,7 @@ function reduceUrlForAnalytics(
   return reduced
 }
 
-function scrubValue(value: string): string | null {
+function scrubValue(value: string, maxLength: number): string | null {
   if (/^https?:\/\//i.test(value)) {
     try {
       // The query keeps everything but the parameters that carry personal
@@ -865,13 +890,13 @@ function scrubValue(value: string): string | null {
       // its campaign. Every kept value was tested for an address already, so
       // the whole-string test below is not run on the result: a harmless
       // `@team` beside a `.` elsewhere in the query would read as one.
-      return reduceUrlForAnalytics(new URL(value), ANALYTICS_PARAM_MAX_LENGTH)
+      return reduceUrlForAnalytics(new URL(value), maxLength)
     } catch {
       return null
     }
   }
   if (EMAIL_SHAPED.test(value)) return null
-  return value.slice(0, ANALYTICS_PARAM_MAX_LENGTH)
+  return value.slice(0, maxLength)
 }
 
 /**
@@ -888,7 +913,7 @@ export function sanitizeEventParams(
     if (DENIED_PARAM_KEYS.has(key.toLowerCase())) continue
     if (value === undefined || value === null) continue
     if (typeof value === 'string') {
-      const scrubbed = scrubValue(value)
+      const scrubbed = scrubValue(value, maxLengthFor(key))
       if (scrubbed === null || scrubbed === '') continue
       safe[key] = scrubbed
       continue

@@ -20,6 +20,7 @@
 import {
   ANALYTICS_DENIED_URL_PARAMS,
   ANALYTICS_EVENT_NAMES,
+  ANALYTICS_PARAM_MAX_LENGTH_BY_KEY,
   buildAddToCartParams,
   buildBeginCheckoutParams,
   buildViewCartParams,
@@ -782,13 +783,49 @@ describe('analytics-events (AGL-1561)', () => {
       })
 
       it('leaves out a whole param that would run past the cap, never half of one', () => {
+        // `link_url` has the general 100-character cap.
         const safe = sanitizeEventParams({
-          page_location: `https://aglyn.com/p?utm_source=s&utm_campaign=${'c'.repeat(90)}&utm_term=t`,
+          link_url: `https://aglyn.com/p?utm_source=s&utm_campaign=${'c'.repeat(90)}&utm_term=t`,
         })
 
         expect(safe).toEqual({
-          page_location: 'https://aglyn.com/p?utm_source=s&utm_term=t',
+          link_url: 'https://aglyn.com/p?utm_source=s&utm_term=t',
         })
+      })
+
+      it('keeps the utm tags AND a long gclid on a landing page_location (1,000-character cap)', () => {
+        const gclid = `Cj0KCQiA${'x9Q6BhCDARIsACwUxu6K'.repeat(5)}_BwE`
+        const url =
+          'https://app.aglyn.com/signup?utm_source=google&utm_medium=cpc&utm_campaign=fall-2026-trades' +
+          `&gclid=${gclid}&gad_source=1&gad_campaignid=21843509871`
+        expect(url.length).toBeGreaterThan(200)
+
+        expect(sanitizeEventParams({ page_location: url })).toEqual({ page_location: url })
+        // The same value under a general key is still held to 100, so the
+        // larger cap is the key's, not every URL's.
+        expect(
+          String(sanitizeEventParams({ link_url: url }).link_url).length,
+        ).toBeLessThanOrEqual(100)
+      })
+
+      it('holds each GA4 page param to its own documented limit', () => {
+        expect(ANALYTICS_PARAM_MAX_LENGTH_BY_KEY).toEqual({
+          page_location: 1000,
+          page_referrer: 420,
+          page_title: 300,
+        })
+
+        const safe = sanitizeEventParams({
+          page_title: 't'.repeat(500),
+          form_name: 'f'.repeat(500),
+          page_referrer: `https://ref.example/${'r'.repeat(600)}`,
+          page_location: `https://a.co/${'p'.repeat(1200)}`,
+        })
+
+        expect((safe.page_title as string).length).toBe(300)
+        expect((safe.form_name as string).length).toBe(100)
+        expect((safe.page_referrer as string).length).toBe(420)
+        expect((safe.page_location as string).length).toBe(1000)
       })
 
       it('lists the denied names as lowercase, the form the match uses', () => {

@@ -999,10 +999,14 @@ Every payload passes `sanitizeEventParams` before reaching a transport:
   and the ad click ids, which are opaque ids by design. A value that is itself
   a URL or a same-site path (`continue=/x?…`) has its own query filtered the
   same way. The fragment is dropped, and a parameter that would push the URL
-  past 100 characters is left out whole rather than cut. The email test runs on
-  the path **after** the query is set aside, so a page URL with `?email=…`
-  keeps its useful path instead of being thrown away whole;
-- strings are capped at 100 characters.
+  past its param's cap (below) is left out whole rather than cut. The email
+  test runs on the path **after** the query is set aside, so a page URL with
+  `?email=…` keeps its useful path instead of being thrown away whole;
+- strings are capped at GA4's own documented limits
+  (`ANALYTICS_PARAM_MAX_LENGTH_BY_KEY`): `page_location` 1,000 characters,
+  `page_referrer` 420, `page_title` 300, and every other param 100. The page
+  params get the larger caps because a landing URL with its `utm_*` tags and a
+  `gclid` routinely runs past 100.
 
 `user_id` on the console is an opaque Firebase uid and is the one identifier GA
 is allowed to hold. `form_name` is author-written site content, never a
