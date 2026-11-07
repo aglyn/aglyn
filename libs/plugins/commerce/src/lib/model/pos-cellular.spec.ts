@@ -30,6 +30,7 @@ import {
   posCellularOverdue,
   posCellularPreviousMonthKey,
   posCellularReaderMonthlyCents,
+  posCellularBilledToPlatform,
   posCellularReadersByWorkspace,
   posCellularView,
   posCellularWarningDue,
@@ -190,6 +191,25 @@ describe('a reader’s 4G periods (AGL-4038)', () => {
     )
     expect([...byOrg]).toEqual([['org-1', { readers: 2, hostIds: ['host-1', 'host-2'] }]])
   })
+
+  it('leaves out a reader on a store’s own Stripe account, which Stripe bills to that account', () => {
+    const record = (hostId: string, readerId: string, account?: string): PosCellularReaderRecord => ({
+      ...openPosCellularPeriod(
+        { ...base, orgId: 'org-1', hostId, readerId, ...(account ? { stripeConfigurationAccount: account } : {}) },
+        null,
+        oct.startMs + 10,
+      ),
+    })
+    expect(posCellularBilledToPlatform(record('host-1', 'tmr_1'))).toBe(true)
+    expect(posCellularBilledToPlatform(record('host-2', 'tmr_2', 'acct_store'))).toBe(false)
+    const byOrg = posCellularReadersByWorkspace(
+      [record('host-1', 'tmr_1'), record('host-2', 'tmr_2', 'acct_store'), record('host-2', 'tmr_3', 'acct_store')],
+      '2026-10',
+    )
+    expect([...byOrg]).toEqual([['org-1', { readers: 1, hostIds: ['host-1'] }]])
+    // A workspace whose every store is on its own account owes nothing.
+    expect(posCellularReadersByWorkspace([record('host-2', 'tmr_2', 'acct_store')], '2026-10').size).toBe(0)
+  })
 })
 
 describe('the POS devices card’s 4G row (AGL-4038)', () => {
@@ -197,7 +217,7 @@ describe('the POS devices card’s 4G row (AGL-4038)', () => {
     const s710 = [{ deviceType: 'stripe_s710' }, { deviceType: 'stripe_s700' }]
     expect(posCellularView(null, { cellularEnabled: true }, s710)).toBeNull()
     expect(posCellularView(CONFIG, {}, [{ deviceType: 'stripe_s700' }])).toBeNull()
-    const view = { suspended: null, turnOnBlocked: null }
+    const view = { ownAccount: false, suspended: null, turnOnBlocked: null }
     expect(posCellularView(CONFIG, {}, s710)).toEqual({ readerMonthlyCents: 1_061, enabled: false, readers: 1, ...view })
     expect(posCellularView(CONFIG, { cellularEnabled: true }, [])).toEqual({ readerMonthlyCents: 1_061, enabled: true, readers: 0, ...view })
   })
@@ -209,6 +229,21 @@ describe('the POS devices card’s 4G row (AGL-4038)', () => {
     // Turned on again since: the notice is done.
     expect(posCellularView(CONFIG, { ...suspended, cellularEnabled: true }, s710)?.suspended).toBeNull()
     expect(posCellularView(CONFIG, {}, s710, { turnOnBlocked: 'No billing key' })?.turnOnBlocked).toBe('No billing key')
+  })
+
+  it('shows no price, and asks for no billing key, for a store on its own Stripe account', () => {
+    const s710 = [{ deviceType: 'stripe_s710' }]
+    const own = { stripeLocationAccount: 'acct_store' }
+    expect(posCellularView(CONFIG, own, s710, { turnOnBlocked: 'No billing key' })).toEqual({
+      readerMonthlyCents: null,
+      ownAccount: true,
+      enabled: false,
+      readers: 1,
+      suspended: null,
+      turnOnBlocked: null,
+    })
+    // A blank account is the platform's.
+    expect(posCellularView(CONFIG, { stripeLocationAccount: ' ' }, s710)).toMatchObject({ ownAccount: false, readerMonthlyCents: 1_061 })
   })
 })
 

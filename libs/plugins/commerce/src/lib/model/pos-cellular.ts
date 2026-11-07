@@ -71,6 +71,17 @@ import {
  * workspace, and they are told again; paying does not turn it back on, and
  * it cannot be turned on again until the charge is paid. A workspace deleted
  * mid-month is charged for that final month as it is erased.
+ *
+ * A STORE ON ITS OWN STRIPE ACCOUNT (direct charges, Terms §4.32) is the
+ * exception to all of that. Its Location, and so the Configuration that
+ * carries `cellular[enabled]`, is on the store's own full Stripe account
+ * (`stripeLocationAccount` on its terminal settings, which every reader
+ * record copies as `stripeConfigurationAccount`), and Stripe bills its 4G to
+ * that account under the store's own agreement with Stripe. The platform
+ * pays nothing for it, so the workspace is never charged for it here, never
+ * warned about it, and never has it turned off over a charge here
+ * ({@link posCellularBilledToPlatform}); and turning it on takes neither
+ * "Manage billing" nor an agreement to a price that is not the platform's.
  *=========================================*/
 
 export const POS_CELLULAR_ENV = {
@@ -239,6 +250,30 @@ export interface PosCellularReaderRecord {
   updatedAtMs: number
 }
 
+/**
+ * The store's own Stripe account its 4G Configuration is on, from the
+ * account its terminal settings record for its Location
+ * (`stripeLocationAccount`), or null when it is on the platform. The
+ * Configuration always lives where the Location does
+ * (`savePosReaderConfiguration`), so this is the account Stripe bills.
+ */
+export function posCellularOwnAccount(stripeLocationAccount: unknown): string | null {
+  const id = typeof stripeLocationAccount === 'string' ? stripeLocationAccount.trim() : ''
+  return id || null
+}
+
+/**
+ * Whether the platform pays Stripe for this reader's 4G, and so charges the
+ * workspace for it: its Configuration is on the platform. A reader whose
+ * Configuration is on the store's own Stripe account is billed by Stripe to
+ * that account, so the workspace is never charged for it here (Terms §4.32).
+ */
+export function posCellularBilledToPlatform(
+  record: Pick<PosCellularReaderRecord, 'stripeConfigurationAccount'>,
+): boolean {
+  return posCellularOwnAccount(record.stripeConfigurationAccount) === null
+}
+
 /** The record's document id. */
 export function posCellularReaderId(hostId: string, readerId: string): string {
   return `${hostId}_${readerId}`
@@ -283,7 +318,11 @@ export function posCellularBilledInMonth(
   )
 }
 
-/** Each workspace's readers that had 4G in the month, by workspace. */
+/**
+ * Each workspace's readers that had 4G in the month and that the platform
+ * pays for, by workspace: what a month's charge counts. A reader on a store's
+ * own Stripe account is left out ({@link posCellularBilledToPlatform}).
+ */
 export function posCellularReadersByWorkspace(
   records: ReadonlyArray<PosCellularReaderRecord>,
   month: string,
@@ -292,7 +331,7 @@ export function posCellularReadersByWorkspace(
   const byOrg = new Map<string, { readers: number; hostIds: string[] }>()
   if (!bounds) return byOrg
   for (const record of records) {
-    if (!record.orgId || !posCellularBilledInMonth(record, bounds)) continue
+    if (!record.orgId || !posCellularBilledToPlatform(record) || !posCellularBilledInMonth(record, bounds)) continue
     const entry = byOrg.get(record.orgId) ?? { readers: 0, hostIds: [] }
     entry.readers += 1
     if (!entry.hostIds.includes(record.hostId)) entry.hostIds.push(record.hostId)
@@ -418,8 +457,14 @@ export interface PosCellularSuspension {
 
 /** What the POS devices card is told about 4G for a store; null hides it. */
 export interface PosCellularView {
-  /** What one reader costs a month, in cents, before any sales tax. */
-  readerMonthlyCents: number
+  /**
+   * What one reader costs the workspace a month, in cents, before any sales
+   * tax; null for a store on its own Stripe account, which Stripe bills at
+   * its own price and the workspace is never charged for.
+   */
+  readerMonthlyCents: number | null
+  /** The store's 4G is on its own Stripe account, which Stripe bills directly. */
+  ownAccount: boolean
   enabled: boolean
   /** The store's readers that take 4G. */
   readers: number
@@ -428,7 +473,8 @@ export interface PosCellularView {
   /**
    * Why the viewer may not turn 4G ON (it is charged to the workspace, so it
    * also takes "Manage billing"), or null. Turning it off needs only the
-   * card's own key.
+   * card's own key, and so does turning it on for a store on its own Stripe
+   * account.
    */
   turnOnBlocked?: string | null
 }
@@ -439,7 +485,10 @@ export interface PosCellularView {
  */
 export function posCellularView(
   config: PosCellularConfig | null,
-  terminal: { cellularEnabled?: unknown; cellularSuspended?: unknown } | null | undefined,
+  terminal:
+    | { cellularEnabled?: unknown; cellularSuspended?: unknown; stripeLocationAccount?: unknown }
+    | null
+    | undefined,
   readers: ReadonlyArray<{ deviceType?: unknown }>,
   options: { turnOnBlocked?: string | null } = {},
 ): PosCellularView | null {
@@ -452,11 +501,13 @@ export function posCellularView(
     !enabled && suspension && typeof suspension.month === 'string'
       ? { month: posCellularMonthLabel(suspension.month), atMs: Number(suspension.atMs ?? 0) }
       : null
+  const ownAccount = posCellularOwnAccount(terminal?.stripeLocationAccount) !== null
   return {
-    readerMonthlyCents: posCellularReaderMonthlyCents(config),
+    readerMonthlyCents: ownAccount ? null : posCellularReaderMonthlyCents(config),
+    ownAccount,
     enabled,
     readers: capable,
     suspended,
-    turnOnBlocked: options.turnOnBlocked ?? null,
+    turnOnBlocked: ownAccount ? null : (options.turnOnBlocked ?? null),
   }
 }
