@@ -17,7 +17,7 @@
 'use client'
 
 import type * as Aglyn from '@aglyn/aglyn'
-import { describeScope, isOrgWideScope } from '@aglyn/aglyn'
+import { describeSharing, isOrgWideScope } from '@aglyn/aglyn'
 import { BlockedControl } from '@aglyn/shared-ui-jsx/components/blocked-control.component'
 import BlockOutlinedIcon from '@mui/icons-material/BlockOutlined'
 import CheckCircleIcon from '@mui/icons-material/CheckCircle'
@@ -335,11 +335,11 @@ export function MediaAssetCard(props: MediaAssetCardProps) {
               Only shown when it is actually restricted — badging every
               org-wide asset would be noise on the common case. */}
           {media.visibleTo && !isOrgWideScope(media.visibleTo) ? (
-            <Tooltip title={describeScope(media.visibleTo)}>
+            <Tooltip title={describeSharing(media as unknown as Record<string, unknown>)}>
               <Chip
                 size="small"
                 icon={<LockOutlinedIcon />}
-                label={describeScope(media.visibleTo)}
+                label={describeSharing(media as unknown as Record<string, unknown>)}
                 sx={{ mt: 0.5, maxWidth: '100%' }}
               />
             </Tooltip>
