@@ -27,6 +27,8 @@ import com.aglyn.contracts.checkInDayKeyOfMillis
 import com.aglyn.core.ApiMethod
 import com.aglyn.core.ConsoleApiError
 import com.aglyn.core.siteAddress
+import com.aglyn.pluginhost.CustomerDisplayHosts
+import com.aglyn.pluginhost.CustomerDisplayScreen
 import com.aglyn.pluginhost.LocalSlotProps
 import com.aglyn.pluginhost.NativePluginContext
 import com.aglyn.ui.DateField
@@ -59,6 +61,10 @@ internal const val WAIVERS_STATUS_ROUTE = "/api/waivers/status"
 
 /** The store's own signing page, at `/{path}` on its site (`WAIVERS_SITE_SIGN_PATH`). */
 internal const val WAIVERS_SITE_SIGN_PATH = "sign-waiver"
+
+/** The waivers plugin's public page a paired customer display signs on (`WAIVERS_DISPLAY_PAGE_PATH`). */
+internal const val WAIVERS_DISPLAY_PAGE_PATH = "/display-sign"
+internal const val WAIVERS_PLUGIN_ID = "waivers"
 
 /** The status route's answer. */
 data class WaiverStatusAnswer(val signed: Boolean, val label: String, val matched: Boolean? = null, val searchName: String? = null) {
@@ -118,6 +124,10 @@ fun WaiverCheckInStatus(context: NativePluginContext) {
   var opened by remember { mutableStateOf(false) }
   var findingByName by remember { mutableStateOf(false) }
   var notice by remember { mutableStateOf<String?>(null) }
+  // Sent to the customer display from this row, until the status reads signed.
+  var sent by remember { mutableStateOf(false) }
+  var displayError by remember { mutableStateOf<String?>(null) }
+  val display = CustomerDisplayHosts.current
 
   LaunchedEffect(hostId, dayKey, email, contactId, name, revision) {
     if (hostId.isEmpty() || dayKey.isEmpty()) return@LaunchedEffect
@@ -160,8 +170,26 @@ fun WaiverCheckInStatus(context: NativePluginContext) {
         StatusChip(look.label, if (look.signedInFull) StatusTone.SUCCESS else StatusTone.WARNING, Modifier.align(Alignment.CenterVertically).testTag("waiver-status"))
         if (look.notMatched) TextButton(onClick = { findingByName = true }, modifier = Modifier.testTag("waiver-find-by-name")) { Text("Find by name") }
         if (look.needed) TextButton(onClick = ::openSigning, modifier = Modifier.testTag("waiver-sign")) { Text(if (compact) "Sign" else "Sign waiver") }
-        if (opened && look.needed) TextButton(onClick = { revision += 1 }, modifier = Modifier.testTag("waiver-check-again")) { Text("Check again") }
+        if (display != null && look.needed) {
+          TextButton(
+            onClick = {
+              displayError = null
+              scope.launch {
+                // The display's own pairing is what lets it sign, so nothing is minted for it here; the site is the screen's one parameter.
+                if (display.show(CustomerDisplayScreen(WAIVERS_PLUGIN_ID, WAIVERS_DISPLAY_PAGE_PATH, mapOf("host" to hostId)))) {
+                  sent = true
+                } else {
+                  displayError = "The customer display didn’t answer. Check that it is on, or hand over this device."
+                }
+              }
+            },
+            modifier = Modifier.testTag("waiver-customer-display"),
+          ) { Text("Customer display") }
+        }
+        if ((opened || sent) && look.needed) TextButton(onClick = { revision += 1 }, modifier = Modifier.testTag("waiver-check-again")) { Text("Check again") }
       }
+      if (sent && look.needed) StatusChip("Sent to the customer display", modifier = Modifier.testTag("waiver-sent-to-display"))
+      displayError?.let { NoticeBanner(it, StatusTone.WARNING) }
       notice?.let { Text(it, style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurfaceVariant) }
       val searchName = current.status?.searchName
       if (findingByName && searchName != null) {

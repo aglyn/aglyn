@@ -79,6 +79,9 @@ interface PosDisplayApi {
   suspend fun pairingCode(registerId: String, mode: PosDeviceMode): PosPairingCode
   suspend fun devices(registerId: String): List<PosPairedDevice>
   suspend fun revoke(registerId: String, deviceId: String): Int
+
+  /** Takes a plugin's own screen off the display (`close-screen`), only while it is the one showing (AGL-4042). */
+  suspend fun closeScreen(registerId: String, pluginId: String) {}
 }
 
 class ConsolePosDisplayApi(private val api: ConsoleApiClient, private val hostId: String) : PosDisplayApi {
@@ -126,6 +129,10 @@ class ConsolePosDisplayApi(private val api: ConsoleApiClient, private val hostId
 
   override suspend fun revoke(registerId: String, deviceId: String): Int =
     api.request(POS_DISPLAY_ROUTE, ApiMethod.POST, body(registerId, "revoke") { put("displayId", deviceId) }).obj()["revoked"].cents().toInt()
+
+  override suspend fun closeScreen(registerId: String, pluginId: String) {
+    api.request(POS_DISPLAY_ROUTE, ApiMethod.POST, body(registerId, "close-screen") { put("pluginId", pluginId) })
+  }
 }
 
 /** The display route where there is no console to ask: every call finds it unreachable. */
@@ -250,6 +257,38 @@ class PosDisplayControl(
     val register = registerId() ?: return
     try {
       api.push(register, state)
+    } catch (failure: Throwable) {
+      if (failure is CancellationException) throw failure
+    }
+  }
+
+  /**
+   * Puts another plugin's screen on the display (AGL-4042, core's customer display seam): its public page, opened once
+   * per prompt. False when no display is connected, a prompt waits, or the display could not be reached.
+   */
+  suspend fun showScreen(screen: com.aglyn.pluginhost.CustomerDisplayScreen): Boolean {
+    if (!connected || asking != null) return false
+    val register = registerId() ?: return false
+    val state = PosDisplayState(
+      mode = PosDisplayMode.SCREEN,
+      screen = com.aglyn.contracts.PosDisplayScreen(params = screen.params, path = screen.path, pluginId = screen.pluginId),
+      promptId = mintKey().take(32),
+      updatedAtMs = now().toDouble(),
+    )
+    return try {
+      api.push(register, state)
+      true
+    } catch (failure: Throwable) {
+      if (failure is CancellationException) throw failure
+      false
+    }
+  }
+
+  /** Takes a plugin's own screen off the display, only while it is the one showing. */
+  suspend fun closeScreen(pluginId: String) {
+    val register = registerId() ?: return
+    try {
+      api.closeScreen(register, pluginId)
     } catch (failure: Throwable) {
       if (failure is CancellationException) throw failure
     }

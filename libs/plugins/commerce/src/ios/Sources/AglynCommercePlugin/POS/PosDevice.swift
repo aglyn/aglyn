@@ -162,6 +162,28 @@ enum PosDisplayScreen: Equatable {
   case cart(PosDisplayCart)
   case tip(PosDisplayStateTip, promptID: String)
   case receipt(PosDisplayStateReceipt, promptID: String)
+  /// Another plugin's screen (AGL-4042): its public console page, at `href` beneath the console's origin.
+  case plugin(href: String, promptID: String)
+}
+
+/// The display's own page, which a plugin's screen sends the display back to when the customer is done.
+let posDisplayPagePath = "/kiosk/commerce/pos-display"
+/// Where the display keeps its credential for a plugin's page to read (`CUSTOMER_DISPLAY_CREDENTIAL_KEY`).
+let customerDisplayCredentialKey = "aglyn.customerDisplay.credential"
+
+private let screenPluginPattern = #/^[a-z0-9][a-z0-9-]{0,63}$/#
+private let screenPathPattern = #/^(\/[a-z0-9][a-z0-9-]{0,63}){1,5}$/#
+
+/// Where a display opens a screen (`customerDisplayScreenHref`): the plugin's public page with its parameters and the
+/// display's own address to come back to; nil for a screen out of shape.
+func customerDisplayScreenHref(_ screen: AglynContracts.PosDisplayScreen, returnTo: String = posDisplayPagePath) -> String? {
+  guard screen.pluginId.wholeMatch(of: screenPluginPattern) != nil, screen.path.wholeMatch(of: screenPathPattern) != nil
+  else { return nil }
+  var components = URLComponents()
+  components.queryItems =
+    screen.params.sorted { $0.key < $1.key }.map { URLQueryItem(name: $0.key, value: $0.value) }
+    + [URLQueryItem(name: "return", value: returnTo)]
+  return "/kiosk/\(screen.pluginId)\(screen.path)?\(components.percentEncodedQuery ?? "")"
 }
 
 @MainActor
@@ -182,6 +204,8 @@ final class PosCustomerDisplayModel {
   @ObservationIgnored private var thanksShownAt: Int64 = 0
   @ObservationIgnored private var brandingAt: Int64 = 0
   @ObservationIgnored private var promptKey = ""
+  /// The plugin screens the customer finished (their page sent the display back): opened once per prompt.
+  private(set) var returnedScreens: Set<String> = []
 
   @ObservationIgnored private let api: PosDeviceAPI
   @ObservationIgnored private var store: PosDeviceTokenStore
@@ -200,6 +224,9 @@ final class PosCustomerDisplayModel {
   }
 
   var currency: String? { read?.state.currency }
+
+  /// A plugin's page sent the display back: the customer is done with that screen.
+  func screenReturned(_ promptID: String) { returnedScreens.insert(promptID) }
 
   func pair(code: String) async {
     let digits = code.filter(\.isNumber)
@@ -277,6 +304,14 @@ final class PosCustomerDisplayModel {
       return state.cart.map(PosDisplayScreen.cart) ?? .idle
     case .cart:
       return state.cart.map(PosDisplayScreen.cart) ?? .idle
+    case .screen:
+      // Opened once per prompt; back from it, the same prompt shows the store's screen.
+      if let screen = state.screen, let promptID = state.promptId, !promptID.isEmpty, !returnedScreens.contains(promptID),
+        let href = customerDisplayScreenHref(screen)
+      {
+        return .plugin(href: href, promptID: promptID)
+      }
+      return .idle
     default: return .idle
     }
   }

@@ -22,6 +22,9 @@ public let waiversCheckInWidget = "waivers.check-in-status"
 let waiversStatusRoute = "/api/waivers/status"
 /// The store's own signing page, at `/{path}` on its site (`WAIVERS_SITE_SIGN_PATH`).
 let waiversSiteSignPath = "sign-waiver"
+/// The waivers plugin's public page a paired customer display signs on (`WAIVERS_DISPLAY_PAGE_PATH`).
+let waiversDisplayPagePath = "/display-sign"
+let waiversPluginID = "waivers"
 
 /// The status route's answer.
 public struct WaiverStatusAnswer: Equatable, Sendable {
@@ -85,6 +88,10 @@ struct WaiverCheckInStatusView: View {
   @State private var opened = false
   @State private var findingByName = false
   @State private var notice: String?
+  /// Sent to the customer display from this row, until the status reads signed.
+  @State private var sent = false
+  @State private var displayError: String?
+  private var display: CustomerDisplayHost? { CustomerDisplayHosts.shared.current }
 
   enum LoadState: Equatable {
     case loading, hidden
@@ -105,22 +112,23 @@ struct WaiverCheckInStatusView: View {
         ProgressView().controlSize(.small).accessibilityLabel("Checking the waiver")
       case .ready(let status):
         let look = WaiverStatusLook(status)
-        HStack(spacing: AglynSpace.one) {
-          StatusChip(look.label, tone: look.signedInFull ? .success : .warning)
-            .accessibilityIdentifier("waiver-status")
-          if look.notMatched {
-            Button("Find by name") { findingByName = true }.buttonStyle(.borderless)
-              .accessibilityIdentifier("waiver-find-by-name")
+        let chip = StatusChip(look.label, tone: look.signedInFull ? .success : .warning)
+          .accessibilityIdentifier("waiver-status")
+        // One row where it fits, else the actions under the status (a phone's narrow sheet).
+        ViewThatFits(in: .horizontal) {
+          HStack(spacing: AglynSpace.one) {
+            chip
+            actions(look)
           }
-          if look.needed {
-            Button(compact ? "Sign" : "Sign waiver") { Task { await openSigning() } }.buttonStyle(.borderless)
-              .accessibilityIdentifier("waiver-sign")
-          }
-          if opened && look.needed {
-            Button("Check again") { revision += 1 }.buttonStyle(.borderless)
-              .accessibilityIdentifier("waiver-check-again")
+          VStack(alignment: .leading, spacing: AglynSpace.half) {
+            chip
+            HStack(spacing: AglynSpace.two) { actions(look) }
           }
         }
+        if sent && look.needed {
+          StatusChip("Sent to the customer display").accessibilityIdentifier("waiver-sent-to-display")
+        }
+        if let displayError { AglynNotice(displayError, tone: .warning) { self.displayError = nil } }
         if let notice { Text(notice).font(AglynFont.caption).foregroundStyle(.secondary) }
         // Inline rather than a sheet: the zone sits in a row of the register's own sheet, where a second sheet is
         // refused while the first is up.
@@ -133,6 +141,25 @@ struct WaiverCheckInStatusView: View {
       }
     }
     .task(id: "\(hostID)|\(dayKey)|\(props["email"] ?? "")|\(props["contactId"] ?? "")|\(name)|\(revision)") { await load() }
+  }
+
+  @ViewBuilder private func actions(_ look: WaiverStatusLook) -> some View {
+    if look.notMatched {
+      Button("Find by name") { findingByName = true }.buttonStyle(.borderless)
+        .accessibilityIdentifier("waiver-find-by-name")
+    }
+    if look.needed {
+      Button(compact ? "Sign" : "Sign waiver") { Task { await openSigning() } }.buttonStyle(.borderless)
+        .accessibilityIdentifier("waiver-sign")
+    }
+    if display != nil && look.needed {
+      Button("Customer display") { Task { await showOnDisplay() } }.buttonStyle(.borderless)
+        .accessibilityIdentifier("waiver-customer-display")
+    }
+    if (opened || sent) && look.needed {
+      Button("Check again") { revision += 1 }.buttonStyle(.borderless)
+        .accessibilityIdentifier("waiver-check-again")
+    }
   }
 
   private func load() async {
@@ -156,6 +183,18 @@ struct WaiverCheckInStatusView: View {
       state = .hidden
     } catch {
       state = .ready(nil)
+    }
+  }
+
+  /// Sends the signing to the register's paired display: the display's own pairing is what lets it sign, so nothing is
+  /// minted for it here, and the site is the screen's one parameter.
+  private func showOnDisplay() async {
+    guard let display else { return }
+    displayError = nil
+    if await display.show(CustomerDisplayScreen(pluginID: waiversPluginID, path: waiversDisplayPagePath, params: ["host": hostID])) {
+      sent = true
+    } else {
+      displayError = "The customer display didn’t answer. Check that it is on, or hand over this device."
     }
   }
 
