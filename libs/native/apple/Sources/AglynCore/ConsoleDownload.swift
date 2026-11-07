@@ -53,7 +53,8 @@ extension ConsoleAPIClient {
       var request = URLRequest(url: try url(for: path, query: query))
       request.httpMethod = method.rawValue
       request.setValue("Bearer \(token)", forHTTPHeaderField: "Authorization")
-      if let body {
+      // A GET never carries a body (URLSession refuses one; see `request`).
+      if let body, method != .get {
         request.setValue("application/json", forHTTPHeaderField: "Content-Type")
         request.httpBody = try body.encoded()
       }

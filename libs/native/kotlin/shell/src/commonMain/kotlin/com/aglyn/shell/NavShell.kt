@@ -474,6 +474,7 @@ internal fun SignedInShell(services: ShellServices, root: ShellNavigator, uid: S
               searchResults = { query ->
                 SearchResultsScreen(services, workspace, enabled, hostAdmin, query) { line -> openOneBoxLine(services, navigator, chrome, context, workspace, line, openRef) }
               },
+              onPickSite = { chrome.picker = PickerStep.SITE },
             ) { chrome.colorFor = it }
           }
         }
@@ -851,12 +852,13 @@ private fun ShellBody(
   banner: @Composable () -> Unit,
   staff: Boolean,
   searchResults: @Composable (String) -> Unit,
+  onPickSite: () -> Unit,
   onWorkspaceColor: (String) -> Unit,
 ) {
   when (route) {
     is Route.SearchResults -> searchResults(route.query)
     is Route.Web -> com.aglyn.webview.WebPageScreen(route.url, onClose = { navigator.back() }, openInBrowser = openInBrowser, header = banner)
-    is Route.Screen -> PluginScreenHost(services, context, route.screenId, route.params, workspace.site != null) { navigator.back() }
+    is Route.Screen -> PluginScreenHost(services, context, route.screenId, route.params, workspace.site != null, onPickSite) { navigator.back() }
     is Route.Besigner -> services.besigner(route.path, { navigator.back() }) { link -> navigator.back(); context.openLink(link) }
     Route.Analytics -> AnalyticsScreen(services, context)
     Route.Switcher -> SwitcherScreen(services.workspace, workspace, services.api.origin) { navigator.back() }
@@ -872,7 +874,7 @@ private fun ShellBody(
         when (screen) {
           NavKeys.ANALYTICS_SCREEN -> AnalyticsScreen(services, context)
           "" -> HomeScreen(services, context, workspace, widthClass, navigator)
-          else -> PluginScreenHost(services, context, screen, params, workspace.site != null) { navigator.select(ShellNavigator.HOME) }
+          else -> PluginScreenHost(services, context, screen, params, workspace.site != null, onPickSite) { navigator.select(ShellNavigator.HOME) }
         }
       }
     }

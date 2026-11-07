@@ -158,6 +158,8 @@ internal fun PluginScreenHost(
   screenId: String,
   params: NativeParams,
   hasSite: Boolean,
+  /** Opens the site picker, where a screen that needs a site is opened without one (iOS's "Choose a site"). */
+  onPickSite: (() -> Unit)? = null,
   onExit: () -> Unit = {},
 ) {
   val screen = services.registry.screen(screenId)
@@ -174,7 +176,12 @@ internal fun PluginScreenHost(
       com.aglyn.ui.UpgradeKind.PLAN,
       tag = "feature-gate-$feature",
     ) { context.navigate("core.billing") }
-    screen.requiresSite && !hasSite -> EmptyState("Pick a site first", body = "This page shows one site's data.", icon = AglynIcons.named("public"))
+    screen.requiresSite && !hasSite -> EmptyState(
+      "Pick a site",
+      body = "${screen.title} shows one site at a time.",
+      icon = AglynIcons.named("public"),
+      action = onPickSite?.let { pick -> { OutlinedButton(shape = com.aglyn.ui.controlShape(), onClick = pick, modifier = Modifier.testTag("choose-a-site")) { Text("Choose a site") } } },
+    )
     screen.upcoming -> EmptyState(
       "${screen.title} is coming to the app",
       body = "This part of ${services.config.brandName} is on its way to the app.",
