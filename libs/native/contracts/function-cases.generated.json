@@ -224,6 +224,60 @@
         }
       ]
     },
+    "addCheckInDays": {
+      "module": "libs/plugins/commerce/src/lib/model/commerce-check-in-product.ts",
+      "cases": [
+        {
+          "args": [
+            "2027-01-15",
+            1
+          ],
+          "result": "2027-01-16"
+        },
+        {
+          "args": [
+            "2027-01-31",
+            1
+          ],
+          "result": "2027-02-01"
+        },
+        {
+          "args": [
+            "2027-12-31",
+            1
+          ],
+          "result": "2028-01-01"
+        },
+        {
+          "args": [
+            "2028-03-01",
+            -1
+          ],
+          "result": "2028-02-29"
+        },
+        {
+          "args": [
+            "2027-01-15",
+            0
+          ],
+          "result": "2027-01-15"
+        },
+        {
+          "args": [
+            "2027-01-15",
+            2.6
+          ],
+          "result": "2027-01-18"
+        },
+        {
+          "args": [
+            "bad",
+            1
+          ],
+          "result": "bad"
+        }
+      ]
+    },
     "aggregateScreenDays": {
       "module": "libs/aglyn/src/lib/app-utils/screen-analytics-aggregate.ts",
       "cases": [
@@ -5199,6 +5253,59 @@
         }
       ]
     },
+    "checkInDayLabel": {
+      "module": "libs/plugins/commerce/src/lib/model/commerce-check-in-product.ts",
+      "cases": [
+        {
+          "args": [
+            "2027-01-15"
+          ],
+          "result": "Fri, Jan 15"
+        },
+        {
+          "args": [
+            "2026-11-01"
+          ],
+          "result": "Sun, Nov 1"
+        },
+        {
+          "args": [
+            "2028-02-29"
+          ],
+          "result": "Tue, Feb 29"
+        },
+        {
+          "args": [
+            "2027-02-29"
+          ],
+          "result": ""
+        },
+        {
+          "args": [
+            "2027-1-5"
+          ],
+          "result": ""
+        },
+        {
+          "args": [
+            ""
+          ],
+          "result": ""
+        },
+        {
+          "args": [
+            null
+          ],
+          "result": ""
+        },
+        {
+          "args": [
+            "nonsense"
+          ],
+          "result": ""
+        }
+      ]
+    },
     "checkInRefusal": {
       "module": "libs/plugins/bookings/src/lib/model/booking-manage.ts",
       "cases": [
@@ -5391,6 +5498,60 @@
             1800000000000
           ],
           "result": "This guest is not checked in"
+        }
+      ]
+    },
+    "checkInUseDayProblem": {
+      "module": "libs/plugins/commerce/src/lib/model/commerce-check-in-product.ts",
+      "cases": [
+        {
+          "args": [
+            "2026-11-08",
+            "2026-11-07"
+          ],
+          "result": null
+        },
+        {
+          "args": [
+            "2026-11-07",
+            "2026-11-07"
+          ],
+          "result": null
+        },
+        {
+          "args": [
+            "2026-11-06",
+            "2026-11-07"
+          ],
+          "result": "That day has passed. Choose today or a later day."
+        },
+        {
+          "args": [
+            "2028-11-07",
+            "2026-11-07"
+          ],
+          "result": "Choose a day within the next two years."
+        },
+        {
+          "args": [
+            "2028-11-08",
+            "2026-11-07"
+          ],
+          "result": "Choose a day within the next two years."
+        },
+        {
+          "args": [
+            "2026-13-01",
+            "2026-11-07"
+          ],
+          "result": "Choose the day as a date."
+        },
+        {
+          "args": [
+            null,
+            "2026-11-07"
+          ],
+          "result": "Choose the day as a date."
         }
       ]
     },
@@ -20252,6 +20413,59 @@
           "args": [
             {},
             1800000000000
+          ],
+          "result": false
+        }
+      ]
+    },
+    "isCheckInDayKey": {
+      "module": "libs/plugins/commerce/src/lib/model/commerce-check-in-product.ts",
+      "cases": [
+        {
+          "args": [
+            "2027-01-15"
+          ],
+          "result": true
+        },
+        {
+          "args": [
+            "2026-11-01"
+          ],
+          "result": true
+        },
+        {
+          "args": [
+            "2028-02-29"
+          ],
+          "result": true
+        },
+        {
+          "args": [
+            "2027-02-29"
+          ],
+          "result": false
+        },
+        {
+          "args": [
+            "2027-1-5"
+          ],
+          "result": false
+        },
+        {
+          "args": [
+            ""
+          ],
+          "result": false
+        },
+        {
+          "args": [
+            null
+          ],
+          "result": false
+        },
+        {
+          "args": [
+            "nonsense"
           ],
           "result": false
         }
