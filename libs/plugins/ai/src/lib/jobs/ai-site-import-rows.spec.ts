@@ -147,7 +147,8 @@ describe('a quote keeps its link and its words', () => {
     expect(report.groups.quotes?.items).toMatchObject({ source: 3, built: 3 })
     const nodes = Object.values(nodesOf(page_))
     const links = nodes.filter((node) => node.props?.['children'] === 'See more reviews')
-    expect(links).toHaveLength(3)
+    // Kept as it is, each review's own; improved, the one link they all repeat, once (AGL-4152).
+    expect(links).toHaveLength(finish === 'keep' ? 3 : 1)
     for (const link of links) expect(JSON.stringify(link)).toMatch(/reviews/i)
   })
 

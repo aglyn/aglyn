@@ -50,12 +50,13 @@ import {
   aiReadLayoutBlock,
   type AiLayoutBlock,
   type AiLayoutImportHero,
+  type AiLayoutPicture,
   type AiLayoutItem,
   type AiLayoutSection,
   type AiLayoutSettlement,
 } from '../layout-language/ai-layout-language'
 import { AI_ICON_WORDS } from '../runtime/ai-icon-library'
-import type { AiSiteImportAddedSection, AiSiteImportPagePictures, AiSiteImportPageRole, AiSiteImportPlan } from '../model/ai-site-import'
+import type { AiSiteImportAddedSection, AiSiteImportPagePictures, AiSiteImportPageRole, AiSiteImportPlan, SiteImportLineRef } from '../model/ai-site-import'
 import { aiSiteHomeArc } from '../model/ai-site-home-arcs'
 import {
   SITE_IMPORT_IMPROVED_MEANING,
@@ -76,6 +77,7 @@ import type { AiCopyFraming, AiDoctrineViolation } from '../runtime/ai-doctrine-
 import type { SiteImportBlock } from '../site-import/site-import-html'
 import { siteImportLabel } from '../site-import/site-import-page'
 import { aiSiteImportHonesty, aiSiteImportImprovedPlaced, type AiSiteImportImprovedBlock, type AiSiteImportImprovedSection } from './ai-site-import-honesty'
+import { aiSiteImportSectionActions } from './ai-site-import-actions'
 import {
   aiSiteImportLayoutOf,
   aiSiteImportLinkTo,
@@ -640,6 +642,9 @@ export const AI_SITE_IMPORT_COVER_LEAST_RATIO = 1.3
 /** The heroes that box their photo under the words: a masthead's and an editorial's. */
 const BOXED_HEROES: ReadonlySet<AiLayoutHeroVariant> = new Set(['column', 'editorial'])
 
+/** The heroes that lay their photo edge to edge behind the words, which a square or a portrait cannot fill. */
+const COVERING_HEROES: ReadonlySet<AiLayoutHeroVariant> = new Set(['cover', 'poster', 'panel'])
+
 /**
  * The site's hero as a page brought in draws it: a collage or a portrait holds
  * what a page brought in does not. A redesign whose opening holds the page's
@@ -649,7 +654,10 @@ const BOXED_HEROES: ReadonlySet<AiLayoutHeroVariant> = new Set(['column', 'edito
  */
 export function aiSiteImportImproveHero(design: AiLayoutDesign, plan?: AiSiteImportPlan | null, opening?: { ratio?: number } | null): AiLayoutImportHero {
   const chosen = (plan?.design.hero as AiLayoutHeroVariant | undefined) ?? aiLayoutDesignChoices(design).hero
-  if (BOXED_HEROES.has(chosen) && (opening?.ratio ?? 0) >= AI_SITE_IMPORT_COVER_LEAST_RATIO) return 'cover'
+  const ratio = opening?.ratio ?? 0
+  if (BOXED_HEROES.has(chosen) && ratio >= AI_SITE_IMPORT_COVER_LEAST_RATIO) return 'cover'
+  // A square or a portrait is never stretched behind the words (AGL-4152): it sits beside them.
+  if (COVERING_HEROES.has(chosen) && ratio > 0 && ratio < AI_SITE_IMPORT_COVER_LEAST_RATIO) return 'split'
   return chosen === 'collage' || chosen === 'portrait' ? 'split' : chosen
 }
 
@@ -812,110 +820,6 @@ export function aiSiteImportOpeningPhoto(answer: readonly AiSiteImportImprovedSe
   return [opening, ...rest]
 }
 
-/** A button's words and where it goes, as one key: two that share it are the same action. */
-const actionKey = (text: string | undefined, to: string | undefined): string => `${clean(text).toLowerCase()}\u0000${to ?? ''}`
-
-/** Whether a button is drawn filled: the compiler's default, `primary` or `large`. */
-const filled = (block: AiLayoutBlock): boolean => block.kind === 'button' && (block.style === undefined || block.style === 'primary' || block.style === 'large')
-
-/**
- * A redesigned section's calls to action, each once and each where it belongs
- * (AGL-4152), whatever the answer and the source's kept groups gave:
- *
- * - Buttons placed in a row's columns under a group that runs the row's width,
- *   with nothing else in those columns, sit in the cards they go to where each
- *   goes where exactly one card does, else together under the group: a row of
- *   two buttons under three cards read as a grid half filled.
- * - A link with the same words to the same place on every item of a group
- *   (each review's "See more reviews") is shown once, as a button after the
- *   group, unless the section already has that button. Where only some items
- *   carry it, each is that item's own action and stays.
- * - The same button twice in a section is shown once, the first.
- * - Two buttons side by side to the same place are one: the one with the
- *   header's words where one has them, else the first. Of buttons side by
- *   side, only the first is filled; the rest are outlined.
- */
-export function aiSiteImportSectionActions(section: Pick<AiLayoutSection, 'cols' | 'blocks'>, cta?: string | null): Pick<AiLayoutSection, 'cols' | 'blocks'> {
-  let { cols, blocks } = section
-  // Buttons in columns under a group across the row.
-  const placed = blocks.filter((block) => block.col !== undefined)
-  const group = blocks.find((block) => block.col === undefined && (block.items?.length ?? 0) >= 2 && block.kind !== 'list' && block.kind !== 'faq')
-  if (cols && cols.length >= 2 && group && placed.length && placed.every((block) => block.kind === 'button')) {
-    const items = group.items as AiLayoutItem[]
-    const cards = placed.map((button) => items.flatMap((item, at) => (button.to && item.to === button.to && !item.links?.length ? [at] : [])))
-    const own = cards.every((found) => found.length === 1) && new Set(cards.map((found) => found[0])).size === cards.length
-    if (own) {
-      const into = new Map(placed.map((button, at) => [cards[at]?.[0] as number, button]))
-      const carded = { ...group, items: items.map((item, at) => (into.has(at) ? { ...item, links: [{ text: into.get(at)?.text ?? '', to: item.to as string, style: 'secondary' as const }] } : item)) }
-      blocks = blocks.flatMap((block) => (block === group ? [carded] : placed.includes(block) ? [] : [block]))
-    } else blocks = blocks.map((block) => (placed.includes(block) ? (({ col: _col, ...rest }) => rest)(block) : block))
-    cols = undefined
-  }
-  // A link repeated across a group's items, once after the group.
-  const buttons = new Set(blocks.flatMap((block) => (block.kind === 'button' ? [actionKey(block.text, block.to)] : [])))
-  blocks = blocks.flatMap((block) => {
-    const items = block.items
-    if (!items || items.length < 2) return [block]
-    const counted = new Map<string, { text: string; to?: string; style?: AiLayoutBlock['style']; on: number }>()
-    for (const item of items) {
-      for (const key of new Set((item.links ?? []).map((link) => actionKey(link.text, link.to)))) {
-        const link = item.links?.find((entry) => actionKey(entry.text, entry.to) === key)
-        const was = counted.get(key)
-        if (link) counted.set(key, { text: link.text, ...(link.to ? { to: link.to } : {}), ...(link.style ? { style: link.style } : {}), on: (was?.on ?? 0) + 1 })
-      }
-    }
-    const repeated = new Map([...counted].filter(([, entry]) => entry.on === items.length))
-    if (!repeated.size) return [block]
-    const stripped = items.map((item) => {
-      if (!item.links?.length) return item
-      const links = item.links.filter((link) => !repeated.has(actionKey(link.text, link.to)))
-      const { links: _links, ...rest } = item
-      return links.length ? { ...rest, links } : rest
-    })
-    const after = [...repeated].flatMap(([key, entry]): AiLayoutBlock[] => {
-      if (buttons.has(key)) return []
-      buttons.add(key)
-      return [{ kind: 'button', text: entry.text, ...(entry.to ? { to: entry.to } : {}), ...(entry.style ? { style: entry.style } : {}), ...(block.col !== undefined ? { col: block.col } : {}) }]
-    })
-    return [{ ...block, items: stripped }, ...after]
-  })
-  // The same button twice, once.
-  const seen = new Set<string>()
-  blocks = blocks.filter((block) => {
-    if (block.kind !== 'button' || !block.to) return true
-    const key = actionKey(block.text, block.to)
-    if (seen.has(key)) return false
-    seen.add(key)
-    return true
-  })
-  // Buttons side by side: one to each place, the first filled.
-  const wanted = clean(cta).toLowerCase()
-  const out: AiLayoutBlock[] = []
-  for (const block of blocks) {
-    const before = out[out.length - 1]
-    if (block.kind === 'button' && before?.kind === 'button' && before.col === block.col) {
-      // Back over the run this button stands in.
-      let start = out.length - 1
-      while (start > 0 && out[start - 1]?.kind === 'button' && out[start - 1]?.col === block.col) start -= 1
-      const run = out.slice(start)
-      const same = block.to ? run.findIndex((entry) => entry.to === block.to) : -1
-      if (same !== -1) {
-        // The header's words win the place; the run keeps its first button's place and fill.
-        const kept = run[same] as AiLayoutBlock
-        if (wanted && clean(block.text).toLowerCase() === wanted && clean(kept.text).toLowerCase() !== wanted) {
-          const { style: _style, ...words } = block
-          out[start + same] = { ...words, ...(kept.style ? { style: kept.style } : {}) }
-        }
-        continue
-      }
-      out.push(run.some(filled) && filled(block) ? { ...block, style: 'secondary' } : block)
-      continue
-    }
-    out.push(block)
-  }
-  return { ...(cols ? { cols } : {}), blocks: out }
-}
-
 /** The sections a redesign holds, in the compiler's language: every `keep` expanded to the source's own blocks, every link resolved. */
 export function aiSiteImportImprovedPage(given: readonly AiSiteImportImprovedSection[], input: AiSiteImportImproveCompileInput): AiSiteImportImprovedPage {
   const { doc, ledger, design, destinations } = input
@@ -967,6 +871,28 @@ export function aiSiteImportImprovedPage(given: readonly AiSiteImportImprovedSec
   }
   // The source's pictures a written set of cards stands for, where the answer gave them none (AGL-4152).
   const carded = aiSiteImportCardPictures(answer, ledger)
+  // The page's own photo an opening that asks for a picture takes (AGL-4152), and which of its things it was.
+  const asked = new Set([...aiSiteImportImprovedPlaced(answer, ledger), ...[...carded.values()].flat()])
+  const ownOpening = { ref: null as string | null, taken: false }
+  const openingPicture = (): AiLayoutPicture | null => {
+    if (ownOpening.taken) return null
+    const ratioOf = (line: SiteImportLineRef | undefined) => {
+      const image = line === undefined || scope.used.has(line) ? undefined : doc.blocks[line]
+      if (image?.kind !== 'image' || aiSiteImportIsBrandMark({ url: image.url, alt: image.alt })) return 0
+      const photo = scope.photos.get(image.url)
+      return photo?.width && photo.height ? photo.width / photo.height : 0
+    }
+    const widest = (found: Array<{ ref: string | null; line: SiteImportLineRef | undefined }>) => found.filter((entry) => ratioOf(entry.line) > 0).sort((a, b) => ratioOf(b.line) - ratioOf(a.line))[0]
+    // Its photo no section places; else one of a gallery it keeps, which shows the rest.
+    const pick =
+      widest(ledger.items.filter((item) => item.kind === 'picture' && !asked.has(item.ref)).map((item) => ({ ref: item.ref, line: item.lines[0] }))) ??
+      widest(ledger.items.filter((item) => item.kind === 'gallery' && asked.has(item.ref)).flatMap((item) => item.lines.map((line) => ({ ref: null, line }))))
+    const picture = pick ? aiSiteImportTakePicture(scope, pick.line) : null
+    if (!picture) return null
+    ownOpening.taken = true
+    ownOpening.ref = pick?.ref ?? null
+    return picture
+  }
   const sections = answer.map((section, index): AiLayoutSection => {
     scope.at = `sections[${index}]`
     const words = section.blocks.flatMap((block) => (block.kind === 'heading' || block.kind === 'eyebrow' ? [block.text ?? ''] : [])).join(' ')
@@ -976,7 +902,10 @@ export function aiSiteImportImprovedPage(given: readonly AiSiteImportImprovedSec
       const placed = block.col !== undefined ? { col: block.col } : {}
       if (block.kind === 'image') {
         const { col: _col, ...rest } = block
-        return [{ ...rest, ...placed }]
+        // An opening that asks for a picture shows the page's own where it has one (AGL-4152): a slot the
+        // library fills is searched by words alone, and put a stranger's desk on a builder's gallery.
+        const own = index === 0 && !block.picture?.src ? openingPicture() : null
+        return [{ ...rest, ...(own ? { picture: own } : {}), ...placed }]
       }
       if (block.kind === 'text' || block.kind === 'lede' || block.kind === 'note') {
         say(block.text)
@@ -1032,7 +961,7 @@ export function aiSiteImportImprovedPage(given: readonly AiSiteImportImprovedSec
     const group = sections[index]?.blocks.find((block) => block.items?.length)
     return { heading: names[index] as string, ...(group?.items?.length ? { items: group.items.length } : {}) }
   })
-  const placed = new Set([...aiSiteImportImprovedPlaced(answer, ledger), ...[...carded.values()].flat()])
+  const placed = new Set([...asked, ...(ownOpening.ref ? [ownOpening.ref] : [])])
   const allPictures = ledger.items.filter((item) => item.kind === 'picture')
   const unplaced = allPictures.filter((item) => !placed.has(item.ref)).flatMap((item) => {
     const block = doc.blocks[item.lines[0] as number]
@@ -1044,7 +973,8 @@ export function aiSiteImportImprovedPage(given: readonly AiSiteImportImprovedSec
     written,
     added,
     pictures: {
-      source: allPictures.length - unplaced.length,
+      // A gallery's photo the opening shows is the source's too.
+      source: allPictures.length - unplaced.length + (ownOpening.taken && !ownOpening.ref ? 1 : 0),
       stock: 0,
       generated: 0,
       slots: sections.reduce((total, section) => total + section.blocks.filter((block) => block.kind === 'image' && !block.picture).length, 0),

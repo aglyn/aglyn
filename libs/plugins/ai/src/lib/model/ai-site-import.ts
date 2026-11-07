@@ -1195,6 +1195,14 @@ export interface AiSiteImportState {
    * page says so.
    */
   plan?: AiSiteImportPlan | null
+  /**
+   * Why the plan did not pass, line by line (AGL-4152): each miss's code and
+   * what it says of the line it found, cut to 300 characters, at most 8, as a
+   * redesign's `redesignMissedWhy`. The answer is never stored, and the log
+   * names codes alone, so this is what a later read of the job has to
+   * diagnose a plan that fell back by. For the job's record; never shown.
+   */
+  planMissedWhy?: string[] | null
   /** The owner saw the plan and started the build (AGL-4152): its proposed page is settled, in or out. */
   planAccepted?: true
   /** Whether a slot nothing else fills may take a generated picture (AGL-4152); absent is `AI_SITE_IMPORT_GENERATED_PICTURES_DEFAULT`. */
@@ -2400,9 +2408,20 @@ export function aiSiteImportHasRoomForPage(state: Pick<AiSiteImportState, 'pages
  * The plan in, or the plan that did not pass (`null`). A proposed page takes
  * its place in the wave's rows as a page of its own, new, with no source: its
  * words are written from what the site says, so its one line is its purpose.
+ * A plan that did not pass keeps why (`planMissedWhy`); one that passed
+ * clears what an earlier miss said.
  */
-export function aiSiteImportPlanIn(state: AiSiteImportState, wave: Pick<AiSiteImportWave, 'index'>, plan: AiSiteImportPlan | null, at: string, draftId: string): AiSiteImportState {
-  if (!plan?.proposed) return { ...state, plan }
+export function aiSiteImportPlanIn(
+  state: AiSiteImportState,
+  wave: Pick<AiSiteImportWave, 'index'>,
+  plan: AiSiteImportPlan | null,
+  at: string,
+  draftId: string,
+  why?: readonly string[] | null,
+): AiSiteImportState {
+  if (!plan) return { ...state, plan, ...(why?.length ? { planMissedWhy: why.slice(0, 8).map((line) => line.slice(0, 300)) } : state.planMissedWhy ? { planMissedWhy: null } : {}) }
+  if (state.planMissedWhy) return aiSiteImportPlanIn({ ...state, planMissedWhy: null }, wave, plan, at, draftId)
+  if (!plan.proposed) return { ...state, plan }
   const proposed = plan.proposed
   const named = (pages: readonly string[]) => pages.map((page) => (page === AI_SITE_IMPORT_PROPOSED_PAGE ? draftId : page))
   const page: AiSiteImportPage = {

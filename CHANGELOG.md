@@ -9,6 +9,29 @@ content on the marketing site and is written separately.
 
 <!-- releases below -->
 
+## v1.18.0 — 2026-11-07
+
+[Compare with the previous release](https://github.com/aglyn/aglyn/compare/v1.17.0...v1.18.0)
+
+### Added
+
+- **native:** the quote notice asks the server whether customers can pay ([AGL-4162](https://linear.app/aglyn/issue/AGL-4162))
+- **commerce:** the quote route answers whether customers can pay, for the apps ([AGL-4162](https://linear.app/aglyn/issue/AGL-4162))
+- **native:** the Android quotes list and quote, and Quotes on Orders in both ([AGL-4162](https://linear.app/aglyn/issue/AGL-4162))
+- **native:** iOS Quotes list and read-only quote, from the Store hub ([AGL-4162](https://linear.app/aglyn/issue/AGL-4162))
+- **native:** the console's quote rules in both apps' contracts ([AGL-4162](https://linear.app/aglyn/issue/AGL-4162))
+
+### Fixed
+
+- **ai:** type the improved words tally's lines as lines with words ([AGL-4152](https://linear.app/aglyn/issue/AGL-4152))
+- **ai:** a redesign opens on its own photo; stock only where the site names its world ([AGL-4152](https://linear.app/aglyn/issue/AGL-4152))
+- **ai:** a page whose redesign fell back shows each call to action once ([AGL-4152](https://linear.app/aglyn/issue/AGL-4152))
+- **ai:** the facts ledger takes no ordinary word for a name, and holds a name in any form ([AGL-4152](https://linear.app/aglyn/issue/AGL-4152))
+- **ai:** a picture named only by its file is described by its page ([AGL-4152](https://linear.app/aglyn/issue/AGL-4152))
+- **ai:** mend a site plan where the mend is mechanical, before any re-ask ([AGL-4152](https://linear.app/aglyn/issue/AGL-4152))
+- **ai:** a site plan that falls back keeps why on the job's record ([AGL-4152](https://linear.app/aglyn/issue/AGL-4152))
+- **release-flags:** direct-charges help names in-person sales as direct
+
 ## v1.17.0 — 2026-11-07
 
 [Compare with the previous release](https://github.com/aglyn/aglyn/compare/v1.16.0...v1.17.0)
