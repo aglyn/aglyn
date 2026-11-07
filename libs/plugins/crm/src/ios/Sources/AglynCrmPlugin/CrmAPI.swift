@@ -250,7 +250,14 @@ struct CrmAPI {
     if let outcome, !outcome.isEmpty { fields["outcome"] = outcome }
     if let minutes { fields["durationMinutes"] = minutes }
     if let direction, !direction.isEmpty { fields["direction"] = direction }
-    try await reader.setDocument(crmPath(scope.orgID, "crmActivities") + [newRecordID()], fields, merge: true)
+    let id = newRecordID()
+    try await reader.setDocument(crmPath(scope.orgID, "crmActivities") + [id], fields, merge: true)
+    // Under "All sites except…" the activity is stamped with the default's sites, and the server marks it (AGL-4047),
+    // as the console's log dialog asks: only the server writes the marker.
+    if crmDefaultSharing(scope.org) == "allExcept" {
+      _ = try? await api.request(
+        CrmRoutes.sharing, method: .post, body: taskBody(["action": "evaluate", "object": "crmActivities", "ids": [id]]))
+    }
   }
 
   /// The company an activity rolls up to (`resolveCrmActivityCompany`), reading only what the links leave open. A read
