@@ -10866,6 +10866,410 @@
         ]
       ]
     },
+    "pluginRunsOnOf": {
+      "module": "libs/aglyn/src/lib/plugin-manager/plugin-site-exclusions.ts",
+      "args": [
+        [
+          "crm",
+          [
+            {
+              "id": "a"
+            },
+            {
+              "id": "b",
+              "disabledPlugins": [
+                "crm"
+              ]
+            },
+            {
+              "id": "c",
+              "enabledPlugins": [
+                "accounts"
+              ]
+            }
+          ]
+        ],
+        [
+          "mui",
+          [
+            {
+              "id": "a"
+            },
+            {
+              "id": "b",
+              "disabledPlugins": [
+                "crm"
+              ]
+            },
+            {
+              "id": "c",
+              "enabledPlugins": [
+                "accounts"
+              ]
+            }
+          ]
+        ],
+        [
+          "crm",
+          []
+        ],
+        [
+          "accounts",
+          [
+            {
+              "id": "a"
+            },
+            {
+              "id": "b",
+              "disabledPlugins": [
+                "crm"
+              ]
+            },
+            {
+              "id": "c",
+              "enabledPlugins": [
+                "accounts"
+              ]
+            }
+          ]
+        ]
+      ]
+    },
+    "planPluginRunsOn": {
+      "module": "libs/aglyn/src/lib/plugin-manager/plugin-site-exclusions.ts",
+      "args": [
+        [
+          {
+            "pluginId": "mui",
+            "choice": {
+              "mode": "all"
+            },
+            "org": null,
+            "sites": [
+              {
+                "id": "a"
+              },
+              {
+                "id": "b",
+                "disabledPlugins": [
+                  "crm"
+                ]
+              },
+              {
+                "id": "c",
+                "enabledPlugins": [
+                  "accounts"
+                ]
+              }
+            ]
+          }
+        ],
+        [
+          {
+            "pluginId": "crm",
+            "choice": {
+              "mode": "all"
+            },
+            "org": {
+              "enabledPlugins": [
+                "forms"
+              ]
+            },
+            "sites": [
+              {
+                "id": "a"
+              },
+              {
+                "id": "b",
+                "disabledPlugins": [
+                  "crm"
+                ]
+              },
+              {
+                "id": "c",
+                "enabledPlugins": [
+                  "accounts"
+                ]
+              }
+            ]
+          }
+        ],
+        [
+          {
+            "pluginId": "crm",
+            "choice": {
+              "mode": "allExcept",
+              "exceptHostIds": []
+            },
+            "org": null,
+            "sites": [
+              {
+                "id": "a"
+              },
+              {
+                "id": "b",
+                "disabledPlugins": [
+                  "crm"
+                ]
+              },
+              {
+                "id": "c",
+                "enabledPlugins": [
+                  "accounts"
+                ]
+              }
+            ]
+          }
+        ],
+        [
+          {
+            "pluginId": "crm",
+            "choice": {
+              "mode": "allExcept",
+              "exceptHostIds": [
+                "a",
+                "b",
+                "c"
+              ]
+            },
+            "org": null,
+            "sites": [
+              {
+                "id": "a"
+              },
+              {
+                "id": "b",
+                "disabledPlugins": [
+                  "crm"
+                ]
+              },
+              {
+                "id": "c",
+                "enabledPlugins": [
+                  "accounts"
+                ]
+              }
+            ]
+          }
+        ],
+        [
+          {
+            "pluginId": "crm",
+            "choice": {
+              "mode": "all"
+            },
+            "org": null,
+            "sites": [
+              {
+                "id": "a"
+              },
+              {
+                "id": "b",
+                "disabledPlugins": [
+                  "crm"
+                ]
+              },
+              {
+                "id": "c",
+                "enabledPlugins": [
+                  "accounts"
+                ]
+              }
+            ]
+          }
+        ],
+        [
+          {
+            "pluginId": "crm",
+            "choice": {
+              "mode": "allExcept",
+              "exceptHostIds": [
+                "a"
+              ]
+            },
+            "org": null,
+            "sites": [
+              {
+                "id": "a"
+              },
+              {
+                "id": "b",
+                "disabledPlugins": [
+                  "crm"
+                ]
+              },
+              {
+                "id": "c",
+                "enabledPlugins": [
+                  "accounts"
+                ]
+              }
+            ]
+          }
+        ],
+        [
+          {
+            "pluginId": "crm",
+            "choice": {
+              "mode": "allExcept",
+              "exceptHostIds": [
+                "b",
+                "gone"
+              ]
+            },
+            "org": null,
+            "sites": [
+              {
+                "id": "a"
+              },
+              {
+                "id": "b",
+                "disabledPlugins": [
+                  "crm"
+                ]
+              },
+              {
+                "id": "c",
+                "enabledPlugins": [
+                  "accounts"
+                ]
+              }
+            ]
+          }
+        ],
+        [
+          {
+            "pluginId": "commerce",
+            "choice": {
+              "mode": "allExcept",
+              "exceptHostIds": [
+                "c"
+              ]
+            },
+            "org": null,
+            "sites": [
+              {
+                "id": "a"
+              },
+              {
+                "id": "b",
+                "disabledPlugins": [
+                  "crm"
+                ]
+              },
+              {
+                "id": "c",
+                "enabledPlugins": [
+                  "accounts"
+                ]
+              }
+            ]
+          }
+        ],
+        [
+          {
+            "pluginId": "commerce",
+            "choice": {
+              "mode": "allExcept",
+              "exceptHostIds": [
+                "a"
+              ]
+            },
+            "org": null,
+            "sites": [
+              {
+                "id": "a"
+              },
+              {
+                "id": "b",
+                "disabledPlugins": [
+                  "crm"
+                ]
+              },
+              {
+                "id": "c",
+                "enabledPlugins": [
+                  "accounts"
+                ]
+              }
+            ]
+          }
+        ],
+        [
+          {
+            "pluginId": "commerce",
+            "choice": {
+              "mode": "allExcept",
+              "exceptHostIds": [
+                "b",
+                "c"
+              ]
+            },
+            "org": null,
+            "sites": [
+              {
+                "id": "a"
+              },
+              {
+                "id": "b",
+                "disabledPlugins": [
+                  "crm"
+                ]
+              },
+              {
+                "id": "c",
+                "enabledPlugins": [
+                  "accounts"
+                ]
+              }
+            ]
+          }
+        ],
+        [
+          {
+            "pluginId": "accounts",
+            "choice": {
+              "mode": "allExcept",
+              "exceptHostIds": [
+                "c"
+              ]
+            },
+            "org": null,
+            "sites": [
+              {
+                "id": "a"
+              },
+              {
+                "id": "b",
+                "disabledPlugins": [
+                  "crm"
+                ]
+              },
+              {
+                "id": "c",
+                "enabledPlugins": [
+                  "accounts"
+                ]
+              }
+            ]
+          }
+        ]
+      ]
+    },
+    "pluginRunsOnOptInNote": {
+      "module": "libs/aglyn/src/lib/plugin-manager/plugin-site-exclusions.ts",
+      "args": [
+        [
+          "accounts"
+        ],
+        [
+          "crm"
+        ],
+        [
+          "live-chat"
+        ]
+      ]
+    },
     "resolveEnabledPlugins": {
       "module": "libs/aglyn/src/lib/plugin-manager/enabled-plugins.ts",
       "args": [

@@ -38,6 +38,7 @@ val SITE_PLATFORM_CONTRIBUTES: Map<String, List<String>> = mapOf(
   "screens" to listOf(SITE_SITES_SCREEN, SITE_SITE_SCREEN, SITE_PAGES_SCREEN, SITE_MEDIA_SCREEN, SITE_SETUP_SCREEN, SITE_THEME_SCREEN, SITE_CONTENT_SCREEN) +
     ArtifactKind.entries.map { it.screen },
   "quickActions" to listOf("site.sites-open", "site.pages-open", "site.media-open"),
+  "widgets" to listOf(PLUGIN_RUNS_ON_WIDGET),
   "deepLinks" to listOf("site.sites-page", "site.pages-page", "site.page-view", "site.page-besigner-list", "site.media-page") +
     ArtifactKind.entries.flatMap { listOf("site.${it.collection}-page", "site.${it.singular}-page") } + "site.layouts-list-page" +
     listOf("site.setup-page", "site.setup-section-page", "site.theme-page", "site.content-page", "site.collection-page", "site.entry-page"),
@@ -61,6 +62,8 @@ fun registerSitePlatformNative(r: NativePluginRegistrar) {
   }
 
   r.screen(SITE_MEDIA_SCREEN, title = "Media", icon = "photo_library", layout = ScreenLayout.LIST_DETAIL) { context, params -> MediaScreen(context, params) }
+  // Where a built-in plugin runs, on its page (`core.plugin`'s `pluginRunsOn` zone).
+  r.widget(PLUGIN_RUNS_ON_WIDGET, title = "Runs on", order = 0, slot = PLUGIN_RUNS_ON_SLOT) { context -> PluginRunsOnSection(context) }
   r.quickAction("site.media-open", title = "Media", icon = "photo_library", order = 20, screen = SITE_MEDIA_SCREEN)
   r.quickAction("site.pages-open", title = "Pages", icon = "description", order = 10, requiresSite = true, screen = SITE_PAGES_SCREEN)
   r.quickAction("site.sites-open", title = "Sites", icon = "public", order = 5, screen = SITE_SITES_SCREEN)
