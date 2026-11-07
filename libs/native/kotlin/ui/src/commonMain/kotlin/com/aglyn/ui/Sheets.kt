@@ -88,8 +88,10 @@ fun FormSheet(
   confirmEnabled: Boolean = true,
   destructive: Boolean = false,
   secondary: (@Composable () -> Unit)? = null,
+  /** What the confirm says while it runs: "Saving…", or "Sending…" for a form that sends. */
+  workingLabel: String = "Saving…",
   content: @Composable () -> Unit,
-) = FormSheet(title, busy.busy, busy.error, onDismiss, onConfirm, modifier, confirmLabel, confirmEnabled, destructive, secondary, content)
+) = FormSheet(title, busy.busy, busy.error, onDismiss, onConfirm, modifier, confirmLabel, confirmEnabled, destructive, secondary, workingLabel, content)
 
 /** [FormSheet] for a model that keeps its own [busy] flag and [error] (a screen model's write). */
 @Composable
@@ -104,6 +106,7 @@ fun FormSheet(
   confirmEnabled: Boolean = true,
   destructive: Boolean = false,
   secondary: (@Composable () -> Unit)? = null,
+  workingLabel: String = "Saving…",
   content: @Composable () -> Unit,
 ) {
   Dialog(onDismissRequest = { if (!busy) onDismiss() }, properties = sheetDialogProperties()) {
@@ -127,7 +130,7 @@ fun FormSheet(
             enabled = confirmEnabled && !busy,
             colors = if (destructive) ButtonDefaults.buttonColors(containerColor = MaterialTheme.colorScheme.error) else ButtonDefaults.buttonColors(),
             modifier = Modifier.testTag("form-sheet-confirm"),
-          ) { Text(if (busy) "Saving…" else confirmLabel) }
+          ) { Text(if (busy) workingLabel else confirmLabel) }
         }
         HorizontalDivider()
         Column(Modifier.verticalScroll(rememberScrollState()).padding(space(2f)), verticalArrangement = Arrangement.spacedBy(space(1.5f))) {

@@ -9,6 +9,8 @@ import SwiftUI
 public struct AglynFormSheet<Content: View>: View {
   let title: String
   let confirm: String
+  /// What the confirm says while `save` runs: "Saving…", or "Sending…" for a form that sends.
+  let working: String
   let destructive: Bool
   let canConfirm: Bool
   let save: () async throws -> Void
@@ -18,11 +20,12 @@ public struct AglynFormSheet<Content: View>: View {
   @State private var error: String?
 
   public init(
-    _ title: String, confirm: String = "Save", destructive: Bool = false, canConfirm: Bool = true,
-    save: @escaping () async throws -> Void, @ViewBuilder content: () -> Content
+    _ title: String, confirm: String = "Save", working: String = "Saving…", destructive: Bool = false,
+    canConfirm: Bool = true, save: @escaping () async throws -> Void, @ViewBuilder content: () -> Content
   ) {
     self.title = title
     self.confirm = confirm
+    self.working = working
     self.destructive = destructive
     self.canConfirm = canConfirm
     self.save = save
@@ -53,7 +56,7 @@ public struct AglynFormSheet<Content: View>: View {
       .toolbar {
         ToolbarItem(placement: .cancellationAction) { Button("Cancel") { dismiss() }.disabled(busy) }
         ToolbarItem(placement: .confirmationAction) {
-          Button(busy ? "Saving…" : confirm, role: destructive ? .destructive : nil) {
+          Button(busy ? working : confirm, role: destructive ? .destructive : nil) {
             busy = true
             error = nil
             Task {
