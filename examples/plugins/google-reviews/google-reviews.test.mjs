@@ -231,7 +231,7 @@ async function render(props, { record = RECORD, editorInert = false, listing = '
 const cards = (html) => (html.match(/<li\b/g) || []).length
 const DEFAULT_PROPS = { count: 6, minStars: '1', layout: 'grid', reviewerImage: 'initials', showSummary: true, showReplies: true }
 
-test('the bundle registers one element, in its namespace, with its preset', async () => {
+test('the bundle registers its elements, in its namespace, with the composable presets', async () => {
   const { Element, schema, surface } = await mount()
   assert.equal(typeof Element, 'function')
   assert.equal(schema.pluginId, 'aglyn.google-reviews')
@@ -245,8 +245,24 @@ test('the bundle registers one element, in its namespace, with its preset', asyn
     Object.keys(surface.components.schemas).filter((id) => id.startsWith('aglyn.google-reviews')),
     MANIFEST.contributes.site.components,
   )
-  const preset = surface.components.getPreset(`aglyn.google-reviews:${COMPONENT_ID}`)
-  assert.deepEqual(preset.data.props, DEFAULT_PROPS)
+  // The one-piece element stays registered for pages that place it, but the
+  // Elements panel no longer offers it (AGL-4212).
+  assert.equal(surface.components.getPreset(`aglyn.google-reviews:${COMPONENT_ID}`), undefined)
+  assert.deepEqual(
+    ['section', 'summary', 'cards', 'list', 'carousel', 'review-link', 'stars', 'reviewer-image'].map(
+      (key) => surface.components.getPreset(`aglyn.google-reviews:${key}`)?.displayName,
+    ),
+    [
+      'Google reviews',
+      'Google rating',
+      'Google review cards',
+      'Google review list',
+      'Google review carousel',
+      'Review us on Google',
+      'Google stars',
+      'Google reviewer image',
+    ],
+  )
 })
 
 test('renders the whole of it: summary, review cards, attribution and the review link', async () => {
@@ -392,4 +408,238 @@ test('stars, initials, dates and photos', () => {
   assert.equal(photoAllowed({ photo: 'http://lh3.googleusercontent.com/a/x', anonymous: false }, photo), false)
   assert.equal(photoAllowed({ photo: 'https://lh3.googleusercontent.com/a/x', anonymous: false }, { reviewerImage: 'initials' }), false)
   assert.equal(selectReviews(null, normalizeSettings({})).length, 0)
+})
+
+/* ------------------------------------------------------------------ */
+/* Composable presets and their two elements (AGL-4212)                  */
+/* ------------------------------------------------------------------ */
+
+const PRESET_KEYS = ['section', 'summary', 'cards', 'list', 'carousel', 'review-link', 'stars', 'reviewer-image']
+const REVIEWS_SOURCE = 'aglyn.google-reviews/google'
+const SUMMARY_SOURCE = 'aglyn.google-reviews/google/fields'
+
+/** The presets as register() put them in the registry. */
+async function registeredPresets() {
+  const { surface } = await mount()
+  return PRESET_KEYS.map((key) => surface.components.getPreset(`aglyn.google-reviews:${key}`))
+}
+
+const walk = (node, visit) => {
+  visit(node)
+  for (const child of node.nodes || []) walk(child, visit)
+}
+
+test('every preset is built from site elements and this bundle\'s own, styled in node.sx', async () => {
+  const presets = await registeredPresets()
+  const ours = new Set(MANIFEST.contributes.site.components)
+  for (const preset of presets) {
+    assert.equal(preset.pluginId, 'aglyn.google-reviews', preset.$id)
+    walk(preset.data, (node) => {
+      if (node.pluginId === 'mui') assert.match(node.componentId, /^mui[A-Z]/, preset.$id)
+      else {
+        assert.equal(node.pluginId, 'aglyn.google-reviews', preset.$id)
+        assert.ok(ours.has(node.componentId), `${preset.$id}: ${node.componentId} is declared`)
+      }
+      // Only node.sx is what the Styles panel edits.
+      assert.equal(node.props?.sx, undefined, `${preset.$id}: ${node.componentId} styles in node.sx`)
+    })
+  }
+})
+
+test('the presets repeat over the google connection and name only fields it declares', async () => {
+  const presets = await registeredPresets()
+  const { record } = MANIFEST.connections[0].sync
+  const itemFields = new Set(Object.keys(record.items.fields).flatMap((name) => [name, `${name}Iso`]))
+  const summaryFields = new Set(Object.keys(record.fields))
+  for (const preset of presets) {
+    const check = (node, source) => {
+      const repeat = node.props?.repeatConnection
+      const scope = repeat ?? source
+      for (const value of Object.values(node.props || {})) {
+        for (const [, field] of String(value).matchAll(/\{\{item\.([A-Za-z]+)\}\}/g)) {
+          if (preset.$id.endsWith(':stars') || preset.$id.endsWith(':reviewer-image')) continue
+          assert.ok(scope, `${preset.$id}: {{item.${field}}} sits inside a repeat`)
+          const known = scope === SUMMARY_SOURCE ? summaryFields : itemFields
+          assert.ok(known.has(field), `${preset.$id}: ${field} is declared for ${scope}`)
+        }
+      }
+      for (const child of node.nodes || []) check(child, scope)
+    }
+    check(preset.data, undefined)
+  }
+  const section = presets.find((preset) => preset.$id === 'aglyn.google-reviews:section').data
+  assert.deepEqual(
+    section.nodes.map((node) => node.props.repeatConnection),
+    [SUMMARY_SOURCE, REVIEWS_SOURCE, SUMMARY_SOURCE],
+  )
+  // The owner's reply block leaves a review without one.
+  let reply
+  walk(section, (node) => {
+    if (node.props?.hideUnless) reply = node
+  })
+  assert.equal(reply.props.hideUnless, '{{item.reply}}')
+})
+
+async function renderPart(id, props) {
+  const { React, styles, surface } = await mount()
+  const { renderToString } = await import('react-dom/server')
+  const { default: createCache } = await import('@emotion/cache')
+  const { CacheProvider } = await import('@emotion/react')
+  const cache = createCache({ key: 'site' })
+  cache.compat = true
+  const theme = styles.createTheme({ palette: { primary: { main: '#1d4ed8' }, warning: { main: '#b45309' } } })
+  const h = React.createElement
+  const html = renderToString(
+    h(CacheProvider, { value: cache }, h(styles.ThemeProvider, { theme }, h(surface.components.getFactory(id), props))),
+  )
+  return { html, css: Object.values(cache.inserted).join('\n') }
+}
+
+test('Stars draws a rating and takes the author\'s color and size over its own', async () => {
+  const plain = await renderPart('aglyn.google-reviews.stars', { value: '4.5' })
+  assert.match(plain.html, /aria-label="Rated 4\.5 out of 5 stars"/)
+  assert.match(plain.css, /#b45309/)
+  const styled = await renderPart('aglyn.google-reviews.stars', {
+    value: 4,
+    'data-aglyn': 'n1',
+    sx: { color: '#123456', fontSize: '3rem' },
+  })
+  assert.match(styled.html, /data-aglyn="n1"/)
+  assert.match(styled.css, /color:#123456/)
+  assert.match(styled.css, /font-size:3rem/)
+  // Same rule, the author's declarations after the element's own: they win.
+  const rule = styled.css.split('\n').find((line) => line.includes('#123456'))
+  assert.ok(rule.indexOf('color:#123456') > rule.indexOf('color:#b45309'), 'the author\'s color comes last')
+  assert.ok(rule.indexOf('font-size:3rem') > rule.indexOf('font-size:1.25rem'), 'the author\'s size comes last')
+  // An unfilled token on the canvas draws five empty stars, not an error.
+  const unfilled = await renderPart('aglyn.google-reviews.stars', { value: '{{item.stars}}' })
+  assert.match(unfilled.html, /aria-label="Rated 0 out of 5 stars"/)
+})
+
+test('Reviewer image shows initials, or a photo only when chosen and allowed', async () => {
+  const initials = await renderPart('aglyn.google-reviews.reviewer-image', {
+    name: 'Jordan Lee',
+    photo: 'https://lh3.googleusercontent.com/a/photo',
+    show: 'initials',
+  })
+  assert.match(initials.html, />JL</)
+  assert.doesNotMatch(initials.html, /<img/)
+  const photo = await renderPart('aglyn.google-reviews.reviewer-image', {
+    name: 'Jordan Lee',
+    photo: 'https://lh3.googleusercontent.com/a/photo',
+    show: 'photo',
+    sx: { borderRadius: 2 },
+  })
+  assert.match(photo.html, /<img[^>]*src="https:\/\/lh3\.googleusercontent\.com\/a\/photo"/)
+  const anonymous = await renderPart('aglyn.google-reviews.reviewer-image', {
+    name: 'A Google User',
+    photo: 'https://lh3.googleusercontent.com/a/photo',
+    anonymous: 'true',
+    show: 'photo',
+  })
+  assert.doesNotMatch(anonymous.html, /<img/, 'an anonymous reviewer always shows initials')
+  const elsewhere = await renderPart('aglyn.google-reviews.reviewer-image', {
+    name: 'Jordan Lee',
+    photo: 'https://example.com/photo.png',
+    show: 'photo',
+  })
+  assert.doesNotMatch(elsewhere.html, /<img/, 'a host the page may not load is never drawn')
+})
+
+/* ------------------------------------------------------------------ */
+/* The presets as a published page composes them (AGL-4212)             */
+/* ------------------------------------------------------------------ */
+
+/** A preset's nested tree as the flat node map a page stores. */
+function flatten(data) {
+  const nodes = {}
+  let next = 0
+  const add = (node, parentId) => {
+    const $id = `n${next++}`
+    const { nodes: children, ...rest } = node
+    nodes[$id] = { ...rest, $id, type: 'node', parentId, nodes: [] }
+    nodes[$id].nodes = (children || []).map((child) => add(child, $id))
+    return $id
+  }
+  nodes.root = { $id: 'root', type: 'node', nodes: [add(data, 'root')] }
+  return nodes
+}
+
+/** The page's repeats expanded over RECORD, as the server composes them. */
+async function composePreset(presetKey, record = RECORD) {
+  const { surface } = await mount()
+  const { expandRepeatables, repeatKey } = await workspace('libs/aglyn/src/lib/app-utils/expand-repeatables.ts')
+  const { parsePluginConnectionRepeat, pluginConnectionFieldTypes, pluginConnectionRepeatRows } = await workspace(
+    'libs/aglyn/src/lib/app-utils/plugin-connection-repeat.ts',
+  )
+  const nodes = flatten(surface.components.getPreset(`aglyn.google-reviews:${presetKey}`).data)
+  const types = pluginConnectionFieldTypes(MANIFEST.connections[0])
+  const rows = {}
+  for (const node of Object.values(nodes)) {
+    const key = repeatKey(node)
+    if (!key) continue
+    const target = parsePluginConnectionRepeat(key)
+    rows[key] = pluginConnectionRepeatRows(record, types, target.part)
+  }
+  const out = expandRepeatables(nodes, rows)
+  // Reading order, from the root down.
+  const order = []
+  const visit = (id) => {
+    const node = out[id]
+    if (!node) return
+    if (id !== 'root') order.push(node)
+    for (const child of node.nodes || []) visit(child)
+  }
+  visit('root')
+  return order
+}
+
+const textsOf = (order) => order.map((node) => node.props?.children).filter((value) => typeof value === 'string')
+
+test('the whole section composes into the summary, six newest rated cards and the link', async () => {
+  const order = await composePreset('section')
+  const texts = textsOf(order)
+  assert.equal(texts[0], '4.6')
+  assert.equal(texts[1], '44 reviews on Google')
+  const names = order
+    .filter((node) => node.componentId === 'muiTypography' && node.props.variant === 'subtitle2')
+    .map((node) => node.props.children)
+  // Newest first, a review Google gave no star rating left out, six at most.
+  assert.deepEqual(names, ['Jordan Lee', 'Pat Lee', 'A Google User', 'Sam Rivera', 'Alex Kim', 'Casey Moore'])
+  assert.ok(texts.includes('Mar 14, 2026'), 'the date prints as a date')
+  const stars = order.filter((node) => node.componentId === 'aglyn.google-reviews.stars').map((node) => node.props.value)
+  assert.deepEqual(stars.map(String), ['4.6', '5', '4', '5', '3', '2', '5'])
+  // Replies: only Jordan's and Alex's cards keep the block.
+  assert.equal(texts.filter((text) => text === 'Response from the owner').length, 2)
+  assert.ok(texts.includes('Thank you, Jordan!') && texts.includes('We are sorry, Alex.'))
+  // A review with no comment has no empty text.
+  assert.ok(!texts.some((text) => text.includes('{{')), 'every token is filled')
+  const link = order.find((node) => node.componentId === 'muiScreenLink')
+  assert.equal(link.props.href, RECORD.fields.reviewUrl)
+  // No directive reaches a published element.
+  for (const node of order) {
+    for (const prop of ['repeatConnection', 'repeatLimit', 'repeatFilter', 'repeatSelf', 'hideUnless']) {
+      assert.equal(node.props?.[prop], undefined, `${node.componentId} carries no ${prop}`)
+    }
+  }
+})
+
+test('a filter on the cards keeps only the reviews it names', async () => {
+  const { surface } = await mount()
+  const preset = surface.components.getPreset('aglyn.google-reviews:cards')
+  const before = preset.data.props.repeatFilter
+  preset.data.props.repeatFilter = 'stars >= 5'
+  try {
+    const names = (await composePreset('cards'))
+      .filter((node) => node.props?.variant === 'subtitle2')
+      .map((node) => node.props.children)
+    assert.deepEqual(names, ['Jordan Lee', 'A Google User', 'Casey Moore', 'Morgan Diaz'])
+  } finally {
+    preset.data.props.repeatFilter = before
+  }
+})
+
+test('before the first sync the section draws nothing to visitors', async () => {
+  const order = await composePreset('section', null)
+  assert.deepEqual(textsOf(order), [], 'no summary, no cards, no link')
 })
