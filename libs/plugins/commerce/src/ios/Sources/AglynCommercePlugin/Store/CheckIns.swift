@@ -393,7 +393,8 @@ struct RainCheckSheet: View {
   @State private var kind = "open"
   @State private var newDay: Date?
 
-  private var newDayKey: String? { newDay.map(pickerDayKey) }
+  /// The picked day, else the one the picker shows first: the day after the pass's.
+  private var newDayKey: String? { newDay.map(pickerDayKey) ?? addCheckInDays(row.checkIn.dayKey, 1) }
   private var dayProblem: String? {
     guard kind == "date", let newDayKey else { return nil }
     return rainCheckProblem(row.checkIn, kind: "date", dayKey: newDayKey, todayKey: todayKey)
@@ -432,7 +433,7 @@ struct RainCheckSheet: View {
         if kind == "date" {
           DatePicker(
             "New day",
-            selection: Binding(get: { newDay ?? pickerDate(addCheckInDays(checkIn.dayKey, 1)) ?? Date() }, set: { newDay = $0 }),
+            selection: Binding(get: { newDay ?? newDayKey.flatMap(pickerDate) ?? Date() }, set: { newDay = $0 }),
             displayedComponents: .date
           )
           .accessibilityIdentifier("rain-check-day")
