@@ -282,6 +282,12 @@ final class FunctionCasesTests: XCTestCase {
     for item in cases("quoteIsProofOnly") {
       XCTAssertEqual(quoteIsProofOnly(try quoteOrder(item.args[0])), item.result as? Bool, item.label)
     }
+    for item in cases("describeQuoteTax") {
+      let basis = try (item.args[0] as? [String: Any]).map {
+        try JSONDecoder().decode(QuoteTaxBasis.self, from: JSONSerialization.data(withJSONObject: $0))
+      }
+      XCTAssertEqual(describeQuoteTax(basis), item.result as? String, item.label)
+    }
     for item in cases("isUnpaidQuote") {
       XCTAssertEqual(isUnpaidQuote(try quoteOrder(item.args[0])), item.result as? Bool, item.label)
     }

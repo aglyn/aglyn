@@ -156,3 +156,23 @@ fun payLinkGapLine(gap: PayLinkGap, paymentsReason: String?, noun: String): PayL
   PayLinkGap.TAX_UNDECIDED -> PayLinkGapLine("Choose how this store handles sales tax.", "Open Taxes")
   PayLinkGap.TAX_SAVE -> PayLinkGapLine("${if (noun == "quote") "Save this quote" else "Save the quote"} again to apply the store’s sales tax setting.", null)
 }
+
+/** The tax line's words for a basis (the console's `describeQuoteTax`). */
+fun describeQuoteTax(basis: QuoteTaxBasis?): String {
+  if (basis == null) return "Tax"
+  return when (basis.kind) {
+    QuoteTaxKind.RATE -> {
+      val pct = jsNumberText(basis.pct ?: 0.0)
+      if (!basis.label.isNullOrEmpty()) "${basis.label} ($pct%)" else "Tax ($pct%)"
+    }
+    QuoteTaxKind.SERVICE -> if (!basis.providerLabel.isNullOrEmpty()) "Tax (${basis.providerLabel})" else "Tax"
+    QuoteTaxKind.AT_PAYMENT -> "Tax is added at payment"
+    QuoteTaxKind.NONE -> when (basis.reason) {
+      QuoteNoTaxReason.PRICES_INCLUDE_TAX -> "Prices include tax"
+      QuoteNoTaxReason.NO_RATE -> "No tax rate for this address"
+      QuoteNoTaxReason.UNDECIDED -> "Sales tax is not set up"
+      else -> "No sales tax"
+    }
+    else -> "Tax"
+  }
+}

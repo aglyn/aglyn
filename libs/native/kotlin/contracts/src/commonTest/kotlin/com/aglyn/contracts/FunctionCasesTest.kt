@@ -190,6 +190,12 @@ class FunctionCasesTest {
   }
 
   @Test
+  fun describeQuoteTaxCases() = cases("describeQuoteTax").forEach { (args, result) ->
+    val basis = (args[0] as? JsonObject)?.let { ContractJsonFormat.decodeFromJsonElement(QuoteTaxBasis.serializer(), it) }
+    assertEquals(result.jsonPrimitive.content, describeQuoteTax(basis), args.toString())
+  }
+
+  @Test
   fun formatQuoteNumberCases() = cases("formatQuoteNumber").forEach { (args, result) ->
     assertEquals(result.jsonPrimitive.content, formatQuoteNumber(order(args[0]), str(args.getOrNull(1))), args.toString())
   }

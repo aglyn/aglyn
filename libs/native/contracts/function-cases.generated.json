@@ -9960,6 +9960,99 @@
         }
       ]
     },
+    "describeQuoteTax": {
+      "module": "libs/plugins/commerce/src/lib/model/commerce-quotes.ts",
+      "cases": [
+        {
+          "args": [
+            {
+              "kind": "rate",
+              "pct": 8.25,
+              "label": "State tax"
+            }
+          ],
+          "result": "State tax (8.25%)"
+        },
+        {
+          "args": [
+            {
+              "kind": "rate",
+              "pct": 7
+            }
+          ],
+          "result": "Tax (7%)"
+        },
+        {
+          "args": [
+            {
+              "kind": "service",
+              "taxCents": 120,
+              "providerLabel": "Avalara AvaTax"
+            }
+          ],
+          "result": "Tax (Avalara AvaTax)"
+        },
+        {
+          "args": [
+            {
+              "kind": "service",
+              "taxCents": 120
+            }
+          ],
+          "result": "Tax"
+        },
+        {
+          "args": [
+            {
+              "kind": "at-payment"
+            }
+          ],
+          "result": "Tax is added at payment"
+        },
+        {
+          "args": [
+            {
+              "kind": "none",
+              "reason": "prices-include-tax"
+            }
+          ],
+          "result": "Prices include tax"
+        },
+        {
+          "args": [
+            {
+              "kind": "none",
+              "reason": "no-rate"
+            }
+          ],
+          "result": "No tax rate for this address"
+        },
+        {
+          "args": [
+            {
+              "kind": "none",
+              "reason": "undecided"
+            }
+          ],
+          "result": "Sales tax is not set up"
+        },
+        {
+          "args": [
+            {
+              "kind": "none",
+              "reason": "not-collected"
+            }
+          ],
+          "result": "No sales tax"
+        },
+        {
+          "args": [
+            null
+          ],
+          "result": "Tax"
+        }
+      ]
+    },
     "describeRestockCheck": {
       "module": "libs/plugins/commerce/src/lib/model/order-annotations.ts",
       "cases": [

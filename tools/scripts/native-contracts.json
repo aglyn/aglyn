@@ -34257,6 +34257,69 @@
           null
         ]
       ]
+    },
+    "describeQuoteTax": {
+      "module": "libs/plugins/commerce/src/lib/model/commerce-quotes.ts",
+      "args": [
+        [
+          {
+            "kind": "rate",
+            "pct": 8.25,
+            "label": "State tax"
+          }
+        ],
+        [
+          {
+            "kind": "rate",
+            "pct": 7
+          }
+        ],
+        [
+          {
+            "kind": "service",
+            "taxCents": 120,
+            "providerLabel": "Avalara AvaTax"
+          }
+        ],
+        [
+          {
+            "kind": "service",
+            "taxCents": 120
+          }
+        ],
+        [
+          {
+            "kind": "at-payment"
+          }
+        ],
+        [
+          {
+            "kind": "none",
+            "reason": "prices-include-tax"
+          }
+        ],
+        [
+          {
+            "kind": "none",
+            "reason": "no-rate"
+          }
+        ],
+        [
+          {
+            "kind": "none",
+            "reason": "undecided"
+          }
+        ],
+        [
+          {
+            "kind": "none",
+            "reason": "not-collected"
+          }
+        ],
+        [
+          null
+        ]
+      ]
     }
   }
 }

@@ -60,6 +60,12 @@
               "subtitle": "Fulfill, refund and print"
             },
             {
+              "title": "Quotes",
+              "icon": "doc.text|request_quote",
+              "screen": "commerce.quotes",
+              "subtitle": "Prices for a customer’s order before they buy"
+            },
+            {
               "title": "Pickup & delivery",
               "icon": "local_shipping|local_shipping",
               "screen": "commerce.fulfillmentQueue",

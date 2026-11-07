@@ -184,3 +184,26 @@ public func payLinkGapLine(_ gap: PayLinkGap, paymentsReason: String?, noun: Str
       action: nil)
   }
 }
+
+/// The tax line's words for a basis (the console's `describeQuoteTax`).
+public func describeQuoteTax(_ basis: QuoteTaxBasis?) -> String {
+  guard let basis else { return "Tax" }
+  switch basis.kind {
+  case .rate:
+    let pct = jsNumberText(basis.pct ?? 0)
+    if let label = basis.label, !label.isEmpty { return "\(label) (\(pct)%)" }
+    return "Tax (\(pct)%)"
+  case .service:
+    if let provider = basis.providerLabel, !provider.isEmpty { return "Tax (\(provider))" }
+    return "Tax"
+  case .atPayment: return "Tax is added at payment"
+  case .none:
+    switch basis.reason {
+    case .pricesIncludeTax: return "Prices include tax"
+    case .noRate: return "No tax rate for this address"
+    case .undecided: return "Sales tax is not set up"
+    default: return "No sales tax"
+    }
+  default: return "Tax"
+  }
+}

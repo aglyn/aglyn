@@ -75,6 +75,13 @@ public func registerCommerceNative(_ r: NativePluginRegistrar) {
   r.screen(commerceOrderScreen, title: "Order", requiresSite: true, icon: "bag") { context, params in
     OrderScreen(context: context, orderID: params["orderId"] ?? "")
   }
+  // Quotes (AGL-4093): the console's Quotes card on the Orders page, and one quote read-only.
+  r.screen(commerceQuotesScreen, title: "Quotes", requiresSite: true, icon: "doc.text") { context, _ in
+    QuotesScreen(context: context)
+  }
+  r.screen(commerceQuoteScreen, title: "Quote", requiresSite: true, icon: "doc.text") { context, params in
+    QuoteScreen(context: context, quoteID: params["quote"] ?? "")
+  }
   r.screen(commerceProductsScreen, title: "Products", requiresSite: true, icon: "shippingbox") { context, _ in
     ProductsScreen(context: context)
   }
