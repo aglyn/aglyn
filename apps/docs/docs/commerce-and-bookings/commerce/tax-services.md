@@ -18,8 +18,10 @@ filings start from what you actually sold.
 Aglyn asks your tax service for a figure and records your sales there. It does
 not register you anywhere, file your returns or pay the tax you collect. Where
 you are registered, what you file and when are decisions for you, your tax
-service and your own advisor. This is different from **Stripe Tax** mode,
-where the platform collects and remits the tax for you.
+service and your own advisor. **Stripe Tax** mode is the same for a store on
+its own Stripe account. Only on a platform-managed (Express) account, set up
+before stores got their own, does the platform collect and remit Stripe Tax
+for you.
 :::
 
 Tax services come with every plan that includes selling, at no extra cost.

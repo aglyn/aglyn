@@ -2680,8 +2680,8 @@
       "plans": []
     },
     "release_direct_charges": {
-      "enabled": false,
-      "rolloutPercent": 0,
+      "enabled": true,
+      "rolloutPercent": 100,
       "plans": []
     },
     "release_edit_bar": {

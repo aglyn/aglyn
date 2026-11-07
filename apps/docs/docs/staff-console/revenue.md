@@ -154,11 +154,16 @@ fee = take%(goods) + processing%(charge) + 30¢
       └─ Aglyn ──┘   └──── Stripe, at cost ────┘
 ```
 
-Every storefront charge is a destination charge, so Stripe moves the whole amount to the
-merchant and debits its processing fee from **Aglyn's** balance. The pass-through half of
-the fee recovers exactly that. Reporting the whole fee as earnings would overstate margin
-on every storefront sale, and on a small order would report the 30¢ Stripe just took as
-money Aglyn made. Only the take reaches the earned column.
+A storefront charge on a platform-managed (Express) account is a destination charge, so
+Stripe moves the whole amount to the merchant and debits its processing fee from
+**Aglyn's** balance. The pass-through half of the fee recovers exactly that. Reporting the
+whole fee as earnings would overstate margin on every such sale, and on a small order
+would report the 30¢ Stripe just took as money Aglyn made. Only the take reaches the
+earned column.
+
+A sale on a store's own Stripe account (a direct charge, every store that set up payments
+since stores got their own account) carries no pass-through: Stripe bills its processing to
+the store's account, and the application fee is the take alone, so all of it is earned.
 
 The pass-through is priced at the dearest enabled payment method's rate, because that is
 the rate the fee was charged at and the shopper chooses how to pay after the session is

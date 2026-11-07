@@ -75,10 +75,12 @@ added; a sale with no name or address is filed under **Online customer**.
 
 ### Sales tax collected by Aglyn
 
-On a store that uses **Stripe Tax**, Aglyn collects and remits the sales tax as
-the marketplace facilitator, and that tax never reaches your Stripe account. So
-Aglyn posts those sales without it, and refunds only your share of what went
-back to the buyer. Sales taxed at your own rate post their tax as usual.
+On a store that uses **Stripe Tax**, Aglyn posts those sales without the tax,
+and refunds only your share of what went back to the buyer. On a
+platform-managed (Express) account, set up before stores got their own Stripe
+account, that tax is collected and remitted by Aglyn as the marketplace
+facilitator and never reaches your Stripe account. Sales taxed at your own rate
+post their tax as usual.
 
 ### One summary a day instead
 

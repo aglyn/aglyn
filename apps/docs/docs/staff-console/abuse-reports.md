@@ -551,9 +551,9 @@ the seller is the fraudster:
   membership renewals and switch the seller to manual payouts
   ([Stopping a tenant's money](./lockdown.md#pause-site-money)). Unlocking
   restores exactly what the lock paused.
-- If the lock result says the payouts are **not controllable** (a Standard
-  account), pause them in the Stripe Dashboard
-  (**Connect → Accounts → the account → Payouts**).
+- If the lock result says the payouts are **not controllable** (a store's own
+  full Stripe account, or a Standard account), pause them in the Stripe
+  Dashboard (**Connect → Accounts → the account → Payouts**).
 
 Then close the row with a note saying what you did.
 
@@ -585,9 +585,11 @@ pause the connected account's payouts as for a
 The counters cannot see the card, because Stripe's hosted Checkout page takes
 it. A limit per card is Radar's job. Stripe's card-testing protection is on
 for every Checkout Session by default. Velocity rules live in the platform
-account's Radar, since every tenant sale is a destination charge on it. They
-need Radar for Fraud Teams; check each attribute's exact name in the rule
-editor before saving:
+account's Radar, which sees the tenant sales charged on it: those of stores on
+a platform-managed (Express) account. A store on its own Stripe account is
+charged on that account, under that account's Radar. The rules need Radar for
+Fraud Teams; check each attribute's exact name in the rule editor before
+saving:
 
 - **Block** when one address has many declined charges in an hour
   (`:declined_charges_per_ip_address_hourly:`).

@@ -155,7 +155,10 @@ discount, then add shipping and tax. Tax follows your store's
 - **A connected tax service** ([Tax services](tax-services.md)) prices the quote when
   you save it, and the quote shows its figure.
 - **Stripe Tax**: the quote says **Tax is added at payment**, because Stripe works
-  out the tax when the customer pays.
+  out the tax when the customer pays. A store on its own Stripe account needs
+  Stripe Tax turned on in its Stripe Dashboard first, or paying is refused with
+  "This store is finishing its sales tax setup." (see
+  [Tax settings](overview.md#tax-settings)).
 - **No sales tax**: no tax is added.
 
 If your store hasn't chosen how it handles sales tax, the quote shows no tax, and your
@@ -505,9 +508,12 @@ ship-to. Under Stripe Tax, the tax is worked out from that address when they pay
 Your customer pays by card, or with a wallet you leave on in
 [Payment methods](overview.md#payment-methods): Apple Pay, Google Pay, Link, Cash App
 Pay, Amazon Pay, or stablecoins once you turn them on. A quote never offers Klarna,
-Afterpay or Affirm, as no checkout does. Its processing is Stripe's card rate,
-2.9% + 30¢, passed through at cost beside your plan's platform fee. An invoice pays the
-same way.
+Afterpay or Affirm, as no checkout does. The payment is charged on your own Stripe
+account: Aglyn takes your plan's platform fee from it, and Stripe bills its processing
+to your Stripe account at Stripe's standard pricing for your account. On a
+platform-managed (Express) account, set up before stores got their own, the
+processing is Stripe's card rate, 2.9% + 30¢, passed through at cost beside the
+platform fee. An invoice pays the same way.
 
 If you edit the quote while your customer has it open, **Pay** asks them to reload the
 page first, so nobody pays for a version they haven't seen. Editing a quote, deleting
