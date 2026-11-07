@@ -133,7 +133,8 @@ fun OverflowMenu(
     }
     DropdownMenu(expanded = open, onDismissRequest = { open = false }) {
       for (action in actions) {
-        val color = if (action.destructive) MaterialTheme.colorScheme.error else MaterialTheme.colorScheme.onSurface
+        val color = (if (action.destructive) MaterialTheme.colorScheme.error else MaterialTheme.colorScheme.onSurface)
+          .let { if (action.enabled) it else it.copy(alpha = 0.38f) }
         DropdownMenuItem(
           text = {
             val reason = action.reason?.takeIf { !action.enabled }

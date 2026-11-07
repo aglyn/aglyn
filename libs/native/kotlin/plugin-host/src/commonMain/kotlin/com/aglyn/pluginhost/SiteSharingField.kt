@@ -148,6 +148,7 @@ fun SiteSharingField(
               .padding(horizontal = space(2f))
               .testTag("sharing-site-${site.id}"),
             verticalAlignment = Alignment.CenterVertically,
+            horizontalArrangement = Arrangement.spacedBy(space(1f)),
           ) {
             Checkbox(checked = site.id in picked, onCheckedChange = null, enabled = enabled)
             Column {
