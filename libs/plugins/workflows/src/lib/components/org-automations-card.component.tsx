@@ -25,6 +25,7 @@ import {
 import {
   hostIdsFromScope,
   isOrgWideScope,
+  scopeSharingOf,
 } from '@aglyn/aglyn/app-utils/scope-tokens'
 import { useConsoleWidgetSlot } from '@aglyn/aglyn/app-utils/console-widget-slot-context'
 import { CardDisplay, useConfirmationContext } from '@aglyn/shared-ui-jsx'
@@ -64,6 +65,7 @@ import {
   readOrgAutomation,
 } from '../model/org-automations'
 import {
+  draftSharing,
   newOrgAutomationDraft,
   OrgAutomationEditor,
   orgAutomationBody,
@@ -97,12 +99,21 @@ function placedSiteIds(
     : hostIdsFromScope(row.visibleTo)
 }
 
-/** "Runs on every site" or "Runs on Shop, Blog". */
+/**
+ * "Runs on every site", "Runs on Shop, Blog" or, for one that runs on all
+ * sites except some (AGL-4047), "Runs on every site except Blog".
+ */
 function placementLine(
-  row: Pick<OrgAutomationRow, 'visibleTo'>,
+  row: Pick<OrgAutomationRow, 'visibleTo' | 'scopeMode' | 'scopeExcept'>,
   mount: WorkflowsOrgMount,
 ): string {
-  if (isOrgWideScope(row.visibleTo)) return 'Runs on every site'
+  const sharing = scopeSharingOf(row as Record<string, unknown>)
+  if (sharing.mode === 'all') return 'Runs on every site'
+  if (sharing.mode === 'allExcept') {
+    if (!sharing.includedHostIds.length) return 'Runs on no site'
+    const leftOut = sharing.exceptHostIds.map((id) => orgSiteName(mount, id))
+    return `Runs on every site except ${leftOut.join(', ')}`
+  }
   const names = hostIdsFromScope(row.visibleTo).map((id) => orgSiteName(mount, id))
   return names.length ? `Runs on ${names.join(', ')}` : 'Runs on no site'
 }
@@ -233,6 +244,15 @@ export function OrgAutomationsCard(props: OrgAutomationsCardProps) {
     if (read.ok === false) {
       return void enqueueSnackbar(read.problem, { variant: 'warning', persist: false })
     }
+    // Where it runs, against the workspace's sites, as the route will ask it
+    // (AGL-4047). Leaving sites out waits for the sites; the route asks again.
+    const placement =
+      draft.sharing.mode !== 'allExcept' || mount.hostsReady
+        ? draftSharing(draft, mount.hosts.map((host) => host.id))
+        : null
+    if (placement?.problem) {
+      return void enqueueSnackbar(placement.problem, { variant: 'warning', persist: false })
+    }
     setSaving(true)
     try {
       await api('manage', {
@@ -248,7 +268,7 @@ export function OrgAutomationsCard(props: OrgAutomationsCardProps) {
     } finally {
       setSaving(false)
     }
-  }, [draft, api, mount.orgId, enqueueSnackbar, fail])
+  }, [draft, api, mount.orgId, mount.hosts, mount.hostsReady, enqueueSnackbar, fail])
 
   const handleToggle = useCallback(
     (row: OrgAutomationRow) => async (event: { target: { checked: boolean } }) => {
