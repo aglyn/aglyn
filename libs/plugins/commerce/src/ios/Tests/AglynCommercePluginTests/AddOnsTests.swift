@@ -119,4 +119,26 @@ final class AddOnsTests: XCTestCase {
     plain.removeValue(forKey: "modifierGroups")
     XCTAssertNil(productSaveJSON(productDraft(FirestoreDocument(id: "p2", data: plain)), stored: plain)["modifierGroups"])
   }
+
+  func testAChoicesPictureNoteAndComboReadAndSaveAsTheConsoleWritesThem() throws {
+    var draft = productDraft(FirestoreDocument(id: "p1", data: stored))
+    XCTAssertEqual(draft.addOns[0].choices[1].includes, "Full wall ×2\nRoller bag")
+    XCTAssertEqual(draft.addOns[0].choices[0].imageUrl, "https://cdn.example/wall.jpg")
+    draft.addOns[0].choices[0].imageUrl = " "
+    draft.addOns[0].choices[0].note = "  " + String(repeating: "x", count: 200) + "  "
+    draft.addOns[0].choices[1].includes = "  Full wall ×2 \n\n" + (1...14).map { "Item \($0)" }.joined(separator: "\n")
+    draft.addOns[0].choices[1].note = "Two walls and a bag"
+    let options = try XCTUnwrap(productSaveJSON(draft, stored: stored)["modifierGroups"]?.arrayValue?.first?["options"]?.arrayValue)
+    XCTAssertNil(options[0]["imageUrl"])
+    XCTAssertEqual(options[0]["note"]?.stringValue?.count, 160)
+    let items = try XCTUnwrap(options[1]["includes"]?.arrayValue?.compactMap(\.stringValue))
+    XCTAssertEqual(items.count, 12)
+    XCTAssertEqual(items.first, "Full wall ×2")
+    XCTAssertEqual(options[1]["note"]?.stringValue, "Two walls and a bag")
+    draft.addOns[0].choices[1].includes = ""
+    draft.addOns[0].choices[1].note = ""
+    let after = try XCTUnwrap(productSaveJSON(draft, stored: stored)["modifierGroups"]?.arrayValue?.first?["options"]?.arrayValue?[1])
+    XCTAssertNil(after["includes"])
+    XCTAssertNil(after["note"])
+  }
 }
