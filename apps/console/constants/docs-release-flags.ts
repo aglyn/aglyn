@@ -501,11 +501,6 @@ export const FLAGS_WITHOUT_DOCS: Partial<Record<ReleaseFlagKey, string>> = {
   // less than they say, never more, so there is no rollout to disclose.
   release_crm_assist_whole_record:
     'Widens what CRM assistance sends the model provider without opening any surface. The legal pages (v10, October 5, 2026) and the docs describe the whole record, which is what the flag can send; with it off a record sends less than they say, never more.',
-  // Off until the Terms of Service name the store as seller of record. The
-  // payments docs are rewritten with the Terms, in the same change that turns
-  // the flag on; until then nothing a customer reads may describe it.
-  release_direct_charges:
-    'Changes which Stripe account a new store sells from (its own, as seller of record). It stays off until the Terms of Service say so, and the payments docs are rewritten in the same change that turns it on.',
 }
 
 /**

@@ -137,11 +137,12 @@ const PLATFORM_RELEASE_FLAGS: readonly ReleaseFlagDefinition[] = [
       'the redirect; turning this off returns every storefront to the redirect.',
     defaultEnabled: true,
   },
-  // Off until the Terms of Service say a site's own Stripe account is the
-  // seller of record. On (globally or for one org by override), a store that
-  // sets up payments gets a full Stripe account of its own and its site sales
-  // become direct charges on it. Off changes nothing for an account already
-  // created: the account itself decides how its sales are charged.
+  // Released to every store 2026-11-06, after the Terms (v24) named a site's
+  // own Stripe account as the seller of record. On, a store that sets up
+  // payments gets a full Stripe account of its own and its sales, online and
+  // in person, become direct charges on it. It stays the kill switch: off,
+  // new setups get the platform-managed account again. Neither state changes
+  // an account already created: the account itself decides how it charges.
   {
     key: 'release_direct_charges',
     label: 'Sellers get their own Stripe account',
@@ -155,7 +156,7 @@ const PLATFORM_RELEASE_FLAGS: readonly ReleaseFlagDefinition[] = [
       'platform account. Off: new stores get the platform-managed account ' +
       'and destination charges, as before. Accounts already created keep ' +
       'whichever shape they were created with.',
-    defaultEnabled: false,
+    defaultEnabled: true,
   },
   // Released to every site 2026-09-16 (AGL-3041). Still the whole surface's
   // kill switch, globally or for one org by override: off, the tenant slot
