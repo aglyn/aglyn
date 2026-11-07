@@ -289,7 +289,8 @@ export async function GET(request: Request): Promise<Response> {
       ? await getDomainLockdown(host.slice(CNAME_HOST_PREFIX.length))
       : null
 
-    const hostRes = await getHost({ host })
+    // Request scope (AGL-4121): an hour at most, not the render's week.
+    const hostRes = await getHost({ host, scope: 'request' })
     if (!hostRes.host) {
       // Unknown host: the normal 404 flow owns this case — UNLESS the name
       // itself is locked, which is a thing we can assert without any host.

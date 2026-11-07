@@ -95,6 +95,9 @@ const EXCEPTIONS: Record<string, string> = {
     'The REQUEST-time org read (lockdown verdict, dynamic routes). The page ' +
     "and its layout pass `scope: 'render'`, which takes the backstop — " +
     'asserted below.',
+  'apps/tenant/utils/get-host.ts::HOST_DOC_REQUEST_TTL_SECONDS':
+    "The REQUEST-time host read (the lockdown verdict and its notice). " +
+    "The render never passes `scope: 'request'` — asserted below.",
   'libs/plugins/sales-channels/src/lib/server/catalog-source.ts::FEED_CACHE_TTL_SECONDS':
     'The sales-channel product feed, read only by its own feed route.',
 }
@@ -289,6 +292,20 @@ describe('the tenant page window is the long one (AGL-4121)', () => {
       expect(calls.length).toBeGreaterThan(0)
       for (const call of calls) expect(call).toContain("scope: 'render'")
     }
+  })
+
+  it("reads the host on the request scope only outside the render (AGL-4121)", () => {
+    const requestScope = /getHost\(\{[^}]*scope: 'request'/
+    // Premise: the verdict reads it, so the pattern matches real code.
+    const verdict = readFileSync(
+      join(ROOT, 'apps/tenant/app/api/lockdown-verdict/route.ts'),
+      'utf8',
+    )
+    expect(verdict).toMatch(requestScope)
+    const inRender = files
+      .filter(({ source }) => requestScope.test(source))
+      .map(({ path }) => path)
+    expect(inRender).toEqual([])
   })
 
   it('holds a page on a short window only where a schedule is pending', () => {
