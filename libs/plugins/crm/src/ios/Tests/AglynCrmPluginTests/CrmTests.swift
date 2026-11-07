@@ -39,6 +39,16 @@ final class CrmTests: XCTestCase {
     for (index, item) in try functionCases("crmScopeTokens").enumerated() {
       XCTAssertEqual(crmScopeTokens(item.args[0] as? [String: Any], group(item.args[1])), item.result as? [String], "case \(index)")
     }
+    for (index, item) in try functionCases("crmScopeFields").enumerated() {
+      let want = item.result as? [String: Any]
+      let got = crmScopeFields(item.args[0] as? [String: Any], group(item.args[1]))
+      XCTAssertEqual(got.visibleTo, want?["visibleTo"] as? [String], "case \(index)")
+      XCTAssertEqual(got.scopeMode, want?["scopeMode"] as? String, "case \(index)")
+      XCTAssertEqual(got.scopeExcept, want?["scopeExcept"] as? [String], "case \(index)")
+    }
+    for (index, item) in try functionCases("crmDefaultSharingOf").enumerated() {
+      XCTAssertEqual(crmDefaultSharing(item.args[0] as? [String: Any]), item.result as? String, "case \(index)")
+    }
     for (index, item) in try functionCases("crmReadTokens").enumerated() {
       XCTAssertEqual(crmReadTokens(group(item.args[0])), item.result as? [String], "case \(index)")
     }

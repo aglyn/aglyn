@@ -6871,6 +6871,878 @@
             "declared": false,
             "awaitsConfirmation": false
           }
+        ],
+        [
+          {
+            "crm": {
+              "defaultRecordScope": "host",
+              "defaultRecordExcept": [
+                "h3"
+              ]
+            },
+            "hosts": {
+              "h1": true,
+              "h2": true,
+              "h3": true,
+              "h4": true
+            }
+          },
+          {
+            "hostId": "h1",
+            "groupId": "h1",
+            "name": null,
+            "hostIds": [
+              "h1"
+            ],
+            "declared": false,
+            "awaitsConfirmation": false
+          }
+        ],
+        [
+          {
+            "crm": {
+              "defaultRecordScope": "host",
+              "defaultRecordExcept": [
+                "h3"
+              ]
+            },
+            "hosts": {
+              "h1": true,
+              "h2": true,
+              "h3": true,
+              "h4": true
+            }
+          },
+          {
+            "hostId": "h1",
+            "groupId": "brand",
+            "name": "Brand",
+            "hostIds": [
+              "h1",
+              "h2"
+            ],
+            "declared": true,
+            "awaitsConfirmation": false
+          }
+        ],
+        [
+          {
+            "crm": {
+              "defaultRecordScope": "host",
+              "defaultRecordExcept": [
+                "h1"
+              ]
+            },
+            "hosts": {
+              "h1": true,
+              "h2": true,
+              "h3": true,
+              "h4": true
+            }
+          },
+          {
+            "hostId": "h1",
+            "groupId": "h1",
+            "name": null,
+            "hostIds": [
+              "h1"
+            ],
+            "declared": false,
+            "awaitsConfirmation": false
+          }
+        ],
+        [
+          {
+            "crm": {
+              "defaultRecordScope": "host",
+              "defaultRecordExcept": [
+                "h1"
+              ]
+            },
+            "hosts": {
+              "h1": true,
+              "h2": true,
+              "h3": true,
+              "h4": true
+            }
+          },
+          {
+            "hostId": "h1",
+            "groupId": "brand",
+            "name": "Brand",
+            "hostIds": [
+              "h1",
+              "h2"
+            ],
+            "declared": true,
+            "awaitsConfirmation": false
+          }
+        ],
+        [
+          {
+            "crm": {
+              "defaultRecordScope": "host",
+              "defaultRecordExcept": [
+                "gone"
+              ]
+            },
+            "hosts": {
+              "h1": true,
+              "h2": true,
+              "h3": true,
+              "h4": true
+            }
+          },
+          {
+            "hostId": "h1",
+            "groupId": "h1",
+            "name": null,
+            "hostIds": [
+              "h1"
+            ],
+            "declared": false,
+            "awaitsConfirmation": false
+          }
+        ],
+        [
+          {
+            "crm": {
+              "defaultRecordScope": "host",
+              "defaultRecordExcept": [
+                "gone"
+              ]
+            },
+            "hosts": {
+              "h1": true,
+              "h2": true,
+              "h3": true,
+              "h4": true
+            }
+          },
+          {
+            "hostId": "h1",
+            "groupId": "brand",
+            "name": "Brand",
+            "hostIds": [
+              "h1",
+              "h2"
+            ],
+            "declared": true,
+            "awaitsConfirmation": false
+          }
+        ],
+        [
+          {
+            "crm": {
+              "defaultRecordScope": "host",
+              "defaultRecordExcept": [
+                "h3"
+              ]
+            }
+          },
+          {
+            "hostId": "h1",
+            "groupId": "h1",
+            "name": null,
+            "hostIds": [
+              "h1"
+            ],
+            "declared": false,
+            "awaitsConfirmation": false
+          }
+        ],
+        [
+          {
+            "crm": {
+              "defaultRecordScope": "host",
+              "defaultRecordExcept": [
+                "h3"
+              ]
+            }
+          },
+          {
+            "hostId": "h1",
+            "groupId": "brand",
+            "name": "Brand",
+            "hostIds": [
+              "h1",
+              "h2"
+            ],
+            "declared": true,
+            "awaitsConfirmation": false
+          }
+        ],
+        [
+          {
+            "crm": {
+              "defaultRecordScope": "host",
+              "defaultRecordExcept": []
+            },
+            "hosts": {
+              "h1": true,
+              "h2": true,
+              "h3": true,
+              "h4": true
+            }
+          },
+          {
+            "hostId": "h1",
+            "groupId": "h1",
+            "name": null,
+            "hostIds": [
+              "h1"
+            ],
+            "declared": false,
+            "awaitsConfirmation": false
+          }
+        ],
+        [
+          {
+            "crm": {
+              "defaultRecordScope": "host",
+              "defaultRecordExcept": []
+            },
+            "hosts": {
+              "h1": true,
+              "h2": true,
+              "h3": true,
+              "h4": true
+            }
+          },
+          {
+            "hostId": "h1",
+            "groupId": "brand",
+            "name": "Brand",
+            "hostIds": [
+              "h1",
+              "h2"
+            ],
+            "declared": true,
+            "awaitsConfirmation": false
+          }
+        ],
+        [
+          {
+            "crm": {
+              "defaultRecordScope": "org",
+              "defaultRecordExcept": [
+                "h3"
+              ]
+            },
+            "hosts": {
+              "h1": true,
+              "h2": true,
+              "h3": true,
+              "h4": true
+            }
+          },
+          {
+            "hostId": "h1",
+            "groupId": "h1",
+            "name": null,
+            "hostIds": [
+              "h1"
+            ],
+            "declared": false,
+            "awaitsConfirmation": false
+          }
+        ],
+        [
+          {
+            "crm": {
+              "defaultRecordScope": "org",
+              "defaultRecordExcept": [
+                "h3"
+              ]
+            },
+            "hosts": {
+              "h1": true,
+              "h2": true,
+              "h3": true,
+              "h4": true
+            }
+          },
+          {
+            "hostId": "h1",
+            "groupId": "brand",
+            "name": "Brand",
+            "hostIds": [
+              "h1",
+              "h2"
+            ],
+            "declared": true,
+            "awaitsConfirmation": false
+          }
+        ],
+        [
+          {
+            "crm": {
+              "defaultRecordScope": "host",
+              "defaultRecordExcept": [
+                "h3",
+                "h3",
+                ""
+              ]
+            },
+            "hosts": {
+              "h1": true,
+              "h2": false,
+              "h3": true
+            }
+          },
+          {
+            "hostId": "h1",
+            "groupId": "h1",
+            "name": null,
+            "hostIds": [
+              "h1"
+            ],
+            "declared": false,
+            "awaitsConfirmation": false
+          }
+        ],
+        [
+          {
+            "crm": {
+              "defaultRecordScope": "host",
+              "defaultRecordExcept": [
+                "h3",
+                "h3",
+                ""
+              ]
+            },
+            "hosts": {
+              "h1": true,
+              "h2": false,
+              "h3": true
+            }
+          },
+          {
+            "hostId": "h1",
+            "groupId": "brand",
+            "name": "Brand",
+            "hostIds": [
+              "h1",
+              "h2"
+            ],
+            "declared": true,
+            "awaitsConfirmation": false
+          }
+        ]
+      ]
+    },
+    "crmScopeFields": {
+      "module": "libs/aglyn/src/lib/app-utils/crm.ts",
+      "args": [
+        [
+          {
+            "crm": {
+              "defaultRecordScope": "host",
+              "defaultRecordExcept": [
+                "h3"
+              ]
+            },
+            "hosts": {
+              "h1": true,
+              "h2": true,
+              "h3": true,
+              "h4": true
+            }
+          },
+          {
+            "hostId": "h1",
+            "groupId": "h1",
+            "name": null,
+            "hostIds": [
+              "h1"
+            ],
+            "declared": false,
+            "awaitsConfirmation": false
+          }
+        ],
+        [
+          {
+            "crm": {
+              "defaultRecordScope": "host",
+              "defaultRecordExcept": [
+                "h3"
+              ]
+            },
+            "hosts": {
+              "h1": true,
+              "h2": true,
+              "h3": true,
+              "h4": true
+            }
+          },
+          {
+            "hostId": "h1",
+            "groupId": "brand",
+            "name": "Brand",
+            "hostIds": [
+              "h1",
+              "h2"
+            ],
+            "declared": true,
+            "awaitsConfirmation": false
+          }
+        ],
+        [
+          {
+            "crm": {
+              "defaultRecordScope": "host",
+              "defaultRecordExcept": [
+                "h1"
+              ]
+            },
+            "hosts": {
+              "h1": true,
+              "h2": true,
+              "h3": true,
+              "h4": true
+            }
+          },
+          {
+            "hostId": "h1",
+            "groupId": "h1",
+            "name": null,
+            "hostIds": [
+              "h1"
+            ],
+            "declared": false,
+            "awaitsConfirmation": false
+          }
+        ],
+        [
+          {
+            "crm": {
+              "defaultRecordScope": "host",
+              "defaultRecordExcept": [
+                "h1"
+              ]
+            },
+            "hosts": {
+              "h1": true,
+              "h2": true,
+              "h3": true,
+              "h4": true
+            }
+          },
+          {
+            "hostId": "h1",
+            "groupId": "brand",
+            "name": "Brand",
+            "hostIds": [
+              "h1",
+              "h2"
+            ],
+            "declared": true,
+            "awaitsConfirmation": false
+          }
+        ],
+        [
+          {
+            "crm": {
+              "defaultRecordScope": "host",
+              "defaultRecordExcept": [
+                "gone"
+              ]
+            },
+            "hosts": {
+              "h1": true,
+              "h2": true,
+              "h3": true,
+              "h4": true
+            }
+          },
+          {
+            "hostId": "h1",
+            "groupId": "h1",
+            "name": null,
+            "hostIds": [
+              "h1"
+            ],
+            "declared": false,
+            "awaitsConfirmation": false
+          }
+        ],
+        [
+          {
+            "crm": {
+              "defaultRecordScope": "host",
+              "defaultRecordExcept": [
+                "gone"
+              ]
+            },
+            "hosts": {
+              "h1": true,
+              "h2": true,
+              "h3": true,
+              "h4": true
+            }
+          },
+          {
+            "hostId": "h1",
+            "groupId": "brand",
+            "name": "Brand",
+            "hostIds": [
+              "h1",
+              "h2"
+            ],
+            "declared": true,
+            "awaitsConfirmation": false
+          }
+        ],
+        [
+          {
+            "crm": {
+              "defaultRecordScope": "host",
+              "defaultRecordExcept": [
+                "h3"
+              ]
+            }
+          },
+          {
+            "hostId": "h1",
+            "groupId": "h1",
+            "name": null,
+            "hostIds": [
+              "h1"
+            ],
+            "declared": false,
+            "awaitsConfirmation": false
+          }
+        ],
+        [
+          {
+            "crm": {
+              "defaultRecordScope": "host",
+              "defaultRecordExcept": [
+                "h3"
+              ]
+            }
+          },
+          {
+            "hostId": "h1",
+            "groupId": "brand",
+            "name": "Brand",
+            "hostIds": [
+              "h1",
+              "h2"
+            ],
+            "declared": true,
+            "awaitsConfirmation": false
+          }
+        ],
+        [
+          {
+            "crm": {
+              "defaultRecordScope": "host",
+              "defaultRecordExcept": []
+            },
+            "hosts": {
+              "h1": true,
+              "h2": true,
+              "h3": true,
+              "h4": true
+            }
+          },
+          {
+            "hostId": "h1",
+            "groupId": "h1",
+            "name": null,
+            "hostIds": [
+              "h1"
+            ],
+            "declared": false,
+            "awaitsConfirmation": false
+          }
+        ],
+        [
+          {
+            "crm": {
+              "defaultRecordScope": "host",
+              "defaultRecordExcept": []
+            },
+            "hosts": {
+              "h1": true,
+              "h2": true,
+              "h3": true,
+              "h4": true
+            }
+          },
+          {
+            "hostId": "h1",
+            "groupId": "brand",
+            "name": "Brand",
+            "hostIds": [
+              "h1",
+              "h2"
+            ],
+            "declared": true,
+            "awaitsConfirmation": false
+          }
+        ],
+        [
+          {
+            "crm": {
+              "defaultRecordScope": "org",
+              "defaultRecordExcept": [
+                "h3"
+              ]
+            },
+            "hosts": {
+              "h1": true,
+              "h2": true,
+              "h3": true,
+              "h4": true
+            }
+          },
+          {
+            "hostId": "h1",
+            "groupId": "h1",
+            "name": null,
+            "hostIds": [
+              "h1"
+            ],
+            "declared": false,
+            "awaitsConfirmation": false
+          }
+        ],
+        [
+          {
+            "crm": {
+              "defaultRecordScope": "org",
+              "defaultRecordExcept": [
+                "h3"
+              ]
+            },
+            "hosts": {
+              "h1": true,
+              "h2": true,
+              "h3": true,
+              "h4": true
+            }
+          },
+          {
+            "hostId": "h1",
+            "groupId": "brand",
+            "name": "Brand",
+            "hostIds": [
+              "h1",
+              "h2"
+            ],
+            "declared": true,
+            "awaitsConfirmation": false
+          }
+        ],
+        [
+          {
+            "crm": {
+              "defaultRecordScope": "host",
+              "defaultRecordExcept": [
+                "h3",
+                "h3",
+                ""
+              ]
+            },
+            "hosts": {
+              "h1": true,
+              "h2": false,
+              "h3": true
+            }
+          },
+          {
+            "hostId": "h1",
+            "groupId": "h1",
+            "name": null,
+            "hostIds": [
+              "h1"
+            ],
+            "declared": false,
+            "awaitsConfirmation": false
+          }
+        ],
+        [
+          {
+            "crm": {
+              "defaultRecordScope": "host",
+              "defaultRecordExcept": [
+                "h3",
+                "h3",
+                ""
+              ]
+            },
+            "hosts": {
+              "h1": true,
+              "h2": false,
+              "h3": true
+            }
+          },
+          {
+            "hostId": "h1",
+            "groupId": "brand",
+            "name": "Brand",
+            "hostIds": [
+              "h1",
+              "h2"
+            ],
+            "declared": true,
+            "awaitsConfirmation": false
+          }
+        ],
+        [
+          null,
+          {
+            "hostId": "h1",
+            "groupId": "h1",
+            "name": null,
+            "hostIds": [
+              "h1"
+            ],
+            "declared": false,
+            "awaitsConfirmation": false
+          }
+        ],
+        [
+          {
+            "crm": {
+              "defaultRecordScope": "org"
+            }
+          },
+          {
+            "hostId": "h1",
+            "groupId": "h1",
+            "name": null,
+            "hostIds": [
+              "h1"
+            ],
+            "declared": false,
+            "awaitsConfirmation": false
+          }
+        ]
+      ]
+    },
+    "crmDefaultSharingOf": {
+      "module": "libs/aglyn/src/lib/app-utils/crm.ts",
+      "args": [
+        [
+          {
+            "crm": {
+              "defaultRecordScope": "host",
+              "defaultRecordExcept": [
+                "h3"
+              ]
+            },
+            "hosts": {
+              "h1": true,
+              "h2": true,
+              "h3": true,
+              "h4": true
+            }
+          }
+        ],
+        [
+          {
+            "crm": {
+              "defaultRecordScope": "host",
+              "defaultRecordExcept": [
+                "h1"
+              ]
+            },
+            "hosts": {
+              "h1": true,
+              "h2": true,
+              "h3": true,
+              "h4": true
+            }
+          }
+        ],
+        [
+          {
+            "crm": {
+              "defaultRecordScope": "host",
+              "defaultRecordExcept": [
+                "gone"
+              ]
+            },
+            "hosts": {
+              "h1": true,
+              "h2": true,
+              "h3": true,
+              "h4": true
+            }
+          }
+        ],
+        [
+          {
+            "crm": {
+              "defaultRecordScope": "host",
+              "defaultRecordExcept": [
+                "h3"
+              ]
+            }
+          }
+        ],
+        [
+          {
+            "crm": {
+              "defaultRecordScope": "host",
+              "defaultRecordExcept": []
+            },
+            "hosts": {
+              "h1": true,
+              "h2": true,
+              "h3": true,
+              "h4": true
+            }
+          }
+        ],
+        [
+          {
+            "crm": {
+              "defaultRecordScope": "org",
+              "defaultRecordExcept": [
+                "h3"
+              ]
+            },
+            "hosts": {
+              "h1": true,
+              "h2": true,
+              "h3": true,
+              "h4": true
+            }
+          }
+        ],
+        [
+          {
+            "crm": {
+              "defaultRecordScope": "host",
+              "defaultRecordExcept": [
+                "h3",
+                "h3",
+                ""
+              ]
+            },
+            "hosts": {
+              "h1": true,
+              "h2": false,
+              "h3": true
+            }
+          }
+        ],
+        [
+          null
+        ],
+        [
+          {}
+        ],
+        [
+          {
+            "crm": {
+              "defaultRecordScope": "host"
+            }
+          }
         ]
       ]
     },

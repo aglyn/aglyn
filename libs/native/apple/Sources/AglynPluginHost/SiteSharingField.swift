@@ -136,7 +136,8 @@ public struct SiteSharingField: View {
 
   public var body: some View {
     Group {
-      Text(label).font(AglynFont.caption).foregroundStyle(AglynColor.secondaryText)
+      // A field under a heading that already names it passes no label.
+      if !label.isEmpty { Text(label).font(AglynFont.caption).foregroundStyle(AglynColor.secondaryText) }
       if readOnly, let readOnlyReason { AglynHelperText(readOnlyReason) }
       if modes.contains(.all) {
         AglynChoiceRow("All sites", selected: value?.mode == .all, enabled: !readOnly) { choose(.all) }

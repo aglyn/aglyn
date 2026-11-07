@@ -93,6 +93,17 @@ class CrmCasesTest {
     cases("crmScopeTokens").forEach { (args, result) ->
       assertEquals(result.jsonArray.map { it.jsonPrimitive.content }, crmScopeTokens(map(args[0]), group(args[1])), args.toString())
     }
+    cases("crmScopeFields").forEach { (args, result) ->
+      val want = result.jsonObject
+      fun list(key: String) = (want[key] as? kotlinx.serialization.json.JsonArray)?.map { it.jsonPrimitive.content }
+      assertEquals(
+        CrmScopeFields(list("visibleTo")!!, (want["scopeMode"] as? JsonPrimitive)?.contentOrNull, list("scopeExcept")),
+        crmScopeFields(map(args[0]), group(args[1])), args.toString(),
+      )
+    }
+    cases("crmDefaultSharingOf").forEach { (args, result) ->
+      assertEquals((result as? JsonPrimitive)?.contentOrNull, crmDefaultSharingOf(map(args[0])), args.toString())
+    }
     cases("crmReadTokens").forEach { (args, result) ->
       assertEquals(result.jsonArray.map { it.jsonPrimitive.content }, crmReadTokens(group(args[0])), args.toString())
     }

@@ -220,7 +220,7 @@ private fun DatasetDetail(
   onRefused: (String) -> Unit,
   open: (DatasetDialog) -> Unit,
 ) {
-  val access = rememberDatasetAccess(context, orgId, dataset.visibleTo)
+  val access = rememberDatasetAccess(context, orgId, dataset.placementScope)
   val canWrite = access.canWrite
   var records by remember(dataset.id) { mutableStateOf<Long?>(null) }
   LaunchedEffect(dataset.id, dataset.updatedAt) {
