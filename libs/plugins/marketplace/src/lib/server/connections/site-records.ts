@@ -28,7 +28,14 @@ import {
   type PluginConnectionRecordValue,
   type PluginConnectionSiteRecord,
 } from '@aglyn/aglyn/app-utils/plugin-connection-records'
+import {
+  parsePluginConnectionRepeat,
+  pluginConnectionFieldTypes,
+  pluginConnectionRepeatRows,
+  type PluginConnectionFieldTypes,
+} from '@aglyn/aglyn/app-utils/plugin-connection-repeat'
 import type { HostVariable } from '@aglyn/aglyn/app-utils/variables'
+import type { RepeatRowReader, RepeatRowsAnswer } from '@aglyn/aglyn/plugin-manager/repeat-rows'
 import type { VariableComputation, VariableComputer } from '@aglyn/aglyn/plugin-manager/computed-variables'
 import type { PluginSiteCspSource } from '@aglyn/aglyn/plugin-manager/plugin-site-csp'
 import type { RealmPluginInstall } from '@aglyn/aglyn/plugin-manager/realm-plugins'
@@ -71,6 +78,13 @@ export interface SiteConnectionRecordEntry {
   connectionId: string
   record: PluginConnectionSiteRecord
   variables: Record<string, HostVariable>
+  /**
+   * The declared type of each field (AGL-4212): which fields a repeat over
+   * the record prints, and which of them are dates. The render cache's key
+   * moved with it (`site-records-platform.ts`), so no cached entry lacks it;
+   * optional only for the readers that never repeat.
+   */
+  types?: PluginConnectionFieldTypes
 }
 
 /** What reading a site's records needs: the store and the site's workspace. */
@@ -153,6 +167,7 @@ export async function readSiteConnectionRecords(
       connectionId,
       record,
       variables: pluginConnectionRecordVariables(listingId, connection, record.fields),
+      types: pluginConnectionFieldTypes(connection),
     })
   }
   return out
@@ -227,6 +242,61 @@ export function createConnectionRecordsEnricher(deps: ConnectionRecordsEnricherD
     if (!Object.keys(attributed).length) return undefined
     const data: PluginConnectionRecordsPageData = { nodes: attributed, records }
     return { [PLUGIN_CONNECTION_RECORDS_PROP]: data }
+  }
+}
+
+/* ------------------------------------------------------------------ */
+/* The repeat-rows reader                                               */
+/* ------------------------------------------------------------------ */
+
+/**
+ * The rows a published page's repeats over a connection render (AGL-4212):
+ * each `connection:<identity>/<connectionId>[/fields]` key answered from the
+ * site's own records, through the one function the editor's canvas uses
+ * (`pluginConnectionRepeatRows`).
+ *
+ * Gated exactly as the page enricher hands an element its records: the
+ * identity must be a signed install allowed to run on THIS site (the page
+ * loader's own read: not revoked, not taken down, switched on), and the
+ * record one the site's pinned version still declares, on a plan with the
+ * feature ({@link readSiteConnectionRecords}). A key that names anything
+ * else — an identity not installed here, a connection it does not declare, a
+ * malformed value — is left out, and its element renders no copies. Records
+ * are read for `hostId` alone, so no key can reach another site's.
+ *
+ * A key that parses is answered even before a first sync: an items repeat
+ * with no rows, a summary repeat with none, so both draw nothing.
+ */
+export function createConnectionRepeatRowReader(deps: ConnectionRecordsEnricherDeps): RepeatRowReader {
+  return async ({ hostId, keys }) => {
+    const answer: RepeatRowsAnswer = {}
+    const targets = keys
+      .map((key) => ({ key, target: parsePluginConnectionRepeat(key) }))
+      .filter((one) => one.target !== null)
+    if (!targets.length) return answer
+    const installs = await deps.realmInstalls(hostId)
+    const listingFor = new Map<string, string>()
+    for (const install of installs) {
+      if (typeof install.identity === 'string' && install.identity && !listingFor.has(install.identity)) {
+        listingFor.set(install.identity, install.listingId)
+      }
+    }
+    if (!listingFor.size) return answer
+    const entries = await deps.records(hostId)
+    for (const { key, target } of targets) {
+      if (!target) continue
+      const listingId = listingFor.get(target.identity)
+      if (!listingId) continue
+      const entry = entries.find((one) => one.listingId === listingId && one.connectionId === target.connectionId)
+      if (!entry) {
+        // Installed here but no record yet, or a connection it does not
+        // declare: nothing to show either way.
+        answer[key] = { records: [] }
+        continue
+      }
+      answer[key] = pluginConnectionRepeatRows(entry.record, entry.types ?? { fields: {}, items: {} }, target.part)
+    }
+    return answer
   }
 }
 

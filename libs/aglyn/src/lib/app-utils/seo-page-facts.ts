@@ -15,6 +15,7 @@
  * limitations under the License.
  */
 
+import { repeatKey } from './expand-repeatables'
 import {
   buildPageMarkdown,
   headingLevelOf,
@@ -171,10 +172,7 @@ function originResolver(
   pageNodes: PageMarkdownNodes,
 ): (id: string) => FactOrigin | null {
   const placementIds = Object.keys(pageNodes).filter((id) => pageNodes[id]?.componentId === REUSABLE_INSTANCE)
-  const repeatIds = Object.keys(pageNodes).filter((id) => {
-    const key = (pageNodes[id]?.props as Record<string, unknown> | null | undefined)?.['repeatDataset']
-    return typeof key === 'string' && key.trim() !== ''
-  })
+  const repeatIds = Object.keys(pageNodes).filter((id) => repeatKey(pageNodes[id]) !== '')
   const resolve = (id: string, depth: number): FactOrigin | null => {
     if (depth > MAX_DEPTH) return null
     const own = pageNodes[id]

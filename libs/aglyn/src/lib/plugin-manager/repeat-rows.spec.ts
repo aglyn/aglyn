@@ -31,6 +31,7 @@
  */
 
 let mockDeclared: unknown = undefined
+let mockConnectionDeclared: unknown = undefined
 
 jest.mock('./first-party-plugins.generated', () => {
   const actual = jest.requireActual('./first-party-plugins.generated')
@@ -42,6 +43,11 @@ jest.mock('./first-party-plugins.generated', () => {
         ? actual.PLUGIN_REPEAT_SOURCE_DECLARED
         : mockDeclared
     },
+    get PLUGIN_CONNECTION_REPEAT_SOURCE_DECLARED() {
+      return mockConnectionDeclared === undefined
+        ? actual.PLUGIN_CONNECTION_REPEAT_SOURCE_DECLARED
+        : mockConnectionDeclared
+    },
   }
 })
 
@@ -50,6 +56,7 @@ import {
   resetPluginDeclarationsRepairForTests,
 } from './plugin-declarations-repair'
 import {
+  declaredConnectionRepeatSource,
   declaredRepeatSource,
   readRepeatRows,
   registerRepeatRowReader,
@@ -62,6 +69,7 @@ const TEAM = { records: [{ name: 'Ada' }] }
 
 beforeEach(() => {
   mockDeclared = undefined
+  mockConnectionDeclared = undefined
   resetRepeatRowReadersForTests()
   resetPluginDeclarationsRepairForTests()
 })
@@ -151,5 +159,69 @@ describe('registerRepeatRowReader', () => {
     expect(() =>
       registerRepeatRowReader('products', async () => ({}), { pluginId: 'bookings' }),
     ).toThrow(/already has a reader from "commerce"/)
+  })
+})
+
+/**
+ * A plugin connection's record is a second source (AGL-4212): the keys
+ * `repeatKey` prefixes `connection:` go to the reader the marketplace
+ * declares, every other key to the datasets exactly as before, and each
+ * source keeps the three answers on its own.
+ */
+describe('readRepeatRows over a plugin connection (AGL-4212)', () => {
+  const REVIEWS = { records: [{ $id: '0', author: 'Jordan Lee' }] }
+  const CONNECTION_KEY = 'connection:aglyn.google-reviews/google'
+
+  it('is the marketplace’s, compiled from the config', () => {
+    expect(declaredConnectionRepeatSource()).toEqual({
+      pluginId: 'marketplace',
+      id: 'pluginConnection',
+    })
+  })
+
+  it('routes each key to its own source and merges the answers', async () => {
+    const datasets = jest.fn(async () => ({ Team: TEAM }))
+    const connections = jest.fn(async () => ({ [CONNECTION_KEY]: REVIEWS }))
+    registerRepeatRowReader('dataset', datasets, { pluginId: 'data' })
+    registerRepeatRowReader('pluginConnection', connections, { pluginId: 'marketplace' })
+    await expect(
+      readRepeatRows({ hostId: 'h1', keys: [CONNECTION_KEY, 'Team'] }),
+    ).resolves.toEqual({ Team: TEAM, [CONNECTION_KEY]: REVIEWS })
+    expect(datasets).toHaveBeenCalledWith({ hostId: 'h1', keys: ['Team'] })
+    expect(connections).toHaveBeenCalledWith({ hostId: 'h1', keys: [CONNECTION_KEY] })
+  })
+
+  it('asks the dataset reader nothing for a page that repeats only over a connection', async () => {
+    const datasets = jest.fn(async () => ({}))
+    registerRepeatRowReader('dataset', datasets, { pluginId: 'data' })
+    registerRepeatRowReader('pluginConnection', async () => ({ [CONNECTION_KEY]: REVIEWS }), {
+      pluginId: 'marketplace',
+    })
+    await readRepeatRows({ hostId: 'h1', keys: [CONNECTION_KEY] })
+    expect(datasets).not.toHaveBeenCalled()
+  })
+
+  it('answers no rows for a connection key when no plugin declares the source', async () => {
+    mockConnectionDeclared = null
+    registerRepeatRowReader('dataset', async () => ({ Team: TEAM }), { pluginId: 'data' })
+    await expect(
+      readRepeatRows({ hostId: 'h1', keys: [CONNECTION_KEY, 'Team'] }),
+    ).resolves.toEqual({ Team: TEAM })
+  })
+
+  it('THROWS when the declared connection source has no reader, after the repair', async () => {
+    const repair = jest.fn(async (): Promise<void> => undefined)
+    registerPluginDeclarationsRepair(repair)
+    registerRepeatRowReader('dataset', async () => ({ Team: TEAM }), { pluginId: 'data' })
+    await expect(
+      readRepeatRows({ hostId: 'h1', keys: [CONNECTION_KEY, 'Team'] }),
+    ).rejects.toBeInstanceOf(RepeatRowsUnavailableError)
+    expect(repair).toHaveBeenCalledTimes(1)
+  })
+
+  it('refuses a connection reader from any plugin but the declared one', () => {
+    expect(() =>
+      registerRepeatRowReader('pluginConnection', async () => ({}), { pluginId: 'data' }),
+    ).toThrow(/declared by "marketplace"/)
   })
 })

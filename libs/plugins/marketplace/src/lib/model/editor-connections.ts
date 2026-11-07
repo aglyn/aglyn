@@ -16,9 +16,11 @@
  */
 
 import type {
+  EditorConnectionRepeatable,
   EditorConnectionVariable,
   EditorPluginConnections,
 } from '@aglyn/aglyn/app-utils/plugin-connection-editor'
+import { pluginConnectionFieldTypes } from '@aglyn/aglyn/app-utils/plugin-connection-repeat'
 import type { PluginConnectionSiteRecord } from '@aglyn/aglyn/app-utils/plugin-connection-records'
 import {
   pluginConnectionRecordVariables,
@@ -81,9 +83,10 @@ export function listingForComponent(installs: readonly EditorRealmInstall[]): (c
 
 /**
  * Core's `EditorPluginConnections` for a site: which listing a component is
- * whose, each listing's records, and one variable per declared summary
- * field, named for a person and holding what the last sync wrote (or `null`
- * before one, so an author can bind it before the first sync).
+ * whose, each listing's records, one variable per declared summary field,
+ * named for a person and holding what the last sync wrote (or `null` before
+ * one, so an author can bind it before the first sync), and each syncing
+ * connection an element can repeat over (AGL-4212).
  */
 export function editorPluginConnections(input: {
   installs: readonly EditorRealmInstall[]
@@ -91,9 +94,22 @@ export function editorPluginConnections(input: {
   records: Readonly<Record<string, Readonly<Record<string, PluginConnectionSiteRecord>>>>
 }): EditorPluginConnections {
   const variables: EditorConnectionVariable[] = []
+  const repeatables: EditorConnectionRepeatable[] = []
   // `installed`, not `listing`: the listing-field coverage guard reads every `listing.<field>` here as a document read.
   for (const installed of input.listings) {
+    // The namespace a `repeatConnection` value names (AGL-4212); an install
+    // published before identities existed has none, so nothing to repeat.
+    const identity = input.installs.find((install) => install.listingId === installed.listingId)?.identity
     for (const connection of installed.connections) {
+      if (identity && connection.sync?.record) {
+        repeatables.push({
+          identity,
+          listingId: installed.listingId,
+          connectionId: connection.id,
+          label: connection.label,
+          types: pluginConnectionFieldTypes(connection),
+        })
+      }
       const record = input.records[installed.listingId]?.[connection.id]
       const values = pluginConnectionRecordVariables(installed.listingId, connection, record?.fields)
       for (const field of Object.keys(connection.sync?.record.fields ?? {})) {
@@ -103,5 +119,5 @@ export function editorPluginConnections(input: {
       }
     }
   }
-  return { listingFor: listingForComponent(input.installs), records: input.records, variables }
+  return { listingFor: listingForComponent(input.installs), records: input.records, variables, repeatables }
 }
