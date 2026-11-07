@@ -204,7 +204,7 @@ describe('the POS devices card', () => {
         ...readersAnswer,
         locationReady: true,
         // Figures for the spec only.
-        cellular: { readerMonthlyCents: 1_061, enabled, readers: 2, ...extra },
+        cellular: { readerMonthlyCents: 1_061, ownAccount: false, enabled, readers: 2, ...extra },
       }
     }
 
@@ -230,6 +230,27 @@ describe('the POS devices card', () => {
           hostId: 'host-1',
           enabled: true,
           consent: true,
+        }),
+      )
+    })
+
+    it('on a store’s own Stripe account: says Stripe bills it there, names no price, and asks for no agreement', async () => {
+      withCellular(false, { ownAccount: true, readerMonthlyCents: null })
+      render(<PosDevicesCard hostId="host-1" canManagePos />)
+      expect(await screen.findByText(/Stripe bills its 4G price for each one to this store’s own Stripe account/)).toBeTruthy()
+      fireEvent.click(screen.getByRole('button', { name: 'Turn on 4G' }))
+      expect(screen.getByText(/under the store’s agreement with Stripe/)).toBeTruthy()
+      expect(screen.getByText(/This workspace is not charged for it/)).toBeTruthy()
+      expect(screen.queryByText(/\$/)).toBeNull()
+      expect(screen.queryByRole('checkbox')).toBeNull()
+      const confirm = screen.getAllByRole('button', { name: 'Turn on 4G' }).pop() as HTMLButtonElement
+      expect(confirm.disabled).toBe(false)
+      fireEvent.click(confirm)
+      await waitFor(() =>
+        expect(calls.find((call) => call.body?.action === 'cellular')?.body).toEqual({
+          action: 'cellular',
+          hostId: 'host-1',
+          enabled: true,
         }),
       )
     })

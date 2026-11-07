@@ -81,7 +81,9 @@ export const posReadersHandler: PluginApiHandler = async (req, res) => {
 /**
  * The 4G row for the card (AGL-4038), or nothing: with why this viewer may
  * not turn it on, since it is charged to the workspace ("Manage billing"),
- * asked only where the row shows.
+ * asked only where the row shows and the store is not on its own Stripe
+ * account (which Stripe bills directly, so the workspace's billing key is not
+ * asked for).
  */
 async function cellularFor(
   staff: PosStaff,
@@ -89,7 +91,9 @@ async function cellularFor(
   readers: ReadonlyArray<{ deviceType?: unknown }>,
 ): Promise<{ cellular?: PosCellularView }> {
   const config = parsePosCellularConfig(process.env)
-  if (!posCellularView(config, terminal, readers)) return {}
+  const row = posCellularView(config, terminal, readers)
+  if (!row) return {}
+  if (row.ownAccount) return { cellular: row }
   const { mayTurnOnPosCellular, POS_CELLULAR_BILLING_REFUSAL } = await import('./pos-cellular')
   const turnOnBlocked = (await mayTurnOnPosCellular(staff.uid, staff.hostId)) ? null : POS_CELLULAR_BILLING_REFUSAL
   const cellular = posCellularView(config, terminal, readers, { turnOnBlocked })

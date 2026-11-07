@@ -22,6 +22,7 @@ import {
   isPosCellularDeviceType,
   openPosCellularPeriod,
   parsePosCellularConfig,
+  posCellularOwnAccount,
   posCellularReaderId,
   posCellularMonthLabel,
   posCellularReaderMonthlyCents,
@@ -57,6 +58,15 @@ import { savePosReaderConfiguration } from './pos-terminal'
  * devices"; turning it off takes only the card's key. While a month's charge
  * is unpaid past its grace period (`pos-cellular-billing.ts`), it cannot be
  * turned on again: paying it, then turning it on, is the way back.
+ *
+ * A store whose Location, and so its Configuration, is on its OWN Stripe
+ * account (direct charges: `stripeLocationAccount`, the account
+ * `savePosReaderConfiguration` writes to) is billed for 4G by Stripe, on
+ * that account, under the store's own agreement with Stripe. The workspace
+ * is never charged for it, so turning it on there takes only the card's
+ * "Registers and devices": no "Manage billing", no card on file, no
+ * agreement to the platform's price, and no unpaid month of the workspace's
+ * holds it back.
  *=========================================*/
 
 /** The workspace key turning 4G on takes, beside "Registers and devices". */
@@ -183,7 +193,7 @@ export async function syncPosCellularReaders(input: {
   const configurationId = String(terminal.get('stripeConfigurationId') ?? '') || null
   // The account that configuration lives on: the store's own for a
   // direct-charge store's Location, absent for the platform's.
-  const configurationAccount = String(terminal.get('stripeLocationAccount') ?? '').trim() || null
+  const configurationAccount = posCellularOwnAccount(terminal.get('stripeLocationAccount'))
   const capable = new Map<string, { serialNumber: string | null }>()
   for (const doc of readers.docs as Array<{ id: string; get: (field: string) => unknown }>) {
     if (isPosCellularDeviceType(doc.get('deviceType'))) {
@@ -257,12 +267,16 @@ export async function setPosStoreCellular(
   if (!terminal.get('stripeLocationId')) {
     return { status: 409, body: { error: 'Add a card reader to this store first.', code: 'no-location' } }
   }
+  // On the store's own Stripe account, Stripe bills the 4G to that account:
+  // nothing here is charged to the workspace.
+  const ownAccount = posCellularOwnAccount(terminal.get('stripeLocationAccount')) !== null
   if (enable) {
-    // Charged to the workspace: its billing key, as well as the card's own.
-    if (!(await mayTurnOnPosCellular(staff.uid, staff.hostId))) {
+    // Charged to the workspace: its billing key, as well as the card's own,
+    // and the person's agreement to the price.
+    if (!ownAccount && !(await mayTurnOnPosCellular(staff.uid, staff.hostId))) {
       return { status: 403, body: { error: POS_CELLULAR_BILLING_REFUSAL, code: 'billing-permission' } }
     }
-    if (body['consent'] !== true) {
+    if (!ownAccount && body['consent'] !== true) {
       return {
         status: 400,
         body: { error: 'Agree to the monthly charge for each reader to turn 4G on.', code: 'consent-required' },
@@ -278,25 +292,27 @@ export async function setPosStoreCellular(
         body: { error: '4G works on the S710 reader. Add one to this store first.', code: 'no-capable-reader' },
       }
     }
-    const billing = (await readOrgBilling(staff.orgId).catch(() => ({}))) as { stripeCustomerId?: unknown }
-    if (!String(billing.stripeCustomerId ?? '')) {
-      return {
-        status: 409,
-        body: {
-          error: 'Add a payment method in Billing first: 4G is charged to this workspace each month.',
-          code: 'no-billing',
-        },
+    if (!ownAccount) {
+      const billing = (await readOrgBilling(staff.orgId).catch(() => ({}))) as { stripeCustomerId?: unknown }
+      if (!String(billing.stripeCustomerId ?? '')) {
+        return {
+          status: 409,
+          body: {
+            error: 'Add a payment method in Billing first: 4G is charged to this workspace each month.',
+            code: 'no-billing',
+          },
+        }
       }
-    }
-    // Turned off for an unpaid month: paid first, then on again.
-    const unpaid = await unpaidPosCellularSuspension(staff.orgId, Date.now())
-    if (unpaid) {
-      return {
-        status: 409,
-        body: {
-          error: `4G was turned off because the 4G charge for ${posCellularMonthLabel(unpaid.month)} wasn't paid. Pay it on the Billing page, then turn 4G on again.`,
-          code: 'cellular-unpaid',
-        },
+      // Turned off for an unpaid month: paid first, then on again.
+      const unpaid = await unpaidPosCellularSuspension(staff.orgId, Date.now())
+      if (unpaid) {
+        return {
+          status: 409,
+          body: {
+            error: `4G was turned off because the 4G charge for ${posCellularMonthLabel(unpaid.month)} wasn't paid. Pay it on the Billing page, then turn 4G on again.`,
+            code: 'cellular-unpaid',
+          },
+        }
       }
     }
   }
@@ -326,7 +342,11 @@ export async function setPosStoreCellular(
         cellularChangedAtMs: now,
         cellularChangedBy: staff.uid,
         // What they agreed to, and when: the price per reader at the time.
-        ...(enable ? { cellularConsent: { atMs: now, uid: staff.uid, readerMonthlyCents: posCellularReaderMonthlyCents(config) } } : {}),
+        // Nothing is agreed here for a store on its own Stripe account, which
+        // Stripe bills under the store's own agreement with it.
+        ...(enable && !ownAccount
+          ? { cellularConsent: { atMs: now, uid: staff.uid, readerMonthlyCents: posCellularReaderMonthlyCents(config) } }
+          : {}),
         // On again: the notice of an unpaid month that turned it off is done.
         ...(enable ? { cellularSuspended: null } : {}),
       },
