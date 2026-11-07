@@ -515,70 +515,140 @@ struct DatasetDetailView: View {
         Section { AglynNotice(notice, tone: .success) { runner.clear() } }
       }
       Section {
-        HStack(alignment: .top) {
-          VStack(alignment: .leading, spacing: AglynSpace.half) {
-            Text(dataset.name).font(AglynFont.title2).accessibilityAddTraits(.isHeader)
-            if !dataset.singular.trimmingCharacters(in: .whitespaces).isEmpty {
-              Text("One record is a \(dataset.singular)").font(AglynFont.subheadline).foregroundStyle(.secondary)
+        // The head (Figma Orders 13:1019): the name, then its actions on the same line where they fit, and under it
+        // where they do not (an iPad's detail column, a phone), so the name never breaks mid-word.
+        ViewThatFits(in: .horizontal) {
+          HStack(alignment: .top) {
+            VStack(alignment: .leading, spacing: AglynSpace.half) {
+              Text(dataset.name).font(AglynFont.title2).accessibilityAddTraits(.isHeader)
+              if !dataset.singular.trimmingCharacters(in: .whitespaces).isEmpty {
+                Text("One record is a \(dataset.singular)").font(AglynFont.subheadline).foregroundStyle(.secondary)
+              }
             }
-          }
-          Spacer(minLength: AglynSpace.one)
-          Menu {
-            Button { context.navigate(dataSchemaScreen, ["dataset": dataset.id]) } label: {
-              Label("Edit schema", systemImage: "tablecells")
+            Spacer(minLength: AglynSpace.one)
+            Menu {
+              Button { context.navigate(dataSchemaScreen, ["dataset": dataset.id]) } label: {
+                Label("Edit schema", systemImage: "tablecells")
+              }
+              .disabled(!canWrite)
+              Button {
+                guard canWrite else {
+                  runner.error = verdict.writeRefusal
+                  return
+                }
+                context.navigate(dataImportScreen, datasetImportParams(id: dataset.id, name: dataset.name))
+              } label: {
+                Label("Import records", systemImage: "square.and.arrow.up")
+              }
+              .accessibilityIdentifier("import-dataset-records")
+              Button {
+                guard verdict.canExport else {
+                  runner.error = context.refusal("data.export")
+                  return
+                }
+                onExport(dataset)
+              } label: {
+                Label("Export records", systemImage: "square.and.arrow.down")
+              }
+                .disabled((records ?? 1) == 0)
+              Divider()
+              Button(role: .destructive) {
+                guard verdict.canDelete else {
+                  runner.error = verdict.deleteRefusal
+                  return
+                }
+                onDelete(dataset, records)
+              } label: {
+                Label("Delete dataset", systemImage: "trash")
+              }
+            } label: {
+              Label("More", systemImage: "ellipsis.circle").labelStyle(.iconOnly).imageScale(.large)
             }
+            .menuStyle(.borderlessButton)
+            .fixedSize()
+            .accessibilityLabel("More actions")
+            .accessibilityIdentifier("dataset-actions")
+            // The detail's head (Figma Orders 13:1019): a bordered action, More, then the one filled button.
+            Button {
+              context.navigate(dataRecordsScreen, ["dataset": dataset.id, "new": "1"])
+            } label: {
+              Label("Add record", systemImage: "plus").labelStyle(.titleAndIcon)
+            }
+            .buttonStyle(AglynHeaderButtonStyle())
+            .fixedSize()
             .disabled(!canWrite)
-            Button {
-              guard canWrite else {
-                runner.error = verdict.writeRefusal
-                return
-              }
-              context.navigate(dataImportScreen, datasetImportParams(id: dataset.id, name: dataset.name))
-            } label: {
-              Label("Import records", systemImage: "square.and.arrow.up")
+            .accessibilityIdentifier("dataset-add-record")
+            AglynPrimaryHeaderButton("Records", systemImage: DataSymbols.records) {
+              context.navigate(dataRecordsScreen, ["dataset": dataset.id])
             }
-            .accessibilityIdentifier("import-dataset-records")
-            Button {
-              guard verdict.canExport else {
-                runner.error = context.refusal("data.export")
-                return
+            .accessibilityIdentifier("dataset-records")
+          }
+          VStack(alignment: .leading, spacing: AglynSpace.one) {
+            VStack(alignment: .leading, spacing: AglynSpace.half) {
+              Text(dataset.name).font(AglynFont.title2).accessibilityAddTraits(.isHeader)
+              if !dataset.singular.trimmingCharacters(in: .whitespaces).isEmpty {
+                Text("One record is a \(dataset.singular)").font(AglynFont.subheadline).foregroundStyle(.secondary)
               }
-              onExport(dataset)
-            } label: {
-              Label("Export records", systemImage: "square.and.arrow.down")
             }
-              .disabled((records ?? 1) == 0)
-            Divider()
-            Button(role: .destructive) {
-              guard verdict.canDelete else {
-                runner.error = verdict.deleteRefusal
-                return
+            HStack(spacing: AglynSpace.one) {
+              Menu {
+                Button { context.navigate(dataSchemaScreen, ["dataset": dataset.id]) } label: {
+                  Label("Edit schema", systemImage: "tablecells")
+                }
+                .disabled(!canWrite)
+                Button {
+                  guard canWrite else {
+                    runner.error = verdict.writeRefusal
+                    return
+                  }
+                  context.navigate(dataImportScreen, datasetImportParams(id: dataset.id, name: dataset.name))
+                } label: {
+                  Label("Import records", systemImage: "square.and.arrow.up")
+                }
+                .accessibilityIdentifier("import-dataset-records")
+                Button {
+                  guard verdict.canExport else {
+                    runner.error = context.refusal("data.export")
+                    return
+                  }
+                  onExport(dataset)
+                } label: {
+                  Label("Export records", systemImage: "square.and.arrow.down")
+                }
+                  .disabled((records ?? 1) == 0)
+                Divider()
+                Button(role: .destructive) {
+                  guard verdict.canDelete else {
+                    runner.error = verdict.deleteRefusal
+                    return
+                  }
+                  onDelete(dataset, records)
+                } label: {
+                  Label("Delete dataset", systemImage: "trash")
+                }
+              } label: {
+                Label("More", systemImage: "ellipsis.circle").labelStyle(.iconOnly).imageScale(.large)
               }
-              onDelete(dataset, records)
-            } label: {
-              Label("Delete dataset", systemImage: "trash")
+              .menuStyle(.borderlessButton)
+              .fixedSize()
+              .accessibilityLabel("More actions")
+              .accessibilityIdentifier("dataset-actions")
+              // The detail's head (Figma Orders 13:1019): a bordered action, More, then the one filled button.
+              Button {
+                context.navigate(dataRecordsScreen, ["dataset": dataset.id, "new": "1"])
+              } label: {
+                Label("Add record", systemImage: "plus").labelStyle(.titleAndIcon)
+              }
+              .buttonStyle(AglynHeaderButtonStyle())
+              .fixedSize()
+              .disabled(!canWrite)
+              .accessibilityIdentifier("dataset-add-record")
+              AglynPrimaryHeaderButton("Records", systemImage: DataSymbols.records) {
+                context.navigate(dataRecordsScreen, ["dataset": dataset.id])
+              }
+              .accessibilityIdentifier("dataset-records")
             }
-          } label: {
-            Label("More", systemImage: "ellipsis.circle").labelStyle(.iconOnly).imageScale(.large)
           }
-          .menuStyle(.borderlessButton)
-          .fixedSize()
-          .accessibilityLabel("More actions")
-          .accessibilityIdentifier("dataset-actions")
-          // The detail's head (Figma Orders 13:1019): a bordered action, More, then the one filled button.
-          Button {
-            context.navigate(dataRecordsScreen, ["dataset": dataset.id, "new": "1"])
-          } label: {
-            Label("Add record", systemImage: "plus").labelStyle(.titleAndIcon)
-          }
-          .buttonStyle(AglynHeaderButtonStyle())
-          .fixedSize()
-          .disabled(!canWrite)
-          .accessibilityIdentifier("dataset-add-record")
-          AglynPrimaryHeaderButton("Records", systemImage: DataSymbols.records) {
-            context.navigate(dataRecordsScreen, ["dataset": dataset.id])
-          }
-          .accessibilityIdentifier("dataset-records")
         }
         AglynWrapRow(spacing: AglynSpace.one, lineSpacing: AglynSpace.half) {
           StatusChip("Shared with \(describeScope(dataset.visibleTo))", tone: dataset.visibleTo == nil ? .warning : .info)

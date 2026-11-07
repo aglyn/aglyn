@@ -996,6 +996,9 @@ final class ScreenSpecTests: XCTestCase {
   func testADownloadActionHandsBackTheFileUnderTheNameTheRouteGives() async throws {
     struct FileTransport: HTTPTransport {
       func send(_ request: URLRequest) async throws -> (Data, HTTPURLResponse) {
+        // As URLSession does ("GET method must not have a body"): the workspace export failed this way on iOS, its `nil`
+        // body read as `JSONValue.null`.
+        if request.httpMethod == "GET", request.httpBody != nil { throw URLError(.dataLengthExceedsMaximum) }
         let named = request.url?.path.hasSuffix("/named") == true
         let response = HTTPURLResponse(
           url: request.url!, statusCode: 200, httpVersion: nil,

@@ -96,6 +96,29 @@ class NavShellUiTest {
     assertEquals(null, services.workspace.state.value.site)
   }
 
+  /**
+   * A screen that shows one site, opened from the whole workspace (the workspace menu's Upload / Publish), offers the
+   * site picker in place, as the Apple apps' "Choose a site" does, instead of a dead end.
+   */
+  @Test
+  fun aSiteScreenWithoutASiteOffersTheSitePicker() = runComposeUiTest {
+    val fake = com.aglyn.pluginhost.NativePluginManifestEntry("fake", mapOf("screens" to listOf("fake.one-site"))) { registrar ->
+      registrar.screen("fake.one-site", title = "Publish to the marketplace", requiresSite = true) { _, _ -> }
+    }
+    val services = testServices(userDoc = emptyMap(), plugins = listOf(fake))
+    val navigator = ShellNavigator()
+    setContent { AglynShell(services, navigator) }
+    signIn()
+    waitUntil(timeoutMillis = 3_000) { services.workspace.state.value.site != null }
+    services.workspace.selectWholeWorkspace()
+    waitUntil(timeoutMillis = 3_000) { services.workspace.state.value.wholeWorkspace }
+    runOnIdle { navigator.push(Route.Screen("fake.one-site")) }
+    waitUntil(timeoutMillis = 3_000) { onAllNodesWithTagCount("choose-a-site") > 0 }
+    onNodeWithText("Publish to the marketplace shows one site at a time.").assertExists()
+    onNodeWithTag("choose-a-site").performClick()
+    waitUntil(timeoutMillis = 3_000) { onAllNodesWithTagCount("picker-site-h1") > 0 }
+  }
+
   @Test
   fun aGroupThePersonOpenedStaysOpenWhileTheyNavigate() = runComposeUiTest {
     // Groups remember whether they are open while the person navigates. The test

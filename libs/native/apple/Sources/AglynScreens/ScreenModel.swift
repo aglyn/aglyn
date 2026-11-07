@@ -994,7 +994,7 @@ public final class ScreenModel {
     if let at = action.downloadAt, let name = action.download {
       // The route answers with JSON; the file is the value at `at`, named from the answer.
       do {
-        let answer = try await api.request(path, method: action.method, body: action.method == .get ? nil : (body ?? [:])) ?? .null
+        let answer = try await api.request(path, method: action.method, body: action.method == .get ? JSONValue?.none : (body ?? [:])) ?? .null
         guard let value = ScreenValues.lookup(at, in: answer), value != .null else { return .failed("The route sent no file.") }
         let named = ScreenValues.render(name, in: ScreenContext.with(scope, "response", answer))
         let file = DownloadedFile(name: named, contentType: "application/json", data: try value.encoded(pretty: true))
@@ -1008,7 +1008,7 @@ public final class ScreenModel {
     }
     if let fallback = action.download {
       do {
-        let file = try await api.download(path, method: action.method, body: action.method == .get ? nil : (body ?? [:]))
+        let file = try await api.download(path, method: action.method, body: action.method == .get ? JSONValue?.none : (body ?? [:]))
         let name = file.name ?? ScreenValues.render(fallback, in: scope)
         return .file(file, name: name, message: action.success.map { ScreenValues.render($0, in: scope) })
       } catch let error as ConsoleAPIError {
