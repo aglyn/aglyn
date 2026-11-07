@@ -27,7 +27,7 @@ import {
   IconButton,
   Typography,
 } from '@mui/material'
-import { forwardRef, type ReactNode } from 'react'
+import { type ComponentType, forwardRef, type ReactNode } from 'react'
 import {
   FormRenderer,
   FormSpy,
@@ -93,6 +93,12 @@ export interface CreateArtifactDrawerProps {
   FormTemplate?: any
   /** Label on the submit button. */
   submitLabel?: string
+  /**
+   * Field components beyond the shared ones, by the `component` name an extra
+   * field asks for. Merged over the drawer's own mapper, so a caller with one
+   * field the library has no component for keeps the shared drawer.
+   */
+  componentMapper?: Record<string, ComponentType<any>>
 }
 
 /**
@@ -148,6 +154,7 @@ export function CreateArtifactDrawer(props: CreateArtifactDrawerProps) {
     includeDescription = true,
     FormTemplate = ArtifactFormTemplate,
     submitLabel,
+    componentMapper,
   } = props
   const schema = {
     fields: [
@@ -200,7 +207,11 @@ export function CreateArtifactDrawer(props: CreateArtifactDrawerProps) {
          */}
         <FormRenderer
           FormTemplate={FormTemplate}
-          componentMapper={simpleComponentMapper}
+          componentMapper={
+            componentMapper
+              ? { ...simpleComponentMapper, ...componentMapper }
+              : simpleComponentMapper
+          }
           onSubmit={onSubmit}
           schema={schema}
           subscription={{ pristine: false, submitting: false, valid: false }}

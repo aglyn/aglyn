@@ -93,9 +93,9 @@ import {
   campaignListUnsubscribe,
   campaignRollup,
   campaignSendDisplay,
+  campaignAllExceptLabel,
   campaignSiteIds,
   campaignUtmLabels,
-  campaignVisibleTo,
   campaignWindowState,
   type CampaignAggregate,
   type CampaignSend,
@@ -284,7 +284,7 @@ export function CampaignDetailCard(props: CampaignDetailCardProps) {
   // "Run email campaigns" (AGL-4047): the menu says so before the save or the
   // route does. Edit is client-direct, so it answers the rule; Delete answers
   // the manage route.
-  const { editBlocked, deleteBlocked } = useCampaignContainerAccess(orgId, hostId, campaign)
+  const { editBlocked, deleteBlocked, deleteReason } = useCampaignContainerAccess(orgId, hostId, campaign)
 
   /*
    * ONLY WHEN THE ID NAMES A CAMPAIGN.
@@ -443,10 +443,15 @@ export function CampaignDetailCard(props: CampaignDetailCardProps) {
    * spells — and a cleared topic REMOVES the field, because the model has no
    * null topic and `campaignTopicId` is handed to the composer as one.
    *
-   * `visibleTo` is written only from the org hub, and only when its drawer
-   * says the placement changed. A site hub never touches it: the rules let a
-   * site collaborator edit a campaign only while its scope is unchanged, and
-   * a site hub has no field for it anyway.
+   * WHO IT IS SHARED WITH goes through the manage route instead (AGL-4047),
+   * and only from the org hub, and only when the drawer says the choice
+   * changed. A campaign shared with all sites except some carries a marker
+   * only a server may write, and the rules refuse a client re-scope of one,
+   * so the route is the one writer of `visibleTo` here. The fields go first,
+   * as they always have; a refused sharing change is said where the form
+   * still is, and the rest stays saved. A site hub never touches it: the
+   * rules let a site collaborator edit a campaign only while its scope is
+   * unchanged, and a site hub has no field for it anyway.
    *=========================================*/
   const handleSave = useCallback(
     async (values: CampaignEditValues) => {
@@ -454,10 +459,6 @@ export function CampaignDetailCard(props: CampaignDetailCardProps) {
       setSaving(true)
       setSaveError(null)
       try {
-        const placement =
-          !hostId && values.siteIds !== undefined
-            ? { visibleTo: campaignVisibleTo(values.siteIds) }
-            : {}
         await updateDoc(campaignContainerDoc(firestore, orgId, campaignId), {
           name: values.name,
           // The list's search keys (AGL-3321), from the name written here.
@@ -470,8 +471,23 @@ export function CampaignDetailCard(props: CampaignDetailCardProps) {
           // The utm_campaign labels that mean this campaign (AGL-3461),
           // normalized the way the conversion join looks them up.
           utmCampaigns: campaignUtmLabels(values.utmCampaigns),
-          ...placement,
         })
+        if (!hostId && values.sharing) {
+          const refusal = await manageApi({
+            action: 'setSharing',
+            campaignId,
+            choice: values.sharing,
+          })
+            .then(({ response, payload }) =>
+              response.ok ? null : String(payload?.error ?? 'the change was refused'),
+            )
+            .catch(() => 'the change could not be saved')
+          if (refusal) {
+            return void setSaveError(
+              `The campaign was saved, but who it is shared with did not change: ${refusal}`,
+            )
+          }
+        }
         setEditing(false)
         enqueueSnackbar('Campaign updated', {
           variant: 'success',
@@ -484,7 +500,7 @@ export function CampaignDetailCard(props: CampaignDetailCardProps) {
         setSaving(false)
       }
     },
-    [campaignId, enqueueSnackbar, firestore, hostId, orgId, saving],
+    [campaignId, enqueueSnackbar, firestore, hostId, manageApi, orgId, saving],
   )
 
   /*==========================================
@@ -810,6 +826,19 @@ export function CampaignDetailCard(props: CampaignDetailCardProps) {
    * answer is that site, and none of this is read.
    */
   const placedIds = campaignSiteIds(campaign)
+  /*
+   * A campaign shared with all sites except some is described by the sites it
+   * leaves out (AGL-4047): listing today's sites would read as sites somebody
+   * chose, and the next new site joins it.
+   */
+  const allExceptLabel = orgMount
+    ? campaignAllExceptLabel(
+        campaign,
+        Object.fromEntries(
+          orgSiteOptions(orgMount).map((site) => [site.value, site.label]),
+        ),
+      )
+    : null
   const placedSites = orgMount
     ? orgMount.hosts.filter(
         (site) => placedIds === null || placedIds.includes(site.id),
@@ -878,7 +907,9 @@ export function CampaignDetailCard(props: CampaignDetailCardProps) {
                   icon: <MdiIcon path={mdiDeleteOutline.path} size={0.8} />,
                   destructive: true,
                   disabled: deleting || deleteBlocked,
-                  disabledReason: deleteBlocked ? MARKETING_CAMPAIGNS_REFUSAL : 'This campaign is being deleted',
+                  disabledReason: deleteBlocked
+                    ? (deleteReason ?? MARKETING_CAMPAIGNS_REFUSAL)
+                    : 'This campaign is being deleted',
                   onClick: () => void handleDelete(),
                 },
               ]}
@@ -909,13 +940,15 @@ export function CampaignDetailCard(props: CampaignDetailCardProps) {
         </Stack>
         {orgMount ? (
           <Typography variant="body2" color="text.secondary">
-            {placedIds === null
+            {allExceptLabel
+              ? `Offered on ${allExceptLabel.charAt(0).toLowerCase()}${allExceptLabel.slice(1)}`
+              : (placedIds === null
               ? 'Offered on every site'
               : placedIds.length
                 ? `Offered on ${placedIds
                     .map((id) => orgSiteName(orgMount, id))
                     .join(', ')}`
-                : 'Not offered on any site yet — edit the campaign to place it'}
+                : 'Not offered on any site yet — edit the campaign to place it')}
           </Typography>
         ) : null}
 
@@ -1298,6 +1331,7 @@ export function CampaignDetailCard(props: CampaignDetailCardProps) {
         }))}
         topics={topicOptions}
         sites={orgMount ? orgSiteOptions(orgMount) : undefined}
+        sitesReady={orgMount?.hostsReady ?? false}
         busy={saving}
         error={saveError}
         onSubmit={(values) => void handleSave(values)}

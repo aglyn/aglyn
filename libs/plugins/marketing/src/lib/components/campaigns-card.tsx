@@ -75,9 +75,11 @@ import {
   useUser,
 } from '@aglyn/tenant-feature-instance'
 import {
+  campaignAllExceptLabel,
   campaignListRows,
+  campaignSharingWrite,
   campaignSiteIds,
-  campaignVisibleTo,
+  campaignSiteVisibleTo,
   type CampaignAggregate,
   type CampaignListRow,
   type CampaignSend,
@@ -108,6 +110,8 @@ import {
   type MarketingOrgMount,
 } from './marketing-org-mount'
 import { useCampaignManageApi } from './use-campaign-send-api'
+import { CAMPAIGN_SHARING_FIELD, CampaignSharingFormField } from './campaign-sharing-form-field'
+import type { ScopeSharingChoice } from '@aglyn/aglyn/app-utils/scope-tokens'
 import { HostCampaignsZone } from './campaign-list-zones'
 import { useCampaignTopicOptions } from './use-campaign-topic-options'
 
@@ -244,7 +248,11 @@ export function HostCampaignsCard(props: {
   // so the rule asks it, and the button says so before the save does. Created
   // here it is placed on this site, so the site's verdict counts. A row's Delete
   // answers the manage route, which the same hook reads.
-  const { createBlocked: containersBlocked, deleteBlocked } = useCampaignListAccess(orgId, hostId)
+  const {
+    createBlocked: containersBlocked,
+    deleteBlocked,
+    deleteReachRefusal,
+  } = useCampaignListAccess(orgId, hostId)
   // A container is the org's, so deleting one from the org hub names the org.
   const manageApi = useCampaignManageApi(hostId, orgId)
 
@@ -451,8 +459,15 @@ export function HostCampaignsCard(props: {
         sitesLabel: orgMount
           ? campaignSitesLabel(orgMount, row, byId.get(row.id))
           : '',
+        /*
+         * Why the site's own door would refuse this row's delete past the
+         * key: a campaign on other sites too, or shared with all sites except
+         * some, asks for access to every site (AGL-4047). Read off the row
+         * already loaded, so it costs nothing.
+         */
+        deleteReach: row.legacy ? null : deleteReachRefusal(byId.get(row.id)),
       }))
-  }, [kind, page.rows, firstSends.rows, restSends.rows, orgMount])
+  }, [kind, page.rows, firstSends.rows, restSends.rows, orgMount, deleteReachRefusal])
 
   const pageSorts = useMemo(
     () => ({
@@ -537,22 +552,34 @@ export function HostCampaignsCard(props: {
       if (!orgId) {
         return setCreateError('This workspace is still loading — try again')
       }
-      setCreating(true)
-      setCreateError(null)
-      const id = createResourceUid()
       /*
        * Where it is placed. From a site's hub, that site — the creator is
        * standing on it, and a campaign that appeared on every sibling site
-       * would be a decision nobody made. From the org hub, the sites picked,
-       * and every site when none are.
+       * would be a decision nobody made. From the org hub, who it is shared
+       * with, as the sharing field chose (AGL-4047): a choice that cannot be
+       * stored is refused with the reason, never cut short — more than thirty
+       * chosen sites used to keep the first thirty and say nothing.
+       *
+       * "All sites except…" is created on the sites it reaches today and then
+       * marked by the manage route, the one writer of the marker: the rules
+       * refuse it on a client create. Until the route answers it is exactly
+       * a campaign on those sites, never on a site that was left out.
        */
-      const visibleTo = campaignVisibleTo(
-        hostId
-          ? [hostId]
-          : Array.isArray(values.siteIds)
-            ? values.siteIds.map(String)
-            : null,
-      )
+      const sharing = hostId
+        ? null
+        : ((values.sharing as ScopeSharingChoice | undefined) ?? { mode: 'all' as const })
+      const orgHostIds = (orgMount?.hosts ?? []).map((site) => site.id)
+      const placed = sharing ? campaignSharingWrite(sharing, orgHostIds) : null
+      if (sharing && sharing.mode !== 'all' && !orgMount?.hostsReady) {
+        return setCreateError('This workspace’s sites are still loading — try again')
+      }
+      if (placed && !placed.fields) return setCreateError(placed.problem)
+      const visibleTo = hostId
+        ? campaignSiteVisibleTo(hostId)
+        : (placed?.fields?.visibleTo ?? [])
+      setCreating(true)
+      setCreateError(null)
+      const id = createResourceUid()
       try {
         await setDoc(campaignContainerDoc(firestore, orgId, id), {
           name,
@@ -570,6 +597,26 @@ export function HostCampaignsCard(props: {
           createdAtMs: Date.now(),
           createdBy: String((user as any)?.uid ?? ''),
         })
+        if (sharing?.mode === 'allExcept') {
+          // The campaign exists either way, so a refusal here is said, never
+          // reported as a create that failed.
+          const refusal = await manageApi({
+            action: 'setSharing',
+            campaignId: id,
+            choice: sharing,
+          })
+            .then(({ response, payload }) =>
+              response.ok ? null : String(payload?.error ?? 'the sharing was refused'),
+            )
+            .catch(() => 'the sharing could not be saved')
+          if (refusal) {
+            enqueueSnackbar(
+              'The campaign was created on the sites it reaches today, but a ' +
+                `new site will not get it: ${refusal}`,
+              { variant: 'warning', allowDuplicate: true },
+            )
+          }
+        }
         setCreateOpen(false)
         openCampaign(id)
       } catch (error) {
@@ -583,7 +630,7 @@ export function HostCampaignsCard(props: {
         setCreating(false)
       }
     },
-    [creating, firestore, hostId, orgId, user, enqueueSnackbar, openCampaign],
+    [creating, firestore, hostId, orgId, orgMount, user, enqueueSnackbar, manageApi, openCampaign],
   )
 
   const campaignHref = useCallback(
@@ -918,13 +965,16 @@ export function HostCampaignsCard(props: {
                 label: 'Delete campaign',
                 icon: <MdiIcon path={mdiDeleteOutline.path} size={0.8} />,
                 destructive: true,
-                disabled: row.legacy || deleteBlocked || Boolean(deletingId),
+                disabled:
+                  row.legacy || deleteBlocked || Boolean(row.deleteReach) || Boolean(deletingId),
                 disabledReason: row.legacy
                   ? 'This is a single send, not a campaign. Open it to ' +
                     'manage the email itself.'
                   : deleteBlocked
                     ? MARKETING_CAMPAIGNS_REFUSAL
-                    : 'A campaign is being deleted',
+                    : row.deleteReach
+                      ? String(row.deleteReach)
+                      : 'A campaign is being deleted',
                 onClick: () => void handleDelete(row as CampaignListRow),
               },
             ]}
@@ -1136,8 +1186,17 @@ export function HostCampaignsCard(props: {
         extraFields={campaignFields(
           listOptions,
           topicOptions,
-          orgMount ? orgSiteOptions(orgMount) : null,
+          orgMount
+            ? {
+                sites: orgSiteOptions(orgMount).map((site) => ({
+                  id: site.value,
+                  name: site.label,
+                })),
+                ready: orgMount.hostsReady,
+              }
+            : null,
         )}
+        componentMapper={CAMPAIGN_FORM_COMPONENTS}
         errorSlot={
           createError ? (
             <Alert severity="error" sx={{ mt: 2, mb: 1 }}>
@@ -1149,6 +1208,9 @@ export function HostCampaignsCard(props: {
     </CardDisplay>
   )
 }
+/** The create drawer's one field the shared form library has no component for. */
+const CAMPAIGN_FORM_COMPONENTS = { [CAMPAIGN_SHARING_FIELD]: CampaignSharingFormField }
+
 /**
  * What a campaign collects beyond its name.
  *
@@ -1161,21 +1223,24 @@ function campaignFields(
   lists: Array<{ value: string; label: string }>,
   topics: Array<{ value: string; label: string }>,
   /** The org's sites, on the org hub only — a site hub places on itself. */
-  sites: Array<{ value: string; label: string }> | null,
+  sites: { sites: Array<{ id: string; name: string }>; ready: boolean } | null,
 ): any[] {
   return [
+    /*
+     * Who it is shared with (AGL-4047): radios and a visible list of sites,
+     * never a dropdown, starting on All sites as the empty selection it
+     * replaces did.
+     */
     ...(sites
       ? [
           {
-            component: 'select',
-            name: 'siteIds',
-            label: 'Sites',
-            multiple: true,
-            initialValue: [],
-            helperText:
-              'The sites this campaign is offered on. Leave empty for every site.',
-            disableDefaultOption: true,
-            options: sites,
+            component: CAMPAIGN_SHARING_FIELD,
+            name: 'sharing',
+            label: 'Shared with',
+            initialValue: { mode: 'all' },
+            helperText: 'The sites this campaign is offered on.',
+            sites: sites.sites,
+            sitesReady: sites.ready,
           },
         ]
       : []),
@@ -1230,6 +1295,12 @@ function campaignSitesLabel(
   container: EmailCampaign | undefined,
 ): string {
   if (row.legacy) return orgSiteName(mount, row.sends[0]?.hostId) || '—'
+  // Shared with all sites except some: the sites it leaves out (AGL-4047).
+  const allExcept = campaignAllExceptLabel(
+    container,
+    Object.fromEntries(orgSiteOptions(mount).map((site) => [site.value, site.label])),
+  )
+  if (allExcept) return allExcept
   const ids = campaignSiteIds(container)
   if (ids === null) return 'Every site'
   if (!ids.length) return 'No site'
