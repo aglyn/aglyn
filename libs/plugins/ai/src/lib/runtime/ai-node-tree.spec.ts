@@ -432,6 +432,21 @@ describe('validateAiNodeTree golden trees (AGL-2905)', () => {
     expect(out?.props).not.toHaveProperty('sx')
   })
 
+  it('keeps a button sent back to the visitor’s scheme, and no other scheme a button is not offered (AGL-4152)', () => {
+    const input = GOLDEN.screen()
+    const button = firstOf(input, 'muiButton')
+    button.props = { ...button.props, colorScheme: 'visitor' }
+    const kept = validateAiNodeTree(input, 'screen')
+    ok(kept)
+    const out = Object.values(kept.nodes).find((node) => node.componentId === 'muiButton')
+    expect(out?.props).toMatchObject({ colorScheme: 'visitor' })
+    expect(kept.repairs.join('\n')).not.toContain('colorScheme')
+    button.props = { ...button.props, colorScheme: 'dark' }
+    const dropped = validateAiNodeTree(input, 'screen')
+    ok(dropped)
+    expect(Object.values(dropped.nodes).find((node) => node.componentId === 'muiButton')?.props).not.toHaveProperty('colorScheme')
+  })
+
   it('accepts a screen id the host has and a media reference it holds', () => {
     const input = GOLDEN.screen()
     const button = firstOf(input, 'muiButton')
