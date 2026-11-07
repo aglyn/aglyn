@@ -27,6 +27,13 @@ export const PREVIEW_BANNER_ID = 'aglyn-entry-preview-banner'
  */
 export const PREVIEW_BAR_HEIGHT_VAR = '--aglyn-preview-bar-height'
 
+/**
+ * The admin bar's height on `<html>` while it is up, the same name its
+ * component writes (`ADMIN_BAR_HEIGHT_VAR` in `admin-bar.tsx`, not imported:
+ * this Server Component must not pull the client bar into its graph).
+ */
+export const ADMIN_BAR_HEIGHT_VAR = '--aglyn-admin-bar-height'
+
 /** Its height, spent twice: on the bar and on the spacer that makes room. */
 const BAR_HEIGHT_PX = 44
 
@@ -76,7 +83,12 @@ export function PreviewBanner({
 }) {
   const bar: CSSProperties = {
     position: 'fixed',
-    insetBlockStart: 0,
+    // Under the owner's admin bar when it is up, which publishes its height
+    // on `<html>` and pushes the page down by it (AGL-4152): at 0 the two
+    // bars overlap, this one hides the admin bar and a header pinned below
+    // both leaves a gap of the admin bar's height. At the very top when there
+    // is no admin bar, as for a signed-out team member.
+    insetBlockStart: `var(${ADMIN_BAR_HEIGHT_VAR}, 0px)`,
     insetInlineStart: 0,
     insetInlineEnd: 0,
     // Above anything a site can author. The canvas caps its own stacking well

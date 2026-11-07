@@ -39,6 +39,7 @@ import type { PluginMediaIngest } from '@aglyn/aglyn/plugin-manager/plugin-media
 import { aiLayoutPictureBandCells, type AiLayoutPicturePhoto, type AiLayoutPictureSlot, type AiLayoutPictureSource } from '../layout-language/ai-layout-pictures'
 import { AI_SITE_IMPORT_GENERATED_PICTURES_PER_PAGE, type AiSiteImportPagePictures, type AiSiteImportPhoto } from '../model/ai-site-import'
 import { aiMediaCreditsPerPicture } from '../model/ai-media-credits'
+import { aiSiteImportIsBrandMark } from '../model/ai-site-import-marks'
 import { estimateAiBilledUsd } from '../providers/catalog'
 import { AiImageSafetyRefusal, type AiImageAspectRatio, type AiImageProvider } from '../providers/image-contract'
 import { aiImageAltText, aiImageFileName } from '../server/ai-media-image'
@@ -102,8 +103,9 @@ export function aiSiteImportPictureSource(input: {
   cap?: number
 }): AiLayoutPictureSource | null {
   const { next, make, tally } = input
-  // A photo the library holds no size for cannot be framed.
-  const photos = input.photos.filter((photo) => photo.width && photo.height)
+  // A photo the library holds no size for cannot be framed, and a brand's mark is no photo (AGL-4152): a slot is a
+  // photo's place, and a client's logo filled a page's cover.
+  const photos = input.photos.filter((photo) => photo.width && photo.height && !aiSiteImportIsBrandMark(photo))
   if (!photos.length && !next && !make) return null
   const froms = new Map(photos.map((photo) => [photo.src, photo.from ?? '']))
   const cap = input.cap ?? AI_SITE_IMPORT_GENERATED_PICTURES_PER_PAGE

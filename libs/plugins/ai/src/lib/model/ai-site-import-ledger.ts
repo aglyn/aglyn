@@ -29,6 +29,7 @@
 
 import type { SiteImportBlock } from '../site-import/site-import-html'
 import type { SiteImportLayout, SiteImportLayoutNode, SiteImportLineRef, SiteImportPictureFit } from './ai-site-import'
+import { aiSiteImportIsBrandMark } from './ai-site-import-marks'
 
 export type SiteImportLedgerKind = 'picture' | 'form' | 'plan' | 'table' | 'quote' | 'video' | 'contact' | 'stats' | 'logos' | 'gallery' | 'tabs' | 'group'
 
@@ -202,8 +203,12 @@ export function siteImportLedger(source: { layout: SiteImportLayout; blocks: rea
     if (entry.backdrop?.kind === 'video' && entry.backdrop.poster !== undefined) line(entry.backdrop.poster)
     for (const ref of entry.lines) line(ref)
   })
-  // The picture the page opens on outranks a new one.
-  const opening = items.find((item) => item.kind === 'picture' && item.section === 0)
+  // The picture the page opens on outranks a new one; a brand's mark there is no photo of it (AGL-4152).
+  const opening = items.find((item) => {
+    if (item.kind !== 'picture' || item.section !== 0) return false
+    const block = blocks[item.lines[0] as number]
+    return !(block?.kind === 'image' && aiSiteImportIsBrandMark({ url: block.url, alt: block.alt }))
+  })
   if (opening) opening.must = true
   const links: SiteImportLedgerLink[] = []
   const hrefs = new Set<string>()
