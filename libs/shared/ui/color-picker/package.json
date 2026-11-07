@@ -1,6 +1,6 @@
 {
   "name": "@aglyn/shared-ui-color-picker",
-  "version": "1.17.0",
+  "version": "1.18.0",
   "license": "Apache-2.0",
   "homepage": "https://aglyn.com",
   "repository": {
@@ -24,7 +24,7 @@
     "./package.json": "./package.json"
   },
   "dependencies": {
-    "@aglyn/shared-util-tools": "1.17.0",
+    "@aglyn/shared-util-tools": "1.18.0",
     "@swc/helpers": "0.5.23",
     "react-color": "^2.19.3"
   },

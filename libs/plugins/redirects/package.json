@@ -1,6 +1,6 @@
 {
   "name": "@aglyn/plugins-redirects",
-  "version": "1.17.0",
+  "version": "1.18.0",
   "license": "Apache-2.0",
   "homepage": "https://aglyn.com",
   "repository": {
@@ -25,16 +25,16 @@
     "./package.json": "./package.json"
   },
   "dependencies": {
-    "@aglyn/aglyn": "1.17.0",
-    "@aglyn/shared-data-mdi": "1.17.0",
-    "@aglyn/shared-ui-jsx": "1.17.0",
-    "@aglyn/shared-ui-snackstack": "1.17.0",
-    "@aglyn/shared-util-email": "1.17.0",
-    "@aglyn/shared-util-http": "1.17.0",
-    "@aglyn/shared-util-timestamp": "1.17.0",
-    "@aglyn/shared-util-tools": "1.17.0",
-    "@aglyn/tenant-data-admin": "1.17.0",
-    "@aglyn/tenant-feature-instance": "1.17.0",
+    "@aglyn/aglyn": "1.18.0",
+    "@aglyn/shared-data-mdi": "1.18.0",
+    "@aglyn/shared-ui-jsx": "1.18.0",
+    "@aglyn/shared-ui-snackstack": "1.18.0",
+    "@aglyn/shared-util-email": "1.18.0",
+    "@aglyn/shared-util-http": "1.18.0",
+    "@aglyn/shared-util-timestamp": "1.18.0",
+    "@aglyn/shared-util-tools": "1.18.0",
+    "@aglyn/tenant-data-admin": "1.18.0",
+    "@aglyn/tenant-feature-instance": "1.18.0",
     "@swc/helpers": "0.5.23"
   },
   "peerDependencies": {
