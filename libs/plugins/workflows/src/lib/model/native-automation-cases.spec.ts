@@ -205,6 +205,24 @@ const ORG: unknown[] = [
     steps: [{ type: 'notifyAdmins', title: 'New booking' }],
     visibleTo: ['org'],
   },
+  // Who it runs on, as the editor chose it (AGL-4047): a choice decides over `visibleTo`.
+  ...[
+    { mode: 'all' },
+    { mode: 'selected', hostIds: ['h1', 'h1', 'h2'] },
+    { mode: 'selected', hostIds: ['host:h1'] },
+    { mode: 'selected', hostIds: Array.from({ length: 31 }, (_, i) => `h${i}`) },
+    { mode: 'allExcept', exceptHostIds: ['h3'] },
+    { mode: 'allExcept', exceptHostIds: [] },
+    { mode: 'allExcept', exceptHostIds: 'h3' },
+    { mode: 'nearby' },
+    null,
+  ].map((sharing) => ({
+    name: 'A',
+    trigger: { event: 'formSubmission' },
+    steps: [{ type: 'sendEmail', subject: 'Hi', body: 'B' }],
+    visibleTo: ['host:h1'],
+    sharing,
+  })),
 ]
 
 function cases(fn: (...args: any[]) => unknown, inputs: unknown[][]) {

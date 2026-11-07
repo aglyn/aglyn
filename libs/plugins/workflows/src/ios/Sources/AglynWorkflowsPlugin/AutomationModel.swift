@@ -3,6 +3,7 @@
 
 import AglynContracts
 import AglynCore
+import AglynPluginHost
 import Foundation
 
 // A SITE'S AUTOMATION AND ITS ORGANIZATION'S, as the console's Automation page
@@ -302,7 +303,13 @@ func siteName(_ hostID: String, _ sites: [WorkspaceSite]) -> String {
 
 /// `Runs on every site` / `Runs on A, B` / `Runs on no site`.
 func placementLine(_ row: OrgAutomationRow, sites: [WorkspaceSite]) -> String {
-  if row.orgWide { return "Runs on every site" }
+  switch scopeSharingOf(row.data) {
+  case .all: return "Runs on every site"
+  case .allExcept(let except, let included):
+    if included.isEmpty { return "Runs on no site" }
+    return "Runs on every site except \(except.map { siteName($0, sites) }.joined(separator: ", "))"
+  default: break
+  }
   let names = row.placedHostIDs.map { siteName($0, sites) }
   return names.isEmpty ? "Runs on no site" : "Runs on \(names.joined(separator: ", "))"
 }

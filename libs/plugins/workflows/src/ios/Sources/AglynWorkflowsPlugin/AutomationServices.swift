@@ -208,7 +208,7 @@ final class AutomationPickers {
   @ObservationIgnored private var orgCampaigns: [FirestoreDocument] = []
 
   /// The org editor's pickers: the org's datasets, lists and campaigns, kept to the placement.
-  func loadOrg(_ reader: FirestoreReader, orgID: String, placement: [String]) async {
+  func loadOrg(_ reader: FirestoreReader, orgID: String, placement: [String: Any]) async {
     if !loaded {
       loaded = true
       truncated = []
@@ -222,9 +222,9 @@ final class AutomationPickers {
   }
 
   /// Keeps the org's datasets and campaigns to the ones every placed site can see.
-  func place(_ placement: [String]) {
-    datasets = Self.options(orgDatasets) { scopeCovers($0.data["visibleTo"], placement) }
-    campaigns = Self.options(orgCampaigns) { scopeCovers($0.data["visibleTo"], placement) }
+  func place(_ placement: [String: Any]) {
+    datasets = Self.options(orgDatasets) { sharingCovers($0.data, placement) }
+    campaigns = Self.options(orgCampaigns) { sharingCovers($0.data, placement) }
   }
 }
 

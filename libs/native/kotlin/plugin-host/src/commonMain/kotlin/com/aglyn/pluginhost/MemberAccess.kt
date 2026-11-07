@@ -204,3 +204,29 @@ fun narrowsScope(before: List<String>?, after: List<String>?): Boolean {
   val kept = after.orEmpty().toSet()
   return before.orEmpty().any { it !in kept }
 }
+
+/**
+ * Whether [target] stays visible everywhere [source] is, for whole documents (`sharingCovers`): today's tokens are not
+ * enough once either side is all-except, because both lists move when a site is added.
+ */
+fun sharingCovers(target: Map<String, Any?>?, source: Map<String, Any?>?): Boolean {
+  val targetTokens = (target?.get("visibleTo") as? List<*>)?.filterIsInstance<String>()
+  val sourceTokens = (source?.get("visibleTo") as? List<*>)?.filterIsInstance<String>()
+  val sourceSharing = scopeSharingOf(source)
+  if (sourceSharing is ScopeSharing.AllExcept) {
+    when (val targetSharing = scopeSharingOf(target)) {
+      ScopeSharing.All -> return true
+      is ScopeSharing.AllExcept -> if (!targetSharing.exceptHostIds.all { it in sourceSharing.exceptHostIds }) return false
+      else -> return false
+    }
+  }
+  return scopeTokensCover(targetTokens, sourceTokens)
+}
+
+/** `scopeCovers`: an org-wide target covers anything; a restricted one, an org-wide source never, else every token. */
+fun scopeTokensCover(target: List<String>?, source: List<String>?): Boolean {
+  if (target.orEmpty().contains(OrgAccess.ORG_SCOPE_TOKEN)) return true
+  if (source.orEmpty().contains(OrgAccess.ORG_SCOPE_TOKEN)) return false
+  val reach = target.orEmpty().toSet()
+  return source.orEmpty().all { it in reach }
+}

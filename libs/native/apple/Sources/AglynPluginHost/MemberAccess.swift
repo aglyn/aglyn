@@ -160,3 +160,27 @@ public func narrowsScope(_ before: [String]?, _ after: [String]?) -> Bool {
   let kept = Set(after ?? [])
   return (before ?? []).contains { !kept.contains($0) }
 }
+
+/// Whether `target` stays visible everywhere `source` is, for whole documents (`sharingCovers`): today's tokens are not
+/// enough once either side is all-except, because both lists move when a site is added.
+public func sharingCovers(_ target: [String: Any]?, _ source: [String: Any]?) -> Bool {
+  let targetTokens = (target?["visibleTo"] as? [Any])?.compactMap { $0 as? String }
+  let sourceTokens = (source?["visibleTo"] as? [Any])?.compactMap { $0 as? String }
+  if case .allExcept(let sourceExcept, _) = scopeSharingOf(source) {
+    switch scopeSharingOf(target) {
+    case .all: return true
+    case .allExcept(let targetExcept, _):
+      if !targetExcept.allSatisfy(sourceExcept.contains) { return false }
+    default: return false
+    }
+  }
+  return scopeTokensCover(targetTokens, sourceTokens)
+}
+
+/// `scopeCovers`: an org-wide target covers anything; a restricted one, an org-wide source never, else every token.
+public func scopeTokensCover(_ target: [String]?, _ source: [String]?) -> Bool {
+  if (target ?? []).contains(OrgAccess.orgScopeToken) { return true }
+  if (source ?? []).contains(OrgAccess.orgScopeToken) { return false }
+  let reach = Set(target ?? [])
+  return (source ?? []).allSatisfy(reach.contains)
+}

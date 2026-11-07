@@ -3,6 +3,7 @@
 
 import AglynContracts
 import AglynCore
+import AglynPluginHost
 import Foundation
 
 // The editors' drafts: what each dialog holds while a person edits it, read
@@ -290,8 +291,8 @@ struct OrgAutomationDraft {
   var combinator = "and"
   var steps: [StepDraft] = [StepDraft(defaultAutomationStep("sendEmail"))]
   var enabled = true
-  var everySite = true
-  var siteIDs: [String] = []
+  /// Where it runs: every site, the sites chosen, or every site except some (AGL-4047), as the sharing field edits it.
+  var sharing: ScopeSharingChoice = .all
 
   init() {}
 
@@ -306,12 +307,30 @@ struct OrgAutomationDraft {
     combinator = trigger["combinator"] as? String == "or" ? "or" : "and"
     steps = (data["steps"] as? [Any] ?? []).map { StepDraft($0 as? [String: Any] ?? [:]) }
     enabled = !looseIsFalseValue(data["enabled"])
-    let visibleTo = (data["visibleTo"] as? [Any] ?? []).compactMap { $0 as? String }
-    everySite = visibleTo.contains("org")
-    siteIDs = visibleTo.compactMap { $0.hasPrefix("host:") ? String($0.dropFirst(5)) : nil }
+    // Where a stored automation runs, as the sharing field edits it (the console's `sharingOfRow`).
+    switch scopeSharingOf(data) {
+    case .all: sharing = .all
+    case .allExcept(let except, _): sharing = .allExcept(exceptHostIDs: except)
+    case .selected(let hostIDs): sharing = .selected(hostIDs: hostIDs)
+    case .none: sharing = .selected(hostIDs: [])
+    }
   }
 
-  var placement: [String] { everySite ? ["org"] : siteIDs.map { "host:\($0)" } }
+  /// What the placement would store given the workspace's sites, or why it can't be (`draftSharing`). The sites it
+  /// leaves out stay known even where the list lacks them, so they aren't taken for sites that are gone.
+  func placementWrite(_ orgHostIDs: [String]) -> (fields: ScopeSharingFields?, problem: String?) {
+    let leftOut: [String] = if case .allExcept(let ids) = sharing { ids } else { [] }
+    return sharingFromChoice(sharing, orgHostIDs: orgHostIDs + leftOut)
+  }
+
+  /// The automation as its placement would leave it, for the pickers (`draftPlacement`).
+  func placement(_ orgHostIDs: [String]) -> [String: Any] {
+    guard let fields = placementWrite(orgHostIDs).fields else { return ["visibleTo": [String]()] }
+    var placed: [String: Any] = ["visibleTo": fields.visibleTo]
+    if let mode = fields.scopeMode { placed["scopeMode"] = mode }
+    if let except = fields.scopeExcept { placed["scopeExcept"] = except }
+    return placed
+  }
 
   /// The body the manage route takes.
   var body: [String: Any] {
@@ -322,13 +341,19 @@ struct OrgAutomationDraft {
       trigger["conditions"] = conditions
       trigger["combinator"] = combinator
     }
-    return [
+    // The choice, which decides (AGL-4047), and beside every site or the chosen ones the `visibleTo` it stores, as the
+    // route read it before there was a choice (`orgAutomationBody`).
+    var body: [String: Any] = [
       "name": name.trimmingCharacters(in: .whitespacesAndNewlines), "trigger": trigger, "steps": steps.map(\.fields),
-      "enabled": enabled, "visibleTo": placement,
+      "enabled": enabled, "sharing": sharing.wire,
     ]
+    switch sharing {
+    case .all: body["visibleTo"] = ["org"]
+    case .selected(let hostIDs): body["visibleTo"] = hostIDs.map { "host:\($0)" }
+    case .allExcept: break
+    }
+    return body
   }
-
-  var tooManySites: Bool { !everySite && siteIDs.count > maxScopeHosts }
 }
 
 // MARK: - Step vocabulary for pickers
