@@ -309,6 +309,30 @@ describe('what holds a plan', () => {
     expect(violations.map((violation) => violation.message).join(' ')).toMatch(message)
   })
 
+  it('sends a button that asks to be contacted to the contact page, not another the answer named', () => {
+    const roles = [
+      { page: 'd-p2', role: 'about' },
+      { page: 'd-p3', role: 'contact' },
+    ]
+    const withCta = (cta: { label: string; target: string }, given = roles) => planOf(site(), answer({ roles: given, nav: { ...answer().nav, cta } })).nav.primaryCta
+    // Its words ask for contact and it went to About: it goes to the contact page, and About keeps its menu entry (AGL-4152).
+    expect(withCta({ label: 'Contact us', target: 'd-p2' })).toEqual({ label: 'Contact us', target: 'd-p3' })
+    expect(withCta({ label: 'Get a quote', target: 'd-p1' })?.target).toBe('d-p3')
+    expect(withCta({ label: 'Book a call', target: 'd-p2' })?.target).toBe('d-p3')
+    // Words that ask nothing of the kind, a button already on the contact page, and no contact page: as answered.
+    expect(withCta({ label: 'Our services', target: 'd-p1' })?.target).toBe('d-p1')
+    expect(withCta({ label: 'Contact us', target: 'd-p3' })?.target).toBe('d-p3')
+    expect(withCta({ label: 'Contact us', target: 'd-p2' }, [{ page: 'd-p2', role: 'about' }])?.target).toBe('d-p2')
+    // The phone and the form are ways to reach the business already.
+    expect(withCta({ label: 'Contact us', target: 'form' })).toEqual({ label: 'Contact us', target: 'form', page: 'd-p3' })
+    // The header: the button to the contact page, About still in the menu, the lone Contact entry left to the button.
+    const state = site()
+    const plan = planOf(state, answer({ roles, nav: { ...answer().nav, cta: { label: 'Contact us', target: 'd-p2' } } }))
+    const frame = frameOf(aiSiteImportPlanIn(state, { index: 1 }, plan, 'x', 'd-new'))
+    expect(frame.ctas).toEqual([{ label: 'Contact us', to: 'page:d-p3', style: 'primary' }])
+    expect(frame.nav.map((entry) => entry.label)).toEqual(['Services', 'About', 'Common questions'])
+  })
+
   it('refuses a button to a form no page holds, and to a phone the site does not give', () => {
     const state = site({ pages: site().pages.map((entry) => ({ ...entry, read: entry.read ? { ...entry.read, forms: [] } : null })) })
     expect(hold(answer(), state).violations.map((violation) => violation.message).join(' ')).toMatch(/no page of this site holds a form/)
