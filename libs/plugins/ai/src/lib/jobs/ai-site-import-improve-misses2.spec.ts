@@ -31,8 +31,9 @@ import { siteImportFactScope, siteImportFidelity, siteImportNameKey, type SiteIm
 import { aiSiteImportAltIsFileName } from '../model/ai-site-import-marks'
 import { siteImportReplayBuild, siteImportReplayDocumentOf } from '../site-import/fixtures/site-import-fidelity-replay'
 import { aiImportedPageCheck } from './ai-job-page-language'
+import { aiLayoutStockPhotoSource, aiStockSourceNamesWorld } from './ai-layout-stock-photos'
 import type { AiSiteImportDocument } from './ai-site-import-document'
-import { aiReadImprovedPage, aiSiteImportImproveDestinations, aiSiteImportImprovedPage, aiSiteImportImproveLedger } from './ai-site-import-improve'
+import { aiReadImprovedPage, aiSiteImportImproveDestinations, aiSiteImportImprovedPage, aiSiteImportImproveHero, aiSiteImportImproveLedger } from './ai-site-import-improve'
 
 type Node = { componentId: string; props?: Record<string, unknown>; nodes?: string[]; parentId?: string | null }
 
@@ -73,6 +74,73 @@ function redesigned(doc: AiSiteImportDocument, answer: unknown) {
   const page = aiSiteImportImprovedPage(read, { doc, ledger, design, destinations: aiSiteImportImproveDestinations(doc, ledger), formId: null })
   return { ledger, page }
 }
+
+const imagesIn = (blocks: ReadonlyArray<{ kind: string; picture?: { src: string }; items?: ReadonlyArray<{ picture?: { src: string } }> }>) =>
+  blocks.flatMap((block) => [...(block.picture?.src ? [block.picture.src] : []), ...(block.items ?? []).flatMap((item) => (item.picture?.src ? [item.picture.src] : []))])
+
+describe('a redesigned page’s opening picture', () => {
+  it('is the page’s own photo, taken from the gallery it keeps, never a slot the stock library fills', () => {
+    const doc = readOf(GALLERY, '/gallery')
+    const { ledger, page } = redesigned(doc, GALLERY_ANSWER)
+    expect(ledger.items.filter((item) => item.kind === 'gallery')).toHaveLength(1)
+    const opening = page.given.sections[0]
+    const picture = opening?.blocks.find((block) => block.kind === 'image')?.picture
+    expect(picture?.src).toMatch(/^media:host-import\//)
+    expect(page.pictures.slots).toBe(0)
+    expect(page.pictures.source).toBe(1)
+    // Shown once: the gallery shows the rest.
+    const all = page.given.sections.flatMap((entry) => imagesIn(entry.blocks as never))
+    expect(new Set(all).size).toBe(all.length)
+    expect(all).toHaveLength(NAMES.length)
+  })
+
+  it('takes a photo no section places before one the gallery shows', () => {
+    const html = GALLERY.replace('<section><h2>Recent work</h2>', `<section><img src="${ORIGIN}/media/crew-pour.jpg" alt="Our crew pouring a driveway" width="1600" height="900"><p>Every pour is finished by hand.</p></section><section><h2>Recent work</h2>`)
+    const doc = readOf(html, '/gallery')
+    const { page } = redesigned(doc, GALLERY_ANSWER)
+    const picture = page.given.sections[0]?.blocks.find((block) => block.kind === 'image')?.picture
+    expect(picture?.alt).toBe('Our crew pouring a driveway')
+    expect(page.pictures.unplaced).toEqual([])
+  })
+
+  it('is left to the slot where the page has no photo at all', () => {
+    const doc = readOf(GALLERY.replace(/<section><h2>Recent work<\/h2>[\s\S]*?<\/section>/, ''), '/gallery')
+    const { page } = redesigned(doc, { sections: [GALLERY_ANSWER.sections[0]] })
+    expect(page.given.sections[0]?.blocks.find((block) => block.kind === 'image')?.picture).toBeUndefined()
+    expect(page.pictures.slots).toBe(1)
+  })
+
+  it('sits beside the words, not behind them, where it is a square or a portrait', () => {
+    const plan = { design: { hero: 'cover', group: 'cards', rhythm: 'alternate', cta: 'band' } } as never
+    const design = { kind: 'business', seed: 7, home: false } as never
+    expect(aiSiteImportImproveHero(design, plan, { ratio: 0.75 })).toBe('split')
+    expect(aiSiteImportImproveHero(design, plan, { ratio: 1 })).toBe('split')
+    expect(aiSiteImportImproveHero(design, plan, { ratio: 1.78 })).toBe('cover')
+    // A slot's shape is not known until it is filled: the plan's own hero.
+    expect(aiSiteImportImproveHero(design, plan, null)).toBe('cover')
+    const doc = readOf(GALLERY, '/gallery', { width: 900, height: 1200 })
+    const { page } = redesigned(doc, GALLERY_ANSWER)
+    expect(page.given.sections[0]?.hero).not.toBe('cover')
+    expect(page.given.sections[0]?.hero).not.toBe('poster')
+    expect(page.given.sections[0]?.hero).not.toBe('panel')
+  })
+})
+
+describe('a redesign’s stock photos', () => {
+  const provider = { search: jest.fn(async () => []) }
+  const ingest = { ingest: jest.fn(), findStockPhoto: jest.fn(async () => null) }
+  const deps = { provider: () => provider as never, ingest: () => ingest as never }
+  const input = { hostId: 'host-1', uid: 'u1', seed: 'job:page', sectionNames: ['Opening'] }
+
+  it('are searched only where the site names its world', () => {
+    expect(aiStockSourceNamesWorld({ business: '' })).toBe(false)
+    expect(aiStockSourceNamesWorld({ business: 'A concrete contractor pouring driveways and patios' })).toBe(true)
+    expect(aiLayoutStockPhotoSource({ ...input, business: '', worldOnly: true }, deps)).toBeNull()
+    expect(aiLayoutStockPhotoSource({ ...input, business: 'A concrete contractor pouring driveways and patios', worldOnly: true }, deps)).not.toBeNull()
+    // A page that is no redesign searches as it always has.
+    expect(aiLayoutStockPhotoSource({ ...input, business: '' }, deps)).not.toBeNull()
+  })
+})
 
 /** An invented contractor's home: an ordinary word capitalized after "We", and a store's name with its possessive. */
 const HOME = `<!doctype html><html><head><title>Larkspur Paving</title></head><body>

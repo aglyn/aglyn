@@ -50,12 +50,13 @@ import {
   aiReadLayoutBlock,
   type AiLayoutBlock,
   type AiLayoutImportHero,
+  type AiLayoutPicture,
   type AiLayoutItem,
   type AiLayoutSection,
   type AiLayoutSettlement,
 } from '../layout-language/ai-layout-language'
 import { AI_ICON_WORDS } from '../runtime/ai-icon-library'
-import type { AiSiteImportAddedSection, AiSiteImportPagePictures, AiSiteImportPageRole, AiSiteImportPlan } from '../model/ai-site-import'
+import type { AiSiteImportAddedSection, AiSiteImportPagePictures, AiSiteImportPageRole, AiSiteImportPlan, SiteImportLineRef } from '../model/ai-site-import'
 import { aiSiteHomeArc } from '../model/ai-site-home-arcs'
 import {
   SITE_IMPORT_IMPROVED_MEANING,
@@ -641,6 +642,9 @@ export const AI_SITE_IMPORT_COVER_LEAST_RATIO = 1.3
 /** The heroes that box their photo under the words: a masthead's and an editorial's. */
 const BOXED_HEROES: ReadonlySet<AiLayoutHeroVariant> = new Set(['column', 'editorial'])
 
+/** The heroes that lay their photo edge to edge behind the words, which a square or a portrait cannot fill. */
+const COVERING_HEROES: ReadonlySet<AiLayoutHeroVariant> = new Set(['cover', 'poster', 'panel'])
+
 /**
  * The site's hero as a page brought in draws it: a collage or a portrait holds
  * what a page brought in does not. A redesign whose opening holds the page's
@@ -650,7 +654,10 @@ const BOXED_HEROES: ReadonlySet<AiLayoutHeroVariant> = new Set(['column', 'edito
  */
 export function aiSiteImportImproveHero(design: AiLayoutDesign, plan?: AiSiteImportPlan | null, opening?: { ratio?: number } | null): AiLayoutImportHero {
   const chosen = (plan?.design.hero as AiLayoutHeroVariant | undefined) ?? aiLayoutDesignChoices(design).hero
-  if (BOXED_HEROES.has(chosen) && (opening?.ratio ?? 0) >= AI_SITE_IMPORT_COVER_LEAST_RATIO) return 'cover'
+  const ratio = opening?.ratio ?? 0
+  if (BOXED_HEROES.has(chosen) && ratio >= AI_SITE_IMPORT_COVER_LEAST_RATIO) return 'cover'
+  // A square or a portrait is never stretched behind the words (AGL-4152): it sits beside them.
+  if (COVERING_HEROES.has(chosen) && ratio > 0 && ratio < AI_SITE_IMPORT_COVER_LEAST_RATIO) return 'split'
   return chosen === 'collage' || chosen === 'portrait' ? 'split' : chosen
 }
 
@@ -864,6 +871,28 @@ export function aiSiteImportImprovedPage(given: readonly AiSiteImportImprovedSec
   }
   // The source's pictures a written set of cards stands for, where the answer gave them none (AGL-4152).
   const carded = aiSiteImportCardPictures(answer, ledger)
+  // The page's own photo an opening that asks for a picture takes (AGL-4152), and which of its things it was.
+  const asked = new Set([...aiSiteImportImprovedPlaced(answer, ledger), ...[...carded.values()].flat()])
+  const ownOpening = { ref: null as string | null, taken: false }
+  const openingPicture = (): AiLayoutPicture | null => {
+    if (ownOpening.taken) return null
+    const ratioOf = (line: SiteImportLineRef | undefined) => {
+      const image = line === undefined || scope.used.has(line) ? undefined : doc.blocks[line]
+      if (image?.kind !== 'image' || aiSiteImportIsBrandMark({ url: image.url, alt: image.alt })) return 0
+      const photo = scope.photos.get(image.url)
+      return photo?.width && photo.height ? photo.width / photo.height : 0
+    }
+    const widest = (found: Array<{ ref: string | null; line: SiteImportLineRef | undefined }>) => found.filter((entry) => ratioOf(entry.line) > 0).sort((a, b) => ratioOf(b.line) - ratioOf(a.line))[0]
+    // Its photo no section places; else one of a gallery it keeps, which shows the rest.
+    const pick =
+      widest(ledger.items.filter((item) => item.kind === 'picture' && !asked.has(item.ref)).map((item) => ({ ref: item.ref, line: item.lines[0] }))) ??
+      widest(ledger.items.filter((item) => item.kind === 'gallery' && asked.has(item.ref)).flatMap((item) => item.lines.map((line) => ({ ref: null, line }))))
+    const picture = pick ? aiSiteImportTakePicture(scope, pick.line) : null
+    if (!picture) return null
+    ownOpening.taken = true
+    ownOpening.ref = pick?.ref ?? null
+    return picture
+  }
   const sections = answer.map((section, index): AiLayoutSection => {
     scope.at = `sections[${index}]`
     const words = section.blocks.flatMap((block) => (block.kind === 'heading' || block.kind === 'eyebrow' ? [block.text ?? ''] : [])).join(' ')
@@ -873,7 +902,10 @@ export function aiSiteImportImprovedPage(given: readonly AiSiteImportImprovedSec
       const placed = block.col !== undefined ? { col: block.col } : {}
       if (block.kind === 'image') {
         const { col: _col, ...rest } = block
-        return [{ ...rest, ...placed }]
+        // An opening that asks for a picture shows the page's own where it has one (AGL-4152): a slot the
+        // library fills is searched by words alone, and put a stranger's desk on a builder's gallery.
+        const own = index === 0 && !block.picture?.src ? openingPicture() : null
+        return [{ ...rest, ...(own ? { picture: own } : {}), ...placed }]
       }
       if (block.kind === 'text' || block.kind === 'lede' || block.kind === 'note') {
         say(block.text)
@@ -929,7 +961,7 @@ export function aiSiteImportImprovedPage(given: readonly AiSiteImportImprovedSec
     const group = sections[index]?.blocks.find((block) => block.items?.length)
     return { heading: names[index] as string, ...(group?.items?.length ? { items: group.items.length } : {}) }
   })
-  const placed = new Set([...aiSiteImportImprovedPlaced(answer, ledger), ...[...carded.values()].flat()])
+  const placed = new Set([...asked, ...(ownOpening.ref ? [ownOpening.ref] : [])])
   const allPictures = ledger.items.filter((item) => item.kind === 'picture')
   const unplaced = allPictures.filter((item) => !placed.has(item.ref)).flatMap((item) => {
     const block = doc.blocks[item.lines[0] as number]
@@ -941,7 +973,8 @@ export function aiSiteImportImprovedPage(given: readonly AiSiteImportImprovedSec
     written,
     added,
     pictures: {
-      source: allPictures.length - unplaced.length,
+      // A gallery's photo the opening shows is the source's too.
+      source: allPictures.length - unplaced.length + (ownOpening.taken && !ownOpening.ref ? 1 : 0),
       stock: 0,
       generated: 0,
       slots: sections.reduce((total, section) => total + section.blocks.filter((block) => block.kind === 'image' && !block.picture).length, 0),
