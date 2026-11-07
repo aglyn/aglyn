@@ -293,6 +293,74 @@ final class FunctionCasesTests: XCTestCase {
     }
   }
 
+  private func decode<T: Decodable>(_ type: T.Type, _ value: Any) throws -> T {
+    try JSONDecoder().decode(type, from: JSONSerialization.data(withJSONObject: value))
+  }
+
+  func testQuoteEditorRulesAnswerAsTheConsoleDoes() throws {
+    for item in cases("computeQuoteTotals") {
+      let input = item.args[0] as! [String: Any]
+      let lines = (input["lines"] as! [[String: Any]]).map {
+        QuoteTotalsLine(
+          unitAmountCents: ($0["unitAmountCents"] as? NSNumber)?.doubleValue ?? 0,
+          quantity: ($0["quantity"] as? NSNumber)?.doubleValue ?? 0,
+          included: $0["included"] as? Bool == true, taxExempt: $0["taxExempt"] as? Bool == true)
+      }
+      let discount = try (input["discount"] as? [String: Any]).map { try decode(QuoteDiscount.self, $0) }
+      let tax = try decode(QuoteTaxBasis.self, input["tax"] as Any)
+      let totals = computeQuoteTotals(
+        lines, discount: discount, shippingCents: (input["shippingCents"] as? NSNumber)?.doubleValue, tax: tax)
+      let want = item.result as! [String: Any]
+      let number = { (key: String) in (want[key] as? NSNumber)?.doubleValue }
+      XCTAssertEqual(totals.itemsCents, number("itemsCents"), item.label)
+      XCTAssertEqual(totals.discountCents, number("discountCents"), item.label)
+      XCTAssertEqual(totals.shippingCents, number("shippingCents"), item.label)
+      XCTAssertEqual(totals.taxCents, number("taxCents"), item.label)
+      XCTAssertEqual(totals.totalCents, number("totalCents"), item.label)
+      XCTAssertEqual(totals.taxableCents, number("taxableCents"), item.label)
+      XCTAssertEqual(totals.taxAtPayment, want["taxAtPayment"] as? Bool, item.label)
+    }
+    for item in cases("quoteTaxBasisFromSettings") {
+      let shipTo = item.args.count > 1 ? item.args[1] as? [String: Any] : nil
+      let basis = quoteTaxBasisFromSettings(
+        storeTaxSettingsOf(item.args[0] as? [String: Any]), shipToCountry: shipTo?["country"] as? String,
+        shipToState: shipTo?["state"] as? String)
+      XCTAssertEqual(basis, try decode(QuoteTaxBasis.self, item.result), item.label)
+    }
+    for item in cases("quoteLineRequestFromLine") {
+      let line = try decode(OrderLineItem.self, item.args[0])
+      let want = item.result as! [String: Any]
+      let expected: QuoteLineRequest =
+        want["kind"] as? String == "custom"
+        ? .custom(
+          name: want["name"] as! String, description: want["description"] as? String, sku: want["sku"] as? String,
+          unitAmountCents: (want["unitAmountCents"] as! NSNumber).doubleValue,
+          quantity: (want["quantity"] as! NSNumber).doubleValue, ships: want["ships"] as? Bool == true,
+          included: want["included"] as? Bool == true)
+        : .catalog(
+          productId: want["productId"] as! String, variantId: want["variantId"] as? String,
+          quantity: (want["quantity"] as! NSNumber).doubleValue,
+          modifiers: try ((want["modifiers"] as? [Any]) ?? []).map { try decode(ModifierSelection.self, $0) },
+          included: want["included"] as? Bool == true, description: want["description"] as? String)
+      XCTAssertEqual(quoteLineRequestFromLine(line), expected, item.label)
+    }
+    for item in cases("priceQuoteCustomLine") {
+      let request = item.args[0] as! [String: Any]
+      let priced = priceQuoteCustomLine(
+        name: request["name"] as! String, description: request["description"] as? String, sku: request["sku"] as? String,
+        unitAmountCents: (request["unitAmountCents"] as! NSNumber).doubleValue,
+        quantity: (request["quantity"] as! NSNumber).doubleValue, ships: request["ships"] as? Bool ?? true,
+        included: request["included"] as? Bool == true)
+      XCTAssertEqual(priced, try decode(OrderLineItem.self, item.result), item.label)
+    }
+    for item in cases("quoteRequiresProofApprovalByDefault") {
+      XCTAssertEqual(quoteRequiresProofApprovalByDefault(item.args[0] as? [String: Any]), item.result as? Bool, item.label)
+    }
+    for item in cases("quoteRequiresProofSignInByDefault") {
+      XCTAssertEqual(quoteRequiresProofSignInByDefault(item.args[0] as? [String: Any]), item.result as? Bool, item.label)
+    }
+  }
+
   func testOrderMoneyPrintsAsTheBuyerEmailsDo() {
     for item in cases("formatOrderMoney") {
       let cents = int(item.args[0])

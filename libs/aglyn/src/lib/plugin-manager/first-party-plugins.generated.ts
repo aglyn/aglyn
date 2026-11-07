@@ -2682,6 +2682,16 @@ export const PLUGIN_REPEAT_SOURCE_DECLARED: RepeatSourceDeclaration | null = {
 }
 
 /**
+ * The plugin that answers a published page's repeats over a plugin
+ * connection's record, declared by that plugin (AGL-4212). `null` when none
+ * does, and such a repeat then renders no copies.
+ */
+export const PLUGIN_CONNECTION_REPEAT_SOURCE_DECLARED: RepeatSourceDeclaration | null = {
+  "pluginId": "marketplace",
+  "id": "pluginConnection"
+}
+
+/**
  * The site documents a plugin authors in the besigner, declared by that
  * plugin (AGL-3080). Empty when none does, and the console's plugin-document
  * editor routes answer 404.

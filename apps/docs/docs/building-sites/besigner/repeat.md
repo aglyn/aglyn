@@ -1,13 +1,15 @@
 ---
 sidebar_position: 15
 title: Repeat over data
-description: Make any element render once per record — a list, a grid, a gallery — see the real copies on the canvas, and bound them with a filter, a sort and a limit.
+description: Make any element render once per record of a dataset or a connected service — a list, a grid, a gallery — see the real copies on the canvas, and bound them with a filter, a sort and a limit.
 ---
 
 # Repeat over data
 
-Any element on a page can repeat. Point it at a dataset and it renders once
-per record on the published page, with each copy filled in from that record.
+Any element on a page can repeat. Point it at a dataset — or at what a
+[connected service](#repeat-over-a-connected-service) last synced — and it
+renders once per record on the published page, with each copy filled in from
+that record.
 A row of cards, a gallery, a team list, a price table — one design, as many
 copies as you have rows.
 
@@ -114,6 +116,64 @@ record's page as `{{item.url}}`, so a card links to it with that token.
 - **A copy is not a page.** Copies share one design by definition. If one
   record needs to look different, that's a condition on the design, not a
   second design.
+
+## Repeat over a connected service
+
+A plugin that connects to a service — Google reviews, say — keeps a small copy
+of what that service last sent: a list of items (each review) and a summary
+(the overall rating and the number of reviews). Any element can repeat over
+that copy the same way it repeats over a dataset, so you design the reviews
+with ordinary elements — a Card, a Stack, Typography, an image, a link —
+instead of styling one closed block.
+
+1. Install the plugin and connect it to the service on the site's page for
+   that plugin.
+2. Select the element on the canvas and open the **Attributes** tab.
+3. In **Repeat over a connection**, pick what to repeat over. Each
+   connection is listed twice, by its name:
+   - **each item** (for example **Google: each item**) — one copy per item,
+     such as one card per review;
+   - **summary** (for example **Google: summary**) — one copy holding the
+     summary, such as a "4.8 stars from 120 reviews" header.
+
+The picker lists only the connections this site has. On a site with none, it
+does not appear at all.
+
+Inside the repeating element, **Insert binding** lists the fields the plugin
+provides — for example `{{item.author}}`, `{{item.rating}}`,
+`{{item.text}}`. Dates read as **Nov 3, 2026**; each date also comes as
+`…Iso` (for example `{{item.publishedAtIso}}`) when you need the exact
+moment rather than the words.
+
+Filter, sort and limit work exactly as they do for a dataset: **Repeat limit**
+`3` shows the first three reviews, **Repeat filter** `rating >= 4` only the
+good ones, and **Repeat sort** `publishedAtIso desc` the newest first.
+
+Until the plugin has synced for the first time, there is nothing to show: a
+repeat over the items renders no copies, and a repeat over the summary renders
+none either, so the published page never shows an empty card.
+
+## Hide part of a copy when a field is empty
+
+Some records fill a field and others don't — a review the owner replied to,
+and one they didn't. To draw a block only on the copies that have the value,
+bind its visibility to the field:
+
+1. Select the block inside the repeating element (for example a Box holding
+   a "Response from the owner" caption and `{{item.reply}}`).
+2. In the **Attributes** tab, set **Hide unless** to `{{item.reply}}` (the
+   **Insert binding** button lists the fields). Every element inside a
+   repeating element has this field.
+
+Each copy whose review has a reply draws the block; every other copy leaves
+it out, caption included. **Hide when** works the other way round: the block is
+left out of each copy where the field holds a value. Both work the same way
+inside a repeat over a dataset.
+
+A field that is empty, `false`, `0`, `no` or `off` counts as no value. On the
+canvas, the copy you edit always shows the block so you can keep designing it;
+the copies beside it, Preview and the published page leave it out where the
+record has no value.
 
 ## When a dataset goes away
 

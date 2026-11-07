@@ -9,6 +9,27 @@ content on the marketing site and is written separately.
 
 <!-- releases below -->
 
+## v1.19.0 — 2026-11-07
+
+[Compare with the previous release](https://github.com/aglyn/aglyn/compare/7accf93eb...v1.19.0)
+
+### Added
+
+- **native:** send a quote and its pay link in both apps ([AGL-4097](https://linear.app/aglyn/issue/AGL-4097))
+- **native:** the console's quote send and pay link rules in both contracts ([AGL-4097](https://linear.app/aglyn/issue/AGL-4097))
+- **native:** the Android quote editor, from New quote and Edit ([AGL-4093](https://linear.app/aglyn/issue/AGL-4093))
+- **native:** iOS quote editor, from New quote and Edit ([AGL-4093](https://linear.app/aglyn/issue/AGL-4093))
+- **native:** a quote's product line priced as the console prices it ([AGL-4093](https://linear.app/aglyn/issue/AGL-4093))
+- **native:** the console's quote editor totals and tax in both apps' contracts ([AGL-4093](https://linear.app/aglyn/issue/AGL-4093))
+- **besigner:** repeat any element over a plugin connection's record, and hide a part per record ([AGL-4212](https://linear.app/aglyn/issue/AGL-4212))
+- **google-reviews:** every part of the Google reviews display is an element you can style ([AGL-4212](https://linear.app/aglyn/issue/AGL-4212))
+- **workflows:** org automations run on all sites except some ([AGL-4047](https://linear.app/aglyn/issue/AGL-4047))
+
+### Fixed
+
+- **commerce:** a product-page template previews a real product ([AGL-4211](https://linear.app/aglyn/issue/AGL-4211))
+- **commerce:** the gate coverage names the quote route as a reader, not a door ([AGL-4162](https://linear.app/aglyn/issue/AGL-4162))
+
 ## v1.18.0 — 2026-11-07
 
 [Compare with the previous release](https://github.com/aglyn/aglyn/compare/v1.17.0...v1.18.0)

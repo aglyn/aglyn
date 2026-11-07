@@ -34320,6 +34320,467 @@
           null
         ]
       ]
+    },
+    "computeQuoteTotals": {
+      "module": "libs/plugins/commerce/src/lib/model/commerce-quotes.ts",
+      "args": [
+        [
+          {
+            "lines": [
+              {
+                "unitAmountCents": 1800,
+                "quantity": 2
+              },
+              {
+                "unitAmountCents": 1500,
+                "quantity": 2
+              },
+              {
+                "unitAmountCents": 0,
+                "quantity": 1,
+                "included": true
+              }
+            ],
+            "discount": {
+              "kind": "percent",
+              "pct": 10
+            },
+            "shippingCents": 800,
+            "tax": {
+              "kind": "rate",
+              "pct": 8.25
+            }
+          }
+        ],
+        [
+          {
+            "lines": [
+              {
+                "unitAmountCents": 1000,
+                "quantity": 3
+              },
+              {
+                "unitAmountCents": 333,
+                "quantity": 1,
+                "taxExempt": true
+              }
+            ],
+            "discount": {
+              "kind": "amount",
+              "amountCents": 500
+            },
+            "tax": {
+              "kind": "rate",
+              "pct": 8.25
+            }
+          }
+        ],
+        [
+          {
+            "lines": [
+              {
+                "unitAmountCents": 1000,
+                "quantity": 1
+              }
+            ],
+            "discount": {
+              "kind": "amount",
+              "amountCents": 5000
+            },
+            "tax": {
+              "kind": "service",
+              "taxCents": 77
+            }
+          }
+        ],
+        [
+          {
+            "lines": [
+              {
+                "unitAmountCents": 1999,
+                "quantity": 1
+              }
+            ],
+            "discount": {
+              "kind": "percent",
+              "pct": 150
+            },
+            "shippingCents": -5,
+            "tax": {
+              "kind": "at-payment"
+            }
+          }
+        ],
+        [
+          {
+            "lines": [
+              {
+                "unitAmountCents": 1001,
+                "quantity": 1
+              },
+              {
+                "unitAmountCents": 1001,
+                "quantity": 1
+              },
+              {
+                "unitAmountCents": 1001,
+                "quantity": 1
+              }
+            ],
+            "discount": {
+              "kind": "amount",
+              "amountCents": 100
+            },
+            "tax": {
+              "kind": "rate",
+              "pct": 7
+            }
+          }
+        ],
+        [
+          {
+            "lines": [],
+            "tax": {
+              "kind": "none",
+              "reason": "undecided"
+            }
+          }
+        ]
+      ]
+    },
+    "quoteTaxBasisFromSettings": {
+      "module": "libs/plugins/commerce/src/lib/model/commerce-quotes.ts",
+      "args": [
+        [
+          {
+            "mode": "manual",
+            "origin": {
+              "country": "US",
+              "state": "TX"
+            },
+            "rates": [
+              {
+                "country": "US",
+                "state": "TX",
+                "pct": 8.25,
+                "label": "TX sales tax"
+              },
+              {
+                "country": "US",
+                "pct": 5
+              },
+              {
+                "country": "CA",
+                "state": "ON",
+                "pct": 13
+              }
+            ]
+          },
+          {
+            "country": "US",
+            "state": "TX"
+          }
+        ],
+        [
+          {
+            "mode": "manual",
+            "origin": {
+              "country": "US",
+              "state": "TX"
+            },
+            "rates": [
+              {
+                "country": "US",
+                "state": "TX",
+                "pct": 8.25,
+                "label": "TX sales tax"
+              },
+              {
+                "country": "US",
+                "pct": 5
+              },
+              {
+                "country": "CA",
+                "state": "ON",
+                "pct": 13
+              }
+            ]
+          },
+          {
+            "country": "us",
+            "state": "ca"
+          }
+        ],
+        [
+          {
+            "mode": "manual",
+            "origin": {
+              "country": "US",
+              "state": "TX"
+            },
+            "rates": [
+              {
+                "country": "US",
+                "state": "TX",
+                "pct": 8.25,
+                "label": "TX sales tax"
+              },
+              {
+                "country": "US",
+                "pct": 5
+              },
+              {
+                "country": "CA",
+                "state": "ON",
+                "pct": 13
+              }
+            ]
+          },
+          {
+            "country": "",
+            "state": ""
+          }
+        ],
+        [
+          {
+            "mode": "manual",
+            "origin": {
+              "country": "US",
+              "state": "TX"
+            },
+            "rates": [
+              {
+                "country": "US",
+                "state": "TX",
+                "pct": 8.25,
+                "label": "TX sales tax"
+              },
+              {
+                "country": "US",
+                "pct": 5
+              },
+              {
+                "country": "CA",
+                "state": "ON",
+                "pct": 13
+              }
+            ]
+          },
+          {
+            "country": "CA",
+            "state": "BC"
+          }
+        ],
+        [
+          {
+            "mode": "manual",
+            "origin": {
+              "country": "US",
+              "state": "TX"
+            },
+            "rates": [
+              {
+                "country": "US",
+                "state": "TX",
+                "pct": 8.25,
+                "label": "TX sales tax"
+              },
+              {
+                "country": "US",
+                "pct": 5
+              },
+              {
+                "country": "CA",
+                "state": "ON",
+                "pct": 13
+              }
+            ]
+          },
+          null
+        ],
+        [
+          {
+            "mode": "stripe"
+          },
+          {
+            "country": "US"
+          }
+        ],
+        [
+          {
+            "mode": "none"
+          },
+          {
+            "country": "US"
+          }
+        ],
+        [
+          {},
+          {
+            "country": "US"
+          }
+        ],
+        [
+          null,
+          null
+        ],
+        [
+          {
+            "mode": "manual",
+            "pricesIncludeTax": true,
+            "rates": [
+              {
+                "country": "US",
+                "pct": 5
+              }
+            ]
+          },
+          {
+            "country": "US"
+          }
+        ],
+        [
+          {
+            "mode": "manual",
+            "rates": [
+              {
+                "country": "US",
+                "pct": 0
+              }
+            ]
+          },
+          {
+            "country": "US"
+          }
+        ]
+      ]
+    },
+    "quoteLineRequestFromLine": {
+      "module": "libs/plugins/commerce/src/lib/model/commerce-quotes.ts",
+      "args": [
+        [
+          {
+            "productId": "",
+            "custom": true,
+            "name": "Installation",
+            "sku": "INST",
+            "unitAmountCents": 30000,
+            "quantity": 1,
+            "productType": "physical",
+            "description": "On site"
+          }
+        ],
+        [
+          {
+            "productId": "",
+            "custom": true,
+            "name": "Design time",
+            "unitAmountCents": 0,
+            "quantity": 2,
+            "productType": "service",
+            "included": true
+          }
+        ],
+        [
+          {
+            "productId": "canopy",
+            "variantId": "red",
+            "name": "Canopy",
+            "unitAmountCents": 120000,
+            "quantity": 2,
+            "modifiers": [
+              {
+                "groupId": "g1",
+                "optionId": "o1",
+                "group": "Walls",
+                "name": "Back wall",
+                "priceCents": 15000
+              }
+            ],
+            "description": "Logo on top"
+          }
+        ],
+        [
+          {
+            "productId": "mug",
+            "name": "Mug",
+            "unitAmountCents": 1800,
+            "quantity": 1,
+            "included": true
+          }
+        ]
+      ]
+    },
+    "priceQuoteCustomLine": {
+      "module": "libs/plugins/commerce/src/lib/model/commerce-quotes.ts",
+      "args": [
+        [
+          {
+            "kind": "custom",
+            "name": "Installation",
+            "sku": "INST",
+            "unitAmountCents": 30000,
+            "quantity": 1,
+            "ships": true,
+            "description": "On site"
+          }
+        ],
+        [
+          {
+            "kind": "custom",
+            "name": "Design time",
+            "unitAmountCents": 5000,
+            "quantity": 2,
+            "ships": false,
+            "included": true
+          }
+        ],
+        [
+          {
+            "kind": "custom",
+            "name": "Sticker",
+            "unitAmountCents": 250,
+            "quantity": 10
+          }
+        ]
+      ]
+    },
+    "quoteRequiresProofApprovalByDefault": {
+      "module": "libs/plugins/commerce/src/lib/model/commerce-quotes.ts",
+      "args": [
+        [
+          {
+            "requireProofApproval": true
+          }
+        ],
+        [
+          {
+            "requireProofApproval": false
+          }
+        ],
+        [
+          {}
+        ],
+        [
+          null
+        ]
+      ]
+    },
+    "quoteRequiresProofSignInByDefault": {
+      "module": "libs/plugins/commerce/src/lib/model/commerce-quotes.ts",
+      "args": [
+        [
+          {
+            "requireProofSignIn": true
+          }
+        ],
+        [
+          {}
+        ],
+        [
+          null
+        ]
+      ]
     }
   }
 }

@@ -15,6 +15,13 @@ fun formatQuoteNumber(order: HostOrder?, docId: String? = null): String {
   return if (!docId.isNullOrEmpty()) "Quote #${docId.takeLast(6).uppercase()}" else "Quote"
 }
 
+/** `Quote #1042` from a save's answer, which carries the number and id alone. */
+fun formatQuoteNumber(number: Double?, docId: String?): String = when {
+  number != null -> "Quote #${number.toLong()}"
+  !docId.isNullOrEmpty() -> "Quote #${docId.takeLast(6).uppercase()}"
+  else -> "Quote"
+}
+
 /** Whether an order document is a quote nobody has paid yet, which no order list counts. */
 fun isUnpaidQuote(order: HostOrder?): Boolean = order?.channel == OrderChannel.QUOTE && order.status == OrderStatus.PENDING
 

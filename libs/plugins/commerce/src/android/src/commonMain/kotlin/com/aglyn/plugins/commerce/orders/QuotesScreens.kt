@@ -79,8 +79,9 @@ import kotlinx.serialization.json.JsonPrimitive
  * Quotes (AGL-4093), as the console's Quotes card on the Orders page has them (host-quotes-card.component.tsx): prices
  * put to a customer before they buy. A quote is an unpaid order on the `quote` channel, so this reads
  * `hosts/{hostId}/orders` for that channel alone; the Orders list never shows one until it is paid. A quote opens
- * read-only here, with the console's "Customers can't pay this quote online yet." notice (AGL-4162); making and
- * sending quotes stays in the console for now. The Apple apps' QuotesScreens.swift is the same screen.
+ * read-only here, with the console's "Customers can't pay this quote online yet." notice (AGL-4162). New quote and
+ * Edit open the editor (QuoteEditor.kt, AGL-4093); sending a quote stays in the console for now. The Apple apps'
+ * QuotesScreens.swift is the same screen.
  */
 
 const val COMMERCE_QUOTES_SCREEN = "commerce.quotes"
@@ -149,8 +150,28 @@ fun QuotesScreen(context: NativePluginContext) {
   }.collectAsState(Live.Loading)
   val store by remember(hostId, context.firestore) { context.firestore.observeDoc("hosts/$hostId/settings/store") }.collectAsState(Live.Loading)
   var search by rememberSaveable { mutableStateOf("") }
+  val products by remember(hostId, context.firestore) {
+    context.firestore.observe(FirestoreQuery("hosts/$hostId/products", limit = QUOTE_PRODUCT_WINDOW + 1))
+  }.collectAsState(Live.Loading)
+  val canEdit = com.aglyn.pluginhost.rememberMemberPermissions(context).can(QUOTE_EDIT_PERMISSION)
+  var creating by remember { mutableStateOf(false) }
+  var notice by remember { mutableStateOf<Pair<String, StatusTone>?>(null) }
+  if (creating) {
+    QuoteEditorSheet(
+      context, null, null, quoteProductsOf((products as? Live.Ready)?.value.orEmpty()), (store as? Live.Ready)?.value?.data,
+      onDismiss = { creating = false },
+    ) { message, _ ->
+      creating = false
+      notice = message to StatusTone.SUCCESS
+    }
+  }
   Column(Modifier.fillMaxSize()) {
-    ListHeader("Quotes")
+    ListHeader("Quotes") {
+      com.aglyn.ui.ListHeaderAction("New quote", "add", {
+        if (canEdit) creating = true else notice = com.aglyn.contracts.permissionRefusalText(QUOTE_EDIT_PERMISSION) to StatusTone.INFO
+      }, Modifier.testTag("quotes-new"))
+    }
+    notice?.let { (text, tone) -> NoticeBanner(text, tone, Modifier.padding(horizontal = space(2f))) }
     when (val value = quotes) {
       Live.Loading -> SkeletonList(rows = 5, modifier = Modifier.padding(space(2f)))
       is Live.Failed -> EmptyState("Could not load quotes", body = "Check the connection and try again.", icon = AglynIcons.named("error"), tone = EmptyTone.ERROR)
@@ -217,6 +238,23 @@ fun QuoteScreen(context: NativePluginContext, quoteId: String) {
   // until it answers, or when it could not, which like the console's `error` shows no notice. Asked again each time
   // the quote shows, so coming back from Payments reads the new answer.
   val paymentsState by produceState<String?>(null, hostId) { value = quotePaymentsReadiness(context.api, hostId) }
+  val products by remember(hostId, context.firestore) {
+    context.firestore.observe(FirestoreQuery("hosts/$hostId/products", limit = QUOTE_PRODUCT_WINDOW + 1))
+  }.collectAsState(Live.Loading)
+  val canEdit = com.aglyn.pluginhost.rememberMemberPermissions(context).can(QUOTE_EDIT_PERMISSION)
+  // The quote as it was when Edit was pressed: the editor's starting point and the version its save names.
+  var editing by remember { mutableStateOf<HostOrder?>(null) }
+  var notice by remember { mutableStateOf<Pair<String, StatusTone>?>(null) }
+  val host by remember(hostId, context.firestore) { context.firestore.observeDoc("hosts/$hostId") }.collectAsState(Live.Loading)
+  editing?.let { order ->
+    QuoteEditorSheet(
+      context, quoteId, order, quoteProductsOf((products as? Live.Ready)?.value.orEmpty()), (store as? Live.Ready)?.value?.data,
+      onDismiss = { editing = null },
+    ) { message, deleted ->
+      editing = null
+      if (deleted) context.back() else notice = message to StatusTone.SUCCESS
+    }
+  }
   when (val value = quote) {
     Live.Loading -> SkeletonList(rows = 6, modifier = Modifier.padding(space(2f)))
     is Live.Failed -> EmptyState("Could not load this quote", body = "Check the connection and try again.", icon = AglynIcons.named("error"), tone = EmptyTone.ERROR)
@@ -225,14 +263,21 @@ fun QuoteScreen(context: NativePluginContext, quoteId: String) {
       if (doc == null) {
         EmptyState("This quote is not here", body = "It may have been deleted.", icon = AglynIcons.named("request_quote"))
       } else {
-        QuoteDetail(context, hostOrderFrom(doc), quoteId, storeOf(store), paymentsState)
+        val order = hostOrderFrom(doc)
+        val site = invoiceSiteDetails((host as? Live.Ready)?.value?.data)
+        QuoteDetail(context, order, quoteId, storeOf(store), paymentsState, notice, site, { text, tone -> notice = text to tone }) {
+          if (canEdit) editing = order else notice = com.aglyn.contracts.permissionRefusalText(QUOTE_EDIT_PERMISSION) to StatusTone.INFO
+        }
       }
     }
   }
 }
 
 @Composable
-private fun QuoteDetail(context: NativePluginContext, order: HostOrder, quoteId: String, store: PayLinkStore?, paymentsState: String?) {
+private fun QuoteDetail(
+  context: NativePluginContext, order: HostOrder, quoteId: String, store: PayLinkStore?, paymentsState: String?,
+  notice: Pair<String, StatusTone>?, site: InvoiceSite, onNotice: (String, StatusTone) -> Unit, onEdit: () -> Unit,
+) {
   val unpaid = isUnpaidQuote(order)
   val proofOnly = quoteIsProofOnly(order)
   val payTax = quotePayTax(order.quote, store)
@@ -242,12 +287,17 @@ private fun QuoteDetail(context: NativePluginContext, order: HostOrder, quoteId:
     Modifier.fillMaxSize().verticalScroll(rememberScrollState()).padding(space(2f)).testTag("quote-detail"),
     verticalArrangement = Arrangement.spacedBy(space(2f)),
   ) {
+    notice?.let { (text, tone) -> NoticeBanner(text, tone) }
     Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(space(1f))) {
       Text(formatQuoteNumber(order, quoteId), style = MaterialTheme.typography.headlineSmall, modifier = Modifier.weight(1f).semantics { heading() })
+      // A paid quote is an order now and can no longer be changed.
+      if (unpaid) TextButton(onClick = onEdit, modifier = Modifier.testTag("quote-edit")) { Text("Edit") }
       if (proofOnly) StatusChip("Proof only")
       StatusChip(status.label, tone(quoteStatusColor(status.key)))
     }
+    QuoteEmailSection(context, order, quoteId, site, readiness = { if (gaps.isNotEmpty()) PayLinkNotice(context, gaps, paymentsState) }, onNotice = onNotice)
     if (gaps.isNotEmpty()) PayLinkNotice(context, gaps, paymentsState)
+    QuotePayLinkSection(context, order, quoteId, onNotice)
     SectionCard("Customer") { CustomerLines(order.quote) }
     if (!proofOnly) {
       SectionCard("Items") {
@@ -301,7 +351,7 @@ private fun QuoteLineView(line: OrderLineItem) {
 
 /** The console's `QuoteTotalsSummary`: items, discount, shipping, the tax line, then the total. */
 @Composable
-private fun QuoteTotals(order: HostOrder, payTax: QuotePayTax, unpaid: Boolean) {
+internal fun QuoteTotals(order: HostOrder, payTax: QuotePayTax, unpaid: Boolean) {
   val totals = order.totals
   fun cents(value: Double?) = kotlin.math.round(value ?: 0.0)
   val atPayment = unpaid && payTax.basis.kind == QuoteTaxKind.AT_PAYMENT

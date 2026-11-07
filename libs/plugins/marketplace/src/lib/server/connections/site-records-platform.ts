@@ -25,6 +25,7 @@ import {
 } from '@aglyn/tenant-data-admin/render-cache'
 import {
   createConnectionRecordsEnricher,
+  createConnectionRepeatRowReader,
   createConnectionVariableComputer,
   createPluginImageHostsSource,
   readSiteConnectionRecords,
@@ -74,7 +75,9 @@ export async function cachedSiteConnectionRecords(hostId: string): Promise<SiteC
     )
   try {
     return await withRenderCache({
-      key: ['plugin-connection-records', hostId],
+      // `v2`: entries carry each field's type (AGL-4212); an entry cached
+      // without them must not answer a repeat.
+      key: ['plugin-connection-records', 'v2', hostId],
       revalidate: SITE_CONNECTION_RECORDS_TTL_SECONDS,
       tags: [tenantDataTag(hostId)],
       read,
@@ -122,5 +125,10 @@ export const connectionRecordsEnricher = createConnectionRecordsEnricher({
 })
 
 export const connectionVariableComputer = createConnectionVariableComputer({ records: cachedSiteConnectionRecords })
+
+export const connectionRepeatRowReader = createConnectionRepeatRowReader({
+  realmInstalls,
+  records: cachedSiteConnectionRecords,
+})
 
 export const pluginImageHostsSource = createPluginImageHostsSource(cachedSiteImageHosts)

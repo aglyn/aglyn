@@ -13,8 +13,8 @@ import SwiftUI
  * Quotes (AGL-4093), as the console's Quotes card on the Orders page has them (host-quotes-card.component.tsx): prices
  * put to a customer before they buy. A quote is an unpaid order on the `quote` channel, so this reads
  * `hosts/{hostId}/orders` for that channel alone; the Orders list never shows one until it is paid. A quote opens
- * read-only here, with the console's "Customers can't pay this quote online yet." notice (AGL-4162); making and
- * sending quotes stays in the console for now.
+ * read-only here, with the console's "Customers can't pay this quote online yet." notice (AGL-4162). New quote and
+ * Edit open the editor (QuoteEditor.swift, AGL-4093); sending a quote stays in the console for now.
  */
 
 public let commerceQuotesScreen = "commerce.quotes"
@@ -77,38 +77,85 @@ private func storeOf(_ doc: LiveValue<FirestoreDocument?>) -> PayLinkStore? {
   }
 }
 
+/// How many products the editor's picker offers (the console's `PRODUCT_WINDOW`).
+let quoteProductWindow = 200
+
+/// The store's products the editor's picker offers, by id, leaving out deleted ones.
+func quoteProducts(_ state: LiveValue<[FirestoreDocument]>) -> [(id: String, product: HostProduct)] {
+  guard case .ready(let docs) = state else { return [] }
+  return docs.prefix(quoteProductWindow).compactMap { doc in
+    // The console leaves out a product whose `deletedAt` is set; a stored null is not set.
+    let deleted = doc.data["deletedAt"].map { !($0 is NSNull) && ($0 as? Bool) != false } ?? false
+    guard !deleted, let product = try? decodeJSONFields(HostProduct.self, doc.jsonFields) else { return nil }
+    return (doc.id, product)
+  }
+}
+
+/// The store settings document's fields, or nil.
+func quoteStoreData(_ state: LiveValue<FirestoreDocument?>) -> [String: Any]? {
+  if case .ready(let doc?) = state { return doc.data }
+  return nil
+}
+
 /// The Quotes list: number and first item, customer, total, status and when it last changed, newest first.
 struct QuotesScreen: View {
   let context: NativePluginContext
   @State private var quotes = LiveQuery()
   @State private var store = LiveDocument()
+  @State private var products = LiveQuery()
   @State private var search = ""
+  @State private var creating = false
+  @State private var notice: (text: String, tone: AglynTone)?
 
   private var hostID: String { context.hostID ?? "" }
 
   var body: some View {
-    Group {
-      switch quotes.state {
-      case .loading:
-        List { SkeletonRows(count: 5) }.aglynListBackground()
-      case .failed(let message):
-        AglynEmptyState("Could not load quotes", systemImage: "exclamationmark.triangle", message: message)
-      case .ready(let docs):
-        content(docs)
+    // Above the list, not over it: the list scrolls under nothing.
+    VStack(spacing: 0) {
+      if let notice { AglynNotice(notice.text, tone: notice.tone) { self.notice = nil }.aglynContentEdges() }
+      Group {
+        switch quotes.state {
+        case .loading:
+          List { SkeletonRows(count: 5) }.aglynListBackground()
+        case .failed(let message):
+          AglynEmptyState("Could not load quotes", systemImage: "exclamationmark.triangle", message: message)
+        case .ready(let docs):
+          content(docs)
+        }
       }
     }
     .navigationTitle("Quotes")
     .aglynScreenTitle("Quotes")
+    .toolbar {
+      ToolbarItem(placement: .primaryAction) {
+        Button("New quote") {
+          if context.can(quoteEditPermission) {
+            creating = true
+          } else {
+            notice = (context.refusal(quoteEditPermission), .info)
+          }
+        }
+        .accessibilityIdentifier("quotes-new")
+      }
+    }
+    .sheet(isPresented: $creating) {
+      QuoteEditorSheet(
+        context: context, quoteID: nil, order: nil, productList: quoteProducts(products.state),
+        storeData: quoteStoreData(store.state)
+      ) { message, _ in notice = (message, .success) }
+    }
     .task(id: hostID) {
       guard !hostID.isEmpty else { return }
       quotes.start(
         context.firestore,
         FirestoreQuery(["hosts", hostID, "orders"], equals: [("channel", "quote")], limit: quoteCeiling + 1))
       store.start(context.firestore, ["hosts", hostID, "settings", "store"])
+      products.start(context.firestore, FirestoreQuery(["hosts", hostID, "products"], limit: quoteProductWindow + 1))
     }
     .onDisappear {
       quotes.stop()
       store.stop()
+      products.stop()
     }
   }
 
@@ -178,30 +225,92 @@ struct QuoteScreen: View {
   let quoteID: String
   @State private var quote = LiveDocument()
   @State private var store = LiveDocument()
+  @State private var products = LiveQuery()
+  /// The quote as it was when Edit was pressed: the editor's starting point and the version its save names.
+  @State private var editing: HostOrder?
+  @State private var notice: (text: String, tone: AglynTone)?
+  @State private var host = LiveDocument()
+  /// The pay link as last made, with its version: shown only while the quote is still on that version.
+  @State private var signed: SignedQuoteLink?
+  @State private var linkBusy = false
+  @State private var confirmingReplace = false
+  @State private var sending = false
+  @State private var invoicing = false
+  @Environment(\.dismiss) private var dismiss
   /// The workspace's card payments, as the quote route answers it: nil until it answers, or when it could not.
   @State private var paymentsState: String?
 
   private var hostID: String { context.hostID ?? "" }
 
   var body: some View {
-    Group {
-      switch quote.state {
-      case .loading:
-        List { SkeletonRows(count: 6) }.aglynListBackground()
-      case .failed(let message):
-        AglynEmptyState("Could not load this quote", systemImage: "exclamationmark.triangle", message: message)
-      case .ready(nil):
-        AglynEmptyState("This quote is not here", systemImage: "doc.text", message: "It may have been deleted.")
-      case .ready(let doc?):
-        content(decodeOrder(doc))
+    // Above the list, not over it: the list scrolls under nothing.
+    VStack(spacing: 0) {
+      if let notice { AglynNotice(notice.text, tone: notice.tone) { self.notice = nil }.aglynContentEdges() }
+      Group {
+        switch quote.state {
+        case .loading:
+          List { SkeletonRows(count: 6) }.aglynListBackground()
+        case .failed(let message):
+          AglynEmptyState("Could not load this quote", systemImage: "exclamationmark.triangle", message: message)
+        case .ready(nil):
+          AglynEmptyState("This quote is not here", systemImage: "doc.text", message: "It may have been deleted.")
+        case .ready(let doc?):
+          content(decodeOrder(doc))
+        }
       }
     }
     .navigationTitle("Quote")
     .aglynScreenTitle("Quote")
+    .toolbar {
+      // A paid quote is an order now and can no longer be changed.
+      if case .ready(let doc?) = quote.state, isUnpaidQuote(decodeOrder(doc)) {
+        ToolbarItem(placement: .primaryAction) {
+          Button("Edit") {
+            if context.can(quoteEditPermission) {
+              editing = decodeOrder(doc)
+            } else {
+              notice = (context.refusal(quoteEditPermission), .info)
+            }
+          }
+          .accessibilityIdentifier("quote-edit")
+        }
+      }
+    }
+    .sheet(isPresented: Binding(get: { editing != nil }, set: { if !$0 { editing = nil } })) {
+      if let editing {
+        QuoteEditorSheet(
+          context: context, quoteID: quoteID, order: editing, productList: quoteProducts(products.state),
+          storeData: quoteStoreData(store.state)
+        ) { message, deleted in
+          if deleted { dismiss() } else { notice = (message, .success) }
+        }
+      }
+    }
+    .sheet(isPresented: $sending) {
+      if case .ready(let doc?) = quote.state {
+        let order = decodeOrder(doc)
+        let site = invoiceSiteDetails(quoteStoreData(host.state))
+        let payStore = storeOf(store.state)
+        let gaps = isUnpaidQuote(order) ? payLinkGaps(order, paymentsReady: paymentsState.map { $0 == "ready" }, store: payStore) ?? [] : []
+        QuoteSendSheet(
+          context: context, order: order, quoteID: quoteID, businessName: site.businessName, contact: site.contact,
+          readiness: { if !gaps.isEmpty { payLinkNotice(gaps, state: paymentsState) } }
+        ) { message in notice = (message, .success) }
+      }
+    }
+    .sheet(isPresented: $invoicing) {
+      if case .ready(let doc?) = quote.state {
+        InvoiceSendSheet(context: context, order: decodeOrder(doc), orderID: quoteID) { message in
+          notice = (message, .success)
+        }
+      }
+    }
     .task(id: "\(hostID):\(quoteID)") {
       guard !hostID.isEmpty, !quoteID.isEmpty else { return }
       quote.start(context.firestore, ["hosts", hostID, "orders", quoteID])
       store.start(context.firestore, ["hosts", hostID, "settings", "store"])
+      products.start(context.firestore, FirestoreQuery(["hosts", hostID, "products"], limit: quoteProductWindow + 1))
+      host.start(context.firestore, ["hosts", hostID])
     }
     // Asked again each time the quote shows, so coming back from Payments reads the new answer.
     .task(id: hostID) {
@@ -211,7 +320,156 @@ struct QuoteScreen: View {
     .onDisappear {
       quote.stop()
       store.stop()
+      products.stop()
+      host.stop()
     }
+  }
+
+  /// The console's "Customers can't pay this quote online yet." notice, with a button for each gap that has one.
+  @ViewBuilder func payLinkNotice(_ gaps: [PayLinkGap], state: String?) -> some View {
+    Section {
+      VStack(alignment: .leading, spacing: AglynSpace.one) {
+        // The look of `AglynNotice`'s warning: its icon, then the title.
+        Label {
+          Text(payLinkNoticeTitle("quote")).font(AglynFont.strongSubheadline)
+        } icon: {
+          Image(systemName: "exclamationmark.triangle.fill").foregroundStyle(AglynTone.warning.color)
+        }
+        ForEach(gaps, id: \.rawValue) { gap in
+          let line = payLinkGapLine(gap, paymentsReason: state.flatMap(merchantPaymentsBlockedReason), noun: "quote")
+          HStack(alignment: .firstTextBaseline) {
+            Text(line.text).font(AglynFont.subheadline)
+            Spacer(minLength: AglynSpace.one)
+            if let action = line.action {
+              Button(action) {
+                context.navigate(gap == .payments ? "commerce.payments" : "commerce.tax", [:])
+              }
+              .buttonStyle(.borderless)
+            }
+          }
+        }
+      }
+      .padding(.vertical, AglynSpace.half)
+      .listRowBackground(AglynTone.warning.color.opacity(0.12))
+      .accessibilityIdentifier("quote-pay-link-notice")
+    }
+  }
+
+  /// Emailing the quote (the console's QuoteSendSection): when it was last sent, and Send / Send invoice.
+  @ViewBuilder private func emailSection(_ order: HostOrder) -> some View {
+    let quote = order.quote
+    let unpaid = isUnpaidQuote(order)
+    let proofOnly = quoteIsProofOnly(order)
+    let closed = order.status == .cancelled || order.status == .refunded
+    let nothingToSend = proofOnly && currentQuoteProofs(quote).isEmpty
+    Section("Email to customer") {
+      Text(quoteSendStatus(order) { formatReceiptTime(Int64($0), timeZone: TimeZone.current.identifier) })
+        .foregroundStyle(.secondary)
+      if unpaid && quoteSendReplacesLink(quote) {
+        Text(
+          "Sending revision \(Int(quote?.revision ?? 1)) gives your customer a new pay link. The link in your earlier email will say the quote was updated."
+        )
+        .foregroundStyle(.secondary)
+      }
+      if let line = invoiceSentLine(order) { Text(line).foregroundStyle(.secondary) }
+      if !closed && unpaid {
+        Button(quoteSendLabel(quote, proofOnly: proofOnly)) {
+          if !context.can(quoteSendPermission) {
+            notice = (context.refusal(quoteSendPermission), .info)
+          } else if nothingToSend {
+            notice = (quoteNothingToSendMessage, .info)
+          } else {
+            sending = true
+          }
+        }
+        .accessibilityIdentifier("quote-send")
+      }
+      if !closed && !proofOnly {
+        Button("Send invoice") {
+          if context.can(quoteSendPermission) { invoicing = true } else { notice = (context.refusal(quoteSendPermission), .info) }
+        }
+        .accessibilityIdentifier("quote-send-invoice")
+      }
+    }
+  }
+
+  /// The pay link (the console's QuotePayLinkSection): copy it, or replace it so the one sent before stops working.
+  @ViewBuilder private func payLinkSection(_ order: HostOrder) -> some View {
+    let words = quotePayLinkWords(order)
+    let version = quoteLinkVersion(order.quote)
+    Section(words.title) {
+      Text(words.explanation).foregroundStyle(.secondary)
+      // A link the server made at a version the stored quote has not caught up to yet is the newest one.
+      if let signed, signed.version >= version {
+        Text(signed.url).font(AglynFont.caption).textSelection(.enabled).accessibilityIdentifier("quote-pay-link-url")
+      }
+      Button("Copy \(words.name)") {
+        guard context.can(quoteSendPermission) else { return notice = (context.refusal(quoteSendPermission), .info) }
+        Task { await copyLink(order, replace: false) }
+      }
+      .disabled(linkBusy)
+      .accessibilityIdentifier("quote-copy-link")
+      if isUnpaidQuote(order) {
+        Button("Replace link") {
+          guard context.can(quoteSendPermission) else { return notice = (context.refusal(quoteSendPermission), .info) }
+          confirmingReplace = true
+        }
+        .disabled(linkBusy)
+        .accessibilityIdentifier("quote-replace-link")
+      }
+    }
+    // The quote's link moved on (a revision was emailed, or the link replaced): fetch the current one in its place.
+    .onChange(of: version) { _, now in
+      if let signed, signed.version < now { Task { await fetchLink(order) } }
+    }
+    .confirmationDialog("Replace the \(words.name)?", isPresented: $confirmingReplace, titleVisibility: .visible) {
+      Button("Replace link") { Task { await copyLink(order, replace: true) } }
+      Button("Cancel", role: .cancel) {}
+    } message: {
+      Text(
+        "The link you sent before will stop working: it will tell the customer the \(words.opens) was updated, and show nothing of it. Send them the new link."
+      )
+    }
+  }
+
+  /// Asks for the link (or a new one); nil, with the server's reason on screen, when it could not be made.
+  private func fetchLink(_ order: HostOrder, replace: Bool = false) async -> String? {
+    let words = quotePayLinkWords(order)
+    linkBusy = true
+    defer { linkBusy = false }
+    do {
+      let link = try await requestQuoteLink(
+        api: context.api, hostID: hostID, quoteID: quoteID, replace: replace,
+        fallbackVersion: quoteLinkVersion(order.quote))
+      signed = link
+      return link.url
+    } catch let error as ConsoleAPIError {
+      let reason = (error.body?["error"]?.stringValue).flatMap { $0.isEmpty ? nil : $0 }
+      notice = (reason ?? "The \(words.name) could not be made", .error)
+    } catch {
+      notice = ("The \(words.name) could not be made", .error)
+    }
+    return nil
+  }
+
+  private func copyLink(_ order: HostOrder, replace: Bool) async {
+    let words = quotePayLinkWords(order)
+    let current = signed.flatMap { $0.version >= quoteLinkVersion(order.quote) ? $0.url : nil }
+    let link: String?
+    if replace {
+      link = await fetchLink(order, replace: true)
+    } else if let current {
+      link = current
+    } else {
+      link = await fetchLink(order)
+    }
+    guard let link else { return }
+    AglynClipboard.copy(link)
+    notice = (
+      replace
+        ? "New \(words.name) copied. The earlier link no longer opens the \(words.opens)."
+        : "\(words.title) copied", .success
+    )
   }
 
   @ViewBuilder private func content(_ order: HostOrder) -> some View {
@@ -231,34 +489,9 @@ struct QuoteScreen: View {
           StatusChip(status.label, tone: tone(quoteStatusColor(status.key)))
         }
       }
-      if !gaps.isEmpty {
-        Section {
-          VStack(alignment: .leading, spacing: AglynSpace.one) {
-            // The look of `AglynNotice`'s warning: its icon, then the title.
-            Label {
-              Text(payLinkNoticeTitle("quote")).font(AglynFont.strongSubheadline)
-            } icon: {
-              Image(systemName: "exclamationmark.triangle.fill").foregroundStyle(AglynTone.warning.color)
-            }
-            ForEach(gaps, id: \.rawValue) { gap in
-              let line = payLinkGapLine(gap, paymentsReason: state.flatMap(merchantPaymentsBlockedReason), noun: "quote")
-              HStack(alignment: .firstTextBaseline) {
-                Text(line.text).font(AglynFont.subheadline)
-                Spacer(minLength: AglynSpace.one)
-                if let action = line.action {
-                  Button(action) {
-                    context.navigate(gap == .payments ? "commerce.payments" : "commerce.tax", [:])
-                  }
-                  .buttonStyle(.borderless)
-                }
-              }
-            }
-          }
-          .padding(.vertical, AglynSpace.half)
-          .listRowBackground(AglynTone.warning.color.opacity(0.12))
-          .accessibilityIdentifier("quote-pay-link-notice")
-        }
-      }
+      emailSection(order)
+      if !gaps.isEmpty { payLinkNotice(gaps, state: state) }
+      payLinkSection(order)
       customerSection(order.quote)
       if !proofOnly {
         Section("Items") {

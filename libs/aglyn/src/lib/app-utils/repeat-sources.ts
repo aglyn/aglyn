@@ -17,7 +17,12 @@
 
 import type { AglynAttributeSchema } from '../foundation/definitions/components.types'
 import type { EntityPickerKind } from './entity-picker-context'
-import type { RepeatableDataset } from './expand-repeatables'
+import {
+  REPEAT_CONNECTION_KEY_PREFIX,
+  REPEAT_CONNECTION_PROP,
+  repeatKey,
+  type RepeatableDataset,
+} from './expand-repeatables'
 
 /**
  * Where a repeat's rows come from, for the editor (AGL-3111).
@@ -67,6 +72,14 @@ export interface RepeatRowsRequest {
   key: string
 }
 
+/** One field a repeat's `{{item.<id>}}` token can name, as the menu lists it. */
+export interface RepeatItemField {
+  /** What follows `item.` in the token. */
+  id: string
+  /** What a person reads in the insert-token menu. */
+  label: string
+}
+
 /** One kind of thing an element can repeat over. */
 export interface RepeatSource {
   /** Stable id, e.g. the plugin's name for the kind. */
@@ -91,6 +104,20 @@ export interface RepeatSource {
    * menu offers no item tokens and authors type them.
    */
   entityKind?: EntityPickerKind
+  /**
+   * The fields a key's rows hold, for a source whose keys are no entity the
+   * picker lists (AGL-4212). With it, the insert-token menu inside the repeat
+   * offers `{{item.<id>}}` for each; `undefined` for a key it does not know.
+   * Plain, not a hook: a source whose fields depend on the site is
+   * registered again when they change, which the registry announces.
+   */
+  fields?(key: string): readonly RepeatItemField[] | undefined
+  /**
+   * `false` while the source has nothing this site can pick (AGL-4212): the
+   * Attributes panel then draws its key field only on an element that already
+   * repeats over one of its keys, so it can be cleared. Absent means offered.
+   */
+  offered?: boolean
   /**
    * Reads one key's rows for the besigner's canvas preview and badge. A React
    * hook: the editor mounts one reader per key and calls it unconditionally,
@@ -164,16 +191,49 @@ export function getRepeatSourcesVersion(): number {
 /**
  * The registered source a node repeats over, and the key it names, trimmed.
  * `undefined` for a node that repeats over nothing a registered source owns.
+ *
+ * A node carrying two sources' keys repeats over the one the published page
+ * expands it by (`repeatKey`, AGL-4212), so the canvas never previews rows
+ * the page does not render.
  */
 export function repeatSourceOf(
   node: unknown,
 ): { source: RepeatSource; key: string } | undefined {
   const props = (node as { props?: Record<string, unknown> } | undefined)?.props
   if (!props) return undefined
+  const expandedBy = repeatKey(node)
+  let first: { source: RepeatSource; key: string } | undefined
   for (const source of sources.values()) {
     const value = props[source.keyProp]
     const key = typeof value === 'string' ? value.trim() : ''
-    if (key) return { source, key }
+    if (!key) continue
+    const asExpanded =
+      source.keyProp === REPEAT_CONNECTION_PROP
+        ? `${REPEAT_CONNECTION_KEY_PREFIX}${key}`
+        : key
+    if (asExpanded === expandedBy) return { source, key }
+    first ??= { source, key }
   }
-  return undefined
+  return first
+}
+
+/**
+ * What a source's own picker calls `key`, read off its key attribute's
+ * `options`, or `undefined` when the attribute lists none that matches
+ * (AGL-4212). How a sentence or a menu names a repeat whose key is no entity
+ * the picker lists, without printing the stored value.
+ */
+export function repeatKeyOptionLabel(
+  source: Pick<RepeatSource, 'keyAttribute'>,
+  key: string,
+): string | undefined {
+  const options = (source.keyAttribute as { options?: unknown }).options
+  if (!Array.isArray(options)) return undefined
+  const match = options.find(
+    (option): option is { value: string; label?: unknown } =>
+      Boolean(option) &&
+      typeof option === 'object' &&
+      (option as { value?: unknown }).value === key,
+  )
+  return typeof match?.label === 'string' && match.label ? match.label : undefined
 }

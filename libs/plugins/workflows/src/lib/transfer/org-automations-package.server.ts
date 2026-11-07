@@ -28,6 +28,11 @@
  * replaced one keeps whether it was on.
  *=========================================*/
 
+import {
+  hostIdsFromScope,
+  isOrgWideScope,
+  type ScopeSharingChoice,
+} from '@aglyn/aglyn/app-utils/scope-tokens'
 import { DECLARED_SUBSCRIPTION_TOPICS } from '@aglyn/aglyn/app-utils/subscription-topics'
 import { existingPackageItemsOf, type ExistingPackageItem, type TransferReferenceKind, type TransferRowResult } from '@aglyn/aglyn/data-transfer'
 import { isPluginEnabled } from '@aglyn/aglyn/plugin-manager/enabled-plugins'
@@ -127,9 +132,19 @@ async function readAll(
   })
 }
 
-/** The fields one write stores: the content, read by the route's reader, switched on only if it already was. */
+/**
+ * The fields one write stores: the content, read by the route's reader, switched on only if it already was.
+ *
+ * The package's placement is said as a choice (AGL-4047), so a replace puts the automation where the package
+ * says, and takes off a marker the one it replaces carried, even when the sites happen to match.
+ */
 function fieldsOf(content: OrgAutomationPackageContent, name: string, enabled: boolean) {
-  return readOrgAutomation({ ...content, name, enabled })
+  const sharing: ScopeSharingChoice =
+    content.sharing ??
+    (isOrgWideScope(content.visibleTo)
+      ? { mode: 'all' }
+      : { mode: 'selected', hostIds: hostIdsFromScope(content.visibleTo) })
+  return readOrgAutomation({ ...content, name, enabled, sharing })
 }
 
 export function createOrgAutomationsPackage(deps: OrgAutomationsPackageDeps = defaultDeps()) {

@@ -177,7 +177,7 @@ describe('a proposal as the editor opens it', () => {
         name: 'Welcome every booking',
         event: 'booking',
         enabled: false,
-        placement: 'org',
+        sharing: { mode: 'all' },
         conditionRows: [{ field: 'serviceName', op: 'equals', value: 'Consultation' }],
         steps: [{ type: 'addContactTag', tag: 'booked' }],
       }),

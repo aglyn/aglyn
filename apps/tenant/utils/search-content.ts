@@ -250,7 +250,8 @@ async function readSearchContent(options: {
   // visitor through a repeat, so a match with no page to show it is noise.
   //
   // Where the rows live is not this route's to know. A repeat names a key
-  // (`props.repeatDataset`), and the plugin that keeps rows answers for it
+  // (`repeatKey`: a dataset's, or a plugin connection's record, AGL-4212),
+  // and the plugin that keeps rows answers for it
   // through the platform's repeat-rows contract — the same reader, scoped to
   // this site (AGL-1039), that renders the page. So search finds exactly the
   // rows the page shows, in the order it shows them, and a row this site may
