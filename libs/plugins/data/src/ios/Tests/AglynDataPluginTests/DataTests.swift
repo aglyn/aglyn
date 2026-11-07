@@ -314,10 +314,16 @@ final class DataTests: XCTestCase {
     XCTAssertEqual(transport.sent.last?.path, "/api/resources/erase")
     XCTAssertEqual(transport.sent.last?.body?["kind"]?.stringValue, "datasets")
     let row = DatasetRow(menu)
-    try await api.saveSchema(row, model: row.model, singular: "Menu item", plural: "Menu items", visibleTo: nil)
+    try await api.saveSchema(row, model: row.model, singular: "Menu item", plural: "Menu items")
     XCTAssertEqual(writer.updates.first?.path, ["orgs", "o", "datasets", "ds-menu"])
     XCTAssertEqual(writer.updates.first?.data["displayName"] as? String, "Menu items")
     XCTAssertNil(writer.updates.first?.data["visibleTo"])
+    // Who it is shared with goes through the route: a marker is the server's alone (AGL-4047).
+    transport.answers["/api/orgs/datasets"] = (200, #"{"ok":true}"#)
+    try await api.setSharing(row, choice: .allExcept(exceptHostIDs: ["h3"]))
+    XCTAssertEqual(transport.sent.last?.body?["action"]?.stringValue, "set-sharing")
+    XCTAssertEqual(transport.sent.last?.body?["choice"]?["mode"]?.stringValue, "allExcept")
+    XCTAssertEqual(transport.sent.last?.body?["choice"]?["exceptHostIds"]?.arrayValue?.first?.stringValue, "h3")
   }
 
   // The console's own specs for the Image and Page field types (dataset-image-field.spec.ts, dataset-page-field.spec.ts).
