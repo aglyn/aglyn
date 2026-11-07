@@ -34,6 +34,7 @@ import {
   productPhotoFitSx,
   type ProductPhotoFit,
 } from './product-photo-fit'
+import { PRODUCT_NAME_SX } from './product-name-lines'
 
 // Component ids are persisted in screen documents; never rename.
 export const ID: Aglyn.ComponentId = 'related-products'
@@ -205,7 +206,7 @@ const RelatedProducts = forwardRef<HTMLDivElement, RelatedProductsProps>(
                     <ProductImagePlaceholder name={item.name} sx={mediaSx} />
                   )}
                   <CardContent sx={grid ? { px: 0.5, pt: 1.5, pb: 1 } : { py: 1 }}>
-                    <Typography variant={grid ? 'subtitle1' : 'body2'} noWrap>
+                    <Typography variant={grid ? 'subtitle1' : 'body2'} sx={PRODUCT_NAME_SX}>
                       {item.name}
                     </Typography>
                     <Typography variant={grid ? 'body2' : 'caption'} color="text.secondary">
