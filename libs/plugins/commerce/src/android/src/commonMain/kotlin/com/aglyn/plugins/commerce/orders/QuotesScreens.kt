@@ -298,6 +298,7 @@ private fun QuoteDetail(
     QuoteEmailSection(context, order, quoteId, site, readiness = { if (gaps.isNotEmpty()) PayLinkNotice(context, gaps, paymentsState) }, onNotice = onNotice)
     if (gaps.isNotEmpty()) PayLinkNotice(context, gaps, paymentsState)
     QuotePayLinkSection(context, order, quoteId, onNotice)
+    QuoteProofsSection(context, order, quoteId, onNotice)
     SectionCard("Customer") { CustomerLines(order.quote) }
     if (!proofOnly) {
       SectionCard("Items") {
