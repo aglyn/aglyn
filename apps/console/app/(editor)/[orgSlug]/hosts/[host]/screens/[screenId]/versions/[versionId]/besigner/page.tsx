@@ -1273,14 +1273,34 @@ function BesignerPage(props) {
     !draftPending &&
     !draft.available
 
-  const handleSaveAndPublish = useCallback(async () => {
+  /**
+   * The save-and-promote step, shared by Save & publish and by the app-bar
+   * Publish (AGL-4209).
+   *
+   * The app-bar Publish used to write only the route and the pointer. On a
+   * page whose version is already the pointer, which is every new page, the
+   * canvas's edits live in the working draft, so that Publish put the stored
+   * version live (empty, for a new page) under a green "Published at".
+   * Running this same step first is what makes Publish publish what the
+   * author sees.
+   *
+   * `announce` is off when another action reports the outcome: the step then
+   * keeps its refusals (they say why the publish stopped) and drops its
+   * success, the same contract `publishingRef` gives the save inside it. The
+   * answer tells the caller whether it may go on.
+   */
+  const saveAndPromote = useCallback(async ({
+    announce,
+  }: {
+    announce: boolean
+  }): Promise<'published' | 'unchanged' | 'refused'> => {
     // Publishing a canvas that never took in the saved draft on offer would
     // push the stored page live and then clear the draft as published
     // (AGL-2874).
-    if (refuseOverUnopenedDraft('publish')) return
+    if (refuseOverUnopenedDraft('publish')) return 'refused'
     // A page carrying a form does not go live on a site that switched Forms
     // off (AGL-3029): it would draw an empty space where the author sees one.
-    if (refuseFormsOff(canvas.toJSON().nodes)) return
+    if (refuseFormsOff(canvas.toJSON().nodes)) return 'refused'
     savedLandedRef.current = false
     saveRefusedRef.current = false
     publishingRef.current = true
@@ -1303,7 +1323,7 @@ function BesignerPage(props) {
      *
      * The refusal has already told the author why, so this only has to stop.
      */
-    if (saveRefusedRef.current) return
+    if (saveRefusedRef.current) return 'refused'
     /**
      * A save that did not write is not a reason to stop (AGL-1483).
      *
@@ -1339,6 +1359,10 @@ function BesignerPage(props) {
           do it. Best effort like the success path: a failed hint must never
           make a completed publish look failed.
         */
+        // Said only when this click is the publish. Inside the app-bar
+        // Publish there is nothing of the page's own to refresh: the route
+        // is what that click is about to make live (AGL-4209).
+        if (!announce) return 'unchanged'
         if (!isEmailScreen) {
           void revalidateLivePages({ user, hostId, screenId }).then(
             (result) => {
@@ -1352,12 +1376,13 @@ function BesignerPage(props) {
             },
           )
         }
-        return enqueueSnackbar(
+        enqueueSnackbar(
           'Already published — refreshing the live pages to match.',
           { variant: 'info', persist: false },
         )
+        return 'unchanged'
       }
-      if (remoteChanged) return
+      if (remoteChanged) return 'refused'
     }
     const livePointer = screenResult?.data?.versionId
     /*
@@ -1399,12 +1424,13 @@ function BesignerPage(props) {
           await updateScreenDoc({ versionId } as any)
         }
       } catch (error) {
-        return enqueueSnackbar(
+        enqueueSnackbar(
           `Saved, but publishing failed: ${
             (error as Error | undefined)?.message ?? 'unknown error'
           }`,
           { variant: 'error', persist: false },
         )
+        return 'refused'
       }
     }
     // Not awaited: the writes above have already succeeded, and a cache hint
@@ -1417,7 +1443,11 @@ function BesignerPage(props) {
     // that kept serving the old HTML.
     // An email screen routes no live pages, so there is no cached HTML to
     // drop — the promoted version is read fresh by every campaign render.
-    if (!isEmailScreen) {
+    // Nor does a page whose route a first publish is about to write
+    // (AGL-4209): nothing is cached under an address that does not exist
+    // yet, and the drop, racing the route write, reported a refusal over a
+    // publish that had worked.
+    if (!isEmailScreen && announce) {
       void revalidateLivePages({ user, hostId, screenId }).then((result) => {
         const shortfall = describeRevalidateShortfall(result)
         if (shortfall) {
@@ -1452,17 +1482,20 @@ function BesignerPage(props) {
         versionId,
       })
     }
-    enqueueSnackbar(
-      isEmailScreen
-        ? // The version pointer is what `loadEmailTemplate` and the
-          // composer's preview read, so this names the readers a save
-          // actually reaches — there is no live site to speak of.
-          'Saved — campaigns and previews use this version now.'
-        : livePointer === versionId
-          ? 'Saved and published — the live pages are refreshing now.'
-          : 'Published this version — it is now what the live site serves.',
-      { variant: 'success', persist: false },
-    )
+    if (announce) {
+      enqueueSnackbar(
+        isEmailScreen
+          ? // The version pointer is what `loadEmailTemplate` and the
+            // composer's preview read, so this names the readers a save
+            // actually reaches — there is no live site to speak of.
+            'Saved — campaigns and previews use this version now.'
+          : livePointer === versionId
+            ? 'Saved and published — the live pages are refreshing now.'
+            : 'Published this version — it is now what the live site serves.',
+        { variant: 'success', persist: false },
+      )
+    }
+    return 'published'
   }, [
     refuseOverUnopenedDraft,
     refuseFormsOff,
@@ -1487,6 +1520,31 @@ function BesignerPage(props) {
     enqueueSnackbar,
   ])
 
+  const handleSaveAndPublish = useCallback(async () => {
+    await saveAndPromote({ announce: true })
+  }, [saveAndPromote])
+
+  /**
+   * Does the canvas hold work the stored version does not (AGL-4209)?
+   * `saveAvailable` stays true on the live version until the VERSION has the
+   * tree, so it covers both unsaved edits and a saved working draft; the
+   * other two are a draft saved earlier in this session and one on offer
+   * from an earlier one. Any of these is what an author pressing Publish
+   * means to publish.
+   */
+  const canvasAheadOfVersion = saveAvailable || draftPending || draft.available
+
+  /**
+   * Before a page's route goes live for the first time, put what the canvas
+   * shows into the version the route will serve (AGL-4209). `false` means the
+   * save or the promote refused, which has already said why, and the route
+   * must not go live over a version that did not take the edit.
+   */
+  const carryCanvasIntoPublish = useCallback(async () => {
+    if (!canvasAheadOfVersion) return true
+    return (await saveAndPromote({ announce: false })) !== 'refused'
+  }, [canvasAheadOfVersion, saveAndPromote])
+
   const handlePublish = useCallback(async () => {
     if (
       slugConflict ||
@@ -1497,6 +1555,20 @@ function BesignerPage(props) {
       // The button beside the field is disabled in all four states, so this is
       // a belt-and-braces bail rather than the refusal an author reads — the
       // wording lives on the field's own helper line.
+      return
+    }
+    // A first publish from Page Properties puts the canvas live with the route
+    // (AGL-4209), as the app-bar Publish does. Only on the version the page
+    // serves: this path does not move the pointer, so from another version
+    // it publishes the live one, and carrying would quietly promote this one.
+    // A rename of a page that is already live is not a publish of its canvas.
+    if (
+      normalizedSlug &&
+      composedPath &&
+      !publishedPath &&
+      editingLiveVersion &&
+      !(await carryCanvasIntoPublish())
+    ) {
       return
     }
     // Captured BEFORE the writes below (AGL-1588). `routingMap` is a live
@@ -1589,6 +1661,8 @@ function BesignerPage(props) {
     routesByScreenId,
     user,
     liveDescendantCount,
+    editingLiveVersion,
+    carryCanvasIntoPublish,
   ])
 
   // One-click publish from the app bar (AGL-452). Publish points the live
@@ -1637,6 +1711,12 @@ function BesignerPage(props) {
         )
         return
       }
+      // What the canvas shows goes into the version first (AGL-4209). This
+      // button used to write only the route and the pointer, so a new page
+      // with edits in its working draft went live as its stored, empty
+      // version under a green "Published at". A refusal has said why, and the
+      // route stays off.
+      if (!(await carryCanvasIntoPublish())) return
       // Read before the two writes below, for the reason given in
       // `handlePublish`: the live routing map grows this entry as soon as the
       // sync lands (AGL-1588).
@@ -1701,6 +1781,7 @@ function BesignerPage(props) {
     routesByScreenId,
     user,
     liveDescendantCount,
+    carryCanvasIntoPublish,
   ])
 
   /** Is there a typed slug the screen document has not been told about? */
