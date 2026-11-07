@@ -22,6 +22,7 @@ import {
   verificationRequestBlock,
   type VerificationRequestBlock,
   MARKETPLACE_EMAIL_COMPONENT_ID_ALLOWLIST,
+  allExceptInstallKind,
   installsUnreviewedFallback,
   installTargetsFor,
   isListingBrowsable,
@@ -922,6 +923,61 @@ describe('resolveInstallPlan (AGL-773)', () => {
         hosts,
       ),
     ).toEqual([{ scope: 'org' }])
+  })
+
+  it('plugin + all sites except → one org pin carrying the sites it leaves out (AGL-4047)', () => {
+    expect(
+      resolveInstallPlan({ artifactType: 'plugin' }, 'all-sites-except', {
+        ...hosts,
+        exceptHostIds: ['h2'],
+      }),
+    ).toEqual([{ scope: 'org', exceptHostIds: ['h2'] }])
+  })
+
+  it('host-scoped artifact + all sites except → today’s sites minus the ones left out (AGL-4047)', () => {
+    for (const artifactType of ['component', 'template', 'layout', 'emailTemplate', 'theme']) {
+      expect(
+        resolveInstallPlan({ artifactType }, 'all-sites-except', {
+          ...hosts,
+          exceptHostIds: ['h2'],
+        }),
+      ).toEqual([
+        { scope: 'host', hostId: 'h1' },
+        { scope: 'host', hostId: 'h3' },
+      ])
+    }
+  })
+
+  it('all sites except plans nothing it cannot honor (AGL-4047)', () => {
+    // An org-only artifact can't leave a site out: nothing, never org-wide.
+    expect(
+      resolveInstallPlan({ artifactType: 'datasetSchema' }, 'all-sites-except', {
+        ...hosts,
+        exceptHostIds: ['h2'],
+      }),
+    ).toEqual([])
+    // Leaving nothing out, or every site out, is another choice.
+    expect(resolveInstallPlan({ artifactType: 'plugin' }, 'all-sites-except', hosts)).toEqual([])
+    expect(
+      resolveInstallPlan({ artifactType: 'plugin' }, 'all-sites-except', {
+        ...hosts,
+        exceptHostIds: ['h1', 'h2', 'h3'],
+      }),
+    ).toEqual([])
+    // A site the workspace doesn't hold leaves nothing out.
+    expect(
+      resolveInstallPlan({ artifactType: 'plugin' }, 'all-sites-except', {
+        ...hosts,
+        exceptHostIds: ['elsewhere'],
+      }),
+    ).toEqual([])
+  })
+
+  it('names what all sites except means for each kind of listing (AGL-4047)', () => {
+    expect(allExceptInstallKind({ artifactType: 'plugin' })).toBe('lasting')
+    expect(allExceptInstallKind({ artifactType: 'component' })).toBe('today')
+    expect(allExceptInstallKind({ artifactType: 'theme' })).toBe('today')
+    expect(allExceptInstallKind({ artifactType: 'datasetSchema' })).toBeNull()
   })
 
   it('reads legacy discriminators like the rest of the model', () => {

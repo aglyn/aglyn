@@ -307,6 +307,7 @@ export {
   type InstallPin,
   type InstallTarget,
   LISTING_CATEGORIES,
+  type OrgInstallHost,
   type OrgInstallSite,
   type OrgInstallSummary,
   type PluginInstallState,
@@ -337,13 +338,35 @@ export function installTargetsFor(listing: {
 
 
 /** How the admin chose to target an install from the org marketplace. */
-export type InstallTargeting = 'all-sites' | 'selected-sites'
+export type InstallTargeting = 'all-sites' | 'selected-sites' | 'all-sites-except'
 
 /** One concrete install operation: an org pin, or a pin on a named host. */
 export interface InstallPlanStep {
   scope: InstallTarget
   /** Present iff `scope === 'host'`. */
   hostId?: string
+  /**
+   * On an org pin only: the sites it leaves out (AGL-4047), each of which gets
+   * the entry its own Admin › Plugins switch writes. Absent when none are.
+   */
+  exceptHostIds?: readonly string[]
+}
+
+/**
+ * Whether a listing offers "All sites except…" at install (AGL-4047), and what
+ * it means there. A plugin pins once for the workspace and leaves the chosen
+ * sites out, so a site added later gets it (`'lasting'`). A per-site copy has
+ * no link that outlives the install, so the choice only picks today's sites
+ * (`'today'`). An org-only artifact has no per-site form at all (`null`).
+ */
+export function allExceptInstallKind(listing: {
+  artifactType?: string
+  type?: string
+  kind?: string
+}): 'lasting' | 'today' | null {
+  const targets = installTargetsFor(listing)
+  if (!targets.includes('host')) return null
+  return targets.includes('org') ? 'lasting' : 'today'
 }
 
 /**
@@ -362,6 +385,13 @@ export interface InstallPlanStep {
  *   the admin named specific sites, so honor that literally — UNLESS the
  *   artifact can't host-pin at all (datasetSchema), where the per-site choice
  *   is meaningless and collapses to the org pin.
+ * - "All sites except…" (AGL-4047) is the org pin plus the sites it leaves
+ *   out for an artifact that has both (a plugin), so a site added later gets
+ *   it. A host-scoped artifact fans out to today's sites minus the ones left
+ *   out, and new sites are not covered, as with "all sites". An org-only
+ *   artifact can't leave a site out, and nothing is planned rather than
+ *   silently installing everywhere. Leaving out nothing, or every site,
+ *   plans nothing either: both are another choice.
  */
 export function resolveInstallPlan(
   listing: { artifactType?: string; type?: string; kind?: string },
@@ -369,6 +399,8 @@ export function resolveInstallPlan(
   hosts: {
     selectedHostIds: readonly string[]
     allHostIds: readonly string[]
+    /** The sites "All sites except…" leaves out. */
+    exceptHostIds?: readonly string[]
   },
 ): InstallPlanStep[] {
   const targets = installTargetsFor(listing)
@@ -377,6 +409,15 @@ export function resolveInstallPlan(
   if (targeting === 'all-sites') {
     if (canOrgPin) return [{ scope: 'org' }]
     return hosts.allHostIds.map((hostId) => ({ scope: 'host', hostId }))
+  }
+  if (targeting === 'all-sites-except') {
+    const kind = allExceptInstallKind(listing)
+    const except = new Set(hosts.exceptHostIds ?? [])
+    const kept = hosts.allHostIds.filter((hostId) => !except.has(hostId))
+    const leftOut = hosts.allHostIds.filter((hostId) => except.has(hostId))
+    if (!kind || !leftOut.length || !kept.length) return []
+    if (kind === 'lasting') return [{ scope: 'org', exceptHostIds: leftOut }]
+    return kept.map((hostId) => ({ scope: 'host', hostId }))
   }
   // selected-sites
   if (!canHostPin) return [{ scope: 'org' }]

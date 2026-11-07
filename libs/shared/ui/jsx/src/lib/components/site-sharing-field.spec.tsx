@@ -178,6 +178,43 @@ describe('SiteSharingField', () => {
   })
 })
 
+describe('SiteSharingField, where its own sentences are not true (AGL-4047)', () => {
+  it('says what the caller says under each choice, and over the list', () => {
+    setup(
+      { mode: 'allExcept', exceptHostIds: ['b'] },
+      {
+        modeDetails: { all: 'Installs to all 3 sites.', allExcept: 'New sites won’t get it.' },
+        listLabels: { allExcept: 'Sites to skip' },
+      },
+    )
+    expect(screen.getByText('Installs to all 3 sites.')).toBeTruthy()
+    expect(screen.getByText('New sites won’t get it.')).toBeTruthy()
+    expect(screen.queryByText('A new site gets this automatically.')).toBeNull()
+    expect(screen.getByText('Sites to skip')).toBeTruthy()
+  })
+
+  it('keeps the reason a choice is off over the caller’s sentence', () => {
+    render(
+      <SiteSharingField
+        value={{ mode: 'all' }}
+        onChange={jest.fn()}
+        sites={SITES.slice(0, 1)}
+        sitesReady
+        modeDetails={{ allExcept: 'New sites won’t get it.' }}
+      />,
+    )
+    expect(screen.getByText('This workspace has one site, so there is nothing to leave out.')).toBeTruthy()
+    expect(screen.queryByText('New sites won’t get it.')).toBeNull()
+  })
+
+  it('keeps its own sentences when the caller passes none (the control)', () => {
+    setup({ mode: 'selected', hostIds: [] })
+    expect(screen.getByText('A new site doesn’t get this until you add it.')).toBeTruthy()
+    expect(screen.getByText('A new site gets this automatically.')).toBeTruthy()
+    expect(screen.getByText('Sites to share with')).toBeTruthy()
+  })
+})
+
 function fireThen(onChange: jest.Mock, name: RegExp | string) {
   fireEvent.click(radio(name))
   return onChange.mock.lastCall?.[0]

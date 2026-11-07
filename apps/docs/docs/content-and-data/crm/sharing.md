@@ -15,7 +15,8 @@ brand met the person.
 
 A member holding [**Change CRM settings**](../../workspace-and-billing/teams-and-roles/custom-roles.md#crm-settings-permission)
 (owners and admins by default) chooses, in the CRM's **Settings**, what new
-contacts, companies, deals and tasks are shared with, and saves it:
+contacts, leads, companies, deals, tasks and logged activities are shared
+with, and saves it:
 
 - **All sites in the organization**, as above.
 - **Only the site they came in on**: what an agency that keeps each client's

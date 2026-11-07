@@ -93,6 +93,28 @@ describe('PluginSiteSetPanel', () => {
     )
   })
 
+  it('marks a site whose own switch has the listing off, from the hosts the page hands over (AGL-4047)', () => {
+    docs['orgs/org-1/installs/listing-1'] = orgPin
+
+    render(
+      <PluginSiteSetPanel
+        hostId="host-1"
+        listingId="listing-1"
+        hosts={[
+          { id: 'host-1', label: 'Bakery', disabledPlugins: null },
+          { id: 'host-2', label: 'Cafe', disabledPlugins: ['listing-1'] },
+        ]}
+      />,
+    )
+
+    const { orgInstall } = siteSetProps.mock.calls.at(-1)[0]
+    expect(orgInstall.sites).toEqual([
+      expect.not.objectContaining({ hostId: 'host-1', switchedOff: true }),
+      expect.objectContaining({ hostId: 'host-2', pinnedBy: 'org', switchedOff: true }),
+    ])
+    expect('switchedOff' in orgInstall.sites[0]).toBe(false)
+  })
+
   it("falls back to the install pin's pluginId while the listing is unread", () => {
     docs['orgs/org-1/installs/listing-1'] = orgPin
 

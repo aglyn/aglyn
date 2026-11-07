@@ -67,6 +67,7 @@ import {
   CRM_WRITE_SCOPE_FIELD,
   type CrmShareAccess,
   type CrmShareGrant,
+  type CrmDefaultMarkOnlyCollection,
   type CrmSharingContext,
   type CrmSharingCriteria,
   type CrmSharingObject,
@@ -76,6 +77,7 @@ import {
   type CrmSharingSite,
   describeShareTargets,
   evaluateRecordGrants,
+  isCrmDefaultMarkOnlyCollection,
   isCrmShareAccess,
   isCrmSharingObject,
   planRecordSharing,
@@ -269,6 +271,49 @@ export async function recomputeMany(
 }
 
 /**
+ * A record the CRM default "All sites except…" stamped carries the sites it
+ * reaches today; the marker that lets a site added later join it is the
+ * server's to write (AGL-4047). Only an org with that default pays for it.
+ * Answers how many records it marked.
+ */
+async function markUnderDefault(
+  firestore: Firestore,
+  orgId: string,
+  collection: CrmSharingObject | CrmDefaultMarkOnlyCollection,
+  ids: readonly string[],
+  org: Record<string, unknown>,
+): Promise<number> {
+  if (!crmDefaultExceptOf(org)) return 0
+  const { markRecordUnderDefault } = await import('./crm-default-sharing')
+  let marked = 0
+  for (const id of ids) {
+    const wrote = await markRecordUnderDefault(firestore, orgId, collection, id, org).catch(
+      (error: unknown) => {
+        console.error(`[crm] ${collection}/${id} was not marked for the default sharing`, error)
+        return false
+      },
+    )
+    if (wrote) marked += 1
+  }
+  return marked
+}
+
+/**
+ * What a browser's own write of a record no sharing rule applies to — a
+ * logged activity — owes the CRM default: the marker, when its sites are
+ * exactly the default's (AGL-4047). Nothing else moves.
+ */
+export async function markCrmRecordsUnderDefault(
+  firestore: Firestore,
+  orgId: string,
+  collection: CrmDefaultMarkOnlyCollection,
+  ids: readonly string[],
+): Promise<{ changed: number; missing: number }> {
+  const { org } = await crmSharingRulesOf(firestore, orgId)
+  return { changed: await markUnderDefault(firestore, orgId, collection, ids, org), missing: 0 }
+}
+
+/**
  * Re-evaluates the org's rules for these records — the one thing a write
  * anywhere owes the sharing. An org with no active rule for the object
  * costs one cached read and nothing else; grants of a rule switched off
@@ -281,19 +326,7 @@ export async function evaluateCrmSharing(
   ids: readonly string[],
 ): Promise<{ changed: number; missing: number }> {
   const { rules, fresh, orgHostIds, org } = await crmSharingRulesOf(firestore, orgId)
-  /*
-   * A record the CRM default "All sites except…" stamped carries the sites it
-   * reaches today; the marker that lets a site added later join it is the
-   * server's to write (AGL-4047). Only an org with that default pays for it.
-   */
-  if (crmDefaultExceptOf(org)) {
-    const { markRecordUnderDefault } = await import('./crm-default-sharing')
-    for (const id of ids) {
-      await markRecordUnderDefault(firestore, orgId, object, id, org).catch((error: unknown) => {
-        console.error(`[crm] ${object}/${id} was not marked for the default sharing`, error)
-      })
-    }
-  }
+  await markUnderDefault(firestore, orgId, object, ids, org)
   if (!activeSharingRules(rules, object).length) return { changed: 0, missing: 0 }
   const context = { ...(await crmSharingContextFor(firestore, orgId, rules, object)), orgHostIds }
   const outcome = await recomputeMany(
@@ -688,7 +721,7 @@ export const crmSharingHandler: PluginApiHandler = async (req, res) => {
     if (action === 'evaluate') {
       const object = body['object']
       const ids = readIds(body['ids'])
-      if (!isCrmSharingObject(object) || !ids) {
+      if ((!isCrmSharingObject(object) && !isCrmDefaultMarkOnlyCollection(object)) || !ids) {
         res.status(400).json({ error: 'Name the records.' })
         return
       }
@@ -697,7 +730,10 @@ export const crmSharingHandler: PluginApiHandler = async (req, res) => {
         res.status(writer.status).json(writer.body)
         return
       }
-      const outcome = await evaluateCrmSharing(firestore, writer.orgId, object, ids)
+      // A logged activity no rule applies to: only the CRM default's marker (AGL-4047).
+      const outcome = isCrmDefaultMarkOnlyCollection(object)
+        ? await markCrmRecordsUnderDefault(firestore, writer.orgId, object, ids)
+        : await evaluateCrmSharing(firestore, writer.orgId, object, ids)
       const answer: CrmSharingResponse = { ok: true, ...outcome }
       res.status(200).json(answer)
       return

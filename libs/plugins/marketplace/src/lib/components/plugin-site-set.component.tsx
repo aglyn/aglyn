@@ -16,6 +16,7 @@
  */
 'use client'
 
+import { orgPermissionLabel } from '@aglyn/aglyn/app-utils/org-permissions'
 import { MdiIcon } from '@aglyn/shared-ui-jsx'
 import { mdiCheckCircle } from '@aglyn/shared-data-mdi'
 import {
@@ -223,6 +224,15 @@ export function PluginSiteSet(props: PluginSiteSetProps) {
               label="Overrides org"
             />
           ) : null}
+          {/* Pinned but not running (AGL-4047): the site's own switch has it
+              off, which the realm join honors over any pin. */}
+          {site.switchedOff ? (
+            <Chip
+              size="small"
+              variant="outlined"
+              label="Switched off on this site"
+            />
+          ) : null}
           {/* Removable only where the site owns its
               pin: dropping a site covered by the org
               pin would mean writing an exclusion the
@@ -270,6 +280,13 @@ export function PluginSiteSet(props: PluginSiteSetProps) {
         </Stack>
       ))}
     </Stack>
+    {orgInstall.sites.some((site) => site.switchedOff) ? (
+      <Typography variant="caption" color="text.secondary">
+        {'A site that switched it off turns it back on from its own ' +
+          'Admin › Plugins page, which takes ' +
+          `“${orgPermissionLabel('site.manage')}” on that site.`}
+      </Typography>
+    ) : null}
 
     {staleSites.length ? (
       <Stack spacing={1}>

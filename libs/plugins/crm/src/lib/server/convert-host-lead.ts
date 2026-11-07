@@ -111,7 +111,7 @@ import {
   crmPicklistDefaultLabel,
   judgeCrmCompanyPicklists,
   readCrmCompanyAccountFields,
-  crmScopeTokens,
+  crmScopeFields,
   dealStageForecastCategory,
   DEFAULT_DEAL_STAGES,
   grantedUnderConsentGroup,
@@ -398,7 +398,12 @@ export async function convertHostLead(
   if (!email) return { ok: false, reason: 'no-email' }
 
   const group = await consentGroupForSite(hostId, org)
-  const visibleTo = crmScopeTokens(org, group)
+  /*
+   * The company and the deal carry the marker under "All sites except…"
+   * (AGL-4047), so a site added later joins them; a pipeline seeded here is
+   * stamped only, as the sweep does not keep pipelines.
+   */
+  const { visibleTo, ...marker } = crmScopeFields(org, group)
   /*
    * What the CALLER may read, for the company-by-domain reuse below: their
    * group's own tokens plus `org`, exactly the set the console's listeners
@@ -631,6 +636,7 @@ export async function convertHostLead(
         ...(createCompany.domain ? { domain: createCompany.domain } : {}),
         ...(ownerUid ? { ownerUid } : {}),
         visibleTo,
+        ...marker,
         hostId,
         createdByUid: actor.uid,
         createdAt: FieldValue.serverTimestamp(),
@@ -758,6 +764,7 @@ export async function convertHostLead(
       contactRoles: [{ contactId, primary: true }],
       ...(companyId ? { companyId } : {}),
       visibleTo,
+      ...marker,
       hostId,
       createdByUid: actor.uid,
       createdAt: FieldValue.serverTimestamp(),

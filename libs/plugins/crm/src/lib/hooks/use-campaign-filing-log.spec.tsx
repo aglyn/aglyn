@@ -43,11 +43,17 @@ jest.mock('firebase/firestore', () => ({
   setDoc: (...args: unknown[]) => mockSetDoc(...args),
 }))
 
+const mockFollowUp = jest.fn(async (..._args: unknown[]) => undefined)
+jest.mock('../model/crm-sharing-api', () => ({
+  callCrmSharing: jest.fn(),
+  followUpCrmSharing: (...args: unknown[]) => mockFollowUp(...args),
+}))
+
 import { useCampaignFilingLog } from './use-campaign-filing-log'
 
-const filing = async (link: Record<string, string>) => {
+const filing = async (link: Record<string, string>, org: Record<string, unknown> = {}) => {
   const { result } = renderHook(() =>
-    useCampaignFilingLog({ orgId: 'org-1', hostId: 'site-1', org: {} }),
+    useCampaignFilingLog({ orgId: 'org-1', hostId: 'site-1', org }),
   )
   await act(async () => {
     await result.current(link, { filed: [{ id: 'spring', name: 'Spring' }] })
@@ -59,6 +65,7 @@ describe('useCampaignFilingLog', () => {
   beforeEach(() => {
     mockRecords.clear()
     mockSetDoc.mockClear()
+    mockFollowUp.mockClear()
     mockReadFails = false
     jest.spyOn(console, 'warn').mockImplementation(() => undefined)
   })
@@ -71,6 +78,27 @@ describe('useCampaignFilingLog', () => {
       companyId: 'co-1',
       campaignId: 'spring',
     })
+  })
+
+  it('asks the server to mark the entries under the CRM default "All sites except…" (AGL-4047)', async () => {
+    const row = await filing(
+      { contactId: 'c-1' },
+      {
+        hosts: { 'site-1': true, 'site-2': true, 'site-3': true },
+        crm: { defaultRecordScope: 'host', defaultRecordExcept: ['site-3'] },
+      },
+    )
+    expect(row).toMatchObject({ visibleTo: ['host:site-1', 'host:site-2'] })
+    // The rules refuse the marker from a browser; the follow-up names the entry written.
+    expect('scopeMode' in row).toBe(false)
+    const written = String(mockSetDoc.mock.calls[0][0]).split('/').pop()
+    expect(mockFollowUp).toHaveBeenCalledTimes(1)
+    expect(mockFollowUp.mock.calls[0].slice(1)).toEqual([{ hostId: 'site-1' }, 'crmActivities', [written]])
+  })
+
+  it('asks nothing while the default leaves no site out', async () => {
+    await filing({ contactId: 'c-1' })
+    expect(mockFollowUp).not.toHaveBeenCalled()
   })
 
   it('files the entry anyway when the record cannot be read', async () => {

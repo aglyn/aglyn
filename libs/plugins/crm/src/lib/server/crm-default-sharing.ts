@@ -23,11 +23,14 @@
  *
  * 1. A NEW record stamped by the default (`crmScopeTokens`) carries the sites
  *    it reaches today. The marker that lets a site added later join it can
- *    only be written by the server, so every server write of a lead, a
- *    contact, a company or a deal, and a console create's `evaluate`
- *    follow-up, ask {@link markRecordUnderDefault}: a record created since
- *    the default was chosen, whose sites are exactly what the default stamps,
- *    gets the marker. Its sites do not move.
+ *    only be written by the server. A server writer creating a lead, a
+ *    company, a deal, a task or an activity stamps it as it writes
+ *    (`crmScopeFields`, or `crmDefaultMarkerOf` for one that stamped its sites
+ *    another way); every other server write of a lead, a contact, a company
+ *    or a deal, and a console write's `evaluate` follow-up — a logged
+ *    activity's included — ask {@link markRecordUnderDefault}: a record
+ *    created since the default was chosen, whose sites are exactly what the
+ *    default stamps, gets the marker. Its sites do not move.
  *
  * 2. EXISTING records change only through "Apply to existing records", a run
  *    a member holding "Change CRM settings" starts: every contact, lead,
@@ -40,12 +43,11 @@
 
 import {
   crmDefaultExceptOf,
+  crmDefaultMarkerOf,
   crmListFieldsPatch,
   type CrmListCollection,
-  crmScopeFields,
   CRM_DEFAULT_MAX_INCLUDED,
 } from '@aglyn/aglyn/app-utils/crm'
-import { consentGroupForHost } from '@aglyn/aglyn/app-utils/consent-groups'
 import {
   heldScopeTokens,
   hostScopeToken,
@@ -120,12 +122,15 @@ export function defaultMarkerFor(
   const sinceMs = createdAtMsOf({ createdAt: crm['defaultRecordExceptAt'] })
   const createdMs = createdAtMsOf(record)
   if (sinceMs == null || createdMs == null || createdMs < sinceMs) return null
-  const hostId = typeof record['hostId'] === 'string' ? record['hostId'] : ''
-  if (!hostId) return null
-  const stamped = crmScopeFields(org as Record<string, unknown>, consentGroupForHost(org as Record<string, unknown>, hostId))
-  if (!stamped.scopeMode || !stamped.scopeExcept) return null
-  if (!sameSet(heldScopeTokens(record), stamped.visibleTo)) return null
-  return { scopeMode: stamped.scopeMode, scopeExcept: stamped.scopeExcept }
+  // The one test a writer stamping a new record asks as well: its own sites
+  // are exactly what the default stamps for the site it came in on.
+  const marker = crmDefaultMarkerOf(org as Record<string, unknown>, {
+    hostId: record['hostId'],
+    visibleTo: heldScopeTokens(record),
+  })
+  return marker.scopeMode && marker.scopeExcept
+    ? { scopeMode: marker.scopeMode, scopeExcept: marker.scopeExcept }
+    : null
 }
 
 /**

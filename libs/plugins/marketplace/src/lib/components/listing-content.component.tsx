@@ -34,7 +34,9 @@ import {
   resolveUninstallTargets,
   safePublisherHref,
   safePublisherImageSrc,
+  allExceptInstallKind,
   type InstallTargeting,
+  type OrgInstallHost,
   type UninstallTarget,
 } from '../model/marketplace'
 import {
@@ -44,6 +46,12 @@ import {
 } from '../model/own-listing'
 import { BlockedControl } from '@aglyn/shared-ui-jsx/components/blocked-control.component'
 import { PrerequisiteNotice } from '@aglyn/shared-ui-jsx/components/prerequisite-notice.component'
+import {
+  SiteSharingField,
+  type SiteSharingMode,
+  type SiteSharingValue,
+} from '@aglyn/shared-ui-jsx/components/site-sharing-field.component'
+import { orgPermissionLabel } from '@aglyn/aglyn/app-utils/org-permissions'
 import UninstallImpactDialog from './uninstall-impact-dialog.component'
 import { ListingImage } from './listing-image.component'
 import {
@@ -84,18 +92,12 @@ import {
   Avatar,
   Box,
   Button,
-  Checkbox,
   Chip,
   Dialog,
   DialogActions,
   DialogContent,
   DialogTitle,
   Divider,
-  FormControl,
-  FormControlLabel,
-  FormGroup,
-  FormHelperText,
-  FormLabel,
   IconButton,
   Link as MuiLink,
   Rating,
@@ -565,9 +567,11 @@ export interface MarketplaceListingContentProps {
   /**
    * The org's sites, for the install-targeting picker (AGL-773). Present only
    * at org scope; when given (and non-empty) the CTA offers All sites vs
-   * Selected sites instead of the single org/host choice.
+   * Selected sites instead of the single org/host choice. Each carries the
+   * site's own `disabledPlugins` when the shell has it (AGL-4047), which the
+   * installed-sites panel reads.
    */
-  hosts?: ReadonlyArray<{ id: string; label: string }>
+  hosts?: ReadonlyArray<OrgInstallHost>
 }
 
 /**
@@ -626,13 +630,17 @@ export function MarketplaceListingContent({
   const [updateOpen, setUpdateOpen] = useState(false)
   // Screenshot lightbox (AGL-869): the clicked screenshot's URL, or null.
   const [lightboxUrl, setLightboxUrl] = useState<string | null>(null)
-  // Org-scope install targeting (AGL-773): All sites vs a chosen subset. Only
-  // engaged at org scope with a known site list; otherwise the per-site tab's
-  // simpler org/host choice (AGL-656) still applies.
+  // Org-scope install targeting (AGL-773): All sites, a chosen subset, or all
+  // sites except some (AGL-4047). Only engaged at org scope with a known site
+  // list; otherwise the per-site tab's simpler org/host choice (AGL-656) still
+  // applies.
   const orgTargeting = Boolean(orgScoped && hosts && hosts.length > 0)
-  const [targeting, setTargeting] = useState<InstallTargeting>('all-sites')
-  const [selectedHostIds, setSelectedHostIds] = useState<string[]>([])
+  const [installTo, setInstallTo] = useState<SiteSharingValue>({ mode: 'all' })
   const allHostIds = useMemo(() => (hosts ?? []).map((h) => h.id), [hosts])
+  const installSites = useMemo(
+    () => (hosts ?? []).map((host) => ({ id: host.id, name: host.label })),
+    [hosts],
+  )
   // Listings are org-owned (AGL-652) — "did I publish this" is an org
   // comparison, resolved from the routing mirror like the browse grid.
   const [viewerOrgId, setViewerOrgId] = useState<string | null>(null)
@@ -1176,16 +1184,67 @@ export function MarketplaceListingContent({
   // artifact can host-pin (plugins, components, templates, layouts) — an
   // org-only artifact can't target a subset.
   const canSelectSites = installTargets.includes('host')
+  // "All sites except…" (AGL-4047): a plugin pins once for the workspace and
+  // leaves the chosen sites out, so a site added later gets it; a per-site copy
+  // only picks today's sites; an org-only artifact can't leave one out.
+  const allExceptKind = listing ? allExceptInstallKind(listing) : null
+  const installModes = useMemo<SiteSharingMode[]>(
+    () => [
+      'all',
+      ...(canSelectSites ? (['selected'] as const) : []),
+      ...(allExceptKind ? (['allExcept'] as const) : []),
+    ],
+    [canSelectSites, allExceptKind],
+  )
+  // A choice the artifact doesn't offer reads as All sites, never as a plan
+  // that silently means something else.
+  const installChoice = useMemo<SiteSharingValue>(
+    () => (installModes.includes(installTo.mode) ? installTo : { mode: 'all' }),
+    [installModes, installTo],
+  )
+  const targeting: InstallTargeting =
+    installChoice.mode === 'selected'
+      ? 'selected-sites'
+      : installChoice.mode === 'allExcept'
+        ? 'all-sites-except'
+        : 'all-sites'
   const installPlanSteps = useMemo(
     () =>
       listing
         ? resolveInstallPlan(listing, targeting, {
-            selectedHostIds,
+            selectedHostIds:
+              installChoice.mode === 'selected' ? installChoice.hostIds : [],
             allHostIds,
+            exceptHostIds:
+              installChoice.mode === 'allExcept'
+                ? installChoice.exceptHostIds
+                : [],
           })
         : [],
-    [listing, targeting, selectedHostIds, allHostIds],
+    [listing, targeting, installChoice, allHostIds],
   )
+  const installModeDetails: Partial<Record<SiteSharingMode, string>> =
+    installTargets.includes('org')
+      ? {
+          all: 'Every site, including sites you add later.',
+          allExcept:
+            'Every site but the ones you leave out, including sites you add later.',
+        }
+      : {
+          all:
+            `Installs to all ${allHostIds.length} site` +
+            (allHostIds.length === 1 ? '' : 's') +
+            ". New sites won't get it automatically.",
+          allExcept:
+            'Installs to the sites you have today, but the ones you leave ' +
+            "out. New sites won't get it automatically.",
+        }
+  const installToProblem =
+    installChoice.mode === 'selected' && !installChoice.hostIds.length
+      ? 'Pick at least one site.'
+      : installChoice.mode === 'allExcept' && !installChoice.exceptHostIds.length
+        ? 'Choose at least one site to leave out, or choose All sites.'
+        : null
   const versionHistory: any[] = Array.isArray(listing?.versionHistory)
     ? [...listing.versionHistory].sort((a, b) => b.version - a.version)
     : []
@@ -1196,10 +1255,22 @@ export function MarketplaceListingContent({
   // something else.
   const installTargetSummary = (): string => {
     if (orgTargeting && !installed) {
-      if (
-        installPlanSteps.length === 1 &&
-        installPlanSteps[0]?.scope === 'org'
-      ) {
+      const orgStep =
+        installPlanSteps.length === 1 && installPlanSteps[0]?.scope === 'org'
+          ? installPlanSteps[0]
+          : null
+      if (orgStep?.exceptHostIds?.length) {
+        // "All sites except…" (AGL-4047): the sites left out, by name.
+        const leftOut = orgStep.exceptHostIds.map(
+          (hostId) =>
+            (hosts ?? []).find((host) => host.id === hostId)?.label ?? hostId,
+        )
+        return (
+          `every site except ${leftOut.join(', ')}, ` +
+          'including sites added later'
+        )
+      }
+      if (orgStep) {
         return 'the whole organization — every site, including sites added later'
       }
       const names = installPlanSteps
@@ -1232,8 +1303,11 @@ export function MarketplaceListingContent({
   // plugin — everything else installs INTO a site and has no pin to survey.
   const orgPluginScope = Boolean(orgTargeting && isPlugin)
   const orgInstall = useMemo(
-    () => resolveOrgInstallSummary(hosts ?? [], sitePins, orgPin ?? null),
-    [hosts, sitePins, orgPin],
+    // With each site's own switch (AGL-4047), so a site that turned the plugin
+    // off, or was left out at install, is not listed as running it.
+    () =>
+      resolveOrgInstallSummary(hosts ?? [], sitePins, orgPin ?? null, listingId),
+    [hosts, sitePins, orgPin, listingId],
   )
   /** Run a pin write, then re-read every site's pin. */
   const runSiteEdit = async (work: () => Promise<unknown>) => {
@@ -1859,103 +1933,45 @@ export function MarketplaceListingContent({
                           </Stack>
                         ) : null}
                         {/* Install targeting (AGL-773): at org scope, choose
-                            All sites vs a chosen subset. Only when NOT already
+                            All sites, a chosen subset, or all sites except
+                            some (AGL-4047). Only when NOT already
                             installed — re-asking once it's settled would lie.
                             The per-site tab keeps the simpler org/host choice
                             (AGL-656) below until it's retired. */}
                         {orgTargeting &&
                         !installed &&
                         !(orgPluginScope && orgInstall.installedAnywhere) ? (
-                          <Stack spacing={1.5} sx={{ maxWidth: 420 }}>
-                            <TextField
-                              select
-                              size="small"
+                          <Stack spacing={1} sx={{ maxWidth: 420 }}>
+                            {/* Radios and a visible checkbox list, never a
+                                dropdown (AGL-996, AGL-4047): where third-party
+                                code goes has to read at a glance, and the
+                                sites left out are the part people check. */}
+                            <SiteSharingField
                               label="Install to"
-                              value={targeting}
-                              onChange={(event) =>
-                                setTargeting(
-                                  event.target.value as InstallTargeting,
-                                )
-                              }
-                              helperText={
-                                targeting === 'all-sites'
-                                  ? installTargets.includes('org')
-                                    ? 'Available on every site — including sites you add later.'
-                                    : `Installs to all ${allHostIds.length} site` +
-                                      (allHostIds.length === 1 ? '' : 's') +
-                                      ". New sites won't get it automatically."
-                                  : 'Installs only to the sites you choose.'
-                              }
-                            >
-                              <MenuItem value="all-sites">
-                                {'All sites'}
-                              </MenuItem>
-                              {canSelectSites ? (
-                                <MenuItem value="selected-sites">
-                                  {'Selected sites'}
-                                </MenuItem>
-                              ) : null}
-                            </TextField>
-                            {/* A visible checkbox list, not a multi-select
-                                (AGL-996). The MUI `select multiple` this
-                                replaced rendered its options as bare rows
-                                with no tick and no renderValue, so the
-                                control that decides WHERE third-party code
-                                gets installed could not be read at all:
-                                picked and unpicked sites looked identical,
-                                and the closed field showed raw host ids. */}
-                            {targeting === 'selected-sites' &&
-                            canSelectSites ? (
-                              <FormControl
-                                component="fieldset"
-                                error={!selectedHostIds.length}
+                              value={installChoice}
+                              onChange={setInstallTo}
+                              sites={installSites}
+                              sitesReady
+                              modes={installModes}
+                              modeDetails={installModeDetails}
+                              listLabels={{ selected: 'Sites to install to' }}
+                              problem={installToProblem}
+                            />
+                            {installChoice.mode === 'allExcept' &&
+                            allExceptKind === 'lasting' ? (
+                              <Typography
+                                variant="caption"
+                                color="text.secondary"
                               >
-                                <FormLabel
-                                  component="legend"
-                                  sx={{ typography: 'caption' }}
-                                >
-                                  {'Sites'}
-                                </FormLabel>
-                                <FormGroup
-                                  // Scrolls rather than pushing Install off
-                                  // the page on an org with many sites.
-                                  sx={{ maxHeight: 240, overflowY: 'auto' }}
-                                >
-                                  {(hosts ?? []).map((host) => (
-                                    <FormControlLabel
-                                      key={host.id}
-                                      control={
-                                        <Checkbox
-                                          size="small"
-                                          checked={selectedHostIds.includes(
-                                            host.id,
-                                          )}
-                                          onChange={(event) =>
-                                            setSelectedHostIds((current) =>
-                                              event.target.checked
-                                                ? [...current, host.id]
-                                                : current.filter(
-                                                    (id) => id !== host.id,
-                                                  ),
-                                            )
-                                          }
-                                        />
-                                      }
-                                      label={host.label}
-                                      slotProps={{
-                                        typography: { variant: 'body2' },
-                                      }}
-                                    />
-                                  ))}
-                                </FormGroup>
-                                <FormHelperText>
-                                  {selectedHostIds.length
-                                    ? `${selectedHostIds.length} of ${
-                                        (hosts ?? []).length
-                                      } selected.`
-                                    : 'Pick at least one site.'}
-                                </FormHelperText>
-                              </FormControl>
+                                {'Each site you leave out has the plugin ' +
+                                  'switched off, with the same switch as its ' +
+                                  'own Admin › Plugins page. Leaving a site ' +
+                                  'out takes ' +
+                                  `“${orgPermissionLabel('site.manage')}” ` +
+                                  'there, and anyone holding it, which the ' +
+                                  'site’s admins do by default, can turn the ' +
+                                  'plugin back on for that site.'}
+                              </Typography>
                             ) : null}
                           </Stack>
                         ) : installTargets.length > 1 && !installed ? (

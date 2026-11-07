@@ -31,6 +31,7 @@ import {
   emailStateRefusal,
   type CrmMergeContext,
   crmMergeFieldsIn,
+  crmDefaultMarkerOf,
   crmScopeTokens,
   isOrgWideMember,
   normalizeContactEmail,
@@ -804,9 +805,8 @@ export const crmEmailSendHandler: PluginApiHandler = async (req, res) => {
         ? recordTokens.map(String)
         : crmScopeTokens(org as Record<string, unknown>, group)
     try {
-      await writeCrmEmailActivity(
-        activityRef,
-        buildCrmEmailActivity({
+      await writeCrmEmailActivity(activityRef, {
+        ...buildCrmEmailActivity({
           subject,
           body: text,
           to: recipient.email,
@@ -817,7 +817,13 @@ export const crmEmailSendHandler: PluginApiHandler = async (req, res) => {
           hostId,
           visibleTo,
         }),
-      )
+        /*
+         * Under "All sites except…" (AGL-4047), the marker a site added later
+         * joins by — only when the sites stamped above are exactly the
+         * default's, which a record's own sites may not be.
+         */
+        ...crmDefaultMarkerOf(org as Record<string, unknown>, { hostId, visibleTo }),
+      })
     } catch (error) {
       // The message has left. A row that could not be written is a gap on
       // the timeline, not a failed send, and it is said so in the answer.

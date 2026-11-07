@@ -1204,6 +1204,22 @@ export function isCrmDefaultApplyCollection(value: unknown): value is CrmDefault
   )
 }
 
+/**
+ * What a browser writes itself that no sharing rule applies to, yet the CRM
+ * default "All sites except…" stamps: a logged activity. Its `evaluate`
+ * follow-up only marks it, when its sites are exactly the default's, so a
+ * site added later sees it (AGL-4047).
+ */
+export const CRM_DEFAULT_MARK_ONLY_COLLECTIONS = ['crmActivities'] as const
+export type CrmDefaultMarkOnlyCollection = (typeof CRM_DEFAULT_MARK_ONLY_COLLECTIONS)[number]
+
+export function isCrmDefaultMarkOnlyCollection(value: unknown): value is CrmDefaultMarkOnlyCollection {
+  return (
+    typeof value === 'string' &&
+    (CRM_DEFAULT_MARK_ONLY_COLLECTIONS as readonly string[]).includes(value)
+  )
+}
+
 /** Where the run's progress is mirrored on the org document, for the settings card. */
 export const CRM_DEFAULT_APPLY_RUN_PATH = 'crm.defaultApplyRun'
 

@@ -265,6 +265,29 @@ describe('a CRM step', () => {
     expect(row).toMatchObject({ sourceActionId: 'action-1', byUid: '', contactId: 'contact-1' })
   })
 
+  it('marks what it logs and books under the default "All sites except…", so a site added later sees it (AGL-4047)', async () => {
+    const leavesOut = {
+      ...BUSINESS,
+      hosts: { [HOST_ID]: true, 'site-2': true, 'site-3': true },
+      crm: { defaultRecordScope: 'host', defaultRecordExcept: ['site-3'] },
+    }
+    const marked = {
+      visibleTo: [`host:${HOST_ID}`, 'host:site-2'],
+      scopeMode: 'allExcept',
+      scopeExcept: ['host:site-3'],
+    }
+    await runCrmAutomationStep(
+      stepRequest({ type: 'logCrmActivity', kind: 'note', body: 'Hi' }, undefined, leavesOut),
+    )
+    await runCrmAutomationStep(
+      stepRequest({ type: 'createCrmTask', title: 'Call', kind: 'call', dueInDays: 1 }, undefined, leavesOut),
+    )
+    const [row] = childrenOf(`orgs/${ORG_ID}/crmActivities`).map((key) => store[key])
+    const [task] = childrenOf(`orgs/${ORG_ID}/crmTasks`).map((key) => store[key])
+    expect(row).toMatchObject(marked)
+    expect(task).toMatchObject(marked)
+  })
+
   it('rolls what it logs up to the company the site files the person under (AGL-4123)', async () => {
     await runCrmAutomationStep(stepRequest({ type: 'logCrmActivity', kind: 'note', body: 'Hi' }))
     const [row] = childrenOf(`orgs/${ORG_ID}/crmActivities`).map((key) => store[key])

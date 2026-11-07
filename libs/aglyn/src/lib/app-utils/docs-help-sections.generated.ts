@@ -327,7 +327,7 @@ export const PLUGIN_DOCS_SECTION_EXCERPTS: {
     '#your-sending-addresses': 'Directly under Email capture, Your sending addresses lists the addresses you send from besides the one you sign in with, such as a Gmail Send mail as alias on an outbound domain.',
   },
   crmSharing: {
-    '#default-sharing-for-new-records': 'A member holding Change CRM settings (owners and admins by default) chooses, in the CRM\'s Settings, what new contacts, companies, deals and tasks are shared with, and saves it.',
+    '#default-sharing-for-new-records': 'A member holding Change CRM settings (owners and admins by default) chooses, in the CRM\'s Settings, what new contacts, leads, companies, deals, tasks and logged activities are shared with, and saves it.',
     '#sharing-card': 'The Sharing card on a lead\'s, contact\'s, company\'s or deal\'s page lists every site that can see the record and why; a member holding Change CRM settings shares it with more sites from Share with sites… in the card\'s…',
     '#sharing-rules': 'CRM → Settings → Sharing rules, at the organization level, lists your rules.',
   },

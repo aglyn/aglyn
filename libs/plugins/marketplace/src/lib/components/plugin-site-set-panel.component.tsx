@@ -25,7 +25,7 @@ import {
   useHostOrgId,
 } from '@aglyn/tenant-feature-instance'
 import { offeredPluginVersion } from '@aglyn/aglyn'
-import { resolveOrgInstallSummary } from '../model/marketplace'
+import { resolveOrgInstallSummary, type OrgInstallHost } from '../model/marketplace'
 import { useMarketplaceActions } from '../hooks/use-marketplace-actions'
 import PluginSiteSet from './plugin-site-set.component'
 
@@ -33,7 +33,12 @@ export interface PluginSiteSetPanelProps {
   /** Acting site — org pins still resolve their org through one. */
   hostId: string
   listingId: string
-  hosts?: ReadonlyArray<{ id: string; label: string }>
+  /**
+   * Every site, with its own `disabledPlugins` when the page has it
+   * (AGL-4047): a site that switched this listing off is pinned but does not
+   * run it, and the panel says so instead of listing it as running.
+   */
+  hosts?: ReadonlyArray<OrgInstallHost>
 }
 
 /**
@@ -106,8 +111,9 @@ export function PluginSiteSetPanel(props: PluginSiteSetPanelProps) {
   )
 
   const orgInstall = useMemo(
-    () => resolveOrgInstallSummary(hosts ?? [], sitePins, orgPin ?? null),
-    [hosts, sitePins, orgPin],
+    () =>
+      resolveOrgInstallSummary(hosts ?? [], sitePins, orgPin ?? null, listingId),
+    [hosts, sitePins, orgPin, listingId],
   )
   // The listing doc the actions need. The pin carries the denormalised copy
   // the actions actually read (`$id`, `displayName`, `pluginId`), so this page

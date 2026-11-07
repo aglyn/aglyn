@@ -43,6 +43,7 @@ import {
 import { useCallback, useEffect, useRef, useState } from 'react'
 import { crmActivityClientReads } from '../hooks/crm-activity-client-reads'
 import { crmVisibleToClause } from '../hooks/use-crm-scope'
+import { useCrmDefaultMarkFollowUp } from '../hooks/use-crm-sharing'
 import {
   crmActivityLinkFromPicks,
   crmActivityPicksEqual,
@@ -181,6 +182,8 @@ export interface LogActivityDialogProps {
  * author, the name denormalized because a colleague reading the log cannot
  * resolve a uid (see `CrmActivity.byName`); `atMs` for when it HAPPENED,
  * which the reader picks and which defaults to now; and the timestamps.
+ * Under the CRM default "All sites except…" the server then adds the marker a
+ * site added later joins by, which the rules refuse from a browser (AGL-4047).
  *
  * An edit rewrites only the fields the dialog shows. `visibleTo` is never
  * touched — the rules refuse a scoped member changing it, and widening a
@@ -203,6 +206,7 @@ export function LogActivityDialog(props: LogActivityDialogProps) {
   const { firestore, dataScope, hostId, mountedHostId, readTokens, writeTokens, needsSite } =
     scope
   const { consentGroup, org } = scope
+  const markUnderDefault = useCrmDefaultMarkFollowUp(mountedHostId, dataScope?.[1] ?? null, org)
   const { data: user } = useUser()
   const authorName = useUserName()
   const { enqueueSnackbar } = useSnackbar()
@@ -358,7 +362,7 @@ export function LogActivityDialog(props: LogActivityDialogProps) {
           }
         }
         const links = await stamped()
-        await addDoc(
+        const added = await addDoc(
           collection(
             firestore,
             dataScope[0],
@@ -384,6 +388,8 @@ export function LogActivityDialog(props: LogActivityDialogProps) {
             updatedAt: new Date(),
           },
         )
+        // Under "All sites except…", the marker a site added later joins by (AGL-4047).
+        markUnderDefault([added.id])
         enqueueSnackbar('Activity logged', { variant: 'success', persist: false })
       }
       onClose()
@@ -419,6 +425,7 @@ export function LogActivityDialog(props: LogActivityDialogProps) {
     writeTokens,
     hostId,
     authorName,
+    markUnderDefault,
     onClose,
   ])
 
