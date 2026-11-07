@@ -53,6 +53,7 @@ import {
   productPhotoFitSx,
   type ProductPhotoFit,
 } from './product-photo-fit'
+import { PRODUCT_NAME_SX } from './product-name-lines'
 
 // Component ids are persisted in screen documents; never rename.
 export const ID: Aglyn.ComponentId = 'product-grid'
@@ -879,7 +880,7 @@ const ProductGrid = forwardRef<HTMLDivElement, ProductGridProps>(
                 />
               )}
               <CardContent sx={photoCards ? { px: 0.5, pt: 1.5, pb: 1 } : undefined}>
-                <Typography variant={photoCards ? 'subtitle1' : 'subtitle2'} noWrap>
+                <Typography variant={photoCards ? 'subtitle1' : 'subtitle2'} sx={PRODUCT_NAME_SX}>
                   {item.name}
                 </Typography>
                 <Box sx={{ display: 'flex', gap: 1, alignItems: 'center' }}>
