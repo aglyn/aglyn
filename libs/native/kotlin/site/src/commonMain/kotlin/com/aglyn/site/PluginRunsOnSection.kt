@@ -70,7 +70,8 @@ private fun strings(value: Any?): List<String>? = (value as? List<*>)?.filterIsI
 fun PluginRunsOnSection(context: NativePluginContext) {
   val pluginId = LocalSlotParams.current["pluginId"].orEmpty()
   val orgId = context.orgId ?: return
-  if (pluginId.isEmpty() || PluginCatalog.plugins.none { it.id == pluginId }) return
+  // Sites are built out of an always-on plugin, so it has nowhere to choose; the console shows nothing for it either.
+  if (pluginId.isEmpty() || PluginCatalog.plugins.none { it.id == pluginId } || isLockedOnForSite(pluginId)) return
   val plugin = PluginCatalog.plugins.first { it.id == pluginId }
   val label = plugin.label
   val coroutines = rememberCoroutineScope()

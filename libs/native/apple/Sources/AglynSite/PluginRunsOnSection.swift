@@ -124,7 +124,8 @@ struct PluginRunsOnSection: View {
   private func count(_ n: Int) -> String { n == 1 ? "1 site" : "\(n) sites" }
 
   var body: some View {
-    if let plugin, let orgID = context.orgID {
+    // Sites are built out of an always-on plugin, so it has nowhere to choose; the console shows nothing for it either.
+    if let plugin, let orgID = context.orgID, !isLockedOnForSite(pluginID) {
       let value: ScopeSharingChoice = {
         if locked { return .all }
         if case .allExcept(let ids) = choice { return .allExcept(exceptHostIDs: ids) }

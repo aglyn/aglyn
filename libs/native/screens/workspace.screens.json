@@ -2274,7 +2274,7 @@
           "params": {
             "pluginId": "{params.pluginId}"
           },
-          "when": "data.plugins.rows[id=params.pluginId] && !data.plugins.rows[id=params.pluginId].locked"
+          "when": "data.plugins.rows[id=params.pluginId]"
         },
         {
           "type": "links",
