@@ -69,8 +69,20 @@ function code(path: string): string {
     .replace(/^\s*\/\/.*$/gm, '')
 }
 
-describe.each(Object.entries(PAGES))('the %s editor', (_kind, page) => {
+/**
+ * Where each editor's save-then-promote step starts. The screen editor
+ * shares it between Save & publish and the app-bar Publish (AGL-4209), so
+ * its guard lives in `saveAndPromote`, which Save & publish calls.
+ */
+const PUBLISH_STEP: Partial<Record<keyof typeof PAGES, string>> = {
+  screen: 'const saveAndPromote = useCallback(',
+}
+
+describe.each(Object.entries(PAGES))('the %s editor', (kind, page) => {
   const source = code(page)
+  const step =
+    PUBLISH_STEP[kind as keyof typeof PAGES] ??
+    'const handleSaveAndPublish = useCallback('
 
   it('records a refused save', () => {
     expect(source).toMatch(
@@ -79,7 +91,7 @@ describe.each(Object.entries(PAGES))('the %s editor', (_kind, page) => {
   })
 
   it('stops Save & publish on it before promoting, revalidating or clearing anything', () => {
-    const start = source.indexOf('const handleSaveAndPublish = useCallback(')
+    const start = source.indexOf(step)
     expect(start).toBeGreaterThan(-1)
     const body = source.slice(start, source.indexOf('}, [', start))
 
