@@ -18,7 +18,16 @@
 import { holdsStampedSiteKey } from '@aglyn/aglyn/app-utils/host-permissions'
 import { MARKETPLACE_SITE_ROLE_PRESET, marketplaceSitePermissionRefusal } from '../model/marketplace-site-permissions'
 import {
-  resolveOrgIdForHost, firebaseAdmin } from '@aglyn/tenant-data-admin'
+  memberHasPermissionOnHost,
+  resolveOrgIdForHost,
+  resolveOrgMembership,
+  firebaseAdmin,
+} from '@aglyn/tenant-data-admin'
+import { permissionRefusalText } from '@aglyn/aglyn/app-utils/org-permissions'
+import {
+  pluginRunsOnChoiceFrom,
+  writePluginRunsOn,
+} from '@aglyn/tenant-data-admin/server/plugin-runs-on'
 import {
   isCompatibleHostAbi,
   isFirstPartyPlugin,
@@ -493,6 +502,49 @@ export const installPluginHandler: PluginApiHandler = async (req, res) => {
         .collection('installs')
         .doc(listingId)
     }
+    // "All sites except…" (AGL-4047): a workspace install that leaves some
+    // sites out. Each site left out gets the same entry its own Admin › Plugins
+    // switch writes, and the realm join drops a listing a site switched off,
+    // so the plugin runs everywhere else, a site added later included, and a
+    // site left out can turn it back on for itself. Written BEFORE the pin, and
+    // only once every check above has passed, so a refused install leaves no
+    // entry behind and a site left out never runs it, not even for one page.
+    // Leaving a site out takes "Manage site settings" there, as its own switch
+    // does; one site that refuses writes nothing at all.
+    let leftOutHostIds: string[] = []
+    if (req.body?.runsOn != null) {
+      const choice = pluginRunsOnChoiceFrom(req.body.runsOn)
+      if (
+        choice?.mode !== 'allExcept' ||
+        scope !== 'org' ||
+        !pinOrgId ||
+        isFirstPartyPlugin(listingId)
+      ) {
+        return res.status(400).json({
+          error: 'Only an install for every site can leave sites out.',
+        })
+      }
+      const orgId = pinOrgId
+      const member = (await resolveOrgMembership(decoded.uid, orgId))?.member
+      const written = await writePluginRunsOn({
+        firestore,
+        orgId,
+        pluginId: listingId,
+        choice,
+        installing: true,
+        label: String(listing.displayName ?? '').trim() || undefined,
+        mayChangeSite: (siteId) =>
+          memberHasPermissionOnHost(orgId, siteId, member, 'site.manage'),
+        refusedOnSite: (siteName) =>
+          `On ${siteName}: ${permissionRefusalText('site.manage')}`,
+        now: () => now,
+      })
+      // `in`, not `!written.ok`: without strict null checks a boolean tag doesn't narrow.
+      if ('problem' in written) {
+        return res.status(written.status).json({ error: written.problem })
+      }
+      leftOutHostIds = written.leftOutHostIds
+    }
     const existing = await installRef.get()
     const pin = {
       listingId,
@@ -586,6 +638,7 @@ export const installPluginHandler: PluginApiHandler = async (req, res) => {
       upgraded: existing.exists,
       version,
       ...(hostAbiWarning ? { hostAbiWarning } : {}),
+      ...(leftOutHostIds.length ? { leftOutHostIds } : {}),
     })
   } catch (error) {
     console.error(error)

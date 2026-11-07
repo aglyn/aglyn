@@ -135,6 +135,19 @@ describe('planPluginRunsOn', () => {
     ).toBe('Keep at least one site in. To stop CRM on every site, switch it off for the workspace.')
   })
 
+  it('names a plugin the catalog can’t by the label it is given (AGL-4047)', () => {
+    // A marketplace plugin's id is its listing's, which nobody reads.
+    expect(
+      planPluginRunsOn({
+        pluginId: 'lst-1',
+        label: 'Promo Countdown',
+        choice: { mode: 'allExcept', exceptHostIds: ['a', 'b', 'c'] },
+        org: { enabledPlugins: ['lst-1'] },
+        sites: sites(),
+      }).problem,
+    ).toBe('Keep at least one site in. To stop Promo Countdown on every site, switch it off for the workspace.')
+  })
+
   it('refuses the base library, which runs on every site', () => {
     const plan = planPluginRunsOn({
       pluginId: 'mui',

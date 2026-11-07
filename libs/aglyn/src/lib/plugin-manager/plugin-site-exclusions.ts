@@ -158,6 +158,12 @@ export function planPluginRunsOn(input: {
   installedListings?: readonly string[] | null
   /** How a site reads in a refusal. Its id when absent. */
   siteName?: (hostId: string) => string
+  /**
+   * The plugin's name in a refusal, for one the catalog can't name: a
+   * marketplace plugin, whose id is its listing's (AGL-4047). The catalog's
+   * label, else the id, when absent.
+   */
+  label?: string
 }): PluginRunsOnPlan {
   const { pluginId, choice, org, sites } = input
   const refuse = (problem: string, stranded: PluginSiteStranding[] = []): PluginRunsOnPlan => ({
@@ -165,7 +171,7 @@ export function planPluginRunsOn(input: {
     problem,
     stranded,
   })
-  const label = labelOf(pluginId)
+  const label = input.label?.trim() || labelOf(pluginId)
   if (isLockedOnForSite(pluginId)) {
     return refuse(`${label} runs on every site, because sites are built out of it, so it can’t be left out.`)
   }

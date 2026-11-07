@@ -681,15 +681,20 @@ export function installPlanOutcome(input: {
   version?: string | null
   /** The artifact lands in a library and is not live (a template, a layout): "Saved", not "Installed". */
   saved?: boolean
+  /** Sites the org-wide pin left out, "All sites except…" (AGL-4047). */
+  leftOut?: number
 }): { tone: 'success' | 'warning' | 'error'; text: string } {
   const { name, installed, errors, orgWide, updating, version, saved } = input
+  const leftOut = input.leftOut ?? 0
   const noun = updating ? 'Updated' : saved ? 'Saved' : 'Installed'
   const toVersion = updating && version != null ? ` to v${version}` : ''
   if (installed && !errors.length) {
     return {
       tone: 'success',
       text: orgWide
-        ? `${noun} "${name}"${toVersion} for the whole organization`
+        ? leftOut > 0
+          ? `${noun} "${name}"${toVersion} for every site but ${leftOut === 1 ? 'the one' : `the ${leftOut}`} you left out, and for sites you add later`
+          : `${noun} "${name}"${toVersion} for the whole organization`
         : `${noun} "${name}"${toVersion} on ${installed} site${installed === 1 ? '' : 's'}`,
     }
   }
