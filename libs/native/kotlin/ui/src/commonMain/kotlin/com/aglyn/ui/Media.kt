@@ -133,6 +133,9 @@ fun rememberRemoteBitmap(url: String?): ImageBitmap? {
   return image
 }
 
+/** A picture from bytes the app already holds (a file fetched with the member's token), or null when it is not one. */
+fun decodeImageBytes(bytes: ByteArray): ImageBitmap? = runCatching { bytes.decodeToImageBitmap() }.getOrNull()
+
 /**
  * A person's photo (AGL-4010): their picture covering the circle, loaded with retries, and their [initials] on the
  * [fill] circle while it loads, when it fails, or when they have none. The one avatar every place a person appears
