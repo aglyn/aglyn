@@ -3405,6 +3405,22 @@
     },
     {
       "id": "waivers",
+      "mobile": {
+        "$comment": "AGL-4042/AGL-4043: a rider's waiver at check-in, natively: the status the console's waivers-check-in-status widget shows in commerce's posCheckIn zone (signed, signed for some, needed, not matched), Find by name with a date of birth, Check again, and Sign waiver, which opens the store's own signing page. The Waivers page itself stays in the console.",
+        "ios": {
+          "module": "AglynWaiversPlugin",
+          "register": "registerWaiversNative"
+        },
+        "android": {
+          "package": "com.aglyn.plugins.waivers",
+          "register": "registerWaiversNative"
+        },
+        "contributes": {
+          "widgets": [
+            "waivers.check-in-status"
+          ]
+        }
+      },
       "package": "@aglyn/plugins-waivers",
       "register": {
         "site": "registerWaiversPlugin",

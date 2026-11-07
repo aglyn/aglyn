@@ -44,6 +44,7 @@ let package = Package(
     .package(path: "Plugins/AglynShippingPlugin"),
     .package(path: "Plugins/AglynSmsPlugin"),
     .package(path: "Plugins/AglynTaxEnginesPlugin"),
+    .package(path: "Plugins/AglynWaiversPlugin"),
     .package(path: "Plugins/AglynWorkflowsPlugin"),
     .package(path: "Plugins/AglynZapierPlugin"),
   ],
@@ -84,6 +85,7 @@ let package = Package(
         .product(name: "AglynShippingPlugin", package: "AglynShippingPlugin"),
         .product(name: "AglynSmsPlugin", package: "AglynSmsPlugin"),
         .product(name: "AglynTaxEnginesPlugin", package: "AglynTaxEnginesPlugin"),
+        .product(name: "AglynWaiversPlugin", package: "AglynWaiversPlugin"),
         .product(name: "AglynWorkflowsPlugin", package: "AglynWorkflowsPlugin"),
         .product(name: "AglynZapierPlugin", package: "AglynZapierPlugin"),
       ]

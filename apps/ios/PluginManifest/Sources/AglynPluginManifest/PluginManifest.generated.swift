@@ -36,6 +36,7 @@ import AglynSalesChannelsPlugin
 import AglynShippingPlugin
 import AglynSmsPlugin
 import AglynTaxEnginesPlugin
+import AglynWaiversPlugin
 import AglynWorkflowsPlugin
 import AglynZapierPlugin
 
@@ -200,6 +201,11 @@ public enum NativePluginManifest {
       id: "tax-engines",
       contributes: ["screens": ["tax-engines.service"]],
       register: AglynTaxEnginesPlugin.registerTaxEnginesNative
+    ),
+    NativePluginManifestEntry(
+      id: "waivers",
+      contributes: ["widgets": ["waivers.check-in-status"]],
+      register: AglynWaiversPlugin.registerWaiversNative
     ),
     NativePluginManifestEntry(
       id: "workflows",

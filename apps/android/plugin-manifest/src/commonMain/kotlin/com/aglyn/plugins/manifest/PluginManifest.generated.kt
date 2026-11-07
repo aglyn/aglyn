@@ -38,6 +38,7 @@ import com.aglyn.plugins.saleschannels.registerSalesChannelsNative
 import com.aglyn.plugins.shipping.registerShippingNative
 import com.aglyn.plugins.sms.registerSmsNative
 import com.aglyn.plugins.taxengines.registerTaxEnginesNative
+import com.aglyn.plugins.waivers.registerWaiversNative
 import com.aglyn.plugins.workflows.registerWorkflowsNative
 import com.aglyn.plugins.zapier.registerZapierNative
 
@@ -202,6 +203,11 @@ object NativePluginManifest {
             id = "tax-engines",
             contributes = mapOf("screens" to listOf("tax-engines.service")),
             register = ::registerTaxEnginesNative,
+        ),
+        NativePluginManifestEntry(
+            id = "waivers",
+            contributes = mapOf("widgets" to listOf("waivers.check-in-status")),
+            register = ::registerWaiversNative,
         ),
         NativePluginManifestEntry(
             id = "workflows",
