@@ -1178,6 +1178,23 @@ describe('a verdict names the plugin and says what happened to it (AGL-3432)', (
     expect(mockListingDrops).toEqual([LISTING])
   })
 
+  // Each verdict that changes what may load on a live site must ask for the
+  // platform-wide plugin drop at its own call site (AGL-4121): with plugin
+  // reads on the week-long backstop, a missing call leaves the old set live.
+  it.each([
+    ['a takedown', { action: 'hide', reason: 'Exfiltrates form submissions.' }],
+    ['a restore', { action: 'unhide' }],
+    ['a revoked version', { action: 'revoke-version', version: VERSION }],
+    ['an unrevoked version', { action: 'unrevoke-version', version: VERSION }],
+  ])('%s drops every site’s plugin set (AGL-4121)', async (_label, body) => {
+    seedListing({ latestApprovedVersion: VERSION, reviewStatus: 'listed' })
+    seedVersion()
+    mockListingDrops.length = 0
+    const response = await POST(post({ listingId: LISTING, ...body }))
+    expect(response.status).toBe(200)
+    expect(mockListingDrops).toEqual([LISTING])
+  })
+
   it('CONTROL: rejecting an untrusted version changes nothing a site loads, so drops nothing', async () => {
     seedListing({ profileId: PUBLISHER })
     seedVersion()
