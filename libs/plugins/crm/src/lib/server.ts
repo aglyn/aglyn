@@ -78,6 +78,7 @@ import {
   readContactFacet,
   readCrmCustomInput,
   registerPluginApiRoute,
+  registerPluginJob,
   visibleToHost,
 } from '@aglyn/aglyn/server'
 import {
@@ -147,6 +148,36 @@ import {
   crmRecipeInstallHandler,
   crmRecipeStatusHandler,
 } from './server/recipe-routes'
+
+/*==========================================
+ * Finishes what a change to a workspace's sites left of keeping the CRM's
+ * "all sites except…" sharing level (AGL-4047, `server/crm-sharing-runs.ts`).
+ * A run document exists only while work is left, so a quiet beat costs one
+ * read.
+ *=========================================*/
+registerPluginJob({
+  pluginId: BUNDLE_ID,
+  name: 'continue-sharing-runs',
+  intervalMinutes: 5,
+  description:
+    'Finish keeping CRM records shared with all sites except some in step ' +
+    'with the sites in their workspace.',
+  lockdown: {
+    scope: 'platform',
+    reason:
+      'Rewrites which sites an org-owned CRM record names at orgs/{orgId}/… ' +
+      'and resolves no host. A locked site named on a record serves nothing ' +
+      'because of it, since the lock stops the serving, and taking a site ' +
+      'off a list is the direction a lock points.',
+  },
+  handler: async () => {
+    const { resumeCrmSharingRuns } = await import('./server/crm-sharing-runs')
+    const tally = await resumeCrmSharingRuns()
+    if (tally.droppedAfterFailing) {
+      console.error(`crm sharing runs: gave up on ${tally.droppedAfterFailing} after repeated failures`)
+    }
+  },
+})
 
 /**
  * `GET /api/crm/ping` → `{ ok: true, plugin: 'crm' }`.

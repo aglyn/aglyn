@@ -1060,8 +1060,10 @@ A document in an org collection can be shared with every site but a few. It keep
 | -- | -- |
 | `listScopeSharingCollections()` | Every collection the sweep walks, with its owner, in a stable order. |
 | `registerPluginScopeSharingPatch(collections, patch, { pluginId? })` | Registers the function that recomputes those fields. It receives the collection and the whole document as it will be stored, and its answer is merged into the write. Refuses a collection the plugin did not declare with `patch: true`. |
+| `registerPluginScopeSharingSiteChange(hook, { pluginId? })` | For sharing a plugin keeps somewhere the sweep does not walk, such as a grant inside a document. After every site change, once the sweep has run, the hook receives `{ orgId, reason, hostId?, budgetMs }`. It works for at most `budgetMs`, finishes the rest itself, and must never throw. One per plugin; registering again replaces it. |
+| `listScopeSharingSiteChangeHooks()` | Every registered hook, with its plugin. |
 
-Register a patch from `serverDeclarations`, deferring what it needs behind an `await import`: it registers in every server process, and only a sweep that finds a marked document calls it.
+Register a patch or a hook from `serverDeclarations`, deferring what it needs behind an `await import`: it registers in every server process, and only a sweep that finds a marked document calls a patch.
 
 ## Container kinds — `plugin-containers`
 
