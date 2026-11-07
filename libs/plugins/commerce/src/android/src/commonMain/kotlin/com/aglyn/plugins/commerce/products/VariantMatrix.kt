@@ -108,6 +108,6 @@ fun checkOptions(options: List<OptionDraft>): String? {
     if (option.values.size > COMMERCE_MAX_OPTION_VALUES) return "Option \"${option.name.trim()}\" has too many values"
   }
   if (options.map { it.name.trim() }.toSet().size != options.size) return "Each option needs its own name"
-  if (variantCountOf(options) > COMMERCE_MAX_VARIANTS) return "At most $COMMERCE_MAX_VARIANTS variants per product"
+  variantMatrixProblem(options)?.let { return it }
   return null
 }

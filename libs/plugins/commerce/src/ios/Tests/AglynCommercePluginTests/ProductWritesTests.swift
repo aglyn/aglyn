@@ -261,7 +261,8 @@ final class VariantMatrixTests: XCTestCase {
     XCTAssertEqual(checkOptions([option("A", 26)]), "Option \"A\" has too many values")
     XCTAssertEqual(checkOptions([option("A", 2), option("A ", 2)]), "Each option needs its own name")
     XCTAssertEqual(checkOptions([option("A", 1), option("B", 1), option("C", 1), option("D", 1)]), "At most 3 options per product")
-    XCTAssertEqual(checkOptions([option("A", 25), option("B", 5)]), "At most 100 variants per product")
+    // Said with the count and the way out, as the console says it (AGL-4100).
+    XCTAssertEqual(checkOptions([option("A", 25), option("B", 5)])?.hasPrefix("These options make 125 combinations, and a product holds at most 100."), true)
   }
 
   func testADraftChecksPricesAndCodesAcrossVariants() {
