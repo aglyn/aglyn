@@ -218,6 +218,24 @@ const renderInlines = (inlines: MarkdownInline[]) =>
         return <strong key={index}>{inline.text}</strong>
       case 'italic':
         return <em key={index}>{inline.text}</em>
+      // A setting, host or scope the README names in backticks (AGL-4197).
+      case 'code':
+        return (
+          <Box
+            key={index}
+            component="code"
+            sx={{
+              px: 0.5,
+              borderRadius: 0.5,
+              bgcolor: 'action.hover',
+              fontFamily: 'monospace',
+              fontSize: '0.9em',
+              overflowWrap: 'anywhere',
+            }}
+          >
+            {inline.text}
+          </Box>
+        )
       case 'link': {
         /*
           No routing map is passed, and that is the answer rather than an
@@ -249,7 +267,7 @@ const renderInlines = (inlines: MarkdownInline[]) =>
 
 /**
  * Publisher README (AGL-431), rendered through markdown-lite — the parser
- * only ever emits text/bold/italic/http(s)-links/images, so publisher-
+ * only ever emits text/bold/italic/code/http(s)-links/images, so publisher-
  * written docs can't inject markup or javascript: URLs. Code blocks and
  * tables carry text only (AGL-974); the same guarantee holds for both.
  */
@@ -324,7 +342,10 @@ function ListingChangelog({
 // Exported for the renderer-parity spec (AGL-1315).
 export function ListingReadme({ readme }: { readme: string }) {
   const blocks = useMemo<MarkdownBlock[]>(
-    () => parseMarkdownLite(readme.slice(0, LISTING_README_MAX_CHARS)),
+    () =>
+      parseMarkdownLite(readme.slice(0, LISTING_README_MAX_CHARS), {
+        inlineCode: true,
+      }),
     [readme],
   )
   return (
