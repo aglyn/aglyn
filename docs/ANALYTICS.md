@@ -986,9 +986,22 @@ Every payload passes `sanitizeEventParams` before reaching a transport:
   exact-key, because substring matching would wrongly drop the legitimate
   `form_name` / `item_name` / `link_domain`;
 - any value that merely _looks like_ an email drops its key entirely;
-- URLs are reduced to origin + pathname, so a query string cannot smuggle a
-  token or an address. The reduction runs **before** the email test, so a page
-  URL with `?email=…` keeps its useful path instead of being thrown away whole;
+- a URL keeps its query, in its own order and spelling, minus the parameters
+  that carry personal data or a credential. That list is
+  `ANALYTICS_DENIED_URL_PARAMS`: every identity key above, plus the names our
+  own links put a person or a secret in (`login_hint`, `customer_email`,
+  Firebase's `oobCode` / `apiKey` / `continueUrl`, the sign-in `handoff`, the
+  first-touch `_ft`, the native sign-in `challenge` / `state` / `code`, and
+  bearer names such as `token`, `sig`, `key`, `session_id`), each entry citing
+  where it comes from. As a backstop, a parameter of any name is dropped when
+  its value is shaped like an email address, a phone number or a token (a JWT,
+  or a long mixed-case or hex run); the phone and token shapes skip `utm_*`
+  and the ad click ids, which are opaque ids by design. A value that is itself
+  a URL or a same-site path (`continue=/x?…`) has its own query filtered the
+  same way. The fragment is dropped, and a parameter that would push the URL
+  past 100 characters is left out whole rather than cut. The email test runs on
+  the path **after** the query is set aside, so a page URL with `?email=…`
+  keeps its useful path instead of being thrown away whole;
 - strings are capped at 100 characters.
 
 `user_id` on the console is an opaque Firebase uid and is the one identifier GA
@@ -1792,6 +1805,15 @@ with it. The console now sends `window.location.href`, reduced by
 was the one console event bypassing the sanitizer. That matters here more than
 anywhere: a console URL is the value most likely to carry an address, since
 prefilled invite and signup links put one in the query.
+
+The reduction later turned out to strip too much. This `page_view` starts the
+console session, and GA4 attributes a session by the hit that starts it, so a
+visitor who scanned a QR code for
+`/signup?utm_source=event&utm_medium=qr&utm_campaign=trailer-left` reached GA4
+as a bare `/signup` and the session had no campaign. The sanitizer now keeps
+the query and removes only the parameters that were the reason for stripping
+it: the address and credential names our own links set, and any value shaped
+like an address, a phone number or a token.
 
 **The first pageview of every load was counted twice, and this was verified
 rather than inferred.** Booting Firebase Analytics issues

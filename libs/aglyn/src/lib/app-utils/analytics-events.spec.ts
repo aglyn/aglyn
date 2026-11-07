@@ -18,6 +18,7 @@
  */
 
 import {
+  ANALYTICS_DENIED_URL_PARAMS,
   ANALYTICS_EVENT_NAMES,
   buildAddToCartParams,
   buildBeginCheckoutParams,
@@ -624,12 +625,177 @@ describe('analytics-events (AGL-1561)', () => {
       expect(safe).toEqual({ form_name: 'Contact' })
     })
 
-    it('scrubs URLs to origin + pathname so a query string cannot smuggle a token', () => {
+    it('drops the address and the token from a URL query, keeping the page', () => {
       const safe = sanitizeEventParams({
         content_id: 'https://aglyn.com/pricing?email=person@example.com&token=secret',
       })
 
       expect(safe).toEqual({ content_id: 'https://aglyn.com/pricing' })
+    })
+
+    describe('a URL keeps its query, minus the parameters that carry personal data', () => {
+      it('keeps the signup QR-code campaign exactly as the link spelled it', () => {
+        const safe = sanitizeEventParams({
+          page_location:
+            'https://app.aglyn.com/signup?utm_source=event&utm_medium=qr&utm_campaign=trailer-left',
+        })
+
+        expect(safe).toEqual({
+          page_location:
+            'https://app.aglyn.com/signup?utm_source=event&utm_medium=qr&utm_campaign=trailer-left',
+        })
+      })
+
+      it('keeps utm, click ids and every other ordinary param untouched, in their own order', () => {
+        const url =
+          'https://a.co/x?tab=team&utm_term=t&ref=flyer&gclid=Cj0KCQiA_x-Y9z&page=2&utm_id=9'
+        expect(sanitizeEventParams({ page_location: url })).toEqual({ page_location: url })
+
+        // The URL's own spelling survives too: no re-encoding of what is kept.
+        const spelled = 'https://a.co/?filters=status%3Aopen&q=red+shoes&utm_campaign=Fall%202026'
+        expect(sanitizeEventParams({ page_location: spelled })).toEqual({
+          page_location: spelled,
+        })
+      })
+
+      it('keeps the long opaque click ids the token backstop would otherwise catch', () => {
+        const gclid = 'Cj0KCQiAx9q6BhCDARIsACwUxu6Kq2RbTz1XkQ8w'
+        const safe = sanitizeEventParams({
+          page_location: `https://a.co/?gclid=${gclid}&gad_campaignid=21843509871`,
+        })
+
+        expect(safe).toEqual({
+          page_location: `https://a.co/?gclid=${gclid}&gad_campaignid=21843509871`,
+        })
+      })
+
+      it.each([
+        ['email', 'email=someone%40example.com'],
+        ['name', 'name=Pat'],
+        ['phone', 'phone=5550100'],
+        ['login_hint', 'login_hint=pat'],
+        ['customer_email', 'customer_email=pat'],
+        ['oobCode', 'oobCode=abc'],
+        ['apiKey', 'apiKey=abc'],
+        ['continueUrl', 'continueUrl=https%3A%2F%2Fa.co'],
+        ['handoff', 'handoff=rid1'],
+        ['_ft', '_ft=sealed'],
+        ['challenge', 'challenge=abc'],
+        ['state', 'state=abc'],
+        ['code', 'code=abc'],
+        ['nonce', 'nonce=abc'],
+        ['token', 'token=abc'],
+        ['id_token', 'id_token=abc'],
+        ['idToken', 'idToken=abc'],
+        ['customToken', 'customToken=abc'],
+        ['key', 'key=abc'],
+        ['sig', 'sig=abc'],
+        ['session', 'session=abc'],
+        ['session_id', 'session_id=cs_test_1'],
+        ['invite', 'invite=abc'],
+        ['inviteId', 'inviteId=abc'],
+      ])('removes the denied `%s` param and keeps the rest', (_name, pair) => {
+        const safe = sanitizeEventParams({
+          page_location: `https://app.aglyn.com/signup?utm_source=ads&${pair}&plan=pro`,
+        })
+
+        expect(safe).toEqual({
+          page_location: 'https://app.aglyn.com/signup?utm_source=ads&plan=pro',
+        })
+      })
+
+      it('matches a denied name in any case', () => {
+        const safe = sanitizeEventParams({
+          page_location: 'https://a.co/?EMAIL=x&OOBCODE=y&tab=1',
+        })
+
+        expect(safe).toEqual({ page_location: 'https://a.co/?tab=1' })
+      })
+
+      it('removes an UNLISTED param whose value is an email address', () => {
+        const safe = sanitizeEventParams({
+          page_location:
+            'https://app.aglyn.com/signup?contact=person%40example.com&utm_source=event&who=a@b.co',
+        })
+
+        expect(safe).toEqual({
+          page_location: 'https://app.aglyn.com/signup?utm_source=event',
+        })
+      })
+
+      it('removes a utm value that carries an address, keeping the rest of the campaign', () => {
+        const safe = sanitizeEventParams({
+          page_location:
+            'https://app.aglyn.com/signup?utm_source=person%40example.com&utm_medium=email&utm_campaign=x',
+        })
+
+        expect(safe).toEqual({
+          page_location: 'https://app.aglyn.com/signup?utm_medium=email&utm_campaign=x',
+        })
+        expect(String(safe.page_location)).not.toMatch(/person|example\.com/)
+      })
+
+      it('removes an unlisted param whose value is a phone number', () => {
+        const safe = sanitizeEventParams({
+          page_location: 'https://a.co/?tel=%2B1%20(555)%20010-0199&cell=5550100199&tab=1',
+        })
+
+        expect(safe).toEqual({ page_location: 'https://a.co/?tab=1' })
+      })
+
+      it('removes an unlisted param whose value is a JWT or a long opaque token', () => {
+        const jwt = 'eyJhbGciOiJIUzI1NiJ9.eyJzdWIiOiIxMjM0NTY3ODkwIn0.dozjgNryP4J3jVmNHl0w5N'
+        const safe = sanitizeEventParams({
+          page_location:
+            `https://a.co/?t=${jwt}&rid=Zx81LmQ02VbNc7TyR4uP9sWe3HaK6GdJ` +
+            '&h=0123456789abcdef0123456789abcdef&tab=1',
+        })
+
+        expect(safe).toEqual({ page_location: 'https://a.co/?tab=1' })
+      })
+
+      it('keeps a long lowercase slug, which is not a token', () => {
+        const url = 'https://a.co/?site=best-plumbers-in-austin-texas-2026-edition'
+        expect(sanitizeEventParams({ page_location: url })).toEqual({ page_location: url })
+      })
+
+      it('filters the query of a nested continue path, so a credential cannot ride one level down', () => {
+        const safe = sanitizeEventParams({
+          page_location:
+            'https://app.aglyn.com/signin?continue=%2Fauth%2Fhandoff%2Fcontinue%3Fhandoff%3Drid1%26tab%3Dx',
+        })
+
+        expect(safe).toEqual({
+          page_location:
+            'https://app.aglyn.com/signin?continue=%2Fauth%2Fhandoff%2Fcontinue%3Ftab%3Dx',
+        })
+        // A nested path with nothing denied in it is kept as the URL spelled it.
+        expect(
+          sanitizeEventParams({ page_location: 'https://app.aglyn.com/signin?continue=/billing' }),
+        ).toEqual({ page_location: 'https://app.aglyn.com/signin?continue=/billing' })
+      })
+
+      it('drops the fragment', () => {
+        expect(
+          sanitizeEventParams({ link_url: 'https://partner.example/page?ref=aglyn#access_token=x' }),
+        ).toEqual({ link_url: 'https://partner.example/page?ref=aglyn' })
+      })
+
+      it('leaves out a whole param that would run past the cap, never half of one', () => {
+        const safe = sanitizeEventParams({
+          page_location: `https://aglyn.com/p?utm_source=s&utm_campaign=${'c'.repeat(90)}&utm_term=t`,
+        })
+
+        expect(safe).toEqual({
+          page_location: 'https://aglyn.com/p?utm_source=s&utm_term=t',
+        })
+      })
+
+      it('lists the denied names as lowercase, the form the match uses', () => {
+        for (const name of ANALYTICS_DENIED_URL_PARAMS) {
+          expect(name).toBe(name.toLowerCase())
+        }
+      })
     })
 
     it('sanitizes items entries with the same rules', () => {
@@ -700,7 +866,7 @@ describe('analytics-events (AGL-1561)', () => {
       expect(calls[0][2]).toEqual({ plan: 'pro' })
     })
 
-    it('reduces a URL param to origin + pathname, so the query string stays out', () => {
+    it('drops the address and the session from an authored URL param, keeping the page', () => {
       const calls = installGtag()
 
       trackAuthoredEvent('doc_opened', {
