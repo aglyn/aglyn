@@ -33,8 +33,25 @@ can share a **lead**, a **contact**, a **company** or a **deal**:
 - **By a sharing rule**: every record the rule matches, including the ones
   you already have and every one captured or changed later.
 
-You can share with chosen sites or with **All sites**. All sites includes
-sites you add to the workspace later.
+You can share with **All sites**, with **Selected sites**, or with **All sites
+except…** the ones you leave out. All sites, and all sites except some, include
+sites you add to the workspace later; selected sites don't.
+
+### All sites except some {#all-sites-except-some}
+
+Tick the sites to leave out, and every other site sees the record. A site you
+add later sees it too, once the workspace has finished adding the site. Leave
+out at least one site and keep at least one in; a workspace with one site has
+nothing to leave out, so the choice is switched off there, with the reason.
+It reaches up to 30 sites, so a workspace with more than 30 sites shares
+with selected sites instead.
+
+Leaving out the site that captured the person changes nothing for that site:
+it holds the record, and sharing never takes that away.
+
+Sharing only adds sites to a record. A record every site already sees, which
+is every record in a workspace that hasn't chosen **Only the site they came in
+on**, looks the same after sharing with all sites except some.
 
 ## What a shared record looks like
 
@@ -51,8 +68,9 @@ anyone else that button is switched off, with the permission named:
 
 - **Held by**: the sites that captured the record. Their visibility comes
   from the record itself, and sharing never removes it.
-- **Shared by hand**: the site, who shared it and when. A member holding
-  **Change CRM settings** can stop sharing it in one click.
+- **Shared by hand**: the site, or all sites except the ones left out, who
+  shared it and when. A member holding **Change CRM settings** can stop
+  sharing it in one click.
 - **Shared by a rule**: the rule's name. To stop it, edit or delete the rule
   in [Settings](#sharing-rules).
 
@@ -63,7 +81,8 @@ also holds the record (it captured the person itself), it keeps seeing it.
 
 1. Open the lead, contact, company or deal.
 2. In the **Sharing** card, choose **Share with sites…**.
-3. Pick the sites, or **All sites, including sites added later**.
+3. Choose **All sites**, **Selected sites** and tick them, or **All sites
+   except…** and tick the sites to leave out.
 4. Choose the [access](#access-read-only-or-read-and-edit), then **Share**.
 
 The record's **Activity** gets an entry that says who shared it and with
@@ -83,7 +102,7 @@ rules. Each rule has three parts:
 | part | what you choose |
 | -- | -- |
 | **Which records** | Leads, contacts, companies or deals. You can limit it to records captured on certain sites, and add optional conditions: lead source, lead source direction (Inbound or Outbound), tags, campaign, status or lifecycle stage, and owner. |
-| **Shared with** | Chosen sites, or all sites (including sites added later). |
+| **Shared with** | All sites, selected sites, or all sites except the ones you leave out. All sites, and all sites except some, include sites added later. |
 | **Access** | Read-only, or read and edit. |
 
 Conditions are combined with AND. Several values in one condition are

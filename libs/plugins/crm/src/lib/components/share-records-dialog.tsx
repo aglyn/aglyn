@@ -16,19 +16,21 @@
  */
 'use client'
 
-import { MAX_SCOPE_HOSTS } from '@aglyn/aglyn'
+import { sharingFromChoice } from '@aglyn/aglyn/app-utils/scope-tokens'
+import {
+  SiteSharingField,
+  type SiteSharingValue,
+} from '@aglyn/shared-ui-jsx/components/site-sharing-field.component'
 import { useSnackbar } from '@aglyn/shared-ui-snackstack'
 import { useUser } from '@aglyn/tenant-feature-instance'
 import {
   Button,
-  Checkbox,
   Dialog,
   DialogActions,
   DialogContent,
   DialogTitle,
   FormControl,
   FormControlLabel,
-  FormGroup,
   FormHelperText,
   FormLabel,
   Radio,
@@ -36,8 +38,9 @@ import {
   Stack,
   Typography,
 } from '@mui/material'
-import { useEffect, useState } from 'react'
+import { useEffect, useMemo, useState } from 'react'
 import {
+  CRM_SHARING_MAX_INCLUDED,
   CRM_SHARING_OBJECT_LABELS,
   type CrmShareAccess,
   type CrmSharingObject,
@@ -55,14 +58,31 @@ export interface ShareRecordsDialogProps {
   scope: CrmTaskRouteScope | null
   sites: readonly CrmSharingSite[]
   sitesReady: boolean
-  /** Sites that already hold the record — not offered, since they see it anyway. */
+  /**
+   * Sites that already hold the record. They are listed like every site, so
+   * what each choice reaches reads true, and the dialog says they keep it.
+   */
   heldHostIds?: readonly string[]
   onShared?: (changed: number) => void
 }
 
 /**
- * "Share with sites…" (AGL-3336): the sites a manager picks, or All sites —
- * which covers a site created later — and whether they may edit.
+ * What `crm/sharing` `share` reads as `targets` for a choice (AGL-4047):
+ * `'all'`, the sites, or all sites except the ones left out.
+ */
+export function shareTargetsOfChoice(
+  choice: SiteSharingValue,
+): 'all' | string[] | { mode: 'allExcept'; exceptHostIds: string[] } {
+  if (choice.mode === 'all') return 'all'
+  if (choice.mode === 'selected') return [...choice.hostIds]
+  return { mode: 'allExcept', exceptHostIds: [...choice.exceptHostIds] }
+}
+
+/**
+ * "Share with sites…" (AGL-3336): All sites — which covers a site created
+ * later — the sites a manager picks, or all sites except the ones they leave
+ * out (AGL-4047), which a site created later also joins; and whether they
+ * may edit. Radios and a visible list, through the shared sharing field.
  *
  * Read-only is the default. The sentence under the choice is the guardrail
  * a manager has to read before sharing: the other site sees the person and
@@ -72,31 +92,42 @@ export function ShareRecordsDialog(props: ShareRecordsDialogProps) {
   const { open, onClose, object, ids, scope, sites, sitesReady, heldHostIds = [], onShared } = props
   const { data: user } = useUser()
   const { enqueueSnackbar } = useSnackbar()
-  const [allSites, setAllSites] = useState(false)
-  const [picked, setPicked] = useState<string[]>([])
+  // Nothing is chosen until the manager chooses.
+  const [choice, setChoice] = useState<SiteSharingValue | null>(null)
   const [access, setAccess] = useState<CrmShareAccess>('read')
   const [busy, setBusy] = useState(false)
   useEffect(() => {
     if (!open) return
-    setAllSites(false)
-    setPicked([])
+    setChoice(null)
     setAccess('read')
   }, [open])
 
-  const offered = sites.filter((site) => !heldHostIds.includes(site.id))
+  const holders = sites.filter((site) => heldHostIds.includes(site.id)).map((site) => site.name)
+  const others = sites.length - holders.length
   const label = CRM_SHARING_OBJECT_LABELS[object]
   const what = ids.length === 1 ? `this ${label.one}` : `${ids.length} ${label.many.toLowerCase()}`
-  const tooMany = !allSites && picked.length > MAX_SCOPE_HOSTS
-  const ready = Boolean(scope) && ids.length > 0 && (allSites || picked.length > 0) && !tooMany
+  // What the route will answer, from the same helper: the sites it reaches
+  // are worked out against every site of the workspace, held ones included.
+  const problem = useMemo(() => {
+    if (!choice) return null
+    if (choice.mode === 'selected' && !choice.hostIds.length) return 'Choose a site to share with.'
+    if (choice.mode === 'allExcept' && !sitesReady) return null
+    return sharingFromChoice(
+      choice,
+      sites.map((site) => site.id),
+      { maxIncluded: CRM_SHARING_MAX_INCLUDED },
+    ).problem
+  }, [choice, sites, sitesReady])
+  const ready = Boolean(scope) && ids.length > 0 && Boolean(choice) && !problem
 
   const submit = async () => {
-    if (!scope || !ready) return
+    if (!scope || !ready || !choice) return
     setBusy(true)
     try {
       const answer = await callCrmSharing(user, scope, 'share', {
         object,
         ids,
-        targets: allSites ? 'all' : picked,
+        targets: shareTargetsOfChoice(choice),
         access,
       })
       enqueueSnackbar(
@@ -122,46 +153,24 @@ export function ShareRecordsDialog(props: ShareRecordsDialogProps) {
           <Typography variant="body2" color="text.secondary">
             {`The sites you pick see ${what} on their CRM lists and can log activity and tasks on it.`}
           </Typography>
-          <FormGroup>
-            <FormControlLabel
-              control={
-                <Checkbox
-                  checked={allSites}
-                  onChange={(event) => setAllSites(event.target.checked)}
-                />
-              }
-              label="All sites, including sites added later"
-            />
-            {offered.map((site) => (
-              <FormControlLabel
-                key={site.id}
-                control={
-                  <Checkbox
-                    checked={allSites || picked.includes(site.id)}
-                    disabled={allSites}
-                    onChange={(event) =>
-                      setPicked((current) =>
-                        event.target.checked
-                          ? [...current, site.id]
-                          : current.filter((id) => id !== site.id),
-                      )
-                    }
-                  />
-                }
-                label={site.name}
-              />
-            ))}
-            {!sitesReady ? (
-              <FormHelperText>{'Loading your sites…'}</FormHelperText>
-            ) : !offered.length ? (
-              <FormHelperText>{'No other site to share with. All sites still covers sites added later.'}</FormHelperText>
-            ) : null}
-            {tooMany ? (
-              <FormHelperText error>
-                {`Choose ${MAX_SCOPE_HOSTS} sites or fewer, or share with All sites.`}
-              </FormHelperText>
-            ) : null}
-          </FormGroup>
+          <SiteSharingField
+            label="Share with"
+            value={choice}
+            onChange={setChoice}
+            sites={sites}
+            sitesReady={sitesReady}
+            maxIncluded={CRM_SHARING_MAX_INCLUDED}
+            problem={problem}
+          />
+          {sitesReady && !others ? (
+            <FormHelperText>{'No other site to share with. All sites still covers sites added later.'}</FormHelperText>
+          ) : holders.length ? (
+            <FormHelperText>
+              {`${holders.join(', ')} already ${holders.length === 1 ? 'holds' : 'hold'} ${what}, and ${
+                holders.length === 1 ? 'keeps' : 'keep'
+              } it whatever you choose.`}
+            </FormHelperText>
+          ) : null}
           <FormControl>
             <FormLabel>{'Access'}</FormLabel>
             <RadioGroup

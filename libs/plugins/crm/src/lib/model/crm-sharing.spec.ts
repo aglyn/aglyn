@@ -36,21 +36,30 @@ import {
   visibleToTokens,
 } from '@aglyn/aglyn'
 import {
+  CRM_SHARING_MAX_INCLUDED,
   crmRecordWritableBy,
   crmShareChipFor,
   crmShareChipLabel,
   crmSharingRuleMatches,
   type CrmSharingRule,
   describeRecordSharing,
+  describeShareTargets,
   evaluateRecordGrants,
+  MANUAL_EXCEPT_GRANT_KEY,
   manualGrantKey,
   planRecordSharing,
   readCrmSharingRules,
+  readRecordGrants,
   recordHeldScope,
   ruleGrantKey,
+  shareExceptChoiceFrom,
+  sharingAsksOrgSites,
   sharingPlanChanges,
   shareTargetsFrom,
+  sitesAllExcept,
+  withManualExceptShare,
   withManualShares,
+  withoutManualExceptShare,
   withoutManualShares,
 } from './crm-sharing'
 
@@ -291,5 +300,150 @@ describe('sharing rules (AGL-3336)', () => {
     expect(shareTargetsFrom(['site-b', 'site-b', 'site-c'])).toEqual([B, C])
     expect(shareTargetsFrom(['host:site-b'])).toBeNull()
     expect(shareTargetsFrom([])).toBeNull()
+  })
+})
+
+describe('all sites except some (AGL-4047)', () => {
+  const ORG_SITES = ['site-a', 'site-b', 'site-c']
+  const D = 'host:site-d'
+
+  it('a hand share reaches every site but the ones left out, through tokens, added and writeTo', () => {
+    const lead = leadOnA()
+    const grants = withManualExceptShare({}, { tokens: [B], except: [C] }, 'edit', BY, 5)
+    expect(grants[MANUAL_EXCEPT_GRANT_KEY]).toMatchObject({ tokens: [B], except: [C], access: 'edit' })
+    const plan = planRecordSharing(lead, grants)
+    expect(plan.visibleTo).toEqual([A, B])
+    expect(plan.writeTo).toEqual([A, B])
+    expect(plan.sharing).toMatchObject({ added: [B], hasExcept: true })
+    expect(heldScopeTokens(stored(lead, plan))).toEqual([A])
+  })
+
+  it('a site added later joins the next time the record is worked out; the one left out never does', () => {
+    const lead = leadOnA()
+    const shared = stored(
+      lead,
+      planRecordSharing(lead, withManualExceptShare({}, { tokens: [B], except: [C] }, 'read', BY, 5)),
+    )
+    const grants = evaluateRecordGrants('leads', shared, [], 9, { orgHostIds: [...ORG_SITES, 'site-d'] })
+    expect(grants[MANUAL_EXCEPT_GRANT_KEY].tokens).toEqual([A, B, D])
+    const plan = planRecordSharing(shared, grants)
+    // The capturing site is held, so it is never counted as added.
+    expect(plan.visibleTo).toEqual([A, B, D])
+    expect(plan.sharing?.added).toEqual([B, D])
+    expect(plan.visibleTo).not.toContain(C)
+  })
+
+  it('keeps the person on the site that captured them, even when that site is left out', () => {
+    const lead = leadOnA()
+    const grants = evaluateRecordGrants(
+      'leads',
+      lead,
+      [rule({ sourceHostIds: [], targets: [B, C], except: [A] })],
+      5,
+      { orgHostIds: ORG_SITES },
+    )
+    expect(grants['rule_r1']).toMatchObject({ tokens: [B, C], except: [A] })
+    const plan = planRecordSharing(lead, grants)
+    expect(plan.visibleTo).toEqual([A, B, C])
+    expect(heldScopeTokens(stored(lead, plan))).toEqual([A])
+  })
+
+  it('changes nothing on a record every site already holds', () => {
+    const orgHeld = { ...leadOnA(), visibleTo: ['org'] }
+    const plan = planRecordSharing(
+      orgHeld,
+      withManualExceptShare({}, { tokens: [B], except: [C] }, 'read', BY, 5),
+    )
+    expect(plan.visibleTo).toEqual(['org'])
+    expect(plan.sharing?.added).toEqual([])
+  })
+
+  it('a rule leaving sites out follows the workspace’s sites, and keeps its date while they stand still', () => {
+    const rules = [rule({ sourceHostIds: [], targets: [B], except: [C] })]
+    const lead = leadOnA()
+    const grants = evaluateRecordGrants('leads', lead, rules, 10, { orgHostIds: ORG_SITES })
+    const shared = stored(lead, planRecordSharing(lead, grants))
+    expect(shared['visibleTo']).toEqual([A, B])
+    const again = planRecordSharing(
+      shared,
+      evaluateRecordGrants('leads', shared, rules, 50, { orgHostIds: ORG_SITES }),
+    )
+    expect(sharingPlanChanges(shared, again)).toBe(false)
+    const widened = planRecordSharing(
+      shared,
+      evaluateRecordGrants('leads', shared, rules, 60, { orgHostIds: [...ORG_SITES, 'site-d'] }),
+    )
+    expect(widened.visibleTo).toEqual([A, B, D])
+    // A site that left the workspace leaves the grant.
+    const narrowed = planRecordSharing(
+      shared,
+      evaluateRecordGrants('leads', shared, rules, 70, { orgHostIds: ['site-a', 'site-c'] }),
+    )
+    expect(narrowed.visibleTo).toEqual([A])
+  })
+
+  it('keeps the sites it reached when the workspace’s sites are not known', () => {
+    expect(sitesAllExcept([C], undefined, [B, C])).toEqual([B])
+  })
+
+  it('stops widening past thirty sites, keeping the ones it reached that are still there', () => {
+    const many = Array.from({ length: 32 }, (_, index) => `s${String(index).padStart(2, '0')}`)
+    const before = many.slice(0, 30).map((id) => `host:${id}`)
+    const after = sitesAllExcept(['host:s00'], [...many, 'extra'], before)
+    expect(after).toEqual(before.slice(1))
+    expect(CRM_SHARING_MAX_INCLUDED).toBe(30)
+  })
+
+  it('describes and unshares the hand share as one line', () => {
+    const lead = leadOnA()
+    const grants = withManualShares(
+      withManualExceptShare({}, { tokens: [B], except: [C] }, 'read', BY, 5),
+      [C],
+      'read',
+      BY,
+      6,
+    )
+    const record = stored(lead, planRecordSharing(lead, grants))
+    const lines = describeRecordSharing(record)
+    expect(lines.map((line) => line.kind).sort()).toEqual(['held', 'manual', 'manualExcept'])
+    const name = (id: string) => ({ 'site-b': 'Shop', 'site-c': 'Blog' })[id] ?? id
+    const line = lines.find((entry) => entry.kind === 'manualExcept')
+    if (line?.kind !== 'manualExcept') throw new Error('expected the except line')
+    expect(describeShareTargets(line.tokens, name, line.except)).toBe('All sites except Blog')
+    const left = withoutManualExceptShare(readRecordGrants(record))
+    expect(Object.keys(left)).toEqual([manualGrantKey(C)])
+  })
+
+  it('reads a stored grant and rule with `except`, and never a grant that says all sites beside it', () => {
+    const rules = readCrmSharingRules({
+      crm: {
+        sharingRules: [
+          { id: 'r1', name: 'x', object: 'leads', targets: [B], except: [C, 'org', 'nonsense'] },
+          { id: 'r2', name: 'y', object: 'leads', targets: ['org'] },
+        ],
+      },
+    })
+    expect(rules[0]).toMatchObject({ targets: [B], except: [C] })
+    expect(rules[1]).not.toHaveProperty('except')
+    expect(
+      readRecordGrants({ sharing: { grants: { g: { source: 'manual', tokens: ['org'], except: [C] } } } }),
+    ).toEqual({})
+    expect(
+      readRecordGrants({ sharing: { grants: { g: { source: 'manual', tokens: [], except: [C] } } } })['g'],
+    ).toMatchObject({ tokens: [], except: [C] })
+  })
+
+  it('reads the choice off a request, and nothing else', () => {
+    expect(
+      shareExceptChoiceFrom({ mode: 'allExcept', exceptHostIds: ['site-c', 'site-c', 'host:x', 'a/b'] }),
+    ).toEqual({ mode: 'allExcept', exceptHostIds: ['site-c'] })
+    expect(shareExceptChoiceFrom('all')).toBeNull()
+    expect(shareExceptChoiceFrom(['site-c'])).toBeNull()
+  })
+
+  it('asks for the workspace’s sites only where a grant or a rule leaves some out', () => {
+    expect(sharingAsksOrgSites('leads', leadOnA(), [rule()])).toBe(false)
+    expect(sharingAsksOrgSites('leads', leadOnA(), [rule({ except: [C] })])).toBe(true)
+    expect(sharingAsksOrgSites('contacts', leadOnA(), [rule({ except: [C] })])).toBe(false)
   })
 })
