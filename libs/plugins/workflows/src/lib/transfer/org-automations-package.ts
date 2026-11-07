@@ -37,7 +37,11 @@
 import type { PackageDependency } from '@aglyn/aglyn/data-transfer/package'
 import { remapPackageReference, TRANSFER_SITE_KIND } from '@aglyn/aglyn/data-transfer/package-plan'
 import { hostIdsFromScope, hostScopeToken, ORG_SCOPE_TOKEN } from '@aglyn/aglyn/app-utils/scope-tokens'
-import { readOrgAutomation, type OrgAutomationFields } from '../model/org-automations'
+import {
+  orgAutomationStoredSharing,
+  readOrgAutomation,
+  type OrgAutomationFields,
+} from '../model/org-automations'
 
 /** The resource key, and so the kind every automation item carries. */
 export const ORG_AUTOMATIONS_TRANSFER_KEY = 'workflows.org-automations'
@@ -72,10 +76,19 @@ const STEP_REFERENCES: ReadonlyArray<{ field: string; kind: string }> = [
  * here and a problem at the dry run.
  */
 export function orgAutomationPackageContent(source: unknown): OrgAutomationPackageContent | null {
-  const read = readOrgAutomation(source)
+  /*
+   * A stored automation that runs on all sites except some carries that as the
+   * sweep's marker, never as `sharing`. The package says it as the choice
+   * (AGL-4047), so an import works the sites out from the workspace it lands
+   * in, and a new site there gets it as it would here.
+   */
+  const stored = source && typeof source === 'object' && !('sharing' in source)
+    ? orgAutomationStoredSharing(source as Record<string, unknown>)
+    : null
+  const read = readOrgAutomation(stored ? { ...(source as Record<string, unknown>), sharing: stored } : source)
   if (read.ok === false) return null
-  const { name, trigger, steps, visibleTo } = read.value
-  return { name, trigger, steps, visibleTo }
+  const { name, trigger, steps, visibleTo, sharing } = read.value
+  return { name, trigger, steps, visibleTo, ...(sharing?.mode === 'allExcept' ? { sharing } : {}) }
 }
 
 /** The incoming content as stored, before it is judged: whatever the file holds, shaped like an automation. */
@@ -86,7 +99,13 @@ export function rawOrgAutomationContent(source: unknown): OrgAutomationPackageCo
     trigger: (raw.trigger ?? { event: '', conditions: null, combinator: null }) as OrgAutomationPackageContent['trigger'],
     steps: Array.isArray(raw.steps) ? raw.steps : [],
     visibleTo: Array.isArray(raw.visibleTo) ? raw.visibleTo : [],
+    ...(raw.sharing ? { sharing: raw.sharing } : {}),
   }
+}
+
+/** The sites an all-sites-except automation leaves out, or none. */
+function exceptHostIdsOf(content: OrgAutomationPackageContent): readonly string[] {
+  return content.sharing?.mode === 'allExcept' ? content.sharing.exceptHostIds : []
 }
 
 export function orgAutomationDependencies(content: OrgAutomationPackageContent): PackageDependency[] {
@@ -98,6 +117,7 @@ export function orgAutomationDependencies(content: OrgAutomationPackageContent):
     deps.push({ kind, id })
   }
   for (const hostId of hostIdsFromScope(content.visibleTo)) add(TRANSFER_SITE_KIND, hostId)
+  for (const hostId of exceptHostIdsOf(content)) add(TRANSFER_SITE_KIND, hostId)
   for (const step of content.steps ?? []) {
     for (const { field, kind } of STEP_REFERENCES) add(kind, (step as unknown as StepRecord)[field])
   }
@@ -129,7 +149,24 @@ export function remapOrgAutomationIds(
     }
     return record as unknown as OrgAutomationPackageContent['steps'][number]
   })
-  return { ...content, visibleTo: visibleTo as OrgAutomationPackageContent['visibleTo'], steps }
+  /*
+   * A site left out that the plan drops stays out of nothing: it is not
+   * there. If none is left, the reader refuses it rather than run it on
+   * every site (AGL-4047).
+   */
+  const sharing =
+    content.sharing?.mode === 'allExcept'
+      ? {
+          sharing: {
+            mode: 'allExcept' as const,
+            exceptHostIds: exceptHostIdsOf(content).flatMap((hostId) => {
+              const mapped = remapPackageReference(idMap, TRANSFER_SITE_KIND, hostId)
+              return mapped ? [mapped] : []
+            }),
+          },
+        }
+      : {}
+  return { ...content, visibleTo: visibleTo as OrgAutomationPackageContent['visibleTo'], steps, ...sharing }
 }
 
 export const ORG_AUTOMATION_PACKAGE_RULES = [

@@ -34,6 +34,7 @@ import {
 } from '@aglyn/aglyn'
 import {
   getRepeatSourcesVersion,
+  repeatKeyOptionLabel,
   repeatSourceOf,
   subscribeRepeatSources,
 } from '@aglyn/aglyn/app-utils/repeat-sources'
@@ -55,6 +56,11 @@ export interface InsertTokenOptionsResult {
   options: BindingOption[]
   /** Display-name resolution inputs for pill rendering (AGL-586). */
   labelContext: TokenLabelContext
+  /**
+   * Whether the node is inside a repeat (or repeats itself), where an
+   * `{{item.*}}` token has a record to read (AGL-4212).
+   */
+  inRepeat: boolean
 }
 
 /**
@@ -141,6 +147,8 @@ export function componentPropDefaultPreview(
  * name: the source says which prop holds its key and which entity picker
  * kind the key names (`RepeatSource.entityKind`). A key may be an entity id
  * OR a legacy display name — either resolves against the picker's options.
+ * A source whose keys are no entity lists its fields itself
+ * (`RepeatSource.fields`, AGL-4212).
  */
 export function useInsertTokenOptions(
   node?: Aglyn.NodeSchema<any> | null,
@@ -191,14 +199,29 @@ export function useInsertTokenOptions(
           entityOptions.resolved?.[kind]?.[key] ??
           undefined
         : undefined
+    /*
+     * A source whose keys are no entity (a plugin connection's record,
+     * AGL-4212) names its fields itself, and its picker names the key.
+     */
+    const named =
+      !kind && repeat?.source.fields
+        ? {
+            label: repeatKeyOptionLabel(repeat.source, repeat.key),
+            fields: repeat.source.fields(repeat.key) ?? [],
+          }
+        : undefined
     return {
       inCollectionEntries,
+      inRepeat: Boolean(repeat),
       // What the repeat's items are called in the menu — the source's own
       // name for what it repeats over.
       itemNoun: repeat?.source.label,
-      entityLabel: entity?.label,
-      itemFields:
-        kind && entity ? entityOptions.entityFields?.[kind]?.[entity.id] ?? [] : [],
+      entityLabel: named ? named.label : entity?.label,
+      itemFields: named
+        ? named.fields.map((field) => ({ id: field.id, label: field.label }))
+        : kind && entity
+          ? entityOptions.entityFields?.[kind]?.[entity.id] ?? []
+          : [],
       // Carried out of the walk so the effect below can ask for the entity
       // list without repeating it.
       entityKind: kind,
@@ -302,9 +325,10 @@ export function useInsertTokenOptions(
     [options, bindingVariables, bindingFunctions, insertContext.itemFields],
   )
 
+  const inRepeat = insertContext.inRepeat
   return useMemo(
-    () => ({ options, labelContext }),
-    [options, labelContext],
+    () => ({ options, labelContext, inRepeat }),
+    [options, labelContext, inRepeat],
   )
 }
 

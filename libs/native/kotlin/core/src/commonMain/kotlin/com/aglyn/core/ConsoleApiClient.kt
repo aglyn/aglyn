@@ -1,6 +1,7 @@
 package com.aglyn.core
 
 import io.ktor.client.HttpClient
+import io.ktor.client.request.forms.submitFormWithBinaryData
 import io.ktor.client.request.header
 import io.ktor.client.request.request
 import io.ktor.client.request.setBody
@@ -263,6 +264,35 @@ class ConsoleApiClient(
     }
     if (response.status.value !in 200..299) {
       throw ConsoleApiError("Storage refused the upload (${response.status.value}).", response.status.value, null)
+    }
+  }
+
+  /**
+   * Sends a file to a signed upload form a route handed out (a visitor upload's ticket, which a quote's proof
+   * uses): the policy's [fields] first and the file last, as Storage reads them, no bearer. Like the console's
+   * `sendVisitorUpload`, it does not read the answer: the route's finalize says whether the file arrived. Throws
+   * only when nothing reached storage.
+   */
+  suspend fun postSignedForm(url: String, fields: Map<String, String>, fileName: String, contentType: String, bytes: ByteArray) {
+    require(url.startsWith("https://") || url.startsWith("http://")) { "A signed upload URL is absolute: $url" }
+    try {
+      http.submitFormWithBinaryData(
+        url,
+        io.ktor.client.request.forms.formData {
+          fields.forEach { (key, value) -> append(key, value) }
+          append(
+            "file", bytes,
+            io.ktor.http.Headers.build {
+              append(io.ktor.http.HttpHeaders.ContentType, contentType)
+              append(io.ktor.http.HttpHeaders.ContentDisposition, "filename=\"${fileName.replace("\"", "")}\"")
+            },
+          )
+        },
+      )
+    } catch (error: CancellationException) {
+      throw error
+    } catch (error: Throwable) {
+      throw ConsoleApiError("The file could not be sent. Check your connection and try again.", 0, null)
     }
   }
 

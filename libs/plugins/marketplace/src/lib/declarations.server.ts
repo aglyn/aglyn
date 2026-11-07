@@ -28,7 +28,8 @@ import { registerPluginSiteResourceEraser } from '@aglyn/aglyn/plugin-manager/pl
 import { registerPluginSiteCspSource } from '@aglyn/aglyn/plugin-manager/plugin-site-csp'
 import { registerPluginSiteStarterSource } from '@aglyn/aglyn/plugin-manager/plugin-site-starters'
 import { registerSitePageEnricherService } from '@aglyn/aglyn/plugin-manager/site-page-enricher-services'
-import { BUNDLE_ID } from './constants/bundle-common'
+import { registerRepeatRowReader } from '@aglyn/aglyn/plugin-manager/repeat-rows'
+import { BUNDLE_ID, CONNECTION_REPEAT_SOURCE_ID } from './constants/bundle-common'
 import { RATING_FIELD } from './model/rating-field'
 
 /**
@@ -141,12 +142,17 @@ const siteRecords = () => import('./server/connections/site-records-platform')
  *   - the variable computer gives each record's declared summary fields to
  *     the page as `{{var:…}}` values;
  *   - the CSP source admits the image hosts the site's signed plugins
- *     declare, on those sites only.
+ *     declare, on those sites only;
+ *   - the repeat-rows reader answers a page's repeats over a connection's
+ *     record (`repeatConnection`, AGL-4212), the `connection:` keys the
+ *     platform routes to the source this plugin declares.
  *
- * All three go through the plugin-service registry, which `instrumentation.ts`
- * and the page route share (a module-scope list filled at boot is empty in
- * the route, AGL-3947), and each names this plugin as its owner, so the
- * page's "who contributed" narrowing still holds. Registering again replaces.
+ * The first three go through the plugin-service registry, which
+ * `instrumentation.ts` and the page route share (a module-scope list filled at
+ * boot is empty in the route, AGL-3947), and the reader through the
+ * repeat-rows table, which is per process for the same reason. Each names
+ * this plugin as its owner, so the page's "who contributed" narrowing still
+ * holds. Registering again replaces.
  */
 function registerPluginConnectionsSite(): void {
   registerSitePageEnricherService(
@@ -159,6 +165,11 @@ function registerPluginConnectionsSite(): void {
   )
   registerPluginSiteCspSource(
     { hosts: async (input) => (await siteRecords()).pluginImageHostsSource.hosts(input) },
+    { pluginId: BUNDLE_ID },
+  )
+  registerRepeatRowReader(
+    CONNECTION_REPEAT_SOURCE_ID,
+    async (request) => (await siteRecords()).connectionRepeatRowReader(request),
     { pluginId: BUNDLE_ID },
   )
 }

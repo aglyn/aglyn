@@ -24,25 +24,24 @@ import {
   triggerFilterProblem,
 } from '@aglyn/aglyn'
 import {
-  hostIdsFromScope,
   hostScopeToken,
-  isOrgWideScope,
-  MAX_SCOPE_HOSTS,
   ORG_SCOPE_TOKEN,
+  scopeSharingOf,
+  sharingFromChoice,
 } from '@aglyn/aglyn/app-utils/scope-tokens'
+import {
+  SiteSharingField,
+  type SiteSharingValue,
+} from '@aglyn/shared-ui-jsx/components/site-sharing-field.component'
 import {
   Alert,
   Button,
-  Checkbox,
   Dialog,
   DialogActions,
   DialogContent,
   DialogTitle,
   FormControlLabel,
-  FormGroup,
   MenuItem,
-  Radio,
-  RadioGroup,
   Stack,
   Switch,
   TextField,
@@ -90,9 +89,11 @@ export interface OrgAutomationDraft {
   conditionCombinator: TriggerCombinator
   steps: HostActionStep[]
   enabled: boolean
-  /** `org` runs on every site; `sites` on the ones in `siteIds`. */
-  placement: 'org' | 'sites'
-  siteIds: string[]
+  /**
+   * Where it runs: every site, the sites chosen, or every site except the
+   * ones left out (AGL-4047), as the sharing field edits it.
+   */
+  sharing: SiteSharingValue
 }
 
 /** A blank draft: every site, one email step, switched on. */
@@ -106,9 +107,16 @@ export function newOrgAutomationDraft(): OrgAutomationDraft {
     conditionCombinator: 'and',
     steps: [defaultStep('sendEmail')],
     enabled: true,
-    placement: 'org',
-    siteIds: [],
+    sharing: { mode: 'all' },
   }
+}
+
+/** Where a stored automation runs, as the sharing field edits it. */
+function sharingOfRow(row: OrgAutomationRow): SiteSharingValue {
+  const sharing = scopeSharingOf(row as unknown as Record<string, unknown>)
+  if (sharing.mode === 'all') return { mode: 'all' }
+  if (sharing.mode === 'allExcept') return { mode: 'allExcept', exceptHostIds: sharing.exceptHostIds }
+  return { mode: 'selected', hostIds: sharing.mode === 'selected' ? sharing.hostIds : [] }
 }
 
 /** A stored org automation as the editor opens it. */
@@ -125,8 +133,7 @@ export function orgAutomationDraft(row: OrgAutomationRow): OrgAutomationDraft {
     conditionCombinator: row.trigger?.combinator === 'or' ? 'or' : 'and',
     steps: [...(row.steps ?? [])],
     enabled: row.enabled !== false,
-    placement: isOrgWideScope(row.visibleTo) ? 'org' : 'sites',
-    siteIds: hostIdsFromScope(row.visibleTo),
+    sharing: sharingOfRow(row),
   }
 }
 
@@ -163,17 +170,38 @@ export function orgAutomationDraftFromProposal(
   }
 }
 
-/** The placement a draft stores, as scope tokens. */
-export function draftPlacement(draft: OrgAutomationDraft): string[] {
-  return draft.placement === 'org'
-    ? [ORG_SCOPE_TOKEN]
-    : draft.siteIds.map(hostScopeToken)
+/**
+ * What a draft's placement would store given the workspace's sites, or why it
+ * can't be: the answer the manage route gives, from `sharingFromChoice`. The
+ * sites a draft leaves out stay known here even where the list lacks them, so
+ * they aren't taken for sites that are gone.
+ */
+export function draftSharing(draft: OrgAutomationDraft, orgHostIds: readonly string[]) {
+  const leftOut = draft.sharing.mode === 'allExcept' ? draft.sharing.exceptHostIds : []
+  return sharingFromChoice(draft.sharing, [...orgHostIds, ...leftOut])
 }
 
-/** The body `automations/manage` reads, from a draft. */
+/**
+ * The automation as its placement would leave it, for the pickers that offer
+ * only what reaches every site it runs on (`sharingCovers`).
+ */
+export function draftPlacement(
+  draft: OrgAutomationDraft,
+  orgHostIds: readonly string[],
+): Readonly<Record<string, unknown>> {
+  const fields = draftSharing(draft, orgHostIds).fields
+  return fields ? { ...fields } : { visibleTo: [] }
+}
+
+/**
+ * The body `automations/manage` reads, from a draft: the choice, which decides
+ * (AGL-4047), and beside every site or the chosen ones the `visibleTo` it
+ * stores, as the route read it before there was a choice.
+ */
 export function orgAutomationBody(
   draft: OrgAutomationDraft,
 ): Record<string, unknown> {
+  const { sharing } = draft
   return {
     name: draft.name.trim(),
     trigger: {
@@ -183,7 +211,17 @@ export function orgAutomationBody(
     },
     steps: draft.steps,
     enabled: draft.enabled,
-    visibleTo: draftPlacement(draft),
+    ...(sharing.mode === 'all'
+      ? { visibleTo: [ORG_SCOPE_TOKEN] }
+      : sharing.mode === 'selected'
+        ? { visibleTo: sharing.hostIds.map(hostScopeToken) }
+        : {}),
+    sharing:
+      sharing.mode === 'all'
+        ? { mode: 'all' }
+        : sharing.mode === 'selected'
+          ? { mode: 'selected', hostIds: [...sharing.hostIds] }
+          : { mode: 'allExcept', exceptHostIds: [...sharing.exceptHostIds] },
   }
 }
 
@@ -210,17 +248,25 @@ export interface OrgAutomationEditorProps {
  */
 export function OrgAutomationEditor(props: OrgAutomationEditorProps) {
   const { mount, draft, onDraft, opened, saving, onSave, onClose } = props
+  const orgHostIds = useMemo(() => mount.hosts.map((host) => host.id), [mount.hosts])
   const placement = useMemo(
-    () => (draft ? draftPlacement(draft) : [ORG_SCOPE_TOKEN]),
-    [draft],
+    () => (draft ? draftPlacement(draft, orgHostIds) : { visibleTo: [ORG_SCOPE_TOKEN] }),
+    [draft, orgHostIds],
   )
   const { pickers, truncated } = useOrgAutomationStepPickers(
     mount.orgId,
     opened,
     placement,
   )
-  const sites = useMemo(() => orgSiteOptions(mount), [mount])
-  const tooManySites = (draft?.siteIds.length ?? 0) > MAX_SCOPE_HOSTS
+  const sites = useMemo(
+    () => orgSiteOptions(mount).map((site) => ({ id: site.value, name: site.label })),
+    [mount],
+  )
+  // Nothing to say about leaving sites out until the sites have been read.
+  const sharingProblem =
+    draft && (draft.sharing.mode !== 'allExcept' || mount.hostsReady)
+      ? draftSharing(draft, orgHostIds).problem
+      : null
   return (
     <Dialog open={Boolean(draft)} onClose={onClose} maxWidth="md" fullWidth>
       <DialogTitle>
@@ -305,69 +351,14 @@ export function OrgAutomationEditor(props: OrgAutomationEditorProps) {
             }))
           }
         />
-        <Typography variant="overline" color="text.secondary">
-          {'Runs on'}
-        </Typography>
-        <RadioGroup
-          row
-          value={draft?.placement ?? 'org'}
-          onChange={(event) =>
-            onDraft((previous) => ({
-              ...previous,
-              placement: event.target.value === 'sites' ? 'sites' : 'org',
-            }))
-          }
-        >
-          <FormControlLabel
-            value="org"
-            control={<Radio size="small" />}
-            label="Every site"
-          />
-          <FormControlLabel
-            value="sites"
-            control={<Radio size="small" />}
-            label="Chosen sites"
-          />
-        </RadioGroup>
-        {draft?.placement === 'sites' ? (
-          <FormGroup aria-label="Sites it runs on">
-            {!mount.hostsReady ? (
-              <Typography variant="caption" color="text.secondary">
-                {'…'}
-              </Typography>
-            ) : !sites.length ? (
-              <Typography variant="body2" color="text.secondary">
-                {'This organization has no sites yet.'}
-              </Typography>
-            ) : (
-              sites.map((site) => (
-                <FormControlLabel
-                  key={site.value}
-                  control={
-                    <Checkbox
-                      size="small"
-                      checked={draft.siteIds.includes(site.value)}
-                      onChange={(event) =>
-                        onDraft((previous) => ({
-                          ...previous,
-                          siteIds: event.target.checked
-                            ? [...previous.siteIds, site.value]
-                            : previous.siteIds.filter((id) => id !== site.value),
-                        }))
-                      }
-                    />
-                  }
-                  label={site.label}
-                />
-              ))
-            )}
-            {tooManySites ? (
-              <Typography variant="caption" color="error">
-                {`Choose ${MAX_SCOPE_HOSTS} sites or fewer, or run it on every site.`}
-              </Typography>
-            ) : null}
-          </FormGroup>
-        ) : null}
+        <SiteSharingField
+          label="Runs on"
+          value={draft?.sharing ?? { mode: 'all' }}
+          onChange={(next) => onDraft((previous) => ({ ...previous, sharing: next }))}
+          sites={sites}
+          sitesReady={mount.hostsReady}
+          problem={sharingProblem}
+        />
         <Typography variant="overline" color="text.secondary">
           {'Steps (run in order)'}
         </Typography>

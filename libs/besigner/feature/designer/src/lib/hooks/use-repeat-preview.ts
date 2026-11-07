@@ -71,6 +71,8 @@ export interface RepeatPreview {
   missing?: boolean
   /** Which scope applies, so the canvas draws what the page will build. */
   scope: RepeatScope
+  /** The prop the key is stored under, so the badge opens that field (AGL-4212). */
+  keyProp?: string
   /** The repeated rows, for the token substitution's reference hops. */
   dataset?: RepeatableDataset
   /** Every key the rows answered under, for a one-hop reference (AGL-180). */
@@ -107,7 +109,12 @@ export function useRepeatPreview(node: unknown): RepeatPreview | undefined {
   const request = useMemo(() => {
     const repeat = source ? repeatSourceOf({ props }) : undefined
     return repeat
-      ? { sourceId: repeat.source.id, key: repeat.key, label: repeat.source.label }
+      ? {
+          sourceId: repeat.source.id,
+          key: repeat.key,
+          label: repeat.source.label,
+          keyProp: repeat.source.keyProp,
+        }
       : undefined
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [source, props, propsJson])
@@ -135,6 +142,7 @@ export function useRepeatPreview(node: unknown): RepeatPreview | undefined {
         label: request.label,
         records: [],
         scope: repeatScope(node),
+        keyProp: request.keyProp,
         missing: true,
       }
     }
@@ -145,6 +153,7 @@ export function useRepeatPreview(node: unknown): RepeatPreview | undefined {
       label: answer.label,
       records,
       scope: repeatScope(node),
+      keyProp: request.keyProp,
       dataset,
       datasetsByKey: answer.rowsByKey,
     }

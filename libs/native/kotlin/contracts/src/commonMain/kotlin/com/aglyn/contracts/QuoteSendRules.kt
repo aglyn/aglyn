@@ -124,3 +124,21 @@ fun quotePayLinkWords(order: HostOrder?): QuotePayLinkWords {
     if (proofOnly) "proof link" else "pay link", if (proofOnly) "Proof link" else "Pay link", if (proofOnly) "proof" else "quote", explanation,
   )
 }
+
+/** The longest reply a quote's conversation takes (`QUOTE_MESSAGE_MAX`). */
+const val QUOTE_MESSAGE_MAX = 5_000
+
+/** Who a reply from the quote goes to: the customer's email, else where it was last emailed (`quoteReplyRecipient`). */
+fun quoteReplyRecipient(order: HostOrder?): String = quoteSendPrefill(order)
+
+/**
+ * Why the business can't reply to the quote's customer now, as the console says it (`quoteReplyRefusal` and
+ * `quoteReplyRefusalMessage`); null when it can. A paid quote still takes replies.
+ */
+fun quoteReplyRefusal(order: HostOrder?): String? {
+  if (order == null || order.channel != OrderChannel.QUOTE || order.quote == null) return "Unknown quote"
+  val to = quoteReplyRecipient(order)
+  if (to.isEmpty()) return "This quote has no customer email, so there is nobody to reply to. Add their email to the quote first."
+  if (to.length > 320 || !Regex("""^[^\s@]+@[^\s@]+\.[^\s@]+$""").matches(to)) return "The customer email on this quote isn’t a valid address. Fix it on the quote first."
+  return null
+}

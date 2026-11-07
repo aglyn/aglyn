@@ -32,6 +32,7 @@ import {
   type AnimationPreset,
   type AnimationTrigger,
 } from './element-animation'
+import { repeatKey } from './expand-repeatables'
 
 /**
  * Entrance motion for a whole page (AGL-3838): the pass that writes the
@@ -310,8 +311,9 @@ export function applyElementMotion<T extends Record<string, any>>(nodes: T, opti
     const componentId = String(at.componentId ?? '')
     const kids = children(id)
     let result: boolean
-    // A dataset repeated over one card renders one child per record.
-    if ((at.props?.['repeatDataset'] || LISTS.has(componentId)) && kids.length) result = true
+    // A repeat over one card renders one child per record (a dataset's, or a
+    // plugin connection's, AGL-4212).
+    if ((repeatKey(at) || LISTS.has(componentId)) && kids.length) result = true
     else if (kids.length < 2) result = false
     else {
       const first = String(node(kids[0])?.componentId ?? '')

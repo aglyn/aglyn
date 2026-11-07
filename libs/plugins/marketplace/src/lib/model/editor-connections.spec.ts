@@ -74,6 +74,30 @@ describe('the editor half of declared connections (AGL-4196)', () => {
     expect(value.listingFor('acme.wall')).toBe('Kq3')
   })
 
+  it('lists each syncing connection of a namespaced install as repeatable (AGL-4212)', () => {
+    const value = editorPluginConnections({
+      installs: [
+        { listingId: 'Kq3', identity: 'acme.reviews' },
+        { listingId: 'Old' },
+      ],
+      listings: [
+        { listingId: 'Kq3', connections: [CONNECTION] },
+        // Published before identities existed: nothing a value can name.
+        { listingId: 'Old', connections: [CONNECTION] },
+      ],
+      records: {},
+    })
+    expect(value.repeatables).toEqual([
+      {
+        identity: 'acme.reviews',
+        listingId: 'Kq3',
+        connectionId: 'gbp',
+        label: 'Google Business Profile',
+        types: { fields: { rating: 'number', reviewCount: 'number' }, items: {} },
+      },
+    ])
+  })
+
   it('only a connection that syncs writes a record', () => {
     expect(syncingConnectionsOf(null)).toEqual([])
     expect(syncingConnectionsOf({ connections: 'nope' })).toEqual([])

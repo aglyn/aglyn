@@ -339,6 +339,75 @@ describeEmulated('a DAM delete leaves a restorable tombstone (AGL-1467)', () => 
     expect(doc.exists).toBe(false)
   }, 60_000)
 
+  /**
+   * Shared with all sites except some (AGL-4047). The sites such a file
+   * reaches are a list the sweep keeps up, and the sweep never sees a file
+   * while it sits in its tombstone. So it comes back reaching the sites the
+   * workspace has when it comes back.
+   */
+  describe('a file shared with all sites except some', () => {
+    const MARKED = {
+      ...MEDIA_DOC,
+      visibleTo: ['host:site-a', 'host:site-b'],
+      scopeMode: 'allExcept',
+      scopeExcept: ['host:site-c'],
+    }
+
+    async function deleteMarked(bucket: ReturnType<typeof fakeBucket>) {
+      await scopeRef.set({ hosts: { 'site-a': true, 'site-b': true, 'site-c': true } })
+      await scopeRef.collection('media').doc(MEDIA_ID).set(MARKED)
+      bucket.put(OBJECT_PATH)
+      await tombstone.deleteMediaWithTombstone({
+        scopeRef,
+        bucket,
+        mediaId: MEDIA_ID,
+        objectPath: OBJECT_PATH,
+        uid: 'e2e-deleter-uid',
+      })
+    }
+
+    it('comes back on a site added while it was deleted, and off one that left', async () => {
+      const bucket = fakeBucket()
+      await deleteMarked(bucket)
+      await scopeRef.set({ hosts: { 'site-a': true, 'site-c': true, 'site-new': true } })
+
+      const restore = await tombstone.restoreMediaFromTombstone({ scopeRef, bucket, mediaId: MEDIA_ID, billing: {} })
+      expect(restore).toMatchObject({ ok: true, status: 200 })
+
+      const restored = (await scopeRef.collection('media').doc(MEDIA_ID).get()).data() ?? {}
+      expect(restored['visibleTo']).toEqual(['host:site-a', 'host:site-new'])
+      expect(restored['scopeMode']).toBe('allExcept')
+      expect(restored['scopeExcept']).toEqual(['host:site-c'])
+      expect(restored['alt']).toBe(MEDIA_DOC.alt)
+    }, 60_000)
+
+    it('comes back on All sites, with no marker and no null, once the site it left out is gone', async () => {
+      const bucket = fakeBucket()
+      await deleteMarked(bucket)
+      await scopeRef.set({ hosts: { 'site-a': true, 'site-b': true } })
+
+      await tombstone.restoreMediaFromTombstone({ scopeRef, bucket, mediaId: MEDIA_ID, billing: {} })
+
+      const restored = (await scopeRef.collection('media').doc(MEDIA_ID).get()).data() ?? {}
+      expect(restored['visibleTo']).toEqual(['org'])
+      expect(Object.keys(restored)).not.toContain('scopeMode')
+      expect(Object.keys(restored)).not.toContain('scopeExcept')
+    }, 60_000)
+
+    it('an unmarked file reads no sites (negative control)', async () => {
+      const bucket = fakeBucket()
+      bucket.put(OBJECT_PATH)
+      await scopeRef.collection('media').doc(MEDIA_ID).set({ ...MEDIA_DOC, visibleTo: ['host:site-b'] })
+      await tombstone.deleteMediaWithTombstone({ scopeRef, bucket, mediaId: MEDIA_ID, objectPath: OBJECT_PATH, uid: 'e2e-deleter-uid' })
+      await scopeRef.set({ hosts: { 'site-a': true } })
+
+      await tombstone.restoreMediaFromTombstone({ scopeRef, bucket, mediaId: MEDIA_ID, billing: {} })
+
+      const restored = (await scopeRef.collection('media').doc(MEDIA_ID).get()).data() ?? {}
+      expect(restored['visibleTo']).toEqual(['host:site-b'])
+    }, 60_000)
+  })
+
   it('a second undo is a no-op, not a second counter increment', async () => {
     const bucket = fakeBucket()
     bucket.put(OBJECT_PATH)

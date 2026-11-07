@@ -16,7 +16,12 @@
  */
 
 import {
+  hostScopeToken,
   normalizeVisibleTo,
+  ORG_SCOPE_TOKEN,
+  type SCOPE_MODE_ALL_EXCEPT,
+  type ScopeSharingChoice,
+  scopeSharingOf,
   type ScopeToken,
   visibleToHost,
 } from '@aglyn/aglyn/app-utils/scope-tokens'
@@ -246,12 +251,32 @@ export interface OrgAutomationFields {
   /**
    * The sites it runs on, as scope tokens: `['org']` is every site of the
    * organization, now and later; `['host:{id}', …]` names up to thirty.
+   * For one that runs on all sites except some, the sites still in, which
+   * the route works out from the workspace's sites when it writes: the
+   * reader leaves it empty.
    */
   visibleTo: ScopeToken[]
+  /**
+   * How the editor chose the sites (AGL-4047), when it said so. Set, it
+   * decides: `allExcept` is written by the route as the included sites plus
+   * the sweep's marker (`scopeMode`, `scopeExcept`), and `all` or `selected`
+   * removes a marker the automation carried. Missing, as from a client that
+   * predates it, a save that leaves `visibleTo` as it was keeps the marker,
+   * and one that changes it removes it. Never stored under this name.
+   */
+  sharing?: ScopeSharingChoice
 }
 
 /** `orgs/{orgId}/automations/{id}`, as it is stored. */
-export interface OrgAutomation extends OrgAutomationFields {
+export interface OrgAutomation extends Omit<OrgAutomationFields, 'sharing'> {
+  /**
+   * Set on one that runs on all sites except some (AGL-4047): the marker the
+   * sweep keeps `visibleTo` up to date from as sites come and go. Only the
+   * manage route writes it, and it removes it with a field delete.
+   */
+  scopeMode?: typeof SCOPE_MODE_ALL_EXCEPT
+  /** The sites left out, as scope tokens, beside `scopeMode`. */
+  scopeExcept?: ScopeToken[]
   /**
    * The sites that have paused it for themselves — each a site id, never a
    * scope token. The "host level control": a site's admin or editor adds or
@@ -391,6 +416,49 @@ function readStep(raw: unknown): HostActionStep | { type: unknown } {
   return step as HostActionStep
 }
 
+/** The most site ids one choice may name: far past any workspace. */
+const SHARING_CHOICE_MAX_IDS = 1000
+
+const SHARING_PROBLEM =
+  'Choose every site, the sites, or every site except some, for it to run on'
+
+/**
+ * A sharing choice off the wire (AGL-4047), or null when there is none. Ids are
+ * held to a document id's shape here; whether they are the workspace's is the
+ * route's to ask.
+ */
+function readSharingChoice(
+  raw: unknown,
+): { ok: true; choice: ScopeSharingChoice | null } | { ok: false; problem: string } {
+  if (raw === undefined || raw === null) return { ok: true, choice: null }
+  const source = asObject(raw)
+  const ids = (list: unknown): string[] | null =>
+    Array.isArray(list) &&
+    list.length <= SHARING_CHOICE_MAX_IDS &&
+    list.every((id) => typeof id === 'string' && /^[^:/]+$/.test(id))
+      ? [...new Set(list as string[])]
+      : null
+  if (source?.['mode'] === 'all') return { ok: true, choice: { mode: 'all' } }
+  if (source?.['mode'] === 'selected') {
+    const hostIds = ids(source['hostIds'])
+    return hostIds
+      ? { ok: true, choice: { mode: 'selected', hostIds } }
+      : { ok: false, problem: SHARING_PROBLEM }
+  }
+  if (source?.['mode'] === 'allExcept') {
+    const exceptHostIds = ids(source['exceptHostIds'])
+    if (!exceptHostIds) return { ok: false, problem: SHARING_PROBLEM }
+    if (!exceptHostIds.length) {
+      return {
+        ok: false,
+        problem: 'Choose at least one site to leave out, or run it on every site',
+      }
+    }
+    return { ok: true, choice: { mode: 'allExcept', exceptHostIds } }
+  }
+  return { ok: false, problem: SHARING_PROBLEM }
+}
+
 /** What a caller sends to create or replace an org automation. */
 export type OrgAutomationInput = Record<string, unknown>
 
@@ -403,10 +471,11 @@ export type OrgAutomationInput = Record<string, unknown>
  * the two this vocabulary adds: the trigger must be an org trigger and every
  * step an org step. The placement must be a scope a save can store:
  * `normalizeVisibleTo` refuses an empty one and one over thirty sites rather
- * than guessing between sharing wider and taking access away.
+ * than guessing between sharing wider and taking access away. All sites
+ * except some (AGL-4047) must leave at least one site out.
  *
  * Whether each named site belongs to the organization is the route's to ask,
- * because it takes a read.
+ * because it takes a read, and so is which sites all-but-some reaches.
  */
 export function readOrgAutomation(
   input: unknown,
@@ -454,13 +523,28 @@ export function readOrgAutomation(
     steps: steps as HostActionStep[],
   })
   if (problem) return { ok: false, problem }
-  const visibleTo = normalizeVisibleTo(
-    Array.isArray(body['visibleTo'])
-      ? (body['visibleTo'] as unknown[]).filter(
-          (token): token is string => typeof token === 'string',
-        )
-      : [],
-  )
+  const sharing = readSharingChoice(body['sharing'])
+  if (sharing.ok === false) return { ok: false, problem: sharing.problem }
+  const choice = sharing.choice
+  /*
+   * A choice decides the placement; without one, `visibleTo` does, as it did
+   * before there was a choice. All sites except some names no site here: the
+   * route works the sites out from the workspace's, in the write.
+   */
+  const visibleTo: ScopeToken[] | null =
+    choice?.mode === 'allExcept'
+      ? []
+      : choice?.mode === 'all'
+        ? [ORG_SCOPE_TOKEN]
+        : normalizeVisibleTo(
+            choice?.mode === 'selected'
+              ? choice.hostIds.map(hostScopeToken)
+              : Array.isArray(body['visibleTo'])
+                ? (body['visibleTo'] as unknown[]).filter(
+                    (token): token is string => typeof token === 'string',
+                  )
+                : [],
+          )
   if (!visibleTo) {
     return {
       ok: false,
@@ -480,8 +564,23 @@ export function readOrgAutomation(
       steps: steps as HostActionStep[],
       enabled: body['enabled'] !== false,
       visibleTo,
+      ...(choice ? { sharing: choice } : {}),
     },
   }
+}
+
+/**
+ * The sharing choice a STORED automation was written with, for a reader that
+ * has to say it back (AGL-4047): all sites except some, read off the marker,
+ * or null for one whose `visibleTo` already says everything.
+ */
+export function orgAutomationStoredSharing(
+  automation: Readonly<Record<string, unknown>> | null | undefined,
+): Extract<ScopeSharingChoice, { mode: 'allExcept' }> | null {
+  const sharing = scopeSharingOf(automation)
+  return sharing.mode === 'allExcept'
+    ? { mode: 'allExcept', exceptHostIds: sharing.exceptHostIds }
+    : null
 }
 
 /** A stored document's pause list, read defensively. */
@@ -542,7 +641,9 @@ export function orgAutomationRunsOnHost(
 /**
  * A pause list after the placement changed: a site the automation no longer
  * runs on has nothing left to pause, so its entry goes with it, and a site
- * placed on it again later starts unpaused.
+ * placed on it again later starts unpaused. A site left out of one that runs
+ * on all sites except some is not in `visibleTo`, so its pause goes too
+ * (AGL-4047).
  */
 export function prunePausedHostIds(
   pausedHostIds: readonly string[],

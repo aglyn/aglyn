@@ -44,7 +44,7 @@
 import { readFileSync } from 'node:fs'
 import { join } from 'node:path'
 
-import * as Aglyn from '@aglyn/aglyn'
+import { mediaSharingChoiceOf, mediaSharingKey } from './media-sharing'
 
 import { code } from '../../specs/source-text'
 
@@ -193,10 +193,15 @@ describe('AGL-1466 · the sharing editor shows what is stored', () => {
    * the field: the answer is one function, not four correct copies. Every
    * place this component reads a STORED scope goes through
    * `storedScope`, so "absent means nothing is stored" is decided once.
+   *
+   * Since AGL-4047 that one function is `mediaSharingChoiceOf`, which reads
+   * all sites except some too and answers null where nothing is stored.
    */
   it('reads every stored scope through the one helper', () => {
-    // The three readers: the selection dialog, the drawer seed, the save gate.
-    expect(CODE.match(/(?:Aglyn\.)?\bstoredScope\(/g) ?? []).toHaveLength(3)
+    // The four readers: the selection dialog, the folder dialog, the drawer
+    // seed, the save gate.
+    expect(CODE.match(/\bmediaSharingChoiceOf\(/g) ?? []).toHaveLength(4)
+    expect(CODE.match(/(?:Aglyn\.)?\bstoredScope\(/g) ?? []).toHaveLength(0)
   })
 
   /**
@@ -244,16 +249,19 @@ describe('AGL-1480 · the detail drawer shows what is stored', () => {
   }
 
   /** The `handleEditorSave` local that decides whether the save writes. */
-  const previousScope = (): string => {
-    const start = CODE.indexOf('const previousScope')
+  const scopeChanged = (): string => {
+    const start = CODE.indexOf('const scopeChanged =')
     expect(start).toBeGreaterThan(-1)
-    return CODE.slice(start, CODE.indexOf('\n', start))
+    const end = CODE.indexOf('const sharingWrite', start)
+    expect(end).toBeGreaterThan(start)
+    return CODE.slice(start + 'const scopeChanged ='.length, end).trim()
   }
 
-  /** The drawer's "Shared with" block. */
+  /** The drawer's "Shared with" block, from the org library's branch on. */
   const sharedWith = (): string => {
-    const start = CODE.indexOf("{'Shared with'}")
-    expect(start).toBeGreaterThan(-1)
+    const field = CODE.indexOf('value={editor?.sharing ?? null}')
+    expect(field).toBeGreaterThan(-1)
+    const start = CODE.lastIndexOf('{orgId ? (', field)
     const end = CODE.indexOf("{'Custom metadata'}", start)
     expect(end).toBeGreaterThan(start)
     return CODE.slice(start, end)
@@ -262,7 +270,7 @@ describe('AGL-1480 · the detail drawer shows what is stored', () => {
   /** The literal that shipped the bug, in the place it shipped from. */
   it('does not seed an absent file scope with the org token', () => {
     expect(onDetails()).not.toMatch(/\[(?:Aglyn\.)?ORG_SCOPE_TOKEN\]/)
-    expect(onDetails()).toMatch(/(?:Aglyn\.)?\bstoredScope\(/)
+    expect(onDetails()).toMatch(/\bmediaSharingChoiceOf\(/)
   })
 
   /** And it carries the same `unset` signal the folder dialog renders. */
@@ -285,24 +293,19 @@ describe('AGL-1480 · the detail drawer shows what is stored', () => {
    * If they agree, `scopeChanged` is false however it is spelled.
    */
   it('opens the drawer without making the save gate think anything changed', () => {
-    const seed = /const storedVisibleTo = ([^\n]+)/.exec(onDetails())?.[1]
+    const seed = /const sharing = ([^\n]+)/.exec(onDetails())?.[1]
     expect(seed).toBeTruthy()
-    const previous = /const previousScope: string\[\] = ([^\n]+)/.exec(
-      previousScope(),
-    )?.[1]
-    expect(previous).toBeTruthy()
+    const changed = scopeChanged()
+    expect(changed).toMatch(/mediaSharingKey/)
 
-    // Both helpers are in scope under either spelling, so the comparison
-    // survives the component importing `storedScope` by name rather than
-    // reaching it off the namespace.
-    const evaluate = (expression: string, doc: unknown) =>
+    const evaluate = (expression: string, editor: unknown, media: unknown) =>
       new Function(
-        'Aglyn',
-        'storedScope',
-        'media',
+        'mediaSharingChoiceOf',
+        'mediaSharingKey',
         'editor',
+        'media',
         `return (${expression.replace(/,\s*$/, '')})`,
-      )(Aglyn, Aglyn.storedScope, doc, { media: doc })
+      )(mediaSharingChoiceOf, mediaSharingKey, editor, media)
 
     for (const doc of [
       {},
@@ -312,30 +315,33 @@ describe('AGL-1480 · the detail drawer shows what is stored', () => {
       { visibleTo: [] },
       { visibleTo: ['org'] },
       { visibleTo: ['host:a', 'host:b'] },
+      // Shared with all sites except some (AGL-4047), down to no sites too.
+      { visibleTo: ['host:a'], scopeMode: 'allExcept', scopeExcept: ['host:b'] },
+      { visibleTo: [], scopeMode: 'allExcept', scopeExcept: ['host:b'] },
     ]) {
-      expect(evaluate(`${seed} ?? []`, doc)).toEqual(evaluate(previous!, doc))
+      const sharing = evaluate(seed!, null, doc)
+      expect(evaluate(changed, { media: doc, sharing }, doc)).toBe(false)
     }
   })
 
-  /** The write is still gated on that comparison, and only on it. */
+  /** The write is still gated on that comparison, and only on it, through the route. */
   it('still writes the scope only when it changed', () => {
     expect(CODE).toMatch(
-      /const scopeWrite =\s*orgId && viewerOrgWide && scopeChanged\s*\?/,
+      /const sharingWrite =\s*orgId && viewerOrgWide && scopeChanged\s*\?/,
     )
-    expect(CODE).toMatch(
-      /\.\.\.\(scopeWrite\?\.scope \? \{ visibleTo: scopeWrite\.scope \} : \{\}\)/,
-    )
+    expect(CODE).toMatch(/action: 'set-sharing',\s*mediaIds: \[editor\.id\],\s*choice: sharingWrite,/)
+    // The client never writes a scope itself: the marker is the server's.
+    expect(CODE).not.toMatch(/visibleTo: scopeWrite/)
   })
 
   /**
-   * A real sentinel, never `''` — MUI cannot hold an empty string as a
-   * selected value, and a corpus spec forbids one. Rendered only while unset
-   * and disabled, so the control cannot be set back into "unknown".
+   * No choice shows as picked while nothing is stored: the field is handed
+   * null, and a radio group given null picks nothing. Never `''`, which MUI
+   * cannot hold and a corpus spec forbids.
    */
-  it('offers a real sentinel rather than an empty option value', () => {
-    expect(sharedWith()).toMatch(/<MenuItem value="unset" disabled>/)
+  it('shows no choice picked while the scope is unset', () => {
+    expect(sharedWith()).toMatch(/<SiteSharingField\s+value=\{editor\?\.sharing \?\? null\}/)
     expect(sharedWith()).not.toMatch(/value=""/)
-    expect(sharedWith()).toMatch(/editor\?\.scopeUnset\s*\?\s*'unset'/)
   })
 
   /**
@@ -344,7 +350,10 @@ describe('AGL-1480 · the detail drawer shows what is stored', () => {
    * there, which is the widening-by-accident this class keeps producing.
    */
   it('hides the host chips while the scope is unset', () => {
-    expect(sharedWith()).toMatch(/!editor\?\.scopeUnset\s*&&/)
+    // The field lists sites only under a mode that picks them, and an unset
+    // file has none; the drawer draws no chips of its own.
+    expect(sharedWith()).not.toMatch(/<Chip/)
+    expect(sharedWith()).toMatch(/scopeUnset: false,\s*sharing,/)
   })
 
   /** And the drawer says the consequence, as the folder dialog does. */

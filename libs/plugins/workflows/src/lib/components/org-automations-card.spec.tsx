@@ -144,6 +144,7 @@ describe('the Org automations card', () => {
         steps: [{ type: 'sendEmail', subject: 'Welcome', body: 'Thanks' }],
         enabled: true,
         visibleTo: ['org'],
+        sharing: { mode: 'all' },
       },
     })
   })
@@ -152,15 +153,91 @@ describe('the Org automations card', () => {
     startDraft('Site B only')
     fireEvent.change(screen.getByLabelText('Subject'), { target: { value: 'Hi' } })
     fireEvent.change(screen.getByLabelText('Body'), { target: { value: 'x' } })
-    fireEvent.click(screen.getByLabelText('Chosen sites'))
-    fireEvent.click(screen.getByLabelText('Site B'))
+    fireEvent.click(screen.getByRole('radio', { name: /^Selected sites/ }))
+    fireEvent.click(screen.getByRole('checkbox', { name: 'Site B' }))
 
     fireEvent.click(screen.getByRole('button', { name: 'Save org automation' }))
 
     await waitFor(() => expect(mockApi).toHaveBeenCalledTimes(1))
-    expect((mockApi.mock.calls[0][1] as any).automation.visibleTo).toEqual([
-      'host:site-b',
-    ])
+    const sent = (mockApi.mock.calls[0][1] as any).automation
+    expect(sent.visibleTo).toEqual(['host:site-b'])
+    expect(sent.sharing).toEqual({ mode: 'selected', hostIds: ['site-b'] })
+  })
+
+  describe('all sites except some (AGL-4047)', () => {
+    it('sends the sites left out, and no sites in: the route works those out', async () => {
+      startDraft('Not on Site A')
+      fireEvent.change(screen.getByLabelText('Subject'), { target: { value: 'Hi' } })
+      fireEvent.change(screen.getByLabelText('Body'), { target: { value: 'x' } })
+      // Radios and a visible list, never a dropdown.
+      expect(screen.queryByRole('combobox', { name: /Runs on/ })).toBeNull()
+      fireEvent.click(screen.getByRole('radio', { name: /^All sites except/ }))
+      fireEvent.click(screen.getByRole('checkbox', { name: 'Site A' }))
+
+      fireEvent.click(screen.getByRole('button', { name: 'Save org automation' }))
+
+      await waitFor(() => expect(mockApi).toHaveBeenCalledTimes(1))
+      const sent = (mockApi.mock.calls[0][1] as any).automation
+      expect(sent.sharing).toEqual({ mode: 'allExcept', exceptHostIds: ['site-a'] })
+      expect(sent).not.toHaveProperty('visibleTo')
+    })
+
+    it('refuses before the round trip a choice that leaves nothing out', () => {
+      startDraft('Nothing left out')
+      fireEvent.change(screen.getByLabelText('Subject'), { target: { value: 'Hi' } })
+      fireEvent.change(screen.getByLabelText('Body'), { target: { value: 'x' } })
+      fireEvent.click(screen.getByRole('radio', { name: /^All sites except/ }))
+
+      fireEvent.click(screen.getByRole('button', { name: 'Save org automation' }))
+
+      expect(mockApi).not.toHaveBeenCalled()
+      expect(enqueueSnackbar).toHaveBeenCalledWith(
+        'Choose at least one site to leave out, or run it on every site',
+        { variant: 'warning', persist: false },
+      )
+    })
+
+    it('won’t let the last site in be left out too', () => {
+      startDraft('Everything left out')
+      fireEvent.click(screen.getByRole('radio', { name: /^All sites except/ }))
+      fireEvent.click(screen.getByRole('checkbox', { name: 'Site A' }))
+
+      expect((screen.getByRole('checkbox', { name: /^Site B/ }) as HTMLInputElement).disabled).toBe(true)
+      expect(screen.getByText('At least one site has to stay in.')).toBeTruthy()
+    })
+
+    it('switches the choice off, with the reason, in a workspace with one site', () => {
+      render(<OrgAutomationsCard mount={{ ...MOUNT, hosts: [MOUNT.hosts[0]] }} org={ORG} canEdit />)
+      fireEvent.click(screen.getByRole('button', { name: 'Add org automation' }))
+
+      expect((screen.getByRole('radio', { name: /^All sites except/ }) as HTMLInputElement).disabled).toBe(true)
+      expect(screen.getByText('This workspace has one site, so there is nothing to leave out.')).toBeTruthy()
+    })
+
+    it('opens one that runs on all sites except some as that choice, and says so in its row', () => {
+      collections['automations'] = [
+        seeded({ visibleTo: ['host:site-b'], scopeMode: 'allExcept', scopeExcept: ['host:site-a'] }),
+      ]
+      render(<OrgAutomationsCard mount={MOUNT} org={ORG} canEdit />)
+
+      expect(screen.getByText('Runs on every site except Site A')).toBeTruthy()
+      fireEvent.click(screen.getByRole('button', { name: 'Edit' }))
+      expect((screen.getByRole('radio', { name: /^All sites except/ }) as HTMLInputElement).checked).toBe(true)
+      expect((screen.getByRole('checkbox', { name: 'Site A' }) as HTMLInputElement).checked).toBe(true)
+      // The one site still in, which can't be left out as well.
+      expect((screen.getByRole('checkbox', { name: /^Site B/ }) as HTMLInputElement).checked).toBe(false)
+    })
+
+    it('offers to pause it only on the sites it runs on', () => {
+      collections['automations'] = [
+        seeded({ visibleTo: ['host:site-b'], scopeMode: 'allExcept', scopeExcept: ['host:site-a'] }),
+      ]
+      render(<OrgAutomationsCard mount={MOUNT} org={ORG} canEdit />)
+
+      fireEvent.click(screen.getByRole('button', { name: 'Pause on…' }))
+      expect(screen.queryByRole('menuitem', { name: 'Pause on Site A' })).toBeNull()
+      expect(screen.getByRole('menuitem', { name: 'Pause on Site B' })).toBeTruthy()
+    })
   })
 
   it('refuses before the round trip what the route would refuse', () => {

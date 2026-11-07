@@ -238,7 +238,9 @@ const mockUserState = {
 }
 const mockLogActivity = jest.fn()
 const mockSnackbar = { enqueueSnackbar: jest.fn(), closeSnackbar: jest.fn() }
-const mockConfirmation = { confirm: () => Promise.resolve() }
+const mockConfirmation: { confirm: (options?: { description?: string }) => Promise<void> } = {
+  confirm: () => Promise.resolve(),
+}
 const mockReleaseFlag = {
   released: true,
   visible: true,
@@ -333,16 +335,18 @@ async function mountLibrary() {
   })
 }
 
-/** The Shared with control in a file's details drawer. */
+/**
+ * The Shared with control in a file's details drawer: its All sites radio,
+ * which stands for the whole field (AGL-4047). The field is one fieldset, so
+ * its radios are on or off together.
+ */
 async function drawerSelect(fileName: string) {
   const card = (await screen.findByText(fileName)).closest('.MuiCard-root')
   fireEvent.click(within(card as HTMLElement).getByRole('button', { name: 'File actions' }))
   fireEvent.click(await screen.findByRole('menuitem', { name: 'Details' }))
   await screen.findByRole('textbox', { name: 'File name' })
   const drawer = document.querySelector('.MuiDrawer-paper') as HTMLElement
-  const label = within(drawer).getByText('Shared with')
-  const box = label.parentElement as HTMLElement
-  return box.querySelector('.MuiSelect-select') as HTMLElement
+  return within(drawer).getByRole('radio', { name: 'All sites' }) as HTMLInputElement
 }
 
 /** The Shared with… entry in a folder's menu. */
@@ -382,7 +386,7 @@ describe('the org library’s sharing controls', () => {
     it('finds the drawer’s control switched off, naming the permission', async () => {
       await mountLibrary()
       const select = await drawerSelect('logo.webp')
-      expect(select.getAttribute('aria-disabled')).toBe('true')
+      expect(select.disabled).toBe(true)
       expect(select.closest(`[aria-label='${REFUSAL.replace(/'/g, "\\'")}']`)).not.toBeNull()
     }, 240_000)
 
@@ -417,7 +421,7 @@ describe('the org library’s sharing controls', () => {
     it('has the drawer’s control on', async () => {
       await mountLibrary()
       const select = await drawerSelect('logo.webp')
-      expect(select.getAttribute('aria-disabled')).toBeNull()
+      expect(select.disabled).toBe(false)
       expect(screen.queryByLabelText(REFUSAL)).toBeNull()
     }, 240_000)
   })
@@ -430,7 +434,7 @@ describe('the org library’s sharing controls', () => {
     it('holds the controls with no refusal said', async () => {
       await mountLibrary()
       const select = await drawerSelect('logo.webp')
-      expect(select.getAttribute('aria-disabled')).toBe('true')
+      expect(select.disabled).toBe(true)
       expect(screen.queryByLabelText(REFUSAL)).toBeNull()
     }, 240_000)
   })
@@ -728,5 +732,130 @@ describe('a site’s own library, which answers to the site’s key', () => {
     mockDb.docs.set('hosts/host-1', { memberRoles: {} })
     await mountSite()
     await allOff('on')
+  }, 240_000)
+})
+
+/**
+ * "All sites except…" in the workspace library (AGL-4047): the drawer and a
+ * folder's dialog choose it with the shared field, and the route writes it,
+ * because its marker is the server's alone. The confirmation names the sites
+ * left out that use the file, and does not promise that a link pasted into
+ * custom HTML there stops loading: it doesn't.
+ */
+describe('sharing a file with all sites except some', () => {
+  const posts = () =>
+    (global.fetch as jest.Mock).mock.calls
+      .filter(([input]) => String(input).includes('/api/media/folders'))
+      .map(([, init]) => JSON.parse(String((init as RequestInit).body)))
+  let confirmed: Array<{ description?: string }>
+
+  beforeEach(() => {
+    mockDb.collections.clear()
+    mockDb.docs.clear()
+    seedLibrary('orgs/org-1', true)
+    mockDb.docs.set('orgs/org-1/members/user-1', { role: 'editor', allHosts: true })
+    mockPermissions = HOLDER
+    confirmed = []
+    mockConfirmation.confirm = (options) => {
+      confirmed.push(options ?? {})
+      return Promise.resolve()
+    }
+    global.fetch = jest.fn(async (input: RequestInfo | URL) => ({
+      ok: true,
+      status: 200,
+      json: async () => {
+        const url = String(input)
+        if (url.includes('/api/media/quarantine')) return { quarantined: {} }
+        if (url.includes('/api/media/references')) {
+          return {
+            references: [
+              { kind: 'screen', id: 'home', name: 'Home', hostId: 'host-2', hostSubdomain: 'docs', live: true },
+              { kind: 'screen', id: 'about', name: 'About', hostId: 'host-1', hostSubdomain: 'aglyn-marketing', live: true },
+            ],
+            coverage: 'full',
+          }
+        }
+        return { ok: true, assets: 2, total: 3, next: 3, done: true }
+      },
+    })) as unknown as typeof fetch
+  })
+
+  afterEach(() => {
+    mockConfirmation.confirm = () => Promise.resolve()
+  })
+
+  it('from the drawer: names the site left out that uses it, and writes through the route', async () => {
+    await mountLibrary()
+    await drawerSelect('logo.webp')
+    const drawer = document.querySelector('.MuiDrawer-paper') as HTMLElement
+    fireEvent.click(within(drawer).getByRole('radio', { name: /All sites except/ }))
+    fireEvent.click(within(drawer).getByRole('checkbox', { name: /Docs/ }))
+    expect(within(drawer).getByText(/custom HTML keeps loading/)).toBeTruthy()
+
+    await act(async () => {
+      fireEvent.click(within(drawer).getByRole('button', { name: 'Save' }))
+      await new Promise((resolve) => setTimeout(resolve, 0))
+    })
+
+    expect(confirmed).toHaveLength(1)
+    expect(confirmed[0].description).toContain('docs uses this file')
+    expect(confirmed[0].description).not.toContain('aglyn-marketing')
+    expect(confirmed[0].description).toContain('pasted into custom HTML, which keeps loading')
+    expect(posts()).toContainEqual(
+      expect.objectContaining({
+        action: 'set-sharing',
+        orgId: 'org-1',
+        mediaIds: ['logo'],
+        choice: { mode: 'allExcept', exceptHostIds: ['host-2'] },
+      }),
+    )
+  }, 240_000)
+
+  it('from the drawer: saving details alone writes no sharing (negative control)', async () => {
+    await mountLibrary()
+    await drawerSelect('logo.webp')
+    const drawer = document.querySelector('.MuiDrawer-paper') as HTMLElement
+    await act(async () => {
+      fireEvent.click(within(drawer).getByRole('button', { name: 'Save' }))
+      await new Promise((resolve) => setTimeout(resolve, 0))
+    })
+    expect(confirmed).toHaveLength(0)
+    expect(posts().filter((body) => body.action === 'set-sharing')).toEqual([])
+  }, 240_000)
+
+  it('from a folder: counts with no choice, then writes the choice over the folder', async () => {
+    await mountLibrary()
+    fireEvent.click(await folderItem('Covers'))
+    const dialog = await screen.findByRole('dialog')
+    fireEvent.click(within(dialog).getByRole('radio', { name: /All sites except/ }))
+    fireEvent.click(within(dialog).getByRole('checkbox', { name: /Docs/ }))
+    await act(async () => {
+      fireEvent.click(within(dialog).getByRole('button', { name: 'Apply' }))
+      await new Promise((resolve) => setTimeout(resolve, 0))
+    })
+
+    const sent = posts()
+    expect(sent).toContainEqual(expect.objectContaining({ action: 'set-sharing', folderId: 'covers', preview: true }))
+    expect(sent.find((body) => body.preview)).not.toHaveProperty('choice')
+    expect(sent).toContainEqual(
+      expect.objectContaining({
+        action: 'set-sharing',
+        folderId: 'covers',
+        cascade: true,
+        choice: { mode: 'allExcept', exceptHostIds: ['host-2'] },
+      }),
+    )
+  }, 240_000)
+
+  it('refuses leaving every site out before anything is sent', async () => {
+    await mountLibrary()
+    fireEvent.click(await folderItem('Covers'))
+    const dialog = await screen.findByRole('dialog')
+    fireEvent.click(within(dialog).getByRole('radio', { name: /All sites except/ }))
+    fireEvent.click(within(dialog).getByRole('checkbox', { name: /Docs/ }))
+    // The last site in can't be left out too: the field holds it, with the reason.
+    const last = within(dialog).getByRole('checkbox', { name: /Aglyn Marketing/ }) as HTMLInputElement
+    expect(last.disabled).toBe(true)
+    expect(within(dialog).getByText('At least one site has to stay in.')).toBeTruthy()
   }, 240_000)
 })
