@@ -236,9 +236,9 @@ export async function readRepeatRows(
   ].sort()
   if (!keys.length) return {}
   const connectionKeys = keys.filter(isConnectionRepeatKey)
-  const datasetKeys = keys.filter((key) => !isConnectionRepeatKey(key))
+  const plainKeys = keys.filter((key) => !isConnectionRepeatKey(key))
   const asks = [
-    { declared: declaredRepeatSource(), keys: datasetKeys },
+    { declared: declaredRepeatSource(), keys: plainKeys },
     { declared: declaredConnectionRepeatSource(), keys: connectionKeys },
   ].filter(
     (ask): ask is { declared: RepeatSourceDeclaration; keys: string[] } =>
