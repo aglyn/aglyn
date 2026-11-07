@@ -59,12 +59,22 @@ A campaign is your **organization's**, like its contacts, lists and topics, so o
 campaign can coordinate a push across every site you run, the sequences your reps send
 and the leads they produce.
 
-- **Which sites it runs on.** A campaign is placed on **every site** or on the sites you
-  choose. It is offered in a site's pickers — on its forms, pages and automations —
-  only where it is placed, and a collaborator invited to one site sees only the campaigns
-  placed there. A campaign created from a site's own **Marketing** page starts on that
-  site; one created from the organization's starts on every site, and you can change
-  either later from the organization's page.
+- **Which sites it runs on.** A campaign is offered in a site's pickers — on its forms,
+  pages and automations — only where it is placed, and a collaborator invited to one site
+  sees only the campaigns placed there. **Shared with** on the organization's page
+  decides which sites:
+  - **All sites** — every site you run. A new site gets it automatically.
+  - **Selected sites** — tick the sites that share it, up to 30. A new site doesn't get it
+    until you add that site.
+  - **All sites except…** — tick the sites to leave out. Every other site gets it, with no
+    limit on how many, and so does a new site, automatically. A workspace with one site
+    has nothing to leave out, so this choice stays off until you add a second, and at
+    least one site has to stay in.
+
+  A campaign created from a site's own **Marketing** page starts on that site; one
+  created from the organization's starts on **All sites** unless you choose otherwise,
+  and you can change either later from the organization's page. Changing it takes
+  **Run email campaigns** and access to every site in the workspace.
 - **Which site an email is sent as.** Each email goes out **as one site**: that site's
   sender, its unsubscribe page and the consent people gave it. Writing an email from the
   organization's page asks which site first. A site's **Marketing** and **Emails** pages
@@ -129,6 +139,11 @@ under no campaign); both show in the same table, newest first, a page at a time.
 Open a campaign from **Marketing → Campaigns** to see its dates, its lists and every
 email inside it, with their figures added up; **Edit campaign** and **Delete campaign**
 are in the card's menu (⋮).
+
+From a site's **Marketing** page, **Delete campaign** removes a campaign placed on that
+site alone. A campaign on other sites too, or shared with all sites except some, belongs
+to more than that site, so deleting it takes access to every site in the workspace; the
+menu says so instead of offering it.
 
 Each email inside keeps its own report, and the figures here are the sum across them.
 A campaign with no lists of its own says so: its emails each pick their own audience.

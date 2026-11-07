@@ -221,7 +221,18 @@ export function createCampaignsPackage(deps: CampaignsPackageDeps = defaultDeps(
               if (!current.exists || current.get('deletedAt')) {
                 return { row: write.row, outcome: 'failed', recordId: write.targetId, message: 'That campaign no longer exists.' }
               }
-              transaction.update(containerRef, containerFields(content))
+              /*
+               * A package names the sites it places a campaign on, and never
+               * carries the all-sites-except marker, so a replace places it on
+               * those sites: the marker comes off, as a field delete, or the
+               * sweep would widen it again to every site but the excluded
+               * ones (AGL-4047).
+               */
+              transaction.update(containerRef, {
+                ...containerFields(content),
+                scopeMode: firebaseAdmin.firestore.FieldValue.delete(),
+                scopeExcept: firebaseAdmin.firestore.FieldValue.delete(),
+              })
               return { row: write.row, outcome: 'updated', recordId: write.targetId }
             }
             if (current.exists) {

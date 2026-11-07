@@ -407,12 +407,18 @@ export function mediaObjectPath(
  *
  * The route's preview branch tests the same predicate, so the shape that
  * skips the writes and the shape that is called a read cannot drift apart.
+ *
+ * `set-sharing` (AGL-4047) counts a folder the same way, and its preview needs
+ * a folder: a selection has nothing to count.
  */
 export function isFolderScopePreviewRequest(
   body: Record<string, unknown> | undefined,
 ): boolean {
+  const action = String(body?.['action'] ?? '')
   return (
-    String(body?.['action'] ?? '') === 'set-scope' && body?.['preview'] === true
+    (action === 'set-scope' ||
+      (action === 'set-sharing' && typeof body?.['folderId'] === 'string' && body['folderId'] !== '')) &&
+    body?.['preview'] === true
   )
 }
 

@@ -168,6 +168,16 @@ const mockBatch = () => ({
 
 const mockFirestore = {
   batch: mockBatch,
+  // The sharing cascade writes in a transaction that reads the workspace's
+  // sites first (AGL-4047).
+  runTransaction: async (
+    run: (tx: Record<string, unknown>) => Promise<unknown>,
+  ) =>
+    run({
+      getAll: (...refs: Array<{ get: () => Promise<unknown> }>) =>
+        Promise.all(refs.map((ref) => ref.get())),
+      update: (ref: { path: string }) => writes.push(`tx.update ${ref.path}`),
+    }),
   collection: (name: string) => ({
     doc: (id: string) => ({
       path: `${name}/${id}`,
@@ -367,12 +377,43 @@ describe('AGL-1694 · unlocked behaviour is unchanged', () => {
       written: 3,
       done: true,
     })
-    // The folder doc plus its two subtree assets, in one committed batch.
+    // The folder doc plus its two subtree assets, in one transaction.
     expect(writes).toEqual([
-      'batch.set mediaFolders/f-root',
-      'batch.set media/m-1',
-      'batch.set media/m-2',
-      'batch.commit',
+      'tx.update mediaFolders/f-root',
+      'tx.update media/m-1',
+      'tx.update media/m-2',
     ])
+  })
+})
+
+/**
+ * `set-sharing` (AGL-4047) counts a folder the same way, and needs no choice
+ * to do it. Only a folder's count is a read: a selection has nothing to count.
+ */
+describe('AGL-4047 · the set-sharing preview is the same read', () => {
+  const SHARING_PREVIEW = { action: 'set-sharing', folderId: 'f-root', preview: true }
+
+  it('answers the count under a read-only lock, declared a read, writing nothing', async () => {
+    const response = await post(SHARING_PREVIEW)
+    expect(response.status).toBe(200)
+    await expect(response.json()).resolves.toEqual({ ok: true, preview: true, folders: 1, assets: 2 })
+    expect(intents).toEqual(['read'])
+    expect(writes).toEqual([])
+  })
+
+  it('refuses the write it would perform, with a choice and no flag', async () => {
+    const { preview, ...write } = SHARING_PREVIEW
+    expect(preview).toBe(true)
+    const response = await post({ ...write, choice: { mode: 'all' } })
+    expect(response.status).toBe(423)
+    expect(intents).toEqual(['write'])
+    expect(writes).toEqual([])
+  })
+
+  it('does not let a selection buy a read verdict with the flag', async () => {
+    const response = await post({ action: 'set-sharing', mediaIds: ['m-1'], choice: { mode: 'all' }, preview: true })
+    expect(response.status).toBe(423)
+    expect(intents).toEqual(['write'])
+    expect(writes).toEqual([])
   })
 })

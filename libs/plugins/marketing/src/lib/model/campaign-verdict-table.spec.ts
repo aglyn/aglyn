@@ -153,6 +153,20 @@ describe('the console reads the table as the rule and the route do', () => {
     expect(canEdit(row, HERE, [`host:${HERE}`, 'host:host-other'])).toBe(row.after.updateTwoSites)
   })
 
+  /*
+   * Shared with all sites except some, down to this one site (AGL-4047): the
+   * rule's `scopePlacement` hands the one-site verdict nothing, so it answers as
+   * a campaign on several sites does, for every member kind in the table.
+   */
+  it.each(named)('%s: Edit of a campaign shared with all sites except some, reaching this site alone', (_name, row) => {
+    const marked = (place([`host:${HERE}`]) as Record<string, unknown>)
+    const answer = (fields: Record<string, unknown>) =>
+      holdsCampaignContainers(asMember(row)) ||
+      (campaignPlacedOnlyOn({ ...marked, ...fields } as never, HERE) && siteVerdict(row, HERE))
+    expect(answer({ scopeMode: 'allExcept', scopeExcept: ['host:host-other'] })).toBe(row.after.updateTwoSites)
+    expect(answer({ scopeMode: null })).toBe(row.after.updateTwoSites)
+  })
+
   it.each(named)('%s: on a workspace page, the workspace’s verdict', (_name, row) => {
     expect(canEdit(row, null, [`host:${HERE}`])).toBe(row.workspaceVerdict)
   })

@@ -81,7 +81,7 @@ describe('the page asks the verdict the rule and the route ask, off the membersh
     renderHook(() => useCampaignListAccess('org1', hostId)).result.current.createBlocked
   const listed = (hostId: string | null) =>
     renderHook(() => useCampaignListAccess('org1', hostId)).result.current.deleteBlocked
-  const opened = (hostId: string | null, campaign: { visibleTo: string[] } | undefined) =>
+  const opened = (hostId: string | null, campaign: Record<string, unknown> | undefined) =>
     renderHook(() => useCampaignContainerAccess('org1', hostId, campaign)).result.current
 
   beforeAll(() => registerMarketingDeclarations())
@@ -201,7 +201,7 @@ describe('the page asks the verdict the rule and the route ask, off the membersh
   describe('a campaign’s own page', () => {
     it('a site Editor edits and deletes a campaign on that one site', () => {
       mockDocs.set(MEMBER, on(siteEditor))
-      expect(opened('site1', here)).toEqual({ editBlocked: false, deleteBlocked: false })
+      expect(opened('site1', here)).toMatchObject({ editBlocked: false, deleteBlocked: false })
     })
 
     it.each([
@@ -215,28 +215,75 @@ describe('the page asks the verdict the rule and the route ask, off the membersh
 
     it('a site that turned the key off stops Delete, and the workspace’s verdict still edits', () => {
       mockDocs.set(MEMBER, on(toggledOff))
-      expect(opened('site1', here)).toEqual({ editBlocked: false, deleteBlocked: true })
+      expect(opened('site1', here)).toMatchObject({ editBlocked: false, deleteBlocked: true })
     })
 
     it('an Author here is refused both', () => {
       mockDocs.set(MEMBER, on(siteAuthor))
-      expect(opened('site1', here)).toEqual({ editBlocked: true, deleteBlocked: true })
+      expect(opened('site1', here)).toMatchObject({ editBlocked: true, deleteBlocked: true })
     })
 
     it('on a workspace page, both answer the workspace', () => {
       mockDocs.set(MEMBER, on(raisedViewer))
-      expect(opened(null, here)).toEqual({ editBlocked: true, deleteBlocked: true })
+      expect(opened(null, here)).toMatchObject({ editBlocked: true, deleteBlocked: true })
     })
 
     it('on a workspace page, Delete needs the whole workspace, as the route does', () => {
       mockDocs.set(MEMBER, on({ role: 'editor', allHosts: false }))
-      expect(opened(null, here)).toEqual({ editBlocked: false, deleteBlocked: true })
+      expect(opened(null, here)).toMatchObject({ editBlocked: false, deleteBlocked: true })
     })
 
     it('a reader with no membership is not stopped, and the server answers', () => {
       mockDocs.set(MEMBER, on(undefined))
-      expect(opened(null, here)).toEqual({ editBlocked: false, deleteBlocked: false })
-      expect(opened('site1', here)).toEqual({ editBlocked: false, deleteBlocked: false })
+      expect(opened(null, here)).toMatchObject({ editBlocked: false, deleteBlocked: false })
+      expect(opened('site1', here)).toMatchObject({ editBlocked: false, deleteBlocked: false })
+    })
+  })
+
+  /*
+   * SHARED WITH ALL SITES EXCEPT SOME, DOWN TO THIS ONE SITE (AGL-4047). The
+   * rule's `scopePlacement` gives the site's verdict nothing to look at on a
+   * marked campaign, and the manage route's site door no longer takes it as
+   * this site's alone, so the page answers the same: the workspace's verdict.
+   */
+  describe('a campaign shared with all sites except some, reaching this site alone', () => {
+    const marked = { visibleTo: ['host:site1'], scopeMode: 'allExcept', scopeExcept: ['host:site2'] }
+
+    it('the site’s verdict edits and deletes it no more than a campaign on several sites', () => {
+      mockDocs.set(MEMBER, on(siteEditor))
+      const answer = opened('site1', marked)
+      expect(answer.editBlocked).toBe(true)
+      expect(answer.deleteBlocked).toBe(true)
+      expect(answer.deleteReason).toMatch(/all sites except some/)
+      // The control: the same campaign without its marker is the site's.
+      expect(opened('site1', here)).toMatchObject({ editBlocked: false, deleteBlocked: false })
+    })
+
+    it.each([
+      ['a stored null marker', { visibleTo: ['host:site1'], scopeMode: null }],
+      ['half a marker', { visibleTo: ['host:site1'], scopeExcept: ['host:site2'] }],
+    ])('%s fails closed, as the rule reads it', (_name, campaign) => {
+      mockDocs.set(MEMBER, on(siteEditor))
+      expect(opened('site1', campaign).editBlocked).toBe(true)
+    })
+
+    it('a member of the whole workspace keeps both, by the workspace’s verdict', () => {
+      mockDocs.set(MEMBER, on(workspaceEditor))
+      expect(opened('site1', marked)).toEqual({ editBlocked: false, deleteBlocked: false, deleteReason: null })
+    })
+
+    it('a row in a site’s list says the same, from the row it already holds', () => {
+      mockDocs.set(MEMBER, on(siteEditor))
+      const { deleteBlocked, deleteReachRefusal } = renderHook(() => useCampaignListAccess('org1', 'site1')).result.current
+      expect(deleteBlocked).toBe(false)
+      expect(deleteReachRefusal(marked)).toMatch(/all sites except some/)
+      expect(deleteReachRefusal({ visibleTo: ['host:site1', 'host:site2'] })).toMatch(/other sites too/)
+      expect(deleteReachRefusal(here)).toBeNull()
+    })
+
+    it('a site that turned the key off says the key, not the reach', () => {
+      mockDocs.set(MEMBER, on({ ...siteEditor, hostPermissions: { site1: { 'marketing.campaigns': false } } }))
+      expect(opened('site1', marked).deleteReason).toMatch(/Run email campaigns/)
     })
   })
 })
