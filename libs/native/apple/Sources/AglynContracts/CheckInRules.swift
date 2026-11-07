@@ -136,3 +136,28 @@ public func alreadyCheckedInLabel(timeLabel: String, byName: String?) -> String 
 public let stayCheckInModeLabels: [(mode: String, label: String)] = [
   ("resource", "As each resource is set"), ("stay", "One per stay"), ("guest", "One per guest"),
 ]
+
+// MARK: A stay's guests (commerce-reservations.ts), for the window's Guests dialog
+
+/// The most guests a stay's resource sleeps, else the platform's ceiling (`resourceGuestCeiling`).
+public func resourceGuestCeiling(capacity: Double?) -> Int {
+  let ceiling = ContractValues.shared.maxReservationGuests
+  guard let sleeps = capacity.map({ $0.rounded(.down) }), sleeps.isFinite, sleeps >= 1 else { return ceiling }
+  return min(Int(sleeps), ceiling)
+}
+
+/// A stay's guests, at least one (`reservationGuests`).
+public func reservationGuests(_ guests: Double?) -> Int {
+  guard let count = guests.map({ $0.rounded(.down) }), count.isFinite, count >= 1 else { return 1 }
+  return min(Int(count), ContractValues.shared.maxReservationGuests)
+}
+
+/// Why a guest count can't be stored, or nil (`reservationGuestsProblem`); a blank count says nothing.
+public func reservationGuestsProblem(_ guests: Double?, capacity: Double?) -> String? {
+  guard let guests else { return nil }
+  let ceiling = resourceGuestCeiling(capacity: capacity)
+  if guests != guests.rounded(.down) || guests < 1 || guests > Double(ceiling) {
+    return ceiling == 1 ? "This stay sleeps 1 guest" : "Guests must be a whole number from 1 to \(ceiling)"
+  }
+  return nil
+}

@@ -39,6 +39,21 @@ class CheckInRulesTest {
     }
   }
 
+  private fun number(value: JsonElement?): Double? = (value as? JsonPrimitive)?.contentOrNull?.toDoubleOrNull()
+
+  @Test
+  fun guestsAsTheConsole() {
+    cases("resourceGuestCeiling").forEach { (args, result) ->
+      assertEquals(result.jsonPrimitive.double.toInt(), resourceGuestCeiling(number((args[0] as? kotlinx.serialization.json.JsonObject)?.get("capacity"))), args.toString())
+    }
+    cases("reservationGuests").forEach { (args, result) ->
+      assertEquals(result.jsonPrimitive.double.toInt(), reservationGuests(number((args[0] as? kotlinx.serialization.json.JsonObject)?.get("guests"))), args.toString())
+    }
+    cases("reservationGuestsProblem").forEach { (args, result) ->
+      assertEquals(plain(result), reservationGuestsProblem(number(args[0]), number((args[1] as? kotlinx.serialization.json.JsonObject)?.get("capacity"))), args.toString())
+    }
+  }
+
   private fun pass(
     status: CheckInStatus = CheckInStatus.EXPECTED,
     rainCheck: CheckInRainCheck? = null,

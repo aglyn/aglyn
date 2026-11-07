@@ -35,6 +35,22 @@ final class CheckInRulesTests: XCTestCase {
     }
   }
 
+  private func number(_ value: Any?) -> Double? { (value as? NSNumber)?.doubleValue }
+
+  func testGuestsAsTheConsole() {
+    for item in cases("resourceGuestCeiling") {
+      XCTAssertEqual(resourceGuestCeiling(capacity: number((item.args[0] as? [String: Any])?["capacity"])), (item.result as? NSNumber)?.intValue, "\(item.args)")
+    }
+    for item in cases("reservationGuests") {
+      XCTAssertEqual(reservationGuests(number((item.args[0] as? [String: Any])?["guests"])), (item.result as? NSNumber)?.intValue, "\(item.args)")
+    }
+    for item in cases("reservationGuestsProblem") {
+      XCTAssertEqual(
+        reservationGuestsProblem(number(item.args[0]), capacity: number((item.args[1] as? [String: Any])?["capacity"])),
+        plain(item.result) as? String, "\(item.args)")
+    }
+  }
+
   private func pass(
     status: CheckInStatus = .expected, rainCheck: CheckInRainCheck? = nil, rainCheckOpen: Bool? = nil, variantLabel: String? = nil,
     unitIndex: Double = 0, unitCount: Double = 1, source: HostCheckInSource = .order, dayKey: String = "2027-01-15"

@@ -43871,6 +43871,144 @@
         }
       ]
     },
+    "reservationGuests": {
+      "module": "libs/plugins/commerce/src/lib/model/commerce-reservations.ts",
+      "cases": [
+        {
+          "args": [
+            null
+          ],
+          "result": 1
+        },
+        {
+          "args": [
+            {
+              "guests": 3
+            }
+          ],
+          "result": 3
+        },
+        {
+          "args": [
+            {
+              "guests": 0
+            }
+          ],
+          "result": 1
+        },
+        {
+          "args": [
+            {
+              "guests": 2.9
+            }
+          ],
+          "result": 2
+        },
+        {
+          "args": [
+            {
+              "guests": 99
+            }
+          ],
+          "result": 50
+        },
+        {
+          "args": [
+            {}
+          ],
+          "result": 1
+        }
+      ]
+    },
+    "reservationGuestsProblem": {
+      "module": "libs/plugins/commerce/src/lib/model/commerce-reservations.ts",
+      "cases": [
+        {
+          "args": [
+            3,
+            {
+              "capacity": 4
+            }
+          ],
+          "result": null
+        },
+        {
+          "args": [
+            5,
+            {
+              "capacity": 4
+            }
+          ],
+          "result": "Guests must be a whole number from 1 to 4"
+        },
+        {
+          "args": [
+            0,
+            {
+              "capacity": 4
+            }
+          ],
+          "result": "Guests must be a whole number from 1 to 4"
+        },
+        {
+          "args": [
+            2.5,
+            {
+              "capacity": 4
+            }
+          ],
+          "result": "Guests must be a whole number from 1 to 4"
+        },
+        {
+          "args": [
+            2,
+            {
+              "capacity": 1
+            }
+          ],
+          "result": "This stay sleeps 1 guest"
+        },
+        {
+          "args": [
+            1,
+            {
+              "capacity": 1
+            }
+          ],
+          "result": null
+        },
+        {
+          "args": [
+            null,
+            {
+              "capacity": 4
+            }
+          ],
+          "result": null
+        },
+        {
+          "args": [
+            "",
+            null
+          ],
+          "result": null
+        },
+        {
+          "args": [
+            51,
+            null
+          ],
+          "result": "Guests must be a whole number from 1 to 50"
+        },
+        {
+          "args": [
+            50,
+            null
+          ],
+          "result": null
+        }
+      ]
+    },
     "reservedScreenRouteMessage": {
       "module": "libs/aglyn/src/lib/app-utils/screen-slug.ts",
       "cases": [
@@ -65795,6 +65933,63 @@
             "source": "picked",
             "tintsApp": true
           }
+        }
+      ]
+    },
+    "resourceGuestCeiling": {
+      "module": "libs/plugins/commerce/src/lib/model/commerce-reservations.ts",
+      "cases": [
+        {
+          "args": [
+            null
+          ],
+          "result": 50
+        },
+        {
+          "args": [
+            {
+              "capacity": 4
+            }
+          ],
+          "result": 4
+        },
+        {
+          "args": [
+            {
+              "capacity": 1
+            }
+          ],
+          "result": 1
+        },
+        {
+          "args": [
+            {
+              "capacity": 0
+            }
+          ],
+          "result": 50
+        },
+        {
+          "args": [
+            {
+              "capacity": 2.7
+            }
+          ],
+          "result": 2
+        },
+        {
+          "args": [
+            {
+              "capacity": 80
+            }
+          ],
+          "result": 50
+        },
+        {
+          "args": [
+            {}
+          ],
+          "result": 50
         }
       ]
     },

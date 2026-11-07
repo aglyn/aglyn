@@ -11394,6 +11394,132 @@
         ]
       ]
     },
+    "resourceGuestCeiling": {
+      "module": "libs/plugins/commerce/src/lib/model/commerce-reservations.ts",
+      "args": [
+        [
+          null
+        ],
+        [
+          {
+            "capacity": 4
+          }
+        ],
+        [
+          {
+            "capacity": 1
+          }
+        ],
+        [
+          {
+            "capacity": 0
+          }
+        ],
+        [
+          {
+            "capacity": 2.7
+          }
+        ],
+        [
+          {
+            "capacity": 80
+          }
+        ],
+        [
+          {}
+        ]
+      ]
+    },
+    "reservationGuests": {
+      "module": "libs/plugins/commerce/src/lib/model/commerce-reservations.ts",
+      "args": [
+        [
+          null
+        ],
+        [
+          {
+            "guests": 3
+          }
+        ],
+        [
+          {
+            "guests": 0
+          }
+        ],
+        [
+          {
+            "guests": 2.9
+          }
+        ],
+        [
+          {
+            "guests": 99
+          }
+        ],
+        [
+          {}
+        ]
+      ]
+    },
+    "reservationGuestsProblem": {
+      "module": "libs/plugins/commerce/src/lib/model/commerce-reservations.ts",
+      "args": [
+        [
+          3,
+          {
+            "capacity": 4
+          }
+        ],
+        [
+          5,
+          {
+            "capacity": 4
+          }
+        ],
+        [
+          0,
+          {
+            "capacity": 4
+          }
+        ],
+        [
+          2.5,
+          {
+            "capacity": 4
+          }
+        ],
+        [
+          2,
+          {
+            "capacity": 1
+          }
+        ],
+        [
+          1,
+          {
+            "capacity": 1
+          }
+        ],
+        [
+          null,
+          {
+            "capacity": 4
+          }
+        ],
+        [
+          "",
+          null
+        ],
+        [
+          51,
+          null
+        ],
+        [
+          50,
+          null
+        ]
+      ]
+    },
     "resolveEnabledPlugins": {
       "module": "libs/aglyn/src/lib/plugin-manager/enabled-plugins.ts",
       "args": [

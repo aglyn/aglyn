@@ -155,3 +155,28 @@ val STAY_CHECK_IN_MODE_LABELS: List<Pair<String, String>> = listOf(
   "stay" to "One per stay",
   "guest" to "One per guest",
 )
+
+/* ---- A stay's guests (commerce-reservations.ts), for the window's Guests dialog ---- */
+
+/** The most guests a stay's resource sleeps, else the platform's ceiling (`resourceGuestCeiling`). */
+fun resourceGuestCeiling(capacity: Double?): Int {
+  val ceiling = Contracts.maxReservationGuests.toInt()
+  val sleeps = capacity?.let { kotlin.math.floor(it) } ?: return ceiling
+  return if (sleeps.isFinite() && sleeps >= 1) minOf(sleeps.toInt(), ceiling) else ceiling
+}
+
+/** A stay's guests, at least one (`reservationGuests`). */
+fun reservationGuests(guests: Double?): Int {
+  val count = guests?.let { kotlin.math.floor(it) } ?: return 1
+  return if (count.isFinite() && count >= 1) minOf(count.toInt(), Contracts.maxReservationGuests.toInt()) else 1
+}
+
+/** Why a guest count can't be stored, or null (`reservationGuestsProblem`); a blank count says nothing. */
+fun reservationGuestsProblem(guests: Double?, capacity: Double?): String? {
+  if (guests == null) return null
+  val ceiling = resourceGuestCeiling(capacity)
+  if (guests != kotlin.math.floor(guests) || guests < 1 || guests > ceiling) {
+    return if (ceiling == 1) "This stay sleeps 1 guest" else "Guests must be a whole number from 1 to $ceiling"
+  }
+  return null
+}
