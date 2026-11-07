@@ -27,6 +27,7 @@ content on the marketing site and is written separately.
 
 ### Fixed
 
+- **commerce:** sales, restocks and verified reviews drop the cached storefront ([AGL-4121](https://linear.app/aglyn/issue/AGL-4121))
 - **commerce:** quote messages take a platform id; catalogs and Linear floor regenerated ([AGL-4207](https://linear.app/aglyn/issue/AGL-4207))
 - **commerce:** customer message notice names no product ([AGL-4207](https://linear.app/aglyn/issue/AGL-4207))
 - **commerce:** price quote editor add-on labels for the picked size ([AGL-4206](https://linear.app/aglyn/issue/AGL-4206))
@@ -47,6 +48,7 @@ content on the marketing site and is written separately.
 
 ### Performance
 
+- **tenant:** change-driven tenant cache on a seven-day backstop ([AGL-4121](https://linear.app/aglyn/issue/AGL-4121))
 - **tenant:** tenant pages take a one-day ISR ceiling ([AGL-4121](https://linear.app/aglyn/issue/AGL-4121))
 - **tenant:** stop the per-request middleware trace reaching the log drain ([AGL-4121](https://linear.app/aglyn/issue/AGL-4121))
 - **tenant:** project the realm-install join to the fields it uses ([AGL-4121](https://linear.app/aglyn/issue/AGL-4121))
@@ -54,8 +56,9 @@ content on the marketing site and is written separately.
 - **outreach:** the sync job reads an organization's watched enrollments once per run ([AGL-4121](https://linear.app/aglyn/issue/AGL-4121))
 
 <details>
-<summary>Also in this release: 3 test, 5 chore, 2 docs</summary>
+<summary>Also in this release: 4 test, 5 chore, 2 docs</summary>
 
+- **console:** the table-footer owed list drops the Inbox replies, now a shared thread ([AGL-4207](https://linear.app/aglyn/issue/AGL-4207))
 - **commerce:** connect-mode gate coverage follows the shared account lookup
 - **native:** regenerate the contracts for the quote-message email ([AGL-4207](https://linear.app/aglyn/issue/AGL-4207))
 - **native:** regenerate the contracts for the product builder fields ([AGL-4205](https://linear.app/aglyn/issue/AGL-4205))
