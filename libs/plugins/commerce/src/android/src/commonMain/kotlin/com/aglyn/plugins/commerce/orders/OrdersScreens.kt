@@ -156,6 +156,8 @@ fun OrdersScreen(context: NativePluginContext, initialOrderId: String? = null, s
         OrdersDayReportPane(context, currency)
       } else if (selected == ORDERS_SHIFT_HISTORY_ROW) {
         ShiftHistoryPane(context, registers, currency)
+      } else if (selected == ORDERS_CHECK_INS_ROW) {
+        CheckInsPane(context)
       } else if (selected == null) {
         SelectionPlaceholder("Pick an order to see it here", icon = AglynIcons.named("receipt"))
       } else {
@@ -322,6 +324,14 @@ private fun OrdersList(
                 title = "Day report", detail = "Every register, today or picked days", kind = com.aglyn.ui.ScaffoldRowKind.ORDER,
                 selected = selected == ORDERS_DAY_REPORT_ROW, leading = { com.aglyn.ui.ScaffoldRowTile("bar_chart") },
                 onClick = { onSelect(ORDERS_DAY_REPORT_ROW) }, modifier = Modifier.testTag("orders-day-report"),
+              )
+            }
+            // Who is due at the window and who checked in (AGL-4043), beside the day's totals.
+            item(key = ORDERS_CHECK_INS_ROW) {
+              com.aglyn.ui.ScaffoldListRow(
+                title = "Today's check-ins", detail = "Passes and stays due at the window", kind = com.aglyn.ui.ScaffoldRowKind.ORDER,
+                selected = selected == ORDERS_CHECK_INS_ROW, leading = { com.aglyn.ui.ScaffoldRowTile("event_available") },
+                onClick = { onSelect(ORDERS_CHECK_INS_ROW) }, modifier = Modifier.testTag("orders-check-ins"),
               )
             }
             item(key = ORDERS_SHIFT_HISTORY_ROW) {
