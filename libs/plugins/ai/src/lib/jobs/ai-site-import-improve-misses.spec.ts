@@ -356,7 +356,7 @@ describe('what a visitor sees', () => {
     expect(aiSiteImportOneFrame(alike, true)).toBe(alike)
   })
 
-  it('draws a filled button on a dark band in the site’s one primary, the light scheme its header’s is drawn in', () => {
+  it('draws a filled button on a dark band in the scheme the visitor picked, the one primary its header’s wears', () => {
     const doc = readOf(BUILDER, 'https://www.northfield.example/commercial', [{ path: '/commercial', id: 'p-commercial' }])
     const answer = {
       sections: [
@@ -368,10 +368,11 @@ describe('what a visitor sees', () => {
     expect(codes(built.violations)).toEqual([])
     const button = (label: string) => Object.values(nodes).find((node) => node.componentId === 'muiButton' && node.props?.['children'] === label)
     const onDark = button('Request a quote')
-    const parent = onDark?.parentId ? nodes[onDark.parentId] : undefined
-    expect(parent).toMatchObject({ componentId: 'muiBox', props: { colorScheme: 'light' } })
-    // On the page's own ground it is the primary already.
-    const onPage = button('See our work')
-    expect(onPage?.parentId ? nodes[onPage.parentId]?.props?.['colorScheme'] : undefined).toBeUndefined()
+    // Pinned back on the button itself: no wrapper of a scheme of its own, whose ground would show at its corners.
+    expect(onDark).toMatchObject({ props: { variant: 'contained', color: 'primary', colorScheme: 'visitor' }, sx: { alignSelf: 'center' } })
+    expect(Object.values(nodes).filter((node) => node.props?.['colorScheme'] === 'light')).toEqual([])
+    expect(onDark?.parentId ? nodes[onDark.parentId]?.componentId : undefined).not.toBe('muiBox')
+    // On the page's own ground it is the visitor's primary already.
+    expect(button('See our work')?.props?.['colorScheme']).toBeUndefined()
   })
 })

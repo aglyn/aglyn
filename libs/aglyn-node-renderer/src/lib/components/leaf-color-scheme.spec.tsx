@@ -236,3 +236,77 @@ describe('Leaf color scheme (AGL-3284)', () => {
     expect(plate.getAttribute('data-mode')).toBe('light')
   })
 })
+
+describe("Leaf back to the visitor's scheme (AGL-4152)", () => {
+  /** A band pinned as given, holding a control sent back to the visitor's scheme. */
+  const nested = (bandScheme: string | undefined) =>
+    ({
+      $id: 'band',
+      componentId: 'scheme-wrapper',
+      pluginId: 'test',
+      props: {
+        'data-testid': 'band',
+        ...(bandScheme ? { colorScheme: bandScheme } : {}),
+      },
+      children: [
+        {
+          $id: 'control',
+          componentId: 'scheme-probe',
+          pluginId: 'test',
+          props: { 'data-testid': 'control', colorScheme: 'visitor' },
+          children: [],
+        },
+      ],
+    }) as any
+
+  const renderNested = (
+    page: 'light' | 'dark',
+    bandScheme: string | undefined,
+    build = jest.fn((scheme: 'light' | 'dark') => siteTheme(scheme)),
+  ) => {
+    render(
+      <SiteSchemeThemesContext.Provider value={createSiteSchemeThemes(build)}>
+        <ThemeProvider theme={siteTheme(page)}>
+          <TreeRoot node={nested(bandScheme)} />
+        </ThemeProvider>
+      </SiteSchemeThemesContext.Provider>,
+    )
+    return {
+      band: screen.getByTestId('band'),
+      control: screen.getByTestId('control'),
+      build,
+    }
+  }
+
+  it('renders a control in a dark band on a light page in the light scheme', () => {
+    const { band, control } = renderNested('light', 'dark')
+    expect(band.textContent).toBe('light')
+    expect(control.getAttribute('data-mode')).toBe('light')
+    // A control on its band paints no ground, which would show at its corners.
+    expect(bg(control)).toBe(TRANSPARENT)
+    expect(bg(band)).toBe('rgb(22, 28, 33)')
+  })
+
+  it('renders a control in a dark band on a dark page dark, building nothing', () => {
+    const { control, build } = renderNested('dark', 'dark')
+    expect(control.getAttribute('data-mode')).toBe('dark')
+    expect(bg(control)).toBe(TRANSPARENT)
+    expect(build).not.toHaveBeenCalled()
+  })
+
+  it('renders a control in a light band on a dark page dark', () => {
+    const { control } = renderNested('dark', 'light')
+    expect(control.getAttribute('data-mode')).toBe('dark')
+    expect(bg(control)).toBe(TRANSPARENT)
+  })
+
+  it('changes nothing outside a pinned band', () => {
+    const { control, build } = renderNested('light', undefined)
+    expect(control.getAttribute('data-mode')).toBe('light')
+    expect(bg(control)).toBe(TRANSPARENT)
+    expect(build).not.toHaveBeenCalled()
+    expect(control.getAttributeNames().join(' ').toLowerCase()).not.toContain(
+      'colorscheme',
+    )
+  })
+})

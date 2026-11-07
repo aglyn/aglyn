@@ -16,6 +16,7 @@
  */
 
 import { REUSABLE_INSTANCE_COMPONENT_ID } from '@aglyn/aglyn/app-utils/reusable-component-keys'
+import { ELEMENT_COLOR_SCHEME_VISITOR } from '@aglyn/aglyn/app-utils/element-color-scheme'
 import { CANVAS_ROOT_ELEMENT_ID } from '@aglyn/aglyn/foundation/constants/canvas'
 import {
   AI_ICON_COMPONENT_ID,
@@ -1379,13 +1380,10 @@ function compileButton(
       : style === 'secondary'
         ? { variant: 'outlined', color: onBrand ? 'inherit' : 'primary' }
         : { variant: 'contained', color: onBrand ? 'secondary' : 'primary' }
-  // A filled button of a page brought in is the site's one primary (AGL-4152): on a dark band or over a photo the
-  // dark scheme's primary is a lighter shade made for words on it, so the button keeps the light scheme's, the one
-  // its header's button and every other page's are drawn in. Its fill carries its own words.
-  const oneFill = verbatim && look.variant === 'contained' && look.color === 'primary' && (scope.band === 'dark' || !!scope.overPhoto)
-  // Sized to its words, never stretched across the column a Stack would
-  // stretch it over (AGL-3660), and aligned with its section.
-  const place = { alignSelf: scope.centered ? 'center' : 'flex-start' }
+  // A filled button is the site's one primary (AGL-4152). A dark band and a cover photo pin the dark scheme, whose
+  // primary is the light page's lighter twin; the button goes back to the scheme the visitor picked, so it wears
+  // the primary its header's button and every other filled button wear, light or dark, and paints no ground.
+  const oneFill = look.variant === 'contained' && look.color === 'primary' && (scope.band === 'dark' || !!scope.overPhoto)
   const id = scope.page.tree.add(
     'muiButton',
     {
@@ -1393,14 +1391,17 @@ function compileButton(
       ...look,
       size: scope.index === 0 || block.style === 'large' ? 'large' : 'medium',
       ...(destination ? destinationProps(destination) : {}),
+      ...(oneFill ? { colorScheme: ELEMENT_COLOR_SCHEME_VISITOR } : {}),
     },
-    oneFill ? null : place,
+    // Sized to its words, never stretched across the column a Stack would
+    // stretch it over (AGL-3660), and aligned with its section.
+    { alignSelf: scope.centered ? 'center' : 'flex-start' },
     null,
     'button',
   )
   if (destination) linkTo(scope, id, destination)
   if (film !== null) (scope.page.plays ??= []).push({ id, film, label })
-  return oneFill ? scope.page.tree.add('muiBox', { colorScheme: 'light' }, place, [id], 'buttonScheme') : id
+  return id
 }
 
 /** The film a button of a page brought in plays (AGL-4140), `video:<n>`, by its index; `null` for any other destination. */
