@@ -62,6 +62,31 @@ jest.mock('firebase/firestore', () => ({
   limit: () => null,
   setDoc: jest.fn(async () => undefined),
   deleteDoc: jest.fn(async () => undefined),
+  serverTimestamp: () => ({ __serverTimestamp: true }),
+}))
+// `crm/sharing`, for the default card's sites and its "Apply to existing
+// records" run (AGL-4047).
+const sharingCalls: Array<{ action: string; body: Record<string, unknown> }> = []
+jest.mock('../model/crm-sharing-api', () => ({
+  callCrmSharing: async (_user: unknown, _scope: unknown, action: string, body: Record<string, unknown> = {}) => {
+    sharingCalls.push({ action, body })
+    if (action === 'sites') {
+      return {
+        ok: true,
+        sites: [
+          { id: 'host-1', name: 'Site A' },
+          { id: 'host-2', name: 'Site B' },
+          { id: 'host-3', name: 'Site C' },
+        ],
+      }
+    }
+    return {
+      ok: true,
+      more: false,
+      applyRun: { status: 'done', processed: 12, changed: 9, capped: 0, cursor: null, startedAtMs: 1 },
+    }
+  },
+  followUpCrmSharing: async () => undefined,
 }))
 jest.mock('@aglyn/shared-ui-jsx/components/empty-state.component', () => ({
   __esModule: true,
@@ -421,6 +446,114 @@ describe('the email templates card (AGL-2658)', () => {
       </CrmOrgMountProvider>,
     )
     expect(screen.getByRole('region', { name: 'Email templates' })).toBeTruthy()
+  })
+})
+
+describe('default sharing for new records: all sites except some (AGL-4047)', () => {
+  const EXCEPT = /^All sites except/
+  // The org document as stored; `defaultRecordExcept` is read off it raw.
+  const stored = { crm: { defaultRecordScope: 'host', defaultRecordExcept: ['host-3'] } } as never
+
+  beforeEach(() => {
+    sharingCalls.length = 0
+  })
+
+  it('offers three choices as radios and a visible list, and saves the sites left out', async () => {
+    render(<CrmSettingsSection hostId="host-1" org={{}} />)
+    expect(screen.queryByRole('combobox', { name: /are shared with/ })).toBeNull()
+    expect(
+      screen.getByRole<HTMLInputElement>('radio', { name: 'All sites in the organization' }).checked,
+    ).toBe(true)
+    await waitFor(() =>
+      expect(screen.getByRole<HTMLInputElement>('radio', { name: EXCEPT }).disabled).toBe(false),
+    )
+    fireEvent.click(screen.getByRole('radio', { name: EXCEPT }))
+    // Nothing left out yet: refused before any write.
+    expect(
+      screen.getByText('Choose at least one site to leave out, or share with All sites.'),
+    ).toBeTruthy()
+    fireEvent.click(screen.getByRole('checkbox', { name: 'Site C' }))
+    fireEvent.click(screen.getByRole('button', { name: 'Save' }))
+    await waitFor(() =>
+      expect(updateDoc).toHaveBeenCalledWith(
+        { path: 'orgs/org-1' },
+        {
+          'crm.defaultRecordScope': 'host',
+          'crm.defaultRecordExcept': ['host-3'],
+          'crm.defaultRecordExceptAt': { __serverTimestamp: true },
+        },
+      ),
+    )
+  })
+
+  it('opens a saved choice on its sites, and moving away deletes the sites left out', async () => {
+    render(<CrmSettingsSection hostId="host-1" org={stored} />)
+    expect(screen.getByRole<HTMLInputElement>('radio', { name: EXCEPT }).checked).toBe(true)
+    await waitFor(() =>
+      expect(screen.getByRole<HTMLInputElement>('checkbox', { name: 'Site C' }).checked).toBe(true),
+    )
+    fireEvent.click(screen.getByRole('radio', { name: 'All sites in the organization' }))
+    fireEvent.click(screen.getByRole('button', { name: 'Save' }))
+    await waitFor(() =>
+      expect(updateDoc).toHaveBeenCalledWith(
+        { path: 'orgs/org-1' },
+        {
+          'crm.defaultRecordScope': 'org',
+          'crm.defaultRecordExcept': { __delete: true },
+          'crm.defaultRecordExceptAt': { __delete: true },
+        },
+      ),
+    )
+  })
+
+  it('switches "Apply to existing records" off with the reason until the default leaves sites out', () => {
+    render(<CrmSettingsSection hostId="host-1" org={{}} />)
+    expect(
+      screen.getByRole<HTMLButtonElement>('button', { name: 'Apply to existing records…' }).disabled,
+    ).toBe(true)
+    expect(screen.getByLabelText('Choose All sites except… and save it first.')).toBeTruthy()
+  })
+
+  it('applies to existing records only when asked, and says what it changed', async () => {
+    render(<CrmSettingsSection hostId="host-1" org={stored} />)
+    expect(sharingCalls.some((call) => call.action === 'default-apply')).toBe(false)
+    fireEvent.click(screen.getByRole('button', { name: 'Apply to existing records…' }))
+    await waitFor(() =>
+      expect(sharingCalls.some((call) => call.action === 'default-apply')).toBe(true),
+    )
+    await waitFor(() =>
+      expect(screen.getByText('Applied: 12 records checked, 9 changed.')).toBeTruthy(),
+    )
+  })
+
+  it('switches the choice off, with the reason, in a workspace with one site', () => {
+    render(
+      <CrmOrgMountProvider
+        mount={{
+          orgId: 'org-1',
+          hosts: [{ id: 'host-1', name: 'Site A', subdomain: 'site-a' }],
+          hostsReady: true,
+          orgSlug: 'acme',
+          hostsPath: '/acme/hosts',
+        }}
+      >
+        <CrmSettingsSection hostId={null} org={{}} />
+      </CrmOrgMountProvider>,
+    )
+    expect(screen.getByRole<HTMLInputElement>('radio', { name: EXCEPT }).disabled).toBe(true)
+    expect(
+      screen.getByText('This workspace has one site, so there is nothing to leave out.'),
+    ).toBeTruthy()
+  })
+
+  it('switches Save and Apply off, naming the permission, for a member without "Change CRM settings"', () => {
+    memberRole = 'editor'
+    render(<CrmSettingsSection hostId="host-1" org={stored} />)
+    expect(screen.getByRole<HTMLButtonElement>('button', { name: 'Save' }).disabled).toBe(true)
+    expect(
+      screen.getByRole<HTMLButtonElement>('button', { name: 'Apply to existing records…' }).disabled,
+    ).toBe(true)
+    expect(sharingCalls.some((call) => call.action === 'sites')).toBe(false)
   })
 })
 
