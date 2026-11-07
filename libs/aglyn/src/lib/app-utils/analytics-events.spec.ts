@@ -18,6 +18,12 @@
  */
 
 import {
+  FIRST_TOUCH_CLICK_IDS,
+  FIRST_TOUCH_HANDOFF_PARAM,
+} from '@aglyn/shared-util-first-touch/first-touch'
+
+import {
+  ANALYTICS_AD_CLICK_ID_PARAMS,
   ANALYTICS_DENIED_URL_PARAMS,
   ANALYTICS_EVENT_NAMES,
   ANALYTICS_PARAM_MAX_LENGTH_BY_KEY,
@@ -826,6 +832,15 @@ describe('analytics-events (AGL-1561)', () => {
         expect((safe.form_name as string).length).toBe(100)
         expect((safe.page_referrer as string).length).toBe(420)
         expect((safe.page_location as string).length).toBe(1000)
+      })
+
+      it('agrees with the first-touch capture on the hand-off param and the click ids', () => {
+        // Spelled out in the sanitizer so a published page does not download
+        // the whole first-touch runtime for two constants; held equal here.
+        expect(ANALYTICS_DENIED_URL_PARAMS.has(FIRST_TOUCH_HANDOFF_PARAM)).toBe(true)
+        for (const id of FIRST_TOUCH_CLICK_IDS) {
+          expect(ANALYTICS_AD_CLICK_ID_PARAMS.has(id)).toBe(true)
+        }
       })
 
       it('lists the denied names as lowercase, the form the match uses', () => {

@@ -101,10 +101,6 @@
  * experiment that decides which variant ships.
  */
 
-import {
-  FIRST_TOUCH_CLICK_IDS,
-  FIRST_TOUCH_HANDOFF_PARAM,
-} from '@aglyn/shared-util-first-touch/first-touch'
 import { sendAdvertisingEvent } from './advertising-events'
 
 /**
@@ -720,8 +716,11 @@ export const ANALYTICS_DENIED_URL_PARAMS: ReadonlySet<string> = new Set([
   // The cross-domain sign-in hand-off, `/auth/handoff/continue?handoff={rid}`
   // (`apps/console/app/auth/handoff/start/route.ts`).
   'handoff',
-  // The sealed first-touch record a link to another of our hosts carries.
-  FIRST_TOUCH_HANDOFF_PARAM,
+  // The sealed first-touch record a link to another of our hosts carries
+  // (`FIRST_TOUCH_HANDOFF_PARAM` in `@aglyn/shared-util-first-touch`, spelled
+  // out here because importing that module ships its whole runtime on every
+  // published page; `analytics-events.spec.ts` holds the two equal).
+  '_ft',
   // Native app sign-in: `/auth/native?challenge=…&state=…`, and the `code`
   // `api/auth/native-handoff/authorize` returns.
   'challenge',
@@ -761,9 +760,15 @@ export const ANALYTICS_DENIED_URL_PARAMS: ReadonlySet<string> = new Set([
  * click id IS an opaque token — that is what it is for — and a Google Ads
  * campaign id is a bare run of digits; the backstop would drop exactly the
  * attribution this URL is kept for. The address test still applies to them.
+ *
+ * The first three are the first-touch capture's `FIRST_TOUCH_CLICK_IDS`,
+ * spelled out rather than imported for the same bundle reason as `_ft` above;
+ * `analytics-events.spec.ts` fails if that list gains an id this one lacks.
  */
-const AD_CLICK_ID_PARAMS: ReadonlySet<string> = new Set([
-  ...FIRST_TOUCH_CLICK_IDS,
+export const ANALYTICS_AD_CLICK_ID_PARAMS: ReadonlySet<string> = new Set([
+  'gclid',
+  'fbclid',
+  'msclkid',
   'gbraid',
   'wbraid',
   'gad_source',
@@ -797,7 +802,7 @@ function looksLikeToken(value: string): boolean {
 /** Whether a decoded query value may not reach GA, whatever its name. */
 function isSensitiveQueryValue(key: string, value: string): boolean {
   if (EMAIL_SHAPED.test(value)) return true
-  if (key.startsWith('utm_') || AD_CLICK_ID_PARAMS.has(key)) return false
+  if (key.startsWith('utm_') || ANALYTICS_AD_CLICK_ID_PARAMS.has(key)) return false
   return looksLikePhone(value) || looksLikeToken(value)
 }
 
