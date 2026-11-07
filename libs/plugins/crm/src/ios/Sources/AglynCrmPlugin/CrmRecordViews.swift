@@ -303,6 +303,19 @@ struct RecordDetail: View {
           row.title, subtitle: row.subtitle, systemImage: kind.symbol, status: row.chip.map { ($0, row.tone) },
           primary: acts.primary, more: acts.more)
         if kind == .deal { DealStagePath(pipeline: pipeline, stageID: document.string("stageId"), status: document.string("status")) }
+        // What another plugin does with the person, such as start a quote (the console's `crmRecordActions` zone).
+        if kind == .contact, !context.slotWidgets(crmRecordActionsZone).isEmpty {
+          // The person as the page shows them: the holder's facet over the shared fields (`contactRecordFromDoc`).
+          let data = row.data
+          let text = { (key: String) in (data[key] as? String) ?? "" }
+          SlotWidgets(
+            context: context, slot: crmRecordActionsZone,
+            props: [
+              "hostId": scope.hostID.isEmpty ? (context.hostID ?? "") : scope.hostID, "orgId": scope.orgID,
+              "kind": "contact", "recordId": id, "name": row.title, "email": text("email"),
+              "phone": text("phone").isEmpty ? text("mobilePhone") : text("phone"), "company": text("companyName"),
+            ])
+        }
       }
       Section("Details") {
         // The fields that hold something; Edit holds every one.
@@ -1063,3 +1076,6 @@ struct CreateRecordSheet: View {
     }
   }
 }
+
+/// The console's zone of actions in a contact's head, which other plugins fill (`CRM_RECORD_ACTIONS_ZONE`).
+let crmRecordActionsZone = "crmRecordActions"

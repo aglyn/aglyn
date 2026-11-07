@@ -13,11 +13,22 @@ private struct SlotPlacementKey: EnvironmentKey {
   static let defaultValue = SlotPlacement.body
 }
 
+private struct SlotPropsKey: EnvironmentKey {
+  static let defaultValue: [String: String] = [:]
+}
+
 extension EnvironmentValues {
   /// The placement of the zone a widget is drawn in; `.body` outside one.
   public var slotPlacement: SlotPlacement {
     get { self[SlotPlacementKey.self] }
     set { self[SlotPlacementKey.self] = newValue }
+  }
+
+  /// What the page hosting a zone tells its widgets about the record it shows (the console's zone props): an Inbox
+  /// submission's id and request kind, a CRM record's person. Empty outside a zone, and for a zone that passes none.
+  public var slotProps: [String: String] {
+    get { self[SlotPropsKey.self] }
+    set { self[SlotPropsKey.self] = newValue }
   }
 }
 
@@ -38,17 +49,22 @@ public struct SlotWidgets: View {
   let context: NativePluginContext
   let slot: String
   let placement: SlotPlacement
+  let props: [String: String]
 
-  public init(context: NativePluginContext, slot: String, placement: SlotPlacement = .body) {
+  public init(
+    context: NativePluginContext, slot: String, placement: SlotPlacement = .body, props: [String: String] = [:]
+  ) {
     self.context = context
     self.slot = slot
     self.placement = placement
+    self.props = props
   }
 
   public var body: some View {
     ForEach(context.slotWidgets(slot), id: \.id) { widget in
       widget.make(context)
         .environment(\.slotPlacement, placement)
+        .environment(\.slotProps, props)
         .accessibilityIdentifier("zone-widget-\(widget.id)")
     }
   }

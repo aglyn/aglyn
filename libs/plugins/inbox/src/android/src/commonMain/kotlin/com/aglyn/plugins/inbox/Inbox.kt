@@ -282,6 +282,8 @@ data class Submission(
   val hostId: String? = null,
   /** What it asks for, as a chip says it: "Quote request" from a form marked as asking for a quote. */
   val requestLabel: String? = null,
+  /** What it asks for (`quote`), or null for an ordinary message: what the Inbox's actions zone tells its widgets. */
+  val requestKind: String? = null,
   /** The files it carries, which live in private storage and download through the forms plugin's route. */
   val files: List<SubmissionFile> = emptyList(),
 ) {
@@ -306,6 +308,7 @@ fun submissionOf(doc: FirestoreDoc): Submission {
     path = doc.data["path"] as? String,
     chips = routingChips(doc.data["routing"] as? Map<String, Any?>),
     requestLabel = submissionRequestLabel(doc.data["request"]),
+    requestKind = (doc.data["request"] as? Map<*, *>)?.get("kind") as? String,
     files = submissionFiles(doc.data["files"]),
     capturedKind = captured?.get("kind") as? String,
     capturedId = captured?.get("id") as? String,
@@ -445,3 +448,6 @@ class ConsoleInboxActions(
 internal fun JsonArray?.orEmpty(): List<JsonElement> = this?.jsonArray ?: emptyList()
 
 internal fun JsonElement?.long(): Long? = (this as? JsonPrimitive)?.longOrNull
+
+/** The console's zone of actions on an open submission, which other plugins fill (`INBOX_SUBMISSION_ACTIONS_ZONE`). */
+const val INBOX_SUBMISSION_ACTIONS_ZONE = "inboxSubmissionActions"
