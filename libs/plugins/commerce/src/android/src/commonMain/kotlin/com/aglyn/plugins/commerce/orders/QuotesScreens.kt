@@ -245,6 +245,7 @@ fun QuoteScreen(context: NativePluginContext, quoteId: String) {
   // The quote as it was when Edit was pressed: the editor's starting point and the version its save names.
   var editing by remember { mutableStateOf<HostOrder?>(null) }
   var notice by remember { mutableStateOf<Pair<String, StatusTone>?>(null) }
+  val host by remember(hostId, context.firestore) { context.firestore.observeDoc("hosts/$hostId") }.collectAsState(Live.Loading)
   editing?.let { order ->
     QuoteEditorSheet(
       context, quoteId, order, quoteProductsOf((products as? Live.Ready)?.value.orEmpty()), (store as? Live.Ready)?.value?.data,
@@ -263,7 +264,8 @@ fun QuoteScreen(context: NativePluginContext, quoteId: String) {
         EmptyState("This quote is not here", body = "It may have been deleted.", icon = AglynIcons.named("request_quote"))
       } else {
         val order = hostOrderFrom(doc)
-        QuoteDetail(context, order, quoteId, storeOf(store), paymentsState, notice) {
+        val site = invoiceSiteDetails((host as? Live.Ready)?.value?.data)
+        QuoteDetail(context, order, quoteId, storeOf(store), paymentsState, notice, site, { text, tone -> notice = text to tone }) {
           if (canEdit) editing = order else notice = com.aglyn.contracts.permissionRefusalText(QUOTE_EDIT_PERMISSION) to StatusTone.INFO
         }
       }
@@ -274,7 +276,7 @@ fun QuoteScreen(context: NativePluginContext, quoteId: String) {
 @Composable
 private fun QuoteDetail(
   context: NativePluginContext, order: HostOrder, quoteId: String, store: PayLinkStore?, paymentsState: String?,
-  notice: Pair<String, StatusTone>?, onEdit: () -> Unit,
+  notice: Pair<String, StatusTone>?, site: InvoiceSite, onNotice: (String, StatusTone) -> Unit, onEdit: () -> Unit,
 ) {
   val unpaid = isUnpaidQuote(order)
   val proofOnly = quoteIsProofOnly(order)
@@ -293,7 +295,9 @@ private fun QuoteDetail(
       if (proofOnly) StatusChip("Proof only")
       StatusChip(status.label, tone(quoteStatusColor(status.key)))
     }
+    QuoteEmailSection(context, order, quoteId, site, readiness = { if (gaps.isNotEmpty()) PayLinkNotice(context, gaps, paymentsState) }, onNotice = onNotice)
     if (gaps.isNotEmpty()) PayLinkNotice(context, gaps, paymentsState)
+    QuotePayLinkSection(context, order, quoteId, onNotice)
     SectionCard("Customer") { CustomerLines(order.quote) }
     if (!proofOnly) {
       SectionCard("Items") {
