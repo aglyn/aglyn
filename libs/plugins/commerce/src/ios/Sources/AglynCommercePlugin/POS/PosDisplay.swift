@@ -3,6 +3,7 @@
 
 import AglynContracts
 import AglynCore
+import AglynPluginHost
 import Foundation
 import Observation
 
@@ -55,6 +56,12 @@ protocol PosDisplayAPI: Sendable {
   func pairingCode(registerID: String, mode: PosDeviceMode) async throws -> PosPairingCode
   func devices(registerID: String) async throws -> [PosPairedDevice]
   func revoke(registerID: String, deviceID: String) async throws -> Int
+  /// Takes a plugin's own screen off the display (`close-screen`), only while it is the one showing (AGL-4042).
+  func closeScreen(registerID: String, pluginID: String) async throws
+}
+
+extension PosDisplayAPI {
+  func closeScreen(registerID: String, pluginID: String) async throws {}
 }
 
 struct ConsolePosDisplayAPI: PosDisplayAPI {
@@ -75,6 +82,11 @@ struct ConsolePosDisplayAPI: PosDisplayAPI {
       state = try? JSONDecoder().decode(PosDisplayState.self, from: data)
     }
     return (state, answer?["connected"]?.flag ?? false)
+  }
+
+  func closeScreen(registerID: String, pluginID: String) async throws {
+    _ = try await api.request(
+      posDisplayRoute, method: .post, body: body(registerID, "close-screen", ["pluginId": .string(pluginID)]))
   }
 
   func push(registerID: String, state: PosDisplayState) async throws {
@@ -211,6 +223,27 @@ final class PosDisplayControl {
   func show(_ state: PosDisplayState) async {
     guard connected, asking == nil, let register = registerID() else { return }
     try? await api.push(registerID: register, state: state)
+  }
+
+  /// Puts another plugin's screen on the display (AGL-4042, core's customer display seam): its public page, opened once
+  /// per prompt. False when no display is connected, a prompt waits, or the display could not be reached.
+  func showScreen(_ screen: CustomerDisplayScreen) async -> Bool {
+    guard connected, asking == nil, let register = registerID() else { return false }
+    var state = PosDisplayState(mode: .screen, updatedAtMs: Double(now()))
+    state.screen = AglynContracts.PosDisplayScreen(params: screen.params, path: screen.path, pluginId: screen.pluginID)
+    state.promptId = String(mintKey().prefix(32))
+    do {
+      try await api.push(registerID: register, state: state)
+      return true
+    } catch {
+      return false
+    }
+  }
+
+  /// Takes a plugin's own screen off the display, only while it is the one showing.
+  func closeScreen(pluginID: String) async {
+    guard let register = registerID() else { return }
+    try? await api.closeScreen(registerID: register, pluginID: pluginID)
   }
 
   /// Shows the thank-you; the display returns to idle by itself a few seconds later.

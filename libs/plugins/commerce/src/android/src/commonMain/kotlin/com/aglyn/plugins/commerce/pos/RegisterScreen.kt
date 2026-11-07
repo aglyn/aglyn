@@ -282,6 +282,18 @@ fun RegisterContent(
   LaunchedEffect(Unit) { runCatching { registerFocus.requestFocus() } }
 
   val checkout = model.checkout
+  // Another plugin's widget (a waiver to sign) can put its screen on the connected display (AGL-4042).
+  val displayConnected = model.display.connected
+  androidx.compose.runtime.DisposableEffect(displayConnected) {
+    val withdraw = if (displayConnected) {
+      com.aglyn.pluginhost.CustomerDisplayHosts.register(
+        com.aglyn.pluginhost.CustomerDisplayHost(show = model.display::showScreen, close = model.display::closeScreen),
+      )
+    } else {
+      null
+    }
+    onDispose { withdraw?.invoke() }
+  }
   var opsOpen by remember { mutableStateOf(false) }
   var checkInOpen by remember { mutableStateOf(false) }
   Box(

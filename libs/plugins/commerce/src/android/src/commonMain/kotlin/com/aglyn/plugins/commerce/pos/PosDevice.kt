@@ -177,6 +177,36 @@ sealed interface PosDisplayScreen {
   data class Cart(val cart: PosDisplayCart) : PosDisplayScreen
   data class Tip(val tip: PosDisplayStateTip, val promptId: String) : PosDisplayScreen
   data class Receipt(val receipt: PosDisplayStateReceipt, val promptId: String) : PosDisplayScreen
+
+  /** Another plugin's screen (AGL-4042): its public console page, at [href] beneath the console's origin. */
+  data class Plugin(val href: String, val promptId: String) : PosDisplayScreen
+}
+
+/** The display's own page, which a plugin's screen sends the display back to when the customer is done. */
+const val POS_DISPLAY_PAGE_PATH = "/kiosk/commerce/pos-display"
+
+/** Where the display keeps its credential for a plugin's page to read (`CUSTOMER_DISPLAY_CREDENTIAL_KEY`). */
+const val CUSTOMER_DISPLAY_CREDENTIAL_KEY = "aglyn.customerDisplay.credential"
+
+private val SCREEN_PLUGIN = Regex("^[a-z0-9][a-z0-9-]{0,63}$")
+private val SCREEN_PATH = Regex("^(/[a-z0-9][a-z0-9-]{0,63}){1,5}$")
+
+private fun queryPart(value: String): String = buildString {
+  for (byte in value.encodeToByteArray()) {
+    val c = byte.toInt().toChar()
+    if (c.isLetterOrDigit() && c.code < 128 || c in "-_.~") append(c) else append('%').append(((byte.toInt() and 0xff) or 0x100).toString(16).substring(1).uppercase())
+  }
+}
+
+/**
+ * Where a display opens a screen (`customerDisplayScreenHref`): the plugin's public page with its parameters and the
+ * display's own address to come back to; null for a screen out of shape.
+ */
+fun customerDisplayScreenHref(screen: com.aglyn.contracts.PosDisplayScreen, returnTo: String = POS_DISPLAY_PAGE_PATH): String? {
+  if (!SCREEN_PLUGIN.matches(screen.pluginId) || !SCREEN_PATH.matches(screen.path)) return null
+  val query = (screen.params.entries.sortedBy { it.key }.map { it.key to it.value } + ("return" to returnTo))
+    .joinToString("&") { (key, value) -> "${queryPart(key)}=${queryPart(value)}" }
+  return "/kiosk/${screen.pluginId}${screen.path}?$query"
 }
 
 class PosCustomerDisplayModel(
@@ -199,6 +229,14 @@ class PosCustomerDisplayModel(
     private set
   var notice by mutableStateOf<String?>(null)
     private set
+  /** The plugin screens the customer finished (their page sent the display back): opened once per prompt. */
+  var returnedScreens by mutableStateOf<Set<String>>(emptySet())
+    private set
+
+  /** A plugin's page sent the display back: the customer is done with that screen. */
+  fun screenReturned(promptId: String) {
+    returnedScreens = returnedScreens + promptId
+  }
   var pairError by mutableStateOf<String?>(null)
     private set
   var pairing by mutableStateOf(false)
@@ -298,6 +336,12 @@ class PosCustomerDisplayModel(
           }
         }
         PosDisplayMode.CART -> state.cart?.let { PosDisplayScreen.Cart(it) } ?: PosDisplayScreen.Idle
+        // Opened once per prompt; back from it, the same prompt shows the store's screen.
+        PosDisplayMode.SCREEN -> {
+          val promptId = state.promptId.orEmpty()
+          val href = state.screen?.let { customerDisplayScreenHref(it) }
+          if (href != null && promptId.isNotEmpty() && promptId !in returnedScreens) PosDisplayScreen.Plugin(href, promptId) else PosDisplayScreen.Idle
+        }
         else -> PosDisplayScreen.Idle
       }
     }

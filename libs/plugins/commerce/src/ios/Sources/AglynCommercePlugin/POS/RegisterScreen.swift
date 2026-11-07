@@ -37,10 +37,26 @@ struct RegisterScreen: View {
   @State private var showOps = false
   /// Check-in at the window (AGL-4043).
   @State private var showCheckIn = false
+  /// This register as core's customer display host while a display is connected (AGL-4042).
+  @State private var displayHostToken: Int?
   @State private var showPrinters = false
   @State private var showOfflineCash = false
   @Environment(\.scenePhase) private var scenePhase
   let context: NativePluginContext
+
+  /// Offers this register's display to other plugins' widgets, or withdraws it.
+  private func offerDisplay(_ connected: Bool) {
+    if connected, displayHostToken == nil {
+      let display = model.display
+      displayHostToken = CustomerDisplayHosts.shared.register(
+        CustomerDisplayHost(
+          show: { screen in await display.showScreen(screen) },
+          close: { pluginID in await display.closeScreen(pluginID: pluginID) }))
+    } else if !connected, let token = displayHostToken {
+      CustomerDisplayHosts.shared.withdraw(token)
+      displayHostToken = nil
+    }
+  }
 
   init(context: NativePluginContext) {
     self.context = context
@@ -143,7 +159,12 @@ struct RegisterScreen: View {
       if phase == .active { Task { await model.warmUpReader() } }
     }
     .tapToPayEducationAfterTerms(model.collector)
-    .onDisappear { model.stop() }
+    .onDisappear {
+      model.stop()
+      offerDisplay(false)
+    }
+    // Another plugin's widget (a waiver to sign) can put its screen on the connected display.
+    .onChange(of: model.display.connected, initial: true) { _, connected in offerDisplay(connected) }
   }
 
   @ToolbarContentBuilder
