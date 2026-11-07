@@ -111,6 +111,42 @@ class DataCasesTest {
     cases("describeScope").forEach { (args, result) ->
       assertEquals(result.jsonPrimitive.content, describeScope(strings(args[0]), args[1].jsonObject.mapValues { it.value.jsonPrimitive.content }), args.toString())
     }
+    @Suppress("UNCHECKED_CAST")
+    fun doc(json: JsonElement) = plainJson(json) as? Map<String, Any?>
+    cases("scopeSharingOf").forEach { (args, result) ->
+      val want = result.jsonObject
+      val expected = when (str(want.getValue("mode"))) {
+        "all" -> com.aglyn.pluginhost.ScopeSharing.All
+        "selected" -> com.aglyn.pluginhost.ScopeSharing.Selected(strings(want.getValue("hostIds")).orEmpty())
+        "allExcept" -> com.aglyn.pluginhost.ScopeSharing.AllExcept(strings(want.getValue("exceptHostIds")).orEmpty(), strings(want.getValue("includedHostIds")).orEmpty())
+        else -> com.aglyn.pluginhost.ScopeSharing.None
+      }
+      assertEquals(expected, com.aglyn.pluginhost.scopeSharingOf(doc(args[0])), args.toString())
+    }
+    cases("describeSharing").forEach { (args, result) ->
+      val names = (args.getOrNull(1) as? JsonObject)?.mapValues { it.value.jsonPrimitive.content }.orEmpty()
+      assertEquals(result.jsonPrimitive.content, com.aglyn.pluginhost.describeSharing(doc(args[0]), names), args.toString())
+    }
+    cases("sharingFromChoice").forEach { (args, result) ->
+      val choice = args[0].jsonObject
+      val picked = when (str(choice.getValue("mode"))) {
+        "all" -> com.aglyn.pluginhost.ScopeSharingChoice.All
+        "selected" -> com.aglyn.pluginhost.ScopeSharingChoice.Selected(strings(choice.getValue("hostIds")).orEmpty())
+        else -> com.aglyn.pluginhost.ScopeSharingChoice.AllExcept(strings(choice.getValue("exceptHostIds")).orEmpty())
+      }
+      val options = args.getOrNull(2) as? JsonObject
+      val (fields, problem) = com.aglyn.pluginhost.sharingFromChoice(
+        picked, strings(args[1]).orEmpty(), (options?.get("maxIncluded") as? JsonPrimitive)?.content?.toDoubleOrNull()?.toInt(),
+        (options?.get("keepHostIds"))?.let(::strings).orEmpty(),
+      )
+      val want = result.jsonObject
+      assertEquals(str(want.getValue("problem")), problem, args.toString())
+      val wantFields = want.getValue("fields") as? JsonObject
+      assertEquals(
+        wantFields?.let { com.aglyn.pluginhost.ScopeSharingFields(strings(it.getValue("visibleTo")).orEmpty(), str(it.getValue("scopeMode")), strings(it.getValue("scopeExcept"))) },
+        fields, args.toString(),
+      )
+    }
     cases("scopeToStore").forEach { (args, result) ->
       val (scope, problem) = scopeToStore(strings(args[0]))
       assertEquals(strings(result.jsonObject.getValue("scope")), scope, args.toString())
