@@ -48,6 +48,9 @@ struct SellScreen: View {
     Group {
       if let orgID = context.orgID {
         VStack(spacing: 0) {
+          // The marketplace's sections first, as on Browse, Installed and Licenses: Account › Marketplace lands here, and
+          // from a site this is the way to Publish.
+          SectionTabs(context: context, current: marketplaceSellScreen).aglynContentEdges().padding(.top, AglynSpace.one)
           Picker("Section", selection: $section) {
             ForEach(SellSection.allCases) { Text($0.title).tag($0) }
           }

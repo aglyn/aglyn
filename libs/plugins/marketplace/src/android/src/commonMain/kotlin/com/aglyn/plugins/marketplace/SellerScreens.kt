@@ -111,6 +111,9 @@ fun SellScreen(context: NativePluginContext, initialSection: String? = null) {
   Column(Modifier.fillMaxSize()) {
     ListHeader("Selling")
     Column(Modifier.padding(horizontal = space(2f)), verticalArrangement = Arrangement.spacedBy(space(1f))) {
+      // The marketplace's sections first, as on Browse, Installed and Licenses: Account › Marketplace lands here, and from
+      // a site this is the way to Publish.
+      SectionTabs(context, MARKETPLACE_SELL_SCREEN)
       ChoiceChipRow(SELL_SECTIONS, section, { section = it }, wrap = true)
     }
     Column(Modifier.fillMaxSize().verticalScroll(rememberScrollState()).padding(space(2f)).testTag("sell-$section"), verticalArrangement = Arrangement.spacedBy(space(2f))) {

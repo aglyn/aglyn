@@ -5369,6 +5369,68 @@
                     "id": "licences",
                     "label": "Licenses",
                     "screen": "marketplace.licenses"
+                  },
+                  {
+                    "console": {
+                      "id": "/marketplace/upload",
+                      "surface": "orgPluginSection"
+                    },
+                    "docs": "/developers/plugins/overview",
+                    "id": "upload",
+                    "label": "Upload / Publish",
+                    "screen": "marketplace.publish"
+                  },
+                  {
+                    "console": {
+                      "id": "/marketplace/profile",
+                      "surface": "orgPluginSection"
+                    },
+                    "docs": "/developers/plugins/overview",
+                    "id": "profile",
+                    "label": "Publisher Profile",
+                    "params": {
+                      "section": "profile"
+                    },
+                    "screen": "marketplace.sell"
+                  },
+                  {
+                    "console": {
+                      "id": "/marketplace/listings",
+                      "surface": "orgPluginSection"
+                    },
+                    "docs": "/developers/plugins/overview",
+                    "id": "listings",
+                    "label": "Listings",
+                    "params": {
+                      "section": "listings"
+                    },
+                    "screen": "marketplace.sell"
+                  },
+                  {
+                    "console": {
+                      "id": "/marketplace/payouts",
+                      "surface": "orgPluginSection"
+                    },
+                    "docs": "/developers/plugins/overview",
+                    "id": "payouts",
+                    "label": "Payouts",
+                    "params": {
+                      "section": "payouts"
+                    },
+                    "screen": "marketplace.sell"
+                  },
+                  {
+                    "console": {
+                      "id": "/marketplace/sales",
+                      "surface": "orgPluginSection"
+                    },
+                    "docs": "/developers/plugins/overview",
+                    "id": "sales",
+                    "label": "Sales",
+                    "params": {
+                      "section": "sales"
+                    },
+                    "screen": "marketplace.sell"
                   }
                 ]
               }
