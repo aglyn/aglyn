@@ -32,6 +32,12 @@ import {
 } from '@aglyn/aglyn/plugin-manager/plugin-record-facts'
 import { firebaseAdmin, getOrgForHost } from '@aglyn/tenant-data-admin'
 import { isRefusedIdToken } from '@aglyn/tenant-data-admin/server/id-token-refusal'
+import {
+  merchantAccountReadiness,
+  paymentProvider,
+  type MerchantAccountReadiness,
+  type PaymentMode,
+} from '@aglyn/tenant-data-admin/server/payment-provider'
 import * as CommerceModel from '../model'
 import { commerceSitePermissionRefusal } from '../model/plugin-permissions'
 import { holdsCommerceSiteKey } from './commerce-site-keys'
@@ -107,7 +113,8 @@ import type { QuoteUploadCalls } from './quote-uploads'
  *
  * Every action but the pay link's two and the send asks "Create and edit
  * quotes" (`commerce.quotes`); those three ask "Send quotes and invoices to
- * customers" (`commerce.quotes.send`, AGL-4094, AGL-4097). The send emails
+ * customers" (`commerce.quotes.send`, AGL-4094, AGL-4097). `payments-readiness` answers whether the workspace
+ * can take card payments (`ownerPaymentsReadiness`), for the apps' quote notice. The send emails
  * the quote to the customer (`quote-email.ts`, loaded only then). The PDF
  * (AGL-4095) is the document the customer would download from the quote
  * page, and carries the pay link only for someone who also holds
@@ -163,6 +170,8 @@ export interface QuoteDeps {
    * as a guest.
    */
   customerAccount?(input: { hostId: string; host: Record<string, unknown>; email: string }): Promise<{ id: string } | null>
+  /** This deployment's payment mode, from its own credential; absent, the provider's answer. */
+  platformMode?(): PaymentMode | undefined
   now(): number
 }
 
@@ -190,6 +199,7 @@ export function defaultQuoteDeps(): QuoteDeps {
     requestFacts: async (request) =>
       (await pluginRecordFactsReader(CommerceModel.QUOTE_REQUEST_FACTS_RESOURCE)?.reader.read(request)) ?? null,
     customerAccount: async (input) => (await import('./quote-pay')).readQuoteCustomerAccount(input),
+    platformMode: () => paymentProvider().platformMode(),
     now: () => Date.now(),
   }
 }
@@ -394,6 +404,26 @@ function editedQuoteFields(input: CommerceModel.QuoteInput) {
   }
 }
 
+/**
+ * Whether the site's workspace can take card payments, for an app's "Customers can't pay this quote online yet."
+ * notice (AGL-4162). It reads the workspace OWNER's profile, as the console's `useMerchantPayments` and every money
+ * route do, and answers with `merchantAccountReadiness`, the check the console's copy has to agree with. The server
+ * knows this deployment's payment mode, which an app cannot, so a live deployment's unverified account answers
+ * `mode-unverified` here exactly as it does in the console.
+ */
+async function ownerPaymentsReadiness(deps: QuoteDeps, hostId: string): Promise<MerchantAccountReadiness> {
+  const owner = await deps.orgForHost(hostId)
+  const ownerUid = (owner?.org as { ownerUid?: unknown } | undefined)?.ownerUid
+  if (typeof ownerUid !== 'string' || !ownerUid) return 'not-connected'
+  const profile = await deps.firestore().collection('profiles').doc(ownerUid).get()
+  return merchantAccountReadiness({
+    accountId: profile.get('stripeAccountId'),
+    chargesEnabled: profile.get('stripeChargesEnabled'),
+    accountLivemode: profile.get('stripeAccountLivemode'),
+    platformMode: deps.platformMode ? deps.platformMode() : paymentProvider().platformMode(),
+  })
+}
+
 export async function handleQuote(deps: QuoteDeps, req: PluginApiRequest): Promise<Outcome> {
   if (req.method !== 'POST') return refuse(405, 'Method not allowed')
   const authorization = headerOf(req, 'authorization')
@@ -420,6 +450,10 @@ export async function handleQuote(deps: QuoteDeps, req: PluginApiRequest): Promi
     return refuse(403, commerceSitePermissionRefusal(key))
   }
   const actor = String(decoded.email || decoded.uid)
+
+  if (action === 'payments-readiness') {
+    return { status: 200, body: { state: await ownerPaymentsReadiness(deps, hostId) } }
+  }
 
   if (action === 'pay-link' || action === 'replace-link') {
     const quoteId = String(body['quoteId'] ?? '')
