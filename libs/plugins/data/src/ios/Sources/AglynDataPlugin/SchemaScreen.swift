@@ -215,7 +215,7 @@ private struct SchemaEditor: View {
             tone: .warning)
         }
         SiteSharingField(
-          value: $sharingChoice, sites: sites.map { SharingSite(id: $0.id, name: $0.name) }, sitesReady: sitesReady,
+          "", value: $sharingChoice, sites: sites.map { SharingSite(id: $0.id, name: $0.name) }, sitesReady: sitesReady,
           problem: sharingProblem
         )
         .accessibilityIdentifier("schema-scope")

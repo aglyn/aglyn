@@ -112,7 +112,8 @@ fun SiteSharingField(
     )
   }
   Column(modifier.fillMaxWidth().testTag("site-sharing-field"), verticalArrangement = Arrangement.spacedBy(space(0.5f))) {
-    Text(label, style = MaterialTheme.typography.labelMedium, color = MaterialTheme.colorScheme.onSurfaceVariant, modifier = Modifier.padding(horizontal = space(2f)))
+    // A field under a heading that already names it passes no label.
+    if (label.isNotEmpty()) Text(label, style = MaterialTheme.typography.labelMedium, color = MaterialTheme.colorScheme.onSurfaceVariant, modifier = Modifier.padding(horizontal = space(2f)))
     if (readOnly && readOnlyReason != null) caption(readOnlyReason, false)
     if (SiteSharingMode.ALL in modes) {
       ChoiceRow("All sites", value?.mode == SiteSharingMode.ALL, { choose(SiteSharingMode.ALL) }, Modifier.testTag("sharing-mode-all"), enabled = !readOnly)

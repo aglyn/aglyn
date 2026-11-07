@@ -223,6 +223,7 @@ private fun SchemaEditor(context: NativePluginContext, orgId: String, dataset: D
             sites = siteList.map { SharingSite(it.id, it.name) },
             sitesReady = sitesReady,
             modifier = Modifier.testTag("schema-scope"),
+            label = "",
             problem = sharingProblem,
           )
           // What sharing does NOT do is the part people get wrong (AGL-1046).
