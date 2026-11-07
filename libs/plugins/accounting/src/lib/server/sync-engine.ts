@@ -20,7 +20,7 @@
  *
  * ## Queue, then post
  *
- * An event — an order paid, refunded or cancelled, a payout landed — only
+ * An event — an order paid or refunded, a payout landed — only
  * QUEUES: it writes sync items ({@link enqueueOrderPaid} and its siblings)
  * and returns. Posting happens on the console's tick ({@link runSyncPass}),
  * one item at a time, paced to the provider's limits. So a ledger that is
@@ -118,7 +118,7 @@ export interface AccountingEngineDeps {
 
 // Queueing lives in `sync-intake.ts`, which the tenant's event drain loads
 // and which holds nothing a ledger call needs; re-exported for the tick.
-export { enqueueOrderCancelled, enqueueOrderPaid, enqueueOrderRefunded, enqueuePayout } from './sync-intake'
+export { enqueueOrderPaid, enqueueOrderRefunded, enqueuePayout } from './sync-intake'
 
 // ── Posting ───────────────────────────────────────────────────────────────
 

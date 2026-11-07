@@ -36,7 +36,6 @@ import {
 import { AccountingProviderError } from './providers/http'
 import type { AccountingProvider } from './providers/provider'
 import {
-  enqueueOrderCancelled,
   enqueueOrderPaid,
   enqueueOrderRefunded,
   foreignCurrencyRefusal,
@@ -164,11 +163,24 @@ describe('queueing', () => {
     await expect(enqueueOrderPaid(dated.deps, order())).resolves.toBe(0)
   })
 
-  it('skips a sale that has not posted when its order is cancelled', async () => {
-    const { deps, item } = setup()
+  it('posts a paid order that was later cancelled, and the refund that followed against its sale', async () => {
+    // A cancel moves no money and is not taken: the sale and fee stay queued,
+    // and a refund, if one follows, reverses the posted sale.
+    const { deps, connection, item, provider, advance } = setup()
     await enqueueOrderPaid(deps, order())
-    await expect(enqueueOrderCancelled(deps, order())).resolves.toBe(true)
-    expect(item(saleItemId(order()))).toMatchObject({ status: 'skipped' })
+    const refund = { order: order(), refundId: 're_1', amountCents: 1000, refundedAtMs: NOW, feeRefundedCents: 0 }
+    await enqueueOrderRefunded(deps, refund)
+    // The refund may wait a pass for its sale; it never needs a person.
+    const first = await runSyncPass(deps, connection(), { deadlineMs: NOW + 60_000 })
+    advance(5 * 60_000)
+    const second = await runSyncPass(deps, connection(), { deadlineMs: NOW + 10 * 60_000 })
+    expect(first.posted + second.posted).toBe(3)
+    expect(first.needsAttention + second.needsAttention).toBe(0)
+    expect(provider.createSalesReceipt).toHaveBeenCalledTimes(1)
+    expect(provider.createRefundReceipt).toHaveBeenCalledTimes(1)
+    expect(item(saleItemId(order()))).toMatchObject({ status: 'synced' })
+    expect(item(feeItemId(order()))).toMatchObject({ status: 'synced' })
+    expect(item(refundItemId(refund))).toMatchObject({ status: 'synced' })
   })
 })
 
