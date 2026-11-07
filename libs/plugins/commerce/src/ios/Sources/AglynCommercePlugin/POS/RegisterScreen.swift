@@ -37,6 +37,9 @@ struct RegisterScreen: View {
   @State private var showOps = false
   /// Check-in at the window (AGL-4043).
   @State private var showCheckIn = false
+  /// The platform's own card reader sales (AGL-4038): on its hardware seller store only.
+  @State private var hardwareSeller = PosHardwareSeller()
+  @State private var showToAttach = false
   /// This register as core's customer display host while a display is connected (AGL-4042).
   @State private var displayHostToken: Int?
   @State private var showPrinters = false
@@ -109,6 +112,10 @@ struct RegisterScreen: View {
     .onChange(of: query) { _, text in if text.isEmpty { model.search("") } }
     .sheet(item: $model.sheet) { _ in ItemSheetView(model: model) }
     .sheet(isPresented: $showOps) { RegisterOpsSheet(model: model) }
+    .sheet(isPresented: $showToAttach) {
+      PosHardwareToAttachSheet(api: PosHardwareSaleAPI(api: context.api, hostID: context.hostID ?? ""))
+    }
+    .task { await hardwareSeller.check(PosHardwareSaleAPI(api: context.api, hostID: context.hostID ?? "")) }
     .sheet(isPresented: $showCheckIn) {
       PosCheckInSheet(
         context: context, hostID: context.hostID ?? "", registerID: model.register?.id,
@@ -122,7 +129,7 @@ struct RegisterScreen: View {
     .onChange(of: query) { _, _ in model.cashier.touch() }
     .sheet(isPresented: Binding(get: { model.checkout != nil }, set: { if !$0 { closeCheckout() } })) {
       if let checkout = model.checkout {
-        CheckoutView(model: model, checkout: checkout)
+        CheckoutView(model: model, checkout: checkout, context: context)
           .interactiveDismissDisabled()
           .checkoutSheetSizing()
       }
@@ -175,6 +182,10 @@ struct RegisterScreen: View {
           Picker("Register", selection: Binding(get: { model.register }, set: { if let next = $0 { model.selectRegister(next) } })) {
             ForEach(registers) { Text($0.name).tag(Optional($0)) }
           }
+        }
+        if hardwareSeller.seller {
+          Button("Card reader sales", systemImage: "creditcard.and.123") { showToAttach = true }
+            .accessibilityIdentifier("pos-hardware-to-attach-open")
         }
         Button("Check in", systemImage: "checkmark.circle") { showCheckIn = true }
           .accessibilityIdentifier("pos-check-in-open")
