@@ -139,6 +139,7 @@ jest.mock('@aglyn/aglyn/server', () => {
     // shipping the leak.
     ...jest.requireActual('../../../../../../aglyn/src/lib/app-utils/consent-groups'),
     crmDefaultScopeOf: jest.requireActual('../../../../../../aglyn/src/lib/app-utils/crm').crmDefaultScopeOf,
+    crmScopeFields: jest.requireActual('../../../../../../aglyn/src/lib/app-utils/crm').crmScopeFields,
     ...jest.requireActual('../../../../../../aglyn/src/lib/app-utils/marketing-consent'),
     ...jest.requireActual('../../../../../../aglyn/src/lib/app-utils/container-membership'),
     ORG_SCOPE_TOKEN: 'org',

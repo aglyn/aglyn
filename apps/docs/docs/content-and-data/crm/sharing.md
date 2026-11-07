@@ -11,18 +11,52 @@ contacts, companies, deals and tasks, whichever site they came in on. The site
 a record came from is kept as its **source**, so you can still tell which
 brand met the person.
 
-An agency that keeps each client's records apart can change that. A member
-holding [**Change CRM settings**](../../workspace-and-billing/teams-and-roles/custom-roles.md#crm-settings-permission)
-(owners and admins by default) sets **Default sharing for new records** in the CRM's
-**Settings** to **Only the site they came in on**. Each site then sees the
-people it captured, a site in a [consent group](./overview.md) also sees the
-records of the group's other sites, and every other record is hidden from it,
-so one client's collaborator never sees another client's people. The setting
-covers new contacts, companies, deals and tasks, and changes nothing that
+## Default sharing for new records {#default-sharing-for-new-records}
+
+A member holding [**Change CRM settings**](../../workspace-and-billing/teams-and-roles/custom-roles.md#crm-settings-permission)
+(owners and admins by default) chooses, in the CRM's **Settings**, what new
+contacts, companies, deals and tasks are shared with, and saves it:
+
+- **All sites in the organization**, as above.
+- **Only the site they came in on**: what an agency that keeps each client's
+  records apart chooses. Each site then sees the people it captured, a site in
+  a [consent group](./overview.md) also sees the records of the group's other
+  sites, and every other record is hidden from it, so one client's
+  collaborator never sees another client's people.
+- **All sites except…**: every site but the ones you tick to leave out,
+  including sites you add later. The site a person came in on always keeps
+  them, even if you left it out. Leave out at least one site and keep at
+  least one in. A workspace with one site has nothing to leave out, and the
+  choice works up to 30 sites; past either, it is switched off, with the
+  reason.
+
+The setting covers records created from then on, and changes nothing that
 already exists. It is separate from the defaults for new datasets and media
 files, which are set on the organization **Data** and **Media** pages.
 
-The rest of this page is for a workspace that keeps its sites apart.
+### Apply to existing records {#apply-to-existing-records}
+
+Under **All sites except…**, the records you already have can be shared the
+same way. Choose **Apply to existing records…** below the setting, after
+saving it, and confirm. Every contact, lead, company, deal, task and logged
+activity in the workspace is then shared with every site except the ones you
+left out:
+
+- the site that captured a person keeps them, whatever you left out;
+- sites left out stop seeing the rest;
+- records shared by hand or by a sharing rule keep those shares on top.
+
+Nothing changes on existing records until you apply it, and it changes them
+only once: to apply a later change of the setting, apply it again. The card
+shows how many records were checked and changed. Keep the page open until it
+says it is applied; if it stops, it carries on by itself within a few
+minutes, or choose **Resume**. A record that would reach more than 30 sites
+is left as it was, and the count says how many.
+
+## Share a record with more sites
+
+The rest of this page is for a workspace whose records don't all reach every
+site.
 
 When you run several brands and want one brand's team to work records
 another brand captured, a member holding **Change CRM settings** can share them. You
@@ -154,8 +188,9 @@ A site a record was shared with:
 
 ## Who can do this
 
-Sharing, unsharing and sharing rules take the **Change CRM settings**
-permission, which owners and admins hold by default. Other members see the
+Sharing, unsharing, sharing rules, the default sharing for new records and
+**Apply to existing records** take the **Change CRM settings** permission,
+which owners and admins hold by default. Other members see the
 Sharing card and the chips, with the share buttons switched off and the
 permission named.
 

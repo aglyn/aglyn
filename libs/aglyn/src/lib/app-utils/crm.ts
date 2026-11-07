@@ -100,7 +100,13 @@ import {
   picklistValueByLabel,
   type PicklistValueSet,
 } from './picklists'
-import { MAX_SCOPE_HOSTS, ORG_SCOPE_TOKEN, type ScopeToken } from './scope-tokens'
+import {
+  hostScopeToken,
+  MAX_SCOPE_HOSTS,
+  ORG_SCOPE_TOKEN,
+  SCOPE_MODE_ALL_EXCEPT,
+  type ScopeToken,
+} from './scope-tokens'
 import { isKnownContactSource, labelContactSource } from '../plugin-manager/plugin-contact-capture'
 
 // The fixed vocabularies and their guards live in a leaf module; every name
@@ -2568,6 +2574,122 @@ export function crmDefaultScopeOf(
   return legacy === 'org' || legacy === 'host' ? legacy : 'org'
 }
 
+/*==========================================
+ * ALL SITES EXCEPT SOME, AS THE CRM DEFAULT (AGL-4047).
+ *
+ * Stored as `defaultRecordScope: 'host'` beside `defaultRecordExcept`, the
+ * site ids left out, so a reader that predates the choice — an app build in
+ * a tester's hands, a console tab open across the deploy — reads "the site it
+ * came in on" and never shares a new record with a site left out. Every
+ * reader here answers the third choice from the two together, and
+ * `crmDefaultScopeOf` keeps answering `'host'` for it: a caller asking "does
+ * every site get it?" gets the true no.
+ *=========================================*/
+
+/** Where the sites the CRM default leaves out are stored (AGL-4047). */
+export const CRM_DEFAULT_RECORD_EXCEPT_PATH = `${ORG_CRM_SETTINGS_FIELD}.defaultRecordExcept`
+
+/**
+ * When the default was last set to all sites except some, a server timestamp: a record
+ * created before it was not stamped by it, so only an explicit "Apply to
+ * existing records" run gives such a record the default (AGL-4047).
+ */
+export const CRM_DEFAULT_RECORD_EXCEPT_AT_PATH = `${ORG_CRM_SETTINGS_FIELD}.defaultRecordExceptAt`
+
+/**
+ * The most sites the CRM default may reach when it leaves some out. A record's
+ * scoped search fields grow by site and by prefix (`scopedSearchTokens`), so
+ * past this the choice is switched off and a record stops gaining sites.
+ */
+export const CRM_DEFAULT_MAX_INCLUDED = MAX_SCOPE_HOSTS
+
+function crmSettingsOf(orgDocument: Record<string, unknown> | null | undefined): Record<string, unknown> {
+  const settings = orgDocument?.[ORG_CRM_SETTINGS_FIELD]
+  return settings && typeof settings === 'object' && !Array.isArray(settings)
+    ? (settings as Record<string, unknown>)
+    : {}
+}
+
+/** The sites `orgs/{orgId}.hosts` names, or null when the document carries no map. */
+function orgHostMapIds(orgDocument: Record<string, unknown> | null | undefined): string[] | null {
+  const hosts = orgDocument?.['hosts']
+  if (!hosts || typeof hosts !== 'object' || Array.isArray(hosts)) return null
+  return Object.entries(hosts as Record<string, unknown>)
+    .filter(([, on]) => Boolean(on))
+    .map(([id]) => id)
+}
+
+/**
+ * The sites the CRM default leaves out, when it is all sites except some, or
+ * null. Only the org's own `crm.defaultRecordScope: 'host'` carries it: the
+ * older dataset default never did.
+ */
+export function crmDefaultExceptOf(
+  orgDocument: Record<string, unknown> | null | undefined,
+): string[] | null {
+  const settings = crmSettingsOf(orgDocument)
+  if (settings['defaultRecordScope'] !== 'host') return null
+  const except = settings['defaultRecordExcept']
+  if (!Array.isArray(except)) return null
+  const ids = [...new Set(except.filter((id): id is string => typeof id === 'string' && Boolean(id)))]
+  return ids.length ? ids : null
+}
+
+/** The CRM default as the settings card offers it: one of three choices. */
+export function crmDefaultSharingOf(
+  orgDocument: Record<string, unknown> | null | undefined,
+): 'org' | 'host' | 'allExcept' | undefined {
+  if (crmDefaultExceptOf(orgDocument)) return 'allExcept'
+  return crmDefaultScopeOf(orgDocument)
+}
+
+/** What a new record stores of its sites: `visibleTo`, and the marker when the default leaves sites out. */
+export interface CrmScopeFields {
+  visibleTo: ScopeToken[]
+  scopeMode?: typeof SCOPE_MODE_ALL_EXCEPT
+  scopeExcept?: ScopeToken[]
+}
+
+/**
+ * The sites a new record is stamped with under the org's CRM default, and,
+ * for all sites except some, the marker the sweep keeps it level by
+ * (AGL-4047): the workspace's sites (`orgs/{orgId}.hosts`) less the ones left
+ * out, plus the site it came in on, which keeps the person whatever the
+ * default leaves out.
+ *
+ * It never guesses wider. A document with no sites map, or a choice that would
+ * reach more than {@link CRM_DEFAULT_MAX_INCLUDED} sites, stamps the site it
+ * came in on and its group, as "Only the site they came in on" does. Once no
+ * site left out is still in the workspace the default IS all sites, and the
+ * record is stamped `['org']`, as the sweep would collapse it.
+ *
+ * Only a server writer stores the marker; the rules refuse it from a client,
+ * whose record the server marks on its follow-up (`crm/sharing` `evaluate`).
+ */
+export function crmScopeFields(
+  org: Record<string, unknown> | null | undefined,
+  group: ConsentGroup,
+): CrmScopeFields {
+  const scope = crmDefaultScopeOf(org)
+  if (scope === 'org') return { visibleTo: [ORG_SCOPE_TOKEN] }
+  const kept = consentGroupScope(group)
+  const except = crmDefaultExceptOf(org)
+  const orgHostIds = except ? orgHostMapIds(org) : null
+  if (!except || !orgHostIds?.length) return { visibleTo: kept }
+  const left = except.filter((id) => orgHostIds.includes(id))
+  if (!left.length) return { visibleTo: [ORG_SCOPE_TOKEN] }
+  const out = new Set(left)
+  const included = [...new Set([...orgHostIds.filter((id) => !out.has(id)), group.hostId])]
+    .filter(Boolean)
+    .sort()
+  if (included.length > CRM_DEFAULT_MAX_INCLUDED) return { visibleTo: kept }
+  return {
+    visibleTo: included.map(hostScopeToken),
+    scopeMode: SCOPE_MODE_ALL_EXCEPT,
+    scopeExcept: left.sort().map(hostScopeToken),
+  }
+}
+
 /**
  * Whether a capture from a work email domain no visible company carries
  * should CREATE the company. Off unless the org document says `true`: a
@@ -2926,14 +3048,17 @@ export function newAssignmentRuleId(existing: readonly string[]): string {
  * a scoped member creating a record outside their own tokens, so a creator
  * that bypassed this could only make its record invisible to itself, never
  * wider.
+ *
+ * A third answer since AGL-4047: under "All sites except…", every site of
+ * the workspace but the ones left out, plus the site it came in on
+ * ({@link crmScopeFields}, which a server writer spreads to store the marker
+ * as well).
  */
 export function crmScopeTokens(
   org: Record<string, unknown> | null | undefined,
   group: ConsentGroup,
 ): ScopeToken[] {
-  return crmDefaultScopeOf(org) === 'org'
-    ? [ORG_SCOPE_TOKEN]
-    : consentGroupScope(group)
+  return crmScopeFields(org, group).visibleTo
 }
 
 /**

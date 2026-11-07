@@ -38,6 +38,7 @@
 import {
   CRM_COLLECTIONS,
   crmActivityLogHasRoom,
+  crmDefaultExceptOf,
   type CrmActivityLink,
   crmListFieldsPatch,
 } from '@aglyn/aglyn/app-utils/crm'
@@ -110,7 +111,14 @@ type Firestore = FirebaseFirestore.Firestore
  * is never the reason a grant is TAKEN away — see `recomputeRecordSharing`.
  */
 const RULES_TTL_MS = 10_000
-const rulesCache = new Map<string, { atMs: number; rules: CrmSharingRule[]; orgHostIds: string[] }>()
+interface CachedOrg {
+  atMs: number
+  rules: CrmSharingRule[]
+  orgHostIds: string[]
+  /** The org document as read, for the CRM default's answer (AGL-4047). */
+  org: Record<string, unknown>
+}
+const rulesCache = new Map<string, CachedOrg>()
 
 /** Test seam, and what a rule write calls so its own process reads it fresh. */
 export function forgetCrmSharingRules(orgId?: string): void {
@@ -119,24 +127,26 @@ export function forgetCrmSharingRules(orgId?: string): void {
 }
 
 /**
- * The org's rules, and its sites (`orgs/{orgId}.hosts`) from the same read:
- * what a grant shared with all sites except some reaches (AGL-4047).
+ * The org's rules, and from the same read its sites (`orgs/{orgId}.hosts`),
+ * which a grant shared with all sites except some reaches, and the document
+ * itself, whose CRM default a new record is marked by (AGL-4047).
  */
 export async function crmSharingRulesOf(
   firestore: Firestore,
   orgId: string,
   options: { fresh?: boolean; nowMs?: number } = {},
-): Promise<{ rules: CrmSharingRule[]; fresh: boolean; orgHostIds: string[] }> {
+): Promise<{ rules: CrmSharingRule[]; fresh: boolean; orgHostIds: string[]; org: Record<string, unknown> }> {
   const nowMs = options.nowMs ?? Date.now()
   const cached = rulesCache.get(orgId)
   if (!options.fresh && cached && nowMs - cached.atMs < RULES_TTL_MS) {
-    return { rules: cached.rules, fresh: false, orgHostIds: cached.orgHostIds }
+    return { rules: cached.rules, fresh: false, orgHostIds: cached.orgHostIds, org: cached.org }
   }
   const snapshot = await firestore.collection('orgs').doc(orgId).get()
-  const rules = readCrmSharingRules(snapshot.data() ?? null)
-  const orgHostIds = crmOrgHostIds(snapshot.data())
-  rulesCache.set(orgId, { atMs: nowMs, rules, orgHostIds })
-  return { rules, fresh: true, orgHostIds }
+  const org = (snapshot.data() ?? {}) as Record<string, unknown>
+  const rules = readCrmSharingRules(org)
+  const orgHostIds = crmOrgHostIds(org)
+  rulesCache.set(orgId, { atMs: nowMs, rules, orgHostIds, org })
+  return { rules, fresh: true, orgHostIds, org }
 }
 
 /**
@@ -270,7 +280,20 @@ export async function evaluateCrmSharing(
   object: CrmSharingObject,
   ids: readonly string[],
 ): Promise<{ changed: number; missing: number }> {
-  const { rules, fresh, orgHostIds } = await crmSharingRulesOf(firestore, orgId)
+  const { rules, fresh, orgHostIds, org } = await crmSharingRulesOf(firestore, orgId)
+  /*
+   * A record the CRM default "All sites except…" stamped carries the sites it
+   * reaches today; the marker that lets a site added later join it is the
+   * server's to write (AGL-4047). Only an org with that default pays for it.
+   */
+  if (crmDefaultExceptOf(org)) {
+    const { markRecordUnderDefault } = await import('./crm-default-sharing')
+    for (const id of ids) {
+      await markRecordUnderDefault(firestore, orgId, object, id, org).catch((error: unknown) => {
+        console.error(`[crm] ${object}/${id} was not marked for the default sharing`, error)
+      })
+    }
+  }
   if (!activeSharingRules(rules, object).length) return { changed: 0, missing: 0 }
   const context = { ...(await crmSharingContextFor(firestore, orgId, rules, object)), orgHostIds }
   const outcome = await recomputeMany(
@@ -876,6 +899,40 @@ export const crmSharingHandler: PluginApiHandler = async (req, res) => {
       ).catch(() => undefined)
       const advanced = await advanceSharingRuleRun(firestore, orgId, rule.id, Date.now() + RUN_BUDGET_MS)
       const answer: CrmSharingResponse = { ok: true, rule: advanced.rule, more: advanced.more }
+      res.status(200).json(answer)
+      return
+    }
+
+    /*
+     * "Apply to existing records" (AGL-4047): the CRM default all sites except
+     * some, brought to every record the workspace already has. Started here,
+     * and carried on here while the card is open and by the CRM job when not.
+     */
+    if (action === 'default-apply' || action === 'default-apply-continue') {
+      const { advanceDefaultApply, findDefaultApply, startDefaultApply } = await import(
+        './crm-default-sharing'
+      )
+      let runId: string | null
+      if (action === 'default-apply') {
+        const started = await startDefaultApply(firestore, orgId, { uid: caller.uid })
+        if (started.ok === false) {
+          res.status(400).json({ error: started.error })
+          return
+        }
+        runId = started.runId
+        await logOrgActivity(
+          orgId,
+          actor,
+          'Started applying the CRM default sharing to existing records',
+          { type: `${BUNDLE_ID}:defaultSharing` },
+        ).catch(() => undefined)
+      } else {
+        runId = await findDefaultApply(firestore, orgId)
+      }
+      const pass = runId
+        ? await advanceDefaultApply(firestore, orgId, runId, Date.now() + RUN_BUDGET_MS)
+        : { run: null, more: false }
+      const answer: CrmSharingResponse = { ok: true, applyRun: pass.run, more: pass.more }
       res.status(200).json(answer)
       return
     }

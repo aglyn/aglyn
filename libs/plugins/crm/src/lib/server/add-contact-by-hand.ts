@@ -28,6 +28,8 @@ import {
   type ContactFacet,
   contactFacetPath,
   crmDefaultScopeOf,
+  crmDefaultSharingOf,
+  crmScopeFields,
   crmNewRecordListFields,
   crmReadTokens,
   createResourceUid,
@@ -209,7 +211,20 @@ export async function addContactByHand(
     // The one number the record can be found by; a person who gave only a
     // mobile is found by that.
     const phone = profile.phone || profile.mobilePhone || ''
-    const scope = crmDefaultScopeOf(org) === 'org' ? [ORG_SCOPE_TOKEN] : consentGroupScope(group)
+    /*
+     * A new person is stamped by the org's CRM default, with the marker under
+     * "All sites except…" (AGL-4047). A person the workspace already has
+     * gains this site's group as before; under all sites except some only the
+     * group, since widening a record that exists is the explicit "Apply to
+     * existing records" run's to do, never a capture's.
+     */
+    const stamped = crmScopeFields(org, group)
+    const scope =
+      crmDefaultScopeOf(org) === 'org'
+        ? [ORG_SCOPE_TOKEN]
+        : crmDefaultSharingOf(org) === 'allExcept'
+          ? consentGroupScope(group)
+          : stamped.visibleTo
 
     const existing = email
       ? await findContactByEmail(contacts, email)
@@ -286,7 +301,7 @@ export async function addContactByHand(
     const record: Record<string, unknown> = {
       hostId: sourceHostId,
       [CAPTURED_BY_HOST_FIELD]: sourceHostId ? [sourceHostId] : [],
-      visibleTo: scope,
+      ...stamped,
       /*
        * BLANK RATHER THAN ABSENT. The Contacts table sorts by every column, and
        * a Firestore `orderBy` drops a document that lacks the field, so a person

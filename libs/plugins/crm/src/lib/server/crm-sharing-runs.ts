@@ -37,6 +37,9 @@
  *
  * Every step is idempotent: a record already level reads `unchanged` and is
  * not written.
+ *
+ * The same job carries on "Apply to existing records" (`crm-default-sharing.ts`),
+ * a run a person started, from the same collection.
  */
 
 import { createResourceUid } from '@aglyn/aglyn/app-utils/create-resource-uid'
@@ -49,11 +52,16 @@ import {
   isCrmSharingObject,
 } from '../model/crm-sharing'
 import { crmSharingContextFor, crmSharingRulesOf, recomputeMany } from './crm-sharing'
+import {
+  advanceDefaultApply,
+  CRM_DEFAULT_APPLY_KIND,
+  CRM_SHARING_RUNS_COLLECTION,
+} from './crm-default-sharing'
+
+export { CRM_SHARING_RUNS_COLLECTION }
 
 type Firestore = FirebaseFirestore.Firestore
 
-/** Where a walk with work left records its cursor. */
-export const CRM_SHARING_RUNS_COLLECTION = 'crmSharingRuns'
 /** Records read at a time. */
 const PAGE_SIZE = 100
 /** How long one job beat spends, across every run it takes. */
@@ -214,6 +222,15 @@ export async function resumeCrmSharingRuns(
       if (!org?.exists) {
         await run.ref.delete()
         tally.finished += 1
+        continue
+      }
+      if (run.get('kind') === CRM_DEFAULT_APPLY_KIND) {
+        // A run a person started. One that keeps failing waits for them to
+        // resume it from the card, which says it stopped.
+        if (attempts >= MAX_RUN_ATTEMPTS) continue
+        const pass = await advanceDefaultApply(firestore, org.id, run.id, Date.now() + budgetMs)
+        if (pass.run?.status === 'failed') await run.ref.update({ attempts: attempts + 1 }).catch(() => undefined)
+        if (pass.run?.status === 'done') tally.finished += 1
         continue
       }
       const result = await refreshCrmExceptGrants({
