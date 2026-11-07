@@ -82,16 +82,20 @@ struct ProductEditorSheet: View {
     } header: {
       Text("Add-ons")
     }
-    ForEach($model.draft.addOns) { $group in
+    // Each group and choice is reached by id and written whole, one write to the draft at a time: nested binding
+    // projections into the draft (`$model.draft.addOns` → `$group.choices`) crashed with an access conflict when a
+    // choice's prices by size opened.
+    ForEach(model.draft.addOns) { group in
+      let binding = addOnGroupBinding(group.id)
       Section {
-        TextField("Group name (Walls)", text: $group.name).accessibilityIdentifier("addon-group-name-\(group.id)")
-        Stepper(value: $group.min, in: 0...Swift.max(0, group.choices.count)) {
+        TextField("Group name (Walls)", text: binding.name).accessibilityIdentifier("addon-group-name-\(group.id)")
+        Stepper(value: binding.min, in: 0...Swift.max(0, group.choices.count)) {
           LabeledContent("At least", value: "\(group.min) · \(group.required ? "Required" : "Optional")")
         }
-        Stepper(value: $group.max, in: 1...Swift.max(1, group.choices.count)) {
+        Stepper(value: binding.max, in: 1...Swift.max(1, group.choices.count)) {
           LabeledContent("At most", value: "\(group.max)")
         }
-        Toggle(isOn: Binding(get: { group.online == true }, set: { group.online = $0 })) {
+        Toggle(isOn: Binding(get: { group.online == true }, set: { binding.wrappedValue.online = $0 })) {
           VStack(alignment: .leading, spacing: 2) {
             Text("Show on the website")
             Text(group.online == true ? "Offered on the product’s page and at the register." : "Offered at the register only.")
@@ -100,11 +104,11 @@ struct ProductEditorSheet: View {
           }
         }
         .accessibilityIdentifier("addon-group-online-\(group.id)")
-        ForEach($group.choices) { $choice in
-          addOnChoiceRow(group: $group, choice: $choice)
+        ForEach(group.choices) { choice in
+          addOnChoiceRow(groupID: group.id, choice: choice)
         }
         Button {
-          group = group.withChoiceAdded()
+          binding.wrappedValue = group.withChoiceAdded()
         } label: {
           Label("Add choice", systemImage: "plus")
         }
@@ -134,10 +138,39 @@ struct ProductEditorSheet: View {
     }
   }
 
+  /// A group of the draft by id: read from the draft, and written back whole.
+  private func addOnGroupBinding(_ id: String) -> Binding<AddOnGroupDraft> {
+    Binding(
+      get: { model.draft.addOns.first { $0.id == id } ?? AddOnGroupDraft(id: id) },
+      set: { next in
+        guard let index = model.draft.addOns.firstIndex(where: { $0.id == id }) else { return }
+        model.draft.addOns[index] = next
+      })
+  }
+
+  /// A choice of a group by id: read from the draft, and written back as its whole group.
+  private func addOnChoiceBinding(groupID: String, choiceID: String) -> Binding<AddOnChoiceDraft> {
+    Binding(
+      get: {
+        model.draft.addOns.first { $0.id == groupID }?.choices.first { $0.id == choiceID } ?? AddOnChoiceDraft(id: choiceID)
+      },
+      set: { next in
+        guard let groupIndex = model.draft.addOns.firstIndex(where: { $0.id == groupID }) else { return }
+        var group = model.draft.addOns[groupIndex]
+        guard let index = group.choices.firstIndex(where: { $0.id == choiceID }) else { return }
+        group.choices[index] = next
+        model.draft.addOns[groupIndex] = group
+      })
+  }
+
   /// One choice: its name and what it adds, its prices by size where the product has sizes, and remove.
-  private func addOnChoiceRow(group: Binding<AddOnGroupDraft>, choice: Binding<AddOnChoiceDraft>) -> some View {
-    let current = choice.wrappedValue
-    return VStack(alignment: .leading, spacing: 8) {
+  private func addOnChoiceRow(groupID: String, choice current: AddOnChoiceDraft) -> some View {
+    let choice = addOnChoiceBinding(groupID: groupID, choiceID: current.id)
+    let variants = model.draft.variants
+    let byLabel = priceByLabel(model.draft.options)
+    // Two rows, not one: a Form row with several buttons fires them all on one tap, so opening the prices by size
+    // removed the choice.
+    return Group {
       HStack {
         TextField("Choice", text: choice.name).accessibilityIdentifier("addon-choice-name-\(current.id)")
         TextField("Adds ($)", text: choice.price)
@@ -149,26 +182,27 @@ struct ProductEditorSheet: View {
           #endif
           .accessibilityIdentifier("addon-choice-price-\(current.id)")
         Button(role: .destructive) {
+          let group = addOnGroupBinding(groupID)
           if let index = group.wrappedValue.choices.firstIndex(where: { $0.id == current.id }) {
             group.wrappedValue = group.wrappedValue.withChoiceRemoved(index)
           }
         } label: {
           Image(systemName: "xmark.circle.fill").foregroundStyle(.secondary)
         }
-        .buttonStyle(.plain)
+        .buttonStyle(.borderless)
         .accessibilityLabel("Remove \(current.name.isEmpty ? "choice" : current.name)")
       }
-      if model.draft.variants.count > 1 {
-        DisclosureGroup(priceByLabel(model.draft.options)) {
+      if variants.count > 1 {
+        DisclosureGroup(byLabel) {
           Text("What “\(current.name.isEmpty ? "this choice" : current.name)” adds on each. Leave one blank to use the price above.")
             .font(.caption)
             .foregroundStyle(.secondary)
-          ForEach(model.draft.variants) { variant in
+          ForEach(variants) { variant in
             LabeledContent(variant.label) {
               TextField(
                 current.price.isEmpty ? "0.00" : current.price,
                 text: Binding(
-                  get: { choice.wrappedValue.byVariant[variant.id] ?? "" },
+                  get: { current.byVariant[variant.id] ?? "" },
                   set: { choice.wrappedValue = choice.wrappedValue.withVariantPrice(variant.id, $0) })
               )
               .multilineTextAlignment(.trailing)
