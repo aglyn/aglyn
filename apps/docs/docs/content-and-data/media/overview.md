@@ -658,8 +658,22 @@ The line reads the asset, not your plan: a paid plan does not make a line say
 ## Who an asset is shared with
 
 Workspace media is shared across every site by default. The **Shared with** control
-narrows that, with the same two choices as datasets — **All sites** or
-**Selected sites…**. You'll find it in three places:
+narrows that, with the same three choices as datasets:
+
+- **All sites** — every site in the workspace. A new site gets it automatically.
+- **Selected sites** — tick the sites that share it, up to 30. A new site doesn't get it
+  until you add that site.
+- **All sites except…** — tick the sites to leave out. Every other site shares it, and a
+  new site gets it automatically. A workspace with one site has nothing to leave out, so
+  this choice stays off until you add a second, and at least one site has to stay in.
+
+A site left out can't find the file in its media picker, and its pages stop showing the
+file wherever they show it from the media library. A link to the file that was pasted as
+text into custom HTML on that site keeps loading: the workspace's media link serves a
+file shared with all sites except some to anyone who has it. Narrowing a file names the
+sites left out that use it, and says this, before you confirm.
+
+You'll find the control in three places:
 
 - on a single asset, in its details drawer;
 - on a **selection** — tick several files and use **Shared with…** in the toolbar;
@@ -682,10 +696,10 @@ on, or the one you were editing when you opened the media picker. A folder or fi
 created on the workspace **Media** page has no site to limit it to, so it starts on **All
 sites** either way. New datasets have a default of their own, **Default sharing for new
 datasets** on the organization **Data** page, so files can start on every site while
-datasets start on one, or the other way round. If the **Shared with** dialog ever opens on
-"Not shared with any site", that folder or file has no sharing stored at all: it is hidden
-from every site, and any file inside it turns up under **No folder** there. Pick a value
-and save to fix it.
+datasets start on one, or the other way round. If the **Shared with** dialog ever opens
+saying the folder or file has never been shared, with no choice picked, it has no sharing
+stored at all: it is hidden from every site, and any file inside it turns up under **No
+folder** there. Pick a choice and save to fix it.
 
 ### Default sharing for new media {#default-media-sharing}
 

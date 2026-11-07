@@ -38,6 +38,8 @@ for the how-to.
   **Countertop reader (WisePOS E)**. Your order records keep the exact model.
 - **Share a dataset with all sites except some.** [Datasets](content-and-data/datasets/overview.md#who-a-dataset-is-shared-with)
   — tick the sites to leave out, and every other site shares it, including any site you add later.
+- **Share media with all sites except some.** [Media](content-and-data/media/overview.md#who-an-asset-is-shared-with)
+  — the same choice for a file, a selection of files, or a folder and what is inside it.
 - **Four plans: Free, Starter, Pro and Custom.** [Billing & plans](workspace-and-billing/billing-and-plans/overview.md#tiers--entitlements)
   — Pro is now the full platform: everything that was on Business, including the API
   and webhooks, A/B testing, multilingual sites, scheduled publishing, recurring billing,

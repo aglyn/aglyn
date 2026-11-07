@@ -19,7 +19,6 @@ import { pluginRequestFromWeb } from '@aglyn/aglyn/server'
 import {
   isSiblingNameTaken,
   normalizeFolderName,
-  normalizeVisibleTo,
 } from '@aglyn/aglyn/server'
 import {
   currentDownloadUrlForObject,
@@ -42,6 +41,11 @@ import {
   scopeAllows,
 } from '../../../../utils/server/media-scope'
 import { moveAssetsWithinBudget } from '../../../../utils/server/media-move'
+import {
+  mediaSharingChoiceFrom,
+  mediaSharingChoiceFromScope,
+  writeMediaSharing,
+} from '../../../../utils/server/media-sharing'
 import { resolvePluginMediaPublishRefusal } from '@aglyn/aglyn/plugin-manager/plugin-media-publish'
 import { invalidIdTokenResponse } from '../../_lib/invalid-id-token-response'
 import {
@@ -93,6 +97,10 @@ class FolderTooLargeError extends Error {
  * - `set-scope` {folderId, visibleTo, cascade?, preview?, chunkStart?,
  *   chunkSize?} — the folder sharing cascade (AGL-1045); `preview` counts
  *   the subtree without writing, the cursor pair makes it resumable
+ * - `set-sharing` {choice, mediaIds} or {choice, folderId, cascade?,
+ *   preview?, chunkStart?, chunkSize?} — who files and folders are shared
+ *   with, all sites except some included (AGL-4047); `set-scope` is an older
+ *   client's spelling of it for a folder
  * - `create-folder` {name, parentId|null, forHostId?} — the library's New
  *   folder, with its name, depth and sibling checks and the org's default
  *   sharing (AGL-3668, the native apps)
@@ -372,14 +380,41 @@ async function handler(request: Request): Promise<Response> {
     // Server-side because it is a bulk write over docs the client would
     // otherwise have to enumerate, and because the org-wide check belongs
     // next to the other privileged media operations.
-    if (action === 'set-scope') {
+    //
+    // `set-sharing` (AGL-4047) is the one door for every sharing change in the
+    // workspace library: one file from its drawer, a selection, or a folder and
+    // what is inside it. It takes a choice, All sites, the sites chosen, or all
+    // sites except some, because the marker that last one carries is the
+    // server's alone (`media-sharing.ts`). `set-scope` is an older client's
+    // spelling of the first two, read as the same choice so its write removes
+    // a marker instead of leaving one behind.
+    if (action === 'set-scope' || action === 'set-sharing') {
       const folderId = String(body?.folderId ?? '')
-      const visibleTo = normalizeVisibleTo(
-        Array.isArray(body?.visibleTo) ? (body.visibleTo as string[]) : [],
-      )
-      if (!folderId || !visibleTo) {
+      const mediaIds = Array.isArray(body?.mediaIds)
+        ? (body.mediaIds as unknown[]).map(String).filter((id) => id && !id.includes('/'))
+        : null
+      const preview = isFolderScopePreviewRequest(body)
+      // A preview counts a folder and writes nothing, so it needs no choice:
+      // the count does not depend on one.
+      const choice = preview
+        ? null
+        : action === 'set-sharing'
+          ? mediaSharingChoiceFrom(body?.choice)
+          : mediaSharingChoiceFromScope(body?.visibleTo)
+      if (
+        (!folderId && !mediaIds?.length) ||
+        folderId.includes('/') ||
+        (action === 'set-scope' && !folderId) ||
+        (!preview && !choice)
+      ) {
         return Response.json(
           { error: 'Missing folderId or an unusable scope' },
+          { status: 400 },
+        )
+      }
+      if (mediaIds && mediaIds.length > MAX_ASSETS_PER_OP) {
+        return Response.json(
+          { error: `Share at most ${MAX_ASSETS_PER_OP} files at a time` },
           { status: 400 },
         )
       }
@@ -398,6 +433,30 @@ async function handler(request: Request): Promise<Response> {
           { status: 400 },
         )
       }
+      const firestore = firebaseAdmin.app().firestore()
+      // One file, or a selection: the drawer and the toolbar's Shared with….
+      // The client sends a long selection in slices, to show progress.
+      if (!folderId && mediaIds && choice) {
+        const answer = await writeMediaSharing({
+          firestore,
+          orgRef: scopeRef,
+          refs: mediaIds.map((id) => mediaRef.doc(id)),
+          choice,
+        })
+        if (!answer.ok) {
+          return Response.json({ error: answer.problem }, { status: 400 })
+        }
+        return Response.json(
+          {
+            ok: true,
+            written: answer.writtenIds.length,
+            missingIds: answer.missingIds,
+            visibleTo: answer.fields?.visibleTo ?? null,
+            scopeExcept: answer.fields?.scopeExcept ?? null,
+          },
+          { status: 200 },
+        )
+      }
       const cascade = body?.cascade !== false
       const assets = cascade ? await subtreeAssets(folderId) : []
       // The prompt has to name the number BEFORE anything is written —
@@ -409,7 +468,7 @@ async function handler(request: Request): Promise<Response> {
       // The SAME predicate the lockdown intent above is decided from
       // (AGL-1694) — the shape that skips the writes and the shape that is
       // called a read have to be one shape, or the declaration is a lie.
-      if (isFolderScopePreviewRequest(body)) {
+      if (preview || !choice) {
         return Response.json(
           { ok: true, preview: true, folders: 1, assets: assets.length },
           { status: 200 },
@@ -434,12 +493,11 @@ async function handler(request: Request): Promise<Response> {
         batchLimit: FIRESTORE_BATCH_LIMIT,
       })
       const slice = targets.slice(start, next)
-      for (let i = 0; i < slice.length; i += FIRESTORE_BATCH_LIMIT) {
-        const batch = firebaseAdmin.app().firestore().batch()
-        for (const ref of slice.slice(i, i + FIRESTORE_BATCH_LIMIT)) {
-          batch.set(ref, { visibleTo }, { merge: true })
-        }
-        await batch.commit()
+      // Read in the transaction that writes, with the workspace's sites, and
+      // nothing written when the choice can't be (`writeMediaSharing`).
+      const answer = await writeMediaSharing({ firestore, orgRef: scopeRef, refs: slice, choice })
+      if (!answer.ok) {
+        return Response.json({ error: answer.problem }, { status: 400 })
       }
       return Response.json(
         {
@@ -452,6 +510,8 @@ async function handler(request: Request): Promise<Response> {
           written: slice.length,
           next,
           done,
+          visibleTo: answer.fields?.visibleTo ?? null,
+          scopeExcept: answer.fields?.scopeExcept ?? null,
         },
         { status: 200 },
       )

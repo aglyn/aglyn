@@ -731,7 +731,7 @@ export const DOCS_HELP_SECTION_EXCERPTS: {
     '#photo-link': 'The quickest way to get a business\'s own photos into its site is to let them come straight from the phone that took them.',
     '#site-library': 'The This site tab is the site\'s own library: files only this site uses, organized in folders and served over the CDN.',
     '#two-libraries': 'Every site has a media library of its own, and the workspace has one more that its sites share.',
-    '#who-an-asset-is-shared-with': 'Workspace media is shared across every site by default. The Shared with control narrows that, with the same two choices as datasets — All sites or Selected sites….',
+    '#who-an-asset-is-shared-with': 'Workspace media is shared across every site by default.',
   },
   members: {
     '#2-the-built-in-sign-in-and-sign-up-pages': 'Once User Accounts is on, the site serves three ready-made routes — no design work needed: /signup — "Create your account": name, email, and password (8 characters minimum).',
