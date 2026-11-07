@@ -44,16 +44,11 @@ final class QuoteRulesTests: XCTestCase {
     XCTAssertEqual(payLinkGaps(nil, paymentsReady: false, store: payLinkStoreOf(["mode": "none"])), [.payments])
   }
 
-  func testPaymentsReadinessReadsTheOwnersProfile() {
-    XCTAssertEqual(merchantPaymentsStateFromProfile(nil, platformMode: nil), "not-connected")
-    XCTAssertEqual(merchantPaymentsStateFromProfile(["stripeAccountId": "acct_1"], platformMode: nil), "charges-disabled")
-    let connected: [String: Any] = ["stripeAccountId": "acct_1", "stripeChargesEnabled": true]
-    XCTAssertEqual(merchantPaymentsStateFromProfile(connected, platformMode: nil), "ready")
-    XCTAssertEqual(merchantPaymentsStateFromProfile(connected, platformMode: "live"), "mode-unverified")
-    XCTAssertEqual(
-      merchantPaymentsStateFromProfile(connected.merging(["stripeAccountLivemode": false]) { $1 }, platformMode: "live"), "mode-mismatch")
-    XCTAssertEqual(merchantPaymentsStateFromProfile(connected.merging(["stripeAccountLivemode": true]) { $1 }, platformMode: "live"), "ready")
+  func testEachReadinessStateHasTheConsolesSentence() {
     XCTAssertEqual(merchantPaymentsBlockedReason("not-connected"), "Connect Stripe to take card payments.")
+    XCTAssertEqual(
+      merchantPaymentsBlockedReason("mode-unverified"),
+      "Reconnect Stripe to take card payments: the connected account has not been confirmed for live payments.")
     XCTAssertNil(merchantPaymentsBlockedReason("ready"))
   }
 

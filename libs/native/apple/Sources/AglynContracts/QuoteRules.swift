@@ -141,21 +141,8 @@ public func payLinkGaps(_ order: HostOrder?, paymentsReady: Bool?, store: PayLin
 /// The notice's first line: `Customers can’t pay this quote online yet.`
 public func payLinkNoticeTitle(_ noun: String) -> String { "Customers can’t pay this \(noun) online yet." }
 
-/// Card-payment readiness from the workspace owner's profile (`merchantPaymentsStateFromProfile`): not-connected,
-/// charges-disabled, mode-mismatch, mode-unverified or ready. `platformMode` is the deployment's Stripe key mode, live
-/// or test; nil when unknown, as the console reads a missing key.
-public func merchantPaymentsStateFromProfile(_ profile: [String: Any]?, platformMode: String?) -> String {
-  let accountID = (profile?["stripeAccountId"] as? String)?.trimmingCharacters(in: .whitespaces) ?? ""
-  if accountID.isEmpty { return "not-connected" }
-  if profile?["stripeChargesEnabled"] as? Bool != true { return "charges-disabled" }
-  if let livemode = profile?["stripeAccountLivemode"] as? Bool {
-    guard let platformMode else { return "ready" }
-    return livemode == (platformMode == "live") ? "ready" : "mode-mismatch"
-  }
-  return platformMode == "live" ? "mode-unverified" : "ready"
-}
-
-/// Why the workspace can't take card payments (`merchantPaymentsBlockedReason`), or nil.
+/// Why the workspace can't take card payments (`merchantPaymentsBlockedReason`), or nil. The state is the quote route's
+/// `payments-readiness` answer, which the server works out knowing the deployment's payment mode.
 public func merchantPaymentsBlockedReason(_ state: String) -> String? {
   switch state {
   case "not-connected": "Connect Stripe to take card payments."

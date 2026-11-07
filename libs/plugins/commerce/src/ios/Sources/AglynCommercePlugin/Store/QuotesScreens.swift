@@ -178,8 +178,8 @@ struct QuoteScreen: View {
   let quoteID: String
   @State private var quote = LiveDocument()
   @State private var store = LiveDocument()
-  @State private var org = LiveDocument()
-  @State private var owner = LiveDocument()
+  /// The workspace's card payments, as the quote route answers it: nil until it answers, or when it could not.
+  @State private var paymentsState: String?
 
   private var hostID: String { context.hostID ?? "" }
 
@@ -202,36 +202,15 @@ struct QuoteScreen: View {
       guard !hostID.isEmpty, !quoteID.isEmpty else { return }
       quote.start(context.firestore, ["hosts", hostID, "orders", quoteID])
       store.start(context.firestore, ["hosts", hostID, "settings", "store"])
-      if let orgID = context.orgID { org.start(context.firestore, ["orgs", orgID]) }
     }
-    // Card payments are the workspace OWNER's, so their profile is read, as every money route checks it.
-    .task(id: ownerUID) {
-      if let ownerUID { owner.start(context.firestore, ["profiles", ownerUID]) }
+    // Asked again each time the quote shows, so coming back from Payments reads the new answer.
+    .task(id: hostID) {
+      guard !hostID.isEmpty else { return }
+      paymentsState = await quotePaymentsReadiness(api: context.api, hostID: hostID)
     }
     .onDisappear {
       quote.stop()
       store.stop()
-      org.stop()
-      owner.stop()
-    }
-  }
-
-  private var ownerUID: String? {
-    guard case .ready(let doc?) = org.state, let uid = doc.string("ownerUid"), !uid.isEmpty else { return nil }
-    return uid
-  }
-
-  /// The owner's payments: nil while it is read. No owner reads as not connected, as the console's hook says.
-  private var paymentsState: String? {
-    switch org.state {
-    case .loading, .failed: return nil
-    case .ready(let doc):
-      if (doc?.string("ownerUid") ?? "").isEmpty { return "not-connected" }
-    }
-    switch owner.state {
-    case .loading, .failed: return nil
-    // The apps don't know the deployment's Stripe key mode; the console's own answer for an unknown mode.
-    case .ready(let profile): return merchantPaymentsStateFromProfile(profile?.data, platformMode: nil)
     }
   }
 
@@ -356,4 +335,14 @@ private struct QuoteLineView: View {
       Text(line.included == true ? "Included" : formatOrderMoney(unit * quantity)).monospacedDigit()
     }
   }
+}
+
+/// Whether the workspace can take card payments (ready, not-connected, charges-disabled, mode-unverified or
+/// mode-mismatch), from the quote route, which knows the deployment's payment mode (AGL-4162). Nil when it could not
+/// answer: like the console's `error`, that shows no notice.
+func quotePaymentsReadiness(api: ConsoleAPIClient, hostID: String) async -> String? {
+  let answer = try? await api.request(
+    "/api/commerce/quote", method: .post,
+    body: .object(["hostId": .string(hostID), "action": .string("payments-readiness")]))
+  return answer?["state"]?.stringValue
 }

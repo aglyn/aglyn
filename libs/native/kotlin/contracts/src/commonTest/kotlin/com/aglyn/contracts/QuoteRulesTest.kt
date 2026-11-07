@@ -38,15 +38,9 @@ class QuoteRulesTest {
   }
 
   @Test
-  fun paymentsReadinessReadsTheOwnersProfile() {
-    assertEquals("not-connected", merchantPaymentsStateFromProfile(null, null))
-    assertEquals("charges-disabled", merchantPaymentsStateFromProfile(mapOf("stripeAccountId" to "acct_1"), null))
-    val connected = mapOf("stripeAccountId" to "acct_1", "stripeChargesEnabled" to true)
-    assertEquals("ready", merchantPaymentsStateFromProfile(connected, null))
-    assertEquals("mode-unverified", merchantPaymentsStateFromProfile(connected, "live"))
-    assertEquals("mode-mismatch", merchantPaymentsStateFromProfile(connected + ("stripeAccountLivemode" to false), "live"))
-    assertEquals("ready", merchantPaymentsStateFromProfile(connected + ("stripeAccountLivemode" to true), "live"))
+  fun eachReadinessStateHasTheConsolesSentence() {
     assertEquals("Connect Stripe to take card payments.", merchantPaymentsBlockedReason("not-connected"))
+    assertEquals("Reconnect Stripe to take card payments: the connected account has not been confirmed for live payments.", merchantPaymentsBlockedReason("mode-unverified"))
     assertNull(merchantPaymentsBlockedReason("ready"))
   }
 
