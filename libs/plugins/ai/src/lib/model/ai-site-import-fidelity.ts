@@ -1227,7 +1227,7 @@ function wordsScore(source: SiteImportFidelitySource, built: Built, improve = fa
     links.add(key)
     return false
   }
-  const lines = source.blocks.filter((block) => isLine(block) && block.kind !== 'image')
+  const lines = source.blocks.filter((block): block is Exclude<SiteImportBlock, { kind: 'image' }> => isLine(block) && block.kind !== 'image')
   const full = tally(lines.map((block) => clean(block.text)))
   const least = tally(lines.filter((block) => !again(block)).map((block) => clean(block.text)))
   const shown = tally(built.pieces.map((piece) => piece.text))
