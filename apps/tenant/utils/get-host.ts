@@ -144,6 +144,14 @@ export function normalizeHostAlias(host: string | null | undefined): string {
  */
 const HOST_ALIAS_TTL_SECONDS = TENANT_CACHE_BACKSTOP_SECONDS
 const HOST_DOC_TTL_SECONDS = TENANT_CACHE_BACKSTOP_SECONDS
+/**
+ * The host doc for a REQUEST-time reader (`scope: 'request'`): the lockdown
+ * verdict. A host lock lives on this doc, and the lock's own cache drop is
+ * durable, but the verdict is the takedown itself, so it keeps the hour bound
+ * it had before the backstop: one read per site per hour at most, in its own
+ * entry, never read by the page render, so it cannot shorten a page's window.
+ */
+const HOST_DOC_REQUEST_TTL_SECONDS = 3600
 
 async function queryHostIdByAlias(host: string): Promise<string | null> {
   const firestore = firebaseAdmin.app().firestore()
@@ -174,7 +182,12 @@ async function readHostDoc(hostId: string): Promise<Aglyn.AglynHost | null> {
   return snapshot.exists ? (snapshot.data() as Aglyn.AglynHost) : null
 }
 
-export async function getHost(options: { host: Aglyn.HostUid }) {
+export async function getHost(options: {
+  host: Aglyn.HostUid
+  /** `'request'` only for the lockdown verdict; see `HOST_DOC_REQUEST_TTL_SECONDS`. */
+  scope?: 'render' | 'request'
+}) {
+  const request = options.scope === 'request'
   // Normalized BEFORE the cache key and the tag, never after: see
   // `normalizeHostAlias` (AGL-1385).
   const host = normalizeHostAlias(options.host as string) as Aglyn.HostUid
@@ -195,8 +208,8 @@ export async function getHost(options: { host: Aglyn.HostUid }) {
     if (!hostId) return data
 
     const doc = await withRenderCache({
-      key: ['tenant-host-doc', hostId],
-      revalidate: HOST_DOC_TTL_SECONDS,
+      key: [request ? 'tenant-host-doc-request' : 'tenant-host-doc', hostId],
+      revalidate: request ? HOST_DOC_REQUEST_TTL_SECONDS : HOST_DOC_TTL_SECONDS,
       tags: [tenantDataTag(hostId)],
       read: () => readHostDoc(hostId),
       store: (value) => value !== null,

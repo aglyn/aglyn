@@ -183,7 +183,8 @@ export async function GET(request: Request): Promise<Response> {
   let siteMarks: NoticeIcons = {}
   try {
     if (host && !host.includes('/')) {
-      const hostRes = await getHost({ host })
+      // The verdict's read (AGL-4121), so the notice names the same lock.
+      const hostRes = await getHost({ host, scope: 'request' })
       if (hostRes.host) {
         const orgRes = await getOrgBilling({ hostId: hostRes.host.$id })
         const state = resolveLockdown(

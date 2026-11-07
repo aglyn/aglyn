@@ -100,15 +100,29 @@ export interface LockdownWriteOptions {
  * The return shape is unchanged, so `OrgLockdownResult` and the routes that
  * report it are untouched.
  *
- * BEST EFFORT: enforcement does not depend on it (the tenant middleware verdict
- * is request-level); this only shrinks the stale window of any cached HTML.
+ * DURABLE (AGL-4121): staged in the publish outbox before the call and
+ * released once it lands, so a refused call is retried by the drain and one
+ * that neither lands nor queues raises an operator alert. A HOST lock is read
+ * by the tenant's lockdown verdict from the cached host doc, which this drop
+ * expires; with that cache on the week-long backstop, a lost drop would have
+ * left a taken-down site serving for days, and a lost drop on an unlock would
+ * have left a restored site dark as long.
  */
 export async function revalidateHostAfterLockdown(
   firestore: Firestore,
   hostId: string,
+  reason = 'lockdown changed',
 ): Promise<{ hostId: string; ok: boolean; reason: string }> {
-  const result = await revalidateEntireHost(firestore, hostId)
-  return { hostId, ok: result.reason === 'ok', reason: result.reason }
+  try {
+    const result = await revalidateEntireHost(firestore, hostId, {
+      durable: { reason },
+    })
+    return { hostId, ok: result.reason === 'ok', reason: result.reason }
+  } catch (error) {
+    // Never undoes or hides the lock, which is already written.
+    console.error('[lockdown] cache drop failed', hostId, error)
+    return { hostId, ok: false, reason: 'error' }
+  }
 }
 
 export interface OrgLockdownResult {
@@ -239,7 +253,13 @@ export async function applyOrgLockdown(options: {
   )
   const revalidated = []
   for (const hostId of hostIds) {
-    revalidated.push(await revalidateHostAfterLockdown(firestore, hostId))
+    revalidated.push(
+      await revalidateHostAfterLockdown(
+        firestore,
+        hostId,
+        `workspace ${action === 'lock' ? 'locked' : 'unlocked'}`,
+      ),
+    )
   }
 
   // 5. Kill the raw `firebasestorage.googleapis.com?...&token=` URLs
@@ -335,7 +355,11 @@ export async function applyHostLockdown(options: {
       { merge: true },
     )
   }
-  const revalidated = await revalidateHostAfterLockdown(firestore, hostId)
+  const revalidated = await revalidateHostAfterLockdown(
+    firestore,
+    hostId,
+    `site ${action === 'lock' ? 'locked' : 'unlocked'}`,
+  )
   // The same AGL-1526 revocation at host scope: one site's Storage tree.
   // A host takedown is the scope a DMCA/abuse report usually lands on, so
   // it needs the raw-URL kill at least as much as the org scope does.
