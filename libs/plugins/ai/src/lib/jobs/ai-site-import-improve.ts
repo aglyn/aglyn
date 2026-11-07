@@ -65,6 +65,7 @@ import {
   type SiteImportFidelityTheme,
   type SiteImportPageFidelity,
 } from '../model/ai-site-import-fidelity'
+import { aiSiteImportIsBrandMark } from '../model/ai-site-import-marks'
 import { siteImportLedger, type SiteImportLedger, type SiteImportLedgerItem, type SiteImportLedgerLine } from '../model/ai-site-import-ledger'
 import { AI_SITE_IMPORT_PAGE_CEILING_CREDITS } from '../model/ai-site-import'
 import { estimateAiBilledUsd } from '../providers/catalog'
@@ -765,9 +766,161 @@ function sectionNames(sections: readonly AiLayoutSection[], title: string): stri
   })
 }
 
+/**
+ * The opening of a redesign without a brand's mark for its photo (AGL-4152):
+ * a picture the source names a logo, a badge or an icon (`aiSiteImportIsBrandMark`)
+ * that the answer keeps in its first section takes the page's widest photo no
+ * section placed instead, or, where it has none, is left out, and a row it
+ * leaves a column empty in is drawn as one column. A client's logo the source
+ * showed beside its words read, as a cover, as the page's own work.
+ */
+export function aiSiteImportOpeningPhoto(answer: readonly AiSiteImportImprovedSection[], input: { doc: Pick<AiSiteImportDocument, 'blocks' | 'photos'>; ledger: Pick<SiteImportLedger, 'items'> }): AiSiteImportImprovedSection[] {
+  const [first, ...rest] = answer
+  if (!first) return [...answer]
+  const { doc, ledger } = input
+  const items = new Map(ledger.items.map((item) => [item.ref, item]))
+  const imageOf = (ref: string) => {
+    const item = items.get(ref)
+    const block = item?.kind === 'picture' ? doc.blocks[item.lines[0] as number] : undefined
+    return block?.kind === 'image' ? block : null
+  }
+  const markAt = (ref: string) => {
+    const image = imageOf(ref)
+    return !!image && aiSiteImportIsBrandMark({ url: image.url, alt: image.alt })
+  }
+  const marks = new Set(first.blocks.filter((block) => block.kind === 'keep' && markAt(block.ref)))
+  if (!marks.size) return [...answer]
+  const placed = new Set(aiSiteImportImprovedPlaced(answer, ledger))
+  const ratioOf = (ref: string) => {
+    const url = imageOf(ref)?.url
+    const photo = url ? doc.photos.find((entry) => entry.from === url) : undefined
+    return photo?.width && photo.height ? photo.width / photo.height : 0
+  }
+  const spare = ledger.items.filter((item) => item.kind === 'picture' && !placed.has(item.ref) && !markAt(item.ref)).sort((a, b) => ratioOf(b.ref) - ratioOf(a.ref))
+  let next = 0
+  const blocks = first.blocks.flatMap((block) => {
+    if (!marks.has(block) || block.kind !== 'keep') return [block]
+    const instead = spare[next++]
+    return instead ? [{ ...block, ref: instead.ref }] : []
+  })
+  // A row with a column left empty is no row.
+  const cols = first.cols
+  const emptied = !!cols && cols.some((_, col) => !blocks.some((block) => block.col === col))
+  const opening: AiSiteImportImprovedSection = emptied
+    ? { ...(first.band ? { band: first.band } : {}), ...(first.align ? { align: first.align } : {}), blocks: blocks.map(({ col: _col, ...block }) => block as AiSiteImportImprovedBlock) }
+    : { ...first, blocks }
+  return [opening, ...rest]
+}
+
+/** A button's words and where it goes, as one key: two that share it are the same action. */
+const actionKey = (text: string | undefined, to: string | undefined): string => `${clean(text).toLowerCase()}\u0000${to ?? ''}`
+
+/** Whether a button is drawn filled: the compiler's default, `primary` or `large`. */
+const filled = (block: AiLayoutBlock): boolean => block.kind === 'button' && (block.style === undefined || block.style === 'primary' || block.style === 'large')
+
+/**
+ * A redesigned section's calls to action, each once and each where it belongs
+ * (AGL-4152), whatever the answer and the source's kept groups gave:
+ *
+ * - Buttons placed in a row's columns under a group that runs the row's width,
+ *   with nothing else in those columns, sit in the cards they go to where each
+ *   goes where exactly one card does, else together under the group: a row of
+ *   two buttons under three cards read as a grid half filled.
+ * - A link with the same words to the same place on every item of a group
+ *   (each review's "See more reviews") is shown once, as a button after the
+ *   group, unless the section already has that button. Where only some items
+ *   carry it, each is that item's own action and stays.
+ * - The same button twice in a section is shown once, the first.
+ * - Two buttons side by side to the same place are one: the one with the
+ *   header's words where one has them, else the first. Of buttons side by
+ *   side, only the first is filled; the rest are outlined.
+ */
+export function aiSiteImportSectionActions(section: Pick<AiLayoutSection, 'cols' | 'blocks'>, cta?: string | null): Pick<AiLayoutSection, 'cols' | 'blocks'> {
+  let { cols, blocks } = section
+  // Buttons in columns under a group across the row.
+  const placed = blocks.filter((block) => block.col !== undefined)
+  const group = blocks.find((block) => block.col === undefined && (block.items?.length ?? 0) >= 2 && block.kind !== 'list' && block.kind !== 'faq')
+  if (cols && cols.length >= 2 && group && placed.length && placed.every((block) => block.kind === 'button')) {
+    const items = group.items as AiLayoutItem[]
+    const cards = placed.map((button) => items.flatMap((item, at) => (button.to && item.to === button.to && !item.links?.length ? [at] : [])))
+    const own = cards.every((found) => found.length === 1) && new Set(cards.map((found) => found[0])).size === cards.length
+    if (own) {
+      const into = new Map(placed.map((button, at) => [cards[at]?.[0] as number, button]))
+      const carded = { ...group, items: items.map((item, at) => (into.has(at) ? { ...item, links: [{ text: into.get(at)?.text ?? '', to: item.to as string, style: 'secondary' as const }] } : item)) }
+      blocks = blocks.flatMap((block) => (block === group ? [carded] : placed.includes(block) ? [] : [block]))
+    } else blocks = blocks.map((block) => (placed.includes(block) ? (({ col: _col, ...rest }) => rest)(block) : block))
+    cols = undefined
+  }
+  // A link repeated across a group's items, once after the group.
+  const buttons = new Set(blocks.flatMap((block) => (block.kind === 'button' ? [actionKey(block.text, block.to)] : [])))
+  blocks = blocks.flatMap((block) => {
+    const items = block.items
+    if (!items || items.length < 2) return [block]
+    const counted = new Map<string, { text: string; to?: string; style?: AiLayoutBlock['style']; on: number }>()
+    for (const item of items) {
+      for (const key of new Set((item.links ?? []).map((link) => actionKey(link.text, link.to)))) {
+        const link = item.links?.find((entry) => actionKey(entry.text, entry.to) === key)
+        const was = counted.get(key)
+        if (link) counted.set(key, { text: link.text, ...(link.to ? { to: link.to } : {}), ...(link.style ? { style: link.style } : {}), on: (was?.on ?? 0) + 1 })
+      }
+    }
+    const repeated = new Map([...counted].filter(([, entry]) => entry.on === items.length))
+    if (!repeated.size) return [block]
+    const stripped = items.map((item) => {
+      if (!item.links?.length) return item
+      const links = item.links.filter((link) => !repeated.has(actionKey(link.text, link.to)))
+      const { links: _links, ...rest } = item
+      return links.length ? { ...rest, links } : rest
+    })
+    const after = [...repeated].flatMap(([key, entry]): AiLayoutBlock[] => {
+      if (buttons.has(key)) return []
+      buttons.add(key)
+      return [{ kind: 'button', text: entry.text, ...(entry.to ? { to: entry.to } : {}), ...(entry.style ? { style: entry.style } : {}), ...(block.col !== undefined ? { col: block.col } : {}) }]
+    })
+    return [{ ...block, items: stripped }, ...after]
+  })
+  // The same button twice, once.
+  const seen = new Set<string>()
+  blocks = blocks.filter((block) => {
+    if (block.kind !== 'button' || !block.to) return true
+    const key = actionKey(block.text, block.to)
+    if (seen.has(key)) return false
+    seen.add(key)
+    return true
+  })
+  // Buttons side by side: one to each place, the first filled.
+  const wanted = clean(cta).toLowerCase()
+  const out: AiLayoutBlock[] = []
+  for (const block of blocks) {
+    const before = out[out.length - 1]
+    if (block.kind === 'button' && before?.kind === 'button' && before.col === block.col) {
+      // Back over the run this button stands in.
+      let start = out.length - 1
+      while (start > 0 && out[start - 1]?.kind === 'button' && out[start - 1]?.col === block.col) start -= 1
+      const run = out.slice(start)
+      const same = block.to ? run.findIndex((entry) => entry.to === block.to) : -1
+      if (same !== -1) {
+        // The header's words win the place; the run keeps its first button's place and fill.
+        const kept = run[same] as AiLayoutBlock
+        if (wanted && clean(block.text).toLowerCase() === wanted && clean(kept.text).toLowerCase() !== wanted) {
+          const { style: _style, ...words } = block
+          out[start + same] = { ...words, ...(kept.style ? { style: kept.style } : {}) }
+        }
+        continue
+      }
+      out.push(run.some(filled) && filled(block) ? { ...block, style: 'secondary' } : block)
+      continue
+    }
+    out.push(block)
+  }
+  return { ...(cols ? { cols } : {}), blocks: out }
+}
+
 /** The sections a redesign holds, in the compiler's language: every `keep` expanded to the source's own blocks, every link resolved. */
-export function aiSiteImportImprovedPage(answer: readonly AiSiteImportImprovedSection[], input: AiSiteImportImproveCompileInput): AiSiteImportImprovedPage {
+export function aiSiteImportImprovedPage(given: readonly AiSiteImportImprovedSection[], input: AiSiteImportImproveCompileInput): AiSiteImportImprovedPage {
   const { doc, ledger, design, destinations } = input
+  // A brand's mark is never the opening's photo (AGL-4152).
+  const answer = aiSiteImportOpeningPhoto(given, { doc, ledger })
   const scope = aiSiteImportMapScope(doc, { formId: input.formId, finish: 'improve' })
   const items = new Map(ledger.items.map((item) => [item.ref, item]))
   const choices = aiLayoutDesignChoices(design)
@@ -817,7 +970,7 @@ export function aiSiteImportImprovedPage(answer: readonly AiSiteImportImprovedSe
   const sections = answer.map((section, index): AiLayoutSection => {
     scope.at = `sections[${index}]`
     const words = section.blocks.flatMap((block) => (block.kind === 'heading' || block.kind === 'eyebrow' ? [block.text ?? ''] : [])).join(' ')
-    const blocks = section.blocks.flatMap((raw): AiLayoutBlock[] => {
+    const drawn = section.blocks.flatMap((raw): AiLayoutBlock[] => {
       if (raw.kind === 'keep') return keepOf(raw.ref, raw.col)
       const block = raw
       const placed = block.col !== undefined ? { col: block.col } : {}
@@ -858,6 +1011,9 @@ export function aiSiteImportImprovedPage(answer: readonly AiSiteImportImprovedSe
       const variant = pictured ? (choices.group === 'cards' ? 'articles' : 'pictures') : wanted === 'icons' && !iconed ? 'cards' : wanted === 'menu' || wanted === 'pictures' || wanted === 'articles' ? 'cards' : wanted
       return [{ ...block, items: groupItems, columns: aiSiteImportImproveColumns(groupItems), variant }]
     })
+    // Each call to action once, in its place (AGL-4152).
+    const tidy = aiSiteImportSectionActions({ cols: section.cols, blocks: drawn }, input.plan?.nav.primaryCta?.label)
+    const blocks = tidy.blocks
     const pictures = blocks.filter((block) => block.kind === 'image' || block.kind === 'video')
     const opens = index === 0 && pictures.length === 1 && blocks.every((block) => block.kind === 'image' || block.kind === 'video' || WORD_KINDS.has(block.kind))
     const opening = pictures[0]?.kind === 'image' ? (pictures[0].picture ?? null) : null
@@ -867,7 +1023,7 @@ export function aiSiteImportImprovedPage(answer: readonly AiSiteImportImprovedSe
       ...(band ? { band } : {}),
       ...(section.align ? { align: section.align } : {}),
       // A hero draws its own columns, and frames its own picture.
-      ...(section.cols && !hero ? { cols: section.cols } : {}),
+      ...(tidy.cols && !hero ? { cols: tidy.cols } : {}),
       ...(hero ? { hero, blocks: blocks.map((block) => (block.kind === 'image' && block.picture ? { ...block, picture: { ...block.picture, fit: undefined } } : block)) } : { blocks }),
     }
   })
