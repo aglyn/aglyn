@@ -389,6 +389,8 @@ struct RainCheckSheet: View {
   let hostID: String
   let row: CheckInListRow
   let todayKey: String
+  /// The register and its cashier, when given at the register.
+  var extraFields: [String: JSONValue?] = [:]
   let onDone: () -> Void
   @State private var kind = "open"
   @State private var newDay: Date?
@@ -412,7 +414,7 @@ struct RainCheckSheet: View {
           body: posCheckInBody(
             hostID: hostID,
             ["action": "rain_check", "id": .string(row.id), "kind": .string(kind),
-             "day": kind == "date" ? newDayKey.map(JSONValue.string) : nil]))
+             "day": kind == "date" ? newDayKey.map(JSONValue.string) : nil].merging(extraFields) { _, extra in extra }))
       } catch {
         throw ConsoleAPIError(status: (error as? ConsoleAPIError)?.status ?? 0, message: refusal(error, "The rain check was not given."))
       }

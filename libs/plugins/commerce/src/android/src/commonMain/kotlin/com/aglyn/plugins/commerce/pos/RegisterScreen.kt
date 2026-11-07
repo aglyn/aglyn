@@ -177,12 +177,23 @@ private fun RegisterScreenBody(context: NativePluginContext) {
     ).also { registerModel = it }
   }
   LaunchedEffect(model) { model.start() }
-  RegisterContent(model, onOpenReaders = { context.navigate(COMMERCE_CARD_READERS_SCREEN) }, ordersZone = { PosOrdersZone(context) })
+  RegisterContent(
+    model,
+    onOpenReaders = { context.navigate(COMMERCE_CARD_READERS_SCREEN) },
+    ordersZone = { PosOrdersZone(context) },
+    checkInPanel = { onDismiss -> PosCheckInPanel(context, hostId, model.register?.id, { model.cashier.assertion }, onDismiss = onDismiss) },
+  )
 }
 
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
-fun RegisterContent(model: RegisterModel, onOpenReaders: () -> Unit, ordersZone: @Composable () -> Unit = {}) {
+fun RegisterContent(
+  model: RegisterModel,
+  onOpenReaders: () -> Unit,
+  ordersZone: @Composable () -> Unit = {},
+  /** Check-in at the window (AGL-4043), given its way out; none where the register has no console to ask. */
+  checkInPanel: (@Composable (onDismiss: () -> Unit) -> Unit)? = null,
+) {
   // The basket beside the products from expanded windows up (840dp); a 7-inch tablet held upright keeps the phone's
   // basket bar, so the product grid is not squeezed to one column beside the panel.
   val wide = currentWidthClass().let { it == WidthClass.EXPANDED || it == WidthClass.LARGE }
@@ -272,6 +283,7 @@ fun RegisterContent(model: RegisterModel, onOpenReaders: () -> Unit, ordersZone:
 
   val checkout = model.checkout
   var opsOpen by remember { mutableStateOf(false) }
+  var checkInOpen by remember { mutableStateOf(false) }
   Box(
     Modifier.fillMaxSize().then(keys).focusRequester(registerFocus).focusable().testTag("pos-register")
       // Any touch is the register in use: it keeps the idle lock away.
@@ -287,7 +299,7 @@ fun RegisterContent(model: RegisterModel, onOpenReaders: () -> Unit, ordersZone:
     if (wide) {
       Row(Modifier.fillMaxSize()) {
         Box(Modifier.weight(1f)) {
-          CatalogPane(model, query, { query = it; model.search(it) }, searchFocus, { codeOpen = true }, onCamera = camera?.let { { cameraOpen = true } }, onOps = { opsOpen = true }, ordersZone = ordersZone)
+          CatalogPane(model, query, { query = it; model.search(it) }, searchFocus, { codeOpen = true }, onCamera = camera?.let { { cameraOpen = true } }, onOps = { opsOpen = true }, onCheckIn = checkInPanel?.let { { checkInOpen = true } }, ordersZone = ordersZone)
           // The basket is the sale now: the grid rests until it is paid or canceled.
           if (checkout != null) {
             Box(
@@ -315,7 +327,7 @@ fun RegisterContent(model: RegisterModel, onOpenReaders: () -> Unit, ordersZone:
       Surface(Modifier.fillMaxSize(), color = MaterialTheme.colorScheme.background) { CheckoutPane(model, checkout, onOpenReaders) }
     } else {
       Column(Modifier.fillMaxSize()) {
-        CatalogPane(model, query, { query = it; model.search(it) }, searchFocus, { codeOpen = true }, Modifier.weight(1f), onCamera = camera?.let { { cameraOpen = true } }, onOps = { opsOpen = true }, ordersZone = ordersZone)
+        CatalogPane(model, query, { query = it; model.search(it) }, searchFocus, { codeOpen = true }, Modifier.weight(1f), onCamera = camera?.let { { cameraOpen = true } }, onOps = { opsOpen = true }, onCheckIn = checkInPanel?.let { { checkInOpen = true } }, ordersZone = ordersZone)
         BasketBar(model) { basketOpen = true }
       }
     }
@@ -338,6 +350,7 @@ fun RegisterContent(model: RegisterModel, onOpenReaders: () -> Unit, ordersZone:
   if (holdsOpen) HoldsDialog(model) { holdsOpen = false }
   if (model.offlineCashOpen) OfflineSaleDialog(model)
   if (opsOpen) RegisterOpsDialog(model) { opsOpen = false }
+  if (checkInOpen) checkInPanel?.invoke { checkInOpen = false }
   if (model.cashier.locked) LockedRegister(model)
   if (cameraOpen && camera != null) {
     val filter = remember { CameraScanFilter() }
@@ -376,6 +389,8 @@ private fun CatalogPane(
   onCamera: (() -> Unit)? = null,
   /** Opens the Register sheet: the cashier, the shift and the drawer. */
   onOps: () -> Unit = {},
+  /** Check-in at the window (AGL-4043); none where the register has no console to ask. */
+  onCheckIn: (() -> Unit)? = null,
   /** What other plugins put in the register's `posOrders` zone, above the grid. */
   ordersZone: @Composable () -> Unit = {},
 ) {
@@ -408,6 +423,11 @@ private fun CatalogPane(
       WithTooltip("Enter a barcode or SKU") { IconButton(onClick = onEnterCode, modifier = Modifier.testTag("pos-enter-code")) {
         Icon(AglynIcons.named("barcode"), contentDescription = "Enter a barcode or SKU")
       } }
+      onCheckIn?.let { open ->
+        WithTooltip("Check in") { IconButton(onClick = open, modifier = Modifier.testTag("pos-check-in-open")) {
+          Icon(AglynIcons.named("event_available"), contentDescription = "Check in")
+        } }
+      }
       WithTooltip("Cashier and shift") { IconButton(onClick = onOps, modifier = Modifier.testTag("pos-ops-open")) {
         Icon(AglynIcons.named("person_check"), contentDescription = "Cashier and shift")
       } }

@@ -335,7 +335,16 @@ private fun CheckInDayRow(
 
 /** Give a pass a rain check: open, or moved to a day (the console's PosRainCheckDialog). */
 @Composable
-fun RainCheckSheet(context: NativePluginContext, hostId: String, row: CheckInRow, todayKey: String, onClose: () -> Unit, onDone: () -> Unit) {
+fun RainCheckSheet(
+  context: NativePluginContext,
+  hostId: String,
+  row: CheckInRow,
+  todayKey: String,
+  onClose: () -> Unit,
+  /** The register and its cashier, when given at the register. */
+  extraFields: Map<String, Any?> = emptyMap(),
+  onDone: () -> Unit,
+) {
   val scope = rememberCoroutineScope()
   var kind by remember(row.id) { mutableStateOf("open") }
   var newDay by remember(row.id) { mutableStateOf("") }
@@ -353,7 +362,7 @@ fun RainCheckSheet(context: NativePluginContext, hostId: String, row: CheckInRow
       error = null
       scope.launch {
         try {
-          context.api.request(POS_CHECK_IN_PATH, ApiMethod.POST, posCheckInBody(hostId, mapOf("action" to "rain_check", "id" to row.id, "kind" to kind, "day" to if (kind == "date") newDay else null)))
+          context.api.request(POS_CHECK_IN_PATH, ApiMethod.POST, posCheckInBody(hostId, mapOf("action" to "rain_check", "id" to row.id, "kind" to kind, "day" to if (kind == "date") newDay else null) + extraFields))
           onDone()
         } catch (failure: Throwable) {
           if (failure is kotlinx.coroutines.CancellationException) throw failure

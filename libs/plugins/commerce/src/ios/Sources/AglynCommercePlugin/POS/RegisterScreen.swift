@@ -35,6 +35,8 @@ struct RegisterScreen: View {
   @State private var showDiscount = false
   @State private var scanCode = ""
   @State private var showOps = false
+  /// Check-in at the window (AGL-4043).
+  @State private var showCheckIn = false
   @State private var showPrinters = false
   @State private var showOfflineCash = false
   @Environment(\.scenePhase) private var scenePhase
@@ -91,6 +93,11 @@ struct RegisterScreen: View {
     .onChange(of: query) { _, text in if text.isEmpty { model.search("") } }
     .sheet(item: $model.sheet) { _ in ItemSheetView(model: model) }
     .sheet(isPresented: $showOps) { RegisterOpsSheet(model: model) }
+    .sheet(isPresented: $showCheckIn) {
+      PosCheckInSheet(
+        context: context, hostID: context.hostID ?? "", registerID: model.register?.id,
+        cashierAssertion: { [cashier = model.cashier] in cashier.assertion })
+    }
     .sheet(isPresented: $showPrinters) { RegisterPrintersSheet(model: model) }
     .sheet(isPresented: $showOfflineCash) { OfflineSaleSheet(model: model) }
     .overlay { if model.cashier.locked { LockedRegister(model: model) } }
@@ -148,6 +155,8 @@ struct RegisterScreen: View {
             ForEach(registers) { Text($0.name).tag(Optional($0)) }
           }
         }
+        Button("Check in", systemImage: "checkmark.circle") { showCheckIn = true }
+          .accessibilityIdentifier("pos-check-in-open")
         Button("Cashier and shift", systemImage: "person.badge.clock") { showOps = true }
           .accessibilityIdentifier("pos-ops-open")
         Button("Card readers", systemImage: "creditcard") { context.navigate(commerceCardReadersScreen) }
