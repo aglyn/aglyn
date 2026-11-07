@@ -20,7 +20,7 @@ import { createResourceUid } from '@aglyn/aglyn/app-utils/create-resource-uid'
 import {
   CRM_COLLECTIONS,
   crmActivityLogHasRoom,
-  crmScopeTokens,
+  crmScopeFields,
   type CrmActivityLink,
 } from '@aglyn/aglyn/app-utils/crm'
 import { countCrmActivitiesForRecord } from '@aglyn/tenant-data-admin/server/crm-records'
@@ -124,7 +124,8 @@ export async function fileCampaignFilingActivities(
     const org =
       input.org ?? ((await orgRef.get()).data() as Record<string, unknown> | undefined) ?? null
     const group = consentGroupForHost(org, input.hostId)
-    const visibleTo = crmScopeTokens(org, group)
+    // With the marker under "All sites except…" (AGL-4047).
+    const { visibleTo, ...marker } = crmScopeFields(org, group)
     if (!crmActivityLogHasRoom(await countCrmActivitiesForRecord(orgRef, input.link))) {
       console.warn('[crm] the filing was not written on the timeline: the record’s log is full', input.link)
       return 0
@@ -144,6 +145,7 @@ export async function fileCampaignFilingActivities(
           byUid: input.byUid,
           byName: input.byName ?? null,
         }),
+        ...marker,
         createdAt: FieldValue.serverTimestamp(),
         updatedAt: FieldValue.serverTimestamp(),
       }

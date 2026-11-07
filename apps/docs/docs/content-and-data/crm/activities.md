@@ -326,6 +326,8 @@ need to BCC the capture address from the dialog, and it does not.
 An activity is visible exactly where a contact captured on the same site would
 be: to that site alone, or to every site declared to be one sender with it, or
 to the whole organization when the organization has chosen an org-wide default.
+Under [**All sites except…**](./sharing.md#default-sharing-for-new-records) it is
+visible to every site but the ones left out, including sites added later.
 Logging an activity never widens what a scoped member can see, and a section
 of the CRM can never show an activity to somebody who could not open the
 record it belongs to.

@@ -32,6 +32,7 @@ import {
 } from '../model/campaign-filing-activity'
 import { resolveCrmActivityCompany } from '../model/crm-activity-link'
 import { crmActivityClientReads } from './crm-activity-client-reads'
+import { useCrmDefaultMarkFollowUp } from './use-crm-sharing'
 
 /** What one surface's save changed, by campaign, with the names it showed. */
 export interface CampaignFilingChange {
@@ -71,6 +72,7 @@ export function useCampaignFilingLog(input: {
   const { data: user } = useUser()
   const authorName = useUserName()
   const uid = user?.uid
+  const markUnderDefault = useCrmDefaultMarkFollowUp(hostId, orgId, org)
 
   return useCallback(
     async (
@@ -94,10 +96,12 @@ export function useCampaignFilingLog(input: {
       )
       const atMs = Date.now()
       const activities = collection(firestore, 'orgs', orgId, CRM_COLLECTIONS.activities)
+      const written: string[] = []
       for (const entry of entries) {
         try {
           // Named by the platform's own id, as every console resource is.
-          await setDoc(doc(activities, createResourceUid()), {
+          const id = createResourceUid()
+          await setDoc(doc(activities, id), {
             ...buildCampaignFilingActivity({
               action: entry.action,
               campaign: entry.campaign,
@@ -111,12 +115,15 @@ export function useCampaignFilingLog(input: {
             createdAt: new Date(),
             updatedAt: new Date(),
           })
+          written.push(id)
         } catch (error) {
           console.error('[crm] the filing could not be written on the timeline', error)
         }
       }
+      // Under "All sites except…", the marker a site added later joins by (AGL-4047).
+      if (written.length) markUnderDefault(written)
     },
-    [firestore, orgId, hostId, org, uid, authorName],
+    [firestore, orgId, hostId, org, uid, authorName, markUnderDefault],
   )
 }
 

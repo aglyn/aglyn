@@ -33,7 +33,8 @@ import {
   crmActivityLogHasRoom,
   CRM_EMAIL_ACTIVITY_TAG,
   CRM_EMAIL_ORG_TAG,
-  crmScopeTokens,
+  crmScopeFields,
+  type CrmScopeMarker,
   crmTaskLabelsForNew,
   crmTaskListFields,
   isCrmActivityKind,
@@ -78,7 +79,8 @@ import {
  *  1. the workspace's plan carries the CRM (`features.crm`), as at every
  *     CRM door; a Free workspace keeps no records to file on;
  *  2. the entry carries the scope a record made on that site carries
- *     (`crmScopeTokens`), so exactly the people who see the record see it;
+ *     (`crmScopeFields`), so exactly the people who see the record see it,
+ *     with the marker under "All sites except…" (AGL-4047);
  *  3. an EMAIL is filed under the id the capture address files a copy of the
  *     same message by (`cap_` + the digest of its `Message-ID`), and written
  *     with `create()`: the send, a copy the rep forwarded to the capture
@@ -254,6 +256,8 @@ export function createCrmRecordTimelineWriter(deps: CrmRecordTimelineDeps): Plug
         orgRef: FirebaseFirestore.DocumentReference
         link: CrmActivityLink
         visibleTo: string[]
+        /** Under "All sites except…", the marker a site added later joins by (AGL-4047). */
+        marker: CrmScopeMarker
         groupId: string
         holderUid?: string
       }
@@ -287,11 +291,13 @@ export function createCrmRecordTimelineWriter(deps: CrmRecordTimelineDeps): Plug
       link = found.link
       holderUid = found.holderUid
     }
+    const { visibleTo, ...marker } = crmScopeFields(org, group)
     return {
       firestore,
       orgRef,
       link,
-      visibleTo: crmScopeTokens(org, group),
+      visibleTo,
+      marker,
       groupId: group.groupId,
       ...(holderUid ? { holderUid } : {}),
     }
@@ -320,7 +326,7 @@ export function createCrmRecordTimelineWriter(deps: CrmRecordTimelineDeps): Plug
       if (!isCrmActivityKind(request.kind)) return refuse(400, `"${String(request.kind)}" isn't an activity.`)
       const admitted = await admit(request)
       if ('ok' in admitted) return admitted
-      const { firestore, orgRef, link, visibleTo, groupId } = admitted
+      const { firestore, orgRef, link, visibleTo, marker, groupId } = admitted
       const orgId = orgRef.id
 
       let ref: FirebaseFirestore.DocumentReference
@@ -370,6 +376,7 @@ export function createCrmRecordTimelineWriter(deps: CrmRecordTimelineDeps): Plug
       const { companyId } = await crmActivityLinkWithCompany(orgRef, link, { groupId })
       const stamped = {
         ...activity,
+        ...marker,
         ...(companyId ? { companyId } : {}),
         sourcePluginId: request.sourcePluginId,
       }
@@ -388,7 +395,7 @@ export function createCrmRecordTimelineWriter(deps: CrmRecordTimelineDeps): Plug
       if (!Number.isFinite(request.dueAtMs)) return refuse(400, 'A task has a due time.')
       const admitted = await admit(request, request.assigneeUid === null)
       if ('ok' in admitted) return admitted
-      const { firestore, orgRef, link, visibleTo } = admitted
+      const { firestore, orgRef, link, visibleTo, marker } = admitted
       const ref = orgRef.collection(CRM_COLLECTIONS.tasks).doc(keyedId(request.sourcePluginId, key))
       const notes = String(request.notes ?? '').trim().slice(0, NOTE_MAX)
       // `null` is "whoever holds the record", which admission read.
@@ -417,6 +424,7 @@ export function createCrmRecordTimelineWriter(deps: CrmRecordTimelineDeps): Plug
         ...link,
         hostId: request.hostId,
         visibleTo,
+        ...marker,
       }
       // What the Tasks list searches by (AGL-3321), beside the task.
       const created = await createOnce(ref, { ...task, ...crmTaskListFields(task) })

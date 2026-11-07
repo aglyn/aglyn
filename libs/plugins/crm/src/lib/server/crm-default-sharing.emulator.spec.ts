@@ -41,7 +41,7 @@ import {
 } from '@aglyn/aglyn/plugin-manager/plugin-scope-sharing'
 import { runScopeSharingSweep } from '@aglyn/tenant-data-admin/server/scope-sharing-sweep'
 import { readCrmDefaultApplyRun } from '../model/crm-sharing'
-import { forgetCrmSharingRules } from './crm-sharing'
+import { forgetCrmSharingRules, markCrmRecordsUnderDefault } from './crm-sharing'
 import {
   advanceDefaultApply,
   CRM_SHARING_RUNS_COLLECTION,
@@ -115,6 +115,38 @@ suite('the CRM default all sites except some, against the emulator', () => {
       scopeExcept: [token(C)],
     })
     expect(await read('companies', 'old')).not.toHaveProperty('scopeMode')
+  }, 60_000)
+
+  it('marks a logged activity on its follow-up, and a site added later then sees it without a run', async () => {
+    // As the console's log dialog writes it: the default's sites, no marker.
+    await org().collection('crmActivities').doc('logged').set({
+      kind: 'call',
+      body: 'Called back',
+      hostId: A,
+      visibleTo: [token(A), token(B)],
+      createdAt: Timestamp.fromMillis(2_000_000),
+    })
+    // Shared narrower than the default by whoever logged it: left alone.
+    await org().collection('crmActivities').doc('narrow').set({
+      kind: 'note',
+      body: 'Kept to A',
+      hostId: A,
+      visibleTo: [token(A)],
+      createdAt: Timestamp.fromMillis(2_000_000),
+    })
+    expect(await markCrmRecordsUnderDefault(db, ORG, 'crmActivities', ['logged', 'narrow'])).toEqual({
+      changed: 1,
+      missing: 0,
+    })
+    expect(await read('crmActivities', 'logged')).toMatchObject({
+      visibleTo: [token(A), token(B)],
+      scopeMode: 'allExcept',
+      scopeExcept: [token(C)],
+    })
+    await org().update({ [`hosts.${D}`]: true })
+    expect((await runScopeSharingSweep({ orgId: ORG, firestore: db })).failed).toBe(0)
+    expect((await read('crmActivities', 'logged'))['visibleTo']).toEqual([token(A), token(B), token(D)])
+    expect((await read('crmActivities', 'narrow'))['visibleTo']).toEqual([token(A)])
   }, 60_000)
 
   it('applies to every kind of record, keeps the capturing site and the grants, and a new site then joins', async () => {

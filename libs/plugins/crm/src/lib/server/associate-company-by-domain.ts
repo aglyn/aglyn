@@ -20,7 +20,7 @@ import {
   companyNameForDomain,
   CRM_COLLECTIONS,
   crmReadTokens,
-  crmScopeTokens,
+  crmScopeFields,
   nameSearchFields,
   orgAutoCreatesCompanies,
 } from '@aglyn/aglyn/server'
@@ -79,7 +79,7 @@ export type CompanyAssociation =
  *
  * With `crm.autoCreateCompanies` on the org document, a domain no visible
  * company carries becomes one, named after the domain and scoped exactly as
- * the contact was — `crmScopeTokens`, the stamp every CRM creator uses —
+ * the contact was — `crmScopeFields`, the stamp every CRM creator uses —
  * with the count starting at one. Public mailbox domains never reach this
  * branch, because `companyDomainForEmail` answers `null` for them: a
  * workspace's consumer list is not a list of accounts.
@@ -145,7 +145,8 @@ export async function associateCompanyByDomain(
     const company: Record<string, unknown> = {
       ...nameSearchFields(companyNameForDomain(domain)),
       domain,
-      visibleTo: crmScopeTokens(org, group),
+      // With the marker under "All sites except…" (AGL-4047).
+      ...crmScopeFields(org, group),
       hostId: created.hostId,
       [COMPANY_CONTACTS_COUNT_FIELD]: 1,
       createdAt: FieldValue.serverTimestamp(),

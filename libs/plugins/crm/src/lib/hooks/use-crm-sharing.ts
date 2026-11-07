@@ -16,6 +16,7 @@
  */
 'use client'
 
+import { crmDefaultSharingOf } from '@aglyn/aglyn'
 import { useUser } from '@aglyn/tenant-feature-instance'
 import { useCallback, useEffect, useMemo, useState } from 'react'
 import { type CrmSharingObject, type CrmSharingSite, readCrmSharingRules } from '../model/crm-sharing'
@@ -109,5 +110,28 @@ export function useCrmSharingFollowUp(
       void followUpCrmSharing(user, crmTaskCallScope(hostId, orgId), object, ids)
     },
     [user, hostId, orgId],
+  )
+}
+
+/**
+ * The follow-up a browser's own logged activity owes the CRM default "All
+ * sites except…" (AGL-4047): the rules refuse the marker from a client, so
+ * the server writes it when the activity's sites are exactly the default's,
+ * and a site added later then sees it. Only an org with that default asks;
+ * fire-and-forget like the sharing follow-up.
+ */
+export function useCrmDefaultMarkFollowUp(
+  hostId: string | null | undefined,
+  orgId: string | null | undefined,
+  org: CrmOrgDoc,
+): (ids: readonly string[]) => void {
+  const { data: user } = useUser()
+  const asks = crmDefaultSharingOf((org ?? null) as Record<string, unknown> | null) === 'allExcept'
+  return useCallback(
+    (ids: readonly string[]) => {
+      if (!asks) return
+      void followUpCrmSharing(user, crmTaskCallScope(hostId, orgId), 'crmActivities', ids)
+    },
+    [asks, user, hostId, orgId],
   )
 }

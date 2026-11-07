@@ -289,6 +289,31 @@ describe('the CRM on the record-timeline seam (AGL-2981)', () => {
     expect(row?.['visibleTo']).toEqual(['org'])
   })
 
+  it('marks an entry and a task under the default "All sites except…", so a site added later sees them (AGL-4047)', async () => {
+    seedOrg({
+      hosts: { [HOST]: true, 'host-2': true, 'host-3': true },
+      crm: { defaultRecordScope: 'host', defaultRecordExcept: ['host-3'] },
+    })
+    const marked = {
+      visibleTo: ['host:host-1', 'host:host-2'],
+      scopeMode: 'allExcept',
+      scopeExcept: ['host:host-3'],
+    }
+    await writer.logActivity(INBOUND)
+    const row = [...mockDocs.entries()].find(([key]) => key.includes('/crmActivities/'))?.[1]
+    expect(row).toMatchObject(marked)
+    const task = await writer.createTask(TASK)
+    expect(mockDocs.get(`orgs/${ORG}/crmTasks/${(task as { id: string }).id}`)).toMatchObject(marked)
+  })
+
+  it('marks nothing while the default does not leave a site out', async () => {
+    seedOrg(KEEPS_SITES_APART)
+    await writer.logActivity(INBOUND)
+    const row = [...mockDocs.entries()].find(([key]) => key.includes('/crmActivities/'))?.[1]
+    expect(row).not.toHaveProperty('scopeMode')
+    expect(row).not.toHaveProperty('scopeExcept')
+  })
+
   it("files a non-email entry under the caller's own key, namespaced by its plugin", async () => {
     const first = await writer.logActivity({
       ...INBOUND,

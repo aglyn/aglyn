@@ -579,6 +579,23 @@ describe('the CRM default all sites except some (AGL-4047)', () => {
     expect('scopeMode' in store[lead('l7')]).toBe(false)
   })
 
+  it('a logged activity’s follow-up marks it when its sites are the default’s, and only then', async () => {
+    const activity = (id: string) => `orgs/${ORG}/crmActivities/${id}`
+    store[activity('a1')] = { kind: 'call', body: 'x', hostId: 'site-a', visibleTo: [A, B], createdAt: 2_000 }
+    // Narrower than the default stamps: a share by hand, never widened here.
+    store[activity('a2')] = { kind: 'call', body: 'y', hostId: 'site-a', visibleTo: [A], createdAt: 2_000 }
+    const out = await call({ hostId: 'site-a', action: 'evaluate', object: 'crmActivities', ids: ['a1', 'a2'] })
+    expect(out).toEqual({ status: 200, payload: { ok: true, changed: 1, missing: 0 } })
+    expect(store[activity('a1')]).toMatchObject({ visibleTo: [A, B], scopeMode: 'allExcept', scopeExcept: [C] })
+    expect('scopeMode' in store[activity('a2')]).toBe(false)
+    expect(authorizeCrmWriter).toHaveBeenCalled()
+  })
+
+  it('names no other collection a follow-up may touch', async () => {
+    const out = await call({ hostId: 'site-a', action: 'evaluate', object: 'crmTasks', ids: ['t1'] })
+    expect(out).toEqual({ status: 400, payload: { error: 'Name the records.' } })
+  })
+
   it('"Apply to existing records" asks "Change CRM settings", and writes nothing for anyone without it', async () => {
     authorizeOrgCaller.mockResolvedValueOnce({ ok: false, status: 403, error: 'no' })
     const before = JSON.stringify(store)
