@@ -3037,10 +3037,20 @@ built page against what the reader read of its source.
   ΔE 0.1 of the source's color (`SITE_IMPORT_OUTLINE_DELTA`; a grey or black is
   the theme's ink). Improve it's score adds none of these and reads a band by its
   color alone (`section.absoluteBand`), as the design answer's text does.
-- **A site plan's misses (AGL-4152).** A plan that does not pass keeps why on
-  the job's own record (`siteImport.planMissedWhy`, at most 8 of 300
-  characters, each miss's code and the line it names; a refusal says so),
-  while the log names its codes alone.
+- **A site plan's misses, and its mends (AGL-4152).** A plan that does not pass
+  keeps why on the job's own record (`siteImport.planMissedWhy`, at most 8 of
+  300 characters, each miss's code and the line it names; a refusal says so),
+  while the log names its codes alone. Before an answer is held,
+  `aiSiteImportPlanMended` mends what is mechanical and cannot change what it
+  meant, so such an answer costs no re-ask: a page written by its address or
+  exact title reads as its id (in the menu and on the button), a page named
+  twice in one entry is named once, the home page leaves the menu, the new page
+  leaves every entry where none is proposed, an entry with no page is dropped,
+  and a page of the old menu or the new page left unreachable joins the footer:
+  the column of the pages most like it (both policies, the same section of the
+  site), else a new column under the old menu's own dropdown heading for it,
+  else the first column, else a column headed by the site's name. A label, a
+  line, the button, an unknown page and every honesty check are never mended.
 - **A generative redesign's misses (AGL-4152).** A redesign that falls back logs
   each miss's code with the line it names, and the page's record keeps them
   (`redesignMissedWhy`, at most 8 of 300 characters): the answer itself is
