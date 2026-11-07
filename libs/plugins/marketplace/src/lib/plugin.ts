@@ -16,6 +16,7 @@
  */
 
 import * as Aglyn from '@aglyn/aglyn'
+import { registerRepeatSource } from '@aglyn/aglyn/app-utils/repeat-sources'
 import { ICON_VARIANT_SYMBOL_FLAG } from '@aglyn/shared-data-enums'
 import { mdiStorefrontOutline } from '@aglyn/shared-data-mdi'
 import MarketplaceBrowse from './components/marketplace-browse.component'
@@ -37,6 +38,7 @@ import { MarketplaceListingContent } from './components/listing-content.componen
 import { BUNDLE_ID } from './constants/bundle-common'
 import { MARKETPLACE_LICENSES_SECTION_ID } from './model/marketplace-section-ids'
 import { RATING_FIELD } from './model/rating-field'
+import { connectionRepeatSource } from './repeat/connection-repeat-source'
 import RatingInput from './components/rating-input.component'
 import { lazy } from 'react'
 
@@ -58,6 +60,12 @@ const SitePluginConnectionsCard = lazy(() => import('./components/site-plugin-co
 export function registerMarketplaceConsole(): void {
   // Custom field type (AGL-434): rating rides int32 with a starred input.
   Aglyn.registerCustomFieldType({ ...RATING_FIELD, Input: RatingInput })
+  // A plugin connection's synced record as something any element repeats
+  // over (AGL-4212). Registered here with no site known, so a stored repeat
+  // keeps its badge and Preview expands it; `EditorConnectionsProvider`
+  // registers it again with the site's connections, which is what offers the
+  // picker.
+  registerRepeatSource(connectionRepeatSource())
   Aglyn.registerConsoleExtension({
     /*
      * Four widgets fewer since AGL-3080 — the listing body, the capability

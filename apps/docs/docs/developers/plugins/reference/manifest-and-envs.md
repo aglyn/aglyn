@@ -360,6 +360,74 @@ In the editor, the console reads the same record from
 answers `{ record }` (or `{ record: null }`) to a member holding **Manage a
 site's plugin connections**.
 
+#### Repeating ordinary elements over the record {#connection-repeat}
+
+Your element is one block that a site owner can only style from the outside.
+To let them design the display themselves, ship a **preset** of ordinary
+elements (a Card, a Stack, Typography, an image, a link) that repeats over
+your record instead. Any element repeats over a connection's record with the
+`repeatConnection` prop, exactly as it repeats over a dataset:
+
+| `repeatConnection` | Rows |
+| --- | --- |
+| `<identity>/<connectionId>` | One per item of `record.items`, in order. |
+| `<identity>/<connectionId>/fields` | Exactly one, holding `record.fields`; none before the first sync. |
+
+`<identity>` is your plugin's [identity](../guides/realm-bundles.md#identity-and-namespace),
+`<publisher handle>.<manifest id>` (for example `acme.reviews`), and
+`<connectionId>` an `id` from your `connections`. Inside the repeating element,
+`{{item.<field>}}` prints a declared field of the row:
+
+- `string`, `url`, `number` and `boolean` fields print as stored.
+- A `datetime` field prints as a date, `Nov 3, 2026` (UTC), and
+  `{{item.<field>Iso}}` holds the ISO instant, for sorting or for a
+  machine-readable attribute.
+- A field the row does not hold prints nothing, and an element whose whole
+  text or `src` is such a token is left out of that copy.
+- Each item row's `$id` is its position.
+
+`repeatLimit`, `repeatFilter` and `repeatSort` bound it as they bound any
+repeat, and `repeatSelf: true` repeats the element itself rather than its
+children. To draw part of a copy only when a field has a value, bind
+`hideUnless` (or the reverse, `hideIf`) to the token: each copy reads it
+against its own row and leaves the element out, with everything inside it.
+
+```js
+// A preset's data: one card per review, the owner's reply only where there is one.
+{
+  componentId: 'muiStack',
+  props: { spacing: 2, repeatConnection: 'acme.reviews/reviews', repeatLimit: '5' },
+  nodes: [
+    {
+      componentId: 'muiCard',
+      nodes: [
+        { componentId: 'muiTypography', props: { variant: 'subtitle2', children: '{{item.author}} · {{item.publishedAt}}' } },
+        { componentId: 'muiTypography', props: { children: '{{item.text}}' } },
+        {
+          componentId: 'muiBox',
+          props: { hideUnless: '{{item.reply}}' },
+          nodes: [
+            { componentId: 'muiTypography', props: { variant: 'caption', children: 'Response from the owner' } },
+            { componentId: 'muiTypography', props: { children: '{{item.reply}}' } },
+          ],
+        },
+      ],
+    },
+  ],
+}
+```
+
+- **Only your own install's record, on that site.** The published page reads
+  the rows on the server, for the site being rendered, and only for an
+  identity that is a signed install allowed to run there, at a version that
+  still declares the connection, on a plan with connections. Anything else
+  renders no copies.
+- **The site owner picks it too.** In the Besigner, **Repeat over a
+  connection** lists each of the site's connections, once for its items and
+  once for its summary, and the insert-token menu inside the repeat lists
+  your declared fields. The canvas and Preview draw the copies from the same
+  record, with the same values, as the published page.
+
 #### Record values as site variables {#connection-variables}
 
 Each declared **summary** field (`record.fields`) is also a site variable on

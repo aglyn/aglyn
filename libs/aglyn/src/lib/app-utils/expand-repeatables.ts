@@ -21,6 +21,11 @@ import {
   parseRepeatFilter,
   parseRepeatSort,
 } from './repeat-query'
+import {
+  NODE_HIDE_IF_PROP,
+  NODE_HIDE_UNLESS_PROP,
+} from './reusable-component-keys'
+import { readYesNoValue } from './reusable-prop-values'
 
 /** Namespaces cloned template ids per container/record. */
 export const REPEAT_NODE_ID_PREFIX = 'rep__'
@@ -159,8 +164,55 @@ function isEmptyBinding(
   })
 }
 
+/** One `{{item.*}}` token anywhere, without the global pattern's `lastIndex`. */
+const ITEM_TOKEN_ANYWHERE = new RegExp(ITEM_TOKEN_PATTERN.source)
+
+/** Whether `text` holds a `{{item.*}}` token. */
+const namesItemToken = (text: string): boolean => ITEM_TOKEN_ANYWHERE.test(text)
+
 /**
- * The key a node repeats over, trimmed, or `''` when it repeats over nothing.
+ * Whether a copy's element asks to be left out of it (AGL-4212): its
+ * `hideIf` or `hideUnless` was bound to a `{{item.*}}` token, and this
+ * record's value says so — `hideIf` a yes, `hideUnless` a no, an empty field
+ * included. An owner's reply block bound `hideUnless: '{{item.reply}}'`
+ * draws on the reviews that have one and on no other. A directive bound to
+ * anything else is not the record's to answer, and is left to the graft and
+ * the host prune that read it.
+ */
+function isHiddenByRecord(
+  template: Record<string, unknown> | undefined,
+  substituted: Record<string, unknown>,
+): boolean {
+  const reads = (prop: string, hiddenWhen: boolean) => {
+    const bound = template?.[prop]
+    return (
+      typeof bound === 'string' &&
+      namesItemToken(bound) &&
+      readYesNoValue(substituted[prop]) === hiddenWhen
+    )
+  }
+  return reads(NODE_HIDE_IF_PROP, true) || reads(NODE_HIDE_UNLESS_PROP, false)
+}
+
+/**
+ * The prop a repeat over a plugin connection's synced record persists under
+ * (AGL-4212): `<pluginIdentity>/<connectionId>` repeats once per item of the
+ * record, `<pluginIdentity>/<connectionId>/fields` once for its summary
+ * fields. Persisted — never rename.
+ */
+export const REPEAT_CONNECTION_PROP = 'repeatConnection'
+
+/**
+ * What {@link repeatKey} puts before a {@link REPEAT_CONNECTION_PROP} value,
+ * so a connection's key and a dataset's never name the same rows, and the
+ * server's repeat-rows contract can route each to the plugin that answers it.
+ */
+export const REPEAT_CONNECTION_KEY_PREFIX = 'connection:'
+
+/**
+ * The key a node repeats over, trimmed, or `''` when it repeats over nothing:
+ * its `repeatDataset`, else {@link REPEAT_CONNECTION_KEY_PREFIX} and its
+ * {@link REPEAT_CONNECTION_PROP} (AGL-4212).
  *
  * The one predicate every repeat question is asked through: the expansion, the
  * datasets-read gate below, the reusable-component graft that moves a
@@ -169,9 +221,13 @@ function isEmptyBinding(
  * other becomes an empty list on a customer's page.
  */
 export const repeatKey = (node: unknown): string => {
-  const key = (node as { props?: { repeatDataset?: unknown } })?.props
-    ?.repeatDataset
-  return typeof key === 'string' ? key.trim() : ''
+  const props = (node as { props?: Record<string, unknown> } | null)?.props
+  const dataset = props?.['repeatDataset']
+  const key = typeof dataset === 'string' ? dataset.trim() : ''
+  if (key) return key
+  const connection = props?.[REPEAT_CONNECTION_PROP]
+  const value = typeof connection === 'string' ? connection.trim() : ''
+  return value ? `${REPEAT_CONNECTION_KEY_PREFIX}${value}` : ''
 }
 
 /**
@@ -193,6 +249,7 @@ export const REPEAT_SELF_PROP = 'repeatSelf'
  */
 export const REPEAT_DIRECTIVE_PROPS: readonly string[] = [
   'repeatDataset',
+  REPEAT_CONNECTION_PROP,
   'repeatLimit',
   'repeatFilter',
   'repeatSort',
@@ -417,7 +474,8 @@ export function repeatKeys(
 
 /**
  * Repeats (AGL-103, AGL-3111): any node carrying `props.repeatDataset` (a
- * dataset id or display name) renders once per record of that dataset, with
+ * dataset id or display name), or `props.repeatConnection` (a plugin
+ * connection's synced record, AGL-4212), renders once per record, with
  * `{{item.field}}` tokens in the copied string props replaced by the record's
  * values. A field the record leaves empty prints nothing — never the raw
  * token — and an element whose whole text is such a binding is left out of
@@ -439,7 +497,11 @@ export function repeatKeys(
  *   grafted reusable components. A self-scoped node's first copy is
  *   `rep__{id}__0__{id}`. Run this AFTER `composeReusableComponentNodes` and
  *   BEFORE binding resolution.
- * - Rows are the node's {@link repeatedRecords}.
+ * - Rows are the node's {@link repeatedRecords}, looked up under its
+ *   {@link repeatKey}.
+ * - An element of a copy whose `hideIf` / `hideUnless` is bound to a
+ *   `{{item.*}}` token is left out of that copy, with everything inside it,
+ *   when the record's value says so (AGL-4212).
  * - The repeat directives ({@link REPEAT_DIRECTIVE_PROPS}) are consumed: every
  *   node this expands, and every copy it makes, comes out without them.
  * - Repeats do not nest. A repeat inside another repeat's template is copied
@@ -519,8 +581,20 @@ export function expandRepeatables<N extends AglynNodeSchema = AglynNodeSchema>(
           datasetsByKey: rowsByKey,
           missing: 'empty',
         }) as Record<string, unknown>
-        if (isEmptyBinding(node.props as Record<string, unknown>, props)) {
+        const template = node.props as Record<string, unknown> | undefined
+        if (
+          isEmptyBinding(template, props) ||
+          isHiddenByRecord(template, props)
+        ) {
           return false
+        }
+        // Read, so not carried: a copy is drawn or left out, and the
+        // directive that decided it has nothing left to say.
+        for (const prop of [NODE_HIDE_IF_PROP, NODE_HIDE_UNLESS_PROP]) {
+          const bound = template?.[prop]
+          if (typeof bound === 'string' && namesItemToken(bound)) {
+            delete props[prop]
+          }
         }
         const clonedChildren = Array.isArray(node.nodes)
           ? (node.nodes as NodeId[])

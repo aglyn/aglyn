@@ -16,7 +16,7 @@
  */
 
 import type { ReactNode } from 'react'
-import { renderHook } from '@testing-library/react'
+import { cleanup, renderHook } from '@testing-library/react'
 
 import * as Aglyn from '@aglyn/aglyn'
 import {
@@ -266,5 +266,76 @@ describe('useInsertTokenOptions — a dataset outside the browse window', () => 
     })
     expect(askedFor).toEqual([])
     expect(resolved).toEqual([])
+  })
+})
+
+/**
+ * A source whose keys are no entity names its fields itself (AGL-4212): a
+ * repeat over a plugin connection's record lists the record's declared
+ * fields, and its picker's own option label names the repeat.
+ */
+describe('useInsertTokenOptions — a source that names its own fields (AGL-4212)', () => {
+  const FIELDS_SOURCE: RepeatSource = {
+    id: 'test-connection',
+    label: 'Connection',
+    keyProp: 'repeatConnection',
+    keyAttribute: {
+      component: Aglyn.FieldComponentType.SELECT,
+      options: [{ value: 'acme.reviews/google', label: 'Google: each item' }],
+    },
+    fields: (key) =>
+      key === 'acme.reviews/google'
+        ? [
+            { id: 'author', label: 'Author' },
+            { id: 'publishedAtIso', label: 'Published at (ISO date)' },
+          ]
+        : undefined,
+    useRows: () => ({ status: 'missing' }),
+  }
+  let unregister: () => void = () => undefined
+  beforeEach(() => {
+    unregister = registerRepeatSource(FIELDS_SOURCE)
+  })
+  afterEach(() => {
+    // Unmounted first, so the registry's change reaches no mounted hook.
+    cleanup()
+    unregister()
+    jest.restoreAllMocks()
+  })
+
+  it('offers {{item.<field>}} for each field the source names, without asking the entity picker', () => {
+    jest.spyOn(Aglyn.canvas, 'toJSON').mockReturnValue({
+      nodes: {
+        field: { $id: 'field', props: {}, parentId: 'repeat' },
+        repeat: { $id: 'repeat', props: { repeatConnection: 'acme.reviews/google' } },
+      },
+    } as never)
+    const askedFor: string[] = []
+    const { result } = renderHook(() => useInsertTokenOptions(FIELD_NODE), {
+      wrapper: datasetWrapper({
+        request: (kind) => askedFor.push(kind),
+        resolve: () => undefined,
+      }),
+    })
+    const items = result.current.options.filter((option) => option.group === 'Connection item')
+    expect(items.map((option) => [option.label, option.token])).toEqual([
+      ['Author', '{{item.author}}'],
+      ['Published at (ISO date)', '{{item.publishedAtIso}}'],
+    ])
+    expect(items[0].groupHint).toBe('From connection "Google: each item"')
+    expect(askedFor).toEqual([])
+  })
+
+  it('offers none for a key the source does not know', () => {
+    jest.spyOn(Aglyn.canvas, 'toJSON').mockReturnValue({
+      nodes: {
+        field: { $id: 'field', props: {}, parentId: 'repeat' },
+        repeat: { $id: 'repeat', props: { repeatConnection: 'other.plugin/x' } },
+      },
+    } as never)
+    const { result } = renderHook(() => useInsertTokenOptions(FIELD_NODE), {
+      wrapper: datasetWrapper({}),
+    })
+    expect(result.current.options.some((option) => option.group === 'Connection item')).toBe(false)
   })
 })
