@@ -24,9 +24,11 @@ import { parseAccountingConnectFragment, type AccountingProviderId } from '../mo
 import { asFirestore, memoryFirestore } from '../testing/memory-firestore'
 import type { AccountingProviderConfigResult } from './accounting-config'
 import { createAccountingRoutes, type AccountingRouteDeps } from './accounting-routes'
-import { openToken, readConnection, toStoredConnection } from './connection-store'
+import { newConnectionRecord, openToken, readConnection, toStoredConnection } from './connection-store'
 import { AccountingProviderError } from './providers/http'
 import type { AccountingProvider } from './providers/provider'
+import { enqueueOrderPaid, runSyncPass } from './sync-engine'
+import { saleItemId } from './sync-store'
 
 const NOW = Date.UTC(2026, 9, 6, 18)
 const key = createSecretBoxKey(randomBytes(32))
@@ -126,8 +128,33 @@ function setup(
       headers: { authorization: `Bearer ${token}`, 'content-type': 'application/json' },
       ...(body ? { body: JSON.stringify(body) } : {}),
     })
-  return { store, routes, request, providers, activity }
+  return { store, routes, request, providers, activity, deps }
 }
+
+/** Seeds a Xero connection to Demo Company (US), its accounts chosen. */
+function seedXero(context: ReturnType<typeof setup>) {
+  const record = newConnectionRecord({
+    keyring,
+    orgId: 'org-1',
+    provider: 'xero',
+    tokens: { accessToken: 'access-1', refreshToken: 'refresh-1', accessExpiresAtMs: NOW + 3_600_000, refreshExpiresAtMs: null, scopes: [] },
+    tenants: [{ id: 'tenant-1', name: 'Demo Company (US)', connectionId: 'conn-1' }],
+    environment: null,
+    uid: 'u-1',
+    email: 'owner@example.com',
+    nowMs: NOW - 86_400_000,
+    previous: null,
+  })
+  record.mapping = {
+    ...record.mapping,
+    accounts: { income: 'inc', clearing: 'clr', feeExpense: 'fee', payoutBank: 'bank' },
+  }
+  context.store.seed('orgs/org-1/accountingConnections/xero', toStoredConnection(record, keyring) as never)
+}
+
+/** What Xero answers once the organization removed the app. */
+const removedInXero = () => new AccountingProviderError('revoked', 'AuthenticationUnsuccessful', 403)
+const PLAIN = 'Xero no longer lets Aglyn reach Demo Company (US). Reconnect to keep posting.'
 
 /** Connects QuickBooks end to end and answers the stored record. */
 async function connectQuickBooks(context: ReturnType<typeof setup>) {
@@ -314,6 +341,76 @@ describe('accounting routes', () => {
     await connectQuickBooks(context)
     const refused = await context.routes.connect(context.request('POST', 'accounting/connect', { orgId: 'org-1', provider: 'xero' }))
     expect(refused.status).toBe(409)
+  })
+
+  describe('when the app is removed inside Xero', () => {
+    it('flips the connection to reconnect-required from the options route, and the status route then says so', async () => {
+      const context = setup()
+      seedXero(context)
+      ;(context.providers.xero.listAccounts as jest.Mock).mockRejectedValue(removedInXero())
+      const options = await context.routes.options(context.request('GET', 'accounting/options?orgId=org-1'))
+      expect(options.status).toBe(409)
+      expect(await options.json()).toEqual({ reason: 'reconnect-required', error: PLAIN })
+      const status = await context.routes.status(context.request('GET', 'accounting/status?orgId=org-1'))
+      expect(await status.json()).toMatchObject({
+        providers: { xero: true },
+        connection: { provider: 'xero', status: 'reconnect-required', tenantName: 'Demo Company (US)', lastError: PLAIN },
+      })
+    })
+
+    it('reports the reconnect state on the status route after a sync pass meets it, with the sale still queued', async () => {
+      const context = setup()
+      seedXero(context)
+      const xero = context.providers.xero
+      ;(xero.findByExternalId as jest.Mock).mockRejectedValue(removedInXero())
+      const engine = {
+        firestore: context.deps.firestore,
+        keyring: () => keyring,
+        providerFor: () => xero,
+        now: () => NOW,
+        sleep: async () => undefined,
+      }
+      const order = {
+        orgId: 'org-1',
+        hostId: 'host-1',
+        orderId: 'order-1',
+        number: 1,
+        currency: 'usd',
+        paidAtMs: NOW - 60_000,
+        channel: 'online',
+        customerName: 'Ada',
+        customerEmail: 'ada@example.com',
+        lines: [{ name: 'Mug', quantity: 1, unitAmountCents: 1000 }],
+        totals: { itemsCents: 1000, shippingCents: 0, taxCents: 0, discountCents: 0, totalCents: 1000, feeCents: 0 },
+        taxInclusive: false,
+        taxKey: null,
+      }
+      await enqueueOrderPaid(engine, order)
+      const record = readConnection(context.store.read('orgs/org-1/accountingConnections/xero'), keyring)!
+      await expect(runSyncPass(engine, record, { deadlineMs: NOW + 60_000 })).resolves.toMatchObject({ stopped: 'reconnect' })
+      const status = await context.routes.status(context.request('GET', 'accounting/status?orgId=org-1'))
+      expect(await status.json()).toMatchObject({
+        connection: { status: 'reconnect-required', lastError: PLAIN },
+        counts: { pending: 1, needsAttention: 0 },
+      })
+      expect(context.store.read(`orgs/org-1/accountingSyncItems/${saleItemId(order)}`)).toMatchObject({ status: 'pending' })
+    })
+
+    it('keeps any other 403 a provider error, and the connection connected', async () => {
+      const context = setup()
+      seedXero(context)
+      ;(context.providers.xero.listAccounts as jest.Mock).mockRejectedValue(
+        new AccountingProviderError('validation', 'This organisation has reached the limit of its plan.', 403),
+      )
+      const options = await context.routes.options(context.request('GET', 'accounting/options?orgId=org-1'))
+      expect(options.status).toBe(502)
+      expect(await options.json()).toMatchObject({
+        reason: 'provider-error',
+        error: 'Xero: This organisation has reached the limit of its plan.',
+      })
+      const status = await context.routes.status(context.request('GET', 'accounting/status?orgId=org-1'))
+      expect(await status.json()).toMatchObject({ connection: { status: 'connected', lastError: null } })
+    })
   })
 
   describe('through Codat (AGL-3636)', () => {

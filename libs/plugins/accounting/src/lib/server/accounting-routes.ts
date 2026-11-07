@@ -51,7 +51,9 @@ import { startBackfill } from './backfill'
 import {
   connectionRef,
   connectionSession,
+  isConnectionLost,
   loadOrgConnection,
+  markConnectionLost,
   newConnectionRecord,
   openToken,
   toConnectionView,
@@ -161,6 +163,20 @@ export function createAccountingRoutes(deps: AccountingRouteDeps): AccountingRou
       if (error instanceof AccountingProviderError) return providerFailure(error, record.provider)
       return refusal(409, 'not-connected', `Reconnect ${accountingProviderName(record.provider)}.`)
     }
+  }
+
+  /**
+   * A provider's failure on a connected record. A company that no longer lets
+   * the app in (the app removed inside Xero) marks the connection for
+   * reconnecting, as the sync pass does, and answers `reconnect-required`, on
+   * which the page reads the status again and shows its Reconnect button.
+   */
+  async function connectedFailure(error: unknown, record: AccountingConnectionRecord): Promise<Response> {
+    if (isConnectionLost(error)) {
+      const lost = await markConnectionLost(deps.firestore(), record, deps.now())
+      return refusal(409, 'reconnect-required', lost.message)
+    }
+    return providerFailure(error, record.provider)
   }
 
   async function connected(gate: AccountingGateContext): Promise<AccountingConnectionRecord | Response> {
@@ -421,7 +437,7 @@ export function createAccountingRoutes(deps: AccountingRouteDeps): AccountingRou
       accounts.sort((a, b) => a.name.localeCompare(b.name))
       return ok({ accounts, taxCodes } satisfies AccountingOptionsResponse)
     } catch (error) {
-      return providerFailure(error, record.provider)
+      return connectedFailure(error, record)
     }
   }
 
@@ -473,7 +489,7 @@ export function createAccountingRoutes(deps: AccountingRouteDeps): AccountingRou
       })
       return ok({ connection: toConnectionView({ ...record, mapping, extras: { ...record.extras, ...extras } }) })
     } catch (error) {
-      return providerFailure(error, record.provider)
+      return connectedFailure(error, record)
     }
   }
 

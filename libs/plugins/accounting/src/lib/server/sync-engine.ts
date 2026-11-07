@@ -40,7 +40,9 @@
  *
  * - A refused access token is refreshed once and the call repeated.
  * - A refused GRANT marks the connection "reconnect required"; items stay
- *   pending, uncounted, until someone reconnects.
+ *   pending, uncounted, until someone reconnects. So does a company that no
+ *   longer lets the app in (the app removed inside Xero), though its token
+ *   still opens: {@link markConnectionLost}.
  * - A rate limit or a transient failure counts an attempt and waits
  *   ({@link backoffMs}: 2, 4, 8 … minutes, at most 12 hours); after
  *   {@link SYNC_MAX_ATTEMPTS} the item asks a person.
@@ -84,7 +86,9 @@ import {
   AccountingReconnectRequiredError,
   connectionRef,
   connectionSession,
+  isConnectionLost,
   loadOrgConnection,
+  markConnectionLost,
   type AccountingConnectionRecord,
 } from './connection-store'
 import { AccountingProviderError } from './providers/http'
@@ -180,14 +184,24 @@ async function withSession<T>(context: PassContext, call: (session: AccountingSe
     now: context.deps.now,
     sleep: context.deps.sleep,
   }
+  // The company no longer lets the app in, though the token still opens:
+  // the connection is marked as a refused grant marks it, and the pass stops.
+  const guarded = async (session: AccountingSession) => {
+    try {
+      return await call(session)
+    } catch (error) {
+      if (isConnectionLost(error)) throw await markConnectionLost(tokens.firestore, context.connection, tokens.now())
+      throw error
+    }
+  }
   context.session ??= await connectionSession(tokens, context.connection)
   try {
-    return await call(context.session)
+    return await guarded(context.session)
   } catch (error) {
     if (!(error instanceof AccountingProviderError) || error.code !== 'auth') throw error
     // The access token was refused before its time: refresh once and repeat.
     context.session = await connectionSession(tokens, context.connection, { force: true })
-    return call(context.session)
+    return guarded(context.session)
   }
 }
 
@@ -268,7 +282,11 @@ export async function postItem(context: PassContext, item: AccountingSyncItemRec
 async function currencyRefusal(context: PassContext, currency: string): Promise<string | null> {
   const refusal = foreignCurrencyRefusal(context.connection, currency)
   if (!refusal) return null
-  context.ledgerInfo ??= withSession(context, (session) => context.provider.companyInfo(session)).catch(() => null)
+  context.ledgerInfo ??= withSession(context, (session) => context.provider.companyInfo(session)).catch((error) => {
+    // A lost connection stops the pass; any other failed read leaves the refusal.
+    if (error instanceof AccountingReconnectRequiredError) throw error
+    return null
+  })
   const info = await context.ledgerInfo
   if (!info?.multiCurrency) return refusal
   if (!context.connection.multiCurrency) {
