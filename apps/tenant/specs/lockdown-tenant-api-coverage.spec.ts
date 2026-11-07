@@ -728,6 +728,12 @@ const JOB_SITES: JobSite[] = JOB_ROOTS.flatMap((root) =>
  * than left as a stale entry.
  */
 const PLATFORM_JOBS: Record<string, string> = {
+  'libs/plugins/crm/src/lib/server.ts#continue-sharing-runs':
+    'The CRM twin of the scope sweep (AGL-4047): rewrites which sites an ' +
+    'org-owned CRM record names, for its grants shared with all sites except ' +
+    'some, and resolves no host. A locked site named on a record serves ' +
+    'nothing because of it, and taking a site off a list is the direction a ' +
+    'lock points.',
   'apps/tenant/utils/scope-sharing-sweep-job.ts#resume-scope-sweeps':
     'Rewrites which sites an org-owned document names and resolves no host. ' +
     'A locked site named on a document serves nothing because of it, since ' +

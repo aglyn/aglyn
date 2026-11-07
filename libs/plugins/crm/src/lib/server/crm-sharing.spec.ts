@@ -190,6 +190,7 @@ import {
   crmSharingRulesOf,
   forgetCrmSharingRules,
 } from './crm-sharing'
+import { refreshCrmExceptGrants } from './crm-sharing-runs'
 
 const ORG = 'org-1'
 const A = 'host:site-a'
@@ -441,5 +442,109 @@ describe('the follow-up a client-direct write owes (AGL-3336)', () => {
     expect(out).toEqual({ status: 200, payload: { ok: true, changed: 1, missing: 0 } })
     expect(store[lead('l6')]['visibleTo']).toEqual([B, A])
     expect(authorizeCrmWriter).toHaveBeenCalled()
+  })
+})
+
+describe('all sites except some (AGL-4047)', () => {
+  const C = 'host:site-c'
+  const allExcept = (...exceptHostIds: string[]) => ({ mode: 'allExcept', exceptHostIds })
+
+  beforeEach(() => {
+    store['hosts/site-c'] = { orgId: ORG, displayName: 'Brand C' }
+    store[`orgs/${ORG}`] = { name: 'Acme', hosts: { 'site-a': true, 'site-b': true, 'site-c': true } }
+  })
+
+  it('a hand share reaches every site but the ones left out, and the capturing site keeps the person', async () => {
+    const out = await call({
+      hostId: 'site-a',
+      action: 'share',
+      object: 'leads',
+      ids: ['l1'],
+      targets: allExcept('site-a', 'site-c'),
+    })
+    expect(out).toEqual({ status: 200, payload: { ok: true, changed: 1, missing: 0 } })
+    // Left out, but it captured the person: still held.
+    expect(store[lead('l1')]['visibleTo']).toEqual([A, B])
+    expect(listedOn('l1', 'site-c')).toBe(false)
+    expect(read(store[lead('l1')], ['sharing', 'grants', 'manual_except'])).toMatchObject({
+      source: 'manual',
+      tokens: [B],
+      except: [A, C],
+    })
+    expect(read(store[lead('l1')], ['sharing', 'hasExcept'])).toBe(true)
+    expect(logOrgActivity).toHaveBeenCalledWith(
+      ORG,
+      { uid: 'uid-dana', email: 'dana@acme.test' },
+      'Shared with All sites except Brand A and Brand C (read-only): one lead',
+      { type: 'lead', id: 'l1' },
+    )
+
+    const unshared = await call({ hostId: 'site-a', action: 'unshare', object: 'leads', ids: ['l1'], targets: 'allExcept' })
+    expect(unshared.payload).toMatchObject({ ok: true, changed: 1 })
+    expect(store[lead('l1')]['visibleTo']).toEqual([A])
+    expect('sharing' in store[lead('l1')]).toBe(false)
+  })
+
+  it('refuses leaving nothing out, and leaving every site out, writing nothing', async () => {
+    const before = JSON.stringify(store[lead('l1')])
+    const nothing = await call({ hostId: 'site-a', action: 'share', object: 'leads', ids: ['l1'], targets: allExcept('site-gone') })
+    expect(nothing).toEqual({
+      status: 400,
+      payload: { error: 'Choose at least one site to leave out, or share with All sites.' },
+    })
+    const everything = await call({
+      hostId: 'site-a',
+      action: 'share',
+      object: 'leads',
+      ids: ['l1'],
+      targets: allExcept('site-a', 'site-b', 'site-c'),
+    })
+    expect(everything).toEqual({ status: 400, payload: { error: 'Keep at least one site in, or choose the sites.' } })
+    expect(JSON.stringify(store[lead('l1')])).toBe(before)
+  })
+
+  it('asks "Change CRM settings" like every other share', async () => {
+    authorizeOrgCaller.mockResolvedValueOnce({ ok: false, status: 403, error: 'no' })
+    const out = await call({ hostId: 'site-a', action: 'share', object: 'leads', ids: ['l1'], targets: allExcept('site-c') })
+    expect(out.status).toBe(403)
+    expect(store[lead('l1')]['visibleTo']).toEqual([A])
+  })
+
+  it('a rule leaving a site out stores what it leaves out and shares with the rest', async () => {
+    const out = await call({
+      orgId: ORG,
+      action: 'rule-save',
+      rule: { name: 'Not Brand C', object: 'leads', sourceHostIds: ['site-a'], targets: allExcept('site-c') },
+    })
+    expect(out.status).toBe(200)
+    // Worked out against the workspace's sites, `orgs/{orgId}.hosts`.
+    expect(out.payload['rule']).toMatchObject({ targets: [A, B], except: [C], run: { status: 'done', changed: 2 } })
+    expect(store[lead('l1')]['visibleTo']).toEqual([A, B])
+    expect(listedOn('l1', 'site-c')).toBe(false)
+  })
+
+  it('a site added later joins once the site change brings the grants level; the one left out never does', async () => {
+    await call({ hostId: 'site-a', action: 'share', object: 'leads', ids: ['l1'], targets: allExcept('site-c') })
+    expect(store[lead('l1')]['visibleTo']).toEqual([A, B])
+    store[`orgs/${ORG}`] = { ...store[`orgs/${ORG}`], hosts: { 'site-a': true, 'site-b': true, 'site-c': true, 'site-d': true } }
+    expect(listedOn('l1', 'site-d')).toBe(false)
+
+    forgetCrmSharingRules()
+    const result = await refreshCrmExceptGrants({ orgId: ORG, firestore: firestoreHandle as never })
+    expect(result).toMatchObject({ complete: true, read: 1, changed: 1 })
+    expect(store[lead('l1')]['visibleTo']).toEqual([A, B, 'host:site-d'])
+    expect(listedOn('l1', 'site-d')).toBe(true)
+    expect(listedOn('l1', 'site-c')).toBe(false)
+    // Level now: a second pass writes nothing.
+    expect(await refreshCrmExceptGrants({ orgId: ORG, firestore: firestoreHandle as never })).toMatchObject({ changed: 0 })
+  })
+
+  it('finds nothing to do in a workspace that never shared this way', async () => {
+    expect(await refreshCrmExceptGrants({ orgId: ORG, firestore: firestoreHandle as never })).toEqual({
+      read: 0,
+      changed: 0,
+      complete: true,
+      cursor: null,
+    })
   })
 })

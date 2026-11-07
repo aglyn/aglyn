@@ -42,7 +42,11 @@ import {
   crmListFieldsPatch,
 } from '@aglyn/aglyn/app-utils/crm'
 import { createResourceUid } from '@aglyn/aglyn/app-utils/create-resource-uid'
-import { hostIdsFromScope } from '@aglyn/aglyn/app-utils/scope-tokens'
+import {
+  hostIdsFromScope,
+  type ScopeToken,
+  sharingFromChoice,
+} from '@aglyn/aglyn/app-utils/scope-tokens'
 import type { PluginApiHandler } from '@aglyn/aglyn/server'
 import { firebaseAdmin, getOrgForHost, logOrgActivity } from '@aglyn/tenant-data-admin'
 import { countCrmActivitiesForRecord } from '@aglyn/tenant-data-admin/server/crm-records'
@@ -54,6 +58,8 @@ import {
   CRM_SHARING_CRITERIA_KEYS,
   CRM_SHARING_FIELD,
   CRM_SHARING_IDS_MAX,
+  crmOrgHostIds,
+  CRM_SHARING_MAX_INCLUDED,
   CRM_SHARING_OBJECT_LABELS,
   CRM_SHARING_RULE_IDS_PATH,
   CRM_SHARING_RULES_MAX,
@@ -75,10 +81,14 @@ import {
   readCrmSharingRule,
   readCrmSharingRules,
   recordHeldScope,
+  sharingAsksOrgSites,
   sharingPlanChanges,
+  shareExceptChoiceFrom,
   shareTargetsFrom,
   sharingRulesAskLeadSourceDirection,
+  withManualExceptShare,
   withManualShares,
+  withoutManualExceptShare,
   withoutManualShares,
 } from '../model/crm-sharing'
 import { stampCrmActivityCompany } from '../model/crm-activity-link'
@@ -100,7 +110,7 @@ type Firestore = FirebaseFirestore.Firestore
  * is never the reason a grant is TAKEN away — see `recomputeRecordSharing`.
  */
 const RULES_TTL_MS = 10_000
-const rulesCache = new Map<string, { atMs: number; rules: CrmSharingRule[] }>()
+const rulesCache = new Map<string, { atMs: number; rules: CrmSharingRule[]; orgHostIds: string[] }>()
 
 /** Test seam, and what a rule write calls so its own process reads it fresh. */
 export function forgetCrmSharingRules(orgId?: string): void {
@@ -108,20 +118,25 @@ export function forgetCrmSharingRules(orgId?: string): void {
   else rulesCache.clear()
 }
 
+/**
+ * The org's rules, and its sites (`orgs/{orgId}.hosts`) from the same read:
+ * what a grant shared with all sites except some reaches (AGL-4047).
+ */
 export async function crmSharingRulesOf(
   firestore: Firestore,
   orgId: string,
   options: { fresh?: boolean; nowMs?: number } = {},
-): Promise<{ rules: CrmSharingRule[]; fresh: boolean }> {
+): Promise<{ rules: CrmSharingRule[]; fresh: boolean; orgHostIds: string[] }> {
   const nowMs = options.nowMs ?? Date.now()
   const cached = rulesCache.get(orgId)
   if (!options.fresh && cached && nowMs - cached.atMs < RULES_TTL_MS) {
-    return { rules: cached.rules, fresh: false }
+    return { rules: cached.rules, fresh: false, orgHostIds: cached.orgHostIds }
   }
   const snapshot = await firestore.collection('orgs').doc(orgId).get()
   const rules = readCrmSharingRules(snapshot.data() ?? null)
-  rulesCache.set(orgId, { atMs: nowMs, rules })
-  return { rules, fresh: true }
+  const orgHostIds = crmOrgHostIds(snapshot.data())
+  rulesCache.set(orgId, { atMs: nowMs, rules, orgHostIds })
+  return { rules, fresh: true, orgHostIds }
 }
 
 /**
@@ -165,11 +180,14 @@ export async function recomputeRecordSharing(
   input: RecomputeRecordSharingInput,
 ): Promise<RecomputeOutcome> {
   const { firestore, orgId, object, id, atMs } = input
-  const ref = firestore.collection('orgs').doc(orgId).collection(object).doc(id)
+  const orgRef = firestore.collection('orgs').doc(orgId)
+  const ref = orgRef.collection(object).doc(id)
   return await firestore.runTransaction(async (tx) => {
     const snapshot = await tx.get(ref)
     if (!snapshot.exists) return 'missing' as const
     const record = (snapshot.data() ?? {}) as Record<string, unknown>
+    let orgData: Record<string, unknown> | undefined
+    const readOrg = async () => (orgData ??= ((await tx.get(orgRef)).data() ?? {}) as Record<string, unknown>)
     let rules = input.rules
     /*
      * A GRANT IS NEVER TAKEN AWAY ON A STALE ANSWER. A rule grant whose rule
@@ -182,15 +200,23 @@ export async function recomputeRecordSharing(
       const stored = record[CRM_SHARING_FIELD] as { ruleIds?: unknown } | undefined
       const ruleIds = Array.isArray(stored?.ruleIds) ? (stored.ruleIds as unknown[]) : []
       if (ruleIds.some((ruleId) => !known.has(String(ruleId)))) {
-        const org = await tx.get(firestore.collection('orgs').doc(orgId))
-        rules = readCrmSharingRules(org.data() ?? null)
+        rules = readCrmSharingRules(await readOrg())
       }
     }
     // A rule read afresh above may ask a direction the caller's context was not read for.
-    const context =
+    let context =
       input.context?.leadSources || rules === input.rules
         ? input.context
         : await crmSharingContextFor(firestore, orgId, rules, object)
+    /*
+     * A grant shared with all sites except some reaches the workspace's sites
+     * as they are at commit (AGL-4047): read in this transaction, so a site
+     * claimed meanwhile is either on the list or finds this record in its own
+     * site change. Nothing else pays for the read.
+     */
+    if (sharingAsksOrgSites(object, record, rules)) {
+      context = { ...context, orgHostIds: crmOrgHostIds(await readOrg()) }
+    }
     let grants = evaluateRecordGrants(object, record, rules, atMs, context)
     if (input.manual) grants = input.manual(grants)
     const plan = planRecordSharing(record, grants)
@@ -214,7 +240,7 @@ export async function recomputeRecordSharing(
 }
 
 /** Several records at once, a few in flight. */
-async function recomputeMany(
+export async function recomputeMany(
   input: Omit<RecomputeRecordSharingInput, 'id'>,
   ids: readonly string[],
 ): Promise<{ changed: string[]; missing: number }> {
@@ -244,9 +270,9 @@ export async function evaluateCrmSharing(
   object: CrmSharingObject,
   ids: readonly string[],
 ): Promise<{ changed: number; missing: number }> {
-  const { rules, fresh } = await crmSharingRulesOf(firestore, orgId)
+  const { rules, fresh, orgHostIds } = await crmSharingRulesOf(firestore, orgId)
   if (!activeSharingRules(rules, object).length) return { changed: 0, missing: 0 }
-  const context = await crmSharingContextFor(firestore, orgId, rules, object)
+  const context = { ...(await crmSharingContextFor(firestore, orgId, rules, object)), orgHostIds }
   const outcome = await recomputeMany(
     { firestore, orgId, object, rules, fresh, context, atMs: Date.now() },
     ids,
@@ -386,7 +412,14 @@ function listFrom(raw: unknown, max: number): string[] {
  */
 export function ruleFromRequest(
   raw: unknown,
-  context: { hostIds: readonly string[]; existing: CrmSharingRule | null; uid: string; nowMs: number },
+  context: {
+    hostIds: readonly string[]
+    /** The workspace's sites as `orgs/{orgId}.hosts` names them, which all sites except some is worked out from. */
+    orgSiteIds?: readonly string[]
+    existing: CrmSharingRule | null
+    uid: string
+    nowMs: number
+  },
 ): { rule: CrmSharingRule; error: null } | { rule: null; error: string } {
   if (!raw || typeof raw !== 'object' || Array.isArray(raw)) {
     return { rule: null, error: 'Describe the rule.' }
@@ -403,7 +436,22 @@ export function ruleFromRequest(
   if (sourceHostIds.some((id) => !own.has(id))) {
     return { rule: null, error: 'A site the rule names is not one of this organization’s.' }
   }
-  const targets = shareTargetsFrom(value['targets'])
+  /*
+   * All sites except some (AGL-4047): the sites it leaves out decide, and its
+   * targets are the sites that leaves today, so a reader that predates the
+   * choice shares with no site it leaves out.
+   */
+  const exceptChoice = shareExceptChoiceFrom(value['targets'])
+  let except: ScopeToken[] = []
+  let targets = exceptChoice ? null : shareTargetsFrom(value['targets'])
+  if (exceptChoice) {
+    const shared = sharingFromChoice(exceptChoice, context.orgSiteIds ?? context.hostIds, {
+      maxIncluded: CRM_SHARING_MAX_INCLUDED,
+    })
+    if (!shared.fields) return { rule: null, error: shared.problem }
+    targets = shared.fields.visibleTo
+    except = shared.fields.scopeExcept ?? []
+  }
   if (!targets) return { rule: null, error: 'Choose the sites to share with, or All sites.' }
   if (hostIdsFromScope(targets).some((id) => !own.has(id))) {
     return { rule: null, error: 'A site the rule shares with is not one of this organization’s.' }
@@ -428,6 +476,7 @@ export function ruleFromRequest(
     sourceHostIds,
     criteria,
     targets,
+    ...(except.length ? { except } : {}),
     access: (access as CrmShareAccess | undefined) ?? 'read',
     createdByUid: existing?.createdByUid ?? context.uid,
     createdAtMs: existing?.createdAtMs ?? context.nowMs,
@@ -511,8 +560,8 @@ export async function advanceSharingRuleRun(
   const seen = new Set<string>()
   try {
     while (Date.now() < deadlineMs) {
-      const { rules } = await crmSharingRulesOf(firestore, orgId, { fresh: true })
-      const context = await crmSharingContextFor(firestore, orgId, rules, rule.object)
+      const { rules, orgHostIds } = await crmSharingRulesOf(firestore, orgId, { fresh: true })
+      const context = { ...(await crmSharingContextFor(firestore, orgId, rules, rule.object)), orgHostIds }
       let page: FirebaseFirestore.QuerySnapshot
       if (run.mode === 'apply') {
         let query = records.orderBy(FieldPath.documentId()).limit(RUN_PAGE)
@@ -669,7 +718,30 @@ export const crmSharingHandler: PluginApiHandler = async (req, res) => {
         res.status(400).json({ error: 'Name the records to share.' })
         return
       }
-      const targets = shareTargetsFrom(body['targets'])
+      const access: CrmShareAccess = body['access'] === 'edit' ? 'edit' : 'read'
+      const { rules, fresh, orgHostIds } = await crmSharingRulesOf(firestore, orgId)
+      /*
+       * All sites except some (AGL-4047): one grant, worked out against the
+       * workspace's sites as `orgs/{orgId}.hosts` names them, at most
+       * CRM_SHARING_MAX_INCLUDED of them. Its unshare names it as 'allExcept'.
+       */
+      const exceptChoice = action === 'share' ? shareExceptChoiceFrom(body['targets']) : null
+      const unshareExcept = action === 'unshare' && body['targets'] === 'allExcept'
+      let except: ScopeToken[] = []
+      let targets = exceptChoice || unshareExcept ? null : shareTargetsFrom(body['targets'])
+      if (exceptChoice) {
+        const fromOrg = await firestore.collection('orgs').doc(orgId).get()
+        const shared = sharingFromChoice(exceptChoice, crmOrgHostIds(fromOrg.data()), {
+          maxIncluded: CRM_SHARING_MAX_INCLUDED,
+        })
+        if (!shared.fields) {
+          res.status(400).json({ error: shared.problem })
+          return
+        }
+        targets = shared.fields.visibleTo
+        except = shared.fields.scopeExcept ?? []
+      }
+      if (unshareExcept) targets = []
       if (!targets) {
         res.status(400).json({ error: 'Choose the sites, or All sites.' })
         return
@@ -680,9 +752,8 @@ export const crmSharingHandler: PluginApiHandler = async (req, res) => {
         res.status(400).json({ error: 'A site named is not one of this organization’s.' })
         return
       }
-      const access: CrmShareAccess = body['access'] === 'edit' ? 'edit' : 'read'
-      const { rules, fresh } = await crmSharingRulesOf(firestore, orgId)
-      const context = await crmSharingContextFor(firestore, orgId, rules, object)
+      const shareTokens = targets
+      const context = { ...(await crmSharingContextFor(firestore, orgId, rules, object)), orgHostIds }
       const outcome = await recomputeMany(
         {
           firestore,
@@ -693,14 +764,26 @@ export const crmSharingHandler: PluginApiHandler = async (req, res) => {
           context,
           atMs: nowMs,
           manual: (grants) =>
-            action === 'share'
-              ? withManualShares(grants, targets, access, { uid: caller.uid, name: byName }, nowMs)
-              : withoutManualShares(grants, targets),
+            exceptChoice
+              ? withManualExceptShare(
+                  grants,
+                  { tokens: shareTokens, except },
+                  access,
+                  { uid: caller.uid, name: byName },
+                  nowMs,
+                )
+              : unshareExcept
+                ? withoutManualExceptShare(grants)
+                : action === 'share'
+                  ? withManualShares(grants, shareTokens, access, { uid: caller.uid, name: byName }, nowMs)
+                  : withoutManualShares(grants, shareTokens),
         },
         ids,
       )
       const siteName = (id: string) => sites.find((site) => site.id === id)?.name ?? 'a site'
-      const named = describeShareTargets(targets, siteName)
+      const named = unshareExcept
+        ? 'all sites except some'
+        : describeShareTargets(targets, siteName, except)
       const sentence =
         action === 'share'
           ? `Shared with ${named}${access === 'edit' ? ' (read and edit)' : ' (read-only)'}`
@@ -743,6 +826,7 @@ export const crmSharingHandler: PluginApiHandler = async (req, res) => {
 
     if (action === 'rule-save') {
       const hostIds = await orgHostIds(firestore, orgId)
+      const orgSiteIds = crmOrgHostIds((await firestore.collection('orgs').doc(orgId).get()).data())
       const raw = body['rule']
       const ruleId = raw && typeof raw === 'object' ? String((raw as Record<string, unknown>)['id'] ?? '') : ''
       let saved: CrmSharingRule | null = null
@@ -754,7 +838,7 @@ export const crmSharingHandler: PluginApiHandler = async (req, res) => {
         if (!existing && rules.length >= CRM_SHARING_RULES_MAX) {
           return { error: `A workspace keeps at most ${CRM_SHARING_RULES_MAX} sharing rules.` }
         }
-        const judged = ruleFromRequest(raw, { hostIds, existing, uid: caller.uid, nowMs })
+        const judged = ruleFromRequest(raw, { hostIds, orgSiteIds, existing, uid: caller.uid, nowMs })
         if (!judged.rule) {
           error = judged.error
           return { error: judged.error }

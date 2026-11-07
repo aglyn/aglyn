@@ -198,7 +198,7 @@ export function SharingRulesCard(props: SharingRulesCardProps) {
                   </TableCell>
                   <TableCell>
                     <Typography variant="body2">
-                      {`${describeShareTargets(rule.targets, sites.siteName)}, ${
+                      {`${describeShareTargets(rule.targets, sites.siteName, rule.except)}, ${
                         rule.access === 'edit' ? 'read and edit' : 'read-only'
                       }`}
                     </Typography>
@@ -262,6 +262,7 @@ export function SharingRulesCard(props: SharingRulesCardProps) {
         onClose={() => setDrawerOpen(false)}
         rule={editing}
         sites={sites.sites}
+        sitesReady={sites.ready}
         members={roster.members}
         campaigns={campaigns.options}
         leadSourceList={leadSources.picklist}

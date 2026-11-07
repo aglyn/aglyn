@@ -124,4 +124,51 @@ export function scopeSharingPatchFor(collection: string): ScopeSharingPatch | nu
 /** Test seam: forget every patch. */
 export function resetScopeSharingPatchesForTests(): void {
   patches.clear()
+  siteChangeHooks.clear()
+}
+
+/**
+ * What a plugin keeps level itself after a workspace's sites change, for
+ * sharing it stores somewhere other than a document's own marker: the CRM's
+ * grants shared with all sites except some, which sit inside a record's
+ * `sharing` map. Called after the sweep, with the time it may spend inline;
+ * work left past it is the plugin's to finish. It must never throw.
+ */
+export type ScopeSharingSiteChangeHook = (input: {
+  orgId: string
+  reason: 'site-added' | 'site-removed' | 'drift-repair'
+  hostId?: string
+  budgetMs: number
+}) => Promise<void>
+
+const SITE_CHANGE_KEY = Symbol.for('@aglyn/aglyn:plugin-scope-sharing-site-change')
+
+const globalHooks = globalThis as typeof globalThis & {
+  [SITE_CHANGE_KEY]?: Map<string, ScopeSharingSiteChangeHook>
+}
+
+const siteChangeHooks: Map<string, ScopeSharingSiteChangeHook> =
+  globalHooks[SITE_CHANGE_KEY] ?? (globalHooks[SITE_CHANGE_KEY] = new Map())
+
+/** Registers a plugin's {@link ScopeSharingSiteChangeHook}. One per plugin; again replaces it. */
+export function registerPluginScopeSharingSiteChange(
+  hook: ScopeSharingSiteChangeHook,
+  options?: { pluginId?: string },
+): void {
+  const pluginId = (getRegisteringPluginId() ?? options?.pluginId ?? '').trim()
+  if (!pluginId) {
+    throw new Error(
+      'a scope-sharing site-change hook was registered with no owner: pass { pluginId } ' +
+        'when registering outside a plugin register fn',
+    )
+  }
+  siteChangeHooks.set(pluginId, hook)
+}
+
+/** Every registered site-change hook, by plugin. */
+export function listScopeSharingSiteChangeHooks(): Array<{
+  pluginId: string
+  hook: ScopeSharingSiteChangeHook
+}> {
+  return [...siteChangeHooks.entries()].map(([pluginId, hook]) => ({ pluginId, hook }))
 }

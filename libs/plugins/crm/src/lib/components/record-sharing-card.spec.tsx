@@ -180,3 +180,95 @@ describe('"Share with sites…" on a bulk bar (AGL-4047)', () => {
     expect(calls.some((call) => call.action === 'sites')).toBe(false)
   })
 })
+
+describe('sharing with all sites except some (AGL-4047)', () => {
+  it('offers the choice as radios and a visible list, and sends the sites left out', async () => {
+    render(<CrmBulkShareButton object="leads" ids={['l1', 'l2']} hostId="site-a" orgId="org-1" />)
+    fireEvent.click(screen.getByRole('button', { name: 'Share with sites…' }))
+    await waitFor(() => expect(screen.getByRole('radio', { name: /^All sites except/ })).toBeTruthy())
+    expect(screen.queryByRole('combobox')).toBeNull()
+    // Nothing is chosen until the manager chooses.
+    expect(screen.getByRole<HTMLButtonElement>('button', { name: 'Share' }).disabled).toBe(true)
+    fireEvent.click(screen.getByRole('radio', { name: /^All sites except/ }))
+    await waitFor(() => expect(screen.getByRole('checkbox', { name: 'Brand A' })).toBeTruthy())
+    fireEvent.click(screen.getByRole('checkbox', { name: 'Brand A' }))
+    fireEvent.click(screen.getByRole('button', { name: 'Share' }))
+    await waitFor(() =>
+      expect(calls).toContainEqual({
+        scope: { hostId: 'site-a' },
+        action: 'share',
+        object: 'leads',
+        ids: ['l1', 'l2'],
+        targets: { mode: 'allExcept', exceptHostIds: ['site-a'] },
+        access: 'read',
+      }),
+    )
+  })
+
+  it('won’t send a choice that leaves nothing out', async () => {
+    render(<CrmBulkShareButton object="leads" ids={['l1']} hostId="site-a" orgId="org-1" />)
+    fireEvent.click(screen.getByRole('button', { name: 'Share with sites…' }))
+    await waitFor(() => expect(screen.getByRole('radio', { name: /^All sites except/ })).toBeTruthy())
+    fireEvent.click(screen.getByRole('radio', { name: /^All sites except/ }))
+    await waitFor(() =>
+      expect(screen.getByText('Choose at least one site to leave out, or share with All sites.')).toBeTruthy(),
+    )
+    expect(screen.getByRole<HTMLButtonElement>('button', { name: 'Share' }).disabled).toBe(true)
+  })
+
+  it('names the sites that already hold the record, which keep it', async () => {
+    render(
+      <RecordSharingCard
+        object="leads"
+        id="l1"
+        record={{ hostId: 'site-a', visibleTo: ['host:site-a'] }}
+        hostId="site-a"
+        orgId="org-1"
+        org={org}
+      />,
+    )
+    await waitFor(() => expect(screen.getByRole<HTMLButtonElement>('button', { name: 'Share with sites…' })).toBeTruthy())
+    fireEvent.click(screen.getByRole('button', { name: 'Share with sites…' }))
+    await waitFor(() =>
+      expect(screen.getByText('Brand A already holds this lead, and keeps it whatever you choose.')).toBeTruthy(),
+    )
+  })
+
+  it('lists and unshares a hand share with all sites except some as one line', async () => {
+    const record = {
+      hostId: 'site-a',
+      visibleTo: ['host:site-a', 'host:site-b'],
+      writeTo: ['host:site-a'],
+      sharing: {
+        grants: {
+          manual_except: {
+            source: 'manual',
+            tokens: ['host:site-b'],
+            except: ['host:site-c'],
+            access: 'read',
+            byUid: 'u',
+            byName: 'Dana',
+            atMs: 1,
+          },
+        },
+        tokens: ['host:site-b'],
+        added: ['host:site-b'],
+        ruleIds: [],
+        orgWideHeldBy: [],
+        hasExcept: true,
+      },
+    }
+    render(<RecordSharingCard object="leads" id="l1" record={record} hostId="site-a" orgId="org-1" org={org} />)
+    await waitFor(() => expect(screen.getByText(/All sites except another site — shared by Dana/)).toBeTruthy())
+    fireEvent.click(screen.getByRole('button', { name: 'Stop sharing with All sites except another site' }))
+    await waitFor(() =>
+      expect(calls).toContainEqual({
+        scope: { hostId: 'site-a' },
+        action: 'unshare',
+        object: 'leads',
+        ids: ['l1'],
+        targets: 'allExcept',
+      }),
+    )
+  })
+})
