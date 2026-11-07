@@ -17,21 +17,53 @@ func problemText(_ error: Error) -> String {
 final class MarketingAccess {
   @ObservationIgnored let host = ObservedDocument()
   @ObservationIgnored let org = ObservedDocument()
+  @ObservationIgnored let member = ObservedDocument()
   private var context: NativePluginContext?
 
   func start(_ context: NativePluginContext) {
     self.context = context
     if let hostID = context.hostID { host.start(context.firestore, ["hosts", hostID]) }
-    if let orgID = context.orgID { org.start(context.firestore, ["orgs", orgID]) }
+    if let orgID = context.orgID {
+      org.start(context.firestore, ["orgs", orgID])
+      member.start(context.firestore, ["orgs", orgID, "members", context.uid])
+    }
   }
 
   func stop() {
     host.stop()
     org.stop()
+    member.stop()
   }
 
   /// "Run email campaigns".
   var canEdit: Bool { context?.can("marketing.campaigns") == true }
+
+  /// "Run email campaigns" as the workspace grants it, wherever a campaign is placed (`holdsCampaignContainers`).
+  private var workspaceHolds: Bool { context?.canInWorkspace("marketing.campaigns") == true }
+
+  /// Whether a campaign can be created here: one created under a site is placed on that site alone, so the site's
+  /// verdict counts there; with no site, the workspace's alone.
+  var canCreateCampaign: Bool { workspaceHolds || (context?.hostID != nil && canEdit) }
+
+  /// Whether this campaign can be edited here (AGL-4047): the workspace's verdict answers for every campaign; a site's
+  /// own counts only for one placed on that site alone, never one shared with all sites except some.
+  func canEditCampaign(_ row: CampaignRow) -> Bool {
+    if workspaceHolds { return true }
+    guard let hostID = context?.hostID else { return false }
+    return row.placedOnlyOn(hostID) && canEdit
+  }
+
+  /// Why Delete is off for this campaign, or nil when the manage route would take it (AGL-4047). A site's door takes a
+  /// campaign on that site alone from a member of some sites; anything wider asks for the whole workspace.
+  func campaignDeleteRefusal(_ row: CampaignRow) -> String? {
+    let refusal = permissionRefusalText(ContractValues.shared.orgRoleGrants, key: "marketing.campaigns")
+    guard let hostID = context?.hostID else {
+      return OrgAccess.isOrgWideMember(member.document?.data) && workspaceHolds ? nil : refusal
+    }
+    if !canEdit { return refusal }
+    guard let data = member.document?.data, !OrgAccess.isOrgWideMember(data) else { return nil }
+    return row.siteMayDelete(hostID) ? nil : row.siteDeleteRefusal
+  }
   func carries(_ feature: String) -> Bool { planFeatureCarried(org.document?.data, feature) }
 }
 
@@ -240,7 +272,7 @@ struct CampaignsSection: View {
     }
     .aglynSearchable(text: $searchText, prompt: "Search campaigns", onSubmit: { search = searchText })
     .onChange(of: searchText) { _, text in if text.isEmpty { search = "" } }
-    .aglynPrimaryAction(id: "campaign-new", "New campaign", systemImage: "plus", enabled: access.canEdit, help: permissionRefusalText(ContractValues.shared.orgRoleGrants, key: "marketing.campaigns")) { creating = true }
+    .aglynPrimaryAction(id: "campaign-new", "New campaign", systemImage: "plus", enabled: access.canCreateCampaign, help: permissionRefusalText(ContractValues.shared.orgRoleGrants, key: "marketing.campaigns")) { creating = true }
     .task(id: search) {
       if selection == nil { selection = initial }
       let orgID = actions.orgID, hostID = actions.hostID, search = search, orgLevel = actions.orgLevel
@@ -369,10 +401,13 @@ struct CampaignDetail: View {
         .navigationTitle(row.name)
         .aglynScreenTitle(row.name)
         .aglynScreenToolbar(id: "campaign") {
-          if access.canEdit {
+          let canEdit = access.canEditCampaign(row)
+          let deleteRefusal = access.campaignDeleteRefusal(row)
+          if canEdit || deleteRefusal == nil {
             Menu {
-              Button("Edit", systemImage: "pencil") { editing = true }
-              Button("Delete", systemImage: "trash", role: .destructive) { confirmDelete = true }
+              Button("Edit", systemImage: "pencil") { editing = true }.disabled(!canEdit)
+              Button("Delete", systemImage: "trash", role: .destructive) { confirmDelete = true }.disabled(deleteRefusal != nil)
+              if let deleteRefusal { Text(deleteRefusal) }
             } label: {
               Label("Campaign", systemImage: "ellipsis.circle")
             }

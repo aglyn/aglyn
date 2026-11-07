@@ -112,14 +112,47 @@ struct CampaignRow: Identifiable, Equatable {
   let listIDs: [String]
   let topicID: String?
   let listUnsubscribe: Bool
+  /// Where it is offered: its `visibleTo` tokens.
+  var visibleTo: [String] = []
+  /// Shared with all sites except some (AGL-4047): either marker key present, a stored null included, as the rules'
+  /// `scopeUnmarked` reads it (`campaignSharingMarked`).
+  var sharingMarked = false
   var window: CampaignWindow { campaignWindowState(startAtMs: startAtMs, endAtMs: endAtMs, nowMs: nowMs()) }
+
+  /// The sites it is placed on, or nil when it is on every site (`campaignSiteIds`).
+  var siteIDs: [String]? {
+    if visibleTo.contains(OrgAccess.orgScopeToken) { return nil }
+    return visibleTo.compactMap { $0.hasPrefix("host:") && $0.count > 5 ? String($0.dropFirst(5)) : nil }
+  }
+
+  /// Placed on this site and no other, where the site's own "Run email campaigns" counts for writing it; never one
+  /// shared with all sites except some, however few sites it reaches today (`campaignPlacedOnlyOn`).
+  func placedOnlyOn(_ hostID: String) -> Bool {
+    !sharingMarked && visibleTo == ["host:\(hostID)"]
+  }
+
+  /// Whether the manage route's site door may delete it: on this site and no other, and not shared with all sites
+  /// except some (`campaignSiteMayDelete`).
+  func siteMayDelete(_ hostID: String) -> Bool {
+    guard !sharingMarked, let ids = siteIDs else { return false }
+    return !ids.isEmpty && ids.allSatisfy { $0 == hostID }
+  }
+
+  /// Why a member with access to some sites only may not delete it from a site (`campaignSiteDeleteRefusal`).
+  var siteDeleteRefusal: String {
+    sharingMarked
+      ? "This campaign is shared with all sites except some, so it belongs to the whole workspace and every new site gets it. Deleting it takes access to every site in the workspace."
+      : "This campaign is on other sites too, so deleting it would take it off them as well. Deleting it takes access to every site in the workspace."
+  }
 }
 
 func campaignRow(_ doc: FirestoreDocument) -> CampaignRow {
   CampaignRow(
     id: doc.id, name: doc.string("name").flatMap { $0.isEmpty ? nil : $0 } ?? doc.id, startAtMs: millis(doc.data["startAtMs"]),
     endAtMs: millis(doc.data["endAtMs"]), listIDs: doc.data["listIds"] as? [String] ?? [], topicID: doc.string("topicId"),
-    listUnsubscribe: doc.bool("listUnsubscribe") ?? true)
+    listUnsubscribe: doc.bool("listUnsubscribe") ?? true,
+    visibleTo: (doc.data["visibleTo"] as? [Any] ?? []).compactMap { $0 as? String },
+    sharingMarked: doc.data.keys.contains("scopeMode") || doc.data.keys.contains("scopeExcept"))
 }
 
 /// What a campaign's sends add up to (`campaignRollup`): only sends that went out count.
@@ -369,7 +402,9 @@ struct MarketingActions {
 
   func deleteCampaign(_ id: String) async throws {
     _ = try await context.api.request(
-      campaignManageRoute, method: .post, body: jsonBody(["action": "deleteCampaign", "campaignId": id, "hostId": hostID]))
+      // The workspace's page asks the workspace door; a site's, that site's door (the console's `useCampaignApi`).
+      campaignManageRoute, method: .post,
+      body: jsonBody(["action": "deleteCampaign", "campaignId": id, orgLevel ? "orgId" : "hostId": orgLevel ? orgID : hostID]))
   }
 
   /// A save replaces the overlay whole, as the console's does.
