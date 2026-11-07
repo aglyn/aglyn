@@ -95,22 +95,29 @@ const OrgPluginInstallation: NextPageWithLayout<Record<string, never>> = () => {
   const hostsKey = ((hosts as Array<{ $id: string; displayName?: string; subdomain?: string }>) ?? [])
     .map((host) => `${host.$id}:${host.displayName || host.subdomain || ''}`)
     .join('|')
-  const hostList = useMemo(
-    () =>
-      ((hosts as Array<{ $id: string; displayName?: string; subdomain?: string }>) ?? []).map(
-        (host) => ({
-          id: host.$id,
-          label: host.displayName || host.subdomain || host.$id,
-        }),
-      ),
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-    [hostsKey],
-  )
-  // The same sites with their plugin lists, for "Runs on" (AGL-4047). Keyed
-  // on the lists too, so a site switching a plugin off for itself shows here.
+  // The sites' plugin lists, keyed so a site switching a plugin off for
+  // itself shows here (AGL-4047).
   const runsOnKey = ((hosts as Array<{ $id: string; disabledPlugins?: unknown; enabledPlugins?: unknown }>) ?? [])
     .map((host) => `${host.$id}:${JSON.stringify(host.disabledPlugins ?? null)}:${JSON.stringify(host.enabledPlugins ?? null)}`)
     .join('|')
+  // Each site with its own deny-list (AGL-4047), so a marketplace plugin's
+  // "Where it runs" does not list a site that switched it off, or was left
+  // out at install, as running it. Off the host documents already held.
+  const hostList = useMemo(
+    () =>
+      ((hosts as Array<{ $id: string; displayName?: string; subdomain?: string; disabledPlugins?: unknown }>) ?? []).map(
+        (host) => ({
+          id: host.$id,
+          label: host.displayName || host.subdomain || host.$id,
+          disabledPlugins: Array.isArray(host.disabledPlugins)
+            ? host.disabledPlugins.map(String)
+            : null,
+        }),
+      ),
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+    [hostsKey, runsOnKey],
+  )
+  // The same sites with their plugin lists, for "Runs on" (AGL-4047).
   const runsOnSites = useMemo(
     () =>
       ((hosts as Array<{

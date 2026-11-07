@@ -307,6 +307,7 @@ export {
   type InstallPin,
   type InstallTarget,
   LISTING_CATEGORIES,
+  type OrgInstallHost,
   type OrgInstallSite,
   type OrgInstallSummary,
   type PluginInstallState,

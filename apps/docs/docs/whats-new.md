@@ -58,7 +58,9 @@ for the how-to.
   item goes onto the sites you have now, minus the ones you leave out.
 - **A site's own switch stops a Marketplace plugin there.** [Plugins on one site](guides/install-your-first-plugin.md#site-plugins)
   — switching a Marketplace plugin off on a site's **Admin → Plugins** page now takes it
-  off that site's published pages and its editor too.
+  off that site's published pages and its editor too. A Marketplace plugin's **Where it
+  runs** card, and its listing, mark such a site **Switched off on this site** instead of
+  listing it as running the plugin; see [Where a plugin runs](guides/install-your-first-plugin.md#where-a-plugin-runs).
 - **Four plans: Free, Starter, Pro and Custom.** [Billing & plans](workspace-and-billing/billing-and-plans/overview.md#tiers--entitlements)
   — Pro is now the full platform: everything that was on Business, including the API
   and webhooks, A/B testing, multilingual sites, scheduled publishing, recurring billing,

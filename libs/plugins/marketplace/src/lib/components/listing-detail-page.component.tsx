@@ -31,6 +31,7 @@ import ListingDetailEditor from './listing-detail-editor.component'
 import ListingReviewStatus from './listing-review-status.component'
 import ListingVerificationRequest from './listing-verification-request.component'
 import { MarketplaceListingContent } from './listing-content.component'
+import type { OrgInstallHost } from '../model/marketplace'
 import { publishPluginPath } from '../model/marketplace-paths'
 import {
   MARKETPLACE_MANAGE_LISTINGS_PERMISSION,
@@ -57,7 +58,7 @@ export function ListingDetailPage(props: {
   basePath: string
   /** The site an install acts through, and every site for the target picker. */
   actingHost: string
-  hosts: ReadonlyArray<{ id: string; label: string }>
+  hosts: ReadonlyArray<OrgInstallHost>
   permissions?: Record<string, boolean | undefined>
   orgSlug: string
 }) {

@@ -393,6 +393,21 @@ export interface OrgInstallSite {
   pinnedBy: InstallTarget
   /** This site has its OWN pin on top of an org pin. */
   shadowed: boolean
+  /**
+   * Pinned here, but the site's own Admin › Plugins switch has it off (its
+   * `disabledPlugins` holds the listing id, AGL-4047), so it does not run
+   * here. Present only when true, and only when the caller handed over the
+   * sites' lists and the listing id.
+   */
+  switchedOff?: true
+}
+
+/** A site as the install picture reads it: its id, its name, and the plugins it switched off. */
+export interface OrgInstallHost {
+  id: string
+  label: string
+  /** The site's own deny-list (`disabledPlugins`), when the caller has it. */
+  disabledPlugins?: readonly string[] | null
 }
 
 /**
@@ -423,10 +438,19 @@ export interface OrgInstallSummary {
   installedAnywhere: boolean
 }
 
+/**
+ * `listingId` (AGL-4047): a pin is not the whole answer. A site whose own
+ * switch has the listing off (`disabledPlugins`, written by its Admin ›
+ * Plugins page or by an install that left it out) keeps its pin or its org
+ * coverage but runs nothing, exactly as the realm join drops it. Given the id
+ * and each site's list, such a site is marked `switchedOff`; without them the
+ * picture is the pins alone, as before.
+ */
 export function resolveOrgInstallSummary(
-  hosts: ReadonlyArray<{ id: string; label: string }>,
+  hosts: ReadonlyArray<OrgInstallHost>,
   hostPins: Readonly<Record<string, InstallPin | null | undefined>>,
   orgPin: InstallPin | null | undefined,
+  listingId?: string,
 ): OrgInstallSummary {
   const orgWide = Boolean(orgPin)
   const orgVersion = orgPin?.version != null ? String(orgPin.version) : null
@@ -447,6 +471,9 @@ export function resolveOrgInstallSummary(
         hostPin?.version != null ? String(hostPin.version) : orgVersion,
       pinnedBy: hostPin ? 'host' : 'org',
       shadowed: Boolean(hostPin && orgPin),
+      ...(listingId && host.disabledPlugins?.includes(listingId)
+        ? { switchedOff: true as const }
+        : {}),
     })
   }
   return {
@@ -516,9 +543,24 @@ export function staleSites(sites: readonly OrgInstallSite[], latestVersion: stri
 
 /** What "Where it runs" opens with: the whole organization, or how many of its sites. */
 export function pluginSiteSetSummary(install: OrgInstallSummary, siteCount: number): string {
-  return install.orgWide
-    ? `Installed for the whole organization (v${install.orgVersion}) — every site, including ones you add later.`
-    : `Installed on ${install.sites.length} of ${siteCount} sites.`
+  // Sites whose own switch has it off (AGL-4047): pinned, but not running.
+  const off = install.sites.filter((site) => site.switchedOff).map((site) => site.label)
+  if (install.orgWide) {
+    const head = `Installed for the whole organization (v${install.orgVersion})`
+    if (!off.length) return `${head} — every site, including ones you add later.`
+    return off.length === install.sites.length
+      ? `${head}. Every site switched it off, so it runs only on sites you add later.`
+      : `${head}. It runs on every site except ${namesList(off)}, which switched it off, and on sites you add later.`
+  }
+  const head = `Installed on ${install.sites.length} of ${siteCount} sites`
+  if (!off.length) return `${head}.`
+  const running = install.sites.length - off.length
+  return `${head}. ${namesList(off)} switched it off, so it runs on ${running ? running : 'none of them'}.`
+}
+
+/** "A", "A and B", "A, B and C". */
+function namesList(names: readonly string[]): string {
+  return names.length < 2 ? (names[0] ?? '') : `${names.slice(0, -1).join(', ')} and ${names[names.length - 1]}`
 }
 
 /** What the update confirmation says: the plugin, the version it moves to and where, and what stays put. */

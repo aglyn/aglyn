@@ -277,6 +277,13 @@ marketplace plugin runs on the sites it was [installed to](#step-4-targeting) �
 out, or the sites you picked. A site that switched it off on its own **Admin → Plugins**
 page doesn't run it, whichever you chose.
 
+For a marketplace plugin, the card lists each site it is installed on, and marks a site
+that switched it off, or that you left out when you installed it, **Switched off on this
+site**. The sentence above the list counts only the sites that run it. The listing's own
+page in the Marketplace shows the same list. Anyone holding **Manage site settings** on
+a site marked this way, which its admins hold by default, can turn the plugin back on
+there from that site's **Admin → Plugins** page.
+
 A built-in plugin has the workspace switch, and under it **Runs on**:
 
 | Choice | What it means |

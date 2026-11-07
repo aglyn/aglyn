@@ -98,6 +98,41 @@ describe('what a plugin page says about its installs', () => {
     expect(installedPluginCaption({ version: '1.0.0', orgWide: false, siteLabels: ['Blog', 'Shop'] })).toBe('v1.0.0 · 2 sites')
   })
 
+  it("reads each site's own switch over its pin, given the listing (AGL-4047)", () => {
+    const hosts = [
+      { id: 'h1', label: 'Main site', disabledPlugins: ['commerce'] },
+      { id: 'h2', label: 'Blog', disabledPlugins: ['l1'] },
+      { id: 'h3', label: 'Shop', disabledPlugins: ['l1'] },
+    ]
+    const wide = resolveOrgInstallSummary(hosts, {}, { version: '1.0.0' }, 'l1')
+    expect(wide.sites.map((site) => Boolean(site.switchedOff))).toEqual([false, true, true])
+    // Present only when true, so the native replays' recorded pictures are unchanged.
+    expect('switchedOff' in wide.sites[0]).toBe(false)
+    expect(pluginSiteSetSummary(wide, 3)).toBe(
+      'Installed for the whole organization (v1.0.0). It runs on every site except Blog and Shop, which switched it off, and on sites you add later.',
+    )
+    const allOff = resolveOrgInstallSummary(hosts.slice(1), {}, { version: '1.0.0' }, 'l1')
+    expect(pluginSiteSetSummary(allOff, 2)).toBe(
+      'Installed for the whole organization (v1.0.0). Every site switched it off, so it runs only on sites you add later.',
+    )
+    // A host pin is switched off by the same list: the switch is the site's answer wherever the pin lives.
+    const split = resolveOrgInstallSummary(hosts, { h1: { version: '1.0.0' }, h2: { version: '1.0.0' } }, null, 'l1')
+    expect(pluginSiteSetSummary(split, 3)).toBe('Installed on 2 of 3 sites. Blog switched it off, so it runs on 1.')
+    const noneRun = resolveOrgInstallSummary(hosts, { h2: { version: '1.0.0' }, h3: { version: '1.0.0' } }, null, 'l1')
+    expect(pluginSiteSetSummary(noneRun, 3)).toBe(
+      'Installed on 2 of 3 sites. Blog and Shop switched it off, so it runs on none of them.',
+    )
+    // Without the listing id, the picture is the pins alone, as before.
+    const pinsOnly = resolveOrgInstallSummary(hosts, {}, { version: '1.0.0' })
+    expect(pinsOnly.sites.some((site) => site.switchedOff)).toBe(false)
+    expect(pluginSiteSetSummary(pinsOnly, 3)).toBe(
+      'Installed for the whole organization (v1.0.0) — every site, including ones you add later.',
+    )
+    // A site that switched it off is still pinned: installed, not available to add.
+    expect(wide.installedAnywhere).toBe(true)
+    expect(split.availableHostIds).toEqual(['h3'])
+  })
+
   it('asks for the typed word only where pages break or the check could not speak', () => {
     const targets = [{ hostId: 'h1', label: 'Main site', stillCovered: false }]
     const base = { name: 'Counter', scope: 'org' as const, pluginId: 'counter', targets, impact: null, failed: false }
