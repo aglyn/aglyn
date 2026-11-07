@@ -26,8 +26,11 @@
  * Every answer here is written by hand in the tool's shape: no model is called.
  */
 
+import { CANVAS_ROOT_ELEMENT_ID } from '@aglyn/aglyn/foundation/constants/canvas'
+import { siteImportFactScope, siteImportFidelity, siteImportNameKey, type SiteImportFidelityTree } from '../model/ai-site-import-fidelity'
 import { aiSiteImportAltIsFileName } from '../model/ai-site-import-marks'
 import { siteImportReplayBuild, siteImportReplayDocumentOf } from '../site-import/fixtures/site-import-fidelity-replay'
+import { aiImportedPageCheck } from './ai-job-page-language'
 import type { AiSiteImportDocument } from './ai-site-import-document'
 import { aiReadImprovedPage, aiSiteImportImproveDestinations, aiSiteImportImprovedPage, aiSiteImportImproveLedger } from './ai-site-import-improve'
 
@@ -70,6 +73,58 @@ function redesigned(doc: AiSiteImportDocument, answer: unknown) {
   const page = aiSiteImportImprovedPage(read, { doc, ledger, design, destinations: aiSiteImportImproveDestinations(doc, ledger), formId: null })
   return { ledger, page }
 }
+
+/** An invented contractor's home: an ordinary word capitalized after "We", and a store's name with its possessive. */
+const HOME = `<!doctype html><html><head><title>Larkspur Paving</title></head><body>
+<header><a href="/">Larkspur Paving</a><nav><a href="/contact">Contact</a></nav></header>
+<main>
+<section><h1>Concrete for homes and shops</h1><p>We Specialize in driveways, patios and shop floors across Harlow County.</p><p>We Document every pour on our page, start to finish.</p><p>Our crew poured the lot behind the OBR’s market on Elm Road.</p></section>
+</main><footer><p>Larkspur Paving.</p></footer></body></html>`
+
+describe('the facts a redesign must keep', () => {
+  it('takes no ordinary word for a name: one after its sentence’s subject, or one the site also writes small', () => {
+    const scope = siteImportFactScope(['We Specialize in driveways.', 'We Document every pour.', 'Every pour starts with a Plan.', 'We draw a plan first.', 'We met Rosa at the Elm Road site.'])
+    expect([...scope.names].sort()).toEqual(['Elm', 'Road', 'Rosa'])
+  })
+
+  it('holds a name in any of its forms: its possessive, its initials with stops or hyphens', () => {
+    expect(['OBR’s', 'OBR', "OBR's", 'O-B-R', 'O.B.R.'].map(siteImportNameKey)).toEqual(['obr', 'obr', 'obr', 'obr', 'obr'])
+  })
+
+  it('misses none of them on a page that rewrites them in its own words', () => {
+    const doc = readOf(HOME, '/')
+    const ledger = aiSiteImportImproveLedger(doc)
+    const answer = {
+      sections: [
+        section('dark', [
+          { kind: 'heading', text: 'Concrete for homes and shops' },
+          { kind: 'lede', text: 'We pour driveways, patios and shop floors across Harlow County.' },
+          { kind: 'text', text: 'Every pour is on our page, start to finish.' },
+          { kind: 'text', text: 'Our crew poured the lot behind the O-B-R market on Elm Road.' },
+        ]),
+      ],
+    }
+    const read = aiReadImprovedPage(answer)
+    if (!read) throw new Error('no section')
+    const design = { kind: 'business', seed: 7, home: true } as never
+    const page = aiSiteImportImprovedPage(read, { doc, ledger, design, destinations: aiSiteImportImproveDestinations(doc, ledger), formId: null })
+    const built = aiImportedPageCheck({
+      screen: { title: doc.title, slug: '/', sections: page.names.map((name) => ({ name, uses: [], items: 0 })) } as never,
+      sectionIds: page.names.map((_, index) => `sec-${index}`),
+      targets: { pageId: 'p0', pages: [], homeIds: [], forms: [], formPageId: null, components: [], facts: '' } as never,
+      context: { screenIds: doc.links.map((link) => link.id), formIds: [], componentIds: [], codeBuilt: true },
+      design,
+      doc,
+      given: page.given,
+      rewritten: page.written,
+    })(null)
+    expect(built.violations).toEqual([])
+    const tree: SiteImportFidelityTree = { rootId: CANVAS_ROOT_ELEMENT_ID, nodes: built.value?.nodes as unknown as SiteImportFidelityTree['nodes'] }
+    const source = { layout: doc.layout as NonNullable<AiSiteImportDocument['layout']>, blocks: doc.blocks, photos: doc.photos }
+    const report = siteImportFidelity(source, tree, { finish: 'improve', words: 'improved', improved: { scope: [], destinations: [], forms: 0 } })
+    expect(report.improved?.ledger.facts.missing).toEqual([])
+  })
+})
 
 describe('a picture described only by its file name', () => {
   it('reads as no description', () => {

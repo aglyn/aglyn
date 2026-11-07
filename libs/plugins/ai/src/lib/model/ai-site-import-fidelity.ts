@@ -2064,16 +2064,45 @@ function factsIn(text: string): string[] {
 }
 
 /** The words of a line in capitals, each with whether it opens a sentence. */
-function capitalsIn(text: string): Array<{ word: string; opens: boolean }> {
-  const out: Array<{ word: string; opens: boolean }> = []
+function capitalsIn(text: string): Array<{ word: string; opens: boolean; afterSubject: boolean }> {
+  const out: Array<{ word: string; opens: boolean; afterSubject: boolean }> = []
   let last = 0
+  let before = ''
   for (const match of text.matchAll(/[\p{L}\p{N}][\p{L}\p{N}'’]*/gu)) {
     const at = match.index ?? 0
     const opens = last === 0 || /[.!?:;•·|—–"“(]/.test(text.slice(last, at))
+    // "We Specialize in…", "We Document every job": a word straight after its sentence's subject is what it does, capitalized for show (AGL-4152).
+    const afterSubject = !opens && SUBJECTS.has(before) && /^\s+$/.test(text.slice(last, at))
     last = at + match[0].length
-    if (/^\p{Lu}/u.test(match[0])) out.push({ word: match[0], opens })
+    before = match[0].toLowerCase()
+    if (/^\p{Lu}/u.test(match[0])) out.push({ word: match[0], opens, afterSubject })
   }
   return out
+}
+
+/** A web or an email address in a run of words, whose words are written small whatever they name. */
+const ADDRESSES = /\S+@\S+|(?:https?:\/\/)?[\p{L}\p{N}-]+(?:\.[\p{L}\p{N}-]+)+(?:\/\S*)?/gu
+
+/** The words a sentence's subject is said by, which the word after it acts for: never a name before a name. */
+const SUBJECTS = new Set(['i', 'we', 'you', 'they'])
+
+/**
+ * A name as it is matched on a page (AGL-4152): its possessive, its stops and
+ * its hyphens dropped, in any case. "HEB's", "HEB", "H-E-B" and "H.E.B." are
+ * one store.
+ */
+export function siteImportNameKey(word: string): string {
+  return word
+    .replace(/['’]s$/iu, '')
+    .replace(/[^\p{L}\p{N}]/gu, '')
+    .toLowerCase()
+}
+
+/** Every name key a run of words says: each word, and each run of initials written with stops or hyphens ("H-E-B", "H.E.B."). */
+function nameKeysIn(text: string): string[] {
+  const words = wordsOf(text).map((word) => word.toLowerCase())
+  const initials = [...text.matchAll(/(?<![\p{L}\p{N}])\p{L}(?:[.-]\p{L})+\.?(?![\p{L}\p{N}])/gu)].map((match) => siteImportNameKey(match[0]))
+  return [...words, ...initials]
 }
 
 /** Whether a line is set all in capitals or in title case: its capitals say nothing of its names. */
@@ -2104,8 +2133,14 @@ export interface SiteImportFactScope {
  */
 export function siteImportFactScope(sourceTexts: readonly string[], vocabulary: readonly string[] = []): SiteImportFactScope {
   const said = new Set([...sourceTexts, ...vocabulary].flatMap(wordsOf).map((word) => word.toLowerCase()))
+  // A word the source also writes in small letters is an ordinary word, wherever it capitalizes it (AGL-4152);
+  // never in an address, where a name is written small ("example.app").
+  const small = new Set(sourceTexts.flatMap((text) => wordsOf(text.replace(ADDRESSES, ' '))).filter((word) => /^\p{Ll}/u.test(word)))
+  const names = sourceTexts
+    .filter((text) => !shouted(text))
+    .flatMap((text) => capitalsIn(text).filter((entry) => !entry.opens && entry.word.length > 1 && !entry.afterSubject && !small.has(entry.word.toLowerCase())).map((entry) => entry.word))
   return {
-    names: new Set(sourceTexts.filter((text) => !shouted(text)).flatMap((text) => capitalsIn(text).filter((entry) => !entry.opens && entry.word.length > 1).map((entry) => entry.word))),
+    names: new Set(names),
     said,
     stems: new Set([...said].map(stemOf)),
   }
@@ -2270,8 +2305,9 @@ function improvedScore(source: SiteImportFidelitySource, built: Built, look: Loo
   const said = options.proposed ? [] : [...new Set(sourceTexts.filter((text) => !bareNumber(text)).flatMap((text) => siteImportFactTokens(text, ownScope, false).filter((token) => !token.startsWith('name:') || !titleCased(text))))]
   // A name the page still says, in the sentence case a redesign writes its headings in, is kept (AGL-4152):
   // "Built on Stone" rewritten "built on stone" keeps its word, and a real name keeps its capital anyway.
-  const wordsOnPage = new Set(shown.flatMap(wordsOf).map((word) => word.toLowerCase()))
-  const missingFacts = said.filter((token) => !onPage.has(token) && !(token.startsWith('name:') && wordsOnPage.has(token.slice(5).toLowerCase())))
+  // A name is kept in any of its forms: its possessive, its initials with stops or hyphens (AGL-4152).
+  const wordsOnPage = new Set(shown.flatMap(nameKeysIn))
+  const missingFacts = said.filter((token) => !onPage.has(token) && !(token.startsWith('name:') && wordsOnPage.has(siteImportNameKey(token.slice(5)))))
   // Invented: none that nothing the import read says.
   const allowed = new Set(anywhere.flatMap((text) => siteImportFactTokens(text, scope, false)))
   const found = [...new Set(shown.flatMap((text) => siteImportFactTokens(text, scope, true)))].filter((token) => !allowed.has(token) && token !== 'name:FAQ' && token !== 'name:FAQs')
