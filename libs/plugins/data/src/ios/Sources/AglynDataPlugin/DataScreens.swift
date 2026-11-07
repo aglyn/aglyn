@@ -411,7 +411,7 @@ struct DatasetListRow: View {
   var body: some View {
     let count = (row.model.order ?? []).count
     AglynRow(
-      row.name, subtitle: "\(count == 1 ? "1 field" : "\(count) fields") · \(describeScope(row.visibleTo))",
+      row.name, subtitle: "\(count == 1 ? "1 field" : "\(count) fields") · \(describeSharing(row.sharing))",
       systemImage: DataSymbols.dataset)
   }
 }
@@ -651,7 +651,7 @@ struct DatasetDetailView: View {
           }
         }
         AglynWrapRow(spacing: AglynSpace.one, lineSpacing: AglynSpace.half) {
-          StatusChip("Shared with \(describeScope(dataset.visibleTo))", tone: dataset.visibleTo == nil ? .warning : .info)
+          StatusChip("Shared with \(describeSharing(dataset.sharing))", tone: dataset.visibleTo == nil ? .warning : .info)
           if !referencedBy.isEmpty {
             StatusChip(referencedBy.count == 1 ? "Referenced by 1 field" : "Referenced by \(referencedBy.count) fields")
           }

@@ -117,6 +117,9 @@ struct CampaignRow: Identifiable, Equatable {
   /// Shared with all sites except some (AGL-4047): either marker key present, a stored null included, as the rules'
   /// `scopeUnmarked` reads it (`campaignSharingMarked`).
   var sharingMarked = false
+  /// The marker's fields, when they are what `scopeSharingOf` reads.
+  var scopeMode: String?
+  var scopeExcept: [String]?
   var window: CampaignWindow { campaignWindowState(startAtMs: startAtMs, endAtMs: endAtMs, nowMs: nowMs()) }
 
   /// The sites it is placed on, or nil when it is on every site (`campaignSiteIds`).
@@ -138,6 +141,21 @@ struct CampaignRow: Identifiable, Equatable {
     return !ids.isEmpty && ids.allSatisfy { $0 == hostID }
   }
 
+  /// Where the workspace's page says it is offered: a campaign shared with all sites except some is described by the
+  /// sites it leaves out (`campaignAllExceptLabel`), since the next new site joins it.
+  func offeredLine(_ siteName: (String) -> String) -> String {
+    var fields: [String: Any] = ["visibleTo": visibleTo]
+    if sharingMarked { fields["scopeMode"] = scopeMode ?? NSNull(); fields["scopeExcept"] = scopeExcept ?? NSNull() }
+    if case .allExcept = scopeSharingOf(fields) {
+      let label = describeSharing(fields, hostNames: Dictionary(uniqueKeysWithValues: (scopeExcept ?? []).compactMap { token in
+        token.hasPrefix("host:") ? (String(token.dropFirst(5)), siteName(String(token.dropFirst(5)))) : nil
+      }))
+      return "Offered on \(label.prefix(1).lowercased())\(label.dropFirst())"
+    }
+    guard let ids = siteIDs else { return "Offered on every site" }
+    return ids.isEmpty ? "Not offered on any site yet" : "Offered on \(ids.map(siteName).joined(separator: ", "))"
+  }
+
   /// Why a member with access to some sites only may not delete it from a site (`campaignSiteDeleteRefusal`).
   var siteDeleteRefusal: String {
     sharingMarked
@@ -152,7 +170,8 @@ func campaignRow(_ doc: FirestoreDocument) -> CampaignRow {
     endAtMs: millis(doc.data["endAtMs"]), listIDs: doc.data["listIds"] as? [String] ?? [], topicID: doc.string("topicId"),
     listUnsubscribe: doc.bool("listUnsubscribe") ?? true,
     visibleTo: (doc.data["visibleTo"] as? [Any] ?? []).compactMap { $0 as? String },
-    sharingMarked: doc.data.keys.contains("scopeMode") || doc.data.keys.contains("scopeExcept"))
+    sharingMarked: doc.data.keys.contains("scopeMode") || doc.data.keys.contains("scopeExcept"),
+    scopeMode: doc.string("scopeMode"), scopeExcept: (doc.data["scopeExcept"] as? [Any])?.compactMap { $0 as? String })
 }
 
 /// What a campaign's sends add up to (`campaignRollup`): only sends that went out count.

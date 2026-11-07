@@ -44,7 +44,7 @@ import com.aglyn.pluginhost.RunnerBanners
 import com.aglyn.pluginhost.NativePluginContext
 import com.aglyn.pluginhost.rememberMemberPermissions
 import com.aglyn.pluginhost.TransferExportDialog
-import com.aglyn.pluginhost.describeScope
+import com.aglyn.pluginhost.describeSharing
 import com.aglyn.pluginhost.listScopeTokens
 import com.aglyn.pluginhost.rememberOrgAccess
 import com.aglyn.ui.ActionDialog
@@ -172,7 +172,7 @@ fun DatasetsScreen(context: NativePluginContext, initialDatasetId: String? = nul
                   title = row.name,
                   supporting = listOf(
                     row.model.order.orEmpty().size.let { if (it == 1) "1 field" else "$it fields" },
-                    describeScope(row.visibleTo),
+                    describeSharing(row.sharing),
                   ).joinToString(" · "),
                   icon = AglynIcons.named("dataset"),
                   selected = row.id == selected,
@@ -248,7 +248,7 @@ private fun DatasetDetail(
         )
       }
       FlowRow(horizontalArrangement = Arrangement.spacedBy(space(1f)), verticalArrangement = Arrangement.spacedBy(space(0.5f))) {
-        StatusChip("Shared with ${describeScope(dataset.visibleTo)}", if (dataset.visibleTo == null) StatusTone.WARNING else StatusTone.INFO)
+        StatusChip("Shared with ${describeSharing(dataset.sharing)}", if (dataset.visibleTo == null) StatusTone.WARNING else StatusTone.INFO)
         if (referencedBy.isNotEmpty()) StatusChip(if (referencedBy.size == 1) "Referenced by 1 field" else "Referenced by ${referencedBy.size} fields")
       }
       FlowRow(horizontalArrangement = Arrangement.spacedBy(space(1f)), verticalArrangement = Arrangement.spacedBy(space(1f))) {

@@ -199,6 +199,16 @@ public struct MediaItem: Identifiable, Equatable, Sendable {
   public let updatedAt: Date?
   public let uploadedBy: String?
   public let visibleTo: [String]
+  /// The all-sites-except marker an org-library file carries beside `visibleTo` (AGL-4047).
+  public let scopeMode: String?
+  public let scopeExcept: [String]?
+  /// Who an org-library file is shared with, as `describeSharing` reads it.
+  public var sharing: [String: Any] {
+    var fields: [String: Any] = ["visibleTo": visibleTo]
+    if let scopeMode { fields["scopeMode"] = scopeMode }
+    if let scopeExcept { fields["scopeExcept"] = scopeExcept }
+    return fields
+  }
   /// A film's measured length in whole seconds (`videoMediaProps`); nil for anything else or a film that records none.
   public let videoSeconds: Int?
   /// Whether the film's document records a captured poster frame (only then is its poster URL a picture, not a 404).
@@ -227,6 +237,8 @@ public struct MediaItem: Identifiable, Equatable, Sendable {
     updatedAt = doc.date("updatedAt")
     uploadedBy = doc.string("uploadedBy")
     visibleTo = (doc.data["visibleTo"] as? [Any])?.compactMap { $0 as? String } ?? []
+    scopeMode = doc.string("scopeMode")
+    scopeExcept = (doc.data["scopeExcept"] as? [Any])?.compactMap { $0 as? String }
     videoSeconds = libraryVideoSeconds(doc.data["video"])
     hasPoster = doc.data["poster"] is [String: Any]
   }

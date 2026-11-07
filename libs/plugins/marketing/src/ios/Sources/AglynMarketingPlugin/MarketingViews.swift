@@ -369,6 +369,10 @@ struct CampaignDetail: View {
               Spacer()
               StatusChip(row.window.label, tone: row.window == .running ? .success : .neutral)
             }
+            if actions.orgLevel {
+              Text(row.offeredLine { context.siteName($0) }).font(AglynFont.subheadline).foregroundStyle(.secondary)
+                .accessibilityIdentifier("campaign-offered-on")
+            }
             PropertyRow("Starts", row.startAtMs.map { Date(timeIntervalSince1970: Double($0) / 1000).formatted(date: .abbreviated, time: .omitted) })
             PropertyRow("Ends", row.endAtMs.map { Date(timeIntervalSince1970: Double($0) / 1000).formatted(date: .abbreviated, time: .omitted) })
             PropertyRow("Lists", row.listIDs.map { listNames[$0] ?? $0 }.joined(separator: ", "))

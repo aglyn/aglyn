@@ -72,7 +72,18 @@ data class DatasetRow(
   /** The sharing scope as stored; null when the document stores none. */
   val visibleTo: List<String>?,
   val updatedAt: FirestoreTimestamp?,
+  /** The all-sites-except marker beside `visibleTo` (AGL-4047): the sites left out, as scope tokens, under `allExcept`. */
+  val scopeMode: String? = null,
+  val scopeExcept: List<String>? = null,
 ) {
+  /** Who it is shared with, as `describeSharing` and `scopeSharingOf` read it. */
+  val sharing: Map<String, Any?>
+    get() = buildMap {
+      visibleTo?.let { put("visibleTo", it) }
+      scopeMode?.let { put("scopeMode", it) }
+      scopeExcept?.let { put("scopeExcept", it) }
+    }
+
   /** The other datasets' reference fields that point here. */
   fun referencedBy(others: List<DatasetRow>): List<Pair<DatasetRow, String>> = others.flatMap { other ->
     other.model.orderedFields().filter { (_, field) -> field.type == DatasetFieldType.REFERENCE && field.reference?.datasetId == id }.map { other to it.first }
@@ -93,6 +104,8 @@ data class DatasetRow(
         plural = (names?.get("plural") as? String)?.ifEmpty { null } ?: datasetDisplayName(doc.data),
         visibleTo = (doc.data["visibleTo"] as? List<*>)?.filterIsInstance<String>()?.takeIf { it.isNotEmpty() },
         updatedAt = doc.data["updatedAt"] as? FirestoreTimestamp,
+        scopeMode = doc.data["scopeMode"] as? String,
+        scopeExcept = (doc.data["scopeExcept"] as? List<*>)?.filterIsInstance<String>(),
       )
     }
   }
