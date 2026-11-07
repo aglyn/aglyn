@@ -18,11 +18,13 @@
 import type { ConsolePluginOrgMount } from '@aglyn/aglyn'
 import { buildRoute, Route } from '../constants/route-links'
 
-/** A host document as `useOrgHosts` hands it back — the two fields the mount reads off it. */
+/** A host document as `useOrgHosts` hands it back — the fields the mount reads off it. */
 export interface OrgMountHostDoc {
   $id: string
   displayName?: unknown
   subdomain?: unknown
+  /** The site's own plugin deny-list (AGL-4047). */
+  disabledPlugins?: unknown
 }
 
 /**
@@ -66,6 +68,12 @@ export function resolveOrgMount(input: {
         id: host.$id,
         name: displayName || subdomain || host.$id,
         subdomain: subdomain || null,
+        // Only when the document carries a list (AGL-4047): which plugins
+        // the site switched off for itself, so a surface listing where one
+        // runs does not name a site that turned it off.
+        ...(Array.isArray(host.disabledPlugins)
+          ? { disabledPlugins: host.disabledPlugins.map(String) }
+          : {}),
       }
     }),
     hostsReady,

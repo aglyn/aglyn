@@ -36,6 +36,7 @@ import {
   safePublisherImageSrc,
   allExceptInstallKind,
   type InstallTargeting,
+  type OrgInstallHost,
   type UninstallTarget,
 } from '../model/marketplace'
 import {
@@ -566,9 +567,11 @@ export interface MarketplaceListingContentProps {
   /**
    * The org's sites, for the install-targeting picker (AGL-773). Present only
    * at org scope; when given (and non-empty) the CTA offers All sites vs
-   * Selected sites instead of the single org/host choice.
+   * Selected sites instead of the single org/host choice. Each carries the
+   * site's own `disabledPlugins` when the shell has it (AGL-4047), which the
+   * installed-sites panel reads.
    */
-  hosts?: ReadonlyArray<{ id: string; label: string }>
+  hosts?: ReadonlyArray<OrgInstallHost>
 }
 
 /**
@@ -1300,8 +1303,11 @@ export function MarketplaceListingContent({
   // plugin — everything else installs INTO a site and has no pin to survey.
   const orgPluginScope = Boolean(orgTargeting && isPlugin)
   const orgInstall = useMemo(
-    () => resolveOrgInstallSummary(hosts ?? [], sitePins, orgPin ?? null),
-    [hosts, sitePins, orgPin],
+    // With each site's own switch (AGL-4047), so a site that turned the plugin
+    // off, or was left out at install, is not listed as running it.
+    () =>
+      resolveOrgInstallSummary(hosts ?? [], sitePins, orgPin ?? null, listingId),
+    [hosts, sitePins, orgPin, listingId],
   )
   /** Run a pin write, then re-read every site's pin. */
   const runSiteEdit = async (work: () => Promise<unknown>) => {
