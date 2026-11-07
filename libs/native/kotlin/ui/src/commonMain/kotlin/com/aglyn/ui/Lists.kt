@@ -94,6 +94,8 @@ data class MenuAction(
   val icon: String? = null,
   val destructive: Boolean = false,
   val enabled: Boolean = true,
+  /** Why it is switched off, under its label (the console's menu `disabledReason`); shown only while it is off. */
+  val reason: String? = null,
   val onClick: () -> Unit,
 )
 
@@ -131,9 +133,20 @@ fun OverflowMenu(
     }
     DropdownMenu(expanded = open, onDismissRequest = { open = false }) {
       for (action in actions) {
-        val color = if (action.destructive) MaterialTheme.colorScheme.error else MaterialTheme.colorScheme.onSurface
+        val color = (if (action.destructive) MaterialTheme.colorScheme.error else MaterialTheme.colorScheme.onSurface)
+          .let { if (action.enabled) it else it.copy(alpha = 0.38f) }
         DropdownMenuItem(
-          text = { Text(action.label, color = color) },
+          text = {
+            val reason = action.reason?.takeIf { !action.enabled }
+            if (reason == null) {
+              Text(action.label, color = color)
+            } else {
+              Column(Modifier.widthIn(max = 280.dp)) {
+                Text(action.label, color = color)
+                Text(reason, style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurfaceVariant)
+              }
+            }
+          },
           leadingIcon = action.icon?.let { name -> { Icon(AglynIcons.named(name), null, tint = color) } },
           enabled = action.enabled,
           onClick = {

@@ -44,7 +44,19 @@ struct DatasetRow: Identifiable, Hashable {
   let plural: String
   /// The sharing scope as stored; nil when the document stores none.
   let visibleTo: [String]?
+  /// The all-sites-except marker beside `visibleTo` (AGL-4047): the sites left out, as scope tokens, under `allExcept`.
+  let scopeMode: String?
+  let scopeExcept: [String]?
   let updatedAt: Date?
+
+  /// Who it is shared with, as `describeSharing` and `scopeSharingOf` read it.
+  var sharing: [String: Any] {
+    var fields: [String: Any] = [:]
+    if let visibleTo { fields["visibleTo"] = visibleTo }
+    if let scopeMode { fields["scopeMode"] = scopeMode }
+    if let scopeExcept { fields["scopeExcept"] = scopeExcept }
+    return fields
+  }
 
   init(_ doc: FirestoreDocument) {
     let names = doc.data["names"] as? [String: Any]
@@ -61,6 +73,8 @@ struct DatasetRow: Identifiable, Hashable {
     plural = (storedPlural?.isEmpty == false ? storedPlural : nil) ?? datasetDisplayName(doc.data)
     let scope = (doc.data["visibleTo"] as? [Any])?.compactMap { $0 as? String } ?? []
     visibleTo = scope.isEmpty ? nil : scope
+    scopeMode = doc.data["scopeMode"] as? String
+    scopeExcept = (doc.data["scopeExcept"] as? [Any])?.compactMap { $0 as? String }
     updatedAt = firestoreInstant(doc.data["updatedAt"])
   }
 
@@ -72,7 +86,8 @@ struct DatasetRow: Identifiable, Hashable {
     }
   }
 
-  static func == (a: DatasetRow, b: DatasetRow) -> Bool { a.id == b.id && a.name == b.name && a.model == b.model && a.visibleTo == b.visibleTo && a.updatedAt == b.updatedAt }
+  static func == (a: DatasetRow, b: DatasetRow) -> Bool { a.id == b.id && a.name == b.name && a.model == b.model && a.visibleTo == b.visibleTo && a.scopeMode == b.scopeMode
+      && a.scopeExcept == b.scopeExcept && a.updatedAt == b.updatedAt }
   func hash(into hasher: inout Hasher) { hasher.combine(id) }
 }
 

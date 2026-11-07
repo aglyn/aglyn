@@ -3768,6 +3768,100 @@
         }
       ]
     },
+    "campaignPlacedOnlyOn": {
+      "module": "libs/plugins/marketing/src/lib/model/campaign-container.ts",
+      "cases": [
+        {
+          "args": [
+            null,
+            "a"
+          ],
+          "result": false
+        },
+        {
+          "args": [
+            {
+              "visibleTo": [
+                "host:a"
+              ]
+            },
+            "a"
+          ],
+          "result": true
+        },
+        {
+          "args": [
+            {
+              "visibleTo": [
+                "host:a",
+                "host:b"
+              ]
+            },
+            "a"
+          ],
+          "result": false
+        },
+        {
+          "args": [
+            {
+              "visibleTo": [
+                "org"
+              ]
+            },
+            "a"
+          ],
+          "result": false
+        },
+        {
+          "args": [
+            {
+              "visibleTo": []
+            },
+            "a"
+          ],
+          "result": false
+        },
+        {
+          "args": [
+            {
+              "visibleTo": [
+                "host:a"
+              ],
+              "scopeMode": "allExcept",
+              "scopeExcept": [
+                "host:b"
+              ]
+            },
+            "a"
+          ],
+          "result": false
+        },
+        {
+          "args": [
+            {
+              "visibleTo": [
+                "host:a"
+              ],
+              "scopeMode": null
+            },
+            "a"
+          ],
+          "result": false
+        },
+        {
+          "args": [
+            {
+              "visibleTo": [
+                "host:a",
+                "host:a"
+              ]
+            },
+            "a"
+          ],
+          "result": false
+        }
+      ]
+    },
     "campaignReport": {
       "module": "libs/plugins/marketing/src/lib/model/campaign-report.ts",
       "cases": [
@@ -4239,6 +4333,146 @@
             },
             "state": "pending"
           }
+        }
+      ]
+    },
+    "campaignSiteDeleteRefusal": {
+      "module": "libs/plugins/marketing/src/lib/model/campaign-container.ts",
+      "cases": [
+        {
+          "args": [
+            null
+          ],
+          "result": "This campaign is on other sites too, so deleting it would take it off them as well. Deleting it takes access to every site in the workspace."
+        },
+        {
+          "args": [
+            {
+              "visibleTo": [
+                "host:a"
+              ]
+            }
+          ],
+          "result": "This campaign is on other sites too, so deleting it would take it off them as well. Deleting it takes access to every site in the workspace."
+        },
+        {
+          "args": [
+            {
+              "visibleTo": [
+                "host:a"
+              ],
+              "scopeMode": "allExcept",
+              "scopeExcept": [
+                "host:b"
+              ]
+            }
+          ],
+          "result": "This campaign is shared with all sites except some, so it belongs to the whole workspace and every new site gets it. Deleting it takes access to every site in the workspace."
+        },
+        {
+          "args": [
+            {
+              "visibleTo": [
+                "host:a"
+              ],
+              "scopeMode": null
+            }
+          ],
+          "result": "This campaign is shared with all sites except some, so it belongs to the whole workspace and every new site gets it. Deleting it takes access to every site in the workspace."
+        }
+      ]
+    },
+    "campaignSiteMayDelete": {
+      "module": "libs/plugins/marketing/src/lib/model/campaign-container.ts",
+      "cases": [
+        {
+          "args": [
+            null,
+            "a"
+          ],
+          "result": false
+        },
+        {
+          "args": [
+            {
+              "visibleTo": [
+                "host:a"
+              ]
+            },
+            "a"
+          ],
+          "result": true
+        },
+        {
+          "args": [
+            {
+              "visibleTo": [
+                "host:a",
+                "host:b"
+              ]
+            },
+            "a"
+          ],
+          "result": false
+        },
+        {
+          "args": [
+            {
+              "visibleTo": [
+                "org"
+              ]
+            },
+            "a"
+          ],
+          "result": false
+        },
+        {
+          "args": [
+            {
+              "visibleTo": []
+            },
+            "a"
+          ],
+          "result": false
+        },
+        {
+          "args": [
+            {
+              "visibleTo": [
+                "host:a"
+              ],
+              "scopeMode": "allExcept",
+              "scopeExcept": [
+                "host:b"
+              ]
+            },
+            "a"
+          ],
+          "result": false
+        },
+        {
+          "args": [
+            {
+              "visibleTo": [
+                "host:a"
+              ],
+              "scopeMode": null
+            },
+            "a"
+          ],
+          "result": false
+        },
+        {
+          "args": [
+            {
+              "visibleTo": [
+                "host:a",
+                "host:a"
+              ]
+            },
+            "a"
+          ],
+          "result": true
         }
       ]
     },

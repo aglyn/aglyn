@@ -185,7 +185,7 @@ private struct SchemaEditor: View {
       if !accessKnown {
         Text("Checking your access…").foregroundStyle(.secondary)
       } else if !orgWide {
-        Text(describeScope(dataset.visibleTo, hostNames: Dictionary(uniqueKeysWithValues: sites.map { ($0.id, $0.name) }))
+        Text(describeSharing(dataset.sharing, hostNames: Dictionary(uniqueKeysWithValues: sites.map { ($0.id, $0.name) }))
           + ". Only an owner, an admin or a member with every site can change this.")
           .foregroundStyle(.secondary)
       } else {

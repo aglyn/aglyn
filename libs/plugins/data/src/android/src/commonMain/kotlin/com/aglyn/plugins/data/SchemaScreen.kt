@@ -51,7 +51,7 @@ import com.aglyn.pluginhost.jsNumber
 import com.aglyn.pluginhost.ActionRunner
 import com.aglyn.pluginhost.NativePluginContext
 import com.aglyn.pluginhost.rememberMemberPermissions
-import com.aglyn.pluginhost.describeScope
+import com.aglyn.pluginhost.describeSharing
 import com.aglyn.pluginhost.narrowsScope
 import com.aglyn.pluginhost.rememberOrgAccess
 import com.aglyn.pluginhost.scopeToStore
@@ -176,7 +176,7 @@ private fun SchemaEditor(context: NativePluginContext, orgId: String, dataset: D
     SectionCard("Shared with") {
       when {
         access == null -> Text("Checking your access…", color = MaterialTheme.colorScheme.onSurfaceVariant)
-        !orgWide -> Text(describeScope(dataset.visibleTo, siteList.associate { it.id to it.name }) + ". Only an owner, an admin or a member with every site can change this.", color = MaterialTheme.colorScheme.onSurfaceVariant)
+        !orgWide -> Text(describeSharing(dataset.sharing, siteList.associate { it.id to it.name }) + ". Only an owner, an admin or a member with every site can change this.", color = MaterialTheme.colorScheme.onSurfaceVariant)
         else -> {
           val all = OrgAccess.ORG_SCOPE_TOKEN in visibleTo
           if (dataset.visibleTo == null) NoticeBanner("Not shared with any site: no page can show it until you choose.", StatusTone.WARNING)

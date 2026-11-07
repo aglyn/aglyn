@@ -76,17 +76,56 @@ import com.aglyn.ui.space
 fun grouped(value: Long): String = value.toString().reversed().chunked(3).joinToString(",").reversed().replace("-,", "-")
 
 /** The site's role for this member and the workspace document (its plan), which gate what Marketing offers. */
-data class MarketingAccess(val canEdit: Boolean, val org: Map<String, Any?>?, val orgReady: Boolean) {
+data class MarketingAccess(
+  val canEdit: Boolean,
+  val org: Map<String, Any?>?,
+  val orgReady: Boolean,
+  /** "Run email campaigns" as the workspace grants it, wherever a campaign is placed (`holdsCampaignContainers`). */
+  val workspaceCanEdit: Boolean = false,
+  /** Whether they are a member of the whole workspace; null until their membership is read. */
+  val orgWide: Boolean? = null,
+  val hostId: String? = null,
+) {
   fun carries(feature: String) = planFeatureCarried(org, feature)
+
+  /** A campaign created under a site is placed on that site alone, so the site's verdict counts there. */
+  val canCreateCampaign: Boolean get() = workspaceCanEdit || (hostId != null && canEdit)
+
+  /**
+   * Whether this campaign can be edited here (AGL-4047): the workspace's verdict answers for every campaign; a site's own
+   * counts only for one placed on that site alone, never one shared with all sites except some.
+   */
+  fun canEditCampaign(row: CampaignRow): Boolean = workspaceCanEdit || (hostId != null && row.placedOnlyOn(hostId) && canEdit)
+
+  /**
+   * Why Delete is off for this campaign, or null when the manage route would take it (AGL-4047). A site's door takes a
+   * campaign on that site alone from a member of some sites; anything wider asks for the whole workspace.
+   */
+  fun campaignDeleteRefusal(row: CampaignRow): String? {
+    val refusal = com.aglyn.contracts.permissionRefusalText(CAMPAIGNS_PERMISSION)
+    if (hostId == null) return if (orgWide == true && workspaceCanEdit) null else refusal
+    if (!canEdit) return refusal
+    if (orgWide != false) return null
+    return if (row.siteMayDelete(hostId)) null else row.siteDeleteRefusal
+  }
 }
+
+private const val CAMPAIGNS_PERMISSION = "marketing.campaigns"
 
 @Composable
 fun rememberMarketingAccess(context: NativePluginContext): MarketingAccess {
   val hostId = context.hostId
   val orgId = context.orgId
   val org = remember(orgId) { context.firestore.observeDoc("orgs/$orgId") }.collectAsState(Live.Loading).value
+  val member = remember(orgId, context.uid) { context.firestore.observeDoc("orgs/$orgId/members/${context.uid}") }.collectAsState(Live.Loading).value
+  val permissions = com.aglyn.pluginhost.rememberMemberPermissions(context)
   // "Run email campaigns".
-  return MarketingAccess(com.aglyn.pluginhost.rememberMemberPermissions(context).can("marketing.campaigns"), (org as? Live.Ready)?.value?.data, org is Live.Ready)
+  return MarketingAccess(
+    permissions.can(CAMPAIGNS_PERMISSION), (org as? Live.Ready)?.value?.data, org is Live.Ready,
+    workspaceCanEdit = permissions.workspace[CAMPAIGNS_PERMISSION] == true,
+    orgWide = (member as? Live.Ready)?.value?.let { com.aglyn.core.OrgAccess.fromMember(it).orgWide },
+    hostId = hostId,
+  )
 }
 
 /** The Marketing hub: the console's sections as chips over the chosen one. */
@@ -210,7 +249,7 @@ fun CampaignsSection(context: NativePluginContext, actions: MarketingActions, ac
       Column(Modifier.fillMaxSize()) {
         Row(Modifier.padding(horizontal = space(2f)), verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(space(1f))) {
           SearchField(search, { search = it; if (it.isBlank()) asked = "" }, placeholder = "Search campaigns", modifier = Modifier.weight(1f), onSearch = { asked = search })
-          if (access.canEdit) Button(onClick = { creating = true }, modifier = Modifier.testTag("campaign-new")) { Text("New campaign") }
+          if (access.canCreateCampaign) Button(onClick = { creating = true }, modifier = Modifier.testTag("campaign-new")) { Text("New campaign") }
         }
         LiveListPane(
           list,
@@ -265,7 +304,16 @@ fun CampaignDetail(context: NativePluginContext, actions: MarketingActions, acce
     Row(verticalAlignment = Alignment.CenterVertically) {
       Text(row.name, Modifier.weight(1f), style = MaterialTheme.typography.titleLarge)
       StatusChip(row.window.label, if (row.window == CampaignWindow.RUNNING) StatusTone.SUCCESS else StatusTone.NEUTRAL)
-      if (access.canEdit) OverflowMenu(listOf(MenuAction("edit", "Edit") { editing = true }, MenuAction("delete", "Delete", destructive = true) { deleting = true }))
+      val canEdit = access.canEditCampaign(row)
+      val deleteRefusal = access.campaignDeleteRefusal(row)
+      if (canEdit || deleteRefusal == null) {
+        OverflowMenu(
+          listOf(
+            MenuAction("edit", "Edit", enabled = canEdit) { editing = true },
+            MenuAction("delete", "Delete", destructive = true, enabled = deleteRefusal == null, reason = deleteRefusal) { deleting = true },
+          ),
+        )
+      }
     }
     SectionCard(null) {
       PropertyRow("Starts", row.startAtMs?.let { localDayAndTime(it).first })

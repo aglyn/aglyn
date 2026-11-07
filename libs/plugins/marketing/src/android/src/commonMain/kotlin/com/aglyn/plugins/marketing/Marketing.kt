@@ -108,14 +108,47 @@ data class CampaignRow(
   val listIds: List<String>,
   val topicId: String?,
   val listUnsubscribe: Boolean,
+  /** Where it is offered: its `visibleTo` tokens. */
+  val visibleTo: List<String> = emptyList(),
+  /**
+   * Shared with all sites except some (AGL-4047): either marker key present, a stored null included, as the rules'
+   * `scopeUnmarked` reads it (`campaignSharingMarked`).
+   */
+  val sharingMarked: Boolean = false,
 ) {
   val window: CampaignWindow get() = campaignWindowState(startAtMs, endAtMs, nowMillis())
+
+  /** The sites it is placed on, or null when it is on every site (`campaignSiteIds`). */
+  val siteIds: List<String>?
+    get() = if ("org" in visibleTo) null else visibleTo.filter { it.startsWith("host:") && it.length > 5 }.map { it.removePrefix("host:") }
+
+  /**
+   * Placed on this site and no other, where the site's own "Run email campaigns" counts for writing it; never one shared
+   * with all sites except some, however few sites it reaches today (`campaignPlacedOnlyOn`).
+   */
+  fun placedOnlyOn(hostId: String): Boolean = !sharingMarked && visibleTo == listOf("host:$hostId")
+
+  /** Whether the manage route's site door may delete it: on this site alone, and not marked (`campaignSiteMayDelete`). */
+  fun siteMayDelete(hostId: String): Boolean {
+    val ids = siteIds
+    return !sharingMarked && ids != null && ids.isNotEmpty() && ids.all { it == hostId }
+  }
+
+  /** Why a member with access to some sites only may not delete it from a site (`campaignSiteDeleteRefusal`). */
+  val siteDeleteRefusal: String
+    get() = if (sharingMarked) {
+      "This campaign is shared with all sites except some, so it belongs to the whole workspace and every new site gets it. Deleting it takes access to every site in the workspace."
+    } else {
+      "This campaign is on other sites too, so deleting it would take it off them as well. Deleting it takes access to every site in the workspace."
+    }
 }
 
 @Suppress("UNCHECKED_CAST")
 fun campaignRowOf(doc: FirestoreDoc) = CampaignRow(
   doc.id, doc.string("name")?.takeIf { it.isNotEmpty() } ?: doc.id, millisOf(doc.data["startAtMs"]), millisOf(doc.data["endAtMs"]),
   (doc.data["listIds"] as? List<String>).orEmpty(), doc.string("topicId"), doc.bool("listUnsubscribe") ?: true,
+  (doc.data["visibleTo"] as? List<*>)?.filterIsInstance<String>().orEmpty(),
+  doc.data.containsKey("scopeMode") || doc.data.containsKey("scopeExcept"),
 )
 
 data class CampaignRollup(val emails: Int = 0, val sending: Int = 0, val scheduled: Int = 0, val sent: Long = 0, val opens: Long = 0, val clicks: Long = 0)

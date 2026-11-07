@@ -740,7 +740,24 @@ public func readOrgAutomation(_ input: Any?) -> OrgAutomationRead {
   if !conditions.isEmpty { checked["conditions"] = conditions }
   if let combinator { checked["combinator"] = combinator }
   if let problem = validateHostAction(["name": name, "trigger": checked, "steps": steps]) { return .problem(problem) }
-  guard let visibleTo = normalizeVisibleTo((body["visibleTo"] as? [Any] ?? []).compactMap { $0 as? String }) else {
+  let choice: AutomationDocument?
+  switch readOrgSharingChoice(body["sharing"]) {
+  case .problem(let problem): return .problem(problem)
+  case .ok(let read): choice = read
+  }
+  // A choice decides the placement; without one, `visibleTo` does. All sites except some names no site here: the route
+  // works the sites out from the workspace's, in the write.
+  let mode = choice?["mode"] as? String
+  let placed: [String]? =
+    mode == "allExcept"
+    ? []
+    : mode == "all"
+      ? ["org"]
+      : normalizeVisibleTo(
+        mode == "selected"
+          ? (choice?["hostIds"] as? [String] ?? []).map { "host:\($0)" }
+          : (body["visibleTo"] as? [Any] ?? []).compactMap { $0 as? String })
+  guard let visibleTo = placed else {
     return .problem("Choose every site, or up to 30 sites, for it to run on")
   }
   var stored: AutomationDocument = ["event": event]
@@ -752,9 +769,44 @@ public func readOrgAutomation(_ input: Any?) -> OrgAutomationRead {
     stored["conditions"] = conditions
     stored["combinator"] = combinator ?? "and"
   }
-  return .ok([
+  var value: AutomationDocument = [
     "name": name, "trigger": stored, "steps": steps, "enabled": !looseIsFalse(body["enabled"]), "visibleTo": visibleTo,
-  ])
+  ]
+  if let choice { value["sharing"] = choice }
+  return .ok(value)
+}
+
+private let orgSharingProblem = "Choose every site, the sites, or every site except some, for it to run on"
+
+/// A sharing choice off the wire (AGL-4047), or nil when there is none: ids held to a document id's shape and deduped.
+private func readOrgSharingChoice(_ raw: Any?) -> OrgSharingRead {
+  if raw == nil || raw is NSNull { return .ok(nil) }
+  let source = raw as? AutomationDocument
+  func ids(_ list: Any?) -> [String]? {
+    guard let list = list as? [Any], list.count <= 1000 else { return nil }
+    var unique: [String] = []
+    for id in list {
+      guard let text = id as? String, !text.isEmpty, !text.contains(":"), !text.contains("/") else { return nil }
+      if !unique.contains(text) { unique.append(text) }
+    }
+    return unique
+  }
+  switch source?["mode"] as? String {
+  case "all": return .ok(["mode": "all"])
+  case "selected":
+    guard let hostIDs = ids(source?["hostIds"]) else { return .problem(orgSharingProblem) }
+    return .ok(["mode": "selected", "hostIds": hostIDs])
+  case "allExcept":
+    guard let exceptHostIDs = ids(source?["exceptHostIds"]) else { return .problem(orgSharingProblem) }
+    if exceptHostIDs.isEmpty { return .problem("Choose at least one site to leave out, or run it on every site") }
+    return .ok(["mode": "allExcept", "exceptHostIds": exceptHostIDs])
+  default: return .problem(orgSharingProblem)
+  }
+}
+
+private enum OrgSharingRead {
+  case ok(AutomationDocument?)
+  case problem(String)
 }
 
 /// A stored scope list covers this site.

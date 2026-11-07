@@ -7399,6 +7399,180 @@
         ]
       ]
     },
+    "campaignPlacedOnlyOn": {
+      "module": "libs/plugins/marketing/src/lib/model/campaign-container.ts",
+      "args": [
+        [
+          null,
+          "a"
+        ],
+        [
+          {
+            "visibleTo": [
+              "host:a"
+            ]
+          },
+          "a"
+        ],
+        [
+          {
+            "visibleTo": [
+              "host:a",
+              "host:b"
+            ]
+          },
+          "a"
+        ],
+        [
+          {
+            "visibleTo": [
+              "org"
+            ]
+          },
+          "a"
+        ],
+        [
+          {
+            "visibleTo": []
+          },
+          "a"
+        ],
+        [
+          {
+            "visibleTo": [
+              "host:a"
+            ],
+            "scopeMode": "allExcept",
+            "scopeExcept": [
+              "host:b"
+            ]
+          },
+          "a"
+        ],
+        [
+          {
+            "visibleTo": [
+              "host:a"
+            ],
+            "scopeMode": null
+          },
+          "a"
+        ],
+        [
+          {
+            "visibleTo": [
+              "host:a",
+              "host:a"
+            ]
+          },
+          "a"
+        ]
+      ]
+    },
+    "campaignSiteMayDelete": {
+      "module": "libs/plugins/marketing/src/lib/model/campaign-container.ts",
+      "args": [
+        [
+          null,
+          "a"
+        ],
+        [
+          {
+            "visibleTo": [
+              "host:a"
+            ]
+          },
+          "a"
+        ],
+        [
+          {
+            "visibleTo": [
+              "host:a",
+              "host:b"
+            ]
+          },
+          "a"
+        ],
+        [
+          {
+            "visibleTo": [
+              "org"
+            ]
+          },
+          "a"
+        ],
+        [
+          {
+            "visibleTo": []
+          },
+          "a"
+        ],
+        [
+          {
+            "visibleTo": [
+              "host:a"
+            ],
+            "scopeMode": "allExcept",
+            "scopeExcept": [
+              "host:b"
+            ]
+          },
+          "a"
+        ],
+        [
+          {
+            "visibleTo": [
+              "host:a"
+            ],
+            "scopeMode": null
+          },
+          "a"
+        ],
+        [
+          {
+            "visibleTo": [
+              "host:a",
+              "host:a"
+            ]
+          },
+          "a"
+        ]
+      ]
+    },
+    "campaignSiteDeleteRefusal": {
+      "module": "libs/plugins/marketing/src/lib/model/campaign-container.ts",
+      "args": [
+        [
+          null
+        ],
+        [
+          {
+            "visibleTo": [
+              "host:a"
+            ]
+          }
+        ],
+        [
+          {
+            "visibleTo": [
+              "host:a"
+            ],
+            "scopeMode": "allExcept",
+            "scopeExcept": [
+              "host:b"
+            ]
+          }
+        ],
+        [
+          {
+            "visibleTo": [
+              "host:a"
+            ],
+            "scopeMode": null
+          }
+        ]
+      ]
+    },
     "campaignSendDisplay": {
       "module": "libs/plugins/marketing/src/lib/model/campaign-container.ts",
       "args": [

@@ -1,5 +1,6 @@
 package com.aglyn.plugins.workflows
 
+import com.aglyn.pluginhost.ScopeSharingChoice
 import com.aglyn.contracts.OrgAutomationRead
 import com.aglyn.contracts.readOrgAutomation
 import com.aglyn.contracts.siteInteractionDocument
@@ -219,6 +220,8 @@ class AutomationDataTest {
     val chosen = orgAutomationRowOf(doc("o2", mapOf("name" to "Won", "enabled" to false, "trigger" to mapOf("event" to "dealWon"), "steps" to emptyList<Any>(), "visibleTo" to listOf("host:h2"))))
     assertEquals("Runs on every site", placementLine(everywhere, sites))
     assertEquals("Runs on Shop", placementLine(chosen, sites))
+    val allExcept = orgAutomationRowOf(doc("o3", mapOf("name" to "All", "trigger" to mapOf("event" to "lead"), "steps" to emptyList<Any>(), "visibleTo" to listOf("host:h1"), "scopeMode" to "allExcept", "scopeExcept" to listOf("host:h2"))))
+    assertEquals("Runs on every site except Shop", placementLine(allExcept, sites))
     assertEquals(listOf("h1", "h2"), placedSiteIds(everywhere, sites))
     assertEquals(SitePlacement.PAUSED, sitePlacement(everywhere, "h1"))
     assertEquals(SitePlacement.RUNS, sitePlacement(everywhere, "h2"))
@@ -297,15 +300,30 @@ class AutomationDataTest {
       mapOf("name" to "Welcome", "trigger" to mapOf("event" to "lead", "conditions" to null), "steps" to listOf(mapOf("type" to "sendEmail", "subject" to "Hi", "body" to "B")), "visibleTo" to listOf("host:h1", "host:h2")),
       "o1",
     )
-    assertEquals("sites", draft.placement)
-    assertEquals(listOf("h1", "h2"), draft.siteIds)
+    assertEquals(ScopeSharingChoice.Selected(listOf("h1", "h2")), draft.sharing)
     val read = readOrgAutomation(orgAutomationBody(draft))
     assertIs<OrgAutomationRead.Ok>(read)
     assertEquals(listOf("host:h1", "host:h2"), read.value["visibleTo"])
     assertEquals(
       "Choose every site, or up to 30 sites, for it to run on",
-      (readOrgAutomation(orgAutomationBody(draft.copy(siteIds = emptyList()))) as OrgAutomationRead.Refused).problem,
+      (readOrgAutomation(orgAutomationBody(draft.copy(sharing = ScopeSharingChoice.Selected(emptyList())))) as OrgAutomationRead.Refused).problem,
     )
+    // A marked automation reads back as the choice it was saved with, not today's sites (AGL-4047).
+    val marked = orgAutomationDraftOf(
+      mapOf(
+        "name" to "Welcome", "trigger" to mapOf("event" to "lead"), "steps" to listOf(mapOf("type" to "sendEmail", "subject" to "Hi", "body" to "B")),
+        "visibleTo" to listOf("host:h1", "host:h2"), "scopeMode" to "allExcept", "scopeExcept" to listOf("host:h3"),
+      ),
+      "o2",
+    )
+    assertEquals(ScopeSharingChoice.AllExcept(listOf("h3")), marked.sharing)
+    val markedBody = orgAutomationBody(marked)
+    assertEquals(null, markedBody["visibleTo"])
+    assertEquals(mapOf("mode" to "allExcept", "exceptHostIds" to listOf("h3")), markedBody["sharing"])
+    val markedRead = readOrgAutomation(markedBody)
+    assertIs<OrgAutomationRead.Ok>(markedRead)
+    assertEquals(emptyList<String>(), markedRead.value["visibleTo"])
+    assertEquals("allExcept", draftPlacement(marked, listOf("h1", "h2", "h3"))["scopeMode"])
     assertIs<OrgAutomationRead.Ok>(readOrgAutomation(orgAutomationBody(OrgAutomationDraft(id = null, name = "N", steps = listOf(defaultStep("notifyAdmins") + ("title" to "T"))))))
   }
 

@@ -1,6 +1,7 @@
 // Copyright 2026 Aglyn LLC
 // SPDX-License-Identifier: Apache-2.0
 
+import AglynCore
 import Foundation
 import XCTest
 
@@ -22,6 +23,21 @@ private func variants(_ raw: Any?) -> [VariantRow] {
 }
 
 final class MarketingTests: XCTestCase {
+  func testCampaignPlacementIsTheConsoles() throws {
+    func campaign(_ raw: Any) -> CampaignRow {
+      campaignRow(FirestoreDocument(id: "c", data: raw as? [String: Any] ?? [:]))
+    }
+    for item in try functionCases("campaignPlacedOnlyOn") {
+      XCTAssertEqual(campaign(item.args[0]).placedOnlyOn(item.args[1] as! String), (item.result as? NSNumber)?.boolValue, "\(item.args)")
+    }
+    for item in try functionCases("campaignSiteMayDelete") {
+      XCTAssertEqual(campaign(item.args[0]).siteMayDelete(item.args[1] as! String), (item.result as? NSNumber)?.boolValue, "\(item.args)")
+    }
+    for item in try functionCases("campaignSiteDeleteRefusal") {
+      XCTAssertEqual(campaign(item.args[0]).siteDeleteRefusal, item.result as? String, "\(item.args)")
+    }
+  }
+
   func testExperimentValidationIsTheConsoles() throws {
     for (index, item) in try functionCases("validateExperiment").enumerated() {
       let e = item.args[0] as! [String: Any]

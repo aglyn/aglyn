@@ -42,6 +42,21 @@ class MarketingCasesTest {
 
   private fun close(a: Double?, b: Double?) = (a == null && b == null) || (a != null && b != null && abs(a - b) < 1e-9)
 
+  private fun campaign(element: JsonElement?) = campaignRowOf(com.aglyn.core.FirestoreDoc("c", "orgs/o/emailCampaigns/c", map(element).orEmpty()))
+
+  @Test
+  fun campaignPlacementCases() {
+    cases("campaignPlacedOnlyOn").forEach { (args, result) ->
+      assertEquals((result as JsonPrimitive).booleanOrNull, campaign(args[0]).placedOnlyOn((args[1] as JsonPrimitive).content), args.toString())
+    }
+    cases("campaignSiteMayDelete").forEach { (args, result) ->
+      assertEquals((result as JsonPrimitive).booleanOrNull, campaign(args[0]).siteMayDelete((args[1] as JsonPrimitive).content), args.toString())
+    }
+    cases("campaignSiteDeleteRefusal").forEach { (args, result) ->
+      assertEquals((result as JsonPrimitive).content, campaign(args[0]).siteDeleteRefusal, args.toString())
+    }
+  }
+
   @Test
   fun validationCases() = cases("validateExperiment").forEach { (args, result) ->
     val e = map(args[0])!!

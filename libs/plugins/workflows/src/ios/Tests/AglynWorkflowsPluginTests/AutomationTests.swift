@@ -3,6 +3,7 @@
 
 import AglynContracts
 import AglynCore
+import AglynPluginHost
 import XCTest
 
 @testable import AglynWorkflowsPlugin
@@ -355,18 +356,39 @@ final class AutomationTests: XCTestCase {
   func testAnOrgDraftBuildsTheManageBody() {
     var draft = OrgAutomationDraft()
     draft.name = " Welcome "
-    draft.everySite = false
-    draft.siteIDs = ["h1", "h2"]
+    draft.sharing = .selected(hostIDs: ["h1", "h2"])
     draft.steps = [StepDraft(["type": "sendEmail", "subject": "Hi", "body": "B"])]
     let body = draft.body
     XCTAssertEqual(body["visibleTo"] as? [String], ["host:h1", "host:h2"])
     guard case .ok(let read) = readOrgAutomation(body) else { return XCTFail("refused") }
     XCTAssertEqual(read["name"] as? String, "Welcome")
-    draft.siteIDs = (0..<31).map { "h\($0)" }
-    XCTAssertTrue(draft.tooManySites)
+    XCTAssertEqual((body["sharing"] as? [String: Any])?["mode"] as? String, "selected")
+    draft.sharing = .selected(hostIDs: (0..<31).map { "h\($0)" })
+    XCTAssertNotNil(draft.placementWrite((0..<31).map { "h\($0)" }).problem)
     let stored = OrgAutomationDraft(id: "x", data: ["name": "A", "visibleTo": ["org"], "trigger": ["event": "pageView"]])
-    XCTAssertTrue(stored.everySite)
+    XCTAssertEqual(stored.sharing, .all)
     XCTAssertEqual(stored.event, "formSubmission")
+  }
+
+  func testAnOrgDraftKeepsAllSitesExcept() {
+    // A marked automation reads back as the choice it was saved with, not today's sites (AGL-4047).
+    var draft = OrgAutomationDraft(
+      id: "x",
+      data: [
+        "name": "A", "trigger": ["event": "formSubmission"], "visibleTo": ["host:h1", "host:h2"], "scopeMode": "allExcept",
+        "scopeExcept": ["host:h3"],
+      ])
+    XCTAssertEqual(draft.sharing, .allExcept(exceptHostIDs: ["h3"]))
+    draft.steps = [StepDraft(["type": "sendEmail", "subject": "Hi", "body": "B"])]
+    let body = draft.body
+    XCTAssertNil(body["visibleTo"])
+    XCTAssertEqual((body["sharing"] as? [String: Any])?["exceptHostIds"] as? [String], ["h3"])
+    guard case .ok(let read) = readOrgAutomation(body) else { return XCTFail("refused") }
+    XCTAssertEqual(read["visibleTo"] as? [String], [])
+    XCTAssertEqual(draft.placement(["h1", "h2", "h3"])["scopeMode"] as? String, "allExcept")
+    XCTAssertEqual(
+      placementLine(OrgAutomationRow(FirestoreDocument(id: "x", data: draft.placement(["h1", "h2", "h3"]))), sites: []),
+      "Runs on every site except h3")
   }
 
   func testAStaleSeedIsRefused() {

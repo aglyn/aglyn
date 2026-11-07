@@ -7,13 +7,17 @@ import com.aglyn.contracts.ORG_SCOPE_TOKEN
 import com.aglyn.contracts.SITE_EVENT_TYPES
 import com.aglyn.contracts.asDoc
 import com.aglyn.contracts.hostEventTypes
-import com.aglyn.contracts.hostIdsFromScope
 import com.aglyn.contracts.hostScopeToken
-import com.aglyn.contracts.isOrgWideScope
 import com.aglyn.contracts.jsNumber
 import com.aglyn.contracts.jsString
 import com.aglyn.contracts.normalizeTriggerConditions
 import com.aglyn.contracts.str
+import com.aglyn.pluginhost.ScopeSharing
+import com.aglyn.pluginhost.ScopeSharingChoice
+import com.aglyn.pluginhost.ScopeSharingFields
+import com.aglyn.pluginhost.scopeSharingOf
+import com.aglyn.pluginhost.sharingFromChoice
+import com.aglyn.pluginhost.wire
 
 /*
  * The editors' drafts, and the documents and bodies they save as: the
@@ -212,15 +216,13 @@ data class OrgAutomationDraft(
   val combinator: String = "and",
   val steps: List<Doc> = listOf(defaultStep("sendEmail")),
   val enabled: Boolean = true,
-  /** `org` (every site) or `sites`. */
-  val placement: String = "org",
-  val siteIds: List<String> = emptyList(),
+  /** Where it runs: every site, the sites chosen, or every site except some (AGL-4047), as the sharing field edits it. */
+  val sharing: ScopeSharingChoice = ScopeSharingChoice.All,
 )
 
 fun orgAutomationDraftOf(row: Doc, id: String): OrgAutomationDraft {
   val trigger = row["trigger"].asDoc()
   val event = trigger.str("event")?.takeIf { it in ORG_AUTOMATION_TRIGGER_EVENTS } ?: "formSubmission"
-  val visibleTo = row["visibleTo"] as? List<*>
   return OrgAutomationDraft(
     id = id,
     name = row["name"]?.let(::jsString) ?: "",
@@ -230,13 +232,34 @@ fun orgAutomationDraftOf(row: Doc, id: String): OrgAutomationDraft {
     combinator = if (trigger?.get("combinator") == "or") "or" else "and",
     steps = (row["steps"] as? List<*>)?.mapNotNull { it.asDoc() } ?: emptyList(),
     enabled = row["enabled"] != false,
-    placement = if (isOrgWideScope(visibleTo)) "org" else "sites",
-    siteIds = hostIdsFromScope(visibleTo),
+    // Where a stored automation runs, as the sharing field edits it (the console's `sharingOfRow`).
+    sharing = when (val sharing = scopeSharingOf(row)) {
+      ScopeSharing.All -> ScopeSharingChoice.All
+      is ScopeSharing.AllExcept -> ScopeSharingChoice.AllExcept(sharing.exceptHostIds)
+      is ScopeSharing.Selected -> ScopeSharingChoice.Selected(sharing.hostIds)
+      ScopeSharing.None -> ScopeSharingChoice.Selected(emptyList())
+    },
   )
 }
 
-fun draftPlacement(draft: OrgAutomationDraft): List<String> =
-  if (draft.placement == "org") listOf(ORG_SCOPE_TOKEN) else draft.siteIds.map(::hostScopeToken)
+/**
+ * What a draft's placement would store given the workspace's sites, or why it can't be (`draftSharing`). The sites it
+ * leaves out stay known even where the list lacks them, so they aren't taken for sites that are gone.
+ */
+fun draftSharing(draft: OrgAutomationDraft, orgHostIds: List<String>): Pair<ScopeSharingFields?, String?> {
+  val leftOut = (draft.sharing as? ScopeSharingChoice.AllExcept)?.exceptHostIds.orEmpty()
+  return sharingFromChoice(draft.sharing, orgHostIds + leftOut, null, emptyList())
+}
+
+/** The automation as its placement would leave it, for the pickers that offer only what reaches it (`draftPlacement`). */
+fun draftPlacement(draft: OrgAutomationDraft, orgHostIds: List<String>): Map<String, Any?> {
+  val fields = draftSharing(draft, orgHostIds).first ?: return mapOf("visibleTo" to emptyList<String>())
+  return buildMap {
+    put("visibleTo", fields.visibleTo)
+    fields.scopeMode?.let { put("scopeMode", it) }
+    fields.scopeExcept?.let { put("scopeExcept", it) }
+  }
+}
 
 /** What the manage route is sent (`orgAutomationBody`). */
 fun orgAutomationBody(draft: OrgAutomationDraft): Doc {
@@ -248,8 +271,16 @@ fun orgAutomationBody(draft: OrgAutomationDraft): Doc {
     "trigger" to trigger,
     "steps" to draft.steps,
     "enabled" to draft.enabled,
-    "visibleTo" to draftPlacement(draft),
-  )
+  ).apply {
+    // The choice, which decides (AGL-4047), and beside every site or the chosen ones the `visibleTo` it stores, as the
+    // route read it before there was a choice.
+    when (val sharing = draft.sharing) {
+      ScopeSharingChoice.All -> put("visibleTo", listOf(ORG_SCOPE_TOKEN))
+      is ScopeSharingChoice.Selected -> put("visibleTo", sharing.hostIds.map(::hostScopeToken))
+      is ScopeSharingChoice.AllExcept -> Unit
+    }
+    put("sharing", draft.sharing.wire)
+  }
 }
 
 // ── Webhooks ──────────────────────────────────────────────────────────────

@@ -1442,6 +1442,29 @@ private fun MediaDetailBody(
           }
         }
       }
+      if (scope is MediaScope.Org) {
+        val siteNames = (com.aglyn.pluginhost.rememberWorkspaceSites(context) as? Live.Ready)?.value.orEmpty().associate { it.id to it.name }
+        // Who it is shared with, as the console's details drawer says it (AGL-4047): "All sites except Blog" names the
+        // sites left out, since the next new site gets it too.
+        Column(Modifier.testTag("media-shared-with")) {
+          Text("Shared with", style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurfaceVariant)
+          Text(
+            if (item.visibleTo.isEmpty()) {
+              "Never shared — hidden from every site"
+            } else {
+              com.aglyn.pluginhost.describeSharing(
+                buildMap {
+                  put("visibleTo", item.visibleTo)
+                  item.scopeMode?.let { put("scopeMode", it) }
+                  item.scopeExcept?.let { put("scopeExcept", it) }
+                },
+                siteNames,
+              )
+            },
+            style = MaterialTheme.typography.bodyMedium,
+          )
+        }
+      }
       if (orgWideEditor) {
         SwitchRow(
           "Private",
