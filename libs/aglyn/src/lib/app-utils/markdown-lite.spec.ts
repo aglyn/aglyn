@@ -518,6 +518,103 @@ describe('markdown-lite', () => {
     ])
   })
 
+  it('an indented line continues the item above it (AGL-4197)', () => {
+    // A README wraps a long item at 80 columns and indents the rest under
+    // the text. That is one item, not a list, a paragraph and a second list.
+    const blocks = parseMarkdownLite(
+      [
+        '- a card for each review, with the name',
+        '  and the date;',
+        '- a link.',
+        '',
+        '1. Open the page and select',
+        '   **Connect**.',
+        '2. Pick a location.',
+      ].join('\n'),
+    )
+    expect(blocks).toEqual([
+      {
+        type: 'list',
+        items: [
+          [
+            {
+              type: 'text',
+              text: 'a card for each review, with the name and the date;',
+            },
+          ],
+          [{ type: 'text', text: 'a link.' }],
+        ],
+      },
+      {
+        type: 'orderedList',
+        start: 1,
+        items: [
+          [
+            { type: 'text', text: 'Open the page and select ' },
+            { type: 'bold', text: 'Connect' },
+            { type: 'text', text: '.' },
+          ],
+          [{ type: 'text', text: 'Pick a location.' }],
+        ],
+      },
+    ])
+  })
+
+  it('an indented marker is still an item; an unindented line still ends the run (AGL-4197)', () => {
+    const blocks = parseMarkdownLite(
+      '- top\n  - nested\n  2. numbered\nAfter.',
+    )
+    expect(blocks.map((block) => block.type)).toEqual([
+      'list',
+      'orderedList',
+      'paragraph',
+    ])
+    expect((blocks[0] as any).items).toHaveLength(2)
+  })
+
+  it('a continued item round-trips through the serializer (AGL-4197)', () => {
+    const blocks = parseMarkdownLite('- one\n  two\n- three')
+    expect(parseMarkdownLite(serializeMarkdownLite(blocks))).toEqual(blocks)
+  })
+
+  it('reads backticks as inline code only when asked (AGL-4197)', () => {
+    const source = 'Scope `https://x.example/auth` and `**raw**` text'
+    // Off by default: a site post and the visual editor keep their dialect.
+    expect(parseMarkdownInlines(source)).toEqual([
+      { type: 'text', text: 'Scope `https://x.example/auth` and `' },
+      { type: 'bold', text: 'raw' },
+      { type: 'text', text: '` text' },
+    ])
+    const inlines = parseMarkdownInlines(source, { inlineCode: true })
+    expect(inlines).toEqual([
+      { type: 'text', text: 'Scope ' },
+      { type: 'code', text: 'https://x.example/auth' },
+      { type: 'text', text: ' and ' },
+      { type: 'code', text: '**raw**' },
+      { type: 'text', text: ' text' },
+    ])
+    expect(serializeMarkdownInlines(inlines)).toBe(source)
+    expect(markdownInlinesToText(inlines)).toBe(
+      'Scope https://x.example/auth and **raw** text',
+    )
+  })
+
+  it('threads inline code into headings, lists and tables (AGL-4197)', () => {
+    const blocks = parseMarkdownLite(
+      '## The `rating` value\n\n- use `{x}`\n\n| a | b |\n| --- | --- |\n| `c` | d |',
+      { inlineCode: true },
+    )
+    expect((blocks[0] as any).inlines[1]).toEqual({
+      type: 'code',
+      text: 'rating',
+    })
+    expect((blocks[1] as any).items[0][1]).toEqual({
+      type: 'code',
+      text: '{x}',
+    })
+    expect((blocks[2] as any).rows[0][0]).toEqual([{ type: 'code', text: 'c' }])
+  })
+
   it('a fence holding `1. ` is untouched by the interrupt rule (AGL-1320)', () => {
     // Fences are cut out before chunking, so nothing inside one is ever
     // scanned for markers — intro line or not.
