@@ -108,4 +108,30 @@ class AddOnsTest {
     val plain = productDraftOf("p2", stored - "modifierGroups")
     assertNull(productSaveJson(plain, stored - "modifierGroups")["modifierGroups"])
   }
+
+  @Test
+  fun aChoicesPictureNoteAndComboReadAndSaveAsTheConsoleWritesThem() {
+    val draft = productDraftOf("p1", stored)
+    val kit = draft.addOns[0].choices[1]
+    assertEquals("Full wall ×2\nRoller bag", kit.includes)
+    assertEquals("https://cdn.example/wall.jpg", draft.addOns[0].choices[0].imageUrl)
+    val long = "x".repeat(200)
+    val edited = draft.copy(addOns = listOf(draft.addOns[0].copy(choices = listOf(
+      draft.addOns[0].choices[0].copy(imageUrl = " ", note = "  $long  "),
+      kit.copy(includes = "  Full wall ×2 \n\n${(1..14).joinToString("\n") { "Item $it" }}", note = "Two walls and a bag"),
+    ))))
+    val options = productSaveJson(edited, stored)["modifierGroups"]!!.jsonArray[0].jsonObject["options"]!!.jsonArray
+    val full = options[0].jsonObject
+    assertNull(full["imageUrl"])
+    assertEquals(160, full["note"]!!.jsonPrimitive.content.length)
+    val combo = options[1].jsonObject
+    val items = combo["includes"]!!.jsonArray.map { it.jsonPrimitive.content }
+    assertEquals(12, items.size)
+    assertEquals("Full wall ×2", items[0])
+    assertEquals("Two walls and a bag", combo["note"]!!.jsonPrimitive.content)
+    val cleared = edited.copy(addOns = listOf(edited.addOns[0].copy(choices = edited.addOns[0].choices.map { it.copy(note = "", includes = "") })))
+    val after = productSaveJson(cleared, stored)["modifierGroups"]!!.jsonArray[0].jsonObject["options"]!!.jsonArray[1].jsonObject
+    assertNull(after["includes"])
+    assertNull(after["note"])
+  }
 }

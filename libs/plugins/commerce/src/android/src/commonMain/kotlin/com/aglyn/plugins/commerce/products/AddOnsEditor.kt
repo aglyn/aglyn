@@ -5,6 +5,7 @@ import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.fillMaxWidth
+import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.text.KeyboardOptions
@@ -20,18 +21,25 @@ import androidx.compose.material3.TextButton
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
+import androidx.compose.runtime.remember
 import androidx.compose.runtime.saveable.rememberSaveable
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.draw.clip
 import androidx.compose.ui.platform.testTag
+import androidx.compose.ui.semantics.contentDescription
 import androidx.compose.ui.semantics.heading
 import androidx.compose.ui.semantics.semantics
 import androidx.compose.ui.text.input.KeyboardType
 import androidx.compose.ui.unit.dp
 import com.aglyn.plugins.commerce.pos.POS_MAX_MODIFIER_GROUPS
 import com.aglyn.plugins.commerce.pos.POS_MAX_MODIFIER_OPTIONS
+import com.aglyn.core.mediaPreviewUrl
+import com.aglyn.pluginhost.NativePluginContext
+import com.aglyn.site.media.MediaChooserDialog
 import com.aglyn.ui.AglynIcons
+import com.aglyn.ui.RemoteImage
 import com.aglyn.ui.WithTooltip
 import com.aglyn.ui.space
 
@@ -41,7 +49,7 @@ import com.aglyn.ui.space
  * on the website or kept to the register.
  */
 @Composable
-internal fun AddOnsFields(draft: ProductDraft, change: (ProductDraft) -> Unit) {
+internal fun AddOnsFields(context: NativePluginContext, draft: ProductDraft, change: (ProductDraft) -> Unit) {
   fun setGroups(groups: List<AddOnGroupDraft>) = change(draft.copy(addOns = groups))
   fun setGroup(index: Int, group: AddOnGroupDraft) = setGroups(draft.addOns.toMutableList().also { it[index] = group })
   Text("Add-ons", style = MaterialTheme.typography.titleSmall, modifier = Modifier.semantics { heading() })
@@ -77,7 +85,7 @@ internal fun AddOnsFields(draft: ProductDraft, change: (ProductDraft) -> Unit) {
           Switch(group.online == true, { setGroup(groupIndex, group.copy(online = it)) }, Modifier.testTag("addon-group-online-$groupIndex"))
         }
         group.choices.forEachIndexed { choiceIndex, choice ->
-          ChoiceFields(draft, choice, "$groupIndex-$choiceIndex", { setGroup(groupIndex, group.copy(choices = group.choices.toMutableList().also { list -> list[choiceIndex] = it })) }) {
+          ChoiceFields(context, draft, choice, "$groupIndex-$choiceIndex", { setGroup(groupIndex, group.copy(choices = group.choices.toMutableList().also { list -> list[choiceIndex] = it })) }) {
             setGroup(groupIndex, group.withChoiceRemoved(choiceIndex))
           }
         }
@@ -109,8 +117,11 @@ internal fun AddOnsFields(draft: ProductDraft, change: (ProductDraft) -> Unit) {
 
 /** One choice: its name and what it adds, its prices by size where the product has sizes, and remove. */
 @Composable
-private fun ChoiceFields(draft: ProductDraft, choice: AddOnChoiceDraft, tag: String, update: (AddOnChoiceDraft) -> Unit, remove: () -> Unit) {
+private fun ChoiceFields(context: NativePluginContext, draft: ProductDraft, choice: AddOnChoiceDraft, tag: String, update: (AddOnChoiceDraft) -> Unit, remove: () -> Unit) {
   var byVariantOpen by rememberSaveable(choice.id) { mutableStateOf(false) }
+  var cardOpen by rememberSaveable("card-" + choice.id) { mutableStateOf(false) }
+  var choosing by remember { mutableStateOf(false) }
+  val label = choice.name.ifBlank { "this choice" }
   Column(verticalArrangement = Arrangement.spacedBy(space(0.5f))) {
     Row(horizontalArrangement = Arrangement.spacedBy(space(1f)), verticalAlignment = Alignment.CenterVertically) {
       OutlinedTextField(
@@ -124,8 +135,13 @@ private fun ChoiceFields(draft: ProductDraft, choice: AddOnChoiceDraft, tag: Str
       val label = "Remove ${choice.name.ifBlank { "choice" }}"
       WithTooltip(label) { IconButton(onClick = remove) { Icon(AglynIcons.named("close"), contentDescription = label) } }
     }
+    Row(horizontalArrangement = Arrangement.spacedBy(space(1f))) {
+      if (draft.variants.size > 1) {
+        TextButton(onClick = { byVariantOpen = !byVariantOpen }, modifier = Modifier.testTag("addon-choice-by-variant-$tag")) { Text(priceByLabel(draft.options)) }
+      }
+      TextButton(onClick = { cardOpen = !cardOpen }, modifier = Modifier.testTag("addon-choice-card-$tag")) { Text("Picture & combo") }
+    }
     if (draft.variants.size > 1) {
-      TextButton(onClick = { byVariantOpen = !byVariantOpen }, modifier = Modifier.testTag("addon-choice-by-variant-$tag")) { Text(priceByLabel(draft.options)) }
       if (byVariantOpen) {
         Column(Modifier.padding(start = space(2f)), verticalArrangement = Arrangement.spacedBy(space(0.5f))) {
           Text(
@@ -143,6 +159,41 @@ private fun ChoiceFields(draft: ProductDraft, choice: AddOnChoiceDraft, tag: Str
         }
       }
     }
+    if (cardOpen) {
+      // The choice's picture card (AGL-4205), as the console's "Picture & combo" has it.
+      Column(Modifier.padding(start = space(2f)), verticalArrangement = Arrangement.spacedBy(space(1f))) {
+        Text(
+          "What “$label” shows on its picture card. List what it includes to make it a combo: shoppers can open the list on its card.",
+          style = MaterialTheme.typography.bodySmall,
+          color = MaterialTheme.colorScheme.onSurfaceVariant,
+        )
+        Row(horizontalArrangement = Arrangement.spacedBy(space(1f)), verticalAlignment = Alignment.CenterVertically) {
+          if (choice.imageUrl.isNotBlank()) {
+            RemoteImage(mediaPreviewUrl(choice.imageUrl, context.api.origin, context.hostId, 160), null, Modifier.size(56.dp).clip(MaterialTheme.shapes.small), icon = "image")
+          }
+          val verb = if (choice.imageUrl.isNotBlank()) "Change" else "Choose"
+          OutlinedButton(onClick = { choosing = true }, modifier = Modifier.testTag("addon-choice-picture-$tag").semantics { contentDescription = "$verb the picture for $label" }) {
+            Text(if (choice.imageUrl.isNotBlank()) "Change picture" else "Choose picture")
+          }
+          if (choice.imageUrl.isNotBlank()) {
+            TextButton(onClick = { update(choice.copy(imageUrl = "")) }, modifier = Modifier.semantics { contentDescription = "Remove the picture for $label" }) { Text("Remove") }
+          }
+        }
+        OutlinedTextField(
+          choice.note, { update(choice.copy(note = it.take(PRODUCT_CHOICE_NOTE_MAX))) }, label = { Text("Note") }, placeholder = { Text("Blocks wind on one side") },
+          singleLine = true, modifier = Modifier.fillMaxWidth().testTag("addon-choice-note-$tag"),
+        )
+        OutlinedTextField(
+          choice.includes, { update(choice.copy(includes = it)) }, label = { Text("Combo: what it includes") },
+          placeholder = { Text("Full wall ×2\nSteel weights ×4\nRoller bag") }, minLines = 2,
+          supportingText = { Text("One item per line, up to $PRODUCT_COMBO_MAX_ITEMS. Leave it empty for a single choice.") },
+          modifier = Modifier.fillMaxWidth().testTag("addon-choice-includes-$tag"),
+        )
+      }
+    }
+  }
+  if (choosing) {
+    MediaChooserDialog(context, onChoose = { chosen -> choosing = false; update(choice.copy(imageUrl = chosen.reference)) }, onDismiss = { choosing = false }, kind = "image")
   }
 }
 
