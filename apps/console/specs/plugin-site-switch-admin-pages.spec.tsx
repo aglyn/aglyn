@@ -216,8 +216,10 @@ describe('AI on the WORKSPACE’s Plugins page', () => {
     expect(toggle?.checked).toBe(true)
     expect(toggle?.disabled).toBe(true)
     expect(document.body.textContent).toContain(
-      'a site switches it off for itself, on that site’s Admin › Plugins page',
+      'a site can also switch it off for itself, on that site’s Admin › Plugins page',
     )
+    // Which sites run it is chosen on this page too (AGL-4047).
+    expect(document.body.textContent).toContain('Runs on')
   })
 })
 

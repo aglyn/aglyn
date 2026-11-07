@@ -112,6 +112,7 @@ function collectionRef(path: string, filters: Array<[string, string, any]> = [])
     doc: (id: string) => docRef(`${path}/${id}`),
     where: (field: string, op: string, value: unknown) =>
       collectionRef(path, [...filters, [field, op, value]]),
+    select: () => collectionRef(path, filters),
     count: () => ({ get: async () => ({ data: () => ({ count: matches().length }) }) }),
     get: async () => {
       const docs = matches().map((key) => docRef(key).__snapshot())
@@ -244,6 +245,28 @@ describe('planning a site transfer', () => {
     expect(plan.facts.collaboratorsLosingAccess).toBe(1)
     expect(plan.fromOrgName).toBe('Old Co')
     expect(plan.toOrgName).toBe('New Co')
+  })
+
+  it('says which media stop showing: the files shared with all sites except some', async () => {
+    // AGL-4047: the sweep that runs when the site leaves takes it off every
+    // file shared that way, so those are not files the site "keeps showing".
+    seed({
+      'orgs/from/media/m3': { visibleTo: ['host:h1'], scopeMode: 'allExcept', scopeExcept: ['host:h2'] },
+      'orgs/from/media/m4': { visibleTo: ['host:h2'], scopeMode: 'allExcept', scopeExcept: ['host:h1'] },
+    })
+    const plan = await planHostTransfer({ hostId: 'h1', toOrgId: 'to' })
+    expect(plan.facts.mediaStaying).toBe(2)
+    expect(plan.warnings).toEqual(
+      expect.arrayContaining([
+        expect.stringMatching(/^1 media file\(s\) stay in the old organization's library\. The site keeps showing them/),
+        expect.stringMatching(/^1 media file\(s\) the old organization shares with all of its sites except some stop showing on this site/),
+      ]),
+    )
+  })
+
+  it('says nothing about leaving media when no file is shared that way', async () => {
+    const plan = await planHostTransfer({ hostId: 'h1', toOrgId: 'to' })
+    expect(plan.warnings.some((warning) => /except some/.test(warning))).toBe(false)
   })
 
   it('refuses a move to the organization the site is already in', async () => {

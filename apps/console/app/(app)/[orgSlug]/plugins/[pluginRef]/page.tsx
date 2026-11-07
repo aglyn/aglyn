@@ -35,6 +35,7 @@ import DashboardLayout from '../../../../../components/layouts/dashboard.layout'
 import PluginConfigCards from '../../../../../components/plugin-config-card.component'
 import PluginDependenciesCard from '../../../../../components/plugin-dependencies-card.component'
 import PluginDisableCascadeDialog from '../../../../../components/plugin-disable-cascade-dialog.component'
+import PluginRunsOnField from '../../../../../components/plugin-runs-on-field.component'
 import PluginWidgetSlot from '../../../../../components/plugin-widget-slot.component'
 import { CONTENT_MAX_WIDTH } from '../../../../../constants/shared'
 import { docsHelp } from '../../../../../constants/docs-links'
@@ -86,7 +87,7 @@ const OrgPluginInstallation: NextPageWithLayout<Record<string, never>> = () => {
   )
   const listingId = firstParty ? '' : pluginRef
 
-  const { hosts } = useOrgHosts(
+  const { hosts, ready: hostsReady } = useOrgHosts(
     firestore,
     user?.uid,
     loading ? undefined : (orgId || null),
@@ -104,6 +105,28 @@ const OrgPluginInstallation: NextPageWithLayout<Record<string, never>> = () => {
       ),
     // eslint-disable-next-line react-hooks/exhaustive-deps
     [hostsKey],
+  )
+  // The same sites with their plugin lists, for "Runs on" (AGL-4047). Keyed
+  // on the lists too, so a site switching a plugin off for itself shows here.
+  const runsOnKey = ((hosts as Array<{ $id: string; disabledPlugins?: unknown; enabledPlugins?: unknown }>) ?? [])
+    .map((host) => `${host.$id}:${JSON.stringify(host.disabledPlugins ?? null)}:${JSON.stringify(host.enabledPlugins ?? null)}`)
+    .join('|')
+  const runsOnSites = useMemo(
+    () =>
+      ((hosts as Array<{
+        $id: string
+        displayName?: string
+        subdomain?: string
+        disabledPlugins?: string[]
+        enabledPlugins?: string[]
+      }>) ?? []).map((host) => ({
+        id: host.$id,
+        name: host.displayName || host.subdomain || host.$id,
+        disabledPlugins: host.disabledPlugins ?? null,
+        enabledPlugins: host.enabledPlugins ?? null,
+      })),
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+    [hostsKey, runsOnKey],
   )
 
   // The org pin, plus every site's pin. Same fan-in as the listing page and
@@ -298,11 +321,12 @@ const OrgPluginInstallation: NextPageWithLayout<Record<string, never>> = () => {
                         'is what sites are built out of, so it cannot be ' +
                         'turned off.'
                       : firstParty.alwaysOnForWorkspace
-                        ? 'On for this organization and every site in it. It ' +
-                          'has no switch here — a site switches it off for ' +
-                          'itself, on that site’s Admin › Plugins page.'
-                        : 'Every site in this organization, while it is ' +
-                          'switched on here.'}
+                        ? 'On for this organization. It has no switch here: ' +
+                          'choose below which sites run it, and a site can ' +
+                          'also switch it off for itself, on that site’s ' +
+                          'Admin › Plugins page.'
+                        : 'The sites chosen below, while it is switched on ' +
+                          'here.'}
                   </Typography>
                   {/*
                     The switch, on the page about the thing it switches. It
@@ -350,6 +374,26 @@ const OrgPluginInstallation: NextPageWithLayout<Record<string, never>> = () => {
                     {permissionRefusalText('org.settings')}
                   </Typography>
                 ) : null}
+                {/* Which sites (AGL-4047): read from and written into each
+                    site's own plugin list, so a site left out can still
+                    turn it back on for itself. */}
+                {firstParty.alwaysOn ? null : (
+                  <PluginRunsOnField
+                    orgId={orgId}
+                    pluginId={firstParty.id}
+                    org={org}
+                    sites={runsOnSites}
+                    sitesReady={hostsReady}
+                    onForWorkspace={
+                      switchboard.ready
+                        ? switchboard.isOn(pluginRef) ||
+                          isLockedOnForWorkspace(pluginRef)
+                        : null
+                    }
+                    permissionsLoaded={orgPermissions.loaded}
+                    canChange={orgPermissions.can('org.settings')}
+                  />
+                )}
                 {planState === 'blocked' ? (
                   <Alert severity="info" variant="outlined">
                     {`Switching ${firstParty.label} on does not put it on ` +

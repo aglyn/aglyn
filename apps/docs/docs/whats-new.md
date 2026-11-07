@@ -42,6 +42,8 @@ for the how-to.
   — the same choice for a file, a selection of files, or a folder and what is inside it.
 - **Run an org automation on all sites except some.** [Org automations](marketing-and-automation/workflows-and-actions/org-automations.md#create-one)
   — tick the sites to leave out, and it runs on every other site, including any site you add later.
+- **Run a built-in plugin on all sites except some.** [Where a plugin runs](guides/install-your-first-plugin.md#where-a-plugin-runs)
+  — on a plugin's page, tick the sites to leave out, and every other site runs it, including any site you add later.
 - **Four plans: Free, Starter, Pro and Custom.** [Billing & plans](workspace-and-billing/billing-and-plans/overview.md#tiers--entitlements)
   — Pro is now the full platform: everything that was on Business, including the API
   and webhooks, A/B testing, multilingual sites, scheduled publishing, recurring billing,
