@@ -505,6 +505,7 @@ struct QuoteScreen: View {
       if !gaps.isEmpty { payLinkNotice(gaps, state: state) }
       payLinkSection(order)
       QuoteProofsSections(context: context, order: order, quoteID: quoteID, model: proofsModel)
+      QuoteMessagesSection(context: context, order: order, quoteID: quoteID) { text, tone in notice = (text, tone) }
       customerSection(order.quote)
       if !proofOnly {
         Section("Items") {

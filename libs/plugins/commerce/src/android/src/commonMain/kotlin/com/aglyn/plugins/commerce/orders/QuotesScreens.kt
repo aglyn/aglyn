@@ -299,6 +299,7 @@ private fun QuoteDetail(
     if (gaps.isNotEmpty()) PayLinkNotice(context, gaps, paymentsState)
     QuotePayLinkSection(context, order, quoteId, onNotice)
     QuoteProofsSection(context, order, quoteId, onNotice)
+    QuoteMessagesSection(context, order, quoteId, onNotice)
     SectionCard("Customer") { CustomerLines(order.quote) }
     if (!proofOnly) {
       SectionCard("Items") {

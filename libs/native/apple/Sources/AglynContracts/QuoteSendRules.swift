@@ -135,3 +135,23 @@ public func quotePayLinkWords(_ order: HostOrder?) -> QuotePayLinkWords {
     name: proofOnly ? "proof link" : "pay link", title: proofOnly ? "Proof link" : "Pay link",
     opens: proofOnly ? "proof" : "quote", explanation: explanation)
 }
+
+/// The longest reply a quote's conversation takes (`QUOTE_MESSAGE_MAX`).
+public let quoteMessageMax = 5_000
+
+/// Who a reply from the quote goes to: the customer's email, else where it was last emailed (`quoteReplyRecipient`).
+public func quoteReplyRecipient(_ order: HostOrder?) -> String { quoteSendPrefill(order) }
+
+/// Why the business can't reply to the quote's customer now, as the console says it (`quoteReplyRefusal` and
+/// `quoteReplyRefusalMessage`); nil when it can. A paid quote still takes replies.
+public func quoteReplyRefusal(_ order: HostOrder?) -> String? {
+  guard let order, order.channel == .quote, order.quote != nil else { return "Unknown quote" }
+  let to = quoteReplyRecipient(order)
+  if to.isEmpty {
+    return "This quote has no customer email, so there is nobody to reply to. Add their email to the quote first."
+  }
+  if to.count > 320 || to.range(of: #"^[^\s@]+@[^\s@]+\.[^\s@]+$"#, options: .regularExpression) == nil {
+    return "The customer email on this quote isn’t a valid address. Fix it on the quote first."
+  }
+  return nil
+}
