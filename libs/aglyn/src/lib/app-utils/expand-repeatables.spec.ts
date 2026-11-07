@@ -18,7 +18,10 @@
 import {
   expandRepeatables,
   hasRepeatableNodes,
+  REPEAT_CONNECTION_PROP,
+  repeatKey,
   repeatKeys,
+  withoutRepeatDirective,
 } from './expand-repeatables'
 
 const baseNodes = () =>
@@ -341,5 +344,169 @@ describe('repeatKeys', () => {
     expect(repeatKeys({})).toEqual([])
     expect(repeatKeys({ a: null } as any)).toEqual([])
     expect(repeatKeys(undefined)).toEqual([])
+  })
+})
+
+/**
+ * A plugin connection's record is the second thing an element repeats over
+ * (AGL-4212): `repeatConnection` names it, and every repeat question keeps
+ * going through `repeatKey`, which prefixes it so it never names a dataset's
+ * rows.
+ */
+describe('repeatKey over a plugin connection (AGL-4212)', () => {
+  it('reads repeatConnection, prefixed, when no dataset is named', () => {
+    expect(
+      repeatKey({ props: { repeatConnection: ' aglyn.google-reviews/google ' } }),
+    ).toBe('connection:aglyn.google-reviews/google')
+    expect(
+      repeatKey({ props: { repeatConnection: 'aglyn.google-reviews/google/fields' } }),
+    ).toBe('connection:aglyn.google-reviews/google/fields')
+  })
+
+  it('keeps the dataset when a node names both', () => {
+    expect(
+      repeatKey({
+        props: { repeatDataset: 'Team', repeatConnection: 'aglyn.google-reviews/google' },
+      }),
+    ).toBe('Team')
+  })
+
+  it('names nothing for an empty or non-text value', () => {
+    for (const repeatConnection of ['', '  ', 7, null, {}]) {
+      expect(repeatKey({ props: { repeatConnection } })).toBe('')
+    }
+  })
+
+  it('is a directive the expansion consumes, and repeatKeys lists it', () => {
+    const nodes = baseNodes()
+    delete nodes.list.props.repeatDataset
+    nodes.list.props[REPEAT_CONNECTION_PROP] = 'aglyn.google-reviews/google'
+    expect(repeatKeys(nodes)).toEqual(['connection:aglyn.google-reviews/google'])
+    expect(hasRepeatableNodes(nodes)).toBe(true)
+    expect(withoutRepeatDirective(nodes.list).props).toEqual({})
+    const result = expandRepeatables(nodes, {
+      'connection:aglyn.google-reviews/google': team,
+    })
+    const list = result['list'] as any
+    expect(list.props[REPEAT_CONNECTION_PROP]).toBeUndefined()
+    expect(list.nodes).toHaveLength(2)
+    expect((result[(result[list.nodes[1]] as any).nodes[0]] as any).props.children).toBe(
+      'Grace — Admiral',
+    )
+  })
+
+  it('renders no copies when the rows answer nothing under the key', () => {
+    const nodes = baseNodes()
+    delete nodes.list.props.repeatDataset
+    nodes.list.props[REPEAT_CONNECTION_PROP] = 'aglyn.google-reviews/google'
+    expect((expandRepeatables(nodes, { Team: team })['list'] as any).nodes).toEqual([])
+  })
+})
+
+/**
+ * `hideUnless` / `hideIf` bound to an `{{item.*}}` token are read per copy
+ * (AGL-4212): a review's "owner reply" block (a caption and the reply) is
+ * drawn on the reviews that have a reply and left out of the rest.
+ */
+describe('visibility bound to a record (AGL-4212)', () => {
+  const reviewNodes = () =>
+    ({
+      root: { $id: 'root', componentId: 'div', nodes: ['list'] },
+      list: {
+        $id: 'list',
+        componentId: 'muiStack',
+        props: { repeatConnection: 'aglyn.google-reviews/google' },
+        nodes: ['card'],
+      },
+      card: {
+        $id: 'card',
+        componentId: 'muiCard',
+        parentId: 'list',
+        nodes: ['text', 'reply'],
+      },
+      text: {
+        $id: 'text',
+        componentId: 'muiTypography',
+        parentId: 'card',
+        props: { children: '{{item.text}}' },
+      },
+      reply: {
+        $id: 'reply',
+        componentId: 'muiBox',
+        parentId: 'card',
+        props: { hideUnless: '{{item.reply}}' },
+        nodes: ['caption', 'replyText'],
+      },
+      caption: {
+        $id: 'caption',
+        componentId: 'muiTypography',
+        parentId: 'reply',
+        props: { children: 'Response from the owner' },
+      },
+      replyText: {
+        $id: 'replyText',
+        componentId: 'muiTypography',
+        parentId: 'reply',
+        props: { children: '{{item.reply}}' },
+      },
+    }) as any
+  const rows = {
+    'connection:aglyn.google-reviews/google': {
+      records: [
+        { $id: '0', text: 'Great service', reply: 'Thank you!' },
+        { $id: '1', text: 'Fine' },
+        { $id: '2', text: 'Okay', reply: '' },
+      ],
+    },
+  }
+  const cardsOf = (result: Record<string, any>) =>
+    (result['list'].nodes as string[]).map((id) => result[id])
+
+  it('drops the block and its subtree from a copy whose record leaves it empty', () => {
+    const result = expandRepeatables(reviewNodes(), rows) as Record<string, any>
+    const [first, second, third] = cardsOf(result)
+    expect(first.nodes).toEqual(['rep__list__0__text', 'rep__list__0__reply'])
+    expect(second.nodes).toEqual(['rep__list__1__text'])
+    expect(third.nodes).toEqual(['rep__list__2__text'])
+    expect(result['rep__list__1__caption']).toBeUndefined()
+    expect(result['rep__list__1__replyText']).toBeUndefined()
+    // Read, so not carried onto the copy that stayed.
+    expect(result['rep__list__0__reply'].props.hideUnless).toBeUndefined()
+    expect(result['rep__list__0__replyText'].props.children).toBe('Thank you!')
+  })
+
+  it('reads hideIf the other way round', () => {
+    const nodes = reviewNodes()
+    nodes.reply.props = { hideIf: '{{item.reply}}' }
+    const [first, second] = cardsOf(expandRepeatables(nodes, rows) as Record<string, any>)
+    expect(first.nodes).toEqual(['rep__list__0__text'])
+    expect(second.nodes).toEqual(['rep__list__1__text', 'rep__list__1__reply'])
+  })
+
+  it('reads a self-scoped copy, and a boolean or number field, the same way', () => {
+    const nodes = reviewNodes()
+    nodes.list.props = {}
+    nodes.card.props = {
+      repeatConnection: 'aglyn.google-reviews/google',
+      repeatSelf: true,
+      hideIf: '{{item.hidden}}',
+    }
+    const result = expandRepeatables(nodes, {
+      'connection:aglyn.google-reviews/google': {
+        records: [
+          { $id: '0', text: 'Shown', hidden: false },
+          { $id: '1', text: 'Hidden', hidden: true },
+          { $id: '2', text: 'Zero', hidden: 0 },
+        ],
+      },
+    }) as Record<string, any>
+    expect(result['list'].nodes).toEqual(['rep__card__0__card', 'rep__card__2__card'])
+  })
+
+  it('leaves a directive bound to anything else alone', () => {
+    const nodes = reviewNodes()
+    nodes.reply.props = { hideUnless: '{{prop.showReply}}' }
+    const [, second] = cardsOf(expandRepeatables(nodes, rows) as Record<string, any>)
+    expect(second.nodes).toEqual(['rep__list__1__text', 'rep__list__1__reply'])
   })
 })

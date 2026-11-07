@@ -17,6 +17,7 @@
 
 import { createContext } from 'react'
 import type { PluginConnectionRecordsPageData, PluginConnectionSiteRecord } from './plugin-connection-records'
+import type { PluginConnectionFieldTypes } from './plugin-connection-repeat'
 
 /*
  * DECLARED CONNECTIONS IN THE EDITOR (AGL-4196).
@@ -48,6 +49,22 @@ export interface EditorConnectionVariable {
   value: string | null
 }
 
+/**
+ * One declared connection an element can repeat over (AGL-4212): what the
+ * Attributes panel's picker lists, what a `repeatConnection` value's
+ * identity resolves to, and the fields its `{{item.*}}` tokens can name.
+ */
+export interface EditorConnectionRepeatable {
+  /** `<publisher handle>.<manifest id>`: what a `repeatConnection` value names. */
+  identity: string
+  listingId: string
+  connectionId: string
+  /** The connection's own label, as the site's connections card shows it. */
+  label: string
+  /** The declared type of each summary field and each item field. */
+  types: PluginConnectionFieldTypes
+}
+
 /** What the editor knows of the site's declared connections. */
 export interface EditorPluginConnections {
   /** The listing whose namespace `componentId` is in (`<identity>.<role>`), or `null`. */
@@ -56,6 +73,12 @@ export interface EditorPluginConnections {
   records: Readonly<Record<string, Readonly<Record<string, PluginConnectionSiteRecord>>>>
   /** Every summary field of every declared connection, as site variables. */
   variables: readonly EditorConnectionVariable[]
+  /**
+   * Every declared connection of a namespaced install that writes a record,
+   * for a repeat over it (AGL-4212). Absent from a provider that predates it,
+   * which offers no such repeat.
+   */
+  repeatables?: readonly EditorConnectionRepeatable[]
 }
 
 export const EditorPluginConnectionsContext = createContext<EditorPluginConnections | undefined>(undefined)

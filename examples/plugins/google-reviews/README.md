@@ -6,18 +6,26 @@ their own, so you never copy a review by hand again.
 
 ## What you get
 
-- **A "Google reviews" element** to place on any page. It shows:
-  - your average rating, in stars, and how many reviews you have on Google;
-  - a card for each review, with the reviewer's name, their stars, the date
-    and what they wrote, plus your reply when you have written one;
-  - a **Review us on Google** link, so happy customers can leave a review in
+- **Google reviews elements** for any page, made of your site's own building
+  blocks, so you can style every part of them in the Besigner:
+  - **Google reviews**: the whole section, ready to use. It holds your
+    average rating, a card for each review and a **Review us on Google** link.
+  - **Google rating**: your average rating, in stars, and how many reviews you
+    have on Google.
+  - **Google review cards**, **Google review list** and **Google review
+    carousel**: a card for each review, with the reviewer's name and image,
+    their stars, the date and what they wrote, plus your reply when you have
+    written one.
+  - **Review us on Google**: a link happy customers use to leave a review in
     one tap.
+  - **Google stars** and **Google reviewer image**, for building your own
+    review card.
 - **Your rating, review count and review link, for use anywhere on the site**,
   for example in a hero line or a footer (see *Use your rating in any text*
   below).
 
-Only real reviews are shown. Until your site is connected, and if no review
-matches your settings, the element shows nothing to visitors.
+Only real reviews are shown. Until your site is connected, the elements show
+nothing to visitors.
 
 ## Before you start
 
@@ -34,25 +42,36 @@ matches your settings, the element shows nothing to visitors.
    reviews you want to show).
 4. Your reviews arrive, usually within the hour. After that they refresh about
    every 6 hours, and **Sync now** fetches them straight away.
-5. In the Besigner, add the **Google reviews** element to a page and publish.
+5. In the Besigner, add the **Google reviews** element (or any of its parts)
+   to a page and publish.
 
-## Settings
+## Make it yours
 
-Select the element in the Besigner to change these:
+Each part is an ordinary element. Select it in the Besigner and change it like
+any other: its text, colors, fonts, borders, spacing and size in **Styles**,
+its position by dragging it, or delete it. Change one review card and every
+card changes with it.
 
-| Setting | What it does | Starts as |
-| --- | --- | --- |
-| How many reviews | How many review cards to show, newest first (up to 50) | 6 |
-| Minimum stars | Show only reviews with at least this many stars | Any rating |
-| Layout | **Grid** of cards, a **List** one under another, or a **Carousel** row visitors swipe sideways | Grid |
-| Reviewer image | Each reviewer's **Initials**, or their **Google photo** | Initials |
-| Show the rating summary? | Your average rating and review count above the cards | On |
-| Show your replies? | Your reply under a review, when you have written one on Google | On |
+- **How many reviews**: select the cards' list and set **Repeat limit**. It
+  starts at 6, newest first, and goes up to 50.
+- **Only good reviews**: on the same list, set **Repeat filter** to
+  `stars >= 4` (or 3, or 5).
+- **Layout**: start from the cards, list or carousel element, or change the
+  list's columns in **Styles**.
+- **Reviewer photos**: select a reviewer image and set **Show** to **Google
+  photo**. Reviewers who chose to stay anonymous on Google always show
+  initials.
+- **Your replies**: the reply block only appears on reviews you have replied
+  to. Delete it to hide replies altogether.
+- **Wording**: "Response from the owner", "Reviews from Google" and "Review us
+  on Google" are ordinary text you can change.
 
-The cards use your site's own colors, fonts and dark mode. Reviewers who
-chose to stay anonymous on Google always show initials. The rating summary
-always shows Google's own average and count, whatever you choose for minimum
-stars.
+The elements start with your site's own colors, fonts and dark mode. The
+rating always shows Google's own average and count, whatever you filter.
+
+Placed the one-piece **Google reviews** element before version 1.1.0? It keeps
+working with its own settings. To style each part, replace it with the new
+**Google reviews** element.
 
 ## Use your rating in any text
 

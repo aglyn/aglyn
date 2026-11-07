@@ -761,13 +761,13 @@ export const ASSIST_VIEWS: readonly AssistView[] = [
     match: /^\/[^/]+\/media(\/|$)/,
     screen: 'Media — images and files for this workspace.',
     plain: [
-      'Upload once here and use the file on any site in the workspace.',
+      'Upload once here and use the file on the sites it is shared with: all sites, the sites you choose, or all sites except the ones you leave out.',
       'If the file belongs to one site only, upload it on that site’s own Media page instead.',
       'Files are referenced by the pages that use them, so replacing a file changes it everywhere it appears.',
     ],
     technical: [
       'Route: /[orgSlug]/media. The per-site library is /[orgSlug]/hosts/[host]/media.',
-      'Workspace media is shared across every site in the workspace; site media is scoped to that site.',
+      'Workspace media reaches the sites each file or folder is shared with; shared with all sites except some, it reaches a new site automatically. Site media is scoped to that site.',
     ],
     actions: [
       orgAction(

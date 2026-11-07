@@ -21,6 +21,8 @@
 
 import { ComponentCategory, components, FEATURE_FLAG, FieldComponentType, NodeType } from '@aglyn/aglyn'
 import GoogleReviews from './element.js'
+import { ReviewerImage, Stars } from './parts.js'
+import { presets as partPresets, REVIEWER_IMAGE_ID, STARS_ID } from './presets.js'
 import { DEFAULT_SETTINGS } from './reviews.js'
 
 /**
@@ -106,7 +108,74 @@ export const schema = {
   ],
 }
 
-export const presets = [
+/**
+ * Stars (AGL-4212): what a composable review card draws its rating with.
+ * Persisted id; never rename.
+ */
+export const starsSchema = {
+  $id: STARS_ID,
+  pluginId: BUNDLE_ID,
+  displayName: 'Google stars',
+  description: 'Five stars, filled to a rating. Its color and size follow the Styles panel.',
+  category: ComponentCategory.DATA_DISPLAY,
+  icon: { path: 'M12,17.27L18.18,21L16.54,13.97L22,9.24L14.81,8.62L12,2L9.19,8.62L2,9.24L7.45,13.97L5.82,21L12,17.27Z' },
+  flags: { selfClosing: FEATURE_FLAG.ENABLED },
+  attributes: [
+    {
+      name: 'value',
+      label: 'Rating',
+      description: 'The rating to draw, 0 to 5. Inside a review it is the review\'s stars.',
+      component: FieldComponentType.TEXT_FIELD,
+    },
+    {
+      name: 'size',
+      label: 'Size',
+      component: FieldComponentType.SELECT,
+      options: [
+        { value: 'small', label: 'Small' },
+        { value: 'medium', label: 'Medium' },
+        { value: 'large', label: 'Large' },
+      ],
+    },
+  ],
+}
+
+/**
+ * Reviewer image (AGL-4212): a reviewer's initials or Google photo.
+ * Persisted id; never rename.
+ */
+export const reviewerImageSchema = {
+  $id: REVIEWER_IMAGE_ID,
+  pluginId: BUNDLE_ID,
+  displayName: 'Google reviewer image',
+  description: "A reviewer's initials, or the photo they use on Google. Anonymous reviewers always show initials.",
+  category: ComponentCategory.DATA_DISPLAY,
+  icon: {
+    path: 'M12,4A4,4 0 0,1 16,8A4,4 0 0,1 12,12A4,4 0 0,1 8,8A4,4 0 0,1 12,4M12,14C16.42,14 20,15.79 20,18V20H4V18C4,15.79 7.58,14 12,14Z',
+  },
+  flags: { selfClosing: FEATURE_FLAG.ENABLED },
+  attributes: [
+    {
+      name: 'show',
+      label: 'Show',
+      description: "The reviewer's initials, or the profile photo they use on Google.",
+      component: FieldComponentType.SELECT,
+      options: [
+        { value: 'initials', label: 'Initials' },
+        { value: 'photo', label: 'Google photo' },
+      ],
+    },
+    { name: 'name', label: 'Reviewer name', component: FieldComponentType.TEXT_FIELD },
+    { name: 'photo', label: 'Photo address', component: FieldComponentType.TEXT_FIELD },
+  ],
+}
+
+/**
+ * The one-piece element's preset, as v1.0.0 placed it. No longer offered
+ * (AGL-4212): the Elements panel offers the composable presets instead, and
+ * pages that already place the element keep rendering it.
+ */
+export const legacyPresets = [
   {
     $id: `${BUNDLE_ID}:${COMPONENT_ID}`,
     type: NodeType.PRESET,
@@ -140,8 +209,12 @@ export const presets = [
  * so the publish verifier reads exactly what it registers and holds it to the
  * manifest's `contributes`. A second run registers nothing twice.
  */
+export const presets = partPresets
+
 export function register() {
   if (components.getSchema(COMPONENT_ID)) return
   components.registerComponent(GoogleReviews, { ...schema, $id: 'aglyn.google-reviews.reviews' })
+  components.registerComponent(Stars, { ...starsSchema, $id: 'aglyn.google-reviews.stars' })
+  components.registerComponent(ReviewerImage, { ...reviewerImageSchema, $id: 'aglyn.google-reviews.reviewer-image' })
   components.registerPreset(presets)
 }

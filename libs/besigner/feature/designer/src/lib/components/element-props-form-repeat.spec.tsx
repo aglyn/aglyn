@@ -135,6 +135,15 @@ describe('buildRepeatFields', () => {
     })
   })
 
+  it('draws a source with nothing to pick only where its key is already set (AGL-4212)', () => {
+    const idle: RepeatSource = { ...TEST_SOURCE, id: 'idle', keyProp: 'repeatConnection', offered: false }
+    const [, key] = build(false, [TEST_SOURCE, idle])
+    expect(key['name']).toBe('repeatConnection')
+    expect(key['condition']).toEqual({ when: 'repeatConnection', isNotEmpty: true })
+    // An offered source's field has no such condition.
+    expect(build(false, [{ ...idle, offered: true }])[0]['condition']).toBeUndefined()
+  })
+
   it('gives the scope a default option that can actually persist', () => {
     const scope = build(true).find((field) => field['name'] === 'repeatSelf')
     // `''` cannot persist, so an author who chose "This element" could never

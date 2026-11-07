@@ -1247,6 +1247,10 @@ export function isNodeHiddenByHost(
   return namesHostToken(hideUnless) && readYesNoValue(resolveHostTokens(String(hideUnless), host)) === false
 }
 
+/** A directive bound to a repeat's record, like `{{item.reply}}` (AGL-4212). */
+const namesItemToken = (value: unknown): boolean =>
+  typeof value === 'string' && /\{\{\s*item\./.test(value)
+
 /**
  * The node minus its visibility directives — they are compose-time
  * instructions, and `Leaf` spreads whatever survives onto the component,
@@ -1254,13 +1258,16 @@ export function isNodeHiddenByHost(
  * declared one and stayed.
  *
  * One bound to a `{{host.*}}` token stays: the site's values fill in later,
- * and {@link pruneHostHiddenNodes} reads it then.
+ * and {@link pruneHostHiddenNodes} reads it then. So does one bound to an
+ * `{{item.*}}` token: a repeat's expansion reads it against each record,
+ * after this graft (AGL-4212).
  */
 function withoutVisibilityDirectives<N extends AglynNodeSchema>(node: N): N {
   if (!hasVisibilityDirective(node?.props)) return node
   const props = { ...(node.props as Record<string, unknown>) }
-  if (!namesHostToken(props[NODE_HIDE_IF_PROP])) delete props[NODE_HIDE_IF_PROP]
-  if (!namesHostToken(props[NODE_HIDE_UNLESS_PROP])) delete props[NODE_HIDE_UNLESS_PROP]
+  const deferred = (value: unknown) => namesHostToken(value) || namesItemToken(value)
+  if (!deferred(props[NODE_HIDE_IF_PROP])) delete props[NODE_HIDE_IF_PROP]
+  if (!deferred(props[NODE_HIDE_UNLESS_PROP])) delete props[NODE_HIDE_UNLESS_PROP]
   return { ...node, props: props as N['props'] }
 }
 
