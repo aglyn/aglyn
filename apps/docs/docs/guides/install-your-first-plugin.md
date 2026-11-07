@@ -240,6 +240,8 @@ editor, published pages and the API — and switching it back on restores it.
 - A few cannot be switched off at all, because sites are built out of them.
 - **AI** and **Forms** have no workspace switch: they stay on for the workspace, and a
   site switches them off for itself — see [A plugin on one site](#plugin-on-one-site).
+  Their page's **Runs on** can leave sites out from the workspace too — see
+  [Where a plugin runs](#where-a-plugin-runs).
 - Switching off a plugin that another one depends on asks first, and names what else
   will go with it.
 
@@ -254,9 +256,42 @@ plugin's listing.
 ### Where a plugin runs {#where-a-plugin-runs}
 
 The **Where it runs** card on a plugin's page answers which of your sites have it. A
-built-in plugin has a single switch: on, it runs on every site in the workspace; off, on
-none. A marketplace plugin runs on the sites it was [installed to](#step-4-targeting) —
+marketplace plugin runs on the sites it was [installed to](#step-4-targeting) —
 **All sites**, including ones you add later, or the sites you picked.
+
+A built-in plugin has the workspace switch, and under it **Runs on**:
+
+| Choice | What it means |
+| --- | --- |
+| **All sites** | Every site in the workspace, including sites you add later. |
+| **All sites except…** | Tick the sites to leave out. Every other site runs it, including sites you add later. |
+
+Press **Save**. The line beside it says how many sites the plugin comes off, and how
+many it comes back on for. Switched off for the workspace, a plugin runs on no site,
+so **Runs on** stays off until you switch it on.
+
+A site left out is switched off exactly as if that site had switched the plugin off
+itself, on its **Admin → Plugins** page, so:
+
+- **A site left out can turn it back on for itself.** Anyone holding **Manage site
+  settings** on that site, which its admins hold by default, can switch it on there.
+  **Runs on** then counts that site as in.
+- A site that switched the plugin off for itself shows here as left out, and choosing
+  **All sites** turns it back on there.
+- **Selected sites** is not offered, because a site you add later would get the
+  plugin anyway.
+- You can't leave every site out; switch the plugin off for the workspace instead.
+- Where a plugin on a site needs the one you are leaving out — **User Accounts** needs
+  **Commerce** — saving is refused, naming the site. Switch the other plugin off on that
+  site first, or keep the site in.
+- **User Accounts** still runs only on the sites that turned it on. Leaving a site out
+  keeps it off there even if that site turned it on.
+- The **Components** library runs on every site and can't be left out.
+
+Changing **Runs on** takes the **Organization settings** permission, which the
+workspace's owners and admins hold by default, and **Manage site settings** on each site
+it switches the plugin on or off for. Without them, the field stays off and says which
+permission it takes.
 
 ### Permissions & data {#permissions-and-data}
 
