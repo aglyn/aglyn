@@ -725,7 +725,13 @@ private fun Block(
       }
     }
     // An actions block whose every item is hidden by its `when` draws no card at all, never an empty one.
-    else -> if (block.type != "actions" || footer != null || block.raw.arr("items").mapNotNull { ActionSpec.parse(it) }.any { ScreenValues.condition(it.whenCondition, context) }) SectionCard(title) {
+    // An actions or links block whose every item is hidden draws nothing, not an empty card (iOS's empty section).
+    else -> if (footer != null || when (block.type) {
+        "actions" -> block.raw.arr("items").mapNotNull { ActionSpec.parse(it) }.any { ScreenValues.condition(it.whenCondition, context) }
+        "links" -> block.raw.arr("items").any { ScreenValues.condition(it.str("when"), context) && it.str("screen") != null }
+        else -> true
+      }
+    ) SectionCard(title) {
       Column(Modifier.fillMaxWidth()) {
         when (block.type) {
           "fields" -> FieldsBlock(block, context, copy)
