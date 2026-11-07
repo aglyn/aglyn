@@ -300,6 +300,14 @@ fun SubmissionDetail(context: NativePluginContext, hostId: String, submissionId:
           }
         }
         row.requestLabel?.let { StatusChip(it, StatusTone.INFO, Modifier.testTag("submission-request")) }
+        // What other plugins do with it (the console's `inboxSubmissionActions` zone): commerce's Start a quote on a
+        // quote request. The zone names no plugin; each widget reads the submission from its props.
+        (row.hostId ?: context.hostId)?.let { siteId ->
+          com.aglyn.pluginhost.SlotWidgets(
+            context, INBOX_SUBMISSION_ACTIONS_ZONE,
+            props = mapOf("hostId" to siteId, "submissionId" to row.id, "requestKind" to row.requestKind.orEmpty(), "formName" to row.formName),
+          )
+        }
         SectionCard("Message", Modifier.fillMaxWidth()) {
           if (row.fields.isEmpty()) Text("This message has no fields.", color = MaterialTheme.colorScheme.onSurfaceVariant)
           row.fields.forEach { (key, value) -> PropertyRow(key, value) }

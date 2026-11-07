@@ -21,7 +21,7 @@ import {
   CRM_COLLECTIONS,
   type CrmTask,
   type CrmTaskPicklists,
-  crmScopeTokens,
+  crmScopeFields,
   crmTaskListFields,
   crmTaskStatusWrite,
   isOrgWideMember,
@@ -550,9 +550,11 @@ async function createTask(
   const filed = await resolveFiledFrom(writer, scope)
   if (filed.ok === false) return filed
   const { hostId } = filed
-  const visibleTo = hostId
-    ? crmScopeTokens(writer.org, consentGroupForHost(writer.org, hostId))
-    : [...CRM_ORG_TASK_SCOPE]
+  // Under "All sites except…" with the marker a site added later joins by (AGL-4047).
+  const scopeFields = hostId
+    ? crmScopeFields(writer.org, consentGroupForHost(writer.org, hostId))
+    : { visibleTo: [...CRM_ORG_TASK_SCOPE] }
+  const { visibleTo } = scopeFields
   if (!canReach(writer, visibleTo)) {
     return refuse(403, 'Your access to this organization does not reach this site.')
   }
@@ -565,7 +567,7 @@ async function createTask(
     ...crmTaskListFields({ ...stored, visibleTo }),
     status: 'open',
     completedAtMs: null,
-    visibleTo,
+    ...scopeFields,
     hostId,
     createdByUid: writer.uid,
     createdAt: FieldValue.serverTimestamp(),

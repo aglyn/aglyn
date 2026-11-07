@@ -25,11 +25,15 @@
  *   when it is short, and otherwise handed back with the wait.
  * - `transient` — a timeout, a network failure or a 5xx. Retried with
  *   backoff by the engine.
+ * - `revoked` — the token is fine but the ledger no longer lets the app reach
+ *   the company: the merchant removed the app inside the ledger. Only an
+ *   adapter's {@link AccountingHttpOptions.connectionGone} says so. A refresh
+ *   cannot mend it, so the connection is marked for reconnecting at once.
  * - `validation` — any other 4xx: the ledger refused the document itself.
  *   Never retried on its own; the item asks a person.
  */
 
-export type AccountingProviderErrorCode = 'auth' | 'rate-limited' | 'transient' | 'validation' | 'not-found'
+export type AccountingProviderErrorCode = 'auth' | 'revoked' | 'rate-limited' | 'transient' | 'validation' | 'not-found'
 
 export class AccountingProviderError extends Error {
   readonly code: AccountingProviderErrorCode
@@ -58,6 +62,11 @@ export interface AccountingHttpOptions {
   timeoutMs?: number
   /** Extracts the provider's own sentence from an error body. */
   describeError?: (body: unknown, status: number) => string | null
+  /**
+   * Whether a refusal means the company's connection to the app is gone,
+   * answered as `revoked` rather than as a refused document.
+   */
+  connectionGone?: (body: unknown, status: number) => boolean
   /**
    * Waited before every call, so one run stays under the provider's
    * per-minute limit: QuickBooks allows 500 a minute per company, Xero 60.
@@ -152,6 +161,13 @@ export async function accountingRequest<T>(
     const wait = retryAfterMs(response.headers.get('retry-after'))
     if (response.status === 401) {
       throw new AccountingProviderError('auth', described ?? 'The ledger refused the access token.', 401)
+    }
+    if (options.connectionGone?.(body, response.status)) {
+      throw new AccountingProviderError(
+        'revoked',
+        described ?? 'The ledger no longer lets the app reach these books.',
+        response.status,
+      )
     }
     if (response.status === 429) {
       lastError = new AccountingProviderError(

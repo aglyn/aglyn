@@ -272,6 +272,17 @@ fun RecordDetail(context: NativePluginContext, kind: CrmKind, id: String, listSc
             more = more,
           )
           if (kind == CrmKind.DEAL) DealStagePath(reference.pipeline(doc.string("pipelineId")), doc.string("stageId"), doc.string("status"))
+          // What another plugin does with the person, such as start a quote (the console's `crmRecordActions` zone).
+          if (kind == CrmKind.CONTACT) {
+            fun text(key: String) = (row.data[key] as? String).orEmpty()
+            com.aglyn.pluginhost.SlotWidgets(
+              context, CRM_RECORD_ACTIONS_ZONE,
+              props = mapOf(
+                "hostId" to (scope.hostId?.ifEmpty { null } ?: context.hostId.orEmpty()), "orgId" to scope.orgId, "kind" to "contact", "recordId" to id,
+                "name" to row.title, "email" to text("email"), "phone" to text("phone").ifEmpty { text("mobilePhone") }, "company" to text("companyName"),
+              ),
+            )
+          }
           SectionCard("Details", Modifier.fillMaxWidth()) {
             // The fields that hold something; Edit holds every one.
             val shown = fields.mapNotNull { field ->
@@ -1007,3 +1018,6 @@ private fun ContactConsentBox(values: Map<String, String>, group: ConsentGroup?,
     )
   }
 }
+
+/** The console's zone of actions in a contact's head, which other plugins fill (`CRM_RECORD_ACTIONS_ZONE`). */
+const val CRM_RECORD_ACTIONS_ZONE = "crmRecordActions"

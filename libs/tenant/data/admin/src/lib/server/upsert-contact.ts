@@ -23,7 +23,7 @@ import {
   CONTACT_EXTRA_PHONE_FIELDS,
   type ConsentGroup,
   consentGroupScope,
-  crmDefaultScopeOf,
+  crmScopeFields,
   CONTACT_FACETS_FIELD,
   CONTACT_FORM_IDS_CAP,
   CONTACT_FORM_IDS_FIELD,
@@ -37,7 +37,6 @@ import {
   normalizeContainerIds,
   readContactFacet,
   normalizeContactEmail,
-  ORG_SCOPE_TOKEN,
 } from '@aglyn/aglyn/server'
 import { FieldValue } from 'firebase-admin/firestore'
 import { firebaseAdmin } from './firebase-admin'
@@ -1082,13 +1081,12 @@ export async function upsertHostContact(
        * is available and is an ACT: an org may set its CRM default
        * (`crmDefaultScopeOf`) to `'org'`, or a later capture on a sibling
        * site unions that site in.
+       *
+       * Under "All sites except…" (AGL-4047) every site but the ones left
+       * out, this one always included, with the marker the sweep keeps it
+       * level by as sites come and go (`crmScopeFields`).
        */
-      visibleTo:
-        crmDefaultScopeOf(
-          orgBilling?.org as Record<string, unknown> | null | undefined,
-        ) === 'org'
-          ? [ORG_SCOPE_TOKEN]
-          : consentGroupScope(group),
+      ...crmScopeFields(orgBilling?.org as Record<string, unknown> | null | undefined, group),
       email,
       ...(canonicalName ? nameSearchFields(canonicalName) : {}),
       // The search echo of the facet's phone — see `HostContact.phone`: the

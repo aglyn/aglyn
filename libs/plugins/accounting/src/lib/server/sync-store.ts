@@ -369,6 +369,55 @@ export function readSyncItem(id: string, data: Record<string, unknown> | undefin
   }
 }
 
+/** Items put back per round, and rounds at most, by {@link releaseItemsHeldByLostConnection}. */
+const RELEASE_PAGE = 200
+const RELEASE_ROUNDS = 10
+
+/**
+ * Puts back in the queue the items a lost ledger connection sent to "needs
+ * attention". Until a ledger's "the app was removed" answer was read as such,
+ * each item it refused asked a person, under the ledger's raw words
+ * (`refusedWith`). Nothing was wrong with the item, so it goes back to
+ * pending, saying why it waits (`message`), and posts once the books are
+ * reconnected. Its idempotency key stays: the ledger never took the
+ * document. Answers how many were put back.
+ */
+export async function releaseItemsHeldByLostConnection(
+  firestore: FirebaseFirestore.Firestore,
+  orgId: string,
+  input: { refusedWith: string; message: string; nowMs: number },
+): Promise<number> {
+  const items = syncItemsCollection(firestore, orgId)
+  let released = 0
+  for (let round = 0; round < RELEASE_ROUNDS; round += 1) {
+    // Equality filters only, so no composite index is needed; each round
+    // moves what it finds out of the query's reach.
+    const held = await items
+      .where('status', '==', 'needs_attention')
+      .where('lastError', '==', input.refusedWith)
+      .limit(RELEASE_PAGE)
+      .get()
+    if (held.empty) break
+    const batch = firestore.batch()
+    for (const doc of held.docs) {
+      const item = readSyncItem(doc.id, doc.data())
+      batch.update(doc.ref, {
+        status: 'pending',
+        attempts: 0,
+        // A summary member goes back to waiting for its journal, as on a retry.
+        nextAttemptAtMs: item?.mode === 'summary' && item.kind !== 'summary' ? Number.MAX_SAFE_INTEGER : input.nowMs,
+        lastError: input.message,
+        errorCode: null,
+        updatedAtMs: input.nowMs,
+      })
+    }
+    await batch.commit()
+    released += held.size
+    if (held.size < RELEASE_PAGE) break
+  }
+  return released
+}
+
 /** Every attempt after a failure waits longer: 2, 4, 8 … minutes, at most 12 hours, ±20%. */
 export const SYNC_BACKOFF_BASE_MS = 2 * 60 * 1000
 export const SYNC_BACKOFF_MAX_MS = 12 * 60 * 60 * 1000

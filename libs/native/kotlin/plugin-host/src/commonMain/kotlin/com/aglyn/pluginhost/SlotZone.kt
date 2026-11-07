@@ -14,6 +14,12 @@ enum class SlotPlacement { HEADER, BODY }
 val LocalSlotPlacement = staticCompositionLocalOf { SlotPlacement.BODY }
 
 /**
+ * What the page hosting a zone tells its widgets about the record it shows (the console's zone props): an Inbox
+ * submission's id and request kind, a CRM record's person. Empty outside a zone, and for a zone that passes none.
+ */
+val LocalSlotProps = staticCompositionLocalOf<Map<String, String>> { emptyMap() }
+
+/**
  * The zones a site's lists host beside their create action, under the console's names: the native twins of the
  * `hostScreens`, `hostTemplates`, `hostLayouts`, `hostComponents` and `hostForms` zones. A list draws its zone and never
  * names the plugins that fill it (the AI plugin's Create with AI is one).
@@ -31,10 +37,12 @@ object ListCreateZone {
  * console's `PluginWidgetSlot`. Drawn inline, so a header's row lays the widgets out beside its own actions.
  */
 @Composable
-fun SlotWidgets(context: NativePluginContext, slot: String, placement: SlotPlacement = SlotPlacement.BODY) {
+fun SlotWidgets(
+  context: NativePluginContext, slot: String, placement: SlotPlacement = SlotPlacement.BODY, props: Map<String, String> = emptyMap(),
+) {
   val widgets = context.slotWidgets(slot)
   if (widgets.isEmpty()) return
-  CompositionLocalProvider(LocalSlotPlacement provides placement) {
+  CompositionLocalProvider(LocalSlotPlacement provides placement, LocalSlotProps provides props) {
     widgets.forEach { widget -> widget.content(context) }
   }
 }

@@ -548,3 +548,52 @@ describe('all sites except some (AGL-4047)', () => {
     })
   })
 })
+
+describe('the CRM default all sites except some (AGL-4047)', () => {
+  const C = 'host:site-c'
+  const defaultExceptC = {
+    name: 'Acme',
+    hosts: { 'site-a': true, 'site-b': true, 'site-c': true },
+    crm: { defaultRecordScope: 'host', defaultRecordExcept: ['site-c'], defaultRecordExceptAt: 1_000 },
+  }
+
+  beforeEach(() => {
+    store['hosts/site-c'] = { orgId: ORG, displayName: 'Brand C' }
+    store[`orgs/${ORG}`] = defaultExceptC
+  })
+
+  it('a console create’s follow-up marks a record the default stamped, and moves none of its sites', async () => {
+    store[lead('l7')] = { ...captured('site-a', 'seven@acme.test'), visibleTo: [A, B], createdAt: 2_000 }
+    // Created before the default was chosen: never marked here.
+    store[lead('l8')] = { ...captured('site-a', 'eight@acme.test'), visibleTo: [A, B], createdAt: 500 }
+    const out = await call({ hostId: 'site-a', action: 'evaluate', object: 'leads', ids: ['l7', 'l8'] })
+    expect(out.status).toBe(200)
+    expect(store[lead('l7')]).toMatchObject({ visibleTo: [A, B], scopeMode: 'allExcept', scopeExcept: [C] })
+    expect('scopeMode' in store[lead('l8')]).toBe(false)
+  })
+
+  it('marks nothing in a workspace whose default leaves no site out', async () => {
+    store[`orgs/${ORG}`] = { name: 'Acme', hosts: defaultExceptC.hosts }
+    store[lead('l7')] = { ...captured('site-a', 'seven@acme.test'), visibleTo: [A, B], createdAt: 2_000 }
+    await call({ hostId: 'site-a', action: 'evaluate', object: 'leads', ids: ['l7'] })
+    expect('scopeMode' in store[lead('l7')]).toBe(false)
+  })
+
+  it('"Apply to existing records" asks "Change CRM settings", and writes nothing for anyone without it', async () => {
+    authorizeOrgCaller.mockResolvedValueOnce({ ok: false, status: 403, error: 'no' })
+    const before = JSON.stringify(store)
+    const out = await call({ orgId: ORG, action: 'default-apply' })
+    expect(out).toEqual({ status: 403, payload: { error: 'no' } })
+    expect(JSON.stringify(store)).toBe(before)
+  })
+
+  it('is refused, with the reason, unless the default leaves sites out', async () => {
+    store[`orgs/${ORG}`] = { name: 'Acme', hosts: defaultExceptC.hosts, crm: { defaultRecordScope: 'host' } }
+    const out = await call({ orgId: ORG, action: 'default-apply' })
+    expect(out).toEqual({
+      status: 400,
+      payload: { error: 'Choose All sites except… for new records and save it first.' },
+    })
+    expect(Object.keys(store).some((path) => path.includes('/crmSharingRuns/'))).toBe(false)
+  })
+})

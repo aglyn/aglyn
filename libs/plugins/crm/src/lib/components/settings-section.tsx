@@ -23,11 +23,15 @@ import {
   CRM_ASSIGNMENT_RULES_MAX,
   CRM_ASSIGNMENT_RULES_PATH,
   CRM_AUTO_CREATE_COMPANIES_PATH,
+  CRM_DEFAULT_MAX_INCLUDED,
+  CRM_DEFAULT_RECORD_EXCEPT_AT_PATH,
+  CRM_DEFAULT_RECORD_EXCEPT_PATH,
   CRM_DEFAULT_RECORD_SCOPE_PATH,
   CRM_ROUND_ROBIN_POOL_MAX,
   CRM_ROUND_ROBIN_POOL_PATH,
   type CrmAssignmentRule,
-  crmDefaultScopeOf,
+  crmDefaultExceptOf,
+  crmDefaultSharingOf,
   crmHostDefaultOwnerSegments,
   describeAssignmentRule,
   isOrgWideMember,
@@ -39,7 +43,9 @@ import {
   crmMemberPickerLabel,
 } from '@aglyn/aglyn'
 import { mdiArrowDown, mdiArrowUp, mdiDeleteOutline } from '@aglyn/shared-data-mdi'
-import { CardDisplay, MdiIcon, SrOnly } from '@aglyn/shared-ui-jsx'
+import { sharingFromChoice } from '@aglyn/aglyn/app-utils/scope-tokens'
+import { CardDisplay, MdiIcon, SrOnly, useConfirmationContext } from '@aglyn/shared-ui-jsx'
+import { BlockedControl } from '@aglyn/shared-ui-jsx/components/blocked-control.component'
 import RowActionsMenu from '@aglyn/shared-ui-jsx/components/row-actions-menu.component'
 import { ScrollTable } from '@aglyn/shared-ui-jsx/components/scroll-table.component'
 import { useSnackbar } from '@aglyn/shared-ui-snackstack'
@@ -51,11 +57,15 @@ import {
 import {
   Button,
   Checkbox,
+  FormControl,
   FormControlLabel,
   FormGroup,
   FormHelperText,
+  FormLabel,
   IconButton,
   MenuItem,
+  Radio,
+  RadioGroup,
   Stack,
   Switch,
   TableBody,
@@ -65,10 +75,13 @@ import {
   TextField,
   Typography,
 } from '@mui/material'
-import { deleteField, doc, FieldPath, updateDoc } from 'firebase/firestore'
+import { deleteField, doc, FieldPath, serverTimestamp, updateDoc } from 'firebase/firestore'
 import { useCallback, useEffect, useMemo, useState } from 'react'
 import { useCrmOrgMount } from '../hooks/use-crm-org-mount'
 import { useCrmScope } from '../hooks/use-crm-scope'
+import { useCrmSharingSites } from '../hooks/use-crm-sharing'
+import { type CrmDefaultApplyRun, readCrmDefaultApplyRun } from '../model/crm-sharing'
+import { callCrmSharing } from '../model/crm-sharing-api'
 import { CRM_SETTINGS_PERMISSION, crmSettingsPermissionRefusal } from '../model/crm-permissions'
 import { useOrgMemberDirectory } from '../hooks/use-org-member-directory'
 import AssignmentRuleDrawer from './assignment-rule-drawer'
@@ -247,90 +260,288 @@ AutoCreateCompaniesCard.displayName = 'AutoCreateCompaniesCard'
  * defaults for new datasets and media.
  *
  * Changes nothing that already exists: narrowing an address book from a
- * select would hide records from sites already working them, with no
- * confirmation. Each record's own sharing is where that is decided.
+ * setting would hide records from sites already working them, with no
+ * confirmation. Each record's own sharing is where that is decided, and
+ * under "All sites except…" (AGL-4047) the explicit "Apply to existing
+ * records" run below, which says what it does before it starts.
  *
- * Reads `crmDefaultScopeOf`, the same reader the capture door and every CRM
+ * Reads `crmDefaultSharingOf`, the same reader the capture door and every CRM
  * creator stamp from, so the control cannot show one thing while records
  * get another — including for an org that has never set it, which shares
  * with every site unless it set the older dataset default to keep them
  * apart. Keeping each site's records apart is the agency's choice: one
  * client's collaborator then sees only that client's people.
+ *
+ * Radios and a visible list of sites, never a dropdown: the sites left out
+ * are the part people come to check. "All sites except…" is stored beside
+ * `defaultRecordScope: 'host'`, so a reader that predates it keeps new
+ * records to the site they came in on rather than sharing them wider.
  */
 export function DefaultRecordSharingCard(props: AutoCreateCompaniesCardProps) {
   const { hostId, org } = props
   const firestore = useFirestore()
+  const { data: user } = useUser()
   const { enqueueSnackbar } = useSnackbar()
+  const { confirm } = useConfirmationContext()
   const { orgId, ready: scopeReady } = useCrmScope({ hostId, org })
   const { canManage, ready: roleReady } = useCanManageCrmSettings(orgId)
+  const sites = useCrmSharingSites({ hostId, orgId: orgId ?? null, enabled: canManage })
+  const orgDocument = org as Record<string, unknown> | undefined
 
-  const stored =
-    crmDefaultScopeOf(org as Record<string, unknown> | undefined) ?? 'org'
-  const [value, setValue] = useState<'org' | 'host'>(stored)
+  const storedMode = crmDefaultSharingOf(orgDocument) ?? 'org'
+  const storedExcept = useMemo(() => crmDefaultExceptOf(orgDocument) ?? [], [orgDocument])
+  const [mode, setMode] = useState<CrmDefaultChoice>(storedMode)
+  const [except, setExcept] = useState<string[]>(storedExcept)
   const [busy, setBusy] = useState(false)
-  useEffect(() => setValue(stored), [stored])
+  const [applying, setApplying] = useState(false)
+  const [pass, setPass] = useState<CrmDefaultApplyRun | null>(null)
+  useEffect(() => setMode(storedMode), [storedMode])
+  useEffect(() => setExcept(storedExcept), [storedExcept])
 
-  const handleChange = async (next: 'org' | 'host') => {
-    if (!orgId || !canManage) return
-    setValue(next)
+  const siteIds = sites.sites.map((site) => site.id)
+  const exceptOff = !canManage
+    ? null
+    : !sites.ready
+    ? 'Reading this workspace’s sites…'
+    : sites.sites.length < 2
+      ? 'This workspace has one site, so there is nothing to leave out.'
+      : sites.sites.length > CRM_DEFAULT_MAX_INCLUDED
+        ? `This works up to ${CRM_DEFAULT_MAX_INCLUDED} sites, and this workspace has ${sites.sites.length}. Choose another option.`
+        : null
+  // The answer the stamp gives, from the same helper the server uses.
+  const problem =
+    mode === 'allExcept' && sites.ready
+      ? sharingFromChoice({ mode: 'allExcept', exceptHostIds: except }, siteIds).problem
+      : null
+  const changed =
+    mode !== storedMode ||
+    (mode === 'allExcept' &&
+      (except.length !== storedExcept.length || except.some((id) => !storedExcept.includes(id))))
+  const ready = scopeReady && roleReady
+  const canSave = ready && canManage && !busy && changed && !problem && (mode !== 'allExcept' || !exceptOff)
+
+  const save = async () => {
+    if (!orgId || !canSave) return
     setBusy(true)
     try {
       await updateDoc(doc(firestore, 'orgs', orgId), {
-        [CRM_DEFAULT_RECORD_SCOPE_PATH]: next,
+        [CRM_DEFAULT_RECORD_SCOPE_PATH]: mode === 'org' ? 'org' : 'host',
+        [CRM_DEFAULT_RECORD_EXCEPT_PATH]:
+          mode === 'allExcept' ? except.filter((id) => siteIds.includes(id)) : deleteField(),
+        [CRM_DEFAULT_RECORD_EXCEPT_AT_PATH]: mode === 'allExcept' ? serverTimestamp() : deleteField(),
       })
-      enqueueSnackbar('Default sharing updated', {
-        variant: 'success',
-        persist: false,
-      })
+      enqueueSnackbar('Default sharing updated', { variant: 'success', persist: false })
     } catch (error) {
       console.error(error)
-      setValue(stored)
-      enqueueSnackbar('The setting could not be saved', {
-        variant: 'error',
-        allowDuplicate: true,
-      })
+      setMode(storedMode)
+      setExcept(storedExcept)
+      enqueueSnackbar('The setting could not be saved', { variant: 'error', allowDuplicate: true })
     } finally {
       setBusy(false)
     }
   }
 
-  const ready = scopeReady && roleReady
+  const storedRun = readCrmDefaultApplyRun(orgDocument)
+  const run = pass ?? storedRun
+  const running = applying || run?.status === 'running'
+  const applyOff =
+    storedMode !== 'allExcept'
+      ? 'Choose All sites except… and save it first.'
+      : changed
+        ? 'Save the default first.'
+        : running
+          ? 'Applying now.'
+          : null
+
+  const apply = async (action: 'default-apply' | 'default-apply-continue') => {
+    if (!orgId) return
+    if (action === 'default-apply') {
+      const leftOut = storedExcept.map(sites.siteName).join(', ')
+      const confirmed = await confirm({
+        title: 'Apply to existing records?',
+        description:
+          `Every contact, lead, company, deal, task and logged activity this workspace has is shared ` +
+          `with every site except ${leftOut}. The site that captured a person keeps them. ` +
+          'Sites left out stop seeing the rest. Records shared by hand or by a sharing rule keep those shares.',
+        confirmationText: 'Apply to existing records',
+      })
+        .then(() => true)
+        .catch(() => false)
+      if (!confirmed) return
+    }
+    setApplying(true)
+    try {
+      let answer = await callCrmSharing(user, { orgId }, action)
+      setPass(answer.applyRun ?? null)
+      while (answer.more) {
+        answer = await callCrmSharing(user, { orgId }, 'default-apply-continue')
+        if (answer.applyRun) setPass(answer.applyRun)
+      }
+      if (answer.applyRun?.status === 'done') {
+        enqueueSnackbar('The default sharing is applied to existing records', {
+          variant: 'success',
+          persist: false,
+        })
+      }
+    } catch (error) {
+      enqueueSnackbar((error as Error).message, { variant: 'error', allowDuplicate: true })
+    } finally {
+      setApplying(false)
+    }
+  }
+
+  const toggle = (hostIdToToggle: string) => () =>
+    setExcept((current) =>
+      current.includes(hostIdToToggle)
+        ? current.filter((id) => id !== hostIdToToggle)
+        : [...current, hostIdToToggle],
+    )
+  const stillIn = siteIds.filter((id) => !except.includes(id))
+  const editable = ready && canManage && !busy
+
   return (
     <CardDisplay
       header={'Default sharing for new records'}
-      help={pluginDocsHelp('crmSharing', {
-        anchor: '#access-read-only-or-read-and-edit',
-      })}
+      help={pluginDocsHelp('crmSharing', { anchor: '#default-sharing-for-new-records' })}
       contentGutterX
       contentGutterY
     >
-      <Stack spacing={1} sx={{ maxWidth: 480 }}>
-        <TextField
-          select
-          size="small"
-          label="New contacts, companies, deals and tasks are shared with"
-          value={value}
-          disabled={!ready || !canManage || busy}
-          onChange={(event) =>
-            void handleChange(event.target.value as 'org' | 'host')
-          }
-          helperText={
-            'Only affects records created from now on. Datasets and media ' +
-            'have defaults of their own, on the organization Data and ' +
-            'Media pages.'
-          }
-        >
-          <MenuItem value="org">{'All sites in the organization'}</MenuItem>
-          <MenuItem value="host">
-            {'Only the site they came in on (keeps clients apart, for agencies)'}
-          </MenuItem>
-        </TextField>
+      <Stack spacing={1.5} sx={{ maxWidth: 520 }}>
+        <FormControl component="fieldset" disabled={!editable}>
+          <FormLabel component="legend" sx={{ typography: 'caption' }}>
+            {'New contacts, companies, deals and tasks are shared with'}
+          </FormLabel>
+          <RadioGroup
+            value={mode}
+            onChange={(event) => {
+              const next = event.target.value as CrmDefaultChoice
+              setMode(next)
+              if (next === 'allExcept' && storedMode !== 'allExcept') setExcept([])
+            }}
+          >
+            <FormControlLabel value="org" control={<Radio size="small" />} label="All sites in the organization" />
+            <FormControlLabel
+              value="host"
+              control={<Radio size="small" />}
+              label={
+                <Stack>
+                  <Typography variant="body2">{'Only the site they came in on'}</Typography>
+                  <Typography variant="caption" color="text.secondary">
+                    {'Keeps clients apart, for agencies.'}
+                  </Typography>
+                </Stack>
+              }
+            />
+            <FormControlLabel
+              value="allExcept"
+              // The saved choice stays on: nobody is told they can't have what they have.
+              disabled={!editable || (Boolean(exceptOff) && storedMode !== 'allExcept')}
+              control={<Radio size="small" />}
+              label={
+                <Stack>
+                  <Typography variant="body2">{'All sites except…'}</Typography>
+                  <Typography variant="caption" color="text.secondary">
+                    {exceptOff ??
+                      'Every site but the ones you leave out, including sites added later. The site a person came in on always keeps them.'}
+                  </Typography>
+                </Stack>
+              }
+            />
+          </RadioGroup>
+          {mode === 'allExcept' ? (
+            <Stack spacing={0.5} sx={{ pl: 3.5 }}>
+              <Typography variant="caption" color="text.secondary">
+                {'Sites to leave out'}
+              </Typography>
+              <FormGroup sx={{ flexWrap: 'nowrap', maxHeight: (theme) => theme.spacing(30), overflowY: 'auto' }}>
+                {sites.sites.map((site) => {
+                  const locked = stillIn.length === 1 && stillIn[0] === site.id
+                  return (
+                    <FormControlLabel
+                      key={site.id}
+                      disabled={!editable || locked}
+                      control={
+                        <Checkbox size="small" checked={except.includes(site.id)} onChange={toggle(site.id)} />
+                      }
+                      label={
+                        <Stack>
+                          <Typography variant="body2">{site.name}</Typography>
+                          {locked ? (
+                            <Typography variant="caption" color="text.secondary">
+                              {'At least one site has to stay in.'}
+                            </Typography>
+                          ) : null}
+                        </Stack>
+                      }
+                    />
+                  )
+                })}
+              </FormGroup>
+            </Stack>
+          ) : null}
+          {problem ? <FormHelperText error>{problem}</FormHelperText> : null}
+          <FormHelperText>
+            {'Only affects records created from now on. Datasets and media ' +
+              'have defaults of their own, on the organization Data and ' +
+              'Media pages.'}
+          </FormHelperText>
+        </FormControl>
+        <Stack direction="row" spacing={1}>
+          <BlockedControl blocked={ready && !canManage} reason={crmSettingsPermissionRefusal()}>
+            <Button variant="contained" size="small" disabled={!canSave} onClick={() => void save()}>
+              {'Save'}
+            </Button>
+          </BlockedControl>
+        </Stack>
+        <Typography variant="subtitle2">{'Records you already have'}</Typography>
+        <Typography variant="body2" color="text.secondary">
+          {'Saving changes only new records. To share the ones you already have the same way, ' +
+            'apply it to them. The site that captured each person keeps them.'}
+        </Typography>
+        <Stack direction="row" spacing={1} sx={{ alignItems: 'center' }}>
+          <BlockedControl
+            blocked={(ready && !canManage) || Boolean(applyOff)}
+            reason={ready && !canManage ? crmSettingsPermissionRefusal() : (applyOff ?? '')}
+          >
+            <Button
+              size="small"
+              variant="outlined"
+              disabled={!ready || !canManage || Boolean(applyOff)}
+              onClick={() => void apply('default-apply')}
+            >
+              {'Apply to existing records…'}
+            </Button>
+          </BlockedControl>
+          {run?.status === 'failed' && storedMode === 'allExcept' && !applying ? (
+            <Button size="small" disabled={!canManage} onClick={() => void apply('default-apply-continue')}>
+              {'Resume'}
+            </Button>
+          ) : null}
+        </Stack>
+        {run ? (
+          <Typography
+            variant="caption"
+            color={run.status === 'failed' ? 'error' : 'text.secondary'}
+            role="status"
+          >
+            {run.status === 'running'
+              ? `Applying: ${run.processed} records checked, ${run.changed} changed so far.`
+              : run.status === 'done'
+                ? `Applied: ${run.processed} records checked, ${run.changed} changed${
+                    run.capped ? `, ${run.capped} left as they were because they would reach more than ${CRM_DEFAULT_MAX_INCLUDED} sites` : ''
+                  }.`
+                : (run.error ?? 'Applying stopped.')}
+          </Typography>
+        ) : null}
         <ManagersOnlyNote ready={ready} canManage={canManage} />
       </Stack>
     </CardDisplay>
   )
 }
 DefaultRecordSharingCard.displayName = 'DefaultRecordSharingCard'
+
+/** The three choices the default card offers. */
+type CrmDefaultChoice = 'org' | 'host' | 'allExcept'
 
 /** The caption every card shows a member who may read but not change it. */
 function ManagersOnlyNote(props: { ready: boolean; canManage: boolean }) {

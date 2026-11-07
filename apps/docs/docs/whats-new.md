@@ -40,6 +40,9 @@ for the how-to.
   — tick the sites to leave out, and every other site shares it, including any site you add later.
 - **Share media with all sites except some.** [Media](content-and-data/media/overview.md#who-an-asset-is-shared-with)
   — the same choice for a file, a selection of files, or a folder and what is inside it.
+- **CRM default sharing: all sites except some.** [Default sharing for new records](content-and-data/crm/sharing.md#default-sharing-for-new-records)
+  — new CRM records go to every site but the ones you leave out, including sites you add later, and
+  **Apply to existing records** shares the ones you already have the same way when you choose to.
 - **Share CRM records with all sites except some.** [Share records across sites](content-and-data/crm/sharing.md#all-sites-except-some)
   — share a record by hand or by a sharing rule with every site but the ones you leave out, including any site you add later.
 - **Run an org automation on all sites except some.** [Org automations](marketing-and-automation/workflows-and-actions/org-automations.md#create-one)

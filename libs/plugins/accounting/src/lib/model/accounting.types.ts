@@ -244,6 +244,8 @@ export type AccountingRefusalReason =
   | 'invalid-request'
   | 'not-configured'
   | 'not-connected'
+  /** The books no longer let the app in; the connection now asks to be reconnected. */
+  | 'reconnect-required'
   | 'state-invalid'
   | 'state-expired'
   | 'state-replayed'

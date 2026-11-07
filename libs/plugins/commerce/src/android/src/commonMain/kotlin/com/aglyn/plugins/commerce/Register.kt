@@ -125,6 +125,13 @@ fun registerCommerceNative(r: NativePluginRegistrar) {
   r.widget("commerce.sales-trend", title = "Last 7 days", order = 110, size = WidgetSize.FULL, requiresSite = true) { context -> SalesTrendWidget(context) }
   r.widget("commerce.to-ship", title = "To ship", order = 90, size = WidgetSize.HALF, requiresSite = true) { context -> OrdersToShipWidget(context) }
   r.widget("commerce.needs-you", title = "Needs you", order = 10, requiresSite = true, slot = "homeNeedsYou") { context -> OrdersNeedsYouWidget(context) }
+  // Start a quote (AGL-4098), in the Inbox's and the CRM's zones, as the console registers them.
+  r.widget("commerce.quote-from-request", title = "Start a quote", order = 10, slot = com.aglyn.plugins.commerce.orders.INBOX_SUBMISSION_ACTIONS_ZONE) { context ->
+    com.aglyn.plugins.commerce.orders.QuoteStartFromRequestWidget(context)
+  }
+  r.widget("commerce.quote-from-contact", title = "Start a quote", order = 10, slot = com.aglyn.plugins.commerce.orders.CRM_RECORD_ACTIONS_ZONE) { context ->
+    com.aglyn.plugins.commerce.orders.QuoteStartFromContactWidget(context)
+  }
   r.widget("commerce.glance", title = "At a glance", order = 120, size = WidgetSize.FULL, requiresSite = true) { context -> GlanceWidget(context) }
   // The console's "Newest site users" (registered there under the `accounts` switch, which ships inside commerce).
   r.widget("commerce.newest-site-users", title = "Newest site users", order = 130, size = WidgetSize.HALF, requiresSite = true) { context -> NewestSiteUsersCard(context) }

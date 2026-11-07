@@ -1150,6 +1150,8 @@ export type CrmSharingAction =
   | 'rule-save'
   | 'rule-delete'
   | 'rule-continue'
+  | 'default-apply'
+  | 'default-apply-continue'
 
 export interface CrmSharingSite {
   id: string
@@ -1168,4 +1170,84 @@ export interface CrmSharingResponse {
   rule?: CrmSharingRule | null
   /** Whether a rule run has more to do (`rule-continue` again). */
   more?: boolean
+  /** `default-apply`: where the "Apply to existing records" run stands. */
+  applyRun?: CrmDefaultApplyRun | null
+}
+
+/*==========================================
+ * "APPLY TO EXISTING RECORDS" (AGL-4047).
+ *
+ * The CRM default stamps NEW records. Under "All sites except…" a member
+ * holding "Change CRM settings" can bring the records the workspace already
+ * has to it: every contact, lead, company, deal, task and logged activity is
+ * shared with every site but the ones left out, and the sites that captured
+ * a person keep them. Only that explicit run changes an existing record,
+ * never the setting itself. It walks each collection by a cursor in budgeted
+ * passes, its progress mirrored here on the org document.
+ *=========================================*/
+
+/** The collections the run walks, in order: the cursor names a place in this list. */
+export const CRM_DEFAULT_APPLY_COLLECTIONS = [
+  'contacts',
+  'leads',
+  'companies',
+  'deals',
+  'crmTasks',
+  'crmActivities',
+] as const
+export type CrmDefaultApplyCollection = (typeof CRM_DEFAULT_APPLY_COLLECTIONS)[number]
+
+export function isCrmDefaultApplyCollection(value: unknown): value is CrmDefaultApplyCollection {
+  return (
+    typeof value === 'string' &&
+    (CRM_DEFAULT_APPLY_COLLECTIONS as readonly string[]).includes(value)
+  )
+}
+
+/** Where the run's progress is mirrored on the org document, for the settings card. */
+export const CRM_DEFAULT_APPLY_RUN_PATH = 'crm.defaultApplyRun'
+
+export interface CrmDefaultApplyRun {
+  status: 'running' | 'done' | 'failed'
+  /** Records read. */
+  processed: number
+  /** Records whose sites moved. */
+  changed: number
+  /** Records it would take past the site limit, left as they were. */
+  capped: number
+  /** Where it carries on from. */
+  cursor: { collection: CrmDefaultApplyCollection; afterId: string | null } | null
+  startedAtMs: number
+  finishedAtMs?: number
+  error?: string
+}
+
+/** The run as the org document mirrors it, cleaned; null when none was ever started. */
+export function readCrmDefaultApplyRun(
+  org: Readonly<Record<string, unknown>> | null | undefined,
+): CrmDefaultApplyRun | null {
+  const crm = (org ?? {})['crm']
+  const raw =
+    crm && typeof crm === 'object' && !Array.isArray(crm)
+      ? (crm as Record<string, unknown>)['defaultApplyRun']
+      : undefined
+  if (!raw || typeof raw !== 'object' || Array.isArray(raw)) return null
+  const value = raw as Record<string, unknown>
+  const cursor = value['cursor'] as Record<string, unknown> | null | undefined
+  return {
+    status: value['status'] === 'done' || value['status'] === 'failed' ? value['status'] : 'running',
+    processed: Number(value['processed']) || 0,
+    changed: Number(value['changed']) || 0,
+    capped: Number(value['capped']) || 0,
+    cursor:
+      cursor && isCrmDefaultApplyCollection(cursor['collection'])
+        ? {
+            collection: cursor['collection'],
+            afterId: typeof cursor['afterId'] === 'string' ? cursor['afterId'] : null,
+          }
+        : null,
+    startedAtMs: Number(value['startedAtMs']) || 0,
+    ...(typeof value['finishedAtMs'] === 'number' ? { finishedAtMs: value['finishedAtMs'] } : {}),
+    ...(typeof value['error'] === 'string' ? { error: value['error'] } : {}),
+  }
 }
