@@ -110,6 +110,13 @@ public func registerCommerceNative(_ r: NativePluginRegistrar) {
   r.widget("commerce.needs-you", title: "Needs you", order: 10, requiresSite: true, slot: "homeNeedsYou") { context in
     OrdersNeedsYouWidget(context: context)
   }
+  // Start a quote (AGL-4098), in the Inbox's and the CRM's zones, as the console registers them.
+  r.widget("commerce.quote-from-request", title: "Start a quote", order: 10, slot: inboxSubmissionActionsZone) { context in
+    QuoteStartFromRequestWidget(context: context)
+  }
+  r.widget("commerce.quote-from-contact", title: "Start a quote", order: 10, slot: crmRecordActionsZone) { context in
+    QuoteStartFromContactWidget(context: context)
+  }
   r.widget("commerce.to-ship", title: "To ship", order: 90, size: .half, requiresSite: true) { context in
     OrdersToShipWidget(context: context)
   }
