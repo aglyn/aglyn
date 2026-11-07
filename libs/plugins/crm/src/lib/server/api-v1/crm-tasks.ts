@@ -70,7 +70,7 @@ import {
   CRM_TITLE_MAX,
   createPayload,
   crmCollection,
-  crmCreateStamp,
+  crmScopedCreateStamp,
   crmRefErrors,
   crmTimes,
   crmValidationFailed,
@@ -318,7 +318,7 @@ async function createTask(request: Request, ctx: ApiV1Context): Promise<Response
     const priority = pickedPriority?.meaning ?? 'normal'
     const status = pickedStatus?.meaning ?? 'open'
     const id = createResourceUid()
-    const stamp = crmCreateStamp(ctx, site.siteId)
+    const stamp = crmScopedCreateStamp(ctx, site.siteId)
     const record: Record<string, unknown> = {
       title,
       // Each meaning with the org's label beside it (AGL-3517).

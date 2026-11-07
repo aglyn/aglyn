@@ -53,6 +53,11 @@ jest.mock('firebase/firestore', () => ({
   updateDoc: jest.fn().mockResolvedValue(undefined),
 }))
 jest.mock('./crm-site-picker', () => ({ CrmSitePicker: () => null }))
+const mockFollowUp = jest.fn(async (..._args: unknown[]) => undefined)
+jest.mock('../model/crm-sharing-api', () => ({
+  callCrmSharing: jest.fn(),
+  followUpCrmSharing: (...args: unknown[]) => mockFollowUp(...args),
+}))
 /** The two fields, as what they hand the dialog: the pickers have their own specs. */
 jest.mock('./activity-link-fields', () => ({
   ActivityLinkFields: (props: {
@@ -131,6 +136,49 @@ describe('the kind a new activity opens on (AGL-2661)', () => {
  * inbound, outbound or internal and an email inbound or outbound, outbound
  * to start; no other kind shows the field, and none writes one.
  */
+/*
+ * "ALL SITES EXCEPT…" (AGL-4047). The rules refuse the marker from a browser,
+ * so an activity logged under that CRM default asks the server to mark it,
+ * and only then: every other org pays nothing for it.
+ */
+describe('an activity logged under the CRM default "All sites except…" (AGL-4047)', () => {
+  const { addDoc } = jest.requireMock('firebase/firestore') as { addDoc: jest.Mock }
+  beforeEach(() => {
+    addDoc.mockClear()
+    mockFollowUp.mockClear()
+  })
+  const logOne = async (org: Record<string, unknown> | null) => {
+    render(
+      <LogActivityDialog
+        open
+        onClose={() => undefined}
+        scope={{ ...scope, org } as typeof scope}
+        link={{ contactId: 'c-1' }}
+        kind="note"
+      />,
+    )
+    fireEvent.change(screen.getByRole('textbox', { name: 'What happened' }), {
+      target: { value: 'Prefers mornings' },
+    })
+    fireEvent.click(screen.getByRole('button', { name: 'Log' }))
+    await waitFor(() => expect(addDoc).toHaveBeenCalledTimes(1))
+  }
+
+  it('asks the server to mark it, under the site it was logged from', async () => {
+    await logOne({
+      hosts: { 'host-1': true, 'host-2': true },
+      crm: { defaultRecordScope: 'host', defaultRecordExcept: ['host-2'] },
+    })
+    await waitFor(() => expect(mockFollowUp).toHaveBeenCalledTimes(1))
+    expect(mockFollowUp.mock.calls[0].slice(1)).toEqual([{ hostId: 'host-1' }, 'crmActivities', ['act-1']])
+  })
+
+  it('asks nothing while the default leaves no site out', async () => {
+    await logOne({ crm: { defaultRecordScope: 'host' } })
+    expect(mockFollowUp).not.toHaveBeenCalled()
+  })
+})
+
 describe('a call’s and an email’s direction (AGL-3517)', () => {
   const { addDoc } = jest.requireMock('firebase/firestore') as { addDoc: jest.Mock }
   const direction = () => screen.queryByRole('combobox', { name: 'Direction' })

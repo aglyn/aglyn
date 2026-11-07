@@ -52,6 +52,7 @@ import {
   CRM_LEAD_SOURCE_PICKLIST,
   type CrmPicklist,
   consentGroupForHost,
+  crmDefaultMarkerOf,
   crmDefaultScopeOf,
   crmScopeTokens,
   ORG_SCOPE_TOKEN,
@@ -189,6 +190,18 @@ export function crmCreateStamp(ctx: ApiV1Context, siteId: string | null) {
     createdAt: now,
     updatedAt: now,
   }
+}
+
+/**
+ * {@link crmCreateStamp} for a record the CRM default "All sites except…"
+ * reaches — a company, a deal, a task, an activity — with the marker a site
+ * added later joins by when its sites are the default's (AGL-4047). A
+ * pipeline or an email template is stamped only, never marked: the sweep does
+ * not keep them.
+ */
+export function crmScopedCreateStamp(ctx: ApiV1Context, siteId: string | null) {
+  const stamp = crmCreateStamp(ctx, siteId)
+  return { ...stamp, ...crmDefaultMarkerOf(ctx.org as Record<string, unknown>, stamp) }
 }
 
 // ── Cross-references ────────────────────────────────────────────────────────

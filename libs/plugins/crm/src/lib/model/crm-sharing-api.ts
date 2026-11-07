@@ -21,6 +21,7 @@ import {
 } from '@aglyn/shared-util-http/authorized-token'
 import {
   CRM_SHARING_IDS_MAX,
+  type CrmDefaultMarkOnlyCollection,
   type CrmSharingAction,
   type CrmSharingObject,
   type CrmSharingResponse,
@@ -58,11 +59,14 @@ export async function callCrmSharing(
  * record-written seam, and a browser that wrote the record itself asks for
  * the same re-evaluation here. Never throws, and never holds the save — the
  * record is written whether or not a rule then shares it.
+ *
+ * A logged activity, which no rule applies to, asks the same way for only
+ * the CRM default's "All sites except…" marker (AGL-4047).
  */
 export async function followUpCrmSharing(
   user: MaybeTokenSource,
   scope: CrmTaskRouteScope | null,
-  object: CrmSharingObject,
+  object: CrmSharingObject | CrmDefaultMarkOnlyCollection,
   ids: readonly string[],
 ): Promise<void> {
   const unique = [...new Set(ids.filter(Boolean))].slice(0, CRM_SHARING_IDS_MAX)

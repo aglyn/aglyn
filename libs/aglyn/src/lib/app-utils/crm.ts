@@ -51,7 +51,7 @@ import {
   normalizePhone,
 } from '../foundation/definitions/contact.types'
 import type { OrgCrmAssignmentRule } from '../foundation/definitions/org-billing.types'
-import { type ConsentGroup, consentGroupScope } from './consent-groups'
+import { type ConsentGroup, consentGroupScope, soloConsentGroup } from './consent-groups'
 import {
   CONTACT_LIFECYCLE_STAGES,
   type ContactLifecycleStage,
@@ -337,6 +337,14 @@ export type CrmCustomValue = ContactCustomValue
  */
 export interface CrmScoped {
   visibleTo: string[]
+  /**
+   * Shared with all sites except some (AGL-4047): the marker the sweep keeps
+   * `visibleTo` level by as sites come and go. Only a server writes it — see
+   * `crmScopeFields` and `crmDefaultMarkerOf`.
+   */
+  scopeMode?: typeof SCOPE_MODE_ALL_EXCEPT
+  /** The sites left out, as `host:` tokens, beside {@link CrmScoped.scopeMode}. */
+  scopeExcept?: string[]
   /** The site that created it, or `null` for one that came from no site. */
   hostId: string | null
   createdAt?: unknown
@@ -2688,6 +2696,39 @@ export function crmScopeFields(
     scopeMode: SCOPE_MODE_ALL_EXCEPT,
     scopeExcept: left.sort().map(hostScopeToken),
   }
+}
+
+/** The marker half of {@link CrmScopeFields}: both keys, or neither. */
+export type CrmScopeMarker = Pick<CrmScopeFields, 'scopeMode' | 'scopeExcept'>
+
+/**
+ * The marker a record about to be CREATED carries under the CRM default
+ * "All sites except…" (AGL-4047), for a writer that stamped its sites some
+ * other way than {@link crmScopeFields}: an activity or a task filed beside a
+ * person, a company or a deal made from a site, an entry that copied the
+ * record it is about.
+ *
+ * Only when the sites it is about to store are EXACTLY what the default
+ * stamps for the site it came in on (`hostId`), so a record shared by hand,
+ * one stamped narrower or wider, one from no site, and every record of an org
+ * whose default is not all sites except some, gets `{}`. A writer spreads it
+ * beside `visibleTo` and nothing it stamped moves; the sweep then keeps the
+ * record level as sites come and go, as it keeps a record the default stamped
+ * through `crmScopeFields`.
+ */
+export function crmDefaultMarkerOf(
+  org: Record<string, unknown> | null | undefined,
+  record: { hostId?: unknown; visibleTo?: unknown },
+): CrmScopeMarker {
+  const hostId = typeof record.hostId === 'string' ? record.hostId.trim() : ''
+  if (!hostId || !Array.isArray(record.visibleTo) || !crmDefaultExceptOf(org)) return {}
+  const stamped = crmScopeFields(org, soloConsentGroup(hostId))
+  if (!stamped.scopeMode || !stamped.scopeExcept) return {}
+  const held = new Set<unknown>(record.visibleTo)
+  if (held.size !== stamped.visibleTo.length || !stamped.visibleTo.every((token) => held.has(token))) {
+    return {}
+  }
+  return { scopeMode: stamped.scopeMode, scopeExcept: [...stamped.scopeExcept] }
 }
 
 /**

@@ -56,7 +56,7 @@ import {
   CRM_TITLE_MAX,
   createPayload,
   crmCollection,
-  crmCreateStamp,
+  crmScopedCreateStamp,
   crmRefErrors,
   crmTimes,
   crmValidationFailed,
@@ -242,7 +242,7 @@ async function createActivity(request: Request, ctx: ApiV1Context): Promise<Resp
       })
     }
     const id = createResourceUid()
-    const stamp = crmCreateStamp(ctx, site.siteId)
+    const stamp = crmScopedCreateStamp(ctx, site.siteId)
     const { companyId } = await crmActivityLinkWithCompany(
       ctx.firestore.collection('orgs').doc(ctx.orgId),
       parsed.values,

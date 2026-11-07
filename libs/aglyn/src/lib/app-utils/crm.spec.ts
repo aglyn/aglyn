@@ -92,6 +92,7 @@ import {
   type CrmActivityRow,
   crmReadTokens,
   crmDefaultExceptOf,
+  crmDefaultMarkerOf,
   crmDefaultScopeOf,
   crmDefaultSharingOf,
   crmScopeFields,
@@ -2474,5 +2475,35 @@ describe('the CRM default "All sites except…" (AGL-4047)', () => {
     expect(crmScopeFields(except(['host-gone']), soloConsentGroup('host-a'))).toEqual({
       visibleTo: ['org'],
     })
+  })
+
+  it('marks a new record only when its sites are exactly what the default stamps for its site', () => {
+    const org = except(['host-c'])
+    expect(crmDefaultMarkerOf(org, { hostId: 'host-a', visibleTo: ['host:host-b', 'host:host-a'] })).toEqual({
+      scopeMode: 'allExcept',
+      scopeExcept: ['host:host-c'],
+    })
+    // Filed on the site left out: that site is in, so the default's sites are all three.
+    expect(
+      crmDefaultMarkerOf(org, { hostId: 'host-c', visibleTo: ['host:host-a', 'host:host-b', 'host:host-c'] }),
+    ).toEqual({ scopeMode: 'allExcept', scopeExcept: ['host:host-c'] })
+    // Narrower, wider, or copied from a record shared some other way: never marked.
+    expect(crmDefaultMarkerOf(org, { hostId: 'host-a', visibleTo: ['host:host-a'] })).toEqual({})
+    expect(
+      crmDefaultMarkerOf(org, { hostId: 'host-a', visibleTo: ['host:host-a', 'host:host-b', 'host:host-c'] }),
+    ).toEqual({})
+    expect(crmDefaultMarkerOf(org, { hostId: 'host-a', visibleTo: ['org'] })).toEqual({})
+    // From no site, or with sites a writer has not resolved to a list.
+    expect(crmDefaultMarkerOf(org, { hostId: null, visibleTo: ['host:host-a', 'host:host-b'] })).toEqual({})
+    expect(crmDefaultMarkerOf(org, { hostId: 'host-a', visibleTo: undefined })).toEqual({})
+  })
+
+  it('marks nothing unless the default leaves sites out and can reach them', () => {
+    const record = { hostId: 'host-a', visibleTo: ['host:host-a'] }
+    expect(crmDefaultMarkerOf({ hosts: sites, crm: { defaultRecordScope: 'host' } }, record)).toEqual({})
+    expect(crmDefaultMarkerOf({ hosts: sites }, { hostId: 'host-a', visibleTo: ['org'] })).toEqual({})
+    expect(crmDefaultMarkerOf(null, record)).toEqual({})
+    // All sites once nothing it leaves out is still there: stamped `['org']`, never marked.
+    expect(crmDefaultMarkerOf(except(['host-gone']), { hostId: 'host-a', visibleTo: ['org'] })).toEqual({})
   })
 })
