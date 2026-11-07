@@ -116,6 +116,18 @@ describe('what a plugin page says about its installs', () => {
     expect(installPlanOutcome({ name: 'Counter', installed: 0, errors: [], orgWide: false, updating: false })).toEqual({ tone: 'error', text: 'Install failed' })
   })
 
+  it('says an org-wide install left sites out (AGL-4047)', () => {
+    expect(installPlanOutcome({ name: 'Counter', installed: 1, errors: [], orgWide: true, updating: false, leftOut: 1 }).text).toBe(
+      'Installed "Counter" for every site but the one you left out, and for sites you add later',
+    )
+    expect(installPlanOutcome({ name: 'Counter', installed: 1, errors: [], orgWide: true, updating: false, leftOut: 2 }).text).toBe(
+      'Installed "Counter" for every site but the 2 you left out, and for sites you add later',
+    )
+    expect(installPlanOutcome({ name: 'Counter', installed: 1, errors: [], orgWide: true, updating: false, leftOut: 0 }).text).toBe(
+      'Installed "Counter" for the whole organization',
+    )
+  })
+
   describe('a marketplace plugin\'s settings', () => {
     const manifests: unknown[] = [
       null,

@@ -273,6 +273,8 @@ export function useMarketplaceActions(
          * identical warnings would read as N different problems.
          */
         let withoutBase = 0
+        /** Sites the org-wide pin left out, as the route wrote them (AGL-4047). */
+        let leftOut = 0
         /**
          * A feature lockdown refuses every step identically (AGL-1532), so
          * the fan-out stops at the first one and says "installs are paused"
@@ -291,6 +293,16 @@ export function useMarketplaceActions(
               listingId: listing.$id,
               hostId: targetHostId,
               ...(step.scope === 'org' ? { scope: 'org' } : {}),
+              // "All sites except…" (AGL-4047): the route leaves these sites
+              // out before it writes the workspace's pin.
+              ...(step.scope === 'org' && step.exceptHostIds?.length
+                ? {
+                    runsOn: {
+                      mode: 'allExcept',
+                      exceptHostIds: [...step.exceptHostIds],
+                    },
+                  }
+                : {}),
             }),
           })
           const payload = await response.json().catch(() => ({}))
@@ -300,6 +312,9 @@ export function useMarketplaceActions(
               abiWarnings.add(String(payload.hostAbiWarning))
             }
             if (payload?.baseStored === false) withoutBase += 1
+            if (Array.isArray(payload?.leftOutHostIds)) {
+              leftOut += payload.leftOutHostIds.length
+            }
           } else {
             lockedNotice = parseLockdownRefusal(response.status, payload)
             if (lockedNotice) break
@@ -330,6 +345,7 @@ export function useMarketplaceActions(
           updating: options?.intent === 'update',
           version: options?.version != null ? String(options.version) : null,
           saved: Boolean(marketplaceLandingMessage(artifactType, '')),
+          leftOut,
         })
         enqueueSnackbar(
           outcome.text,

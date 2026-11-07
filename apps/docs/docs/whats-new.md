@@ -52,6 +52,13 @@ for the how-to.
   site you add later.
 - **Run a built-in plugin on all sites except some.** [Where a plugin runs](guides/install-your-first-plugin.md#where-a-plugin-runs)
   — on a plugin's page, tick the sites to leave out, and every other site runs it, including any site you add later.
+- **Install from the Marketplace to all sites except some.** [Choose which sites get it](guides/install-your-first-plugin.md#step-4-targeting)
+  — a plugin installs for every other site, including any site you add later, and a site
+  you left out can turn it back on for itself. A component, template or other per-site
+  item goes onto the sites you have now, minus the ones you leave out.
+- **A site's own switch stops a Marketplace plugin there.** [Plugins on one site](guides/install-your-first-plugin.md#site-plugins)
+  — switching a Marketplace plugin off on a site's **Admin → Plugins** page now takes it
+  off that site's published pages and its editor too.
 - **Four plans: Free, Starter, Pro and Custom.** [Billing & plans](workspace-and-billing/billing-and-plans/overview.md#tiers--entitlements)
   — Pro is now the full platform: everything that was on Business, including the API
   and webhooks, A/B testing, multilingual sites, scheduled publishing, recurring billing,
