@@ -180,3 +180,9 @@ fun reservationGuestsProblem(guests: Double?, capacity: Double?): String? {
   }
   return null
 }
+
+/** A day key as midnight UTC, for a date picker; null for one that is not a day. */
+fun checkInDayKeyMillis(dayKey: String?): Long? = dayKeyMs(dayKey)
+
+/** The day key of an instant in UTC, for a date picker's pick. */
+fun checkInDayKeyOfMillis(epochMs: Long): String = dayKeyOf(epochMs)
