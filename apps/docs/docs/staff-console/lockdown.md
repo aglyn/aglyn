@@ -1410,11 +1410,17 @@ it.
   `lockdownBillingPauses`, and the account is set to
   `settings[payouts][schedule][interval]=manual`. Money stays in the account
   balance and is not paid out.
-- **A Standard account is not controllable.** Aglyn creates Express accounts,
-  and the platform can set payouts only for Express and Custom accounts. For a
-  Standard account the result says **not controllable — pause them in the
-  Stripe Dashboard**. That is not a failure of the lock. Pause the payouts by
-  hand in the Dashboard: **Connect → Accounts → the account → Payouts**.
+- **A store's own Stripe account is not controllable.** The platform can set
+  payouts only for Express and Custom accounts. Stores that set up payments
+  before stores got their own account have Express accounts; every store since
+  has its own full Stripe account, which runs its own payouts, as a Standard
+  account does. For those the result says **not controllable — pause them in
+  the Stripe Dashboard**. That is not a failure of the lock. Pause the payouts
+  by hand in the Dashboard: **Connect → Accounts → the account → Payouts**.
+- **Renewals on a store's own Stripe account are not paused.** Its membership
+  subscriptions live on that account, and the renewal pause asks Aglyn's
+  platform account for each one, so each is reported as failed rather than
+  paused. The lock still stops the site's checkout from taking new payments.
 - **A workspace lock pauses every account the workspace is paid through.**
   Besides the storefront account, a plugin can declare other connected
   accounts it pays the workspace through. The marketplace declares the

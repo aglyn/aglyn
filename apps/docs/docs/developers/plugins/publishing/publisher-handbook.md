@@ -285,6 +285,9 @@ Paste a repository README as-is. The editor renders **two heading sizes**
 and clamps every `#` run onto them, so the `# Project Name` a README opens
 with becomes the larger heading and `####` or deeper become the smaller
 one — you do not have to re-level anything by hand.
+A list item wrapped onto indented lines stays one item, and text in
+backticks shows as code on the listing, so a README wrapped at 80 columns
+reads the way it does on GitHub.
 
 The **changelog** has two audiences, and it is worth writing for both: the
 reviewer, who compares this version against the last approved one, and

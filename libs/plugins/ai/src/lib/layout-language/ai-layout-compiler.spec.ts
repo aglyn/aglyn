@@ -1392,3 +1392,36 @@ describe('a page brought in, kept as it is or improved (AGL-4152)', () => {
     expect(report.violations).toEqual([])
   })
 })
+
+describe('a filled button on a band pinned dark wears the visitor’s primary (AGL-4152)', () => {
+  const PLAN: AiLayoutPagePlan = {
+    title: 'Home',
+    sections: [
+      { name: 'Hero', uses: [], items: 0 },
+      { name: 'Book', uses: [], items: 0 },
+    ],
+  }
+  const sections: AiLayoutSection[] = [
+    { band: 'plain', blocks: [{ kind: 'heading', text: 'Grooming for every coat' }, { kind: 'button', text: 'See services', to: `page:${SERVICES}` }] },
+    {
+      band: 'dark',
+      align: 'center',
+      blocks: [
+        { kind: 'heading', text: 'Book a visit' },
+        { kind: 'button', text: 'Book now', to: `page:${CONTACT}`, style: 'primary' },
+        { kind: 'button', text: 'Call us', to: `page:${CONTACT}`, style: 'secondary' },
+      ],
+    },
+  ]
+
+  it('sends the dark band’s filled button back to the visitor’s scheme, on the button itself', () => {
+    const { tree } = aiCompileLayoutPage(sections, PLAN, TARGETS, { reusableComponents: false, sectionIds: ['sec-1', 'sec-2'] })
+    const button = (label: string) => Object.values(tree.nodes).find((node) => node?.componentId === 'muiButton' && node.props?.['children'] === label)
+    expect(button('Book now')?.props).toMatchObject({ variant: 'contained', color: 'primary', colorScheme: 'visitor' })
+    // The band is dark, so its outlined button and its words are drawn in the dark scheme as before.
+    expect(button('Call us')?.props?.['colorScheme']).toBeUndefined()
+    expect(button('See services')?.props?.['colorScheme']).toBeUndefined()
+    // No wrapper of a scheme of its own, whose ground shows at a button's rounded corners.
+    expect(Object.values(tree.nodes).filter((node) => node?.props?.['colorScheme'] === 'light')).toEqual([])
+  })
+})

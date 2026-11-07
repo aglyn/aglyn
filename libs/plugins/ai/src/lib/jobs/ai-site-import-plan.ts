@@ -369,16 +369,46 @@ export function aiSiteImportPlanRead(raw: unknown, input: AiSiteImportPlanScope)
     const role = AI_SITE_IMPORT_PAGE_ROLES.find((value) => value === named['role'])
     if (role && (ids.has(page) || (page === AI_SITE_IMPORT_PROPOSED_PAGE && proposes))) roles[page] = role
   }
+  // A button that asks to be contacted goes to the page for that, whatever page the answer named (AGL-4152).
+  const ctaTarget = aiSiteImportCtaTarget({ label: ctaLabel, target }, roles)
   return {
     plan: {
       site: { what, audience, kind, voice: clean(site['voice']) },
-      nav: { groups, primaryCta: { label: ctaLabel, target, ...(ctaPage ? { page: ctaPage } : {}) }, footer },
+      nav: { groups, primaryCta: { label: ctaLabel, target: ctaTarget, ...(ctaPage ? { page: ctaPage } : {}) }, footer },
       design: { hero, group, rhythm, cta: closing },
       proposed: proposes ? { title, slug, purpose, on: true } : null,
       ...(Object.keys(roles).length ? { roles } : {}),
     },
     violations: [],
   }
+}
+
+/**
+ * Words on a button that ask a visitor to reach the business (AGL-4152):
+ * contact, get in touch, a quote or estimate, a booking or appointment, a
+ * call, a talk, a consultation, an enquiry, a message.
+ */
+const CONTACT_WORDS =
+  /\b(?:contact|get in touch|in touch|reach (?:us|out)|quotes?|estimates?|book(?:ing)?|schedule|appointments?|call|talk|consult(?:ation)?s?|enquir(?:e|y|ies)|inquir(?:e|y|ies)|message|write to us|email us)\b/i
+
+/** Whether a button's words ask to be contacted. */
+export function aiSiteImportAsksContact(label: string): boolean {
+  return CONTACT_WORDS.test(label)
+}
+
+/**
+ * Where the header's button goes (AGL-4152): where the answer sends it, except
+ * that a button whose words ask to be contacted, sent to a page whose role is
+ * not `contact` while a page of that role exists, goes to that page. A
+ * "Contact us" to the About page took the visitor somewhere else than its
+ * words said, and the menu, leaving a lone entry to the button's page, then
+ * lost About altogether. The phone and the form are contact already.
+ */
+export function aiSiteImportCtaTarget(cta: { label: string; target: string }, roles: Readonly<Record<string, AiSiteImportPageRole>>): string {
+  if (cta.target === 'phone' || cta.target === 'form' || !aiSiteImportAsksContact(cta.label)) return cta.target
+  if (roles[cta.target] === 'contact') return cta.target
+  const contact = Object.keys(roles).find((page) => roles[page] === 'contact')
+  return contact ?? cta.target
 }
 
 /** A plan's check, answer by answer, for the one re-ask. */

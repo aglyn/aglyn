@@ -140,7 +140,11 @@ function compiledAll(withImportFields: boolean): string {
 describe("a guided start's page is drawn as before (AGL-4138)", () => {
   it('compiles to the digest taken before the import learned its sources’ framing', () => {
     const digest = createHash('sha256').update(compiledAll(false)).digest('hex')
-    expect(digest).toBe('0ee9fc9f37f35e7e32884ab7e3f0a5a1c21699edbb34123018423e7f2a22fc7e')
+    // Retaken once (AGL-4152) for one prop and nothing else: a filled button over a cover photo or on a dark band
+    // goes back to the visitor's scheme. Without it the compile hashes to the digest taken before (0ee9fc9f…).
+    expect(digest).toBe('8e0cb95f30c4d233b9b878b002a80ca5f4822fc55deb1395e861ea2436c1257d')
+    const without = compiledAll(false).split(',"colorScheme":"visitor"').join('')
+    expect(createHash('sha256').update(without).digest('hex')).toBe('0ee9fc9f37f35e7e32884ab7e3f0a5a1c21699edbb34123018423e7f2a22fc7e')
   })
 
   it("reads none of the import's fields: a page that carries them compiles the same", () => {

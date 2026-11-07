@@ -122,7 +122,8 @@ class VariantMatrixTest {
     assertEquals("Option \"A\" has too many values", checkOptions(listOf(option("A", 26))))
     assertEquals("Each option needs its own name", checkOptions(listOf(option("A", 2), option("A ", 2))))
     assertEquals("At most 3 options per product", checkOptions(listOf(option("A", 1), option("B", 1), option("C", 1), option("D", 1))))
-    assertEquals("At most 100 variants per product", checkOptions(listOf(option("A", 25), option("B", 5))))
+    // Said with the count and the way out, as the console says it (AGL-4100).
+    assertEquals(true, checkOptions(listOf(option("A", 25), option("B", 5)))?.startsWith("These options make 125 combinations, and a product holds at most 100."))
   }
 
   @Test

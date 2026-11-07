@@ -15,10 +15,10 @@
     "budget": 28672
   },
   "commerce": {
-    "baseline": 208018,
-    "budget": 219136,
+    "baseline": 219199,
+    "budget": 230400,
     "headroom": 1.05,
-    "note": "Re-baselined 2026-10-28 at 203.1 KB eager for the customer's quote page (AGL-4094): the page itself loads lazily (`quote-page-body.tsx`), and what stays eager is its small shell and schema and the new send-quotes permission entry. Before that, re-baselined 2026-10-25 at 190.9 KB (was 150.8 KB at the last baseline, against a 189.0 KB budget) after beta.282's POS work (AGL-4036/4037/4038/4043) took the storefront's eager bytes past it; the product model now validates a variant's check-in setting. Headroom is cut to 5% so the next growth is looked at, not absorbed. Making the member/return/review widgets lazy (`--why commerce`) is the follow-up that earns headroom back."
+    "note": "Re-baselined 2026-11-06 at 214.1 KB eager for v1.17.0: #2465 (the product builder) left 0.1 KB of headroom, and #2486 (product names on storefront cards wrap to two lines) spent it on the grid and related-products cards, which draw at load. Re-baselined 2026-10-28 at 203.1 KB eager for the customer's quote page (AGL-4094): the page itself loads lazily (`quote-page-body.tsx`), and what stays eager is its small shell and schema and the new send-quotes permission entry. Before that, re-baselined 2026-10-25 at 190.9 KB (was 150.8 KB at the last baseline, against a 189.0 KB budget) after beta.282's POS work (AGL-4036/4037/4038/4043) took the storefront's eager bytes past it; the product model now validates a variant's check-in setting. Headroom is cut to 5% so the next growth is looked at, not absorbed. Making the member/return/review widgets lazy (`--why commerce`) is the follow-up that earns headroom back."
   },
   "marketplace": {
     "baseline": 248508,

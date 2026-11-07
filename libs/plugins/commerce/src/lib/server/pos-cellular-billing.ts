@@ -35,6 +35,7 @@ import {
 import {
   closePosCellularPeriod,
   parsePosCellularConfig,
+  posCellularBilledToPlatform,
   posCellularChargeCents,
   posCellularGraceEndsAtMs,
   posCellularMonthBounds,
@@ -107,6 +108,14 @@ import {
  * (and last month too, if the run had not charged it yet), so the two never
  * charge one month twice. A failure there alerts staff and never holds the
  * erasure.
+ *
+ * A STORE ON ITS OWN STRIPE ACCOUNT (a reader record with
+ * `stripeConfigurationAccount`) is billed for its 4G by Stripe, on that
+ * account, so none of the charging above counts it
+ * (`posCellularReadersByWorkspace`), and no charge here can warn about it or
+ * turn its 4G off: an unpaid month suspends only the workspace's stores on
+ * the platform. A gone store and an erased workspace still turn it off at
+ * Stripe, on the account it is on.
  *=========================================*/
 
 const LABEL = '[pos-cellular] billing'
@@ -564,11 +573,15 @@ async function warnPaymentDue(
   const charge = await claimWarning(id, now)
   if (!charge) return false
   const told = await (async () => {
-    // The stores that have 4G now, which lose it on that day.
+    // The stores that have 4G on the platform now, which lose it on that
+    // day. A store on its own Stripe account keeps it whatever happens here.
     const snapshot = await recordsRef().where('orgId', '==', charge.orgId).where('enabled', '==', true).limit(500).get()
     const hostIds = [
       ...new Set(
-        (snapshot.docs as unknown as Array<{ data: () => PosCellularReaderRecord }>).map((doc) => doc.data().hostId),
+        (snapshot.docs as unknown as Array<{ data: () => PosCellularReaderRecord }>)
+          .map((doc) => doc.data())
+          .filter(posCellularBilledToPlatform)
+          .map((record) => record.hostId),
       ),
     ]
     return context.warn({
@@ -600,10 +613,11 @@ async function claimSuspension(id: string, now: number): Promise<boolean> {
 }
 
 /**
- * 4G off at Stripe for every store of the workspace that still has it, each
- * store's settings saying why, its readers' periods closed, and the workspace
- * told once. Safe to run again: a store already off and a notice already
- * sent are left alone.
+ * 4G off at Stripe for every store of the workspace that still has it on the
+ * platform, each store's settings saying why, its readers' periods closed,
+ * and the workspace told once. A store on its own Stripe account is never
+ * touched: its 4G is not part of the charge. Safe to run again: a store
+ * already off and a notice already sent are left alone.
  */
 async function finishSuspension(
   id: string,
@@ -617,9 +631,9 @@ async function finishSuspension(
 ): Promise<void> {
   const { now } = context
   const snapshot = await recordsRef().where('orgId', '==', charge.orgId).where('enabled', '==', true).limit(500).get()
-  const records = (snapshot.docs as unknown as Array<{ id: string; data: () => PosCellularReaderRecord }>).map(
-    (doc) => ({ id: String(doc.id), record: doc.data() }),
-  )
+  const records = (snapshot.docs as unknown as Array<{ id: string; data: () => PosCellularReaderRecord }>)
+    .map((doc) => ({ id: String(doc.id), record: doc.data() }))
+    .filter(({ record }) => posCellularBilledToPlatform(record))
   const hostIds = new Set(charge.suspendedHostIds ?? [])
   if (records.length) {
     await turnOffConfigurations(
@@ -661,15 +675,16 @@ async function finishSuspension(
  * goes:
  *
  * 1. CHARGE IT. The month the workspace is deleted in is charged now, for
- *    each S710 that had 4G in it, as the monthly run would have charged it a
+ *    each S710 on the platform that had 4G in it (one on a store's own
+ *    Stripe account is Stripe's to bill), as the monthly run would have charged it a
  *    month later; and last month too, if the run had not charged it yet.
  *    Through the run's own claim and key, so the two never charge one month
  *    twice. A workspace that is locked is not charged (its card may be the
  *    stolen one the lock is about): staff are alerted instead. Any failure
  *    alerts staff and goes on.
  * 2. TURN IT OFF. Every store of the workspace with 4G on has cellular turned
- *    off at Stripe, so the platform stops paying for readers nobody will be
- *    charged for, and their periods are closed.
+ *    off at Stripe, on the account it is on, so nobody keeps paying for
+ *    readers of a workspace that is gone, and their periods are closed.
  *
  * Never fails the erasure: a refusal is a must alert. A dry run only counts.
  */

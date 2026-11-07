@@ -45,12 +45,16 @@ are shown in the console only when they are available for your store.
 
 **Getting a reader**
 
-Readers take payments through Aglyn's Stripe account, which pays your
-store out, so a reader is registered to your store in Aglyn rather than
-in a Stripe Dashboard of your own. Any supported reader can be added with
-the pairing code it shows, including one that was registered somewhere
-else before: generating a new pairing code on the reader and adding it
-here moves it to your store.
+Readers take payments on your store's own Stripe account, the same account
+your online sales are charged on, and Aglyn registers each one there for you
+when you add it here. Any supported reader can be added with the pairing
+code it shows, including one that was registered somewhere else before:
+generating a new pairing code on the reader and adding it here moves it to
+your store. A reader added before your store had its own Stripe account has
+to be removed and added again; see
+[Card readers](pos-and-reservations.md#card-readers). On a platform-managed
+(Express) account, set up before stores got their own, readers take payments
+through Aglyn's Stripe account, which pays the store out.
 
 Where the **Hardware** card is available, you can buy a reader from Aglyn
 instead and have it shipped to you; see

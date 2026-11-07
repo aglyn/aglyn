@@ -656,6 +656,23 @@ describe('editing and deleting a quote', () => {
     expect(docs.has('hosts/site1/orders/order-9')).toBe(true)
   })
 
+  it('takes the conversation with a deleted draft, and keeps it when the delete is refused (AGL-4207)', async () => {
+    const quoteId = await created()
+    const path = `hosts/site1/orders/${quoteId}`
+    docs.set(`${path}/messages/m1`, { direction: 'out', body: 'Draft reply', atMs: 1_000, revision: 1 })
+    docs.set(`${path}/messages/m2`, { direction: 'out', body: 'Another', atMs: 1_100, revision: 1 })
+    const sent = await handleQuote(deps, request('admin', { action: 'create', hostId: 'site1', quote: { lines: [CUSTOM] } }, 's2'))
+    const sentPath = `hosts/site1/orders/${String(sent.body['quoteId'])}`
+    docs.set(sentPath, { ...docs.get(sentPath), quote: { ...docs.get(sentPath)?.['quote'], stage: 'sent' } })
+    docs.set(`${sentPath}/messages/m3`, { direction: 'in', body: 'Kept', atMs: 1_200, revision: 1 })
+
+    const remove = (id: string) => handleQuote(deps, request('admin', { action: 'delete', hostId: 'site1', quoteId: id }))
+    expect(await remove(quoteId)).toEqual({ status: 200, body: { deleted: true } })
+    expect([...docs.keys()].filter((key) => key.startsWith(`${path}/`))).toEqual([])
+    expect((await remove(String(sent.body['quoteId']))).status).toBe(409)
+    expect(docs.has(`${sentPath}/messages/m3`)).toBe(true)
+  })
+
   it('refuses deleting without the key', async () => {
     const quoteId = await created()
     expect((await handleQuote(deps, request('author', { action: 'delete', hostId: 'site1', quoteId }))).status).toBe(403)

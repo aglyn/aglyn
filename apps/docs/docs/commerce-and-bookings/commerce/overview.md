@@ -7,9 +7,11 @@ description: Sell physical, digital, and service products with a full catalog, o
 # Commerce
 
 Aglyn commerce sells from **your own Stripe account**: buyers pay you
-directly, and Aglyn collects a per-sale platform fee set by your plan (see
+directly, you are the seller of record, and Aglyn takes a per-sale platform fee
+set by your plan (see
 [Platform fees](../../workspace-and-billing/billing-and-plans/overview.md#platform-fees) — the fee
-is lower on Pro than on Starter, and Custom carries none).
+is lower on Pro than on Starter, and Custom carries none). Stripe bills its card
+processing to your Stripe account; see [Who charges what](#who-charges-what).
 
 ```mermaid
 sequenceDiagram
@@ -30,6 +32,41 @@ Pro has no product limit and a lower fee: 0.5% on physical goods and 3% on digit
 and service products. Custom carries no platform fee.
 :::
 
+## Who charges what {#who-charges-what}
+
+You set up payments from **Products → Payments → Set up payments**, through
+Stripe's onboarding. The Stripe account it creates is yours: it has its own
+Stripe login and the full Stripe Dashboard. Every sale your sites take is
+charged on it, online and in person: checkout, the cart, subscriptions and
+memberships, quotes, invoices, reservations, bookings, the register and Tap to
+Pay.
+
+- **Aglyn's platform fee** is your plan's rate and nothing else. It is taken
+  from each sale automatically as a Stripe application fee. Cash, gift card
+  and store credit payments at the register carry none, and a room charge's
+  fee is billed on your monthly invoice.
+- **Card processing** is billed by Stripe straight to your Stripe account, at
+  Stripe's standard pricing for your account. So is Stripe Tax, if you use it.
+  Neither is an Aglyn charge.
+- **Refunds** come out of your Stripe balance. Aglyn returns its fee on the
+  refunded share.
+- **Disputes** are answered in your own Stripe Dashboard, and Stripe bills its
+  dispute fee to your account. See [If a dispute is lost](#a-lost-dispute).
+- **Payouts** go from Stripe to your bank, on the schedule set in your Stripe
+  account.
+- **Payment methods** come from your Stripe account's settings. See
+  [Payment methods](#payment-methods).
+
+:::note Set up payments before this change?
+A store that set up payments earlier keeps the platform-managed (Stripe Express)
+account it was given, and everything works exactly as before for it: sales are
+charged through Aglyn's Stripe account and paid on to yours, card processing is
+passed through at cost inside the platform fee (see
+[Platform fees](../../workspace-and-billing/billing-and-plans/overview.md#platform-fees)),
+and **View payouts in Stripe** opens the Express dashboard. The kind of account
+can't be changed once it is created.
+:::
+
 ![The products hub](/img/commerce/products-page.png)
 
 ## Products hub
@@ -48,7 +85,7 @@ The **Products** page is the catalog manager:
   Products, categories, orders, discounts, coupons and gift cards export with
   the fields you pick. See
   [Import and export store data](store-import-and-export.md).
-- **Payments** — Stripe Connect onboarding status and your plan's fee
+- **Payments** — your Stripe account's setup status and your plan's fee
   ladder.
 
 The store's settings sit under **Settings** at the foot of the Products rail,
@@ -272,8 +309,8 @@ snapshots, totals, and a timeline:
   approve, receive with restock and refund — see
   [Returns](orders-and-returns.md#returns). **Order webhooks** send each order
   event to your own systems — see [Order webhooks](orders-and-returns.md#order-webhooks).
-- **Refunds** (full or partial) go through Stripe and reverse the platform
-  fee. Refunding needs the **Refund orders** permission. By default, that's an
+- **Refunds** (full or partial) go through Stripe, come out of your Stripe
+  balance, and return the platform fee on the refunded share. Refunding needs the **Refund orders** permission. By default, that's an
   admin of the site who is also a member of the whole workspace: a workspace owner
   or admin, or a member given access to every site. A collaborator invited to this
   one site as its admin can run the till and fulfill orders, but can't send money
@@ -281,7 +318,7 @@ snapshots, totals, and a timeline:
 - **Chargebacks** are shown apart from refunds. When a shopper disputes a
   charge with their bank, the order gets a **Chargeback open** badge and the
   list warns you with the date Stripe needs your evidence by — answer it in
-  the Stripe dashboard, because an unanswered dispute is decided for the
+  your Stripe Dashboard, because an unanswered dispute is decided for the
   shopper. If the dispute is lost the money is reversed, the order reads
   **Charged back** rather than Refunded, and the buyer loses the downloads,
   membership and verified-purchase review a refund would have withdrawn. A
@@ -425,7 +462,7 @@ tiles says so. Use **Export orders** and your Stripe payouts to reconcile; use t
 to see which way the last month went.
 :::
 
-### If a dispute is lost, the money comes back out of your payout {#a-lost-dispute}
+### If a dispute is lost, the money comes out of your Stripe balance {#a-lost-dispute}
 
 Worth knowing before it happens, because it is money leaving an account you
 already received it into:
@@ -436,28 +473,33 @@ The order keeps its **Refunded** status and gains a **Charged back** badge besid
 it — the pair is deliberate. The money did leave, so the order is refunded; the
 badge is what tells you the merchant did not choose it.
 
-- **The sale was paid out to you at the time of the charge.** When a dispute is
-  lost, that payout is reversed — the amount is pulled back from your connected
-  Stripe account, not absorbed by Aglyn.
+- **The dispute is on your own Stripe account.** The sale was charged there, so
+  when a dispute is lost Stripe takes the amount from your Stripe balance.
 - **The full sale amount comes back, not the amount after our commission.** On
-  a $100 sale you received $95 and Aglyn kept $5; a lost dispute pulls back the
+  a $100 sale you kept $95 and Aglyn took $5; a lost dispute takes back the
   whole $100, because that is what the shopper's bank took. This is the same
   treatment Shopify, Etsy, eBay, PayPal and Square apply to a chargeback, and
   it is **different from a refund you issue yourself** — on a refund, Aglyn's
   commission is returned to you.
-- **Aglyn pays the dispute fee.** Card networks charge a fee (around $15) on
-  every lost dispute on top of the sale amount. That one is ours, not yours,
-  and it never appears on your order or your payout.
+- **Stripe's dispute fee is billed to your Stripe account**, at Stripe's
+  pricing for your account. It does not appear on your order.
 - **You are notified** when the reversal happens, so the first you hear of it is
   not a shortfall in a payout you were expecting.
 - **The reversal can push your Stripe balance negative** if you have already
   been paid out and nothing new has come in. Stripe recovers a negative balance
-  from your next payouts; it does not ask you for money. It does mean your next
-  payout can be smaller than the sales behind it, which is normal and not an
-  error.
+  from your next payouts. It does mean your next payout can be smaller than the
+  sales behind it, which is normal and not an error.
 - **Answer disputes promptly.** An unanswered dispute is decided for the shopper
   by default, so the deadline on the order row is the whole game. Evidence is
-  submitted in the Stripe dashboard.
+  submitted in your Stripe Dashboard.
+
+:::note On a platform-managed (Express) account
+A store that set up payments earlier is paid out at the time of each sale, so
+a lost dispute reverses that payout: the full sale amount is pulled back from
+the connected Stripe account, not absorbed by Aglyn. Aglyn pays the card
+network's dispute fee (around $15) on those accounts, and it never appears on
+the order or the payout.
+:::
 
 :::info Selling needs a plan with commerce
 Storefront checkout, POS, **draft orders**, and **reservation deposits** all
@@ -492,12 +534,26 @@ country it serves.
 The card only lists the methods the platform offers. A method missing from
 your card is not available for storefronts yet.
 
-**No checkout offers buy-now-pay-later.** Klarna, Afterpay and Affirm are not
-offered anywhere a customer pays you: storefront checkout, bookings, reservation
-deposits, quotes, invoices, draft order links and the register's card link. Every
-method on the card costs Stripe no more than a card does, so the processing passed
-through on each sale is Stripe's card rate, 2.9% + 30¢ (see
-[processing costs](../../workspace-and-billing/billing-and-plans/overview.md)).
+**Your Stripe account decides the rest.** Your sales are charged on your own
+Stripe account, so the methods a shopper sees also follow that account's
+payment method settings in your Stripe Dashboard. A method you turn on there
+and that the card does not list, such as bank payments, can appear at checkout
+when the order qualifies. Turning a method off on this card keeps it off your
+checkout whatever your Stripe account allows. Stripe bills each method at
+Stripe's standard pricing for your account.
+
+**No checkout offers buy-now-pay-later.** Klarna, Afterpay and Affirm are left
+out of every place a customer pays you: storefront checkout, bookings,
+reservation deposits, quotes, invoices, draft order links and the register's card link,
+even when they are on in your Stripe account.
+
+:::note On a platform-managed (Express) account
+A store that set up payments earlier is offered the methods on this card that
+the platform's own Stripe settings allow, and every one of them costs no more
+than a card, so the processing passed through on each sale is Stripe's card
+rate, 2.9% + 30¢ (see
+[Platform fees](../../workspace-and-billing/billing-and-plans/overview.md#platform-fees)).
+:::
 
 Anyone holding **Manage orders**
 can read the card; changing it takes **Manage payment methods**, which a site's admins
@@ -508,7 +564,7 @@ first**, and a note at the top of the card links to the **Payments** card
 above it, where you connect. You can still choose your methods in the
 meantime; they show at checkout once Stripe is connected and approves them.
 
-**What each chip means.** Cash App Pay, Amazon Pay and stablecoins also need Stripe to enable them on your payout account. Saving the
+**What each chip means.** Cash App Pay, Amazon Pay and stablecoins also need Stripe to enable them on your Stripe account. Saving the
 card asks Stripe for that. **Stripe is reviewing** means it is still checking,
 and **Stripe needs more details** means Stripe wants more information. The
 organization owner presses **Finish in Stripe** on that method to give it.
@@ -548,7 +604,13 @@ is taken that cannot be taxed correctly.
 1. Choose the **Calculation**:
    - **Manual rates** — you enter the rates.
    - **Stripe Tax (automatic)** — Stripe works out the tax for each buyer's
-     location at checkout. Activate Stripe Tax in your Stripe dashboard first.
+     location at checkout, on your own Stripe account. Turn on Stripe Tax in
+     your Stripe Dashboard first (**Settings → Tax**: your head office address,
+     a preset product tax code, and at least one registration). Until it is
+     active there, checkout refuses with "This store is finishing its sales tax
+     setup." Stripe bills Stripe Tax to your Stripe account. A store on a
+     platform-managed (Express) account skips this step: its Stripe Tax runs
+     against Aglyn's registrations.
    - **Don't collect sales tax** — no tax is added to any order, and orders
      still go through. Choose it when you have no obligation to collect.
 2. For manual rates, enter the **Origin country** and **Origin state**: where
@@ -624,23 +686,27 @@ them together:
 
 - **Tax Stripe calculated against Aglyn's registrations** — automatic tax was
   on, Stripe computed the rate against registrations on Aglyn's platform
-  account, and Aglyn holds what was collected.
+  account, and Aglyn holds what was collected. Only stores on a
+  platform-managed (Express) account have sales here.
 - **Tax your store calculated at your own rate** — automatic tax was off, and
   the rate came from the tax settings you configured, applied to your own
   declared origin.
 - **Tax Stripe calculated against your connected account** — automatic tax was
-  on and Stripe named your connected account as the liable party.
+  on and Stripe named your Stripe account as the liable party. Stripe Tax on a
+  store's own Stripe account lands here.
 
 Each group breaks down by jurisdiction, with the sales, the taxable base
 Stripe stated, and the tax.
 
 :::warning Aglyn does not provide tax advice
-For storefront sales Aglyn acts as a **marketplace facilitator**, and where
-applicable law gives Aglyn a collection obligation it calculates, collects and
-remits that tax itself — added on top at checkout, held by Aglyn, and never
-transferred to your connected payment account. That is the first group above.
-Tax your store calculated at your own rate, and tax Stripe named your connected
-account liable for, stay yours.
+A store that sells on its own Stripe account owns the tax on its sales: it
+calculates, collects, files and remits it. For a store on a platform-managed
+(Express) account, Aglyn acts as a **marketplace facilitator** for storefront
+sales, and where applicable law gives Aglyn a collection obligation it
+calculates, collects and remits that tax itself — added on top at checkout,
+held by Aglyn, and never transferred to the store's connected payment account.
+That is the first group above. Tax your store calculated at your own rate, and
+tax Stripe named your Stripe account liable for, stay yours.
 
 Aglyn still does not print a per-jurisdiction verdict for your business:
 Terms of Service §10.7 binds Aglyn only where it actually has an obligation for

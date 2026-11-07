@@ -38,6 +38,16 @@ export const NODE_COLOR_SCHEME_PROP = 'colorScheme'
 /** "Match the site": follow the visitor's scheme, as if the prop were unset. */
 export const ELEMENT_COLOR_SCHEME_SITE = 'site'
 
+/**
+ * Back to the visitor's own scheme inside a part of the page pinned to the
+ * other one (AGL-4152). Never offered in the Color scheme field, so no author
+ * and no model picks it: the AI layout compiler writes it on a filled button
+ * inside a band pinned dark, so that button wears the same primary as every
+ * other filled button on the site, light or dark, as the visitor picked. It
+ * paints nothing of its own, so the band shows at the button's rounded corners.
+ */
+export const ELEMENT_COLOR_SCHEME_VISITOR = 'visitor'
+
 export type ElementColorScheme = 'light' | 'dark'
 
 /**

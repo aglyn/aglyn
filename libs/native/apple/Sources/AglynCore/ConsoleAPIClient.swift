@@ -167,10 +167,12 @@ public final class ConsoleAPIClient: Sendable {
         }
         request.setValue("Bearer \(token)", forHTTPHeaderField: "Authorization")
       }
-      if let body {
+      // A GET never carries a body: URLSession refuses one before it is sent ("GET method must not have a body"), and
+      // `JSONValue` takes `nil` as `.null`, so a caller's `nil` can arrive here as a body.
+      if let body, method != .get {
         request.setValue("application/json", forHTTPHeaderField: "Content-Type")
         request.httpBody = try body.encoded()
-      } else if let rawBody {
+      } else if let rawBody, method != .get {
         // A route that takes the file itself as the body (`/api/fonts/prepare`).
         request.setValue(rawBody.contentType, forHTTPHeaderField: "Content-Type")
         request.httpBody = rawBody.data

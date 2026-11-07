@@ -102,7 +102,8 @@ workspace can add.
 
 Transaction fees are Aglyn platform fees on the sales you take through your site —
 storefront orders, recurring billing and paid bookings alike — separate from
-Stripe's payment-processing fees. Pro's are lower than Starter's, and Custom has none.
+Stripe's payment-processing fees, which Stripe bills to your own Stripe account. Pro's
+are lower than Starter's, and Custom has none.
 
 Every plan also includes an amount of monthly **traffic** — 2 GB on Free, more on each
 paid plan, and on Custom whatever the agreement sets. Passing it is metered and
@@ -741,8 +742,9 @@ subscription is calculated from.
 - **This page is where you edit it.** It also appears, read-only, on **Settings →
   Profile**, which links back here. One address, one place to change it.
 - **It is not your payout address.** Money that flows *out* to you from marketplace or
-  storefront sales is keyed by the identity Stripe holds for your connected account,
-  which you set up under **Marketplace → Payouts**.
+  storefront sales is keyed by the identity Stripe holds for your Stripe account,
+  which you set up on **Products → Payments** for store sales and under
+  **Marketplace → Payouts** for plugin sales.
 - **It is not your storefront's tax origin either.** Sales tax on orders *your* buyers
   place is calculated from the origin set per site in **Products → Taxes**.
 - **It can be replaced but not emptied.** A workspace with no billing address cannot have
@@ -803,16 +805,19 @@ line on the invoice.
 
 Sales tax on **your own** storefront's sales to **your** customers is a separate
 charge from the tax on your Aglyn invoice, and it is allocated by Terms of
-Service §10.7: for storefront sales Aglyn acts as a **marketplace facilitator**,
-so where applicable law gives Aglyn a collection obligation Aglyn calculates,
-collects and remits that tax itself — added on top at checkout, and never
-transferred to your connected payment account. Flat rates you configure yourself
-(lodging, service and similar) stay yours to set and to remit. See
-[Shipping &amp; taxes](../../commerce-and-bookings/commerce/overview.md#shipping--taxes).
+Service §10.7. A store that sells on its own Stripe account owns the tax on its
+sales: it calculates, collects, files and remits it, with its own rates or with
+Stripe Tax on its own Stripe account. For a store that set up payments earlier on
+a platform-managed account, Aglyn acts as a **marketplace facilitator** for
+storefront sales, so where applicable law gives Aglyn a collection obligation
+Aglyn calculates, collects and remits that tax itself — added on top at checkout,
+and never transferred to the store's connected payment account. Flat rates you
+configure yourself (lodging, service and similar) stay yours to set and to remit.
+See [Shipping &amp; taxes](../../commerce-and-bookings/commerce/overview.md#shipping--taxes).
 
 ### Platform fees
 
-Sales you take through your site carry a **platform fee** on top of Stripe's
+Sales you take through your site carry a **platform fee**, separate from Stripe's
 processing fee. It is lower on Pro than on Starter, and Custom has none:
 
 | Plan | Physical goods | Digital goods, recurring billing & bookings |
@@ -823,33 +828,57 @@ processing fee. It is lower on Pro than on Starter, and Custom has none:
 
 **Recurring billing** (subscriptions and paid memberships), paid access to
 **members-only content**, and **bookings** bill at the digital rate — the fee is
-applied at checkout as the Stripe Connect application fee, on one-time sales and
-recurring member subscriptions alike. A paid booking is a service sale and sits on
+taken from each sale automatically as a Stripe application fee, on one-time sales
+and recurring member subscriptions alike. A paid booking is a service sale and sits on
 that same digital line rather than carrying a rate of its own; see
 [Bookings](../../commerce-and-bookings/bookings/overview.md#payments-and-fees).
 Selling requires a paid plan with commerce.
 
-**Stripe's processing cost is passed through at cost**, on every tier, alongside the
-platform fee above. On a one-time sale it is a cents amount inside the application fee.
-On a recurring membership it is folded into the fee percentage, because a Stripe
-subscription accepts only a percentage: the fixed per-transaction part becomes a share
-of the recurring price, rounded up to two decimals, so a $10-a-month membership carries
-a higher percentage than a $100-a-month one. The platform take itself does not move,
-and Custom still takes 0%.
+**Card processing is billed by Stripe to your own Stripe account.** Your store
+sells on a Stripe account of its own, so Stripe charges its card processing there, at
+Stripe's standard pricing for your account, along with Stripe Tax if you use it. Neither is
+part of Aglyn's fee and neither passes through Aglyn. The platform fee in the table
+is the whole of what Aglyn takes from a sale, and Custom takes nothing. The same
+holds online and at the register: storefront orders, bookings, quotes, invoices,
+memberships, card readers and Tap to Pay.
 
-**Card processing is 2.9% + 30¢ on every sale**, online or on a card reader:
-storefront orders, bookings, quotes, invoices and memberships. No checkout offers
-buy-now-pay-later (Klarna, Afterpay or Affirm), so no way your customer can pay costs
-more. What Stripe charges to pay you out (0.25% + 25¢ a payout), and 0.5% where Stripe
-Tax works out the tax, come out of the platform fee. Where the platform fee is smaller
-than those (a 0% fee, or a small sale), the fee on that sale is what Stripe charges
-instead, never more. See
+- **Refunds** come out of your Stripe balance, and Aglyn returns its platform fee
+  on the refunded share.
+- **Disputes** are answered in your own Stripe Dashboard, and Stripe's dispute fee
+  is billed to your Stripe account.
+- **Payouts** go from Stripe to your bank on the schedule set in your Stripe
+  account.
+
+See [Who charges what](../../commerce-and-bookings/commerce/overview.md#who-charges-what).
+
+:::note Stores that set up payments earlier
+A store that set up payments before stores got their own Stripe account keeps the
+platform-managed (Stripe Express) account it was given, and its sales work as they
+always have. The kind of account can't be changed once it is created. On that kind:
+
+- **Stripe's processing cost is passed through at cost**, on every tier, alongside
+  the platform fee above. On a one-time sale it is a cents amount inside the
+  application fee. On a recurring membership it is folded into the fee percentage,
+  because a Stripe subscription accepts only a percentage: the fixed
+  per-transaction part becomes a share of the recurring price, rounded up to two
+  decimals, so a $10-a-month membership carries a higher percentage than a
+  $100-a-month one. The platform take itself does not move, and Custom still
+  takes 0%.
+- **Card processing is 2.9% + 30¢ on every sale**, online or on a card reader.
+  What Stripe charges to pay you out (0.25% + 25¢ a payout), and 0.5% where Stripe
+  Tax works out the tax, come out of the platform fee. Where the platform fee is
+  smaller than those (a 0% fee, or a small sale), the fee on that sale is what
+  Stripe charges instead, never more.
+:::
+
+No checkout offers buy-now-pay-later (Klarna, Afterpay or Affirm), on either kind
+of account. See
 [payment methods](../../commerce-and-bookings/commerce/overview.md#payment-methods).
 
 **At the register, cash, gift cards and store credit carry no platform fee.** Card
 and charge-to-room payments carry the same rate as an online sale. Card payments have
-the fee deducted from the Stripe payout; a room charge has no payout to deduct from, so
-its fee is added to your next monthly invoice as a usage line. Cash is yours in full,
+the fee taken from the sale in Stripe; a room charge has no card payment to take it
+from, so its fee is added to your next monthly invoice as a usage line. Cash is yours in full,
 the fee on a gift card is charged when the card is sold, not again when it is spent,
 and store credit is value you gave your customer. A split sale charges the fee only on
 its card and room-charge parts, and tips carry no platform fee. See

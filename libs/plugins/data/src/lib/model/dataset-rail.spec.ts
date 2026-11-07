@@ -18,7 +18,6 @@
 import {
   type DatasetRailEntry,
   datasetCreatedLabel,
-  datasetNameMatches,
   datasetRecordTitle,
   datasetRailSecondary,
   datasetSourceLabel,
@@ -87,14 +86,7 @@ describe('the groups', () => {
   })
 })
 
-describe('the search and the order', () => {
-  it('matches the start of a name, normalized as the stored key is', () => {
-    const services = entry('a', 'Seasonal  Specials', ['org'])
-    expect(datasetNameMatches(services, ' SEASONAL s')).toBe(true)
-    expect(datasetNameMatches(services, 'specials')).toBe(false)
-    expect(datasetNameMatches(services, '')).toBe(true)
-  })
-
+describe('the order', () => {
   it('keeps two of one name in a stable order', () => {
     expect(
       sortDatasetsByName([entry('z', 'services', ['org']), entry('b', 'Allergens', ['org']), entry('a', 'Services', ['org'])]).map(

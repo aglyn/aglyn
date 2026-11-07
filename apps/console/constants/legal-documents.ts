@@ -72,7 +72,7 @@
 
 import { LEGAL_URLS } from './shared'
 
-export const LEGAL_DOCUMENT_VERSION = 'v24'
+export const LEGAL_DOCUMENT_VERSION = 'v25'
 
 export interface LegalDocumentManifestEntry {
   /** Stable key, and the snapshot's filename under `legal/{version}/`. */
@@ -1163,6 +1163,34 @@ export interface LegalDocumentManifestEntry {
  * 38630 bytes / `b315fe…`, byte for byte both before and after publication,
  * and terms reproduced its `v23` pin (71341 bytes / `48018d…`) before.
  *
+ * v25 (2026-11-06): in-person card sales on a store's own Stripe account.
+ *
+ *   - Terms §10.2(a) now covers the card sales a store takes in person
+ *     (card readers, Tap to Pay, bookings paid in person) as well as its online
+ *     sales when it has a full Stripe account of its own; §10.2(b) keeps only
+ *     sales on an account that is not the store's own (an Express account),
+ *     in person or online; the §10.2 lead says the account kind alone decides.
+ *     §10.7's first paragraph also covers tax the Services calculate from the
+ *     store's own console tax settings, as the register does. §4.32 adds that
+ *     an own-account store's readers are registered to that account and that
+ *     Aglyn does not also charge for cellular data the processor bills there.
+ *   - Privacy Policy unchanged, so its pin is unchanged and it is the
+ *     control. Subprocessors unchanged.
+ *
+ * "Last updated" stays November 6, 2026 (published the same Central day as
+ * v24, at 9:00 p.m.), so no `/legal` index card moved. The record is
+ * `Platform Docs/Legal/Proposed/2026-11-06-direct-charges-in-person-v25/`.
+ *
+ * Publication-first: the Terms master was edited and verified through the
+ * Docs API (revision 27 to 28: §10.2's lead, (a) and (b), §10.7's first
+ * paragraph and §4.32, nothing else), the version was published, the live
+ * page confirmed serving the new text on two consecutive checks, and only
+ * then was terms captured: 74456 bytes (`0e04be…`), identical across the
+ * capture's requests, and archived in `Acceptance-Snapshots/v25`. Privacy
+ * reproduced its pin, 38630 bytes / `b315fe…`, byte for byte both before and
+ * after publication, and terms reproduced its `v24` pin (73964 bytes /
+ * `f0af39…`) before.
+ *
  * ## ONE snapshot in the tree, and why that is enough
  *
  * Only the CURRENT version is checked out. Superseded text is not deleted —
@@ -1222,8 +1250,8 @@ export const LEGAL_DOCUMENTS: LegalDocumentManifestEntry[] = [
     key: 'terms',
     url: LEGAL_URLS.TERMS,
     sha256:
-      'f0af392a40e94272bbea006894889adddb6c0d0d4e4b01155d1efe89fabafb6b',
-    bytes: 73964,
+      '0e04be9ee6990bc805c34d919084dc07c512ab2190a3a8360dff39ae34a52553',
+    bytes: 74456,
   },
   {
     key: 'privacy',

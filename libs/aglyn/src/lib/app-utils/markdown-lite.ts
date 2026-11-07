@@ -39,6 +39,24 @@ export type MarkdownInline =
   | { type: 'bold'; text: string }
   | { type: 'italic'; text: string }
   | { type: 'link'; text: string; href: string }
+  /**
+   * `inline code` — emitted ONLY when the caller opts in with
+   * {@link MarkdownLiteOptions.inlineCode}. A plugin README names settings,
+   * hosts and scopes in backticks; a site's blog post and the visual editor
+   * never asked for it, so their parse is unchanged and a backtick there stays
+   * the character it was typed as.
+   */
+  | { type: 'code'; text: string }
+
+/**
+ * Parse options for {@link parseMarkdownLite}. Every option is OFF unless a
+ * caller names it, so a site renderer and the visual editor keep the dialect
+ * they were built for.
+ */
+export interface MarkdownLiteOptions {
+  /** Read a backtick-delimited run as inline code (a listing README, AGL-4197). */
+  inlineCode?: boolean
+}
 
 /** A table cell's content. Cells hold inline runs only — no nesting. */
 export type MarkdownTableCell = MarkdownInline[]
@@ -285,7 +303,36 @@ function pushText(inlines: MarkdownInline[], text: string): void {
   else inlines.push({ type: 'text', text })
 }
 
-export function parseMarkdownInlines(text: string): MarkdownInline[] {
+/** One backtick-delimited run on a single line — no escapes, no nesting. */
+const INLINE_CODE_PATTERN = /`([^`\n]+)`/g
+
+export function parseMarkdownInlines(
+  text: string,
+  options: MarkdownLiteOptions = {},
+): MarkdownInline[] {
+  if (!options.inlineCode || !text.includes('`')) return parseEmphasis(text)
+  // Code first, so `**not bold**` inside backticks stays the characters it is.
+  const inlines: MarkdownInline[] = []
+  let cursor = 0
+  for (const match of text.matchAll(INLINE_CODE_PATTERN)) {
+    const index = match.index ?? 0
+    appendInlines(inlines, parseEmphasis(text.slice(cursor, index)))
+    inlines.push({ type: 'code', text: match[1] ?? '' })
+    cursor = index + match[0].length
+  }
+  appendInlines(inlines, parseEmphasis(text.slice(cursor)))
+  return inlines
+}
+
+/** Appends a run, merging a leading text inline into a trailing one. */
+function appendInlines(into: MarkdownInline[], run: MarkdownInline[]): void {
+  for (const inline of run) {
+    if (inline.type === 'text') pushText(into, inline.text)
+    else into.push(inline)
+  }
+}
+
+function parseEmphasis(text: string): MarkdownInline[] {
   const inlines: MarkdownInline[] = []
   let cursor = 0
   for (const match of text.matchAll(INLINE_PATTERN)) {
@@ -374,16 +421,21 @@ function alignOfDelimiter(cell: string): MarkdownTableAlign {
  * rows pad with empty cells and overflow is dropped, so the model the
  * serializer writes back re-parses to itself.
  */
-function parseTable(lines: string[]): MarkdownBlock | null {
+function parseTable(
+  lines: string[],
+  options: MarkdownLiteOptions,
+): MarkdownBlock | null {
   const [headerLine, delimiterLine] = lines
   if (!headerLine || !delimiterLine || !headerLine.includes('|')) return null
   const delimiters = splitTableRow(delimiterLine)
   if (!delimiters.every((cell) => DELIMITER_CELL.test(cell))) return null
-  const header = splitTableRow(headerLine).map(parseMarkdownInlines)
+  const header = splitTableRow(headerLine).map((cell) =>
+    parseMarkdownInlines(cell, options),
+  )
   const columns = header.length
   const squared = (cells: string[]): MarkdownTableCell[] =>
     Array.from({ length: columns }, (_, index) =>
-      parseMarkdownInlines(cells[index] ?? ''),
+      parseMarkdownInlines(cells[index] ?? '', options),
     )
   return {
     type: 'table',
@@ -429,7 +481,10 @@ function listStartOf(
  * which a later list may interrupt in turn. The serializer writes the pieces
  * back as separate blank-line-delimited chunks, so the split round-trips.
  */
-function parseChunk(chunk: string): MarkdownBlock[] {
+function parseChunk(
+  chunk: string,
+  options: MarkdownLiteOptions,
+): MarkdownBlock[] {
   const trimmed = chunk.trim()
   if (!trimmed) return []
   const image = /^!\[([^\]]*)\]\(([^)\s]+)\)$/.exec(trimmed)
@@ -443,12 +498,12 @@ function parseChunk(chunk: string): MarkdownBlock[] {
       {
         type: 'heading',
         level: clampHeadingLevel(heading[1].length),
-        inlines: parseMarkdownInlines(heading[2]),
+        inlines: parseMarkdownInlines(heading[2], options),
       },
     ]
   }
   const lines = trimmed.split('\n')
-  const table = parseTable(lines)
+  const table = parseTable(lines, options)
   if (table) return [table]
   // A quote when EVERY line of the chunk is `>`-prefixed — a paragraph merely
   // mentioning `>` stays a paragraph, and a quote does NOT interrupt prose the
@@ -461,7 +516,7 @@ function parseChunk(chunk: string): MarkdownBlock[] {
       .map((line) => line.trim().replace(/^>\s?/, ''))
       .filter(Boolean)
       .join(' ')
-    return [{ type: 'quote', inlines: parseMarkdownInlines(text) }]
+    return [{ type: 'quote', inlines: parseMarkdownInlines(text, options) }]
   }
   const blocks: MarkdownBlock[] = []
   // Prose lines are buffered RAW and joined with spaces, the way a multi-line
@@ -471,7 +526,7 @@ function parseChunk(chunk: string): MarkdownBlock[] {
     if (prose.length) {
       blocks.push({
         type: 'paragraph',
-        inlines: parseMarkdownInlines(prose.join(' ')),
+        inlines: parseMarkdownInlines(prose.join(' '), options),
       })
     }
     prose = []
@@ -486,22 +541,37 @@ function parseChunk(chunk: string): MarkdownBlock[] {
     flushProse()
     const pattern =
       list.kind === 'list' ? BULLET_ITEM_PATTERN : ORDERED_ITEM_PATTERN
-    const items: MarkdownInline[][] = []
+    const items: string[] = []
     // The run ends at the first line that is not an item of THIS kind, so a
     // bullet closes a numbered run and vice versa. Only the FIRST ordered
     // marker is read, which is why a source numbered `1. 1. 1.` renumbers on
     // the way out.
+    //
+    // An INDENTED line that is not an item continues the item above it
+    // (AGL-4197): a README wraps a long item at 80 columns and indents the
+    // rest under the text, and splitting there broke one list into a list, a
+    // stray paragraph and a second list. An unindented line still ends the
+    // run and starts the next paragraph, as it always has.
     while (index < lines.length) {
-      const item = (lines[index] ?? '').trim()
-      if (!pattern.test(item)) break
-      items.push(parseMarkdownInlines(item.replace(pattern, '')))
+      const raw = lines[index] ?? ''
+      const item = raw.trim()
+      if (pattern.test(item)) items.push(item.replace(pattern, ''))
+      else if (
+        items.length &&
+        /^\s/.test(raw) &&
+        !BULLET_ITEM_PATTERN.test(item) &&
+        !ORDERED_ITEM_PATTERN.test(item)
+      )
+        items[items.length - 1] += ` ${item}`
+      else break
       index++
     }
     index--
+    const parsed = items.map((item) => parseMarkdownInlines(item, options))
     blocks.push(
       list.kind === 'list'
-        ? { type: 'list', items }
-        : { type: 'orderedList', start: list.start, items },
+        ? { type: 'list', items: parsed }
+        : { type: 'orderedList', start: list.start, items: parsed },
     )
   }
   flushProse()
@@ -514,14 +584,17 @@ function parseChunk(chunk: string): MarkdownBlock[] {
  * split on `\n{2,}` (AGL-974). An unterminated fence runs to the end of
  * the document, which is what a README truncated mid-snippet needs.
  */
-export function parseMarkdownLite(body: string): MarkdownBlock[] {
+export function parseMarkdownLite(
+  body: string,
+  options: MarkdownLiteOptions = {},
+): MarkdownBlock[] {
   const blocks: MarkdownBlock[] = []
   const lines = body.split('\n')
   let pending: string[] = []
   const flush = (): void => {
     // A chunk yields MORE than one block when a list interrupts its prose
     // (AGL-1320) — and none at all when it holds nothing renderable.
-    if (pending.length) blocks.push(...parseChunk(pending.join('\n')))
+    if (pending.length) blocks.push(...parseChunk(pending.join('\n'), options))
     pending = []
   }
   for (let index = 0; index < lines.length; index++) {
@@ -732,6 +805,9 @@ export function serializeMarkdownInlines(inlines: MarkdownInline[]): string {
       const text = flattenInlineText(inline.text).replace(/\]/g, '')
       const href = inline.href.replace(/[)\s]/g, '')
       out += text && href ? `[${text}](${href})` : text
+    } else if (inline.type === 'code') {
+      const text = flattenInlineText(inline.text).replace(/`/g, '')
+      if (text) out += `\`${text}\``
     } else {
       out += flattenInlineText(inline.text)
     }

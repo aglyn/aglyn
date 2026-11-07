@@ -87,6 +87,8 @@ data class ProductDraft(
   val type: ProductType = ProductType.PHYSICAL,
   val options: List<OptionDraft> = emptyList(),
   val variants: List<VariantDraft> = listOf(VariantDraft("default", "Default", "")),
+  /** Add-ons (AGL-4100): choices added to the item that need no stock of their own. */
+  val addOns: List<AddOnGroupDraft> = emptyList(),
 )
 
 @OptIn(ExperimentalUuidApi::class)
@@ -116,6 +118,7 @@ fun productDraftOf(productId: String, data: Map<String, Any?>): ProductDraft {
         selections = variant.options.orEmpty(),
       )
     },
+    addOns = addOnDrafts(data),
   )
 }
 
@@ -123,6 +126,7 @@ fun productDraftOf(productId: String, data: Map<String, Any?>): ProductDraft {
 fun checkProductDraft(draft: ProductDraft): String? {
   if (draft.name.isBlank()) return "Product name is required"
   checkOptions(draft.options)?.let { return it }
+  checkAddOns(draft.addOns)?.let { return it }
   val skus = mutableSetOf<String>()
   for (variant in draft.variants) {
     val price = parseMoneyCents(variant.price) ?: return "Enter a price for ${variant.label}"
@@ -170,6 +174,7 @@ fun productSaveJson(draft: ProductDraft, stored: Map<String, Any?>?): JsonObject
   base["type"] = JsonPrimitive(draft.type.raw)
   if (draft.options.isNotEmpty() || "options" in base) base["options"] = JsonArray(draft.options.map { JsonObject(mapOf("name" to JsonPrimitive(it.name.trim()), "values" to JsonArray(it.values.map(::JsonPrimitive)))) })
   base["variants"] = JsonArray(variants)
+  if (draft.addOns.isNotEmpty() || "modifierGroups" in base) base["modifierGroups"] = addOnsJson(draft.addOns, base["modifierGroups"])
   if (draft.create) base["slug"] = JsonPrimitive(commerceSlug(draft.name))
   return JsonObject(base)
 }

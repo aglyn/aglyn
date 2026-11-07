@@ -121,7 +121,7 @@
     },
     "release_direct_charges": {
       "defaultValue": {
-        "value": "{\"enabled\":false,\"rolloutPercent\":0,\"note\":\"Off until the Terms name the store as seller of record\"}"
+        "value": "{\"enabled\":true,\"rolloutPercent\":100,\"note\":\"On for every store (Terms v24 name the store as seller of record)\"}"
       },
       "description": "New stores get their own full Stripe account and site sales become direct charges on it (store is seller of record). Off: platform-managed accounts and destination charges.",
       "valueType": "JSON"

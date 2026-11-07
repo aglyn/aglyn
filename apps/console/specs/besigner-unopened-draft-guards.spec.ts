@@ -72,11 +72,22 @@ function handler(source: string, name: string): string {
   return source.slice(start, end)
 }
 
-describe.each(Object.entries(PAGES))('the %s editor', (_kind, page) => {
+/**
+ * The handler each editor's Save & publish runs. The screen editor's is
+ * `saveAndPromote`, shared with the app-bar Publish (AGL-4209).
+ */
+const PUBLISH_STEP: Partial<Record<keyof typeof PAGES, string>> = {
+  screen: 'saveAndPromote',
+}
+
+describe.each(Object.entries(PAGES))('the %s editor', (kind, page) => {
   const source = code(page)
 
   it('refuses Save & publish over an unopened draft before it saves anything', () => {
-    const body = handler(source, 'handleSaveAndPublish')
+    const body = handler(
+      source,
+      PUBLISH_STEP[kind as keyof typeof PAGES] ?? 'handleSaveAndPublish',
+    )
     const guard = body.indexOf("refuseOverUnopenedDraft('publish')")
     expect(guard).toBeGreaterThan(-1)
     expect(guard).toBeLessThan(body.indexOf('handleSave()'))

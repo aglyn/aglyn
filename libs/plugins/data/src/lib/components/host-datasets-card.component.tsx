@@ -69,7 +69,6 @@ import {
   deleteDoc,
   deleteField,
   doc,
-  documentId,
   endAt,
   getCountFromServer,
   getDoc,
@@ -122,7 +121,6 @@ import {
   DATASET_RAIL_GROUP_AT,
   type DatasetRailEntry,
   datasetCreatedLabel,
-  datasetNameMatches,
   datasetPickerLabelsOf,
   datasetRailName,
   datasetRecordTitle,
@@ -188,17 +186,6 @@ const NO_DATASETS: any[] = []
  * reaches every dataset however many there are (AGL-4047).
  */
 const DATASET_LIST_WINDOW = 100
-
-/**
- * TODO(AGL-4047): switch to true once the `datasets (visibleTo, nameLower)`
- * index is READY and `tools/scripts/backfill-dataset-name-lower.mjs --apply`
- * has run in production. Then the rail is ordered by `nameLower` on the query
- * and the search asks a `nameLower` prefix of the server, rather than the
- * rail walking datasets in document order and matching names among the ones
- * it has loaded. Until both are confirmed, ordering on a field a dataset may
- * lack would leave that dataset off the rail.
- */
-const DATASET_NAMES_ON_SERVER = false
 
 /** A dataset read off its document, as the card's rows carry it. */
 const datasetRow = (snapshot: { id: string; data(): unknown }) => ({
@@ -371,7 +358,8 @@ export function HostDatasetsCard(props: HostDatasetsCardProps) {
     () => (sharedWith && !pageHostId ? scopeTokensForHost(sharedWith) : listScope),
     [sharedWith, pageHostId, listScope],
   )
-  const serverNameKey = DATASET_NAMES_ON_SERVER ? nameSearchKey(nameSearch) : ''
+  /** The search as the stored `nameLower` is normalized, asked of the server as a prefix. */
+  const serverNameKey = nameSearchKey(nameSearch)
   const { hostNames, sites: orgSites } = useOrgSites(orgId)
 
   const {
@@ -397,17 +385,18 @@ export function HostDatasetsCard(props: HostDatasetsCardProps) {
               ? [where('visibleTo', 'array-contains-any', [...railScope])]
               : []),
             /*
-             * A walk that reaches every dataset (AGL-4047). The document's
-             * name is on every dataset, so ordering on it leaves none out,
-             * and the automatic index serves it beside the scope clause. One
-             * row past the window says whether there are more.
+             * The rail in name order, and the search as a `nameLower` prefix
+             * asked of the server, so it finds a dataset past the loaded
+             * window (AGL-4047). Served by the `datasets (visibleTo CONTAINS,
+             * nameLower ASC)` index beside the scope clause. Ordering on a
+             * field leaves out a document that lacks it, so every writer
+             * stamps `nameLower` through `datasetNameLower`, and
+             * `tools/scripts/backfill-dataset-name-lower.mjs` stamped the
+             * datasets saved before. One row past the window says whether
+             * there are more.
              */
-            ...(DATASET_NAMES_ON_SERVER
-              ? [
-                  orderBy('nameLower'),
-                  ...(serverNameKey ? [startAt(serverNameKey), endAt(`${serverNameKey}\uf8ff`)] : []),
-                ]
-              : [orderBy(documentId())]),
+            orderBy('nameLower'),
+            ...(serverNameKey ? [startAt(serverNameKey), endAt(`${serverNameKey}\uf8ff`)] : []),
             limit(railWindow + 1),
           )
         : null,
@@ -420,21 +409,14 @@ export function HostDatasetsCard(props: HostDatasetsCardProps) {
     [datasetDocs, railWindow],
   )
   const moreDatasets = (datasetDocs?.length ?? 0) > railWindow
-  /** The rail: the loaded window, narrowed by the search among the names it holds. */
-  const railDatasets = useMemo(
-    () =>
-      DATASET_NAMES_ON_SERVER
-        ? datasets
-        : datasets.filter((item: DatasetRailEntry) => datasetNameMatches(item, nameSearch)),
-    [datasets, nameSearch],
-  )
   /**
    * Whether the loaded window is short of everything this page lists: a
-   * filter narrowed it, or there are more. A check that must see every
-   * dataset — what references a record about to be deleted — reads for
-   * itself then.
+   * filter or the name search narrowed it, or there are more. A check that
+   * must see every dataset — what references a record about to be deleted —
+   * reads for itself then.
    */
-  const railNarrowed = Boolean(pageHostId) || Boolean(sharedWith) || moreDatasets
+  const railNarrowed =
+    Boolean(pageHostId) || Boolean(sharedWith) || Boolean(serverNameKey) || moreDatasets
 
   /**
    * The open dataset (AGL-4047): the one the address names, or, on the bare
@@ -1601,7 +1583,7 @@ export function HostDatasetsCard(props: HostDatasetsCardProps) {
    * {@link DATASET_RAIL_GROUP_AT} the tabs are grouped by who they are shared
    * with, and the organization page offers the Shared with filter.
    */
-  const grouped = railDatasets.length > DATASET_RAIL_GROUP_AT
+  const grouped = datasets.length > DATASET_RAIL_GROUP_AT
   const railSections = useMemo<HubSection[]>(() => {
     if (!basePath) return []
     const tab = (item: DatasetRailEntry, group?: string): HubSection => ({
@@ -1610,11 +1592,11 @@ export function HostDatasetsCard(props: HostDatasetsCardProps) {
       secondary: datasetRailSecondary(item, { hostNames, grouped }),
       ...(group ? { group } : {}),
     })
-    if (!grouped) return railDatasets.map((item: DatasetRailEntry) => tab(item))
-    return groupDatasetsBySharing(railDatasets, hostNames).flatMap((group) =>
+    if (!grouped) return datasets.map((item: DatasetRailEntry) => tab(item))
+    return groupDatasetsBySharing(datasets, hostNames).flatMap((group) =>
       group.datasets.map((item) => tab(item, group.label)),
     )
-  }, [basePath, railDatasets, hostNames, grouped])
+  }, [basePath, datasets, hostNames, grouped])
   /** The join dialog's names, told apart where two match (AGL-4047). */
   const joinLabels = useMemo(() => datasetPickerLabelsOf(datasets, hostNames), [datasets, hostNames])
   const offerSharedWith =
@@ -1658,9 +1640,9 @@ export function HostDatasetsCard(props: HostDatasetsCardProps) {
     ) : null
   const railFooter = (
     <>
-      {listAnswered && datasets.length > 0 && railDatasets.length === 0 ? (
+      {listAnswered && serverNameKey && datasets.length === 0 ? (
         <Typography variant="body2" color="text.secondary" sx={{ px: 2, py: 1 }}>
-          {moreDatasets ? 'None of the loaded datasets match.' : 'No datasets match.'}
+          {'No datasets match.'}
         </Typography>
       ) : null}
       {moreDatasets ? (
@@ -1779,7 +1761,7 @@ export function HostDatasetsCard(props: HostDatasetsCardProps) {
   ) : recordPanel ? (
     recordPanel
   ) : !selected ? (
-    listAnswered && datasets.length === 0 && !sharedWith ? (
+    listAnswered && datasets.length === 0 && !sharedWith && !serverNameKey ? (
       <CardDisplay contentGutterX contentGutterY>
         <Typography variant="body2" color="text.secondary">
           {'Create a dataset, like Products, then add a repeating section ' +

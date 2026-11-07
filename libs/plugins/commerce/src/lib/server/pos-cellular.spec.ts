@@ -75,6 +75,8 @@ interface StripeCall {
   method: string
   path: string
   key: string | null
+  /** The `Stripe-Account` a call was made on; null for the platform. */
+  account: string | null
   params: URLSearchParams
 }
 const stripeCalls: StripeCall[] = []
@@ -90,6 +92,7 @@ const fetchMock = jest.fn(async (url: any, init: any) => {
     method: String(init?.method ?? 'GET'),
     path,
     key: headers['Idempotency-Key'] ?? null,
+    account: headers['Stripe-Account'] ?? null,
     params: new URLSearchParams(String(init?.body ?? '')),
   })
   if (refuseConfigurations && path.startsWith('terminal/configurations')) {
@@ -204,6 +207,7 @@ describe('the POS devices card’s 4G switch (AGL-4038)', () => {
   it('shows the price per reader where the store has an S710, and not where it has none', async () => {
     expect((await readers({ action: 'list' })).body.cellular).toEqual({
       readerMonthlyCents: 1_061,
+      ownAccount: false,
       enabled: false,
       readers: 1,
       suspended: null,
@@ -313,6 +317,66 @@ describe('the POS devices card’s 4G switch (AGL-4038)', () => {
     expect((await readers({ action: 'remove', readerId: 'tmr_gate710' })).status).toBe(200)
     expect(record('tmr_gate710')).toMatchObject({ enabled: false })
     expect(record('tmr_lot710')).toMatchObject({ enabled: true })
+  })
+
+  describe('a store on its own Stripe account, which Stripe bills for 4G', () => {
+    beforeEach(() => {
+      fakeDocs.set('hosts/host-1/terminal/config', {
+        ...fakeDocs.get('hosts/host-1/terminal/config'),
+        stripeLocationAccount: 'acct_store',
+      })
+    })
+
+    it('shows no price and asks for no "Manage billing"', async () => {
+      mockManageBilling = false
+      expect((await readers({ action: 'list' })).body.cellular).toEqual({
+        readerMonthlyCents: null,
+        ownAccount: true,
+        enabled: false,
+        readers: 1,
+        suspended: null,
+        turnOnBlocked: null,
+      })
+    })
+
+    it('turns on with the devices key alone: no agreement, no card on file, no billing key', async () => {
+      mockManageBilling = false
+      mockBilling = {}
+      const answer = await readers({ action: 'cellular', enabled: true })
+      expect(answer).toEqual({ status: 200, body: { ok: true, enabled: true } })
+      // On the store's own account, where its Configuration lives.
+      expect(configWrites().map((call) => [call.path, call.account])).toEqual([['terminal/configurations/tmc_1', 'acct_store']])
+      const terminal = fakeDocs.get('hosts/host-1/terminal/config') as Record<string, unknown>
+      expect(terminal).toMatchObject({ cellularEnabled: true, cellularChangedBy: 'manager-1' })
+      // No agreement to the platform's price is recorded: there is none.
+      expect(terminal['cellularConsent']).toBeUndefined()
+      expect(record('tmr_gate710')).toMatchObject({ enabled: true, stripeConfigurationAccount: 'acct_store' })
+    })
+
+    it('still needs an S710, and is still set up like the readers', async () => {
+      fakeDocs.delete('hosts/host-1/terminalReaders/tmr_gate710')
+      expect((await readers({ action: 'cellular', enabled: true })).body).toMatchObject({ code: 'no-capable-reader' })
+      mockDevices = false
+      expect((await readers({ action: 'cellular', enabled: true })).status).toBe(403)
+      expect(configWrites()).toHaveLength(0)
+    })
+
+    it('is not held back by a month the workspace left unpaid for its stores on the platform', async () => {
+      fakeDocs.set('posCellularCharges/org-1_2026-10', {
+        orgId: 'org-1',
+        month: '2026-10',
+        readers: 1,
+        amountCents: 1_061,
+        state: 'suspended',
+        invoiceId: 'in_open',
+        paidCents: 0,
+        attempts: 1,
+        createdAtMs: 1,
+        updatedAtMs: 1,
+      })
+      invoiceAnswers['in_open'] = { status: 'open', amount_paid: 0 }
+      expect(await readers({ action: 'cellular', enabled: true })).toEqual({ status: 200, body: { ok: true, enabled: true } })
+    })
   })
 })
 
@@ -436,6 +500,46 @@ describe('the monthly 4G charge (AGL-4038)', () => {
     expect(turnedOff).toEqual(['tmc_gone'])
     expect(fakeDocs.get('posCellularReaders/gone_1')).toMatchObject({ enabled: false, disabledAtMs: NOV_2 })
   })
+
+  it('never charges for a reader on a store’s own Stripe account, which Stripe bills to that account', async () => {
+    seedRecord('own_1', { hostId: 'host-own', stripeConfigurationId: 'tmc_own', stripeConfigurationAccount: 'acct_store' })
+    fakeDocs.set('hosts/host-own', { name: 'Uptown', orgId: 'org-1' })
+    const report = await runPosCellularBilling(gate(), deps())
+    expect(report).toMatchObject({ month: '2026-10', workspaces: 0, paid: 0, open: 0, unbillable: 0 })
+    expect(charges).toEqual([])
+    expect(chargeDoc()).toBeUndefined()
+    // Still on: nothing here turns it off.
+    expect(turnedOff).toEqual([])
+    expect(fakeDocs.get('posCellularReaders/own_1')).toMatchObject({ enabled: true })
+  })
+
+  it('charges a workspace with both kinds of store only for its readers on the platform', async () => {
+    seedRecord('r1', {})
+    seedRecord('own_1', { hostId: 'host-own', stripeConfigurationId: 'tmc_own', stripeConfigurationAccount: 'acct_store' })
+    seedRecord('own_2', { hostId: 'host-own', stripeConfigurationId: 'tmc_own', stripeConfigurationAccount: 'acct_store' })
+    fakeDocs.set('hosts/host-own', { name: 'Uptown', orgId: 'org-1' })
+    await runPosCellularBilling(gate(), deps())
+    expect(charges).toEqual([
+      expect.objectContaining({ amountCents: 1_061, description: '4G for 1 S710 card reader, October 2026' }),
+    ])
+    expect(chargeDoc()).toMatchObject({ readers: 1 })
+  })
+
+  it('still turns 4G off for a deleted store on its own Stripe account, on that account', async () => {
+    const calls: Array<[string, string | null | undefined]> = []
+    seedRecord('gone_own', { hostId: 'host-gone', stripeConfigurationId: 'tmc_gone', stripeConfigurationAccount: 'acct_store' })
+    const report = await runPosCellularBilling(gate(), {
+      ...deps(),
+      turnOff: async (id: string, account?: string | null) => {
+        calls.push([id, account])
+        return true
+      },
+    })
+    expect(report.storesGone).toBe(1)
+    expect(calls).toEqual([['tmc_gone', 'acct_store']])
+    expect(fakeDocs.get('posCellularReaders/gone_own')).toMatchObject({ enabled: false, disabledAtMs: NOV_2 })
+    expect(charges).toEqual([])
+  })
 })
 
 describe('a workspace erasure turns 4G off (AGL-4038)', () => {
@@ -473,6 +577,44 @@ describe('a workspace erasure turns 4G off (AGL-4038)', () => {
     expect(turnedOff).toEqual(['tmc_a'])
     expect(fakeDocs.get('posCellularReaders/a')).toMatchObject({ enabled: false, disabledAtMs: 50 })
     expect(fakeDocs.get('posCellularReaders/d')).toMatchObject({ enabled: true })
+  })
+
+  it('turns off a store on its own Stripe account on that account, and charges nothing for it', async () => {
+    fakeDocs.set('posCellularReaders/own', {
+      orgId: 'org-1',
+      hostId: 'host-own',
+      readerId: 'own',
+      serialNumber: null,
+      stripeConfigurationId: 'tmc_own',
+      stripeConfigurationAccount: 'acct_store',
+      enabled: true,
+      periods: [{ fromMs: Date.UTC(2026, 8, 1), toMs: null }],
+      disabledAtMs: null,
+      updatedAtMs: 1,
+    })
+    const calls: Array<[string, string | null | undefined]> = []
+    const charged: OrgUsageInvoiceRequest[] = []
+    const eraser = createPosCellularOrgEraser({
+      turnOff: async (id, account) => {
+        calls.push([id, account])
+        return true
+      },
+      charge: async (request) => {
+        charged.push(request)
+        throw new Error('nothing is charged for a store on its own account')
+      },
+      readBilling: async () => mockBilling,
+      now: () => Date.UTC(2026, 10, 20, 12),
+    })
+    expect(await eraser({ orgId: 'org-1', dryRun: false })).toEqual({
+      cellularStoresTurnedOff: 1,
+      cellularTurnOffFailed: 0,
+      cellularFinalMonthsCharged: 0,
+      cellularFinalChargeFailed: 0,
+    })
+    expect(calls).toEqual([['tmc_own', 'acct_store']])
+    expect(charged).toEqual([])
+    expect(fakeDocs.get('posCellularReaders/own')).toMatchObject({ enabled: false })
   })
 
   it('alerts staff when Stripe refuses, and never fails the erasure', async () => {
@@ -666,6 +808,41 @@ describe('alert, then turn off: a charge unpaid past its grace (AGL-4038)', () =
     expect(notices).toHaveLength(1)
     expect(chargeDoc()).toMatchObject({ state: 'suspended', noticeSentAtMs: OPENED + 15 * DAY })
   })
+
+  it('never turns 4G off for the workspace’s store on its own Stripe account', async () => {
+    const ownTerminal = {
+      stripeLocationId: 'tml_own',
+      stripeLocationAccount: 'acct_store',
+      stripeConfigurationId: 'tmc_own',
+      cellularEnabled: true,
+      cellularConfigurationId: 'tmc_own',
+    }
+    fakeDocs.set('hosts/host-own', { name: 'Uptown', orgId: 'org-1' })
+    fakeDocs.set('hosts/host-own/terminal/config', ownTerminal)
+    fakeDocs.set('posCellularReaders/host-own_tmr_own710', {
+      orgId: 'org-1',
+      hostId: 'host-own',
+      readerId: 'tmr_own710',
+      serialNumber: 'STRS710-2',
+      stripeConfigurationId: 'tmc_own',
+      stripeConfigurationAccount: 'acct_store',
+      enabled: true,
+      periods: [{ fromMs: Date.UTC(2026, 8, 1), toMs: null }],
+      disabledAtMs: null,
+      updatedAtMs: 1,
+    })
+    expect((await run(OPENED + 14 * DAY)).turnedOff).toBe(1)
+    // Only the store on the platform, whose 4G the charge was for.
+    expect(turnedOff).toEqual(['tmc_1'])
+    expect(chargeDoc()).toMatchObject({ suspendedHostIds: ['host-1'] })
+    expect(notices).toEqual([expect.objectContaining({ hostIds: ['host-1'] })])
+    expect(fakeDocs.get('hosts/host-own/terminal/config')).toEqual(ownTerminal)
+    expect(fakeDocs.get('posCellularReaders/host-own_tmr_own710')).toMatchObject({ enabled: true, disabledAtMs: null })
+    // A half-done run finished later still leaves it alone.
+    await run(OPENED + 15 * DAY)
+    expect(turnedOff).toEqual(['tmc_1'])
+    expect(fakeDocs.get('posCellularReaders/host-own_tmr_own710')).toMatchObject({ enabled: true })
+  })
 })
 
 describe('warn at the start: the day a charge is left open (AGL-4038)', () => {
@@ -817,6 +994,24 @@ describe('warn at the start: the day a charge is left open (AGL-4038)', () => {
     expect(chargeDoc()).toMatchObject({ openedAtMs: NOV_2, warnedAtMs: NOV_2 + DAY })
     expect((await run(NOV_2 + 14 * DAY - 1)).turnedOff).toBe(0)
     expect((await run(NOV_2 + 14 * DAY)).turnedOff).toBe(1)
+  })
+
+  it('names only the stores on the platform, never one on its own Stripe account', async () => {
+    fakeDocs.set('posCellularReaders/host-own_tmr_own710', {
+      orgId: 'org-1',
+      hostId: 'host-own',
+      readerId: 'tmr_own710',
+      serialNumber: null,
+      stripeConfigurationId: 'tmc_own',
+      stripeConfigurationAccount: 'acct_store',
+      enabled: true,
+      periods: [{ fromMs: Date.UTC(2026, 8, 1), toMs: null }],
+      disabledAtMs: null,
+      updatedAtMs: 1,
+    })
+    seedOpen()
+    await run(NOV_2)
+    expect(warnings.map((notice) => notice.hostIds)).toEqual([['host-1']])
   })
 
   it('never warns of a charge made as the workspace was erased', async () => {

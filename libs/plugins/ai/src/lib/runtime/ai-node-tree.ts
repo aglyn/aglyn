@@ -38,6 +38,10 @@ import { parseMediaRef } from '@aglyn/aglyn/app-utils/media-ref'
 import { ELEMENT_HIDDEN_CLASS } from '@aglyn/aglyn/app-utils/element-hidden-style'
 import { SX_SCHEME_DARK_KEY } from '@aglyn/aglyn/app-utils/scheme-sx'
 import {
+  ELEMENT_COLOR_SCHEME_VISITOR,
+  NODE_COLOR_SCHEME_PROP,
+} from '@aglyn/aglyn/app-utils/element-color-scheme'
+import {
   COMPONENT_PROP_NAME_PATTERN,
   REUSABLE_INSTANCE_COMPONENT_ID,
   REUSABLE_INSTANCE_PROP_VALUES_KEY,
@@ -659,6 +663,13 @@ function sanitizeProps(
     const audioRefusal = aiOwnerAudioRefusal(entry.pluginId, name, value, bindingTokens)
     if (audioRefusal) {
       repairs.push(`${nodeId}.${name}: ${audioRefusal}; dropped`)
+      continue
+    }
+    // The visitor's own scheme (AGL-4152) is a directive to the renderer that
+    // the layout compiler writes on a filled button inside a pinned band.
+    // Offered in no field, so no palette entry declares it; kept as written.
+    if (name === NODE_COLOR_SCHEME_PROP && value === ELEMENT_COLOR_SCHEME_VISITOR) {
+      props[name] = value
       continue
     }
     const schema = declared[name]

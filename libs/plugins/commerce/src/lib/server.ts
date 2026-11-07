@@ -521,12 +521,38 @@ export function registerCommerceApi(): void {
  * jobs", which is how they stayed dark for months: it asserted the wiring
  * instead of having it.
  */
+/**
+ * A storefront read for the console surface (AGL-4210): answers GET and HEAD
+ * only, so a public read registered there for Preview can never be reached as
+ * anything else.
+ */
+export function storefrontReadOnly(handler: PluginApiHandler): PluginApiHandler {
+  return (req, res) => {
+    const method = String(req.method ?? 'GET').toUpperCase()
+    if (method !== 'GET' && method !== 'HEAD') {
+      return res.status(405).json({ error: 'Method not allowed' })
+    }
+    return handler(req, res)
+  }
+}
+
 export function registerCommerceConsoleApi(): void {
   // The register's gate (`managePos`) is resolved on THIS surface: every POS
   // route below runs in the console, and a key no surface registered here is
   // absent from the resolved map, which reads as refused — the site's own
   // owner was answered 403 at the register.
   registerPluginPermissions(COMMERCE_PERMISSIONS)
+  // The storefront's public reads, on the console too (AGL-4210). The
+  // Besigner's Preview renders a site's pages on the console origin, and the
+  // storefront blocks read through relative `/api/commerce/*` URLs, so with
+  // these registered for the tenant alone every Product detail in Preview said
+  // "Product not found" and grids and related products drew nothing. They are
+  // the same public reads a live page makes, behind the same dispatcher gates;
+  // only GET and HEAD are answered here, and Preview's `useSiteFetch` already
+  // refuses every write.
+  registerPluginApiRoute('commerce/product', storefrontReadOnly(productHandler))
+  registerPluginApiRoute('commerce/catalog', storefrontReadOnly(catalogHandler))
+  registerPluginApiRoute('commerce/related', storefrontReadOnly(relatedHandler))
   // What a product looks like to a surface that is not this plugin's — a
   // campaign email that features one asks here rather than importing the model.
   registerProductCardReader()

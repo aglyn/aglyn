@@ -92,16 +92,6 @@ export function sortDatasetsByName<T extends DatasetRailEntry>(datasets: readonl
   )
 }
 
-/**
- * Whether a dataset's name starts with what was typed, normalized the way the
- * stored `nameLower` is, so the loaded-list search and the query that replaces
- * it answer alike.
- */
-export function datasetNameMatches(dataset: DatasetRailEntry, typed: string): boolean {
-  const key = nameSearchKey(typed)
-  return !key || nameSearchKey(datasetDisplayName(dataset)).startsWith(key)
-}
-
 /** One group of the rail: its heading, with how many it holds, and its datasets in name order. */
 export interface DatasetRailGroup {
   label: string

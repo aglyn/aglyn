@@ -29,22 +29,26 @@
 import { act, fireEvent, render, screen, waitFor, within } from '@testing-library/react'
 import { PageHeaderActionsContext } from '@aglyn/aglyn/app-utils/page-header-actions-context'
 import { type ReactNode, useMemo, useState } from 'react'
+import { datasetNameLower } from '../model/datasets'
 import { HostDatasetsCard } from './host-datasets-card.component'
 
 const field = (name: string) => ({ name, type: 'text' })
 const SERVICES = { order: ['name', 'duration'], fields: { name: field('Name'), duration: field('Duration') } }
 const ONE = { order: ['name'], fields: { name: field('Name') } }
 
-const BAKERY_SERVICES = { $id: 'ds-bakery', displayName: 'Services', model: SERVICES, visibleTo: ['host:bakery'] }
-const DOWNTOWN_SERVICES = { $id: 'ds-downtown', displayName: 'Services', model: ONE, visibleTo: ['host:downtown'] }
-const PRODUCTS = {
+/** A dataset as every writer stores it: its name's search key beside the name. */
+const stored = <T extends { displayName: string }>(row: T) => ({ ...row, nameLower: datasetNameLower(row.displayName) })
+
+const BAKERY_SERVICES = stored({ $id: 'ds-bakery', displayName: 'Services', model: SERVICES, visibleTo: ['host:bakery'] })
+const DOWNTOWN_SERVICES = stored({ $id: 'ds-downtown', displayName: 'Services', model: ONE, visibleTo: ['host:downtown'] })
+const PRODUCTS = stored({
   $id: 'ds-products',
   displayName: 'Products',
   model: ONE,
   visibleTo: ['org'],
   source: { listingId: 'listing-1', version: 3 },
   createdAt: { toDate: () => new Date(2026, 9, 2) },
-}
+})
 const SITES = [
   { $id: 'bakery', name: 'Bakery', orgId: 'org-1' },
   { $id: 'downtown', name: 'Downtown', orgId: 'org-1' },
@@ -84,13 +88,24 @@ const USER = { data: { uid: 'uid-test' } }
 const DATA_SCOPE = { scope: ['orgs', 'org-1'], orgId: 'org-1' }
 const LOADING = { data: undefined, status: 'loading', fromCache: true }
 
-/** The documents a built query matches, in document-id order, as far as its limit. */
+/**
+ * The documents a built query matches, as far as its limit, the way Firestore
+ * answers it: ordered on the field the query orders by, then the document id,
+ * leaving out a document that lacks that field, and held to the `startAt` /
+ * `endAt` range.
+ */
 const matching = (constraints: Array<Record<string, any>>) => {
   const clause = constraints.find((one) => one['field'] === 'visibleTo')
   const cap = constraints.find((one) => 'limit' in one)?.['limit'] ?? Infinity
+  const ordered = constraints.find((one) => 'orderBy' in one)?.['orderBy'] as string | undefined
+  const from = constraints.find((one) => 'startAt' in one)?.['startAt'] as string | undefined
+  const to = constraints.find((one) => 'endAt' in one)?.['endAt'] as string | undefined
+  const key = (row: Record<string, any>) => (ordered && ordered !== '__name__' ? row[ordered] : row['$id'])
   return datasets
     .filter((row) => !clause || (row['visibleTo'] ?? []).some((token: string) => clause['value'].includes(token)))
-    .sort((a, b) => a['$id'].localeCompare(b['$id']))
+    .filter((row) => typeof key(row) === 'string')
+    .filter((row) => (from === undefined || key(row) >= from) && (to === undefined || key(row) <= to))
+    .sort((a, b) => key(a).localeCompare(key(b)) || a['$id'].localeCompare(b['$id']))
     .slice(0, cap)
 }
 
@@ -301,18 +316,55 @@ describe('the search', () => {
     expect(heading()).toBe('Services')
   })
 
-  it('asks no new query of Firestore while the names are matched among the loaded ones', async () => {
+  it('asks Firestore for a prefix of the stored name key, normalized as the writers stamp it', async () => {
     await mount({ segments: ['ds-bakery'] })
-    const before = datasetQueries.length
-    fireEvent.change(screen.getByRole('textbox', { name: 'Search datasets by name' }), { target: { value: 'pro' } })
-    expect(datasetQueries.length).toBe(before)
+    expect(datasetQueries.at(-1)).toEqual([{ orderBy: 'nameLower' }, { limit: 101 }])
+    fireEvent.change(screen.getByRole('textbox', { name: 'Search datasets by name' }), { target: { value: '  Pro ' } })
+    expect(datasetQueries.at(-1)).toEqual([
+      { orderBy: 'nameLower' },
+      { startAt: 'pro' },
+      { endAt: 'pro\uf8ff' },
+      { limit: 101 },
+    ])
+    expect(rail().map((one) => one.split(' | ')[0])).toEqual(['Products'])
+  })
+
+  it('finds a dataset past the loaded window, which a search among the loaded names could not', async () => {
+    datasets = Array.from({ length: 150 }, (_, at) =>
+      stored({ $id: `ds-${String(at).padStart(3, '0')}`, displayName: `List ${String(at).padStart(3, '0')}`, model: ONE, visibleTo: ['org'] }),
+    )
+    await mount({ segments: ['ds-000'] })
+    expect(tabs()).toHaveLength(100)
+    fireEvent.change(screen.getByRole('textbox', { name: 'Search datasets by name' }), { target: { value: 'list 14' } })
+    expect(rail().map((one) => one.split(' | ')[0])).toEqual(Array.from({ length: 10 }, (_, at) => `List 14${at}`))
+  })
+
+  it('says no match, not "create a dataset", when the search finds none', async () => {
+    // The bare page: no dataset is open, so only the rail decides what shows.
+    await mount()
+    fireEvent.change(screen.getByRole('textbox', { name: 'Search datasets by name' }), { target: { value: 'zzz' } })
+    expect(screen.getByText('No datasets match.')).toBeTruthy()
+    expect(screen.queryByText(/Create a dataset, like Products/)).toBeNull()
+  })
+})
+
+describe('the rail is in name order', () => {
+  it('orders on the stored key, and a dataset without one is not listed', async () => {
+    datasets = [
+      stored({ $id: 'ds-a', displayName: 'zebra', model: ONE, visibleTo: ['org'] }),
+      stored({ $id: 'ds-b', displayName: 'Apples', model: ONE, visibleTo: ['org'] }),
+      // The shape the backfill stamped: a writer that skips the key loses the dataset.
+      { $id: 'ds-c', displayName: 'Unstamped', model: ONE, visibleTo: ['org'] },
+    ]
+    await mount({ segments: ['ds-b'] })
+    expect(rail().map((one) => one.split(' | ')[0])).toEqual(['Apples', 'zebra'])
   })
 })
 
 describe('many datasets', () => {
   const many = () => [
-    ...Array.from({ length: 6 }, (_, at) => ({ $id: `b-${at}`, displayName: `Bakery list ${at}`, model: ONE, visibleTo: ['host:bakery'] })),
-    ...Array.from({ length: 5 }, (_, at) => ({ $id: `d-${at}`, displayName: `Downtown list ${at}`, model: SERVICES, visibleTo: ['host:downtown'] })),
+    ...Array.from({ length: 6 }, (_, at) => stored({ $id: `b-${at}`, displayName: `Bakery list ${at}`, model: ONE, visibleTo: ['host:bakery'] })),
+    ...Array.from({ length: 5 }, (_, at) => stored({ $id: `d-${at}`, displayName: `Downtown list ${at}`, model: SERVICES, visibleTo: ['host:downtown'] })),
   ]
 
   it('groups the rail by who each dataset is shared with, and names the first fields instead', async () => {
@@ -331,7 +383,7 @@ describe('many datasets', () => {
     fireEvent.click(screen.getByRole('option', { name: 'Downtown' }))
     expect(datasetQueries.at(-1)).toEqual([
       { field: 'visibleTo', op: 'array-contains-any', value: ['org', 'host:downtown'] },
-      { orderBy: '__name__' },
+      { orderBy: 'nameLower' },
       { limit: 101 },
     ])
     expect(rail().map((one) => one.split(' | ')[0])).toEqual(Array.from({ length: 5 }, (_, at) => `Downtown list ${at}`))
@@ -344,12 +396,14 @@ describe('many datasets', () => {
   })
 
   it('reaches every dataset past the first hundred', async () => {
-    datasets = Array.from({ length: 150 }, (_, at) => ({
-      $id: `ds-${String(at).padStart(3, '0')}`,
-      displayName: `List ${at}`,
-      model: ONE,
-      visibleTo: ['org'],
-    }))
+    datasets = Array.from({ length: 150 }, (_, at) =>
+      stored({
+        $id: `ds-${String(at).padStart(3, '0')}`,
+        displayName: `List ${String(at).padStart(3, '0')}`,
+        model: ONE,
+        visibleTo: ['org'],
+      }),
+    )
     await mount({ segments: ['ds-000'] })
     expect(tabs()).toHaveLength(100)
     fireEvent.click(screen.getByRole('button', { name: 'Show more datasets' }))
@@ -359,12 +413,14 @@ describe('many datasets', () => {
   })
 
   it('opens a dataset past the loaded window by its own read', async () => {
-    datasets = Array.from({ length: 150 }, (_, at) => ({
-      $id: `ds-${String(at).padStart(3, '0')}`,
-      displayName: `List ${at}`,
-      model: ONE,
-      visibleTo: ['org'],
-    }))
+    datasets = Array.from({ length: 150 }, (_, at) =>
+      stored({
+        $id: `ds-${String(at).padStart(3, '0')}`,
+        displayName: `List ${String(at).padStart(3, '0')}`,
+        model: ONE,
+        visibleTo: ['org'],
+      }),
+    )
     await mount({ segments: ['ds-140'] })
     expect(heading()).toBe('List 140')
   })

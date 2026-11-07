@@ -46,6 +46,25 @@ describe('ListingReadme (markdown-lite parity)', () => {
     expect(container.textContent).toBe('Install:Run npm iRegister it')
   })
 
+  it('renders a wrapped item as one item and backticks as code (AGL-4197)', () => {
+    const { container } = render(
+      <ListingReadme
+        readme={[
+          '- **Permission:** manage your profile',
+          '  (`https://x.example/auth`), read only.',
+          '- Kept: the latest copy.',
+        ].join('\n')}
+      />,
+    )
+    const items = container.querySelectorAll('ul > li')
+    expect(items).toHaveLength(2)
+    expect(container.querySelectorAll('p')).toHaveLength(0)
+    expect(items[0]?.querySelector('code')?.textContent).toBe(
+      'https://x.example/auth',
+    )
+    expect(container.textContent).not.toContain('`')
+  })
+
   it('renders a link REFERENCE as text — a listing has no site (AGL-3118)', () => {
     // `entry:`/`screen:` name a page of the SITE a document was written for,
     // and this README is read in the console, which serves none of them. An

@@ -255,16 +255,23 @@ private fun ListColumnHead(title: String, modifier: Modifier, actions: @Composab
       verticalAlignment = Alignment.CenterVertically,
       horizontalArrangement = Arrangement.spacedBy(space(1f)),
     ) {
-      Text(
-        title,
-        Modifier.weight(1f, fill = false).semantics { heading() },
-        style = MaterialTheme.typography.headlineSmall.copy(fontSize = ListColumnTitle.size, lineHeight = ListColumnTitle.line),
-        fontWeight = FontWeight.Bold,
-        maxLines = 1,
-        overflow = TextOverflow.Ellipsis,
-      )
-      star?.star?.invoke()
-      androidx.compose.foundation.layout.Spacer(Modifier.weight(1f))
+      // The title and its ☆ take all the width the actions leave, so the title shortens only when there is truly no
+      // room ("Datasets" beside ☆ and New dataset had been cut to "Data…" by an even split with a spacer).
+      androidx.compose.foundation.layout.Row(
+        Modifier.weight(1f),
+        verticalAlignment = Alignment.CenterVertically,
+        horizontalArrangement = Arrangement.spacedBy(space(1f)),
+      ) {
+        Text(
+          title,
+          Modifier.weight(1f, fill = false).semantics { heading() },
+          style = MaterialTheme.typography.headlineSmall.copy(fontSize = ListColumnTitle.size, lineHeight = ListColumnTitle.line),
+          fontWeight = FontWeight.Bold,
+          maxLines = 1,
+          overflow = TextOverflow.Ellipsis,
+        )
+        star?.star?.invoke()
+      }
       actions()
     }
     ListColumnSections()

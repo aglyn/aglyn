@@ -29,8 +29,8 @@ sequenceDiagram
 :::
 
 :::warning Paid services need Stripe connected first
-A paid booking is a **destination charge into your own Stripe account**, so the
-booking widget cannot take money until Stripe Connect onboarding is finished and
+A paid booking is **charged on your own Stripe account**, so the booking widget
+cannot take money until Stripe's onboarding for your account is finished and
 Stripe reports charges enabled. Until then a visitor who picks a paid service is
 told **"Payments are not set up yet"** and the slot is not held. Free services are
 unaffected — they never touch Stripe. Connect your account from the **Payments**
@@ -149,14 +149,17 @@ the queue that will actually be drained, not an estimate.
 ## Payments and fees {#payments-and-fees}
 
 Money for a paid booking goes **to you, not to Aglyn**. The charge is created on
-your connected Stripe account, and Aglyn takes its platform fee out of it as the
-Stripe Connect application fee — the same way a storefront sale works.
+your own Stripe account, and Aglyn takes its platform fee out of it as a Stripe
+application fee — the same way a storefront sale works.
 
 - A booking is priced as a **service**, which bills at your plan's **digital**
   transaction rate: 5% on Starter, 3% on Pro, and **0% on Custom**. It is the same
   rate as digital products — bookings are not charged separately or additionally.
 - The fee is taken on the **service price only**. Stripe's own processing fee is
-  separate and comes out of your account as usual.
+  separate: Stripe bills it to your Stripe account at Stripe's standard pricing
+  for your account. On a platform-managed (Express) account, set up before
+  stores got their own, it is passed through at cost inside the fee instead; see
+  [Platform fees](../../workspace-and-billing/billing-and-plans/overview.md#platform-fees).
 - Your current rate is shown on the **Payments** card of the Products hub, and
   the full ladder is on the [plans page](../../workspace-and-billing/billing-and-plans/overview.md#platform-fees).
 
@@ -233,8 +236,8 @@ Canceling a booking reopens the slot. For a **paid** booking, canceling also
 **refunds the visitor through Stripe** — the button reads **Cancel and refund**
 and tells you the amount before you confirm.
 
-- The refund pulls the money back out of your account and returns Aglyn's
-  platform fee on it, so a refunded appointment costs you nothing in fees.
+- The refund comes out of your Stripe balance and returns Aglyn's platform fee
+  on it, so a refunded appointment costs you nothing in Aglyn fees.
 - If the refund fails, **the booking is not canceled**. The appointment stays on
   the list and the message says what went wrong, so you never end up with a
   canceled slot the visitor was never paid back for.

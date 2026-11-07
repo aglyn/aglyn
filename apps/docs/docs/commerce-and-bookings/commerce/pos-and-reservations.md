@@ -196,23 +196,27 @@ your customer, so no money changes hands.
 
 | Payment | Platform fee | How it is collected |
 | --- | --- | --- |
-| Card reader, typed card, card (QR) | Your plan's rate | Deducted from your Stripe payout for that payment |
-| Charge to room | Your plan's rate | No payout to deduct from, so it is added to your next monthly invoice |
+| Card reader, typed card, card (QR) | Your plan's rate | Taken from that card payment in Stripe, as an application fee |
+| Charge to room | Your plan's rate | No card payment to take it from, so it is added to your next monthly invoice |
 | Cash | None | — |
 | Gift card | None | — |
 | Store credit | None | — |
 
 A **split** sale charges the fee only on the part of the sale its card and
 room-charge payments paid: a $100 sale paid $60 by card and
-$40 in cash carries the fee on $60, deducted from that card's payout, and
+$40 in cash carries the fee on $60, taken from that card payment, and
 nothing on the cash. Cash sales you ring while the register is
 [offline](pos-operations.md#selling-while-offline) carry no fee either, and a
 card the Aglyn POS app
 [takes offline](pos-operations.md#cards-taken-offline-in-the-aglyn-pos-app)
-carries the card fee, as it would online. **Tips** carry no platform fee. Stripe's own processing cost on a
-card payment is passed through at cost, like any other card sale, and is
-worked out on the whole charge, tip included, because that is what Stripe
-charges on.
+carries the card fee, as it would online. **Tips** carry no platform fee.
+
+Card payments at the register are charged on your own Stripe account, like
+your online sales, so Stripe bills its card processing to that account at
+Stripe's standard pricing for your account, worked out on the whole charge,
+tip included. On a platform-managed (Express) account, set up before stores
+got their own, Stripe's processing cost is passed through at cost instead,
+like any other card sale on that kind of account.
 
 The customer never pays the fee, and the amount **Due** on the register is
 the same on every tender. On Custom, which carries no platform fee, there is
@@ -299,6 +303,12 @@ status, and can be renamed, moved to another register, or removed. A
 removed reader has to be registered again with a new code to be used. A
 reader must be switched on and connected to the internet to take a
 payment; the register warns you when the selected reader looks offline.
+
+A reader is registered on the Stripe account your store sells on. A reader
+added before your store had its own Stripe account can't take its cards: the
+register says the reader was set up before the store started taking payments
+on its own Stripe account. Remove it, then add it again with the new code it
+shows.
 See [POS hardware](pos-hardware.md#card-readers) for setup notes.
 
 :::tip Trying it in test mode

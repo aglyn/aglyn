@@ -45,6 +45,8 @@ import {
 } from '@aglyn/aglyn/app-utils/enabled-plugins-context'
 import { NodeIdentityContext } from '@aglyn/aglyn/app-utils/node-identity'
 import {
+  ELEMENT_COLOR_SCHEME_VISITOR,
+  type ElementColorScheme,
   NODE_COLOR_SCHEME_PROP,
   resolveElementColorScheme,
 } from '@aglyn/aglyn/app-utils/element-color-scheme'
@@ -67,6 +69,7 @@ import { RealmElementsContext } from '@aglyn/aglyn/app-utils/realm-elements-cont
 import {
   Children,
   cloneElement,
+  createContext,
   forwardRef,
   type HTMLAttributes,
   isValidElement,
@@ -89,6 +92,17 @@ import {
 import { resolvePaletteVarsSx, resolveSchemeSx } from '../utils/scheme-sx'
 
 const DefaultComponent = styled('div')({})
+
+/**
+ * The scheme the visitor picked, under an element pinned to the other one
+ * (AGL-4152). Unset outside every pin, where the active scheme IS the
+ * visitor's; set by the outermost pin, which is the last place that still
+ * knows it.
+ */
+const VisitorSchemeContext = createContext<ElementColorScheme | undefined>(
+  undefined,
+)
+VisitorSchemeContext.displayName = 'VisitorSchemeContext'
 
 /** Leaf props with any `children` a resolved prop carried, for a held root. */
 function withoutChildren<T extends Record<string, unknown>>(
@@ -312,7 +326,16 @@ export const Leaf = observer(
     // No provider (an email render, a bare test) means nothing to force.
     // Every hook above runs on both paths, so the early return keeps the
     // hook order stable when an author flips the setting.
-    const pinnedScheme = resolveElementColorScheme(_colorScheme)
+    //
+    // "The visitor's scheme" (AGL-4152) is the same swap the other way, for a
+    // filled button inside a band pinned dark: it re-renders under the scheme
+    // the visitor picked, so it wears the one primary every other filled
+    // button on the site wears. It paints no ground of its own (below).
+    const visitorScheme = useContext(VisitorSchemeContext) ?? activeScheme
+    const toVisitor = _colorScheme === ELEMENT_COLOR_SCHEME_VISITOR
+    const pinnedScheme = toVisitor
+      ? visitorScheme
+      : resolveElementColorScheme(_colorScheme)
     const schemeThemes = useSiteSchemeThemes()
     const forcedTheme =
       pinnedScheme && pinnedScheme !== activeScheme && schemeThemes
@@ -342,9 +365,11 @@ export const Leaf = observer(
     }
     if (forcedTheme && forcedTheme.palette?.mode === pinnedScheme) {
       return (
-        <ThemeProvider theme={forcedTheme}>
-          <Leaf {...props} ref={ref} />
-        </ThemeProvider>
+        <VisitorSchemeContext.Provider value={visitorScheme}>
+          <ThemeProvider theme={forcedTheme}>
+            <Leaf {...props} ref={ref} />
+          </ThemeProvider>
+        </VisitorSchemeContext.Provider>
       )
     }
     // MUI array composition: later entries win on key conflicts, so the
@@ -383,11 +408,13 @@ export const Leaf = observer(
     // own controls and scrollbars inside the band match. Only a pinned
     // element carries this, so an unpinned one renders exactly as before —
     // and so does a pinned one on a surface with no site themes to pin to.
+    // An element sent back to the visitor's scheme paints nothing: it is a
+    // control on its band, and a ground of its own would show at its corners.
     const authorSx = sanitizeAuthorSx(node?.sx)
     const composedSx = pinRampedTypographySx(
       resolvePaletteVarsSx(
         resolveSchemeSx(
-          pinnedScheme && schemeThemes
+          pinnedScheme && schemeThemes && !toVisitor
             ? mergeSxProps(
                 {
                   colorScheme: pinnedScheme,

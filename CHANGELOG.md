@@ -9,6 +9,52 @@ content on the marketing site and is written separately.
 
 <!-- releases below -->
 
+## v1.17.0 — 2026-11-07
+
+[Compare with the previous release](https://github.com/aglyn/aglyn/compare/v1.16.0...v1.17.0)
+
+### Added
+
+- **legal:** pin Legal v25, in-person card sales on a store's own Stripe account
+- **native:** product add-ons, priced by size and shown on the website ([AGL-4162](https://linear.app/aglyn/issue/AGL-4162), [AGL-4100](https://linear.app/aglyn/issue/AGL-4100))
+- **native:** the Selling tabs and workspace menu reach the publish forms ([AGL-4105](https://linear.app/aglyn/issue/AGL-4105))
+- **commerce:** release_direct_charges on by default for every store
+- **data:** the dataset rail is ordered and searched by name on the server ([AGL-4047](https://linear.app/aglyn/issue/AGL-4047))
+- **native:** an add-on choice's picture, note and combo, as the console's ([AGL-4162](https://linear.app/aglyn/issue/AGL-4162))
+
+### Fixed
+
+- **commerce:** no workspace 4G charge for a store on its own Stripe account
+- **console:** app-bar publish puts the canvas live, not the stored version ([AGL-4209](https://linear.app/aglyn/issue/AGL-4209))
+- **lockdown:** a site lock's cache drop is durable and the verdict keeps an hour bound ([AGL-4121](https://linear.app/aglyn/issue/AGL-4121))
+- **ai:** a filled button on a dark band wears the site's one primary, light or dark ([AGL-4152](https://linear.app/aglyn/issue/AGL-4152))
+- **renderer:** a control can go back to the visitor's scheme inside a pinned band ([AGL-4152](https://linear.app/aglyn/issue/AGL-4152))
+- **commerce:** the Besigner Preview loads storefront products ([AGL-4210](https://linear.app/aglyn/issue/AGL-4210))
+- **marketplace:** wrapped README list items and inline code render ([AGL-4197](https://linear.app/aglyn/issue/AGL-4197))
+- **commerce:** deleting a draft quote removes its messages ([AGL-4207](https://linear.app/aglyn/issue/AGL-4207))
+- **native:** iOS add-on rows reached by id, prices by size on their own row ([AGL-4162](https://linear.app/aglyn/issue/AGL-4162))
+- **native:** downloads, the dataset head and site-only screens on tablets ([AGL-4047](https://linear.app/aglyn/issue/AGL-4047))
+- **ai:** a redesign's calls to action once each, in place; no mark as its opening ([AGL-4152](https://linear.app/aglyn/issue/AGL-4152))
+- **ai:** a brand's mark never fills a redesign's photo slot ([AGL-4152](https://linear.app/aglyn/issue/AGL-4152))
+- **ai:** a header button that asks to be contacted goes to the contact page ([AGL-4152](https://linear.app/aglyn/issue/AGL-4152))
+- **tenant:** the preview bar sits under the admin bar, not over it ([AGL-4152](https://linear.app/aglyn/issue/AGL-4152))
+- **commerce:** product names on storefront cards wrap to two lines
+
+### Documentation
+
+- **commerce:** payments docs describe a store's own Stripe account
+
+<details>
+<summary>Also in this release: 2 tests, 3 chores</summary>
+
+- **marketplace:** pin the plugin cache drop at every security call site ([AGL-4121](https://linear.app/aglyn/issue/AGL-4121))
+- **console:** publish guard specs read the shared save-and-publish step ([AGL-4209](https://linear.app/aglyn/issue/AGL-4209))
+- **data:** skip CI on the dataset rail name-order head ([AGL-4047](https://linear.app/aglyn/issue/AGL-4047))
+- **tools:** raise the Linear id floor to AGL-4210 ([AGL-4210](https://linear.app/aglyn/issue/AGL-4210))
+- **budgets:** re-baseline commerce for two-line product names on storefront cards
+
+</details>
+
 ## v1.16.0 — 2026-11-06
 
 [Compare with the previous release](https://github.com/aglyn/aglyn/compare/v1.15.2...v1.16.0)
