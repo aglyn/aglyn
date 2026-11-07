@@ -927,7 +927,7 @@ export function siteImportFidelity(source: SiteImportFidelitySource, tree: SiteI
   if (improvedWords) placement.placeRewritten()
   const look = new LookOf(built, source.layout.look, theme)
 
-  const words = wordsScore(source, built)
+  const words = wordsScore(source, built, finish === 'improve')
   // Improved, a page's bands are read as its colors alone say; kept, against its page's ground (AGL-4152).
   const read = sections.map((section) => (finished && finish === 'improve' ? (section.absoluteBand ?? section.band) : section.band))
   const drawn = drawnSections.map((id) => siteImportFidelityBandOf(built.node(id)))
@@ -1015,7 +1015,9 @@ export function siteImportFidelity(source: SiteImportFidelitySource, tree: SiteI
           break
         }
         case 'group': {
-          const units = unitsOn(built, placement, node.items.map((item) => item.lines), root)
+          // Improved, a link every item repeats is shown once after the group (AGL-4152): no item holds it.
+          const shared = finish === 'improve' ? sharedLinkLines(source.blocks, node.items) : null
+          const units = unitsOn(built, placement, node.items.map((item) => (shared ? item.lines.filter((line) => !shared.has(line)) : item.lines)), root)
           // Each item's own icon and its bullets' marks, in the element that is the item.
           node.items.forEach((item, at) => {
             // Its corner arrow too (AGL-4138): a card's "↗" is an icon of its own.
@@ -1193,15 +1195,44 @@ function itemKept(built: Built, kind: SiteImportGroupKind, item: SiteImportLayou
   return true
 }
 
-/** The words: the source's lines against what the page shows, each word as often as it is said. */
-function wordsScore(source: SiteImportFidelitySource, built: Built): SiteImportFidelityWords {
+/** The link lines of a group's items that every item carries, the same words to the same place: one call to action, said on each. */
+function sharedLinkLines(blocks: readonly SiteImportBlock[], items: ReadonlyArray<{ lines: readonly SiteImportLineRef[] }>): Set<SiteImportLineRef> {
+  if (items.length < 2) return new Set()
+  const keyOf = (line: SiteImportLineRef) => {
+    const block = blocks[line]
+    return block?.kind === 'link' && !block.inline ? `${wordLine(clean(block.text)).toLowerCase()}\u0000${block.href}` : null
+  }
+  const each = items.map((item) => new Set(item.lines.flatMap((line) => keyOf(line) ?? [])))
+  const common = [...(each[0] ?? [])].filter((key) => each.every((keys) => keys.has(key)))
+  return new Set(items.flatMap((item) => item.lines.filter((line) => common.includes(keyOf(line) ?? ''))))
+}
+
+/**
+ * The words: the source's lines against what the page shows, each word as
+ * often as it is said. Improved, a link said again with the same words to the
+ * same place may be shown once or as often as it is said (AGL-4152): the page
+ * shows each call to action once, and a page drawn as before is no worse.
+ */
+function wordsScore(source: SiteImportFidelitySource, built: Built, improve = false): SiteImportFidelityWords {
   const tally = (lines: readonly string[]) => {
     const counts = new Map<string, number>()
     for (const word of lines.flatMap(wordsOf)) counts.set(word, (counts.get(word) ?? 0) + 1)
     return counts
   }
-  const said = tally(source.blocks.flatMap((block) => (isLine(block) && block.kind !== 'image' ? [clean(block.text)] : [])))
+  const links = new Set<string>()
+  const again = (block: SiteImportBlock) => {
+    if (!improve || block.kind !== 'link') return false
+    const key = `${wordLine(clean(block.text)).toLowerCase()}\u0000${block.href}`
+    if (links.has(key)) return true
+    links.add(key)
+    return false
+  }
+  const lines = source.blocks.filter((block) => isLine(block) && block.kind !== 'image')
+  const full = tally(lines.map((block) => clean(block.text)))
+  const least = tally(lines.filter((block) => !again(block)).map((block) => clean(block.text)))
   const shown = tally(built.pieces.map((piece) => piece.text))
+  // Each word as often as the page shows it, between the least the source asks and all it says.
+  const said = new Map([...full].map(([word, count]) => [word, Math.min(count, Math.max(least.get(word) ?? 0, shown.get(word) ?? 0))]))
   let sourceWords = 0
   let builtWords = 0
   let both = 0

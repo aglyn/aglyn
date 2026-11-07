@@ -111,6 +111,7 @@ import { aiSiteImportAltIsFileName } from '../model/ai-site-import-marks'
 import { aiHexOklch } from '../model/ai-site-look'
 import { aiModelAtLeastStepTier } from '../providers/routing'
 import type { SiteImportBlock } from '../site-import/site-import-html'
+import { aiSiteImportSectionActions } from './ai-site-import-actions'
 import {
   AI_SITE_IMPORT_DOC_MAX_NODES,
   AI_SITE_IMPORT_LABEL_CHARS,
@@ -1322,6 +1323,10 @@ export function aiSiteImportDesignedSections(
     const source = reading ? 'start' : section.align
     // The source's own heading measure for its opening's words, on a page kept as it is (AGL-4152).
     const measure = hero && !improve ? aiSiteImportHeroMeasure(section) : null
+    const cols = row.cols && blocks.some((block) => block.col !== undefined) ? row.cols : undefined
+    // Improved, each call to action once and in its place, as a redesign's are (AGL-4152): a page whose
+    // redesign fell back keeps its layout, never each review's own "See more reviews".
+    const tidy = improve ? aiSiteImportSectionActions({ ...(cols ? { cols } : {}), blocks: mergeLists(blocks) }, doc.plan?.nav.primaryCta?.label) : { ...(cols ? { cols } : {}), blocks: mergeLists(blocks) }
     return {
       band,
       // Kept as it is, a section keeps the source's alignment (AGL-4152); improved, the answer's.
@@ -1329,8 +1334,8 @@ export function aiSiteImportDesignedSections(
       // As wide as the source runs (AGL-4083), or the theme's own on a page its owner asked improved (AGL-4152);
       // where it sets no cap, a page's width, a long read's measure.
       width: (improve ? null : siteImportWidthOf(section.width)) ?? (reading ? 'md' : 'lg'),
-      ...(row.cols && blocks.some((block) => block.col !== undefined) ? { cols: row.cols } : {}),
-      blocks: mergeLists(blocks),
+      ...(tidy.cols ? { cols: tidy.cols } : {}),
+      blocks: tidy.blocks,
       ...(hero ? { hero } : {}),
       ...(measure ? { measure } : {}),
     }

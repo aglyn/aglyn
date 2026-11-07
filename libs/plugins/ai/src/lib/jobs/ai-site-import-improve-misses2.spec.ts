@@ -126,6 +126,33 @@ describe('the facts a redesign must keep', () => {
   })
 })
 
+/** An invented contractor's home whose three reviews each carry the same link. */
+const REVIEWED = `<!doctype html><html><head><title>Larkspur Paving</title></head><body>
+<header><a href="/">Larkspur Paving</a><nav><a href="/contact">Contact</a></nav></header>
+<main>
+<section><h1>Concrete for homes and shops</h1><p>Driveways, patios and shop floors.</p></section>
+<section><h2>Why us?</h2><p>Here are some of our clients’ reviews.</p>
+<div><blockquote>“On time and on budget. The patio is perfect.”</blockquote><a href="https://reviews.example/larkspur">See More Reviews</a></div>
+<div><blockquote>“They poured our driveway in a day and cleaned up after.”</blockquote><a href="https://reviews.example/larkspur">See More Reviews</a></div>
+<div><blockquote>“Honest prices and a crew that listens.”</blockquote><a href="https://reviews.example/larkspur">See More Reviews</a></div>
+</section>
+</main><footer><p>Larkspur Paving.</p></footer></body></html>`
+
+describe('a page whose redesign fell back, under Improve it', () => {
+  const buttonsOf = (nodes: Record<string, Node>, text: string) => Object.values(nodes).filter((node) => node.componentId === 'muiButton' && node.props?.['children'] === text)
+
+  it('keeps its layout with each call to action once', () => {
+    const read = siteImportReplayDocumentOf(REVIEWED, `${ORIGIN}/`, sameSite)
+    const kept = siteImportReplayBuild(read, '/', true, { finish: 'keep', words: 'kept' })
+    const improved = siteImportReplayBuild(read, '/', true, { finish: 'improve', words: 'kept' })
+    expect(kept.violations).toEqual([])
+    expect(improved.violations).toEqual([])
+    // Kept as it is, the source's own three; improved, one.
+    expect(buttonsOf(kept.tree.nodes as unknown as Record<string, Node>, 'See More Reviews')).toHaveLength(3)
+    expect(buttonsOf(improved.tree.nodes as unknown as Record<string, Node>, 'See More Reviews')).toHaveLength(1)
+  })
+})
+
 describe('a picture described only by its file name', () => {
   it('reads as no description', () => {
     expect(NAMES.map(aiSiteImportAltIsFileName)).toEqual(NAMES.map(() => true))
