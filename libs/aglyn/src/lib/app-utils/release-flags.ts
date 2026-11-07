@@ -137,7 +137,7 @@ const PLATFORM_RELEASE_FLAGS: readonly ReleaseFlagDefinition[] = [
       'the redirect; turning this off returns every storefront to the redirect.',
     defaultEnabled: true,
   },
-  // Released to every store 2026-11-06, after the Terms (v24) named a site's
+  // Released to every store 2026-11-06, after the Terms (v24, v25) named a site's
   // own Stripe account as the seller of record. On, a store that sets up
   // payments gets a full Stripe account of its own and its sales, online and
   // in person, become direct charges on it. It stays the kill switch: off,
@@ -149,11 +149,12 @@ const PLATFORM_RELEASE_FLAGS: readonly ReleaseFlagDefinition[] = [
     description:
       'When a store sets up payments it gets a full Stripe account of its own ' +
       '(Stripe bills it, Stripe Dashboard included), and its site sales, ' +
-      'quotes, invoices and bookings are charged directly on that account: ' +
-      'the store is the seller of record, owns refunds, disputes and sales ' +
-      'tax, and the platform keeps only its plan take as an application fee. The ' +
-      'register, Tap to Pay and plugin marketplace sales stay on the ' +
-      'platform account. Off: new stores get the platform-managed account ' +
+      'quotes, invoices, bookings and in-person card sales (the register and ' +
+      'Tap to Pay) are charged directly on that account: the store is the ' +
+      'seller of record, owns refunds, disputes and sales tax, and the ' +
+      'platform keeps only its plan take as an application fee. Plugin ' +
+      'marketplace sales stay on the platform account. Off: new stores get ' +
+      'the platform-managed account ' +
       'and destination charges, as before. Accounts already created keep ' +
       'whichever shape they were created with.',
     defaultEnabled: true,
