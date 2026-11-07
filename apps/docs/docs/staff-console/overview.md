@@ -649,7 +649,11 @@ click tracking.
 - **Media** in the old organization's library. The site keeps showing it, because
   pages reference it by address, but only the old organization can manage it —
   deleting a file there removes it from this site. The review says how many
-  files this affects.
+  files this affects. A file the old organization shares with **all sites except
+  some** is the exception: it stops showing on the site once the site moves,
+  because the site is no longer one of the old organization's sites, and the
+  review counts those files apart. A link to one pasted into custom HTML or CSS
+  may keep loading.
 - Records the site made for the old organization: CRM contacts and leads,
   datasets, lists, and its **campaign send history**, which names the old
   organization's lists and consent.

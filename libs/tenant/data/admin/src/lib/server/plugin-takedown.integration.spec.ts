@@ -187,4 +187,33 @@ describe('a taken-down plugin stops resolving (AGL-958)', () => {
       .set({ enabledPlugins: [LISTING] }, { merge: true })
     expect(await getRealmPluginInstalls({ orgId: ORG })).toHaveLength(1)
   })
+
+  it("stops on a site that switched it off, and only there (AGL-4047)", async () => {
+    // The site's own Admin › Plugins switch writes the listing id into the
+    // host's deny-list. The join read only the workspace's list, so the site
+    // switch did nothing on the published page.
+    const OTHER = `${HOST}-other`
+    await db().collection('hostIndex').doc(HOST).set({ orgId: ORG })
+    await db().collection('hostIndex').doc(OTHER).set({ orgId: ORG })
+    await db().collection('hosts').doc(OTHER).set({ orgId: ORG })
+    try {
+      expect(await getRealmPluginInstalls({ hostId: HOST })).toHaveLength(1)
+      await db()
+        .collection('hosts')
+        .doc(HOST)
+        .set({ disabledPlugins: [LISTING] }, { merge: true })
+      expect(await getRealmPluginInstalls({ hostId: HOST })).toEqual([])
+      expect(await getRealmPluginInstalls({ orgId: ORG, hostId: HOST })).toEqual([])
+      // The negative control: the workspace and its other site keep it.
+      expect(await getRealmPluginInstalls({ hostId: OTHER })).toHaveLength(1)
+      expect(await getRealmPluginInstalls({ orgId: ORG })).toHaveLength(1)
+      // Switched back on, it runs again.
+      await db().collection('hosts').doc(HOST).set({ disabledPlugins: [] }, { merge: true })
+      expect(await getRealmPluginInstalls({ hostId: HOST })).toHaveLength(1)
+    } finally {
+      await db().collection('hostIndex').doc(HOST).delete()
+      await db().collection('hostIndex').doc(OTHER).delete()
+      await db().recursiveDelete(db().collection('hosts').doc(OTHER))
+    }
+  })
 })

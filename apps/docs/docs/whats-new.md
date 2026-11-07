@@ -50,6 +50,8 @@ for the how-to.
 - **Share an email campaign with all sites except some.** [Campaigns](marketing-and-automation/email-campaigns/overview.md#campaigns-belong-to-the-organization)
   — the same choice on a campaign, from your organization's **Marketing** page, including any
   site you add later.
+- **Run a built-in plugin on all sites except some.** [Where a plugin runs](guides/install-your-first-plugin.md#where-a-plugin-runs)
+  — on a plugin's page, tick the sites to leave out, and every other site runs it, including any site you add later.
 - **Four plans: Free, Starter, Pro and Custom.** [Billing & plans](workspace-and-billing/billing-and-plans/overview.md#tiers--entitlements)
   — Pro is now the full platform: everything that was on Business, including the API
   and webhooks, A/B testing, multilingual sites, scheduled publishing, recurring billing,
