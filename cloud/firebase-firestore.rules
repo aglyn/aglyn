@@ -177,8 +177,14 @@ service cloud.firestore {
      * three Admin-SDK creators write onto a media document, minus every field
      * a client surface actually writes. Nothing here is a guess, and nothing
      * here is client-authored — the DAM writes `fileName`, `alt`,
-     * `description`, `tags`, `folderId`/`folder` and `visibleTo`, and those
-     * six are the whole of it, swept from the repo rather than remembered.
+     * `description`, `tags` and `folderId`/`folder`, and those five are the
+     * whole of it, swept from the repo rather than remembered.
+     *
+     * `visibleTo` was the sixth until AGL-4047. Every sharing change now goes
+     * through `set-sharing` / `set-scope` on `/api/media/folders`, which
+     * writes the scope and the all-except marker together on the Admin SDK,
+     * and no client surface writes it any more — so it is frozen for the
+     * AGL-1367 reason below, like every other field only a route writes.
      *
      * Two of the eleven beyond `storagePath`/`private` are security inputs in
      * their own right, found while classifying them and closed here rather
@@ -241,7 +247,7 @@ service cloud.firestore {
         'variantsError', 'svgSanitized', 'uploadedBy', 'createdAt',
         'video', 'poster', 'posterError', 'videoRenditions',
         'deliveryCopies', 'embeddedMetadata', 'variantEncoderVersion',
-        'display', 'variantRegeneration']);
+        'display', 'variantRegeneration', 'visibleTo']);
     }
     function mediaObjectFieldsUnchanged() {
       return !request.resource.data.diff(resource.data).affectedKeys().hasAny([
@@ -250,7 +256,7 @@ service cloud.firestore {
         'variantsError', 'svgSanitized', 'uploadedBy', 'createdAt',
         'video', 'poster', 'posterError', 'videoRenditions',
         'deliveryCopies', 'embeddedMetadata', 'variantEncoderVersion',
-        'display', 'variantRegeneration']);
+        'display', 'variantRegeneration', 'visibleTo']);
     }
 
     /**

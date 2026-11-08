@@ -160,6 +160,9 @@ PROJECTS=(
   # Commerce proves a card reader bought from the online store becomes a
   # hardware order, through the real collections (AGL-4038).
   libs/plugins/commerce
+  # Marketing proves a campaign set's site sharing against the real rules
+  # (campaign-set-sharing.emulator.spec.ts).
+  libs/plugins/marketing
 )
 
 # Projects whose specs exercise a cross-workspace job run their suites one at
