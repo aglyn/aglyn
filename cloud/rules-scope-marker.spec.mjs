@@ -121,7 +121,10 @@ const contextOf = (env) => {
  */
 const COLLECTIONS = {
   datasets: { writes: true, create: false, fields: { displayName: 'A', model: { order: [], fields: {} } } },
-  media: { writes: true, create: true, fields: { fileName: 'a.png' } },
+  // Since AGL-4047 no client creates or re-scopes media: uploads and every
+  // sharing change go through Admin-SDK routes, and the rules freeze
+  // `visibleTo` on a media document for clients.
+  media: { writes: true, create: false, rescope: false, fields: { fileName: 'a.png' } },
   mediaFolders: { writes: true, create: true, fields: { name: 'A' } },
   emailCampaigns: { writes: true, create: true, fields: { name: 'A' } },
   leads: { writes: true, create: false, fields: { status: 'new' } },
@@ -247,7 +250,7 @@ const seedCollections = async (seed, org = ORG) => {
   // A client cannot re-scope a marked document, or it would leave the marker
   // describing sharing the document no longer has. Only the set-sharing route writes
   // the two together. A document with no marker re-scopes as it always has.
-  for (const [name, { writes, fields }] of Object.entries(COLLECTIONS)) {
+  for (const [name, { writes, rescope = true, fields }] of Object.entries(COLLECTIONS)) {
     if (!writes) continue
     await seed(['orgs', ORG, name, 're-scope'], { ...fields, visibleTo: ONE })
     for (const uid of ['owner', 'editor']) {
@@ -262,11 +265,15 @@ const seedCollections = async (seed, org = ORG) => {
         updateDoc(doc(db, 'orgs', ORG, name, 'marked'), { label: `e${++edits}`, visibleTo: TWO }),
       )
     }
-    await allow(`owner on ${name}: re-scopes a document with no marker, as today`, () =>
+    // Where no client re-scopes at all, the unmarked re-scope is denied too.
+    const rescopes = rescope ? allow : deny
+    await rescopes(`owner on ${name}: ${rescope ? 're-scopes' : 'cannot re-scope'} a document with no marker`, () =>
       updateDoc(doc(as('owner'), 'orgs', ORG, name, 're-scope'), { visibleTo: TWO }),
     )
-    await allow(`editor on ${name}: re-scopes a document with no marker, as today`, () =>
-      updateDoc(doc(as('editor'), 'orgs', ORG, name, 're-scope'), { visibleTo: ONE }),
+    await rescopes(`editor on ${name}: ${rescope ? 're-scopes' : 'cannot re-scope'} a document with no marker`, () =>
+      // The owner's attempt was refused, so the stored value is still ONE and
+      // only a different value is a re-scope.
+      updateDoc(doc(as('editor'), 'orgs', ORG, name, 're-scope'), { visibleTo: rescope ? ONE : TWO }),
     )
     await deny(`a collaborator on ${name}: cannot re-scope a marked document`, () =>
       updateDoc(doc(as('siteOnly'), 'orgs', ORG, name, 'marked'), { visibleTo: TWO }),
@@ -596,14 +603,18 @@ const slug = (text) => text.replace(/[^a-z]+/gi, '-')
   await seedWorkspace(seed)
   await seedCollections(seed)
   const db = as('owner')
-  for (const [name, { writes, create, fields }] of Object.entries(COLLECTIONS)) {
+  for (const [name, { writes, create, rescope = true, fields }] of Object.entries(COLLECTIONS)) {
     if (!writes) continue
     await allow(`control: without the freeze, ${name} takes a forged marker`, () =>
       updateDoc(doc(db, 'orgs', ORG, name, 'plain'), MARKER),
     )
-    await allow(`control: without the freeze, ${name} is re-scoped with its marker on`, () =>
-      updateDoc(doc(db, 'orgs', ORG, name, 'marked'), { visibleTo: TWO }),
-    )
+    // Media's `visibleTo` is frozen by a separate rule, so lifting the marker
+    // freeze alone does not let a client re-scope it.
+    if (rescope) {
+      await allow(`control: without the freeze, ${name} is re-scoped with its marker on`, () =>
+        updateDoc(doc(db, 'orgs', ORG, name, 'marked'), { visibleTo: TWO }),
+      )
+    }
     await allow(`control: without the freeze, ${name} loses its marker`, () =>
       updateDoc(doc(db, 'orgs', ORG, name, 'marked'), { scopeMode: deleteField(), scopeExcept: deleteField() }),
     )

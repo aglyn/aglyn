@@ -10694,17 +10694,31 @@ describe('media object fields are server-owned (AGL-1881)', () => {
       }),
     )
     await mustAllow(
-      'the sharing control, which only an org-wide member may move',
-      updateDoc(doc(authed(OWNER), ...ORG_ASSET), {
-        visibleTo: [`host:${HOST}`],
-      }),
-    )
-    await mustAllow(
       're-sending the frozen values UNCHANGED, which diff() must not call a change',
       updateDoc(doc(authed(OWNER), ...ORG_ASSET), {
         fileName: 'Brochure v3.pdf',
         storagePath: `orgs/${ORG}/media/agl1881`,
         private: true,
+      }),
+    )
+  })
+
+  // Since the sharing change (AGL-4047), an asset's sharing moves only
+  // through the media-folder routes, which write `visibleTo` with the Admin
+  // SDK. The rules freeze it for clients, so the DAM's own control cannot
+  // be the hole a client-side write would reopen.
+  it('a client cannot reshare an org asset; only the media-folder routes may', async () => {
+    await mustDeny(
+      'moving the sharing tokens from the client',
+      updateDoc(doc(authed(OWNER), ...ORG_ASSET), {
+        visibleTo: [`host:${HOST}`],
+      }),
+    )
+    await mustAllow(
+      're-sending the current sharing UNCHANGED beside a real edit',
+      updateDoc(doc(authed(OWNER), ...ORG_ASSET), {
+        alt: 'Company brochure, front',
+        visibleTo: ['org'],
       }),
     )
   })
