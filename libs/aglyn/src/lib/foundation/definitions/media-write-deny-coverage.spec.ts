@@ -433,7 +433,12 @@ describe('media documents: server-owned fields are denied to clients (AGL-1881)'
     ])
     expect(SERVER_WRITTEN.size).toBeGreaterThanOrEqual(16)
     expect([...CLIENT_WRITTEN.keys()].sort()).toContain('fileName')
-    expect([...CLIENT_WRITTEN.keys()].sort()).toContain('visibleTo')
+    expect([...CLIENT_WRITTEN.keys()].sort()).toContain('alt')
+    // `visibleTo` was client-written until AGL-4047 moved every sharing change
+    // to `set-sharing` / `set-scope` on `/api/media/folders` (Admin SDK). It is
+    // now frozen in the rules with the other route-only fields; a client write
+    // reappearing here means that freeze would break it.
+    expect([...CLIENT_WRITTEN.keys()]).not.toContain('visibleTo')
     // The parse is known not to see these; if it starts to, the note above
     // is stale and the field needs classifying like any other.
     for (const field of INVISIBLE_TO_THE_PARSE) {

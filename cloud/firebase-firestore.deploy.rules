@@ -234,6 +234,12 @@ function isSuperStaff() { return isStaff() && staffRole() == 'super'; }
 
 
 
+
+
+
+
+
+
 function mediaObjectFieldsUnset() {
 return !request.resource.data.keys().hasAny([
 'storagePath', 'private', 'cdnPath', 'url', 'contentType',
@@ -241,7 +247,7 @@ return !request.resource.data.keys().hasAny([
 'variantsError', 'svgSanitized', 'uploadedBy', 'createdAt',
 'video', 'poster', 'posterError', 'videoRenditions',
 'deliveryCopies', 'embeddedMetadata', 'variantEncoderVersion',
-'display', 'variantRegeneration']);
+'display', 'variantRegeneration', 'visibleTo']);
 }
 function mediaObjectFieldsUnchanged() {
 return !request.resource.data.diff(resource.data).affectedKeys().hasAny([
@@ -250,7 +256,7 @@ return !request.resource.data.diff(resource.data).affectedKeys().hasAny([
 'variantsError', 'svgSanitized', 'uploadedBy', 'createdAt',
 'video', 'poster', 'posterError', 'videoRenditions',
 'deliveryCopies', 'embeddedMetadata', 'variantEncoderVersion',
-'display', 'variantRegeneration']);
+'display', 'variantRegeneration', 'visibleTo']);
 }
 
 

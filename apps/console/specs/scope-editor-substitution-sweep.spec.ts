@@ -136,20 +136,36 @@ describe('AGL-1484 · nothing substitutes the org token for an absent scope', ()
 
   /**
    * The positive half, and the one that stops the next copy being written
-   * correctly-but-again. Every editor that reads a STORED scope asks
-   * `storedScope`, so "absent means nothing is stored" is decided once.
+   * correctly-but-again. Every editor that reads a STORED scope asks a shared
+   * helper, so "absent means nothing is stored" is decided in `scope-tokens.ts`
+   * and nowhere else.
+   *
+   * Two helpers answer it. `storedScope` returns the tokens, or null when
+   * none are stored. `scopeSharingOf` (AGL-4047) returns the sharing choice
+   * those tokens and the all-except marker make, and `{ mode: 'none' }` when
+   * none are stored. Since AGL-4047 the media library edits the sharing
+   * CHOICE (All sites / chosen sites / all except some), so it reads through
+   * `mediaSharingChoiceOf`, which is `scopeSharingOf` and maps `none` to null.
+   * Each reader below is held to the helper it actually uses, and the media
+   * wrapper is held to `scopeSharingOf`, so the chain cannot quietly grow a
+   * hand-written read at either link.
    */
-  it('reads stored scopes through the one helper', () => {
-    const readers = [
-      'apps/console/components/media/media-library.component.tsx',
-      'libs/plugins/data/src/lib/components/dataset-schema-dialog.component.tsx',
+  it('reads stored scopes through the shared helpers', () => {
+    const readers: Array<[file: string, helper: RegExp]> = [
+      ['apps/console/components/media/media-library.component.tsx', /\bmediaSharingChoiceOf\(/],
+      ['apps/console/components/media/media-sharing.ts', /\bscopeSharingOf\(/],
+      ['libs/plugins/data/src/lib/components/dataset-schema-dialog.component.tsx', /\bstoredScope\(/],
     ]
-    for (const file of readers) {
+    for (const [file, helper] of readers) {
       const source = readFileSync(join(REPO_ROOT, file), 'utf8')
-      expect({ file, uses: /storedScope\(/.test(source) }).toEqual({
-        file,
-        uses: true,
-      })
+      expect({ file, uses: helper.test(source) }).toEqual({ file, uses: true })
     }
+    // The media wrapper adds nothing of its own to the absent case: the one
+    // decision is `scopeSharingOf`'s `none`, which the wrapper maps to null.
+    const wrapper = readFileSync(
+      join(REPO_ROOT, 'apps/console/components/media/media-sharing.ts'),
+      'utf8',
+    )
+    expect(wrapper).not.toMatch(/visibleTo/)
   })
 })
