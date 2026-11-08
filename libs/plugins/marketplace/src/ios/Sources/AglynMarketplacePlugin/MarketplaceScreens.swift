@@ -594,24 +594,58 @@ private struct ListingSheets: View {
   @State private var rating = 0
   @State private var comment = ""
   @State private var reason = ""
+  /// "Install to" (AGL-4047): a workspace plugin install runs on every site, or on every site but some.
+  @State private var installTo: ScopeSharingChoice? = .all
 
   private var api: MarketplaceAPI { MarketplaceAPI(api: context.api) }
+
+  private func choosing(_ scope: InstallTarget?) -> Bool {
+    scope == .org && listing.artifactType == "plugin" && !state.updateAvailable
+  }
+  private var exceptHostIDs: [String] {
+    if case .allExcept(let ids) = installTo { return ids }
+    return []
+  }
+  private var installToProblem: String? {
+    if case .allExcept(let ids) = installTo, ids.isEmpty { return "Choose at least one site to leave out, or choose All sites." }
+    return nil
+  }
 
   var body: some View {
     switch sheet {
     case .install(let scope):
       AglynActionSheet(
         state.updateAvailable ? "Update \(listing.name)?" : (scope == .org ? "Install \(listing.name) for every site?" : "Install \(listing.name)?"),
-        message: installBody(scope), confirmLabel: state.updateAvailable ? "Update" : "Install", busy: runner.busy, error: runner.error,
+        message: installBody(scope), confirmLabel: state.updateAvailable ? "Update" : "Install",
+        confirmEnabled: !choosing(scope) || installToProblem == nil, busy: runner.busy, error: runner.error,
         onCancel: { runner.error = nil; close() },
         onConfirm: {
           guard let hostID = context.hostID else { return }
+          let except = choosing(scope) ? exceptHostIDs : []
           runner.run(onDone: close) {
-            let outcome = try await api.install(listing, hostID: hostID, scope: scope)
+            let outcome = try await api.install(listing, hostID: hostID, scope: scope, exceptHostIDs: except)
             runner.notice = outcome.message + (outcome.warning.map { " \($0)" } ?? "")
           }
         }
-      ) { EmptyView() }
+      ) {
+        if choosing(scope) {
+          SiteSharingField(
+            "Install to", value: $installTo, sites: context.sites.map { SharingSite(id: $0.id, name: $0.name) }, sitesReady: true,
+            modes: [.all, .allExcept], problem: installToProblem,
+            modeDetails: [
+              .all: "Every site, including sites you add later.",
+              .allExcept: "Every site but the ones you leave out, including sites you add later.",
+            ]
+          )
+          .accessibilityIdentifier("listing-install-to")
+          if case .allExcept = installTo {
+            Text(
+              "Each site you leave out has the plugin switched off, with the same switch as its own Admin › Plugins page. Leaving a site out takes “\(orgPermissionLabel(ContractValues.shared.orgRoleGrants, key: "site.manage"))” there, and anyone holding it, which the site’s admins do by default, can turn the plugin back on for that site."
+            )
+            .font(AglynFont.caption).foregroundStyle(.secondary)
+          }
+        }
+      }
     case .uninstall(let scope):
       AglynActionSheet(
         "Remove \(listing.name)?",
@@ -669,6 +703,10 @@ private struct ListingSheets: View {
 
   private func installBody(_ scope: InstallTarget?) -> String? {
     if listing.artifactType == "theme" { return "It replaces this site's theme. Setup → Theme has a way back." }
+    if choosing(scope), !exceptHostIDs.isEmpty {
+      let names = exceptHostIDs.map { id in context.sites.first { $0.id == id }?.name ?? id }
+      return "This will be installed to every site except \(names.joined(separator: ", ")), including sites added later."
+    }
     if scope == .org { return "Every site in the workspace gets it, except a site with its own install of it." }
     if listing.artifactType == "plugin" { return "It runs on this site's pages once installed." }
     return marketplaceLandingMessage(listing.artifactType, listing.name).map { "Once installed: \($0)" }

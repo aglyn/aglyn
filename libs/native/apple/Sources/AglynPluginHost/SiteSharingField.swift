@@ -74,12 +74,15 @@ public struct SiteSharingField: View {
   let readOnly: Bool
   let readOnlyReason: String?
   let problem: String?
+  /// A sentence per choice where the defaults aren’t true of this resource (web’s `modeDetails`); an off-reason wins.
+  let modeDetails: [SiteSharingMode: String]
 
   public init(
     _ label: String = "Shared with", value: Binding<ScopeSharingChoice?>, sites: [SharingSite], sitesReady: Bool,
     modes: [SiteSharingMode] = SiteSharingMode.allCases, maxIncluded: Int? = nil, readOnly: Bool = false,
-    readOnlyReason: String? = nil, problem: String? = nil
+    readOnlyReason: String? = nil, problem: String? = nil, modeDetails: [SiteSharingMode: String] = [:]
   ) {
+    self.modeDetails = modeDetails
     self.label = label
     _value = value
     self.sites = sites
@@ -140,12 +143,13 @@ public struct SiteSharingField: View {
       if !label.isEmpty { Text(label).font(AglynFont.caption).foregroundStyle(AglynColor.secondaryText) }
       if readOnly, let readOnlyReason { AglynHelperText(readOnlyReason) }
       if modes.contains(.all) {
-        AglynChoiceRow("All sites", selected: value?.mode == .all, enabled: !readOnly) { choose(.all) }
+        AglynChoiceRow("All sites", detail: modeDetails[.all], selected: value?.mode == .all, enabled: !readOnly) { choose(.all) }
           .accessibilityIdentifier("sharing-mode-all")
       }
       if modes.contains(.selected) {
         AglynChoiceRow(
-          "Selected sites", detail: "A new site doesn’t get this until you add it.", selected: value?.mode == .selected,
+          "Selected sites", detail: modeDetails[.selected] ?? "A new site doesn’t get this until you add it.",
+          selected: value?.mode == .selected,
           enabled: !readOnly
         ) { choose(.selected) }
         .accessibilityIdentifier("sharing-mode-selected")
@@ -153,7 +157,7 @@ public struct SiteSharingField: View {
       if modes.contains(.allExcept) {
         let enabled = !readOnly && (exceptOffReason == nil || value?.mode == .allExcept)
         AglynChoiceRow(
-          "All sites except…", detail: exceptOffReason ?? "A new site gets this automatically.",
+          "All sites except…", detail: exceptOffReason ?? modeDetails[.allExcept] ?? "A new site gets this automatically.",
           selected: value?.mode == .allExcept, enabled: enabled
         ) { if enabled { choose(.allExcept) } }
         .accessibilityIdentifier("sharing-mode-allExcept")

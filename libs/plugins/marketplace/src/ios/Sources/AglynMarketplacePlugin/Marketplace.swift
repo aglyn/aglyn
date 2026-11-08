@@ -359,10 +359,16 @@ struct MarketplaceAPI {
   let api: ConsoleAPIClient
 
   /// Installs `listing` on `hostID` (or, for a plugin with `scope` org, every site of the workspace).
-  func install(_ listing: ListingRow, hostID: String, scope: InstallTarget?) async throws -> InstallOutcome {
+  func install(
+    _ listing: ListingRow, hostID: String, scope: InstallTarget?, exceptHostIDs: [String] = []
+  ) async throws -> InstallOutcome {
     var body: [String: Any?] = ["listingId": listing.id, "hostId": hostID]
     if scope == .org { body["scope"] = "org" }
     if listing.artifactType == "plugin" { body["version"] = listing.latestApprovedVersion }
+    // "All sites except…" (AGL-4047): a workspace plugin install leaves these sites out, as the console's `runsOn` does.
+    if scope == .org, listing.artifactType == "plugin", !exceptHostIDs.isEmpty {
+      body["runsOn"] = ["mode": "allExcept", "exceptHostIds": exceptHostIDs] as [String: Any]
+    }
     let answer = try await api.request("/api/" + marketplaceInstallEndpoint(listing.artifactType), method: .post, body: JSONValue.from(body))
     let upgraded = answer?["upgraded"]?.boolValue == true || answer?["updated"]?.boolValue == true
     let version = answer?["version"].flatMap { value -> String? in
@@ -370,9 +376,13 @@ struct MarketplaceAPI {
       if case .number(let number) = value { return jsNumberString(number) }
       return nil
     }
+    let leftOut = answer?["leftOutHostIds"]?.arrayValue?.count ?? 0
     let message =
-      marketplaceLandingMessage(listing.artifactType, listing.name)
-      ?? ((upgraded ? "Updated \"\(listing.name)\"" : "Installed \"\(listing.name)\"") + (version.map { " (v\($0))" } ?? "") + ".")
+      leftOut > 0
+      ? installPlanOutcome(name: listing.name, installed: 1, errors: [], orgWide: true, updating: false, version: nil, leftOut: leftOut).text
+        + "."
+      : marketplaceLandingMessage(listing.artifactType, listing.name)
+        ?? ((upgraded ? "Updated \"\(listing.name)\"" : "Installed \"\(listing.name)\"") + (version.map { " (v\($0))" } ?? "") + ".")
     return InstallOutcome(message: message, warning: answer?["hostAbiWarning"]?.stringValue)
   }
 

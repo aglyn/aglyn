@@ -75,6 +75,8 @@ fun SiteSharingField(
   readOnly: Boolean = false,
   readOnlyReason: String? = null,
   problem: String? = null,
+  /** A sentence per choice where the defaults aren't true of this resource (web's `modeDetails`); an off-reason still wins. */
+  modeDetails: Map<SiteSharingMode, String> = emptyMap(),
 ) {
   val siteIds = sites.map { it.id }
   val exceptOffReason = when {
@@ -116,18 +118,21 @@ fun SiteSharingField(
     if (label.isNotEmpty()) Text(label, style = MaterialTheme.typography.labelMedium, color = MaterialTheme.colorScheme.onSurfaceVariant, modifier = Modifier.padding(horizontal = space(2f)))
     if (readOnly && readOnlyReason != null) caption(readOnlyReason, false)
     if (SiteSharingMode.ALL in modes) {
-      ChoiceRow("All sites", value?.mode == SiteSharingMode.ALL, { choose(SiteSharingMode.ALL) }, Modifier.testTag("sharing-mode-all"), enabled = !readOnly)
+      ChoiceRow(
+        "All sites", value?.mode == SiteSharingMode.ALL, { choose(SiteSharingMode.ALL) }, Modifier.testTag("sharing-mode-all"),
+        supporting = modeDetails[SiteSharingMode.ALL], enabled = !readOnly,
+      )
     }
     if (SiteSharingMode.SELECTED in modes) {
       ChoiceRow(
         "Selected sites", value?.mode == SiteSharingMode.SELECTED, { choose(SiteSharingMode.SELECTED) }, Modifier.testTag("sharing-mode-selected"),
-        supporting = "A new site doesn’t get this until you add it.", enabled = !readOnly,
+        supporting = modeDetails[SiteSharingMode.SELECTED] ?: "A new site doesn’t get this until you add it.", enabled = !readOnly,
       )
     }
     if (SiteSharingMode.ALL_EXCEPT in modes) {
       ChoiceRow(
         "All sites except…", value?.mode == SiteSharingMode.ALL_EXCEPT, { choose(SiteSharingMode.ALL_EXCEPT) }, Modifier.testTag("sharing-mode-allExcept"),
-        supporting = exceptOffReason ?: "A new site gets this automatically.",
+        supporting = exceptOffReason ?: modeDetails[SiteSharingMode.ALL_EXCEPT] ?: "A new site gets this automatically.",
         enabled = !readOnly && (exceptOffReason == null || value?.mode == SiteSharingMode.ALL_EXCEPT),
       )
     }
