@@ -15,6 +15,7 @@ content on the marketing site and is written separately.
 
 ### Added
 
+- **native:** a marketplace install for every site can leave sites out
 - **native:** sell a card reader at the booth register ([AGL-4038](https://linear.app/aglyn/issue/AGL-4038))
 - **native:** sign a waiver on the customer display ([AGL-4042](https://linear.app/aglyn/issue/AGL-4042))
 - **native:** a rider's waiver status at check-in ([AGL-4042](https://linear.app/aglyn/issue/AGL-4042))
@@ -76,6 +77,7 @@ content on the marketing site and is written separately.
 <details>
 <summary>Also in this release: 2 test, 6 chore</summary>
 
+- **rules:** media sharing is route-only in the rules matrix ([AGL-4047](https://linear.app/aglyn/issue/AGL-4047))
 - **tools:** raise the Linear id floor to AGL-4213 ([AGL-4213](https://linear.app/aglyn/issue/AGL-4213), [AGL-4211](https://linear.app/aglyn/issue/AGL-4211), [AGL-4212](https://linear.app/aglyn/issue/AGL-4212), [AGL-4210](https://linear.app/aglyn/issue/AGL-4210))
 - **native:** a plugin's link opens its page on both apps
 - **native:** dataset sharing goes through set-sharing
