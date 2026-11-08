@@ -342,13 +342,15 @@ fun uninstallImpactView(
 /** What a run of installs says once it is done (`installPlanOutcome`). */
 data class InstallPlanOutcome(val tone: String, val text: String)
 
-fun installPlanOutcome(name: String, installed: Int, errors: List<String>, orgWide: Boolean, updating: Boolean, version: String?, saved: Boolean = false): InstallPlanOutcome {
+fun installPlanOutcome(name: String, installed: Int, errors: List<String>, orgWide: Boolean, updating: Boolean, version: String?, saved: Boolean = false, leftOut: Int = 0): InstallPlanOutcome {
   val noun = if (updating) "Updated" else if (saved) "Saved" else "Installed"
   val toVersion = if (updating && version != null) " to v$version" else ""
   return when {
     installed > 0 && errors.isEmpty() -> InstallPlanOutcome(
       "success",
-      if (orgWide) "$noun \"$name\"$toVersion for the whole organization" else "$noun \"$name\"$toVersion on $installed site${if (installed == 1) "" else "s"}",
+      // "All sites except…" (AGL-4047): the sites the org-wide pin left out.
+      if (orgWide && leftOut > 0) "$noun \"$name\"$toVersion for every site but ${if (leftOut == 1) "the one" else "the $leftOut"} you left out, and for sites you add later"
+      else if (orgWide) "$noun \"$name\"$toVersion for the whole organization" else "$noun \"$name\"$toVersion on $installed site${if (installed == 1) "" else "s"}",
     )
     installed > 0 -> InstallPlanOutcome("warning", "$noun on $installed site(s); ${errors.size} failed — ${errors[0]}")
     else -> InstallPlanOutcome("error", errors.firstOrNull() ?: "Install failed")

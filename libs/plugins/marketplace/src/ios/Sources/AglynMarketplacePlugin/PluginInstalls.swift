@@ -434,16 +434,20 @@ struct InstallPlanOutcome: Equatable {
 }
 
 func installPlanOutcome(
-  name: String, installed: Int, errors: [String], orgWide: Bool, updating: Bool, version: String?, saved: Bool = false
+  name: String, installed: Int, errors: [String], orgWide: Bool, updating: Bool, version: String?, saved: Bool = false,
+  leftOut: Int = 0
 ) -> InstallPlanOutcome {
   let noun = updating ? "Updated" : (saved ? "Saved" : "Installed")
   let toVersion = updating && version != nil ? " to v\(version ?? "")" : ""
   if installed > 0, errors.isEmpty {
+    // "All sites except…" (AGL-4047): the sites the org-wide pin left out.
+    let orgText =
+      leftOut > 0
+      ? "\(noun) \"\(name)\"\(toVersion) for every site but \(leftOut == 1 ? "the one" : "the \(leftOut)") you left out, and for sites you add later"
+      : "\(noun) \"\(name)\"\(toVersion) for the whole organization"
     return InstallPlanOutcome(
       tone: "success",
-      text: orgWide
-        ? "\(noun) \"\(name)\"\(toVersion) for the whole organization"
-        : "\(noun) \"\(name)\"\(toVersion) on \(installed) site\(installed == 1 ? "" : "s")")
+      text: orgWide ? orgText : "\(noun) \"\(name)\"\(toVersion) on \(installed) site\(installed == 1 ? "" : "s")")
   }
   if installed > 0 {
     return InstallPlanOutcome(tone: "warning", text: "\(noun) on \(installed) site(s); \(errors.count) failed — \(errors[0])")

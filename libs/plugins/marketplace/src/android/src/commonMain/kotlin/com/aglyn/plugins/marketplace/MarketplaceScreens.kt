@@ -45,6 +45,11 @@ import com.aglyn.pluginhost.ActionRunner
 import com.aglyn.contracts.permissionRefusalText
 import com.aglyn.pluginhost.MemberPermissions
 import com.aglyn.pluginhost.NativePluginContext
+import com.aglyn.pluginhost.rememberWorkspaceSites
+import com.aglyn.pluginhost.SiteSharingMode
+import com.aglyn.pluginhost.SiteSharingField
+import com.aglyn.pluginhost.SharingSite
+import com.aglyn.pluginhost.ScopeSharingChoice
 import com.aglyn.pluginhost.rememberMemberPermissions
 import com.aglyn.ui.ActionDialog
 import com.aglyn.ui.AglynIcons
@@ -426,31 +431,70 @@ private fun ListingDialogs(
   val hostId = context.hostId
   when (dialog) {
     null -> Unit
-    is ListingDialog.Install -> ActionDialog(
-      title = when {
-        state.updateAvailable -> "Update ${listing.name}?"
-        dialog.scope == InstallTarget.ORG -> "Install ${listing.name} for every site?"
-        else -> "Install ${listing.name}?"
-      },
-      body = when {
-        listing.artifactType == "theme" -> "It replaces this site's theme. Setup → Theme has a way back."
-        dialog.scope == InstallTarget.ORG -> "Every site in the workspace gets it, except a site with its own install of it."
-        listing.artifactType == "plugin" -> "It runs on this site's pages once installed."
-        else -> marketplaceLandingMessage(listing.artifactType, listing.name)?.let { "Once installed: $it" }
-      },
-      icon = "download",
-      confirmLabel = if (state.updateAvailable) "Update" else "Install",
-      busy = runner.busy,
-      error = runner.error,
-      onDismiss = { runner.error = null; close() },
-      onConfirm = {
-        if (hostId == null) return@ActionDialog
-        runner.run(onDone = close) {
-          val outcome = api.install(listing, hostId, dialog.scope)
-          runner.notice = outcome.message + (outcome.warning?.let { " $it" } ?: "")
-        }
-      },
-    )
+    is ListingDialog.Install -> {
+      // "Install to" (AGL-4047): a workspace plugin install runs on every site, or on every site but some, as the console's
+      // listing offers it. A site added later gets it either way.
+      val choosing = dialog.scope == InstallTarget.ORG && listing.artifactType == "plugin" && !state.updateAvailable
+      var installTo by remember(listing.id) { mutableStateOf<ScopeSharingChoice>(ScopeSharingChoice.All) }
+      val workspaceSites = rememberWorkspaceSites(context)
+      val sites = (workspaceSites as? Live.Ready)?.value.orEmpty().map { SharingSite(it.id, it.name) }
+      val except = (installTo as? ScopeSharingChoice.AllExcept)?.exceptHostIds.orEmpty()
+      val problem = if (installTo is ScopeSharingChoice.AllExcept && except.isEmpty()) "Choose at least one site to leave out, or choose All sites." else null
+      val leftOutNames = except.map { id -> sites.firstOrNull { it.id == id }?.name ?: id }
+      ActionDialog(
+        title = when {
+          state.updateAvailable -> "Update ${listing.name}?"
+          dialog.scope == InstallTarget.ORG -> "Install ${listing.name} for every site?"
+          else -> "Install ${listing.name}?"
+        },
+        body = when {
+          listing.artifactType == "theme" -> "It replaces this site's theme. Setup → Theme has a way back."
+          choosing && leftOutNames.isNotEmpty() -> "This will be installed to every site except ${leftOutNames.joinToString(", ")}, including sites added later."
+          dialog.scope == InstallTarget.ORG -> "Every site in the workspace gets it, except a site with its own install of it."
+          listing.artifactType == "plugin" -> "It runs on this site's pages once installed."
+          else -> marketplaceLandingMessage(listing.artifactType, listing.name)?.let { "Once installed: $it" }
+        },
+        icon = "download",
+        confirmLabel = if (state.updateAvailable) "Update" else "Install",
+        busy = runner.busy,
+        error = runner.error,
+        confirmEnabled = !choosing || problem == null,
+        onDismiss = { runner.error = null; close() },
+        onConfirm = {
+          if (hostId == null) return@ActionDialog
+          runner.run(onDone = close) {
+            val outcome = api.install(listing, hostId, dialog.scope, if (choosing) except else emptyList())
+            runner.notice = outcome.message + (outcome.warning?.let { " $it" } ?: "")
+          }
+        },
+        content = if (choosing) ({
+          Column(verticalArrangement = Arrangement.spacedBy(space(1f))) {
+            SiteSharingField(
+              value = installTo,
+              onChange = { installTo = it },
+              sites = sites,
+              sitesReady = workspaceSites is Live.Ready,
+              label = "Install to",
+              modes = listOf(SiteSharingMode.ALL, SiteSharingMode.ALL_EXCEPT),
+              problem = problem,
+              modeDetails = mapOf(
+                SiteSharingMode.ALL to "Every site, including sites you add later.",
+                SiteSharingMode.ALL_EXCEPT to "Every site but the ones you leave out, including sites you add later.",
+              ),
+              modifier = Modifier.testTag("listing-install-to"),
+            )
+            if (installTo is ScopeSharingChoice.AllExcept) {
+              Text(
+                "Each site you leave out has the plugin switched off, with the same switch as its own Admin › Plugins page. " +
+                  "Leaving a site out takes “${com.aglyn.contracts.orgPermissionLabel("site.manage")}” there, and anyone holding it, " +
+                  "which the site’s admins do by default, can turn the plugin back on for that site.",
+                style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurfaceVariant,
+              )
+            }
+          }
+        }) else null,
+      )
+    }
     is ListingDialog.Uninstall -> ActionDialog(
       title = "Remove ${listing.name}?",
       body = if (dialog.scope == InstallTarget.ORG) "It stops running on every site that uses the workspace's install." else "It stops running on this site.",

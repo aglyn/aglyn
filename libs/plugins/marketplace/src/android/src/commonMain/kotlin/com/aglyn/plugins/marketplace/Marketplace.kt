@@ -329,7 +329,9 @@ data class InstallOutcome(val message: String, val warning: String?)
 
 class MarketplaceApi(private val api: ConsoleApiClient) {
   /** Installs [listing] on [hostId] (or, for a plugin with [scope] org, every site of the workspace). */
-  suspend fun install(listing: ListingRow, hostId: String, scope: InstallTarget?): InstallOutcome {
+  suspend fun install(listing: ListingRow, hostId: String, scope: InstallTarget?, exceptHostIds: List<String> = emptyList()): InstallOutcome {
+    // "All sites except…" (AGL-4047): a workspace plugin install leaves these sites out, as the console's `runsOn` does.
+    val leaving = scope == InstallTarget.ORG && listing.artifactType == "plugin" && exceptHostIds.isNotEmpty()
     val answer = api.request(
       "/api/" + marketplaceInstallEndpoint(listing.artifactType),
       ApiMethod.POST,
@@ -338,12 +340,17 @@ class MarketplaceApi(private val api: ConsoleApiClient) {
         "hostId" to hostId,
         "scope" to if (scope == InstallTarget.ORG) "org" else null,
         "version" to if (listing.artifactType == "plugin") listing.latestApprovedVersion else null,
+        "runsOn" to if (leaving) mapOf("mode" to "allExcept", "exceptHostIds" to exceptHostIds) else null,
       ),
     )
     val upgraded = answer.boolField("upgraded") == true || answer.boolField("updated") == true
     val version = answer.field("version") ?: answer.numberField("version")?.let { com.aglyn.pluginhost.jsNumber(it) }
-    val message = marketplaceLandingMessage(listing.artifactType, listing.name)
-      ?: (if (upgraded) "Updated \"${listing.name}\"" else "Installed \"${listing.name}\"") + (version?.let { " (v$it)" } ?: "") + "."
+    val leftOut = ((answer as? JsonObject)?.get("leftOutHostIds") as? JsonArray)?.size ?: 0
+    val message = when {
+      leftOut > 0 -> installPlanOutcome(listing.name, 1, emptyList(), orgWide = true, updating = false, version = null, leftOut = leftOut).text + "."
+      else -> marketplaceLandingMessage(listing.artifactType, listing.name)
+        ?: (if (upgraded) "Updated \"${listing.name}\"" else "Installed \"${listing.name}\"") + (version?.let { " (v$it)" } ?: "") + "."
+    }
     return InstallOutcome(message, answer.field("hostAbiWarning"))
   }
 

@@ -22337,6 +22337,26 @@
             "updating": true,
             "version": null
           }
+        ],
+        [
+          {
+            "name": "Counter",
+            "installed": 1,
+            "errors": [],
+            "orgWide": true,
+            "updating": false,
+            "leftOut": 1
+          }
+        ],
+        [
+          {
+            "name": "Counter",
+            "installed": 1,
+            "errors": [],
+            "orgWide": true,
+            "updating": false,
+            "leftOut": 2
+          }
         ]
       ]
     },

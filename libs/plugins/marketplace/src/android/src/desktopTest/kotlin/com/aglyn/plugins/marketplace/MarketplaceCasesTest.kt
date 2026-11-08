@@ -186,6 +186,7 @@ class MarketplaceCasesTest {
       val outcome = installPlanOutcome(
         str(input["name"]).orEmpty(), input["installed"]?.jsonPrimitive?.content?.toInt() ?: 0, (input["errors"] as? JsonArray).orEmpty().map { it.jsonPrimitive.content },
         flag(input["orgWide"]), flag(input["updating"]), version(input["version"]), flag(input["saved"]),
+        input["leftOut"]?.jsonPrimitive?.content?.toInt() ?: 0,
       )
       assertEquals(str(result.jsonObject["tone"]), outcome.tone, args.toString())
       assertEquals(str(result.jsonObject["text"]), outcome.text, args.toString())

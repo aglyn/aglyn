@@ -291,7 +291,7 @@ final class MarketplaceTests: XCTestCase {
       let outcome = installPlanOutcome(
         name: input["name"] as? String ?? "", installed: (input["installed"] as? NSNumber)?.intValue ?? 0, errors: input["errors"] as? [String] ?? [],
         orgWide: input["orgWide"] as? Bool == true, updating: input["updating"] as? Bool == true, version: string(input["version"]),
-        saved: input["saved"] as? Bool == true)
+        saved: input["saved"] as? Bool == true, leftOut: (input["leftOut"] as? NSNumber)?.intValue ?? 0)
       let expected = object(item.result)
       XCTAssertEqual(outcome.tone, expected["tone"] as? String, "\(item.args)")
       XCTAssertEqual(outcome.text, expected["text"] as? String, "\(item.args)")

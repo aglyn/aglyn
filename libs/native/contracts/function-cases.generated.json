@@ -20229,6 +20229,38 @@
             "text": "Updated \"Counter\" on 1 site",
             "tone": "success"
           }
+        },
+        {
+          "args": [
+            {
+              "name": "Counter",
+              "installed": 1,
+              "errors": [],
+              "orgWide": true,
+              "updating": false,
+              "leftOut": 1
+            }
+          ],
+          "result": {
+            "text": "Installed \"Counter\" for every site but the one you left out, and for sites you add later",
+            "tone": "success"
+          }
+        },
+        {
+          "args": [
+            {
+              "name": "Counter",
+              "installed": 1,
+              "errors": [],
+              "orgWide": true,
+              "updating": false,
+              "leftOut": 2
+            }
+          ],
+          "result": {
+            "text": "Installed \"Counter\" for every site but the 2 you left out, and for sites you add later",
+            "tone": "success"
+          }
         }
       ]
     },
