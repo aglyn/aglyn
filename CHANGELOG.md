@@ -45,6 +45,8 @@ content on the marketing site and is written separately.
 
 ### Fixed
 
+- **ci:** three main-gate reds after the media and campaign sharing change
+- **commerce:** the gate coverage names the quote route as a reader, not a door ([AGL-4162](https://linear.app/aglyn/issue/AGL-4162))
 - **native:** a links block with every link hidden draws no card on Android
 - **native:** the iPhone register searches as you type
 - **analytics:** keep the first-touch runtime off every published page
