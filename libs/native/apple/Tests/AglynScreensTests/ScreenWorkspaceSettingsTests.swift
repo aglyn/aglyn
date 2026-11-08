@@ -227,6 +227,20 @@ final class ScreenWorkspaceSettingsTests: XCTestCase {
   }
 
   @MainActor
+  func testAPluginsLinkOpensItsPageFromTheSchemeAndTheConsole() throws {
+    let page = try spec("core.plugin")
+    struct Route: DeepLinkRoute {
+      let path: String
+      let screen: String
+    }
+    let routes = page.links.map { Route(path: $0, screen: page.id) }
+    for link in ["aglyn://acme/plugins/marketing", "https://app.aglyn.com/acme/plugins/marketing"] {
+      XCTAssertEqual(
+        DeepLinks.resolve(link, routes: routes), .screen("core.plugin", ["pluginId": "marketing", "orgSlug": "acme"]), link)
+    }
+  }
+
+  @MainActor
   func testAMarketplacePluginsPageIsFilledByTheMarketplaceAndAKeepsBuiltInBlocksToBuiltInPlugins() throws {
     let page = try spec("core.plugin")
     let zone = try XCTUnwrap(page.blocks.first { $0.type == "zone" && $0["name"]?.stringValue == "pluginInstallation" })
