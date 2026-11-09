@@ -193,6 +193,16 @@ describe('checkEmailCredentials', () => {
     })
   })
 
+  it('treats the 400 Resend answers a key it does not know as an invalid key', async () => {
+    configure('re_test', null)
+    mockStatus(400, '{"statusCode":400,"name":"validation_error","message":"API key is invalid"}')
+
+    expect(await checkEmailCredentials()).toMatchObject({
+      status: 'invalid-key',
+      probeStatus: 400,
+    })
+  })
+
   it('treats a suspended key as an invalid key', async () => {
     configure('re_test', null)
     mockStatus(403, '{"statusCode":403,"name":"suspended_api_key"}')

@@ -28,6 +28,7 @@
 import {
   type EmailSendPriority,
   emailSendRateWindowStartMs,
+  getEmailCredentialRefusalHandler,
   getEmailSendGovernor,
   isRefusablePriority,
   resolveSendPriority,
@@ -1271,6 +1272,13 @@ export async function sendEmail(
         }
       }
       console.error(`${label} failed`, refusal.status, detail)
+      if (refusal.credentialRefused) {
+        try {
+          await getEmailCredentialRefusalHandler()?.()
+        } catch (error) {
+          console.error(`${label} credential refusal could not be reported`, error)
+        }
+      }
       return {
         sent: false,
         reason: 'rejected',

@@ -86,6 +86,8 @@ export type MailProviderSendResult =
       rateLimited: boolean
       /** `rateLimited` only: the earliest instant a retry is welcome. */
       retryAtMs?: number
+      /** The provider refused the credential itself, so no mail is leaving. */
+      credentialRefused?: boolean
       /** HTTP status, when the provider answered over HTTP. */
       status?: number
       /** The provider's own words, untrimmed; the caller trims for storage. */

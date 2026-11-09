@@ -66,11 +66,15 @@ export function sendsFromDomain(fromDomain: string, expected: string): boolean {
  * pool raises `deliverability.providerCredentialsRejected`, deduped, because
  * that is the failure email itself cannot announce: the operator webhook is
  * the channel that still reaches somebody.
+ *
+ * `credentials: false` leaves the key probe out and keeps the pool's. The tick
+ * passes it: a sending-scoped key can only fail that read, which logged a 401
+ * in Resend every 15 minutes. A dead key alerts from the first refused send.
  */
-export async function evaluateEmailHealth(options: { probe: boolean }) {
+export async function evaluateEmailHealth(options: { probe: boolean; credentials?: boolean }) {
   const config = describeEmailConfig()
   const credentials =
-    options.probe
+    options.probe && options.credentials !== false
       ? await checkEmailCredentials()
       : null
 

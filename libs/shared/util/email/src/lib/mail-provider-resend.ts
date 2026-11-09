@@ -184,7 +184,13 @@ async function sendThroughResend(
         detail,
       }
     }
-    return { accepted: false, rateLimited: false, status: response.status, detail }
+    return {
+      accepted: false,
+      rateLimited: false,
+      status: response.status,
+      detail,
+      ...(isRefusedSendingKey(response.status, detail) ? { credentialRefused: true } : {}),
+    }
   }
   const body = (await response.json().catch(() => null)) as { id?: string } | null
   return { accepted: true, id: body?.id ?? null }
@@ -239,6 +245,21 @@ function resendErrorName(body: string): string {
 }
 
 /**
+ * Whether a refused send means the key itself is dead.
+ *
+ * Narrower than {@link REFUSED_KEY_ERRORS}, because a send's `validation_error`
+ * mostly means the message: a 403 of that name is an unverified domain, and a
+ * 422 a bad payload. Only the wording tells a dead key apart (measured
+ * 2026-11-09: `401`, `API key is invalid`).
+ */
+export function isRefusedSendingKey(status: number, body: string): boolean {
+  if (status !== 401 && status !== 403) return false
+  const name = resendErrorName(body)
+  if (name === 'missing_api_key' || name === 'suspended_api_key') return true
+  return name === 'validation_error' && /api key is invalid/i.test(body)
+}
+
+/**
  * Whether the sending key is accepted — without sending anything to anybody,
  * and without leaving anything behind that reads as failed mail.
  *
@@ -251,8 +272,13 @@ function resendErrorName(body: string): string {
  *   key and then denied it this read. A sending-scoped key always answers
  *   this way, and getting the answer proves the credential works → `ok`
  * - `missing_api_key` / `validation_error` / `suspended_api_key` — the key
- *   itself was refused → `invalid-key`
+ *   itself was refused → `invalid-key`. A key Resend does not know answers
+ *   this read `400`, not `401` (measured 2026-11-09).
  * - anything else → `unknown`
+ *
+ * ⚠ A sending-scoped key logs a `401` in the account's Resend logs every time
+ * this runs, so it is asked on request only. The operator tick learns of a
+ * dead key from a refused send instead (`setEmailCredentialRefusalHandler`).
  *
  * An unrecognized rejection is `unknown`, never `invalid-key`: this feeds a
  * staff diagnostics screen whose whole value is that a red line means
@@ -273,7 +299,7 @@ export async function checkResendCredentials(
     if (response.status >= 200 && response.status < 300) {
       return { status: 'ok', probeStatus: response.status }
     }
-    if (response.status === 401 || response.status === 403) {
+    if (response.status === 400 || response.status === 401 || response.status === 403) {
       const name = resendErrorName(detail)
       if (AUTHENTICATED_BUT_UNSCOPED_ERRORS.has(name)) {
         return { status: 'ok', probeStatus: response.status }
