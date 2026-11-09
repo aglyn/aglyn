@@ -552,6 +552,35 @@ describe('the daily summary', () => {
       expect(context.customerId).toBe(id === 'xero' ? 'c-aglyn' : null)
     }
   })
+
+  it('posts a day’s later journal under its own reference, not onto the first', async () => {
+    const summaryMapping: AccountingMapping = { ...mapping, syncMode: 'daily-summary' }
+    const posted = new Map<string, { id: string; type: string }>()
+    const provider = fakeProvider({
+      findByExternalId: jest.fn(async (_session, _kind, externalId) => posted.get(externalId) ?? null),
+      createJournal: jest.fn(async (_session, doc) => {
+        const ref = { id: `journal-${posted.size + 1}`, type: 'JournalEntry' }
+        posted.set(doc.externalId, ref)
+        return ref
+      }),
+    })
+    const { deps, connection, item, advance } = setup({ provider, mapping: summaryMapping })
+    const refund = { order: order(), refundId: 're_1', amountCents: 1000, refundedAtMs: NOW, feeRefundedCents: 0 }
+    await enqueueOrderPaid(deps, order())
+    await enqueueOrderRefunded(deps, refund)
+    advance(24 * 60 * 60 * 1000)
+
+    // The refund joins a journal only once its sale is in one: a second journal.
+    await gatherSummaries(deps, connection())
+    await runSyncPass(deps, connection(), { deadlineMs: Number.MAX_SAFE_INTEGER })
+    await gatherSummaries(deps, connection())
+    await runSyncPass(deps, connection(), { deadlineMs: Number.MAX_SAFE_INTEGER })
+
+    expect(provider.createJournal).toHaveBeenCalledTimes(2)
+    expect(posted.size).toBe(2)
+    expect(item(saleItemId(order()))).toMatchObject({ status: 'synced', providerDocId: 'journal-1' })
+    expect(item(refundItemId(refund))).toMatchObject({ status: 'synced', providerDocId: 'journal-2' })
+  })
 })
 
 export type { AccountingConnectionRecord, MemoryFirestore }
