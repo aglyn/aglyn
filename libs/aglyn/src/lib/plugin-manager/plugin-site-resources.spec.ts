@@ -25,6 +25,7 @@ import {
   resetPluginDeclarationsRepairForTests,
 } from './plugin-declarations-repair'
 import {
+  PLUGIN_HOST_KEYED_COLLECTIONS,
   erasePluginSiteResources,
   listPluginSiteResourceErasers,
   previewPluginSiteResources,
@@ -115,5 +116,19 @@ describe('a plugin’s share of deleting a site (AGL-4003)', () => {
     expect(() =>
       registerPluginSiteResourceEraser({ preview: async () => PREVIEW } as never, { pluginId: 'data' }),
     ).toThrow(/preview and an erase/)
+  })
+})
+
+describe('plugin collections keyed by the site (AGL-4214)', () => {
+  it('compiles the POS display collections, with the field that names the site', () => {
+    expect(PLUGIN_HOST_KEYED_COLLECTIONS).toEqual(
+      expect.arrayContaining(
+        ['posDisplayStates', 'posDisplayPairings', 'posDisplayTokens'].map((name) => ({
+          pluginId: 'commerce',
+          name,
+          siteField: 'hostId',
+        })),
+      ),
+    )
   })
 })

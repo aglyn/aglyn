@@ -55,6 +55,7 @@ import {
 } from '@aglyn/aglyn/app-utils/consent-groups'
 import { listPluginOrgCollections } from '@aglyn/aglyn/plugin-manager/plugin-host-collections'
 import {
+  PLUGIN_HOST_KEYED_COLLECTIONS,
   erasePluginSiteResources,
   previewPluginSiteResources,
   type PluginSiteResourcePreviewRow,
@@ -232,6 +233,27 @@ async function eraseHostOwnedOrgDocuments(orgId: string, hostId: string): Promis
         `eraseHost: ${declared.name} cleanup failed for ${hostId}`,
         error,
       )
+    }
+  }
+  return erased
+}
+
+/**
+ * Destroy the site's rows in every top-level plugin collection keyed by it
+ * (AGL-4214): a register's customer-display state, pairing codes and tokens.
+ *
+ * Bounded by the declared field, like every top-level sweep here, because each
+ * of these collections holds every other site's rows too. Best-effort and per
+ * collection, like every other trailing cleanup in `eraseHost`, so one failed
+ * query leaves the others' cleanup standing.
+ */
+async function erasePluginHostKeyedCollections(hostId: string): Promise<number> {
+  let erased = 0
+  for (const { name, siteField } of PLUGIN_HOST_KEYED_COLLECTIONS) {
+    try {
+      erased += await deleteDocsByOrgId(name, hostId, false, siteField)
+    } catch (error) {
+      console.error(`eraseHost: ${name} cleanup failed for ${hostId}`, error)
     }
   }
   return erased
@@ -449,6 +471,10 @@ export async function eraseHost(
   // The host document tree (screens/layouts/versions/counters/products/…).
   await firestore.recursiveDelete(hostRef)
 
+  // The plugin rows keyed by the site that its tree does not hold (AGL-4214).
+  // After the tree, so a register's display can no longer verify against it.
+  await erasePluginHostKeyedCollections(hostId)
+
   // Once more now the site is gone: a membership sync that was mid-flight when
   // the first pass ran can write the row back afterwards, and a row for a
   // deleted site keeps it in the switcher and mapped to its subdomain. Last
@@ -621,7 +647,8 @@ async function erasePluginOrgKeyedCollections(
 
 /**
  * Delete every document in a TOP-LEVEL collection that names this org in its
- * `orgId` FIELD (AGL-1444/AGL-1448).
+ * `orgId` FIELD (AGL-1444/AGL-1448). `orgField` names another field, which is
+ * how a site delete sweeps the collections keyed by a site (AGL-4214).
  *
  * The shared mechanism behind every collection a path-scoped cascade cannot
  * see. Two properties are the whole point, and neither is optional:
