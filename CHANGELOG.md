@@ -9,6 +9,16 @@ content on the marketing site and is written separately.
 
 <!-- releases below -->
 
+## v1.20.1 — 2026-11-09
+
+[Compare with the previous release](https://github.com/aglyn/aglyn/compare/v1.20.0...v1.20.1)
+
+### Fixed
+
+- **email:** the operator tick stops logging a Resend 401 every 15 minutes ([AGL-1921](https://linear.app/aglyn/issue/AGL-1921))
+- **accounting:** post a day's later summary under its own reference ([AGL-3614](https://linear.app/aglyn/issue/AGL-3614))
+- **ops:** the log-drain receiver's deploy is checked, and two false pages stop ([AGL-1921](https://linear.app/aglyn/issue/AGL-1921))
+
 ## v1.20.0 — 2026-11-08
 
 [Compare with the previous release](https://github.com/aglyn/aglyn/compare/v1.19.0...v1.20.0)
