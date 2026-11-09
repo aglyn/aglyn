@@ -480,3 +480,26 @@ export function getEmailSendGovernor(): EmailSendGovernor | null {
 export function resetEmailSendGovernorForTests(): void {
   installedGovernor = null
 }
+
+/**
+ * What to do when the provider refuses the sending credential on a real send.
+ *
+ * Injected like the governor, because this package cannot reach the operator
+ * alert pipeline. Null by default: nothing is told, the send still reports
+ * `rejected`.
+ */
+export type EmailCredentialRefusalHandler = () => Promise<void>
+
+let installedRefusalHandler: EmailCredentialRefusalHandler | null = null
+
+/** Installs the handler. Called once, from `@aglyn/tenant-data-admin`. */
+export function setEmailCredentialRefusalHandler(
+  handler: EmailCredentialRefusalHandler | null,
+): void {
+  installedRefusalHandler = handler
+}
+
+/** The installed handler, or null when nothing has been installed. */
+export function getEmailCredentialRefusalHandler(): EmailCredentialRefusalHandler | null {
+  return installedRefusalHandler
+}

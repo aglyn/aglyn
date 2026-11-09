@@ -91,8 +91,9 @@ jest.mock('@aglyn/tenant-data-admin', () => {
     },
   }
 })
+const mockEvaluateEmailHealth = jest.fn(async (_options: unknown) => ({ healthy: true }))
 jest.mock('../utils/server/email-health', () => ({
-  evaluateEmailHealth: async () => ({ healthy: true }),
+  evaluateEmailHealth: (options: unknown) => mockEvaluateEmailHealth(options),
 }))
 
 import {
@@ -192,6 +193,15 @@ describe('the operator alerts tick (AGL-3377)', () => {
     })
     expect(rows.find((row) => row.path === '/api/health/journeys')?.status).toBe('unreachable')
     expect(mockRecorded.some((entry) => entry.id === 'console-journeys')).toBe(false)
+  })
+
+  it('checks the sending pool but not the send-only key, which can only answer 401', async () => {
+    mockEvaluateEmailHealth.mockClear()
+    await runHealthSweep({
+      requestOrigin: 'https://console.example.com',
+      fetcher: jest.fn(async () => answer(200, { status: 'ok', checks: {} })) as never,
+    })
+    expect(mockEvaluateEmailHealth).toHaveBeenCalledWith({ probe: true, credentials: false })
   })
 
   it('asks the tenant runtime only when an origin is configured', async () => {

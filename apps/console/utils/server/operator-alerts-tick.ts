@@ -37,7 +37,7 @@ import { evaluateEmailHealth } from './email-health'
  *    tick asks each one on the install's own origins, so each records its
  *    verdict (`recordHealthResponse`) and a degraded check raises
  *    `system.healthDegraded` whether or not anybody else is watching. The
- *    provider credential and shared-pool probe runs here too.
+ *    shared-pool probe runs here too.
  *    Then the reminder the edge never sends (AGL-3860): a check still
  *    degraded after 1 h raises `system.healthStillDegraded`, again every
  *    2 h, Must know from 2 h on, so a red check keeps paging until it is
@@ -168,10 +168,10 @@ export async function runHealthSweep(options: {
     for (const path of TENANT_HEALTH_PATHS) jobs.push(probe('tenant', tenantBase, path, fetcher))
   }
   const rows = await Promise.all(jobs)
-  // The provider credential and pool probe is staff-gated over HTTP, so it
+  // The pool probe is staff-gated over HTTP, so it
   // runs in-process: it raises its own alert when the key is refused.
   try {
-    await evaluateEmailHealth({ probe: true })
+    await evaluateEmailHealth({ probe: true, credentials: false })
   } catch (error) {
     console.error('[operator-alerts] email health probe failed', error)
   }
