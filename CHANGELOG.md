@@ -15,6 +15,7 @@ content on the marketing site and is written separately.
 
 ### Fixed
 
+- **tools:** declare the log-drain receiver's own host ([AGL-1921](https://linear.app/aglyn/issue/AGL-1921))
 - **email:** the operator tick stops logging a Resend 401 every 15 minutes ([AGL-1921](https://linear.app/aglyn/issue/AGL-1921))
 - **accounting:** post a day's later summary under its own reference ([AGL-3614](https://linear.app/aglyn/issue/AGL-3614))
 - **ops:** the log-drain receiver's deploy is checked, and two false pages stop ([AGL-1921](https://linear.app/aglyn/issue/AGL-1921))
