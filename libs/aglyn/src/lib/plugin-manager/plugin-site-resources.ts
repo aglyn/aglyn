@@ -46,6 +46,27 @@
 
 import { getRegisteringPluginId } from '../app-utils/registering-plugin'
 import { runPluginDeclarationsRepair } from './plugin-declarations-repair'
+import { PLUGIN_HOST_KEYED_COLLECTIONS } from './first-party-plugins.generated'
+
+export { PLUGIN_HOST_KEYED_COLLECTIONS }
+
+/**
+ * A plugin's top-level collection whose documents name one site in a field
+ * and no organization (AGL-4214): a POS register's customer-display state, its
+ * pairing codes and its tokens. Neither the site's tree nor a workspace sweep
+ * by `orgId` reaches them, so the owner declares them in `plugins.config.json`
+ * (`hostKeyedCollections`) and `eraseHost` sweeps each by that field. Compiled
+ * rather than registered, because a site delete cannot rely on the owner
+ * being loaded in the process doing it.
+ */
+export interface PluginHostKeyedCollection {
+  /** The plugin that declared it. */
+  pluginId: string
+  /** The top-level collection. */
+  name: string
+  /** The field naming the site a document belongs to. */
+  siteField: string
+}
 
 /** The site a preview or an erase is about, and the workspace that owns it. */
 export interface PluginSiteResourceRequest {

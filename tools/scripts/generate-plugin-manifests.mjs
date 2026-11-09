@@ -2973,6 +2973,38 @@ function orgKeyedCollectionRows() {
 }
 
 /**
+ * A plugin's top-level collections whose documents name a site in a field
+ * (AGL-4214), which a site delete sweeps by that field in every process. One
+ * owner per collection; plain names only.
+ */
+function hostKeyedCollectionRows() {
+  const rows = []
+  const owners = new Map()
+  for (const plugin of config.plugins) {
+    const declared = plugin.hostKeyedCollections
+    if (!declared) continue
+    const where = `plugins.config.json: "${plugin.id}" hostKeyedCollections`
+    if (!Array.isArray(declared) || !declared.length) {
+      throw new Error(`${where} is present and declares nothing — drop it, or name what the site delete must sweep`)
+    }
+    for (const { name, siteField } of declared) {
+      const what = `${where} "${name ?? ''}"`
+      if (typeof name !== 'string' || !/^[A-Za-z][A-Za-z0-9]*$/.test(name)) {
+        throw new Error(`${where}: a collection needs a plain "name"`)
+      }
+      if (typeof siteField !== 'string' || !/^[A-Za-z][A-Za-z0-9]*$/.test(siteField)) {
+        throw new Error(`${what}: "siteField" is the plain name of the field naming a document's site`)
+      }
+      const held = owners.get(name)
+      if (held) throw new Error(`${what} is already declared by "${held}" — one collection has one owner`)
+      owners.set(name, plugin.id)
+      rows.push({ pluginId: plugin.id, name, siteField })
+    }
+  }
+  return rows
+}
+
+/**
  * The analytics providers (AGL-3080): each plugin that adapts a vendor's
  * measurement tag declares it under `analyticsProvider` — the module its
  * adapter lives in, and which of a site's analytics settings configure a tag
@@ -3615,7 +3647,7 @@ function catalogContent(planEntitlements, usageAxes) {
  * the types and the resolvers in \`enabled-plugins.ts\`; it holds no row.
  */
 
-import type { FirstPartyPlugin, PluginEditBarLink, PublishedSiteImpact } from './enabled-plugins'\nimport type { ResolvedPluginHostCollection, ResolvedPluginOrgCollection } from './plugin-host-collections'\nimport type { ResolvedPluginSitemapSection } from './plugin-sitemap-sections'\nimport type { ResolvedPluginSitemapReaderDeclaration } from './plugin-sitemap-readers'\nimport type { ResolvedPluginSiteBundleSectionDeclaration } from './plugin-site-bundle'\nimport type { ResolvedTransferResourceDeclaration } from './plugin-transfer-resources'\nimport type { ResolvedPluginOrgCapacity } from './plugin-org-capacity'\nimport type { ResolvedPluginEntityPicker } from './plugin-entity-pickers'\nimport type { ResolvedPluginRecordPage } from './plugin-record-pages'\nimport type { ResolvedVisitorDoor } from './plugin-visitor-doors'\nimport type { ResolvedPluginCostAxis, ResolvedPluginSpendLine, ResolvedPluginUsageBand, ResolvedPluginUsageMeter } from './plugin-usage-axes'\nimport type { ResolvedPluginPlanFeature, ResolvedPluginPlanQuota } from './plugin-plan-entitlements'\nimport type { FunctionBindings } from './plugin-contributions'\nimport type { PluginDistribution } from './plugin-distribution'\nimport type { RepeatSourceDeclaration } from './repeat-rows'\nimport type { PluginTemplateSource } from './plugin-template-sources'\nimport type { FormRecordTargetDeclaration } from './submission-record-target'\nimport type { ArtifactTypeDeclaration } from './plugin-artifact-types'\nimport type { ResolvedBesignerDocument } from './besigner-documents'\nimport type { PluginOrgKeyedCollection } from './plugin-org-erasure'\nimport type { PluginSiteCspDeclaration } from './plugin-site-csp'\nimport type { AnalyticsProviderDeclaration } from '../app-utils/analytics-provider'\nimport type { InteractionStepDeclaration } from '../app-utils/site-interactions'\nimport type { ServerStepDeclaration } from './plugin-server-steps'\nimport type { InteractionRecipeDeclaration } from './interaction-recipes'\nimport type { NotificationCategoryDeclaration, NotificationDigestDeclaration } from '../app-utils/notifications'
+import type { FirstPartyPlugin, PluginEditBarLink, PublishedSiteImpact } from './enabled-plugins'\nimport type { ResolvedPluginHostCollection, ResolvedPluginOrgCollection } from './plugin-host-collections'\nimport type { ResolvedPluginSitemapSection } from './plugin-sitemap-sections'\nimport type { ResolvedPluginSitemapReaderDeclaration } from './plugin-sitemap-readers'\nimport type { ResolvedPluginSiteBundleSectionDeclaration } from './plugin-site-bundle'\nimport type { ResolvedTransferResourceDeclaration } from './plugin-transfer-resources'\nimport type { ResolvedPluginOrgCapacity } from './plugin-org-capacity'\nimport type { ResolvedPluginEntityPicker } from './plugin-entity-pickers'\nimport type { ResolvedPluginRecordPage } from './plugin-record-pages'\nimport type { ResolvedVisitorDoor } from './plugin-visitor-doors'\nimport type { ResolvedPluginCostAxis, ResolvedPluginSpendLine, ResolvedPluginUsageBand, ResolvedPluginUsageMeter } from './plugin-usage-axes'\nimport type { ResolvedPluginPlanFeature, ResolvedPluginPlanQuota } from './plugin-plan-entitlements'\nimport type { FunctionBindings } from './plugin-contributions'\nimport type { PluginDistribution } from './plugin-distribution'\nimport type { RepeatSourceDeclaration } from './repeat-rows'\nimport type { PluginTemplateSource } from './plugin-template-sources'\nimport type { FormRecordTargetDeclaration } from './submission-record-target'\nimport type { ArtifactTypeDeclaration } from './plugin-artifact-types'\nimport type { ResolvedBesignerDocument } from './besigner-documents'\nimport type { PluginHostKeyedCollection } from './plugin-site-resources'\nimport type { PluginOrgKeyedCollection } from './plugin-org-erasure'\nimport type { PluginSiteCspDeclaration } from './plugin-site-csp'\nimport type { AnalyticsProviderDeclaration } from '../app-utils/analytics-provider'\nimport type { InteractionStepDeclaration } from '../app-utils/site-interactions'\nimport type { ServerStepDeclaration } from './plugin-server-steps'\nimport type { InteractionRecipeDeclaration } from './interaction-recipes'\nimport type { NotificationCategoryDeclaration, NotificationDigestDeclaration } from '../app-utils/notifications'
 
 export const FIRST_PARTY_PLUGINS: readonly FirstPartyPlugin[] = [
 ${rows.map((row) => `  ${indent(JSON.stringify(row.plugin, null, 2))},`).join('\n')}
@@ -3765,6 +3797,14 @@ ${usageAxes.meters.map((row) => `  ${JSON.stringify(row)},`).join('\n')}
  */
 export const PLUGIN_ORG_KEYED_COLLECTIONS: readonly PluginOrgKeyedCollection[] = [
 ${orgKeyedCollectionRows().map((row) => `  ${indent(JSON.stringify(row, null, 2))},`).join('\n')}
+]
+
+/**
+ * Every top-level plugin collection a site delete sweeps by the field naming
+ * the site, declared by the plugin that owns it (AGL-4214).
+ */
+export const PLUGIN_HOST_KEYED_COLLECTIONS: readonly PluginHostKeyedCollection[] = [
+${hostKeyedCollectionRows().map((row) => `  ${indent(JSON.stringify(row, null, 2))},`).join('\n')}
 ]
 
 /**

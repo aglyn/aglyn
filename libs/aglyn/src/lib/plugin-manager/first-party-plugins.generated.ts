@@ -26,6 +26,7 @@ import type { PluginTemplateSource } from './plugin-template-sources'
 import type { FormRecordTargetDeclaration } from './submission-record-target'
 import type { ArtifactTypeDeclaration } from './plugin-artifact-types'
 import type { ResolvedBesignerDocument } from './besigner-documents'
+import type { PluginHostKeyedCollection } from './plugin-site-resources'
 import type { PluginOrgKeyedCollection } from './plugin-org-erasure'
 import type { PluginSiteCspDeclaration } from './plugin-site-csp'
 import type { AnalyticsProviderDeclaration } from '../app-utils/analytics-provider'
@@ -2630,6 +2631,28 @@ export const PLUGIN_ORG_KEYED_COLLECTIONS: readonly PluginOrgKeyedCollection[] =
     "pluginId": "domains",
     "name": "domainConnectSessions",
     "orgField": "orgId"
+  },
+]
+
+/**
+ * Every top-level plugin collection a site delete sweeps by the field naming
+ * the site, declared by the plugin that owns it (AGL-4214).
+ */
+export const PLUGIN_HOST_KEYED_COLLECTIONS: readonly PluginHostKeyedCollection[] = [
+  {
+    "pluginId": "commerce",
+    "name": "posDisplayStates",
+    "siteField": "hostId"
+  },
+  {
+    "pluginId": "commerce",
+    "name": "posDisplayPairings",
+    "siteField": "hostId"
+  },
+  {
+    "pluginId": "commerce",
+    "name": "posDisplayTokens",
+    "siteField": "hostId"
   },
 ]
 

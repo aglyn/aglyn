@@ -488,6 +488,23 @@
         }
       },
       "requiredPersonEraser": true,
+      "hostKeyedCollections": [
+        {
+          "$comment": "What one register's customer display is showing, a typed email or phone number included (AGL-4214). Top level and closed to every client, and it names a site but no workspace, so deleting the site removes it by hostId.",
+          "name": "posDisplayStates",
+          "siteField": "hostId"
+        },
+        {
+          "$comment": "A six-digit display pairing code's hash and the site and register it opens (AGL-4214).",
+          "name": "posDisplayPairings",
+          "siteField": "hostId"
+        },
+        {
+          "$comment": "A paired display's token hash and the site and register it opens (AGL-4214).",
+          "name": "posDisplayTokens",
+          "siteField": "hostId"
+        }
+      ],
       "orgKeyedCollections": [
         {
           "$comment": "Each Stripe Reader S710's 4G months, which the monthly 4G charge counts (AGL-4038). No person on it. Top level and closed to every client, so org erasure removes them by orgId, after the org eraser has turned 4G off at Stripe.",

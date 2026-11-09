@@ -252,6 +252,7 @@ has a sweep in `eraseOrg` or is a defect.
 | `stripeCustomers` | yes (AGL-1448) | billing-identity → workspace correlation |
 | `orgSlugs` | yes (AGL-1448) | current slug **and every rename tombstone** |
 | `hostIndex` | yes, via `eraseHost` | subdomain/cname routing |
+| `posDisplayStates`, `posDisplayPairings`, `posDisplayTokens` | yes (AGL-4214), via `eraseHost`, by `hostId`, as collections commerce DECLARES (`hostKeyedCollections`) | a register's customer display: what it shows, its pairing codes and token hashes |
 | `platformRevenue`, `storefrontTaxCollected`, `posHardwareSales` | **never, deliberately** | tax records — see below |
 | `contactSuppressions` | **never, deliberately** | do-not-contact list — see below |
 | `supportTickets` + `messages` | yes (AGL-1971), by `eraseOrg` — `eraseUser` redacts instead | subject, body (≤5000 chars), `authorEmail` |
