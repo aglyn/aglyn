@@ -75,6 +75,7 @@ import {
   parseDrainPayload,
 } from './lib/vercel-log-drain.js'
 import { isValidDrainSignature } from './lib/vercel-drain-signature.js'
+import { SOURCE_STAMP } from './lib/source-stamp.js'
 
 /**
  * Byte cap before parse, carried over from the Vercel route: deliveries are
@@ -160,7 +161,7 @@ const server = createServer(async (req, res) => {
 
   // Cloud Run's own health probe, and a human checking the URL is alive.
   if (req.method === 'GET') {
-    send(res, 200, { ok: true, service: 'aglyn-log-drain' }, verifyHeader)
+    send(res, 200, { ok: true, service: 'aglyn-log-drain', sourceStamp: SOURCE_STAMP }, verifyHeader)
     return
   }
   if (req.method !== 'POST') {

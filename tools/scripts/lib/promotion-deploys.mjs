@@ -95,6 +95,21 @@ export const MANUAL_DEPLOY_TARGETS = [
       'A query that needs an undeployed index throws FAILED_PRECONDITION. When the caller is a cron ' +
       'the failure is swallowed into a 500 nobody reads (AGL-1793).',
   },
+  {
+    id: 'log-drain',
+    label: 'Log-drain receiver (Cloud Run)',
+    paths: [
+      'cloud/log-drain/',
+      'libs/tenant/data/admin/src/lib/server/vercel-log-drain.ts',
+      'libs/tenant/data/admin/src/lib/server/vercel-drain-signature.ts',
+    ],
+    checker: 'tools/scripts/check-log-drain-drift.mjs',
+    baselineFlag: true,
+    deployCommand: 'cloud/log-drain/deploy.sh',
+    cost:
+      'The old 5xx gate keeps running. A filter written to quiet a false page never takes effect ' +
+      '(AGL-1921: closed-site 503s kept paging for four days after the fix was promoted).',
+  },
 ]
 
 /** Does one changed path belong to this target? */
