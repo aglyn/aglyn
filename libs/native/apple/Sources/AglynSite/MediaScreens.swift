@@ -1333,6 +1333,22 @@ struct MediaDetailBody: View {
           .disabled(!canEdit || runner.busy)
           .accessibilityIdentifier("media-private")
         }
+        if scope.isOrg {
+          // Who it is shared with, as the console's details drawer says it (AGL-4047): "All sites except Blog" names the
+          // sites left out, since the next new site gets it too.
+          VStack(alignment: .leading, spacing: AglynMediaMetrics.ring) {
+            Text("Shared with").font(.system(size: wide ? AglynMediaMetrics.note : AglynMediaMetrics.phoneNote))
+              .foregroundStyle(AglynColor.secondaryText)
+            Text(
+              item.visibleTo.isEmpty
+                ? "Never shared — hidden from every site"
+                : describeSharing(item.sharing, hostNames: Dictionary(context.sites.map { ($0.id, $0.name) }) { first, _ in first })
+            )
+            .font(.system(size: wide ? AglynMediaMetrics.switchLabel : AglynMediaMetrics.phoneSwitchLabel))
+            .foregroundStyle(AglynColor.textPrimary)
+            .accessibilityIdentifier("media-shared-with")
+          }
+        }
         AglynHairline()
         Text("Details").font(.system(size: AglynMediaMetrics.groupLabel, weight: .semibold)).foregroundStyle(AglynColor.secondaryText)
           .accessibilityAddTraits(.isHeader)

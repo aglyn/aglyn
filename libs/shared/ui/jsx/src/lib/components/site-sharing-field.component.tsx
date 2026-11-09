@@ -68,6 +68,15 @@ export interface SiteSharingFieldProps {
   readOnlyReason?: string
   /** Why the caller cannot save this choice, from `sharingFromChoice`. */
   problem?: string | null
+  /**
+   * The sentence under a choice, for a resource where the default one is not
+   * true: a copy installed onto today's sites, which a site added later never
+   * gets whichever choice made it (AGL-4047). A reason a choice is off still
+   * wins over it.
+   */
+  modeDetails?: Partial<Record<SiteSharingMode, string>>
+  /** The caption over the list of sites, per choice, where "share" is not the verb. */
+  listLabels?: Partial<Record<'selected' | 'allExcept', string>>
 }
 
 const EVERY_MODE: readonly SiteSharingMode[] = ['all', 'selected', 'allExcept']
@@ -121,6 +130,8 @@ export function SiteSharingField(props: SiteSharingFieldProps) {
     readOnly = false,
     readOnlyReason,
     problem,
+    modeDetails,
+    listLabels,
   } = props
   const labelId = useId()
   const siteIds = sites.map((site) => site.id)
@@ -184,13 +195,22 @@ export function SiteSharingField(props: SiteSharingFieldProps) {
       {readOnly && readOnlyReason ? <FormHelperText>{readOnlyReason}</FormHelperText> : null}
       <RadioGroup aria-labelledby={labelId} value={value?.mode ?? null} onChange={choose}>
         {modes.includes('all') ? (
-          <FormControlLabel value="all" control={<Radio size="small" />} label={<ModeLabel title="All sites" />} />
+          <FormControlLabel
+            value="all"
+            control={<Radio size="small" />}
+            label={<ModeLabel title="All sites" detail={modeDetails?.all} />}
+          />
         ) : null}
         {modes.includes('selected') ? (
           <FormControlLabel
             value="selected"
             control={<Radio size="small" />}
-            label={<ModeLabel title="Selected sites" detail="A new site doesn’t get this until you add it." />}
+            label={
+              <ModeLabel
+                title="Selected sites"
+                detail={modeDetails?.selected ?? 'A new site doesn’t get this until you add it.'}
+              />
+            }
           />
         ) : null}
         {modes.includes('allExcept') ? (
@@ -199,14 +219,21 @@ export function SiteSharingField(props: SiteSharingFieldProps) {
             // The current choice stays on: nobody is told they can't have what they have.
             disabled={readOnly || (Boolean(exceptOffReason) && value?.mode !== 'allExcept')}
             control={<Radio size="small" />}
-            label={<ModeLabel title="All sites except…" detail={exceptOffReason ?? 'A new site gets this automatically.'} />}
+            label={
+              <ModeLabel
+                title="All sites except…"
+                detail={exceptOffReason ?? modeDetails?.allExcept ?? 'A new site gets this automatically.'}
+              />
+            }
           />
         ) : null}
       </RadioGroup>
       {listed ? (
         <Stack spacing={0.5} sx={{ pl: 3.5 }}>
           <Typography variant="caption" color="text.secondary">
-            {value?.mode === 'allExcept' ? 'Sites to leave out' : 'Sites to share with'}
+            {value?.mode === 'allExcept'
+              ? (listLabels?.allExcept ?? 'Sites to leave out')
+              : (listLabels?.selected ?? 'Sites to share with')}
           </Typography>
           {!sitesReady ? (
             <Typography variant="body2" color="text.secondary">

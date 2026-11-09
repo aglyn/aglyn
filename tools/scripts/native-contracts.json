@@ -6871,6 +6871,878 @@
             "declared": false,
             "awaitsConfirmation": false
           }
+        ],
+        [
+          {
+            "crm": {
+              "defaultRecordScope": "host",
+              "defaultRecordExcept": [
+                "h3"
+              ]
+            },
+            "hosts": {
+              "h1": true,
+              "h2": true,
+              "h3": true,
+              "h4": true
+            }
+          },
+          {
+            "hostId": "h1",
+            "groupId": "h1",
+            "name": null,
+            "hostIds": [
+              "h1"
+            ],
+            "declared": false,
+            "awaitsConfirmation": false
+          }
+        ],
+        [
+          {
+            "crm": {
+              "defaultRecordScope": "host",
+              "defaultRecordExcept": [
+                "h3"
+              ]
+            },
+            "hosts": {
+              "h1": true,
+              "h2": true,
+              "h3": true,
+              "h4": true
+            }
+          },
+          {
+            "hostId": "h1",
+            "groupId": "brand",
+            "name": "Brand",
+            "hostIds": [
+              "h1",
+              "h2"
+            ],
+            "declared": true,
+            "awaitsConfirmation": false
+          }
+        ],
+        [
+          {
+            "crm": {
+              "defaultRecordScope": "host",
+              "defaultRecordExcept": [
+                "h1"
+              ]
+            },
+            "hosts": {
+              "h1": true,
+              "h2": true,
+              "h3": true,
+              "h4": true
+            }
+          },
+          {
+            "hostId": "h1",
+            "groupId": "h1",
+            "name": null,
+            "hostIds": [
+              "h1"
+            ],
+            "declared": false,
+            "awaitsConfirmation": false
+          }
+        ],
+        [
+          {
+            "crm": {
+              "defaultRecordScope": "host",
+              "defaultRecordExcept": [
+                "h1"
+              ]
+            },
+            "hosts": {
+              "h1": true,
+              "h2": true,
+              "h3": true,
+              "h4": true
+            }
+          },
+          {
+            "hostId": "h1",
+            "groupId": "brand",
+            "name": "Brand",
+            "hostIds": [
+              "h1",
+              "h2"
+            ],
+            "declared": true,
+            "awaitsConfirmation": false
+          }
+        ],
+        [
+          {
+            "crm": {
+              "defaultRecordScope": "host",
+              "defaultRecordExcept": [
+                "gone"
+              ]
+            },
+            "hosts": {
+              "h1": true,
+              "h2": true,
+              "h3": true,
+              "h4": true
+            }
+          },
+          {
+            "hostId": "h1",
+            "groupId": "h1",
+            "name": null,
+            "hostIds": [
+              "h1"
+            ],
+            "declared": false,
+            "awaitsConfirmation": false
+          }
+        ],
+        [
+          {
+            "crm": {
+              "defaultRecordScope": "host",
+              "defaultRecordExcept": [
+                "gone"
+              ]
+            },
+            "hosts": {
+              "h1": true,
+              "h2": true,
+              "h3": true,
+              "h4": true
+            }
+          },
+          {
+            "hostId": "h1",
+            "groupId": "brand",
+            "name": "Brand",
+            "hostIds": [
+              "h1",
+              "h2"
+            ],
+            "declared": true,
+            "awaitsConfirmation": false
+          }
+        ],
+        [
+          {
+            "crm": {
+              "defaultRecordScope": "host",
+              "defaultRecordExcept": [
+                "h3"
+              ]
+            }
+          },
+          {
+            "hostId": "h1",
+            "groupId": "h1",
+            "name": null,
+            "hostIds": [
+              "h1"
+            ],
+            "declared": false,
+            "awaitsConfirmation": false
+          }
+        ],
+        [
+          {
+            "crm": {
+              "defaultRecordScope": "host",
+              "defaultRecordExcept": [
+                "h3"
+              ]
+            }
+          },
+          {
+            "hostId": "h1",
+            "groupId": "brand",
+            "name": "Brand",
+            "hostIds": [
+              "h1",
+              "h2"
+            ],
+            "declared": true,
+            "awaitsConfirmation": false
+          }
+        ],
+        [
+          {
+            "crm": {
+              "defaultRecordScope": "host",
+              "defaultRecordExcept": []
+            },
+            "hosts": {
+              "h1": true,
+              "h2": true,
+              "h3": true,
+              "h4": true
+            }
+          },
+          {
+            "hostId": "h1",
+            "groupId": "h1",
+            "name": null,
+            "hostIds": [
+              "h1"
+            ],
+            "declared": false,
+            "awaitsConfirmation": false
+          }
+        ],
+        [
+          {
+            "crm": {
+              "defaultRecordScope": "host",
+              "defaultRecordExcept": []
+            },
+            "hosts": {
+              "h1": true,
+              "h2": true,
+              "h3": true,
+              "h4": true
+            }
+          },
+          {
+            "hostId": "h1",
+            "groupId": "brand",
+            "name": "Brand",
+            "hostIds": [
+              "h1",
+              "h2"
+            ],
+            "declared": true,
+            "awaitsConfirmation": false
+          }
+        ],
+        [
+          {
+            "crm": {
+              "defaultRecordScope": "org",
+              "defaultRecordExcept": [
+                "h3"
+              ]
+            },
+            "hosts": {
+              "h1": true,
+              "h2": true,
+              "h3": true,
+              "h4": true
+            }
+          },
+          {
+            "hostId": "h1",
+            "groupId": "h1",
+            "name": null,
+            "hostIds": [
+              "h1"
+            ],
+            "declared": false,
+            "awaitsConfirmation": false
+          }
+        ],
+        [
+          {
+            "crm": {
+              "defaultRecordScope": "org",
+              "defaultRecordExcept": [
+                "h3"
+              ]
+            },
+            "hosts": {
+              "h1": true,
+              "h2": true,
+              "h3": true,
+              "h4": true
+            }
+          },
+          {
+            "hostId": "h1",
+            "groupId": "brand",
+            "name": "Brand",
+            "hostIds": [
+              "h1",
+              "h2"
+            ],
+            "declared": true,
+            "awaitsConfirmation": false
+          }
+        ],
+        [
+          {
+            "crm": {
+              "defaultRecordScope": "host",
+              "defaultRecordExcept": [
+                "h3",
+                "h3",
+                ""
+              ]
+            },
+            "hosts": {
+              "h1": true,
+              "h2": false,
+              "h3": true
+            }
+          },
+          {
+            "hostId": "h1",
+            "groupId": "h1",
+            "name": null,
+            "hostIds": [
+              "h1"
+            ],
+            "declared": false,
+            "awaitsConfirmation": false
+          }
+        ],
+        [
+          {
+            "crm": {
+              "defaultRecordScope": "host",
+              "defaultRecordExcept": [
+                "h3",
+                "h3",
+                ""
+              ]
+            },
+            "hosts": {
+              "h1": true,
+              "h2": false,
+              "h3": true
+            }
+          },
+          {
+            "hostId": "h1",
+            "groupId": "brand",
+            "name": "Brand",
+            "hostIds": [
+              "h1",
+              "h2"
+            ],
+            "declared": true,
+            "awaitsConfirmation": false
+          }
+        ]
+      ]
+    },
+    "crmScopeFields": {
+      "module": "libs/aglyn/src/lib/app-utils/crm.ts",
+      "args": [
+        [
+          {
+            "crm": {
+              "defaultRecordScope": "host",
+              "defaultRecordExcept": [
+                "h3"
+              ]
+            },
+            "hosts": {
+              "h1": true,
+              "h2": true,
+              "h3": true,
+              "h4": true
+            }
+          },
+          {
+            "hostId": "h1",
+            "groupId": "h1",
+            "name": null,
+            "hostIds": [
+              "h1"
+            ],
+            "declared": false,
+            "awaitsConfirmation": false
+          }
+        ],
+        [
+          {
+            "crm": {
+              "defaultRecordScope": "host",
+              "defaultRecordExcept": [
+                "h3"
+              ]
+            },
+            "hosts": {
+              "h1": true,
+              "h2": true,
+              "h3": true,
+              "h4": true
+            }
+          },
+          {
+            "hostId": "h1",
+            "groupId": "brand",
+            "name": "Brand",
+            "hostIds": [
+              "h1",
+              "h2"
+            ],
+            "declared": true,
+            "awaitsConfirmation": false
+          }
+        ],
+        [
+          {
+            "crm": {
+              "defaultRecordScope": "host",
+              "defaultRecordExcept": [
+                "h1"
+              ]
+            },
+            "hosts": {
+              "h1": true,
+              "h2": true,
+              "h3": true,
+              "h4": true
+            }
+          },
+          {
+            "hostId": "h1",
+            "groupId": "h1",
+            "name": null,
+            "hostIds": [
+              "h1"
+            ],
+            "declared": false,
+            "awaitsConfirmation": false
+          }
+        ],
+        [
+          {
+            "crm": {
+              "defaultRecordScope": "host",
+              "defaultRecordExcept": [
+                "h1"
+              ]
+            },
+            "hosts": {
+              "h1": true,
+              "h2": true,
+              "h3": true,
+              "h4": true
+            }
+          },
+          {
+            "hostId": "h1",
+            "groupId": "brand",
+            "name": "Brand",
+            "hostIds": [
+              "h1",
+              "h2"
+            ],
+            "declared": true,
+            "awaitsConfirmation": false
+          }
+        ],
+        [
+          {
+            "crm": {
+              "defaultRecordScope": "host",
+              "defaultRecordExcept": [
+                "gone"
+              ]
+            },
+            "hosts": {
+              "h1": true,
+              "h2": true,
+              "h3": true,
+              "h4": true
+            }
+          },
+          {
+            "hostId": "h1",
+            "groupId": "h1",
+            "name": null,
+            "hostIds": [
+              "h1"
+            ],
+            "declared": false,
+            "awaitsConfirmation": false
+          }
+        ],
+        [
+          {
+            "crm": {
+              "defaultRecordScope": "host",
+              "defaultRecordExcept": [
+                "gone"
+              ]
+            },
+            "hosts": {
+              "h1": true,
+              "h2": true,
+              "h3": true,
+              "h4": true
+            }
+          },
+          {
+            "hostId": "h1",
+            "groupId": "brand",
+            "name": "Brand",
+            "hostIds": [
+              "h1",
+              "h2"
+            ],
+            "declared": true,
+            "awaitsConfirmation": false
+          }
+        ],
+        [
+          {
+            "crm": {
+              "defaultRecordScope": "host",
+              "defaultRecordExcept": [
+                "h3"
+              ]
+            }
+          },
+          {
+            "hostId": "h1",
+            "groupId": "h1",
+            "name": null,
+            "hostIds": [
+              "h1"
+            ],
+            "declared": false,
+            "awaitsConfirmation": false
+          }
+        ],
+        [
+          {
+            "crm": {
+              "defaultRecordScope": "host",
+              "defaultRecordExcept": [
+                "h3"
+              ]
+            }
+          },
+          {
+            "hostId": "h1",
+            "groupId": "brand",
+            "name": "Brand",
+            "hostIds": [
+              "h1",
+              "h2"
+            ],
+            "declared": true,
+            "awaitsConfirmation": false
+          }
+        ],
+        [
+          {
+            "crm": {
+              "defaultRecordScope": "host",
+              "defaultRecordExcept": []
+            },
+            "hosts": {
+              "h1": true,
+              "h2": true,
+              "h3": true,
+              "h4": true
+            }
+          },
+          {
+            "hostId": "h1",
+            "groupId": "h1",
+            "name": null,
+            "hostIds": [
+              "h1"
+            ],
+            "declared": false,
+            "awaitsConfirmation": false
+          }
+        ],
+        [
+          {
+            "crm": {
+              "defaultRecordScope": "host",
+              "defaultRecordExcept": []
+            },
+            "hosts": {
+              "h1": true,
+              "h2": true,
+              "h3": true,
+              "h4": true
+            }
+          },
+          {
+            "hostId": "h1",
+            "groupId": "brand",
+            "name": "Brand",
+            "hostIds": [
+              "h1",
+              "h2"
+            ],
+            "declared": true,
+            "awaitsConfirmation": false
+          }
+        ],
+        [
+          {
+            "crm": {
+              "defaultRecordScope": "org",
+              "defaultRecordExcept": [
+                "h3"
+              ]
+            },
+            "hosts": {
+              "h1": true,
+              "h2": true,
+              "h3": true,
+              "h4": true
+            }
+          },
+          {
+            "hostId": "h1",
+            "groupId": "h1",
+            "name": null,
+            "hostIds": [
+              "h1"
+            ],
+            "declared": false,
+            "awaitsConfirmation": false
+          }
+        ],
+        [
+          {
+            "crm": {
+              "defaultRecordScope": "org",
+              "defaultRecordExcept": [
+                "h3"
+              ]
+            },
+            "hosts": {
+              "h1": true,
+              "h2": true,
+              "h3": true,
+              "h4": true
+            }
+          },
+          {
+            "hostId": "h1",
+            "groupId": "brand",
+            "name": "Brand",
+            "hostIds": [
+              "h1",
+              "h2"
+            ],
+            "declared": true,
+            "awaitsConfirmation": false
+          }
+        ],
+        [
+          {
+            "crm": {
+              "defaultRecordScope": "host",
+              "defaultRecordExcept": [
+                "h3",
+                "h3",
+                ""
+              ]
+            },
+            "hosts": {
+              "h1": true,
+              "h2": false,
+              "h3": true
+            }
+          },
+          {
+            "hostId": "h1",
+            "groupId": "h1",
+            "name": null,
+            "hostIds": [
+              "h1"
+            ],
+            "declared": false,
+            "awaitsConfirmation": false
+          }
+        ],
+        [
+          {
+            "crm": {
+              "defaultRecordScope": "host",
+              "defaultRecordExcept": [
+                "h3",
+                "h3",
+                ""
+              ]
+            },
+            "hosts": {
+              "h1": true,
+              "h2": false,
+              "h3": true
+            }
+          },
+          {
+            "hostId": "h1",
+            "groupId": "brand",
+            "name": "Brand",
+            "hostIds": [
+              "h1",
+              "h2"
+            ],
+            "declared": true,
+            "awaitsConfirmation": false
+          }
+        ],
+        [
+          null,
+          {
+            "hostId": "h1",
+            "groupId": "h1",
+            "name": null,
+            "hostIds": [
+              "h1"
+            ],
+            "declared": false,
+            "awaitsConfirmation": false
+          }
+        ],
+        [
+          {
+            "crm": {
+              "defaultRecordScope": "org"
+            }
+          },
+          {
+            "hostId": "h1",
+            "groupId": "h1",
+            "name": null,
+            "hostIds": [
+              "h1"
+            ],
+            "declared": false,
+            "awaitsConfirmation": false
+          }
+        ]
+      ]
+    },
+    "crmDefaultSharingOf": {
+      "module": "libs/aglyn/src/lib/app-utils/crm.ts",
+      "args": [
+        [
+          {
+            "crm": {
+              "defaultRecordScope": "host",
+              "defaultRecordExcept": [
+                "h3"
+              ]
+            },
+            "hosts": {
+              "h1": true,
+              "h2": true,
+              "h3": true,
+              "h4": true
+            }
+          }
+        ],
+        [
+          {
+            "crm": {
+              "defaultRecordScope": "host",
+              "defaultRecordExcept": [
+                "h1"
+              ]
+            },
+            "hosts": {
+              "h1": true,
+              "h2": true,
+              "h3": true,
+              "h4": true
+            }
+          }
+        ],
+        [
+          {
+            "crm": {
+              "defaultRecordScope": "host",
+              "defaultRecordExcept": [
+                "gone"
+              ]
+            },
+            "hosts": {
+              "h1": true,
+              "h2": true,
+              "h3": true,
+              "h4": true
+            }
+          }
+        ],
+        [
+          {
+            "crm": {
+              "defaultRecordScope": "host",
+              "defaultRecordExcept": [
+                "h3"
+              ]
+            }
+          }
+        ],
+        [
+          {
+            "crm": {
+              "defaultRecordScope": "host",
+              "defaultRecordExcept": []
+            },
+            "hosts": {
+              "h1": true,
+              "h2": true,
+              "h3": true,
+              "h4": true
+            }
+          }
+        ],
+        [
+          {
+            "crm": {
+              "defaultRecordScope": "org",
+              "defaultRecordExcept": [
+                "h3"
+              ]
+            },
+            "hosts": {
+              "h1": true,
+              "h2": true,
+              "h3": true,
+              "h4": true
+            }
+          }
+        ],
+        [
+          {
+            "crm": {
+              "defaultRecordScope": "host",
+              "defaultRecordExcept": [
+                "h3",
+                "h3",
+                ""
+              ]
+            },
+            "hosts": {
+              "h1": true,
+              "h2": false,
+              "h3": true
+            }
+          }
+        ],
+        [
+          null
+        ],
+        [
+          {}
+        ],
+        [
+          {
+            "crm": {
+              "defaultRecordScope": "host"
+            }
+          }
         ]
       ]
     },
@@ -7396,6 +8268,180 @@
         ],
         [
           []
+        ]
+      ]
+    },
+    "campaignPlacedOnlyOn": {
+      "module": "libs/plugins/marketing/src/lib/model/campaign-container.ts",
+      "args": [
+        [
+          null,
+          "a"
+        ],
+        [
+          {
+            "visibleTo": [
+              "host:a"
+            ]
+          },
+          "a"
+        ],
+        [
+          {
+            "visibleTo": [
+              "host:a",
+              "host:b"
+            ]
+          },
+          "a"
+        ],
+        [
+          {
+            "visibleTo": [
+              "org"
+            ]
+          },
+          "a"
+        ],
+        [
+          {
+            "visibleTo": []
+          },
+          "a"
+        ],
+        [
+          {
+            "visibleTo": [
+              "host:a"
+            ],
+            "scopeMode": "allExcept",
+            "scopeExcept": [
+              "host:b"
+            ]
+          },
+          "a"
+        ],
+        [
+          {
+            "visibleTo": [
+              "host:a"
+            ],
+            "scopeMode": null
+          },
+          "a"
+        ],
+        [
+          {
+            "visibleTo": [
+              "host:a",
+              "host:a"
+            ]
+          },
+          "a"
+        ]
+      ]
+    },
+    "campaignSiteMayDelete": {
+      "module": "libs/plugins/marketing/src/lib/model/campaign-container.ts",
+      "args": [
+        [
+          null,
+          "a"
+        ],
+        [
+          {
+            "visibleTo": [
+              "host:a"
+            ]
+          },
+          "a"
+        ],
+        [
+          {
+            "visibleTo": [
+              "host:a",
+              "host:b"
+            ]
+          },
+          "a"
+        ],
+        [
+          {
+            "visibleTo": [
+              "org"
+            ]
+          },
+          "a"
+        ],
+        [
+          {
+            "visibleTo": []
+          },
+          "a"
+        ],
+        [
+          {
+            "visibleTo": [
+              "host:a"
+            ],
+            "scopeMode": "allExcept",
+            "scopeExcept": [
+              "host:b"
+            ]
+          },
+          "a"
+        ],
+        [
+          {
+            "visibleTo": [
+              "host:a"
+            ],
+            "scopeMode": null
+          },
+          "a"
+        ],
+        [
+          {
+            "visibleTo": [
+              "host:a",
+              "host:a"
+            ]
+          },
+          "a"
+        ]
+      ]
+    },
+    "campaignSiteDeleteRefusal": {
+      "module": "libs/plugins/marketing/src/lib/model/campaign-container.ts",
+      "args": [
+        [
+          null
+        ],
+        [
+          {
+            "visibleTo": [
+              "host:a"
+            ]
+          }
+        ],
+        [
+          {
+            "visibleTo": [
+              "host:a"
+            ],
+            "scopeMode": "allExcept",
+            "scopeExcept": [
+              "host:b"
+            ]
+          }
+        ],
+        [
+          {
+            "visibleTo": [
+              "host:a"
+            ],
+            "scopeMode": null
+          }
         ]
       ]
     },
@@ -9817,6 +10863,660 @@
               }
             ]
           }
+        ]
+      ]
+    },
+    "pluginRunsOnOf": {
+      "module": "libs/aglyn/src/lib/plugin-manager/plugin-site-exclusions.ts",
+      "args": [
+        [
+          "crm",
+          [
+            {
+              "id": "a"
+            },
+            {
+              "id": "b",
+              "disabledPlugins": [
+                "crm"
+              ]
+            },
+            {
+              "id": "c",
+              "enabledPlugins": [
+                "accounts"
+              ]
+            }
+          ]
+        ],
+        [
+          "mui",
+          [
+            {
+              "id": "a"
+            },
+            {
+              "id": "b",
+              "disabledPlugins": [
+                "crm"
+              ]
+            },
+            {
+              "id": "c",
+              "enabledPlugins": [
+                "accounts"
+              ]
+            }
+          ]
+        ],
+        [
+          "crm",
+          []
+        ],
+        [
+          "accounts",
+          [
+            {
+              "id": "a"
+            },
+            {
+              "id": "b",
+              "disabledPlugins": [
+                "crm"
+              ]
+            },
+            {
+              "id": "c",
+              "enabledPlugins": [
+                "accounts"
+              ]
+            }
+          ]
+        ]
+      ]
+    },
+    "planPluginRunsOn": {
+      "module": "libs/aglyn/src/lib/plugin-manager/plugin-site-exclusions.ts",
+      "args": [
+        [
+          {
+            "pluginId": "mui",
+            "choice": {
+              "mode": "all"
+            },
+            "org": null,
+            "sites": [
+              {
+                "id": "a"
+              },
+              {
+                "id": "b",
+                "disabledPlugins": [
+                  "crm"
+                ]
+              },
+              {
+                "id": "c",
+                "enabledPlugins": [
+                  "accounts"
+                ]
+              }
+            ]
+          }
+        ],
+        [
+          {
+            "pluginId": "crm",
+            "choice": {
+              "mode": "all"
+            },
+            "org": {
+              "enabledPlugins": [
+                "forms"
+              ]
+            },
+            "sites": [
+              {
+                "id": "a"
+              },
+              {
+                "id": "b",
+                "disabledPlugins": [
+                  "crm"
+                ]
+              },
+              {
+                "id": "c",
+                "enabledPlugins": [
+                  "accounts"
+                ]
+              }
+            ]
+          }
+        ],
+        [
+          {
+            "pluginId": "crm",
+            "choice": {
+              "mode": "allExcept",
+              "exceptHostIds": []
+            },
+            "org": null,
+            "sites": [
+              {
+                "id": "a"
+              },
+              {
+                "id": "b",
+                "disabledPlugins": [
+                  "crm"
+                ]
+              },
+              {
+                "id": "c",
+                "enabledPlugins": [
+                  "accounts"
+                ]
+              }
+            ]
+          }
+        ],
+        [
+          {
+            "pluginId": "crm",
+            "choice": {
+              "mode": "allExcept",
+              "exceptHostIds": [
+                "a",
+                "b",
+                "c"
+              ]
+            },
+            "org": null,
+            "sites": [
+              {
+                "id": "a"
+              },
+              {
+                "id": "b",
+                "disabledPlugins": [
+                  "crm"
+                ]
+              },
+              {
+                "id": "c",
+                "enabledPlugins": [
+                  "accounts"
+                ]
+              }
+            ]
+          }
+        ],
+        [
+          {
+            "pluginId": "crm",
+            "choice": {
+              "mode": "all"
+            },
+            "org": null,
+            "sites": [
+              {
+                "id": "a"
+              },
+              {
+                "id": "b",
+                "disabledPlugins": [
+                  "crm"
+                ]
+              },
+              {
+                "id": "c",
+                "enabledPlugins": [
+                  "accounts"
+                ]
+              }
+            ]
+          }
+        ],
+        [
+          {
+            "pluginId": "crm",
+            "choice": {
+              "mode": "allExcept",
+              "exceptHostIds": [
+                "a"
+              ]
+            },
+            "org": null,
+            "sites": [
+              {
+                "id": "a"
+              },
+              {
+                "id": "b",
+                "disabledPlugins": [
+                  "crm"
+                ]
+              },
+              {
+                "id": "c",
+                "enabledPlugins": [
+                  "accounts"
+                ]
+              }
+            ]
+          }
+        ],
+        [
+          {
+            "pluginId": "crm",
+            "choice": {
+              "mode": "allExcept",
+              "exceptHostIds": [
+                "b",
+                "gone"
+              ]
+            },
+            "org": null,
+            "sites": [
+              {
+                "id": "a"
+              },
+              {
+                "id": "b",
+                "disabledPlugins": [
+                  "crm"
+                ]
+              },
+              {
+                "id": "c",
+                "enabledPlugins": [
+                  "accounts"
+                ]
+              }
+            ]
+          }
+        ],
+        [
+          {
+            "pluginId": "commerce",
+            "choice": {
+              "mode": "allExcept",
+              "exceptHostIds": [
+                "c"
+              ]
+            },
+            "org": null,
+            "sites": [
+              {
+                "id": "a"
+              },
+              {
+                "id": "b",
+                "disabledPlugins": [
+                  "crm"
+                ]
+              },
+              {
+                "id": "c",
+                "enabledPlugins": [
+                  "accounts"
+                ]
+              }
+            ]
+          }
+        ],
+        [
+          {
+            "pluginId": "commerce",
+            "choice": {
+              "mode": "allExcept",
+              "exceptHostIds": [
+                "a"
+              ]
+            },
+            "org": null,
+            "sites": [
+              {
+                "id": "a"
+              },
+              {
+                "id": "b",
+                "disabledPlugins": [
+                  "crm"
+                ]
+              },
+              {
+                "id": "c",
+                "enabledPlugins": [
+                  "accounts"
+                ]
+              }
+            ]
+          }
+        ],
+        [
+          {
+            "pluginId": "commerce",
+            "choice": {
+              "mode": "allExcept",
+              "exceptHostIds": [
+                "b",
+                "c"
+              ]
+            },
+            "org": null,
+            "sites": [
+              {
+                "id": "a"
+              },
+              {
+                "id": "b",
+                "disabledPlugins": [
+                  "crm"
+                ]
+              },
+              {
+                "id": "c",
+                "enabledPlugins": [
+                  "accounts"
+                ]
+              }
+            ]
+          }
+        ],
+        [
+          {
+            "pluginId": "accounts",
+            "choice": {
+              "mode": "allExcept",
+              "exceptHostIds": [
+                "c"
+              ]
+            },
+            "org": null,
+            "sites": [
+              {
+                "id": "a"
+              },
+              {
+                "id": "b",
+                "disabledPlugins": [
+                  "crm"
+                ]
+              },
+              {
+                "id": "c",
+                "enabledPlugins": [
+                  "accounts"
+                ]
+              }
+            ]
+          }
+        ]
+      ]
+    },
+    "pluginRunsOnOptInNote": {
+      "module": "libs/aglyn/src/lib/plugin-manager/plugin-site-exclusions.ts",
+      "args": [
+        [
+          "accounts"
+        ],
+        [
+          "crm"
+        ],
+        [
+          "live-chat"
+        ]
+      ]
+    },
+    "checkInDayLabel": {
+      "module": "libs/plugins/commerce/src/lib/model/commerce-check-in-product.ts",
+      "args": [
+        [
+          "2027-01-15"
+        ],
+        [
+          "2026-11-01"
+        ],
+        [
+          "2028-02-29"
+        ],
+        [
+          "2027-02-29"
+        ],
+        [
+          "2027-1-5"
+        ],
+        [
+          ""
+        ],
+        [
+          null
+        ],
+        [
+          "nonsense"
+        ]
+      ]
+    },
+    "isCheckInDayKey": {
+      "module": "libs/plugins/commerce/src/lib/model/commerce-check-in-product.ts",
+      "args": [
+        [
+          "2027-01-15"
+        ],
+        [
+          "2026-11-01"
+        ],
+        [
+          "2028-02-29"
+        ],
+        [
+          "2027-02-29"
+        ],
+        [
+          "2027-1-5"
+        ],
+        [
+          ""
+        ],
+        [
+          null
+        ],
+        [
+          "nonsense"
+        ]
+      ]
+    },
+    "addCheckInDays": {
+      "module": "libs/plugins/commerce/src/lib/model/commerce-check-in-product.ts",
+      "args": [
+        [
+          "2027-01-15",
+          1
+        ],
+        [
+          "2027-01-31",
+          1
+        ],
+        [
+          "2027-12-31",
+          1
+        ],
+        [
+          "2028-03-01",
+          -1
+        ],
+        [
+          "2027-01-15",
+          0
+        ],
+        [
+          "2027-01-15",
+          2.6
+        ],
+        [
+          "bad",
+          1
+        ]
+      ]
+    },
+    "checkInUseDayProblem": {
+      "module": "libs/plugins/commerce/src/lib/model/commerce-check-in-product.ts",
+      "args": [
+        [
+          "2026-11-08",
+          "2026-11-07"
+        ],
+        [
+          "2026-11-07",
+          "2026-11-07"
+        ],
+        [
+          "2026-11-06",
+          "2026-11-07"
+        ],
+        [
+          "2028-11-07",
+          "2026-11-07"
+        ],
+        [
+          "2028-11-08",
+          "2026-11-07"
+        ],
+        [
+          "2026-13-01",
+          "2026-11-07"
+        ],
+        [
+          null,
+          "2026-11-07"
+        ]
+      ]
+    },
+    "resourceGuestCeiling": {
+      "module": "libs/plugins/commerce/src/lib/model/commerce-reservations.ts",
+      "args": [
+        [
+          null
+        ],
+        [
+          {
+            "capacity": 4
+          }
+        ],
+        [
+          {
+            "capacity": 1
+          }
+        ],
+        [
+          {
+            "capacity": 0
+          }
+        ],
+        [
+          {
+            "capacity": 2.7
+          }
+        ],
+        [
+          {
+            "capacity": 80
+          }
+        ],
+        [
+          {}
+        ]
+      ]
+    },
+    "reservationGuests": {
+      "module": "libs/plugins/commerce/src/lib/model/commerce-reservations.ts",
+      "args": [
+        [
+          null
+        ],
+        [
+          {
+            "guests": 3
+          }
+        ],
+        [
+          {
+            "guests": 0
+          }
+        ],
+        [
+          {
+            "guests": 2.9
+          }
+        ],
+        [
+          {
+            "guests": 99
+          }
+        ],
+        [
+          {}
+        ]
+      ]
+    },
+    "reservationGuestsProblem": {
+      "module": "libs/plugins/commerce/src/lib/model/commerce-reservations.ts",
+      "args": [
+        [
+          3,
+          {
+            "capacity": 4
+          }
+        ],
+        [
+          5,
+          {
+            "capacity": 4
+          }
+        ],
+        [
+          0,
+          {
+            "capacity": 4
+          }
+        ],
+        [
+          2.5,
+          {
+            "capacity": 4
+          }
+        ],
+        [
+          2,
+          {
+            "capacity": 1
+          }
+        ],
+        [
+          1,
+          {
+            "capacity": 1
+          }
+        ],
+        [
+          null,
+          {
+            "capacity": 4
+          }
+        ],
+        [
+          "",
+          null
+        ],
+        [
+          51,
+          null
+        ],
+        [
+          50,
+          null
         ]
       ]
     },
@@ -19121,6 +20821,124 @@
             }
           },
           null
+        ],
+        [
+          [
+            {
+              "id": "h1",
+              "label": "Main site",
+              "disabledPlugins": [
+                "acme-chat"
+              ]
+            },
+            {
+              "id": "h2",
+              "label": "Blog"
+            },
+            {
+              "id": "h3",
+              "label": "Shop",
+              "disabledPlugins": [
+                "other",
+                "acme-chat"
+              ]
+            }
+          ],
+          {},
+          {
+            "version": "1.0.0"
+          },
+          "acme-chat"
+        ],
+        [
+          [
+            {
+              "id": "h1",
+              "label": "Main site",
+              "disabledPlugins": [
+                "acme-chat"
+              ]
+            },
+            {
+              "id": "h2",
+              "label": "Blog"
+            },
+            {
+              "id": "h3",
+              "label": "Shop",
+              "disabledPlugins": [
+                "other",
+                "acme-chat"
+              ]
+            }
+          ],
+          {
+            "h1": {
+              "version": "1.2.0"
+            },
+            "h2": {
+              "version": "1.2.0"
+            }
+          },
+          null,
+          "acme-chat"
+        ],
+        [
+          [
+            {
+              "id": "h1",
+              "label": "Main site",
+              "disabledPlugins": [
+                "acme-chat"
+              ]
+            },
+            {
+              "id": "h2",
+              "label": "Blog"
+            },
+            {
+              "id": "h3",
+              "label": "Shop",
+              "disabledPlugins": [
+                "other",
+                "acme-chat"
+              ]
+            }
+          ],
+          {},
+          {
+            "version": "1.0.0"
+          }
+        ],
+        [
+          [
+            {
+              "id": "h1",
+              "label": "Main site",
+              "disabledPlugins": [
+                "acme-chat"
+              ]
+            },
+            {
+              "id": "h2",
+              "label": "Blog"
+            },
+            {
+              "id": "h3",
+              "label": "Shop",
+              "disabledPlugins": [
+                "other",
+                "acme-chat"
+              ]
+            }
+          ],
+          {
+            "h3": {
+              "version": "1.1.0"
+            }
+          },
+          null,
+          "acme-chat"
         ]
       ]
     },
@@ -19614,6 +21432,197 @@
             "installedAnywhere": true
           },
           0
+        ],
+        [
+          {
+            "orgWide": true,
+            "orgVersion": "1.0.0",
+            "sites": [
+              {
+                "hostId": "h1",
+                "label": "Main site",
+                "version": "1.0.0",
+                "pinnedBy": "org",
+                "shadowed": false,
+                "switchedOff": true
+              },
+              {
+                "hostId": "h2",
+                "label": "Blog",
+                "version": "1.0.0",
+                "pinnedBy": "org",
+                "shadowed": false
+              },
+              {
+                "hostId": "h3",
+                "label": "Shop",
+                "version": "1.0.0",
+                "pinnedBy": "org",
+                "shadowed": false,
+                "switchedOff": true
+              }
+            ],
+            "hostPinnedIds": [],
+            "availableHostIds": [],
+            "installedAnywhere": true
+          },
+          3
+        ],
+        [
+          {
+            "orgWide": true,
+            "orgVersion": "1.0.0",
+            "sites": [
+              {
+                "hostId": "h1",
+                "label": "Main site",
+                "version": "1.0.0",
+                "pinnedBy": "org",
+                "shadowed": false,
+                "switchedOff": true
+              },
+              {
+                "hostId": "h2",
+                "label": "Blog",
+                "version": "1.0.0",
+                "pinnedBy": "org",
+                "shadowed": false,
+                "switchedOff": true
+              }
+            ],
+            "hostPinnedIds": [],
+            "availableHostIds": [],
+            "installedAnywhere": true
+          },
+          2
+        ],
+        [
+          {
+            "orgWide": true,
+            "orgVersion": "1.0.0",
+            "sites": [
+              {
+                "hostId": "h1",
+                "label": "Main site",
+                "version": "1.0.0",
+                "pinnedBy": "org",
+                "shadowed": false,
+                "switchedOff": true
+              },
+              {
+                "hostId": "h2",
+                "label": "Blog",
+                "version": "1.0.0",
+                "pinnedBy": "org",
+                "shadowed": false
+              }
+            ],
+            "hostPinnedIds": [],
+            "availableHostIds": [],
+            "installedAnywhere": true
+          },
+          2
+        ],
+        [
+          {
+            "orgWide": false,
+            "orgVersion": null,
+            "sites": [
+              {
+                "hostId": "h1",
+                "label": "Main site",
+                "version": "1.0.0",
+                "pinnedBy": "org",
+                "shadowed": false,
+                "switchedOff": true
+              },
+              {
+                "hostId": "h2",
+                "label": "Blog",
+                "version": "1.0.0",
+                "pinnedBy": "org",
+                "shadowed": false
+              }
+            ],
+            "hostPinnedIds": [
+              "h1",
+              "h2"
+            ],
+            "availableHostIds": [],
+            "installedAnywhere": true
+          },
+          3
+        ],
+        [
+          {
+            "orgWide": false,
+            "orgVersion": null,
+            "sites": [
+              {
+                "hostId": "h1",
+                "label": "Main site",
+                "version": "1.0.0",
+                "pinnedBy": "org",
+                "shadowed": false,
+                "switchedOff": true
+              },
+              {
+                "hostId": "h2",
+                "label": "Blog",
+                "version": "1.0.0",
+                "pinnedBy": "org",
+                "shadowed": false,
+                "switchedOff": true
+              }
+            ],
+            "hostPinnedIds": [
+              "h1",
+              "h2"
+            ],
+            "availableHostIds": [],
+            "installedAnywhere": true
+          },
+          3
+        ],
+        [
+          {
+            "orgWide": false,
+            "orgVersion": null,
+            "sites": [
+              {
+                "hostId": "h1",
+                "label": "Main site",
+                "version": "1.0.0",
+                "pinnedBy": "org",
+                "shadowed": false,
+                "switchedOff": true
+              },
+              {
+                "hostId": "h2",
+                "label": "Blog",
+                "version": "1.0.0",
+                "pinnedBy": "org",
+                "shadowed": false,
+                "switchedOff": true
+              },
+              {
+                "hostId": "h3",
+                "label": "Shop",
+                "version": "1.0.0",
+                "pinnedBy": "org",
+                "shadowed": false,
+                "switchedOff": true
+              }
+            ],
+            "hostPinnedIds": [
+              "h1",
+              "h2",
+              "h3"
+            ],
+            "availableHostIds": [],
+            "installedAnywhere": true
+          },
+          3
         ]
       ]
     },
@@ -20327,6 +22336,26 @@
             "orgWide": false,
             "updating": true,
             "version": null
+          }
+        ],
+        [
+          {
+            "name": "Counter",
+            "installed": 1,
+            "errors": [],
+            "orgWide": true,
+            "updating": false,
+            "leftOut": 1
+          }
+        ],
+        [
+          {
+            "name": "Counter",
+            "installed": 1,
+            "errors": [],
+            "orgWide": true,
+            "updating": false,
+            "leftOut": 2
           }
         ]
       ]

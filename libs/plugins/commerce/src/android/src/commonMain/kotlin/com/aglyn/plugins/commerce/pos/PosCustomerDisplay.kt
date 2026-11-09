@@ -99,7 +99,7 @@ fun PosCustomerDisplayScreen(context: NativePluginContext) {
         else -> {
           Column(Modifier.fillMaxSize()) {
             if (model.offline) NoticeBanner("Reconnecting…", StatusTone.WARNING, Modifier.padding(space(1f)))
-            key(model.view?.state?.mode, model.view?.state?.promptId) { DisplayBody(model) }
+            key(model.view?.state?.mode, model.view?.state?.promptId) { DisplayBody(model, context.api.origin) }
           }
           UnpairControl(model, Modifier.align(Alignment.BottomEnd))
         }
@@ -109,7 +109,7 @@ fun PosCustomerDisplayScreen(context: NativePluginContext) {
 }
 
 @Composable
-private fun DisplayBody(model: PosCustomerDisplayModel) {
+private fun DisplayBody(model: PosCustomerDisplayModel, origin: String) {
   val scope = rememberCoroutineScope()
   when (val screen = model.screen) {
     PosDisplayScreen.Idle -> PosDeviceBrandScreen(model.branding, title = null, message = model.branding?.message ?: "Welcome")
@@ -125,6 +125,15 @@ private fun DisplayBody(model: PosCustomerDisplayModel) {
     is PosDisplayScreen.Tip -> DeviceScroll(model.branding, model.notice) {
       DisplayTipView(screen.tip, model.currency, model.busy) { answer -> scope.launch { model.answer(answer.copy(promptId = screen.promptId)) } }
     }
+    // Another plugin's screen (AGL-4042): its public page, with the display's credential where the page reads it.
+    is PosDisplayScreen.Plugin -> com.aglyn.webview.CustomerDisplayWebView(
+      origin = origin,
+      href = screen.href,
+      storage = model.token?.let { mapOf(CUSTOMER_DISPLAY_CREDENTIAL_KEY to it) }.orEmpty(),
+      returnPath = POS_DISPLAY_PAGE_PATH,
+      onReturn = { model.screenReturned(screen.promptId) },
+      modifier = Modifier.fillMaxSize().testTag("pos-display-plugin-screen"),
+    )
     is PosDisplayScreen.Receipt -> DeviceScroll(model.branding, model.notice) {
       DisplayReceiptView(screen.receipt, model.busy) { answer -> scope.launch { model.answer(answer.copy(promptId = screen.promptId)) } }
     }

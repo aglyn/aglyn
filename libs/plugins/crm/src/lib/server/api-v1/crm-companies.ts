@@ -71,7 +71,7 @@ import {
   CRM_TITLE_MAX,
   createPayload,
   crmCollection,
-  crmCreateStamp,
+  crmScopedCreateStamp,
   crmCustomUpdate,
   crmCustomView,
   crmRecordsBandRefusal,
@@ -418,7 +418,7 @@ async function createCompany(
       ...(Object.keys(customValues).length
         ? { custom: createPayload(customValues) }
         : {}),
-      ...crmCreateStamp(ctx, site.siteId),
+      ...crmScopedCreateStamp(ctx, site.siteId),
     }
     // What the console's Companies list searches and filters by (AGL-3321).
     await collection.doc(id).create({ ...record, ...crmNewRecordListFields('companies', record) })

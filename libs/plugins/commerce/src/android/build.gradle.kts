@@ -60,6 +60,8 @@ kotlin {
       implementation(project(":native-site"))
       implementation(project(":native-ui"))
       implementation(project(":native-contracts"))
+      // A plugin's screen on the customer display (AGL-4042).
+      implementation(project(":native-webview"))
       implementation(libs.kotlinx.serialization.json)
     }
     commonTest.dependencies {

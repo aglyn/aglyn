@@ -19,12 +19,18 @@
  * WHERE A SALE ENTERS THE SYNC (AGL-3614): commerce's order events, read
  * into the plugin's own snapshots and QUEUED — nothing more.
  *
- * Commerce raises `order.paid`, `order.refunded` and `order.cancelled`
- * through the plugin event outbox (AGL-3611), which a TENANT job drains, so
- * this module runs in the tenant runtime. That is why it is apart from the
+ * Commerce raises `order.paid` and `order.refunded` through the plugin event
+ * outbox (AGL-3611), which a TENANT job drains, so this module runs in the
+ * tenant runtime. That is why it is apart from the
  * engine: it writes sync items and reads the connection's mapping, and never
  * opens a grant, reads a credential or calls a ledger. Posting happens on
  * the console's tick (`sync-job.ts`), the only place that holds the key.
+ *
+ * `order.cancelled` is not taken. Cancelling a paid order moves no money: it
+ * releases stock, and a refund is its own act with its own event. So every
+ * item of a paid order posts, cancelled or not, and a refund reverses its
+ * sale. Skipping the sale on a cancel left the money in Stripe and in the
+ * next payout with no sale behind it, and stranded the refund that followed.
  *
  * Delivery is at least once. Every item's id is derived from its source (the
  * order, the refund), and a document that already exists is left alone, so a
@@ -57,7 +63,6 @@ import {
   itemForPayout,
   itemsForPaidOrder,
   itemsForRefund,
-  readSyncItem,
   saleItemId,
   syncItemId,
   syncItemsCollection,
@@ -216,30 +221,6 @@ export async function enqueueOrderRefunded(
   return createSyncItems(firestore, refund.order.orgId, itemsForRefund(refund, connection.mapping, deps.now()))
 }
 
-/**
- * A cancelled order. Money that moved is reversed by its refund, which
- * arrives as its own event; what a cancel changes here is a sale that has not
- * posted yet, which is skipped rather than posted and then reversed.
- */
-export async function enqueueOrderCancelled(
-  deps: AccountingIntakeDeps,
-  order: Pick<AccountingOrderSnapshot, 'orgId' | 'hostId' | 'orderId'>,
-): Promise<boolean> {
-  const firestore = deps.firestore()
-  const ref = syncItemsCollection(firestore, order.orgId).doc(saleItemId(order))
-  return firestore.runTransaction(async (transaction) => {
-    const snapshot = await transaction.get(ref)
-    const item = readSyncItem(ref.id, snapshot.exists ? snapshot.data() : undefined)
-    if (!item || item.status !== 'pending' || item.summaryItemId) return false
-    transaction.update(ref, {
-      status: 'skipped',
-      lastError: 'The order was cancelled before it was posted.',
-      updatedAtMs: deps.now(),
-    })
-    return true
-  })
-}
-
 /** A payout that landed: one transfer from clearing to the bank. */
 export async function enqueuePayout(deps: AccountingIntakeDeps, payout: AccountingPayoutSnapshot): Promise<number> {
   const firestore = deps.firestore()
@@ -294,17 +275,4 @@ export async function onOrderRefunded(
     refundedAtMs: envelope.occurredAtMs,
     feeRefundedCents: feeRefundedFor(snapshot, merchantCents),
   })
-}
-
-/** `order.cancelled` → a sale not yet posted is skipped. */
-export async function onOrderCancelled(
-  deps: AccountingIntakeDeps,
-  envelope: AccountingEventEnvelope<OrderEventPayload>,
-): Promise<boolean> {
-  const order = envelope.payload?.order
-  if (!order?.id) return false
-  const firestore = deps.firestore()
-  const orgId = await orgOfHost(firestore, envelope.hostId, envelope.orgId)
-  if (!orgId) return false
-  return enqueueOrderCancelled(deps, { orgId, hostId: envelope.hostId, orderId: order.id })
 }

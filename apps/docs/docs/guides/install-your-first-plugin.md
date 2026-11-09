@@ -110,12 +110,13 @@ anyone — weight them differently.
 
 This is the step to read.
 
-On the detail page you'll find an **Install to** dropdown with two options:
+On the detail page you'll find **Install to**, with up to three choices:
 
 | Option | What it means |
 | --- | --- |
 | **All sites** | Everything in the organization. For a plugin, that includes **sites you add later**. |
-| **Selected sites** | Only the sites you tick. A **Sites** checklist appears underneath — tick at least one. |
+| **Selected sites** | Only the sites you tick. A list of your sites appears underneath — tick at least one. |
+| **All sites except…** | Every site but the ones you tick to leave out. For a plugin, that includes **sites you add later**. Tick at least one, and keep at least one in. |
 
 <!-- screenshot: marketplace/install-to-selected-sites.png per SCREENSHOT_PLAN.md -->
 
@@ -126,18 +127,33 @@ whole reason this step exists:
   month gets them too.
 - **Components, templates, layouts, themes and email templates are site-scoped.** "All
   sites" copies them onto every site you have *right now*; a site you add later will
+  **not** have them. "All sites except…" works the same way: it copies them onto the
+  sites you have now, minus the ones you leave out, and a site you add later will
   **not** have them.
 
 You will have seen this fact once already, in the **What's included** box further up
 the page — *Installs org-wide, covering sites you add later*, or *Installs per site —
-new sites are not covered automatically*. The helper text under the **Install to**
-dropdown is the same fact with your own numbers in it: for the site-scoped case it
-reads "Installs to all 4 sites. New sites won't get it automatically." Two wordings,
-one behavior — if they ever seem to disagree, the helper text is the one counting your
-actual sites.
+new sites are not covered automatically*. The line under each **Install to** choice is
+the same fact with your own numbers in it: for the site-scoped case it reads "Installs
+to all 4 sites. New sites won't get it automatically." Two wordings, one behavior — if
+they ever seem to disagree, the line under the choice is the one counting your actual
+sites.
 
-"Selected sites" only appears when there's a choice to make, so on a one-site
-organization you won't see it.
+"Selected sites" and "All sites except…" only appear when there's a choice to make. A
+dataset schema installs for the whole organization, so it offers **All sites** alone.
+On a one-site organization "All sites except…" is switched off, because there is
+nothing to leave out.
+
+**A plugin left out of a site** is switched off there exactly as if that site had
+switched it off itself, on its **Admin → Plugins** page:
+
+- Leaving a site out takes the **Manage site settings** permission on that site, which
+  its admins hold by default. If you don't hold it on a site you tick, nothing is
+  installed, and the message names the site.
+- Anyone holding **Manage site settings** on a site you left out can turn the plugin back
+  on for that site, from its **Admin → Plugins** page.
+- A site that had switched this plugin off before keeps it off; installing doesn't turn
+  it back on there.
 
 :::caution Every site here is a live site
 There is no staging site in Aglyn. Whatever you install is reachable by real visitors
@@ -240,6 +256,8 @@ editor, published pages and the API — and switching it back on restores it.
 - A few cannot be switched off at all, because sites are built out of them.
 - **AI** and **Forms** have no workspace switch: they stay on for the workspace, and a
   site switches them off for itself — see [A plugin on one site](#plugin-on-one-site).
+  Their page's **Runs on** can leave sites out from the workspace too — see
+  [Where a plugin runs](#where-a-plugin-runs).
 - Switching off a plugin that another one depends on asks first, and names what else
   will go with it.
 
@@ -254,9 +272,51 @@ plugin's listing.
 ### Where a plugin runs {#where-a-plugin-runs}
 
 The **Where it runs** card on a plugin's page answers which of your sites have it. A
-built-in plugin has a single switch: on, it runs on every site in the workspace; off, on
-none. A marketplace plugin runs on the sites it was [installed to](#step-4-targeting) —
-**All sites**, including ones you add later, or the sites you picked.
+marketplace plugin runs on the sites it was [installed to](#step-4-targeting) —
+**All sites**, including ones you add later, **All sites except…** the ones you left
+out, or the sites you picked. A site that switched it off on its own **Admin → Plugins**
+page doesn't run it, whichever you chose.
+
+For a marketplace plugin, the card lists each site it is installed on, and marks a site
+that switched it off, or that you left out when you installed it, **Switched off on this
+site**. The sentence above the list counts only the sites that run it. The listing's own
+page in the Marketplace shows the same list. Anyone holding **Manage site settings** on
+a site marked this way, which its admins hold by default, can turn the plugin back on
+there from that site's **Admin → Plugins** page.
+
+A built-in plugin has the workspace switch, and under it **Runs on**:
+
+| Choice | What it means |
+| --- | --- |
+| **All sites** | Every site in the workspace, including sites you add later. |
+| **All sites except…** | Tick the sites to leave out. Every other site runs it, including sites you add later. |
+
+Press **Save**. The line beside it says how many sites the plugin comes off, and how
+many it comes back on for. Switched off for the workspace, a plugin runs on no site,
+so **Runs on** stays off until you switch it on.
+
+A site left out is switched off exactly as if that site had switched the plugin off
+itself, on its **Admin → Plugins** page, so:
+
+- **A site left out can turn it back on for itself.** Anyone holding **Manage site
+  settings** on that site, which its admins hold by default, can switch it on there.
+  **Runs on** then counts that site as in.
+- A site that switched the plugin off for itself shows here as left out, and choosing
+  **All sites** turns it back on there.
+- **Selected sites** is not offered, because a site you add later would get the
+  plugin anyway.
+- You can't leave every site out; switch the plugin off for the workspace instead.
+- Where a plugin on a site needs the one you are leaving out — **User Accounts** needs
+  **Commerce** — saving is refused, naming the site. Switch the other plugin off on that
+  site first, or keep the site in.
+- **User Accounts** still runs only on the sites that turned it on. Leaving a site out
+  keeps it off there even if that site turned it on.
+- The **Components** library runs on every site and can't be left out.
+
+Changing **Runs on** takes the **Organization settings** permission, which the
+workspace's owners and admins hold by default, and **Manage site settings** on each site
+it switches the plugin on or off for. Without them, the field stays off and says which
+permission it takes.
 
 ### Permissions & data {#permissions-and-data}
 

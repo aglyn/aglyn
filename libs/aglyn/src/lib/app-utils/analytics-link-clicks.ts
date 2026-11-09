@@ -224,10 +224,9 @@ export function classifyLinkClick(
     // The destination href already states the tier (`/signup?plan=pro`), so
     // a CTA whose target URL carries a `plan` query value is qualified with
     // it. ONLY `plan`: it is our own tier key, the one value the funnel
-    // already splits on downstream — a general query capture is exactly the
-    // token/address smuggling the sanitizer's URL reduction exists to stop.
-    // This is also the only place the tier survives the click: the console
-    // `page_view` reduces `page_location` to origin + pathname.
+    // already splits on downstream. The console `page_view` that follows
+    // the click now carries `?plan=` in `page_location` as well, but this is
+    // still the only place the tier is a dimension on the CTA's own row.
     const plan = url.searchParams.get('plan') || ''
     const planQualifier = plan ? `plan=${plan.slice(0, 20)}` : ''
     const contentId = [section, label, planQualifier]

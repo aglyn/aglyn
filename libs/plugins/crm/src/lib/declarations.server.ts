@@ -39,7 +39,10 @@ import {
   type PluginRecordTimelineWriter,
 } from '@aglyn/aglyn/plugin-manager/plugin-record-timeline'
 import { registerPluginRecordWrittenListener } from '@aglyn/aglyn/plugin-manager/plugin-record-written'
-import { registerPluginScopeSharingPatch } from '@aglyn/aglyn/plugin-manager/plugin-scope-sharing'
+import {
+  registerPluginScopeSharingPatch,
+  registerPluginScopeSharingSiteChange,
+} from '@aglyn/aglyn/plugin-manager/plugin-scope-sharing'
 import { registerServerStepExecutor } from '@aglyn/aglyn/plugin-manager/plugin-server-steps'
 import { registerPluginUsageMeter } from '@aglyn/aglyn/plugin-manager/plugin-usage-meters'
 import { BUNDLE_ID, CRM_RECORDS_METER_ID, CRM_STEP_TYPES } from './constants/bundle-common'
@@ -211,6 +214,16 @@ export function registerCrmServerDeclarations(): void {
     async (collection, next) => {
       const { crmScopeSharingPatch } = await import('./server/scope-sharing-patch')
       return crmScopeSharingPatch(collection, next)
+    },
+    { pluginId: BUNDLE_ID },
+  )
+  // Its grants shared with all sites except some sit inside a record's
+  // `sharing`, which the sweep does not walk, so a change to the workspace's
+  // sites brings them level here (AGL-4047). Deferred like the patch.
+  registerPluginScopeSharingSiteChange(
+    async (input) => {
+      const { crmSharingAfterSiteChange } = await import('./server/crm-sharing-runs')
+      await crmSharingAfterSiteChange(input)
     },
     { pluginId: BUNDLE_ID },
   )

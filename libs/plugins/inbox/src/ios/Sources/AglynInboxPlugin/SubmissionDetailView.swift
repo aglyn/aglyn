@@ -186,6 +186,18 @@ struct SubmissionDetailView: View {
           Text(received).font(AglynFont.caption).foregroundStyle(.secondary)
         }
       }
+      // What other plugins do with it (the console's `inboxSubmissionActions` zone): commerce's Start a quote on a
+      // quote request. The zone names no plugin; each widget reads the submission from `slotProps`.
+      if !context.slotWidgets(inboxSubmissionActionsZone).isEmpty, let hostID = submission.hostID ?? context.hostID {
+        Section {
+          SlotWidgets(
+            context: context, slot: inboxSubmissionActionsZone,
+            props: [
+              "hostId": hostID, "submissionId": submission.id, "requestKind": submission.requestKind ?? "",
+              "formName": submission.formName,
+            ])
+        }
+      }
       // What can be done with it, as plain rows in the accent color (a › on the one that opens another screen).
       if submission.capturedKind != nil || (permissions.canAssign && submission.sender.email != nil) {
         Section {
@@ -326,3 +338,6 @@ struct DownloadedSubmissionFile: Identifiable {
   let url: URL
   var id: URL { url }
 }
+
+/// The console's zone of actions on an open submission, which other plugins fill (`INBOX_SUBMISSION_ACTIONS_ZONE`).
+let inboxSubmissionActionsZone = "inboxSubmissionActions"

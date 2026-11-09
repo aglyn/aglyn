@@ -164,11 +164,16 @@ final class MarketplaceTests: XCTestCase {
   private func site(_ json: [String: Any]) -> OrgInstallSite {
     OrgInstallSite(
       hostID: json["hostId"] as? String ?? "", label: json["label"] as? String ?? "", version: string(json["version"]),
-      pinnedBy: InstallTarget(rawValue: json["pinnedBy"] as? String ?? "") ?? .org, shadowed: json["shadowed"] as? Bool == true)
+      pinnedBy: InstallTarget(rawValue: json["pinnedBy"] as? String ?? "") ?? .org, shadowed: json["shadowed"] as? Bool == true,
+      switchedOff: json["switchedOff"] as? Bool == true)
   }
 
   private func siteJSON(_ site: OrgInstallSite) -> [String: Any?] {
-    ["hostId": site.hostID, "label": site.label, "version": site.version, "pinnedBy": site.pinnedBy.rawValue, "shadowed": site.shadowed]
+    var json: [String: Any?] = [
+      "hostId": site.hostID, "label": site.label, "version": site.version, "pinnedBy": site.pinnedBy.rawValue, "shadowed": site.shadowed,
+    ]
+    if site.switchedOff { json["switchedOff"] = true }
+    return json
   }
 
   private func statusJSON(_ status: UpdateStatus) -> [String: Any?] {
@@ -220,11 +225,14 @@ final class MarketplaceTests: XCTestCase {
 
   func testTheWorkspacesPicturePicksUpEverySitesPin() throws {
     for item in try functionCases("resolveOrgInstallSummary") {
-      let hosts = (item.args[0] as? [[String: Any]] ?? []).map { SiteChoice(id: $0["id"] as? String ?? "", label: $0["label"] as? String ?? "") }
+      let hosts = (item.args[0] as? [[String: Any]] ?? []).map {
+        SiteChoice(id: $0["id"] as? String ?? "", label: $0["label"] as? String ?? "", disabledPlugins: $0["disabledPlugins"] as? [String])
+      }
       var pins: [String: PinVersion] = [:]
       for (key, value) in object(item.args[1]) where !(value is NSNull) { pins[key] = PinVersion(version: versionText(object(value)["version"])) }
       let org: PinVersion? = item.args[2] is NSNull ? nil : PinVersion(version: versionText(object(item.args[2])["version"]))
-      let result = resolveOrgInstallSummary(hosts: hosts, hostPins: pins, orgPin: org)
+      let result = resolveOrgInstallSummary(
+        hosts: hosts, hostPins: pins, orgPin: org, listingID: item.args.count > 3 ? item.args[3] as? String : nil)
       let expected = object(item.result)
       XCTAssertEqual(result.orgWide, expected["orgWide"] as? Bool, "\(item.args)")
       XCTAssertEqual(result.orgVersion, string(expected["orgVersion"]), "\(item.args)")
@@ -283,7 +291,7 @@ final class MarketplaceTests: XCTestCase {
       let outcome = installPlanOutcome(
         name: input["name"] as? String ?? "", installed: (input["installed"] as? NSNumber)?.intValue ?? 0, errors: input["errors"] as? [String] ?? [],
         orgWide: input["orgWide"] as? Bool == true, updating: input["updating"] as? Bool == true, version: string(input["version"]),
-        saved: input["saved"] as? Bool == true)
+        saved: input["saved"] as? Bool == true, leftOut: (input["leftOut"] as? NSNumber)?.intValue ?? 0)
       let expected = object(item.result)
       XCTAssertEqual(outcome.tone, expected["tone"] as? String, "\(item.args)")
       XCTAssertEqual(outcome.text, expected["text"] as? String, "\(item.args)")

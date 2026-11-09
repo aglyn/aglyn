@@ -2163,6 +2163,380 @@
             ]
           }
         }
+      },
+      {
+        "args": [
+          {
+            "name": "A",
+            "trigger": {
+              "event": "formSubmission"
+            },
+            "steps": [
+              {
+                "type": "sendEmail",
+                "subject": "Hi",
+                "body": "B"
+              }
+            ],
+            "visibleTo": [
+              "host:h1"
+            ],
+            "sharing": {
+              "mode": "all"
+            }
+          }
+        ],
+        "result": {
+          "ok": true,
+          "value": {
+            "name": "A",
+            "trigger": {
+              "event": "formSubmission",
+              "conditions": null,
+              "combinator": null
+            },
+            "steps": [
+              {
+                "type": "sendEmail",
+                "subject": "Hi",
+                "body": "B"
+              }
+            ],
+            "enabled": true,
+            "visibleTo": [
+              "org"
+            ],
+            "sharing": {
+              "mode": "all"
+            }
+          }
+        }
+      },
+      {
+        "args": [
+          {
+            "name": "A",
+            "trigger": {
+              "event": "formSubmission"
+            },
+            "steps": [
+              {
+                "type": "sendEmail",
+                "subject": "Hi",
+                "body": "B"
+              }
+            ],
+            "visibleTo": [
+              "host:h1"
+            ],
+            "sharing": {
+              "mode": "selected",
+              "hostIds": [
+                "h1",
+                "h1",
+                "h2"
+              ]
+            }
+          }
+        ],
+        "result": {
+          "ok": true,
+          "value": {
+            "name": "A",
+            "trigger": {
+              "event": "formSubmission",
+              "conditions": null,
+              "combinator": null
+            },
+            "steps": [
+              {
+                "type": "sendEmail",
+                "subject": "Hi",
+                "body": "B"
+              }
+            ],
+            "enabled": true,
+            "visibleTo": [
+              "host:h1",
+              "host:h2"
+            ],
+            "sharing": {
+              "mode": "selected",
+              "hostIds": [
+                "h1",
+                "h2"
+              ]
+            }
+          }
+        }
+      },
+      {
+        "args": [
+          {
+            "name": "A",
+            "trigger": {
+              "event": "formSubmission"
+            },
+            "steps": [
+              {
+                "type": "sendEmail",
+                "subject": "Hi",
+                "body": "B"
+              }
+            ],
+            "visibleTo": [
+              "host:h1"
+            ],
+            "sharing": {
+              "mode": "selected",
+              "hostIds": [
+                "host:h1"
+              ]
+            }
+          }
+        ],
+        "result": {
+          "ok": false,
+          "problem": "Choose every site, the sites, or every site except some, for it to run on"
+        }
+      },
+      {
+        "args": [
+          {
+            "name": "A",
+            "trigger": {
+              "event": "formSubmission"
+            },
+            "steps": [
+              {
+                "type": "sendEmail",
+                "subject": "Hi",
+                "body": "B"
+              }
+            ],
+            "visibleTo": [
+              "host:h1"
+            ],
+            "sharing": {
+              "mode": "selected",
+              "hostIds": [
+                "h0",
+                "h1",
+                "h2",
+                "h3",
+                "h4",
+                "h5",
+                "h6",
+                "h7",
+                "h8",
+                "h9",
+                "h10",
+                "h11",
+                "h12",
+                "h13",
+                "h14",
+                "h15",
+                "h16",
+                "h17",
+                "h18",
+                "h19",
+                "h20",
+                "h21",
+                "h22",
+                "h23",
+                "h24",
+                "h25",
+                "h26",
+                "h27",
+                "h28",
+                "h29",
+                "h30"
+              ]
+            }
+          }
+        ],
+        "result": {
+          "ok": false,
+          "problem": "Choose every site, or up to 30 sites, for it to run on"
+        }
+      },
+      {
+        "args": [
+          {
+            "name": "A",
+            "trigger": {
+              "event": "formSubmission"
+            },
+            "steps": [
+              {
+                "type": "sendEmail",
+                "subject": "Hi",
+                "body": "B"
+              }
+            ],
+            "visibleTo": [
+              "host:h1"
+            ],
+            "sharing": {
+              "mode": "allExcept",
+              "exceptHostIds": [
+                "h3"
+              ]
+            }
+          }
+        ],
+        "result": {
+          "ok": true,
+          "value": {
+            "name": "A",
+            "trigger": {
+              "event": "formSubmission",
+              "conditions": null,
+              "combinator": null
+            },
+            "steps": [
+              {
+                "type": "sendEmail",
+                "subject": "Hi",
+                "body": "B"
+              }
+            ],
+            "enabled": true,
+            "visibleTo": [],
+            "sharing": {
+              "mode": "allExcept",
+              "exceptHostIds": [
+                "h3"
+              ]
+            }
+          }
+        }
+      },
+      {
+        "args": [
+          {
+            "name": "A",
+            "trigger": {
+              "event": "formSubmission"
+            },
+            "steps": [
+              {
+                "type": "sendEmail",
+                "subject": "Hi",
+                "body": "B"
+              }
+            ],
+            "visibleTo": [
+              "host:h1"
+            ],
+            "sharing": {
+              "mode": "allExcept",
+              "exceptHostIds": []
+            }
+          }
+        ],
+        "result": {
+          "ok": false,
+          "problem": "Choose at least one site to leave out, or run it on every site"
+        }
+      },
+      {
+        "args": [
+          {
+            "name": "A",
+            "trigger": {
+              "event": "formSubmission"
+            },
+            "steps": [
+              {
+                "type": "sendEmail",
+                "subject": "Hi",
+                "body": "B"
+              }
+            ],
+            "visibleTo": [
+              "host:h1"
+            ],
+            "sharing": {
+              "mode": "allExcept",
+              "exceptHostIds": "h3"
+            }
+          }
+        ],
+        "result": {
+          "ok": false,
+          "problem": "Choose every site, the sites, or every site except some, for it to run on"
+        }
+      },
+      {
+        "args": [
+          {
+            "name": "A",
+            "trigger": {
+              "event": "formSubmission"
+            },
+            "steps": [
+              {
+                "type": "sendEmail",
+                "subject": "Hi",
+                "body": "B"
+              }
+            ],
+            "visibleTo": [
+              "host:h1"
+            ],
+            "sharing": {
+              "mode": "nearby"
+            }
+          }
+        ],
+        "result": {
+          "ok": false,
+          "problem": "Choose every site, the sites, or every site except some, for it to run on"
+        }
+      },
+      {
+        "args": [
+          {
+            "name": "A",
+            "trigger": {
+              "event": "formSubmission"
+            },
+            "steps": [
+              {
+                "type": "sendEmail",
+                "subject": "Hi",
+                "body": "B"
+              }
+            ],
+            "visibleTo": [
+              "host:h1"
+            ],
+            "sharing": null
+          }
+        ],
+        "result": {
+          "ok": true,
+          "value": {
+            "name": "A",
+            "trigger": {
+              "event": "formSubmission",
+              "conditions": null,
+              "combinator": null
+            },
+            "steps": [
+              {
+                "type": "sendEmail",
+                "subject": "Hi",
+                "body": "B"
+              }
+            ],
+            "enabled": true,
+            "visibleTo": [
+              "host:h1"
+            ]
+          }
+        }
       }
     ],
     "triggerFilterProblem": [

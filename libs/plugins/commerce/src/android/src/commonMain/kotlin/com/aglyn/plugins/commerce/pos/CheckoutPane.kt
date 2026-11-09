@@ -94,6 +94,8 @@ internal fun CheckoutPane(model: RegisterModel, checkout: Checkout, onOpenReader
       Modifier.weight(1f).fillMaxWidth().verticalScroll(rememberScrollState()).padding(start = space(2f), end = space(2f), bottom = space(2f)),
       verticalArrangement = Arrangement.spacedBy(space(2f)),
     ) {
+      // The platform's own card reader sale (AGL-4038): attach the buyer, the terms of sale, the readers.
+      if (receiptStep == null) LocalPosHardwareSales.current?.let { PosHardwareSaleSection(it, state.opened.orderId, model.cart.lines.map { line -> line.productId }) }
       CheckoutBody(model, checkout, state, receiptStep, fmt, onOpenReaders)
     }
   }

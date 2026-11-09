@@ -88,6 +88,97 @@ fun describeScope(visibleTo: List<String>?, hostNames: Map<String, String> = emp
   }
 }
 
+/** The `scopeMode` a document kept up by the all-except sweep carries (`SCOPE_MODE_ALL_EXCEPT`). */
+const val SCOPE_MODE_ALL_EXCEPT = "allExcept"
+
+/** How a document is shared, as a person would choose it (`ScopeSharing`). */
+sealed interface ScopeSharing {
+  data object All : ScopeSharing
+  data class Selected(val hostIds: List<String>) : ScopeSharing
+  data class AllExcept(val exceptHostIds: List<String>, val includedHostIds: List<String>) : ScopeSharing
+  data object None : ScopeSharing
+}
+
+/**
+ * The excluded sites a marker names, or null when the marker is not one to act on (anything but host tokens), so a
+ * damaged marker never reads as "except nothing".
+ */
+private fun markerExceptHostIds(doc: Map<String, Any?>?): List<String>? {
+  if (doc?.get("scopeMode") != SCOPE_MODE_ALL_EXCEPT) return null
+  val except = doc["scopeExcept"] as? List<*> ?: return null
+  val ids = mutableListOf<String>()
+  for (token in except) {
+    val text = token as? String ?: return null
+    if (!text.startsWith("host:") || text.length <= 5) return null
+    ids += text.removePrefix("host:")
+  }
+  return ids.filter { it.isNotEmpty() }.distinct()
+}
+
+/**
+ * How a document is shared (`scopeSharingOf`). The marker is read only where it agrees with what readers enforce: a
+ * document carrying `org` is All sites whatever a marker beside it says, and a damaged marker reads as the chosen sites.
+ */
+fun scopeSharingOf(doc: Map<String, Any?>?): ScopeSharing {
+  val tokens = (doc?.get("visibleTo") as? List<*>)?.filterIsInstance<String>()
+  if (tokens != null && OrgAccess.ORG_SCOPE_TOKEN in tokens) return ScopeSharing.All
+  val included = hostIdsOf(tokens).filter { it.isNotEmpty() }.distinct()
+  val except = if (tokens != null) markerExceptHostIds(doc) else null
+  if (except != null) return ScopeSharing.AllExcept(except, included)
+  return if (included.isEmpty()) ScopeSharing.None else ScopeSharing.Selected(included)
+}
+
+/**
+ * The sentence for how a document is shared (`describeSharing`): [describeScope], plus "All sites except …". Sites are
+ * named only where [hostNames] has them, so a reader who cannot see a site's name is told how many, never an id.
+ */
+fun describeSharing(doc: Map<String, Any?>?, hostNames: Map<String, String> = emptyMap()): String {
+  val sharing = scopeSharingOf(doc)
+  if (sharing !is ScopeSharing.AllExcept) return describeScope((doc?.get("visibleTo") as? List<*>)?.filterIsInstance<String>(), hostNames)
+  if (sharing.includedHostIds.isEmpty()) return "No sites"
+  val names = sharing.exceptHostIds.map { hostNames[it] }
+  if (names.size == 1) return "All sites except ${names[0] ?: "1 site"}"
+  if (names.size == 2 && names.all { it != null }) return "All sites except ${names[0]} and ${names[1]}"
+  return "All sites except ${names.size} sites"
+}
+
+/** What a person picked (`ScopeSharingChoice`). */
+sealed interface ScopeSharingChoice {
+  data object All : ScopeSharingChoice
+  data class Selected(val hostIds: List<String>) : ScopeSharingChoice
+  data class AllExcept(val exceptHostIds: List<String>) : ScopeSharingChoice
+}
+
+/** What a sharing choice writes (`ScopeSharingFields`): a null marker means the document must not carry it. */
+data class ScopeSharingFields(val visibleTo: List<String>, val scopeMode: String?, val scopeExcept: List<String>?)
+
+/**
+ * What a sharing choice writes, or why it cannot be (`sharingFromChoice`). [orgHostIds] is the workspace's sites as the
+ * writer read them; an exclusion naming a site no longer there is dropped.
+ */
+fun sharingFromChoice(
+  choice: ScopeSharingChoice, orgHostIds: List<String>, maxIncluded: Int? = null, keepHostIds: List<String> = emptyList(),
+): Pair<ScopeSharingFields?, String?> = when (choice) {
+  ScopeSharingChoice.All -> ScopeSharingFields(listOf(OrgAccess.ORG_SCOPE_TOKEN), null, null) to null
+  is ScopeSharingChoice.Selected -> {
+    val (scope, problem) = scopeToStore(choice.hostIds.map { "host:$it" })
+    if (scope == null) null to problem else ScopeSharingFields(scope, null, null) to null
+  }
+  is ScopeSharingChoice.AllExcept -> {
+    val org = orgHostIds.filter { it.isNotEmpty() }.distinct()
+    val except = choice.exceptHostIds.filter { it.isNotEmpty() }.distinct().filter { it in org }
+    val kept = keepHostIds.toSet()
+    val included = org.filter { it !in except || it in kept }.sorted()
+    when {
+      except.isEmpty() -> null to "Choose at least one site to leave out, or share with All sites."
+      included.isEmpty() -> null to "Keep at least one site in, or choose the sites."
+      maxIncluded != null && included.size > maxIncluded ->
+        null to "This can reach ${if (maxIncluded == 1) "1 site" else "$maxIncluded sites"} at most. Leave out more sites, or choose the sites."
+      else -> ScopeSharingFields(included.map { "host:$it" }, SCOPE_MODE_ALL_EXCEPT, except.map { "host:$it" }) to null
+    }
+  }
+}
+
 /** A picked scope as it may be stored, or the problem with it (`scopeToStore`). */
 fun scopeToStore(input: List<String>?): Pair<List<String>?, String?> {
   val tokens = input.orEmpty().filter { it == OrgAccess.ORG_SCOPE_TOKEN || (it.startsWith("host:") && it.length > 5) }
@@ -112,4 +203,30 @@ fun narrowsScope(before: List<String>?, after: List<String>?): Boolean {
   if (wideAfter) return false
   val kept = after.orEmpty().toSet()
   return before.orEmpty().any { it !in kept }
+}
+
+/**
+ * Whether [target] stays visible everywhere [source] is, for whole documents (`sharingCovers`): today's tokens are not
+ * enough once either side is all-except, because both lists move when a site is added.
+ */
+fun sharingCovers(target: Map<String, Any?>?, source: Map<String, Any?>?): Boolean {
+  val targetTokens = (target?.get("visibleTo") as? List<*>)?.filterIsInstance<String>()
+  val sourceTokens = (source?.get("visibleTo") as? List<*>)?.filterIsInstance<String>()
+  val sourceSharing = scopeSharingOf(source)
+  if (sourceSharing is ScopeSharing.AllExcept) {
+    when (val targetSharing = scopeSharingOf(target)) {
+      ScopeSharing.All -> return true
+      is ScopeSharing.AllExcept -> if (!targetSharing.exceptHostIds.all { it in sourceSharing.exceptHostIds }) return false
+      else -> return false
+    }
+  }
+  return scopeTokensCover(targetTokens, sourceTokens)
+}
+
+/** `scopeCovers`: an org-wide target covers anything; a restricted one, an org-wide source never, else every token. */
+fun scopeTokensCover(target: List<String>?, source: List<String>?): Boolean {
+  if (target.orEmpty().contains(OrgAccess.ORG_SCOPE_TOKEN)) return true
+  if (source.orEmpty().contains(OrgAccess.ORG_SCOPE_TOKEN)) return false
+  val reach = target.orEmpty().toSet()
+  return source.orEmpty().all { it in reach }
 }

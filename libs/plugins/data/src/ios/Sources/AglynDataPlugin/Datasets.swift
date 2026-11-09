@@ -44,7 +44,26 @@ struct DatasetRow: Identifiable, Hashable {
   let plural: String
   /// The sharing scope as stored; nil when the document stores none.
   let visibleTo: [String]?
+  /// The all-sites-except marker beside `visibleTo` (AGL-4047): the sites left out, as scope tokens, under `allExcept`.
+  let scopeMode: String?
+  let scopeExcept: [String]?
   let updatedAt: Date?
+
+  /// Shared with all sites except some (AGL-4047): either marker key present, as the rules read it.
+  let sharingMarked: Bool
+
+  /// Where it sits for the one-site verdict (`oneSitePlacement`): never one site while it is marked, however few sites it
+  /// reaches today, since it belongs to the whole workspace.
+  var placementScope: [String]? { sharingMarked ? nil : visibleTo }
+
+  /// Who it is shared with, as `describeSharing` and `scopeSharingOf` read it.
+  var sharing: [String: Any] {
+    var fields: [String: Any] = [:]
+    if let visibleTo { fields["visibleTo"] = visibleTo }
+    if let scopeMode { fields["scopeMode"] = scopeMode }
+    if let scopeExcept { fields["scopeExcept"] = scopeExcept }
+    return fields
+  }
 
   init(_ doc: FirestoreDocument) {
     let names = doc.data["names"] as? [String: Any]
@@ -61,6 +80,9 @@ struct DatasetRow: Identifiable, Hashable {
     plural = (storedPlural?.isEmpty == false ? storedPlural : nil) ?? datasetDisplayName(doc.data)
     let scope = (doc.data["visibleTo"] as? [Any])?.compactMap { $0 as? String } ?? []
     visibleTo = scope.isEmpty ? nil : scope
+    scopeMode = doc.data["scopeMode"] as? String
+    scopeExcept = (doc.data["scopeExcept"] as? [Any])?.compactMap { $0 as? String }
+    sharingMarked = doc.data.keys.contains("scopeMode") || doc.data.keys.contains("scopeExcept")
     updatedAt = firestoreInstant(doc.data["updatedAt"])
   }
 
@@ -72,7 +94,8 @@ struct DatasetRow: Identifiable, Hashable {
     }
   }
 
-  static func == (a: DatasetRow, b: DatasetRow) -> Bool { a.id == b.id && a.name == b.name && a.model == b.model && a.visibleTo == b.visibleTo && a.updatedAt == b.updatedAt }
+  static func == (a: DatasetRow, b: DatasetRow) -> Bool { a.id == b.id && a.name == b.name && a.model == b.model && a.visibleTo == b.visibleTo && a.scopeMode == b.scopeMode
+      && a.scopeExcept == b.scopeExcept && a.updatedAt == b.updatedAt }
   func hash(into hasher: inout Hasher) { hasher.combine(id) }
 }
 
@@ -356,11 +379,14 @@ struct DataAPI {
 
   /// The Schema dialog's save: the model, its names and (for an org-wide member) the sharing scope.
   /// Who a dataset is shared with, alone: what a member a site narrows can still change.
-  func saveSharing(_ dataset: DatasetRow, visibleTo: [String]) async throws {
-    try await writer.update(datasetsPath(orgID) + [dataset.id], ["visibleTo": visibleTo])
+  /// Who a dataset is shared with, through the route (`set-sharing`): a marker is the server's alone (AGL-4047).
+  func setSharing(_ dataset: DatasetRow, choice: ScopeSharingChoice) async throws {
+    _ = try await api.request(
+      "/api/orgs/datasets", method: .post,
+      body: JSONValue.from(["orgId": orgID, "action": "set-sharing", "datasetId": dataset.id, "choice": choice.wire]))
   }
 
-  func saveSchema(_ dataset: DatasetRow, model: DatasetModel, singular: String, plural: String, visibleTo: [String]?) async throws {
+  func saveSchema(_ dataset: DatasetRow, model: DatasetModel, singular: String, plural: String) async throws {
     var data: [String: Any] = [
       "model": schemaModelJSON(model, rawFields: dataset.rawFields),
       "names": ["singular": singular.trimmingCharacters(in: .whitespacesAndNewlines), "plural": plural.trimmingCharacters(in: .whitespacesAndNewlines)],
@@ -371,7 +397,6 @@ struct DataAPI {
       data["displayName"] = plural.trimmingCharacters(in: .whitespacesAndNewlines)
       data["nameLower"] = nameSearchKey(plural)
     }
-    if let visibleTo { data["visibleTo"] = visibleTo }
     try await writer.update(datasetsPath(orgID) + [dataset.id], data)
   }
 }

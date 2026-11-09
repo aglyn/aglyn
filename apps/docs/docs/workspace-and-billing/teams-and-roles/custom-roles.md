@@ -266,7 +266,9 @@ Creating or editing a campaign asks **Run email campaigns** on the workspace. On
 on one site, holding it on that site is enough too. So turning it off for someone in a site's
 **Permissions** dialog stops them sending, duplicating and deleting there, and, if they hold it on
 the workspace, they can still create and edit campaigns. A campaign placed on several sites or on
-every site follows the workspace permission alone.
+every site follows the workspace permission alone, and so does one shared with all sites except
+some, even while it reaches only one site: the next new site gets it too. Changing which sites a
+campaign is shared with takes **Run email campaigns** on the workspace and access to every site.
 
 ### Marketplace permissions on a site {#marketplace-site-permissions}
 

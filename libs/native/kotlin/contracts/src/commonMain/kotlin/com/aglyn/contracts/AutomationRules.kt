@@ -687,8 +687,17 @@ fun readOrgAutomation(input: Any?): OrgAutomationRead {
     if (combinator != null) put("combinator", combinator)
   }
   validateHostAction(mapOf("name" to name, "trigger" to checked, "steps" to steps))?.let { return OrgAutomationRead.Refused(it) }
-  val visibleTo = normalizeVisibleTo((body["visibleTo"] as? List<*>)?.filterIsInstance<String>() ?: emptyList())
-    ?: return OrgAutomationRead.Refused("Choose every site, or up to 30 sites, for it to run on")
+  val sharing = readOrgSharingChoice(body["sharing"])
+  if (sharing is OrgSharingRead.Refused) return OrgAutomationRead.Refused(sharing.problem)
+  val choice = (sharing as OrgSharingRead.Read).choice
+  // A choice decides the placement; without one, `visibleTo` does. All sites except some names no site here: the route
+  // works the sites out from the workspace's, in the write.
+  val visibleTo = when (choice?.get("mode")) {
+    "allExcept" -> emptyList()
+    "all" -> listOf(ORG_SCOPE_TOKEN)
+    "selected" -> normalizeVisibleTo((choice["hostIds"] as List<*>).map { hostScopeToken(it as String) })
+    else -> normalizeVisibleTo((body["visibleTo"] as? List<*>)?.filterIsInstance<String>() ?: emptyList())
+  } ?: return OrgAutomationRead.Refused("Choose every site, or up to 30 sites, for it to run on")
   val storedTrigger = linkedMapOf<String, Any?>("event" to event).apply {
     if (filter.isNotEmpty()) put("filter", filter)
     put("conditions", conditions.ifEmpty { null })
@@ -701,8 +710,37 @@ fun readOrgAutomation(input: Any?): OrgAutomationRead {
       "steps" to steps,
       "enabled" to (body["enabled"] != false),
       "visibleTo" to visibleTo,
-    ),
+    ).apply { if (choice != null) put("sharing", choice) },
   )
+}
+
+private const val ORG_SHARING_PROBLEM = "Choose every site, the sites, or every site except some, for it to run on"
+
+private sealed interface OrgSharingRead {
+  data class Read(val choice: Map<String, Any?>?) : OrgSharingRead
+  data class Refused(val problem: String) : OrgSharingRead
+}
+
+/** A sharing choice off the wire (AGL-4047), or none: ids held to a document id's shape and deduped. */
+private fun readOrgSharingChoice(raw: Any?): OrgSharingRead {
+  if (raw == null) return OrgSharingRead.Read(null)
+  val source = raw.asDoc()
+  fun ids(list: Any?): List<String>? {
+    if (list !is List<*> || list.size > 1000) return null
+    if (!list.all { it is String && it.isNotEmpty() && ':' !in it && '/' !in it }) return null
+    return list.map { it as String }.distinct()
+  }
+  return when (source?.get("mode")) {
+    "all" -> OrgSharingRead.Read(mapOf("mode" to "all"))
+    "selected" -> ids(source["hostIds"])?.let { OrgSharingRead.Read(mapOf("mode" to "selected", "hostIds" to it)) }
+      ?: OrgSharingRead.Refused(ORG_SHARING_PROBLEM)
+    "allExcept" -> {
+      val except = ids(source["exceptHostIds"]) ?: return OrgSharingRead.Refused(ORG_SHARING_PROBLEM)
+      if (except.isEmpty()) OrgSharingRead.Refused("Choose at least one site to leave out, or run it on every site")
+      else OrgSharingRead.Read(mapOf("mode" to "allExcept", "exceptHostIds" to except))
+    }
+    else -> OrgSharingRead.Refused(ORG_SHARING_PROBLEM)
+  }
 }
 
 fun orgAutomationPausedHostIds(automation: Doc?): List<String> =

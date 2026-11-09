@@ -95,4 +95,17 @@ final class QuoteSendRulesTests: XCTestCase {
     XCTAssertEqual(quoteLinkVersion(try order().quote), 1)
     XCTAssertEqual(quoteLinkVersion(try order(["linkVersion": 3]).quote), 3)
   }
+
+  func testAReplyGoesToTheCustomerElseTheLastSendAndNeedsAnAddress() throws {
+    XCTAssertNil(quoteReplyRefusal(try order()))
+    XCTAssertEqual(
+      quoteReplyRecipient(try order(["customer": ["email": ""], "sends": [record(1, 1, to: "buyer@example.org")]])),
+      "buyer@example.org")
+    XCTAssertEqual(
+      quoteReplyRefusal(try order(["customer": ["email": ""]])),
+      "This quote has no customer email, so there is nobody to reply to. Add their email to the quote first.")
+    XCTAssertEqual(
+      quoteReplyRefusal(try order(["customer": ["email": "not an address"]])),
+      "The customer email on this quote isn’t a valid address. Fix it on the quote first.")
+  }
 }

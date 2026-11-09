@@ -181,6 +181,8 @@ export interface AccountingConnectionView {
   missingRoles: AccountingAccountRole[]
   lastSyncAtMs: number | null
   lastError: string | null
+  /** Why the merchant's Stripe payouts could not be read, while that lasts. */
+  payoutError?: string | null
 }
 
 /** What `accounting/status` answers. */
@@ -242,6 +244,8 @@ export type AccountingRefusalReason =
   | 'invalid-request'
   | 'not-configured'
   | 'not-connected'
+  /** The books no longer let the app in; the connection now asks to be reconnected. */
+  | 'reconnect-required'
   | 'state-invalid'
   | 'state-expired'
   | 'state-replayed'

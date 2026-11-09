@@ -35,10 +35,31 @@ struct RegisterScreen: View {
   @State private var showDiscount = false
   @State private var scanCode = ""
   @State private var showOps = false
+  /// Check-in at the window (AGL-4043).
+  @State private var showCheckIn = false
+  /// The platform's own card reader sales (AGL-4038): on its hardware seller store only.
+  @State private var hardwareSeller = PosHardwareSeller()
+  @State private var showToAttach = false
+  /// This register as core's customer display host while a display is connected (AGL-4042).
+  @State private var displayHostToken: Int?
   @State private var showPrinters = false
   @State private var showOfflineCash = false
   @Environment(\.scenePhase) private var scenePhase
   let context: NativePluginContext
+
+  /// Offers this register's display to other plugins' widgets, or withdraws it.
+  private func offerDisplay(_ connected: Bool) {
+    if connected, displayHostToken == nil {
+      let display = model.display
+      displayHostToken = CustomerDisplayHosts.shared.register(
+        CustomerDisplayHost(
+          show: { screen in await display.showScreen(screen) },
+          close: { pluginID in await display.closeScreen(pluginID: pluginID) }))
+    } else if !connected, let token = displayHostToken {
+      CustomerDisplayHosts.shared.withdraw(token)
+      displayHostToken = nil
+    }
+  }
 
   init(context: NativePluginContext) {
     self.context = context
@@ -87,10 +108,24 @@ struct RegisterScreen: View {
     }
     .navigationTitle(model.storeName)
     .toolbar { toolbar }
-    .aglynSearchable(text: $query, prompt: "Search products", onSubmit: { model.search(query) })
-    .onChange(of: query) { _, text in if text.isEmpty { model.search("") } }
+    .aglynSearchable(text: $query, prompt: "Search products", onSubmit: { model.search(query) }, alwaysShown: true)
+    // As the cashier types, as on Android and in the console: a short pause, then the grid narrows. Return searches at once.
+    .task(id: query) {
+      if !query.isEmpty { try? await Task.sleep(for: .milliseconds(300)) }
+      guard !Task.isCancelled, query != model.args.search else { return }
+      model.search(query)
+    }
     .sheet(item: $model.sheet) { _ in ItemSheetView(model: model) }
     .sheet(isPresented: $showOps) { RegisterOpsSheet(model: model) }
+    .sheet(isPresented: $showToAttach) {
+      PosHardwareToAttachSheet(api: PosHardwareSaleAPI(api: context.api, hostID: context.hostID ?? ""))
+    }
+    .task { await hardwareSeller.check(PosHardwareSaleAPI(api: context.api, hostID: context.hostID ?? "")) }
+    .sheet(isPresented: $showCheckIn) {
+      PosCheckInSheet(
+        context: context, hostID: context.hostID ?? "", registerID: model.register?.id,
+        cashierAssertion: { [cashier = model.cashier] in cashier.assertion })
+    }
     .sheet(isPresented: $showPrinters) { RegisterPrintersSheet(model: model) }
     .sheet(isPresented: $showOfflineCash) { OfflineSaleSheet(model: model) }
     .overlay { if model.cashier.locked { LockedRegister(model: model) } }
@@ -99,7 +134,7 @@ struct RegisterScreen: View {
     .onChange(of: query) { _, _ in model.cashier.touch() }
     .sheet(isPresented: Binding(get: { model.checkout != nil }, set: { if !$0 { closeCheckout() } })) {
       if let checkout = model.checkout {
-        CheckoutView(model: model, checkout: checkout)
+        CheckoutView(model: model, checkout: checkout, context: context)
           .interactiveDismissDisabled()
           .checkoutSheetSizing()
       }
@@ -136,7 +171,12 @@ struct RegisterScreen: View {
       if phase == .active { Task { await model.warmUpReader() } }
     }
     .tapToPayEducationAfterTerms(model.collector)
-    .onDisappear { model.stop() }
+    .onDisappear {
+      model.stop()
+      offerDisplay(false)
+    }
+    // Another plugin's widget (a waiver to sign) can put its screen on the connected display.
+    .onChange(of: model.display.connected, initial: true) { _, connected in offerDisplay(connected) }
   }
 
   @ToolbarContentBuilder
@@ -148,6 +188,12 @@ struct RegisterScreen: View {
             ForEach(registers) { Text($0.name).tag(Optional($0)) }
           }
         }
+        if hardwareSeller.seller {
+          Button("Card reader sales", systemImage: "creditcard.and.123") { showToAttach = true }
+            .accessibilityIdentifier("pos-hardware-to-attach-open")
+        }
+        Button("Check in", systemImage: "checkmark.circle") { showCheckIn = true }
+          .accessibilityIdentifier("pos-check-in-open")
         Button("Cashier and shift", systemImage: "person.badge.clock") { showOps = true }
           .accessibilityIdentifier("pos-ops-open")
         Button("Card readers", systemImage: "creditcard") { context.navigate(commerceCardReadersScreen) }

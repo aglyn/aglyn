@@ -58,6 +58,7 @@ import {
 import { runPluginDeclarationsRepair } from '@aglyn/aglyn/plugin-manager/plugin-declarations-repair'
 import {
   listScopeSharingCollections,
+  listScopeSharingSiteChangeHooks,
   type ResolvedScopeSharingCollection,
   scopeSharingPatchFor,
 } from '@aglyn/aglyn/plugin-manager/plugin-scope-sharing'
@@ -370,6 +371,27 @@ export async function sweepScopeSharingAfterSiteChange(input: {
     await leaveForTheJob(null, 1).catch((writeError: unknown) => {
       console.error(`[scope-sweep] could not leave ${orgId}'s sweep for the job`, writeError)
     })
+  }
+  await runSiteChangeHooks({ orgId, reason, ...(hostId ? { hostId } : {}) })
+}
+
+/**
+ * The plugins' own share of a site change (`registerPluginScopeSharingSiteChange`):
+ * sharing kept somewhere the sweep does not walk, such as the CRM's grants.
+ * Each gets {@link INLINE_BUDGET_MS} and finishes the rest itself. Never throws.
+ * A hook registers with its plugin's server declarations, at boot.
+ */
+async function runSiteChangeHooks(input: {
+  orgId: string
+  reason: ScopeSweepReason
+  hostId?: string
+}): Promise<void> {
+  for (const { pluginId, hook } of listScopeSharingSiteChangeHooks()) {
+    try {
+      await hook({ ...input, budgetMs: INLINE_BUDGET_MS })
+    } catch (error) {
+      console.error(`[scope-sweep] ${pluginId}'s site-change hook failed for ${input.orgId}`, error)
+    }
   }
 }
 

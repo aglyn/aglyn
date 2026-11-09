@@ -21,6 +21,7 @@ import {
   crmActivityLogHasRoom,
   type CrmActivityLink,
   type CrmEmailDirection,
+  crmDefaultMarkerOf,
   crmScopeTokens,
   emailAddressOf,
   emailDomainOf,
@@ -381,7 +382,12 @@ export async function fileCrmInboundEmail(
     hostId: match.hostId,
     visibleTo: match.visibleTo,
   })
-  const created = await createCrmEmailActivity(ref, activity)
+  const created = await createCrmEmailActivity(ref, {
+    ...activity,
+    // Under "All sites except…", the marker a site added later joins by, when
+    // the sites it carries are exactly the default's (AGL-4047).
+    ...crmDefaultMarkerOf(org, activity),
+  })
   return created === 'created'
     ? { outcome: 'filed', activityId: ref.id, match }
     : { outcome: 'duplicate', activityId: ref.id }

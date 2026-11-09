@@ -128,6 +128,8 @@ struct Submission: Identifiable, Hashable {
   let chips: [RoutingChip]
   /// What it asks for, as a chip says it: "Quote request" from a form marked as asking for a quote.
   let requestLabel: String?
+  /// What it asks for (`quote`), or nil for an ordinary message: what the Inbox's actions zone tells its widgets.
+  let requestKind: String?
   /// The files it carries, which live in private storage and download through the forms plugin's route.
   let files: [SubmissionFile]
 
@@ -148,6 +150,7 @@ struct Submission: Identifiable, Hashable {
     capturedID = captured?["id"] as? String
     chips = routingChips(doc.data["routing"] as? [String: Any])
     requestLabel = submissionRequestLabel(doc.data["request"])
+    requestKind = (doc.data["request"] as? [String: Any])?["kind"] as? String
     files = submissionFiles(doc.data["files"])
   }
 

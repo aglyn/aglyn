@@ -161,6 +161,11 @@ export interface AccountingJournalDoc {
   currency: string
   memo: string
   lines: AccountingJournalLine[]
+  /**
+   * The mapped clearing account. Xero takes no bank account on a manual
+   * journal, so it posts the day through this account as a bank transaction.
+   */
+  clearingAccountId: string
 }
 
 export type AccountingDoc =
@@ -603,6 +608,7 @@ export function buildSummaryDoc(
     currency: normalizeCurrency(input.currency),
     memo: `${PLATFORM_BRAND_NAME} sales summary for ${input.date}: ${input.orderCount} ${input.orderCount === 1 ? 'order' : 'orders'}`,
     lines,
+    clearingAccountId: accountFor(mapping, 'clearing'),
   }
 }
 

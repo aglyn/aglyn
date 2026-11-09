@@ -284,6 +284,70 @@ struct QuoteTotalsRows: View {
   }
 }
 
+/// A new quote's start (AGL-4098): from an Inbox request, with what it carried, or from a CRM contact (the console's
+/// `QuoteEditorStart`). The request's own parts (which request, its files, its conversation) are stamped by the server
+/// from `fromSubmissionID` when the quote is created, never from here.
+struct QuoteEditorStart: Identifiable {
+  let id = UUID()
+  /// The request it is started from, which the server reads again on create; nil for a contact.
+  var fromSubmissionID: String?
+  var draft: QuoteDraft
+  /// The request, as the editor says where the quote came from.
+  var requestFormName: String?
+  var requestReceivedAtMs: Double?
+  var fileNames: [String] = []
+  /// Whether the request started an email conversation the quote's first email will reply into.
+  var threaded = false
+
+  /// A start for a CRM contact: the person as the page shows them is the quote's customer.
+  static func contact(kind: String, recordID: String, name: String, email: String, phone: String, company: String)
+    -> QuoteEditorStart
+  {
+    var draft = QuoteDraft()
+    draft.record = QuoteCustomerRecord(id: recordID, kind: kind)
+    draft.name = name
+    draft.email = email
+    draft.phone = phone
+    draft.company = company
+    return QuoteEditorStart(fromSubmissionID: nil, draft: draft)
+  }
+
+  /// A start from the route's `start-from-request` answer.
+  static func request(submissionID: String, answer: JSONValue?) -> QuoteEditorStart {
+    let prefill = answer?["prefill"]
+    var draft = QuoteDraft()
+    let customer = prefill?["customer"]
+    if let kind = customer?["record"]?["kind"]?.stringValue, let id = customer?["record"]?["id"]?.stringValue {
+      draft.record = QuoteCustomerRecord(id: id, kind: kind)
+    }
+    draft.name = customer?["name"]?.stringValue ?? ""
+    draft.email = customer?["email"]?.stringValue ?? ""
+    draft.phone = customer?["phone"]?.stringValue ?? ""
+    draft.company = customer?["company"]?.stringValue ?? ""
+    draft.notes = prefill?["notes"]?.stringValue ?? ""
+    draft.lines = (prefill?["lines"]?.arrayValue ?? []).compactMap { line in
+      guard let productID = line["productId"]?.stringValue else { return nil }
+      var draftLine = QuoteLineDraft(kind: .catalog)
+      draftLine.productID = productID
+      draftLine.variantID = line["variantId"]?.stringValue ?? ""
+      let quantity = line["quantity"]?.numberValue ?? 1
+      draftLine.quantity = String(Int(quantity > 0 ? quantity : 1))
+      draftLine.modifiers = (line["modifiers"]?.arrayValue ?? []).compactMap { pick in
+        guard let group = pick["groupId"]?.stringValue, let option = pick["optionId"]?.stringValue else { return nil }
+        return ModifierSelection(groupId: group, optionId: option)
+      }
+      draftLine.description = line["description"]?.stringValue ?? ""
+      draftLine.included = line["included"]?.boolValue == true
+      return draftLine
+    }
+    return QuoteEditorStart(
+      fromSubmissionID: submissionID, draft: draft, requestFormName: answer?["request"]?["formName"]?.stringValue,
+      requestReceivedAtMs: answer?["request"]?["receivedAtMs"]?.numberValue,
+      fileNames: (answer?["files"]?.arrayValue ?? []).compactMap { $0["name"]?.stringValue },
+      threaded: answer?["threaded"]?.boolValue == true)
+  }
+}
+
 /// A field whose label stays in view once it is filled: the label leading, what is typed trailing.
 struct QuoteLabeledField: View {
   let label: String
@@ -322,12 +386,15 @@ struct QuoteEditorSheet: View {
   @Environment(\.dismiss) private var dismiss
 
   private let baseUpdatedAtMs: Double?
+  /// What a new quote opens with when it is started from a request or a contact; nil for a saved quote.
+  private let start: QuoteEditorStart?
 
   init(
     context: NativePluginContext, quoteID: String?, order: HostOrder?, productList: [(id: String, product: HostProduct)],
-    storeData: [String: Any]?, onDone: @escaping (String, Bool) -> Void
+    storeData: [String: Any]?, start: QuoteEditorStart? = nil, onDone: @escaping (String, Bool) -> Void
   ) {
     self.context = context
+    self.start = order == nil ? start : nil
     self.quoteID = quoteID
     self.order = order
     self.productList = productList
@@ -335,7 +402,7 @@ struct QuoteEditorSheet: View {
     self.storeData = storeData
     self.onDone = onDone
     baseUpdatedAtMs = order?.quote?.updatedAtMs
-    _draft = State(initialValue: order.map(QuoteDraft.init) ?? QuoteDraft())
+    _draft = State(initialValue: order.map(QuoteDraft.init) ?? (order == nil ? start?.draft : nil) ?? QuoteDraft())
   }
 
   private var hostID: String { context.hostID ?? "" }
@@ -377,6 +444,7 @@ struct QuoteEditorSheet: View {
       if !context.can(quoteEditPermission) {
         Section { AglynNotice(context.refusal(quoteEditPermission), tone: .info) }
       }
+      if let start, let formName = start.requestFormName { requestNote(start, formName: formName) }
       customerSection
       itemsSections(priced)
       if !proofOnly { discountSection }
@@ -404,6 +472,28 @@ struct QuoteEditorSheet: View {
       Text("The quote and everything on it is removed. This can’t be undone.")
     }
     .task(id: search) { await findCustomers() }
+  }
+
+  /// Where a new quote came from (the console's QuoteStartedFromRequest): the request, its files and its conversation.
+  @ViewBuilder private func requestNote(_ start: QuoteEditorStart, formName: String) -> some View {
+    let when =
+      start.requestReceivedAtMs.map { " on \(formatReceiptTime(Int64($0), timeZone: TimeZone.current.identifier))" } ?? ""
+    Section {
+      VStack(alignment: .leading, spacing: AglynSpace.one) {
+        Text("From a request sent through “\(formName)”\(when).").font(AglynFont.subheadline)
+        if !start.fileNames.isEmpty {
+          Text("Their files, kept on the quote as the customer’s:").font(AglynFont.caption).foregroundStyle(.secondary)
+          ForEach(start.fileNames, id: \.self) { Text($0).font(AglynFont.caption) }
+        }
+        Text(
+          start.threaded
+            ? "When you email the quote, it replies to the confirmation they were sent, in the same conversation."
+            : "They weren’t sent a confirmation, so the quote’s email starts the conversation."
+        )
+        .font(AglynFont.caption).foregroundStyle(.secondary)
+      }
+      .listRowBackground(AglynTone.info.color.opacity(0.12))
+    }
   }
 
   // MARK: Customer
@@ -755,6 +845,10 @@ struct QuoteEditorSheet: View {
     if let quoteID {
       body["quoteId"] = .string(quoteID)
       if let baseUpdatedAtMs { body["baseUpdatedAtMs"] = .number(baseUpdatedAtMs) }
+    }
+    // A request's parts are read again by the server from here (AGL-4098).
+    if quoteID == nil, let submission = start?.fromSubmissionID {
+      body["from"] = .object(["kind": .string("submission"), "id": .string(submission)])
     }
     let answer: JSONValue?
     do {

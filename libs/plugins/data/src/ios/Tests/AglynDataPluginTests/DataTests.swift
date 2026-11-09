@@ -123,6 +123,46 @@ final class DataCasesTests: XCTestCase {
     }
   }
 
+  func testSharingRules() throws {
+    for item in try functionCases("scopeSharingOf") {
+      let want = item.result as? [String: Any]
+      let expected: ScopeSharing
+      switch want?["mode"] as? String {
+      case "all": expected = .all
+      case "selected": expected = .selected(hostIDs: strings(want?["hostIds"]) ?? [])
+      case "allExcept":
+        expected = .allExcept(
+          exceptHostIDs: strings(want?["exceptHostIds"]) ?? [], includedHostIDs: strings(want?["includedHostIds"]) ?? [])
+      default: expected = .none
+      }
+      XCTAssertEqual(scopeSharingOf(item.args[0] as? [String: Any]), expected, "\(item.args)")
+    }
+    for item in try functionCases("describeSharing") {
+      let names = item.args.count > 1 ? item.args[1] as? [String: String] ?? [:] : [:]
+      XCTAssertEqual(describeSharing(item.args[0] as? [String: Any], hostNames: names), item.result as? String, "\(item.args)")
+    }
+    for item in try functionCases("sharingFromChoice") {
+      let choice = item.args[0] as? [String: Any]
+      let picked: ScopeSharingChoice
+      switch choice?["mode"] as? String {
+      case "all": picked = .all
+      case "selected": picked = .selected(hostIDs: strings(choice?["hostIds"]) ?? [])
+      default: picked = .allExcept(exceptHostIDs: strings(choice?["exceptHostIds"]) ?? [])
+      }
+      let options = item.args.count > 2 ? item.args[2] as? [String: Any] : nil
+      let answer = sharingFromChoice(
+        picked, orgHostIDs: strings(item.args[1]) ?? [], maxIncluded: (options?["maxIncluded"] as? NSNumber)?.intValue,
+        keepHostIDs: strings(options?["keepHostIds"]) ?? [])
+      let want = item.result as? [String: Any]
+      XCTAssertEqual(answer.problem, text(want?["problem"]), "\(item.args)")
+      let fields = (want?["fields"] as? [String: Any]).map {
+        ScopeSharingFields(
+          visibleTo: strings($0["visibleTo"]) ?? [], scopeMode: text($0["scopeMode"]), scopeExcept: strings($0["scopeExcept"]))
+      }
+      XCTAssertEqual(answer.fields, fields, "\(item.args)")
+    }
+  }
+
   func testOperatorLabels() throws {
     for item in try functionCases("listFilterOperatorLabel") {
       XCTAssertEqual(listFilterOperatorLabel(item.args[0] as? String ?? ""), item.result as? String, "\(item.args)")
@@ -274,10 +314,16 @@ final class DataTests: XCTestCase {
     XCTAssertEqual(transport.sent.last?.path, "/api/resources/erase")
     XCTAssertEqual(transport.sent.last?.body?["kind"]?.stringValue, "datasets")
     let row = DatasetRow(menu)
-    try await api.saveSchema(row, model: row.model, singular: "Menu item", plural: "Menu items", visibleTo: nil)
+    try await api.saveSchema(row, model: row.model, singular: "Menu item", plural: "Menu items")
     XCTAssertEqual(writer.updates.first?.path, ["orgs", "o", "datasets", "ds-menu"])
     XCTAssertEqual(writer.updates.first?.data["displayName"] as? String, "Menu items")
     XCTAssertNil(writer.updates.first?.data["visibleTo"])
+    // Who it is shared with goes through the route: a marker is the server's alone (AGL-4047).
+    transport.answers["/api/orgs/datasets"] = (200, #"{"ok":true}"#)
+    try await api.setSharing(row, choice: .allExcept(exceptHostIDs: ["h3"]))
+    XCTAssertEqual(transport.sent.last?.body?["action"]?.stringValue, "set-sharing")
+    XCTAssertEqual(transport.sent.last?.body?["choice"]?["mode"]?.stringValue, "allExcept")
+    XCTAssertEqual(transport.sent.last?.body?["choice"]?["exceptHostIds"]?.arrayValue?.first?.stringValue, "h3")
   }
 
   // The console's own specs for the Image and Page field types (dataset-image-field.spec.ts, dataset-page-field.spec.ts).

@@ -9,6 +9,86 @@ content on the marketing site and is written separately.
 
 <!-- releases below -->
 
+## v1.20.0 — 2026-11-08
+
+[Compare with the previous release](https://github.com/aglyn/aglyn/compare/v1.19.0...v1.20.0)
+
+### Added
+
+- **native:** a marketplace install for every site can leave sites out
+- **native:** sell a card reader at the booth register ([AGL-4038](https://linear.app/aglyn/issue/AGL-4038))
+- **native:** sign a waiver on the customer display ([AGL-4042](https://linear.app/aglyn/issue/AGL-4042))
+- **native:** a rider's waiver status at check-in ([AGL-4042](https://linear.app/aglyn/issue/AGL-4042))
+- **native:** check people in at the register ([AGL-4043](https://linear.app/aglyn/issue/AGL-4043))
+- **native:** today's check-ins on iPhone and iPad ([AGL-4043](https://linear.app/aglyn/issue/AGL-4043))
+- **native:** today's check-ins on Android
+- **native:** port a stay's guest count rules
+- **native:** port the check-in day and rain-check rules
+- **native:** mark a site that switched a marketplace plugin off
+- **native:** choose where a built-in plugin runs from its page
+- **native:** port where a plugin runs across the workspace's sites
+- **native:** the CRM default can share new records with all sites except some
+- **native:** choose all sites except for a dataset through set-sharing
+- **native:** say all sites except on datasets, media and campaigns
+- **native:** port the all-sites-except sharing rules to the apps
+- **marketplace:** install to all sites except some ([AGL-4047](https://linear.app/aglyn/issue/AGL-4047))
+- **native:** start a quote from an Inbox request or a CRM contact on Android ([AGL-4098](https://linear.app/aglyn/issue/AGL-4098))
+- **native:** start a quote from an Inbox request or a CRM contact on iOS ([AGL-4098](https://linear.app/aglyn/issue/AGL-4098))
+- **crm:** default sharing all sites except some, and apply to existing records ([AGL-4047](https://linear.app/aglyn/issue/AGL-4047))
+- **plugins:** run a built-in plugin on all sites except some ([AGL-4047](https://linear.app/aglyn/issue/AGL-4047))
+- **crm:** share records and sharing rules with all sites except some ([AGL-4047](https://linear.app/aglyn/issue/AGL-4047))
+- **campaigns:** share a campaign with all sites except some ([AGL-4047](https://linear.app/aglyn/issue/AGL-4047))
+- **native:** a quote's conversation and replies in both apps ([AGL-4207](https://linear.app/aglyn/issue/AGL-4207))
+- **media:** share files and folders with all sites except some ([AGL-4047](https://linear.app/aglyn/issue/AGL-4047))
+- **native:** the Android quote proofs and revisions ([AGL-4096](https://linear.app/aglyn/issue/AGL-4096))
+- **native:** iOS quote proofs and revisions, and a signed upload in both kits ([AGL-4096](https://linear.app/aglyn/issue/AGL-4096))
+- **native:** the console's quote proof rules in both contracts ([AGL-4096](https://linear.app/aglyn/issue/AGL-4096))
+
+### Fixed
+
+- **ci:** three main-gate reds after the media and campaign sharing change
+- **commerce:** the gate coverage names the quote route as a reader, not a door ([AGL-4162](https://linear.app/aglyn/issue/AGL-4162))
+- **native:** a links block with every link hidden draws no card on Android
+- **native:** the iPhone register searches as you type
+- **analytics:** keep the first-touch runtime off every published page
+- **analytics:** cap page params at GA4's own limits, not 100
+- **analytics:** name the click-id set outside the marketing plugin's vocabulary
+- **analytics:** keep a URL's query in GA events, minus personal data
+- **native:** a moved rain check takes the day the picker shows
+- **native:** a logged activity is marked under the all-sites-except CRM default
+- **native:** show Runs on unless sites are built out of the plugin
+- **native:** no second Shared with label under the schema's heading
+- **native:** name the sites a dataset leaves out, and dim switched-off menu items
+- **crm:** new records stamped All sites except carry the marker ([AGL-4047](https://linear.app/aglyn/issue/AGL-4047))
+- **native:** campaign edit and delete follow the workspace's verdict
+- **native:** org automations keep all sites except some on save
+- **marketplace:** installed-sites lists show a site that switched a plugin off ([AGL-4047](https://linear.app/aglyn/issue/AGL-4047))
+- **accounting:** an app removed inside Xero asks to reconnect ([AGL-3614](https://linear.app/aglyn/issue/AGL-3614))
+- **plugins:** a site's own switch stops a marketplace plugin there ([AGL-4047](https://linear.app/aglyn/issue/AGL-4047))
+- **accounting:** the Xero daily summary posts through the clearing bank account ([AGL-3614](https://linear.app/aglyn/issue/AGL-3614))
+- **accounting:** retry re-reads the ledger's currencies before refusing ([AGL-3614](https://linear.app/aglyn/issue/AGL-3614))
+- **accounting:** a cancelled paid order still posts its sale ([AGL-3614](https://linear.app/aglyn/issue/AGL-3614))
+- **accounting:** a failed payout or backfill read no longer stops posting ([AGL-3614](https://linear.app/aglyn/issue/AGL-3614))
+
+### Documentation
+
+- **crm:** new leads and logged activities follow the default sharing ([AGL-4047](https://linear.app/aglyn/issue/AGL-4047))
+
+<details>
+<summary>Also in this release: 2 test, 6 chore</summary>
+
+- **rules:** media sharing is route-only in the rules matrix ([AGL-4047](https://linear.app/aglyn/issue/AGL-4047))
+- **tools:** raise the Linear id floor to AGL-4213 ([AGL-4213](https://linear.app/aglyn/issue/AGL-4213), [AGL-4211](https://linear.app/aglyn/issue/AGL-4211), [AGL-4212](https://linear.app/aglyn/issue/AGL-4212), [AGL-4210](https://linear.app/aglyn/issue/AGL-4210))
+- **native:** a plugin's link opens its page on both apps
+- **native:** dataset sharing goes through set-sharing
+- **crm:** default sharing all sites except some ready to land ([AGL-4047](https://linear.app/aglyn/issue/AGL-4047))
+- **plugins:** carry main into where a built-in plugin runs ([AGL-4047](https://linear.app/aglyn/issue/AGL-4047))
+- **plugins:** where a built-in plugin runs, ready to land ([AGL-4047](https://linear.app/aglyn/issue/AGL-4047))
+- **crm:** all sites except some on grants ready to land ([AGL-4047](https://linear.app/aglyn/issue/AGL-4047))
+- **media:** all sites except some ready to land ([AGL-4047](https://linear.app/aglyn/issue/AGL-4047))
+
+</details>
+
 ## v1.19.0 — 2026-11-07
 
 [Compare with the previous release](https://github.com/aglyn/aglyn/compare/7accf93eb...v1.19.0)

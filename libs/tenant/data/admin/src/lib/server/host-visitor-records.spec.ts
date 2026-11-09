@@ -544,6 +544,29 @@ describe('the lead is written as an org-scoped record (AGL-3275)', () => {
     })
   })
 
+  it('marks a new lead under the default "All sites except…", so a site added later sees it (AGL-4047)', async () => {
+    mockOrg = {
+      hosts: { 'host-1': true, 'host-2': true, 'host-3': true },
+      crm: { defaultRecordScope: 'host', defaultRecordExcept: ['host-3'] },
+    }
+    const state = harness(0)
+    await add(state)
+
+    expect(state.written[0]).toMatchObject({
+      visibleTo: { __arrayUnion: ['host:host-1', 'host:host-2'] },
+      scopeMode: 'allExcept',
+      scopeExcept: ['host:host-3'],
+    })
+  })
+
+  it('marks nothing while the default leaves no site out', async () => {
+    const state = harness(0)
+    await add(state)
+
+    expect(state.written[0]).not.toHaveProperty('scopeMode')
+    expect(state.written[0]).not.toHaveProperty('scopeExcept')
+  })
+
   it('records every site that captured the person, not only the first', async () => {
     // On a shared row a sibling brand's capture has to appear here or the
     // "Known by" answer silently omits it. `arrayUnion`, as the contact door

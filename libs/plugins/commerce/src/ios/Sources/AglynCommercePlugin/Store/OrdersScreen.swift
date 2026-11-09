@@ -60,6 +60,8 @@ struct OrdersScreen: View {
               if let areaHead { AglynDetailCrumbs(areaHead) }
               if selection == ordersDayReportRowID {
                 OrdersDayReportView(context: context, currency: reportCurrency)
+              } else if selection == ordersCheckInsRowID {
+                NavigationStack { CheckInsView(context: context) }
               } else if selection == ordersShiftHistoryRowID {
                 NavigationStack {
                   ShiftHistoryView(context: context, registers: registers.registers, currency: reportCurrency)
@@ -392,8 +394,10 @@ struct OrdersScreen: View {
 
   /// Day report and Shift history head the list for a store with registers, while no filter or search is on.
   private var showsReports: Bool { !registers.registers.isEmpty && model.filter == .all && model.search.isEmpty }
-  private var reportIDs: [String] { showsReports ? [ordersDayReportRowID, ordersShiftHistoryRowID] : [] }
-  private func isReport(_ id: String) -> Bool { id == ordersDayReportRowID || id == ordersShiftHistoryRowID }
+  private var reportIDs: [String] { showsReports ? [ordersDayReportRowID, ordersCheckInsRowID, ordersShiftHistoryRowID] : [] }
+  private func isReport(_ id: String) -> Bool {
+    id == ordersDayReportRowID || id == ordersCheckInsRowID || id == ordersShiftHistoryRowID
+  }
   /// The reports' money: the day report reads its own currency; the shifts are the store's.
   private var reportCurrency: String { registers.currency }
 
@@ -413,6 +417,17 @@ struct OrdersScreen: View {
       }
       .modifier(OrderRowLook(flush: flush && !selectable))
       .accessibilityIdentifier("orders-day-report")
+      let checkIns = OrdersReportRow(
+        title: "Today's check-ins", detail: "Passes and stays due at the window", systemImage: "person.badge.clock")
+      Group {
+        if selectable {
+          checkIns.aglynSelectableRow(ordersCheckInsRowID, selection: $selection)
+        } else {
+          AglynPushLink(disclosure: !flush) { CheckInsView(context: context) } label: { checkIns }
+        }
+      }
+      .modifier(OrderRowLook(flush: flush && !selectable))
+      .accessibilityIdentifier("orders-check-ins")
       Group {
         if selectable {
           shifts.aglynSelectableRow(ordersShiftHistoryRowID, selection: $selection)

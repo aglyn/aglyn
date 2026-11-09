@@ -60,9 +60,9 @@ import {
   composeContactName,
   crmLeadListFields,
   crmReadTokens,
-  crmScopeTokens,
+  crmScopeFields,
 } from '@aglyn/aglyn/server'
-import type { ConsentGroup, ScopeToken } from '@aglyn/aglyn/server'
+import type { ConsentGroup, CrmScopeFields, ScopeToken } from '@aglyn/aglyn/server'
 // The module path rather than the barrel, as `upsert-contact.ts` does: a spec
 // that substitutes the barrel keeps the real rule for which group a grant is.
 import { consentGroupForGrant } from '@aglyn/aglyn/app-utils/consent-groups'
@@ -167,13 +167,26 @@ export async function leadScopeForHost(
   hostId: string,
   org?: Record<string, unknown> | null,
 ): Promise<ScopeToken[]> {
+  return (await leadScopeFieldsForHost(hostId, org)).visibleTo
+}
+
+/**
+ * {@link leadScopeForHost} with the marker a NEW lead carries under the CRM
+ * default "All sites except…" (AGL-4047), which lets a site added later join
+ * it (`crmScopeFields`). An existing lead never takes it from a capture:
+ * widening a record that exists is the "Apply to existing records" run's.
+ */
+export async function leadScopeFieldsForHost(
+  hostId: string,
+  org?: Record<string, unknown> | null,
+): Promise<CrmScopeFields> {
   // The org document decides: a capture with none in hand reads it, rather
   // than stamping the site alone for an org whose records belong to every
   // site. An org that cannot be read stamps the site — never everyone.
   const resolved =
     org ?? ((await getOrgForHost(hostId).catch(() => null))?.org as Record<string, unknown> | undefined) ?? null
   const group = await consentGroupForSite(hostId, resolved)
-  return crmScopeTokens(resolved, group)
+  return crmScopeFields(resolved, group)
 }
 
 /**
@@ -512,7 +525,7 @@ export async function addHostLeadOutcome(options: {
      * change between attempts, so resolving them inside would pay for the org
      * read again on every retry.
      */
-    const scope = await leadScopeForHost(hostId)
+    const { visibleTo: scope, ...marker } = await leadScopeFieldsForHost(hostId)
     const group = await consentGroupForSite(hostId)
     const now = Date.now()
     const seen = {
@@ -708,6 +721,9 @@ export async function addHostLeadOutcome(options: {
             : {
                 firstSeenAtMs: now,
                 createdAt: FieldValue.serverTimestamp(),
+                // Under "All sites except…", the marker a site added later
+                // joins by: a new lead's sites are the default's (AGL-4047).
+                ...marker,
               }),
           /*
            * The basis is recorded under the GROUP, keyed by its host, because

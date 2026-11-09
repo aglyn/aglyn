@@ -38,8 +38,29 @@ for the how-to.
   **Countertop reader (WisePOS E)**. Your order records keep the exact model.
 - **Share a dataset with all sites except some.** [Datasets](content-and-data/datasets/overview.md#who-a-dataset-is-shared-with)
   — tick the sites to leave out, and every other site shares it, including any site you add later.
+- **Share media with all sites except some.** [Media](content-and-data/media/overview.md#who-an-asset-is-shared-with)
+  — the same choice for a file, a selection of files, or a folder and what is inside it.
+- **CRM default sharing: all sites except some.** [Default sharing for new records](content-and-data/crm/sharing.md#default-sharing-for-new-records)
+  — new CRM records go to every site but the ones you leave out, including sites you add later, and
+  **Apply to existing records** shares the ones you already have the same way when you choose to.
+- **Share CRM records with all sites except some.** [Share records across sites](content-and-data/crm/sharing.md#all-sites-except-some)
+  — share a record by hand or by a sharing rule with every site but the ones you leave out, including any site you add later.
 - **Run an org automation on all sites except some.** [Org automations](marketing-and-automation/workflows-and-actions/org-automations.md#create-one)
   — tick the sites to leave out, and it runs on every other site, including any site you add later.
+- **Share an email campaign with all sites except some.** [Campaigns](marketing-and-automation/email-campaigns/overview.md#campaigns-belong-to-the-organization)
+  — the same choice on a campaign, from your organization's **Marketing** page, including any
+  site you add later.
+- **Run a built-in plugin on all sites except some.** [Where a plugin runs](guides/install-your-first-plugin.md#where-a-plugin-runs)
+  — on a plugin's page, tick the sites to leave out, and every other site runs it, including any site you add later.
+- **Install from the Marketplace to all sites except some.** [Choose which sites get it](guides/install-your-first-plugin.md#step-4-targeting)
+  — a plugin installs for every other site, including any site you add later, and a site
+  you left out can turn it back on for itself. A component, template or other per-site
+  item goes onto the sites you have now, minus the ones you leave out.
+- **A site's own switch stops a Marketplace plugin there.** [Plugins on one site](guides/install-your-first-plugin.md#site-plugins)
+  — switching a Marketplace plugin off on a site's **Admin → Plugins** page now takes it
+  off that site's published pages and its editor too. A Marketplace plugin's **Where it
+  runs** card, and its listing, mark such a site **Switched off on this site** instead of
+  listing it as running the plugin; see [Where a plugin runs](guides/install-your-first-plugin.md#where-a-plugin-runs).
 - **Four plans: Free, Starter, Pro and Custom.** [Billing & plans](workspace-and-billing/billing-and-plans/overview.md#tiers--entitlements)
   — Pro is now the full platform: everything that was on Business, including the API
   and webhooks, A/B testing, multilingual sites, scheduled publishing, recurring billing,

@@ -47,6 +47,9 @@ const GATES: Array<{ surface: string; key: string; route: string }> = [
   { surface: 'components/media/org-default-sharing-card.component.tsx', key: 'org.settings', route: 'app/api/orgs/settings/route.ts' },
   { surface: 'hooks/use-plugin-switchboard.ts', key: 'org.settings', route: 'app/api/orgs/settings/route.ts' },
   { surface: 'app/(app)/[orgSlug]/plugins/page.tsx', key: 'org.settings', route: 'app/api/orgs/settings/route.ts' },
+  // Where a built-in plugin runs (AGL-4047); the route also asks "Manage site
+  // settings" on each site it changes, which its own spec pins.
+  { surface: 'app/(app)/[orgSlug]/plugins/[pluginRef]/page.tsx', key: 'org.settings', route: 'app/api/orgs/plugin-sites/route.ts' },
   { surface: 'app/(app)/[orgSlug]/settings/(sections)/layout.tsx', key: 'org.settings', route: 'app/api/orgs/settings/route.ts' },
   // The three sections that stayed on the owner or admin role until their
   // routes moved to keys of their own.

@@ -3,6 +3,7 @@ package com.aglyn.contracts
 import kotlin.test.Test
 import kotlin.test.assertEquals
 import kotlin.test.assertFalse
+import kotlin.test.assertNull
 import kotlin.test.assertTrue
 
 /** The console's commerce-quote-email spec cases, and the send section's words, as the apps read them. */
@@ -80,5 +81,13 @@ class QuoteSendRulesTest {
     assertFalse(quotePaymentBlockedByApproval(quote(proofs = listOf(proof(1)), approval = true, approved = 1)))
     assertEquals(1, quoteLinkVersion(quote()))
     assertEquals(3, quoteLinkVersion(quote(linkVersion = 3)))
+  }
+
+  @Test
+  fun aReplyGoesToTheCustomerElseTheLastSendAndNeedsAnAddress() {
+    assertNull(quoteReplyRefusal(order(quote())))
+    assertEquals("buyer@example.org", quoteReplyRecipient(order(quote(email = "", sends = listOf(record(1, 1, to = "buyer@example.org"))))))
+    assertEquals("This quote has no customer email, so there is nobody to reply to. Add their email to the quote first.", quoteReplyRefusal(order(quote(email = ""))))
+    assertEquals("The customer email on this quote isn’t a valid address. Fix it on the quote first.", quoteReplyRefusal(order(quote(email = "not an address"))))
   }
 }

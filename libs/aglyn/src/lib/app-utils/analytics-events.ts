@@ -69,11 +69,12 @@
  * Every payload passes through {@link sanitizeEventParams} before it reaches a
  * transport: an exact-key denylist drops the identity-bearing params someone
  * will eventually add by reflex (`email`, `org_name`, `first_name`, ...), any
- * value that looks like an email address drops its key entirely, URLs are
- * reduced to origin + pathname so query strings can never smuggle a token or
- * an address, and strings are length-capped. The console separately sets a
- * `user_id` — that is an opaque Firebase uid and is the one identifier GA is
- * allowed to hold.
+ * value that looks like an email address drops its key entirely, a URL keeps
+ * its query minus the parameters that carry personal data or a credential
+ * ({@link ANALYTICS_DENIED_URL_PARAMS}, plus any value shaped like an address,
+ * a phone number or a token), and strings are length-capped. The console
+ * separately sets a `user_id` — that is an opaque Firebase uid and is the one
+ * identifier GA is allowed to hold.
  *
  * Sanitizing here rather than at each call site is the point: a new call site
  * cannot forget.
@@ -652,26 +653,255 @@ const EMAIL_SHAPED = /[^\s@]+@[^\s@]+\.[^\s@]+/
  */
 export const ANALYTICS_PARAM_MAX_LENGTH = 100
 
-function scrubValue(value: string): string | null {
-  let candidate = value
-  if (/^https?:\/\//i.test(candidate)) {
+/**
+ * The params GA4 lets run past {@link ANALYTICS_PARAM_MAX_LENGTH}, at GA4's
+ * own documented limits ("Analytics collection limits", Google Analytics
+ * Help 9267744): `page_location` 1,000 characters, `page_referrer` 420,
+ * `page_title` 300.
+ *
+ * A page URL is the value most likely to be long for a good reason: a
+ * landing URL with its `utm_*` tags and a `gclid` routinely runs past 100,
+ * and cutting it there dropped exactly the attribution the query is kept
+ * for. A URL's length is measured as it is sent, already URL-encoded, which
+ * is how GA4 measures it.
+ */
+export const ANALYTICS_PARAM_MAX_LENGTH_BY_KEY: Readonly<Record<string, number>> = {
+  page_location: 1000,
+  page_referrer: 420,
+  page_title: 300,
+}
+
+/** The longest value `key` may carry: its GA4 limit, or the general 100. */
+function maxLengthFor(key: string): number {
+  return Object.prototype.hasOwnProperty.call(ANALYTICS_PARAM_MAX_LENGTH_BY_KEY, key)
+    ? ANALYTICS_PARAM_MAX_LENGTH_BY_KEY[key]
+    : ANALYTICS_PARAM_MAX_LENGTH
+}
+
+/**
+ * Query parameters a URL value loses on its way into an event, matched
+ * case-insensitively. Everything else in the query is kept, in the order the
+ * URL spelled it: `utm_*`, `gclid`, `ref`, `plan`, `tab`, filters.
+ *
+ * ## Why a denylist
+ *
+ * URLs used to be reduced to origin + pathname, because a few console links
+ * put personal data or a credential in the query. That also threw away the
+ * campaign tags on the session-starting `page_view`: a visitor who scanned a
+ * QR code for `/signup?utm_source=event&utm_medium=qr&utm_campaign=trailer-left`
+ * reached GA4 as a bare `/signup`, with no campaign. The fix is to remove
+ * the parameters that were the reason for stripping, and only those. Each
+ * entry below names where that parameter comes from.
+ *
+ * {@link isSensitiveQueryValue} is the backstop for a parameter nobody
+ * listed: a value shaped like an address, a phone number or a token is
+ * dropped whatever its name.
+ */
+export const ANALYTICS_DENIED_URL_PARAMS: ReadonlySet<string> = new Set([
+  // Every identity key an event param may not carry is refused as a query
+  // parameter too: `email`, `name`, `phone`, `address`, `org_name`, ….
+  // `/sso?email=` is set by `apps/console/app/auth/native/page.tsx`, and a
+  // tenant's `/api/email/confirm?email=` link by `email-unsubscribe-link.ts`.
+  ...DENIED_PARAM_KEYS,
+  // The address the native app hands `/auth/native` to forward to `/sso`.
+  'login_hint',
+  // Stripe Checkout's prefilled address.
+  'customer_email',
+  // Firebase email action links: `/verify-email` and `/reset-password` arrive
+  // with `?mode=…&oobCode=…&apiKey=…&continueUrl=…`. The code is a one-time
+  // credential; `continueUrl` is a whole URL that can carry its own query.
+  'oobcode',
+  'apikey',
+  'continueurl',
+  // The cross-domain sign-in hand-off, `/auth/handoff/continue?handoff={rid}`
+  // (`apps/console/app/auth/handoff/start/route.ts`).
+  'handoff',
+  // The sealed first-touch record a link to another of our hosts carries
+  // (`FIRST_TOUCH_HANDOFF_PARAM` in `@aglyn/shared-util-first-touch`, spelled
+  // out here because importing that module ships its whole runtime on every
+  // published page; `analytics-events.spec.ts` holds the two equal).
+  '_ft',
+  // Native app sign-in: `/auth/native?challenge=…&state=…`, and the `code`
+  // `api/auth/native-handoff/authorize` returns.
+  'challenge',
+  'code_challenge',
+  'state',
+  'code',
+  'nonce',
+  // Bearer credentials in a URL: the names the personal-data export strips
+  // from a URL (`personal-data-export.ts`), plus the sign-in tokens.
+  'token',
+  'access_token',
+  'id_token',
+  'idtoken',
+  'refresh_token',
+  'customtoken',
+  'auth',
+  'authorization',
+  'api_key',
+  'key',
+  'sig',
+  'signature',
+  'secret',
+  'password',
+  'downloadtoken',
+  'session',
+  // Stripe Checkout's return, `?session_id={CHECKOUT_SESSION_ID}`.
+  'session_id',
+  // Invite ids. Console invites need no link today (they are accepted on
+  // sign-in), so these are listed for the day one carries the id in a URL.
+  'invite',
+  'inviteid',
+  'invite_id',
+])
+
+/**
+ * Campaign tags, which the phone and token shapes below never apply to. A
+ * click id IS an opaque token — that is what it is for — and a Google Ads
+ * campaign id is a bare run of digits; the backstop would drop exactly the
+ * attribution this URL is kept for. The address test still applies to them.
+ *
+ * The first three are the first-touch capture's `FIRST_TOUCH_CLICK_IDS`,
+ * spelled out rather than imported for the same bundle reason as `_ft` above;
+ * `analytics-events.spec.ts` fails if that list gains an id this one lacks.
+ */
+export const ANALYTICS_AD_CLICK_ID_PARAMS: ReadonlySet<string> = new Set([
+  'gclid',
+  'fbclid',
+  'msclkid',
+  'gbraid',
+  'wbraid',
+  'gad_source',
+  'gad_campaignid',
+])
+
+const PHONE_SHAPED = /^\+?[\d\s().-]+$/
+const JWT_SHAPED = /^[\w-]{8,}\.[\w-]{8,}\.[\w-]+$/
+const OPAQUE_RUN = /[A-Za-z0-9_-]{32,}/g
+
+function looksLikePhone(value: string): boolean {
+  const trimmed = value.trim()
+  if (!PHONE_SHAPED.test(trimmed)) return false
+  const digits = trimmed.replace(/\D/g, '').length
+  return digits >= 10 && digits <= 15
+}
+
+/**
+ * A JWT, or a run of 32+ URL-safe characters that mixes cases and digits or
+ * is all hex. A slug is lowercase words, so a long one is not caught.
+ */
+function looksLikeToken(value: string): boolean {
+  if (JWT_SHAPED.test(value)) return true
+  for (const run of value.match(OPAQUE_RUN) ?? []) {
+    if (/^[0-9a-f]+$/.test(run)) return true
+    if (/[a-z]/.test(run) && /[A-Z]/.test(run) && /\d/.test(run)) return true
+  }
+  return false
+}
+
+/** Whether a decoded query value may not reach GA, whatever its name. */
+function isSensitiveQueryValue(key: string, value: string): boolean {
+  if (EMAIL_SHAPED.test(value)) return true
+  if (key.startsWith('utm_') || ANALYTICS_AD_CLICK_ID_PARAMS.has(key)) return false
+  return looksLikePhone(value) || looksLikeToken(value)
+}
+
+function decodeQueryPart(part: string): string {
+  return decodeURIComponent(part.replace(/\+/g, ' '))
+}
+
+/**
+ * The query parameters of `search` that may reach GA, each as the URL spelled
+ * it. A value that is itself a URL or a same-site path (`continue=/x?…`) has
+ * its own query filtered by the same rules, so a credential cannot ride in
+ * one level down.
+ */
+function keptQueryParts(search: string, depth: number): string[] {
+  const kept: string[] = []
+  for (const part of search.replace(/^\?/, '').split('&')) {
+    if (!part) continue
+    const cut = part.indexOf('=')
+    const rawKey = cut < 0 ? part : part.slice(0, cut)
+    const rawValue = cut < 0 ? '' : part.slice(cut + 1)
+    let key: string
+    let value: string
     try {
-      const url = new URL(candidate)
-      // Origin + pathname only: a query string is where a session token, a
-      // signup email or a Stripe id ends up, and none of them belong in GA.
-      candidate = `${url.origin}${url.pathname}`
+      key = decodeQueryPart(rawKey).toLowerCase()
+      value = decodeQueryPart(rawValue)
+    } catch {
+      continue
+    }
+    if (ANALYTICS_DENIED_URL_PARAMS.has(key)) continue
+    const nested = depth < 3 ? reduceNestedUrl(value, depth + 1) : value
+    if (nested === null) continue
+    if (isSensitiveQueryValue(key, nested)) continue
+    kept.push(nested === value ? part : `${rawKey}=${encodeURIComponent(nested)}`)
+  }
+  return kept
+}
+
+/** A URL or same-site path value with its query filtered; other values as given. */
+function reduceNestedUrl(value: string, depth: number): string | null {
+  const isPath = value.startsWith('/') && !value.startsWith('//')
+  if (!isPath && !/^https?:\/\//i.test(value)) return value
+  let url: URL
+  try {
+    url = new URL(value, 'https://placeholder.invalid')
+  } catch {
+    return null
+  }
+  const query = keptQueryParts(url.search, depth).join('&')
+  const base = isPath ? url.pathname : `${url.origin}${url.pathname}`
+  return query ? `${base}?${query}` : base
+}
+
+/**
+ * Reduce an `http(s)` URL for GA: origin + pathname, plus every query
+ * parameter that is not denied (see {@link ANALYTICS_DENIED_URL_PARAMS}), in
+ * the URL's own order and spelling. The fragment is dropped. Null when the
+ * path itself carries an address.
+ *
+ * The result fits `maxLength`. A parameter that would run past it is left
+ * out whole, never cut in half, so a truncated value never reaches a report
+ * as if it were a real one; later, shorter parameters can still fit. A path
+ * already over the limit is cut to it, as before.
+ */
+function reduceUrlForAnalytics(
+  url: URL,
+  maxLength = ANALYTICS_PARAM_MAX_LENGTH,
+): string | null {
+  const base = `${url.origin}${url.pathname}`
+  // AFTER the query is set aside, not before. A page URL routinely carries an
+  // address in its query (`?email=…` on a prefilled signup link), and testing
+  // the raw string would throw the whole URL away for PII that the query
+  // filter is about to remove — losing the legitimate page dimension to
+  // protect something already protected. Testing the path still catches an
+  // address embedded in it.
+  if (EMAIL_SHAPED.test(base)) return null
+  if (base.length >= maxLength) return base.slice(0, maxLength)
+  let reduced = base
+  for (const part of keptQueryParts(url.search, 0)) {
+    const next = `${reduced}${reduced === base ? '?' : '&'}${part}`
+    if (next.length <= maxLength) reduced = next
+  }
+  return reduced
+}
+
+function scrubValue(value: string, maxLength: number): string | null {
+  if (/^https?:\/\//i.test(value)) {
+    try {
+      // The query keeps everything but the parameters that carry personal
+      // data or a credential, so a session-starting `page_view` still names
+      // its campaign. Every kept value was tested for an address already, so
+      // the whole-string test below is not run on the result: a harmless
+      // `@team` beside a `.` elsewhere in the query would read as one.
+      return reduceUrlForAnalytics(new URL(value), maxLength)
     } catch {
       return null
     }
   }
-  // AFTER the URL reduction, not before. A page URL routinely carries an
-  // address in its query (`?email=…` on a prefilled signup link), and testing
-  // the raw string would throw the whole URL away for PII that the reduction
-  // was about to remove — losing the legitimate page dimension to protect
-  // something already protected. Testing the REDUCED value still catches an
-  // address embedded in the path itself, which the reduction keeps.
-  if (EMAIL_SHAPED.test(candidate)) return null
-  return candidate.slice(0, ANALYTICS_PARAM_MAX_LENGTH)
+  if (EMAIL_SHAPED.test(value)) return null
+  return value.slice(0, maxLength)
 }
 
 /**
@@ -688,7 +918,7 @@ export function sanitizeEventParams(
     if (DENIED_PARAM_KEYS.has(key.toLowerCase())) continue
     if (value === undefined || value === null) continue
     if (typeof value === 'string') {
-      const scrubbed = scrubValue(value)
+      const scrubbed = scrubValue(value, maxLengthFor(key))
       if (scrubbed === null || scrubbed === '') continue
       safe[key] = scrubbed
       continue

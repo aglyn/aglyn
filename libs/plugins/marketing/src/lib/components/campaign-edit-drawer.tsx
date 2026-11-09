@@ -19,6 +19,8 @@
 import { ICON_VARIANT_CLOSE } from '@aglyn/shared-data-enums'
 import { Container, MdiIcon, SrOnly } from '@aglyn/shared-ui-jsx'
 import { NavigationDrawerComponent } from '@aglyn/shared-ui-jsx/components/navigation-drawer.component'
+import { SiteSharingField } from '@aglyn/shared-ui-jsx/components/site-sharing-field.component'
+import type { ScopeSharingChoice } from '@aglyn/aglyn/app-utils/scope-tokens'
 import {
   Alert,
   Button,
@@ -31,10 +33,12 @@ import {
   TextField,
   Typography,
 } from '@mui/material'
-import { useEffect, useState } from 'react'
+import { useEffect, useMemo, useState } from 'react'
 import {
   campaignListUnsubscribe,
-  campaignSiteIds,
+  campaignSharingChoice,
+  campaignSharingKey,
+  campaignSharingWrite,
   campaignUtmLabels,
 } from '../model/campaign-container'
 
@@ -59,11 +63,13 @@ export interface CampaignEditValues {
    */
   utmCampaigns: string[]
   /**
-   * The sites it is placed on — `null` for every site. Present only when the
-   * drawer was handed `sites`, which only the org hub does (a site hub never
-   * moves a campaign's placement), and only when the field was changed.
+   * Who it is shared with: all sites, the sites chosen, or all sites except
+   * some (AGL-4047). Present only when the drawer was handed `sites`, which
+   * only the org hub does (a site hub never moves a campaign's placement), and
+   * only when the choice was changed. The manage route writes it, never the
+   * client: a marker is the server's alone.
    */
-  siteIds?: string[] | null
+  sharing?: ScopeSharingChoice
 }
 
 export interface CampaignEditDrawerProps {
@@ -77,6 +83,8 @@ export interface CampaignEditDrawerProps {
     listIds?: string[]
     topicId?: string
     visibleTo?: string[]
+    scopeMode?: string | null
+    scopeExcept?: string[] | null
     listUnsubscribe?: boolean
     utmCampaigns?: string[]
   } | null
@@ -90,6 +98,8 @@ export interface CampaignEditDrawerProps {
    * the rules refuse it from anyone narrower.
    */
   sites?: CampaignEditOption[]
+  /** False while `sites` is still being read. */
+  sitesReady?: boolean
   busy?: boolean
   /** A refusal from the write, shown where the form still is. */
   error?: string | null
@@ -140,8 +150,18 @@ function dayInputMs(value: string): number | null {
  * ones already sent.
  */
 export function CampaignEditDrawer(props: CampaignEditDrawerProps) {
-  const { open, onClose, campaign, lists, topics, sites, busy, error, onSubmit } =
-    props
+  const {
+    open,
+    onClose,
+    campaign,
+    lists,
+    topics,
+    sites,
+    sitesReady = true,
+    busy,
+    error,
+    onSubmit,
+  } = props
 
   const [name, setName] = useState('')
   const [startAt, setStartAt] = useState('')
@@ -151,15 +171,36 @@ export function CampaignEditDrawer(props: CampaignEditDrawerProps) {
   const [listUnsubscribe, setListUnsubscribe] = useState(true)
   /** The utm_campaign labels, as the field holds them: one per line or comma. */
   const [utmLabels, setUtmLabels] = useState('')
-  /** The chosen sites; empty is every site, as the create drawer reads it. */
-  const [siteIds, setSiteIds] = useState<string[]>([])
   /*
-   * Whether the placement was CHANGED here. An untouched field submits
-   * nothing, so saving a name cannot rewrite where a campaign is offered —
-   * least of all turn a campaign placed on no site (an absent `visibleTo`,
-   * which the field has no way to draw) into one on every site.
+   * Who it is shared with, as edited here: null while it stores none (an
+   * absent `visibleTo`, which no reader matches), so no choice shows as picked
+   * until someone picks one. Only a CHANGED choice is submitted, so saving a
+   * name cannot rewrite where a campaign is offered.
    */
-  const [sitesTouched, setSitesTouched] = useState(false)
+  const [sharing, setSharing] = useState<ScopeSharingChoice | null>(null)
+  const sharingSites = useMemo(
+    () => (sites ?? []).map((site) => ({ id: site.value, name: site.label })),
+    [sites],
+  )
+  const sharingChanged =
+    Boolean(sites) &&
+    sharing !== null &&
+    campaignSharingKey(sharing) !== campaignSharingKey(campaignSharingChoice(campaign))
+  /*
+   * Why the choice cannot be saved, the same answer the manage route gives
+   * from the sites it reads itself. The sites a choice leaves out stay known
+   * here even where this list cannot name them, so they aren't taken for sites
+   * that are gone. Nothing to say about leaving sites out until they are read.
+   */
+  const sharingProblem = useMemo(() => {
+    if (!sharingChanged || !sharing) return null
+    if (sharing.mode === 'allExcept' && !sitesReady) return null
+    const leftOut = sharing.mode === 'allExcept' ? sharing.exceptHostIds : []
+    return campaignSharingWrite(sharing, [
+      ...sharingSites.map((site) => site.id),
+      ...leftOut,
+    ]).problem
+  }, [sharing, sharingChanged, sharingSites, sitesReady])
 
   /*
    * Re-seeded whenever the drawer opens rather than held from the last time.
@@ -175,8 +216,7 @@ export function CampaignEditDrawer(props: CampaignEditDrawerProps) {
     setTopicId(String(campaign?.topicId ?? ''))
     setListUnsubscribe(campaignListUnsubscribe(campaign))
     setUtmLabels(campaignUtmLabels(campaign?.utmCampaigns).join(', '))
-    setSiteIds(campaignSiteIds(campaign) ?? [])
-    setSitesTouched(false)
+    setSharing(campaignSharingChoice(campaign))
   }, [open, campaign])
 
   const startAtMs = dayInputMs(startAt)
@@ -188,7 +228,12 @@ export function CampaignEditDrawer(props: CampaignEditDrawerProps) {
    * "Ended" from the day it was made.
    */
   const backwards = startAtMs !== null && endAtMs !== null && endAtMs < startAtMs
-  const submittable = name.trim().length > 0 && !backwards && !busy
+  const submittable =
+    name.trim().length > 0 &&
+    !backwards &&
+    !busy &&
+    !sharingProblem &&
+    !(sharingChanged && sharing?.mode === 'allExcept' && !sitesReady)
 
   return (
     <NavigationDrawerComponent
@@ -360,54 +405,19 @@ export function CampaignEditDrawer(props: CampaignEditDrawerProps) {
             </Alert>
           ) : null}
           {sites ? (
-            <TextField
-              select
-              label="Sites"
-              value={siteIds}
-              onChange={(event) => {
-                setSitesTouched(true)
-                setSiteIds(
-                  (event.target.value as unknown as string[]).map(String),
-                )
-              }}
-              helperText="The sites this campaign is offered on. Leave empty for every site."
-              slotProps={{
-                select: {
-                  multiple: true,
-                  displayEmpty: true,
-                  renderValue: (selected: unknown) =>
-                    (selected as string[]).length ? (
-                      <Stack
-                        useFlexGap
-                        direction="row"
-                        spacing={0.5}
-                        sx={{ flexWrap: 'wrap' }}
-                      >
-                        {(selected as string[]).map((id) => (
-                          <Chip
-                            key={id}
-                            size="small"
-                            label={
-                              sites.find((site) => site.value === id)?.label ??
-                              id
-                            }
-                          />
-                        ))}
-                      </Stack>
-                    ) : (
-                      'Every site'
-                    ),
-                },
-                inputLabel: { shrink: true },
-              }}
-              fullWidth
-            >
-              {sites.map((site) => (
-                <MenuItem key={site.value} value={site.value}>
-                  {site.label}
-                </MenuItem>
-              ))}
-            </TextField>
+            <Stack spacing={0.5}>
+              <SiteSharingField
+                label="Shared with"
+                value={sharing}
+                onChange={setSharing}
+                sites={sharingSites}
+                sitesReady={sitesReady}
+                problem={sharingProblem}
+              />
+              <Typography variant="caption" color="text.secondary">
+                {'The sites this campaign is offered on.'}
+              </Typography>
+            </Stack>
           ) : null}
           {backwards ? (
             <Alert severity="warning">
@@ -427,9 +437,7 @@ export function CampaignEditDrawer(props: CampaignEditDrawerProps) {
                 topicId,
                 listUnsubscribe,
                 utmCampaigns: campaignUtmLabels(utmLabels),
-                ...(sites && sitesTouched
-                  ? { siteIds: siteIds.length ? siteIds : null }
-                  : {}),
+                ...(sharingChanged && sharing ? { sharing } : {}),
               })
             }
           >

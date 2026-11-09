@@ -29,14 +29,16 @@ import {
   crmPicklistOptions,
   groupPicklistOptions,
 } from '@aglyn/aglyn'
-import { hostIdsFromScope, ORG_SCOPE_TOKEN } from '@aglyn/aglyn/app-utils/scope-tokens'
+import { hostIdsFromScope, ORG_SCOPE_TOKEN, sharingFromChoice } from '@aglyn/aglyn/app-utils/scope-tokens'
+import {
+  SiteSharingField,
+  type SiteSharingValue,
+} from '@aglyn/shared-ui-jsx/components/site-sharing-field.component'
 import {
   Button,
-  Checkbox,
   Drawer,
   FormControl,
   FormControlLabel,
-  FormGroup,
   FormHelperText,
   FormLabel,
   ListSubheader,
@@ -52,6 +54,7 @@ import { type ReactNode, useEffect, useMemo, useState } from 'react'
 import type { OrgMemberOption } from '../hooks/use-org-member-directory'
 import {
   CRM_SHARING_CRITERIA_FOR,
+  CRM_SHARING_MAX_INCLUDED,
   CRM_SHARING_OBJECT_LABELS,
   CRM_SHARING_OBJECTS,
   type CrmShareAccess,
@@ -74,8 +77,17 @@ export interface SharingRuleDraft {
   enabled: boolean
   sourceHostIds: string[]
   criteria: CrmSharingCriteria
-  targets: 'all' | string[]
+  /** All sites, the sites, or all sites except the ones left out (AGL-4047). */
+  targets: 'all' | string[] | { mode: 'allExcept'; exceptHostIds: string[] }
   access: CrmShareAccess
+}
+
+/** Who a stored rule shares with, as the sharing field edits it. */
+export function ruleSharingChoice(rule: CrmSharingRule | null): SiteSharingValue {
+  if (!rule) return { mode: 'all' }
+  if (rule.except?.length) return { mode: 'allExcept', exceptHostIds: hostIdsFromScope(rule.except) }
+  if (rule.targets.includes(ORG_SCOPE_TOKEN)) return { mode: 'all' }
+  return { mode: 'selected', hostIds: hostIdsFromScope(rule.targets) }
 }
 
 export interface SharingRuleDrawerProps {
@@ -84,6 +96,8 @@ export interface SharingRuleDrawerProps {
   /** The rule being edited, or `null` for a new one. */
   rule: CrmSharingRule | null
   sites: readonly CrmSharingSite[]
+  /** False while `sites` is still being read. */
+  sitesReady?: boolean
   members: readonly OrgMemberOption[]
   campaigns: readonly { value: string; label: string }[]
   /** The org's Lead source list, which the Lead source criterion picks from. */
@@ -99,12 +113,14 @@ const splitList = (text: string) =>
 
 /**
  * A sharing rule, three parts (AGL-3336): WHICH RECORDS (an object, the
- * sites that captured them, optional criteria), SHARED WITH (sites, or all
- * sites), and ACCESS (read-only unless edit is chosen).
+ * sites that captured them, optional criteria), SHARED WITH (all sites, the
+ * sites, or all sites except some, AGL-4047), and ACCESS (read-only unless
+ * edit is chosen).
  */
 export function SharingRuleDrawer(props: SharingRuleDrawerProps) {
   const { open, onClose, rule, sites, members, campaigns, busy, onSubmit } = props
   const leadSourceList = props.leadSourceList ?? STANDARD_LEAD_SOURCES
+  const sitesReady = props.sitesReady ?? sites.length > 0
   const [name, setName] = useState('')
   const [object, setObject] = useState<CrmSharingObject>('leads')
   const [enabled, setEnabled] = useState(true)
@@ -115,8 +131,7 @@ export function SharingRuleDrawer(props: SharingRuleDrawerProps) {
   const [stages, setStages] = useState<string[]>([])
   const [ownerUids, setOwnerUids] = useState<string[]>([])
   const [campaignIds, setCampaignIds] = useState<string[]>([])
-  const [allSites, setAllSites] = useState(true)
-  const [targets, setTargets] = useState<string[]>([])
+  const [sharing, setSharing] = useState<SiteSharingValue>({ mode: 'all' })
   const [access, setAccess] = useState<CrmShareAccess>('read')
 
   useEffect(() => {
@@ -131,8 +146,7 @@ export function SharingRuleDrawer(props: SharingRuleDrawerProps) {
     setStages(rule?.criteria.stages ?? [])
     setOwnerUids(rule?.criteria.ownerUids ?? [])
     setCampaignIds(rule?.criteria.campaignIds ?? [])
-    setAllSites(rule ? rule.targets.includes(ORG_SCOPE_TOKEN) : true)
-    setTargets(rule ? hostIdsFromScope(rule.targets) : [])
+    setSharing(ruleSharingChoice(rule))
     setAccess(rule?.access ?? 'read')
   }, [open, rule])
 
@@ -150,8 +164,18 @@ export function SharingRuleDrawer(props: SharingRuleDrawerProps) {
             label: CONTACT_LIFECYCLE_STAGE_LABELS[value],
           }))
         : []
-  const canSubmit =
-    !busy && name.trim().length > 0 && (allSites || targets.length > 0)
+  // What the route will answer about where it shares, from the same helper.
+  const sharingProblem =
+    sharing.mode === 'selected' && !sharing.hostIds.length
+      ? 'Choose a site to share with.'
+      : sharing.mode === 'allExcept' && !sitesReady
+        ? null
+        : sharingFromChoice(
+            sharing,
+            sites.map((site) => site.id),
+            { maxIncluded: CRM_SHARING_MAX_INCLUDED },
+          ).problem
+  const canSubmit = !busy && name.trim().length > 0 && !sharingProblem
   /*
    * The org's lead source values under their groups (AGL-3511), and every
    * value the rule already names that the list no longer offers, so an
@@ -199,7 +223,12 @@ export function SharingRuleDrawer(props: SharingRuleDrawerProps) {
       enabled,
       sourceHostIds,
       criteria,
-      targets: allSites ? 'all' : targets,
+      targets:
+        sharing.mode === 'all'
+          ? 'all'
+          : sharing.mode === 'selected'
+            ? [...sharing.hostIds]
+            : { mode: 'allExcept', exceptHostIds: [...sharing.exceptHostIds] },
       access,
     })
   }
@@ -437,36 +466,15 @@ export function SharingRuleDrawer(props: SharingRuleDrawerProps) {
             </MenuItem>
           ))}
         </TextField>
-        <FormControl>
-          <FormLabel>{'Shared with'}</FormLabel>
-          <FormGroup>
-            <FormControlLabel
-              control={
-                <Checkbox checked={allSites} onChange={(event) => setAllSites(event.target.checked)} />
-              }
-              label="All sites, including sites added later"
-            />
-            {sites.map((site) => (
-              <FormControlLabel
-                key={site.id}
-                control={
-                  <Checkbox
-                    checked={allSites || targets.includes(site.id)}
-                    disabled={allSites}
-                    onChange={(event) =>
-                      setTargets((current) =>
-                        event.target.checked
-                          ? [...current, site.id]
-                          : current.filter((id) => id !== site.id),
-                      )
-                    }
-                  />
-                }
-                label={site.name}
-              />
-            ))}
-          </FormGroup>
-        </FormControl>
+        <SiteSharingField
+          label="Shared with"
+          value={sharing}
+          onChange={setSharing}
+          sites={sites}
+          sitesReady={sitesReady}
+          maxIncluded={CRM_SHARING_MAX_INCLUDED}
+          problem={sharingProblem}
+        />
         <FormControl>
           <FormLabel>{'Access'}</FormLabel>
           <RadioGroup

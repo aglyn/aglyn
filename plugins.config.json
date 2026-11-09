@@ -482,7 +482,7 @@
         "contributes": {
           "screens": ["commerce.orders", "commerce.order", "commerce.quotes", "commerce.quote", "commerce.products", "commerce.product", "commerce.productMedia", "commerce.scan", "commerce.sales", "commerce.register", "commerce.card-readers", "commerce.settings", "commerce.returns", "commerce.returnsByStatus", "commerce.return", "commerce.startReturn", "commerce.returnSettings", "commerce.stockMovements", "commerce.stockMovementsReason", "commerce.stockMovementsProduct", "commerce.stockMovementsOrder", "commerce.stockMovementsLocation", "commerce.stockMovementsProducts", "commerce.stockMovementsLocations", "commerce.categories", "commerce.collections", "commerce.collection", "commerce.collectionProducts", "commerce.collectionRules", "commerce.discounts", "commerce.coupons", "commerce.giftCards", "commerce.giftCardsSearch", "commerce.recovery", "commerce.fulfillmentQueue", "commerce.fulfillmentPickup", "commerce.fulfillmentDelivery", "commerce.reservations", "commerce.storeSettings", "commerce.notifications", "commerce.reviewSettings", "commerce.reviews", "commerce.suppliers", "commerce.locations", "commerce.tax", "commerce.payments", "commerce.paymentMethods", "commerce.shipstation", "commerce.shippingeasy", "commerce.orderWebhooks", "commerce.orderWebhookDeliveries", "commerce.memberPosts", "commerce.taxSummary", "commerce.shipping", "commerce.shippingTiers", "commerce.localDelivery", "commerce.manage", "commerce.promotions", "commerce.orderServices", "commerce.transfer", "commerce.ordersBulk", "commerce.productDetails", "commerce.productRelated", "commerce.display", "commerce.kiosk", "commerce.import.giftCards"],
           "tabs": ["commerce.orders-tab", "commerce.products-tab"],
-          "widgets": ["commerce.today", "commerce.sales-trend", "commerce.to-ship", "commerce.glance", "commerce.needs-you", "commerce.newest-site-users"],
+          "widgets": ["commerce.today", "commerce.sales-trend", "commerce.to-ship", "commerce.glance", "commerce.needs-you", "commerce.newest-site-users", "commerce.quote-from-request", "commerce.quote-from-contact"],
           "quickActions": ["commerce.orders-to-ship", "commerce.new-product", "commerce.scan"],
           "deepLinks": ["commerce.orders-page", "commerce.products-page"]
         }
@@ -3405,6 +3405,22 @@
     },
     {
       "id": "waivers",
+      "mobile": {
+        "$comment": "AGL-4042/AGL-4043: a rider's waiver at check-in, natively: the status the console's waivers-check-in-status widget shows in commerce's posCheckIn zone (signed, signed for some, needed, not matched), Find by name with a date of birth, Check again, and Sign waiver, which opens the store's own signing page. The Waivers page itself stays in the console.",
+        "ios": {
+          "module": "AglynWaiversPlugin",
+          "register": "registerWaiversNative"
+        },
+        "android": {
+          "package": "com.aglyn.plugins.waivers",
+          "register": "registerWaiversNative"
+        },
+        "contributes": {
+          "widgets": [
+            "waivers.check-in-status"
+          ]
+        }
+      },
       "package": "@aglyn/plugins-waivers",
       "register": {
         "site": "registerWaiversPlugin",

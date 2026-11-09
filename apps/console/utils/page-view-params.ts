@@ -36,9 +36,18 @@ import { stripUnreadBadge } from './notification-alerts'
  * this one call used `logEvent` directly and bypassed it. That matters more
  * here than anywhere else, because a console URL is the value most likely to
  * carry an address — prefilled invite and signup links put one in the query.
- * `sanitizeEventParams` reduces any `http(s)` value to origin + pathname, so
- * the query is gone before the hit is built and the upgrade from pathname to
- * full URL cannot leak more than the pathname already did.
+ * `sanitizeEventParams` removes the query parameters that carry personal data
+ * or a credential (`email`, `login_hint`, `oobCode`, `handoff`, `token`, …;
+ * the list is `ANALYTICS_DENIED_URL_PARAMS`, each entry citing the link that
+ * sets it) and any parameter whose value is shaped like an address, a phone
+ * number or a token, before the hit is built.
+ *
+ * Every other parameter is kept, in the URL's own order. This `page_view` is
+ * the hit that starts a console session and GA4 attributes the session by
+ * it, so its query is where the campaign is. When the whole query was
+ * stripped, a visitor who scanned a QR code for
+ * `/signup?utm_source=event&utm_medium=qr&utm_campaign=trailer-left` arrived
+ * as a bare `/signup`, with no campaign.
  *
  * ## Why `page_title` is sent EXPLICITLY (AGL-2060)
  *

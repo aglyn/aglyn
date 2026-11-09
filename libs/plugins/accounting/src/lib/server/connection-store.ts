@@ -43,10 +43,12 @@
  * moment they arrive.
  */
 
+import { PLATFORM_BRAND_NAME } from '@aglyn/aglyn/app-utils/platform-brand'
 import { needsReseal, openSecret, sealSecret, type SecretBoxKeyring } from '@aglyn/shared-util-tools/secret-box'
 import {
   ACCOUNTING_CONNECTIONS_COLLECTION,
   EMPTY_ACCOUNTING_MAPPING,
+  accountingProviderName,
   missingAccountRoles,
   type AccountingConnectionStatus,
   type AccountingConnectionView,
@@ -54,6 +56,8 @@ import {
   type AccountingProviderId,
 } from '../model/accounting.types'
 import { AccountingProviderError } from './providers/http'
+import { XERO_CONNECTION_GONE_MARKER } from './providers/xero'
+import { releaseItemsHeldByLostConnection } from './sync-store'
 import type {
   AccountingProvider,
   AccountingProviderExtras,
@@ -100,6 +104,12 @@ export interface AccountingConnectionRecord {
   callCount: number
   lastSyncAtMs: number | null
   lastError: string | null
+  /**
+   * Why the last read of the merchant's Stripe payouts failed, or absent once
+   * a read succeeds. The payout read owns it alone, so a posting pass that
+   * rewrites `lastError` never clears it.
+   */
+  payoutError?: string | null
   updatedAtMs: number
 }
 
@@ -238,6 +248,7 @@ export function toConnectionView(record: AccountingConnectionRecord): Accounting
     missingRoles: missingAccountRoles(record.mapping),
     lastSyncAtMs: record.lastSyncAtMs,
     lastError: record.lastError,
+    payoutError: record.payoutError ?? null,
   }
 }
 
@@ -269,6 +280,58 @@ export class AccountingReconnectRequiredError extends Error {
     super(message)
     this.name = 'AccountingReconnectRequiredError'
   }
+}
+
+/**
+ * Whether a provider's answer means the company no longer lets the app in:
+ * the merchant removed it inside the ledger. See {@link markConnectionLost}.
+ */
+export function isConnectionLost(error: unknown): error is AccountingProviderError {
+  return error instanceof AccountingProviderError && error.code === 'revoked'
+}
+
+/** What the Accounting page says about a lost connection, by the company's name. */
+export function connectionLostMessage(record: Pick<AccountingConnectionRecord, 'provider' | 'tenantName'>): string {
+  const books = record.tenantName?.trim() || 'your books'
+  return `${capitalize(accountingProviderName(record.provider))} no longer lets ${PLATFORM_BRAND_NAME} reach ${books}. Reconnect to keep posting.`
+}
+
+const capitalize = (text: string) => text.charAt(0).toUpperCase() + text.slice(1)
+
+/**
+ * Marks a connection whose company no longer lets the app in (a `revoked`
+ * answer) for reconnecting, the same state a refused grant leaves
+ * ({@link refreshConnection}): nothing posts, and what is queued waits for the
+ * reconnect. Items an earlier answer of the same kind already sent to "needs
+ * attention" go back to waiting too. Answers the error the caller throws, so
+ * a pass stops on it as it does on a refused grant.
+ */
+export async function markConnectionLost(
+  firestore: FirebaseFirestore.Firestore,
+  record: AccountingConnectionRecord,
+  nowMs: number,
+): Promise<AccountingReconnectRequiredError> {
+  const message = connectionLostMessage(record)
+  await connectionRef(firestore, record.orgId, record.provider).update({
+    status: 'reconnect-required',
+    lastError: message,
+    updatedAtMs: nowMs,
+  })
+  record.status = 'reconnect-required'
+  record.lastError = message
+  if (record.provider === 'xero') {
+    try {
+      await releaseItemsHeldByLostConnection(firestore, record.orgId, {
+        refusedWith: XERO_CONNECTION_GONE_MARKER,
+        message,
+        nowMs,
+      })
+    } catch (error) {
+      // The connection is marked either way; the held items can be retried by hand.
+      console.error('[accounting] could not put back the items a lost connection held', error)
+    }
+  }
+  return new AccountingReconnectRequiredError(message)
 }
 
 /** Whether a record's access token should be refreshed before use. */

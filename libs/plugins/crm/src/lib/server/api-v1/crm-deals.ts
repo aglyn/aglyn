@@ -124,7 +124,7 @@ import {
   CRM_TITLE_MAX,
   createPayload,
   crmCollection,
-  crmCreateStamp,
+  crmScopedCreateStamp,
   crmCustomUpdate,
   crmCustomView,
   crmRecordsBandRefusal,
@@ -761,7 +761,7 @@ async function createDeal(request: Request, ctx: ApiV1Context): Promise<Response
     const id = createResourceUid()
     // One clock: the stage move is stamped with the instant the record's own
     // `createdAt` carries, so a deal created won closed the moment it began.
-    const stamp = crmCreateStamp(ctx, site.siteId)
+    const stamp = crmScopedCreateStamp(ctx, site.siteId)
     const record: Record<string, unknown> = {
       title,
       titleLower: (title ?? '').toLowerCase(),

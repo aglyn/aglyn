@@ -48,7 +48,7 @@ import {
   type CrmFieldObject,
   crmPicklistDefinition,
   crmReadTokens,
-  crmScopeTokens,
+  crmScopeFields,
   effectiveCrmPicklist,
   fieldDefinitionsForObject,
   isCrmPicklistId,
@@ -182,12 +182,16 @@ export function requireSite(env: CrmTransferEnv, what: string): { hostId: string
   return { hostId: env.hostId, group: env.group }
 }
 
-/** The stamp a record the import creates carries: the site, and who reads it. */
+/**
+ * The stamp a record the import creates carries: the site, and who reads it,
+ * with the marker under "All sites except…" (AGL-4047) — the import makes
+ * companies, deals and tasks, which the sweep keeps level as sites come and go.
+ */
 export function creationScope(env: CrmTransferEnv, actorUid: string | null): Record<string, unknown> {
   const { hostId, group } = requireSite(env, 'records')
   return {
     hostId,
-    visibleTo: crmScopeTokens(env.org, group),
+    ...crmScopeFields(env.org, group),
     ...(actorUid ? { createdByUid: actorUid } : {}),
     createdAt: FieldValue.serverTimestamp(),
     updatedAt: FieldValue.serverTimestamp(),

@@ -143,6 +143,8 @@ jest.mock('@aglyn/shared-ui-jsx', () => ({
   ),
   MdiIcon: () => null,
   SrOnly: ({ children }: { children: ReactNode }) => <span>{children}</span>,
+  // The default sharing card's "Apply to existing records" asks first (AGL-4047).
+  useConfirmationContext: () => ({ confirm: jest.fn().mockResolvedValue(undefined) }),
 }))
 
 const HOSTS = [

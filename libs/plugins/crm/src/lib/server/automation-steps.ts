@@ -31,7 +31,7 @@ import {
   type CrmTask,
   type CrmTaskPriority,
   crmEmailDeliveryTags,
-  crmScopeTokens,
+  crmScopeFields,
   crmTaskLabelsForNew,
   crmTaskListFields,
   normalizeContactEmail,
@@ -422,12 +422,15 @@ export async function runCrmAutomationStep(
 
   // The two record creators: a task and an activity are documents of their
   // own beside the contact, stamped with the scope a contact captured on this
-  // site would carry — `crmScopeTokens` is the create path's own expression,
+  // site would carry — `crmScopeFields` is the create path's own expression,
   // so a record an automation made is visible to exactly the sites a record a
-  // person made would be.
+  // person made would be, with the marker under "All sites except…" (AGL-4047).
   if (!env.orgId) return { error: 'this site has no organization' }
   const orgRef = firebaseAdmin.app().firestore().collection('orgs').doc(env.orgId)
-  const visibleTo = crmScopeTokens((env.org ?? null) as Record<string, unknown> | null, group)
+  const { visibleTo, ...marker } = crmScopeFields(
+    (env.org ?? null) as Record<string, unknown> | null,
+    group,
+  )
   const links = stampCrmActivityCompany(
     { contactId: contact.id },
     { contact: contact.data, groupId: group.groupId },
@@ -480,6 +483,7 @@ export async function runCrmAutomationStep(
       ...links,
       hostId,
       visibleTo,
+      ...marker,
       createdAt: FieldValue.serverTimestamp(),
       updatedAt: FieldValue.serverTimestamp(),
     }
@@ -522,6 +526,7 @@ export async function runCrmAutomationStep(
       ...links,
       hostId,
       visibleTo,
+      ...marker,
       createdAt: FieldValue.serverTimestamp(),
       updatedAt: FieldValue.serverTimestamp(),
     }
@@ -595,7 +600,11 @@ async function runLeadStep(
   if (!env.orgId) return { error: 'this site has no organization' }
   const orgRef = firebaseAdmin.app().firestore().collection('orgs').doc(env.orgId)
   const group = await consentGroupForSite(hostId)
-  const visibleTo = crmScopeTokens((env.org ?? null) as Record<string, unknown> | null, group)
+  // With the marker under "All sites except…" (AGL-4047), as on a contact.
+  const { visibleTo, ...marker } = crmScopeFields(
+    (env.org ?? null) as Record<string, unknown> | null,
+    group,
+  )
   // Filed under the lead, as a sequence's call step files one (AGL-3233); a
   // conversion stamps the contact beside it, and the task follows the person.
   const links = { leadId: lead.id }
@@ -635,6 +644,7 @@ async function runLeadStep(
       ...links,
       hostId,
       visibleTo,
+      ...marker,
       createdAt: FieldValue.serverTimestamp(),
       updatedAt: FieldValue.serverTimestamp(),
     }
@@ -661,6 +671,7 @@ async function runLeadStep(
       ...links,
       hostId,
       visibleTo,
+      ...marker,
       createdAt: FieldValue.serverTimestamp(),
       updatedAt: FieldValue.serverTimestamp(),
     }
@@ -728,7 +739,10 @@ export async function prepareCrmRecordEmail(
       return null
     }
     const ref = newCrmActivityRef(firestore, orgId)
-    const visibleTo = crmScopeTokens((org ?? null) as Record<string, unknown> | null, group)
+    const { visibleTo, ...marker } = crmScopeFields(
+      (org ?? null) as Record<string, unknown> | null,
+      group,
+    )
     return {
       tags: crmEmailDeliveryTags({ orgId, hostId, activityId: ref.id }),
       /*
@@ -739,9 +753,8 @@ export async function prepareCrmRecordEmail(
        */
       async file(sent) {
         try {
-          await writeCrmEmailActivity(
-            ref,
-            buildCrmEmailActivity({
+          await writeCrmEmailActivity(ref, {
+            ...buildCrmEmailActivity({
               subject: sent.subject,
               body: sent.body,
               to: normalizeContactEmail(sent.to) ?? sent.to,
@@ -752,7 +765,9 @@ export async function prepareCrmRecordEmail(
               hostId,
               visibleTo,
             }),
-          )
+            // Under "All sites except…", the marker a site added later joins by (AGL-4047).
+            ...marker,
+          })
         } catch (error) {
           console.error('[crm] automation email activity write failed', ref.id, error)
         }

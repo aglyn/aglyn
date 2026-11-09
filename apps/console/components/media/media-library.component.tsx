@@ -21,7 +21,7 @@ import {
   checkEntitlement,
   defaultMediaScopeOf,
   defaultScopeForNewResource,
-  describeScope,
+  describeSharing,
   folderDepth,
   hostScopeToken,
   isOrgWideScope,
@@ -34,13 +34,9 @@ import {
   newMediaFolderDoc,
   normalizeFolderName,
   normalizeMediaTags,
-  normalizeVisibleTo,
   ORG_SCOPE_TOKEN,
   planLabelGrantingFeature,
   planLegacyFolderMigration,
-  type ScopeToken,
-  scopeToStore,
-  storedScope,
   visibleToHost,
   wouldCreateCycle,
 } from '@aglyn/aglyn'
@@ -53,6 +49,10 @@ import { holdsSiteKey } from '@aglyn/aglyn/app-utils/host-permissions'
 import { permissionRefusalText } from '@aglyn/aglyn/app-utils/org-permissions'
 import { AppLink, useConfirmationContext } from '@aglyn/shared-ui-jsx'
 import { BlockedControl } from '@aglyn/shared-ui-jsx/components/blocked-control.component'
+import {
+  SiteSharingField,
+  type SiteSharingValue,
+} from '@aglyn/shared-ui-jsx/components/site-sharing-field.component'
 import ListFilterChips from '@aglyn/shared-ui-jsx/components/list-filter-chips.component'
 import ListQueryNotices from '@aglyn/shared-ui-jsx/components/list-query-notices.component'
 import { ListTable } from '@aglyn/shared-ui-jsx/components/list-table.component'
@@ -104,7 +104,6 @@ import {
   Link,
   Menu,
   MenuItem,
-  Select,
   Stack,
   TextField,
   ToggleButton,
@@ -152,6 +151,13 @@ import useFirestoreCollection from '../../hooks/use-firestore-collection'
 import useFirestoreDoc from '../../hooks/use-firestore-doc'
 import useHostActivityLogger from '../../hooks/use-host-activity-logger'
 import useOrgHosts from '../../hooks/use-org-hosts'
+import {
+  ALL_EXCEPT_MEDIA_NOTE,
+  limitAccessDescription,
+  mediaSharingChoiceOf,
+  mediaSharingKey,
+  mediaSharingPreview,
+} from './media-sharing'
 import useOrgPermissions from '../../hooks/use-org-permissions'
 import firestoreOneShotRetry from '../../utils/firestore-one-shot-retry'
 import {
@@ -620,10 +626,24 @@ export function MediaLibraryComponent(props: MediaLibraryComponentProps) {
   const { confirm } = useConfirmationContext()
   // Sites in this org, for the "Selected sites…" chips and for turning
   // stored `host:` tokens back into names.
-  const { hosts: orgHostList } = useOrgHosts(
+  const { hosts: orgHostList, ready: orgHostsReady } = useOrgHosts(
     firestore,
     (user as any)?.uid,
     orgId ?? undefined,
+  )
+  /** The workspace's site ids, for what a sharing choice would write (AGL-4047). */
+  const orgHostIds = useMemo(
+    () => orgHostList.map((host: any) => String(host.$id)),
+    [orgHostList],
+  )
+  /** The sites the sharing field lists, by name. */
+  const sharingSites = useMemo(
+    () =>
+      orgHostList.map((host: any) => ({
+        id: String(host.$id),
+        name: String(host.name ?? host.subdomain ?? host.$id),
+      })),
+    [orgHostList],
   )
   /** host id → display name, for turning `host:` tokens back into words. */
   const hostNameById = useMemo(
@@ -2076,16 +2096,27 @@ export function MediaLibraryComponent(props: MediaLibraryComponentProps) {
     // Custom metadata (AGL-822) edited as ordered rows, not a map, so
     // blank/duplicate keys are tolerable mid-edit and reorder is stable.
     customMeta: Array<{ key: string; value: string }>
-    /** Scope tokens being edited (AGL-1045); org library only. */
-    visibleTo: string[]
     /**
-     * True when the file stores NO scope (AGL-1480) — as opposed to storing
-     * `['org']`. The drawer used to render the two identically, and this is
-     * the most-travelled of the three surfaces that did, so it is the one
-     * that taught the most people a file was shared when it was not.
+     * Who the file is shared with, as edited here (AGL-1045, AGL-4047); org
+     * library only. Null while the file stores NO scope (AGL-1480) — as
+     * opposed to storing `['org']`. The drawer used to render the two
+     * identically, and this is the most-travelled of the three surfaces that
+     * did, so it is the one that taught the most people a file was shared
+     * when it was not.
      */
+    sharing: SiteSharingValue | null
+    /** True when the file stores no scope; see `sharing`. */
     scopeUnset: boolean
   } | null>(null)
+  /**
+   * Why the drawer's sharing choice can't be saved, as the route would say it.
+   * Nothing to say about leaving sites out until the sites have been read.
+   */
+  const editorSharingProblem = useMemo(() => {
+    const sharing = editor?.sharing ?? null
+    if (sharing?.mode === 'allExcept' && !orgHostsReady) return null
+    return mediaSharingPreview(sharing, orgHostIds)?.problem ?? null
+  }, [editor?.sharing, orgHostIds, orgHostsReady])
   const handleEditorSave = useCallback(async () => {
     if (!editor) return
     const folderId = editor.folderId || null
@@ -2105,7 +2136,7 @@ export function MediaLibraryComponent(props: MediaLibraryComponentProps) {
       JSON.stringify(Object.entries(nextMeta).sort()) !==
       JSON.stringify(Object.entries(prevMeta).sort())
     /**
-     * What the document actually carries, `[]` when it carries nothing
+     * What the document actually carries, nothing when it carries nothing
      * (AGL-1480) — matching the seed `onDetails` puts in the drawer, through
      * the same helper.
      *
@@ -2117,37 +2148,37 @@ export function MediaLibraryComponent(props: MediaLibraryComponentProps) {
      * on screen into a write nobody asked for — and `set-scope` cascades. So
      * these two move together or not at all.
      *
-     * `[]` is also the honest previous value for the OTHER direction: a
+     * Nothing is also the honest previous value for the OTHER direction: a
      * deliberate save of exactly `['org']` on an unset file used to compare
      * equal to the default and be dropped, which is the one save this dialog
      * most needs to land.
      */
-    const previousScope: string[] = storedScope(editor.media?.visibleTo) ?? []
     const scopeChanged =
-      JSON.stringify([...previousScope].sort()) !==
-      JSON.stringify([...editor.visibleTo].sort())
-    // The scope this save writes, or null when it writes none. Only an
-    // org-wide member may change it — the AGL-1042 rules deny anyone else, so
-    // sending it would fail the whole write rather than just this field.
+      mediaSharingKey(mediaSharingChoiceOf(editor.media)) !== mediaSharingKey(editor.sharing)
+    // The sharing this save writes, or null when it writes none. Only an
+    // org-wide member may change it — the route and the AGL-1042 rules refuse
+    // anyone else — and it goes through the route, because the marker of a
+    // file shared with all sites except some is the server's alone (AGL-4047).
     //
-    // A selection `scopeToStore` cannot store refuses the save rather than
-    // writing a substitute: the org token would share the file with every
-    // site, and anything narrower would drop sites somebody picked.
-    const scopeWrite =
-      orgId && viewerOrgWide && scopeChanged
-        ? scopeToStore(editor.visibleTo)
-        : null
-    if (scopeWrite?.problem) {
-      return void enqueueSnackbar(scopeWrite.problem, {
+    // A choice that can't be stored refuses the save rather than writing a
+    // substitute: the org token would share the file with every site, and
+    // anything narrower would drop sites somebody picked.
+    const sharingWrite = orgId && viewerOrgWide && scopeChanged ? editor.sharing : null
+    const preview = mediaSharingPreview(sharingWrite, orgHostIds)
+    if (preview?.problem) {
+      return void enqueueSnackbar(preview.problem, {
         variant: 'warning',
         persist: false,
       })
     }
+    const previousScope = (editor.media?.visibleTo ?? []) as readonly string[]
+    const nextScope: readonly string[] = preview?.fields?.visibleTo ?? previousScope
     // Narrowing can break a LIVE page (AGL-1045). Before taking an asset
     // away from a site, find out which sites actually use it and name them
     // — silently breaking a published client site is the worst outcome this
-    // project could produce. Widening needs no confirmation.
-    if (scopeChanged && narrowsScope(previousScope, editor.visibleTo)) {
+    // project could produce. Widening needs no confirmation. A site left out
+    // of "All sites except…" is one that loses it, and is named the same way.
+    if (sharingWrite && narrowsScope(previousScope, nextScope)) {
       // Inline rather than reusing runReferenceAudit below: that one drives
       // the drawer's "Used on" panel state, and this needs a plain answer.
       //
@@ -2162,23 +2193,22 @@ export function MediaLibraryComponent(props: MediaLibraryComponentProps) {
         // An org-level reference (the org's own logo) names no site, and a
         // site scope decides nothing about it.
         .filter((host) => host.hostId)
-        .filter((host) => !visibleToHost(editor.visibleTo, host.hostId))
+        .filter((host) => !visibleToHost(nextScope, host.hostId))
       const names = [...new Set(losing.map((host) => host.hostSubdomain))]
       const proceed = await confirm({
         title: 'Limit who can use this file?',
-        description: names.length
-          ? `${names.join(', ')} ${names.length === 1 ? 'uses' : 'use'} this ` +
-            'file and will stop rendering it. This does not delete anything.'
-          : affected === null
-            ? 'Its current usage could not be checked. Any site losing ' +
-              'access will stop rendering it.'
-            : 'No page uses it yet, so nothing breaks today.',
+        description: limitAccessDescription({
+          names: affected === null ? null : names.map(String),
+          count: 1,
+          allExcept: sharingWrite.mode === 'allExcept',
+        }),
         confirmationText: 'Limit access',
       })
         .then(() => true)
         .catch(() => false)
       if (!proceed) return
     }
+    let sharingRefusal: string | null = null
     try {
       await updateDoc(
         doc(firestore, scopeCollection, scopeId, 'media', editor.id),
@@ -2186,8 +2216,6 @@ export function MediaLibraryComponent(props: MediaLibraryComponentProps) {
           folderId,
           // Legacy string kept in sync until every reader is on folderId.
           folder: folderId ? (folderNameById[folderId] ?? '') : '',
-          // Sharing scope (AGL-1045) — see `scopeWrite`.
-          ...(scopeWrite?.scope ? { visibleTo: scopeWrite.scope } : {}),
           // Rename (AGL-184): display-name only; the Storage object id/URL
           // stays stable so existing references keep resolving.
           ...(editor.fileName.trim()
@@ -2206,6 +2234,25 @@ export function MediaLibraryComponent(props: MediaLibraryComponentProps) {
           }),
         },
       )
+      // Sharing (AGL-1045), through the route since AGL-4047 — see
+      // `sharingWrite`. After the details, which the rules let through
+      // whatever the sharing becomes. A refusal is said, and the drawer stays.
+      if (sharingWrite) {
+        const response = await authorizedFetch(user, '/api/media/folders', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({
+            ...scopeBody,
+            action: 'set-sharing',
+            mediaIds: [editor.id],
+            choice: sharingWrite,
+          }),
+        })
+        if (!response.ok) {
+          const payload = await response.json().catch(() => ({}))
+          sharingRefusal = String(payload?.error ?? 'The sharing could not be changed.')
+        }
+      }
       if (metaChanged) {
         const response = await authorizedFetch(user, '/api/media/folders', {
           method: 'POST',
@@ -2222,24 +2269,32 @@ export function MediaLibraryComponent(props: MediaLibraryComponentProps) {
           throw new Error(payload?.error ?? 'Saving custom metadata failed')
         }
       }
-      enqueueSnackbar('Media details saved', {
-        variant: 'success',
-        persist: false,
-      })
       logActivity('Updated media details', {
         type: 'media',
         id: editor.id,
         name: editor.media?.fileName ?? editor.id,
       })
-      setEditor(null)
       refresh()
+      if (sharingRefusal) {
+        // The details landed; the sharing didn't. Said, and the drawer stays
+        // open on the choice, so it can be tried again or changed.
+        return void enqueueSnackbar(`Details saved. Its sharing didn’t change: ${sharingRefusal}`, {
+          variant: 'warning',
+          persist: false,
+        })
+      }
+      enqueueSnackbar('Media details saved', {
+        variant: 'success',
+        persist: false,
+      })
+      setEditor(null)
     } catch (error: any) {
       enqueueSnackbar(error?.message ?? 'An error has occurred', {
         variant: 'error',
         allowDuplicate: true,
       })
     }
-  }, [editor, folderNameById, firestore, scopeId, user, enqueueSnackbar, logActivity, refresh])
+  }, [editor, folderNameById, firestore, scopeId, user, enqueueSnackbar, logActivity, refresh, orgHostIds, scanReferences, confirm])
 
   // Asset editing (AGL-184): replace-file + image transforms. AGL-827
   // generalized replace to any media so the card overflow menu can trigger
@@ -2801,7 +2856,11 @@ export function MediaLibraryComponent(props: MediaLibraryComponentProps) {
     target:
       | { kind: 'selection'; ids: string[] }
       | { kind: 'folder'; id: string; name: string }
-    visibleTo: string[]
+    /**
+     * Who they are to be shared with (AGL-4047), or null while nothing is
+     * chosen: the files disagree, or nothing is stored.
+     */
+    sharing: SiteSharingValue | null
     /** True when the chosen assets do not currently agree on a scope. */
     mixed: boolean
     /**
@@ -2823,7 +2882,7 @@ export function MediaLibraryComponent(props: MediaLibraryComponentProps) {
   const canShareScope = Boolean(orgId) && viewerOrgWide && !onSelect
 
   /**
-   * The scope actually STORED on a media doc — `null` when the field is
+   * The sharing actually STORED on a media doc — `null` when the field is
    * absent (AGL-1466).
    *
    * This used to answer `[ORG_SCOPE_TOKEN]` for an absent field, "defaulted
@@ -2837,34 +2896,32 @@ export function MediaLibraryComponent(props: MediaLibraryComponentProps) {
    * Through the shared helper since AGL-1480: this component had written the
    * substitution out longhand THREE times, and fixing the two somebody
    * happened to name left the third — the details drawer, one click from
-   * every card — still saying "All sites".
+   * every card — still saying "All sites". Since AGL-4047 the helper reads
+   * the choice, all sites except some included (`mediaSharingChoiceOf`).
    */
   const scopeOfMedia = useCallback(
-    (media: any): string[] | null => storedScope(media?.visibleTo),
+    (media: any): SiteSharingValue | null => mediaSharingChoiceOf(media),
     [],
   )
 
   const openSelectionScope = useCallback(() => {
     const ids = [...selected]
-    const scopes = ids.map((id) =>
-      JSON.stringify(
-        [
-          ...(scopeOfMedia(items.find((item: any) => item.$id === id)) ?? []),
-        ].sort(),
-      ),
+    const choices = ids.map((id) =>
+      scopeOfMedia(items.find((item: any) => item.$id === id)),
     )
-    const agreed = scopes.length && scopes.every((s) => s === scopes[0])
+    const keys = choices.map(mediaSharingKey)
+    const agreed = keys.length && keys.every((key) => key === keys[0])
     // Mixed selections start with nothing chosen. Pre-filling one of the
     // values would make Apply overwrite the others with a scope nobody
     // typed — the widening direction of that is a silent leak.
-    const value: string[] = agreed ? JSON.parse(scopes[0]) : []
+    const value = agreed ? choices[0] : null
     setScopeRun(null)
     setScopeDialog({
       target: { kind: 'selection', ids },
-      visibleTo: value,
+      sharing: value,
       // They agree, and what they agree on is "nothing stored" — which the
       // dialog has to say rather than paper over.
-      unset: Boolean(agreed) && !value.length,
+      unset: Boolean(agreed) && !value,
       mixed: !agreed,
       fileCount: ids.length,
       applyToFiles: true,
@@ -2873,13 +2930,11 @@ export function MediaLibraryComponent(props: MediaLibraryComponentProps) {
 
   const openFolderScope = useCallback(
     (folder: any) => {
-      const stored = Array.isArray(folder?.visibleTo) && folder.visibleTo.length
-        ? (folder.visibleTo as string[])
-        : null
+      const stored = mediaSharingChoiceOf(folder)
       setScopeRun(null)
       setScopeDialog({
         target: { kind: 'folder', id: folder.$id, name: folder.name },
-        visibleTo: stored ?? [],
+        sharing: stored,
         unset: !stored,
         mixed: false,
         fileCount: null,
@@ -2888,20 +2943,16 @@ export function MediaLibraryComponent(props: MediaLibraryComponentProps) {
       // Count the subtree so the prompt can name it. `preview` runs the
       // same walk the write does, so the number shown is the number that
       // will be touched — not a directory-only count that under-reports
-      // every subfolder.
+      // every subfolder. Nothing is written on a preview, and it needs no
+      // choice: the count does not depend on one.
       void (async () => {
         const response = await authorizedFetch(user, '/api/media/folders', {
           method: 'POST',
           headers: { 'Content-Type': 'application/json' },
           body: JSON.stringify({
             ...scopeBody,
-            action: 'set-scope',
+            action: 'set-sharing',
             folderId: folder.$id,
-            // Only the COUNT is wanted here (`preview`), and the walk does
-            // not depend on the scope — but the route refuses an unusable
-            // one, so an unset folder sends the org token to get its number
-            // rather than a 400. Nothing is written on a preview.
-            visibleTo: stored ?? [ORG_SCOPE_TOKEN],
             preview: true,
           }),
         })
@@ -2927,7 +2978,7 @@ export function MediaLibraryComponent(props: MediaLibraryComponentProps) {
    */
   const REFERENCE_SCAN_LIMIT = 20
   const sitesLosingAccess = useCallback(
-    async (mediaIds: string[], nextScope: string[]) => {
+    async (mediaIds: string[], nextScope: readonly string[]) => {
       if (!mediaIds.length || mediaIds.length > REFERENCE_SCAN_LIMIT) return null
       const scans = await Promise.all(mediaIds.map(scanReferences)).catch(
         () => null,
@@ -2949,44 +3000,54 @@ export function MediaLibraryComponent(props: MediaLibraryComponentProps) {
     [scanReferences],
   )
 
+  /**
+   * Shares a selection through the route (AGL-4047), a slice at a time so the
+   * dialog shows progress and a failure resumes from the last slice written.
+   */
   const applyScopeToSelection = useCallback(
-    async (ids: string[], next: ScopeToken[]) => {
+    async (ids: string[], choice: SiteSharingValue, nextScope: readonly string[], from: number) => {
       const narrowing = ids.filter((id) =>
         narrowsScope(
-          scopeOfMedia(items.find((item: any) => item.$id === id)),
-          next,
+          (items.find((item: any) => item.$id === id)?.visibleTo ?? []) as readonly string[],
+          nextScope,
         ),
       )
-      if (narrowing.length) {
-        const names = await sitesLosingAccess(narrowing, next)
-        const one = narrowing.length === 1
+      if (narrowing.length && from === 0) {
+        const names = await sitesLosingAccess(narrowing, nextScope)
         const proceed = await confirm({
-          title: `Limit who can use ${narrowing.length} file${one ? '' : 's'}?`,
-          description: names?.length
-            ? `${names.join(', ')} ${names.length === 1 ? 'uses' : 'use'} ` +
-              `${one ? 'it' : 'these files'} and will stop rendering ` +
-              `${one ? 'it' : 'them'}. This does not delete anything.`
-            : names
-              ? `No page uses ${one ? 'it' : 'them'} yet, so nothing breaks today.`
-              : `Current usage was not checked. Any site losing access ` +
-                `will stop rendering ${one ? 'it' : 'them'}.`,
+          title: `Limit who can use ${narrowing.length} file${narrowing.length === 1 ? '' : 's'}?`,
+          description: limitAccessDescription({
+            names: names ? names.map(String) : null,
+            count: narrowing.length,
+            allExcept: choice.mode === 'allExcept',
+          }),
           confirmationText: 'Limit access',
         })
           .then(() => true)
           .catch(() => false)
         if (!proceed) return false
       }
-      setScopeRun({ done: 0, total: ids.length, running: true })
-      // One write per doc rather than a batch: the rules evaluate per
-      // document, and a batch fails whole — one asset the caller may not
-      // write would take the other 49 down with it.
-      for (const [index, id] of ids.entries()) {
-        await updateDoc(doc(firestore, scopeCollection, scopeId, 'media', id), {
-          // Already a storable scope: `handleScopeApply`, the one caller,
-          // normalizes the selection and refuses one it cannot store.
-          visibleTo: next,
+      let cursor = from
+      setScopeRun({ done: cursor, total: ids.length, running: true })
+      while (cursor < ids.length) {
+        const slice = ids.slice(cursor, cursor + SCOPE_CHUNK_SIZE)
+        const response = await authorizedFetch(user, '/api/media/folders', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({
+            ...scopeBody,
+            action: 'set-sharing',
+            mediaIds: slice,
+            choice,
+          }),
         })
-        setScopeRun({ done: index + 1, total: ids.length, running: true })
+        const payload = await response.json().catch(() => ({}))
+        if (!response.ok) {
+          setScopeRun({ done: cursor, total: ids.length, running: false })
+          throw new Error(payload?.error ?? 'Applying sharing failed')
+        }
+        cursor += slice.length
+        setScopeRun({ done: cursor, total: ids.length, running: true })
       }
       enqueueSnackbar(
         `Sharing updated for ${ids.length} file${ids.length === 1 ? '' : 's'}`,
@@ -2995,11 +3056,11 @@ export function MediaLibraryComponent(props: MediaLibraryComponentProps) {
       clearSelection()
       return true
     },
-    [items, scopeOfMedia, sitesLosingAccess, confirm, firestore, scopeCollection, scopeId, enqueueSnackbar],
+    [items, sitesLosingAccess, confirm, user, scopeId, orgId, enqueueSnackbar],
   )
 
   const applyScopeToFolder = useCallback(
-    async (folderId: string, next: string[], cascade: boolean, from: number) => {
+    async (folderId: string, choice: SiteSharingValue, cascade: boolean, from: number) => {
       let cursor = from
       // Corrected by the first response; the folder doc itself is one write,
       // so one is the floor.
@@ -3014,9 +3075,9 @@ export function MediaLibraryComponent(props: MediaLibraryComponentProps) {
           headers: { 'Content-Type': 'application/json' },
           body: JSON.stringify({
             ...scopeBody,
-            action: 'set-scope',
+            action: 'set-sharing',
             folderId,
-            visibleTo: next,
+            choice,
             cascade,
             chunkStart: cursor,
             chunkSize: SCOPE_CHUNK_SIZE,
@@ -3044,19 +3105,35 @@ export function MediaLibraryComponent(props: MediaLibraryComponentProps) {
     [user, scopeId, orgId, enqueueSnackbar],
   )
 
+  /** Why the dialog's choice can't be applied, as the route would say it. */
+  const scopeDialogPreview = useMemo(
+    () => mediaSharingPreview(scopeDialog?.sharing ?? null, orgHostIds),
+    [scopeDialog?.sharing, orgHostIds],
+  )
+  const scopeDialogProblem =
+    scopeDialog?.sharing?.mode === 'allExcept' && !orgHostsReady
+      ? null
+      : (scopeDialogPreview?.problem ?? null)
+
   const handleScopeApply = useCallback(async () => {
-    if (!scopeDialog) return
-    const next = normalizeVisibleTo(scopeDialog.visibleTo)
-    if (!next?.length) return
+    if (!scopeDialog?.sharing) return
+    const nextScope = scopeDialogPreview?.fields?.visibleTo
+    if (!nextScope) {
+      if (scopeDialogPreview?.problem) {
+        enqueueSnackbar(scopeDialogPreview.problem, { variant: 'warning', persist: false })
+      }
+      return
+    }
+    const from = scopeRun && !scopeRun.running ? scopeRun.done : 0
     try {
       const finished =
         scopeDialog.target.kind === 'selection'
-          ? await applyScopeToSelection(scopeDialog.target.ids, next)
+          ? await applyScopeToSelection(scopeDialog.target.ids, scopeDialog.sharing, nextScope, from)
           : await applyScopeToFolder(
               scopeDialog.target.id,
-              next,
+              scopeDialog.sharing,
               scopeDialog.applyToFiles,
-              scopeRun && !scopeRun.running ? scopeRun.done : 0,
+              from,
             )
       if (!finished) return setScopeRun(null)
       setScopeDialog(null)
@@ -3068,7 +3145,7 @@ export function MediaLibraryComponent(props: MediaLibraryComponentProps) {
         allowDuplicate: true,
       })
     }
-  }, [scopeDialog, scopeRun, applyScopeToSelection, applyScopeToFolder, enqueueSnackbar, refresh])
+  }, [scopeDialog, scopeDialogPreview, scopeRun, applyScopeToSelection, applyScopeToFolder, enqueueSnackbar, refresh])
 
   // Per-asset delivery stats (AGL-176), loaded when the drawer opens: 30 days
   // of origin-serve counters from the analytics day-docs (edge cache hits
@@ -3907,14 +3984,14 @@ export function MediaLibraryComponent(props: MediaLibraryComponentProps) {
    * The third AGL-1466 surface, and the busiest (AGL-1480). This seeded the
    * "Shared with" control with the org token whenever the field was absent,
    * so the drawer said "All sites" about a file both enforcement layers hide
-   * from every one of them. `?? []` and the flag below say the true thing
-   * instead; persisting the default on open was the other option and
+   * from every one of them. A null choice and the flag below say the true
+   * thing instead; persisting the default on open was the other option and
    * AGL-1466 ruled it out — opening a drawer would write, the write
    * cascades, the AGL-1042 rules refuse it from anyone who is not org-wide,
    * and it repairs only what somebody happens to look at.
    */
   const openDetails = useCallback((media: Aglyn.AglynHostMedia) => {
-    const storedVisibleTo = storedScope(media.visibleTo)
+    const sharing = mediaSharingChoiceOf(media)
     setEditor({
       id: media.$id as string,
       media,
@@ -3926,8 +4003,8 @@ export function MediaLibraryComponent(props: MediaLibraryComponentProps) {
       customMeta: Object.entries((media as any).customMetadata ?? {}).map(
         ([key, value]) => ({ key, value: String(value) }),
       ),
-      visibleTo: storedVisibleTo ?? [],
-      scopeUnset: !storedVisibleTo,
+      sharing,
+      scopeUnset: sharing === null,
     })
   }, [])
 
@@ -4829,7 +4906,7 @@ export function MediaLibraryComponent(props: MediaLibraryComponentProps) {
                   orgId &&
                   Array.isArray((folder as any).visibleTo) &&
                   !isOrgWideScope((folder as any).visibleTo)
-                    ? describeScope((folder as any).visibleTo, hostNameById)
+                    ? describeSharing(folder as unknown as Record<string, unknown>, hostNameById)
                     : undefined
                 }
               />
@@ -5248,14 +5325,6 @@ export function MediaLibraryComponent(props: MediaLibraryComponentProps) {
               value. */}
           {orgId ? (
             <Box>
-              <Typography
-                variant="caption"
-                color="text.secondary"
-                component="div"
-                sx={{ mb: 0.5 }}
-              >
-                {'Shared with'}
-              </Typography>
               {viewerOrgWide ? (
                 <>
                   {/*
@@ -5273,23 +5342,19 @@ export function MediaLibraryComponent(props: MediaLibraryComponentProps) {
                         'with to fix that.'}
                     </Alert>
                   ) : null}
+                  {/*
+                    Radios and a visible list of sites (AGL-4047): All sites,
+                    the sites chosen, or all sites except the ones left out.
+                    No choice shows as picked until someone picks one.
+                  */}
                   <BlockedControl
                     blocked={mediaWriteRefused}
                     reason={mediaWriteReason}
                     fullWidth
                   >
-                    <Select
-                      size="small"
-                      fullWidth
-                      disabled={mediaWriteHeld}
-                      value={
-                        (editor?.visibleTo ?? []).includes(ORG_SCOPE_TOKEN)
-                          ? 'org'
-                          : editor?.scopeUnset
-                            ? 'unset'
-                            : 'hosts'
-                      }
-                      onChange={(event) =>
+                    <SiteSharingField
+                      value={editor?.sharing ?? null}
+                      onChange={(sharing) =>
                         setEditor((prev) =>
                           prev
                             ? {
@@ -5298,85 +5363,46 @@ export function MediaLibraryComponent(props: MediaLibraryComponentProps) {
                                 // the control shows what was picked, not what
                                 // was (not) stored.
                                 scopeUnset: false,
-                                visibleTo:
-                                  event.target.value === 'org'
-                                    ? [ORG_SCOPE_TOKEN]
-                                    : // Default the narrowed case to the site
-                                      // being browsed, or none — never a guess
-                                      // at which sites the author meant.
-                                      [],
+                                sharing,
                               }
                             : prev,
                         )
                       }
-                    >
-                      {/*
-                        A real sentinel, never '' — MUI cannot hold an empty
-                        string as a selected value. Rendered only while unset
-                        and disabled, so the control cannot be set back into
-                        "nobody has decided".
-                      */}
-                      {editor?.scopeUnset ? (
-                        <MenuItem value="unset" disabled>
-                          {'Not shared with any site'}
-                        </MenuItem>
-                      ) : null}
-                      <MenuItem value="org">{'All sites'}</MenuItem>
-                      <MenuItem value="hosts">{'Selected sites…'}</MenuItem>
-                    </Select>
+                      sites={sharingSites}
+                      sitesReady={orgHostsReady}
+                      readOnly={mediaWriteOff}
+                      problem={editorSharingProblem}
+                    />
                   </BlockedControl>
-                  {!editor?.scopeUnset &&
-                  !(editor?.visibleTo ?? []).includes(ORG_SCOPE_TOKEN) ? (
-                    <Box sx={{ mt: 1, display: 'flex', flexWrap: 'wrap', gap: 0.5 }}>
-                      {orgHostList.map((host) => {
-                        const token = hostScopeToken(host.$id)
-                        const on = (editor?.visibleTo ?? []).includes(token)
-                        return (
-                          <Chip
-                            key={host.$id}
-                            size="small"
-                            label={host.name ?? host.subdomain ?? host.$id}
-                            color={on ? 'primary' : 'default'}
-                            variant={on ? 'filled' : 'outlined'}
-                            disabled={mediaWriteOff}
-                            onClick={() =>
-                              setEditor((prev) =>
-                                prev
-                                  ? {
-                                      ...prev,
-                                      visibleTo: on
-                                        ? prev.visibleTo.filter((t) => t !== token)
-                                        : [...prev.visibleTo, token],
-                                    }
-                                  : prev,
-                              )
-                            }
-                          />
-                        )
-                      })}
-                    </Box>
-                  ) : null}
-                  {editor &&
-                  !editor.scopeUnset &&
-                  scopeToStore(editor.visibleTo).problem ? (
-                    <Typography variant="caption" color="error">
-                      {scopeToStore(editor.visibleTo).problem}
+                  {editor?.sharing?.mode === 'allExcept' ? (
+                    <Typography variant="caption" color="text.secondary" component="div">
+                      {ALL_EXCEPT_MEDIA_NOTE}
                     </Typography>
                   ) : null}
                 </>
               ) : (
-                <Typography variant="body2">
-                  {/*
-                    A scoped member cannot fix this — the AGL-1042 rules deny
-                    them the write — but they are the ones who notice the file
-                    missing from their site, so they get the reason rather
-                    than `describeScope`'s "No sites", which reads like a
-                    setting somebody chose (AGL-1480).
-                  */}
-                  {editor?.scopeUnset
-                    ? 'Never shared — hidden from every site'
-                    : describeScope(editor?.visibleTo, hostNameById)}
-                </Typography>
+                <>
+                  <Typography
+                    variant="caption"
+                    color="text.secondary"
+                    component="div"
+                    sx={{ mb: 0.5 }}
+                  >
+                    {'Shared with'}
+                  </Typography>
+                  <Typography variant="body2">
+                    {/*
+                      A scoped member cannot fix this — the AGL-1042 rules deny
+                      them the write — but they are the ones who notice the file
+                      missing from their site, so they get the reason rather
+                      than `describeSharing`'s "No sites", which reads like a
+                      setting somebody chose (AGL-1480).
+                    */}
+                    {editor?.scopeUnset
+                      ? 'Never shared — hidden from every site'
+                      : describeSharing(editor?.media, hostNameById)}
+                  </Typography>
+                </>
               )}
             </Box>
           ) : null}
@@ -5846,17 +5872,15 @@ export function MediaLibraryComponent(props: MediaLibraryComponentProps) {
                     'are shared with to fix that.'}
               </Alert>
             ) : null}
-            <Select
-              size="small"
-              fullWidth
-              value={
-                scopeDialog?.visibleTo.includes(ORG_SCOPE_TOKEN)
-                  ? 'org'
-                  : scopeDialog?.unset
-                    ? 'unset'
-                    : 'hosts'
-              }
-              onChange={(event) =>
+            {/*
+              Radios and a visible list of sites (AGL-4047): All sites, the
+              sites chosen, or all sites except the ones left out. No choice
+              shows as picked until someone picks one, which is what an unset
+              folder and a mixed selection both need.
+            */}
+            <SiteSharingField
+              value={scopeDialog?.sharing ?? null}
+              onChange={(sharing) =>
                 setScopeDialog((prev) =>
                   prev
                     ? {
@@ -5865,57 +5889,20 @@ export function MediaLibraryComponent(props: MediaLibraryComponentProps) {
                         // control shows what the user picked, not what was
                         // (not) stored.
                         unset: false,
-                        visibleTo:
-                          event.target.value === 'org'
-                            ? [ORG_SCOPE_TOKEN]
-                            : [],
+                        sharing,
                       }
                     : prev,
                 )
               }
-            >
-              {/*
-                A real sentinel rather than '', which MUI cannot hold as a
-                selected value. Rendered only while unset so it can never be
-                chosen back into.
-              */}
-              {scopeDialog?.unset ? (
-                <MenuItem value="unset" disabled>
-                  {'Not shared with any site'}
-                </MenuItem>
-              ) : null}
-              <MenuItem value="org">{'All sites'}</MenuItem>
-              <MenuItem value="hosts">{'Selected sites…'}</MenuItem>
-            </Select>
-            {!scopeDialog?.unset &&
-            !scopeDialog?.visibleTo.includes(ORG_SCOPE_TOKEN) ? (
-              <Box sx={{ display: 'flex', flexWrap: 'wrap', gap: 0.5 }}>
-                {orgHostList.map((host: any) => {
-                  const token = hostScopeToken(host.$id)
-                  const on = Boolean(scopeDialog?.visibleTo.includes(token))
-                  return (
-                    <Chip
-                      key={host.$id}
-                      size="small"
-                      label={hostNameById[host.$id]}
-                      color={on ? 'primary' : 'default'}
-                      variant={on ? 'filled' : 'outlined'}
-                      onClick={() =>
-                        setScopeDialog((prev) =>
-                          prev
-                            ? {
-                                ...prev,
-                                visibleTo: on
-                                  ? prev.visibleTo.filter((t) => t !== token)
-                                  : [...prev.visibleTo, token],
-                              }
-                            : prev,
-                        )
-                      }
-                    />
-                  )
-                })}
-              </Box>
+              sites={sharingSites}
+              sitesReady={orgHostsReady}
+              readOnly={Boolean(scopeRun?.running)}
+              problem={scopeDialogProblem}
+            />
+            {scopeDialog?.sharing?.mode === 'allExcept' ? (
+              <Typography variant="caption" color="text.secondary">
+                {ALL_EXCEPT_MEDIA_NOTE}
+              </Typography>
             ) : null}
             {scopeDialog?.target.kind === 'folder' ? (
               <>
@@ -5984,7 +5971,8 @@ export function MediaLibraryComponent(props: MediaLibraryComponentProps) {
             color="primary"
             disabled={
               scopeRun?.running ||
-              !normalizeVisibleTo(scopeDialog?.visibleTo ?? [])?.length
+              !scopeDialog?.sharing ||
+              Boolean(scopeDialogProblem)
             }
             onClick={handleScopeApply}
           >

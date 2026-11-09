@@ -20,7 +20,7 @@
  *
  * ## Queue, then post
  *
- * An event — an order paid, refunded or cancelled, a payout landed — only
+ * An event — an order paid or refunded, a payout landed — only
  * QUEUES: it writes sync items ({@link enqueueOrderPaid} and its siblings)
  * and returns. Posting happens on the console's tick ({@link runSyncPass}),
  * one item at a time, paced to the provider's limits. So a ledger that is
@@ -40,7 +40,9 @@
  *
  * - A refused access token is refreshed once and the call repeated.
  * - A refused GRANT marks the connection "reconnect required"; items stay
- *   pending, uncounted, until someone reconnects.
+ *   pending, uncounted, until someone reconnects. So does a company that no
+ *   longer lets the app in (the app removed inside Xero), though its token
+ *   still opens: {@link markConnectionLost}.
  * - A rate limit or a transient failure counts an attempt and waits
  *   ({@link backoffMs}: 2, 4, 8 … minutes, at most 12 hours); after
  *   {@link SYNC_MAX_ATTEMPTS} the item asks a person.
@@ -84,11 +86,13 @@ import {
   AccountingReconnectRequiredError,
   connectionRef,
   connectionSession,
+  isConnectionLost,
   loadOrgConnection,
+  markConnectionLost,
   type AccountingConnectionRecord,
 } from './connection-store'
 import { AccountingProviderError } from './providers/http'
-import type { AccountingDocRef, AccountingProvider, AccountingSession } from './providers/provider'
+import type { AccountingCompanyInfo, AccountingDocRef, AccountingProvider, AccountingSession } from './providers/provider'
 import { XERO_DAILY_CALL_LIMIT } from './providers/xero'
 import {
   SYNC_MAX_ATTEMPTS,
@@ -118,7 +122,7 @@ export interface AccountingEngineDeps {
 
 // Queueing lives in `sync-intake.ts`, which the tenant's event drain loads
 // and which holds nothing a ledger call needs; re-exported for the tick.
-export { enqueueOrderCancelled, enqueueOrderPaid, enqueueOrderRefunded, enqueuePayout } from './sync-intake'
+export { enqueueOrderPaid, enqueueOrderRefunded, enqueuePayout } from './sync-intake'
 
 // ── Posting ───────────────────────────────────────────────────────────────
 
@@ -165,6 +169,11 @@ interface PassContext {
   provider: AccountingProvider
   keyring: SecretBoxKeyring
   session: AccountingSession | null
+  /**
+   * The ledger's company info, read at most once a pass, and only when the
+   * stored currency setting would refuse an item: see {@link currencyRefusal}.
+   */
+  ledgerInfo?: Promise<AccountingCompanyInfo | null>
 }
 
 async function withSession<T>(context: PassContext, call: (session: AccountingSession) => Promise<T>): Promise<T> {
@@ -175,14 +184,24 @@ async function withSession<T>(context: PassContext, call: (session: AccountingSe
     now: context.deps.now,
     sleep: context.deps.sleep,
   }
+  // The company no longer lets the app in, though the token still opens:
+  // the connection is marked as a refused grant marks it, and the pass stops.
+  const guarded = async (session: AccountingSession) => {
+    try {
+      return await call(session)
+    } catch (error) {
+      if (isConnectionLost(error)) throw await markConnectionLost(tokens.firestore, context.connection, tokens.now())
+      throw error
+    }
+  }
   context.session ??= await connectionSession(tokens, context.connection)
   try {
-    return await call(context.session)
+    return await guarded(context.session)
   } catch (error) {
     if (!(error instanceof AccountingProviderError) || error.code !== 'auth') throw error
     // The access token was refused before its time: refresh once and repeat.
     context.session = await connectionSession(tokens, context.connection, { force: true })
-    return call(context.session)
+    return guarded(context.session)
   }
 }
 
@@ -200,7 +219,7 @@ export async function postItem(context: PassContext, item: AccountingSyncItemRec
     }
     const doc = documentFor(item, connection)
     if (!doc) return { status: 'synced', ref: null }
-    const foreign = foreignCurrencyRefusal(connection, doc.currency)
+    const foreign = await currencyRefusal(context, doc.currency)
     if (foreign) return { status: 'needs_attention', code: 'currency', error: foreign }
     const existing = await withSession(context, (session) => provider.findByExternalId(session, doc.kind, doc.externalId))
     if (existing) return { status: 'synced', ref: existing }
@@ -227,9 +246,13 @@ export async function postItem(context: PassContext, item: AccountingSyncItemRec
       case 'payout':
         ref = await withSession(context, (session) => provider.createDeposit(session, doc, { ...base, customerId: null }))
         break
-      case 'summary':
-        ref = await withSession(context, (session) => provider.createJournal(session, doc, { ...base, customerId: null }))
+      case 'summary': {
+        // Xero posts the day as a bank transaction, which names a contact:
+        // the same one a fee is paid to. Every other ledger gets none.
+        const payee = await feePayeeId(context)
+        ref = await withSession(context, (session) => provider.createJournal(session, doc, { ...base, customerId: payee }))
         break
+      }
     }
     return { status: 'synced', ref }
   } catch (error) {
@@ -243,6 +266,37 @@ export async function postItem(context: PassContext, item: AccountingSyncItemRec
     }
     return { status: 'retry', error: error instanceof Error ? error.message : String(error), retryAfterMs: null }
   }
+}
+
+/**
+ * {@link foreignCurrencyRefusal}, against what the ledger says now. The
+ * connection's `multiCurrency` is read when the books are bound, so a merchant
+ * who turns on more currencies afterward, as the refusal tells them to, would
+ * otherwise be refused again on every retry. When the stored setting would
+ * refuse, the ledger's company info is read again, once a pass however many
+ * items it holds back, and a ledger that now keeps several currencies is
+ * remembered on the connection and the item posts. The read spends two calls,
+ * within the item's share of the daily budget ({@link CALLS_PER_ITEM}). A read
+ * that fails leaves the refusal as it stood.
+ */
+async function currencyRefusal(context: PassContext, currency: string): Promise<string | null> {
+  const refusal = foreignCurrencyRefusal(context.connection, currency)
+  if (!refusal) return null
+  context.ledgerInfo ??= withSession(context, (session) => context.provider.companyInfo(session)).catch((error) => {
+    // A lost connection stops the pass; any other failed read leaves the refusal.
+    if (error instanceof AccountingReconnectRequiredError) throw error
+    return null
+  })
+  const info = await context.ledgerInfo
+  if (!info?.multiCurrency) return refusal
+  if (!context.connection.multiCurrency) {
+    context.connection.multiCurrency = true
+    await connectionRef(context.deps.firestore(), context.connection.orgId, context.connection.provider).update({
+      multiCurrency: true,
+      updatedAtMs: context.deps.now(),
+    })
+  }
+  return foreignCurrencyRefusal(context.connection, currency)
 }
 
 /**

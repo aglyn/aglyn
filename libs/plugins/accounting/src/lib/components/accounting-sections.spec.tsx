@@ -24,7 +24,7 @@ import {
   accountingDocsHelp,
   connectLabel,
 } from './accounting-connection-section'
-import type { AccountingApi } from './use-accounting-api'
+import { AccountingRouteError, type AccountingApi } from './use-accounting-api'
 
 /**
  * The Accounting page's two sections (AGL-3614): what a deployment with no
@@ -188,6 +188,52 @@ describe('the Connection section', () => {
       />,
     )
     expect(await screen.findByRole('button', { name: 'Reconnect QuickBooks Online' })).toBeTruthy()
+  })
+
+  it('reads the status again when the books stop letting the app in, and offers Reconnect in plain words', async () => {
+    const plain = 'Xero no longer lets Aglyn reach Demo Company (US). Reconnect to keep posting.'
+    const xero = { provider: 'xero' as const, tenantName: 'Demo Company (US)', environment: null }
+    const statusRead = jest
+      .fn()
+      .mockResolvedValueOnce(status({ providers: { quickbooks: false, xero: true, codat: false }, connection: connection(xero) }))
+      .mockResolvedValue(
+        status({
+          providers: { quickbooks: false, xero: true, codat: false },
+          connection: connection({ ...xero, status: 'reconnect-required', lastError: plain }),
+        }),
+      )
+    render(
+      <AccountingConnectionSection
+        orgId="org-1"
+        api={api({
+          status: statusRead,
+          options: jest.fn(async () => {
+            throw new AccountingRouteError(plain, 'reconnect-required', 409)
+          }),
+        })}
+      />,
+    )
+    expect(await screen.findByRole('button', { name: 'Reconnect Xero' })).toBeTruthy()
+    expect(statusRead).toHaveBeenCalledTimes(2)
+    expect(screen.getByText(`${plain} Nothing is posted until you reconnect; what is waiting will post then.`)).toBeTruthy()
+    expect(screen.queryByText('Connected')).toBeNull()
+  })
+
+  it('says why payouts could not be read, on a connection that still posts', async () => {
+    const payoutError =
+      "Payouts couldn't be read from Stripe: The account is restricted. " +
+      'Sales, refunds and fees still post; payouts will be tried again in a few hours.'
+    render(
+      <AccountingConnectionSection
+        orgId="org-1"
+        api={api({
+          status: jest.fn(async () =>
+            status({ providers: { quickbooks: true, xero: false, codat: false }, connection: connection({ payoutError }) }),
+          ),
+        })}
+      />,
+    )
+    expect(await screen.findByText(payoutError)).toBeTruthy()
   })
 })
 

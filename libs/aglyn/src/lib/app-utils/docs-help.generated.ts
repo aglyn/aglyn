@@ -641,7 +641,7 @@ export const PLUGIN_DOCS_ANCHORS = {
   crmLeads: ['#what-makes-a-lead', '#what-a-lead-holds', '#lead-source-filled-in', '#adding-a-lead-by-hand', '#the-leads-list', '#lead-statuses', '#filter-the-leads', '#working-a-lead-from-the-row', '#several-leads-at-once', '#import-from-csv', '#who-owns-a-lead', '#a-leads-page', '#lead-details', '#lead-campaigns', '#captured-history', '#email-state', '#converting-a-lead', '#unqualifying-a-lead', '#erasing-the-person', '#who-can-do-this', '#related'],
   crmReports: ['#choosing-a-period', '#contacts', '#sources-and-lifecycle', '#conversion-by-source', '#lead-funnel', '#lead-sources', '#pipeline', '#forecast-by-close-month', '#by-forecast-category', '#won-and-lost', '#won-and-lost-by-owner', '#activity-by-teammate', '#tasks', '#exporting-a-table', '#crm-at-a-glance', '#how-the-numbers-are-counted', '#related'],
   crmSettings: ['#companies', '#create-companies-from-work-email-domains', '#default-owner', '#assignment-rules', '#round-robin', '#email-templates', '#email-capture', '#your-sending-addresses', '#recipes', '#related'],
-  crmSharing: ['#what-a-shared-record-looks-like', '#sharing-card', '#share-a-record-by-hand', '#several-records-at-once', '#sharing-rules', '#access-read-only-or-read-and-edit', '#sharing-is-not-consent', '#who-can-do-this', '#related'],
+  crmSharing: ['#default-sharing-for-new-records', '#apply-to-existing-records', '#share-a-record-with-more-sites', '#all-sites-except-some', '#what-a-shared-record-looks-like', '#sharing-card', '#share-a-record-by-hand', '#several-records-at-once', '#sharing-rules', '#access-read-only-or-read-and-edit', '#sharing-is-not-consent', '#who-can-do-this', '#related'],
   crmTasks: ['#task-picklists', '#the-tasks-page', '#the-calendar-view', '#snoozing-a-task', '#selecting-exporting-and-acting-on-many', '#import-from-csv', '#creating-a-task', '#assigning-a-task-to-someone-else', '#completing-and-reopening', '#organization-tasks', '#tasks-on-a-contact-company-or-deal', '#reminders', '#turning-reminders-off', '#next-activity', '#the-daily-digest', '#turning-it-off', '#the-dashboard-card', '#who-can-do-what', '#related'],
   crmViews: ['#the-views-control', '#a-view-is-a-link', '#filters', '#filters-on-the-contacts-list', '#filters-on-the-other-lists', '#columns-and-sort', '#segments-and-views', '#who-sees-what', '#related'],
   datasets: ['#organization-data-page', '#model-builder', '#typed-documents', '#sample-rows', '#filter-records', '#relations', '#query-layer', '#repeatable-components', '#record-pages', '#who-a-dataset-is-shared-with', '#default-dataset-sharing', '#import--export', '#related'],
@@ -1003,7 +1003,7 @@ export const PLUGIN_DOCS_SECTION_TITLES: {
     '#your-sending-addresses': 'Your sending addresses',
   },
   crmSharing: {
-    '#access-read-only-or-read-and-edit': 'Access: read-only or read and edit',
+    '#default-sharing-for-new-records': 'Default sharing for new records',
     '#sharing-card': 'The Sharing card',
     '#sharing-rules': 'Sharing rules',
   },

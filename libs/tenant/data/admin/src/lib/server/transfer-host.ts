@@ -22,7 +22,7 @@ import {
 import { holdsDedicatedSendingDomain } from '@aglyn/aglyn/app-utils/dedicated-sending-domain'
 import type { HostTransferHold, HostTransferPlan } from '@aglyn/aglyn/app-utils/host-transfer'
 import { checkQuota } from '@aglyn/aglyn/app-utils/plan-entitlements'
-import { hostScopeToken } from '@aglyn/aglyn/app-utils/scope-tokens'
+import { hostScopeToken, SCOPE_MODE_ALL_EXCEPT } from '@aglyn/aglyn/app-utils/scope-tokens'
 import { resolveHostEnabledPlugins } from '@aglyn/aglyn/plugin-manager/enabled-plugins'
 import { listPluginOrgCollections } from '@aglyn/aglyn/plugin-manager/plugin-host-collections'
 import { normalizeSendingDomain } from '@aglyn/shared-util-email'
@@ -259,10 +259,39 @@ export async function planHostTransfer(input: PlanHostTransferInput): Promise<Ho
         .where('visibleTo', 'array-contains', hostScopeToken(hostId)),
     ).catch(() => 0)
     if (plan.facts.mediaStaying) {
-      warnings.push(
-        `${plan.facts.mediaStaying} media file(s) stay in the old organization's library. The site keeps ` +
-          'showing them, but only the old organization can manage them — deleting them there removes them from this site.',
-      )
+      // A file shared with all of the old organization's sites except some
+      // reaches this site only while it is one of them: the sweep that runs
+      // when the site leaves takes it off every such file (AGL-4047). Only the
+      // marked files are read, so this costs nothing where none are.
+      const leaving = await db
+        .collection('orgs')
+        .doc(fromOrgId)
+        .collection('media')
+        .where('scopeMode', '==', SCOPE_MODE_ALL_EXCEPT)
+        .select('visibleTo')
+        .get()
+        .then(
+          (marked) =>
+            marked.docs.filter((doc) => {
+              const visibleTo = doc.get('visibleTo')
+              return Array.isArray(visibleTo) && visibleTo.includes(hostScopeToken(hostId))
+            }).length,
+        )
+        .catch(() => 0)
+      const keeping = Math.max(plan.facts.mediaStaying - leaving, 0)
+      if (keeping) {
+        warnings.push(
+          `${keeping} media file(s) stay in the old organization's library. The site keeps ` +
+            'showing them, but only the old organization can manage them — deleting them there removes them from this site.',
+        )
+      }
+      if (leaving) {
+        warnings.push(
+          `${leaving} media file(s) the old organization shares with all of its sites except some stop ` +
+            'showing on this site when it moves, because the site is no longer one of those sites. A link ' +
+            'to one of them pasted into custom HTML or CSS on the site may keep loading.',
+        )
+      }
     }
 
     // Collaborators: old members who reached this site only through a grant.

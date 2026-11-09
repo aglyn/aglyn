@@ -44,7 +44,7 @@ struct PosCustomerDisplayScreen: View {
           if model.offline {
             AglynNotice("Reconnecting…", tone: .warning).padding(AglynSpace.one)
           }
-          DisplayBody(model: model)
+          DisplayBody(model: model, origin: context.api.origin)
             .id("\(model.read?.state.mode.rawValue ?? "idle"):\(model.read?.state.promptId ?? "")")
         }
         .overlay(alignment: .bottomTrailing) { UnpairControl(model: model) }
@@ -69,6 +69,8 @@ struct PosCustomerDisplayScreen: View {
 /// The screen for the current mode.
 private struct DisplayBody: View {
   let model: PosCustomerDisplayModel
+  /// The console the display was paired through, for another plugin's screen.
+  let origin: String
 
   var body: some View {
     switch model.screen {
@@ -88,6 +90,16 @@ private struct DisplayBody: View {
       DeviceScroll(branding: model.branding, notice: model.notice) { DisplayTipView(
           tip: tip, currency: model.currency, busy: model.busy, promptID: promptID,
           onAnswer: { answer in Task { await model.answer(answer) } }) }
+    case .plugin(let href, let promptID):
+      if let url = URL(string: origin + href), let token = model.token {
+        PosDisplayPluginScreen(url: url, credential: token, returnPath: posDisplayPagePath) {
+          model.screenReturned(promptID)
+        }
+        .ignoresSafeArea(edges: .bottom)
+        .accessibilityIdentifier("pos-display-plugin-screen")
+      } else {
+        PosDeviceBrandScreen(branding: model.branding, title: nil, message: model.branding?.message ?? "Welcome")
+      }
     case .receipt(let receipt, let promptID):
       DeviceScroll(branding: model.branding, notice: model.notice) { DisplayReceiptView(
           receipt: receipt, busy: model.busy, promptID: promptID, onAnswer: { answer in Task { await model.answer(answer) } }) }

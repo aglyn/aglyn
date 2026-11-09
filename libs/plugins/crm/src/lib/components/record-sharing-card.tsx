@@ -107,6 +107,7 @@ export function RecordSharingCard(props: RecordSharingCardProps) {
   const shared = lines.some((line) => line.kind !== 'held')
   if (!record || (!shared && !roleReady)) return null
 
+  /** `token` is the site a hand share names, or `allExcept` for the share with all sites except some. */
   const unshare = async (key: string, token: string) => {
     if (!scope) return
     setBusyKey(key)
@@ -114,7 +115,12 @@ export function RecordSharingCard(props: RecordSharingCardProps) {
       await callCrmSharing(user, scope, 'unshare', {
         object,
         ids: [id],
-        targets: token === 'org' ? 'all' : [token.slice('host:'.length)],
+        targets:
+          token === 'allExcept'
+            ? 'allExcept'
+            : token === 'org'
+              ? 'all'
+              : [token.slice('host:'.length)],
       })
       enqueueSnackbar('No longer shared', { variant: 'success', persist: false })
     } catch (error) {
@@ -163,8 +169,12 @@ export function RecordSharingCard(props: RecordSharingCardProps) {
               </Typography>
             )
           }
-          if (line.kind === 'manual') {
-            const target = describeShareTargets([line.token], sites.siteName)
+          if (line.kind === 'manual' || line.kind === 'manualExcept') {
+            const target =
+              line.kind === 'manual'
+                ? describeShareTargets([line.token], sites.siteName)
+                : describeShareTargets(line.tokens, sites.siteName, line.except)
+            const token = line.kind === 'manual' ? line.token : 'allExcept'
             return (
               <Stack key={line.key} direction="row" spacing={1} sx={{ alignItems: 'center' }}>
                 <Typography variant="body2" sx={{ flex: 1, minWidth: 0 }}>
@@ -177,7 +187,7 @@ export function RecordSharingCard(props: RecordSharingCardProps) {
                     <IconButton
                       size="small"
                       disabled={busyKey !== null}
-                      onClick={() => void unshare(line.key, line.token)}
+                      onClick={() => void unshare(line.key, token)}
                     >
                       <MdiIcon path={mdiClose.path} size={0.7} />
                       <SrOnly>{`Stop sharing with ${target}`}</SrOnly>
@@ -190,7 +200,7 @@ export function RecordSharingCard(props: RecordSharingCardProps) {
           const rule = rules.find((entry) => entry.id === line.ruleId)
           return (
             <Typography key={line.key} variant="body2">
-              {`${describeShareTargets(line.tokens, sites.siteName)} — by the rule ${
+              {`${describeShareTargets(line.tokens, sites.siteName, line.except)} — by the rule ${
                 rule ? `“${rule.name}”` : 'that shares it'
               }, ${line.access === 'edit' ? 'read and edit' : 'read-only'}`}
             </Typography>

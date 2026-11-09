@@ -123,9 +123,15 @@ import {
   CAMPAIGN_SEND_CONTAINER_FIELD,
   CAMPAIGN_SEND_HOST_FIELD,
   campaignPlacedOnHost,
-  campaignSiteIds,
-  campaignVisibleTo,
+  campaignSharingChoiceFrom,
+  campaignSharingWrite,
+  campaignSiteDeleteRefusal,
+  campaignSiteMayDelete,
+  campaignSiteVisibleTo,
+  type EmailCampaign,
 } from '../model/campaign-container'
+import { fieldsToWrite, orgHostIdsFromDoc } from '@aglyn/tenant-data-admin/server/scope-sharing-sweep'
+import { isRefusedIdToken } from '@aglyn/tenant-data-admin/server/id-token-refusal'
 import {
   campaignSendSiteStamp,
   orgCampaignSends,
@@ -396,6 +402,56 @@ interface DeleteAccess {
 }
 
 /**
+ * Who a campaign is shared with: all sites, the sites chosen, or all sites
+ * except some (AGL-4047).
+ *
+ * The container's other fields stay client-writable. Its sharing is written
+ * here, because `scopeMode` and `scopeExcept` are the server's alone (the
+ * rules' `scopeMarkerUnchanged` refuses them from a client, and refuses a
+ * client re-scope of a marked campaign), so this is the one door that sets or
+ * removes them, and removing them is a field delete, never a stored null.
+ *
+ * Who: the organization door's caller, a member of the whole workspace holding
+ * "Run email campaigns", which is exactly who the rules let re-scope a campaign
+ * today. The handler asks it before this runs.
+ *
+ * The workspace's sites are read in the transaction: a site being created
+ * writes the same document, so it either lands first and is on this list, or
+ * lands after and its sweep finds this campaign. A site the workspace doesn't
+ * hold is dropped from a choice, never stored.
+ */
+async function setCampaignSharing(
+  firestore: FirebaseFirestore.Firestore,
+  orgId: string,
+  campaignId: string,
+  rawChoice: unknown,
+): Promise<ManageResult> {
+  const choice = campaignSharingChoiceFrom(rawChoice)
+  if (!choice) {
+    return { status: 400, body: { error: 'Missing or unreadable sharing choice' } }
+  }
+  const orgRef = firestore.collection('orgs').doc(orgId)
+  const ref = orgEmailCampaigns(firestore, orgId).doc(campaignId)
+  return firestore.runTransaction(async (transaction): Promise<ManageResult> => {
+    const [org, campaign] = await Promise.all([transaction.get(orgRef), transaction.get(ref)])
+    if (!campaign.exists || campaign.get('deletedAt')) {
+      return { status: 404, body: { error: 'Unknown campaign' } }
+    }
+    const shared = campaignSharingWrite(choice, orgHostIdsFromDoc(org.data()))
+    if (!shared.fields) return { status: 400, body: { error: shared.problem } }
+    transaction.update(ref, fieldsToWrite(shared.fields))
+    return {
+      status: 200,
+      body: {
+        campaignId,
+        visibleTo: shared.fields.visibleTo,
+        scopeExcept: shared.fields.scopeExcept,
+      },
+    }
+  })
+}
+
+/**
  * Removes a campaign container, leaving its emails standing.
  *
  * Detach first, delete second, and the order is the point: stopping between
@@ -411,7 +467,9 @@ interface DeleteAccess {
  * it answers 404 as a missing one would. A campaign also placed on other
  * sites is refused unless the caller is an org-wide member: deleting it
  * takes it off those sites too, which is the same reach change the rules
- * reserve for org-wide members when a campaign is edited.
+ * reserve for org-wide members when a campaign is edited. So is one shared
+ * with all sites except some, even when this is the one site it reaches
+ * today (AGL-4047).
  */
 async function deleteCampaign(
   firestore: FirebaseFirestore.Firestore,
@@ -428,32 +486,27 @@ async function deleteCampaign(
    * very often "this is a send", and answering it as a completed deletion
    * would tell the console it had removed something it never touched.
    */
-  const placement = {
-    visibleTo: snapshot.exists
-      ? (snapshot.get('visibleTo') as string[] | undefined)
-      : undefined,
-  }
+  /*
+   * The whole document, marker included: a campaign shared with all sites
+   * except some is the workspace's however few sites it reaches today, so it
+   * is never this site's alone to delete (AGL-4047), as the rules never let
+   * that one site's verdict edit it.
+   */
+  const placement = (snapshot.exists ? snapshot.data() : undefined) as
+    | Pick<EmailCampaign, 'visibleTo' | 'scopeMode' | 'scopeExcept'>
+    | undefined
   if (
     !snapshot.exists ||
     (access.hostId && !campaignPlacedOnHost(placement, access.hostId))
   ) {
     return { status: 404, body: { error: 'Unknown campaign' } }
   }
-  if (access.hostId) {
-    const sites = campaignSiteIds(placement)
-    const onlyHere = sites !== null && sites.every((id) => id === access.hostId)
-    if (!onlyHere) {
-      const membership = await resolveOrgMembership(access.uid, orgId)
-      if (!isOrgWideMember(membership?.member)) {
-        return {
-          status: 403,
-          body: {
-            error:
-              'This campaign is on other sites too, so deleting it would take ' +
-              'it off them as well. An organization admin can delete it from ' +
-              'the organization’s campaigns.',
-          },
-        }
+  if (access.hostId && !campaignSiteMayDelete(placement, access.hostId)) {
+    const membership = await resolveOrgMembership(access.uid, orgId)
+    if (!isOrgWideMember(membership?.member)) {
+      return {
+        status: 403,
+        body: { error: campaignSiteDeleteRefusal(placement), reason: 'reach' },
       }
     }
   }
@@ -937,7 +990,7 @@ export function createCampaignDraftWriter(
         const nowMs = request.now.getTime()
         // A site hub's create drawer's own document: a name, no dates, no
         // lists, placed on the site it was drafted for.
-        const visibleTo = campaignVisibleTo([request.hostId])
+        const visibleTo = campaignSiteVisibleTo(request.hostId)
         transaction.create(campaignRef, {
           name,
           ...campaignContainerSearchFields(name),
@@ -1003,8 +1056,9 @@ export async function campaignManageSubject(
 }
 
 /**
- * Campaign management API: removing a campaign, discarding a draft, and
- * copying an email.
+ * Campaign management API: removing a campaign, discarding a draft, copying
+ * an email, and choosing which sites a campaign is shared with (`setSharing`,
+ * AGL-4047, from the organization hub only).
  *
  * Separate from `campaigns/send` because nothing here sends, reserves
  * allowance or moves a meter, and because the removals are about a record
@@ -1019,7 +1073,8 @@ export async function campaignManageSubject(
  * Editing a campaign is deliberately NOT here. The container is client-
  * writable, its create already runs on the client SDK, and a second door to
  * the same document would be a second place for the two to disagree about
- * what a campaign may hold.
+ * what a campaign may hold. Its SHARING is the one exception: a campaign
+ * shared with all sites except some carries a marker only a server may write.
  */
 export const campaignManageHandler: PluginApiHandler = async (req, res) => {
   if (req.method !== 'POST') {
@@ -1044,9 +1099,21 @@ export const campaignManageHandler: PluginApiHandler = async (req, res) => {
   if (
     action !== 'deleteCampaign' &&
     action !== 'discardEmail' &&
-    action !== 'duplicate'
+    action !== 'duplicate' &&
+    action !== 'setSharing'
   ) {
     return res.status(400).json({ error: 'Unknown action' })
+  }
+  /*
+   * Sharing is asked from the organization's door alone (AGL-4047): which
+   * sites a campaign is offered on is a decision about every site, which the
+   * rules reserve for a member of the whole workspace, and a site hub has no
+   * field for it.
+   */
+  if (action === 'setSharing' && hostId) {
+    return res.status(400).json({
+      error: 'Change which sites a campaign is shared with from the workspace’s campaigns.',
+    })
   }
 
   const authorization = String(req.headers.authorization ?? '')
@@ -1136,6 +1203,10 @@ export const campaignManageHandler: PluginApiHandler = async (req, res) => {
       else await claim?.release()
       return res.status(copied.status).json(copied.body)
     }
+    if (action === 'setSharing') {
+      const shared = await setCampaignSharing(firestore, orgId, targetId, req.body?.choice)
+      return res.status(shared.status).json(shared.body)
+    }
     const result =
       action === 'deleteCampaign'
         ? await deleteCampaign(firestore, orgId, targetId, {
@@ -1145,6 +1216,10 @@ export const campaignManageHandler: PluginApiHandler = async (req, res) => {
         : await discardDraft(firestore, orgId, targetId, hostId)
     return res.status(result.status).json(result.body)
   } catch (error) {
+    // A refused credential is a 401, not a fault of ours (AGL-1993).
+    if (isRefusedIdToken(error)) {
+      return res.status(401).json({ error: 'Unauthenticated' })
+    }
     console.error(error)
     return res.status(500).json({ error: 'The request could not be completed' })
   }

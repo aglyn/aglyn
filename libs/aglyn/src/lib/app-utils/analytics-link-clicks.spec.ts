@@ -171,9 +171,9 @@ describe('what counts as a CTA (AGL-1562)', () => {
 describe('tier qualification — the plan in the CTA href (AGL-1858)', () => {
   it('qualifies content_id with the destination plan, so five "Choose" buttons become five rows', () => {
     // The live pricing page's shape: identical labels, no authored section,
-    // the tier stated only in the href — which the console page_view then
-    // strips (its sanitizer reduces URLs to origin + pathname), so this is
-    // the ONLY place the tier survives the click.
+    // the tier stated only in the href. The console page_view that follows
+    // carries it in `page_location`, but this is the only place it is a
+    // dimension on the CTA's own row.
     const link = paint(
       '<a id="target" class="MuiButton-root" ' +
         'href="https://app.localhost/signup?plan=starter&interval=month">Choose</a>',

@@ -78,7 +78,7 @@ class MarketplaceCasesTest {
   private fun site(json: JsonElement) = obj(json).let {
     OrgInstallSite(
       str(it["hostId"]).orEmpty(), str(it["label"]).orEmpty(), version(it["version"]),
-      if (str(it["pinnedBy"]) == "host") InstallTarget.HOST else InstallTarget.ORG, flag(it["shadowed"]),
+      if (str(it["pinnedBy"]) == "host") InstallTarget.HOST else InstallTarget.ORG, flag(it["shadowed"]), flag(it["switchedOff"]),
     )
   }
 
@@ -134,10 +134,12 @@ class MarketplaceCasesTest {
 
   @Test
   fun theWorkspacesPicturePicksUpEverySitesPin() = cases("resolveOrgInstallSummary").forEach { (args, result) ->
-    val hosts = args[0].jsonArray.map { SiteChoice(str(it.jsonObject["id"]).orEmpty(), str(it.jsonObject["label"]).orEmpty()) }
+    val hosts = args[0].jsonArray.map {
+      SiteChoice(str(it.jsonObject["id"]).orEmpty(), str(it.jsonObject["label"]).orEmpty(), (it.jsonObject["disabledPlugins"] as? JsonArray)?.map { id -> id.jsonPrimitive.content })
+    }
     val pins = obj(args[1]).filterValues { it !is JsonNull }.mapValues { PinVersion(version(obj(it.value)["version"])) }
     val org = if (args[2] is JsonNull) null else PinVersion(version(obj(args[2])["version"]))
-    assertEquals(summary(result), resolveOrgInstallSummary(hosts, pins, org), args.toString())
+    assertEquals(summary(result), resolveOrgInstallSummary(hosts, pins, org, args.getOrNull(3)?.let(::str)), args.toString())
   }
 
   @Test
@@ -184,6 +186,7 @@ class MarketplaceCasesTest {
       val outcome = installPlanOutcome(
         str(input["name"]).orEmpty(), input["installed"]?.jsonPrimitive?.content?.toInt() ?: 0, (input["errors"] as? JsonArray).orEmpty().map { it.jsonPrimitive.content },
         flag(input["orgWide"]), flag(input["updating"]), version(input["version"]), flag(input["saved"]),
+        input["leftOut"]?.jsonPrimitive?.content?.toInt() ?: 0,
       )
       assertEquals(str(result.jsonObject["tone"]), outcome.tone, args.toString())
       assertEquals(str(result.jsonObject["text"]), outcome.text, args.toString())

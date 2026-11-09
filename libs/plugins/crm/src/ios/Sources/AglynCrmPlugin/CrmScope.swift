@@ -85,8 +85,49 @@ func crmDefaultScope(_ org: [String: Any]?) -> String? {
   return "org"
 }
 
+/// The sites the CRM default leaves out, when it is all sites except some, or nil (`crmDefaultExceptOf`, AGL-4047). Only
+/// the org's own `crm.defaultRecordScope: 'host'` carries it.
+func crmDefaultExcept(_ org: [String: Any]?) -> [String]? {
+  let settings = org?["crm"] as? [String: Any] ?? [:]
+  guard settings["defaultRecordScope"] as? String == "host", let except = settings["defaultRecordExcept"] as? [Any] else {
+    return nil
+  }
+  var ids: [String] = []
+  for case let id as String in except where !id.isEmpty && !ids.contains(id) { ids.append(id) }
+  return ids.isEmpty ? nil : ids
+}
+
+/// The CRM default as the settings offer it: `org`, `host` or `allExcept` (`crmDefaultSharingOf`).
+func crmDefaultSharing(_ org: [String: Any]?) -> String? {
+  crmDefaultExcept(org) != nil ? "allExcept" : crmDefaultScope(org)
+}
+
+/// The most sites the CRM default may reach when it leaves some out (`CRM_DEFAULT_MAX_INCLUDED`).
+let crmDefaultMaxIncluded = maxScopeHosts
+
+/// What a new record stores of its sites (`crmScopeFields`): under all sites except some, the workspace's sites
+/// (`orgs/{orgId}.hosts`) less the ones left out, plus the site it came in on; never wider than the site and its group
+/// when the sites can't be read or would be too many. Only a server stores the marker; a client's record is marked on
+/// the server's follow-up.
+func crmScopeFields(_ org: [String: Any]?, _ group: ConsentGroup) -> (visibleTo: [String], scopeMode: String?, scopeExcept: [String]?) {
+  if crmDefaultScope(org) == "org" { return ([orgScopeToken], nil, nil) }
+  let kept = group.hostIDs.map(hostScopeToken)
+  guard let except = crmDefaultExcept(org), let hosts = org?["hosts"] as? [String: Any] else { return (kept, nil, nil) }
+  let orgHostIDs = hosts.filter { entry in
+    if let on = entry.value as? Bool { return on }
+    return !(entry.value is NSNull)
+  }.map(\.key)
+  if orgHostIDs.isEmpty { return (kept, nil, nil) }
+  let left = except.filter(orgHostIDs.contains)
+  if left.isEmpty { return ([orgScopeToken], nil, nil) }
+  let out = Set(left)
+  let included = Array(Set(orgHostIDs.filter { !out.contains($0) } + [group.hostID])).filter { !$0.isEmpty }.sorted()
+  if included.count > crmDefaultMaxIncluded { return (kept, nil, nil) }
+  return (included.map(hostScopeToken), "allExcept", left.sorted().map(hostScopeToken))
+}
+
 func crmScopeTokens(_ org: [String: Any]?, _ group: ConsentGroup) -> [String] {
-  crmDefaultScope(org) == "org" ? [orgScopeToken] : group.hostIDs.map(hostScopeToken)
+  crmScopeFields(org, group).visibleTo
 }
 
 func crmReadTokens(_ group: ConsentGroup) -> [String] {

@@ -77,6 +77,12 @@ import {
   type SendRate,
   type SendStats,
 } from '@aglyn/shared-ui-email-campaigns/model/send-report'
+import {
+  describeSharing,
+  scopeSharingOf,
+  sharingFromChoice,
+  type ScopeSharingChoice,
+} from '@aglyn/aglyn/app-utils/scope-tokens'
 import { CAMPAIGN_SEQUENCE_REPORTS_COLLECTION } from './campaign-report'
 
 /** The org collection holding campaign CONTAINERS. */
@@ -153,15 +159,167 @@ export function campaignSiteIds(
 }
 
 /**
+ * Whether a container is shared with all sites except some (AGL-4047): either
+ * marker key present, as the rules' `scopeUnmarked` reads it, so a stored null
+ * or half a marker fails closed.
+ */
+export function campaignSharingMarked(
+  campaign: Pick<EmailCampaign, 'scopeMode' | 'scopeExcept'> | null | undefined,
+): boolean {
+  return (
+    campaign?.scopeMode !== undefined || campaign?.scopeExcept !== undefined
+  )
+}
+
+/**
  * Whether a container is placed on this one site and no other: the placement
  * where the site's own "Run email campaigns" counts for writing it (AGL-4047).
+ *
+ * Never for a container shared with all sites except some, however few sites
+ * it reaches today. Its list can shrink to one site while it still belongs to
+ * the whole workspace, and the next new site joins it, so that one site's
+ * Admins never come to answer for it. The rules' `scopePlacement` and core's
+ * `oneSitePlacement` answer the same.
  */
 export function campaignPlacedOnlyOn(
-  campaign: Pick<EmailCampaign, 'visibleTo'> | null | undefined,
+  campaign:
+    | Pick<EmailCampaign, 'visibleTo' | 'scopeMode' | 'scopeExcept'>
+    | null
+    | undefined,
   hostId: string,
 ): boolean {
+  if (campaignSharingMarked(campaign)) return false
   const tokens = campaign?.visibleTo ?? []
   return tokens.length === 1 && tokens[0] === campaignHostScope(hostId)
+}
+
+/**
+ * Whether the site door of the manage route may delete this container: one
+ * placed on this site and on no other, and not shared with all sites except
+ * some. Deleting anything wider takes it off other sites too, which asks for
+ * access to every site in the workspace (AGL-4047).
+ */
+export function campaignSiteMayDelete(
+  campaign:
+    | Pick<EmailCampaign, 'visibleTo' | 'scopeMode' | 'scopeExcept'>
+    | null
+    | undefined,
+  hostId: string,
+): boolean {
+  if (campaignSharingMarked(campaign)) return false
+  const ids = campaignSiteIds(campaign)
+  return ids !== null && ids.length > 0 && ids.every((id) => id === hostId)
+}
+
+/**
+ * Why a member with access to some sites only may not delete this container
+ * from a site's hub, as the manage route and the console both say it. Names
+ * what it takes, never a role.
+ */
+export function campaignSiteDeleteRefusal(
+  campaign: Pick<EmailCampaign, 'scopeMode' | 'scopeExcept'> | null | undefined,
+): string {
+  return campaignSharingMarked(campaign)
+    ? 'This campaign is shared with all sites except some, so it belongs to ' +
+        'the whole workspace and every new site gets it. Deleting it takes ' +
+        'access to every site in the workspace.'
+    : 'This campaign is on other sites too, so deleting it would take it off ' +
+        'them as well. Deleting it takes access to every site in the workspace.'
+}
+
+/**
+ * What a sharing choice writes on a container, or why it cannot be written
+ * (AGL-4047): `sharingFromChoice` over the workspace's sites, with a chosen
+ * site the workspace no longer holds dropped rather than stored.
+ *
+ * This is where the old silent cap went. A container used to keep the first
+ * thirty sites of a longer selection and say nothing; now a choice of more
+ * than thirty sites is refused with the reason, and "All sites except…" has
+ * no such ceiling, because a container's stored fields do not multiply by
+ * site (its search keys come from its name alone). The console asks it before
+ * a save, and the manage route asks it again with the sites it reads itself.
+ */
+export function campaignSharingWrite(
+  choice: ScopeSharingChoice,
+  orgHostIds: readonly string[],
+): ReturnType<typeof sharingFromChoice> {
+  return sharingFromChoice(
+    choice.mode === 'selected'
+      ? {
+          mode: 'selected',
+          hostIds: choice.hostIds.filter((id) => orgHostIds.includes(id)),
+        }
+      : choice,
+    orgHostIds,
+  )
+}
+
+/**
+ * A container's sharing as the sharing field edits it, or null where it
+ * stores none (an absent or empty `visibleTo`, which no reader matches).
+ */
+export function campaignSharingChoice(
+  campaign: Pick<EmailCampaign, 'visibleTo' | 'scopeMode' | 'scopeExcept'> | null | undefined,
+): ScopeSharingChoice | null {
+  const sharing = scopeSharingOf(campaign as Record<string, unknown> | null | undefined)
+  if (sharing.mode === 'all') return { mode: 'all' }
+  if (sharing.mode === 'selected') return { mode: 'selected', hostIds: sharing.hostIds }
+  if (sharing.mode === 'allExcept') {
+    return { mode: 'allExcept', exceptHostIds: sharing.exceptHostIds }
+  }
+  return null
+}
+
+/** Two sharing choices compare by what they pick, in any order. */
+export function campaignSharingKey(choice: ScopeSharingChoice | null | undefined): string {
+  if (!choice) return 'unset'
+  if (choice.mode === 'all') return 'all'
+  const picked = choice.mode === 'selected' ? choice.hostIds : choice.exceptHostIds
+  return `${choice.mode}:${[...picked].sort().join(',')}`
+}
+
+/** The most site ids one sharing choice off the wire may name: far past any workspace. */
+const SHARING_CHOICE_MAX_IDS = 1000
+
+/**
+ * A sharing choice off the wire, or null for anything else. The ids are
+ * checked against the workspace after, by {@link campaignSharingWrite}.
+ */
+export function campaignSharingChoiceFrom(value: unknown): ScopeSharingChoice | null {
+  const choice = (value ?? {}) as { mode?: unknown; hostIds?: unknown; exceptHostIds?: unknown }
+  const ids = (list: unknown): string[] | null =>
+    Array.isArray(list) &&
+    list.length <= SHARING_CHOICE_MAX_IDS &&
+    list.every((id) => typeof id === 'string' && /^[^:/]+$/.test(id))
+      ? (list as string[])
+      : null
+  if (choice.mode === 'all') return { mode: 'all' }
+  if (choice.mode === 'selected') {
+    const hostIds = ids(choice.hostIds)
+    return hostIds && { mode: 'selected', hostIds }
+  }
+  if (choice.mode === 'allExcept') {
+    const exceptHostIds = ids(choice.exceptHostIds)
+    return exceptHostIds && { mode: 'allExcept', exceptHostIds }
+  }
+  return null
+}
+
+/**
+ * Where a container shared with all sites except some is offered, naming the
+ * sites left out where the reader can name them (`describeSharing`), or null
+ * for any other container, whose sites the surfaces list as they always have.
+ * Listing today's sites would read as sites somebody chose, and the next new
+ * site joins it.
+ */
+export function campaignAllExceptLabel(
+  campaign: Pick<EmailCampaign, 'visibleTo' | 'scopeMode' | 'scopeExcept'> | null | undefined,
+  hostNames: Readonly<Record<string, string>>,
+): string | null {
+  if (scopeSharingOf(campaign as Record<string, unknown> | null | undefined).mode !== 'allExcept') {
+    return null
+  }
+  return describeSharing(campaign as Record<string, unknown> | null | undefined, hostNames)
 }
 
 /** Whether a container is offered on this site. */
@@ -174,16 +332,12 @@ export function campaignPlacedOnHost(
 }
 
 /**
- * The `visibleTo` a container is stamped with, from a site selection.
- *
- * `null` (or an empty selection) is every site. A selection is deduped and
- * capped at thirty, the ceiling `array-contains-any` and the rules' `hasAny`
- * both impose.
+ * The `visibleTo` of a container created under one site: that site alone. A
+ * site hub's create and an AI draft both place a campaign where it was made.
+ * Every other placement is a sharing choice, {@link campaignSharingWrite}.
  */
-export function campaignVisibleTo(siteIds: readonly string[] | null): string[] {
-  if (!siteIds || siteIds.length === 0) return [CAMPAIGN_ORG_SCOPE]
-  const unique = [...new Set(siteIds.filter((id) => typeof id === 'string' && id))]
-  return unique.slice(0, 30).map(campaignHostScope)
+export function campaignSiteVisibleTo(hostId: string): string[] {
+  return [campaignHostScope(hostId)]
 }
 
 /**
@@ -227,6 +381,15 @@ export interface EmailCampaign {
    * every site, `['host:{id}', …]` for a set. See {@link campaignSiteIds}.
    */
   visibleTo?: string[]
+  /**
+   * `'allExcept'` on a container shared with all sites except some (AGL-4047),
+   * beside {@link EmailCampaign.scopeExcept}, the sites it leaves out. Both are
+   * the manage route's alone to write: the rules refuse them from a client, and
+   * the sweep keeps `visibleTo` in step as sites come and go. Absent on every
+   * other container.
+   */
+  scopeMode?: string | null
+  scopeExcept?: string[] | null
   /**
    * Whether its emails carry `List-Unsubscribe` and `List-Unsubscribe-Post`
    * (RFC 8058), the header mail clients draw their own Unsubscribe button

@@ -21,6 +21,15 @@ struct OrgAutomationEditorScreen: View {
   @State private var saving = false
   @State private var notice: String?
 
+  private var orgHostIDs: [String] { sites.sites.map(\.id) }
+
+  /// Why the placement can't be saved, the answer the manage route gives; nothing about leaving sites out until the
+  /// sites are read.
+  private var sharingProblem: String? {
+    if case .allExcept = draft.sharing, !sites.ready { return nil }
+    return draft.placementWrite(orgHostIDs).problem
+  }
+
   private var editingID: String? { params["id"].flatMap { $0 == "new" || $0.isEmpty ? nil : $0 } }
 
   var body: some View {
@@ -47,10 +56,10 @@ struct OrgAutomationEditorScreen: View {
       guard let orgID = context.orgID else { return }
       sites.start(context)
       if let editingID { stored.start(context.firestore, AutomationPaths.orgAutomations(orgID) + [editingID]) }
-      await pickers.loadOrg(context.firestore, orgID: orgID, placement: draft.placement)
+      await pickers.loadOrg(context.firestore, orgID: orgID, placement: draft.placement(orgHostIDs))
     }
     .onChange(of: stored.loaded) { _, loaded in seed(loaded) }
-    .onChange(of: draft.placement) { _, placement in pickers.place(placement) }
+    .onChange(of: "\(draft.sharing.key)|\(orgHostIDs)") { _, _ in pickers.place(draft.placement(orgHostIDs)) }
     .onAppear { seed(stored.loaded) }
     .onDisappear {
       stored.stop()
@@ -63,7 +72,7 @@ struct OrgAutomationEditorScreen: View {
     if let editingID {
       guard loaded, let doc = stored.doc else { return }
       draft = OrgAutomationDraft(id: editingID, data: doc.data)
-      pickers.place(draft.placement)
+      pickers.place(draft.placement(orgHostIDs))
     }
     seeded = true
   }
@@ -97,35 +106,14 @@ struct OrgAutomationEditorScreen: View {
           .accessibilityIdentifier("org-automation-filter")
         }
         ConditionRowsSection(rows: $draft.conditionRows, combinator: $draft.combinator, forms: nil)
-        Section("Runs on") {
-          Picker("Runs on", selection: $draft.everySite) {
-            Text("Every site").tag(true)
-            Text("Chosen sites").tag(false)
-          }
-          .pickerStyle(.segmented)
+        Section {
+          SiteSharingField(
+            "Runs on",
+            value: Binding(get: { draft.sharing }, set: { if let next = $0 { draft.sharing = next } }),
+            sites: sites.sites.map { SharingSite(id: $0.id, name: siteName($0.id, sites.sites)) }, sitesReady: sites.ready,
+            problem: sharingProblem
+          )
           .accessibilityIdentifier("org-automation-placement")
-          if !draft.everySite {
-            if !sites.ready {
-              ProgressView()
-            } else if sites.sites.isEmpty {
-              Text("This organization has no sites yet.").foregroundStyle(.secondary)
-            } else {
-              ForEach(sites.sites) { site in
-                Toggle(
-                  siteName(site.id, sites.sites),
-                  isOn: Binding(
-                    get: { draft.siteIDs.contains(site.id) },
-                    set: { on in
-                      if on { draft.siteIDs.append(site.id) } else { draft.siteIDs.removeAll { $0 == site.id } }
-                    })
-                )
-                .accessibilityIdentifier("org-automation-site-\(site.id)")
-              }
-            }
-            if draft.tooManySites {
-              AglynHelperText("Choose \(maxScopeHosts) sites or fewer, or run it on every site.", isError: true)
-            }
-          }
         }
         ForEach($draft.steps) { $step in
           let index = draft.steps.firstIndex { $0.id == step.id } ?? 0
@@ -155,6 +143,12 @@ struct OrgAutomationEditorScreen: View {
     guard let orgID = context.orgID else { return }
     let body = draft.body
     if case .problem(let problem) = readOrgAutomation(body) {
+      notice = problem
+      return
+    }
+    // Where it runs, against the workspace's sites, as the route will ask it (AGL-4047). Leaving sites out waits for
+    // the sites; the route asks again.
+    if let problem = sharingProblem {
       notice = problem
       return
     }

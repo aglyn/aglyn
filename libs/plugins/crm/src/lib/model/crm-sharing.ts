@@ -56,6 +56,20 @@
  * own field, `writeTo`, present only on a shared record: the held tokens
  * and the tokens of grants whose access is `edit`. The Firestore rules and
  * the CRM's routes check it; a read-only grant is the default.
+ *
+ * ## All sites except some (AGL-4047)
+ *
+ * A grant or a rule can share with every site but the ones it leaves out:
+ * `except` beside `tokens` (a rule's `targets`). Readers still enforce one
+ * flat list, so the grant's `tokens` are the sites it reaches, worked out
+ * from the workspace's sites every time the record's sharing is recomputed,
+ * and a site added later joins on the next recompute, which the workspace's
+ * own site change starts (`server/crm-sharing-runs.ts`). `planRecordSharing`
+ * reads `tokens` as it always has, so `visibleTo`, `added` and `writeTo` come
+ * out the same way. A site left out that captured the person still holds
+ * them: held tokens are never a grant's to take away. One grant reaches at
+ * most {@link CRM_SHARING_MAX_INCLUDED} sites, since a record's search fields
+ * grow by site; past that it keeps the sites it has and stops widening.
  */
 
 import type { ScopeToken } from '@aglyn/aglyn'
@@ -68,6 +82,7 @@ import {
   ORG_SCOPE_TOKEN,
   parseScopeToken,
   SCOPE_GRANTS_FIELD,
+  type ScopeSharingChoice,
 } from '@aglyn/aglyn/app-utils/scope-tokens'
 import type { CrmPicklist } from '@aglyn/aglyn/app-utils/crm'
 import {
@@ -114,8 +129,17 @@ export type CrmShareSource = 'manual' | 'rule'
 /** One grant on one record. */
 export interface CrmShareGrant {
   source: CrmShareSource
-  /** The sites it shares with: `['org']` for all sites, else host tokens. */
+  /**
+   * The sites it shares with: `['org']` for all sites, else host tokens. For
+   * a grant with `except`, the sites it reached when last worked out.
+   */
   tokens: ScopeToken[]
+  /**
+   * Present on a grant shared with all sites except some (AGL-4047): the
+   * sites it leaves out, as host tokens. `tokens` follows the workspace's
+   * sites, so a site added later joins.
+   */
+  except?: ScopeToken[]
   access: CrmShareAccess
   /** The rule behind a `rule` grant. */
   ruleId?: string
@@ -143,6 +167,12 @@ export interface CrmRecordSharing {
    * since a query takes a single array clause.
    */
   orgWideHeldBy: ScopeToken[]
+  /**
+   * `true` while any grant shares with all sites except some (AGL-4047), so
+   * a change to the workspace's sites can find the records to bring level
+   * ({@link CRM_SHARING_EXCEPT_PATH}). Absent otherwise.
+   */
+  hasExcept?: true
 }
 
 /** The record field its grants live under — the core's name for it. */
@@ -153,6 +183,19 @@ export const CRM_WRITE_SCOPE_FIELD = 'writeTo'
 
 /** The array field a rule's removal queries. */
 export const CRM_SHARING_RULE_IDS_PATH = `${CRM_SHARING_FIELD}.ruleIds`
+
+/** The field a site change queries for records with an all-except grant (AGL-4047). */
+export const CRM_SHARING_EXCEPT_PATH = `${CRM_SHARING_FIELD}.hasExcept`
+
+/**
+ * The most sites one all-except grant reaches (AGL-4047). A record's scoped
+ * search fields grow by site (`scopedSearchTokens`), so past this the grant
+ * keeps the sites it has and stops widening, and a new share is refused.
+ */
+export const CRM_SHARING_MAX_INCLUDED = MAX_SCOPE_HOSTS
+
+/** The key of a record's one hand share with all sites except some. */
+export const MANUAL_EXCEPT_GRANT_KEY = 'manual_except'
 
 /** A hand share is one grant per target, so each is unshared on its own. */
 export function manualGrantKey(token: string): string {
@@ -170,11 +213,20 @@ function tokenList(raw: unknown): ScopeToken[] {
   return [...new Set(raw.filter(isScopeToken))]
 }
 
+/** Host tokens only, de-duplicated: what an `except` list may hold. */
+function hostTokenList(raw: unknown): ScopeToken[] {
+  return tokenList(raw).filter((token) => parseScopeToken(token)?.kind === 'host')
+}
+
 function readGrant(raw: unknown): CrmShareGrant | null {
   if (!raw || typeof raw !== 'object' || Array.isArray(raw)) return null
   const value = raw as Record<string, unknown>
   const tokens = tokenList(value['tokens'])
-  if (!tokens.length) return null
+  const except = hostTokenList(value['except'])
+  // An all-except grant can reach no site for a while, when every site but
+  // the ones it leaves out is gone. It still says who it shares with.
+  if (!tokens.length && !except.length) return null
+  if (except.length && tokens.includes(ORG_SCOPE_TOKEN)) return null
   const source = value['source'] === 'rule' ? 'rule' : value['source'] === 'manual' ? 'manual' : null
   if (!source) return null
   const ruleId = typeof value['ruleId'] === 'string' ? value['ruleId'] : ''
@@ -185,6 +237,7 @@ function readGrant(raw: unknown): CrmShareGrant | null {
   return {
     source,
     tokens,
+    ...(except.length ? { except } : {}),
     access: value['access'] === 'edit' ? 'edit' : 'read',
     ...(ruleId ? { ruleId } : {}),
     ...(byUid ? { byUid } : {}),
@@ -287,6 +340,7 @@ export function planRecordSharing(
       added,
       ruleIds,
       orgWideHeldBy: added.includes(ORG_SCOPE_TOKEN) ? [...held] : [],
+      ...(entries.some(([, grant]) => grant.except?.length) ? { hasExcept: true as const } : {}),
     },
   }
 }
@@ -305,7 +359,8 @@ const sameGrant = (a: CrmShareGrant | undefined, b: CrmShareGrant | undefined) =
   (a.byUid ?? '') === (b.byUid ?? '') &&
   (a.byName ?? '') === (b.byName ?? '') &&
   a.atMs === b.atMs &&
-  sameList(a.tokens, b.tokens)
+  sameList(a.tokens, b.tokens) &&
+  sameList(a.except ?? [], b.except ?? [])
 
 /** Whether writing `plan` would change what the record stores. */
 export function sharingPlanChanges(
@@ -329,7 +384,8 @@ export function sharingPlanChanges(
       Array.isArray(sharing['ruleIds']) ? (sharing['ruleIds'] as unknown[]) : [],
       plan.sharing.ruleIds,
     ) ||
-    !sameList(tokenList(sharing['orgWideHeldBy']), plan.sharing.orgWideHeldBy)
+    !sameList(tokenList(sharing['orgWideHeldBy']), plan.sharing.orgWideHeldBy) ||
+    (sharing['hasExcept'] === true) !== (plan.sharing.hasExcept === true)
   )
 }
 
@@ -415,8 +471,17 @@ export interface CrmSharingRule {
   /** Records captured or created on any of these sites; empty is every site. */
   sourceHostIds: string[]
   criteria: CrmSharingCriteria
-  /** `['org']` for all sites, including sites added later; else host tokens. */
+  /**
+   * `['org']` for all sites, including sites added later; else host tokens.
+   * For a rule with `except`, the sites it reached when it was saved.
+   */
   targets: ScopeToken[]
+  /**
+   * Present on a rule that shares with all sites except some (AGL-4047): the
+   * sites it leaves out, as host tokens. Its grants follow the workspace's
+   * sites, so a site added later joins.
+   */
+  except?: ScopeToken[]
   access: CrmShareAccess
   /** Being deleted: its grants are being removed, and it matches nothing. */
   deleting?: boolean
@@ -446,7 +511,10 @@ export function readCrmSharingRule(raw: unknown): CrmSharingRule | null {
   const id = String(value['id'] ?? '')
   if (!RULE_ID.test(id)) return null
   if (!isCrmSharingObject(value['object'])) return null
-  const targets = normalizeShareTargets(tokenList(value['targets']))
+  const except = hostTokenList(value['except'])
+  const targets = except.length
+    ? hostTokenList(value['targets'])
+    : normalizeShareTargets(tokenList(value['targets']))
   if (!targets) return null
   const rawCriteria = (value['criteria'] ?? {}) as Record<string, unknown>
   const criteria: CrmSharingCriteria = {}
@@ -465,6 +533,7 @@ export function readCrmSharingRule(raw: unknown): CrmSharingRule | null {
     sourceHostIds: stringList(value['sourceHostIds'], MAX_SCOPE_HOSTS),
     criteria,
     targets,
+    ...(except.length ? { except } : {}),
     access: value['access'] === 'edit' ? 'edit' : 'read',
     ...(value['deleting'] === true ? { deleting: true } : {}),
     ...(typeof value['createdByUid'] === 'string' ? { createdByUid: value['createdByUid'] } : {}),
@@ -538,6 +607,62 @@ export function shareTargetsFrom(input: unknown): ScopeToken[] | null {
       .filter((id) => id && !id.includes('/') && !id.includes(':'))
       .map(hostScopeToken),
   )
+}
+
+/**
+ * All sites except some, from a request (AGL-4047):
+ * `{ mode: 'allExcept', exceptHostIds }`, or null when the input is not that
+ * choice. Whether the sites are the workspace's, and what the choice reaches,
+ * is `sharingFromChoice`'s to answer against the workspace's sites.
+ */
+export function shareExceptChoiceFrom(
+  input: unknown,
+): Extract<ScopeSharingChoice, { mode: 'allExcept' }> | null {
+  if (!input || typeof input !== 'object' || Array.isArray(input)) return null
+  const value = input as Record<string, unknown>
+  if (value['mode'] !== 'allExcept' || !Array.isArray(value['exceptHostIds'])) return null
+  const exceptHostIds = [
+    ...new Set(
+      (value['exceptHostIds'] as unknown[])
+        .map((id) => String(id ?? '').trim())
+        .filter((id) => id && !id.includes('/') && !id.includes(':')),
+    ),
+  ].slice(0, 1000)
+  return { mode: 'allExcept', exceptHostIds }
+}
+
+/**
+ * The sites `orgs/{orgId}.hosts` names: the list the sweep keeps every
+ * all-except document level with (`orgHostIdsFromDoc`), read the same way
+ * here so the CRM's grants and the sweep never disagree about a site.
+ */
+export function crmOrgHostIds(org: Readonly<Record<string, unknown>> | null | undefined): string[] {
+  const hosts = org?.['hosts']
+  if (!hosts || typeof hosts !== 'object' || Array.isArray(hosts)) return []
+  return Object.entries(hosts as Record<string, unknown>)
+    .filter(([, on]) => Boolean(on))
+    .map(([hostId]) => hostId)
+}
+
+/**
+ * The sites an all-except grant reaches (AGL-4047): the workspace's sites
+ * less the ones it leaves out, sorted. `orgHostIds` unknown keeps what the
+ * grant reached last. Past {@link CRM_SHARING_MAX_INCLUDED} it stops
+ * widening: it keeps the sites it reached that are still the workspace's.
+ */
+export function sitesAllExcept(
+  except: readonly string[],
+  orgHostIds: readonly string[] | null | undefined,
+  previous: readonly string[],
+): ScopeToken[] {
+  const left = new Set(hostIdsFromScope(except))
+  const before = hostIdsFromScope(hostTokenList(previous)).filter((id) => !left.has(id))
+  if (!orgHostIds) return before.map(hostScopeToken)
+  const org = [...new Set(orgHostIds.filter(Boolean))]
+  const included = org.filter((id) => !left.has(id)).sort()
+  if (included.length <= CRM_SHARING_MAX_INCLUDED) return included.map(hostScopeToken)
+  const now = new Set(org)
+  return before.filter((id) => now.has(id)).map(hostScopeToken)
 }
 
 /*==========================================
@@ -616,6 +741,12 @@ const anyOf = (wanted: readonly string[] | undefined, have: readonly string[], f
  */
 export interface CrmSharingContext {
   leadSources?: CrmPicklist
+  /**
+   * The workspace's sites (`orgs/{orgId}.hosts`), which an all-except grant
+   * reaches less the ones it leaves out (AGL-4047). Absent, such a grant keeps
+   * the sites it reached last.
+   */
+  orgHostIds?: readonly string[]
 }
 
 /** Whether any active rule for `object` asks a lead source direction — whether the list must be read. */
@@ -673,23 +804,52 @@ export function evaluateRecordGrants(
   const current = readRecordGrants(record)
   const next: Record<string, CrmShareGrant> = {}
   for (const [key, grant] of Object.entries(current)) {
-    if (grant.source === 'manual') next[key] = grant
+    if (grant.source !== 'manual') continue
+    // A hand share with all sites except some follows the workspace's sites.
+    next[key] = grant.except?.length
+      ? { ...grant, tokens: sitesAllExcept(grant.except, context.orgHostIds, grant.tokens) }
+      : grant
   }
   for (const rule of activeSharingRules(rules, object)) {
     if (!crmSharingRuleMatches(rule, object, record, context)) continue
     const key = ruleGrantKey(rule.id)
     const before = current[key]
+    const except = rule.except ?? []
+    const tokens = except.length
+      ? sitesAllExcept(except, context.orgHostIds, before?.except?.length ? before.tokens : rule.targets)
+      : [...rule.targets]
     next[key] = {
       source: 'rule',
       ruleId: rule.id,
-      tokens: [...rule.targets],
+      tokens,
+      ...(except.length ? { except: [...except] } : {}),
       access: rule.access,
-      atMs: before && sameList(before.tokens, rule.targets) && before.access === rule.access
-        ? before.atMs
-        : atMs,
+      atMs:
+        before &&
+        sameList(before.tokens, tokens) &&
+        sameList(before.except ?? [], except) &&
+        before.access === rule.access
+          ? before.atMs
+          : atMs,
     }
   }
   return next
+}
+
+/**
+ * Whether working out this record's sharing needs the workspace's sites: a
+ * grant on it, or an active rule for its kind, leaves sites out (AGL-4047).
+ * Everything else plans from the record and the rules alone.
+ */
+export function sharingAsksOrgSites(
+  object: CrmSharingObject,
+  record: Readonly<Record<string, unknown>>,
+  rules: readonly CrmSharingRule[],
+): boolean {
+  return (
+    Object.values(readRecordGrants(record)).some((grant) => Boolean(grant.except?.length)) ||
+    activeSharingRules(rules, object).some((rule) => Boolean(rule.except?.length))
+  )
 }
 
 /** The hand shares after sharing with `targets`, by `by`. */
@@ -713,6 +873,42 @@ export function withManualShares(
     }
   }
   return next
+}
+
+/**
+ * The hand shares after sharing with all sites except some (AGL-4047): one
+ * grant, {@link MANUAL_EXCEPT_GRANT_KEY}, replacing any earlier one. `tokens`
+ * are the sites it reaches today.
+ */
+export function withManualExceptShare(
+  grants: Readonly<Record<string, CrmShareGrant>>,
+  share: { tokens: readonly ScopeToken[]; except: readonly ScopeToken[] },
+  access: CrmShareAccess,
+  by: { uid: string; name?: string | null },
+  atMs: number,
+): Record<string, CrmShareGrant> {
+  const name = String(by.name ?? '').trim()
+  return {
+    ...grants,
+    [MANUAL_EXCEPT_GRANT_KEY]: {
+      source: 'manual',
+      tokens: [...share.tokens],
+      except: [...share.except],
+      access,
+      byUid: by.uid,
+      ...(name ? { byName: name } : {}),
+      atMs,
+    },
+  }
+}
+
+/** The hand shares after taking away the share with all sites except some. */
+export function withoutManualExceptShare(
+  grants: Readonly<Record<string, CrmShareGrant>>,
+): Record<string, CrmShareGrant> {
+  return Object.fromEntries(
+    Object.entries(grants).filter(([key]) => key !== MANUAL_EXCEPT_GRANT_KEY),
+  )
 }
 
 /** The hand shares after unsharing `targets`. Rule grants are the rule's to take away. */
@@ -809,7 +1005,26 @@ export type CrmSharingLine =
       byName?: string
       atMs: number
     }
-  | { kind: 'rule'; key: string; ruleId: string; tokens: ScopeToken[]; access: CrmShareAccess; atMs: number }
+  | {
+      /** A hand share with all sites except some (AGL-4047). */
+      kind: 'manualExcept'
+      key: string
+      tokens: ScopeToken[]
+      except: ScopeToken[]
+      access: CrmShareAccess
+      byName?: string
+      atMs: number
+    }
+  | {
+      kind: 'rule'
+      key: string
+      ruleId: string
+      tokens: ScopeToken[]
+      /** The sites a rule shares with all but (AGL-4047). */
+      except?: ScopeToken[]
+      access: CrmShareAccess
+      atMs: number
+    }
 
 /**
  * Where a record is visible and why: the sites that hold it (its consent
@@ -827,6 +1042,18 @@ export function describeRecordSharing(
   const grants = Object.entries(readRecordGrants(record))
   for (const [key, grant] of grants) {
     if (grant.source !== 'manual') continue
+    if (grant.except?.length) {
+      lines.push({
+        kind: 'manualExcept',
+        key,
+        tokens: grant.tokens,
+        except: grant.except,
+        access: grant.access,
+        ...(grant.byName ? { byName: grant.byName } : {}),
+        atMs: grant.atMs,
+      })
+      continue
+    }
     lines.push({
       kind: 'manual',
       key,
@@ -843,6 +1070,7 @@ export function describeRecordSharing(
       key,
       ruleId: grant.ruleId,
       tokens: grant.tokens,
+      ...(grant.except?.length ? { except: grant.except } : {}),
       access: grant.access,
       atMs: grant.atMs,
     })
@@ -850,11 +1078,20 @@ export function describeRecordSharing(
   return lines
 }
 
-/** "All sites", a site's name, or "N sites". */
+/**
+ * "All sites", a site's name, or "N sites"; for a share with all sites except
+ * some (AGL-4047), "All sites except Blog", "All sites except Blog and Shop"
+ * or "All sites except 3 sites".
+ */
 export function describeShareTargets(
   tokens: readonly string[],
   siteName: (hostId: string) => string,
+  except?: readonly string[] | null,
 ): string {
+  const left = except ? hostIdsFromScope(except) : []
+  if (left.length === 1) return `All sites except ${siteName(left[0])}`
+  if (left.length === 2) return `All sites except ${siteName(left[0])} and ${siteName(left[1])}`
+  if (left.length > 2) return `All sites except ${left.length} sites`
   if (tokens.includes(ORG_SCOPE_TOKEN)) return 'All sites'
   const ids = hostIdsFromScope(tokens)
   if (ids.length === 1) return siteName(ids[0])
@@ -913,6 +1150,8 @@ export type CrmSharingAction =
   | 'rule-save'
   | 'rule-delete'
   | 'rule-continue'
+  | 'default-apply'
+  | 'default-apply-continue'
 
 export interface CrmSharingSite {
   id: string
@@ -931,4 +1170,100 @@ export interface CrmSharingResponse {
   rule?: CrmSharingRule | null
   /** Whether a rule run has more to do (`rule-continue` again). */
   more?: boolean
+  /** `default-apply`: where the "Apply to existing records" run stands. */
+  applyRun?: CrmDefaultApplyRun | null
+}
+
+/*==========================================
+ * "APPLY TO EXISTING RECORDS" (AGL-4047).
+ *
+ * The CRM default stamps NEW records. Under "All sites except…" a member
+ * holding "Change CRM settings" can bring the records the workspace already
+ * has to it: every contact, lead, company, deal, task and logged activity is
+ * shared with every site but the ones left out, and the sites that captured
+ * a person keep them. Only that explicit run changes an existing record,
+ * never the setting itself. It walks each collection by a cursor in budgeted
+ * passes, its progress mirrored here on the org document.
+ *=========================================*/
+
+/** The collections the run walks, in order: the cursor names a place in this list. */
+export const CRM_DEFAULT_APPLY_COLLECTIONS = [
+  'contacts',
+  'leads',
+  'companies',
+  'deals',
+  'crmTasks',
+  'crmActivities',
+] as const
+export type CrmDefaultApplyCollection = (typeof CRM_DEFAULT_APPLY_COLLECTIONS)[number]
+
+export function isCrmDefaultApplyCollection(value: unknown): value is CrmDefaultApplyCollection {
+  return (
+    typeof value === 'string' &&
+    (CRM_DEFAULT_APPLY_COLLECTIONS as readonly string[]).includes(value)
+  )
+}
+
+/**
+ * What a browser writes itself that no sharing rule applies to, yet the CRM
+ * default "All sites except…" stamps: a logged activity. Its `evaluate`
+ * follow-up only marks it, when its sites are exactly the default's, so a
+ * site added later sees it (AGL-4047).
+ */
+export const CRM_DEFAULT_MARK_ONLY_COLLECTIONS = ['crmActivities'] as const
+export type CrmDefaultMarkOnlyCollection = (typeof CRM_DEFAULT_MARK_ONLY_COLLECTIONS)[number]
+
+export function isCrmDefaultMarkOnlyCollection(value: unknown): value is CrmDefaultMarkOnlyCollection {
+  return (
+    typeof value === 'string' &&
+    (CRM_DEFAULT_MARK_ONLY_COLLECTIONS as readonly string[]).includes(value)
+  )
+}
+
+/** Where the run's progress is mirrored on the org document, for the settings card. */
+export const CRM_DEFAULT_APPLY_RUN_PATH = 'crm.defaultApplyRun'
+
+export interface CrmDefaultApplyRun {
+  status: 'running' | 'done' | 'failed'
+  /** Records read. */
+  processed: number
+  /** Records whose sites moved. */
+  changed: number
+  /** Records it would take past the site limit, left as they were. */
+  capped: number
+  /** Where it carries on from. */
+  cursor: { collection: CrmDefaultApplyCollection; afterId: string | null } | null
+  startedAtMs: number
+  finishedAtMs?: number
+  error?: string
+}
+
+/** The run as the org document mirrors it, cleaned; null when none was ever started. */
+export function readCrmDefaultApplyRun(
+  org: Readonly<Record<string, unknown>> | null | undefined,
+): CrmDefaultApplyRun | null {
+  const crm = (org ?? {})['crm']
+  const raw =
+    crm && typeof crm === 'object' && !Array.isArray(crm)
+      ? (crm as Record<string, unknown>)['defaultApplyRun']
+      : undefined
+  if (!raw || typeof raw !== 'object' || Array.isArray(raw)) return null
+  const value = raw as Record<string, unknown>
+  const cursor = value['cursor'] as Record<string, unknown> | null | undefined
+  return {
+    status: value['status'] === 'done' || value['status'] === 'failed' ? value['status'] : 'running',
+    processed: Number(value['processed']) || 0,
+    changed: Number(value['changed']) || 0,
+    capped: Number(value['capped']) || 0,
+    cursor:
+      cursor && isCrmDefaultApplyCollection(cursor['collection'])
+        ? {
+            collection: cursor['collection'],
+            afterId: typeof cursor['afterId'] === 'string' ? cursor['afterId'] : null,
+          }
+        : null,
+    startedAtMs: Number(value['startedAtMs']) || 0,
+    ...(typeof value['finishedAtMs'] === 'number' ? { finishedAtMs: value['finishedAtMs'] } : {}),
+    ...(typeof value['error'] === 'string' ? { error: value['error'] } : {}),
+  }
 }

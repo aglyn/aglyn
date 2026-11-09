@@ -37,7 +37,6 @@ import androidx.compose.ui.semantics.semantics
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
 import com.aglyn.contracts.ACTION_MAX_STEPS
-import com.aglyn.contracts.MAX_SCOPE_HOSTS
 import com.aglyn.contracts.ORG_AUTOMATION_STEP_TYPES
 import com.aglyn.contracts.ORG_AUTOMATION_TRIGGER_EVENTS
 import com.aglyn.contracts.OrgAutomationRead
@@ -59,6 +58,10 @@ import com.aglyn.core.Live
 import com.aglyn.core.OrgAccess
 import com.aglyn.core.OrgRole
 import com.aglyn.pluginhost.NativePluginContext
+import com.aglyn.pluginhost.ScopeSharingChoice
+import com.aglyn.pluginhost.SharingSite
+import com.aglyn.pluginhost.SiteSharingField
+import com.aglyn.pluginhost.sharingCovers
 import com.aglyn.ui.ActionDialog
 import com.aglyn.ui.AglynIcons
 import com.aglyn.ui.EmptyState
@@ -406,7 +409,12 @@ fun OrgAutomationEditor(context: NativePluginContext, orgId: String, id: String?
   var draft by remember(id, seed != null) { mutableStateOf(seed?.let { orgAutomationDraftOf(it.data, it.id) } ?: OrgAutomationDraft(id = null)) }
   var busy by remember { mutableStateOf(false) }
   var error by remember { mutableStateOf<String?>(null) }
-  val pickers = rememberOrgPickers(context, orgId, draftPlacement(draft))
+  val siteList = (sites as? Live.Ready)?.value.orEmpty()
+  val orgHostIds = siteList.map { it.id }
+  val pickers = rememberOrgPickers(context, orgId, draftPlacement(draft, orgHostIds))
+  // Why the placement can't be saved, the answer the manage route gives; nothing about leaving sites out until the
+  // sites are read.
+  val sharingProblem = if (draft.sharing is ScopeSharingChoice.AllExcept && sites !is Live.Ready) null else draftSharing(draft, orgHostIds).second
 
   EditorFrame(
     title = if (draft.id != null) "Edit org automation" else "Add org automation",
@@ -420,6 +428,11 @@ fun OrgAutomationEditor(context: NativePluginContext, orgId: String, id: String?
       val read = readOrgAutomation(body)
       if (read is OrgAutomationRead.Refused) {
         error = read.problem
+        return@EditorFrame
+      }
+      // Where it runs, against the workspace's sites, as the route will ask it (AGL-4047).
+      if (sharingProblem != null) {
+        error = sharingProblem
         return@EditorFrame
       }
       busy = true
@@ -457,40 +470,16 @@ fun OrgAutomationEditor(context: NativePluginContext, orgId: String, id: String?
     val problem = triggerFilterProblem(draft.filter)
     Field("Filter (optional)", draft.filter, { draft = draft.copy(filter = it) }, placeholder = "subscribe", helper = problem ?: hostEventPayloadHint(draft.event), error = problem != null)
     ConditionRowsEditor(draft.conditionRows, draft.combinator, { draft = draft.copy(conditionRows = it) }, { draft = draft.copy(combinator = it) })
-    Overline("Runs on")
-    ChoiceChipRow(
-      options = listOf(ChipOption("org", "Every site"), ChipOption("sites", "Chosen sites")),
-      selected = draft.placement,
-      onSelect = { draft = draft.copy(placement = it) },
+    SiteSharingField(
+      value = draft.sharing,
+      onChange = { draft = draft.copy(sharing = it) },
+      sites = siteList.map { SharingSite(it.id, it.name.ifEmpty { it.subdomain.ifEmpty { it.id } }) },
+      sitesReady = sites is Live.Ready,
       modifier = Modifier.testTag("org-automation-placement"),
+      label = "Runs on",
+      problem = sharingProblem,
     )
-    if (draft.placement == "sites") {
-      when (sites) {
-        Live.Loading -> Caption("…")
-        is Live.Failed -> NoticeBanner("The workspace's sites could not be loaded.", StatusTone.ERROR)
-        is Live.Ready -> if (sites.value.isEmpty()) {
-          Caption("This organization has no sites yet.")
-        } else {
-          Column {
-            for (site in sites.value) {
-              val checked = site.id in draft.siteIds
-              Row(
-                Modifier.fillMaxWidth().clickable {
-                  draft = draft.copy(siteIds = if (checked) draft.siteIds - site.id else draft.siteIds + site.id)
-                }.testTag("site-choice-${site.id}"),
-                verticalAlignment = Alignment.CenterVertically,
-              ) {
-                Checkbox(checked = checked, onCheckedChange = null)
-                Text(site.name.ifEmpty { site.subdomain.ifEmpty { site.id } }, style = MaterialTheme.typography.bodyLarge)
-              }
-            }
-          }
-        }
-      }
-      if (draft.siteIds.size > MAX_SCOPE_HOSTS) {
-        Caption("Choose $MAX_SCOPE_HOSTS sites or fewer, or run it on every site.", color = MaterialTheme.colorScheme.error)
-      }
-    }
+    if (sites is Live.Failed) NoticeBanner("The workspace's sites could not be loaded.", StatusTone.ERROR)
     Overline("Steps (run in order)")
     draft.steps.forEachIndexed { index, step ->
       StepCard(
@@ -519,16 +508,15 @@ fun OrgAutomationEditor(context: NativePluginContext, orgId: String, id: String?
 
 /** The org editor's pickers: the workspace's datasets, lists and campaigns, those that reach the placement. */
 @Composable
-fun rememberOrgPickers(context: NativePluginContext, orgId: String, placement: List<String>): SitePickers {
+fun rememberOrgPickers(context: NativePluginContext, orgId: String, placement: Map<String, Any?>): SitePickers {
   val datasets = windowOf(liveQuery(context, remember(orgId) { ceilingQuery(datasetsPath(orgId), EDITOR_OPTION_CEILING) }).docsOrEmpty(), EDITOR_OPTION_CEILING)
   val lists = windowOf(liveQuery(context, remember(orgId) { ceilingQuery(listsPath(orgId), EDITOR_OPTION_CEILING) }).docsOrEmpty(), EDITOR_OPTION_CEILING)
   val campaigns = windowOf(liveQuery(context, remember(orgId) { ceilingQuery(campaignsPath(orgId), EDITOR_OPTION_CEILING) }).docsOrEmpty(), EDITOR_OPTION_CEILING)
-  val covers = { visibleTo: Any? -> scopeCovers((visibleTo as? List<*>)?.filterIsInstance<String>(), placement) }
   return SitePickers(
     StepPickers(
-      datasets = datasetOptions(datasets.rows.filter { covers(it.data["visibleTo"] ?: emptyList<String>()) }),
+      datasets = datasetOptions(datasets.rows.filter { sharingCovers(it.data, placement) }),
       lists = listOptions(lists.rows),
-      campaigns = campaignOptions(campaigns.rows.filter { covers(it.data["visibleTo"]) }),
+      campaigns = campaignOptions(campaigns.rows.filter { sharingCovers(it.data, placement) }),
     ),
     listOfNotNull(
       if (datasets.truncated) "datasets" else null,

@@ -224,6 +224,60 @@
         }
       ]
     },
+    "addCheckInDays": {
+      "module": "libs/plugins/commerce/src/lib/model/commerce-check-in-product.ts",
+      "cases": [
+        {
+          "args": [
+            "2027-01-15",
+            1
+          ],
+          "result": "2027-01-16"
+        },
+        {
+          "args": [
+            "2027-01-31",
+            1
+          ],
+          "result": "2027-02-01"
+        },
+        {
+          "args": [
+            "2027-12-31",
+            1
+          ],
+          "result": "2028-01-01"
+        },
+        {
+          "args": [
+            "2028-03-01",
+            -1
+          ],
+          "result": "2028-02-29"
+        },
+        {
+          "args": [
+            "2027-01-15",
+            0
+          ],
+          "result": "2027-01-15"
+        },
+        {
+          "args": [
+            "2027-01-15",
+            2.6
+          ],
+          "result": "2027-01-18"
+        },
+        {
+          "args": [
+            "bad",
+            1
+          ],
+          "result": "bad"
+        }
+      ]
+    },
     "aggregateScreenDays": {
       "module": "libs/aglyn/src/lib/app-utils/screen-analytics-aggregate.ts",
       "cases": [
@@ -3768,6 +3822,100 @@
         }
       ]
     },
+    "campaignPlacedOnlyOn": {
+      "module": "libs/plugins/marketing/src/lib/model/campaign-container.ts",
+      "cases": [
+        {
+          "args": [
+            null,
+            "a"
+          ],
+          "result": false
+        },
+        {
+          "args": [
+            {
+              "visibleTo": [
+                "host:a"
+              ]
+            },
+            "a"
+          ],
+          "result": true
+        },
+        {
+          "args": [
+            {
+              "visibleTo": [
+                "host:a",
+                "host:b"
+              ]
+            },
+            "a"
+          ],
+          "result": false
+        },
+        {
+          "args": [
+            {
+              "visibleTo": [
+                "org"
+              ]
+            },
+            "a"
+          ],
+          "result": false
+        },
+        {
+          "args": [
+            {
+              "visibleTo": []
+            },
+            "a"
+          ],
+          "result": false
+        },
+        {
+          "args": [
+            {
+              "visibleTo": [
+                "host:a"
+              ],
+              "scopeMode": "allExcept",
+              "scopeExcept": [
+                "host:b"
+              ]
+            },
+            "a"
+          ],
+          "result": false
+        },
+        {
+          "args": [
+            {
+              "visibleTo": [
+                "host:a"
+              ],
+              "scopeMode": null
+            },
+            "a"
+          ],
+          "result": false
+        },
+        {
+          "args": [
+            {
+              "visibleTo": [
+                "host:a",
+                "host:a"
+              ]
+            },
+            "a"
+          ],
+          "result": false
+        }
+      ]
+    },
     "campaignReport": {
       "module": "libs/plugins/marketing/src/lib/model/campaign-report.ts",
       "cases": [
@@ -4239,6 +4387,146 @@
             },
             "state": "pending"
           }
+        }
+      ]
+    },
+    "campaignSiteDeleteRefusal": {
+      "module": "libs/plugins/marketing/src/lib/model/campaign-container.ts",
+      "cases": [
+        {
+          "args": [
+            null
+          ],
+          "result": "This campaign is on other sites too, so deleting it would take it off them as well. Deleting it takes access to every site in the workspace."
+        },
+        {
+          "args": [
+            {
+              "visibleTo": [
+                "host:a"
+              ]
+            }
+          ],
+          "result": "This campaign is on other sites too, so deleting it would take it off them as well. Deleting it takes access to every site in the workspace."
+        },
+        {
+          "args": [
+            {
+              "visibleTo": [
+                "host:a"
+              ],
+              "scopeMode": "allExcept",
+              "scopeExcept": [
+                "host:b"
+              ]
+            }
+          ],
+          "result": "This campaign is shared with all sites except some, so it belongs to the whole workspace and every new site gets it. Deleting it takes access to every site in the workspace."
+        },
+        {
+          "args": [
+            {
+              "visibleTo": [
+                "host:a"
+              ],
+              "scopeMode": null
+            }
+          ],
+          "result": "This campaign is shared with all sites except some, so it belongs to the whole workspace and every new site gets it. Deleting it takes access to every site in the workspace."
+        }
+      ]
+    },
+    "campaignSiteMayDelete": {
+      "module": "libs/plugins/marketing/src/lib/model/campaign-container.ts",
+      "cases": [
+        {
+          "args": [
+            null,
+            "a"
+          ],
+          "result": false
+        },
+        {
+          "args": [
+            {
+              "visibleTo": [
+                "host:a"
+              ]
+            },
+            "a"
+          ],
+          "result": true
+        },
+        {
+          "args": [
+            {
+              "visibleTo": [
+                "host:a",
+                "host:b"
+              ]
+            },
+            "a"
+          ],
+          "result": false
+        },
+        {
+          "args": [
+            {
+              "visibleTo": [
+                "org"
+              ]
+            },
+            "a"
+          ],
+          "result": false
+        },
+        {
+          "args": [
+            {
+              "visibleTo": []
+            },
+            "a"
+          ],
+          "result": false
+        },
+        {
+          "args": [
+            {
+              "visibleTo": [
+                "host:a"
+              ],
+              "scopeMode": "allExcept",
+              "scopeExcept": [
+                "host:b"
+              ]
+            },
+            "a"
+          ],
+          "result": false
+        },
+        {
+          "args": [
+            {
+              "visibleTo": [
+                "host:a"
+              ],
+              "scopeMode": null
+            },
+            "a"
+          ],
+          "result": false
+        },
+        {
+          "args": [
+            {
+              "visibleTo": [
+                "host:a",
+                "host:a"
+              ]
+            },
+            "a"
+          ],
+          "result": true
         }
       ]
     },
@@ -4965,6 +5253,59 @@
         }
       ]
     },
+    "checkInDayLabel": {
+      "module": "libs/plugins/commerce/src/lib/model/commerce-check-in-product.ts",
+      "cases": [
+        {
+          "args": [
+            "2027-01-15"
+          ],
+          "result": "Fri, Jan 15"
+        },
+        {
+          "args": [
+            "2026-11-01"
+          ],
+          "result": "Sun, Nov 1"
+        },
+        {
+          "args": [
+            "2028-02-29"
+          ],
+          "result": "Tue, Feb 29"
+        },
+        {
+          "args": [
+            "2027-02-29"
+          ],
+          "result": ""
+        },
+        {
+          "args": [
+            "2027-1-5"
+          ],
+          "result": ""
+        },
+        {
+          "args": [
+            ""
+          ],
+          "result": ""
+        },
+        {
+          "args": [
+            null
+          ],
+          "result": ""
+        },
+        {
+          "args": [
+            "nonsense"
+          ],
+          "result": ""
+        }
+      ]
+    },
     "checkInRefusal": {
       "module": "libs/plugins/bookings/src/lib/model/booking-manage.ts",
       "cases": [
@@ -5157,6 +5498,60 @@
             1800000000000
           ],
           "result": "This guest is not checked in"
+        }
+      ]
+    },
+    "checkInUseDayProblem": {
+      "module": "libs/plugins/commerce/src/lib/model/commerce-check-in-product.ts",
+      "cases": [
+        {
+          "args": [
+            "2026-11-08",
+            "2026-11-07"
+          ],
+          "result": null
+        },
+        {
+          "args": [
+            "2026-11-07",
+            "2026-11-07"
+          ],
+          "result": null
+        },
+        {
+          "args": [
+            "2026-11-06",
+            "2026-11-07"
+          ],
+          "result": "That day has passed. Choose today or a later day."
+        },
+        {
+          "args": [
+            "2028-11-07",
+            "2026-11-07"
+          ],
+          "result": "Choose a day within the next two years."
+        },
+        {
+          "args": [
+            "2028-11-08",
+            "2026-11-07"
+          ],
+          "result": "Choose a day within the next two years."
+        },
+        {
+          "args": [
+            "2026-13-01",
+            "2026-11-07"
+          ],
+          "result": "Choose the day as a date."
+        },
+        {
+          "args": [
+            null,
+            "2026-11-07"
+          ],
+          "result": "Choose the day as a date."
         }
       ]
     },
@@ -7269,6 +7664,159 @@
         }
       ]
     },
+    "crmDefaultSharingOf": {
+      "module": "libs/aglyn/src/lib/app-utils/crm.ts",
+      "cases": [
+        {
+          "args": [
+            {
+              "crm": {
+                "defaultRecordScope": "host",
+                "defaultRecordExcept": [
+                  "h3"
+                ]
+              },
+              "hosts": {
+                "h1": true,
+                "h2": true,
+                "h3": true,
+                "h4": true
+              }
+            }
+          ],
+          "result": "allExcept"
+        },
+        {
+          "args": [
+            {
+              "crm": {
+                "defaultRecordScope": "host",
+                "defaultRecordExcept": [
+                  "h1"
+                ]
+              },
+              "hosts": {
+                "h1": true,
+                "h2": true,
+                "h3": true,
+                "h4": true
+              }
+            }
+          ],
+          "result": "allExcept"
+        },
+        {
+          "args": [
+            {
+              "crm": {
+                "defaultRecordScope": "host",
+                "defaultRecordExcept": [
+                  "gone"
+                ]
+              },
+              "hosts": {
+                "h1": true,
+                "h2": true,
+                "h3": true,
+                "h4": true
+              }
+            }
+          ],
+          "result": "allExcept"
+        },
+        {
+          "args": [
+            {
+              "crm": {
+                "defaultRecordScope": "host",
+                "defaultRecordExcept": [
+                  "h3"
+                ]
+              }
+            }
+          ],
+          "result": "allExcept"
+        },
+        {
+          "args": [
+            {
+              "crm": {
+                "defaultRecordScope": "host",
+                "defaultRecordExcept": []
+              },
+              "hosts": {
+                "h1": true,
+                "h2": true,
+                "h3": true,
+                "h4": true
+              }
+            }
+          ],
+          "result": "host"
+        },
+        {
+          "args": [
+            {
+              "crm": {
+                "defaultRecordScope": "org",
+                "defaultRecordExcept": [
+                  "h3"
+                ]
+              },
+              "hosts": {
+                "h1": true,
+                "h2": true,
+                "h3": true,
+                "h4": true
+              }
+            }
+          ],
+          "result": "org"
+        },
+        {
+          "args": [
+            {
+              "crm": {
+                "defaultRecordScope": "host",
+                "defaultRecordExcept": [
+                  "h3",
+                  "h3",
+                  ""
+                ]
+              },
+              "hosts": {
+                "h1": true,
+                "h2": false,
+                "h3": true
+              }
+            }
+          ],
+          "result": "allExcept"
+        },
+        {
+          "args": [
+            null
+          ],
+          "result": null
+        },
+        {
+          "args": [
+            {}
+          ],
+          "result": "org"
+        },
+        {
+          "args": [
+            {
+              "crm": {
+                "defaultRecordScope": "host"
+              }
+            }
+          ],
+          "result": "host"
+        }
+      ]
+    },
     "crmFieldListFields": {
       "module": "libs/aglyn/src/lib/app-utils/crm.ts",
       "cases": [
@@ -7553,6 +8101,546 @@
         }
       ]
     },
+    "crmScopeFields": {
+      "module": "libs/aglyn/src/lib/app-utils/crm.ts",
+      "cases": [
+        {
+          "args": [
+            {
+              "crm": {
+                "defaultRecordScope": "host",
+                "defaultRecordExcept": [
+                  "h3"
+                ]
+              },
+              "hosts": {
+                "h1": true,
+                "h2": true,
+                "h3": true,
+                "h4": true
+              }
+            },
+            {
+              "hostId": "h1",
+              "groupId": "h1",
+              "name": null,
+              "hostIds": [
+                "h1"
+              ],
+              "declared": false,
+              "awaitsConfirmation": false
+            }
+          ],
+          "result": {
+            "scopeExcept": [
+              "host:h3"
+            ],
+            "scopeMode": "allExcept",
+            "visibleTo": [
+              "host:h1",
+              "host:h2",
+              "host:h4"
+            ]
+          }
+        },
+        {
+          "args": [
+            {
+              "crm": {
+                "defaultRecordScope": "host",
+                "defaultRecordExcept": [
+                  "h3"
+                ]
+              },
+              "hosts": {
+                "h1": true,
+                "h2": true,
+                "h3": true,
+                "h4": true
+              }
+            },
+            {
+              "hostId": "h1",
+              "groupId": "brand",
+              "name": "Brand",
+              "hostIds": [
+                "h1",
+                "h2"
+              ],
+              "declared": true,
+              "awaitsConfirmation": false
+            }
+          ],
+          "result": {
+            "scopeExcept": [
+              "host:h3"
+            ],
+            "scopeMode": "allExcept",
+            "visibleTo": [
+              "host:h1",
+              "host:h2",
+              "host:h4"
+            ]
+          }
+        },
+        {
+          "args": [
+            {
+              "crm": {
+                "defaultRecordScope": "host",
+                "defaultRecordExcept": [
+                  "h1"
+                ]
+              },
+              "hosts": {
+                "h1": true,
+                "h2": true,
+                "h3": true,
+                "h4": true
+              }
+            },
+            {
+              "hostId": "h1",
+              "groupId": "h1",
+              "name": null,
+              "hostIds": [
+                "h1"
+              ],
+              "declared": false,
+              "awaitsConfirmation": false
+            }
+          ],
+          "result": {
+            "scopeExcept": [
+              "host:h1"
+            ],
+            "scopeMode": "allExcept",
+            "visibleTo": [
+              "host:h1",
+              "host:h2",
+              "host:h3",
+              "host:h4"
+            ]
+          }
+        },
+        {
+          "args": [
+            {
+              "crm": {
+                "defaultRecordScope": "host",
+                "defaultRecordExcept": [
+                  "h1"
+                ]
+              },
+              "hosts": {
+                "h1": true,
+                "h2": true,
+                "h3": true,
+                "h4": true
+              }
+            },
+            {
+              "hostId": "h1",
+              "groupId": "brand",
+              "name": "Brand",
+              "hostIds": [
+                "h1",
+                "h2"
+              ],
+              "declared": true,
+              "awaitsConfirmation": false
+            }
+          ],
+          "result": {
+            "scopeExcept": [
+              "host:h1"
+            ],
+            "scopeMode": "allExcept",
+            "visibleTo": [
+              "host:h1",
+              "host:h2",
+              "host:h3",
+              "host:h4"
+            ]
+          }
+        },
+        {
+          "args": [
+            {
+              "crm": {
+                "defaultRecordScope": "host",
+                "defaultRecordExcept": [
+                  "gone"
+                ]
+              },
+              "hosts": {
+                "h1": true,
+                "h2": true,
+                "h3": true,
+                "h4": true
+              }
+            },
+            {
+              "hostId": "h1",
+              "groupId": "h1",
+              "name": null,
+              "hostIds": [
+                "h1"
+              ],
+              "declared": false,
+              "awaitsConfirmation": false
+            }
+          ],
+          "result": {
+            "visibleTo": [
+              "org"
+            ]
+          }
+        },
+        {
+          "args": [
+            {
+              "crm": {
+                "defaultRecordScope": "host",
+                "defaultRecordExcept": [
+                  "gone"
+                ]
+              },
+              "hosts": {
+                "h1": true,
+                "h2": true,
+                "h3": true,
+                "h4": true
+              }
+            },
+            {
+              "hostId": "h1",
+              "groupId": "brand",
+              "name": "Brand",
+              "hostIds": [
+                "h1",
+                "h2"
+              ],
+              "declared": true,
+              "awaitsConfirmation": false
+            }
+          ],
+          "result": {
+            "visibleTo": [
+              "org"
+            ]
+          }
+        },
+        {
+          "args": [
+            {
+              "crm": {
+                "defaultRecordScope": "host",
+                "defaultRecordExcept": [
+                  "h3"
+                ]
+              }
+            },
+            {
+              "hostId": "h1",
+              "groupId": "h1",
+              "name": null,
+              "hostIds": [
+                "h1"
+              ],
+              "declared": false,
+              "awaitsConfirmation": false
+            }
+          ],
+          "result": {
+            "visibleTo": [
+              "host:h1"
+            ]
+          }
+        },
+        {
+          "args": [
+            {
+              "crm": {
+                "defaultRecordScope": "host",
+                "defaultRecordExcept": [
+                  "h3"
+                ]
+              }
+            },
+            {
+              "hostId": "h1",
+              "groupId": "brand",
+              "name": "Brand",
+              "hostIds": [
+                "h1",
+                "h2"
+              ],
+              "declared": true,
+              "awaitsConfirmation": false
+            }
+          ],
+          "result": {
+            "visibleTo": [
+              "host:h1",
+              "host:h2"
+            ]
+          }
+        },
+        {
+          "args": [
+            {
+              "crm": {
+                "defaultRecordScope": "host",
+                "defaultRecordExcept": []
+              },
+              "hosts": {
+                "h1": true,
+                "h2": true,
+                "h3": true,
+                "h4": true
+              }
+            },
+            {
+              "hostId": "h1",
+              "groupId": "h1",
+              "name": null,
+              "hostIds": [
+                "h1"
+              ],
+              "declared": false,
+              "awaitsConfirmation": false
+            }
+          ],
+          "result": {
+            "visibleTo": [
+              "host:h1"
+            ]
+          }
+        },
+        {
+          "args": [
+            {
+              "crm": {
+                "defaultRecordScope": "host",
+                "defaultRecordExcept": []
+              },
+              "hosts": {
+                "h1": true,
+                "h2": true,
+                "h3": true,
+                "h4": true
+              }
+            },
+            {
+              "hostId": "h1",
+              "groupId": "brand",
+              "name": "Brand",
+              "hostIds": [
+                "h1",
+                "h2"
+              ],
+              "declared": true,
+              "awaitsConfirmation": false
+            }
+          ],
+          "result": {
+            "visibleTo": [
+              "host:h1",
+              "host:h2"
+            ]
+          }
+        },
+        {
+          "args": [
+            {
+              "crm": {
+                "defaultRecordScope": "org",
+                "defaultRecordExcept": [
+                  "h3"
+                ]
+              },
+              "hosts": {
+                "h1": true,
+                "h2": true,
+                "h3": true,
+                "h4": true
+              }
+            },
+            {
+              "hostId": "h1",
+              "groupId": "h1",
+              "name": null,
+              "hostIds": [
+                "h1"
+              ],
+              "declared": false,
+              "awaitsConfirmation": false
+            }
+          ],
+          "result": {
+            "visibleTo": [
+              "org"
+            ]
+          }
+        },
+        {
+          "args": [
+            {
+              "crm": {
+                "defaultRecordScope": "org",
+                "defaultRecordExcept": [
+                  "h3"
+                ]
+              },
+              "hosts": {
+                "h1": true,
+                "h2": true,
+                "h3": true,
+                "h4": true
+              }
+            },
+            {
+              "hostId": "h1",
+              "groupId": "brand",
+              "name": "Brand",
+              "hostIds": [
+                "h1",
+                "h2"
+              ],
+              "declared": true,
+              "awaitsConfirmation": false
+            }
+          ],
+          "result": {
+            "visibleTo": [
+              "org"
+            ]
+          }
+        },
+        {
+          "args": [
+            {
+              "crm": {
+                "defaultRecordScope": "host",
+                "defaultRecordExcept": [
+                  "h3",
+                  "h3",
+                  ""
+                ]
+              },
+              "hosts": {
+                "h1": true,
+                "h2": false,
+                "h3": true
+              }
+            },
+            {
+              "hostId": "h1",
+              "groupId": "h1",
+              "name": null,
+              "hostIds": [
+                "h1"
+              ],
+              "declared": false,
+              "awaitsConfirmation": false
+            }
+          ],
+          "result": {
+            "scopeExcept": [
+              "host:h3"
+            ],
+            "scopeMode": "allExcept",
+            "visibleTo": [
+              "host:h1"
+            ]
+          }
+        },
+        {
+          "args": [
+            {
+              "crm": {
+                "defaultRecordScope": "host",
+                "defaultRecordExcept": [
+                  "h3",
+                  "h3",
+                  ""
+                ]
+              },
+              "hosts": {
+                "h1": true,
+                "h2": false,
+                "h3": true
+              }
+            },
+            {
+              "hostId": "h1",
+              "groupId": "brand",
+              "name": "Brand",
+              "hostIds": [
+                "h1",
+                "h2"
+              ],
+              "declared": true,
+              "awaitsConfirmation": false
+            }
+          ],
+          "result": {
+            "scopeExcept": [
+              "host:h3"
+            ],
+            "scopeMode": "allExcept",
+            "visibleTo": [
+              "host:h1"
+            ]
+          }
+        },
+        {
+          "args": [
+            null,
+            {
+              "hostId": "h1",
+              "groupId": "h1",
+              "name": null,
+              "hostIds": [
+                "h1"
+              ],
+              "declared": false,
+              "awaitsConfirmation": false
+            }
+          ],
+          "result": {
+            "visibleTo": [
+              "host:h1"
+            ]
+          }
+        },
+        {
+          "args": [
+            {
+              "crm": {
+                "defaultRecordScope": "org"
+              }
+            },
+            {
+              "hostId": "h1",
+              "groupId": "h1",
+              "name": null,
+              "hostIds": [
+                "h1"
+              ],
+              "declared": false,
+              "awaitsConfirmation": false
+            }
+          ],
+          "result": {
+            "visibleTo": [
+              "org"
+            ]
+          }
+        }
+      ]
+    },
     "crmScopeTokens": {
       "module": "libs/aglyn/src/lib/app-utils/crm.ts",
       "cases": [
@@ -7639,6 +8727,445 @@
           ],
           "result": [
             "org"
+          ]
+        },
+        {
+          "args": [
+            {
+              "crm": {
+                "defaultRecordScope": "host",
+                "defaultRecordExcept": [
+                  "h3"
+                ]
+              },
+              "hosts": {
+                "h1": true,
+                "h2": true,
+                "h3": true,
+                "h4": true
+              }
+            },
+            {
+              "hostId": "h1",
+              "groupId": "h1",
+              "name": null,
+              "hostIds": [
+                "h1"
+              ],
+              "declared": false,
+              "awaitsConfirmation": false
+            }
+          ],
+          "result": [
+            "host:h1",
+            "host:h2",
+            "host:h4"
+          ]
+        },
+        {
+          "args": [
+            {
+              "crm": {
+                "defaultRecordScope": "host",
+                "defaultRecordExcept": [
+                  "h3"
+                ]
+              },
+              "hosts": {
+                "h1": true,
+                "h2": true,
+                "h3": true,
+                "h4": true
+              }
+            },
+            {
+              "hostId": "h1",
+              "groupId": "brand",
+              "name": "Brand",
+              "hostIds": [
+                "h1",
+                "h2"
+              ],
+              "declared": true,
+              "awaitsConfirmation": false
+            }
+          ],
+          "result": [
+            "host:h1",
+            "host:h2",
+            "host:h4"
+          ]
+        },
+        {
+          "args": [
+            {
+              "crm": {
+                "defaultRecordScope": "host",
+                "defaultRecordExcept": [
+                  "h1"
+                ]
+              },
+              "hosts": {
+                "h1": true,
+                "h2": true,
+                "h3": true,
+                "h4": true
+              }
+            },
+            {
+              "hostId": "h1",
+              "groupId": "h1",
+              "name": null,
+              "hostIds": [
+                "h1"
+              ],
+              "declared": false,
+              "awaitsConfirmation": false
+            }
+          ],
+          "result": [
+            "host:h1",
+            "host:h2",
+            "host:h3",
+            "host:h4"
+          ]
+        },
+        {
+          "args": [
+            {
+              "crm": {
+                "defaultRecordScope": "host",
+                "defaultRecordExcept": [
+                  "h1"
+                ]
+              },
+              "hosts": {
+                "h1": true,
+                "h2": true,
+                "h3": true,
+                "h4": true
+              }
+            },
+            {
+              "hostId": "h1",
+              "groupId": "brand",
+              "name": "Brand",
+              "hostIds": [
+                "h1",
+                "h2"
+              ],
+              "declared": true,
+              "awaitsConfirmation": false
+            }
+          ],
+          "result": [
+            "host:h1",
+            "host:h2",
+            "host:h3",
+            "host:h4"
+          ]
+        },
+        {
+          "args": [
+            {
+              "crm": {
+                "defaultRecordScope": "host",
+                "defaultRecordExcept": [
+                  "gone"
+                ]
+              },
+              "hosts": {
+                "h1": true,
+                "h2": true,
+                "h3": true,
+                "h4": true
+              }
+            },
+            {
+              "hostId": "h1",
+              "groupId": "h1",
+              "name": null,
+              "hostIds": [
+                "h1"
+              ],
+              "declared": false,
+              "awaitsConfirmation": false
+            }
+          ],
+          "result": [
+            "org"
+          ]
+        },
+        {
+          "args": [
+            {
+              "crm": {
+                "defaultRecordScope": "host",
+                "defaultRecordExcept": [
+                  "gone"
+                ]
+              },
+              "hosts": {
+                "h1": true,
+                "h2": true,
+                "h3": true,
+                "h4": true
+              }
+            },
+            {
+              "hostId": "h1",
+              "groupId": "brand",
+              "name": "Brand",
+              "hostIds": [
+                "h1",
+                "h2"
+              ],
+              "declared": true,
+              "awaitsConfirmation": false
+            }
+          ],
+          "result": [
+            "org"
+          ]
+        },
+        {
+          "args": [
+            {
+              "crm": {
+                "defaultRecordScope": "host",
+                "defaultRecordExcept": [
+                  "h3"
+                ]
+              }
+            },
+            {
+              "hostId": "h1",
+              "groupId": "h1",
+              "name": null,
+              "hostIds": [
+                "h1"
+              ],
+              "declared": false,
+              "awaitsConfirmation": false
+            }
+          ],
+          "result": [
+            "host:h1"
+          ]
+        },
+        {
+          "args": [
+            {
+              "crm": {
+                "defaultRecordScope": "host",
+                "defaultRecordExcept": [
+                  "h3"
+                ]
+              }
+            },
+            {
+              "hostId": "h1",
+              "groupId": "brand",
+              "name": "Brand",
+              "hostIds": [
+                "h1",
+                "h2"
+              ],
+              "declared": true,
+              "awaitsConfirmation": false
+            }
+          ],
+          "result": [
+            "host:h1",
+            "host:h2"
+          ]
+        },
+        {
+          "args": [
+            {
+              "crm": {
+                "defaultRecordScope": "host",
+                "defaultRecordExcept": []
+              },
+              "hosts": {
+                "h1": true,
+                "h2": true,
+                "h3": true,
+                "h4": true
+              }
+            },
+            {
+              "hostId": "h1",
+              "groupId": "h1",
+              "name": null,
+              "hostIds": [
+                "h1"
+              ],
+              "declared": false,
+              "awaitsConfirmation": false
+            }
+          ],
+          "result": [
+            "host:h1"
+          ]
+        },
+        {
+          "args": [
+            {
+              "crm": {
+                "defaultRecordScope": "host",
+                "defaultRecordExcept": []
+              },
+              "hosts": {
+                "h1": true,
+                "h2": true,
+                "h3": true,
+                "h4": true
+              }
+            },
+            {
+              "hostId": "h1",
+              "groupId": "brand",
+              "name": "Brand",
+              "hostIds": [
+                "h1",
+                "h2"
+              ],
+              "declared": true,
+              "awaitsConfirmation": false
+            }
+          ],
+          "result": [
+            "host:h1",
+            "host:h2"
+          ]
+        },
+        {
+          "args": [
+            {
+              "crm": {
+                "defaultRecordScope": "org",
+                "defaultRecordExcept": [
+                  "h3"
+                ]
+              },
+              "hosts": {
+                "h1": true,
+                "h2": true,
+                "h3": true,
+                "h4": true
+              }
+            },
+            {
+              "hostId": "h1",
+              "groupId": "h1",
+              "name": null,
+              "hostIds": [
+                "h1"
+              ],
+              "declared": false,
+              "awaitsConfirmation": false
+            }
+          ],
+          "result": [
+            "org"
+          ]
+        },
+        {
+          "args": [
+            {
+              "crm": {
+                "defaultRecordScope": "org",
+                "defaultRecordExcept": [
+                  "h3"
+                ]
+              },
+              "hosts": {
+                "h1": true,
+                "h2": true,
+                "h3": true,
+                "h4": true
+              }
+            },
+            {
+              "hostId": "h1",
+              "groupId": "brand",
+              "name": "Brand",
+              "hostIds": [
+                "h1",
+                "h2"
+              ],
+              "declared": true,
+              "awaitsConfirmation": false
+            }
+          ],
+          "result": [
+            "org"
+          ]
+        },
+        {
+          "args": [
+            {
+              "crm": {
+                "defaultRecordScope": "host",
+                "defaultRecordExcept": [
+                  "h3",
+                  "h3",
+                  ""
+                ]
+              },
+              "hosts": {
+                "h1": true,
+                "h2": false,
+                "h3": true
+              }
+            },
+            {
+              "hostId": "h1",
+              "groupId": "h1",
+              "name": null,
+              "hostIds": [
+                "h1"
+              ],
+              "declared": false,
+              "awaitsConfirmation": false
+            }
+          ],
+          "result": [
+            "host:h1"
+          ]
+        },
+        {
+          "args": [
+            {
+              "crm": {
+                "defaultRecordScope": "host",
+                "defaultRecordExcept": [
+                  "h3",
+                  "h3",
+                  ""
+                ]
+              },
+              "hosts": {
+                "h1": true,
+                "h2": false,
+                "h3": true
+              }
+            },
+            {
+              "hostId": "h1",
+              "groupId": "brand",
+              "name": "Brand",
+              "hostIds": [
+                "h1",
+                "h2"
+              ],
+              "declared": true,
+              "awaitsConfirmation": false
+            }
+          ],
+          "result": [
+            "host:h1"
           ]
         }
       ]
@@ -18702,6 +20229,38 @@
             "text": "Updated \"Counter\" on 1 site",
             "tone": "success"
           }
+        },
+        {
+          "args": [
+            {
+              "name": "Counter",
+              "installed": 1,
+              "errors": [],
+              "orgWide": true,
+              "updating": false,
+              "leftOut": 1
+            }
+          ],
+          "result": {
+            "text": "Installed \"Counter\" for every site but the one you left out, and for sites you add later",
+            "tone": "success"
+          }
+        },
+        {
+          "args": [
+            {
+              "name": "Counter",
+              "installed": 1,
+              "errors": [],
+              "orgWide": true,
+              "updating": false,
+              "leftOut": 2
+            }
+          ],
+          "result": {
+            "text": "Installed \"Counter\" for every site but the 2 you left out, and for sites you add later",
+            "tone": "success"
+          }
         }
       ]
     },
@@ -18886,6 +20445,59 @@
           "args": [
             {},
             1800000000000
+          ],
+          "result": false
+        }
+      ]
+    },
+    "isCheckInDayKey": {
+      "module": "libs/plugins/commerce/src/lib/model/commerce-check-in-product.ts",
+      "cases": [
+        {
+          "args": [
+            "2027-01-15"
+          ],
+          "result": true
+        },
+        {
+          "args": [
+            "2026-11-01"
+          ],
+          "result": true
+        },
+        {
+          "args": [
+            "2028-02-29"
+          ],
+          "result": true
+        },
+        {
+          "args": [
+            "2027-02-29"
+          ],
+          "result": false
+        },
+        {
+          "args": [
+            "2027-1-5"
+          ],
+          "result": false
+        },
+        {
+          "args": [
+            ""
+          ],
+          "result": false
+        },
+        {
+          "args": [
+            null
+          ],
+          "result": false
+        },
+        {
+          "args": [
+            "nonsense"
           ],
           "result": false
         }
@@ -34820,6 +36432,455 @@
         }
       ]
     },
+    "planPluginRunsOn": {
+      "module": "libs/aglyn/src/lib/plugin-manager/plugin-site-exclusions.ts",
+      "cases": [
+        {
+          "args": [
+            {
+              "pluginId": "mui",
+              "choice": {
+                "mode": "all"
+              },
+              "org": null,
+              "sites": [
+                {
+                  "id": "a"
+                },
+                {
+                  "id": "b",
+                  "disabledPlugins": [
+                    "crm"
+                  ]
+                },
+                {
+                  "id": "c",
+                  "enabledPlugins": [
+                    "accounts"
+                  ]
+                }
+              ]
+            }
+          ],
+          "result": {
+            "problem": "Components runs on every site, because sites are built out of it, so it can’t be left out.",
+            "stranded": [],
+            "writes": null
+          }
+        },
+        {
+          "args": [
+            {
+              "pluginId": "crm",
+              "choice": {
+                "mode": "all"
+              },
+              "org": {
+                "enabledPlugins": [
+                  "forms"
+                ]
+              },
+              "sites": [
+                {
+                  "id": "a"
+                },
+                {
+                  "id": "b",
+                  "disabledPlugins": [
+                    "crm"
+                  ]
+                },
+                {
+                  "id": "c",
+                  "enabledPlugins": [
+                    "accounts"
+                  ]
+                }
+              ]
+            }
+          ],
+          "result": {
+            "problem": "CRM is switched off for this workspace, so it runs on no site. Switch it on first.",
+            "stranded": [],
+            "writes": null
+          }
+        },
+        {
+          "args": [
+            {
+              "pluginId": "crm",
+              "choice": {
+                "mode": "allExcept",
+                "exceptHostIds": []
+              },
+              "org": null,
+              "sites": [
+                {
+                  "id": "a"
+                },
+                {
+                  "id": "b",
+                  "disabledPlugins": [
+                    "crm"
+                  ]
+                },
+                {
+                  "id": "c",
+                  "enabledPlugins": [
+                    "accounts"
+                  ]
+                }
+              ]
+            }
+          ],
+          "result": {
+            "problem": "Choose at least one site to leave out, or choose All sites.",
+            "stranded": [],
+            "writes": null
+          }
+        },
+        {
+          "args": [
+            {
+              "pluginId": "crm",
+              "choice": {
+                "mode": "allExcept",
+                "exceptHostIds": [
+                  "a",
+                  "b",
+                  "c"
+                ]
+              },
+              "org": null,
+              "sites": [
+                {
+                  "id": "a"
+                },
+                {
+                  "id": "b",
+                  "disabledPlugins": [
+                    "crm"
+                  ]
+                },
+                {
+                  "id": "c",
+                  "enabledPlugins": [
+                    "accounts"
+                  ]
+                }
+              ]
+            }
+          ],
+          "result": {
+            "problem": "Keep at least one site in. To stop CRM on every site, switch it off for the workspace.",
+            "stranded": [],
+            "writes": null
+          }
+        },
+        {
+          "args": [
+            {
+              "pluginId": "crm",
+              "choice": {
+                "mode": "all"
+              },
+              "org": null,
+              "sites": [
+                {
+                  "id": "a"
+                },
+                {
+                  "id": "b",
+                  "disabledPlugins": [
+                    "crm"
+                  ]
+                },
+                {
+                  "id": "c",
+                  "enabledPlugins": [
+                    "accounts"
+                  ]
+                }
+              ]
+            }
+          ],
+          "result": {
+            "problem": null,
+            "stranded": [],
+            "writes": [
+              {
+                "disabledPlugins": [],
+                "hostId": "b",
+                "leftOut": false
+              }
+            ]
+          }
+        },
+        {
+          "args": [
+            {
+              "pluginId": "crm",
+              "choice": {
+                "mode": "allExcept",
+                "exceptHostIds": [
+                  "a"
+                ]
+              },
+              "org": null,
+              "sites": [
+                {
+                  "id": "a"
+                },
+                {
+                  "id": "b",
+                  "disabledPlugins": [
+                    "crm"
+                  ]
+                },
+                {
+                  "id": "c",
+                  "enabledPlugins": [
+                    "accounts"
+                  ]
+                }
+              ]
+            }
+          ],
+          "result": {
+            "problem": null,
+            "stranded": [],
+            "writes": [
+              {
+                "disabledPlugins": [
+                  "crm"
+                ],
+                "hostId": "a",
+                "leftOut": true
+              },
+              {
+                "disabledPlugins": [],
+                "hostId": "b",
+                "leftOut": false
+              }
+            ]
+          }
+        },
+        {
+          "args": [
+            {
+              "pluginId": "crm",
+              "choice": {
+                "mode": "allExcept",
+                "exceptHostIds": [
+                  "b",
+                  "gone"
+                ]
+              },
+              "org": null,
+              "sites": [
+                {
+                  "id": "a"
+                },
+                {
+                  "id": "b",
+                  "disabledPlugins": [
+                    "crm"
+                  ]
+                },
+                {
+                  "id": "c",
+                  "enabledPlugins": [
+                    "accounts"
+                  ]
+                }
+              ]
+            }
+          ],
+          "result": {
+            "problem": null,
+            "stranded": [],
+            "writes": []
+          }
+        },
+        {
+          "args": [
+            {
+              "pluginId": "commerce",
+              "choice": {
+                "mode": "allExcept",
+                "exceptHostIds": [
+                  "c"
+                ]
+              },
+              "org": null,
+              "sites": [
+                {
+                  "id": "a"
+                },
+                {
+                  "id": "b",
+                  "disabledPlugins": [
+                    "crm"
+                  ]
+                },
+                {
+                  "id": "c",
+                  "enabledPlugins": [
+                    "accounts"
+                  ]
+                }
+              ]
+            }
+          ],
+          "result": {
+            "problem": "User Accounts on c needs Commerce. Switch it off on that site first, or keep the site in.",
+            "stranded": [
+              {
+                "hostId": "c",
+                "missing": [
+                  "commerce"
+                ],
+                "pluginId": "accounts"
+              }
+            ],
+            "writes": null
+          }
+        },
+        {
+          "args": [
+            {
+              "pluginId": "commerce",
+              "choice": {
+                "mode": "allExcept",
+                "exceptHostIds": [
+                  "a"
+                ]
+              },
+              "org": null,
+              "sites": [
+                {
+                  "id": "a"
+                },
+                {
+                  "id": "b",
+                  "disabledPlugins": [
+                    "crm"
+                  ]
+                },
+                {
+                  "id": "c",
+                  "enabledPlugins": [
+                    "accounts"
+                  ]
+                }
+              ]
+            }
+          ],
+          "result": {
+            "problem": null,
+            "stranded": [],
+            "writes": [
+              {
+                "disabledPlugins": [
+                  "commerce"
+                ],
+                "hostId": "a",
+                "leftOut": true
+              }
+            ]
+          }
+        },
+        {
+          "args": [
+            {
+              "pluginId": "commerce",
+              "choice": {
+                "mode": "allExcept",
+                "exceptHostIds": [
+                  "b",
+                  "c"
+                ]
+              },
+              "org": null,
+              "sites": [
+                {
+                  "id": "a"
+                },
+                {
+                  "id": "b",
+                  "disabledPlugins": [
+                    "crm"
+                  ]
+                },
+                {
+                  "id": "c",
+                  "enabledPlugins": [
+                    "accounts"
+                  ]
+                }
+              ]
+            }
+          ],
+          "result": {
+            "problem": "User Accounts on c needs Commerce. Switch it off on that site first, or keep the site in.",
+            "stranded": [
+              {
+                "hostId": "c",
+                "missing": [
+                  "commerce"
+                ],
+                "pluginId": "accounts"
+              }
+            ],
+            "writes": null
+          }
+        },
+        {
+          "args": [
+            {
+              "pluginId": "accounts",
+              "choice": {
+                "mode": "allExcept",
+                "exceptHostIds": [
+                  "c"
+                ]
+              },
+              "org": null,
+              "sites": [
+                {
+                  "id": "a"
+                },
+                {
+                  "id": "b",
+                  "disabledPlugins": [
+                    "crm"
+                  ]
+                },
+                {
+                  "id": "c",
+                  "enabledPlugins": [
+                    "accounts"
+                  ]
+                }
+              ]
+            }
+          ],
+          "result": {
+            "problem": null,
+            "stranded": [],
+            "writes": [
+              {
+                "disabledPlugins": [
+                  "accounts"
+                ],
+                "hostId": "c",
+                "leftOut": true
+              }
+            ]
+          }
+        }
+      ]
+    },
     "pluginDependents": {
       "module": "libs/aglyn/src/lib/plugin-manager/enabled-plugins.ts",
       "cases": [
@@ -34948,6 +37009,121 @@
         }
       ]
     },
+    "pluginRunsOnOf": {
+      "module": "libs/aglyn/src/lib/plugin-manager/plugin-site-exclusions.ts",
+      "cases": [
+        {
+          "args": [
+            "crm",
+            [
+              {
+                "id": "a"
+              },
+              {
+                "id": "b",
+                "disabledPlugins": [
+                  "crm"
+                ]
+              },
+              {
+                "id": "c",
+                "enabledPlugins": [
+                  "accounts"
+                ]
+              }
+            ]
+          ],
+          "result": {
+            "exceptHostIds": [
+              "b"
+            ],
+            "mode": "allExcept"
+          }
+        },
+        {
+          "args": [
+            "mui",
+            [
+              {
+                "id": "a"
+              },
+              {
+                "id": "b",
+                "disabledPlugins": [
+                  "crm"
+                ]
+              },
+              {
+                "id": "c",
+                "enabledPlugins": [
+                  "accounts"
+                ]
+              }
+            ]
+          ],
+          "result": {
+            "mode": "all"
+          }
+        },
+        {
+          "args": [
+            "crm",
+            []
+          ],
+          "result": {
+            "mode": "all"
+          }
+        },
+        {
+          "args": [
+            "accounts",
+            [
+              {
+                "id": "a"
+              },
+              {
+                "id": "b",
+                "disabledPlugins": [
+                  "crm"
+                ]
+              },
+              {
+                "id": "c",
+                "enabledPlugins": [
+                  "accounts"
+                ]
+              }
+            ]
+          ],
+          "result": {
+            "mode": "all"
+          }
+        }
+      ]
+    },
+    "pluginRunsOnOptInNote": {
+      "module": "libs/aglyn/src/lib/plugin-manager/plugin-site-exclusions.ts",
+      "cases": [
+        {
+          "args": [
+            "accounts"
+          ],
+          "result": "User Accounts still runs only on the sites that turned it on. Leaving a site out here keeps it off there even if that site turned it on."
+        },
+        {
+          "args": [
+            "crm"
+          ],
+          "result": null
+        },
+        {
+          "args": [
+            "live-chat"
+          ],
+          "result": "Live chat still runs only on the sites that turned it on. Leaving a site out here keeps it off there even if that site turned it on."
+        }
+      ]
+    },
     "pluginSiteSetSummary": {
       "module": "libs/plugins/marketplace/src/lib/model/marketplace-catalog.ts",
       "cases": [
@@ -35072,6 +37248,215 @@
             0
           ],
           "result": "Installed for the whole organization (v5) — every site, including ones you add later."
+        },
+        {
+          "args": [
+            {
+              "orgWide": true,
+              "orgVersion": "1.0.0",
+              "sites": [
+                {
+                  "hostId": "h1",
+                  "label": "Main site",
+                  "version": "1.0.0",
+                  "pinnedBy": "org",
+                  "shadowed": false,
+                  "switchedOff": true
+                },
+                {
+                  "hostId": "h2",
+                  "label": "Blog",
+                  "version": "1.0.0",
+                  "pinnedBy": "org",
+                  "shadowed": false
+                },
+                {
+                  "hostId": "h3",
+                  "label": "Shop",
+                  "version": "1.0.0",
+                  "pinnedBy": "org",
+                  "shadowed": false,
+                  "switchedOff": true
+                }
+              ],
+              "hostPinnedIds": [],
+              "availableHostIds": [],
+              "installedAnywhere": true
+            },
+            3
+          ],
+          "result": "Installed for the whole organization (v1.0.0). It runs on every site except Main site and Shop, which switched it off, and on sites you add later."
+        },
+        {
+          "args": [
+            {
+              "orgWide": true,
+              "orgVersion": "1.0.0",
+              "sites": [
+                {
+                  "hostId": "h1",
+                  "label": "Main site",
+                  "version": "1.0.0",
+                  "pinnedBy": "org",
+                  "shadowed": false,
+                  "switchedOff": true
+                },
+                {
+                  "hostId": "h2",
+                  "label": "Blog",
+                  "version": "1.0.0",
+                  "pinnedBy": "org",
+                  "shadowed": false,
+                  "switchedOff": true
+                }
+              ],
+              "hostPinnedIds": [],
+              "availableHostIds": [],
+              "installedAnywhere": true
+            },
+            2
+          ],
+          "result": "Installed for the whole organization (v1.0.0). Every site switched it off, so it runs only on sites you add later."
+        },
+        {
+          "args": [
+            {
+              "orgWide": true,
+              "orgVersion": "1.0.0",
+              "sites": [
+                {
+                  "hostId": "h1",
+                  "label": "Main site",
+                  "version": "1.0.0",
+                  "pinnedBy": "org",
+                  "shadowed": false,
+                  "switchedOff": true
+                },
+                {
+                  "hostId": "h2",
+                  "label": "Blog",
+                  "version": "1.0.0",
+                  "pinnedBy": "org",
+                  "shadowed": false
+                }
+              ],
+              "hostPinnedIds": [],
+              "availableHostIds": [],
+              "installedAnywhere": true
+            },
+            2
+          ],
+          "result": "Installed for the whole organization (v1.0.0). It runs on every site except Main site, which switched it off, and on sites you add later."
+        },
+        {
+          "args": [
+            {
+              "orgWide": false,
+              "orgVersion": null,
+              "sites": [
+                {
+                  "hostId": "h1",
+                  "label": "Main site",
+                  "version": "1.0.0",
+                  "pinnedBy": "org",
+                  "shadowed": false,
+                  "switchedOff": true
+                },
+                {
+                  "hostId": "h2",
+                  "label": "Blog",
+                  "version": "1.0.0",
+                  "pinnedBy": "org",
+                  "shadowed": false
+                }
+              ],
+              "hostPinnedIds": [
+                "h1",
+                "h2"
+              ],
+              "availableHostIds": [],
+              "installedAnywhere": true
+            },
+            3
+          ],
+          "result": "Installed on 2 of 3 sites. Main site switched it off, so it runs on 1."
+        },
+        {
+          "args": [
+            {
+              "orgWide": false,
+              "orgVersion": null,
+              "sites": [
+                {
+                  "hostId": "h1",
+                  "label": "Main site",
+                  "version": "1.0.0",
+                  "pinnedBy": "org",
+                  "shadowed": false,
+                  "switchedOff": true
+                },
+                {
+                  "hostId": "h2",
+                  "label": "Blog",
+                  "version": "1.0.0",
+                  "pinnedBy": "org",
+                  "shadowed": false,
+                  "switchedOff": true
+                }
+              ],
+              "hostPinnedIds": [
+                "h1",
+                "h2"
+              ],
+              "availableHostIds": [],
+              "installedAnywhere": true
+            },
+            3
+          ],
+          "result": "Installed on 2 of 3 sites. Main site and Blog switched it off, so it runs on none of them."
+        },
+        {
+          "args": [
+            {
+              "orgWide": false,
+              "orgVersion": null,
+              "sites": [
+                {
+                  "hostId": "h1",
+                  "label": "Main site",
+                  "version": "1.0.0",
+                  "pinnedBy": "org",
+                  "shadowed": false,
+                  "switchedOff": true
+                },
+                {
+                  "hostId": "h2",
+                  "label": "Blog",
+                  "version": "1.0.0",
+                  "pinnedBy": "org",
+                  "shadowed": false,
+                  "switchedOff": true
+                },
+                {
+                  "hostId": "h3",
+                  "label": "Shop",
+                  "version": "1.0.0",
+                  "pinnedBy": "org",
+                  "shadowed": false,
+                  "switchedOff": true
+                }
+              ],
+              "hostPinnedIds": [
+                "h1",
+                "h2",
+                "h3"
+              ],
+              "availableHostIds": [],
+              "installedAnywhere": true
+            },
+            3
+          ],
+          "result": "Installed on 3 of 3 sites. Main site, Blog and Shop switched it off, so it runs on none of them."
         }
       ]
     },
@@ -41515,6 +43900,144 @@
             1800000000000
           ],
           "result": "Pick a time that has not passed"
+        }
+      ]
+    },
+    "reservationGuests": {
+      "module": "libs/plugins/commerce/src/lib/model/commerce-reservations.ts",
+      "cases": [
+        {
+          "args": [
+            null
+          ],
+          "result": 1
+        },
+        {
+          "args": [
+            {
+              "guests": 3
+            }
+          ],
+          "result": 3
+        },
+        {
+          "args": [
+            {
+              "guests": 0
+            }
+          ],
+          "result": 1
+        },
+        {
+          "args": [
+            {
+              "guests": 2.9
+            }
+          ],
+          "result": 2
+        },
+        {
+          "args": [
+            {
+              "guests": 99
+            }
+          ],
+          "result": 50
+        },
+        {
+          "args": [
+            {}
+          ],
+          "result": 1
+        }
+      ]
+    },
+    "reservationGuestsProblem": {
+      "module": "libs/plugins/commerce/src/lib/model/commerce-reservations.ts",
+      "cases": [
+        {
+          "args": [
+            3,
+            {
+              "capacity": 4
+            }
+          ],
+          "result": null
+        },
+        {
+          "args": [
+            5,
+            {
+              "capacity": 4
+            }
+          ],
+          "result": "Guests must be a whole number from 1 to 4"
+        },
+        {
+          "args": [
+            0,
+            {
+              "capacity": 4
+            }
+          ],
+          "result": "Guests must be a whole number from 1 to 4"
+        },
+        {
+          "args": [
+            2.5,
+            {
+              "capacity": 4
+            }
+          ],
+          "result": "Guests must be a whole number from 1 to 4"
+        },
+        {
+          "args": [
+            2,
+            {
+              "capacity": 1
+            }
+          ],
+          "result": "This stay sleeps 1 guest"
+        },
+        {
+          "args": [
+            1,
+            {
+              "capacity": 1
+            }
+          ],
+          "result": null
+        },
+        {
+          "args": [
+            null,
+            {
+              "capacity": 4
+            }
+          ],
+          "result": null
+        },
+        {
+          "args": [
+            "",
+            null
+          ],
+          "result": null
+        },
+        {
+          "args": [
+            51,
+            null
+          ],
+          "result": "Guests must be a whole number from 1 to 50"
+        },
+        {
+          "args": [
+            50,
+            null
+          ],
+          "result": null
         }
       ]
     },
@@ -61825,6 +64348,245 @@
               }
             ]
           }
+        },
+        {
+          "args": [
+            [
+              {
+                "id": "h1",
+                "label": "Main site",
+                "disabledPlugins": [
+                  "acme-chat"
+                ]
+              },
+              {
+                "id": "h2",
+                "label": "Blog"
+              },
+              {
+                "id": "h3",
+                "label": "Shop",
+                "disabledPlugins": [
+                  "other",
+                  "acme-chat"
+                ]
+              }
+            ],
+            {},
+            {
+              "version": "1.0.0"
+            },
+            "acme-chat"
+          ],
+          "result": {
+            "availableHostIds": [],
+            "hostPinnedIds": [],
+            "installedAnywhere": true,
+            "orgVersion": "1.0.0",
+            "orgWide": true,
+            "sites": [
+              {
+                "hostId": "h1",
+                "label": "Main site",
+                "pinnedBy": "org",
+                "shadowed": false,
+                "switchedOff": true,
+                "version": "1.0.0"
+              },
+              {
+                "hostId": "h2",
+                "label": "Blog",
+                "pinnedBy": "org",
+                "shadowed": false,
+                "version": "1.0.0"
+              },
+              {
+                "hostId": "h3",
+                "label": "Shop",
+                "pinnedBy": "org",
+                "shadowed": false,
+                "switchedOff": true,
+                "version": "1.0.0"
+              }
+            ]
+          }
+        },
+        {
+          "args": [
+            [
+              {
+                "id": "h1",
+                "label": "Main site",
+                "disabledPlugins": [
+                  "acme-chat"
+                ]
+              },
+              {
+                "id": "h2",
+                "label": "Blog"
+              },
+              {
+                "id": "h3",
+                "label": "Shop",
+                "disabledPlugins": [
+                  "other",
+                  "acme-chat"
+                ]
+              }
+            ],
+            {
+              "h1": {
+                "version": "1.2.0"
+              },
+              "h2": {
+                "version": "1.2.0"
+              }
+            },
+            null,
+            "acme-chat"
+          ],
+          "result": {
+            "availableHostIds": [
+              "h3"
+            ],
+            "hostPinnedIds": [
+              "h1",
+              "h2"
+            ],
+            "installedAnywhere": true,
+            "orgVersion": null,
+            "orgWide": false,
+            "sites": [
+              {
+                "hostId": "h1",
+                "label": "Main site",
+                "pinnedBy": "host",
+                "shadowed": false,
+                "switchedOff": true,
+                "version": "1.2.0"
+              },
+              {
+                "hostId": "h2",
+                "label": "Blog",
+                "pinnedBy": "host",
+                "shadowed": false,
+                "version": "1.2.0"
+              }
+            ]
+          }
+        },
+        {
+          "args": [
+            [
+              {
+                "id": "h1",
+                "label": "Main site",
+                "disabledPlugins": [
+                  "acme-chat"
+                ]
+              },
+              {
+                "id": "h2",
+                "label": "Blog"
+              },
+              {
+                "id": "h3",
+                "label": "Shop",
+                "disabledPlugins": [
+                  "other",
+                  "acme-chat"
+                ]
+              }
+            ],
+            {},
+            {
+              "version": "1.0.0"
+            }
+          ],
+          "result": {
+            "availableHostIds": [],
+            "hostPinnedIds": [],
+            "installedAnywhere": true,
+            "orgVersion": "1.0.0",
+            "orgWide": true,
+            "sites": [
+              {
+                "hostId": "h1",
+                "label": "Main site",
+                "pinnedBy": "org",
+                "shadowed": false,
+                "version": "1.0.0"
+              },
+              {
+                "hostId": "h2",
+                "label": "Blog",
+                "pinnedBy": "org",
+                "shadowed": false,
+                "version": "1.0.0"
+              },
+              {
+                "hostId": "h3",
+                "label": "Shop",
+                "pinnedBy": "org",
+                "shadowed": false,
+                "version": "1.0.0"
+              }
+            ]
+          }
+        },
+        {
+          "args": [
+            [
+              {
+                "id": "h1",
+                "label": "Main site",
+                "disabledPlugins": [
+                  "acme-chat"
+                ]
+              },
+              {
+                "id": "h2",
+                "label": "Blog"
+              },
+              {
+                "id": "h3",
+                "label": "Shop",
+                "disabledPlugins": [
+                  "other",
+                  "acme-chat"
+                ]
+              }
+            ],
+            {
+              "h3": {
+                "version": "1.1.0"
+              }
+            },
+            null,
+            "acme-chat"
+          ],
+          "result": {
+            "availableHostIds": [
+              "h1",
+              "h2"
+            ],
+            "hostPinnedIds": [
+              "h3"
+            ],
+            "installedAnywhere": true,
+            "orgVersion": null,
+            "orgWide": false,
+            "sites": [
+              {
+                "hostId": "h3",
+                "label": "Shop",
+                "pinnedBy": "host",
+                "shadowed": false,
+                "switchedOff": true,
+                "version": "1.1.0"
+              }
+            ]
+          }
         }
       ]
     },
@@ -63203,6 +65965,63 @@
             "source": "picked",
             "tintsApp": true
           }
+        }
+      ]
+    },
+    "resourceGuestCeiling": {
+      "module": "libs/plugins/commerce/src/lib/model/commerce-reservations.ts",
+      "cases": [
+        {
+          "args": [
+            null
+          ],
+          "result": 50
+        },
+        {
+          "args": [
+            {
+              "capacity": 4
+            }
+          ],
+          "result": 4
+        },
+        {
+          "args": [
+            {
+              "capacity": 1
+            }
+          ],
+          "result": 1
+        },
+        {
+          "args": [
+            {
+              "capacity": 0
+            }
+          ],
+          "result": 50
+        },
+        {
+          "args": [
+            {
+              "capacity": 2.7
+            }
+          ],
+          "result": 2
+        },
+        {
+          "args": [
+            {
+              "capacity": 80
+            }
+          ],
+          "result": 50
+        },
+        {
+          "args": [
+            {}
+          ],
+          "result": 50
         }
       ]
     },

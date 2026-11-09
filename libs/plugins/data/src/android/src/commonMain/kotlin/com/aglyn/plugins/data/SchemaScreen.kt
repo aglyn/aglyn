@@ -42,19 +42,26 @@ import com.aglyn.contracts.DatasetFieldDefinitionReferenceOnDelete
 import com.aglyn.contracts.DatasetFieldType
 import com.aglyn.contracts.DatasetFieldValidation
 import com.aglyn.contracts.DatasetModel
+import com.aglyn.core.ConsoleApiError
 import com.aglyn.core.FilterOp
 import com.aglyn.core.FirestoreFilter
 import com.aglyn.core.FirestoreQuery
 import com.aglyn.core.Live
 import com.aglyn.core.OrgAccess
-import com.aglyn.pluginhost.jsNumber
 import com.aglyn.pluginhost.ActionRunner
 import com.aglyn.pluginhost.NativePluginContext
-import com.aglyn.pluginhost.rememberMemberPermissions
-import com.aglyn.pluginhost.describeScope
+import com.aglyn.pluginhost.ScopeSharingChoice
+import com.aglyn.pluginhost.SharingSite
+import com.aglyn.pluginhost.SiteSharingField
+import com.aglyn.pluginhost.choice
+import com.aglyn.pluginhost.describeSharing
+import com.aglyn.pluginhost.jsNumber
+import com.aglyn.pluginhost.key
 import com.aglyn.pluginhost.narrowsScope
+import com.aglyn.pluginhost.rememberMemberPermissions
 import com.aglyn.pluginhost.rememberOrgAccess
-import com.aglyn.pluginhost.scopeToStore
+import com.aglyn.pluginhost.scopeSharingOf
+import com.aglyn.pluginhost.sharingFromChoice
 import com.aglyn.ui.ActionDialog
 import com.aglyn.ui.AglynIcons
 import com.aglyn.ui.AglynListItem
@@ -76,7 +83,9 @@ import com.aglyn.ui.SwitchRow
 import com.aglyn.ui.TextButton
 import com.aglyn.ui.WithTooltip
 import com.aglyn.ui.space
+import kotlinx.serialization.json.JsonObject
 import kotlinx.serialization.json.JsonPrimitive
+import kotlinx.serialization.json.contentOrNull
 
 /** A site of the workspace, for naming and picking a dataset's sharing. */
 private data class SiteChoice(val id: String, val name: String)
@@ -127,12 +136,14 @@ private fun SchemaEditor(context: NativePluginContext, orgId: String, dataset: D
   val scope = rememberCoroutineScope()
   val api = remember(orgId, context.api, context.writer) { DataApi(context.api, context.writer, orgId) }
   val runner = remember(dataset.id) { ActionRunner(scope) }
-  val datasetVerdict = rememberDatasetAccess(context, orgId, dataset.visibleTo)
+  val datasetVerdict = rememberDatasetAccess(context, orgId, dataset.placementScope)
   val canWrite = datasetVerdict.canWrite
   var model by remember(dataset.id) { mutableStateOf(dataset.model) }
   var singular by remember(dataset.id) { mutableStateOf(dataset.singular) }
   var plural by remember(dataset.id) { mutableStateOf(dataset.plural) }
-  var visibleTo by remember(dataset.id) { mutableStateOf(dataset.visibleTo.orEmpty()) }
+  // Who it is shared with, as edited here: null while the dataset stores none, so no choice shows as picked (AGL-1484).
+  val storedChoice = remember(dataset.id) { scopeSharingOf(dataset.sharing).choice() }
+  var sharing by remember(dataset.id) { mutableStateOf(storedChoice) }
   var dialog by remember { mutableStateOf<SchemaDialog?>(null) }
   var records by remember(dataset.id) { mutableStateOf(0L) }
   LaunchedEffect(dataset.id) { records = runCatching { context.firestore.count(FirestoreQuery(recordsPath(orgId, dataset.id))) }.getOrNull() ?: 0L }
@@ -142,21 +153,43 @@ private fun SchemaEditor(context: NativePluginContext, orgId: String, dataset: D
   val siteList = ((sites as? Live.Ready)?.value).orEmpty().map { SiteChoice(it.id, it.string("displayName") ?: it.string("subdomain") ?: it.id) }
   val orgWide = access?.orgWide == true
   val previousScope = dataset.visibleTo.orEmpty()
-  val scopeChanged = previousScope.sorted() != visibleTo.sorted()
+  val scopeChanged = sharing.key != storedChoice.key
+  val sitesReady = sites is Live.Ready
+  // What the choice would write, or why it cannot be: the route's own answer, from the workspace's sites. The sites a
+  // choice leaves out stay known even where this member can't name them, so they aren't taken for sites that are gone.
+  val sharingDraft = sharing?.let { choice ->
+    val leftOut = (choice as? ScopeSharingChoice.AllExcept)?.exceptHostIds.orEmpty()
+    sharingFromChoice(choice, siteList.map { it.id } + leftOut, null, emptyList())
+  }
+  // Nothing to say about leaving sites out until the sites have been read.
+  val sharingProblem = if (sharing is ScopeSharingChoice.AllExcept && !sitesReady) null else sharingDraft?.second
+  val nextScope = sharingDraft?.first?.visibleTo.orEmpty()
 
   fun save() {
-    if (model.order.isNullOrEmpty()) {
+    // The sharing this save writes, through the route, or null when it writes none: only an org-wide member may change
+    // it, and a choice that can't be stored refuses the save rather than substituting a scope.
+    val sharingWrite = if (orgWide && scopeChanged) sharing else null
+    if (sharingWrite != null && sharingDraft?.second != null) {
+      runner.error = sharingDraft.second
+      return
+    }
+    // Nothing of theirs to write when the sharing did not move.
+    if (!canWrite && sharingWrite == null) return context.back()
+    if (canWrite && model.order.isNullOrEmpty()) {
       runner.error = "A collection needs at least one field"
       return
     }
-    val scopeWrite = if (orgWide && scopeChanged) scopeToStore(visibleTo) else null
-    if (scopeWrite?.second != null) {
-      runner.error = scopeWrite.second
-      return
-    }
-    runner.run(if (canWrite) "Schema saved." else "Sharing saved.", onDone = { context.back() }) {
-      // A site's narrowing takes the schema, not the sharing, and one write carrying both would be refused whole.
-      if (canWrite) api.saveSchema(dataset, model, singular, plural, scopeWrite?.first) else api.saveSharing(dataset, scopeWrite?.first.orEmpty())
+    runner.run(if (canWrite) "Schema saved" else "Sharing saved", onDone = { context.back() }) {
+      // The schema goes first, because who may write it depends on where the dataset sits as it stands.
+      if (canWrite) api.saveSchema(dataset, model, singular, plural)
+      if (sharingWrite != null) {
+        try {
+          api.setSharing(dataset, sharingWrite)
+        } catch (error: ConsoleApiError) {
+          val reason = ((error.body as? JsonObject)?.get("error") as? JsonPrimitive)?.contentOrNull ?: "The sharing could not be changed."
+          throw ConsoleApiError(if (canWrite) "Schema saved. Its sharing didn’t change: $reason" else reason, error.status, null)
+        }
+      }
     }
   }
 
@@ -176,25 +209,25 @@ private fun SchemaEditor(context: NativePluginContext, orgId: String, dataset: D
     SectionCard("Shared with") {
       when {
         access == null -> Text("Checking your access…", color = MaterialTheme.colorScheme.onSurfaceVariant)
-        !orgWide -> Text(describeScope(dataset.visibleTo, siteList.associate { it.id to it.name }) + ". Only an owner, an admin or a member with every site can change this.", color = MaterialTheme.colorScheme.onSurfaceVariant)
+        !orgWide -> Text((if (dataset.visibleTo == null) "Never shared — hidden from every site" else describeSharing(dataset.sharing, siteList.associate { it.id to it.name })) + ". Only an owner, an admin or a member with every site can change this.", color = MaterialTheme.colorScheme.onSurfaceVariant)
         else -> {
-          val all = OrgAccess.ORG_SCOPE_TOKEN in visibleTo
-          if (dataset.visibleTo == null) NoticeBanner("Not shared with any site: no page can show it until you choose.", StatusTone.WARNING)
-          ChoiceChipRow(
-            listOf(ChipOption("org", "All sites"), ChipOption("hosts", "Selected sites…")),
-            if (all) "org" else if (visibleTo.isNotEmpty() || dataset.visibleTo != null) "hosts" else null,
-            { picked -> visibleTo = if (picked == "org") listOf(OrgAccess.ORG_SCOPE_TOKEN) else visibleTo.filter { it != OrgAccess.ORG_SCOPE_TOKEN } },
-          )
-          if (!all) {
-            if (siteList.isEmpty()) Text("No sites to pick from.", color = MaterialTheme.colorScheme.onSurfaceVariant)
-            for (site in siteList) {
-              val token = OrgAccess.hostScopeToken(site.id)
-              Row(verticalAlignment = Alignment.CenterVertically) {
-                Checkbox(token in visibleTo, { on -> visibleTo = if (on) visibleTo + token else visibleTo - token }, Modifier.testTag("scope-${site.id}"))
-                Text(site.name)
-              }
-            }
+          if (dataset.visibleTo == null) {
+            NoticeBanner(
+              "This collection has never been shared. Nothing is stored, so it is hidden from every site and any page repeating over it renders nothing. Choose who it is shared with to fix that.",
+              StatusTone.WARNING,
+            )
           }
+          SiteSharingField(
+            value = sharing,
+            onChange = { sharing = it },
+            sites = siteList.map { SharingSite(it.id, it.name) },
+            sitesReady = sitesReady,
+            modifier = Modifier.testTag("schema-scope"),
+            label = "",
+            problem = sharingProblem,
+          )
+          // What sharing does NOT do is the part people get wrong (AGL-1046).
+          Text("Sites you exclude cannot see or use this dataset — in the console or on their pages.", style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurfaceVariant)
         }
       }
     }
@@ -235,11 +268,11 @@ private fun SchemaEditor(context: NativePluginContext, orgId: String, dataset: D
       OutlinedButton(onClick = { context.back() }) { Text("Cancel") }
       Button(
         onClick = {
-          if (orgWide && scopeChanged && narrowsScope(previousScope, visibleTo)) {
+          if (orgWide && scopeChanged && sharingProblem == null && narrowsScope(previousScope, nextScope)) {
             val names = siteList.associate { it.id to it.name }
             val losing = siteList.map { it.id }.filter { id ->
               val token = OrgAccess.hostScopeToken(id)
-              (OrgAccess.ORG_SCOPE_TOKEN in previousScope || token in previousScope) && !(OrgAccess.ORG_SCOPE_TOKEN in visibleTo || token in visibleTo)
+              (OrgAccess.ORG_SCOPE_TOKEN in previousScope || token in previousScope) && !(OrgAccess.ORG_SCOPE_TOKEN in nextScope || token in nextScope)
             }.map { names[it] ?: it }
             dialog = SchemaDialog.Narrow(losing)
           } else {

@@ -125,13 +125,40 @@ describe('console page_view params (AGL-1643)', () => {
     ).toContain('app.aglyn.com/pricing')
   })
 
-  it('drops the query string, which is where an address turns up', () => {
+  it('drops the address in the query, which is where one turns up, and keeps the rest', () => {
     const params = buildConsolePageViewParams(
       'https://app.aglyn.com/signup?email=someone@example.com&plan=pro',
     )
-    expect(params.page_location).toBe('https://app.aglyn.com/signup')
+    expect(params.page_location).toBe('https://app.aglyn.com/signup?plan=pro')
     expect(String(params.page_location)).not.toContain('someone@example.com')
-    expect(String(params.page_location)).not.toContain('plan=pro')
+  })
+
+  it('keeps the full query on a QR-code signup landing, so GA4 can attribute the session', () => {
+    // The production report: this exact link reached GA4 as a bare
+    // `https://app.aglyn.com/signup`, and the session had no campaign.
+    const params = buildConsolePageViewParams(
+      'https://app.aglyn.com/signup?utm_source=event&utm_medium=qr&utm_campaign=trailer-left',
+    )
+    expect(params.page_location).toBe(
+      'https://app.aglyn.com/signup?utm_source=event&utm_medium=qr&utm_campaign=trailer-left',
+    )
+  })
+
+  it('keeps the utm tags and a long gclid together on an ad landing', () => {
+    // Past the general 100-character cap, inside GA4's 1,000 for page_location.
+    const url =
+      'https://app.aglyn.com/signup?utm_source=google&utm_medium=cpc&utm_campaign=fall-2026' +
+      `&gclid=Cj0KCQiA${'x9Q6BhCDARIsACwUxu6K'.repeat(5)}_BwE`
+    expect(buildConsolePageViewParams(url).page_location).toBe(url)
+  })
+
+  it('drops the one-time code from an emailed verification link', () => {
+    const params = buildConsolePageViewParams(
+      'https://app.aglyn.com/verify-email?mode=verifyEmail&oobCode=AbC123&apiKey=AIza&lang=en',
+    )
+    expect(params.page_location).toBe(
+      'https://app.aglyn.com/verify-email?mode=verifyEmail&lang=en',
+    )
   })
 
   it('drops the param entirely rather than sending an address in the PATH', () => {

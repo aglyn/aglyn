@@ -17,6 +17,7 @@
 
 import {
   registerPluginScopeSharingPatch,
+  registerPluginScopeSharingSiteChange,
   resetScopeSharingPatchesForTests,
 } from '@aglyn/aglyn/plugin-manager/plugin-scope-sharing'
 import { FieldValue, type Firestore } from 'firebase-admin/firestore'
@@ -414,6 +415,33 @@ describe('sweepScopeSharingAfterSiteChange', () => {
     expect(await resumeScopeSweeps({ firestore: db })).toEqual({ resumed: 1, finished: 1, droppedAfterFailing: 0 })
     expect(store.get('orgs/o1/media/m1')?.['visibleTo']).toEqual(['host:b', 'host:c'])
     expect(sweepDocs(store)).toEqual([])
+  })
+
+  it('then hands the change to each plugin hook, with its budget, and survives one that throws', async () => {
+    const { db, store } = fakeFirestore({ ...ORG, 'orgs/o1/media/m1': marked(['host:b'], ['host:a']) })
+    const seen: unknown[] = []
+    registerPluginScopeSharingSiteChange(
+      async (input) => {
+        // The sweep has already run by now.
+        seen.push({ ...input, mediaLevel: store.get('orgs/o1/media/m1')?.['visibleTo'] })
+      },
+      { pluginId: 'grants-plugin' },
+    )
+    registerPluginScopeSharingSiteChange(
+      async () => {
+        throw new Error('down')
+      },
+      { pluginId: 'broken-plugin' },
+    )
+    const error = jest.spyOn(console, 'error').mockImplementation(() => undefined)
+    await expect(
+      sweepScopeSharingAfterSiteChange({ orgId: 'o1', reason: 'site-added', hostId: 'c', firestore: db }),
+    ).resolves.toBeUndefined()
+    error.mockRestore()
+    expect(seen).toEqual([
+      { orgId: 'o1', reason: 'site-added', hostId: 'c', budgetMs: 3_000, mediaLevel: ['host:b', 'host:c'] },
+    ])
+    resetScopeSharingPatchesForTests()
   })
 })
 

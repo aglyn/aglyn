@@ -21,8 +21,17 @@ import { isOrgWideMember } from '@aglyn/aglyn/app-utils/organizations'
 import type { AglynOrgMember } from '@aglyn/aglyn/foundation/definitions/organization.types'
 import { useFirestore, useFirestoreDoc, useUser } from '@aglyn/tenant-feature-instance'
 import { doc } from 'firebase/firestore'
-import { campaignPlacedOnlyOn, type EmailCampaign } from '../model/campaign-container'
-import { MARKETING_SITE_PERMISSIONS } from '../model/marketing-permissions'
+import { useCallback } from 'react'
+import {
+  campaignPlacedOnlyOn,
+  campaignSiteDeleteRefusal,
+  campaignSiteMayDelete,
+  type EmailCampaign,
+} from '../model/campaign-container'
+import { MARKETING_CAMPAIGNS_REFUSAL, MARKETING_SITE_PERMISSIONS } from '../model/marketing-permissions'
+
+/** The fields of a container that decide who may write it: its placement and its marker. */
+type CampaignPlacement = Pick<EmailCampaign, 'visibleTo' | 'scopeMode' | 'scopeExcept'>
 
 /** What the rule reads off a membership document. */
 export interface CampaignContainerMember {
@@ -68,6 +77,23 @@ export function siteHoldsCampaignContainers(
  */
 export function workspaceManagesCampaigns(member: CampaignContainerMember): boolean {
   return isOrgWideMember(member as Partial<AglynOrgMember>) && holdsCampaignContainers(member)
+}
+
+/**
+ * Why the manage route's SITE door refuses to delete this campaign for this
+ * member, past the key: one placed on other sites too, or shared with all sites
+ * except some, asks for a member of the whole workspace (AGL-4047). `null` when
+ * that door would take it, and with no site named, where the door is the
+ * workspace's and the key alone decides.
+ */
+export function siteDeleteReachRefusal(
+  member: CampaignContainerMember | null | undefined,
+  hostId: string | null | undefined,
+  campaign: CampaignPlacement | null | undefined,
+): string | null {
+  if (!hostId || !member || !campaign) return null
+  if (isOrgWideMember(member as Partial<AglynOrgMember>)) return null
+  return campaignSiteMayDelete(campaign, hostId) ? null : campaignSiteDeleteRefusal(campaign)
 }
 
 /** The reader's membership: `null` until one has landed, and for a reader with none, who is staff. */
@@ -120,15 +146,25 @@ function useSiteVerdict(
 export function useCampaignListAccess(
   orgId: string | null | undefined,
   hostId: string | null | undefined,
-): { createBlocked: boolean; deleteBlocked: boolean } {
+): {
+  createBlocked: boolean
+  deleteBlocked: boolean
+  /** A row's own reason the site door refuses its delete: {@link siteDeleteReachRefusal}. */
+  deleteReachRefusal: (campaign: CampaignPlacement | null | undefined) => string | null
+} {
   const member = useContainerMember(orgId)
   const site = useSiteVerdict(orgId, hostId, member)
   const refused = Boolean(member) && !holdsCampaignContainers(member as CampaignContainerMember)
+  const deleteReachRefusal = useCallback(
+    (campaign: CampaignPlacement | null | undefined) => siteDeleteReachRefusal(member, hostId, campaign),
+    [member, hostId],
+  )
   return {
     createBlocked: refused && (!hostId || (site.known && !site.held)),
     deleteBlocked: hostId
       ? site.known && !site.held
       : Boolean(member) && !workspaceManagesCampaigns(member as CampaignContainerMember),
+    deleteReachRefusal,
   }
 }
 
@@ -147,16 +183,20 @@ export function useCampaignListAccess(
 export function useCampaignContainerAccess(
   orgId: string | null | undefined,
   hostId: string | null | undefined,
-  campaign: Pick<EmailCampaign, 'visibleTo'> | null | undefined,
-): { editBlocked: boolean; deleteBlocked: boolean } {
+  campaign: CampaignPlacement | null | undefined,
+): { editBlocked: boolean; deleteBlocked: boolean; deleteReason: string | null } {
   const member = useContainerMember(orgId)
   const site = useSiteVerdict(orgId, campaign ? hostId : null, member)
   const refused = Boolean(member) && !holdsCampaignContainers(member as CampaignContainerMember)
+  // Never for a campaign shared with all sites except some (AGL-4047), as the rule.
   const siteCounts = Boolean(hostId) && campaignPlacedOnlyOn(campaign, String(hostId))
+  const keyRefused = hostId
+    ? site.known && !site.held
+    : Boolean(member) && !workspaceManagesCampaigns(member as CampaignContainerMember)
+  const reach = keyRefused ? null : siteDeleteReachRefusal(member, hostId, campaign)
   return {
     editBlocked: refused && (!siteCounts || (site.known && !site.held)),
-    deleteBlocked: hostId
-      ? site.known && !site.held
-      : Boolean(member) && !workspaceManagesCampaigns(member as CampaignContainerMember),
+    deleteBlocked: keyRefused || Boolean(reach),
+    deleteReason: keyRefused ? MARKETING_CAMPAIGNS_REFUSAL : reach,
   }
 }

@@ -18,11 +18,13 @@
 import { FieldValue, Timestamp } from 'firebase-admin/firestore'
 import { checkQuota } from '@aglyn/aglyn/server'
 import { mediaFilterKeys } from '@aglyn/aglyn/app-utils/media-metadata'
+import { reconcileAllExcept } from '@aglyn/aglyn/app-utils/scope-tokens'
 import {
   removeMediaDeliveryCopies,
   withoutMediaDeliveryCopies,
 } from './media-delivery'
 import { mediaDerivedObjectPaths } from './media-variants'
+import { orgHostIdsFromDoc } from './scope-sharing-sweep'
 
 /**
  * What a DAM delete has to leave behind for an undo to be possible at all
@@ -442,6 +444,34 @@ export function mediaRestoreRefusal(options: {
  * transaction finds no tombstone, commits nothing, and the caller is told the
  * file is already back rather than being charged for it twice.
  */
+/**
+ * The scope a restored file of the workspace library is written with, when it
+ * carries the marker of "all sites except some" (AGL-4047): `visibleTo` and the
+ * marker as `reconcileAllExcept` answers them for the workspace's sites today.
+ * Empty for anything else: an unmarked file, a site's own library, or a marker
+ * the helper can't act on (left as it was, for the weekly drift report).
+ *
+ * Spread over the whole document, which a `set` with no merge writes, so a
+ * marker that drops to All sites is taken off by deleting the keys from the
+ * copy, never by storing a null.
+ */
+async function restoredScopeFields(
+  transaction: FirebaseFirestore.Transaction,
+  scopeRef: FirebaseFirestore.DocumentReference,
+  media: Record<string, unknown>,
+): Promise<Record<string, unknown>> {
+  if (media['scopeMode'] === undefined || scopeRef.parent.id !== 'orgs') return {}
+  const org = await transaction.get(scopeRef)
+  const answer = reconcileAllExcept(media, orgHostIdsFromDoc(org.data()))
+  if (!answer.fields) return {}
+  if (!answer.fields.scopeMode) {
+    delete media['scopeMode']
+    delete media['scopeExcept']
+    return { visibleTo: answer.fields.visibleTo }
+  }
+  return { ...answer.fields }
+}
+
 export async function restoreMediaFromTombstone(options: {
   scopeRef: FirebaseFirestore.DocumentReference
   bucket: TombstoneStorageBucket
@@ -553,8 +583,15 @@ export async function restoreMediaFromTombstone(options: {
       // With the library's filter keys re-derived, so a file deleted before
       // they existed comes back findable by them (AGL-3327).
       const media = withoutMediaDeliveryCopies(record.media)
+      // Shared with all sites except some (AGL-4047): the sites it reaches are
+      // a list the sweep keeps up as sites come and go, and the sweep never saw
+      // this file while it was deleted. So it comes back reaching the sites
+      // the workspace has NOW, read in this transaction, as the sweep would
+      // have left it. Any other file comes back as it was.
+      const scope = await restoredScopeFields(transaction, scopeRef, media)
       transaction.set(mediaRef, {
         ...media,
+        ...scope,
         ...mediaFilterKeys(media as Parameters<typeof mediaFilterKeys>[0]),
         folderId: (media as { folderId?: unknown }).folderId ?? null,
       })

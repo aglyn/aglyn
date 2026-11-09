@@ -98,9 +98,48 @@ fun crmDefaultScopeOf(org: Map<String, Any?>?): String? {
   return if (legacy == "org" || legacy == "host") legacy as String else "org"
 }
 
+/**
+ * The sites the CRM default leaves out, when it is all sites except some, or null (`crmDefaultExceptOf`, AGL-4047). Only
+ * the org's own `crm.defaultRecordScope: 'host'` carries it.
+ */
+fun crmDefaultExceptOf(org: Map<String, Any?>?): List<String>? {
+  val settings = org?.get("crm") as? Map<*, *> ?: return null
+  if (settings["defaultRecordScope"] != "host") return null
+  val except = settings["defaultRecordExcept"] as? List<*> ?: return null
+  return except.filterIsInstance<String>().filter { it.isNotEmpty() }.distinct().ifEmpty { null }
+}
+
+/** The CRM default as the settings offer it: `org`, `host` or `allExcept` (`crmDefaultSharingOf`). */
+fun crmDefaultSharingOf(org: Map<String, Any?>?): String? = if (crmDefaultExceptOf(org) != null) "allExcept" else crmDefaultScopeOf(org)
+
+/** The most sites the CRM default may reach when it leaves some out (`CRM_DEFAULT_MAX_INCLUDED`). */
+const val CRM_DEFAULT_MAX_INCLUDED = MAX_SCOPE_HOSTS
+
+/** What a new record stores of its sites: `visibleTo`, and the marker when the default leaves sites out. */
+data class CrmScopeFields(val visibleTo: List<String>, val scopeMode: String? = null, val scopeExcept: List<String>? = null)
+
+/**
+ * What a new record stores of its sites (`crmScopeFields`): under all sites except some, the workspace's sites
+ * (`orgs/{orgId}.hosts`) less the ones left out, plus the site it came in on; never wider than the site and its group when
+ * the sites can't be read or would be too many. Only a server stores the marker; a client's record is marked on the
+ * server's follow-up.
+ */
+fun crmScopeFields(org: Map<String, Any?>?, group: ConsentGroup): CrmScopeFields {
+  if (crmDefaultScopeOf(org) == "org") return CrmScopeFields(listOf(ORG_SCOPE_TOKEN))
+  val kept = consentGroupScope(group)
+  val except = crmDefaultExceptOf(org) ?: return CrmScopeFields(kept)
+  val hosts = org?.get("hosts") as? Map<*, *> ?: return CrmScopeFields(kept)
+  val orgHostIds = hosts.filter { (_, on) -> on != null && on != false && on != 0 && on != "" }.keys.map { it.toString() }
+  if (orgHostIds.isEmpty()) return CrmScopeFields(kept)
+  val left = except.filter { it in orgHostIds }
+  if (left.isEmpty()) return CrmScopeFields(listOf(ORG_SCOPE_TOKEN))
+  val included = (orgHostIds.filter { it !in left } + group.hostId).filter { it.isNotEmpty() }.distinct().sorted()
+  if (included.size > CRM_DEFAULT_MAX_INCLUDED) return CrmScopeFields(kept)
+  return CrmScopeFields(included.map(::hostScopeToken), "allExcept", left.sorted().map(::hostScopeToken))
+}
+
 /** What a record this viewer creates is stamped with. */
-fun crmScopeTokens(org: Map<String, Any?>?, group: ConsentGroup): List<String> =
-  if (crmDefaultScopeOf(org) == "org") listOf(ORG_SCOPE_TOKEN) else consentGroupScope(group)
+fun crmScopeTokens(org: Map<String, Any?>?, group: ConsentGroup): List<String> = crmScopeFields(org, group).visibleTo
 
 /** What a reader of this group lists by: the org's token, then the group's sites, capped. */
 fun crmReadTokens(group: ConsentGroup): List<String> = (listOf(ORG_SCOPE_TOKEN) + consentGroupScope(group)).take(MAX_SCOPE_HOSTS)

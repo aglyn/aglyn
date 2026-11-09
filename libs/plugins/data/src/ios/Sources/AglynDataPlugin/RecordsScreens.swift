@@ -164,7 +164,7 @@ private struct RecordsBody: View {
   }
 
   @State private var placement = DatasetPlacement()
-  private var verdict: DatasetAccess { placement.access(context, visibleTo: dataset.visibleTo) }
+  private var verdict: DatasetAccess { placement.access(context, visibleTo: dataset.placementScope) }
   private var canWrite: Bool { verdict.canWrite }
   private var noun: String { dataset.singular.trimmingCharacters(in: .whitespaces).isEmpty ? "record" : dataset.singular.lowercased() }
   private var api: DataAPI { DataAPI(api: context.api, writer: context.writer, orgID: orgID) }
@@ -245,7 +245,7 @@ private struct RecordsBody: View {
         if let message { runner.notice = message }
       }
     }
-    .task(id: dataset.visibleTo) { placement.start(context, visibleTo: dataset.visibleTo) }
+    .task(id: dataset.placementScope) { placement.start(context, visibleTo: dataset.placementScope) }
     .task(id: dataset.model) {
       model.use(dataset)
       model.start(context.firestore, orgID: orgID)

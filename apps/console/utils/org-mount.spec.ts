@@ -73,6 +73,29 @@ describe('resolveOrgMount', () => {
     expect(mount?.billingPath).toBe(buildRoute(Route.MANAGE_BILLING, { orgSlug: 'acme' }))
   })
 
+  it("carries each site's own plugin switch-offs, only when its document has the list (AGL-4047)", () => {
+    // A marketplace listing's installed-sites panel reads this to tell a
+    // pinned site that switched the plugin off from one running it; it is
+    // off the host documents the page already holds, so it costs no read.
+    const mount = resolveOrgMount({
+      orgId: 'org-1',
+      orgSlug: 'acme',
+      hosts: [
+        { $id: 'h-1', displayName: 'Bakery', disabledPlugins: ['lst-1', 'commerce'] },
+        { $id: 'h-2', displayName: 'Cafe', disabledPlugins: [] },
+        { $id: 'h-3', displayName: 'Catering' },
+        { $id: 'h-4', displayName: 'Deli', disabledPlugins: 'lst-1' },
+      ],
+      hostsReady: true,
+    })
+    expect(mount?.hosts).toEqual([
+      { id: 'h-1', name: 'Bakery', subdomain: null, disabledPlugins: ['lst-1', 'commerce'] },
+      { id: 'h-2', name: 'Cafe', subdomain: null, disabledPlugins: [] },
+      { id: 'h-3', name: 'Catering', subdomain: null },
+      { id: 'h-4', name: 'Deli', subdomain: null },
+    ])
+  })
+
   it('carries the list\'s readiness through, so a consumer can hold on it', () => {
     const mount = resolveOrgMount({
       orgId: 'org-1',

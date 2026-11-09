@@ -144,6 +144,9 @@ data class MediaItem(
   val updatedAt: FirestoreTimestamp?,
   val uploadedBy: String?,
   val visibleTo: List<String>,
+  /** The all-sites-except marker an org-library file carries beside `visibleTo` (AGL-4047). */
+  val scopeMode: String? = null,
+  val scopeExcept: List<String>? = null,
   /** A film's measured length in whole seconds (`videoMediaProps`); null for anything else or a film that records none. */
   val videoSeconds: Long? = null,
   /** Whether the film's document records a captured poster frame (only then is its poster URL a picture, not a 404). */
@@ -197,6 +200,8 @@ data class MediaItem(
         updatedAt = doc.data["updatedAt"] as? FirestoreTimestamp,
         uploadedBy = doc.string("uploadedBy"),
         visibleTo = (doc.data["visibleTo"] as? List<*>)?.filterIsInstance<String>().orEmpty(),
+        scopeMode = doc.data["scopeMode"] as? String,
+        scopeExcept = (doc.data["scopeExcept"] as? List<*>)?.filterIsInstance<String>(),
         videoSeconds = libraryVideoSeconds(doc.data["video"]),
         hasPoster = doc.data["poster"] is Map<*, *>,
       )

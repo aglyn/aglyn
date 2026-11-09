@@ -163,6 +163,8 @@ func pluginUpdateStatus(pin: UpdateComparablePin?, offered: String?) -> UpdateSt
 struct SiteChoice: Equatable, Identifiable {
   let id: String
   let label: String
+  /// The site's own deny-list (`disabledPlugins`), when the caller has it (AGL-4047).
+  var disabledPlugins: [String]? = nil
 }
 
 /// One site's slice of an org-scope install picture (`OrgInstallSite`).
@@ -175,6 +177,9 @@ struct OrgInstallSite: Equatable, Identifiable {
   let pinnedBy: InstallTarget
   /// This site has its own pin on top of an org pin.
   let shadowed: Bool
+  /// Pinned here, but the site's own Admin › Plugins switch has it off (its `disabledPlugins` holds the listing id,
+  /// AGL-4047), so it does not run here. Known only when the caller handed over the sites' lists and the listing id.
+  var switchedOff = false
   var id: String { hostID }
 }
 
@@ -193,7 +198,11 @@ struct PinVersion: Equatable {
   let version: String?
 }
 
-func resolveOrgInstallSummary(hosts: [SiteChoice], hostPins: [String: PinVersion], orgPin: PinVersion?) -> OrgInstallSummary {
+/// `listingID` (AGL-4047): a site whose own switch has the listing off keeps its pin or its org coverage but runs nothing,
+/// as the realm join drops it; given the id and each site's list, such a site is marked `switchedOff`.
+func resolveOrgInstallSummary(
+  hosts: [SiteChoice], hostPins: [String: PinVersion], orgPin: PinVersion?, listingID: String? = nil
+) -> OrgInstallSummary {
   let orgVersion = orgPin?.version
   var sites: [OrgInstallSite] = []
   var hostPinned: [String] = []
@@ -208,7 +217,8 @@ func resolveOrgInstallSummary(hosts: [SiteChoice], hostPins: [String: PinVersion
     sites.append(
       OrgInstallSite(
         hostID: host.id, label: host.label, version: hostPin?.version ?? orgVersion, pinnedBy: hostPin != nil ? .host : .org,
-        shadowed: hostPin != nil && orgPin != nil))
+        shadowed: hostPin != nil && orgPin != nil,
+        switchedOff: !(listingID ?? "").isEmpty && host.disabledPlugins?.contains(listingID ?? "") == true))
   }
   return OrgInstallSummary(
     orgWide: orgPin != nil, orgVersion: orgVersion, sites: sites, hostPinnedIDs: hostPinned, availableHostIDs: available,
@@ -237,9 +247,24 @@ func staleSites(_ sites: [OrgInstallSite], latestVersion: String?) -> [OrgInstal
 
 /// What "Where it runs" opens with (`pluginSiteSetSummary`).
 func pluginSiteSetSummary(_ install: OrgInstallSummary, siteCount: Int) -> String {
-  install.orgWide
-    ? "Installed for the whole organization (v\(install.orgVersion ?? "null")) — every site, including ones you add later."
-    : "Installed on \(install.sites.count) of \(siteCount) sites."
+  // Sites whose own switch has it off (AGL-4047): pinned, but not running.
+  let off = install.sites.filter(\.switchedOff).map(\.label)
+  if install.orgWide {
+    let head = "Installed for the whole organization (v\(install.orgVersion ?? "null"))"
+    if off.isEmpty { return "\(head) — every site, including ones you add later." }
+    return off.count == install.sites.count
+      ? "\(head). Every site switched it off, so it runs only on sites you add later."
+      : "\(head). It runs on every site except \(namesList(off)), which switched it off, and on sites you add later."
+  }
+  let head = "Installed on \(install.sites.count) of \(siteCount) sites"
+  if off.isEmpty { return "\(head)." }
+  let running = install.sites.count - off.count
+  return "\(head). \(namesList(off)) switched it off, so it runs on \(running > 0 ? String(running) : "none of them")."
+}
+
+/// "A", "A and B", "A, B and C".
+private func namesList(_ names: [String]) -> String {
+  names.count < 2 ? (names.first ?? "") : "\(names.dropLast().joined(separator: ", ")) and \(names.last!)"
 }
 
 /// What the update confirmation says (`pluginUpdatePrompt`).
@@ -409,16 +434,20 @@ struct InstallPlanOutcome: Equatable {
 }
 
 func installPlanOutcome(
-  name: String, installed: Int, errors: [String], orgWide: Bool, updating: Bool, version: String?, saved: Bool = false
+  name: String, installed: Int, errors: [String], orgWide: Bool, updating: Bool, version: String?, saved: Bool = false,
+  leftOut: Int = 0
 ) -> InstallPlanOutcome {
   let noun = updating ? "Updated" : (saved ? "Saved" : "Installed")
   let toVersion = updating && version != nil ? " to v\(version ?? "")" : ""
   if installed > 0, errors.isEmpty {
+    // "All sites except…" (AGL-4047): the sites the org-wide pin left out.
+    let orgText =
+      leftOut > 0
+      ? "\(noun) \"\(name)\"\(toVersion) for every site but \(leftOut == 1 ? "the one" : "the \(leftOut)") you left out, and for sites you add later"
+      : "\(noun) \"\(name)\"\(toVersion) for the whole organization"
     return InstallPlanOutcome(
       tone: "success",
-      text: orgWide
-        ? "\(noun) \"\(name)\"\(toVersion) for the whole organization"
-        : "\(noun) \"\(name)\"\(toVersion) on \(installed) site\(installed == 1 ? "" : "s")")
+      text: orgWide ? orgText : "\(noun) \"\(name)\"\(toVersion) on \(installed) site\(installed == 1 ? "" : "s")")
   }
   if installed > 0 {
     return InstallPlanOutcome(tone: "warning", text: "\(noun) on \(installed) site(s); \(errors.count) failed — \(errors[0])")

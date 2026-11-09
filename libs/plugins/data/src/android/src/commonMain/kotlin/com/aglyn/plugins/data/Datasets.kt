@@ -14,18 +14,20 @@ import com.aglyn.core.ApiMethod
 import com.aglyn.core.ConsoleApiClient
 import com.aglyn.core.ConsoleApiError
 import com.aglyn.core.FilterOp
-import com.aglyn.core.OrgAccess
 import com.aglyn.core.FirestoreDoc
 import com.aglyn.core.FirestoreFilter
 import com.aglyn.core.FirestoreQuery
 import com.aglyn.core.FirestoreReader
 import com.aglyn.core.FirestoreTimestamp
 import com.aglyn.core.FirestoreWriter
+import com.aglyn.core.OrgAccess
 import com.aglyn.core.field
 import com.aglyn.core.jsonBody
 import com.aglyn.core.listquery.nameSearchKey
 import com.aglyn.core.listquery.toFirestoreQuery
 import com.aglyn.core.plainJson
+import com.aglyn.pluginhost.ScopeSharingChoice
+import com.aglyn.pluginhost.wire
 import com.aglyn.ui.Load
 import kotlinx.coroutines.CancellationException
 import kotlinx.coroutines.CoroutineScope
@@ -72,7 +74,27 @@ data class DatasetRow(
   /** The sharing scope as stored; null when the document stores none. */
   val visibleTo: List<String>?,
   val updatedAt: FirestoreTimestamp?,
+  /** The all-sites-except marker beside `visibleTo` (AGL-4047): the sites left out, as scope tokens, under `allExcept`. */
+  val scopeMode: String? = null,
+  val scopeExcept: List<String>? = null,
 ) {
+  /** Shared with all sites except some (AGL-4047): either marker key present, as the rules read it. */
+  val sharingMarked: Boolean get() = scopeMode != null || scopeExcept != null
+
+  /**
+   * Where it sits for the one-site verdict (`oneSitePlacement`): never one site while it is marked, however few sites
+   * it reaches today, since it belongs to the whole workspace.
+   */
+  val placementScope: List<String>? get() = if (sharingMarked) null else visibleTo
+
+  /** Who it is shared with, as `describeSharing` and `scopeSharingOf` read it. */
+  val sharing: Map<String, Any?>
+    get() = buildMap {
+      visibleTo?.let { put("visibleTo", it) }
+      scopeMode?.let { put("scopeMode", it) }
+      scopeExcept?.let { put("scopeExcept", it) }
+    }
+
   /** The other datasets' reference fields that point here. */
   fun referencedBy(others: List<DatasetRow>): List<Pair<DatasetRow, String>> = others.flatMap { other ->
     other.model.orderedFields().filter { (_, field) -> field.type == DatasetFieldType.REFERENCE && field.reference?.datasetId == id }.map { other to it.first }
@@ -93,6 +115,8 @@ data class DatasetRow(
         plural = (names?.get("plural") as? String)?.ifEmpty { null } ?: datasetDisplayName(doc.data),
         visibleTo = (doc.data["visibleTo"] as? List<*>)?.filterIsInstance<String>()?.takeIf { it.isNotEmpty() },
         updatedAt = doc.data["updatedAt"] as? FirestoreTimestamp,
+        scopeMode = doc.data["scopeMode"] as? String,
+        scopeExcept = (doc.data["scopeExcept"] as? List<*>)?.filterIsInstance<String>(),
       )
     }
   }
@@ -289,13 +313,13 @@ class DataApi(private val api: ConsoleApiClient, private val writer: FirestoreWr
     )
   }
 
-  /** Who a dataset is shared with, alone: what a member a site narrows can still change. */
-  suspend fun saveSharing(dataset: DatasetRow, visibleTo: List<String>) {
-    writer.update("${datasetsPath(orgId)}/${dataset.id}", linkedMapOf<String, Any?>("visibleTo" to visibleTo))
+  /** Who a dataset is shared with, through the route (`set-sharing`): a marker is the server's alone (AGL-4047). */
+  suspend fun setSharing(dataset: DatasetRow, choice: ScopeSharingChoice) {
+    api.request("/api/orgs/datasets", ApiMethod.POST, jsonBody("orgId" to orgId, "action" to "set-sharing", "datasetId" to dataset.id, "choice" to choice.wire))
   }
 
-  /** The Schema dialog's save: the model, its names and (for an org-wide member) the sharing scope. */
-  suspend fun saveSchema(dataset: DatasetRow, model: DatasetModel, singular: String, plural: String, visibleTo: List<String>?) {
+  /** The Schema dialog's save: the model and its names. Who it is shared with goes through [setSharing]. */
+  suspend fun saveSchema(dataset: DatasetRow, model: DatasetModel, singular: String, plural: String) {
     val data = linkedMapOf<String, Any?>(
       "model" to schemaModelJson(model, dataset.rawFields),
       "names" to mapOf("singular" to singular.trim(), "plural" to plural.trim()),
@@ -306,7 +330,6 @@ class DataApi(private val api: ConsoleApiClient, private val writer: FirestoreWr
       data["displayName"] = plural.trim()
       data["nameLower"] = nameSearchKey(plural)
     }
-    if (visibleTo != null) data["visibleTo"] = visibleTo
     writer.update("${datasetsPath(orgId)}/${dataset.id}", data)
   }
 }

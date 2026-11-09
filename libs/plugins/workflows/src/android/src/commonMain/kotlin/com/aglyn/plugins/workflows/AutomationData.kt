@@ -331,9 +331,16 @@ fun placedSiteIds(row: OrgAutomationRow, sites: List<OrgSite>): List<String> =
 
 fun orgSiteName(sites: List<OrgSite>, hostId: String): String = sites.firstOrNull { it.id == hostId }?.name?.ifEmpty { null } ?: hostId
 
-/** `Runs on every site` / `Runs on Demo, Shop` / `Runs on no site`. */
+/** `Runs on every site` / `Runs on Demo, Shop` / `Runs on every site except Blog` (AGL-4047) / `Runs on no site`. */
 fun placementLine(row: OrgAutomationRow, sites: List<OrgSite>): String {
-  if (row.everySite) return "Runs on every site"
+  when (val sharing = com.aglyn.pluginhost.scopeSharingOf(row.raw)) {
+    com.aglyn.pluginhost.ScopeSharing.All -> return "Runs on every site"
+    is com.aglyn.pluginhost.ScopeSharing.AllExcept -> {
+      if (sharing.includedHostIds.isEmpty()) return "Runs on no site"
+      return "Runs on every site except ${sharing.exceptHostIds.joinToString(", ") { orgSiteName(sites, it) }}"
+    }
+    else -> Unit
+  }
   val names = com.aglyn.contracts.hostIdsFromScope(row.visibleTo).map { orgSiteName(sites, it) }
   return if (names.isNotEmpty()) "Runs on ${names.joinToString(", ")}" else "Runs on no site"
 }

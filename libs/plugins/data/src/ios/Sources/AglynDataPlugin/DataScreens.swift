@@ -180,6 +180,8 @@ struct DatasetsScreen: View {
   @State private var exporting: TransferExportRequest?
 
   private var canWrite: Bool { context.can("data.manage") }
+  /// The workspace's sites by id, so "All sites except…" names the sites it leaves out.
+  private var siteNames: [String: String] { Dictionary(context.sites.map { ($0.id, $0.name) }) { first, _ in first } }
 
   private var api: DataAPI? {
     context.orgID.map { DataAPI(api: context.api, writer: context.writer, orgID: $0) }
@@ -311,13 +313,13 @@ struct DatasetsScreen: View {
     ForEach(model.rows) { row in
       Group {
         if selectable {
-          DatasetListRow(row: row).aglynSelectableRow(row.id, selection: $selection)
+          DatasetListRow(row: row, hostNames: siteNames).aglynSelectableRow(row.id, selection: $selection)
         } else {
           Button {
             pushed = row.id
           } label: {
             HStack {
-              DatasetListRow(row: row)
+              DatasetListRow(row: row, hostNames: siteNames)
               Image(systemName: "chevron.right").font(AglynFont.caption.weight(.semibold)).foregroundStyle(.tertiary)
                 .accessibilityHidden(true)
             }
@@ -407,11 +409,13 @@ struct DatasetsScreen: View {
 
 struct DatasetListRow: View {
   let row: DatasetRow
+  /// The workspace's sites by id, so "All sites except…" names the sites it leaves out.
+  var hostNames: [String: String] = [:]
 
   var body: some View {
     let count = (row.model.order ?? []).count
     AglynRow(
-      row.name, subtitle: "\(count == 1 ? "1 field" : "\(count) fields") · \(describeScope(row.visibleTo))",
+      row.name, subtitle: "\(count == 1 ? "1 field" : "\(count) fields") · \(describeSharing(row.sharing, hostNames: hostNames))",
       systemImage: DataSymbols.dataset)
   }
 }
@@ -485,7 +489,7 @@ struct DatasetDetailView: View {
   @State private var placement = DatasetPlacement()
 
   private var dataset: DatasetRow? { datasets.first { $0.id == datasetID } }
-  private var verdict: DatasetAccess { placement.access(context, visibleTo: dataset?.visibleTo) }
+  private var verdict: DatasetAccess { placement.access(context, visibleTo: dataset?.placementScope) }
   private var canWrite: Bool { verdict.canWrite }
 
   var body: some View {
@@ -502,7 +506,7 @@ struct DatasetDetailView: View {
     }
     .navigationTitle(titled ? (dataset?.name ?? "Dataset") : "Data")
     .aglynScreenTitle(titled ? (dataset?.name ?? "Dataset") : "Data")
-    .task(id: dataset?.visibleTo) { placement.start(context, visibleTo: dataset?.visibleTo) }
+    .task(id: dataset?.placementScope) { placement.start(context, visibleTo: dataset?.placementScope) }
   }
 
   private func content(_ dataset: DatasetRow) -> some View {
@@ -651,7 +655,7 @@ struct DatasetDetailView: View {
           }
         }
         AglynWrapRow(spacing: AglynSpace.one, lineSpacing: AglynSpace.half) {
-          StatusChip("Shared with \(describeScope(dataset.visibleTo))", tone: dataset.visibleTo == nil ? .warning : .info)
+          StatusChip("Shared with \(describeSharing(dataset.sharing, hostNames: Dictionary(context.sites.map { ($0.id, $0.name) }) { first, _ in first }))", tone: dataset.visibleTo == nil ? .warning : .info)
           if !referencedBy.isEmpty {
             StatusChip(referencedBy.count == 1 ? "Referenced by 1 field" : "Referenced by \(referencedBy.count) fields")
           }

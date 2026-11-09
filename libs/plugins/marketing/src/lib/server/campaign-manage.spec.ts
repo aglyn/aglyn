@@ -38,6 +38,8 @@
  * unsubscribe handler increments, so its existence is asserted too.
  */
 
+import { FieldValue } from 'firebase-admin/firestore'
+
 const store = new Map<string, Record<string, any>>()
 
 /** The `FieldValue.delete()` sentinel, resolved by the double below. */
@@ -98,6 +100,8 @@ function applyUpdate(
   for (const [key, value] of Object.entries(patch)) {
     writePath(next, key, (previous) => {
       if (isPlainObject(value) && '__delete' in value) return { remove: true }
+      // The real sentinel, as the shared `fieldsToWrite` spells a marker's removal.
+      if (value instanceof FieldValue && value.isEqual(FieldValue.delete())) return { remove: true }
       if (isPlainObject(value) && '__arrayRemove' in value) {
         const taken = value['__arrayRemove'] as unknown[]
         const before = Array.isArray(previous) ? previous : []
@@ -266,13 +270,20 @@ function mockFirestore(): any {
 }
 
 let mockUid = 'uid-1'
+/** What verifying the token throws, when a case wants it refused. */
+let mockTokenError: unknown = null
 
 jest.mock('@aglyn/tenant-data-admin/server/firebase-admin', () => ({
   __esModule: true,
   default: {
     app: () => ({
       firestore: () => mockFirestore(),
-      auth: () => ({ verifyIdToken: async () => ({ uid: mockUid }) }),
+      auth: () => ({
+        verifyIdToken: async () => {
+          if (mockTokenError) throw mockTokenError
+          return { uid: mockUid }
+        },
+      }),
     }),
     firestore: {
       FieldValue: {
@@ -380,6 +391,7 @@ beforeEach(() => {
   commits.length = 0
   resetPluginMembershipDetachersForTests()
   mockUid = 'uid-1'
+  mockTokenError = null
   process.env['EMAIL_UNSUBSCRIBE_SECRET'] = SECRET
   store.set(`hosts/${HOST}`, {
     subdomain: 'acme',
@@ -1232,5 +1244,203 @@ describe('the organization hub', () => {
     })
     await expect(campaignManageSubject(request({ orgId: 'a/b' }))).resolves.toBeNull()
     await expect(campaignManageSubject(request({}))).resolves.toBeNull()
+  })
+})
+
+/*==========================================
+ * WHO A CAMPAIGN IS SHARED WITH (AGL-4047).
+ *
+ * The marker (`scopeMode`, `scopeExcept`) is the server's alone: the rules
+ * refuse it from a client. So this route is its one writer, from the
+ * organization's door, for the member the rules let re-scope a campaign: one
+ * of the whole workspace holding "Run email campaigns".
+ *=========================================*/
+describe('action: setSharing', () => {
+  const THIRD = 'host-3'
+  const orgPost = (body: Record<string, unknown>) =>
+    post({ orgId: ORG_ID, action: 'setSharing', campaignId: CAMPAIGN, ...body })
+
+  beforeEach(() => {
+    // The workspace's sites, as the org document lists them.
+    store.set(`orgs/${ORG_ID}`, {
+      name: 'Acme',
+      hosts: { [HOST]: true, [SIBLING]: true, [THIRD]: true },
+    })
+    store.set(`orgs/${ORG_ID}/members/uid-1`, { role: 'editor' })
+  })
+
+  it('shares with all sites except some: today’s other sites, and the marker', async () => {
+    const result = await orgPost({ choice: { mode: 'allExcept', exceptHostIds: [SIBLING] } })
+
+    expect(result.status).toBe(200)
+    expect(stored(`emailCampaigns/${CAMPAIGN}`)).toMatchObject({
+      name: 'Spring sale',
+      visibleTo: [`host:${HOST}`, `host:${THIRD}`],
+      scopeMode: 'allExcept',
+      scopeExcept: [`host:${SIBLING}`],
+    })
+  })
+
+  it('back to All sites collapses to the org token and DELETES the marker, never storing null', async () => {
+    store.set(`orgs/${ORG_ID}/emailCampaigns/${CAMPAIGN}`, {
+      name: 'Spring sale',
+      visibleTo: [`host:${HOST}`],
+      scopeMode: 'allExcept',
+      scopeExcept: [`host:${SIBLING}`],
+    })
+
+    const result = await orgPost({ choice: { mode: 'all' } })
+
+    expect(result.status).toBe(200)
+    const campaign = stored(`emailCampaigns/${CAMPAIGN}`) as Record<string, unknown>
+    expect(campaign['visibleTo']).toEqual(['org'])
+    expect('scopeMode' in campaign).toBe(false)
+    expect('scopeExcept' in campaign).toBe(false)
+  })
+
+  it('drops a chosen site the workspace does not hold, rather than storing it', async () => {
+    const result = await orgPost({ choice: { mode: 'selected', hostIds: [THIRD, 'host-gone'] } })
+
+    expect(result.status).toBe(200)
+    expect(stored(`emailCampaigns/${CAMPAIGN}`)?.['visibleTo']).toEqual([`host:${THIRD}`])
+  })
+
+  it('refuses more than thirty chosen sites with the reason, rather than keeping the first thirty', async () => {
+    const many = Array.from({ length: 31 }, (_, at) => `site-${at}`)
+    store.set(`orgs/${ORG_ID}`, {
+      name: 'Acme',
+      hosts: Object.fromEntries(many.map((id) => [id, true])),
+    })
+
+    const result = await orgPost({ choice: { mode: 'selected', hostIds: many } })
+
+    expect(result.status).toBe(400)
+    expect(String(result.body.error)).toMatch(/30 sites or fewer/)
+    expect(stored(`emailCampaigns/${CAMPAIGN}`)?.['visibleTo']).toEqual([`host:${HOST}`])
+  })
+
+  it('reaches past thirty sites with all sites except some, which has no such ceiling', async () => {
+    const many = Array.from({ length: 40 }, (_, at) => `site-${at}`)
+    store.set(`orgs/${ORG_ID}`, {
+      name: 'Acme',
+      hosts: Object.fromEntries(many.map((id) => [id, true])),
+    })
+
+    const result = await orgPost({ choice: { mode: 'allExcept', exceptHostIds: ['site-0'] } })
+
+    expect(result.status).toBe(200)
+    expect(stored(`emailCampaigns/${CAMPAIGN}`)?.['visibleTo']).toHaveLength(39)
+  })
+
+  it.each([
+    ['leaves nothing out', { mode: 'allExcept', exceptHostIds: [] }, /at least one site to leave out/],
+    ['leaves every site out', { mode: 'allExcept', exceptHostIds: ['host-1', 'host-2', 'host-3'] }, /Keep at least one site in/],
+    ['chooses no site', { mode: 'selected', hostIds: [] }, /at least one site/],
+  ])('refuses a choice that %s, with the reason', async (_label, choice, reason) => {
+    const result = await orgPost({ choice })
+
+    expect(result.status).toBe(400)
+    expect(String(result.body.error)).toMatch(reason)
+    expect(stored(`emailCampaigns/${CAMPAIGN}`)?.['visibleTo']).toEqual([`host:${HOST}`])
+  })
+
+  it.each([
+    ['no choice', undefined],
+    ['an unknown mode', { mode: 'some' }],
+    ['a site id that is a path', { mode: 'selected', hostIds: ['a/b'] }],
+  ])('answers %s with a 400', async (_label, choice) => {
+    const result = await orgPost({ choice })
+    expect(result.status).toBe(400)
+  })
+
+  it('answers an unknown campaign with a 404', async () => {
+    const result = await orgPost({ campaignId: 'nope', choice: { mode: 'all' } })
+    expect(result.status).toBe(404)
+    expect(stored('emailCampaigns/nope')).toBeUndefined()
+  })
+
+  it('is asked of the organization’s door alone, never a site’s', async () => {
+    const result = await post({
+      hostId: HOST,
+      action: 'setSharing',
+      campaignId: CAMPAIGN,
+      choice: { mode: 'all' },
+    })
+
+    expect(result.status).toBe(400)
+    expect(stored(`emailCampaigns/${CAMPAIGN}`)?.['visibleTo']).toEqual([`host:${HOST}`])
+  })
+
+  it.each([
+    ['a viewer', { role: 'viewer' }],
+    ['a site Admin of this site alone', { role: 'viewer', allHosts: false, hostAccess: { [HOST]: 'admin' } }],
+    ['an editor whose own permissions refuse the key', { role: 'editor', permissions: { 'marketing.campaigns': false } }],
+  ])('refuses %s, naming the permission', async (_label, member) => {
+    store.set(`orgs/${ORG_ID}/members/uid-1`, member)
+
+    const result = await orgPost({ choice: { mode: 'allExcept', exceptHostIds: [SIBLING] } })
+
+    expect(result.status).toBe(403)
+    expect(String(result.body.error)).toMatch(/Run email campaigns/)
+    expect(stored(`emailCampaigns/${CAMPAIGN}`)).not.toHaveProperty('scopeMode')
+  })
+
+  it('answers a refused credential with a 401, not a fault of ours', async () => {
+    mockTokenError = Object.assign(new Error('expired'), { code: 'auth/id-token-expired' })
+    const result = await orgPost({ choice: { mode: 'all' } })
+    expect(result.status).toBe(401)
+  })
+})
+
+describe('a campaign shared with all sites except some, down to one site (AGL-4047)', () => {
+  const siteAdminOnly = { role: 'viewer', allHosts: false, hostAccess: { [HOST]: 'admin' } }
+
+  beforeEach(() => {
+    // Reaches this site alone today, and the next new site joins it.
+    store.set(`orgs/${ORG_ID}/emailCampaigns/${CAMPAIGN}`, {
+      name: 'Spring sale',
+      visibleTo: [`host:${HOST}`],
+      scopeMode: 'allExcept',
+      scopeExcept: [`host:${SIBLING}`],
+    })
+  })
+
+  it('is not this site’s to delete for its Admin with no other site', async () => {
+    store.set(`orgs/${ORG_ID}/members/uid-1`, siteAdminOnly)
+
+    const result = await post({ hostId: HOST, action: 'deleteCampaign', campaignId: CAMPAIGN })
+
+    expect(result.status).toBe(403)
+    expect(String(result.body.error)).toMatch(/all sites except some/)
+    expect(stored(`emailCampaigns/${CAMPAIGN}`)).toBeTruthy()
+  })
+
+  it('is deleted from the site’s hub by a member of the whole workspace', async () => {
+    const result = await post({ hostId: HOST, action: 'deleteCampaign', campaignId: CAMPAIGN })
+    expect(result.status).toBe(200)
+    expect(stored(`emailCampaigns/${CAMPAIGN}`)).toBeUndefined()
+  })
+
+  it('a stored null marker fails closed, as the rules read it', async () => {
+    store.set(`orgs/${ORG_ID}/emailCampaigns/${CAMPAIGN}`, {
+      name: 'Spring sale',
+      visibleTo: [`host:${HOST}`],
+      scopeMode: null,
+    })
+    store.set(`orgs/${ORG_ID}/members/uid-1`, siteAdminOnly)
+
+    const result = await post({ hostId: HOST, action: 'deleteCampaign', campaignId: CAMPAIGN })
+    expect(result.status).toBe(403)
+  })
+
+  it('a plain campaign on this site alone stays its Admin’s to delete (the control)', async () => {
+    store.set(`orgs/${ORG_ID}/emailCampaigns/${CAMPAIGN}`, {
+      name: 'Spring sale',
+      visibleTo: [`host:${HOST}`],
+    })
+    store.set(`orgs/${ORG_ID}/members/uid-1`, siteAdminOnly)
+
+    const result = await post({ hostId: HOST, action: 'deleteCampaign', campaignId: CAMPAIGN })
+    expect(result.status).toBe(200)
   })
 })
