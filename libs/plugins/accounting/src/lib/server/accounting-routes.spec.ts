@@ -403,7 +403,7 @@ describe('accounting routes', () => {
         new AccountingProviderError('validation', 'This organisation has reached the limit of its plan.', 403),
       )
       const options = await context.routes.options(context.request('GET', 'accounting/options?orgId=org-1'))
-      expect(options.status).toBe(502)
+      expect(options.status).toBe(422)
       expect(await options.json()).toMatchObject({
         reason: 'provider-error',
         error: 'Xero: This organisation has reached the limit of its plan.',

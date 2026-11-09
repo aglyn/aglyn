@@ -40,6 +40,7 @@ import {
   CHUNK_LOAD_KIND,
   describeRejectionReason,
   documentLoadUrl,
+  FIRESTORE_QUEUE_KIND,
   installErrorBeacon,
   isBenignBrowserNotice,
   isHydrationMismatch,
@@ -435,6 +436,28 @@ describe('recoveredErrorKind (AGL-3423)', () => {
         new TypeError('Failed to fetch dynamically imported module: https://a/b.js'),
       ),
     ).toBe(CHUNK_LOAD_KIND)
+  })
+
+  it('labels the Firestore write-queue failure the tab recovers from (AGL-4156)', () => {
+    expect(
+      recoveredErrorKind(
+        new Error(
+          'FIRESTORE (13.0.0) INTERNAL ASSERTION FAILED: Unexpected state (ID: b815) CONTEXT: {}',
+        ),
+      ),
+    ).toBe(FIRESTORE_QUEUE_KIND)
+    expect(
+      recoveredErrorKind({
+        message:
+          'Attempt to get a record from database without an in-progress transaction',
+      }),
+    ).toBe(FIRESTORE_QUEUE_KIND)
+    // Another assertion id is not this recovery, and still pages as itself.
+    expect(
+      recoveredErrorKind(
+        new Error('FIRESTORE (13.0.0) INTERNAL ASSERTION FAILED: Unexpected state (ID: ca9)'),
+      ),
+    ).toBeUndefined()
   })
 
   it("labels reCAPTCHA's own timeout, whose stack is only Google's script (AGL-4068)", () => {
