@@ -123,7 +123,9 @@
           }
         },
         "options": {
-          "passWithNoTests": true
+          "passWithNoTests": true,
+          "cwd": "{workspaceRoot}",
+          "command": "jest --config {projectRoot}/jest.config.ts"
         }
       }
     ],
@@ -142,7 +144,11 @@
               "eslint"
             ]
           }
-        ]
+        ],
+        "options": {
+          "cwd": "{workspaceRoot}",
+          "command": "eslint {projectRoot}"
+        }
       }
     ],
     "serve": [
