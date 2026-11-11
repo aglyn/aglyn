@@ -92,6 +92,11 @@ import {
   writeGuardedBySeed,
   useUser,
 } from '@aglyn/tenant-feature-instance'
+import {
+  isSeedChecking,
+  seedCheckingText,
+} from '@aglyn/tenant-feature-instance/hooks/use-seed-edits'
+import { useSeedDraft } from '@aglyn/tenant-feature-instance/hooks/use-seed-draft'
 import { writeSiteWideChange } from '@aglyn/tenant-feature-instance/hooks/helpers/site-wide-change'
 import { useListQuery } from '@aglyn/tenant-feature-instance/hooks/use-list-query'
 import {
@@ -252,7 +257,23 @@ export function HostExperimentsCard(props: HostExperimentsCardProps) {
       }),
     [experimentPlan.refused],
   )
-  const [editor, setEditor] = useState<ExperimentDraft | null>(null)
+  /*
+   * The editor's draft, kept as EDITS over the experiment as the list has it
+   * now (AGL-4047): opened from the cache's row, the server's copy replaces
+   * it under every field nobody touched (`status` among them), and Save is
+   * held until it has.
+   */
+  const [editor, setEditor] = useSeedDraft<ExperimentDraft>((opened) =>
+    opened.$id
+      ? experiments.find((experiment) => experiment.$id === opened.$id)
+      : undefined,
+  )
+  const editorChecking =
+    Boolean(editor?.$id) &&
+    isSeedChecking({
+      fromCache: experimentsFromCache,
+      unreadable: experimentsStatus === 'error',
+    })
   /*
    * The screens and their versions fill the EDITOR's pickers and nothing
    * else on the card, so they are read while the editor is open and not
@@ -967,12 +988,18 @@ export function HostExperimentsCard(props: HostExperimentsCardProps) {
           ) : null}
         </DialogContent>
         <DialogActions>
+          {editorChecking ? (
+            <Typography variant="body2" color="text.secondary" role="status" sx={{ mr: 'auto' }}>
+              {seedCheckingText('experiment')}
+            </Typography>
+          ) : null}
           <Button color="inherit" onClick={() => setEditor(null)}>
             {'Cancel'}
           </Button>
           <Button
             variant="contained"
             color="primary"
+            disabled={editorChecking}
             onClick={() => void handleSave()}
           >
             {'Save'}

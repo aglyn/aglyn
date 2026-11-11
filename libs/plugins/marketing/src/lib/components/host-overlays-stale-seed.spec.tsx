@@ -121,25 +121,29 @@ function editFirstOverlayAndSave() {
   fireEvent.click(screen.getByRole('button', { name: 'Save' }))
 }
 
+/** Long enough for a press that was going to write to have written. */
+const settle = () => new Promise((resolve) => setTimeout(resolve, 20))
+
 // This spec pins the refusal, not the wait before it (AGL-4120).
 beforeAll(() => setSeedConfirmWaitMs(0))
 afterAll(() => setSeedConfirmWaitMs())
 
 describe('HostOverlaysCard (AGL-1358)', () => {
-  it('REFUSES to replace an overlay seeded from an unconfirmed read', async () => {
+  it('HOLDS Save on an overlay seeded from an unconfirmed read, keeping what was typed', async () => {
     listener.fromCache = true
     render(<HostOverlaysCard hostId="host-1" org={ORG} />)
 
     editFirstOverlayAndSave()
-
-    // Settled, so this cannot pass merely by asserting too early.
-    await waitFor(() => expect(enqueueSnackbar).toHaveBeenCalled())
+    await settle()
+    // Held, not refused: nothing was pressed into the wait, and the reason
+    // sits beside the held control (AGL-4047).
+    expect(enqueueSnackbar).not.toHaveBeenCalled()
+    expect(screen.getAllByRole('status').map((note) => note.textContent)).toContain(
+      'Checking your overlay with the server…',
+    )
     expect(setDoc).not.toHaveBeenCalled()
     // …and no history entry claiming an update that never landed.
     expect(mockLogActivity).not.toHaveBeenCalled()
-    const [message] = enqueueSnackbar.mock.calls[0]
-    expect(message).toEqual(expect.stringContaining('overlay'))
-    expect(message).toEqual(expect.stringMatching(/nothing was saved/i))
     // The editor stays open with what was typed.
     expect(
       (screen.getByDisplayValue('Spring sale on now') as HTMLInputElement)

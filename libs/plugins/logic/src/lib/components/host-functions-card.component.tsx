@@ -77,6 +77,11 @@ import {
   useUser,
   writeGuardedBySeed,
 } from '@aglyn/tenant-feature-instance'
+import {
+  isSeedChecking,
+  seedCheckingText,
+} from '@aglyn/tenant-feature-instance/hooks/use-seed-edits'
+import { useSeedDraft } from '@aglyn/tenant-feature-instance/hooks/use-seed-draft'
 import { writeSiteWideChange } from '@aglyn/tenant-feature-instance/hooks/helpers/site-wide-change'
 import { ParameterChoicesEditor } from './parameter-choices-editor.component'
 import WhereUsedDialog from './where-used-dialog.component'
@@ -278,6 +283,18 @@ function SectionLabel(props: { children: string }) {
  * the shared evaluator. Definitions persist to `hosts/{hostId}/functions`;
  * prop/event wiring lands with AGL-93.
  */
+/** A stored function as the editor holds it. */
+function functionDraftOf(definition: any): FunctionDraft {
+  return {
+    id: definition.$id,
+    name: definition.name ?? '',
+    parameters: definition.parameters ?? [],
+    variables: definition.variables ?? [],
+    operations: definition.operations ?? [],
+    returnValue: definition.returnValue ?? '',
+  }
+}
+
 export function HostFunctionsCard(props: HostFunctionsCardProps) {
   const { hostId } = props
   const firestore = useFirestore()
@@ -390,7 +407,23 @@ export function HostFunctionsCard(props: HostFunctionsCardProps) {
   }, [firestore, hostId, functionCountEpoch])
   const functionCount = serverFunctionCount ?? functions.length
 
-  const [draft, setDraft] = useState<FunctionDraft | null>(null)
+  /*
+   * The editor's draft, kept as EDITS over the function as the list has it
+   * now (AGL-4047): opened from the cache's row, the server's copy replaces
+   * it under every field nobody touched, and Done is held until it has.
+   */
+  const [draft, setDraft] = useSeedDraft<FunctionDraft>((opened) => {
+    const row = opened.id
+      ? functions.find((definition: any) => definition.$id === opened.id)
+      : undefined
+    return row ? functionDraftOf(row) : undefined
+  })
+  const draftChecking =
+    Boolean(draft?.id) &&
+    isSeedChecking({
+      fromCache: functionsFromCache,
+      unreadable: functionsStatus === 'error',
+    })
 
   // Where-used dialog (AGL-193).
   const [usage, setUsage] = useState<{
@@ -405,7 +438,7 @@ export function HostFunctionsCard(props: HostFunctionsCardProps) {
   const patch = useCallback(
     (updater: (previous: FunctionDraft) => FunctionDraft) =>
       setDraft((previous) => (previous ? updater(previous) : previous)),
-    [],
+    [setDraft],
   )
 
   /**
@@ -435,10 +468,19 @@ export function HostFunctionsCard(props: HostFunctionsCardProps) {
       }
       setTestArgs({})
       setTestResult(null)
-      setDraft({ ...proposal.definition, id: proposal.functionId })
+      // A change to a saved function opens on that function and lands as
+      // edits over it, so the rest follows the stored row (AGL-4047).
+      const row = proposal.functionId
+        ? functions.find((definition: any) => definition.$id === proposal.functionId)
+        : undefined
+      setDraft(null)
+      setDraft(row ? functionDraftOf(row) : { ...proposal.definition, id: proposal.functionId })
+      if (row) {
+        setDraft((opened) => opened && { ...opened, ...proposal.definition, id: proposal.functionId })
+      }
       return true
     },
-    [org, functionCount, enqueueSnackbar],
+    [org, functionCount, enqueueSnackbar, functions, setDraft],
   )
   /*
    * The saved function the editor has open, named as it is STORED: a rename
@@ -593,6 +635,7 @@ export function HostFunctionsCard(props: HostFunctionsCardProps) {
       })
     }
   }, [
+    setDraft,
     user,
     draft,
     nameTaken,
@@ -835,14 +878,7 @@ export function HostFunctionsCard(props: HostFunctionsCardProps) {
                 onClick={() => {
                   setTestArgs({})
                   setTestResult(null)
-                  setDraft({
-                    id: definition.$id,
-                    name: definition.name ?? '',
-                    parameters: definition.parameters ?? [],
-                    variables: definition.variables ?? [],
-                    operations: definition.operations ?? [],
-                    returnValue: definition.returnValue ?? '',
-                  })
+                  setDraft(functionDraftOf(definition))
                 }}
               >
                 {'Edit'}
@@ -1359,11 +1395,16 @@ export function HostFunctionsCard(props: HostFunctionsCardProps) {
           ) : null}
         </DialogContent>
         <DialogActions>
+          {draftChecking ? (
+            <Typography variant="body2" color="text.secondary" role="status" sx={{ mr: 'auto' }}>
+              {seedCheckingText('function')}
+            </Typography>
+          ) : null}
           <Button onClick={() => setDraft(null)}>{'Cancel'}</Button>
           <Button
             variant="contained"
             color="primary"
-            disabled={!draft?.name.trim() || nameTaken}
+            disabled={draftChecking || !draft?.name.trim() || nameTaken}
             onClick={handleSave}
           >
             {'Done'}

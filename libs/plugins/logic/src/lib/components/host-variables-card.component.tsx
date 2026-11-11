@@ -69,6 +69,11 @@ import {
   useUser,
   writeGuardedBySeed,
 } from '@aglyn/tenant-feature-instance'
+import {
+  isSeedChecking,
+  seedCheckingText,
+} from '@aglyn/tenant-feature-instance/hooks/use-seed-edits'
+import { useSeedDraft } from '@aglyn/tenant-feature-instance/hooks/use-seed-draft'
 import { writeSiteWideChange } from '@aglyn/tenant-feature-instance/hooks/helpers/site-wide-change'
 import WhereUsedDialog from './where-used-dialog.component'
 import { useConsoleWidgetSlot } from '@aglyn/aglyn/app-utils/console-widget-slot-context'
@@ -197,6 +202,18 @@ function VariableValueField(props: {
  * compose pipeline resolves it at render. Soft delete keeps old tokens
  * rendering literally rather than breaking published pages.
  */
+/** A stored variable as the editor holds it. */
+function variableDraftOf(variable: any): VariableDraft {
+  return {
+    id: variable.$id,
+    name: variable.name ?? '',
+    type: variable.type ?? 'text',
+    value: variable.value ?? '',
+    workflowId: variable.workflowId ?? '',
+    workflowName: variable.workflowName ?? '',
+  }
+}
+
 export function HostVariablesCard(props: HostVariablesCardProps) {
   const { hostId } = props
   const firestore = useFirestore()
@@ -263,7 +280,25 @@ export function HostVariablesCard(props: HostVariablesCardProps) {
   )
   const { rows: readVariables, truncated: variablesTruncated } =
     ceilingedWindow<any>(variableDocs, VARIABLE_CEILING)
-  const [draft, setDraft] = useState<VariableDraft | null>(null)
+  /*
+   * The editor's draft, kept as EDITS over the variable as the list has it
+   * now (AGL-4047): opened from the cache's row, the server's copy replaces
+   * it under every field nobody touched, and Save is held until it has.
+   * `readVariables` rather than the sorted list below, which is declared
+   * after this; the same rows.
+   */
+  const [draft, setDraft] = useSeedDraft<VariableDraft>((opened) => {
+    const row = opened.id
+      ? readVariables.find((variable: any) => variable.$id === opened.id)
+      : undefined
+    return row ? variableDraftOf(row) : undefined
+  })
+  const draftChecking =
+    Boolean(draft?.id) &&
+    isSeedChecking({
+      fromCache: variablesFromCache,
+      unreadable: variablesStatus === 'error',
+    })
 
   /** The shell's zone renderer (AGL-3603); `null` outside the console shell. */
   const ExtensionZone = useConsoleWidgetSlot()
@@ -396,7 +431,7 @@ export function HostVariablesCard(props: HostVariablesCardProps) {
       setDraft({ id: null, ...proposal.variable, workflowId: '', workflowName: '' })
       return true
     },
-    [org, variableCount, enqueueSnackbar],
+    [setDraft, org, variableCount, enqueueSnackbar],
   )
 
   const validName = VARIABLE_NAME_PATTERN.test(draft?.name ?? '')
@@ -483,6 +518,7 @@ export function HostVariablesCard(props: HostVariablesCardProps) {
       })
     }
   }, [
+    setDraft,
     user,
     draft,
     validName,
@@ -607,16 +643,7 @@ export function HostVariablesCard(props: HostVariablesCardProps) {
               </Button>
               <Button
                 size="small"
-                onClick={() =>
-                  setDraft({
-                    id: variable.$id,
-                    name: variable.name ?? '',
-                    type: variable.type ?? 'text',
-                    value: variable.value ?? '',
-                    workflowId: variable.workflowId ?? '',
-                    workflowName: variable.workflowName ?? '',
-                  })
-                }
+                onClick={() => setDraft(variableDraftOf(variable))}
               >
                 {'Edit'}
               </Button>
@@ -792,11 +819,16 @@ export function HostVariablesCard(props: HostVariablesCardProps) {
           </TextField>
         </DialogContent>
         <DialogActions>
+          {draftChecking ? (
+            <Typography variant="body2" color="text.secondary" role="status" sx={{ mr: 'auto' }}>
+              {seedCheckingText('variable')}
+            </Typography>
+          ) : null}
           <Button onClick={() => setDraft(null)}>{'Cancel'}</Button>
           <Button
             variant="contained"
             color="primary"
-            disabled={!validName || nameTaken}
+            disabled={draftChecking || !validName || nameTaken}
             onClick={handleSave}
           >
             {'Save variable'}
