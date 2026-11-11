@@ -29,7 +29,7 @@
 
 import type { SiteImportBlock } from '../site-import/site-import-html'
 import type { SiteImportLayout, SiteImportLayoutNode, SiteImportLineRef, SiteImportPictureFit } from './ai-site-import'
-import { aiSiteImportIsBrandMark } from './ai-site-import-marks'
+import { aiSiteImportImageIsMark } from './ai-site-import-marks'
 
 export type SiteImportLedgerKind = 'picture' | 'form' | 'plan' | 'table' | 'quote' | 'video' | 'contact' | 'stats' | 'logos' | 'gallery' | 'tabs' | 'group'
 
@@ -115,8 +115,15 @@ const GROUP_ITEMS: Readonly<Record<string, SiteImportLedgerKind>> = { pricing: '
 /** What must land exactly once, by its kind. */
 const MUST: ReadonlySet<SiteImportLedgerKind> = new Set(['form', 'plan', 'table', 'quote', 'video', 'contact'])
 
-/** A source's ledger (AGL-4152), in source order. */
-export function siteImportLedger(source: { layout: SiteImportLayout; blocks: readonly SiteImportBlock[] }): SiteImportLedger {
+/**
+ * A source's ledger (AGL-4152), in source order. `photos`, the page's pictures
+ * as its import brought them in, say which of them are graphics by their pixels.
+ */
+export function siteImportLedger(source: {
+  layout: SiteImportLayout
+  blocks: readonly SiteImportBlock[]
+  photos?: ReadonlyArray<{ from?: string; graphic?: boolean }>
+}): SiteImportLedger {
   const { layout, blocks } = source
   const items: SiteImportLedgerItem[] = []
   const lines: SiteImportLedgerLine[] = []
@@ -203,11 +210,11 @@ export function siteImportLedger(source: { layout: SiteImportLayout; blocks: rea
     if (entry.backdrop?.kind === 'video' && entry.backdrop.poster !== undefined) line(entry.backdrop.poster)
     for (const ref of entry.lines) line(ref)
   })
-  // The picture the page opens on outranks a new one; a brand's mark there is no photo of it (AGL-4152).
+  // The picture the page opens on outranks a new one; a brand's mark there, by its name or its pixels, is no photo of it (AGL-4152).
   const opening = items.find((item) => {
     if (item.kind !== 'picture' || item.section !== 0) return false
     const block = blocks[item.lines[0] as number]
-    return !(block?.kind === 'image' && aiSiteImportIsBrandMark({ url: block.url, alt: block.alt }))
+    return !(block?.kind === 'image' && aiSiteImportImageIsMark(block, source.photos))
   })
   if (opening) opening.must = true
   const links: SiteImportLedgerLink[] = []

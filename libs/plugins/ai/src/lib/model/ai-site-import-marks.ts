@@ -20,14 +20,19 @@ const MARK_WORDS = /(?:^|[^a-z])(?:logos?|logotype|badges?|emblems?|favicon|word
 
 /**
  * Whether a picture of the source is a brand's mark rather than a photo
- * (AGL-4152): its file name or its alt text calls it a logo, a badge, an
- * emblem, a wordmark or an icon. A mark is the source's words in a picture: a
- * cover, a photo band or any slot a redesign fills with a photo never takes
- * one, where a client's logo laid under a page's heading read as that page's
- * work. Its address is read by its last part, its words split where it runs
- * them together ("ClientLogo.jpg", "client+logo.png").
+ * (AGL-4152): its pixels make it a graphic (`graphic`, read when the import
+ * brought it in: `aiSiteImportLooksGraphic`), or its file name or its alt
+ * text calls it a logo, a badge, an emblem, a wordmark or an icon. A mark is
+ * the source's words in a picture: a cover, a photo band or any slot a
+ * redesign fills with a photo never takes one, where a client's logo laid
+ * under a page's heading read as that page's work, and a partner's wordmark
+ * a phone named "IMG_….webp" did the same. Its address is read by its last
+ * part, its words split where it runs them together ("ClientLogo.jpg",
+ * "client+logo.png"). A picture read before its pixels were has no
+ * `graphic`, and its name and alt decide.
  */
-export function aiSiteImportIsBrandMark(picture: { alt?: string | null; from?: string | null; url?: string | null }): boolean {
+export function aiSiteImportIsBrandMark(picture: { alt?: string | null; from?: string | null; url?: string | null; graphic?: boolean | null }): boolean {
+  if (picture.graphic === true) return true
   const address = picture.from ?? picture.url ?? ''
   let file = address.split(/[?#]/)[0]?.split('/').pop() ?? ''
   try {
@@ -37,6 +42,18 @@ export function aiSiteImportIsBrandMark(picture: { alt?: string | null; from?: s
   }
   const split = (text: string) => text.replace(/(?<=[a-z])(?=[A-Z])|(?<=[A-Z])(?=[A-Z][a-z])/g, ' ')
   return MARK_WORDS.test(split(file)) || MARK_WORDS.test(split(picture.alt ?? ''))
+}
+
+/**
+ * Whether the source's picture at `url` is a mark (`aiSiteImportIsBrandMark`),
+ * its pixels read off the page's photo brought in from there (`from`).
+ */
+export function aiSiteImportImageIsMark(
+  image: { url: string; alt?: string | null },
+  photos: ReadonlyArray<{ from?: string; graphic?: boolean }> | ReadonlyMap<string, { graphic?: boolean }> | null | undefined,
+): boolean {
+  const photo = !photos ? undefined : 'get' in photos ? photos.get(image.url) : photos.find((entry) => entry.from === image.url)
+  return aiSiteImportIsBrandMark({ url: image.url, alt: image.alt, graphic: photo?.graphic ?? null })
 }
 
 /** A picture file's own ending: what an upload's name ends in, never a description's. */

@@ -53,6 +53,7 @@ import {
 import { aiSiteImportStartAction, aiSiteImportStoppedCopy } from '../model/ai-site-import-view'
 import type { SiteImportBlock } from '../site-import/site-import-html'
 import { AI_LAYOUT_IMPORTED_SECTIONS_INPUT, type AiSiteImportDocument } from './ai-site-import-document'
+import { AI_SITE_IMPORT_GRAPHICS_MS } from './ai-site-import-graphics'
 import {
   HARBOR_DOMAIN,
   HARBOR_INJECTION,
@@ -64,6 +65,7 @@ import {
   AI_SITE_IMPORT_JOB_MAX_BYTES,
   AI_SITE_IMPORT_MAX_PASSES,
   AI_SITE_IMPORT_PASS_MINIMUM_MS,
+  AI_SITE_IMPORT_PHOTOS_MS,
   aiSiteImportFrameJob,
   aiSiteImportPageJob,
   aiSiteImportReadsWithin,
@@ -586,6 +588,44 @@ describe('an import that stops with work left waits, and never says it is done (
   it('leaves an import with nothing left to do to end as any build ends', () => {
     expect(stoppedAt({ ...harborState(), waves: harborState().waves.map((wave) => ({ ...wave, status: 'done' as const })) }, [])).toBeNull()
     expect(aiSiteImportStopReview(importJob())).toBeNull()
+  })
+})
+
+describe('a page’s photos (AGL-4152)', () => {
+  it('keep, on each photo entry, whether its pixels make it a graphic, read once as they come in', async () => {
+    const state = harborState()
+    const [slot] = state.waves[0].slots
+    const images = [
+      { url: 'https://cdn.example.com/uploads/IMG_4295.webp', alt: '' },
+      { url: 'https://cdn.example.com/uploads/IMG_5101.jpg', alt: 'A treatment room' },
+      { url: 'https://cdn.example.com/uploads/IMG_5102.jpg', alt: 'The front desk' },
+    ]
+    const started = aiSiteImportWaveStarted(state, 0, 'x', new Map([[slot, { at: 'x', title: 'Home', text: 'Home', sections: ['Home'], images, blocks: [] }]]))
+    const items = aiSiteImportLedger(state).map((row): AiJobItemLedger => (row.slot === 'frame' ? { ...row, status: 'succeeded' } : row))
+    expect(aiSiteImportNextWork(started, items)).toMatchObject({ kind: 'images', page: { slot } })
+    let held = 0
+    const ingest = {
+      ingest: async () => ({ ok: false as const, status: 500, reason: 'unused' }),
+      findStockPhoto: async () => null,
+      findImportedPhoto: async () => ({ mediaId: `m${++held}`, src: `media:host-1/m${held}`, width: 1200, height: 900 }),
+    }
+    const pictureGraphics = jest.fn(async (refs: readonly string[]) => refs.map((ref) => (ref === 'media:host-1/m1' ? true : ref === 'media:host-1/m2' ? false : null)))
+    const result = await run(createAiJobImportStep(deps({ ingest: () => ingest, pictureGraphics })), importJob({ siteImport: started, items }))
+    expect(pictureGraphics).toHaveBeenCalledTimes(1)
+    expect(pictureGraphics).toHaveBeenCalledWith(['media:host-1/m1', 'media:host-1/m2', 'media:host-1/m3'], expect.objectContaining({ hostId: 'host-1', orgId: 'org-pro' }))
+    const page = result.siteImport?.pages.find((entry) => entry.slot === slot)
+    expect(page?.photos?.reused).toBe(3)
+    // The third could not be read: no flag, and its name decides.
+    expect(page?.photos?.assets.map((photo) => [photo.from, photo.graphic])).toEqual([
+      [images[0]?.url, true],
+      [images[1]?.url, false],
+      [images[2]?.url, undefined],
+    ])
+    expect(result.estCostUsd).toBe(0)
+  })
+
+  it('give the read its own time in the pass', () => {
+    expect(AI_SITE_IMPORT_PASS_MINIMUM_MS.photos).toBeGreaterThanOrEqual(AI_SITE_IMPORT_PHOTOS_MS + AI_SITE_IMPORT_GRAPHICS_MS)
   })
 })
 

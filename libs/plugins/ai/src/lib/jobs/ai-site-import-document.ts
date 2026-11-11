@@ -249,6 +249,8 @@ export function aiSiteImportDocumentOf(inputs: Readonly<Record<string, unknown>>
               ...(size(photo['height']) ? { height: size(photo['height']) } : {}),
               ...(typeof photo['alt'] === 'string' ? { alt: photo['alt'] } : {}),
               ...(typeof photo['from'] === 'string' ? { from: photo['from'] } : {}),
+              // Whether its pixels make it a graphic, read when it was brought in (AGL-4152).
+              ...(typeof photo['graphic'] === 'boolean' ? { graphic: photo['graphic'] } : {}),
             },
           ]
         : []

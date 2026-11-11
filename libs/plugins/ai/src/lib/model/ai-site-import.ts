@@ -235,6 +235,13 @@ export interface AiSiteImportPhoto {
   alt?: string
   /** The address on the old site it was read from, where a page that is copied places it (AGL-4084). */
   from?: string
+  /**
+   * Whether its pixels make it a graphic, not a photo (AGL-4152): a logo, a
+   * badge, a flat illustration, a screenshot of text (`aiSiteImportLooksGraphic`).
+   * Read once, when the import brings it in; absent where it could not be
+   * read, or was brought in before the pixels were read, and its name decides.
+   */
+  graphic?: boolean
 }
 
 /*------------------------------------------

@@ -16,9 +16,10 @@
  */
 
 import { firebaseAdmin } from '@aglyn/tenant-data-admin/server/firebase-admin'
-import { AI_IMAGE_READS_SIGNATURE, AI_LOGO_RASTER_MAX_BYTES, rasterizeAiLogoSvg, verifyAiImageReadsRequest } from '../jobs/ai-image-reads'
+import { AI_IMAGE_READS_SIGNATURE, AI_LOGO_RASTER_MAX_BYTES, AI_PICTURE_GRAPHICS_MAX_REFS, rasterizeAiLogoSvg, verifyAiImageReadsRequest } from '../jobs/ai-image-reads'
 import { aiMediaAssetLocation } from '../jobs/ai-media-asset'
 import { readAiProductImageAt } from '../jobs/ai-product-image'
+import { readAiSiteImportGraphicsHere } from '../jobs/ai-site-import-graphics'
 import { readAiThemeLogoColorsAt } from '../jobs/ai-theme-brand-inputs'
 
 /*==========================================
@@ -33,6 +34,11 @@ import { readAiThemeLogoColorsAt } from '../jobs/ai-theme-brand-inputs'
  *                                               dominant colors, or null
  *   {op: 'logo-raster', svg, height}            `{png}`: a site import's SVG
  *                                               logo drawn as a PNG (AGL-4084)
+ *   {op: 'picture-graphics', refs, hostId, orgId}
+ *                                               `{graphics}`: whether each of a
+ *                                               site import's pictures is a
+ *                                               graphic by its pixels, or null
+ *                                               (AGL-4152)
  *
  * The asset is located again here from its reference, the site and the org,
  * under the rule the step used (`aiMediaAssetLocation`): one that is not the
@@ -77,11 +83,24 @@ export async function aiImageReadsRoute(request: Request): Promise<Response> {
       return json({ error: 'The logo could not be drawn.' }, 500)
     }
   }
-  if (op !== 'product-photo' && op !== 'logo-colors') return json({ error: 'Unknown op' }, 400)
+  if (op !== 'product-photo' && op !== 'logo-colors' && op !== 'picture-graphics') return json({ error: 'Unknown op' }, 400)
   const hostId = String(body['hostId'] ?? '')
   const orgId = String(body['orgId'] ?? '')
   if (!DOCUMENT_ID.test(hostId) || (orgId !== '' && !DOCUMENT_ID.test(orgId))) {
     return json({ error: 'Bad request' }, 400)
+  }
+  // Which of a site import's pictures are graphics (AGL-4152): each located again here, as every read is.
+  if (op === 'picture-graphics') {
+    const refs = body['refs']
+    if (!Array.isArray(refs) || refs.length > AI_PICTURE_GRAPHICS_MAX_REFS || refs.some((ref) => typeof ref !== 'string')) {
+      return json({ error: 'Bad request' }, 400)
+    }
+    try {
+      return json({ graphics: await readAiSiteImportGraphicsHere(firebaseAdmin.app().firestore(), refs as string[], hostId, orgId) })
+    } catch (error) {
+      console.error('[ai-image-reads]', op, { hostId, error })
+      return json({ error: 'The pictures could not be read.' }, 500)
+    }
   }
   const location = aiMediaAssetLocation(body['ref'], hostId, orgId)
   try {
