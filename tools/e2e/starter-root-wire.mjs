@@ -389,7 +389,7 @@ if (process.env.WIRE_SKIP_BUILD !== '1') {
 console.log(`starting the tenant production server on ${PORT}…`)
 const server = spawn(
   'npx',
-  ['next', 'start', 'dist/apps/tenant', '-p', String(PORT)],
+  ['next', 'start', 'apps/tenant', '-p', String(PORT)],
   {
     cwd: repoRoot,
     detached: true,

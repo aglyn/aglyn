@@ -5,65 +5,32 @@
   "projectType": "application",
   "tags": ["scope:app", "scope:private", "scope:console"],
   "targets": {
-    "build": {
-      "executor": "@nx/next:build",
-      "outputs": ["{options.outputPath}"],
-      "defaultConfiguration": "production",
-      "cache": false,
+    "serve": {
       "options": {
-        "outputPath": "dist/apps/console"
-      },
-      "configurations": {
-        "production": {
-          "webpack": false
-        },
-        "development": {
-          "outputPath": "apps/console"
-        }
+        "port": 4200
       }
     },
-    "serve": {
-      "executor": "@nx/next:server",
-      "defaultConfiguration": "development",
+    "start": {
       "options": {
-        "buildTarget": "console:build",
-        "dev": true,
         "port": 4200
-      },
-      "configurations": {
-        "production": {
-          "buildTarget": "console:build:production",
-          "dev": false
-        },
-        "development": {
-          "buildTarget": "console:build:development",
-          "dev": true
-        }
-      },
-      "dependsOn": ["clean-next-cache"]
-    },
-    "export": {
-      "executor": "@nx/next:export",
-      "options": {
-        "buildTarget": "console:build:production"
       }
     },
     "test": {
-      "executor": "@nx/jest:jest",
-      "outputs": ["{workspaceRoot}/coverage/apps/console"],
       "inputs": [
         "default",
         "^default",
         "{workspaceRoot}/.github/workflows/scheduled-crons.yml",
-        "{workspaceRoot}/tools/scripts/cron-deploy-state.sh"
-      ],
-      "options": {
-        "jestConfig": "apps/console/jest.config.ts"
-      }
-    },
-    "lint": {
-      "executor": "@nx/eslint:lint",
-      "outputs": ["{options.outputFile}"]
+        "{workspaceRoot}/tools/scripts/cron-deploy-state.sh",
+        {
+          "externalDependencies": [
+            "jest",
+            "@nx/jest",
+            "ts-jest",
+            "@nx/react",
+            "babel-jest"
+          ]
+        }
+      ]
     },
     "version": {
       "executor": "@jscutlery/semver:version",
@@ -73,11 +40,11 @@
     },
     "clean-next-cache": {
       "executor": "nx:run-commands",
+      "cache": false,
       "options": {
         "cwd": "{workspaceRoot}",
         "command": "node tools/scripts/clean-next.mjs --prune --app=console"
-      },
-      "cache": false
+      }
     }
   }
 }

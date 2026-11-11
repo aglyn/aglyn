@@ -3,17 +3,11 @@
   "$schema": "../../../node_modules/nx/schemas/project-schema.json",
   "sourceRoot": "libs/plugins/ai/src",
   "projectType": "library",
-  "tags": [
-    "aglyn:addons",
-    "scope:plugin",
-    "type:feature"
-  ],
+  "tags": ["aglyn:addons", "scope:plugin", "type:feature"],
   "targets": {
     "build": {
       "executor": "@nx/js:swc",
-      "outputs": [
-        "{options.outputPath}"
-      ],
+      "outputs": ["{options.outputPath}"],
       "options": {
         "outputPath": "dist/libs/plugins/ai",
         "main": "libs/plugins/ai/src/index.ts",
@@ -28,20 +22,15 @@
         ]
       }
     },
-    "lint": {
-      "executor": "@nx/eslint:lint",
-      "outputs": [
-        "{options.outputFile}"
-      ]
-    },
     "test": {
-      "executor": "@nx/jest:jest",
-      "outputs": [
-        "{workspaceRoot}/coverage/libs/plugins/ai"
-      ],
-      "options": {
-        "jestConfig": "libs/plugins/ai/jest.config.ts"
-      }
+      "inputs": [
+        "default",
+        "^default",
+        "{workspaceRoot}/jest.preset.js",
+        {
+          "externalDependencies": ["jest", "@nx/jest", "ts-jest", "@swc/jest"]
+        }
+      ]
     }
   }
 }

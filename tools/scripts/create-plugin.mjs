@@ -97,38 +97,32 @@ write(
       sourceRoot: `libs/plugins/${id}/src`,
       projectType: 'library',
       tags: ['aglyn:addons'],
+      // `lint` and `test` are inferred: nx.json registers @nx/eslint/plugin
+      // and @nx/jest/plugin for `libs/plugins/**/*`, which read the
+      // eslint.config.mjs and jest.config.ts written below (Nx 24 removed
+      // the @nx/eslint:lint and @nx/jest:jest executors). `test` is still
+      // named here, with the inputs the migration gave the other plugins, so
+      // check:test-wiring sees the project's specs have a runner.
       targets: {
         build: {
-          executor: '@nx/rollup:rollup',
+          executor: '@nx/js:swc',
           outputs: ['{options.outputPath}'],
           options: {
             outputPath: `dist/libs/plugins/${id}`,
+            main: `libs/plugins/${id}/src/index.ts`,
             tsConfig: `libs/plugins/${id}/tsconfig.lib.json`,
-            project: `libs/plugins/${id}/package.json`,
-            entryFile: `libs/plugins/${id}/src/index.ts`,
-            external: ['react/jsx-runtime'],
-            rollupConfig: [
-              '@nx/react/plugins/bundle-rollup',
-              'tools/rollup-external-packages.js',
-              'tools/rollup-suppress-use-client.js',
-              'tools/rollup-skip-typecheck.js',
-            ],
-            compiler: 'swc',
-            assets: [
-              { glob: `libs/plugins/${id}/README.md`, input: '.', output: '.' },
-            ],
-            updateBuildableProjectDepsInPackageJson: true,
-            skipTypeCheck: true,
+            assets: [`libs/plugins/${id}/*.md`],
           },
         },
-        lint: {
-          executor: '@nx/eslint:lint',
-          outputs: ['{options.outputFile}'],
-        },
         test: {
-          executor: '@nx/jest:jest',
-          outputs: [`{workspaceRoot}/coverage/libs/plugins/${id}`],
-          options: { jestConfig: `libs/plugins/${id}/jest.config.ts` },
+          inputs: [
+            'default',
+            '^default',
+            '{workspaceRoot}/jest.preset.js',
+            {
+              externalDependencies: ['jest', '@nx/jest', 'ts-jest', '@swc/jest'],
+            },
+          ],
         },
       },
     },
@@ -137,6 +131,50 @@ write(
   ) + '\n',
 )
 
+// The @nx/js:swc build reads the project's own .swcrc (the reference plugin's).
+write(
+  '.swcrc',
+  JSON.stringify(
+    {
+      jsc: {
+        target: 'es2017',
+        parser: {
+          syntax: 'typescript',
+          decorators: true,
+          dynamicImport: true,
+        },
+        transform: {
+          decoratorMetadata: true,
+          legacyDecorator: true,
+          react: {
+            runtime: 'automatic',
+          },
+        },
+        keepClassNames: true,
+        externalHelpers: true,
+        loose: true,
+        baseUrl: '.',
+      },
+      module: {
+        type: 'es6',
+        strict: true,
+        noInterop: true,
+        resolveFully: true,
+      },
+      sourceMaps: true,
+      exclude: [
+        'jest.config.ts',
+        '.*.spec.tsx?$',
+        '.*.test.tsx?$',
+        './src/jest-setup.ts$',
+        './**/jest-setup.ts$',
+        '.*.js$',
+      ],
+    },
+    null,
+    2,
+  ) + '\n',
+)
 write(
   'package.json',
   JSON.stringify(

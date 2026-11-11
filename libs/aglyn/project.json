@@ -35,16 +35,15 @@
         "command": "node tools/scripts/publish.mjs aglyn {args.ver} {args.tag}"
       }
     },
-    "lint": {
-      "executor": "@nx/eslint:lint",
-      "outputs": ["{options.outputFile}"]
-    },
     "test": {
-      "executor": "@nx/jest:jest",
-      "outputs": ["{workspaceRoot}/coverage/libs/aglyn"],
-      "options": {
-        "jestConfig": "libs/aglyn/jest.config.ts"
-      }
+      "inputs": [
+        "default",
+        "^default",
+        "{workspaceRoot}/jest.preset.js",
+        {
+          "externalDependencies": ["jest", "@nx/jest", "ts-jest", "babel-jest"]
+        }
+      ]
     }
   }
 }

@@ -758,7 +758,8 @@ unknown flags onto the command **string** of an `nx:run-commands` target, so
 
 `cloud-functions:lint`, `docs:build` and `docs:typecheck` are all run-commands
 targets. `--maxWorkers` therefore goes **only** on the test phase, where every
-target is `@nx/jest:jest`; lint and build get nx's own `--parallel`, which nx
+target runs jest (the inferred `@nx/jest/plugin` targets append it to the jest
+command line); lint and build get nx's own `--parallel`, which nx
 consumes rather than forwards.
 
 **It reads every exit code bare.** The command writes to a log file and its

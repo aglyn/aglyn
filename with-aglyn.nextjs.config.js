@@ -17,7 +17,9 @@
 
 const { BundleAnalyzerPlugin } = require('webpack-bundle-analyzer')
 const pkg = require('./package.json')
-const withNx = require('@nx/next/plugins/with-nx')
+// What withNx() did before Nx 24 made it inert (AGL-4218): the production
+// distDir under dist/, workspace-library transpiling, and the `nx` key strip.
+const { withWorkspace } = require('./tools/build/next-workspace-config')
 const deepFillIn = require('mout/object/deepFillIn')
 
 const PACKAGE_VERSION = String(pkg?.version ?? '0.0.0')
@@ -650,7 +652,8 @@ const AGLYN_CONFIG = {
     // Leaving it here would keep implying the value was set somewhere.
 
     // SVGR: process *.svg files imported from JS/TS with named ReactComponent export.
-    // nx.svgr:true is a no-op in @nx/next v22 withNx; the rule must be added explicitly.
+    // The `nx.svgr` option was never honoured (a no-op since @nx/next v22, and
+    // withNx itself is gone in Nx 24); the rule must be added explicitly.
     // Exclude SVGs from ALL existing asset/resource rules (Next.js may register more than one).
     config.module.rules.forEach((rule) => {
       if (rule.test instanceof RegExp && rule.test.test('.svg')) {
@@ -686,6 +689,9 @@ const AGLYN_CONFIG = {
  * @param nextConfig {import('./with-aglyn.nextjs.config').WithAglynOptions}
  **/
 function withAglyn(nextConfig = {}) {
+  // The app's own directory (its next.config's `__dirname`), which places a
+  // production build under dist/ (tools/build/next-workspace-config.js).
+  const appDir = nextConfig?.aglyn?.appDir ?? process.cwd()
   console.log('process.env.NODE_ENV', NODE_ENV)
 
   /**
@@ -776,7 +782,7 @@ function withAglyn(nextConfig = {}) {
     }
   }
 
-  return withNx(handleUserConfig(nextConfig))
+  return withWorkspace(handleUserConfig(nextConfig), appDir)
 }
 
 module.exports = withAglyn

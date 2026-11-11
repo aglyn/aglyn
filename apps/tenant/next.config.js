@@ -25,6 +25,7 @@ const isProduction = process.env.NODE_ENV === 'production'
  * @type {import('/tools/nextjs-base.config').WithAglynOptions}
  **/
 module.exports = withAglyn({
+  aglyn: { appDir: __dirname },
   env: {
     AGLYN_TENANT_HOST_ID: process.env.AGLYN_TENANT_HOST_ID,
     AGLYN_TENANT_HOST_HOSTNAME: process.env.AGLYN_TENANT_HOST_HOSTNAME,

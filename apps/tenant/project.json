@@ -5,67 +5,39 @@
   "projectType": "application",
   "tags": ["scope:app", "scope:public", "scope:tenant"],
   "targets": {
-    "build": {
-      "executor": "@nx/next:build",
-      "outputs": ["{options.outputPath}"],
-      "defaultConfiguration": "production",
-      "cache": false,
+    "serve": {
       "options": {
-        "outputPath": "dist/apps/tenant"
-      },
-      "configurations": {
-        "production": {
-          "webpack": false
-        },
-        "development": {
-          "outputPath": "apps/tenant"
-        }
+        "port": 4500
       }
     },
-    "serve": {
-      "executor": "@nx/next:server",
-      "defaultConfiguration": "development",
+    "start": {
       "options": {
-        "buildTarget": "tenant:build",
-        "dev": true,
         "port": 4500
-      },
-      "configurations": {
-        "production": {
-          "buildTarget": "tenant:build:production",
-          "dev": false
-        },
-        "development": {
-          "buildTarget": "tenant:build:development",
-          "dev": true
-        }
-      },
-      "dependsOn": ["clean-next-cache"]
-    },
-    "export": {
-      "executor": "@nx/next:export",
-      "options": {
-        "buildTarget": "tenant:build:production"
       }
     },
     "test": {
-      "executor": "@nx/jest:jest",
-      "outputs": ["{workspaceRoot}/coverage/apps/tenant"],
-      "options": {
-        "jestConfig": "apps/tenant/jest.config.ts"
-      }
-    },
-    "lint": {
-      "executor": "@nx/eslint:lint",
-      "outputs": ["{options.outputFile}"]
+      "inputs": [
+        "default",
+        "^default",
+        "{workspaceRoot}/jest.preset.js",
+        {
+          "externalDependencies": [
+            "jest",
+            "@nx/jest",
+            "ts-jest",
+            "@nx/react",
+            "babel-jest"
+          ]
+        }
+      ]
     },
     "clean-next-cache": {
       "executor": "nx:run-commands",
+      "cache": false,
       "options": {
         "cwd": "{workspaceRoot}",
         "command": "node tools/scripts/clean-next.mjs --prune --app=tenant"
-      },
-      "cache": false
+      }
     }
   }
 }

@@ -15,16 +15,15 @@
         "assets": ["libs/plugins/inbox/*.md"]
       }
     },
-    "lint": {
-      "executor": "@nx/eslint:lint",
-      "outputs": ["{options.outputFile}"]
-    },
     "test": {
-      "executor": "@nx/jest:jest",
-      "outputs": ["{workspaceRoot}/coverage/libs/plugins/inbox"],
-      "options": {
-        "jestConfig": "libs/plugins/inbox/jest.config.ts"
-      }
+      "inputs": [
+        "default",
+        "^default",
+        "{workspaceRoot}/jest.preset.js",
+        {
+          "externalDependencies": ["jest", "@nx/jest", "ts-jest", "@swc/jest"]
+        }
+      ]
     }
   }
 }

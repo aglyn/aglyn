@@ -16,7 +16,6 @@
  */
 
 /// <reference types="vitest" />
-import { nxViteTsPaths } from '@nx/vite/plugins/nx-tsconfig-paths.plugin'
 import react from '@vitejs/plugin-react'
 import { join } from 'path'
 import { defineConfig } from 'vite'
@@ -24,6 +23,9 @@ import dts from 'vite-plugin-dts'
 import svgr from 'vite-plugin-svgr'
 
 export default defineConfig({
+  resolve: {
+    tsconfigPaths: true,
+  },
   root: __dirname,
   cacheDir: '../../../../node_modules/.vite/shared-svg-icons-svg-icons',
 
@@ -38,7 +40,6 @@ export default defineConfig({
       include: '**/*.svg',
       svgrOptions: { exportType: 'named' },
     }),
-    nxViteTsPaths(),
   ],
 
   // Uncomment this if you are using workers.
