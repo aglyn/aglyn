@@ -172,9 +172,6 @@ val PLATFORM_ENTRIES: List<com.aglyn.pluginhost.NativePluginManifestEntry> = lis
 /** The site's Pages screen, which the site registration (libs/native/kotlin/site) contributes. */
 const val SITE_PAGES_SCREEN_ID = "site.pages"
 
-/** The Media screen, a site's and the whole workspace's library. */
-internal const val SITE_MEDIA_SCREEN_ID = "site.media"
-
 /** What the desktop's menu bar can ask of the shell. */
 enum class ShellCommand {
   FIND, SWITCH_WORKSPACE, SWITCH_SITE, SETTINGS, TOGGLE_SIDEBAR, TOGGLE_RAIL, ADD_ACCOUNT, SHORTCUTS, AI_PANEL, HELP_DOCS,
@@ -380,7 +377,8 @@ internal class ShellPluginContext(
       if (link != null) openLink(link)
       return
     }
-    val scope = LinkScope(orgId, row.hostId ?: workspace.site?.id?.takeIf { orgId == workspace.org?.id })
+    // A notice about the whole workspace whose link is the workspace's own page opens on the whole workspace (AGL-4059).
+    val scope = notificationScope(orgId, row.hostId, link, workspace)
     if (link == null) {
       if (!linkScopeSettled(scope, workspace)) services.workspace.select(scope.orgId, scope.hostId)
       return
@@ -406,7 +404,7 @@ internal class ShellPluginContext(
     }
     navigator.deferredPlace = null
     navigator.deferredLink = link to scope
-    linkScopePick(scope, workspace)?.let { (orgId, hostId) -> services.workspace.select(orgId, hostId) }
+    pickLinkScope(scope, workspace, services.workspace)
   }
 
   /** Called as the workspace changes: picks the next step toward a deferred link's site, and opens the link once there. */
@@ -419,20 +417,15 @@ internal class ShellPluginContext(
       openHere(link)
       return
     }
-    linkScopePick(scope, workspace)?.let { (orgId, hostId) -> services.workspace.select(orgId, hostId) }
+    pickLinkScope(scope, workspace, services.workspace)
   }
 
   private fun openHere(link: String): Boolean {
     val chrome = chrome ?: return openOverWhatIsShown(link)
-    val (scope, path) = NavPaths.link(link, services.registry.deepLinks(), navPathLists(), workspace.site != null) ?: return false
+    // A workspace's own page has already left the site for the whole workspace (`LinkScope.whole`), so the workspace's
+    // Media shows the workspace's library.
+    val (_, path) = NavPaths.link(link, services.registry.deepLinks(), navPathLists(), workspace.site != null) ?: return false
     go(path, chrome)
-    // The workspace's own Media read from inside a site (`/{orgSlug}/media`) shows the workspace's library, which its
-    // screen reads from the link's scope (MediaScreens' `orgOnly`), over the site's Media.
-    val area = path.area
-    val orgSlug = scope.orgSlug
-    if (orgSlug != null && scope.hostSlug == null && workspace.site != null && path.pushed.isEmpty() && area is NavArea.Row && area.screen == SITE_MEDIA_SCREEN_ID) {
-      navigator.push(Route.Screen(area.screen, area.params + ("orgSlug" to orgSlug)))
-    }
     return true
   }
 
@@ -441,13 +434,14 @@ internal class ShellPluginContext(
    * workspace and site first (by the caller), then its mode, area and each level over it.
    */
   fun openPlace(item: com.aglyn.contracts.AccountItemRef) {
-    val scope = LinkScope(item.orgId, item.hostId)
+    // An item with no site is the whole workspace's: it leaves a site on screen for the workspace (AGL-4059).
+    val scope = placeScope(item)
     // Another workspace or site comes on screen first, and the place opens once it has: put on screen before, its
     // mode and pushes were dropped as the switch settled (a setting opened outside Site settings, a record lost).
     if (!linkScopeSettled(scope, workspace) && workspace.orgs.any { it.id == item.orgId }) {
       navigator.deferredLink = null
       navigator.deferredPlace = item to scope
-      linkScopePick(scope, workspace)?.let { (orgId, hostId) -> services.workspace.select(orgId, hostId) }
+      pickLinkScope(scope, workspace, services.workspace)
       return
     }
     openPlaceHere(item)
@@ -467,7 +461,7 @@ internal class ShellPluginContext(
       openPlaceHere(item)
       return
     }
-    linkScopePick(scope, workspace)?.let { (orgId, hostId) -> services.workspace.select(orgId, hostId) }
+    pickLinkScope(scope, workspace, services.workspace)
   }
 
   /** The lists a place is looked up in: the manifest's rows this build has a screen for, and the staff list for staff. */

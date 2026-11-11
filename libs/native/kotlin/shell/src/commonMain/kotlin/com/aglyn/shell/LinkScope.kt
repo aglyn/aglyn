@@ -9,7 +9,16 @@ import com.aglyn.pluginhost.DeepLinks
  * opens there, never in whichever workspace happened to be on screen (AGL-3911: an AI job notification from another site
  * opened that job's screen over the wrong site's jobs, every field "—").
  */
-internal data class LinkScope(val orgId: String, val hostId: String? = null, val hostSubdomain: String? = null)
+internal data class LinkScope(
+  val orgId: String,
+  val hostId: String? = null,
+  val hostSubdomain: String? = null,
+  /**
+   * The link (or place) is the whole workspace's own (`/{orgSlug}/marketplace/payouts`, an item with no site): it opens on
+   * the whole workspace, leaving a site that is on screen, as the console and the Apple apps do (AGL-4059).
+   */
+  val whole: Boolean = false,
+)
 
 /** The query parameter an AI job notice carries to open AI jobs on that job (`AI_JOB_LINK_PARAM`). */
 internal const val AI_JOB_LINK_PARAM = "aiJob"
@@ -21,7 +30,7 @@ internal fun linkScopeOf(link: String, workspace: WorkspaceState): LinkScope? {
   val first = split.orgSlug ?: return null
   workspace.orgs.firstOrNull { it.slug == first }?.let { org ->
     val site = split.hostSlug?.let { host -> workspace.sites.firstOrNull { it.orgId == org.id && it.subdomain == host } }
-    return LinkScope(org.id, site?.id, split.hostSlug)
+    return LinkScope(org.id, site?.id, split.hostSlug, whole = split.hostSlug == null)
   }
   // A stored link (`normalizeNotificationLink`'s input) leads with the site's document id.
   workspace.sites.firstOrNull { it.id == first }?.let { return LinkScope(it.orgId, it.id, it.subdomain.ifEmpty { null }) }
@@ -43,6 +52,7 @@ private fun sitesLoadedFor(scope: LinkScope, workspace: WorkspaceState) =
  */
 internal fun linkScopeSettled(scope: LinkScope, workspace: WorkspaceState): Boolean {
   if (workspace.org?.id != scope.orgId) return false
+  if (scope.whole) return workspace.site == null
   if (scope.hostId == null && scope.hostSubdomain == null) return true
   val current = workspace.site
   if (current != null && (current.id == scope.hostId || (scope.hostSubdomain != null && current.subdomain == scope.hostSubdomain))) return true
@@ -51,9 +61,11 @@ internal fun linkScopeSettled(scope: LinkScope, workspace: WorkspaceState): Bool
 
 /**
  * The next pick on the way to [scope]: the workspace (with its site when its id is known), then the site once the
- * workspace's sites have loaded; null when nothing is left to pick.
+ * workspace's sites have loaded; null when nothing is left to pick. A [LinkScope.whole] scope's pick is the whole
+ * workspace (`WorkspaceStore.selectScope` with no site, [pickLinkScope]).
  */
 internal fun linkScopePick(scope: LinkScope, workspace: WorkspaceState): Pair<String, String?>? {
+  if (scope.whole) return if (linkScopeSettled(scope, workspace)) null else scope.orgId to null
   if (workspace.org?.id != scope.orgId) return scope.orgId to scope.hostId
   if (!sitesLoadedFor(scope, workspace)) return null
   val site = siteOf(scope, workspace) ?: return null
@@ -75,3 +87,21 @@ internal fun withAiJobPath(link: String): String {
   val rest = params.filter { it.first != AI_JOB_LINK_PARAM }.joinToString("&") { (key, value) -> "$key=$value" }
   return "${path.trimEnd('/')}/ai-jobs/$jobId" + if (rest.isEmpty()) "" else "?$rest"
 }
+
+/** Makes [linkScopePick]'s next pick: the whole workspace for a [LinkScope.whole] scope, else the workspace and site. */
+internal fun pickLinkScope(scope: LinkScope, workspace: WorkspaceState, store: com.aglyn.core.WorkspaceStore) {
+  val (orgId, hostId) = linkScopePick(scope, workspace) ?: return
+  if (scope.whole) store.selectScope(orgId, null) else store.select(orgId, hostId)
+}
+
+/** Where a Starred or Recent item opens: its site, or (with none) the whole workspace, leaving a site on screen. */
+internal fun placeScope(item: com.aglyn.contracts.AccountItemRef) = LinkScope(item.orgId, item.hostId, whole = item.hostId == null)
+
+/**
+ * Where a notification opens: the site it is about; a notice about no site whose link is the workspace's own page
+ * (`/{orgSlug}/marketplace/payouts`) on the whole workspace, as its link does; else the site on screen when it is in the
+ * notice's workspace.
+ */
+internal fun notificationScope(orgId: String, hostId: String?, link: String?, workspace: WorkspaceState): LinkScope =
+  link?.let { linkScopeOf(it, workspace) }?.takeIf { hostId == null && it.whole && it.orgId == orgId }
+    ?: LinkScope(orgId, hostId ?: workspace.site?.id?.takeIf { orgId == workspace.org?.id })

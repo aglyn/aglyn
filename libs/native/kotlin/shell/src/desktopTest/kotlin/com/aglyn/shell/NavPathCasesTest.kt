@@ -61,8 +61,12 @@ class NavPathCasesTest {
     for (case in fixture.getValue("cases").jsonArray.map { it.jsonObject }) {
       val name = case.text("name")
       val expected = path(case.getValue("expect").jsonObject)
+      val stays = case.getValue("expect").jsonObject["starredRowStays"]?.jsonPrimitive?.booleanOrNull
+      assertEquals(stays, expected.keepsStarredRow, "$name: the starred row stays selected")
       for (entry in case.getValue("entries").jsonArray.map { it.jsonObject }) {
-        assertEquals(expected, open(entry)?.unscoped, "$name, via ${entry.text("via")}")
+        val via = entry.text("via")
+        assertEquals(expected, open(entry)?.unscoped, "$name, via $via")
+        scopeOf(entry)?.let { assertEquals(case.text("scope"), it, "$name, via $via: the scope it opens on") }
         entries += 1
       }
     }
@@ -122,6 +126,55 @@ class NavPathCasesTest {
       NavPaths.link("/acme/hosts/shop/setup/seo", platform, all, inSite = false)?.path?.unscoped,
     )
     assertNotNull(NavPaths.consoleAddress("site.pages", mapOf("screenId" to "s1"), platform))
+  }
+
+  /**
+   * A workspace-only place opened from inside a site leaves for the whole workspace, as on the Mac and iPhone: its scope is
+   * not settled while the site is on screen, and the pick is the workspace with no site.
+   */
+  @Test
+  fun aWorkspacePlaceFromInsideASiteLeavesForTheWholeWorkspace() {
+    val scope = linkScopeOf("/acme/marketplace/payouts", inSite)!!
+    assertTrue(scope.whole)
+    kotlin.test.assertFalse(linkScopeSettled(scope, inSite))
+    assertEquals("org-acme" to null, linkScopePick(scope, inSite))
+    val whole = inSite.copy(site = null, wholeWorkspace = true)
+    assertTrue(linkScopeSettled(scope, whole))
+    assertNull(linkScopePick(scope, whole))
+    val payouts = AccountItemRef(id = "marketplace", kind = "screen", label = "Payouts", orgId = "org-acme", params = mapOf("section" to "payouts"), screen = "marketplace.sell")
+    kotlin.test.assertFalse(linkScopeSettled(placeScope(payouts), inSite))
+    // A site's own place, opened from that site, is already there.
+    assertTrue(linkScopeSettled(placeScope(payouts.copy(hostId = "h1", id = "orders", screen = "commerce.orders", params = null)), inSite))
+  }
+
+  /** The workspace and site the entries are opened from: the case table's site, on screen. */
+  private val inSite = run {
+    val org = com.aglyn.core.WorkspaceOrg("org-acme", "Acme", "acme", "owner")
+    val site = com.aglyn.core.WorkspaceSite("h1", "org-acme", "Shop", "shop", "admin")
+    com.aglyn.core.WorkspaceState(orgs = listOf(org), sites = listOf(site), org = org, site = site, ready = true)
+  }
+
+  /** Where an entry opens: `site`, `workspace` (the whole workspace) or `unchanged`; null for a search row (the scope in use). */
+  private fun scopeOf(entry: JsonObject): String? {
+    fun name(scope: LinkScope?) = when {
+      scope == null -> "unchanged"
+      scope.whole -> "workspace"
+      else -> "site"
+    }
+    val link = entry.text("link")
+    return when (entry.text("via")) {
+      "link", "universal", "aglyn", "search" -> name(link?.let { linkScopeOf(it, inSite) })
+      "notification", "push" -> {
+        val stored = DeepLinks.notificationLink(link, entry.text("orgSlug"), entry.text("hostId"), entry.text("hostSubdomain"))
+        if (entry.text("orgSlug") == null || stored?.let { linkScopeOf(it, inSite) } == null) {
+          name(stored?.let { linkScopeOf(it, inSite) })
+        } else {
+          name(notificationScope("org-acme", entry.text("hostId"), stored, inSite))
+        }
+      }
+      "starred", "recent" -> name(placeScope(Json.decodeFromJsonElement(AccountItemRef.serializer(), entry.getValue("item"))))
+      else -> null
+    }
   }
 
   // Replaying an entry
