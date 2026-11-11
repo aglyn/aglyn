@@ -118,7 +118,7 @@ On the detail page you'll find **Install to**, with up to three choices:
 | **Selected sites** | Only the sites you tick. A list of your sites appears underneath — tick at least one. |
 | **All sites except…** | Every site but the ones you tick to leave out. For a plugin, that includes **sites you add later**. Tick at least one, and keep at least one in. |
 
-<!-- screenshot: marketplace/install-to-selected-sites.png per SCREENSHOT_PLAN.md -->
+![The Install card on a marketplace listing, with Install to set to Selected sites and two of the organization's three sites ticked in the Sites to install to list, above the Install button](/img/marketplace/install-to-selected-sites.png)
 
 **"All sites" does not mean the same thing for every kind of listing**, and that is the
 whole reason this step exists:

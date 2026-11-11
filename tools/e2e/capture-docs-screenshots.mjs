@@ -98,6 +98,10 @@ const TIMEOUT_MS = Number(process.env.E2E_TIMEOUT_MS ?? 60_000)
  * and restores them after it, for a state the seed does not give the site.
  * `submittedSiteStarter: true` puts one site starter in the staff review queue
  * for that one shot, and takes it out after it.
+ * `orgSites: [{ id, displayName }, …]` adds sites to the seeded workspace for
+ * that one shot, as the capture account's own, and deletes them after it: the
+ * seed gives the workspace one site, and a surface that only offers a choice
+ * of sites with several of them cannot be shot on one.
  * `assertAbsent: [selector, …]` (or a single
  * selector) fails the shot when any of them is visible at the shutter.
  * A step may carry only `settleMs`, which is how a shot waits for the
@@ -109,10 +113,17 @@ const TIMEOUT_MS = Number(process.env.E2E_TIMEOUT_MS ?? 60_000)
  *
  * Run a subset with `--only=<out-substring>[,<out-substring>…]`.
  */
-/** Selects the seeded Team dataset in the Data page's Dataset dropdown. */
+/**
+ * Opens the seeded Team dataset from the Data page's Datasets list, the rail
+ * that took the place of the Dataset dropdown (AGL-4047). Scoped to that card,
+ * because the site's own tabs can carry a "Team" of their own.
+ */
 const pickTeamDataset = [
-  { click: 'role=combobox[name="Dataset"]' },
-  { click: 'role=option[name="Team"]', waitFor: 'Avery Quinn', settleMs: 800 },
+  {
+    click: '.MuiCard-root:has([aria-label="Search datasets by name"]) :text-is("Team")',
+    waitFor: 'Avery Quinn',
+    settleMs: 800,
+  },
 ]
 
 /**
@@ -205,16 +216,45 @@ const shots = [
       { rect: { x: 16, y: 300, width: 1408, height: 540 }, n: 5 },
     ],
   },
-  // The Data page opens on the first dataset by name, and the seeded
-  // scoped-sharing fixture ("Internal rates") sorts before Team — so the
-  // Data page shots pick Team, the dataset their pages describe.
+  // The Data page opens on the first dataset by name, and the seeded survey
+  // fixture ("Survey responses") sorts before Team — so the Data page shots
+  // pick Team, the dataset their pages describe. The rail shows a spinner
+  // until the server has answered (AGL-4047), and the shot refuses one.
   {
     out: 'datasets/data-page.png',
     path: `/${HOST_BASE}/data`,
     waitFor: 'Add dataset',
-    // A click on blank card space takes the focus ring off the select and
+    // A click on the blank page header takes the focus ring off the list and
     // the pointer off the table's column header.
-    actions: [...pickTeamDataset, { clickXY: [1000, 560], settleMs: 600 }],
+    actions: [...pickTeamDataset, { clickXY: [700, 140], settleMs: 600 }],
+    assertAbsent: ['[aria-label="Loading datasets"]', '.MuiCircularProgress-root'],
+  },
+  // The marketplace Install card set to Selected sites (SCREENSHOT_PLAN M3).
+  // The choice is only offered on a workspace with more than one site and a
+  // listing not yet installed anywhere, so the shot adds two sites of its own
+  // and ticks two of the three. The card waits for where the listing is
+  // installed before it offers a choice (AGL-4047), so the loading line must
+  // be gone by the shutter.
+  {
+    out: 'marketplace/install-to-selected-sites.png',
+    path: `/${ORG_SLUG}/marketplace/realm-demo`,
+    waitFor: 'Install to',
+    orgSites: [
+      { id: 'docs-shot-farmers-market', displayName: 'Farmers Market Stall' },
+      { id: 'docs-shot-catering', displayName: 'Bakery Catering' },
+    ],
+    actions: [
+      { click: 'label:has-text("Selected sites")', waitFor: 'Bakery Catering' },
+      { click: 'label:has-text("Demo Bakery")' },
+      { click: 'label:has-text("Bakery Catering")', settleMs: 600 },
+    ],
+    assertAbsent: ['text=Loading where it is installed', '.MuiCircularProgress-root'],
+    // Tall enough for the whole card down to Install, which also keeps the
+    // fixed assistant button below the crop instead of over the site list.
+    viewport: { width: 1440, height: 1400 },
+    clipTo: {
+      locator: '.MuiCard-root:has([role="radiogroup"]):has-text("Install to"):not(:has(.MuiCard-root))',
+    },
   },
   // The import wizard on the seeded Team dataset (AGL-3547), at Columns:
   // rows are pasted rather than a file chosen, so the shot needs no fixture
@@ -1716,6 +1756,61 @@ async function applyHostFields(fields) {
 }
 
 /**
+ * Adds a shot's sites to the seeded workspace, and returns the function that
+ * deletes them again. Each site is written as seed-e2e.mjs writes the seeded
+ * one: the site, its routing mirror, and the capture account's membership
+ * row, which is the list the console's site lists read. Throws rather than
+ * warning, as `applyHostFields` does: a site that silently failed to land
+ * photographs the workspace with one site fewer than the shot names.
+ */
+async function addOrgSites(sites) {
+  const createdAt = { timestampValue: new Date().toISOString() }
+  const docs = sites.flatMap(({ id, displayName }) => [
+    [
+      `hosts/${id}`,
+      {
+        subdomain: { stringValue: id },
+        displayName: { stringValue: displayName },
+        orgId: { stringValue: ORG_ID },
+        memberRoles: firestoreValue({ [ORG_ID]: 'admin' }),
+        screens: firestoreValue({}),
+        createdAt,
+      },
+    ],
+    [`hostIndex/${id}`, { orgId: { stringValue: ORG_ID } }],
+    [
+      `users/${ORG_ID}/hostMemberships/${id}`,
+      {
+        orgId: { stringValue: ORG_ID },
+        subdomain: { stringValue: id },
+        displayName: { stringValue: displayName },
+        nameLower: { stringValue: displayName.trim().replace(/\s+/g, ' ').toLowerCase() },
+        role: { stringValue: 'admin' },
+        createdAt,
+      },
+    ],
+  ])
+  const remove = async () => {
+    for (const [path] of docs) {
+      const response = await fetch(documentUrl(path), { method: 'DELETE', headers: EMULATOR_ADMIN })
+      if (!response.ok) throw new Error(`${path} not deleted (${response.status}) at ${FIRESTORE_HOST}`)
+    }
+  }
+  for (const [path, fields] of docs) {
+    const response = await fetch(documentUrl(path), {
+      method: 'PATCH',
+      headers: EMULATOR_ADMIN,
+      body: JSON.stringify({ fields }),
+    })
+    if (!response.ok) {
+      await remove().catch(() => undefined)
+      throw new Error(`${path} not written (${response.status}) at ${FIRESTORE_HOST}`)
+    }
+  }
+  return remove
+}
+
+/**
  * The seeded site as one created with a built-in look is stored (AGL-4049):
  * the theme fields `planSiteStarterTheme` writes for Material 3 with a brand
  * color and a font pairing, and the routing with Home at `/`, which is the
@@ -1925,6 +2020,7 @@ for (const shot of selected) {
   let removeSiteStarters = null
   let restoreHostFields = null
   let removeSubmittedSiteStarter = null
+  let removeOrgSites = null
   try {
     // A taller window for a surface that is genuinely taller than 900px.
     // `clip` is clamped to the viewport, so a dialog that overflows gets
@@ -1955,6 +2051,7 @@ for (const shot of selected) {
     if (shot.siteStarters) removeSiteStarters = await listSiteStarters()
     if (shot.hostFields) restoreHostFields = await applyHostFields(await shot.hostFields())
     if (shot.submittedSiteStarter) removeSubmittedSiteStarter = await queueSubmittedSiteStarter()
+    if (shot.orgSites) removeOrgSites = await addOrgSites(shot.orgSites)
     await page.goto(`${BASE_URL}${shot.path}`, {
       waitUntil: 'domcontentloaded',
       timeout: TIMEOUT_MS,
@@ -2089,6 +2186,12 @@ for (const shot of selected) {
       await removeSubmittedSiteStarter().catch((error) => {
         failures += 1
         console.error(`FAIL  ${shot.out}: submitted starter not removed: ${error.message}`)
+      })
+    }
+    if (removeOrgSites) {
+      await removeOrgSites().catch((error) => {
+        failures += 1
+        console.error(`FAIL  ${shot.out}: added sites not removed: ${error.message}`)
       })
     }
   }
