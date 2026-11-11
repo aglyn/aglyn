@@ -28,6 +28,7 @@ import {
   installTargetsFor,
   isListingDeleted,
   isPrivateListing,
+  installPictureReadPhase,
   resolveInstallPlan,
   resolveOrgInstallSummary,
   resolvePluginInstallState,
@@ -93,6 +94,7 @@ import {
   Box,
   Button,
   Chip,
+  CircularProgress,
   Dialog,
   DialogActions,
   DialogContent,
@@ -121,7 +123,7 @@ import {
   useFirestore,
   useFirestoreCollection,
   useFirestoreDoc,
-  useHostOrgId,
+  useHostOrgIdState,
   useUser,
   useScopeTokens,
 } from '@aglyn/tenant-feature-instance'
@@ -572,6 +574,13 @@ export interface MarketplaceListingContentProps {
    * installed-sites panel reads.
    */
   hosts?: ReadonlyArray<OrgInstallHost>
+  /**
+   * The workspace, when the surface knows it (AGL-4047): the org-scope hub
+   * does. Without it the org is looked up through `hostId`, a one-shot read
+   * that settles to "no org" when it fails, and then the org pin is never
+   * read and an org-wide install reads as not installed for good.
+   */
+  orgId?: string | null
 }
 
 /**
@@ -587,6 +596,7 @@ export function MarketplaceListingContent({
   orgScoped,
   orgSlug: orgSlugProp,
   hosts,
+  orgId: orgIdProp,
 }: MarketplaceListingContentProps) {
   // The publisher link was `/{hostDocId}/marketplace/publisher/{id}` — the
   // pre-AGL-621 shape, dead since. The sibling browse grid was fixed for
@@ -602,7 +612,8 @@ export function MarketplaceListingContent({
   // ORGANIZATION, so `buy` has to name the workspace it is buying for rather
   // than let the server infer it from whichever site the surface happens to
   // be acting through.
-  const orgId = useHostOrgId(hostId)
+  const hostOrg = useHostOrgIdState(orgIdProp ? undefined : hostId)
+  const orgId = orgIdProp || hostOrg.orgId
   const { install, installPlan, buy, uninstall, payPanel, buying } = useMarketplaceActions(
     hostId,
     orgId,
@@ -737,15 +748,16 @@ export function MarketplaceListingContent({
   // `components` above never sees either, so an installed plugin read as
   // "not installed" here; the two pins tell the honest story, host over org.
   // (`orgId` is resolved above, where `buy` needs it.)
-  const { data: hostPin } = useFirestoreDoc<any>(
+  const hostPinRead = useFirestoreDoc<any>(
     () => doc(firestore, 'hosts', hostId, 'installs', listingId || '-missing-'),
     [firestore, hostId, listingId],
     { idField: '$id' },
   )
+  const hostPin = hostPinRead.data
   // Held at null while `useHostOrgId` is in flight, never `orgs/-pending-`
   // (AGL-1440): installs are member-gated, so the sentinel was a
   // guaranteed-denied listen on every listing view.
-  const { data: orgPin } = useFirestoreDoc<any>(
+  const orgPinRead = useFirestoreDoc<any>(
     () =>
       orgId && listingId
         ? doc(firestore, 'orgs', orgId, 'installs', listingId)
@@ -761,10 +773,15 @@ export function MarketplaceListingContent({
   // query would need an index plus a rules audit to read other orgs' pins
   // it must never see. `pinsNonce` re-reads after this page's own writes,
   // which are the only thing that changes these docs while it is open.
+  const orgPin = orgPinRead.data
   const [sitePins, setSitePins] = useState<Record<string, any>>({})
   const [pinsNonce, setPinsNonce] = useState(0)
   const hostIdsKey = (hosts ?? []).map((host) => host.id).join('|')
+  /** The site set the pins answer for, or that reading them failed (AGL-4047). */
+  const [sitePinsFor, setSitePinsFor] = useState<string | null>(null)
+  const [sitePinsFailed, setSitePinsFailed] = useState(false)
   useEffect(() => {
+    setSitePinsFailed(false)
     if (!orgScoped || !listingId || !hosts?.length) return
     let active = true
     void Promise.all(
@@ -776,9 +793,13 @@ export function MarketplaceListingContent({
       }),
     )
       .then((entries) => {
-        if (active) setSitePins(Object.fromEntries(entries))
+        if (!active) return
+        setSitePins(Object.fromEntries(entries))
+        setSitePinsFor(`${listingId}:${hostIdsKey}`)
       })
-      .catch(() => undefined)
+      .catch(() => {
+        if (active) setSitePinsFailed(true)
+      })
     return () => {
       active = false
     }
@@ -1309,6 +1330,35 @@ export function MarketplaceListingContent({
       resolveOrgInstallSummary(hosts ?? [], sitePins, orgPin ?? null, listingId),
     [hosts, sitePins, orgPin, listingId],
   )
+  /**
+   * Whether the install card may state anything yet (AGL-4047). "Install"
+   * and its targeting picker are a verdict, "not installed anywhere", that
+   * rests on ABSENT pins, so it waits for the org pin's server answer and
+   * every site's pin. Listed: this page offered Install to an org-wide
+   * install while the pins loaded.
+   */
+  const pinsPhase = !isPlugin
+    ? 'ready'
+    : installPictureReadPhase({
+        orgPin: !listingId
+          ? null
+          : orgId
+            ? orgPinRead
+            : orgIdProp || !hostOrg.loaded
+              ? 'pending'
+              : null,
+        sitePins: orgTargeting
+          ? sitePinsFailed
+            ? 'failed'
+            : sitePinsFor === `${listingId}:${hostIdsKey}`
+              ? 'answered'
+              : 'loading'
+          : !hostPinRead.data &&
+              (hostPinRead.status === 'loading' ||
+                hostPinRead.fromCache === true)
+            ? 'loading'
+            : 'answered',
+      })
   /** Run a pin write, then re-read every site's pin. */
   const runSiteEdit = async (work: () => Promise<unknown>) => {
     try {
@@ -1882,7 +1932,24 @@ export function MarketplaceListingContent({
                             {updateStateLabel(updateStatus)}
                           </Alert>
                         ) : null}
-                        {orgPluginScope ? (
+                        {pinsPhase === 'loading' ? (
+                          <Stack
+                            direction="row"
+                            spacing={1}
+                            sx={{ alignItems: 'center' }}
+                          >
+                            <CircularProgress size={16} />
+                            <Typography variant="body2" color="text.secondary">
+                              {'Loading where it is installed…'}
+                            </Typography>
+                          </Stack>
+                        ) : pinsPhase === 'error' ? (
+                          <Alert severity="warning">
+                            {'Could not load where this plugin is installed. ' +
+                              'Reload the page to try again.'}
+                          </Alert>
+                        ) : null}
+                        {orgPluginScope && pinsPhase === 'ready' ? (
                           <PluginSiteSet
                             listing={listing}
                             hosts={hosts ?? []}
@@ -1938,7 +2005,7 @@ export function MarketplaceListingContent({
                             installed — re-asking once it's settled would lie.
                             The per-site tab keeps the simpler org/host choice
                             (AGL-656) below until it's retired. */}
-                        {orgTargeting &&
+                        {pinsPhase !== 'ready' ? null : orgTargeting &&
                         !installed &&
                         !(orgPluginScope && orgInstall.installedAnywhere) ? (
                           <Stack spacing={1} sx={{ maxWidth: 420 }}>
@@ -2035,7 +2102,8 @@ export function MarketplaceListingContent({
                         <Box
                           sx={{
                             display:
-                              orgPluginScope && orgInstall.installedAnywhere
+                              pinsPhase !== 'ready' ||
+                              (orgPluginScope && orgInstall.installedAnywhere)
                                 ? 'none'
                                 : undefined,
                           }}

@@ -104,6 +104,7 @@ jest.mock('@aglyn/tenant-feature-instance', () => ({
   useFirestore: () => FIRESTORE,
   useUser: () => ({ data: { uid: 'uid-test' } }),
   useHostOrgId: () => 'o1',
+  useHostOrgIdState: () => ({ orgId: 'o1', loaded: true }),
   useConsoleHostRoute: () => ({ orgSlug: 'acme', subdomain: 'site' }),
   useScopeTokens: () => ({ tokens: ['org'], orgWide: true, loaded: true }),
   useFirestoreDoc: (build: () => any) => {
