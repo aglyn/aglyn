@@ -979,7 +979,7 @@ export interface ListingInclusion {
 
 /** What each artifact type drops into the org when it installs. */
 const ARTIFACT_INSTALL_RESULT: Record<MarketplaceArtifactType, string> = {
-  plugin: 'A plugin, sandboxed on its own origin with a per-plugin CSP',
+  plugin: 'A plugin that runs in its own secure space, separate from your site',
   component: 'An editable component you can place on any page',
   template: 'Editable pages you can rework in Besigner',
   layout: 'An editable layout you can apply to any page',
@@ -993,6 +993,61 @@ const ARTIFACT_INSTALL_RESULT: Record<MarketplaceArtifactType, string> = {
 
 /** A plugin version staff signed to run with the site's own code (`trust: 'realm'`). */
 const REALM_PLUGIN_INSTALL_RESULT = `A plugin, reviewed and signed by ${PLATFORM_BRAND_NAME} to run with your site`
+
+/**
+ * The Install to choice a listing page offers: the org picker's three modes,
+ * or `thisSite` for the per-site tab's "This site only".
+ */
+export type ListingInstallReach = 'all' | 'selected' | 'allExcept' | 'thisSite'
+
+/**
+ * The `What's included` row that says which sites an install reaches, for the
+ * Install to choice on offer. It states what {@link resolveInstallPlan} does
+ * with that choice: an org pin covers sites added later, host pins cover only
+ * the sites they name. A row that covers fewer sites than "every site, now and
+ * later" is a note, not a tick, because it is a limit the shopper is told
+ * about. A choice the artifact cannot make reads as All sites, matching the
+ * picker, which never offers it.
+ */
+export function installReachInclusion(
+  listing: { artifactType?: string; type?: string; kind?: string },
+  reach: ListingInstallReach,
+): ListingInclusion {
+  const targets = installTargetsFor(listing)
+  const canOrgPin = targets.includes('org')
+  const canHostPin = targets.includes('host')
+  const effective: ListingInstallReach = canHostPin ? reach : 'all'
+  if (effective === 'thisSite') {
+    return { label: 'Installs on this site only', tone: 'note' }
+  }
+  if (effective === 'selected') {
+    return {
+      label:
+        "Installs only on the sites you pick. A new site doesn't get it until you add it",
+      tone: 'note',
+    }
+  }
+  if (effective === 'allExcept') {
+    return canOrgPin
+      ? {
+          label:
+            'Installs on every site but the ones you leave out, including sites you add later',
+          tone: 'included',
+        }
+      : {
+          label:
+            "Installs on the sites you have now, minus the ones you leave out. A new site doesn't get it automatically",
+          tone: 'note',
+        }
+  }
+  return canOrgPin
+    ? { label: 'Installs on every site, including sites you add later', tone: 'included' }
+    : {
+        label:
+          "Installs on the sites you have now. A new site doesn't get it automatically",
+        tone: 'note',
+      }
+}
 
 /**
  * The `WHAT'S INCLUDED` checklist the marketplace listing mockup shows
@@ -1022,9 +1077,14 @@ export function listingInclusions(
     reviewedVersion?: boolean
     /**
      * The version on offer is staff-signed to run with the site's own code
-     * (`trust: 'realm'`), so "sandboxed on its own origin" would be untrue.
+     * (`trust: 'realm'`), so "runs in its own secure space" would be untrue.
      */
     realmTrusted?: boolean
+    /**
+     * The Install to choice on offer, when the page shows one. The reach row
+     * then describes that choice; without it, the row describes All sites.
+     */
+    installTo?: ListingInstallReach
     /**
      * The labels of the services the version on offer declares connections
      * to (AGL-4197). Connecting one needs a plan that includes plugin
@@ -1048,15 +1108,7 @@ export function listingInclusions(
   // Right after what the install produces: it is the fact most likely to stop
   // an install, and a note, not a tick, because it is a limit.
   if (planNote) rows.push({ label: planNote, tone: 'note' })
-  const targets = installTargetsFor(listing)
-  rows.push({
-    label: targets.includes('org')
-      ? 'Installs org-wide, covering sites you add later'
-      : 'Installs per site — new sites are not covered automatically',
-    // The host-only case is a real limit and the picker already has to say
-    // so; softening it here would put the caveat only where nobody reads.
-    tone: targets.includes('org') ? 'included' : 'note',
-  })
+  rows.push(installReachInclusion(listing, options.installTo ?? 'all'))
   if (options.reviewedVersion) {
     rows.push({
       label: 'This version passed marketplace review',
