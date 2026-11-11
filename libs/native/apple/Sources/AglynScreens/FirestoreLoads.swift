@@ -150,6 +150,49 @@ enum FirestoreLoads {
     return doc
   }
 
+  /// The key a document load's answer carries (beside `$id`) while only the device's cache has given it (AGL-4047). The
+  /// model takes it off, holds the forms seeded from that load (`checking`) and swaps in the server's copy when it answers.
+  static let fromCacheKey = "$fromCache"
+
+  /// A document load's first answer, marked with `fromCacheKey` when only the device's cache gave it. A document the
+  /// cache reports missing is not missing yet: the server is waited for (`serverDocument`), so a form is never seeded
+  /// blank over values the server holds.
+  @MainActor
+  static func documentLoad(_ reader: FirestoreReader, _ path: String) async throws -> JSONValue {
+    let first: FirestoreAnswer<FirestoreDocument?> = try await withCheckedThrowingContinuation { continuation in
+      var listener: FirestoreListening?
+      var finished = false
+      listener = reader.listenDocumentAnswer(segments(path)) { result in
+        guard !finished else { return }
+        finished = true
+        listener?.remove()
+        continuation.resume(with: result)
+      }
+      if finished { listener?.remove() }
+    }
+    guard first.fromCache else { return first.value.map(json) ?? .null }
+    guard let doc = first.value else {
+      let server = try await serverDocument(reader, path)
+      let value = server.document.map(json) ?? .null
+      return server.confirmed ? value : markedFromCache(value)
+    }
+    return markedFromCache(json(doc))
+  }
+
+  /// `value` with `fromCacheKey` set; a document that is not there has nothing to carry it.
+  static func markedFromCache(_ value: JSONValue) -> JSONValue {
+    guard case .object(var record) = value else { return value }
+    record[fromCacheKey] = .bool(true)
+    return .object(record)
+  }
+
+  /// `value` without `fromCacheKey`: a per-row read is shown, never saved back, so it is not held.
+  static func unmarked(_ value: JSONValue) -> JSONValue {
+    guard case .object(var record) = value, record[fromCacheKey] != nil else { return value }
+    record[fromCacheKey] = nil
+    return .object(record)
+  }
+
   /// How long `serverDocument` waits for the server past the cache's answer: the console guard's 12 s (tests shorten it).
   @MainActor static var serverDeadline: Duration = .seconds(12)
 

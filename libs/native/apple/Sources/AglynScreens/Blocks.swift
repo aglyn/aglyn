@@ -713,15 +713,20 @@ struct StepperInput: View {
   }
 }
 
-/// A form on the screen: its inputs, filled from the loaded data, and the
-/// action that saves them.
+/// A form on the screen: its inputs, filled from the loaded data, and the action that saves them. What the person
+/// changed is kept as edits over the data as it is now (`FormEdits`), and Save is held while that data is only the
+/// device cache's answer.
 struct FormBlock: View {
   let block: BlockSpec
   let context: JSONValue
   let busy: Bool
   let submit: (ActionSpec, JSONValue) -> Void
+  /// The fields the person changed; every other field shows what the data says now.
   @State private var values: [String: FieldValue] = [:]
-  @State private var seededFrom: JSONValue?
+  /// The seed the edits were last settled against.
+  @State private var seededFrom: [String: FieldValue]?
+  /// What the last Save wrote, settled once the data moves.
+  @State private var pressed: [String: FieldValue]?
 
   private var fields: [FieldSpec] {
     FieldSpec.parseAll(block["fields"].array, in: scope)
@@ -732,14 +737,27 @@ struct FormBlock: View {
     return base.map { ScreenContext.with(context, item: $0) } ?? context
   }
 
+  private func current(_ field: FieldSpec) -> FieldValue {
+    values[field.key] ?? initialValue(field, in: scope)
+  }
+
   private var filled: JSONValue {
-    ScreenContext.with(scope, "form", .object(formObject(fields) { values[$0.key] }))
+    ScreenContext.with(scope, "form", .object(formObject(fields) { current($0) }))
   }
 
   private var missing: Bool {
     fields.contains { field in
-      ScreenValues.condition(field.when, in: filled) && field.unmet(fieldJSON(field, values[field.key] ?? initialValue(field, in: scope)), in: scope)
+      ScreenValues.condition(field.when, in: filled) && field.unmet(fieldJSON(field, current(field)), in: scope)
     }
+  }
+
+  /// A load this form is seeded from is only the cache's answer yet.
+  private var held: Bool {
+    !FormEdits.heldBy(object: block["object"]?.stringValue, initials: fields.compactMap(\.initial), checking: context["checking"]).isEmpty
+  }
+
+  private var dirty: Bool {
+    fields.contains { field in values[field.key].map { $0 != initialValue(field, in: scope) } ?? false }
   }
 
   var body: some View {
@@ -747,19 +765,25 @@ struct FormBlock: View {
       ForEach(fields.filter { ScreenValues.condition($0.when, in: filled) }) { field in
         FieldInput(
           field: field, context: scope,
-          value: Binding(get: { values[field.key] ?? initialValue(field, in: scope) }, set: { values[field.key] = $0 }))
+          value: Binding(get: { current(field) }, set: { values[field.key] = $0 }))
       }
       if let action = block["submit"].flatMap(ActionSpec.init), ScreenValues.condition(action.when, in: scope) {
         // One Save per form at the standard control size, trailing (spec 8): never a full-width bar per form.
         HStack(spacing: AglynSpace.one) {
+          if held && dirty {
+            Text(FormEdits.checkingText(block["checking"]?.stringValue))
+              .font(AglynFont.caption).foregroundStyle(.secondary)
+              .accessibilityIdentifier("checking-\(block.id)")
+          }
           Spacer(minLength: 0)
           if busy { ProgressView().controlSize(.small) }
           Button(ScreenValues.render(action.label, in: scope)) {
+            pressed = values
             submit(action, visibleOnly(filled, fields))
           }
           .buttonStyle(.aglynProminent)
           .controlSize(.regular)
-          .disabled(busy || missing || action.disabledWhen.map { ScreenValues.condition($0, in: scope) } == true)
+          .disabled(busy || held || missing || action.disabledWhen.map { ScreenValues.condition($0, in: scope) } == true)
           .accessibilityIdentifier("submit-\(block.id)")
         }
       }
@@ -768,14 +792,16 @@ struct FormBlock: View {
     .onChange(of: context) { _, _ in seed() }
   }
 
-  /// Fills the inputs from the data once per load, keeping what was typed
-  /// when the data did not change.
+  /// Settles the edits when the data under them moves (a save landed, or the server's copy replaced the cache's).
   private func seed() {
-    guard seededFrom != scope else { return }
-    seededFrom = scope
-    var next: [String: FieldValue] = [:]
-    for field in fields { next[field.key] = initialValue(field, in: scope) }
-    values = next
+    var now: [String: FieldValue] = [:]
+    for field in fields { now[field.key] = initialValue(field, in: scope) }
+    guard seededFrom != now else { return }
+    if seededFrom != nil {
+      values = FormEdits.settled(values, pressed: pressed, seed: now)
+      pressed = nil
+    }
+    seededFrom = now
   }
 }
 

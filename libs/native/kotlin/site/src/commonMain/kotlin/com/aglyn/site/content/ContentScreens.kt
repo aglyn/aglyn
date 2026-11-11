@@ -283,12 +283,21 @@ private fun EntryEditor(
     is Live.Ready -> {
       val entry = doc.value?.let(ContentEntry::from) ?: return EmptyState("This entry is gone", icon = AglynIcons.named("article"))
       val stored = remember(entry) { EntryDraft.of(entry) }
-      var draft by remember(stored) { mutableStateOf(stored) }
+      // A newer copy of the entry keeps what was typed and moves every other field to it (AGL-4047).
+      var draft by remember(entry.id) { mutableStateOf(stored) }
+      var seeded by remember(entry.id) { mutableStateOf(stored) }
+      if (seeded != stored) {
+        draft = draft.rebased(seeded, stored)
+        seeded = stored
+      }
       val saverScope = rememberCoroutineScope()
       val saver = remember(entry.id) { ActionRunner(saverScope) }
       val now = remember(entry.updatedAt) { nowMillis() }
       val titleError = if (draft.title.isBlank()) "Required" else null
       val slugError = if (draft.effectiveSlug.isEmpty()) "Add a title or an address" else null
+      // The entry is only the device cache's copy yet: Save is held until the server's is in (AGL-4047).
+      val checking = if (doc.fromCache) com.aglyn.core.seedCheckingText("entry") else null
+      androidx.compose.runtime.CompositionLocalProvider(com.aglyn.ui.LocalFormChecking provides checking) {
       Column(
         Modifier.fillMaxSize().verticalScroll(rememberScrollState()).padding(space(2f)).testTag("entry-editor"),
         verticalArrangement = Arrangement.spacedBy(space(2f)),
@@ -425,6 +434,7 @@ private fun EntryEditor(
           DetailRow("Updated", entry.updatedAt?.let { relativeTime(it.epochMillis, now) })
           DetailRow("Entry id", entry.id)
         }
+      }
       }
     }
   }

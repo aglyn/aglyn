@@ -53,6 +53,36 @@ internal object FirestoreLoads {
 
   suspend fun document(reader: FirestoreReader, path: String): JsonElement = reader.get(path)?.let { json(it) } ?: JsonNull
 
+  /**
+   * The key a document load's answer carries (beside `$id`) while only the device's cache has given it (AGL-4047). The
+   * model takes it off, holds the forms seeded from that load (`checking`) and swaps in the server's copy when it answers.
+   */
+  const val FROM_CACHE_KEY = "\$fromCache"
+
+  /**
+   * A document load's answer, marked with [FROM_CACHE_KEY] when only the device's cache gave it. A document the cache
+   * reports missing is not missing yet: the server is waited for ([serverDocument]), so a form is never seeded blank over
+   * values the server holds.
+   */
+  suspend fun documentLoad(reader: FirestoreReader, path: String): JsonElement {
+    val first = reader.getAnswer(path)
+    if (!first.fromCache) return first.value?.let { json(it) } ?: JsonNull
+    val doc = first.value ?: run {
+      val server = serverDocument(reader, path)
+      val value = server.document?.let { json(it) } ?: JsonNull
+      return if (server.confirmed) value else markedFromCache(value)
+    }
+    return markedFromCache(json(doc))
+  }
+
+  /** [value] with [FROM_CACHE_KEY] set; a document that is not there has nothing to carry it. */
+  fun markedFromCache(value: JsonElement): JsonElement =
+    (value as? JsonObject)?.let { JsonObject(it + (FROM_CACHE_KEY to JsonPrimitive(true))) } ?: value
+
+  /** [value] without [FROM_CACHE_KEY]: a per-row read is shown, never saved back, so it is not held. */
+  fun unmarked(value: JsonElement): JsonElement =
+    (value as? JsonObject)?.takeIf { FROM_CACHE_KEY in it }?.let { JsonObject(it - FROM_CACHE_KEY) } ?: value
+
   /** How long `serverDocument` waits for the server past the cache's answer: the console guard's 12 s (tests shorten it). */
   internal var serverDeadlineMs: Long = 12_000
 

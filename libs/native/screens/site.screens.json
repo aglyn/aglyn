@@ -24,6 +24,7 @@
       "blocks": [
         {
           "type": "form",
+          "checking": "site settings",
           "id": "details",
           "object": "data.site",
           "fields": [
@@ -83,6 +84,7 @@
         },
         {
           "type": "form",
+          "checking": "site settings",
           "title": "Site address",
           "id": "subdomain",
           "object": "data.site",
