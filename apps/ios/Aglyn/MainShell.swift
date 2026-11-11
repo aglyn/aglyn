@@ -1197,6 +1197,7 @@ struct RecentPlacesMenu: View {
 /// tab bar (Home, the site's busiest area, Inbox, Menu).
 struct PhoneShell: View {
   @Environment(AppModel.self) private var model
+  @Environment(\.scenePhase) private var scenePhase
   @Bindable var navigation: ShellNavigation
   /// A tab's count from its row's count view (Inbox's unread), worn as the tab's badge (Figma Phone/Tab bar 22:499).
   @State private var counts: [String: Int] = [:]
@@ -1309,8 +1310,10 @@ struct PhoneShell: View {
         navigation.showCreate = true
         return
       }
-      // A section with no tab of its own opens on Home, an area with its section chips (AGL-3993, AGL-4006).
-      guard !tabs.contains(where: { $0.section == section }) else { return }
+      // A section with no tab of its own opens on Home, an area with its section chips (AGL-3993, AGL-4006). Not while
+      // the app is in the background: iPadOS draws its app-switcher snapshots at a phone's width, and this turned the
+      // iPad window's section into Home with the area pushed on it (a second head over the screen's own on return).
+      guard scenePhase != .background, !tabs.contains(where: { $0.section == section }) else { return }
       navigation.openOnHome(section)
     }
     #if DEBUG
@@ -1329,7 +1332,7 @@ struct PhoneShell: View {
     // the screen was left on a tab no longer there (the link only opened the site).
     .onChange(of: tabs.map(\.section)) { _, sections in
       let old = navigation.section
-      guard !sections.contains(old) else { return }
+      guard scenePhase != .background, !sections.contains(old) else { return }
       let carried = navigation.paths[old] ?? []
       navigation.section = .home
       if !carried.isEmpty { navigation.paths[.home] = carried }
