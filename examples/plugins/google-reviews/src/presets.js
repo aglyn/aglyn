@@ -240,17 +240,30 @@ const preset = (key, displayName, description, icon, data) => ({
   data,
 })
 
+/**
+ * The whole section as the built-in blocks place one: a band with room above
+ * and below, and a Container that holds the content to a readable width with
+ * the theme's side gutters. Dropped bare onto a page, the parts ran edge to
+ * edge and touched the screen on a phone. The parts on their own stay bare,
+ * because they go inside the author's own layout.
+ */
+const sectionBand = (nodes) =>
+  node(
+    'muiStack',
+    { component: 'section', 'aria-label': 'Google reviews' },
+    {
+      sx: { paddingTop: 4, paddingBottom: 4 },
+      nodes: [node('muiContainer', { maxWidth: 'lg' }, { nodes: [node('muiStack', { spacing: 2.5 }, { nodes })] })],
+    },
+  )
+
 export const presets = [
   preset(
     'section',
     'Google reviews',
     'Your Google rating, review cards and a "Review us on Google" link, each part yours to style.',
     ICONS.reviews,
-    node(
-      'muiStack',
-      { spacing: 2.5, component: 'section', 'aria-label': 'Google reviews' },
-      { nodes: [summaryNode(), cardsNode('grid'), footerNode()] },
-    ),
+    sectionBand([summaryNode(), cardsNode('grid'), footerNode()]),
   ),
   preset(
     'summary',
