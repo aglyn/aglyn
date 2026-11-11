@@ -666,12 +666,13 @@ struct AssistSlot: View {
 
   var body: some View {
     let scope = ShellScope(model: model, navigation: navigation)
-    let row = scope.row(for: navigation.section)
-    let place = navigation.section == .home ? "Home" : row?.label
+    let shown = Self.shownSection(navigation)
+    let row = scope.row(for: shown)
+    let place = shown == .home ? "Home" : row?.label
     let scopeName = scope.site?.name ?? scope.org?.name
     let title = [place, scopeName].compactMap { $0 }.joined(separator: " · ")
     // The context chip wears the place's own icon (Figma AI sheet 21:314, AI panel 18:485).
-    let icon = navigation.section == .home ? "house" : (row?.appleIcon ?? "eye")
+    let icon = shown == .home ? "house" : (row?.appleIcon ?? "eye")
     let orgSlug = model.workspace?.org?.slug ?? ""
     let site = scope.site
     let route =
@@ -687,6 +688,15 @@ struct AssistSlot: View {
     .environment(
       \.aglynSlotParams,
       ["route": route, "title": title, "icon": icon, "place": place ?? "", "scope": scopeName ?? ""])
+  }
+
+  /// The place on show: the area last pushed on the section, before the section itself. A phone opens every area on
+  /// Home's stack (AGL-4006), so the section alone said "Home" while Orders or an order was on screen.
+  static func shownSection(_ navigation: ShellNavigation) -> ShellSection {
+    for route in (navigation.paths[navigation.section] ?? []).reversed() {
+      if case .area(let screen, let params) = route { return ShellSection.opening(screen, params) }
+    }
+    return navigation.section
   }
 
   /// A row's console path within its scope, from the manifest's console reference.
