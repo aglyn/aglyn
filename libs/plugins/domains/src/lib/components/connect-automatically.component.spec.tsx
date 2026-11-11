@@ -111,17 +111,21 @@ describe('when the provider can apply the records', () => {
 
   it('warns about a previous host’s IPv6 record before the owner goes to the provider (AGL-3963)', async () => {
     routes({
-      'domain-connect/discover': { supported: true, providerName: 'Provider DNS', strayIpv6: ['2001:db8::1'] },
+      'domain-connect/discover': {
+        supported: true,
+        providerName: 'Provider DNS',
+        strayIpv6: { name: 'example.com', addresses: ['2001:db8::1'] },
+      },
     })
     render(<ConnectAutomatically hostId="host-1" domain="example.com" onConnected={jest.fn()} />)
     await screen.findByRole('button', { name: /Connect automatically/ }, { timeout: 2000 })
     const warning = screen.getByRole('alert')
-    expect(warning.textContent).toContain('2001:db8::1')
+    expect(warning.textContent).toContain('example.com also has an IPv6 (AAAA) record, 2001:db8::1')
     expect(warning.textContent).toContain('Delete it at Provider DNS')
   })
 
   it('shows no IPv6 warning when there is no stray AAAA, the control', async () => {
-    routes({ 'domain-connect/discover': { supported: true, providerName: 'Provider DNS', strayIpv6: [] } })
+    routes({ 'domain-connect/discover': { supported: true, providerName: 'Provider DNS', strayIpv6: null } })
     render(<ConnectAutomatically hostId="host-1" domain="example.com" onConnected={jest.fn()} />)
     await screen.findByRole('button', { name: /Connect automatically/ }, { timeout: 2000 })
     expect(screen.queryByRole('alert')).toBeNull()

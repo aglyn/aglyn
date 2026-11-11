@@ -102,31 +102,73 @@ async function resolveARecords(domain: string): Promise<string[]> {
   }
 }
 
-async function resolveAaaaRecords(domain: string): Promise<string[]> {
-  const normalise = (records: string[]) => records.map((record) => record.toLowerCase())
-  const lookup = async (resolver?: CallbackResolver) =>
-    resolver
-      ? new Promise<string[]>((resolve, reject) => {
-          resolver.resolve6(domain, (error, addresses) =>
-            error ? reject(error) : resolve(addresses),
-          )
-        })
-      : dns.resolve6(domain)
+/**
+ * The most an IPv6 check may add to a request (AGL-3963). It is advice beside
+ * a check that already answered, so a slow resolver gives up and reads as
+ * "nothing found" rather than holding the domain card or the button.
+ */
+const IPV6_LOOKUP_BUDGET_MS = 2_000
+
+function withinIpv6Budget<T>(work: Promise<T>, fallback: T): Promise<T> {
+  let timer: ReturnType<typeof setTimeout> | undefined
+  const late = new Promise<T>((resolve) => {
+    timer = setTimeout(() => resolve(fallback), IPV6_LOOKUP_BUDGET_MS)
+  })
+  return Promise.race([work.catch(() => fallback), late]).finally(() => clearTimeout(timer))
+}
+
+/** One spelling per address, so `2001:DB8:0::1` and `2001:db8::1` match. */
+function normaliseIpv6(address: string): string {
+  const trimmed = address.trim()
   try {
-    const resolver = new CallbackResolver()
-    resolver.setServers(PUBLIC_RESOLVERS)
-    return normalise(await lookup(resolver))
-  } catch (error) {
-    const code = (error as NodeJS.ErrnoException)?.code
-    if (code === 'ENOTFOUND' || code === 'ENODATA' || code === 'NXDOMAIN') {
-      return []
-    }
-    try {
-      return normalise(await lookup())
-    } catch {
-      return []
-    }
+    return new URL(`http://[${trimmed}]`).hostname.replace(/^\[|\]$/g, '')
+  } catch {
+    return trimmed.toLowerCase()
   }
+}
+
+/**
+ * AAAA records on the public resolvers, one short try each. No fallback to
+ * the runtime's resolver, unlike the A check: this is advice, and a second
+ * slow lookup would only spend the budget.
+ */
+async function resolveAaaaRecords(domain: string): Promise<string[]> {
+  try {
+    const resolver = new CallbackResolver({ timeout: 1_500, tries: 1 })
+    resolver.setServers(PUBLIC_RESOLVERS)
+    const records = await new Promise<string[]>((resolve, reject) => {
+      resolver.resolve6(domain, (error, addresses) => (error ? reject(error) : resolve(addresses)))
+    })
+    return records.map(normaliseIpv6)
+  } catch {
+    return []
+  }
+}
+
+/**
+ * Each name's IPv6 addresses that the tenant edge does not answer with, with
+ * the edge looked up once. A name carrying a CNAME is skipped: a resolver
+ * follows the CNAME, so those addresses are its target's, and the record to
+ * fix is the CNAME, which the A side already reports.
+ */
+async function strayIpv6ByName(names: readonly string[]): Promise<Map<string, string[]>> {
+  const work = (async () => {
+    const [edge, ...answers] = await Promise.all([
+      resolveAaaaRecords(CNAME_TARGET),
+      ...names.map(async (name) => {
+        const [cnames, addresses] = await Promise.all([resolveCnameRecords(name), resolveAaaaRecords(name)])
+        return { name, addresses: cnames.length ? [] : addresses }
+      }),
+    ])
+    const ours = new Set(edge as string[])
+    const found = new Map<string, string[]>()
+    for (const answer of answers as Array<{ name: string; addresses: string[] }>) {
+      const strays = answer.addresses.filter((address) => !ours.has(address))
+      if (strays.length) found.set(answer.name, strays)
+    }
+    return found
+  })()
+  return withinIpv6Budget(work, new Map<string, string[]>())
 }
 
 /**
@@ -139,18 +181,15 @@ async function resolveAaaaRecords(domain: string): Promise<string[]> {
  * edge's certificate challenge over IPv6 can fail with it. Cloudflare named
  * this case when it onboarded our templates (2026-10-29).
  *
- * Compared against the edge's own AAAA answer rather than "any AAAA at all",
- * so the day the edge publishes IPv6 a correctly-pointed name stays clean.
- * Reported, never refused, for the same reason as `stray` below. Never throws:
- * an unreachable resolver reads as no records.
+ * Today the edge answers no AAAA at all, so any AAAA on the name is a stray.
+ * The edge's own answer is subtracted anyway, so an edge that starts
+ * publishing IPv6 on `CNAME_TARGET` does not warn every customer at once; an
+ * IPv6 apex pool like `HOST_APEX_ADDRESSES` would need adding here too.
+ * Reported, never refused, for the same reason as `stray` below. Never throws,
+ * and gives up after `IPV6_LOOKUP_BUDGET_MS`: no answer reads as none.
  */
 export async function strayIpv6Addresses(domain: string): Promise<string[]> {
-  const [domainAddresses, targetAddresses] = await Promise.all([
-    resolveAaaaRecords(domain),
-    resolveAaaaRecords(CNAME_TARGET),
-  ])
-  const ours = new Set(targetAddresses)
-  return domainAddresses.filter((address) => !ours.has(address))
+  return (await strayIpv6ByName([domain])).get(domain) ?? []
 }
 
 /** A record answering for a name that is not ours, as the status card lists it. */
@@ -160,25 +199,29 @@ export interface TenantDnsConflict {
   value?: string
 }
 
+function conflictKey(type: unknown, name: unknown, value: unknown): string {
+  const kind = String(type ?? '').toUpperCase()
+  const host = String(name ?? '').trim().toLowerCase().replace(/\.+$/, '')
+  const data = kind === 'AAAA' ? normaliseIpv6(String(value ?? '')) : String(value ?? '').trim().toLowerCase()
+  return [kind, host, data].join('|')
+}
+
 /**
  * `conflicts` with each stray IPv6 address of `names` added as an AAAA entry,
  * unless the platform already listed it (AGL-3963). The platform's own DNS
- * check is not relied on to name these: it is the A record it checks.
+ * check is not relied on to name these: it is the A record it checks. Never
+ * throws; within `IPV6_LOOKUP_BUDGET_MS`.
  */
 export async function withStrayIpv6Conflicts(
   names: readonly string[],
   conflicts: readonly TenantDnsConflict[],
 ): Promise<TenantDnsConflict[]> {
   const merged = [...conflicts]
-  const listed = new Set(
-    conflicts.map((conflict) =>
-      [conflict.type, conflict.name, conflict.value].map((part) => String(part ?? '').toLowerCase()).join('|'),
-    ),
-  )
-  const strays = await Promise.all(names.map(async (name) => ({ name, addresses: await strayIpv6Addresses(name) })))
-  for (const { name, addresses } of strays) {
+  const listed = new Set(conflicts.map((conflict) => conflictKey(conflict.type, conflict.name, conflict.value)))
+  const strays = await strayIpv6ByName(names)
+  for (const [name, addresses] of strays) {
     for (const value of addresses) {
-      const key = ['aaaa', name.toLowerCase(), value].join('|')
+      const key = conflictKey('AAAA', name, value)
       if (listed.has(key)) continue
       listed.add(key)
       merged.push({ type: 'AAAA', name, value })

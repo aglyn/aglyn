@@ -166,12 +166,12 @@ export function createDiscoverRoute(deps: DomainConnectRouteDeps) {
     // host's AAAA on the root survives the apply and keeps IPv6 visitors on
     // the old site (AGL-3963; Cloudflare raised it at onboarding). Asked
     // before the owner goes to the provider, where they can delete it.
-    const strayIpv6 =
+    const addresses =
       found.zone.template === 'apex' ? await deps.strayIpv6(found.zone.root).catch(() => []) : []
     const answer: DomainConnectDiscoverResponse = {
       supported: true,
       providerName: found.provider.providerName,
-      strayIpv6,
+      strayIpv6: addresses.length ? { name: found.zone.root, addresses } : null,
     }
     return json(answer)
   }

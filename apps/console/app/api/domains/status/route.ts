@@ -153,7 +153,7 @@ async function handler(request: Request): Promise<Response> {
   const conflicts = await withStrayIpv6Conflicts(
     twin ? [domain, twin] : [domain],
     status.conflicts ?? [],
-  ).catch(() => status.conflicts)
+  )
   return Response.json({
     domain,
     state: status.state,

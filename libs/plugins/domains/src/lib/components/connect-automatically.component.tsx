@@ -117,7 +117,7 @@ export default function ConnectAutomatically(props: ConsoleHostDomainConnectZone
   const [typed, setTyped] = useState('')
   const [providerName, setProviderName] = useState<string | null>(null)
   // A previous host's AAAA on the zone root, which the apply leaves (AGL-3963).
-  const [strayIpv6, setStrayIpv6] = useState<string[]>([])
+  const [strayIpv6, setStrayIpv6] = useState<{ name: string; addresses: string[] } | null>(null)
   const [phase, setPhase] = useState<Phase>('idle')
   const [problem, setProblem] = useState<string | null>(null)
   const [active, setActiveState] = useState<ActiveSession | null>(null)
@@ -140,11 +140,10 @@ export default function ConnectAutomatically(props: ConsoleHostDomainConnectZone
 
   useEffect(() => {
     setProblem(null)
-    if (!looksLikeFullDomain(typed) || !user) {
-      setProviderName(null)
-      setStrayIpv6([])
-      return
-    }
+    // The last domain's answer is not this one's: clear it while asking.
+    setProviderName(null)
+    setStrayIpv6(null)
+    if (!looksLikeFullDomain(typed) || !user) return
     let current = true
     void (async () => {
       try {
@@ -155,12 +154,10 @@ export default function ConnectAutomatically(props: ConsoleHostDomainConnectZone
         const answer = response.ok ? ((await response.json()) as DomainConnectDiscoverResponse) : null
         if (!current) return
         setProviderName(answer?.supported ? answer.providerName : null)
-        setStrayIpv6(answer?.supported && Array.isArray(answer.strayIpv6) ? answer.strayIpv6 : [])
+        const stray = answer?.supported ? answer.strayIpv6 : null
+        setStrayIpv6(stray && Array.isArray(stray.addresses) && stray.addresses.length ? stray : null)
       } catch {
-        if (current) {
-          setProviderName(null)
-          setStrayIpv6([])
-        }
+        // Cleared above; nothing to draw.
       }
     })()
     return () => {
@@ -358,11 +355,11 @@ export default function ConnectAutomatically(props: ConsoleHostDomainConnectZone
           <Typography variant="caption" color="text.secondary">
             {name} will ask you to sign in and approve the change. No records to copy.
           </Typography>
-          {strayIpv6.length > 0 && (
+          {strayIpv6 && (
             <Alert severity="warning">
-              {`Your domain also has an IPv6 (AAAA) record, ${strayIpv6.join(', ')}, that points at your ` +
-                `previous host. Connecting replaces the IPv4 address but not this record. Delete it at ${name}, ` +
-                'or visitors on IPv6 will keep reaching the old site.'}
+              {`${strayIpv6.name} also has an IPv6 (AAAA) record, ${strayIpv6.addresses.join(', ')}, that ` +
+                `points at your previous host. Connecting replaces the IPv4 address but not this record. ` +
+                `Delete it at ${name}, or visitors on IPv6 will keep reaching the old site.`}
             </Alert>
           )}
         </>

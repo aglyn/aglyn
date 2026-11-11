@@ -480,9 +480,9 @@ export function CustomDomainCard(props: CustomDomainCardProps) {
             */}
             {status?.conflicts?.length ? (
               <Alert severity="warning">
-                {'Other DNS records are answering for this name and will make ' +
-                  'the site load intermittently. Remove them at your ' +
-                  'registrar: '}
+                {'Other DNS records are answering for this name, so some ' +
+                  'visitors reach the wrong place or the site will load ' +
+                  'intermittently. Remove them at your registrar: '}
                 {status.conflicts
                   .map((conflict) =>
                     [conflict.type, conflict.name, conflict.value]

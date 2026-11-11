@@ -158,7 +158,7 @@ describe('discover', () => {
     const response = await createDiscoverRoute(world().deps)(
       get('domain-connect/discover?hostId=host-1&domain=example.com', 'admin'),
     )
-    expect(await response.json()).toEqual({ supported: true, providerName: 'Provider DNS', strayIpv6: [] })
+    expect(await response.json()).toEqual({ supported: true, providerName: 'Provider DNS', strayIpv6: null })
   })
 
   it('names a previous host’s AAAA on the root, which the apex template leaves (AGL-3963)', async () => {
@@ -167,7 +167,7 @@ describe('discover', () => {
     const response = await createDiscoverRoute(deps)(
       get('domain-connect/discover?hostId=host-1&domain=www.example.com', 'admin'),
     )
-    expect(await response.json()).toEqual({ supported: true, providerName: 'Provider DNS', strayIpv6: ['2001:db8::1'] })
+    expect(await response.json()).toEqual({ supported: true, providerName: 'Provider DNS', strayIpv6: { name: 'example.com', addresses: ['2001:db8::1'] } })
     // The zone root, where the template writes `A @`, whatever name was typed.
     expect(strayIpv6).toHaveBeenCalledWith('example.com')
   })
@@ -184,7 +184,7 @@ describe('discover', () => {
     const response = await createDiscoverRoute(deps)(
       get('domain-connect/discover?hostId=host-1&domain=shop.example.com', 'admin'),
     )
-    expect((await response.json()).strayIpv6).toEqual([])
+    expect((await response.json()).strayIpv6).toBeNull()
     expect(strayIpv6).not.toHaveBeenCalled()
   })
 
@@ -193,7 +193,7 @@ describe('discover', () => {
     const response = await createDiscoverRoute(deps)(
       get('domain-connect/discover?hostId=host-1&domain=example.com', 'admin'),
     )
-    expect(await response.json()).toEqual({ supported: true, providerName: 'Provider DNS', strayIpv6: [] })
+    expect(await response.json()).toEqual({ supported: true, providerName: 'Provider DNS', strayIpv6: null })
   })
 
   it('answers not supported with no signing key, before asking anything', async () => {
