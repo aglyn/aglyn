@@ -341,7 +341,8 @@ final class ConsolePosOfflineAPITests: XCTestCase {
     let transport = Recording(#"{"kit":\#(kitJSON)}"#)
     let read = try await ConsolePosOfflineAPI(api: client(transport), hostID: "h1").kit()
     XCTAssertEqual(transport.requests.last?.url?.path, "/api/commerce/pos-offline-sync")
-    XCTAssertEqual(transport.requests.last?.url?.query, "hostId=h1")
+    // The app can make a card's intent on a store's own Stripe account, and says so (AGL-4219).
+    XCTAssertEqual(transport.requests.last?.url?.query, "hostId=h1&cardChargeModels=direct")
     XCTAssertEqual(transport.requests.last?.httpMethod, "GET")
     XCTAssertEqual(read.tax.pct, 8)
     XCTAssertEqual(read.maxDiscountPct, 20)

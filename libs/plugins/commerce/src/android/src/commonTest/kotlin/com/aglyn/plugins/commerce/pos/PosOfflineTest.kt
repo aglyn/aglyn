@@ -361,7 +361,8 @@ class ConsolePosOfflineApiTest {
     val seen = mutableListOf<Seen>()
     val read = api(seen, """{"kit":$KIT_JSON}""").kit()
     assertEquals("/api/commerce/pos-offline-sync", seen.single().path)
-    assertEquals("hostId=h1", seen.single().query)
+    // The app can make a card's intent on a store's own Stripe account, and says so (AGL-4219).
+    assertEquals("hostId=h1&cardChargeModels=direct", seen.single().query)
     assertEquals(HttpMethod.Get, seen.single().method)
     assertEquals(8.0, read.tax.pct)
     assertEquals(20.0, read.maxDiscountPct)
