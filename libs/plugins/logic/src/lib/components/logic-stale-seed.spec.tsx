@@ -171,6 +171,9 @@ beforeEach(() => {
   listener.status = 'success'
 })
 
+/** Long enough for a press that was going to write to have written. */
+const settle = () => new Promise((resolve) => setTimeout(resolve, 20))
+
 // This spec pins the refusal, not the wait before it (AGL-4120).
 beforeAll(() => setSeedConfirmWaitMs(0))
 afterAll(() => setSeedConfirmWaitMs())
@@ -181,18 +184,19 @@ describe('HostVariablesCard (AGL-1358)', () => {
     fireEvent.click(screen.getByRole('button', { name: 'Save variable' }))
   }
 
-  it('REFUSES to rewrite a variable seeded from an unconfirmed read', async () => {
+  it('HOLDS Save on a variable seeded from an unconfirmed read, keeping it open', async () => {
     listener.fromCache = true
     render(<HostVariablesCard hostId="host-1" org={ORG} />)
 
     editFirstVariableAndSave()
-
-    // Settled, so this cannot pass merely by asserting too early.
-    await waitFor(() => expect(enqueueSnackbar).toHaveBeenCalled())
+    await settle()
+    // Held, not refused: nothing was pressed into the wait, and the reason
+    // sits beside the held control (AGL-4047).
+    expect(enqueueSnackbar).not.toHaveBeenCalled()
+    expect(screen.getAllByRole('status').map((note) => note.textContent)).toContain(
+      'Checking your variable with the server…',
+    )
     expect(setDoc).not.toHaveBeenCalled()
-    const [message] = enqueueSnackbar.mock.calls[0]
-    expect(message).toEqual(expect.stringContaining('variable'))
-    expect(message).toEqual(expect.stringMatching(/nothing was saved/i))
     // …and the dialog is still open with what was being edited.
     expect((screen.getByLabelText(/^Name/) as HTMLInputElement).value).toEqual(
       'siteTagline',
@@ -249,17 +253,20 @@ describe('HostFunctionsCard (AGL-1358)', () => {
     fireEvent.click(screen.getByRole('button', { name: 'Done' }))
   }
 
-  it('REFUSES to rewrite a function seeded from an unconfirmed read', async () => {
+  it('HOLDS Done on a function seeded from an unconfirmed read, keeping it open', async () => {
     listener.fromCache = true
     render(<HostFunctionsCard hostId="host-1" org={ORG} />)
 
     editFirstFunctionAndSave()
 
-    await waitFor(() => expect(enqueueSnackbar).toHaveBeenCalled())
+    await settle()
+    // Held, not refused: nothing was pressed into the wait, and the reason
+    // sits beside the held control (AGL-4047).
+    expect(enqueueSnackbar).not.toHaveBeenCalled()
+    expect(screen.getAllByRole('status').map((note) => note.textContent)).toContain(
+      'Checking your function with the server…',
+    )
     expect(setDoc).not.toHaveBeenCalled()
-    const [message] = enqueueSnackbar.mock.calls[0]
-    expect(message).toEqual(expect.stringContaining('function'))
-    expect(message).toEqual(expect.stringMatching(/nothing was saved/i))
     // Parameter rows reuse the `Name` label, so the function's own field is
     // the first one in the dialog.
     expect(

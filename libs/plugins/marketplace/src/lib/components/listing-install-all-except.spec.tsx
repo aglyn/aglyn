@@ -28,6 +28,11 @@
  * Radios and a visible list, never a dropdown.
  */
 
+import {
+  DEFAULT_ICON,
+  mdiCheckCircleOutline,
+  mdiInformationOutline,
+} from '@aglyn/shared-data-mdi'
 import { act, fireEvent, render, screen, within } from '@testing-library/react'
 import type { ReactNode } from 'react'
 
@@ -107,7 +112,8 @@ jest.mock('@aglyn/shared-ui-jsx', () => ({
       ))}
     </div>
   ),
-  MdiIcon: () => null,
+  // The real icon, so the What's included ticks can be read (AGL-4047).
+  MdiIcon: jest.requireActual('@aglyn/shared-ui-jsx/components/mdi-icon/mdi-icon').MdiIcon,
   useConfirmationContext: () => ({ confirm: jest.fn().mockResolvedValue(undefined) }),
 }))
 jest.mock('@aglyn/shared-ui-next/contexts/next-page-title-provider', () => ({ NextPageTitle: () => null }))
@@ -308,5 +314,15 @@ describe("What's included follows the Install to choice", () => {
       screen.getByText('A plugin that runs in its own secure space, separate from your site'),
     ).toBeTruthy()
     expect(screen.queryByText(/CSP|origin/)).toBeNull()
+  })
+
+  it('ticks each row with its own icon, never the "?" diamond', async () => {
+    await mount('plugin')
+    const heading = screen.getByText("What's included")
+    const list = heading.parentElement as HTMLElement
+    const drawn = Array.from(list.querySelectorAll('svg path')).map((p) => p.getAttribute('d'))
+    expect(drawn.length).toBeGreaterThan(0)
+    expect(drawn).not.toContain(DEFAULT_ICON.path)
+    expect(drawn.every((d) => d === mdiCheckCircleOutline.path || d === mdiInformationOutline.path)).toBe(true)
   })
 })

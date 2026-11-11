@@ -186,6 +186,10 @@ struct SpecScreenBody: View {
   @State private var running: String?
   @State private var searchText = ""
   @State private var started = false
+  /// Whether this screen is on show. An action that goes back once it answers (`back`) leaves alone a screen that has
+  /// already gone, so its going back cannot close what is on screen now: Delete site's answer comes after the window
+  /// has left the deleted site for the workspace's Sites.
+  @State private var onScreen = false
   /// Each conditional zone screen's own read (its `showWhen`), keyed by screen and params. It is loaded here, by the
   /// screen that is always on screen, never by the row: a row that draws nothing until its read is in has no view for
   /// the read to run on, so it never appeared (GroupTaskTests).
@@ -239,6 +243,8 @@ struct SpecScreenBody: View {
 
   var body: some View {
     content
+      .onAppear { onScreen = true }
+      .onDisappear { onScreen = false }
       .safeAreaInset(edge: .top) {
         if let notice {
           // Opaque beneath its tint: the list scrolls under this inset, and its text must not show through.
@@ -799,7 +805,7 @@ struct SpecScreenBody: View {
       }
       if action.resume { gateResolve?() }
       if action.back {
-        dismiss()
+        if onScreen { dismiss() }
         return
       }
       if let follow = model.followUp {

@@ -61,6 +61,12 @@ import {
   writeGuardedBySeed,
   type ListenHandle,
 } from '@aglyn/tenant-feature-instance'
+import {
+  isSeedChecking,
+  seedCheckingText,
+  useSeedEdits,
+} from '@aglyn/tenant-feature-instance/hooks/use-seed-edits'
+import { seedEditsBetween } from '@aglyn/tenant-feature-instance/hooks/use-seed-draft'
 import { DATASET_AUTHORABLE_FIELD_TYPES, DATASET_FIELD_TYPES, DATASET_FIELD_TYPE_LABELS, type DatasetFieldDefinition, type DatasetFieldType, type DatasetModel, effectiveDatasetModel } from '../model/dataset-models'
 import { datasetDisplayName, datasetNameLower, defaultDatasetFieldId, validateDatasetFieldId } from '../model/datasets'
 import { RECORD_PAGE_ADDRESS_FIELD_TYPE, isRecordAddressField } from '../record-pages/record-pages'
@@ -161,6 +167,14 @@ function sharingChoiceKey(choice: SiteSharingValue | null): string {
  * lazily on next document save; fieldIds are stable keys — only display
  * names rename.
  */
+/** The schema and the names as the dialog edits them, each key on its own. */
+interface SchemaDraft {
+  fields: DatasetModel['fields']
+  order: DatasetModel['order']
+  singular: string
+  plural: string
+}
+
 export function DatasetSchemaDialog(props: DatasetSchemaDialogProps) {
   const {
     hostId,
@@ -234,13 +248,15 @@ export function DatasetSchemaDialog(props: DatasetSchemaDialogProps) {
   /** The dataset as this choice would leave it, for what depends on where it is. */
   const sharingPreview = useMemo(() => sharingDraft?.fields ?? { visibleTo: [] as string[] }, [sharingDraft])
 
-  const [model, setModel] = useState<DatasetModel>({ fields: {}, order: [] })
-  const [names, setNames] = useState<{ singular: string; plural: string }>({
-    singular: '',
-    plural: '',
-  })
-  useEffect(() => {
-    if (!dataset) return
+  /*
+   * The schema and the names, kept as EDITS over the dataset (AGL-4047).
+   * They used to be reset from every snapshot of it, so the server's answer
+   * landing after a keystroke took what was typed; now a key the reader
+   * changed keeps their value and every other key follows the dataset, and
+   * Save is held until the server has answered (`checkingText`).
+   */
+  const schemaSeed = useMemo(() => {
+    if (!dataset) return { fields: {}, order: [], singular: '', plural: '' } as SchemaDraft
     // The fourth copy of the AGL-1466 substitution (AGL-1484), and the seed
     // half of it. Persisting the default on open was the other option and
     // AGL-1466 ruled it out: opening a dialog would write, the AGL-1042
@@ -250,15 +266,55 @@ export function DatasetSchemaDialog(props: DatasetSchemaDialogProps) {
     // for why the pair is the safety property. The sharing is seeded by the
     // effect below.
     const effective = effectiveDatasetModel(dataset)
-    setModel({
+    return {
       fields: JSON.parse(JSON.stringify(effective.fields)),
       order: [...effective.order],
-    })
-    setNames({
       singular: dataset.names?.singular ?? '',
       plural: dataset.names?.plural ?? datasetDisplayName(dataset),
-    })
+    } as SchemaDraft
   }, [dataset])
+  const schema = useSeedEdits<SchemaDraft>(schemaSeed)
+  const { fields: modelFields, order: modelOrder, singular, plural } = schema.values
+  const model = useMemo<DatasetModel>(
+    () => ({ fields: modelFields, order: modelOrder }),
+    [modelFields, modelOrder],
+  )
+  const names = useMemo(() => ({ singular, plural }), [singular, plural])
+  const { edit: editSchema, discard: discardSchema } = schema
+  const setModel = useCallback(
+    (next: DatasetModel | ((previous: DatasetModel) => DatasetModel)) =>
+      editSchema((values) => {
+        const previous = { fields: values.fields, order: values.order }
+        return seedEditsBetween(values, {
+          ...values,
+          ...(typeof next === 'function' ? next(previous) : next),
+        })
+      }),
+    [editSchema],
+  )
+  const setNames = useCallback(
+    (
+      next:
+        | { singular: string; plural: string }
+        | ((previous: { singular: string; plural: string }) => { singular: string; plural: string }),
+    ) =>
+      editSchema((values) => {
+        const previous = { singular: values.singular, plural: values.plural }
+        return seedEditsBetween(values, {
+          ...values,
+          ...(typeof next === 'function' ? next(previous) : next),
+        })
+      }),
+    [editSchema],
+  )
+  // Fresh edits for each dataset the dialog is opened on.
+  const datasetId = dataset?.$id
+  useEffect(() => {
+    discardSchema()
+  }, [datasetId, discardSchema])
+  const checkingText = isSeedChecking({ fromCache: seedFromCache, unreadable: seedUnreadable })
+    ? seedCheckingText('collection schema')
+    : undefined
   /*
    * The sharing, seeded for this dataset and again only when its STORED
    * sharing moves, not on every snapshot of it (AGL-4047). A save writes the
@@ -367,7 +423,7 @@ export function DatasetSchemaDialog(props: DatasetSchemaDialogProps) {
         : [...prev.order, fieldId as string],
     }))
     setFieldEditor(null)
-  }, [fieldEditor, model, recordCount, confirm, enqueueSnackbar])
+  }, [setModel, fieldEditor, model, recordCount, confirm, enqueueSnackbar])
 
   const handleFieldRemove = useCallback(
     (fieldId: string) => async () => {
@@ -389,7 +445,7 @@ export function DatasetSchemaDialog(props: DatasetSchemaDialogProps) {
         return { fields, order: prev.order.filter((id) => id !== fieldId) }
       })
     },
-    [model, confirm],
+    [setModel, model, confirm],
   )
 
   const moveField = useCallback(
@@ -403,7 +459,7 @@ export function DatasetSchemaDialog(props: DatasetSchemaDialogProps) {
         order.splice(target, 0, fieldId)
         return { ...prev, order }
       }),
-    [],
+    [setModel],
   )
 
   const handleSave = useCallback(async () => {
@@ -795,13 +851,19 @@ export function DatasetSchemaDialog(props: DatasetSchemaDialogProps) {
           </SchemaControls>
         </DialogContent>
         <DialogActions>
+          {checkingText ? (
+            <Typography variant="body2" color="text.secondary" role="status" sx={{ mr: 'auto' }}>
+              {checkingText}
+            </Typography>
+          ) : null}
           <Button onClick={onClose}>{'Cancel'}</Button>
           {/* Held until the data scope resolves (AGL-1061) — a save in that
-              window writes the schema to the legacy host path. */}
+              window writes the schema to the legacy host path. Held too while
+              the dataset read is the cache's (AGL-4047). */}
           <Button
             variant="contained"
             color="primary"
-            disabled={!dataScope}
+            disabled={!dataScope || Boolean(checkingText)}
             onClick={handleSave}
           >
             {sharingOnlyReason ? 'Save sharing' : 'Save schema'}
