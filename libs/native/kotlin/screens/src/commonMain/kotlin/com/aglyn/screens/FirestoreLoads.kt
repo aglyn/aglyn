@@ -8,6 +8,7 @@ import com.aglyn.core.FirestoreQuery
 import com.aglyn.core.FirestoreReader
 import com.aglyn.core.FirestoreTimestamp
 import com.aglyn.core.decode
+import kotlinx.coroutines.flow.first
 import kotlinx.serialization.json.JsonArray
 import kotlinx.serialization.json.JsonElement
 import kotlinx.serialization.json.JsonNull
@@ -51,6 +52,35 @@ internal object FirestoreLoads {
   }
 
   suspend fun document(reader: FirestoreReader, path: String): JsonElement = reader.get(path)?.let { json(it) } ?: JsonNull
+
+  /** How long `serverDocument` waits for the server past the cache's answer: the console guard's 12 s (tests shorten it). */
+  internal var serverDeadlineMs: Long = 12_000
+
+  /** A document read as `serverDocument` answers it: the document, and whether the server confirmed it. */
+  data class ServerAnswer(val document: FirestoreDoc?, val confirmed: Boolean)
+
+  /**
+   * A document as the server answers it (AGL-4047): an answer the device's cache gives first is waited past, up to
+   * [deadlineMs]. `confirmed` is false when only the cache answered by then; a read that failed throws.
+   */
+  suspend fun serverDocument(reader: FirestoreReader, path: String, deadlineMs: Long = serverDeadlineMs): ServerAnswer {
+    var latest: com.aglyn.core.Live.Ready<FirestoreDoc?>? = null
+    val confirmed = kotlinx.coroutines.withTimeoutOrNull(deadlineMs) {
+      reader.observeDoc(path).first { live ->
+        when (live) {
+          is com.aglyn.core.Live.Failed -> throw live.error
+          is com.aglyn.core.Live.Ready -> {
+            latest = live
+            !live.fromCache
+          }
+          com.aglyn.core.Live.Loading -> false
+        }
+      }
+    }
+    if (confirmed is com.aglyn.core.Live.Ready) return ServerAnswer(confirmed.value, true)
+    val cached = latest ?: throw IllegalStateException("The server did not answer in time.")
+    return ServerAnswer(cached.value, false)
+  }
 
   /** `2026-10-13T04:00:00Z` (fraction optional, or a bare date) as a timestamp, else null. */
   internal fun isoInstant(text: String): FirestoreTimestamp? {

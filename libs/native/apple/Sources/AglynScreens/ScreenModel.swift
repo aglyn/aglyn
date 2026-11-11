@@ -538,8 +538,16 @@ public final class ScreenModel {
       guard let reader else { return (load.key, .null, nil) }
       let org = try await FirestoreLoads.document(reader, ScreenValues.render("orgs/{org.id}", in: context))
       guard scope == "site" else { return (load.key, SwitchboardRows.org(org), nil) }
-      let host = try await FirestoreLoads.document(reader, ScreenValues.render("hosts/{site.id}", in: context))
-      return (load.key, SwitchboardRows.site(org, host), nil)
+      // The site's lists as the server holds them (AGL-4047): a cached copy is waited past, and if only the cache has
+      // answered by the deadline the switches are held (`checking`). A read that failed fails the screen.
+      let host = try await FirestoreLoads.serverDocument(reader, ScreenValues.render("hosts/{site.id}", in: context))
+      var rows = SwitchboardRows.site(org, host.document.map { FirestoreLoads.json($0) } ?? .null)
+      if case .object(var record) = rows {
+        record["checking"] = .bool(!host.confirmed)
+        record["checkingText"] = .string(SwitchboardRows.checkingText)
+        rows = .object(record)
+      }
+      return (load.key, rows, nil)
     }
     if let query = load.query {
       guard let reader else { return (load.key, .null, nil) }
@@ -639,6 +647,33 @@ public final class ScreenModel {
     let rest = segments.dropFirst().joined(separator: ".")
     record[first] = appending(rows, at: rest, in: record[first] ?? .array([]))
     return .object(record)
+  }
+
+  /// Switches one plugin on or off for the site (`sitePluginSwitch`): the move is applied to the site's lists as the
+  /// server holds them now, never to a copy the screen read earlier (AGL-4047). A read the server has not confirmed
+  /// by the deadline, or one that failed, saves nothing and says why, in the console's words.
+  private func switchSitePlugin(_ move: JSONValue, _ scope: JSONValue, success: String?) async -> ActionOutcome {
+    guard let writer, let reader else { return .failed("Saving is not available here.") }
+    let pluginID = ScreenValues.render(move["pluginId"]?.stringValue ?? "", in: scope)
+    let hostID = scope["site"]?["id"]?.stringValue ?? ""
+    let orgID = scope["org"]?["id"]?.stringValue ?? ""
+    guard !pluginID.isEmpty, !hostID.isEmpty, !orgID.isEmpty else { return .failed("Saving is not available here.") }
+    let host: (document: FirestoreDocument?, confirmed: Bool)
+    do {
+      host = try await FirestoreLoads.serverDocument(reader, "hosts/\(hostID)")
+    } catch {
+      return .failed(SwitchboardRows.unreadableText)
+    }
+    guard host.confirmed else { return .failed(SwitchboardRows.unconfirmedText) }
+    do {
+      let org = try await FirestoreLoads.document(reader, "orgs/\(orgID)")
+      let fields = SwitchboardRows.switched(
+        org, host.document.map { FirestoreLoads.json($0) } ?? .null, pluginID: pluginID, on: move["on"] == .bool(true))
+      try await writer.merge(["hosts", hostID], FirestoreLoads.plain(.object(fields)) as? [String: Any] ?? [:])
+      return .done(message: success.map { ScreenValues.render($0, in: scope) }, response: nil)
+    } catch {
+      return .failed(error.localizedDescription)
+    }
   }
 
   /// Runs an action against `scope` (the screen's context, maybe with an
@@ -962,6 +997,9 @@ public final class ScreenModel {
       } catch {
         return .failed(error.localizedDescription)
       }
+    }
+    if let move = action.sitePluginSwitch {
+      return await switchSitePlugin(move, scope, success: action.success)
     }
     if let write = action.write {
       guard let writer else { return .failed("Saving is not available here.") }

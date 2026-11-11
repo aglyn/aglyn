@@ -150,6 +150,34 @@ enum FirestoreLoads {
     return doc
   }
 
+  /// How long `serverDocument` waits for the server past the cache's answer: the console guard's 12 s (tests shorten it).
+  @MainActor static var serverDeadline: Duration = .seconds(12)
+
+  /// A document as the server answers it (AGL-4047): an answer the device's cache gives first is waited past, up to
+  /// `deadline`. `confirmed` is false when only the cache answered by then; a read that failed throws.
+  @MainActor
+  static func serverDocument(
+    _ reader: FirestoreReader, _ path: String, deadline: Duration? = nil
+  ) async throws -> (document: FirestoreDocument?, confirmed: Bool) {
+    let deadline = deadline ?? serverDeadline
+    let wait = ServerAnswerWait()
+    return try await withCheckedThrowingContinuation { continuation in
+      wait.continuation = continuation
+      wait.listener = reader.listenDocumentAnswer(segments(path)) { result in
+        switch result {
+        case .failure(let error): wait.finish(.failure(error))
+        case .success(let answer):
+          wait.latest = .some(answer.value)
+          if !answer.fromCache { wait.finish(.success((answer.value, true))) }
+        }
+      }
+      Task { @MainActor in
+        try? await Task.sleep(for: deadline)
+        if let latest = wait.latest { wait.finish(.success((latest, false))) } else { wait.finish(.failure(URLError(.timedOut))) }
+      }
+    }
+  }
+
   /// How many rows a query load reads to start with: the spec's `limit`, or fifty.
   static func queryLimit(_ spec: JSONValue) -> Int { ScreenValues.number(spec["limit"]).map { Int($0) } ?? 50 }
 
@@ -254,5 +282,21 @@ enum FirestoreLoads {
       }
       if finished { listener?.remove() }
     }
+  }
+}
+
+/// One `serverDocument` wait: the first of its listener's server answer, its failure or its deadline ends it.
+@MainActor
+private final class ServerAnswerWait {
+  var continuation: CheckedContinuation<(document: FirestoreDocument?, confirmed: Bool), Error>?
+  var listener: FirestoreListening?
+  var latest: FirestoreDocument??
+
+  func finish(_ result: Result<(document: FirestoreDocument?, confirmed: Bool), Error>) {
+    guard let continuation else { return }
+    self.continuation = nil
+    listener?.remove()
+    listener = nil
+    continuation.resume(with: result)
   }
 }
