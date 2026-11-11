@@ -534,6 +534,19 @@ describe('the Fields list table (AGL-3335)', () => {
     expect(screen.getByLabelText('Clear sorting and filters to reorder')).toBeTruthy()
   })
 
+  /**
+   * The first press is never refused for a late server (AGL-4047): the order
+   * arrows are held while the definitions read is the cache's, with the
+   * reason beside them, rather than pressed into a wait that can end refused.
+   */
+  it('holds the arrows, with the reason, while the definitions are unconfirmed', () => {
+    withFields(TWELVE)
+    definitionsFor.mockReturnValue({ definitions: TWELVE, active: TWELVE, ready: true, fromCache: true })
+    render(<ContactsFieldsSection hostId="host-1" org={{}} />)
+    expect(arrow('Move Tier up').disabled).toBe(true)
+    expect(screen.getByRole('status').textContent).toBe('Checking your field order with the server…')
+  })
+
   it('filters by Type and by Required, on the query', () => {
     withFields(TWELVE)
     render(<ContactsFieldsSection hostId="host-1" org={{}} />)

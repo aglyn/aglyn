@@ -44,7 +44,7 @@ import {
 import { collection, doc, getDoc } from 'firebase/firestore'
 import { ScanAdornment } from '../../barcode/scan-button.component'
 import { productCollectionFields } from './smart-collections'
-import { lazy, memo, Suspense, useCallback, useMemo, useRef, useState } from 'react'
+import { lazy, memo, Suspense, useCallback, useMemo, useState } from 'react'
 import {
   ceilingedWindow,
   collectionCeiling,
@@ -56,6 +56,12 @@ import {
   type ListenHandle,
 } from '@aglyn/tenant-feature-instance'
 import { writeSiteWideChange } from '@aglyn/tenant-feature-instance/hooks/helpers/site-wide-change'
+import {
+  isSeedChecking,
+  seedCheckingText,
+  useSeedEdits,
+} from '@aglyn/tenant-feature-instance/hooks/use-seed-edits'
+import { seedEditsBetween } from '@aglyn/tenant-feature-instance/hooks/use-seed-draft'
 import { type PickedMedia, useMediaPicker } from '@aglyn/aglyn'
 import {
   type ConsoleWidgetSlotRenderer,
@@ -1301,7 +1307,6 @@ export function ProductEditorDialog(props: ProductEditorDialogProps) {
     () => (product ? CommerceModel.liftLegacyProduct(product) : null),
     [product],
   )
-  const [draft, setDraft] = useState<CommerceModel.HostProduct | null>(null)
   const [slugTouched, setSlugTouched] = useState(false)
   // The console media browser is provided by the shell (AGL-395); opening it
   // resolves with the chosen asset (or null if cancelled).
@@ -1313,22 +1318,33 @@ export function ProductEditorDialog(props: ProductEditorDialogProps) {
     },
     [pickMedia],
   )
-  // Lazy-init per open; parent remounts via `key` on product change.
-  const current: CommerceModel.HostProduct = draft ?? lifted ?? blankProduct()
+  /*
+   * What was typed, kept as EDITS over the product (AGL-4047). The hub hands
+   * the row as its list has it now, so the server's copy arriving after the
+   * dialog opened on the cache's replaces it under every field nobody
+   * touched, and Save is held until it has (`checking`). Lazy-init per open;
+   * the parent remounts via `key` on product change.
+   */
+  const seed = useMemo(() => lifted ?? blankProduct(), [lifted])
+  const form = useSeedEdits<CommerceModel.HostProduct>(seed)
+  const current = form.values
+  const { edit } = form
+  const checking =
+    Boolean(product) &&
+    isSeedChecking({ fromCache: seedFromCache, unreadable: seedUnreadable })
   /*
    * The two writes every field goes through, each keeping its identity for
    * the life of the dialog so a memoized section redraws only when its own
-   * slice of the draft does (AGL-3423). Both write from the draft as last
-   * rendered, which `latest` holds: `update` spreads a patch over it, and a
-   * patch that is a function is handed it, so no field holds a copy of the
-   * product to spread. A write that lands after a picker closes lands on the
-   * draft as it is then.
+   * slice of the draft does (AGL-3423). Both write from the draft as it is
+   * when the write lands, which `edit` hands them: `update` spreads a patch
+   * over it, and a patch that is a function is handed it, so no field holds a
+   * copy of the product to spread. A write that lands after a picker closes
+   * lands on the draft as it is then. Only the keys a write moved are kept as
+   * edits (`seedEditsBetween`), so every other key follows the seed.
    */
-  const latest = useRef(current)
-  latest.current = current
   const replaceDraft = useCallback<DraftReplace>(
-    (build) => setDraft(build(latest.current)),
-    [],
+    (build) => edit((values) => seedEditsBetween(values, build(values))),
+    [edit],
   )
   const update = useCallback<ProductUpdate>(
     (patch) =>
@@ -1438,12 +1454,9 @@ export function ProductEditorDialog(props: ProductEditorDialogProps) {
         if (typeof value === 'string') staged[field] = value
       }
       if (!Object.keys(staged).length) return
-      setDraft((prior) => {
-        const base = prior ?? lifted ?? blankProduct()
-        return { ...base, seo: { ...base.seo, ...staged } }
-      })
+      edit((base) => ({ seo: { ...base.seo, ...staged } }))
     },
-    [lifted],
+    [edit],
   )
 
   /**
@@ -1454,12 +1467,9 @@ export function ProductEditorDialog(props: ProductEditorDialogProps) {
    */
   const proposeProductValues = useCallback(
     (values: ConsoleProductCopyValues) => {
-      setDraft((prior) => {
-        const base = prior ?? lifted ?? blankProduct()
-        return { ...base, ...CommerceModel.productCopyPatch(base, values) }
-      })
+      edit((base) => CommerceModel.productCopyPatch(base, values))
     },
-    [lifted],
+    [edit],
   )
   const zoneCategories = useMemo(
     () => categories.rows.map((category: any) => ({ id: String(category.$id), name: String(category.name ?? '') })),
@@ -2087,11 +2097,16 @@ export function ProductEditorDialog(props: ProductEditorDialogProps) {
         ) : null}
       </DialogContent>
       <DialogActions>
+        {checking ? (
+          <Typography variant="body2" color="text.secondary" role="status" sx={{ mr: 'auto' }}>
+            {seedCheckingText('product')}
+          </Typography>
+        ) : null}
         <Button onClick={onClose}>{'Cancel'}</Button>
         <Button
           variant="contained"
           color="primary"
-          disabled={!current.name.trim() || Boolean(error)}
+          disabled={checking || !current.name.trim() || Boolean(error)}
           onClick={handleSave}
         >
           {'Save product'}

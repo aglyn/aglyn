@@ -57,6 +57,10 @@ import {
   updateDoc,
   where,
 } from 'firebase/firestore'
+import {
+  isSeedChecking,
+  seedCheckingText,
+} from '@aglyn/tenant-feature-instance/hooks/use-seed-edits'
 import { useCallback, useEffect, useState } from 'react'
 import { crmVisibleToClause } from '../hooks/use-crm-scope'
 import {
@@ -227,6 +231,15 @@ export function PipelineStagesDialog(props: PipelineStagesDialogProps) {
   }, [firestore, orgId, pipeline, problem, stages, unreadable, fromCache, listen, enqueueSnackbar, onClose])
 
   const openCount = stages.filter((stage) => stage.kind === 'open').length
+  /*
+   * Save is held while the pipeline read is the cache's, with the reason
+   * beside it, rather than pressed into a wait that can end refused
+   * (AGL-4047). The draft follows the stored stages until it is edited, so
+   * nothing is lost meanwhile.
+   */
+  const checkingText = isSeedChecking({ fromCache, unreadable })
+    ? seedCheckingText('pipeline')
+    : undefined
 
   return (
     <Dialog open={open} onClose={busy ? undefined : onClose} fullWidth maxWidth="sm">
@@ -386,12 +399,17 @@ export function PipelineStagesDialog(props: PipelineStagesDialogProps) {
         </Stack>
       </DialogContent>
       <DialogActions>
+        {checkingText ? (
+          <Typography variant="body2" color="text.secondary" role="status" sx={{ mr: 'auto' }}>
+            {checkingText}
+          </Typography>
+        ) : null}
         <Button onClick={onClose} disabled={busy}>
           {'Cancel'}
         </Button>
         <Button
           variant="contained"
-          disabled={busy || !pipeline || Boolean(problem)}
+          disabled={busy || Boolean(checkingText) || !pipeline || Boolean(problem)}
           onClick={() => void handleSave()}
         >
           {'Save stages'}

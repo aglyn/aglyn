@@ -27,7 +27,7 @@
  */
 
 import { soloConsentGroup } from '@aglyn/aglyn'
-import { fireEvent, render, screen, within } from '@testing-library/react'
+import { fireEvent, render, screen, waitFor, within } from '@testing-library/react'
 import type { ComponentProps, ReactNode } from 'react'
 import { LeadPropertiesCard } from './lead-properties-card'
 
@@ -134,7 +134,7 @@ const lead = {
 
 function renderCard(props: Partial<ComponentProps<typeof LeadPropertiesCard>> = {}) {
   const onConvert = jest.fn()
-  render(
+  const element = (next: Partial<ComponentProps<typeof LeadPropertiesCard>>) => (
     <LeadPropertiesCard
       hostId="host-1"
       consentGroup={soloConsentGroup('host-1')}
@@ -154,10 +154,15 @@ function renderCard(props: Partial<ComponentProps<typeof LeadPropertiesCard>> = 
       }}
       onConvert={onConvert}
       onUnqualify={() => undefined}
-      {...props}
-    />,
+      {...next}
+    />
   )
-  return { onConvert }
+  const view = render(element(props))
+  return {
+    onConvert,
+    rerender: (next: Partial<ComponentProps<typeof LeadPropertiesCard>>) =>
+      view.rerender(element(next)),
+  }
 }
 
 const convert = () => screen.getByRole('button', { name: 'Convert' }) as HTMLButtonElement
@@ -197,6 +202,25 @@ describe('Convert on the lead page', () => {
  */
 describe('the profile on the lead page', () => {
   beforeEach(() => updateDoc.mockClear())
+
+  /**
+   * The first press is never refused for a late server (AGL-4047): Save is
+   * held while the lead read is the cache's, with the reason beside it, and
+   * the edit is saved onto the lead the server confirms.
+   */
+  it('holds Save over an unconfirmed read, then saves the edit onto the server’s lead', async () => {
+    const { rerender } = renderCard({ lead: { ...lead, jobTitle: 'CMO' }, fromCache: true })
+    fireEvent.change(screen.getByLabelText('Company'), { target: { value: 'Acme Brands' } })
+    expect(saveButton().disabled).toBe(true)
+    expect(screen.getByRole('status').textContent).toBe('Checking your lead with the server…')
+
+    // The title was changed elsewhere since the cached snapshot.
+    rerender({ lead: { ...lead, jobTitle: 'CFO' }, fromCache: false })
+    expect((screen.getByLabelText('Company') as HTMLInputElement).value).toBe('Acme Brands')
+    fireEvent.click(saveButton())
+    await waitFor(() => expect(updateDoc).toHaveBeenCalledTimes(1))
+    expect(updateDoc.mock.calls[0]?.[1]).toMatchObject({ company: 'Acme Brands', jobTitle: 'CFO' })
+  })
 
   it('saves the profile as the record stores it, deleting what was cleared', async () => {
     renderCard({ lead: { ...lead, jobTitle: 'CMO', tags: ['warm'] } })

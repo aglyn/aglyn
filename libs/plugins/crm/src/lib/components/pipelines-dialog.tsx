@@ -59,6 +59,10 @@ import {
   where,
   writeBatch,
 } from 'firebase/firestore'
+import {
+  isSeedChecking,
+  seedCheckingText,
+} from '@aglyn/tenant-feature-instance/hooks/use-seed-edits'
 import { useCallback, useEffect, useState } from 'react'
 import {
   activePipelines,
@@ -143,6 +147,15 @@ export function PipelinesDialog(props: PipelinesDialogProps) {
   const [newName, setNewName] = useState('')
   const [renaming, setRenaming] = useState<{ id: string; name: string } | null>(null)
   const [editingStages, setEditingStages] = useState<string | null>(null)
+  /*
+   * Every write is held while the pipelines read is the cache's, with the
+   * reason beside it, rather than pressed into a wait that can end refused
+   * (AGL-4047). Each is built from the pipelines as they are when pressed.
+   */
+  const checkingText = isSeedChecking({ fromCache, unreadable })
+    ? seedCheckingText('pipelines')
+    : undefined
+  const held = busy !== null || Boolean(checkingText)
 
   useEffect(() => {
     if (!open) return
@@ -318,7 +331,8 @@ export function PipelinesDialog(props: PipelinesDialogProps) {
             key: 'restore',
             label: 'Restore',
             icon: <MdiIcon path={mdiArchiveArrowUpOutline.path} size={0.8} />,
-            disabled: working,
+            disabled: held,
+            disabledReason: checkingText,
             onClick: () => handleRestore(pipeline),
           },
         ]
@@ -341,15 +355,16 @@ export function PipelinesDialog(props: PipelinesDialogProps) {
             key: 'default',
             label: 'Set as default',
             icon: <MdiIcon path={mdiStarOutline.path} size={0.8} />,
-            disabled: working || Boolean(pipeline.isDefault),
-            disabledReason: pipeline.isDefault ? 'Already the default' : undefined,
+            disabled: held || Boolean(pipeline.isDefault),
+            disabledReason: pipeline.isDefault ? 'Already the default' : checkingText,
             onClick: () => handleSetDefault(pipeline),
           },
           {
             key: 'archive',
             label: 'Archive',
             icon: <MdiIcon path={mdiArchiveArrowDownOutline.path} size={0.8} />,
-            disabled: working,
+            disabled: held,
+            disabledReason: checkingText,
             destructive: true,
             onClick: () => void handleArchive(pipeline),
           },
@@ -397,7 +412,7 @@ export function PipelinesDialog(props: PipelinesDialogProps) {
             <Button
               size="small"
               variant="contained"
-              disabled={busy !== null || !renaming.name.trim()}
+              disabled={held || !renaming.name.trim()}
               onClick={() => void handleRename()}
             >
               {'Save'}
@@ -470,7 +485,7 @@ export function PipelinesDialog(props: PipelinesDialogProps) {
               />
               <Button
                 variant="contained"
-                disabled={busy !== null || !newName.trim() || Boolean(newProblem) || !user?.uid}
+                disabled={held || !newName.trim() || Boolean(newProblem) || !user?.uid}
                 onClick={() => void handleCreate()}
                 sx={{ mt: 0.25 }}
               >
@@ -480,6 +495,11 @@ export function PipelinesDialog(props: PipelinesDialogProps) {
           </Stack>
         </DialogContent>
         <DialogActions>
+          {checkingText ? (
+            <Typography variant="body2" color="text.secondary" role="status" sx={{ mr: 'auto' }}>
+              {checkingText}
+            </Typography>
+          ) : null}
           {/* Every pipeline with its stages, as a file (AGL-3528). */}
           <CrmExportButton resource={CRM_PIPELINES_RESOURCE} hostId={hostId} label="Export pipelines…" />
           <Button onClick={onClose} disabled={busy !== null}>

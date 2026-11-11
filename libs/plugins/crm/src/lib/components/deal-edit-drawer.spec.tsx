@@ -390,30 +390,42 @@ describe('a save writes what the reader changed', () => {
 })
 
 describe('what still waits for a confirmed read', () => {
-  const REFUSAL = /could not confirm your deal/
-
-  it('refuses a contact change on an unconfirmed read, keeping what was picked', async () => {
-    const { onClose } = openDrawer({ fromCache: true })
+  /**
+   * The first press is never refused for a late server (AGL-4047): an edit
+   * worked out from the read holds Save, with the reason beside it, rather
+   * than pressing into a wait that ends refused, and what was picked stays.
+   */
+  it('holds Save on a contact change over an unconfirmed read, keeping what was picked', async () => {
+    const { onClose, snapshot } = openDrawer({ fromCache: true })
     search('Contact', 'gra')
     fireEvent.click(screen.getByRole('option', { name: /Grace Hopper/ }))
+    expect(
+      (screen.getByRole('button', { name: 'Save deal' }) as HTMLButtonElement).disabled,
+    ).toBe(true)
+    expect(screen.getByRole('status').textContent).toBe('Checking your deal with the server…')
     save()
-
-    await waitFor(() => expect(mockNotices.map((notice) => notice.message)).toEqual([
-      expect.stringMatching(REFUSAL),
-    ]))
+    await new Promise((resolve) => setTimeout(resolve, 20))
+    expect(mockNotices).toEqual([])
     expect(updateDoc).not.toHaveBeenCalled()
     expect(onClose).not.toHaveBeenCalled()
     expect(field('Contact').value).toBe('Grace Hopper')
+
+    // The server answers; the first press saves.
+    snapshot({ fromCache: false })
+    save()
+    await waitFor(() => expect(onClose).toHaveBeenCalled())
+    expect(written()).toMatchObject({ contactId: 'c2' })
   })
 
-  it('refuses an amount change on an unconfirmed read', async () => {
+  it('holds Save on an amount change over an unconfirmed read', async () => {
     openDrawer({ fromCache: true })
     type('Amount', '75.00')
+    expect(
+      (screen.getByRole('button', { name: 'Save deal' }) as HTMLButtonElement).disabled,
+    ).toBe(true)
     save()
-
-    await waitFor(() => expect(mockNotices.map((notice) => notice.message)).toEqual([
-      expect.stringMatching(REFUSAL),
-    ]))
+    await new Promise((resolve) => setTimeout(resolve, 20))
+    expect(mockNotices).toEqual([])
     expect(updateDoc).not.toHaveBeenCalled()
     expect(field('Amount').value).toBe('75.00')
   })

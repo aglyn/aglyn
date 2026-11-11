@@ -60,6 +60,10 @@ import {
   Typography,
 } from '@mui/material'
 import { doc, getDocs, updateDoc } from 'firebase/firestore'
+import {
+  isSeedChecking,
+  seedCheckingText,
+} from '@aglyn/tenant-feature-instance/hooks/use-seed-edits'
 import { useCallback, useEffect, useMemo, useState } from 'react'
 import { pluginRecordListSource } from '@aglyn/aglyn/plugin-manager/plugin-record-lists'
 import type { CrmOrgDoc } from '../hooks/use-crm-scope'
@@ -146,6 +150,16 @@ export function DealProductsCard(props: DealProductsCardProps) {
   const billingHref = orgSlug ? `${buildRoute(Route.MANAGE_BILLING, { orgSlug })}#plans` : undefined
   const [busy, setBusy] = useState(false)
   const [adding, setAdding] = useState(false)
+  /*
+   * Every change is held while the deal read is the cache's, with the reason
+   * beside it, rather than pressed into a wait that can end refused
+   * (AGL-4047). Each change is built from the lines as they are when it is
+   * pressed, so nothing typed needs replaying.
+   */
+  const checkingText = isSeedChecking({ fromCache, unreadable })
+    ? seedCheckingText('deal')
+    : undefined
+  const held = busy || Boolean(checkingText)
 
   /** The one write: the lines and their sum, together. */
   const save = useCallback(
@@ -228,7 +242,7 @@ export function DealProductsCard(props: DealProductsCardProps) {
                 <Button
                   size="small"
                   startIcon={<MdiIcon path={mdiPlus.path} size={0.8} />}
-                  disabled={busy || full}
+                  disabled={held || full}
                   onClick={() => setAdding(true)}
                 >
                   {'Add line'}
@@ -240,6 +254,11 @@ export function DealProductsCard(props: DealProductsCardProps) {
         contentGutterX
         contentGutterY
       >
+        {checkingText ? (
+          <Typography variant="body2" color="text.secondary" role="status" sx={{ mb: 1 }}>
+            {checkingText}
+          </Typography>
+        ) : null}
         {items.length === 0 ? (
           <Typography variant="body2" color="text.secondary">
             {hasCommerce
@@ -273,7 +292,7 @@ export function DealProductsCard(props: DealProductsCardProps) {
                   <TableCell align="right">
                     <QuantityField
                       value={item.quantity}
-                      disabled={busy}
+                      disabled={held}
                       label={`Quantity of ${item.name}`}
                       onCommit={(quantity) => handleQuantity(index, quantity)}
                     />
@@ -288,7 +307,7 @@ export function DealProductsCard(props: DealProductsCardProps) {
                         <IconButton
                           size="small"
                           color="error"
-                          disabled={busy}
+                          disabled={held}
                           aria-label={`Remove ${item.name}`}
                           onClick={() => handleRemove(index)}
                         >
@@ -323,6 +342,7 @@ export function DealProductsCard(props: DealProductsCardProps) {
         catalogNeedsPlan={!hasCommerce && Boolean(catalogHostId)}
         billingHref={billingHref}
         busy={busy}
+        checkingText={checkingText}
         onAdd={handleAdd}
       />
     </>
@@ -395,13 +415,16 @@ interface AddLineDialogProps {
   /** The workspace's Billing plans, for that notice. */
   billingHref?: string
   busy: boolean
+  /** Add is held while the deal is unconfirmed (AGL-4047). */
+  checkingText?: string
   onAdd: (line: CrmDealLineItem) => Promise<void>
 }
 
 type Door = 'catalog' | 'manual'
 
 function AddLineDialog(props: AddLineDialogProps) {
-  const { open, onClose, hostId, currency, catalog, catalogNeedsPlan, billingHref, busy, onAdd } = props
+  const { open, onClose, hostId, currency, catalog, catalogNeedsPlan, billingHref, busy, checkingText, onAdd } =
+    props
   const firestore = useFirestore()
   const [door, setDoor] = useState<Door>(catalog ? 'catalog' : 'manual')
   const [picked, setPicked] = useState<CatalogChoice | null>(null)
@@ -606,10 +629,15 @@ function AddLineDialog(props: AddLineDialogProps) {
         </Stack>
       </DialogContent>
       <DialogActions>
+        {checkingText ? (
+          <Typography variant="body2" color="text.secondary" role="status" sx={{ mr: 'auto' }}>
+            {checkingText}
+          </Typography>
+        ) : null}
         <Button onClick={onClose} disabled={busy}>
           {'Cancel'}
         </Button>
-        <Button variant="contained" disabled={busy || Boolean(problem)} onClick={handleAdd}>
+        <Button variant="contained" disabled={busy || Boolean(checkingText) || Boolean(problem)} onClick={handleAdd}>
           {'Add line'}
         </Button>
       </DialogActions>
