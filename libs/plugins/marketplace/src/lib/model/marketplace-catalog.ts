@@ -486,6 +486,47 @@ export function resolveOrgInstallSummary(
   }
 }
 
+/** A pin's document read, as a live listen reports it. */
+export interface InstallPinRead {
+  data?: unknown
+  status?: string
+  /** The answer came from the local cache and the server has not confirmed it. */
+  fromCache?: boolean
+}
+
+/** Where the install picture of one listing stands: still loading, failed, or answered. */
+export type InstallPictureReadPhase = 'loading' | 'error' | 'ready'
+
+/**
+ * Whether a page may state where a plugin is installed yet (AGL-4047).
+ *
+ * "Not installed" and "Install" are verdicts, and both rest on ABSENCE: no
+ * org pin and no site pin. An absence read too early is not an answer. The
+ * cache answers "missing" first for a pin it has never held, and while
+ * another tab holds the shared cache that answer can stand for seconds, so a
+ * pin is missing only once the server says so, and the sites' pins only once
+ * every one of them has been read. Until then a page shows that it is
+ * loading, and a read that failed is said as a failure, never as "not
+ * installed".
+ *
+ * `orgPin` is `'pending'` while the org id is still resolving and `null` when
+ * there is no org to read a pin under. `sitePins` is the fan-in over the
+ * sites' own pins.
+ */
+export function installPictureReadPhase(input: {
+  orgPin: InstallPinRead | null | 'pending'
+  sitePins: 'loading' | 'failed' | 'answered'
+}): InstallPictureReadPhase {
+  const { orgPin, sitePins } = input
+  if (orgPin === 'pending') return 'loading'
+  if (orgPin && !orgPin.data) {
+    if (orgPin.status === 'error') return 'error'
+    if (orgPin.status === 'loading' || orgPin.fromCache === true) return 'loading'
+  }
+  if (sitePins === 'failed') return 'error'
+  return sitePins === 'loading' ? 'loading' : 'ready'
+}
+
 /** One site an uninstall would touch, and whether it really loses the plugin. */
 export interface UninstallTarget {
   hostId: string
@@ -746,12 +787,39 @@ export function installPlanOutcome(input: {
   return { tone: 'error', text: errors[0] ?? 'Install failed' }
 }
 
-/** The row of the plugins list for one install: the version and where it runs. */
-export function installedPluginCaption(input: { version?: unknown; orgWide: boolean; siteLabels: readonly string[] }): string {
-  return (
-    `v${input.version} · ` +
-    (input.orgWide ? 'every site in this organization' : input.siteLabels.length === 1 ? input.siteLabels[0] : `${input.siteLabels.length} sites`)
-  )
+/**
+ * The row of the plugins list for one install: the version and where it runs.
+ *
+ * `switchedOff` (AGL-4047): the sites it covers whose own Admin › Plugins
+ * switch has it off. They keep the pin but run nothing, so the row does not
+ * call them sites it runs on, the way "Where it runs" and the listing say it.
+ * For an org-wide install that is any site of the workspace; for site pins,
+ * any pinned site. `siteCount` is how many sites the workspace has.
+ */
+export function installedPluginCaption(input: {
+  version?: unknown
+  orgWide: boolean
+  siteLabels: readonly string[]
+  switchedOff?: readonly string[]
+  siteCount?: number
+}): string {
+  const off = input.switchedOff ?? []
+  const offNamed = off.length === 1 ? off[0] : `${off.length} of them`
+  let where: string
+  if (input.orgWide) {
+    where = !off.length
+      ? 'every site in this organization'
+      : input.siteCount != null && off.length >= input.siteCount
+        ? 'every site switched it off'
+        : off.length === 1
+          ? `every site except ${off[0]}, which switched it off`
+          : `every site except ${off.length} that switched it off`
+  } else if (input.siteLabels.length === 1) {
+    where = off.length ? `${input.siteLabels[0]}, which switched it off` : input.siteLabels[0]
+  } else {
+    where = `${input.siteLabels.length} sites` + (off.length ? ` · ${offNamed} switched it off` : '')
+  }
+  return `v${input.version} · ${where}`
 }
 
 // ─── A marketplace plugin's settings, from its manifest (AGL-428, AGL-3671) ───

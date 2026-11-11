@@ -24,7 +24,14 @@ import {
 } from '@aglyn/aglyn'
 import { mdiChevronRight } from '@aglyn/shared-data-mdi'
 import { AppLink, CardDisplay, MdiIcon } from '@aglyn/shared-ui-jsx'
-import { Alert, Chip, Stack, Tooltip, Typography } from '@mui/material'
+import {
+  Alert,
+  Chip,
+  CircularProgress,
+  Stack,
+  Tooltip,
+  Typography,
+} from '@mui/material'
 import {
   collection,
   documentId,
@@ -38,7 +45,10 @@ import {
   useFirestore,
   useFirestoreCollection,
 } from '@aglyn/tenant-feature-instance'
-import { installedPluginCaption } from '../model/marketplace-catalog'
+import {
+  installedPluginCaption,
+  installPictureReadPhase,
+} from '../model/marketplace-catalog'
 import { resolveUpdateState, updateStateLabel } from '../model/update-state'
 
 /** One installation: its org pin, or the sites that pin it. */
@@ -48,6 +58,8 @@ interface Installation {
   pluginId?: string
   version?: string
   siteLabels: string[]
+  /** The sites pinning it, by id (AGL-4047). */
+  siteIds: string[]
   orgWide: boolean
 }
 
@@ -69,13 +81,13 @@ interface Installation {
  * an installation is managed.
  */
 export function OrgPluginInstallsCard(props: ConsoleOrgPluginInstallsZoneProps) {
-  const { orgId, orgSlug, hosts } = props
+  const { orgId, orgSlug, hosts, hostsReady = true } = props
   const firestore = useFirestore()
 
   // Held at null while the org resolves, never `orgs/-pending-` (AGL-1440):
   // installs are member-gated, so the sentinel was a guaranteed-denied listen
   // on every mount.
-  const { data: orgInstalls } = useFirestoreCollection<any>(
+  const orgInstallsRead = useFirestoreCollection<any>(
     () =>
       orgId
         ? query(collection(firestore, 'orgs', orgId, 'installs'), limit(100))
@@ -83,6 +95,7 @@ export function OrgPluginInstallsCard(props: ConsoleOrgPluginInstallsZoneProps) 
     [firestore, orgId],
     { idField: '$id' },
   )
+  const orgInstalls = orgInstallsRead.data
 
   // Site pins too (AGL-1012). Reading only the org pins meant a plugin
   // targeted at specific sites — installed, running, and the whole point of
@@ -91,7 +104,14 @@ export function OrgPluginInstallsCard(props: ConsoleOrgPluginInstallsZoneProps) 
   // the hook count between renders.
   const hostIdsKey = hosts.map((host) => host.id).join('|')
   const [sitePins, setSitePins] = useState<Record<string, any[]>>({})
+  /**
+   * Which site set the pins above answer for, or that reading them failed
+   * (AGL-4047): until they answer, "Nothing installed" would be a guess.
+   */
+  const [sitePinsFor, setSitePinsFor] = useState<string | null>(null)
+  const [sitePinsFailed, setSitePinsFailed] = useState(false)
   useEffect(() => {
+    setSitePinsFailed(false)
     if (!hosts.length) return
     let active = true
     void Promise.all(
@@ -106,28 +126,64 @@ export function OrgPluginInstallsCard(props: ConsoleOrgPluginInstallsZoneProps) 
       }),
     )
       .then((entries) => {
-        if (active) setSitePins(Object.fromEntries(entries))
+        if (!active) return
+        setSitePins(Object.fromEntries(entries))
+        setSitePinsFor(hostIdsKey)
       })
-      .catch(() => undefined)
+      .catch(() => {
+        if (active) setSitePinsFailed(true)
+      })
     return () => {
       active = false
     }
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [firestore, hostIdsKey])
+  /**
+   * Whether the page may say what is installed (AGL-4047). An empty list the
+   * server has not confirmed is a cache's guess, and the sites' pins answer
+   * only once every one is read; a site list with no sites has none to read.
+   */
+  const readPhase = installPictureReadPhase({
+    orgPin: orgId
+      ? {
+          data: orgInstallsRead.data?.length ? orgInstallsRead.data : undefined,
+          status:
+            orgInstallsRead.data === undefined && orgInstallsRead.status == null
+              ? 'loading'
+              : orgInstallsRead.status,
+          fromCache: orgInstallsRead.fromCache,
+        }
+      : 'pending',
+    sitePins: sitePinsFailed
+      ? 'failed'
+      : !hostsReady
+        ? 'loading'
+        : !hosts.length || sitePinsFor === hostIdsKey
+        ? 'answered'
+        : 'loading',
+  })
 
   const installations = useMemo(() => {
     const byListing = new Map<string, Installation>()
     for (const install of orgInstalls ?? []) {
-      byListing.set(install.$id, { ...install, siteLabels: [], orgWide: true })
+      byListing.set(install.$id, {
+        ...install,
+        siteLabels: [],
+        siteIds: [],
+        orgWide: true,
+      })
     }
     for (const host of hosts) {
       for (const pin of sitePins[host.id] ?? []) {
         const existing = byListing.get(pin.$id)
-        if (existing) existing.siteLabels.push(host.label)
-        else
+        if (existing) {
+          existing.siteLabels.push(host.label)
+          existing.siteIds.push(host.id)
+        } else
           byListing.set(pin.$id, {
             ...pin,
             siteLabels: [host.label],
+            siteIds: [host.id],
             orgWide: false,
           })
       }
@@ -222,7 +278,20 @@ export function OrgPluginInstallsCard(props: ConsoleOrgPluginInstallsZoneProps) 
                   pluginRef: install.$id,
                 })}
                 label={install.displayName ?? install.pluginId ?? install.$id}
-                caption={installedPluginCaption(install)}
+                caption={installedPluginCaption({
+                  ...install,
+                  // The sites it covers whose own switch has it off
+                  // (AGL-4047): every site for an org-wide install, the
+                  // pinned ones otherwise.
+                  switchedOff: hosts
+                    .filter(
+                      (host) =>
+                        (install.orgWide || install.siteIds.includes(host.id)) &&
+                        host.disabledPlugins?.includes(install.$id),
+                    )
+                    .map((host) => host.label),
+                  siteCount: hosts.length,
+                })}
                 trailing={
                   status.state === 'update-available' ? (
                     <Chip
@@ -241,6 +310,18 @@ export function OrgPluginInstallsCard(props: ConsoleOrgPluginInstallsZoneProps) 
             )
           })}
         </Stack>
+      ) : readPhase === 'loading' ? (
+        <Stack direction="row" spacing={1} sx={{ alignItems: 'center' }}>
+          <CircularProgress size={16} />
+          <Typography variant="body2" color="text.secondary">
+            {'Loading what this workspace installed…'}
+          </Typography>
+        </Stack>
+      ) : readPhase === 'error' ? (
+        <Alert severity="warning">
+          {'Could not load what this workspace installed. Reload the page to ' +
+            'try again.'}
+        </Alert>
       ) : (
         <Alert severity="info">
           {'Nothing installed from the marketplace yet — browse it to add one.'}

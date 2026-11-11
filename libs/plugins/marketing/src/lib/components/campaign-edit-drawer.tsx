@@ -216,8 +216,21 @@ export function CampaignEditDrawer(props: CampaignEditDrawerProps) {
     setTopicId(String(campaign?.topicId ?? ''))
     setListUnsubscribe(campaignListUnsubscribe(campaign))
     setUtmLabels(campaignUtmLabels(campaign?.utmCampaigns).join(', '))
-    setSharing(campaignSharingChoice(campaign))
   }, [open, campaign])
+  /*
+   * The sharing is seeded on its own: when the drawer opens and when the
+   * STORED sharing moves, not on every snapshot of the campaign (AGL-4047).
+   * A save writes the other fields before the route answers for the sharing,
+   * so a refused sharing change still brings a fresh campaign, and seeding
+   * from it put the choice back on the stored one beside the refusal; the
+   * choice being refused is the one to keep.
+   */
+  const storedSharingKey = campaignSharingKey(campaignSharingChoice(campaign))
+  useEffect(() => {
+    if (!open) return
+    setSharing(campaignSharingChoice(campaign))
+    // eslint-disable-next-line react-hooks/exhaustive-deps -- `campaign` is read through its stored sharing
+  }, [open, storedSharingKey])
 
   const startAtMs = dayInputMs(startAt)
   const endAtMs = dayInputMs(endAt)

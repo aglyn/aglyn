@@ -87,19 +87,27 @@ public final class ObservedDocument {
   public private(set) var document: FirestoreDocument?
   public private(set) var ready = false
   public private(set) var failed = false
+  /// The last answer came from the device's cache and the server has not confirmed it yet.
+  public private(set) var fromCache = false
   @ObservationIgnored private var listener: FirestoreListening?
 
   public init() {}
+
+  /// Whether `document` can be believed when it is nil: answered, and a missing document the server confirmed (AGL-4047).
+  public var confirmed: Bool { ready && !failed && (document != nil || !fromCache) }
 
   public func start(_ reader: FirestoreReader, _ path: [String]) {
     listener?.remove()
     ready = false
     failed = false
-    listener = reader.listenDocument(path) { [weak self] result in
+    fromCache = false
+    listener = reader.listenDocumentAnswer(path) { [weak self] result in
       guard let self else { return }
       switch result {
-      case .success(let doc):
-        self.document = doc
+      case .success(let answer):
+        self.document = answer.value
+        self.fromCache = answer.fromCache
+        self.failed = false
       case .failure:
         self.failed = true
       }

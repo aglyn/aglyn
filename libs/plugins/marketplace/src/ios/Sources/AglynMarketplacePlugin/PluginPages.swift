@@ -48,8 +48,13 @@ struct PluginInstallation: Identifiable, Equatable {
   let siteLabels: [String]
   let orgWide: Bool
   let status: UpdateStatus
+  /// The sites it covers whose own Admin › Plugins switch has it off (AGL-4047), and how many sites the workspace has.
+  var switchedOff: [String] = []
+  var siteCount: Int?
 
-  var caption: String { installedPluginCaption(version: version, orgWide: orgWide, siteLabels: siteLabels) }
+  var caption: String {
+    installedPluginCaption(version: version, orgWide: orgWide, siteLabels: siteLabels, switchedOff: switchedOff, siteCount: siteCount)
+  }
 }
 
 /// The installations the workspace holds, read the way the console's installs card reads them.
@@ -61,28 +66,40 @@ final class PluginInstallationsModel {
   @ObservationIgnored private var orgListener: FirestoreListening?
   @ObservationIgnored private var siteListener: FirestoreListening?
   @ObservationIgnored private var orgDocs: [FirestoreDocument]?
+  @ObservationIgnored private var orgFailed = false
   @ObservationIgnored private var sites: [SiteChoice]?
+  @ObservationIgnored private var sitesFailed = false
   @ObservationIgnored private var generation = 0
 
   func start(_ context: NativePluginContext) {
     stop()
+    failed = false
+    orgFailed = false
+    sitesFailed = false
     guard let orgID = context.orgID else {
       installations = []
       return
     }
-    orgListener = context.firestore.listen(FirestoreQuery(["orgs", orgID, "installs"], limit: 100)) { [weak self] result in
+    let installs = FirestoreQuery(["orgs", orgID, "installs"], limit: 100, includeMetadataChanges: true)
+    orgListener = context.firestore.listenAnswer(installs) { [weak self] result in
       guard let self else { return }
       switch result {
-      case .success(let docs): self.orgDocs = docs
-      case .failure: self.failed = true
+      // An empty list from the cache is not "nothing installed": only the server may say so (AGL-4047).
+      case .success(let answer):
+        if answer.value.isEmpty && answer.fromCache { return }
+        self.orgDocs = answer.value
+        self.orgFailed = false
+      case .failure: self.orgFailed = true
       }
       self.refresh(context)
     }
     siteListener = context.firestore.listen(sitesQuery(uid: context.uid, orgID: orgID)) { [weak self] result in
       guard let self else { return }
       switch result {
-      case .success(let docs): self.sites = siteChoices(docs)
-      case .failure: self.sites = []
+      case .success(let docs):
+        self.sites = siteChoices(docs)
+        self.sitesFailed = false
+      case .failure: self.sitesFailed = true
       }
       self.refresh(context)
     }
@@ -96,24 +113,43 @@ final class PluginInstallationsModel {
   }
 
   private func refresh(_ context: NativePluginContext) {
+    // A read that failed is said as a failure, never as "nothing installed" (AGL-4047).
+    if orgFailed || sitesFailed {
+      installations = nil
+      failed = true
+      return
+    }
     guard let orgDocs, let sites else { return }
     generation += 1
     let mine = generation
     Task { @MainActor in
-      var byListing: [String: (doc: FirestoreDocument, labels: [String], orgWide: Bool)] = [:]
+      var byListing: [String: (doc: FirestoreDocument, labels: [String], siteIDs: [String], orgWide: Bool)] = [:]
       var order: [String] = []
       for doc in orgDocs {
-        byListing[doc.id] = (doc, [], true)
+        byListing[doc.id] = (doc, [], [], true)
         order.append(doc.id)
       }
+      var disabled: [String: [String]] = [:]
       for site in sites {
-        let pins = (try? await context.firestore.readOnce(FirestoreQuery(["hosts", site.id, "installs"], limit: 100))) ?? []
+        let pins: [FirestoreDocument]
+        do {
+          pins = try await context.firestore.readConfirmed(FirestoreQuery(["hosts", site.id, "installs"], limit: 100))
+        } catch {
+          guard mine == self.generation else { return }
+          self.installations = nil
+          self.failed = true
+          return
+        }
+        if let host = try? await context.firestore.readOnce(["hosts", site.id]) {
+          disabled[site.id] = (host.data["disabledPlugins"] as? [Any])?.compactMap { $0 as? String } ?? []
+        }
         for pin in pins {
           if var existing = byListing[pin.id] {
             existing.labels.append(site.label)
+            existing.siteIDs.append(site.id)
             byListing[pin.id] = existing
           } else {
-            byListing[pin.id] = (pin, [site.label], false)
+            byListing[pin.id] = (pin, [site.label], [site.id], false)
             order.append(pin.id)
           }
         }
@@ -126,12 +162,18 @@ final class PluginInstallationsModel {
         let offered = pluginOfferedVersion(
           latestApprovedVersion: versionText(listing?.data["latestApprovedVersion"]), revoked: Revoked(revocation?.data))
         let name = (entry.doc.string("displayName") ?? entry.doc.string("pluginId") ?? id)
+        // The sites it covers whose own switch has it off: every site for an org-wide install, the pinned ones otherwise.
+        let switchedOff = sites.filter {
+          (entry.orgWide || entry.siteIDs.contains($0.id)) && (disabled[$0.id] ?? []).contains(id)
+        }.map(\.label)
         rows.append(
           PluginInstallation(
             id: id, name: name, version: versionText(entry.doc.data["version"]), siteLabels: entry.labels, orgWide: entry.orgWide,
-            status: pluginUpdateStatus(pin: UpdateComparablePin(entry.doc.data), offered: offered)))
+            status: pluginUpdateStatus(pin: UpdateComparablePin(entry.doc.data), offered: offered), switchedOff: switchedOff,
+            siteCount: sites.count))
       }
       guard mine == generation else { return }
+      failed = false
       installations = rows
     }
   }
@@ -188,6 +230,10 @@ final class ListingInstallsModel {
   private(set) var listing: FirestoreDocument?
   private(set) var revocation: FirestoreDocument?
   private(set) var loaded = false
+  /// How the workspace's pin read stands, and whether the site list or a site's pin failed to read (AGL-4047).
+  private(set) var orgPinRead: InstallPinRead?
+  private(set) var sitesFailed = false
+  private(set) var pinsFailed = false
   /// Each site's own deny-list (`disabledPlugins`), so a site that switched the listing off is marked (AGL-4047).
   private(set) var siteDisabled: [String: [String]] = [:]
   private(set) var listingID = ""
@@ -197,14 +243,26 @@ final class ListingInstallsModel {
   func start(_ context: NativePluginContext, listingID: String) {
     stop()
     loaded = false
+    sitesFailed = false
+    pinsFailed = false
+    orgPinRead = nil
     self.listingID = listingID
     guard let orgID = context.orgID, !listingID.isEmpty else {
       loaded = true
       return
     }
+    orgPinRead = InstallPinRead(hasData: false, status: "loading")
     listeners.append(
-      context.firestore.listenDocument(["orgs", orgID, "installs", listingID]) { [weak self] result in
-        self?.orgPin = try? result.get()
+      context.firestore.listenDocumentAnswer(["orgs", orgID, "installs", listingID]) { [weak self] result in
+        guard let self else { return }
+        switch result {
+        case .success(let answer):
+          self.orgPin = answer.value
+          self.orgPinRead = InstallPinRead(hasData: answer.value != nil, status: "success", fromCache: answer.fromCache)
+        case .failure:
+          self.orgPin = nil
+          self.orgPinRead = InstallPinRead(hasData: false, status: "error")
+        }
       })
     listeners.append(
       context.firestore.listenDocument([listingsCollection, listingID]) { [weak self] result in self?.listing = try? result.get() })
@@ -213,6 +271,7 @@ final class ListingInstallsModel {
     listeners.append(
       context.firestore.listen(sitesQuery(uid: context.uid, orgID: orgID)) { [weak self] result in
         guard let self else { return }
+        self.sitesFailed = (try? result.get()) == nil
         self.sites = (try? result.get()).map(siteChoices) ?? []
         let key = self.sites.map(\.id).joined(separator: "|")
         if key != self.sitesKey || !self.loaded {
@@ -231,15 +290,28 @@ final class ListingInstallsModel {
   func reloadPins(_ context: NativePluginContext, listingID: String) async {
     var found: [String: FirestoreDocument] = [:]
     var disabled: [String: [String]] = [:]
+    var failedRead = false
     for site in sites {
-      if let doc = try? await context.firestore.readOnce(["hosts", site.id, "installs", listingID]) { found[site.id] = doc }
+      // A pin is missing only once the server says so; a read that fails is a failure, not "not installed" (AGL-4047).
+      do {
+        if let doc = try await context.firestore.readConfirmed(["hosts", site.id, "installs", listingID]) { found[site.id] = doc }
+      } catch {
+        failedRead = true
+      }
       if let host = try? await context.firestore.readOnce(["hosts", site.id]) {
         disabled[site.id] = (host.data["disabledPlugins"] as? [Any])?.compactMap { $0 as? String }
       }
     }
     hostPins = found
     siteDisabled = disabled
+    pinsFailed = failedRead
     loaded = true
+  }
+
+  /// Whether the page may say where the plugin is installed yet: "loading", "error" or "ready" (AGL-4047).
+  var readPhase: String {
+    installPictureReadPhase(
+      orgPinPending: false, orgPin: orgPinRead, sitePins: sitesFailed || pinsFailed ? "failed" : (loaded ? "answered" : "loading"))
   }
 
   var summary: OrgInstallSummary {
@@ -299,7 +371,11 @@ struct PluginInstallationCard: View {
     VStack(alignment: .leading, spacing: AglynSpace.two) {
       if let error = runner.error { AglynNotice(error, tone: .error) { runner.clear() } }
       if let notice = runner.notice { AglynNotice(notice, tone: .success) { runner.clear() } }
-      if !model.loaded {
+      if model.readPhase == "error" {
+        AglynNotice(
+          "Could not load where this plugin is installed.", tone: .warning, actionTitle: "Try again",
+          action: { model.start(context, listingID: listingID) })
+      } else if model.readPhase == "loading" {
         SkeletonRows(count: 3)
       } else if !model.summary.installedAnywhere {
         AglynNotice(

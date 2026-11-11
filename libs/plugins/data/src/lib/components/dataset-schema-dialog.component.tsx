@@ -247,8 +247,8 @@ export function DatasetSchemaDialog(props: DatasetSchemaDialogProps) {
     // rules refuse that write from anyone who is not org-wide, and it
     // repairs only what somebody happens to look at — a repair mechanism
     // wearing a UI. `handleSave` reads the SAME helper; see the note there
-    // for why the pair is the safety property.
-    setSharing(sharingChoiceOf(dataset))
+    // for why the pair is the safety property. The sharing is seeded by the
+    // effect below.
     const effective = effectiveDatasetModel(dataset)
     setModel({
       fields: JSON.parse(JSON.stringify(effective.fields)),
@@ -259,6 +259,21 @@ export function DatasetSchemaDialog(props: DatasetSchemaDialogProps) {
       plural: dataset.names?.plural ?? datasetDisplayName(dataset),
     })
   }, [dataset])
+  /*
+   * The sharing, seeded for this dataset and again only when its STORED
+   * sharing moves, not on every snapshot of it (AGL-4047). A save writes the
+   * schema before the route answers for the sharing, so a refused sharing
+   * change still brings a fresh dataset, and seeding from it put the choice
+   * back on the stored one while the refusal was said: the choice being
+   * refused is the one to keep.
+   */
+  const storedSharing = useMemo(() => (dataset ? sharingChoiceOf(dataset) : null), [dataset])
+  const storedSharingKey = dataset ? `${dataset.$id}|${sharingChoiceKey(storedSharing)}` : null
+  useEffect(() => {
+    if (storedSharingKey === null) return
+    setSharing(storedSharing)
+    // eslint-disable-next-line react-hooks/exhaustive-deps -- `storedSharing` is read through its key
+  }, [storedSharingKey])
 
   // Per-field editor (null fieldId = new field). `idDraft`/`idTouched` back
   // the editable Reference ID (AGL-578): for a new field the draft follows

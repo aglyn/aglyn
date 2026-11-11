@@ -16,7 +16,12 @@
  */
 
 import { firebaseAdmin, getOrgForUser } from '@aglyn/tenant-data-admin'
-import { paymentProvider } from '@aglyn/tenant-data-admin/server/payment-provider'
+import {
+  merchantAccountInOtherMode,
+  merchantAccountReplacement,
+  paymentProvider,
+  PREVIOUS_MERCHANT_ACCOUNTS_FIELD,
+} from '@aglyn/tenant-data-admin/server/payment-provider'
 import { buildRoute, Route, type PluginApiHandler } from '@aglyn/aglyn/server'
 import { orgAgeDays } from '@aglyn/tenant-data-admin/server/org-age'
 import {
@@ -109,11 +114,37 @@ export const connectHandler: PluginApiHandler = async (req, res) => {
       })
     }
 
+    // This deployment's Stripe mode, asked first: whether the stored account
+    // can be used here at all depends on it (AGL-2471).
+    const platformMode = await paymentProvider().resolvePlatformMode()
     let accountId = profileSnapshot.get('stripeAccountId') as
       | string
       | undefined
-    if (!accountId) {
-      const account = await stripe(
+    // An account from the other Stripe mode is REPLACED, never resumed: a
+    // live key cannot read a test account, so resuming it failed every time.
+    // The commerce twin carries the full note.
+    let account: any
+    let replacedAccountId: string | undefined
+    if (
+      accountId &&
+      merchantAccountInOtherMode(
+        profileSnapshot.get('stripeAccountLivemode'),
+        platformMode,
+      )
+    ) {
+      replacedAccountId = accountId
+    } else if (accountId) {
+      try {
+        account = await stripe(`accounts/${accountId}`)
+      } catch (error) {
+        if (!paymentProvider().refusedAsOtherMode((error as Error)?.message)) {
+          throw error
+        }
+        replacedAccountId = accountId
+      }
+    }
+    if (!accountId || replacedAccountId) {
+      const created = await stripe(
         'accounts',
         new URLSearchParams({
           type: 'express',
@@ -125,24 +156,45 @@ export const connectHandler: PluginApiHandler = async (req, res) => {
           'capabilities[card_payments][requested]': 'true',
           'capabilities[transfers][requested]': 'true',
           'metadata[publisherOrgId]': orgId,
+          ...(replacedAccountId
+            ? { 'metadata[replacesAccount]': replacedAccountId }
+            : {}),
           ...(decoded.email ? { email: decoded.email } : {}),
         }),
       )
-      accountId = account.id
-      await profileRef.set(
-        { stripeAccountId: accountId, stripeChargesEnabled: false },
-        { merge: true },
-      )
+      accountId = String(created.id)
+      if (replacedAccountId) {
+        console.warn(
+          `[AGL-2471] Replacing Stripe account ${replacedAccountId} on ` +
+            `publisherProfiles/${orgId}: it belongs to the other Stripe mode ` +
+            `from this ${platformMode ?? 'unknown'}-mode deployment. New ` +
+            `account ${accountId}.`,
+        )
+        await profileRef.set(
+          merchantAccountReplacement({
+            previousAccountIds: profileSnapshot.get(
+              PREVIOUS_MERCHANT_ACCOUNTS_FIELD,
+            ),
+            replacedAccountId,
+            newAccountId: accountId,
+          }),
+          { merge: true },
+        )
+      } else {
+        await profileRef.set(
+          { stripeAccountId: accountId, stripeChargesEnabled: false },
+          { merge: true },
+        )
+      }
+      account = await stripe(`accounts/${accountId}`)
     }
 
-    const account = await stripe(`accounts/${accountId}`)
     const chargesEnabled = Boolean(account?.charges_enabled)
     // Which Stripe world this account lives in (AGL-2471) — two of the three
     // poisoned production linkages were publisherProfiles, written by this
     // very route from a localhost session holding the test key. See the
     // commerce twin and `payment-provider-stripe-connect.ts` for why the retrieve above
     // is the proof and the `acct_…` string is not.
-    const platformMode = await paymentProvider().resolvePlatformMode()
     // Payout readiness rides along (AGL-1547): the gate stays on
     // charges_enabled, but the profile records whether the money can
     // actually LEAVE Stripe — the live drill (AGL-1548) reads it, and a

@@ -20069,6 +20069,122 @@
         }
       ]
     },
+    "installPictureReadPhase": {
+      "module": "libs/plugins/marketplace/src/lib/model/marketplace-catalog.ts",
+      "cases": [
+        {
+          "args": [
+            {
+              "orgPin": "pending",
+              "sitePins": "answered"
+            }
+          ],
+          "result": "loading"
+        },
+        {
+          "args": [
+            {
+              "orgPin": null,
+              "sitePins": "answered"
+            }
+          ],
+          "result": "ready"
+        },
+        {
+          "args": [
+            {
+              "orgPin": null,
+              "sitePins": "loading"
+            }
+          ],
+          "result": "loading"
+        },
+        {
+          "args": [
+            {
+              "orgPin": null,
+              "sitePins": "failed"
+            }
+          ],
+          "result": "error"
+        },
+        {
+          "args": [
+            {
+              "orgPin": {
+                "status": "loading"
+              },
+              "sitePins": "answered"
+            }
+          ],
+          "result": "loading"
+        },
+        {
+          "args": [
+            {
+              "orgPin": {
+                "status": "success",
+                "fromCache": true
+              },
+              "sitePins": "answered"
+            }
+          ],
+          "result": "loading"
+        },
+        {
+          "args": [
+            {
+              "orgPin": {
+                "status": "success",
+                "fromCache": false
+              },
+              "sitePins": "answered"
+            }
+          ],
+          "result": "ready"
+        },
+        {
+          "args": [
+            {
+              "orgPin": {
+                "status": "error"
+              },
+              "sitePins": "answered"
+            }
+          ],
+          "result": "error"
+        },
+        {
+          "args": [
+            {
+              "orgPin": {
+                "data": {
+                  "version": "1.0.0"
+                },
+                "status": "success",
+                "fromCache": true
+              },
+              "sitePins": "answered"
+            }
+          ],
+          "result": "ready"
+        },
+        {
+          "args": [
+            {
+              "orgPin": {
+                "data": {
+                  "version": "1.0.0"
+                },
+                "status": "error"
+              },
+              "sitePins": "loading"
+            }
+          ],
+          "result": "loading"
+        }
+      ]
+    },
     "installPlanOutcome": {
       "module": "libs/plugins/marketplace/src/lib/model/marketplace-catalog.ts",
       "cases": [
@@ -20301,6 +20417,103 @@
             }
           ],
           "result": "v3 · 2 sites"
+        },
+        {
+          "args": [
+            {
+              "version": "1.0.0",
+              "orgWide": true,
+              "siteLabels": [],
+              "switchedOff": [
+                "Catering"
+              ],
+              "siteCount": 3
+            }
+          ],
+          "result": "v1.0.0 · every site except Catering, which switched it off"
+        },
+        {
+          "args": [
+            {
+              "version": "1.0.0",
+              "orgWide": true,
+              "siteLabels": [],
+              "switchedOff": [
+                "A",
+                "B"
+              ],
+              "siteCount": 3
+            }
+          ],
+          "result": "v1.0.0 · every site except 2 that switched it off"
+        },
+        {
+          "args": [
+            {
+              "version": "1.0.0",
+              "orgWide": true,
+              "siteLabels": [],
+              "switchedOff": [
+                "A",
+                "B",
+                "C"
+              ],
+              "siteCount": 3
+            }
+          ],
+          "result": "v1.0.0 · every site switched it off"
+        },
+        {
+          "args": [
+            {
+              "version": "1.0.0",
+              "orgWide": false,
+              "siteLabels": [
+                "Blog"
+              ],
+              "switchedOff": [
+                "Blog"
+              ],
+              "siteCount": 3
+            }
+          ],
+          "result": "v1.0.0 · Blog, which switched it off"
+        },
+        {
+          "args": [
+            {
+              "version": "2",
+              "orgWide": false,
+              "siteLabels": [
+                "A",
+                "B"
+              ],
+              "switchedOff": [
+                "A"
+              ],
+              "siteCount": 3
+            }
+          ],
+          "result": "v2 · 2 sites · A switched it off"
+        },
+        {
+          "args": [
+            {
+              "version": "2",
+              "orgWide": false,
+              "siteLabels": [
+                "A",
+                "B",
+                "C"
+              ],
+              "switchedOff": [
+                "A",
+                "C"
+              ],
+              "siteCount": 3
+            }
+          ],
+          "result": "v2 · 3 sites · 2 of them switched it off"
         }
       ]
     },

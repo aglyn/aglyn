@@ -131,10 +131,14 @@ final class DatasetsModel {
       ready = true
       return
     }
-    listener = context.firestore.listen(datasetsQuery(orgID, scopeTokens: tokens)) { [weak self] result in
+    listener = context.firestore.listenAnswer(datasetsQuery(orgID, scopeTokens: tokens)) { [weak self] result in
       guard let self else { return }
       switch result {
-      case .success(let docs): self.rows = docs.map(DatasetRow.init).sorted { $0.name.lowercased() < $1.name.lowercased() }
+      case .success(let answer):
+        // An empty list from the cache is not "no datasets": only the server may say there are none (AGL-4047).
+        if answer.value.isEmpty && answer.fromCache { return }
+        self.failed = false
+        self.rows = answer.value.map(DatasetRow.init).sorted { $0.name.lowercased() < $1.name.lowercased() }
       case .failure: self.failed = true
       }
       self.ready = true

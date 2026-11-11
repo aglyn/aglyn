@@ -283,7 +283,19 @@ final class MarketplaceTests: XCTestCase {
     for item in try functionCases("installedPluginCaption") {
       let input = object(item.args[0])
       XCTAssertEqual(
-        installedPluginCaption(version: versionText(input["version"]), orgWide: input["orgWide"] as? Bool == true, siteLabels: input["siteLabels"] as? [String] ?? []),
+        installedPluginCaption(
+          version: versionText(input["version"]), orgWide: input["orgWide"] as? Bool == true, siteLabels: input["siteLabels"] as? [String] ?? [],
+          switchedOff: input["switchedOff"] as? [String] ?? [], siteCount: (input["siteCount"] as? NSNumber)?.intValue),
+        item.result as? String, "\(item.args)")
+    }
+    for item in try functionCases("installPictureReadPhase") {
+      let input = object(item.args[0])
+      let pin = input["orgPin"]
+      let read = (pin as? [String: Any]).map {
+        InstallPinRead(hasData: $0["data"] != nil && !($0["data"] is NSNull), status: $0["status"] as? String, fromCache: $0["fromCache"] as? Bool == true)
+      }
+      XCTAssertEqual(
+        installPictureReadPhase(orgPinPending: pin as? String == "pending", orgPin: read, sitePins: input["sitePins"] as? String ?? ""),
         item.result as? String, "\(item.args)")
     }
     for item in try functionCases("installPlanOutcome") {

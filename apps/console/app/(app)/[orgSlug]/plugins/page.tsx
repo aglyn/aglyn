@@ -82,13 +82,26 @@ const OrgPlugins: NextPageWithLayout<Record<string, never>> = () => {
   // `null` means "an account with no org — list every site they hold", and
   // on an org-scoped route that is never the right answer. It listed another
   // client's sites for the width of the cold-load window.
-  const { hosts } = useOrgHosts(firestore, user?.uid, orgId || undefined)
+  const { hosts, ready: hostsReady } = useOrgHosts(
+    firestore,
+    user?.uid,
+    orgId || undefined,
+  )
+  // With each site's own switch (AGL-4047), so a marketplace plugin a site
+  // switched off for itself is not listed as running on every site.
   const hostList = useMemo(
     () =>
-      ((hosts as Array<{ $id: string; displayName?: string; subdomain?: string }>) ??
-        []).map((host) => ({
+      ((hosts as Array<{
+        $id: string
+        displayName?: string
+        subdomain?: string
+        disabledPlugins?: unknown
+      }>) ?? []).map((host) => ({
         id: host.$id,
         label: host.displayName || host.subdomain || host.$id,
+        disabledPlugins: Array.isArray(host.disabledPlugins)
+          ? host.disabledPlugins.map(String)
+          : null,
       })),
     [hosts],
   )
@@ -180,6 +193,7 @@ const OrgPlugins: NextPageWithLayout<Record<string, never>> = () => {
               orgId={orgId}
               orgSlug={orgSlug}
               hosts={hostList}
+              hostsReady={hostsReady}
             />
           ) : null}
 

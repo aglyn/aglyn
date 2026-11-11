@@ -168,6 +168,7 @@ export function MarketplaceHub(props: ConsolePluginPageProps) {
           basePath={mount}
           actingHost={actingHost}
           hosts={hostList}
+          hostsReady={orgMount?.hostsReady ?? true}
           permissions={permissions}
           orgSlug={orgSlug}
         />

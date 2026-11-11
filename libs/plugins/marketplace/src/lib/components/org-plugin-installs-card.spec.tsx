@@ -65,6 +65,11 @@ jest.mock('@aglyn/shared-ui-jsx', () => ({
   MdiIcon: () => null,
 }))
 
+/**
+ * How the org installs list stands (AGL-4047): answered, still loading, or a
+ * cached answer the server has not confirmed.
+ */
+let mockOrgListRead: 'success' | 'loading' | 'fromCache' = 'success'
 /** Documents by collection path; a path absent here reads as empty. */
 let mockDocs: Record<string, Array<Record<string, unknown>>> = {}
 /** Collections whose read fails, to prove a failure is not a false "current". */
@@ -98,6 +103,10 @@ jest.mock('@aglyn/tenant-feature-instance', () => ({
   useFirestore: () => ({}),
   useFirestoreCollection: (factory: () => { path: string } | null) => {
     const ref = factory()
+    if (ref && mockOrgListRead === 'loading')
+      return { data: undefined, status: 'loading', fromCache: true }
+    if (ref && mockOrgListRead === 'fromCache')
+      return { data: [], status: 'success', fromCache: true }
     return { data: ref ? (mockDocs[ref.path] ?? []) : undefined }
   },
   useFirestoreDoc: (factory: () => { path: string } | null) => {
@@ -127,6 +136,7 @@ const rowOf = (name: string) =>
   screen.getByText(name).closest('a') as HTMLElement
 
 beforeEach(() => {
+  mockOrgListRead = 'success'
   mockFailing = new Set()
   mockDocs = {
     'orgs/org-1/installs': [
@@ -226,6 +236,99 @@ describe('the installed half of the Plugins page', () => {
     expect(
       screen.getByText(/Nothing installed from the marketplace yet/),
     ).toBeTruthy()
+  })
+
+  /*
+   * The row said "every site in this organization" after one site had
+   * switched the plugin off on its Admin › Plugins page (AGL-4047). The page
+   * hands over each site's own switch, so the row says which.
+   */
+  it('names a site that switched an org-wide plugin off', async () => {
+    render(
+      <OrgPluginInstallsCard
+        orgId="org-1"
+        orgSlug="acme"
+        hosts={[
+          { id: 'host-a', label: 'Main site' },
+          { id: 'host-b', label: 'Shop', disabledPlugins: ['atlas'] },
+        ]}
+      />,
+    )
+    await waitFor(() => expect(screen.getByText('Ledger Sync')).toBeTruthy())
+    expect(
+      within(rowOf('Atlas Maps')).getByText(
+        'v1.0.0 · every site except Shop, which switched it off',
+      ),
+    ).toBeTruthy()
+    expect(
+      within(rowOf('Atlas Maps')).queryByText(/every site in this organization/),
+    ).toBeNull()
+    // Another plugin's row, on sites that did not switch it off, is unchanged.
+    expect(within(rowOf('Ledger Sync')).getByText('v2.0.0 · 2 sites')).toBeTruthy()
+  })
+
+  it('counts a pinned site that switched a plugin off', async () => {
+    render(
+      <OrgPluginInstallsCard
+        orgId="org-1"
+        orgSlug="acme"
+        hosts={[
+          { id: 'host-a', label: 'Main site' },
+          { id: 'host-b', label: 'Shop', disabledPlugins: ['ledger'] },
+        ]}
+      />,
+    )
+    await waitFor(() =>
+      expect(
+        within(rowOf('Ledger Sync')).getByText(
+          'v2.0.0 · 2 sites · Shop switched it off',
+        ),
+      ).toBeTruthy(),
+    )
+  })
+
+  describe('while it loads (AGL-4047)', () => {
+    const NOTHING = /Nothing installed from the marketplace yet/
+
+    it('says loading, not "nothing installed", while the list is unanswered', () => {
+      mockDocs = {}
+      mockOrgListRead = 'loading'
+      render(<OrgPluginInstallsCard orgId="org-1" orgSlug="acme" hosts={[]} />)
+      expect(screen.getByText('Loading what this workspace installed…')).toBeTruthy()
+      expect(screen.queryByText(NOTHING)).toBeNull()
+    })
+
+    it('treats an empty cached list the server has not confirmed as loading', () => {
+      mockDocs = {}
+      mockOrgListRead = 'fromCache'
+      render(<OrgPluginInstallsCard orgId="org-1" orgSlug="acme" hosts={[]} />)
+      expect(screen.queryByText(NOTHING)).toBeNull()
+    })
+
+    it('holds while the site list is still loading', () => {
+      mockDocs = {}
+      render(
+        <OrgPluginInstallsCard
+          orgId="org-1"
+          orgSlug="acme"
+          hosts={[]}
+          hostsReady={false}
+        />,
+      )
+      expect(screen.queryByText(NOTHING)).toBeNull()
+    })
+
+    it("says a failed read of the sites' pins failed", async () => {
+      mockDocs = {}
+      mockFailing.add('hosts/host-a/installs')
+      render(<OrgPluginInstallsCard orgId="org-1" orgSlug="acme" hosts={HOSTS} />)
+      await waitFor(() =>
+        expect(
+          screen.getByText(/Could not load what this workspace installed/),
+        ).toBeTruthy(),
+      )
+      expect(screen.queryByText(NOTHING)).toBeNull()
+    })
   })
 })
 

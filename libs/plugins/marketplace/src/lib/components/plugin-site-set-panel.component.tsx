@@ -16,16 +16,20 @@
  */
 'use client'
 
-import { Typography } from '@mui/material'
+import { Alert, CircularProgress, Stack, Typography } from '@mui/material'
 import { doc, getDoc } from 'firebase/firestore'
 import { useEffect, useMemo, useState } from 'react'
 import {
   useFirestore,
   useFirestoreDoc,
-  useHostOrgId,
+  useHostOrgIdState,
 } from '@aglyn/tenant-feature-instance'
 import { offeredPluginVersion } from '@aglyn/aglyn'
-import { resolveOrgInstallSummary, type OrgInstallHost } from '../model/marketplace'
+import {
+  installPictureReadPhase,
+  resolveOrgInstallSummary,
+  type OrgInstallHost,
+} from '../model/marketplace'
 import { useMarketplaceActions } from '../hooks/use-marketplace-actions'
 import PluginSiteSet from './plugin-site-set.component'
 
@@ -39,6 +43,17 @@ export interface PluginSiteSetPanelProps {
    * run it, and the panel says so instead of listing it as running.
    */
   hosts?: ReadonlyArray<OrgInstallHost>
+  /**
+   * Whether `hosts` is the whole site list yet (AGL-4047). Absent reads as
+   * true, for a caller that only mounts this once its sites are known.
+   */
+  hostsReady?: boolean
+  /**
+   * The workspace, when the page knows it (AGL-4047). Read through the
+   * acting site otherwise, and that lookup is a one-shot read that settles
+   * to "no org" when it fails, after which no org pin is ever read.
+   */
+  orgId?: string
 }
 
 /**
@@ -52,25 +67,31 @@ export interface PluginSiteSetPanelProps {
  * therefore keeps ownership of it there.
  */
 export function PluginSiteSetPanel(props: PluginSiteSetPanelProps) {
-  const { hostId, listingId, hosts } = props
+  const { hostId, listingId, hosts, hostsReady = true } = props
   const firestore = useFirestore()
-  const orgId = useHostOrgId(hostId)
+  const hostOrg = useHostOrgIdState(props.orgId ? undefined : hostId)
+  const orgId = props.orgId || hostOrg.orgId
   const { installPlan, uninstall } = useMarketplaceActions(hostId)
 
   // Held at null while `useHostOrgId` is in flight, never `orgs/-pending-`
   // (AGL-1440): installs are member-gated, so the sentinel was a
   // guaranteed-denied listen on every mount of this panel.
-  const { data: orgPin } = useFirestoreDoc<any>(
+  const orgPinRead = useFirestoreDoc<any>(
     () =>
       orgId && listingId
         ? doc(firestore, 'orgs', orgId, 'installs', listingId)
         : null,
     [firestore, orgId, listingId],
   )
+  const orgPin = orgPinRead.data
   const [sitePins, setSitePins] = useState<Record<string, any>>({})
   const [pinsNonce, setPinsNonce] = useState(0)
   const hostIdsKey = (hosts ?? []).map((host) => host.id).join('|')
+  /** The site set the pins answer for, or that reading them failed (AGL-4047). */
+  const [sitePinsFor, setSitePinsFor] = useState<string | null>(null)
+  const [sitePinsFailed, setSitePinsFailed] = useState(false)
   useEffect(() => {
+    setSitePinsFailed(false)
     if (!listingId || !hosts?.length) return
     let active = true
     void Promise.all(
@@ -82,9 +103,13 @@ export function PluginSiteSetPanel(props: PluginSiteSetPanelProps) {
       }),
     )
       .then((entries) => {
-        if (active) setSitePins(Object.fromEntries(entries))
+        if (!active) return
+        setSitePins(Object.fromEntries(entries))
+        setSitePinsFor(`${listingId}:${hostIdsKey}`)
       })
-      .catch(() => undefined)
+      .catch(() => {
+        if (active) setSitePinsFailed(true)
+      })
     return () => {
       active = false
     }
@@ -139,6 +164,47 @@ export function PluginSiteSetPanel(props: PluginSiteSetPanelProps) {
       anyPin?.pluginId,
     ],
   )
+
+  /*
+   * Loading is said as loading (AGL-4047). "Not installed" rests on no pin
+   * anywhere, and a pin the server has not answered for yet is not absent:
+   * this page said "Not installed on any site" for seconds about a plugin
+   * running org-wide.
+   */
+  const readPhase = installPictureReadPhase({
+    orgPin: !listingId
+      ? null
+      : orgId
+        ? orgPinRead
+        : props.orgId || !hostOrg.loaded
+          ? 'pending'
+          : null,
+    sitePins: sitePinsFailed
+      ? 'failed'
+      : !hostsReady
+        ? 'loading'
+        : !hosts?.length || sitePinsFor === `${listingId}:${hostIdsKey}`
+          ? 'answered'
+          : 'loading',
+  })
+  if (readPhase === 'loading') {
+    return (
+      <Stack direction="row" spacing={1} sx={{ alignItems: 'center' }}>
+        <CircularProgress size={16} />
+        <Typography variant="body2" color="text.secondary">
+          {'Loading where it is installed…'}
+        </Typography>
+      </Stack>
+    )
+  }
+  if (readPhase === 'error') {
+    return (
+      <Alert severity="warning">
+        {'Could not load where this plugin is installed. Reload the page to ' +
+          'try again.'}
+      </Alert>
+    )
+  }
 
   if (!orgInstall.installedAnywhere) {
     return (

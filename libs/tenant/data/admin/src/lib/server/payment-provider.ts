@@ -135,6 +135,13 @@ export interface PaymentProvider {
    */
   resolvePlatformMode(): Promise<PaymentMode | undefined>
   /**
+   * Whether the provider's refusal to read a stored merchant account says
+   * the account belongs to the OTHER mode: a test account read with a live
+   * credential, or the reverse. Such an account can never be used on this
+   * deployment, so onboarding replaces it instead of failing on it.
+   */
+  refusedAsOtherMode(message: unknown): boolean
+  /**
    * Applies an event about a connected merchant account — its readiness
    * changed, a payout to it failed, a later payout landed — to the documents
    * in `collection` that store it. A plugin passes the collection holding ITS
@@ -197,6 +204,65 @@ export function merchantAccountReadiness(
       : 'mode-mismatch'
   }
   return platformMode === 'live' ? 'mode-unverified' : 'ready'
+}
+
+/**
+ * Whether a stored merchant account is RECORDED as belonging to the other
+ * mode from this deployment: the `mode-mismatch` refusal, asked before the
+ * account is read, because a live credential cannot even read a test
+ * account. Only a literal boolean is a recorded mode, as in
+ * {@link merchantAccountReadiness}; an unrecorded one is settled by reading
+ * the account (see {@link PaymentProvider.refusedAsOtherMode}).
+ */
+export function merchantAccountInOtherMode(
+  accountLivemode: unknown,
+  platformMode: PaymentMode | undefined,
+): boolean {
+  if (typeof accountLivemode !== 'boolean' || !platformMode) return false
+  return accountLivemode !== (platformMode === 'live')
+}
+
+/** Where an onboarding route keeps the accounts it has replaced. */
+export const PREVIOUS_MERCHANT_ACCOUNTS_FIELD = 'previousStripeAccountIds'
+
+/**
+ * The profile fields that replace a stored merchant account with a new one
+ * created in this deployment's mode.
+ *
+ * The replaced id is KEPT, appended to {@link PREVIOUS_MERCHANT_ACCOUNTS_FIELD}
+ * (once), so nothing that names it is orphaned: every order and payment
+ * records the account it was paid into on itself, and this list is the
+ * profile's own record that the account was once its. Everything the profile
+ * says about the old account is reset, so the new one cannot inherit it: its
+ * charges and payout readiness, its recorded mode and charge shape (written
+ * again from the new account by the same request), and a payout failure the
+ * old account reported.
+ */
+export function merchantAccountReplacement(input: {
+  previousAccountIds: unknown
+  replacedAccountId: string
+  newAccountId: string
+}): Record<string, unknown> {
+  const kept = Array.isArray(input.previousAccountIds)
+    ? input.previousAccountIds.filter(
+        (id): id is string => typeof id === 'string' && Boolean(id.trim()),
+      )
+    : []
+  const replaced = input.replacedAccountId.trim()
+  return {
+    stripeAccountId: input.newAccountId,
+    [PREVIOUS_MERCHANT_ACCOUNTS_FIELD]:
+      replaced && !kept.includes(replaced) ? [...kept, replaced] : kept,
+    stripeChargesEnabled: false,
+    stripePayoutsEnabled: null,
+    stripeAccountLivemode: null,
+    stripeChargeModel: null,
+    lastPayoutFailureId: null,
+    lastPayoutFailureKind: null,
+    lastPayoutFailureAtMs: null,
+    lastPayoutFailureCents: null,
+    lastPayoutFailureReason: null,
+  }
 }
 
 /**

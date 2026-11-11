@@ -27,6 +27,10 @@ import {
 } from '@aglyn/tenant-data-admin'
 import { invalidIdTokenResponse } from '@aglyn/tenant-data-admin/server/id-token-refusal'
 import {
+  merchantAccountInOtherMode,
+  paymentProvider,
+} from '@aglyn/tenant-data-admin/server/payment-provider'
+import {
   isStorefrontPaymentMethodOn,
   normalizeStorefrontPaymentMethodSettings,
   STOREFRONT_PAYMENT_METHODS,
@@ -303,11 +307,21 @@ export async function paymentMethodsHandler(request: Request): Promise<Response>
     }
 
     const ownerUid = String(owner?.org?.ownerUid ?? '')
-    const accountId = ownerUid
-      ? (((await firestore.collection('profiles').doc(ownerUid).get()).get(
-          'stripeAccountId',
-        ) as string | undefined) ?? null)
+    const ownerProfile = ownerUid
+      ? await firestore.collection('profiles').doc(ownerUid).get()
       : null
+    // An account RECORDED in the other Stripe mode (AGL-2471) is no payout
+    // account here: this key cannot read it, every sale against it is
+    // refused, and "Set up payments" replaces it. So nothing is asked of it,
+    // and the methods read as waiting on Stripe, not as ready.
+    const accountId =
+      ownerProfile &&
+      !merchantAccountInOtherMode(
+        ownerProfile.get('stripeAccountLivemode'),
+        paymentProvider().platformMode(),
+      )
+        ? ((ownerProfile.get('stripeAccountId') as string | undefined) ?? null)
+        : null
 
     const storeRef = hostRef.collection('settings').doc('store')
     let settings = normalizeStorefrontPaymentMethodSettings(

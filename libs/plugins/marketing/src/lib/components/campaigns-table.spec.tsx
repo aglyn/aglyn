@@ -165,15 +165,28 @@ jest.mock('@aglyn/shared-ui-snackstack', () => ({
  * driven field by field: the drawer and data-driven-forms are library code
  * with their own tests, and what belongs here is which fields a campaign asks
  * for and what the card does with the values that come back.
+ *
+ * A refusal the create hands back for one field is said by that field (the
+ * real drawer's submission errors); the stub prints it under the field's name.
  */
 jest.mock('@aglyn/shared-ui-jsx-forms', () => ({
   CreateArtifactDrawer: ({ open, extraFields, onSubmit, errorSlot }: any) => {
+    const { useState } = jest.requireActual<typeof import('react')>('react')
+    const [refused, setRefused] = useState<Record<string, string> | null>(null)
     drawerFields = extraFields
     return open ? (
       <div>
-        <button type="button" onClick={() => onSubmit(formValues)}>
+        <button
+          type="button"
+          onClick={() => void Promise.resolve(onSubmit(formValues)).then((answer) => setRefused(answer ?? null))}
+        >
           {'Submit campaign'}
         </button>
+        {Object.entries(refused ?? {}).map(([name, reason]) => (
+          <p key={name} data-field={name}>
+            {reason}
+          </p>
+        ))}
         {/* A refusal is shown IN the drawer, where the form still is. */}
         {errorSlot}
       </div>
@@ -1146,7 +1159,7 @@ describe('the campaigns table on the org hub', () => {
     ['leaves nothing out', { mode: 'allExcept', exceptHostIds: [] }, /at least one site to leave out/],
     ['leaves every site out', { mode: 'allExcept', exceptHostIds: ['host-1', 'host-2'] }, /Keep at least one site in/],
     ['chooses no site', { mode: 'selected', hostIds: [] }, /at least one site/],
-  ])('refuses a choice that %s, with the reason, and writes nothing', async (_name, sharing, reason) => {
+  ])('refuses a choice that %s, with the reason beside the field, and writes nothing', async (_name, sharing, reason) => {
     formValues = { displayName: 'Nowhere', sharing }
     await mountAtOrg()
     fireEvent.click(screen.getAllByText('Create campaign')[0])
@@ -1154,7 +1167,10 @@ describe('the campaigns table on the org hub', () => {
     fireEvent.click(screen.getByText('Submit campaign'))
     await settle()
 
-    expect(screen.getByText(reason)).toBeTruthy()
+    // Handed back to the sharing field, never left under the form, where it
+    // outlived the choice it was about (production check 11/10).
+    expect(screen.getByText(reason).getAttribute('data-field')).toBe('sharing')
+    expect(screen.getAllByText(reason)).toHaveLength(1)
     expect(writes).toHaveLength(0)
     expect(posted).toHaveLength(0)
   })

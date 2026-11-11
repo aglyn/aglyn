@@ -6,6 +6,7 @@ import com.google.firebase.firestore.AggregateSource
 import com.google.firebase.firestore.DocumentSnapshot
 import com.google.firebase.firestore.FieldPath
 import com.google.firebase.firestore.FirebaseFirestore
+import com.google.firebase.firestore.MetadataChanges
 import com.google.firebase.firestore.SetOptions
 import com.google.firebase.firestore.Query
 import kotlinx.coroutines.channels.awaitClose
@@ -38,7 +39,9 @@ class FirebaseFirestoreReader(private val db: FirebaseFirestore) : FirestoreRead
 
   override fun observeDoc(path: String): Flow<Live<FirestoreDoc?>> = callbackFlow {
     trySend(Live.Loading)
-    val registration = db.document(path).addSnapshotListener { snapshot, error ->
+    // Metadata changes too, so a cached answer the server then confirms reaches the screen with `fromCache` false: a
+    // missing document the cache reports first is not missing yet (AGL-4047), as the Apple kit's listenDocument does.
+    val registration = db.document(path).addSnapshotListener(MetadataChanges.INCLUDE) { snapshot, error ->
       if (error != null) Telemetry.record(error, Telemetry.firestoreContext("listen_document", path))
       if (error != null) trySend(Live.Failed(error)) else trySend(Live.Ready(snapshot?.toDoc(), snapshot?.metadata?.isFromCache == true))
     }
@@ -54,7 +57,8 @@ class FirebaseFirestoreReader(private val db: FirebaseFirestore) : FirestoreRead
       Telemetry.record(error, Telemetry.firestoreContext("build", query.collectionPath))
       throw error
     }
-    val registration = built.addSnapshotListener { snapshot, error ->
+    val metadata = if (query.includeMetadataChanges) MetadataChanges.INCLUDE else MetadataChanges.EXCLUDE
+    val registration = built.addSnapshotListener(metadata) { snapshot, error ->
       if (error != null) {
         Telemetry.record(error, Telemetry.firestoreContext("listen", query.collectionPath))
         trySend(Live.Failed(error))

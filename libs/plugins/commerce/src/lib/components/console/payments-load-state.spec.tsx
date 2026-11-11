@@ -163,7 +163,13 @@ describe('PaymentsSettingsCard Stripe claims (AGL-1380)', () => {
     // `stripeAccountLivemode` since AGL-2471: the chip's success claim now
     // needs a linkage whose Stripe world was actually established, because
     // `stripeChargesEnabled` alone was true of a TEST account in production.
-    profile.data = { stripeChargesEnabled: true, stripeAccountLivemode: true }
+    // And an account id: the verdict is the server's, and a profile with no
+    // account is not connected whatever its flags say.
+    profile.data = {
+      stripeAccountId: 'acct_live_1',
+      stripeChargesEnabled: true,
+      stripeAccountLivemode: true,
+    }
 
     render(<PaymentsSettingsCard hostId="host-1" />)
 
@@ -175,7 +181,10 @@ describe('PaymentsSettingsCard Stripe claims (AGL-1380)', () => {
     // THE PRODUCTION SHAPE, verbatim: `profiles/7AVEMtDa…` carried exactly
     // this and its three storefronts read as ready while no money door would
     // charge against them. The card has to stop agreeing with a claim the
-    // checkout refuses.
+    // checkout refuses. On a LIVE deployment, as the server reads it: an
+    // unrecorded mode refuses only there.
+    const realKey = process.env.NEXT_PUBLIC_STRIPE_PUBLISHABLE_KEY
+    process.env.NEXT_PUBLIC_STRIPE_PUBLISHABLE_KEY = 'pk_live_spec'
     profile.status = 'success'
     profile.data = {
       stripeAccountId: 'acct_1TulDeRbL3B9Ioqz',
@@ -193,5 +202,6 @@ describe('PaymentsSettingsCard Stripe claims (AGL-1380)', () => {
     expect(
       screen.getByText(/has not been verified for payments on this site/),
     ).toBeTruthy()
+    process.env.NEXT_PUBLIC_STRIPE_PUBLISHABLE_KEY = realKey
   })
 })

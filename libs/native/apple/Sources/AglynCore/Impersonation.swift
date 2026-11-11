@@ -66,6 +66,22 @@ public final class SwitchingFirestoreReader: FirestoreReader, @unchecked Sendabl
     active.listenDocument(path, onChange)
   }
 
+  @MainActor
+  public func listenAnswer(
+    _ query: FirestoreQuery,
+    _ onChange: @escaping @MainActor (Result<FirestoreAnswer<[FirestoreDocument]>, Error>) -> Void
+  ) -> FirestoreListening {
+    active.listenAnswer(query, onChange)
+  }
+
+  @MainActor
+  public func listenDocumentAnswer(
+    _ path: [String],
+    _ onChange: @escaping @MainActor (Result<FirestoreAnswer<FirestoreDocument?>, Error>) -> Void
+  ) -> FirestoreListening {
+    active.listenDocumentAnswer(path, onChange)
+  }
+
   public func setDocument(_ path: [String], _ fields: [String: Any], merge: Bool) async throws {
     try await active.setDocument(path, fields, merge: merge)
   }
