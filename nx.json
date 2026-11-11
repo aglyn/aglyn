@@ -370,6 +370,20 @@
         "componentTestingTargetName": "component-test",
         "openTargetName": "open-cypress"
       }
+    },
+    {
+      "plugin": "@nx/vite/plugin",
+      "options": {
+        "devTargetName": "dev",
+        "typecheckTargetName": "typecheck",
+        "buildTargetName": "build",
+        "serveTargetName": "serve",
+        "previewTargetName": "preview",
+        "serveStaticTargetName": "serve-static"
+      },
+      "include": [
+        "libs/shared/svg-icons/svg-icons/**/*"
+      ]
     }
   ]
 }

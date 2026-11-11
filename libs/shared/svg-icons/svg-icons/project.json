@@ -6,11 +6,13 @@
   "tags": ["scope:lib", "scope:shared", "scope:ui", "type:ui"],
   "targets": {
     "build": {
-      "executor": "@nx/vite:build",
-      "outputs": ["{options.outputPath}"],
+      "outputs": [
+        "{projectRoot}/{options.outDir}",
+        "{workspaceRoot}/dist/libs/shared/svg-icons/svg-icons"
+      ],
       "defaultConfiguration": "production",
       "options": {
-        "outputPath": "dist/libs/shared/svg-icons/svg-icons"
+        "outDir": "../../../../dist/libs/shared/svg-icons/svg-icons"
       },
       "configurations": {
         "development": {
