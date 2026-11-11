@@ -596,8 +596,9 @@ struct SidebarList: View {
         AglynSidebarRow(
           item.label, selected: navigation.section == section && navigation.starKey == item.key, indent: 1, pill: pill,
           action: {
-            model.open(item.ref, in: navigation)
-            navigation.starKey = item.key
+            // The starred row stays selected where the sidebar still shows Starred; a place in a settings mode selects
+            // its own row there (a starred SEO selects SEO).
+            if model.open(item.ref, in: navigation).keepsStarredRow { navigation.starKey = item.key }
           }
         ) { dot }
       }

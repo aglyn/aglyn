@@ -1,5 +1,5 @@
 {
-  "about": "AGL-4059: every way into a place opens the same path as a link to it (the sidebar's mode, the area row or section, then each screen pushed over it). Replayed by libs/native/apple/Tests/AglynCoreTests/NavPathTests.swift and libs/native/kotlin/shell/src/desktopTest/kotlin/com/aglyn/shell/NavPathCasesTest.kt against the real nav manifest. Routes are the console paths the platform, the spec screens and the plugins register; staff is the staff list (its rows are the staff spec screens). An entry's via: link (a console path), universal (https), aglyn, notification and push (a stored link, put in the console's form by notificationLink), search (a record row's link), starred and recent (account items), searchScreen (a screens-and-settings row: its id and screen, in the scope in use).",
+  "about": "AGL-4059: every way into a place opens the same path as a link to it (the sidebar's mode, the area row or section, then each screen pushed over it). Replayed by libs/native/apple/Tests/AglynCoreTests/NavPathTests.swift and libs/native/kotlin/shell/src/desktopTest/kotlin/com/aglyn/shell/NavPathCasesTest.kt against the real nav manifest. Routes are the console paths the platform, the spec screens and the plugins register; staff is the staff list (its rows are the staff spec screens). Each case also names the scope every entry opens on (site, workspace: the whole workspace, leaving a site on screen; unchanged: where the window stands) and whether a Starred row it was opened from stays selected (only in the everyday list; a setting selects its own row). An entry's via: link (a console path), universal (https), aglyn, notification and push (a stored link, put in the console's form by notificationLink), search (a record row's link), starred and recent (account items), searchScreen (a screens-and-settings row: its id and screen, in the scope in use).",
   "routes": [
     { "path": "/hosts", "screen": "site.sites" },
     { "path": "/screens", "screen": "site.pages" },
@@ -43,7 +43,8 @@
   "cases": [
     {
       "name": "an order: the site's Orders, then the order",
-      "expect": { "mode": "main", "area": { "row": "orders", "screen": "commerce.orders", "params": {} }, "pushed": [{ "screen": "commerce.order", "params": { "order": "o1", "orderId": "o1" } }] },
+      "scope": "site",
+      "expect": { "mode": "main", "area": { "row": "orders", "screen": "commerce.orders", "params": {} }, "pushed": [{ "screen": "commerce.order", "params": { "order": "o1", "orderId": "o1" } }], "starredRowStays": true },
       "entries": [
         { "via": "link", "link": "/acme/hosts/shop/products/orders?order=o1" },
         { "via": "universal", "link": "https://console.example.com/acme/hosts/shop/products/orders?order=o1#items" },
@@ -57,7 +58,8 @@
     },
     {
       "name": "a page three levels deep: Website, Pages, the page's version",
-      "expect": { "mode": "main", "area": { "row": "pages", "screen": "site.pages", "params": {} }, "pushed": [{ "screen": "site.pages", "params": { "screenId": "s1", "versionId": "v1" } }] },
+      "scope": "site",
+      "expect": { "mode": "main", "area": { "row": "pages", "screen": "site.pages", "params": {} }, "pushed": [{ "screen": "site.pages", "params": { "screenId": "s1", "versionId": "v1" } }], "starredRowStays": true },
       "entries": [
         { "via": "link", "link": "/acme/hosts/shop/screens/s1/versions/v1/view" },
         { "via": "universal", "link": "https://console.example.com/acme/hosts/shop/screens/s1/versions/v1/view" },
@@ -70,7 +72,8 @@
     },
     {
       "name": "a page: Pages, then the page",
-      "expect": { "mode": "main", "area": { "row": "pages", "screen": "site.pages", "params": {} }, "pushed": [{ "screen": "site.pages", "params": { "screenId": "s1" } }] },
+      "scope": "site",
+      "expect": { "mode": "main", "area": { "row": "pages", "screen": "site.pages", "params": {} }, "pushed": [{ "screen": "site.pages", "params": { "screenId": "s1" } }], "starredRowStays": true },
       "entries": [
         { "via": "link", "link": "/acme/hosts/shop/screens/s1" },
         { "via": "notification", "link": "/h1/screens/s1", "orgSlug": "acme", "hostId": "h1", "hostSubdomain": "shop" },
@@ -79,7 +82,8 @@
     },
     {
       "name": "a page's Besigner: Pages, the page, then the Besigner",
-      "expect": { "mode": "main", "area": { "row": "pages", "screen": "site.pages", "params": {} }, "pushed": [{ "screen": "site.pages", "params": { "screenId": "s1" } }, { "besigner": "/acme/hosts/shop/screens/s1/versions/v1/besigner" }] },
+      "scope": "site",
+      "expect": { "mode": "main", "area": { "row": "pages", "screen": "site.pages", "params": {} }, "pushed": [{ "screen": "site.pages", "params": { "screenId": "s1" } }, { "besigner": "/acme/hosts/shop/screens/s1/versions/v1/besigner" }], "starredRowStays": true },
       "entries": [
         { "via": "link", "link": "/acme/hosts/shop/screens/s1/versions/v1/besigner" },
         { "via": "notification", "link": "/h1/screens/s1/versions/v1/besigner", "orgSlug": "acme", "hostId": "h1", "hostSubdomain": "shop" }
@@ -87,7 +91,8 @@
     },
     {
       "name": "the site's Pages list itself",
-      "expect": { "mode": "main", "area": { "row": "pages", "screen": "site.pages", "params": {} }, "pushed": [] },
+      "scope": "site",
+      "expect": { "mode": "main", "area": { "row": "pages", "screen": "site.pages", "params": {} }, "pushed": [], "starredRowStays": true },
       "entries": [
         { "via": "link", "link": "/acme/hosts/shop/screens" },
         { "via": "link", "link": "/acme/hosts/shop/screens/list" },
@@ -98,7 +103,8 @@
     },
     {
       "name": "a site setting: Site settings, Setup, SEO",
-      "expect": { "mode": "siteSettings", "area": { "row": "seo", "screen": "site.setup", "params": { "section": "seo" } }, "pushed": [] },
+      "scope": "site",
+      "expect": { "mode": "siteSettings", "area": { "row": "seo", "screen": "site.setup", "params": { "section": "seo" } }, "pushed": [], "starredRowStays": false },
       "entries": [
         { "via": "link", "link": "/acme/hosts/shop/setup/seo" },
         { "via": "notification", "link": "/h1/setup/seo", "orgSlug": "acme", "hostId": "h1", "hostSubdomain": "shop" },
@@ -109,7 +115,8 @@
     },
     {
       "name": "a workspace setting: Workspace settings, SSO",
-      "expect": { "mode": "workspaceSettings", "area": { "row": "sso", "screen": "core.settings.sso", "params": {} }, "pushed": [] },
+      "scope": "workspace",
+      "expect": { "mode": "workspaceSettings", "area": { "row": "sso", "screen": "core.settings.sso", "params": {} }, "pushed": [], "starredRowStays": false },
       "entries": [
         { "via": "link", "link": "/acme/settings/sso" },
         { "via": "notification", "link": "/org/settings/sso", "orgSlug": "acme" },
@@ -120,7 +127,8 @@
     },
     {
       "name": "a teammate: Workspace settings, Members, the member",
-      "expect": { "mode": "workspaceSettings", "area": { "row": "members", "screen": "core.team", "params": {} }, "pushed": [{ "screen": "core.team.member", "params": { "uid": "u1" } }] },
+      "scope": "workspace",
+      "expect": { "mode": "workspaceSettings", "area": { "row": "members", "screen": "core.team", "params": {} }, "pushed": [{ "screen": "core.team.member", "params": { "uid": "u1" } }], "starredRowStays": false },
       "entries": [
         { "via": "link", "link": "/acme/team/u1" },
         { "via": "notification", "link": "/org/team/u1", "orgSlug": "acme" },
@@ -129,7 +137,8 @@
     },
     {
       "name": "a lead in the whole workspace: CRM, Leads, the lead",
-      "expect": { "mode": "main", "area": { "row": "crm", "screen": "crm.leads", "params": {} }, "pushed": [{ "screen": "crm.lead", "params": { "lead": "l1" } }] },
+      "scope": "workspace",
+      "expect": { "mode": "main", "area": { "row": "crm", "screen": "crm.leads", "params": {} }, "pushed": [{ "screen": "crm.lead", "params": { "lead": "l1" } }], "starredRowStays": true },
       "entries": [
         { "via": "link", "link": "/acme/crm/leads/l1" },
         { "via": "notification", "link": "/org/crm/leads/l1", "orgSlug": "acme" },
@@ -139,7 +148,8 @@
     },
     {
       "name": "a campaign: Marketing, Campaigns, the campaign",
-      "expect": { "mode": "main", "area": { "row": "marketing", "screen": "marketing.campaigns", "params": {} }, "pushed": [{ "screen": "marketing.campaigns", "params": { "campaign": "c1" } }] },
+      "scope": "site",
+      "expect": { "mode": "main", "area": { "row": "marketing", "screen": "marketing.campaigns", "params": {} }, "pushed": [{ "screen": "marketing.campaigns", "params": { "campaign": "c1" } }], "starredRowStays": true },
       "entries": [
         { "via": "link", "link": "/acme/hosts/shop/marketing/campaigns/c1" },
         { "via": "notification", "link": "/h1/marketing/campaigns/c1", "orgSlug": "acme", "hostId": "h1", "hostSubdomain": "shop" },
@@ -148,7 +158,8 @@
     },
     {
       "name": "Campaigns from the Inbox: the Inbox's Campaigns section",
-      "expect": { "mode": "main", "area": { "row": "inbox", "screen": "marketing.campaigns", "params": {} }, "pushed": [] },
+      "scope": "site",
+      "expect": { "mode": "main", "area": { "row": "inbox", "screen": "marketing.campaigns", "params": {} }, "pushed": [], "starredRowStays": true },
       "entries": [
         { "via": "link", "link": "/acme/hosts/shop/inbox/campaigns" },
         { "via": "starred", "item": { "kind": "screen", "id": "inbox", "orgId": "org-acme", "hostId": "h1", "label": "Campaigns", "screen": "marketing.campaigns" } }
@@ -156,7 +167,8 @@
     },
     {
       "name": "a marketplace hub section: Marketplace, Payouts",
-      "expect": { "mode": "main", "area": { "row": "marketplace", "screen": "marketplace.sell", "params": { "section": "payouts" } }, "pushed": [] },
+      "scope": "workspace",
+      "expect": { "mode": "main", "area": { "row": "marketplace", "screen": "marketplace.sell", "params": { "section": "payouts" } }, "pushed": [], "starredRowStays": true },
       "entries": [
         { "via": "link", "link": "/acme/marketplace/payouts" },
         { "via": "notification", "link": "/org/marketplace/payouts", "orgSlug": "acme" },
@@ -165,7 +177,8 @@
     },
     {
       "name": "a marketplace listing: Marketplace, then the listing",
-      "expect": { "mode": "main", "area": { "row": "marketplace", "screen": "marketplace.browse", "params": {} }, "pushed": [{ "screen": "marketplace.listing", "params": { "listingId": "l1" } }] },
+      "scope": "workspace",
+      "expect": { "mode": "main", "area": { "row": "marketplace", "screen": "marketplace.browse", "params": {} }, "pushed": [{ "screen": "marketplace.listing", "params": { "listingId": "l1" } }], "starredRowStays": true },
       "entries": [
         { "via": "link", "link": "/acme/marketplace/l1" },
         { "via": "starred", "item": { "kind": "listing", "id": "l1", "orgId": "org-acme", "label": "Booking widget", "screen": "marketplace.listing", "params": { "listingId": "l1" } } }
@@ -173,7 +186,8 @@
     },
     {
       "name": "an AI job's notice: AI jobs, then the job",
-      "expect": { "mode": "main", "area": { "row": "aiJobs", "screen": "ai.jobs", "params": {} }, "pushed": [{ "screen": "ai.job", "params": { "jobId": "j1" } }] },
+      "scope": "site",
+      "expect": { "mode": "main", "area": { "row": "aiJobs", "screen": "ai.jobs", "params": {} }, "pushed": [{ "screen": "ai.job", "params": { "jobId": "j1" } }], "starredRowStays": true },
       "entries": [
         { "via": "link", "link": "/acme/hosts/shop/ai-jobs/j1" },
         { "via": "notification", "link": "/h1?aiJob=j1", "orgSlug": "acme", "hostId": "h1", "hostSubdomain": "shop" },
@@ -183,7 +197,8 @@
     },
     {
       "name": "the site's Analytics: its Overview row",
-      "expect": { "mode": "main", "area": { "row": "overview", "screen": "shell.analytics", "params": {} }, "pushed": [] },
+      "scope": "site",
+      "expect": { "mode": "main", "area": { "row": "overview", "screen": "shell.analytics", "params": {} }, "pushed": [], "starredRowStays": true },
       "entries": [
         { "via": "link", "link": "/acme/hosts/shop/analytics" },
         { "via": "notification", "link": "/h1/analytics", "orgSlug": "acme", "hostId": "h1", "hostSubdomain": "shop" },
@@ -193,25 +208,35 @@
     },
     {
       "name": "the whole workspace's Media",
-      "expect": { "mode": "main", "area": { "row": "media", "screen": "site.media", "params": {} }, "pushed": [] },
+      "scope": "workspace",
+      "expect": { "mode": "main", "area": { "row": "media", "screen": "site.media", "params": {} }, "pushed": [], "starredRowStays": true },
       "entries": [
         { "via": "link", "link": "/acme/media" },
         { "via": "starred", "item": { "kind": "screen", "id": "media", "orgId": "org-acme", "label": "Media", "screen": "site.media" } }
       ]
     },
     {
-      "name": "a workspace's and a site's own address: Home",
-      "expect": { "mode": "main", "area": { "shell": "home" }, "pushed": [] },
+      "name": "a workspace's own address: its Home",
+      "scope": "workspace",
+      "expect": { "mode": "main", "area": { "shell": "home" }, "pushed": [], "starredRowStays": false },
       "entries": [
         { "via": "link", "link": "/acme" },
+        { "via": "notification", "link": "/org", "orgSlug": "acme" }
+      ]
+    },
+    {
+      "name": "a site's own address: its Home",
+      "scope": "site",
+      "expect": { "mode": "main", "area": { "shell": "home" }, "pushed": [], "starredRowStays": false },
+      "entries": [
         { "via": "link", "link": "/acme/hosts/shop" },
-        { "via": "notification", "link": "/org", "orgSlug": "acme" },
         { "via": "notification", "link": "/h1", "orgSlug": "acme", "hostId": "h1", "hostSubdomain": "shop" }
       ]
     },
     {
       "name": "a page the app has no screen for yet, over the area it is in",
-      "expect": { "mode": "main", "area": { "row": "products", "screen": "commerce.products", "params": {} }, "pushed": [{ "unavailable": "/acme/hosts/shop/products/subscriptions?subscription=s1" }] },
+      "scope": "site",
+      "expect": { "mode": "main", "area": { "row": "products", "screen": "commerce.products", "params": {} }, "pushed": [{ "unavailable": "/acme/hosts/shop/products/subscriptions?subscription=s1" }], "starredRowStays": true },
       "entries": [
         { "via": "link", "link": "/acme/hosts/shop/products/subscriptions?subscription=s1" },
         { "via": "notification", "link": "/h1/products/subscriptions?subscription=s1", "orgSlug": "acme", "hostId": "h1", "hostSubdomain": "shop" }
@@ -219,7 +244,8 @@
     },
     {
       "name": "notification settings",
-      "expect": { "mode": "main", "area": { "shell": "notificationSettings" }, "pushed": [] },
+      "scope": "unchanged",
+      "expect": { "mode": "main", "area": { "shell": "notificationSettings" }, "pushed": [], "starredRowStays": false },
       "entries": [
         { "via": "link", "link": "/manage/notifications/settings" },
         { "via": "universal", "link": "https://console.example.com/manage/notifications/settings" }
@@ -227,7 +253,8 @@
     },
     {
       "name": "a staff page: the staff list's Workspaces, then the workspace",
-      "expect": { "mode": "staff", "area": { "row": "core.staff.orgs", "screen": "core.staff.orgs", "params": {} }, "pushed": [{ "screen": "core.staff.org", "params": { "orgId": "o1" } }] },
+      "scope": "unchanged",
+      "expect": { "mode": "staff", "area": { "row": "core.staff.orgs", "screen": "core.staff.orgs", "params": {} }, "pushed": [{ "screen": "core.staff.org", "params": { "orgId": "o1" } }], "starredRowStays": false },
       "entries": [
         { "via": "link", "link": "/admin/orgs/o1#site-care" },
         { "via": "notification", "link": "/admin/orgs/o1", "orgSlug": "acme" }

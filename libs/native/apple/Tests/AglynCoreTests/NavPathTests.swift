@@ -48,9 +48,13 @@ final class NavPathTests: XCTestCase {
     for item in cases {
       let name = item["name"] as? String ?? "?"
       let expected = try XCTUnwrap(Self.path(item["expect"] as? [String: Any]), name)
+      // A starred setting selects its own row in its mode, not the starred row (AGL-4059 iPad drive).
+      XCTAssertEqual(
+        expected.keepsStarredRow, (item["expect"] as? [String: Any])?["starredRowStays"] as? Bool, "\(name): the starred row stays")
       for entry in item["entries"] as? [[String: Any]] ?? [] {
         let via = entry["via"] as? String ?? "?"
         XCTAssertEqual(open(entry)?.unscoped, expected, "\(name), via \(via)")
+        if let scope = scope(of: entry) { XCTAssertEqual(scope, item["scope"] as? String, "\(name), via \(via): its scope") }
         entries += 1
       }
     }
@@ -100,6 +104,29 @@ final class NavPathTests: XCTestCase {
   }
 
   // MARK: Replaying an entry
+
+  /// Where an entry opens: `site`, `workspace` (the whole workspace, leaving a site on screen) or `unchanged`; nil for a
+  /// search row (the scope in use).
+  private func scope(of entry: [String: Any]) -> String? {
+    func name(_ scope: DeepLinks.Scope?) -> String {
+      guard let scope, scope.orgSlug != nil else { return "unchanged" }
+      return scope.hostSlug == nil ? "workspace" : "site"
+    }
+    let link = entry["link"] as? String
+    switch entry["via"] as? String {
+    case "link", "universal", "aglyn", "search":
+      return name(link.flatMap { NavPaths.link($0, routes: routes, lists: lists, inSite: true)?.scope })
+    case "notification", "push":
+      let stored = DeepLinks.notificationLink(
+        link, orgSlug: entry["orgSlug"] as? String, hostID: entry["hostId"] as? String,
+        hostSubdomain: entry["hostSubdomain"] as? String)
+      return name(stored.flatMap { NavPaths.link($0, routes: routes, lists: lists, inSite: true)?.scope })
+    case "starred", "recent":
+      return ((entry["item"] as? [String: Any])?["hostId"] as? String) == nil ? "workspace" : "site"
+    default:
+      return nil
+    }
+  }
 
   private func open(_ entry: [String: Any]) -> NavPath? {
     let routes = routes

@@ -317,8 +317,9 @@ final class AppModel {
   }
 
   /// Opens a Starred or Recent item (the sidebar's, Home's, the title bar's, the search's): onto its workspace and site,
-  /// then the same path a link to it opens (AGL-4059).
-  func open(_ item: AccountItemRef, in navigation: ShellNavigation) {
+  /// then the same path a link to it opens (AGL-4059). Returns that path.
+  @discardableResult
+  func open(_ item: AccountItemRef, in navigation: ShellNavigation) -> NavPath {
     if item.orgId != workspace?.org?.id { workspace?.open(orgID: item.orgId, hostID: item.hostId) }
     if let hostID = item.hostId {
       workspace?.selectSite(hostID)
@@ -326,7 +327,9 @@ final class AppModel {
     } else if app == .aglyn {
       navigation.inSite = false
     }
-    go(NavPaths.place(item, routes: registry.deepLinks, lists: navPathLists), in: navigation)
+    let path = NavPaths.place(item, routes: registry.deepLinks, lists: navPathLists)
+    go(path, in: navigation)
+    return path
   }
 
   /// Opens a screen of the scope in use (a screens-and-settings match in the search, a record row that names a screen):

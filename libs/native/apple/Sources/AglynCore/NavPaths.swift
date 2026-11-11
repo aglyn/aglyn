@@ -55,6 +55,14 @@ public struct NavPath: Equatable, Sendable {
     self.pushed = pushed
   }
 
+  /// Whether the sidebar's Starred row the place was opened from stays the selected row: only where the sidebar still
+  /// shows Starred, the scope's everyday list. A place in a settings mode or the staff list selects its own row there
+  /// (a starred Site settings › SEO selects SEO, AGL-4059).
+  public var keepsStarredRow: Bool {
+    guard mode == .main, case .row = area else { return false }
+    return true
+  }
+
   /// The same path with every level's workspace and site slugs dropped: a link carries them, a stored place does not,
   /// and both open the same screen.
   public var unscoped: NavPath {
