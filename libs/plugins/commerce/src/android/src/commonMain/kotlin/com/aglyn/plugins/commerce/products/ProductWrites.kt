@@ -3,9 +3,11 @@ package com.aglyn.plugins.commerce.products
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.setValue
+import com.aglyn.contracts.ProductCheckIn
 import com.aglyn.contracts.ProductStatus
 import com.aglyn.contracts.ProductType
 import com.aglyn.contracts.commerceSlug
+import com.aglyn.contracts.normalizeProductCheckIn
 import com.aglyn.core.ApiMethod
 import com.aglyn.core.ConsoleApiClient
 import com.aglyn.core.ConsoleApiError
@@ -75,6 +77,8 @@ data class VariantDraft(
   val selections: Map<String, String> = emptyMap(),
   /** Added to the matrix in this edit, so its stock and picks are written with the save. */
   val fresh: Boolean = false,
+  /** Its own check-in setting (AGL-4063), or null to follow the product's. */
+  val checkIn: ProductCheckIn? = null,
 )
 
 /** What the editor edits. */
@@ -89,7 +93,16 @@ data class ProductDraft(
   val variants: List<VariantDraft> = listOf(VariantDraft("default", "Default", "")),
   /** Add-ons (AGL-4100): choices added to the item that need no stock of their own. */
   val addOns: List<AddOnGroupDraft> = emptyList(),
+  /** Check-in at the window (AGL-4063): whether each one sold is somebody to check in, and how many people one admits. */
+  val checkIn: ProductCheckIn? = null,
 )
+
+/** A stored product's variants as their raw maps, to read what a typed variant does not carry as stored. */
+private fun storedVariantMaps(data: Map<String, Any?>?): List<Map<*, *>> = (data?.get("variants") as? List<*>).orEmpty().mapNotNull { it as? Map<*, *> }
+
+/** A stored variant's own check-in setting, made safe. */
+private fun storedVariantCheckIn(data: Map<String, Any?>?, id: String): ProductCheckIn? =
+  normalizeProductCheckIn(storedVariantMaps(data).firstOrNull { it["id"] == id }?.get("checkIn"))
 
 @OptIn(ExperimentalUuidApi::class)
 fun newProductId(): String = "p" + Uuid.random().toHexString().take(19)
@@ -116,9 +129,11 @@ fun productDraftOf(productId: String, data: Map<String, Any?>): ProductDraft {
         barcode = variant.barcode.orEmpty(),
         stock = variant.inventory?.toLong()?.toString().orEmpty(),
         selections = variant.options.orEmpty(),
+        checkIn = storedVariantCheckIn(data, variant.id.orEmpty()),
       )
     },
     addOns = addOnDrafts(data),
+    checkIn = normalizeProductCheckIn(data["checkIn"]),
   )
 }
 
@@ -144,7 +159,9 @@ fun checkProductDraft(draft: ProductDraft): String? {
 /**
  * The product a save sends: the stored product (or the console's blank one)
  * with the editor's fields on top. Codes and compare-at prices left empty
- * are removed, as the console's editor removes them.
+ * are removed, as the console's editor removes them. A check-in setting is
+ * written only where the editor changed it, as the console's fields write it;
+ * an untouched one stays as stored.
  */
 fun productSaveJson(draft: ProductDraft, stored: Map<String, Any?>?): JsonObject {
   val base: MutableMap<String, JsonElement> = stored?.let(::storedProductJson)?.toMutableMap() ?: mutableMapOf(
@@ -166,6 +183,9 @@ fun productSaveJson(draft: ProductDraft, stored: Map<String, Any?>?): JsonObject
     if (draft.create || edit.fresh) {
       edit.stock.trim().toLongOrNull()?.let { fields["inventory"] = JsonPrimitive(it) } ?: fields.put("inventory", JsonNull)
     }
+    if (edit.checkIn != storedVariantCheckIn(stored, edit.id)) {
+      edit.checkIn?.let { fields["checkIn"] = productCheckInJson(it) } ?: fields.remove("checkIn")
+    }
     JsonObject(fields)
   }
   base["name"] = JsonPrimitive(draft.name)
@@ -175,6 +195,9 @@ fun productSaveJson(draft: ProductDraft, stored: Map<String, Any?>?): JsonObject
   if (draft.options.isNotEmpty() || "options" in base) base["options"] = JsonArray(draft.options.map { JsonObject(mapOf("name" to JsonPrimitive(it.name.trim()), "values" to JsonArray(it.values.map(::JsonPrimitive)))) })
   base["variants"] = JsonArray(variants)
   if (draft.addOns.isNotEmpty() || "modifierGroups" in base) base["modifierGroups"] = addOnsJson(draft.addOns, base["modifierGroups"])
+  if (draft.checkIn != normalizeProductCheckIn(stored?.get("checkIn"))) {
+    draft.checkIn?.let { base["checkIn"] = productCheckInJson(it) } ?: base.remove("checkIn")
+  }
   if (draft.create) base["slug"] = JsonPrimitive(commerceSlug(draft.name))
   return JsonObject(base)
 }

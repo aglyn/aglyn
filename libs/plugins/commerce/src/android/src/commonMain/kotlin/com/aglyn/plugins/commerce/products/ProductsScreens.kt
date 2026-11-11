@@ -609,6 +609,7 @@ private fun ProductDialogs(context: NativePluginContext, editor: ProductEditorMo
           }
         }
         AddOnsFields(context, draft, editor::change)
+        ProductCheckInFields(context, draft, editor::change)
       }
     }
   }
