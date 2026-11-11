@@ -1,6 +1,7 @@
 package com.aglyn.webview
 
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.staticCompositionLocalOf
 import com.aglyn.core.AuthSession
 import com.aglyn.pluginhost.BesignerEntry
 
@@ -24,6 +25,35 @@ expect fun BesignerWebView(
   onConsoleLink: (path: String) -> Unit,
   bridge: ConsoleBridge? = null,
 )
+
+/**
+ * The shell's way to press the Besigner's own back control (AGL-4056). The editor has no native head in the app: its
+ * back control is the way out, and the title bar's Back, Ctrl/⌘+[ and the system back press it, so whatever it does
+ * first runs for each of them. The Besigner on screen registers itself here.
+ */
+class BesignerBack {
+  /** Set by the Besigner on screen, cleared when it leaves. */
+  var handler: (() -> Unit)? = null
+
+  /** Presses the back control of the Besigner on screen; false when there is none, so the caller goes back itself. */
+  fun press(): Boolean {
+    val pressing = handler ?: return false
+    pressing()
+    return true
+  }
+}
+
+/** The shell's [BesignerBack], for the Besigner view to register with. */
+val LocalBesignerBack = staticCompositionLocalOf<BesignerBack?> { null }
+
+/**
+ * Where leaving the Besigner goes (AGL-4056): after a document switch, the current document's own place ([url], the
+ * page its back control went to), else back to the screen that opened it ([path]).
+ */
+internal fun besignerLeave(path: String, current: String, url: String, onExit: () -> Unit, onConsoleLink: (String) -> Unit) {
+  val place = BesignerEntry.returnPath(path, current, consolePathOf(url))
+  if (place != null) onConsoleLink(place) else onExit()
+}
 
 /** Where a navigation inside the Besigner view goes. */
 sealed interface BesignerNavigation {

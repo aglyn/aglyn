@@ -43,9 +43,10 @@ struct AglynCommands: Commands {
       Button("Search or Jump To…") { navigation?.showOneBox = true }
         .keyboardShortcut("k", modifiers: .command)
         .disabled(navigation == nil)
-      Button("Back") { navigation?.goBack() }
+      // Over the Besigner, ⌘[ presses the editor's own back control, as Esc does (AGL-4056).
+      Button("Back") { navigation?.back() }
         .keyboardShortcut("[", modifiers: .command)
-        .disabled(navigation?.canGoBack != true)
+        .disabled(navigation?.canGoBackOrLeave != true)
       Button("Forward") { navigation?.goForward() }
         .keyboardShortcut("]", modifiers: .command)
         .disabled(navigation?.canGoForward != true)

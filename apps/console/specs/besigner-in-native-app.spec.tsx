@@ -23,11 +23,12 @@
 import { PLATFORM_BRANDING_PROFILE } from '@aglyn/aglyn'
 import { PLATFORM_BRAND_NAME } from '@aglyn/aglyn/app-utils/platform-brand'
 import * as shared from '@aglyn/aglyn/app-utils/native-app-web-view'
-import { render, screen, waitFor } from '@testing-library/react'
+import * as React from 'react'
+import { fireEvent, render, screen, waitFor } from '@testing-library/react'
 
 /**
- * The Besigner inside the native apps (AGL-3894): the editor chrome a browser
- * tab needs and an app screen does not.
+ * The Besigner inside the native apps (AGL-3894, AGL-4056): the editor chrome
+ * a browser tab needs and an app screen does not, and the back arrow both keep.
  *
  * Every case here is a DIRECT open: the web view's user agent carries the
  * apps' `AglynApp/<version>` marker and the tab holds no mark from the
@@ -64,16 +65,17 @@ jest.mock('../hooks/use-secondary-nav', () => ({
   __esModule: true,
   useUrlNamesOrg: () => true,
 }))
-// The bar's own chrome, each covered by its own specs; here only the arrow matters.
+// The bar's own chrome, each covered by its own specs; here only what the apps leave out or keep matters.
 jest.mock('../components/layouts/app-bar-menubar.component', () => ({ __esModule: true, default: () => null }))
-jest.mock('../components/global-search/global-search-trigger.component', () => ({ __esModule: true, default: () => null }))
+jest.mock('../components/global-search/global-search-trigger.component', () => ({ __esModule: true, default: () => 'web search' }))
 jest.mock('../components/notification-prompt.component', () => ({ __esModule: true, default: () => null }))
 jest.mock('../components/notifications-menu.component', () => ({ __esModule: true, default: () => 'web bell' }))
 jest.mock('../components/offline-indicator.component', () => ({ __esModule: true, default: () => null }))
 jest.mock('../components/console-top-bar-slot.component', () => ({ __esModule: true, default: () => null }))
 jest.mock('../components/org-switcher-nav.component', () => ({ __esModule: true, default: () => null }))
-jest.mock('../components/user-menu.component', () => ({ __esModule: true, default: () => null }))
+jest.mock('../components/user-menu.component', () => ({ __esModule: true, default: () => 'web avatar' }))
 
+import { NATIVE_BESIGNER_BACK_CONTROL_ID } from '@aglyn/aglyn/app-utils/native-besigner-back'
 import ConsoleBrandingEffects from '../components/console-branding-effects.component'
 import MainLayout from '../components/layouts/main.layout'
 import {
@@ -126,17 +128,127 @@ describe('the editor\'s back arrow', () => {
     expect(screen.getByText('back')).toBeTruthy()
   })
 
-  it('is not drawn inside the apps, whose Done button is the way out', async () => {
+  // AGL-4056: the apps draw no head over the editor, so its own arrow is the way out there too.
+  it('is drawn inside the apps too, by the id the apps press it with', async () => {
     setUserAgent(MAC_APP_UA)
     render(editor())
-    await waitFor(() => expect(screen.queryByText('back')).toBeNull())
-    expect(screen.getByText('canvas')).toBeTruthy()
+    await waitFor(() => expect(screen.getByText('back')).toBeTruthy())
+    const control = document.getElementById(NATIVE_BESIGNER_BACK_CONTROL_ID)
+    expect(control?.getAttribute('href')).toBe('/acme/hosts/demo/screens/s1/view')
   })
 
-  it('is not drawn for a build that only set the entry page\'s mark', async () => {
+  // A routed link showed the console's loading page before the app closed the editor; a plain link's whole-page
+  // navigation is caught by the app before anything loads (AGL-4056).
+  describe('with the router link every editor passes', () => {
+    const RouterLink = React.forwardRef<HTMLAnchorElement, { href: string; children?: React.ReactNode }>(
+      function RouterLink({ href, children, ...rest }, ref) {
+        return <a ref={ref} href={href} data-router="yes" {...rest}>{children}</a>
+      },
+    )
+    const routed = () => (
+      <MainLayout
+        besigner
+        backButton={{ component: RouterLink, componentVariant: 'naked', href: '/acme/hosts/demo/forms/f1' } as any}
+      >
+        <div>canvas</div>
+      </MainLayout>
+    )
+
+    it('routes in a browser tab', () => {
+      render(routed())
+      expect(document.getElementById(NATIVE_BESIGNER_BACK_CONTROL_ID)?.getAttribute('data-router')).toBe('yes')
+    })
+
+    it('is a plain link inside the apps, to the same place', async () => {
+      setUserAgent(MAC_APP_UA)
+      render(routed())
+      await waitFor(() =>
+        expect(document.getElementById(NATIVE_BESIGNER_BACK_CONTROL_ID)?.getAttribute('data-router')).toBeNull(),
+      )
+      const control = document.getElementById(NATIVE_BESIGNER_BACK_CONTROL_ID)
+      expect(control?.tagName).toBe('A')
+      expect(control?.getAttribute('href')).toBe('/acme/hosts/demo/forms/f1')
+      expect(control?.getAttribute('componentvariant')).toBeNull()
+    })
+  })
+
+  it('is drawn for a build that only set the entry page\'s mark', async () => {
     markNativeAppWebView()
     render(editor())
-    await waitFor(() => expect(screen.queryByText('back')).toBeNull())
+    await waitFor(() => expect(document.getElementById(NATIVE_BESIGNER_BACK_CONTROL_ID)).toBeTruthy())
+  })
+})
+
+describe('Esc and ⌘[ inside the apps', () => {
+  const editor = () => (
+    <MainLayout besigner backButton={{ href: '/acme/hosts/demo/screens/s1/view' }}>
+      <input aria-label="heading" />
+    </MainLayout>
+  )
+
+  /** Counts presses of the back control, without leaving the test page. */
+  function watchBack() {
+    const control = document.getElementById(NATIVE_BESIGNER_BACK_CONTROL_ID) as HTMLElement
+    const pressed = jest.fn((event: Event) => event.preventDefault())
+    control.addEventListener('click', pressed)
+    return pressed
+  }
+
+  it('Esc on the editor presses the back control', async () => {
+    setUserAgent(MAC_APP_UA)
+    render(editor())
+    await waitFor(() => expect(document.getElementById(NATIVE_BESIGNER_BACK_CONTROL_ID)).toBeTruthy())
+    const pressed = watchBack()
+    fireEvent.keyDown(document.body, { key: 'Escape' })
+    expect(pressed).toHaveBeenCalledTimes(1)
+  })
+
+  it('⌘[ presses it too', async () => {
+    setUserAgent(MAC_APP_UA)
+    render(editor())
+    await waitFor(() => expect(document.getElementById(NATIVE_BESIGNER_BACK_CONTROL_ID)).toBeTruthy())
+    const pressed = watchBack()
+    fireEvent.keyDown(document.body, { key: '[', metaKey: true })
+    expect(pressed).toHaveBeenCalledTimes(1)
+  })
+
+  it('Esc in a field stays the field\'s', async () => {
+    setUserAgent(MAC_APP_UA)
+    render(editor())
+    await waitFor(() => expect(document.getElementById(NATIVE_BESIGNER_BACK_CONTROL_ID)).toBeTruthy())
+    const pressed = watchBack()
+    fireEvent.keyDown(screen.getByLabelText('heading'), { key: 'Escape' })
+    expect(pressed).not.toHaveBeenCalled()
+  })
+
+  it('leaves a browser tab\'s Esc alone', () => {
+    render(editor())
+    const pressed = watchBack()
+    fireEvent.keyDown(document.body, { key: 'Escape' })
+    fireEvent.keyDown(document.body, { key: '[', metaKey: true })
+    expect(pressed).not.toHaveBeenCalled()
+  })
+})
+
+describe('the bar\'s duplicates of the apps\' own chrome', () => {
+  const editor = () => (
+    <MainLayout besigner backButton={{ href: '/acme/hosts/demo/screens/s1/view' }}>
+      <div>canvas</div>
+    </MainLayout>
+  )
+
+  it('a browser tab keeps the workspace search and the avatar', () => {
+    render(editor())
+    expect(screen.getByText('web search')).toBeTruthy()
+    expect(screen.getByText('web avatar')).toBeTruthy()
+  })
+
+  it('the apps leave both out: their own ⌘K and account menu are the ones', async () => {
+    setUserAgent(MAC_APP_UA)
+    render(editor())
+    await waitFor(() => expect(screen.queryByText('web search')).toBeNull())
+    expect(screen.queryByText('web avatar')).toBeNull()
+    expect(screen.getByText('canvas')).toBeTruthy()
   })
 })
 

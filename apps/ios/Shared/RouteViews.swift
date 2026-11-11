@@ -89,12 +89,17 @@ struct NotInAppView: View {
 /// against the editor it left (AGL-3850).
 @MainActor
 final class BesignerWebSession {
-  /// The editor page the web view shows (or is entering).
+  /// The editor page the Besigner opened on.
+  let opened: String
+  /// The editor page the web view shows (or is entering): another document's once the switcher moved it (AGL-4056).
   private(set) var current: String
   /// Set once the web view has handed the person back to the app.
   var left = false
 
-  init(path: String) { current = path }
+  init(path: String) {
+    opened = path
+    current = path
+  }
 
   /// Whether the web view may show `next`; a Besigner page becomes the current one.
   func allows(_ next: String) -> Bool {
@@ -112,6 +117,8 @@ final class BesignerWebSession {
 struct BesignerScreen: View {
   @Environment(AppModel.self) private var model
   @Environment(ShellNavigation.self) private var navigation
+  /// The Mac's and iPad's drawn chrome: there the Besigner opens in focus mode (AGL-4056).
+  @Environment(\.aglynWideChrome) private var wide
   let path: String
   @State private var webModel = ConsoleWebViewModel()
   @State private var state: SessionState = .starting
@@ -158,12 +165,15 @@ struct BesignerScreen: View {
           ],
           info: ["app": .string(model.app == .pos ? "aglyn-pos" : "aglyn")],
           allowsPath: { session.allows($0) },
-          onRefusedPath: { handBack($0) }
+          onRefusedPath: { handBack($0) },
+          // The back gesture presses the editor's own back control, as Esc and ⌘[ do (AGL-4056).
+          onBackGesture: { pressBack() }
         )
         .frame(minWidth: 0, maxWidth: .infinity, minHeight: 0, maxHeight: .infinity)
         .opacity(shown ? 1 : 0)
         .allowsHitTesting(shown)
-        .ignoresSafeArea(edges: .bottom)
+        // A phone keeps the editor's bars inside the safe areas (AGL-4056); a wide window runs it to the bottom edge.
+        .ignoresSafeArea(edges: wide ? .bottom : [])
         .task(id: url) { await revealWhenDrawn() }
       }
       if case .failed(let message) = state {
@@ -191,15 +201,42 @@ struct BesignerScreen: View {
     .navigationTitle("Besigner")
     .aglynScreenTitle("Besigner")
     #if os(iOS)
-      .navigationBarTitleDisplayMode(.inline)
+      // No native head (AGL-4056): the editor's own bars sit right under the status bar or the window chrome, and its
+      // own back control is the way out. The stack hides the system bar and its back swipe for this route
+      // (`wideBarHidden(always:)`, outside this view, where it wins over the stack's own setting); here for a stack
+      // that sets none (POS). The web view's edge swipe presses that control.
+      .toolbar(.hidden, for: .navigationBar)
+      .navigationBarBackButtonHidden(true)
       // The editor takes the whole screen: on a phone the tab bar covered the bottom of its canvas.
       .toolbar(.hidden, for: .tabBar)
     #endif
-    .aglynScreenTitle("Besigner")
-    .aglynPrimaryAction(id: "besigner-done", "Done", systemImage: "checkmark") { leave() }
-    // The editor's own Assist is the AI here; the app's panel closes rather than sit beside it (AGL-4057).
-    .onAppear { navigation.showAssist = false }
+    .onAppear {
+      // The editor's own Assist is the AI here; the app's panel closes rather than sit beside it (AGL-4057).
+      navigation.showAssist = false
+      navigation.besignerBack = { pressBack() }
+      // Focus mode: the rail and the sidebar fold away while the editor is open (AGL-4056).
+      if wide { withAnimation(AglynShellMotion.columns) { navigation.enterBesignerFocus() } }
+    }
+    .onDisappear {
+      navigation.besignerBack = nil
+      withAnimation(AglynShellMotion.columns) { navigation.leaveBesignerFocus() }
+    }
+    // The title bar's switcher toggle brings the rail and the sidebar back together, and folds both again.
+    .onChange(of: navigation.railHidden) {
+      withAnimation(AglynShellMotion.columns) { navigation.followRailInBesignerFocus() }
+    }
     .task { await start() }
+  }
+
+  /// Esc, ⌘[, the title bar's Back and the back gesture: the editor's own back control, so whatever it does first runs
+  /// for each of them (AGL-4056). Before the editor has drawn, or on a page without one, the screen just closes.
+  private func pressBack() {
+    guard !session.left else { return }
+    guard shown else { return leave() }
+    Task {
+      if await webModel.pressBesignerBack() { return }
+      leave()
+    }
   }
 
   /// Lifts the loading state once the editor has painted (`BesignerReveal.paintedScript`) on an editor page, past the
@@ -236,7 +273,15 @@ struct BesignerScreen: View {
     guard !session.left else { return }
     switch BesignerEntry.exit(from: session.current, to: next) {
     case .stay: return
-    case .leave: leave()
+    case .leave:
+      leave()
+      // After a document switch, back opens the current document's own place in the app; with no screen for it, or
+      // still on the document it opened, it is the screen that opened the Besigner (AGL-4056).
+      if let place = BesignerEntry.returnPath(opened: session.opened, current: session.current, back: next),
+        case .screen(let screen, let params)? = model.registry.resolve(place)
+      {
+        navigation.push(.screen(screen, params))
+      }
     case .sessionEnded:
       state = .failed("Your session ended. Open the Besigner again to keep editing.")
     case .open(let link):
