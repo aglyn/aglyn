@@ -133,5 +133,8 @@
   "parallel": 3,
   "defaultBase": "main",
   "analytics": true,
-  "pluginsConfig": {}
+  "pluginsConfig": {},
+  "affected": {
+    "legacy": true
+  }
 }
