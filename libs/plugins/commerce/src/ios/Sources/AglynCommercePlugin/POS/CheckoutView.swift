@@ -1,6 +1,7 @@
 // Copyright 2026 Aglyn LLC
 // SPDX-License-Identifier: Apache-2.0
 
+import AglynContracts
 import AglynHardware
 import AglynPluginHost
 import AglynUI
@@ -19,36 +20,45 @@ struct CheckoutView: View {
   @State private var creditText = ""
   @State private var partText = ""
   @State private var receiptTo = ""
+  #if os(iOS)
+    @Environment(\.horizontalSizeClass) private var sizeClass
+    private var phoneEdges: Bool { sizeClass == .compact }
+  #else
+    private var phoneEdges: Bool { false }
+  #endif
 
   var body: some View {
     NavigationStack {
       ScrollView {
         VStack(alignment: .leading, spacing: AglynSpace.three) {
           summary
-          if let context, !isPaid {
-            PosHardwareSaleSection(
-              context: context, saleOrderID: checkout.opened.orderID, productIDs: model.cart.lines.map(\.productID))
-          }
-          if let notice = checkout.notice {
-            AglynNotice(notice.message, tone: notice.tone) { checkout.dismissNotice() }
-          }
-          if case .tender = checkout.step {
-            if let declined = checkout.declined { declinedReceipt(declined) }
+          if checkout.showsDeclined, let declined = checkout.declined {
+            declinedReceipt(declined)
+          } else {
+            if let context, !isPaid {
+              PosHardwareSaleSection(
+                context: context, saleOrderID: checkout.opened.orderID, productIDs: model.cart.lines.map(\.productID))
+            }
+            if let notice = checkout.notice {
+              AglynNotice(notice.message, tone: notice.tone) { checkout.dismissNotice() }
+            }
             // Pinned at the top, above the tip, so it never needs a scroll (Apple 5.1, 5.2).
-            if model.offersTapToPay { TapToPayCheckoutButton(model: model, checkout: checkout) }
-          }
-          switch checkout.step {
-          case .tender: tender
-          case .cash: cash
-          case .giftCard: giftCard
-          case .credit(let providerID): credit(providerID)
-          case .room: room
-          case .qr(let paymentID, let url, let amount): qr(paymentID, url, amount)
-          case .card(let label, _): card(label)
-          case .receipt(let change): receipt(change)
+            if case .tender = checkout.step, model.offersTapToPay { TapToPayCheckoutButton(model: model, checkout: checkout) }
+            switch checkout.step {
+            case .tender: tender
+            case .cash: cash
+            case .giftCard: giftCard
+            case .credit(let providerID): credit(providerID)
+            case .room: room
+            case .qr(let paymentID, let url, let amount): qr(paymentID, url, amount)
+            case .card(let label, _): card(label)
+            case .receipt(let change): receipt(change)
+            }
           }
         }
-        .padding(AglynSpace.three)
+        // The phone's 16-point edges, the iPad's 24 (Figma POS iPhone checkout frames, e.g. 177:5163; iPad 40:3541).
+        .padding(.horizontal, phoneEdges ? AglynContentInsets.phone : AglynContentInsets.horizontal)
+        .padding(.vertical, AglynSpace.three)
         .frame(maxWidth: 560)
         .frame(maxWidth: .infinity)
       }
@@ -58,7 +68,7 @@ struct CheckoutView: View {
         .navigationBarTitleDisplayMode(.inline)
       #endif
       .toolbar {
-        if !isPaid {
+        if !isPaid, !checkout.showsDeclined {
           ToolbarItem(placement: .cancellationAction) {
             Button("Cancel sale", role: .destructive) {
               Task { if await checkout.void() { model.voided() } }
@@ -75,18 +85,50 @@ struct CheckoutView: View {
     .sheet(item: cardForm) { session in CardFieldsSheet(session: session) }
   }
 
-  /// A card that was not approved can still be sent its receipt (Apple 5.10), through the share sheet.
+  /// A card that was not approved (Figma iPhone POS 177:5163): what happened, its receipt to send or print (Apple
+  /// 5.10), and the way on to another tender. The receipt goes through the share sheet: the console sends a paid sale's
+  /// receipt, never a declined card's.
   private func declinedReceipt(_ declined: DeclinedCard) -> some View {
-    HStack {
-      Text("Not approved · \(model.money(declined.amountCents))").font(AglynFont.subheadline)
-      Spacer()
-      ShareLink(item: declined.receipt(store: model.storeName, money: model.money)) {
-        Label("Send receipt", systemImage: "square.and.arrow.up")
+    VStack(alignment: .leading, spacing: AglynSpace.three) {
+      AglynNotice(declined.notice, tone: .error)
+        .accessibilityIdentifier("declined-notice")
+      AglynSectionHeader("Receipt")
+      if let data = model.receipt {
+        ScrollView(.horizontal, showsIndicators: false) {
+          ReceiptPreviewText(
+            document: layoutDeclinedReceipt(data, cardLabel: declined.cardLabel, ReceiptLayoutOptions(columns: PaperColumns.mm58 + 8)))
+            .padding(AglynSpace.one)
+        }
+        .aglynCardSurface()
+        .accessibilityIdentifier("declined-receipt-preview")
       }
-      .accessibilityIdentifier("declined-receipt-share")
+      HStack {
+        if SystemPrinter.isAvailable, let data = model.receipt {
+          Button("Print receipt") {
+            Task {
+              let text = renderText(
+                layoutDeclinedReceipt(data, cardLabel: declined.cardLabel, ReceiptLayoutOptions(columns: PaperColumns.mm80)))
+              if case .failed(let words) = await model.systemPrint(text, "Declined receipt \(data.orderNumber)") {
+                model.toast = CheckoutNotice(tone: .error, message: words)
+              }
+            }
+          }
+          .buttonStyle(.aglynSecondary)
+          .accessibilityIdentifier("declined-receipt-print")
+        }
+        Spacer()
+        ShareLink(item: declined.receipt(store: model.storeName, money: model.money)) { Text("Send receipt") }
+          .buttonStyle(.aglynProminent)
+          .accessibilityIdentifier("declined-receipt-share")
+      }
+      Button { checkout.takePaymentAnotherWay() } label: {
+        Text("Take payment another way").frame(maxWidth: .infinity)
+      }
+      .buttonStyle(.aglynProminent)
+      .controlSize(.large)
+      .accessibilityIdentifier("declined-take-another-way")
     }
-    .padding(AglynSpace.two)
-    .aglynCardSurface()
+    .task { model.watchReceipt(orderID: checkout.opened.orderID) }
   }
 
   private var cardForm: Binding<CardFormSession?> {
@@ -99,7 +141,7 @@ struct CheckoutView: View {
     return false
   }
 
-  private var title: String { isPaid ? "Paid" : "Checkout" }
+  private var title: String { checkout.showsDeclined ? "Not paid" : isPaid ? "Paid" : "Checkout" }
 
   private var summary: some View {
     VStack(alignment: .leading, spacing: AglynSpace.one) {
@@ -110,8 +152,10 @@ struct CheckoutView: View {
       if let tax = checkout.opened.taxCents { AglynAmountRow("Tax", amount: model.money(tax)) }
       if checkout.sale.paidCents > 0 { AglynAmountRow("Paid", amount: model.money(checkout.sale.paidCents), tone: .success) }
       Divider()
+      // Paid, or a card just declined: the sale's total (Figma 177:5163); otherwise what is left to pay.
+      let whole = isPaid || checkout.showsDeclined
       AglynAmountRow(
-        isPaid ? "Total" : "To pay", amount: model.money(isPaid ? checkout.sale.totalCents : checkout.dueCents),
+        whole ? "Total" : "To pay", amount: model.money(whole ? checkout.sale.totalCents : checkout.dueCents),
         emphasized: true)
     }
     .padding(AglynSpace.two)

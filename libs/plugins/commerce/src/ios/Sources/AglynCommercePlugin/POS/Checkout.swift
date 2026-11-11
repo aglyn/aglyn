@@ -2,6 +2,7 @@
 // SPDX-License-Identifier: Apache-2.0
 
 import AglynCore
+import AglynHardware
 import AglynUI
 import Foundation
 import Observation
@@ -150,11 +151,28 @@ final class Checkout {
     let outcome = await reader.charge(deps, amountCents: amount, tipCents: tip, attemptKey: key) { [weak self] id in
       self?.step = .card(readerLabel: reader.label, paymentID: id)
     }
-    if case .failed(let message, _) = outcome {
-      declined = DeclinedCard(amountCents: amount + tip, readerLabel: reader.label, message: message, at: Date())
+    if case .failed(let message, let answer) = outcome {
+      declined = DeclinedCard(
+        amountCents: amount + tip, readerLabel: reader.label, message: message, at: Date(),
+        cardLabel: declinedCardLabel(answer?.payment))
       onCardNotApproved?(formatMoney(amount + tip))
     }
     await finish(outcome)
+    // The declined card's own notice says what happened and what to do next; the processor's words stay on its receipt.
+    if declined != nil { notice = nil }
+  }
+
+  /// A card was just declined and the cashier has not moved on: the checkout shows it as not paid, with its receipt
+  /// (Figma iPhone POS 177:5163).
+  var showsDeclined: Bool {
+    guard declined != nil, case .tender = step else { return false }
+    return true
+  }
+
+  /// Leaves the declined card's receipt for the tenders, to take the payment another way.
+  func takePaymentAnotherWay() {
+    declined = nil
+    notice = nil
   }
 
   /// Stops the card payment the customer is at; nobody is charged.
@@ -528,6 +546,13 @@ struct DeclinedCard: Equatable {
   let readerLabel: String
   let message: String
   let at: Date
+  /// The card as its receipt names it ("Visa •••• 4242"), when the processor said which card it was.
+  var cardLabel: String? = nil
+
+  /// What the checkout says about it: the card, that nothing was charged, and what the cashier can do.
+  var notice: String {
+    "Card declined\(cardLabel.map { ": \($0)" } ?? ""). Nothing was charged. Send the customer a receipt, or take the payment another way."
+  }
 
   /// The receipt the customer can be sent through the share sheet: confidential, nothing charged.
   func receipt(store: String, money: (Int) -> String) -> String {
@@ -536,11 +561,19 @@ struct DeclinedCard: Equatable {
       at.formatted(date: .abbreviated, time: .shortened),
       "",
       "Card payment not approved",
+      cardLabel.map { "Card: \($0)" },
       "Amount: \(money(amountCents))",
       "Taken on: \(readerLabel)",
       message,
       "",
       "Nothing was charged.",
-    ].joined(separator: "\n")
+    ].compactMap { $0 }.joined(separator: "\n")
   }
+}
+
+/// A declined payment's card as the checkout names it: its brand and last four ("Visa •••• 4242"); nil when the
+/// processor did not say.
+func declinedCardLabel(_ payment: PosSalePayment?) -> String? {
+  guard let payment, !(payment.cardBrand ?? "").isEmpty || !(payment.last4 ?? "").isEmpty else { return nil }
+  return offlineCardLabel(brand: payment.cardBrand, last4: payment.last4)
 }
