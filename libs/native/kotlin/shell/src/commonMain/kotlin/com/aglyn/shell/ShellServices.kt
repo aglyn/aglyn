@@ -195,6 +195,9 @@ class ShellNavigator(initialTop: String = HOME) {
   /** A link waiting for the workspace and site it belongs to to come on screen (`openLink`), with where that is. */
   internal var deferredLink by mutableStateOf<Pair<String, LinkScope>?>(null)
 
+  /** A Starred or Recent item waiting, as a link does, for its workspace and site to come on screen (`openPlace`). */
+  internal var deferredPlace by mutableStateOf<Pair<com.aglyn.contracts.AccountItemRef, LinkScope>?>(null)
+
   val current: Route? get() = stack.lastOrNull()
 
   /**
@@ -401,12 +404,14 @@ internal class ShellPluginContext(
       openHere(link)
       return
     }
+    navigator.deferredPlace = null
     navigator.deferredLink = link to scope
     linkScopePick(scope, workspace)?.let { (orgId, hostId) -> services.workspace.select(orgId, hostId) }
   }
 
   /** Called as the workspace changes: picks the next step toward a deferred link's site, and opens the link once there. */
   fun settleDeferredLink() {
+    settleDeferredPlace()
     val (link, scope) = navigator.deferredLink ?: return
     if (!workspace.ready) return
     if (linkScopeSettled(scope, workspace)) {
@@ -436,8 +441,33 @@ internal class ShellPluginContext(
    * workspace and site first (by the caller), then its mode, area and each level over it.
    */
   fun openPlace(item: com.aglyn.contracts.AccountItemRef) {
+    val scope = LinkScope(item.orgId, item.hostId)
+    // Another workspace or site comes on screen first, and the place opens once it has: put on screen before, its
+    // mode and pushes were dropped as the switch settled (a setting opened outside Site settings, a record lost).
+    if (!linkScopeSettled(scope, workspace) && workspace.orgs.any { it.id == item.orgId }) {
+      navigator.deferredLink = null
+      navigator.deferredPlace = item to scope
+      linkScopePick(scope, workspace)?.let { (orgId, hostId) -> services.workspace.select(orgId, hostId) }
+      return
+    }
+    openPlaceHere(item)
+  }
+
+  private fun openPlaceHere(item: com.aglyn.contracts.AccountItemRef) {
     val chrome = chrome ?: return navigator.select(NavKeys.of(item.screen, item.params))
     go(NavPaths.place(item, services.registry.deepLinks(), navPathLists()), chrome)
+  }
+
+  /** As `settleDeferredLink`, for a deferred Starred or Recent item. */
+  private fun settleDeferredPlace() {
+    val (item, scope) = navigator.deferredPlace ?: return
+    if (!workspace.ready) return
+    if (linkScopeSettled(scope, workspace)) {
+      navigator.deferredPlace = null
+      openPlaceHere(item)
+      return
+    }
+    linkScopePick(scope, workspace)?.let { (orgId, hostId) -> services.workspace.select(orgId, hostId) }
   }
 
   /** The lists a place is looked up in: the manifest's rows this build has a screen for, and the staff list for staff. */

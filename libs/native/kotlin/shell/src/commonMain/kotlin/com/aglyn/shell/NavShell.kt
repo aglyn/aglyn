@@ -170,8 +170,8 @@ internal fun SignedInShell(services: ShellServices, root: ShellNavigator, uid: S
     if (chrome.settingsMode == NativeNavListId.SITE_SETTINGS && workspace.site == null) chrome.settingsMode = null
   }
 
-  // A link that switched workspace or site opens once that workspace is on screen.
-  LaunchedEffect(navigator.deferredLink, workspace) { context.settleDeferredLink() }
+  // A link or a Starred or Recent item that switched workspace or site opens once that workspace is on screen.
+  LaunchedEffect(navigator.deferredLink, navigator.deferredPlace, workspace) { context.settleDeferredLink() }
   LaunchedEffect(pendingLink, workspace.ready) {
     if (pendingLink != null && workspace.ready && !AuthFlow.isAuthLink(pendingLink)) {
       // A link to a workspace another signed-in account holds opens in that account.
@@ -442,12 +442,8 @@ internal fun SignedInShell(services: ShellServices, root: ShellNavigator, uid: S
       services.accountPrefs.opened(item)
     }
     // Opens a recent or starred item: its workspace and site first, then the same path a link to it opens (AGL-4059).
-    val openRef: (com.aglyn.contracts.AccountItemRef) -> Unit = { item ->
-      if (item.orgId != workspace.org?.id || (item.hostId != null && item.hostId != workspace.site?.id)) {
-        services.workspace.select(item.orgId, item.hostId)
-      }
-      context.openPlace(item)
-    }
+    // `openPlace` makes the switch and waits for it, as a link does.
+    val openRef: (com.aglyn.contracts.AccountItemRef) -> Unit = { item -> context.openPlace(item) }
     val banner: @Composable () -> Unit = {
       impersonation?.let { ImpersonationBanner(it, onExit = { exitScope.launch { services.auth.endImpersonation() } }) }
     }
