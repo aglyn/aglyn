@@ -34,6 +34,13 @@ Starter plan — see Billing to upgrade."*
    green chip. An apex — connected by ALIAS or by A record, since both are checked the
    same way — gets an extra note: *"Apex verified by the addresses it resolves to."*
 
+:::tip Your DNS provider may add the record for you
+If your domain's DNS is at a provider that supports Domain Connect, such as Cloudflare,
+a **Connect automatically with** *your provider* button appears under the **Domain**
+field. You approve the change at your provider and skip steps 2 and 3. See
+[Connect a domain automatically](connect-automatically.md).
+:::
+
 If DNS hasn't propagated yet, **Verify & connect** tells you what it found instead —
 either the record it saw and what it expected, or that no record exists yet — and asks
 you to try again in a while. Nothing is saved on a failed verify, so re-running it is
