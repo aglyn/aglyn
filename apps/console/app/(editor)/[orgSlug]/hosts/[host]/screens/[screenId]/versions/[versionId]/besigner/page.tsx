@@ -111,6 +111,10 @@ import {
   writeGuardedBySeed,
   useUser,
 } from '@aglyn/tenant-feature-instance'
+import {
+  isSeedChecking,
+  seedCheckingText,
+} from '@aglyn/tenant-feature-instance/hooks/use-seed-edits'
 import { useHost } from '../../../../../../../../../../hooks/use-host'
 import useDiscardChangesMenuItem from '@aglyn/shared-ui-jsx/hooks/use-discard-changes-menu-item'
 import {
@@ -2713,6 +2717,15 @@ function BesignerPage(props) {
                         hostId={hostId}
                         saved={(screenResult?.data as any)?.seo}
                         onSave={handleSeoSave}
+                        // Held while the screen read is the cache's (AGL-4047).
+                        checkingText={
+                          isSeedChecking({
+                            fromCache: screenResult?.fromCache,
+                            unreadable: screenResult?.status === 'error',
+                          })
+                            ? seedCheckingText('SEO settings')
+                            : undefined
+                        }
                       />
                       <Typography variant="subtitle2">
                         {'Password protection'}

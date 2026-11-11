@@ -119,7 +119,11 @@ private fun WebView2Besigner(
         if (!shown.startsWith(BesignerEntry.PATH)) current[0] = shown
         return NavigationVerdict.ALLOW
       }
-      BesignerNavigation.Leave -> { left[0] = true; scope.launch { exit() } }
+      BesignerNavigation.Leave -> {
+        left[0] = true
+        val shown = current[0]
+        scope.launch { besignerLeave(path, shown, uri, exit, leave) }
+      }
       is BesignerNavigation.Native -> { left[0] = true; scope.launch { leave(next.path) } }
       BesignerNavigation.SessionEnded -> scope.launch { error = "Your session ended. Open the Besigner again to keep editing." }
       BesignerNavigation.External -> runCatching { Desktop.getDesktop().browse(URI(uri)) }
@@ -157,6 +161,19 @@ private fun WebView2Besigner(
   }
 
   DisposableEffect(Unit) { onDispose { view?.close() } }
+
+  // The title bar's Back, Ctrl+[ from the app's chrome and the menu's Back press the editor's own back control; inside
+  // the page, Esc and Ctrl+[ press it themselves (AGL-4056). Before the editor has loaded the screen just closes.
+  val back = LocalBesignerBack.current
+  DisposableEffect(back) {
+    back?.handler = {
+      val shown = view
+      if (left[0]) Unit
+      else if (shown == null || !ready || error != null) { left[0] = true; exit() }
+      else shown.executeScript(BesignerEntry.BACK_SCRIPT)
+    }
+    onDispose { back?.handler = null }
+  }
 
   if (error != null) {
     EmptyState("The Besigner did not open", body = error, icon = AglynIcons.named("error"))

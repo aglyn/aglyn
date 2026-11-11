@@ -48,6 +48,10 @@ import {
 } from '@aglyn/shared-ui-jsx-forms'
 import { useSnackbar } from '@aglyn/shared-ui-snackstack'
 import { useFirestore, useUser, writeGuardedBySeed } from '@aglyn/tenant-feature-instance'
+import {
+  isSeedChecking,
+  seedCheckingText,
+} from '@aglyn/tenant-feature-instance/hooks/use-seed-edits'
 import { doc, serverTimestamp, setDoc } from 'firebase/firestore'
 import { useCallback, useMemo } from 'react'
 import { docsHelp } from '../constants/docs-links'
@@ -334,14 +338,22 @@ export function BusinessProfileCard(props: BusinessProfileCardProps) {
     [enqueueSnackbar, fromCache, level, listen, profileRef, queueLoading, status, stored, user?.uid],
   )
 
+  // Update is held while the profile read is the cache's, with the reason
+  // beside it, rather than pressed into a wait that can end refused; what
+  // was typed meanwhile survives the server's copy (AGL-4047).
+  const checking = isSeedChecking({ fromCache, unreadable: status === 'error' })
   return (
     <FormRenderer
       FormTemplate={CardDisplayFormTemplate}
+      FormTemplateProps={{
+        checkingText: checking ? seedCheckingText('business profile') : undefined,
+      }}
       componentMapper={simpleComponentMapper}
       onSubmit={handleSave}
       schema={schema}
       subscription={{ values: true }}
       initialValues={initialValues}
+      keepDirtyOnReinitialize
     />
   )
 }

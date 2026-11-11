@@ -145,6 +145,15 @@ internal fun SignedInShell(services: ShellServices, root: ShellNavigator, uid: S
   val wide = widthClass != WidthClass.COMPACT
   val compactChrome = LocalUsesCompactChrome.current
   val context = ShellPluginContext(uid, workspace, services, navigator, emptySet(), chrome)
+  // The in-app Besigner (AGL-4056): its own back control is the way out, which Back, Ctrl/⌘+[ and the menu's Back press;
+  // on a wide window it opens in focus mode, the rail and the sidebar folded away until it closes.
+  val besignerBack = remember { com.aglyn.webview.BesignerBack() }
+  val besignerOnScreen = navigator.current is Route.Besigner
+  LaunchedEffect(besignerOnScreen, wide) {
+    if (besignerOnScreen && wide) chrome.enterFocus() else chrome.leaveFocus()
+  }
+  /** Back from the title bar, Ctrl/⌘+[ or the menu: the Besigner's own back control while it is on screen. */
+  fun backOut(): Boolean = if (besignerOnScreen && besignerBack.press()) true else navigator.back()
 
   // The workspace on screen is the most recent one, once the account's preferences have loaded: on a fresh install the
   // first workspace opens before they arrive, and was never recorded (AGL-4000). Each account remembers the workspaces it
@@ -327,7 +336,7 @@ internal fun SignedInShell(services: ShellServices, root: ShellNavigator, uid: S
       event.key == Key.Slash -> { chrome.shortcuts = true; true }
       // ⌃⌘S (Ctrl+Alt+S) shows or hides the workspace switcher; the desktop's menu bar owns it there.
       event.key == Key.S && !hasMenuBar && (if (isMacPlatform) event.isCtrlPressed else event.isAltPressed) -> { chrome.toggleRail(); true }
-      event.key == Key.LeftBracket -> navigator.back()
+      event.key == Key.LeftBracket -> backOut()
       event.key == Key.Comma && !event.isShiftPressed -> { actions.enterSettings(if (inSite) NativeNavListId.SITE_SETTINGS else NativeNavListId.WORKSPACE_SETTINGS); true }
       // Tabs: the desktop's menu bar owns these keys there, so only a window without one handles them here.
       !wide || hasMenuBar -> false
@@ -349,7 +358,7 @@ internal fun SignedInShell(services: ShellServices, root: ShellNavigator, uid: S
     when (command) {
       ShellCommand.HOME -> { chrome.settingsMode = null; navigator.select(ShellNavigator.HOME) }
       ShellCommand.NOTIFICATIONS -> { chrome.settingsMode = null; navigator.select(ShellNavigator.NOTIFICATIONS) }
-      ShellCommand.BACK -> navigator.back()
+      ShellCommand.BACK -> backOut()
       ShellCommand.NEW_TAB -> if (wide) newTab()
       ShellCommand.CLOSE_TAB -> if (!tabs.active.pinned) closeTab()
       ShellCommand.REOPEN_TAB -> if (wide) reopenTab()
@@ -388,6 +397,7 @@ internal fun SignedInShell(services: ShellServices, root: ShellNavigator, uid: S
     LocalAccountIdentity provides accountIdentity(user, prefs, services.api.origin),
     LocalShellColors provides shell,
     LocalShowShortcuts provides wide,
+    com.aglyn.webview.LocalBesignerBack provides besignerBack,
   ) {
   var openRecentHolder by remember { mutableStateOf<((com.aglyn.contracts.AccountItemRef) -> Unit)?>(null) }
   val bellPopover: @Composable (Boolean, () -> Unit) -> Unit = { expanded, dismiss ->
@@ -576,7 +586,7 @@ internal fun SignedInShell(services: ShellServices, root: ShellNavigator, uid: S
       Column(Modifier.fillMaxSize().background(shellColors.titleBar).windowInsetsPadding(androidx.compose.foundation.layout.WindowInsets.safeDrawing).then(shortcuts)) {
         WindowTabStrip(tabs, onSelectTab = ::selectTab, onCloseTab = { closeTab(it) }, onNewTab = { newTab() }) { HomeTabMark(services, workspace) }
         WideToolbar(
-          services, navigator, chrome, pushed = route != null, uid = uid,
+          services, navigator, chrome, pushed = route != null, uid = uid, onBack = { backOut() },
           search = { modifier ->
             InlineSearchField(
               services, workspace, chrome, enabled, hostAdmin,
@@ -591,7 +601,12 @@ internal fun SignedInShell(services: ShellServices, root: ShellNavigator, uid: S
         }
         HorizontalDivider(color = shellColors.divider)
         Row(Modifier.weight(1f).fillMaxWidth().testTag("nav-shell-wide")) {
-          if (!chrome.railHidden) {
+          // Folding away and back (the switcher toggle, the Besigner's focus mode) slides the column, as on Apple (AGL-4056).
+          androidx.compose.animation.AnimatedVisibility(
+            visible = !chrome.railHidden,
+            enter = androidx.compose.animation.expandHorizontally(com.aglyn.ui.ShellMotion.fold()) + androidx.compose.animation.fadeIn(com.aglyn.ui.ShellMotion.fold()),
+            exit = androidx.compose.animation.shrinkHorizontally(com.aglyn.ui.ShellMotion.fold()) + androidx.compose.animation.fadeOut(com.aglyn.ui.ShellMotion.fold()),
+          ) { Row {
             Box(Modifier.fillMaxHeight().background(shellColors.rail)) {
               WorkspaceRail(
                 services, workspace, prefs, user, unreadByOrg(services, uid),
@@ -612,18 +627,23 @@ internal fun SignedInShell(services: ShellServices, root: ShellNavigator, uid: S
               }
             }
             VerticalDivider(color = shellColors.divider)
-          }
-          if (!chrome.sidebarHidden) {
+          } }
+          androidx.compose.animation.AnimatedVisibility(
+            visible = !chrome.sidebarHidden,
+            enter = androidx.compose.animation.expandHorizontally(com.aglyn.ui.ShellMotion.fold()) + androidx.compose.animation.fadeIn(com.aglyn.ui.ShellMotion.fold()),
+            exit = androidx.compose.animation.shrinkHorizontally(com.aglyn.ui.ShellMotion.fold()) + androidx.compose.animation.fadeOut(com.aglyn.ui.ShellMotion.fold()),
+          ) { Row {
             NavSidebar(services, workspace, chrome, sidebar, selectedKey, starred, onRow = { openRow(it) }, onStar = onStar, foot = planFoot)
             VerticalDivider(color = shellColors.divider)
-          }
+          } }
           // The content area stands on the theme's surface, every column alike, never the grey canvas (AGL-4012).
           val shellRow = this
           com.aglyn.ui.ContentGround { with(shellRow) {
           Column(Modifier.weight(1f).fillMaxHeight().background(MaterialTheme.colorScheme.background)) {
             val crumbsSlot = remember { com.aglyn.ui.PageCrumbsSlot() }
             val sectionsSlot = remember { com.aglyn.ui.PageSectionsSlot() }
-            if (route !is Route.Web) {
+            // The in-app browser and the Besigner have no head: their own bars are theirs (AGL-4056).
+            if (route !is Route.Web && route !is Route.Besigner) {
               // Where the screen sits, as Figma heads every page: the scope, the group, the destination, then a pushed screen.
               val steps = if (row == null && route == null) null else {
                 val holder = allGroups.firstOrNull { g -> row != null && row in g.rows }
@@ -658,7 +678,7 @@ internal fun SignedInShell(services: ShellServices, root: ShellNavigator, uid: S
             Row(Modifier.weight(1f).fillMaxWidth()) {
               // The content area brings every screen in by E − 16, so a screen that pads its content by 16 lands on the one
               // content edge E (Zach 10/19); an in-app browser page stays full-bleed.
-              val bodyInset = if (route is Route.Web) 0.dp else (com.aglyn.ui.contentInset() - com.aglyn.ui.DetailPanePadding).coerceAtLeast(0.dp)
+              val bodyInset = if (route is Route.Web || route is Route.Besigner) 0.dp else (com.aglyn.ui.contentInset() - com.aglyn.ui.DetailPanePadding).coerceAtLeast(0.dp)
               Box(Modifier.weight(1f).fillMaxHeight().padding(horizontal = bodyInset)) {
                 CompositionLocalProvider(
                   com.aglyn.ui.LocalPageCrumbs provides crumbsSlot,
@@ -667,7 +687,8 @@ internal fun SignedInShell(services: ShellServices, root: ShellNavigator, uid: S
                   com.aglyn.ui.LocalContentInset provides com.aglyn.ui.DetailPanePadding,
                 ) { body() }
               }
-              if (assistTitle != null && chrome.aiPanel && route !is Route.Web) {
+              // Not beside the Besigner: the editor's own Assist is the canvas-aware one (AGL-4057).
+              if (assistTitle != null && chrome.aiPanel && route !is Route.Web && route !is Route.Besigner) {
                 VerticalDivider(color = shellColors.divider)
                 // The AI panel stays on the neutral ground, never a tinted sidebar's (AGL-4000).
                 Column(Modifier.width(380.dp).fillMaxHeight().background(MaterialTheme.colorScheme.surfaceContainerLow).testTag("ai-panel")) {
@@ -1001,6 +1022,7 @@ private fun WideToolbar(
   chrome: NavChromeState,
   pushed: Boolean,
   uid: String,
+  onBack: () -> Unit,
   search: @Composable (Modifier) -> Unit,
   trailing: @Composable () -> Unit = {},
 ) {
@@ -1013,7 +1035,8 @@ private fun WideToolbar(
         "toggle-rail",
       ) { chrome.toggleRail() }
       if (pushed) {
-        TitleBarButton("Back", "arrow_back", "title-back") { navigator.back() }
+        // Over the Besigner it presses the editor's own back control (AGL-4056).
+        TitleBarButton("Back", "arrow_back", "title-back") { onBack() }
       } else {
         // Back and forward through the places visited.
         TitleBarButton("Back", "arrow_back", "history-back", enabled = navigator.canGoBackInHistory) { navigator.historyBack() }

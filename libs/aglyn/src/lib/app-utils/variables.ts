@@ -302,9 +302,12 @@ export function resolveNodesBindings<T extends Record<string, any>>(
   variables: Record<string, HostVariable>,
   functions: HostFunctionLookup = {},
 ): T {
-  if (!Object.keys(variables).length && !Object.keys(functions).length) {
-    return nodes
-  }
+  // No early return for a site with no variables: its `{{var:id}}` tokens
+  // still have to render EMPTY (a deleted variable, a plugin connection that
+  // was disconnected), or the raw token reaches visitors. Only a node whose
+  // text actually changes is copied, so a page with nothing to resolve comes
+  // back as the same map.
+  let anyChanged = false
   const next: Record<string, any> = {}
   for (const [id, node] of Object.entries(nodes)) {
     const props = node?.props
@@ -316,11 +319,15 @@ export function resolveNodesBindings<T extends Record<string, any>>(
     const nextProps: Record<string, unknown> = { ...props }
     for (const [key, value] of Object.entries(props)) {
       if (typeof value === 'string' && hasBindings(value)) {
-        nextProps[key] = resolveBindings(value, variables, functions)
-        changed = true
+        const resolved = resolveBindings(value, variables, functions)
+        if (resolved !== value) {
+          nextProps[key] = resolved
+          changed = true
+        }
       }
     }
     next[id] = changed ? { ...node, props: nextProps } : node
+    anyChanged = anyChanged || changed
   }
-  return next as T
+  return (anyChanged ? next : nodes) as T
 }

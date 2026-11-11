@@ -149,8 +149,13 @@ final class ShellNavigation {
   var sidebarHidden = false
   /// The workspace rail hidden (the title bar's toggle, ⌃⌘S): remembered on this device.
   var railHidden = UserDefaults.standard.bool(forKey: "aglyn.shell.railHidden") {
-    didSet { UserDefaults.standard.set(railHidden, forKey: "aglyn.shell.railHidden") }
+    // Not while the Besigner's focus mode has it folded (AGL-4056): the next launch keeps the person's own choice.
+    didSet { if !besignerFocus.active { UserDefaults.standard.set(railHidden, forKey: "aglyn.shell.railHidden") } }
   }
+  /// The in-app Besigner's focus mode (AGL-4056): the rail and sidebar as they were before it opened.
+  var besignerFocus = BesignerFocus()
+  /// Presses the in-app Besigner's own back control (AGL-4056), set while the Besigner is on screen.
+  @ObservationIgnored var besignerBack: (() -> Void)?
   /// The keyboard shortcuts sheet.
   var showShortcuts = false
   /// Bumped when this device's own theme changes (it is not on the account, so nothing else would redraw it).

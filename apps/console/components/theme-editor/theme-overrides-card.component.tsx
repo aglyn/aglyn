@@ -118,8 +118,16 @@ export function ThemeOverridesCard(props: {
    * the user as a successful reset.
    */
   onWriteOverride: (value: unknown) => Promise<{ ok: boolean; message?: string }>
+  /**
+   * `host` is not confirmed by the server yet (AGL-4047): each per-field Reset
+   * is held, with this sentence above the table. A press then waited on the
+   * confirmation and could end refused, which met the first press after a
+   * page load. "Reset everything" goes through the server and is not held.
+   */
+  checkingText?: string
 }) {
-  const { hostId, host, onWriteOverride } = props
+  const { hostId, host, onWriteOverride, checkingText } = props
+  const checking = Boolean(checkingText)
   const { data: user } = useUser()
   const { enqueueSnackbar } = useSnackbar()
   const [busy, setBusy] = useState(false)
@@ -249,6 +257,11 @@ export function ThemeOverridesCard(props: {
                   ? ' Taking an update keeps these and applies the rest.'
                   : '')}
             </Typography>
+            {checking ? (
+              <Typography variant="body2" color="text.secondary" role="status">
+                {checkingText}
+              </Typography>
+            ) : null}
             <ScrollTable size="small">
               <TableHead>
                 <TableRow>
@@ -287,7 +300,7 @@ export function ThemeOverridesCard(props: {
                     <TableCell align="right">
                       <Button
                         size="small"
-                        disabled={busy}
+                        disabled={busy || checking}
                         onClick={() => resetPath(entry)}
                       >
                         {'Reset'}

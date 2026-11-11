@@ -59,6 +59,10 @@ import {
   withBesignerNodes,
   writeGuardedBySeed,
 } from '@aglyn/tenant-feature-instance'
+import {
+  isSeedChecking,
+  seedCheckingText,
+} from '@aglyn/tenant-feature-instance/hooks/use-seed-edits'
 import { Alert, Button, Stack, TextField, Typography } from '@mui/material'
 import { doc, setDoc, Timestamp } from 'firebase/firestore'
 import { observer } from 'mobx-react-lite'
@@ -395,6 +399,18 @@ function HostEmailBesignerPage() {
   })
   clearMirrorRef.current = coediting.clearMirror
 
+  /**
+   * Save subject is HELD while the template read is the cache's (AGL-4047),
+   * with the reason below it. A press then waited on the server's
+   * confirmation and could end refused, which met the first press after a
+   * page load. Each field is null until typed, so what was typed survives the
+   * wait and an untouched one is written from the confirmed template.
+   */
+  const templateChecking = isSeedChecking({
+    fromCache: templateFromCache,
+    unreadable: templateStatus === 'error',
+  })
+
   const handlePropertiesSave = useCallback(async () => {
     if (!definition || !hostId) return
     try {
@@ -702,11 +718,20 @@ function HostEmailBesignerPage() {
             size="small"
             variant="outlined"
             onClick={() => void handlePropertiesSave()}
-            disabled={subjectInput == null && preheaderInput == null}
+            disabled={
+              (subjectInput == null && preheaderInput == null) ||
+              templateChecking
+            }
             sx={{ alignSelf: 'flex-start' }}
           >
             {'Save subject'}
           </Button>
+          {(subjectInput != null || preheaderInput != null) &&
+          templateChecking ? (
+            <Typography variant="body2" color="text.secondary" role="status">
+              {seedCheckingText('email')}
+            </Typography>
+          ) : null}
 
           <Typography variant="subtitle2" sx={{ pt: 2 }}>
             {'Merge tokens'}

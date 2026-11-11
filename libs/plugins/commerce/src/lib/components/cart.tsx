@@ -37,6 +37,7 @@ import Badge from '@mui/material/Badge'
 import Box from '@mui/material/Box'
 import Button from '@mui/material/Button'
 import Checkbox from '@mui/material/Checkbox'
+import CircularProgress from '@mui/material/CircularProgress'
 import Drawer from '@mui/material/Drawer'
 import FormControlLabel from '@mui/material/FormControlLabel'
 import IconButton from '@mui/material/IconButton'
@@ -119,9 +120,52 @@ interface CartView {
   subtotalCents: number
   /** The cart holds card reader hardware the platform's own store sells (AGL-4038). */
   hardwareTerms?: boolean
+  /**
+   * Checkout will need to know where this cart is going (AGL-1721), so the
+   * cart asks with its other fields instead of after the first press.
+   */
+  needsShippingCountry?: boolean
+  shippingCountries?: string[]
 }
 
+/**
+ * Where the stored cart is: still being read, read, or unreadable. The cart is
+ * fetched, and until the first answer lands there is nothing to say about it:
+ * rendering "Your cart is empty." for that time told a shopper with two items
+ * in it that they had none.
+ */
+type CartLoad = 'loading' | 'loaded' | 'failed'
+
 const usd = (cents: number) => `$${(cents / 100).toFixed(2)}`
+
+/**
+ * The stored cart's read: one URL for the preload hint and the fetch, so the
+ * browser hands the fetch the response it already has.
+ */
+function cartReadUrl(hostId: string): string {
+  return `/api/commerce/cart?hostId=${encodeURIComponent(hostId)}`
+}
+
+/**
+ * Starts the cart page's read while the HTML is still arriving (AGL-4047).
+ *
+ * The read is a client fetch, and a client effect runs only once the whole
+ * page has hydrated: on aglyn.com/cart that was 0.5–4.3 s after the HTML
+ * landed, and the cart's own request (0.3–0.75 s) only started then.
+ * Rendered on the server, this hint has the browser make the same request as
+ * soon as it parses the page, so when the cart mounts its fetch is answered
+ * from the response already in hand. `crossOrigin="anonymous"` is what lets a
+ * `fetch()` with its defaults (cors, same-origin cookies) match it; without it
+ * the browser would read the cart twice.
+ *
+ * The cart page only: a badge in a header is on every page of the store and
+ * has nothing on screen waiting for its count.
+ */
+function CartReadPreload({ hostId }: { hostId: string }) {
+  return (
+    <link rel="preload" as="fetch" href={cartReadUrl(hostId)} crossOrigin="anonymous" />
+  )
+}
 
 /**
  * The cart's lines as GA4 `items`.
@@ -146,12 +190,13 @@ function cartAnalyticsItems(cart: CartView | null): AnalyticsItem[] {
 function CartLines(props: {
   hostId: string
   cart: CartView | null
+  load: CartLoad
   showCoupon?: boolean
   checkoutLabel?: string
   emptyText?: string
   onMutate: (body: Record<string, unknown>) => Promise<void>
 }) {
-  const { hostId, cart, showCoupon, checkoutLabel, emptyText, onMutate } =
+  const { hostId, cart, load, showCoupon, checkoutLabel, emptyText, onMutate } =
     props
   const siteFetch = Aglyn.useSiteFetch()
   const [coupon, setCoupon] = useState('')
@@ -167,6 +212,15 @@ function CartLines(props: {
   // itself the server's answer rather than a guess made here.
   const [shipTo, setShipTo] = useState('')
   const [shipCountries, setShipCountries] = useState<string[] | null>(null)
+  // The cart itself can say so before any press, and then the field is shown
+  // from the start with the others; a checkout answer still wins.
+  const askedCountries =
+    shipCountries ??
+    (cart?.needsShippingCountry
+      ? cart.shippingCountries?.length
+        ? cart.shippingCountries
+        : [...CommerceModel.CHECKOUT_SHIPPING_COUNTRIES]
+      : null)
   // Live carrier rates price by postal code (AGL-3612): asked only when the
   // store prices that way and the server says so.
   const [shipPostal, setShipPostal] = useState('')
@@ -184,6 +238,15 @@ function CartLines(props: {
     'idle' | 'sending' | 'error' | 'paused' | 'ask' | 'unconfigured'
   >('idle')
   const [message, setMessage] = useState('')
+  // The notice is about the destination ("Choose where you're shipping to.",
+  // a country not served, a postal code), so answering it clears it.
+  const [messageForShipping, setMessageForShipping] = useState(false)
+  const answerShipping = () => {
+    if (!messageForShipping) return
+    setMessageForShipping(false)
+    setMessage('')
+    setStatus('idle')
+  }
   // The terms of sale and business use, for card reader hardware (AGL-4038):
   // asked when the cart says it holds some, or when a checkout was refused
   // for want of them.
@@ -295,6 +358,7 @@ function CartLines(props: {
     if (status === 'sending') return
     setStatus('sending')
     setMessage('')
+    setMessageForShipping(false)
     if (!attemptKey.current) {
       attemptKey.current =
         globalThis.crypto?.randomUUID?.() ??
@@ -451,6 +515,7 @@ function CartLines(props: {
             : [...CommerceModel.CHECKOUT_SHIPPING_COUNTRIES],
         )
         setMessage(String(payload?.error ?? ''))
+        setMessageForShipping(true)
         // An unserved destination is a real refusal and reads as one; being
         // asked the first time is not.
         setStatus(shipTo ? 'error' : 'ask')
@@ -469,6 +534,27 @@ function CartLines(props: {
     // right one.
   }, [hostId, cart, coupon, email, optIn, giftCard, creditCode, shipTo, shipPostal, status, siteFetch, extras.chosenIds, extras.reload, extras.credits.length, fulfillment.request, fulfillment.reload, hardwareTerms, hardwareTermsAsked])
 
+  if (!cart && load === 'loading') {
+    return (
+      <Box
+        role="status"
+        aria-busy="true"
+        sx={{ display: 'flex', alignItems: 'center', gap: 1.5, p: 2 }}
+      >
+        <CircularProgress size={18} />
+        <Typography variant="body2" color="text.secondary">
+          {'Loading your cart…'}
+        </Typography>
+      </Box>
+    )
+  }
+  if (!cart && load === 'failed') {
+    return (
+      <Typography variant="body2" color="text.secondary" sx={{ p: 2 }}>
+        {'Your cart could not be loaded. Refresh the page to try again.'}
+      </Typography>
+    )
+  }
   if (!cart || cart.lines.length === 0) {
     return (
       <Typography variant="body2" color="text.secondary" sx={{ p: 2 }}>
@@ -633,16 +719,20 @@ function CartLines(props: {
           slotProps={{ htmlInput: { 'data-testid': 'cart-credit-code' } }}
         />
       ) : null}
-      {shipCountries && fulfillment.method === 'shipping' ? (
+      {askedCountries && fulfillment.method === 'shipping' ? (
         <TextField
           select
+          required
           label="Ship to"
           value={shipTo}
-          onChange={(event) => setShipTo(event.target.value)}
+          onChange={(event) => {
+            setShipTo(event.target.value)
+            answerShipping()
+          }}
           size="small"
           helperText="Shipping rates depend on where this is going"
         >
-          {shipCountries.map((code) => (
+          {askedCountries.map((code) => (
             <MenuItem key={code} value={code}>
               {CommerceModel.CHECKOUT_SHIPPING_COUNTRY_NAMES[code] ?? code}
             </MenuItem>
@@ -653,7 +743,10 @@ function CartLines(props: {
         <TextField
           label="Postal code"
           value={shipPostal}
-          onChange={(event) => setShipPostal(event.target.value)}
+          onChange={(event) => {
+            setShipPostal(event.target.value)
+            answerShipping()
+          }}
           size="small"
           helperText="Carrier rates depend on the postal code"
           slotProps={{ htmlInput: { autoComplete: 'shipping postal-code', maxLength: 12 } }}
@@ -681,7 +774,7 @@ function CartLines(props: {
           // cannot succeed (AGL-2019).
           status === 'unconfigured' ||
           // Asked but unanswered: the server would only refuse again.
-          (fulfillment.method === 'shipping' && shipCountries !== null && !shipTo) ||
+          (fulfillment.method === 'shipping' && askedCountries !== null && !shipTo) ||
           (fulfillment.method === 'shipping' && askPostal && !shipPostal.trim()) ||
           // Pickup needs a location, delivery a zone and a time (AGL-3624).
           !fulfillment.ready ||
@@ -739,6 +832,7 @@ const Cart = forwardRef<HTMLDivElement, CartProps>((props, ref) => {
   const { hostId } = Aglyn.useSite()
   const siteFetch = Aglyn.useSiteFetch()
   const [cart, setCart] = useState<CartView | null>(null)
+  const [load, setLoad] = useState<CartLoad>('loading')
   const [open, setOpen] = useState(false)
 
   // Closes the merchant's ecommerce funnel (AGL-1641). Stripe returns a cart
@@ -751,12 +845,16 @@ const Cart = forwardRef<HTMLDivElement, CartProps>((props, ref) => {
   const refresh = useCallback(async () => {
     if (!hostId) return
     try {
-      const response = await fetch(
-        `/api/commerce/cart?hostId=${encodeURIComponent(hostId)}`,
-      )
-      if (response.ok) setCart(await response.json())
+      const response = await fetch(cartReadUrl(hostId))
+      if (response.ok) {
+        setCart(await response.json())
+        setLoad('loaded')
+      } else {
+        setLoad((current) => (current === 'loaded' ? current : 'failed'))
+      }
     } catch {
-      // Badge silently stays stale offline.
+      // Badge silently stays stale offline; a cart never read says so.
+      setLoad((current) => (current === 'loaded' ? current : 'failed'))
     }
   }, [hostId])
 
@@ -851,10 +949,12 @@ const Cart = forwardRef<HTMLDivElement, CartProps>((props, ref) => {
   if (variant === 'inline') {
     return (
       <Box ref={ref} {...rest}>
+        <CartReadPreload hostId={hostId} />
         <CheckoutReturnNotice hostId={hostId} siteFetch={siteFetch} />
         <CartLines
           hostId={hostId}
           cart={cart}
+          load={load}
           showCoupon={showCoupon}
           checkoutLabel={checkoutLabel}
           emptyText={emptyText}
@@ -885,6 +985,7 @@ const Cart = forwardRef<HTMLDivElement, CartProps>((props, ref) => {
           <CartLines
             hostId={hostId}
             cart={cart}
+            load={load}
             showCoupon={showCoupon}
             checkoutLabel={checkoutLabel}
             emptyText={emptyText}

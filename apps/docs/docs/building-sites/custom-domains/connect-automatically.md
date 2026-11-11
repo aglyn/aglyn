@@ -10,7 +10,7 @@ If you already own a domain, your DNS provider may be able to add Aglyn's record
 you. It uses **Domain Connect**, an open standard for exactly this: you approve the
 change on your provider's own page, and there are no records to copy.
 
-Cloudflare, NameSilo and Glauca support it for Aglyn today. When another provider adds
+Cloudflare, NameSilo, Glauca and Domain Chief support it for Aglyn today. When another provider adds
 Aglyn, the button appears for its domains on its own, with nothing for you to change.
 
 ## Steps {#steps}

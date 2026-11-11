@@ -82,7 +82,9 @@ const mockHostDoc = {
   defaultLocale: 'en',
 }
 
-const mockComponentDocs = [
+// `let`, so a case can hand the card a new snapshot the way a listener does:
+// a new array of new rows.
+let mockComponentDocs = [
   {
     $id: 'cmp-1',
     displayName: 'Hero band',
@@ -309,20 +311,61 @@ describe('LanguagesCard (AGL-1358)', () => {
     fireEvent.click(screen.getByRole('button', { name: 'Save languages' }))
   }
 
-  it('REFUSES to rewrite the locale list from an unconfirmed read', async () => {
+  /**
+   * The first press is never refused for a late server (AGL-4047): Save is
+   * held while the host read is the cache's, with the reason under it, and
+   * what was typed stays.
+   */
+  it('HOLDS Save while the host read is unconfirmed, keeping what was typed', async () => {
     mockListener.fromCache = true
     render(<LanguagesCard hostId="host-1" />)
 
     editAndSave()
+    await new Promise((resolve) => setTimeout(resolve, 20))
 
-    await waitFor(() => expect(mockEnqueueSnackbar).toHaveBeenCalled())
+    const save = screen.getByRole('button', {
+      name: 'Save languages',
+    }) as HTMLButtonElement
+    expect(save.disabled).toBe(true)
+    expect(screen.getByRole('status').textContent).toBe(
+      'Checking your language settings with the server…',
+    )
     expect(updateDoc).not.toHaveBeenCalled()
-    const [message] = mockEnqueueSnackbar.mock.calls[0]
-    expect(message).toEqual(expect.stringContaining('language settings'))
-    expect(message).toEqual(expect.stringMatching(/nothing was saved/i))
+    expect(mockEnqueueSnackbar).not.toHaveBeenCalled()
     expect(
       (screen.getByLabelText('Languages') as HTMLInputElement).value,
     ).toEqual('en, es, fr')
+  })
+
+  it('keeps what was typed through the server’s copy, and saves it on the first press', async () => {
+    mockListener.fromCache = true
+    const { rerender } = render(<LanguagesCard hostId="host-1" />)
+    fireEvent.change(screen.getByLabelText('Languages'), {
+      target: { value: 'en, es, fr' },
+    })
+
+    // The server answers, and its copy differs from the cache's: the
+    // default was changed elsewhere since that snapshot.
+    const before = mockHostDoc.defaultLocale
+    mockHostDoc.defaultLocale = 'es'
+    mockListener.fromCache = false
+    try {
+      rerender(<LanguagesCard hostId="host-1" />)
+      // Used to be wiped by the reset every snapshot ran.
+      expect(
+        (screen.getByLabelText('Languages') as HTMLInputElement).value,
+      ).toEqual('en, es, fr')
+      expect(screen.queryByRole('status')).toBeNull()
+      fireEvent.click(screen.getByRole('button', { name: 'Save languages' }))
+
+      await waitFor(() => expect(updateDoc).toHaveBeenCalledTimes(1))
+      const [, payload] = (updateDoc as jest.Mock).mock.calls[0]
+      expect(payload.locales).toEqual(['en', 'es', 'fr'])
+      // The untouched field is saved as the server has it.
+      expect(payload.defaultLocale).toBe('es')
+    } finally {
+      mockHostDoc.defaultLocale = before
+    }
   })
 
   it('SAVES normally once the server has confirmed the seed', async () => {
@@ -411,22 +454,63 @@ describe('HostComponentsCard (AGL-1358)', () => {
     fireEvent.click(screen.getByRole('button', { name: 'Save' }))
   }
 
-  it('REFUSES to rewrite a component seeded from an unconfirmed read', async () => {
+  /**
+   * The first press is never refused for a late server (AGL-4047): Save is
+   * HELD while the list read is the cache's, with the reason beside it, and
+   * the dialog keeps what was typed.
+   */
+  it('HOLDS Save while the list read is unconfirmed, keeping what was typed', async () => {
     mockListener.fromCache = true
     render(<HostComponentsCard hostId="host-1" />)
 
-    renameAndSave()
+    fireEvent.click(screen.getByRole('button', { name: /More actions/ }))
+    fireEvent.click(screen.getByRole('menuitem', { name: 'Rename' }))
+    fireEvent.change(screen.getByLabelText('Name'), {
+      target: { value: 'Hero banner' },
+    })
+    fireEvent.click(screen.getByRole('button', { name: 'Save' }))
+    await new Promise((resolve) => setTimeout(resolve, 20))
 
-    await waitFor(() => expect(mockEnqueueSnackbar).toHaveBeenCalled())
+    const save = screen.getByRole('button', { name: 'Save' }) as HTMLButtonElement
+    expect(save.disabled).toBe(true)
+    expect(
+      screen.getByText('Checking your component with the server…'),
+    ).toBeTruthy()
     expect(updateDoc).not.toHaveBeenCalled()
-    const [message] = mockEnqueueSnackbar.mock.calls[0]
-    expect(message).toEqual(expect.stringContaining('component'))
-    expect(message).toEqual(expect.stringMatching(/nothing was saved/i))
-    // The dialog is still open with what was being edited. This path had no
-    // report at all before the guard, so the message is the whole point.
+    expect(mockEnqueueSnackbar).not.toHaveBeenCalled()
     expect((screen.getByLabelText('Name') as HTMLInputElement).value).toEqual(
-      'Hero band',
+      'Hero banner',
     )
+  })
+
+  it('keeps the rename through the server’s copy, and saves its description on the first press', async () => {
+    mockListener.fromCache = true
+    const cached = mockComponentDocs
+    try {
+      const { rerender } = render(<HostComponentsCard hostId="host-1" />)
+      fireEvent.click(screen.getByRole('button', { name: /More actions/ }))
+      fireEvent.click(screen.getByRole('menuitem', { name: 'Rename' }))
+      fireEvent.change(screen.getByLabelText('Name'), {
+        target: { value: 'Hero banner' },
+      })
+      // The server answers: the description changed elsewhere since the
+      // cached snapshot.
+      mockComponentDocs = [{ ...cached[0], description: 'The top of every page' }]
+      mockListener.fromCache = false
+      rerender(<HostComponentsCard hostId="host-1" />)
+
+      expect((screen.getByLabelText('Name') as HTMLInputElement).value).toEqual(
+        'Hero banner',
+      )
+      fireEvent.click(screen.getByRole('button', { name: 'Save' }))
+      await waitFor(() => expect(updateDoc).toHaveBeenCalledTimes(1))
+      const [, payload] = (updateDoc as jest.Mock).mock.calls[0]
+      expect(payload.displayName).toBe('Hero banner')
+      // Not the cache's copy, which the dialog used to hold from the open.
+      expect(payload.description).toBe('The top of every page')
+    } finally {
+      mockComponentDocs = cached
+    }
   })
 
   it('SAVES normally once the server has confirmed the seed', async () => {

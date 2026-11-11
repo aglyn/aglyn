@@ -35,6 +35,58 @@ final class BesignerEntryTests: XCTestCase {
     XCTAssertEqual(BesignerEntry.exit(from: editor, to: "/acme/hosts/shop/screens/s9/versions/v2/view"), .stay)
   }
 
+  // AGL-4056: every editor's own back control returns to the screen the Besigner was opened from.
+  func testEachEditorsBackControlReturnsToTheApp() {
+    // A plugin document's goes to the document.
+    XCTAssertEqual(
+      BesignerEntry.exit(from: "/acme/hosts/shop/forms/f1/versions/v3/besigner", to: "/acme/hosts/shop/forms/f1"), .leave)
+    // A layout's, a component's and a template's go to their lists.
+    XCTAssertEqual(
+      BesignerEntry.exit(from: "/acme/hosts/shop/layouts/l1/versions/v1/besigner", to: "/acme/hosts/shop/layouts"), .leave)
+    XCTAssertEqual(
+      BesignerEntry.exit(from: "/acme/hosts/shop/components/c1/versions/v1/besigner", to: "/acme/hosts/shop/components?x=1"),
+      .leave)
+    XCTAssertEqual(BesignerEntry.exit(from: "/acme/hosts/shop/templates/t1/besigner", to: "/acme/hosts/shop/templates"), .leave)
+    // The staff console's email designs go to theirs.
+    XCTAssertEqual(BesignerEntry.exit(from: "/admin/emails/welcome/versions/v1/besigner", to: "/admin/emails"), .leave)
+    // The logo's workspace and site homes are not a way back: they open the app's Home.
+    XCTAssertEqual(BesignerEntry.exit(from: editor, to: "/acme/hosts/shop"), .open("/acme/hosts/shop"))
+    XCTAssertEqual(BesignerEntry.exit(from: editor, to: "/acme/hosts"), .open("/acme/hosts"))
+    // Another document's page is not this editor's way back.
+    XCTAssertEqual(
+      BesignerEntry.exit(from: "/acme/hosts/shop/forms/f1/versions/v3/besigner", to: "/acme/hosts/shop/forms/f2"),
+      .open("/acme/hosts/shop/forms/f2"))
+  }
+
+  func testTheBackScriptPressesTheControlTheConsoleNames() {
+    // The console's `NATIVE_BESIGNER_BACK_CONTROL_ID` (libs/aglyn native-besigner-back.ts).
+    XCTAssertEqual(BesignerEntry.backControlID, "aglyn-besigner-back")
+    XCTAssertTrue(BesignerEntry.backScript.contains("getElementById('aglyn-besigner-back')"))
+    XCTAssertTrue(BesignerEntry.backScript.contains(".click()"))
+  }
+
+  func testBackAfterASwitchReturnsToTheCurrentDocumentsPlace() {
+    let opened = "/acme/hosts/shop/screens/s1/versions/v2/besigner"
+    // Still the document it opened (another version included): back to the screen that opened it.
+    XCTAssertNil(BesignerEntry.returnPath(opened: opened, current: opened, back: "/acme/hosts/shop/screens/s1/versions/v2/view"))
+    XCTAssertNil(
+      BesignerEntry.returnPath(
+        opened: opened, current: "/acme/hosts/shop/screens/s1/versions/v3/besigner",
+        back: "/acme/hosts/shop/screens/s1/versions/v3/view"))
+    // Switched to another page: that page's view.
+    XCTAssertEqual(
+      BesignerEntry.returnPath(
+        opened: opened, current: "/acme/hosts/shop/screens/s7/versions/v1/besigner",
+        back: "/acme/hosts/shop/screens/s7/versions/v1/view"),
+      "/acme/hosts/shop/screens/s7/versions/v1/view")
+    // Switched to a layout: its list, as its own back control goes.
+    XCTAssertEqual(
+      BesignerEntry.returnPath(
+        opened: opened, current: "/acme/hosts/shop/layouts/l1/versions/v1/besigner?panel=layers",
+        back: "/acme/hosts/shop/layouts"),
+      "/acme/hosts/shop/layouts")
+  }
+
   func testAConsolePageOpensTheAppsOwnScreen() {
     XCTAssertEqual(BesignerEntry.exit(from: editor, to: "/acme"), .open("/acme"))
     XCTAssertEqual(BesignerEntry.exit(from: editor, to: "/acme/hosts/shop/media?tab=org"), .open("/acme/hosts/shop/media?tab=org"))

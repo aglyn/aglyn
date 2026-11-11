@@ -111,7 +111,10 @@ bought here does.
 
 If a domain uses another provider's nameservers (common for a domain you just
 transferred in), the page names them and explains that its records are edited there.
-There's no editor for it here.
+To edit them here instead, a workspace owner or admin can press **Use Aglyn's
+nameservers** and confirm. Records kept at the old provider stop applying, such as
+email (MX) records, so note the ones you need first and add them again under **DNS
+records** afterwards. The change can take up to 48 hours to reach everyone.
 
 ## Move a domain to another registrar {#transfer-out}
 

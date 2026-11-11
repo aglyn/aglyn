@@ -132,6 +132,10 @@ export function DnsRecordsSection(props: DnsRecordsSectionProps) {
   const [badFields, setBadFields] = useState<string[]>([])
   const [error, setError] = useState<string | null>(null)
   const [busy, setBusy] = useState(false)
+  const [confirmingMove, setConfirmingMove] = useState(false)
+  const [moveError, setMoveError] = useState<string | null>(null)
+  /** Set once the registrar took the change; the new nameservers take a while to show. */
+  const [moved, setMoved] = useState(false)
 
   const load = useCallback(async () => {
     try {
@@ -237,18 +241,101 @@ export function DnsRecordsSection(props: DnsRecordsSectionProps) {
     }
   }
 
+  const moveToOurNameservers = async () => {
+    setBusy(true)
+    setMoveError(null)
+    try {
+      await request(DOMAINS_API_ROUTES.dns, { body: { orgId, domain, action: 'use-our-nameservers' } })
+      setConfirmingMove(false)
+      setMoved(true)
+      enqueueSnackbar(`${domain} is moving to ${PLATFORM_BRAND_NAME}’s nameservers`, {
+        variant: 'success',
+        persist: false,
+      })
+      void load()
+    } catch (caught) {
+      if (caught instanceof DomainsRequestError && caught.code === 'already-ours') {
+        // Another tab or admin got there first, or the move finished.
+        setConfirmingMove(false)
+        void load()
+      } else {
+        setMoveError((caught as Error).message)
+      }
+    } finally {
+      setBusy(false)
+    }
+  }
+
   if (loadError) return <Alert severity="warning">{loadError}</Alert>
   if (!answer) return null
 
   if (!answer.ours) {
+    const current = answer.nameservers.length ? answer.nameservers.join(', ') : 'another provider’s nameservers'
+    const moving = moved || Boolean(answer.moving)
     return (
       <Stack spacing={1.5}>
-        <Typography variant="subtitle1" component="h3">
-          {'DNS records'}
-        </Typography>
-        <Alert severity="info">
-          {`${domain} uses ${answer.nameservers.length ? answer.nameservers.join(', ') : 'another provider’s nameservers'} for its DNS, so its records are kept and edited there, not here. Anything already using the domain keeps working.`}
-        </Alert>
+        <Stack direction="row" spacing={1} sx={{ alignItems: 'center', justifyContent: 'space-between' }}>
+          <Typography variant="subtitle1" component="h3">
+            {'DNS records'}
+          </Typography>
+          {moving ? null : (
+            <Button
+              size="small"
+              variant="outlined"
+              onClick={() => {
+                setMoveError(null)
+                setConfirmingMove(true)
+              }}
+            >
+              {`Use ${PLATFORM_BRAND_NAME}’s nameservers`}
+            </Button>
+          )}
+        </Stack>
+        {moving ? (
+          <Alert severity="success">
+            {`${domain} is moving to ${PLATFORM_BRAND_NAME}’s nameservers. It can take up to 48 hours to reach everyone. Its records can be edited here once it has.`}
+          </Alert>
+        ) : (
+          <Alert severity="info">
+            {`${domain} uses ${current} for its DNS, so its records are kept and edited there, not here. Anything already using the domain keeps working.`}
+          </Alert>
+        )}
+
+        <Dialog
+          open={confirmingMove}
+          onClose={busy ? undefined : () => setConfirmingMove(false)}
+          fullWidth
+          maxWidth="sm"
+        >
+          <DialogTitle>{`Use ${PLATFORM_BRAND_NAME}’s nameservers?`}</DialogTitle>
+          <DialogContent>
+            <Stack spacing={1.5} sx={{ pt: 0.5 }}>
+              <Typography variant="body2">
+                {`${domain} will stop using ${current}, and its DNS records will be kept and edited here instead.`}
+              </Typography>
+              <Alert severity="warning">
+                {'Records kept at your current DNS provider stop applying, such as email (MX) records or verifications for other services. Note the ones you need first, then add them again under DNS records here. Any records already kept here for this domain apply instead.'}
+              </Alert>
+              {answer.siteConnected ? (
+                <Typography variant="body2" color="text.secondary">
+                  {`The site this domain serves keeps working: ${PLATFORM_BRAND_NAME} adds the records it needs.`}
+                </Typography>
+              ) : null}
+              <Typography variant="body2" color="text.secondary">
+                {'The change can take up to 48 hours to reach everyone.'}
+              </Typography>
+              {moveError ? <Alert severity="error">{moveError}</Alert> : null}
+            </Stack>
+          </DialogContent>
+          <DialogActions>
+            <Button onClick={() => setConfirmingMove(false)} disabled={busy}>
+              {'Cancel'}
+            </Button>
+            <Button variant="contained" color="warning" onClick={() => void moveToOurNameservers()} disabled={busy}>
+              {'Use them'}
+            </Button>
+          </DialogActions>
+        </Dialog>
       </Stack>
     )
   }

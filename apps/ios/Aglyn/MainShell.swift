@@ -224,8 +224,9 @@ struct ShellChrome: View {
           ) {
             withAnimation(.easeOut(duration: 0.2)) { navigation.railHidden.toggle() }
           }
-          TitleBarButton("Back", systemImage: "arrow.left", identifier: "titlebar-back") { navigation.goBack() }
-            .disabled(!navigation.canGoBack)
+          // Over the Besigner, Back presses the editor's own back control (AGL-4056).
+          TitleBarButton("Back", systemImage: "arrow.left", identifier: "titlebar-back") { navigation.back() }
+            .disabled(!navigation.canGoBackOrLeave)
           TitleBarButton("Forward", systemImage: "arrow.right", identifier: "titlebar-forward") { navigation.goForward() }
             .disabled(!navigation.canGoForward)
           RecentPlacesMenu()
@@ -730,7 +731,7 @@ struct ShellStack: View {
         .wideBarHidden()
         .aglynStackEntrance()
         .navigationDestination(for: Route.self) { route in
-          PushedScreen(section: section) {
+          PushedScreen(section: section, head: !route.isBesigner) {
             if case .area(let screen, let params) = route {
               AreaView(screen: screen, params: params, pushed: true)
             } else if case .modeList = route {
@@ -741,7 +742,8 @@ struct ShellStack: View {
             }
           }
           .phoneAssistOnPushed(route)
-          .wideBarHidden()
+          // The Besigner has no system bar on any size: its own bars and back are its head (AGL-4056).
+          .wideBarHidden(always: route.isBesigner)
           .aglynStackEntrance()
         }
     }
@@ -760,17 +762,21 @@ struct ShellStack: View {
 extension View {
   /// On iPad, as on the Mac, the window's drawn chrome and the screen's head replace the system navigation bar (Figma
   /// iPad frames): a screen's title, way back and actions are in its head.
-  func wideBarHidden() -> some View { modifier(WideBarHidden()) }
+  func wideBarHidden(always: Bool = false) -> some View { modifier(WideBarHidden(always: always)) }
 }
 
 /// No system bar where the shell draws its own chrome: the navigation bar on iPad, and on the Mac the window toolbar a
 /// pushed screen would bring back (its back chevron and a screen's own items floated over the tab row).
 private struct WideBarHidden: ViewModifier {
   @Environment(\.aglynWideChrome) private var wide
+  /// Hidden on a phone too, with its back swipe (the in-app Besigner, AGL-4056).
+  var always = false
 
   func body(content: Content) -> some View {
     #if os(iOS)
-      content.toolbar(wide ? .hidden : .automatic, for: .navigationBar)
+      content
+        .toolbar(wide || always ? .hidden : .automatic, for: .navigationBar)
+        .navigationBarBackButtonHidden(always)
     #else
       content
         .navigationBarBackButtonHidden(wide)
@@ -789,13 +795,15 @@ struct PushedScreen<Content: View>: View {
   let section: ShellSection
   /// Whether the head offers the way back (a pushed screen) or not (a section's own first screen).
   var back = true
+  /// Whether the screen has a head at all: the in-app Besigner has none, its own bars are its head (AGL-4056).
+  var head = true
   @ViewBuilder let content: () -> Content
 
   /// The head's height, kept clear above the screen.
   private var headHeight: CGFloat { back ? 92 : 70 }
 
   var body: some View {
-    if wide {
+    if wide && head {
       // The screen fills the area under its head, so the head stays at the top on a screen that draws less than the
       // window (the Besigner's loading state had the head centred around its spinner, AGL-4002).
       content()
@@ -1443,6 +1451,8 @@ private struct PhoneAssistOnPushed: ViewModifier {
   /// The in-app browser keeps its own bar (Figma 22:712): its page is not a screen the AI reads.
   private var shown: Bool {
     if case .web = route { return false }
+    // The Besigner's own Assist is its AI, and it has no bar to hold the button (AGL-4056, AGL-4057).
+    if route.isBesigner { return false }
     return AssistSlot.available(model)
   }
 

@@ -73,12 +73,43 @@ internal class NavChromeState(private val device: KeyValueStore) {
 
   fun toggleSidebar() {
     sidebarHidden = !sidebarHidden
-    device.set(SIDEBAR_HIDDEN, if (sidebarHidden) "1" else null)
+    // Not while the Besigner's focus mode holds the columns: leaving it puts back the person's own choice.
+    if (focusSaved == null) device.set(SIDEBAR_HIDDEN, if (sidebarHidden) "1" else null)
   }
 
   fun toggleRail() {
     railHidden = !railHidden
-    device.set(RAIL_HIDDEN, if (railHidden) "1" else null)
+    val saved = focusSaved
+    if (saved == null) {
+      device.set(RAIL_HIDDEN, if (railHidden) "1" else null)
+    } else {
+      // In focus mode the sidebar follows the rail, so the one toggle brings both back, and folds both again.
+      sidebarHidden = railHidden
+    }
+  }
+
+  /** The rail and sidebar as they were before the Besigner opened in focus mode (AGL-4056); null while it is not. */
+  private var focusSaved by mutableStateOf<Pair<Boolean, Boolean>?>(null)
+
+  /** Whether the Besigner holds the window in focus mode. */
+  val inFocus: Boolean get() = focusSaved != null
+
+  /**
+   * The Besigner opens on a wide window (AGL-4056): the rail and the sidebar fold away, remembered as they were, and the
+   * fold is never stored as the person's own choice. Opening it again keeps the first memory.
+   */
+  fun enterFocus() {
+    if (focusSaved == null) focusSaved = railHidden to sidebarHidden
+    railHidden = true
+    sidebarHidden = true
+  }
+
+  /** The Besigner closes: the rail and the sidebar come back exactly as they were before it opened. */
+  fun leaveFocus() {
+    val (rail, sidebar) = focusSaved ?: return
+    focusSaved = null
+    railHidden = rail
+    sidebarHidden = sidebar
   }
 
   /** Each group the person opened (true) or folded (false), by "<list>.<group>", remembered on this device. */

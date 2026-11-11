@@ -288,7 +288,9 @@ describe('the SEO card announces a published screen (AGL-2934)', () => {
   })
 
   it('does NOT announce when the seed guard refuses the save', async () => {
-    mockScreenDoc.fromCache = true
+    // A cache-served seed now HOLDS the save (AGL-4047); a failed read is
+    // the refusal that still reaches the guard.
+    mockScreenDoc.status = 'error'
     render(<ScreenDetails />)
 
     editTitleAndSave()
@@ -401,7 +403,9 @@ describe('the rename announces a published screen (AGL-2934)', () => {
   })
 
   it('does NOT announce when the seed guard refuses the rename', async () => {
-    mockScreenDoc.fromCache = true
+    // A cache-served seed now HOLDS the save (AGL-4047); a failed read is
+    // the refusal that still reaches the guard.
+    mockScreenDoc.status = 'error'
     render(<ScreenDetails />)
 
     renameAndSave()

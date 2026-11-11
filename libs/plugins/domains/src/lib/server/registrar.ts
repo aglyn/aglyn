@@ -177,6 +177,12 @@ export interface RegistrarDriver {
   }): Promise<RegistrarResult<{ orderId: string }>>
   transferStatus(domain: string): Promise<RegistrarResult<RegistrarTransferStatus>>
   nameservers(domain: string): Promise<RegistrarResult<RegistrarNameservers>>
+  /**
+   * Points a name registered here at other nameservers. An empty list puts
+   * it back on the registrar's own, whose records the DNS editor writes
+   * (AGL-4040).
+   */
+  setNameservers(domain: string, nameservers: readonly string[]): Promise<RegistrarResult<true>>
   listDnsRecords(domain: string): Promise<RegistrarResult<RegistrarListedRecord[]>>
   createDnsRecord(
     domain: string,
@@ -213,6 +219,7 @@ export const NO_REGISTRAR: RegistrarDriver = {
   transferIn: async () => ({ ok: 'no', code: 'not-configured', retryable: false }),
   transferStatus: async () => ({ ok: 'no', code: 'not-configured', retryable: false }),
   nameservers: async () => ({ ok: 'no', code: 'not-configured', retryable: false }),
+  setNameservers: async () => ({ ok: 'no', code: 'not-configured', retryable: false }),
   listDnsRecords: async () => ({ ok: 'no', code: 'not-configured', retryable: false }),
   createDnsRecord: async () => ({ ok: 'no', code: 'not-configured', retryable: false }),
   updateDnsRecord: async () => ({ ok: 'no', code: 'not-configured', retryable: false }),
