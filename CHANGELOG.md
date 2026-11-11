@@ -26,6 +26,7 @@ content on the marketing site and is written separately.
 - **legal:** Privacy Policy v26 adds Google Business Profile data; signed-in users accept it once ([AGL-4212](https://linear.app/aglyn/issue/AGL-4212))
 - **docs:** the domain guides list Connect a domain automatically ([AGL-3963](https://linear.app/aglyn/issue/AGL-3963))
 - **console:** a page opened in a running tab gets past another tab's locked cache in seconds, not half a minute ([AGL-4204](https://linear.app/aglyn/issue/AGL-4204))
+- **ai:** Bring my site tells logos and graphics from photos by their pixels and keeps them out of photo slots ([AGL-4152](https://linear.app/aglyn/issue/AGL-4152))
 
 ## v1.20.2 — 2026-11-11
 
