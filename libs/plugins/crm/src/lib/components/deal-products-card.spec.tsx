@@ -89,3 +89,23 @@ describe('the catalog door and the plan (AGL-3982)', () => {
     expect(screen.queryByText(/needs a plan with the store/)).toBeNull()
   })
 })
+
+/**
+ * The first press is never refused for a late server (AGL-4047): every change
+ * to the lines is held while the deal read is the cache's, with the reason
+ * beside it, rather than pressed into a wait that can end refused.
+ */
+describe('a deal read the server has not confirmed', () => {
+  it('holds Add line and each line’s controls, with the reason', () => {
+    const deal = {
+      ...(DEAL as object),
+      lineItems: [{ name: 'Desk', quantity: 2, unitAmountCents: 5000 }],
+    } as never
+    render(
+      <DealProductsCard deal={deal} orgId="org-1" hostId="host-1" org={{}} fromCache unreadable={false} />,
+    )
+    expect((screen.getByRole('button', { name: 'Add line' }) as HTMLButtonElement).disabled).toBe(true)
+    expect((screen.getByRole('button', { name: 'Remove Desk' }) as HTMLButtonElement).disabled).toBe(true)
+    expect(screen.getByRole('status').textContent).toBe('Checking your deal with the server…')
+  })
+})

@@ -132,6 +132,30 @@ describe('LeadCampaignsCard', () => {
     expect(onFiled).toHaveBeenCalledWith({ added: ['founder-icp2'], removed: ['founder-icp1'] })
   })
 
+  /**
+   * The first press is never refused for a late server (AGL-4047): Save is
+   * held while the lead read is the cache's, with the reason beside it.
+   */
+  it('holds Save, with the reason, while the lead read is unconfirmed', async () => {
+    render(
+      <LeadCampaignsCard
+        hostId="site-1"
+        leadId="lead-key"
+        lead={{ campaignIds: ['founder-icp1'] }}
+        leadStatus="success"
+        fromCache
+        options={options}
+        optionsReady
+      />,
+    )
+    fireEvent.mouseDown(screen.getByRole('combobox', { name: 'Filed under campaigns' }))
+    fireEvent.click(screen.getByRole('option', { name: 'Founder · ICP 2' }))
+    fireEvent.keyDown(screen.getByRole('listbox'), { key: 'Escape' })
+    await waitFor(() => expect(screen.queryByRole('listbox')).toBeNull())
+    expect((saveFiling() as HTMLButtonElement).disabled).toBe(true)
+    expect(screen.getByRole('status').textContent).toBe('Checking your lead with the server…')
+  })
+
   it('says so in place of the picker when the site has no campaigns', () => {
     render(
       <LeadCampaignsCard

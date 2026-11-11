@@ -72,6 +72,12 @@ export interface ContactRolesEditorProps {
   emptyDescription: string
   /** Writes the whole list, and answers whether it landed. */
   save: (next: CrmDealContactRole[], done: string) => Promise<boolean>
+  /**
+   * The record is not confirmed by the server yet (AGL-4047): every change is
+   * held, with this sentence beside it, rather than pressed into a wait that
+   * can end refused. Build it with `seedCheckingText`.
+   */
+  checkingText?: string
 }
 
 /**
@@ -98,14 +104,17 @@ export function ContactRolesEditor(props: ContactRolesEditorProps) {
     help,
     emptyDescription,
     save,
+    checkingText,
   } = props
+  // Held while the server has not answered, the same as while a save runs.
+  const held = busy || Boolean(checkingText)
 
   const addButton = (variant: 'text' | 'contained') => (
     <Button
       size="small"
       variant={variant}
       startIcon={<MdiIcon path={mdiAccountPlusOutline.path} size={0.8} />}
-      disabled={busy || !ready}
+      disabled={held || !ready}
       onClick={() => onAddingChange(true)}
     >
       {'Add contact'}
@@ -121,6 +130,11 @@ export function ContactRolesEditor(props: ContactRolesEditorProps) {
         contentGutterX
         contentGutterY
       >
+        {checkingText ? (
+          <Typography variant="body2" color="text.secondary" role="status" sx={{ mb: 1 }}>
+            {checkingText}
+          </Typography>
+        ) : null}
         {roles.length === 0 ? (
           <EmptyStateComponent
             compact
@@ -152,7 +166,7 @@ export function ContactRolesEditor(props: ContactRolesEditorProps) {
                       label="Role"
                       value={row.role ?? ''}
                       stored={row.role}
-                      disabled={busy}
+                      disabled={held}
                       onChange={(role) =>
                         void save(dealContactRolesWithRole(roles, row.contactId, role), 'Role saved')
                       }
@@ -162,7 +176,7 @@ export function ContactRolesEditor(props: ContactRolesEditorProps) {
                     {row.primary ? null : (
                       <Button
                         size="small"
-                        disabled={busy}
+                        disabled={held}
                         onClick={() =>
                           void save(dealContactRolesWithPrimary(roles, row.contactId), 'Primary contact set')
                         }
@@ -175,7 +189,7 @@ export function ContactRolesEditor(props: ContactRolesEditorProps) {
                         <IconButton
                           size="small"
                           aria-label={`Remove ${name} from this ${noun}`}
-                          disabled={busy}
+                          disabled={held}
                           onClick={() =>
                             void save(dealContactRolesWithout(roles, row.contactId), 'Contact removed')
                           }
@@ -195,6 +209,7 @@ export function ContactRolesEditor(props: ContactRolesEditorProps) {
         noun={noun}
         open={adding}
         busy={busy}
+        checkingText={checkingText}
         roles={roles}
         hostId={hostId}
         org={org}
@@ -215,6 +230,8 @@ interface AddContactRoleDialogProps {
   noun: ContactRolesNoun
   open: boolean
   busy: boolean
+  /** Add is held while the record is unconfirmed (AGL-4047). */
+  checkingText?: string
   roles: readonly CrmDealContactRole[]
   hostId: string | null
   org: CrmOrgDoc
@@ -226,7 +243,7 @@ interface AddContactRoleDialogProps {
 
 /** Pick a contact, the part they play, and whether they are the Primary. */
 function AddContactRoleDialog(props: AddContactRoleDialogProps) {
-  const { noun, open, busy, roles, hostId, org, picklist, onClose, onAdd } = props
+  const { noun, open, busy, checkingText, roles, hostId, org, picklist, onClose, onAdd } = props
   const scope = useCrmScope({ hostId, org })
   const [contactId, setContactId] = useState<string | null>(null)
   const [role, setRole] = useState('')
@@ -281,12 +298,17 @@ function AddContactRoleDialog(props: AddContactRoleDialogProps) {
         </Stack>
       </DialogContent>
       <DialogActions>
+        {checkingText ? (
+          <Typography variant="body2" color="text.secondary" role="status" sx={{ mr: 'auto' }}>
+            {checkingText}
+          </Typography>
+        ) : null}
         <Button onClick={close} disabled={busy}>
           {'Cancel'}
         </Button>
         <Button
           variant="contained"
-          disabled={busy || !contactId || Boolean(problem)}
+          disabled={busy || Boolean(checkingText) || !contactId || Boolean(problem)}
           onClick={async () => {
             if (!contactId) return
             const added = await onAdd({

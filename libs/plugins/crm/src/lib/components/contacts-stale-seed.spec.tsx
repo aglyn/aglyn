@@ -43,6 +43,8 @@ import ContactDetailPage from './contact-detail-page'
 const listener = {
   fromCache: false,
   status: 'success' as 'success' | 'error',
+  /** The server's newer copy, when a spec has it answer with one. */
+  doc: null as Record<string, unknown> | null,
 }
 
 const contactDoc = {
@@ -105,7 +107,7 @@ jest.mock('@aglyn/tenant-feature-instance', () => ({
   useOrgContainerOptions: () => ({ options: [], truncated: false, ready: true }),
   // The ONE document the page reads, carrying the listener's verdict.
   useFirestoreDoc: () => ({
-    data: contactDoc,
+    data: listener.doc ?? contactDoc,
     status: listener.status,
     fromCache: listener.fromCache,
   }),
@@ -211,6 +213,7 @@ beforeEach(() => {
   posted = []
   listener.fromCache = false
   listener.status = 'success'
+  listener.doc = null
 })
 
 const renderPage = () =>
@@ -238,23 +241,60 @@ beforeAll(() => setSeedConfirmWaitMs(0))
 afterAll(() => setSeedConfirmWaitMs())
 
 describe('ContactDetailPage (AGL-1358, AGL-2596)', () => {
-  it('REFUSES to write a contact seeded from an unconfirmed read', async () => {
+  /**
+   * The first press is never refused for a late server (AGL-4047): Save is
+   * HELD while the contact read is the cache's, with the reason beside it,
+   * and what was typed stays.
+   */
+  it('HOLDS Save, with the reason beside it, while the read is unconfirmed', async () => {
     listener.fromCache = true
     renderPage()
 
     editNotesAndSave()
+    await new Promise((resolve) => setTimeout(resolve, 20))
 
-    // Settled, so this cannot pass merely by asserting too early.
-    await waitFor(() => expect(enqueueSnackbar).toHaveBeenCalled())
+    expect(
+      (screen.getByRole('button', { name: 'Save' }) as HTMLButtonElement).disabled,
+    ).toBe(true)
+    expect(screen.getAllByRole('status').map((note) => note.textContent)).toContain(
+      'Checking your contact with the server…',
+    )
     expect(updateDoc).not.toHaveBeenCalled()
     expect(profileSaves()).toEqual([])
-    const [message] = enqueueSnackbar.mock.calls[0]
-    expect(message).toEqual(expect.stringContaining('contact'))
-    expect(message).toEqual(expect.stringMatching(/nothing was saved/i))
-    // The card keeps what was typed, so the refusal is not a silent no-op.
+    // Nothing refused: the press never happened.
+    expect(enqueueSnackbar).not.toHaveBeenCalled()
     expect((screen.getByLabelText('About') as HTMLInputElement).value).toEqual(
       'Prefers a phone call',
     )
+  })
+
+  /**
+   * The half that keeps the guard's protection while Save is held: the edit
+   * is replayed onto the record the server confirms, so the tags nobody
+   * touched are saved as the server has them, never as the cache had them.
+   */
+  it('saves the edit onto the record the server confirms, on the first press', async () => {
+    listener.fromCache = true
+    const { rerender } = renderPage()
+    fireEvent.change(screen.getByLabelText('About'), {
+      target: { value: 'Prefers a phone call' },
+    })
+
+    // A tag was taken off elsewhere since the cached snapshot.
+    listener.doc = {
+      ...contactDoc,
+      facets: { 'host-1': { ...contactDoc.facets['host-1'], tags: ['vip'] } },
+    }
+    listener.fromCache = false
+    rerender(
+      <ContactDetailPage hostId="host-1" id="con-1" basePath="/acme/hosts/shop/crm" />,
+    )
+    fireEvent.click(screen.getByRole('button', { name: 'Save' }))
+
+    await waitFor(() => expect(profileSaves()).toHaveLength(1))
+    const { payload } = profileSaves()[0]
+    expect(payload['set']['notes']).toBe('Prefers a phone call')
+    expect(payload['set']['tags']).toEqual(['vip'])
   })
 
   it('SAVES normally once the server has confirmed the seed', async () => {

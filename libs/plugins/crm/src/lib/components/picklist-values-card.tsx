@@ -69,6 +69,10 @@ import {
   Typography,
 } from '@mui/material'
 import { doc, serverTimestamp, setDoc } from 'firebase/firestore'
+import {
+  isSeedChecking,
+  seedCheckingText,
+} from '@aglyn/tenant-feature-instance/hooks/use-seed-edits'
 import { useCallback, useState } from 'react'
 import { useCrmPicklist } from '../hooks/use-crm-picklist'
 import {
@@ -171,6 +175,13 @@ export function PicklistValuesCard(props: PicklistValuesCardProps) {
   const suggestions = holders.length === 0
   const field = definition.label.toLowerCase()
   const failed = `The ${definition.plural} could not be saved.`
+  /*
+   * Every change is held while the list read is the cache's, with the reason
+   * beside it, rather than pressed into a wait that can end refused
+   * (AGL-4047). Each is built from the list as it is when pressed.
+   */
+  const checkingText = isSeedChecking({ fromCache }) ? seedCheckingText(`${field} list`) : undefined
+  const held = busy || Boolean(checkingText)
   const isStandard = (value: CrmPicklistValue) => isStandardPicklistValueId(definition, value.id)
 
   /** Write the whole list — the list-only moves above. */
@@ -334,14 +345,14 @@ export function PicklistValuesCard(props: PicklistValuesCardProps) {
         key: 'rename',
         label: 'Rename',
         icon: <MdiIcon path={mdiPencilOutline.path} size={0.8} />,
-        disabled: busy,
+        disabled: held,
         onClick: () => openRename(value),
       },
       {
         key: 'default',
         label: isDefault ? 'Clear default' : 'Make default',
         icon: <MdiIcon path={mdiStarOutline.path} size={0.8} />,
-        disabled: busy || (!isDefault && !value.active),
+        disabled: held || (!isDefault && !value.active),
         disabledReason: !value.active ? 'An inactive value cannot be the default' : undefined,
         onClick: () =>
           void save(
@@ -355,7 +366,7 @@ export function PicklistValuesCard(props: PicklistValuesCardProps) {
         icon: (
           <MdiIcon path={value.active ? mdiEyeOffOutline.path : mdiEyeOutline.path} size={0.8} />
         ),
-        disabled: busy,
+        disabled: held,
         onClick: () =>
           void save(
             setPicklistValueActive(picklist, value.id, !value.active),
@@ -370,7 +381,7 @@ export function PicklistValuesCard(props: PicklistValuesCardProps) {
         label: 'Delete…',
         icon: <MdiIcon path={mdiDeleteOutline.path} size={0.8} />,
         destructive: true,
-        disabled: busy,
+        disabled: held,
         onClick: () => openDelete(value),
       })
     }
@@ -407,15 +418,20 @@ export function PicklistValuesCard(props: PicklistValuesCardProps) {
           </Typography>
         </Stack>
         {orgId ? (
-          <Stack direction="row" spacing={1} sx={{ flexShrink: 0 }}>
+          <Stack direction="row" spacing={1} sx={{ flexShrink: 0, alignItems: 'center' }}>
+            {checkingText ? (
+              <Typography variant="body2" color="text.secondary" role="status">
+                {checkingText}
+              </Typography>
+            ) : null}
             <Button
               size="small"
-              disabled={busy || picklist.values.length < 2}
+              disabled={held || picklist.values.length < 2}
               onClick={() => void save(sortPicklistValues(picklist), 'Sorted A–Z')}
             >
               {'Sort A–Z'}
             </Button>
-            <Button size="small" variant="outlined" disabled={busy} onClick={openAdd}>
+            <Button size="small" variant="outlined" disabled={held} onClick={openAdd}>
               {'Add value'}
             </Button>
           </Stack>
@@ -449,7 +465,7 @@ export function PicklistValuesCard(props: PicklistValuesCardProps) {
                 hover
                 // Native drag and drop for a pointer; the arrows beside the
                 // handle are the same move for a keyboard or a touch screen.
-                draggable={!busy}
+                draggable={!held}
                 onDragStart={(event) => {
                   setDragFrom(index)
                   event.dataTransfer.effectAllowed = 'move'
@@ -475,12 +491,12 @@ export function PicklistValuesCard(props: PicklistValuesCardProps) {
                     <MdiIcon
                       path={mdiDragVertical.path}
                       size={0.8}
-                      style={{ cursor: busy ? 'default' : 'grab' }}
+                      style={{ cursor: held ? 'default' : 'grab' }}
                       aria-hidden
                     />
                     <IconButton
                       size="small"
-                      disabled={index === 0 || busy}
+                      disabled={index === 0 || held}
                       onClick={() => move(index, index - 1)}
                     >
                       <MdiIcon path={mdiArrowUp.path} size={0.7} />
@@ -488,7 +504,7 @@ export function PicklistValuesCard(props: PicklistValuesCardProps) {
                     </IconButton>
                     <IconButton
                       size="small"
-                      disabled={index === picklist.values.length - 1 || busy}
+                      disabled={index === picklist.values.length - 1 || held}
                       onClick={() => move(index, index + 1)}
                     >
                       <MdiIcon path={mdiArrowDown.path} size={0.7} />
@@ -511,7 +527,7 @@ export function PicklistValuesCard(props: PicklistValuesCardProps) {
                       size="small"
                       variant="standard"
                       value={value.group ?? ''}
-                      disabled={busy || !orgId}
+                      disabled={held || !orgId}
                       onChange={(event) => {
                         const group = String(event.target.value) || null
                         const name = groups.find((entry) => entry.id === group)?.label
@@ -652,7 +668,7 @@ export function PicklistValuesCard(props: PicklistValuesCardProps) {
           <Button onClick={() => setNameDialog(null)}>{'Cancel'}</Button>
           <Button
             variant="contained"
-            disabled={busy || !draftName.trim()}
+            disabled={held || !draftName.trim()}
             onClick={() => void submitName()}
           >
             {nameDialog?.mode === 'rename' ? 'Rename' : 'Add'}
@@ -699,7 +715,7 @@ export function PicklistValuesCard(props: PicklistValuesCardProps) {
           <Button
             variant="contained"
             color="error"
-            disabled={busy || (meanings.length > 0 && !replaceWith)}
+            disabled={held || (meanings.length > 0 && !replaceWith)}
             onClick={() => void submitDelete()}
           >
             {'Delete value'}

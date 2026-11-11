@@ -174,13 +174,33 @@ describe('saving the filing', () => {
     expect(writes).toEqual([])
   })
 
-  it('sends nothing over a read the server never confirmed', async () => {
-    renderCard({ status: 'success', fromCache: true })
+  /**
+   * The first press is never refused for a late server (AGL-4047): Save is
+   * held while the read is the cache's, with the reason beside it, and what
+   * was picked stays; once the server answers, the first press files it.
+   */
+  it('holds Save over a read the server never confirmed, then files on the first press', async () => {
+    const { rerender } = renderCard({ status: 'success', fromCache: true })
     fireEvent.click(screen.getByRole('button', { name: 'File under Spring push' }))
+    expect(saveFiling().disabled).toBe(true)
+    expect(screen.getByRole('status').textContent).toBe('Checking your contact with the server…')
     fireEvent.click(saveFiling())
-    await waitFor(() => expect(notices).toHaveLength(1))
-    expect(notices[0]).toMatch(/nothing was saved/i)
+    await new Promise((resolve) => setTimeout(resolve, 20))
+    expect(notices).toEqual([])
     expect(posted).toEqual([])
     expect(writes).toEqual([])
+
+    rerender(
+      <ContactAssociationsCard
+        hostId="host-1"
+        record={record}
+        row={{ email: 'ada@example.test', visibleTo: ['host:host-1'] }}
+        consentGroup={GROUP}
+        seed={{ status: 'success', fromCache: false }}
+        basePath="/acme/hosts/shop/crm"
+      />,
+    )
+    fireEvent.click(saveFiling())
+    await waitFor(() => expect(posted).toHaveLength(1))
   })
 })

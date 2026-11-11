@@ -44,6 +44,12 @@ import {
   type ListenHandle,
 } from '@aglyn/tenant-feature-instance'
 import {
+  isSeedChecking,
+  seedCheckingText,
+  useSeedEdits,
+} from '@aglyn/tenant-feature-instance/hooks/use-seed-edits'
+import { seedEditsBetween } from '@aglyn/tenant-feature-instance/hooks/use-seed-draft'
+import {
   Alert,
   Button,
   IconButton,
@@ -201,7 +207,31 @@ export function CompanyEditDrawer(props: CompanyEditDrawerProps) {
   // from where the line belongs, and a gate the record write never faced.
   const logActivity = useCrmActivityLogger(hostId)
 
-  const [draft, setDraft] = useState<CompanyDraft>(EMPTY_COMPANY_DRAFT)
+  /*
+   * What was typed, kept as EDITS over the company (AGL-4047). The company
+   * listen is live, so the server's copy arriving after the drawer opened on
+   * the cache's replaces it under every field nobody touched, and Save is
+   * held until it has (`checkingText`).
+   */
+  const draftSeed = useMemo<CompanyDraft>(
+    () =>
+      company
+        ? companyDraftFrom(company)
+        : { ...EMPTY_COMPANY_DRAFT, ownerUid: user?.uid ?? '' },
+    [company, user?.uid],
+  )
+  const draftEdits = useSeedEdits<CompanyDraft>(draftSeed)
+  const draft = draftEdits.values
+  const { edit: editDraft, discard: discardDraft } = draftEdits
+  const setDraft = useCallback(
+    (build: (current: CompanyDraft) => CompanyDraft) =>
+      editDraft((values) => seedEditsBetween(values, build(values))),
+    [editDraft],
+  )
+  const checkingText =
+    company && isSeedChecking({ fromCache: seed?.fromCache, unreadable: seed?.unreadable })
+      ? seedCheckingText('company')
+      : undefined
   const [busy, setBusy] = useState(false)
   const [error, setError] = useState('')
   /*
@@ -237,26 +267,22 @@ export function CompanyEditDrawer(props: CompanyEditDrawerProps) {
   )
 
   /*
-   * Seeded when the drawer OPENS, and not on every render of the card
-   * behind it: the company listen is live, so re-seeding on each snapshot
-   * would take a field away from whoever is typing in it — including on the
-   * snapshot their own save produces. The create case seeds the owner to the
-   * person filing the record, which is the answer nine times in ten and one
-   * click to change.
+   * The edits start empty when the drawer OPENS. The company listen is live,
+   * and each snapshot moves only the fields nobody has typed in (the draft is
+   * edits over it, above), so a snapshot, their own save's included, never
+   * takes a field away from whoever is typing. The create case seeds the
+   * owner to the person filing the record, which is the answer nine times in
+   * ten and one click to change.
    */
   const companyId = company?.$id
   useEffect(() => {
     if (!open) return
-    setDraft(
-      company
-        ? companyDraftFrom(company)
-        : { ...EMPTY_COMPANY_DRAFT, ownerUid: user?.uid ?? '' },
-    )
+    discardDraft()
     setCustom({})
     setError('')
     seededDefaults.current = false
-    // The stored fields are read once per opening; `company` is a new object
-    // on every snapshot and must not re-seed.
+    // Once per opening; `company` is a new object on every snapshot and must
+    // not throw the edits away.
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [open, companyId])
   /*
@@ -276,12 +302,12 @@ export function CompanyEditDrawer(props: CompanyEditDrawerProps) {
       }
       return next
     })
-  }, [open, company, picklists])
+  }, [open, company, picklists, setDraft])
 
   const patch = useCallback(
     (field: keyof Omit<CompanyDraft, AddressDraftField>, value: string) =>
       setDraft((current) => ({ ...current, [field]: value })),
-    [],
+    [setDraft],
   )
   const patchAddress = useCallback(
     (which: AddressDraftField, field: keyof AglynPostalAddress, value: string) =>
@@ -289,7 +315,7 @@ export function CompanyEditDrawer(props: CompanyEditDrawerProps) {
         ...current,
         [which]: { ...current[which], [field]: value },
       })),
-    [],
+    [setDraft],
   )
   /** The parent's own parent, as the cycle guard walks it; `null` for one this reader cannot see. */
   const readParent = useCallback(
@@ -743,12 +769,23 @@ export function CompanyEditDrawer(props: CompanyEditDrawerProps) {
             </>
           ) : null}
           {error ? <Alert severity="warning">{error}</Alert> : null}
+          {checkingText ? (
+            <Typography variant="body2" color="text.secondary" role="status">
+              {checkingText}
+            </Typography>
+          ) : null}
           <Stack direction="row" spacing={1}>
             <Button
               variant="contained"
               color="primary"
               // A new company waits for its capturing site.
-              disabled={busy || !scope || !draft.name.trim() || (!company && !createTokens.length)}
+              disabled={
+                busy ||
+                Boolean(checkingText) ||
+                !scope ||
+                !draft.name.trim() ||
+                (!company && !createTokens.length)
+              }
               onClick={() => void handleSave()}
             >
               {busy
