@@ -78,6 +78,7 @@ import { hoistStateSx } from '../utils/state-sx'
 import CanvasDropIndicator from './dnd/canvas-drop-indicator'
 import InlineMarkdownEditorComponent from './inline-markdown-editor.component'
 import InlineTextEditorComponent from './inline-text-editor.component'
+import TableEdgeControlsComponent from './table-edge-controls.component'
 import LayoutPartMenu, {
   findLayoutPart,
   layoutPartMenu,
@@ -438,6 +439,8 @@ const Overlays = forwardRef<any, Partial<BoxProps>>((props, ref) => {
       <NodeOverlay data-aglyn="overlay:selected" variant="selected" />
       <CanvasDropIndicator />
       <LayoutPartMenu />
+      {/* Before the editors, so a cell editor's toolbar paints over a bar. */}
+      <TableEdgeControlsComponent />
       <InlineTextEditorComponent />
       <InlineMarkdownEditorComponent />
     </Box>
