@@ -403,10 +403,17 @@ class ConsolePosOfflineApiTest {
 class PosOfflineCardTest {
   private val key = "offcard0000000000000000001"
 
-  private fun cardKit(available: Boolean = true, maxSale: Double = 10_000.0, maxDaily: Double = 500_000.0) = makeKit {
+  private fun cardKit(
+    available: Boolean = true,
+    maxSale: Double = 10_000.0,
+    maxDaily: Double = 500_000.0,
+    account: String? = null,
+  ) = makeKit {
     it.copy(
       card = com.aglyn.contracts.PosOfflineKitCard(
-        available = available, currency = "usd", destination = "acct_merchant", maxSaleCents = maxSale, maxDeviceDailyCents = maxDaily,
+        account = account,
+        available = available, currency = "usd", destination = if (account == null) "acct_merchant" else "",
+        maxSaleCents = maxSale, maxDeviceDailyCents = maxDaily,
         unavailableReason = if (available) null else "Card sales offline are not turned on.",
       ),
     )
@@ -480,6 +487,30 @@ class PosOfflineCardTest {
     assertEquals(1296L, request.amountCents)
     assertEquals("pos-offline", request.metadata["kind"])
     assertNull(request.problem)
+  }
+
+  @Test
+  fun aDirectChargeStoresKitMakesTheIntentOnItsOwnAccountAndTheSaleSaysWhich() = runTest {
+    // A store on its own Stripe account (AGL-4219).
+    val api = FakeOfflineApi().apply { kitAnswer = cardKit(account = "acct_1StoreOwnAcct") }
+    val offline = model(api, InMemoryKeyValueStore(), this, keys = listOf(key))
+    offline.refreshKit()
+    val request = assertNotNull(offline.cardRequest(cart()))
+    assertEquals("acct_1StoreOwnAcct", request.account)
+    assertEquals("direct", request.metadata["chargeModel"])
+    assertNull(request.problem)
+    val rung = assertNotNull(
+      offline.ringCardSale(
+        cart(),
+        com.aglyn.hardware.OfflineCardTaken(key, "pi_3Q0abcdEFGH12345", "visa", "4242", account = request.account),
+      ),
+    )
+    assertEquals("acct_1StoreOwnAcct", rung.sale.card?.account)
+    // A destination store's sale names no account, and its intent no charge model.
+    api.kitAnswer = cardKit()
+    offline.refreshKit()
+    assertNull(offline.cardRequest(cart())?.account)
+    assertNull(offline.cardRequest(cart())?.metadata?.get("chargeModel"))
   }
 
   @Test

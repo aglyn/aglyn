@@ -8,9 +8,12 @@ package com.aglyn.hardware
  * collects it ([collectCardPayment]). Offline there is no server to ask, so
  * the app makes the intent itself through the Stripe Terminal SDK, which
  * stores the card on the device ("store and forward") and sends it to Stripe
- * once a connection returns. The intent is a destination charge with MANUAL
- * capture and no application fee: the server captures it when the sale
- * syncs, and sizes the platform fee then.
+ * once a connection returns. The intent has MANUAL capture and no
+ * application fee: a destination charge for a store on Aglyn's account, or,
+ * for a store on its own Stripe account (AGL-4219), an intent with no
+ * transfer at all, which the SDK makes on the account its connection token
+ * belongs to (the store's). The server captures it when the sale syncs, and
+ * sizes the platform fee then.
  *
  * Nothing here needs Google Play services or the SDK: the request's checks,
  * the create → collect → confirm sequence and what a forward means are tested
@@ -29,7 +32,7 @@ data class OfflineCardRequest(
   val saleKey: String,
   val amountCents: Long,
   val currency: String,
-  /** The connected account the charge transfers to. */
+  /** The connected account the charge transfers to; ignored for a direct charge. */
   val destination: String,
   val metadata: Map<String, String>,
   /** The store's limit per sale offline, in cents: above it the SDK is told to require a connection. */
@@ -37,13 +40,15 @@ data class OfflineCardRequest(
   /** The store's daily limit per device, in cents, and what this device took offline today before this card. */
   val maxDeviceDailyCents: Long = Long.MAX_VALUE,
   val takenTodayCents: Long = 0,
+  /** The store's own Stripe account, for a direct charge (AGL-4219): no transfer is set, and the sale records it. */
+  val account: String? = null,
 ) {
   /** Null when the request is well formed. */
   val problem: String?
     get() = when {
       !OFFLINE_SALE_KEY.matches(saleKey) -> "The sale has no key to charge the card against."
       amountCents <= 0 -> "There is nothing to charge."
-      !destination.startsWith("acct_") -> "Card payments are not set up for this store."
+      !(account?.takeIf { it.isNotEmpty() } ?: destination).startsWith("acct_") -> "Card payments are not set up for this store."
       !CURRENCY.matches(currency) -> "The store's currency is missing."
       metadata["saleKey"] != saleKey -> "The card does not name its sale."
       else -> null
@@ -57,6 +62,8 @@ data class OfflineCardTaken(
   val paymentIntentId: String?,
   val brand: String? = null,
   val last4: String? = null,
+  /** The store's own account the intent was made on (a direct charge, AGL-4219); null for a destination charge. */
+  val account: String? = null,
 ) {
   val label: String get() = offlineCardLabel(brand, last4)
 }
@@ -143,7 +150,13 @@ suspend fun collectOfflineCardPayment(port: OfflineTerminalPort, request: Offlin
         OfflineCardOutcome.Failed("The card did not go through. Try another card or take cash.")
       } else {
         OfflineCardOutcome.Taken(
-          OfflineCardTaken(request.saleKey, if (intent.storedOffline) null else intent.id, intent.brand, intent.last4),
+          OfflineCardTaken(
+            request.saleKey,
+            if (intent.storedOffline) null else intent.id,
+            intent.brand,
+            intent.last4,
+            account = request.account?.takeIf { it.isNotEmpty() },
+          ),
         )
       }
     }

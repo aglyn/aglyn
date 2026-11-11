@@ -102,7 +102,8 @@ struct ConsolePosOfflineAPI: PosOfflineAPI {
   let hostID: String
 
   func kit() async throws -> PosOfflineKit {
-    let answer = try await api.request(posOfflineSyncRoute, query: [("hostId", hostID)])
+    // This app makes a card's intent on a store's own Stripe account too (AGL-4219), so it asks for that kit.
+    let answer = try await api.request(posOfflineSyncRoute, query: [("hostId", hostID), ("cardChargeModels", "direct")])
     guard let data = try answer?["kit"]?.encoded(), let kit = try? JSONDecoder().decode(PosOfflineKit.self, from: data) else {
       throw ConsoleAPIError(status: 502, message: "The register did not answer with its offline rules.")
     }
@@ -318,7 +319,9 @@ final class PosOfflineModel {
     let key = mintKey()
     return OfflineCardRequest(
       saleKey: key, amountCents: Int(totals.totalCents ?? 0), currency: card.currency, destination: card.destination,
-      metadata: posOfflineCardIntentMetadata(saleKey: key, hostID: kit.hostId, orgID: kit.orgId, registerID: register),
+      account: card.account,
+      metadata: posOfflineCardIntentMetadata(
+        saleKey: key, hostID: kit.hostId, orgID: kit.orgId, registerID: register, direct: card.account != nil),
       maxSaleCents: min(Int(card.maxSaleCents), ContractValues.shared.posOfflineCardMaxSaleCentsLimit),
       // 0 is no daily limit: the store did not set one.
       maxDeviceDailyCents: card.maxDeviceDailyCents > 0 ? Int(card.maxDeviceDailyCents) : .max,
@@ -352,8 +355,8 @@ final class PosOfflineModel {
   /// even past the ceilings: the money was taken.
   func ringCardSale(cart: Cart, taken: OfflineCardTaken) -> PosOfflineRung? {
     let card = PosOfflineSaleCard(
-      brand: taken.brand, forward: taken.paymentIntentID == nil ? .stored : .forwarded, last4: taken.last4,
-      paymentIntentId: taken.paymentIntentID)
+      account: taken.account, brand: taken.brand, forward: taken.paymentIntentID == nil ? .stored : .forwarded,
+      last4: taken.last4, paymentIntentId: taken.paymentIntentID)
     let rung = ring(cart: cart, saleKey: taken.saleKey, cashTenderedCents: 0, changeCents: 0, card: card)
     if let rung { store.addCardTaken(rung.totalCents, on: today()) }
     return rung

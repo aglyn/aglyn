@@ -386,11 +386,14 @@ final class ConsolePosOfflineAPITests: XCTestCase {
 final class PosOfflineCardTests: XCTestCase {
   private let key = "offcard0000000000000000001"
 
-  private func cardKit(available: Bool = true, maxSale: Double = 10_000, maxDaily: Double = 500_000) -> PosOfflineKit {
+  private func cardKit(
+    available: Bool = true, maxSale: Double = 10_000, maxDaily: Double = 500_000, account: String? = nil
+  ) -> PosOfflineKit {
     makeKit {
       $0.card = PosOfflineKitCard(
-        available: available, currency: "usd", destination: "acct_merchant", maxDeviceDailyCents: maxDaily,
-        maxSaleCents: maxSale, unavailableReason: available ? nil : "Card sales offline are not turned on.")
+        account: account, available: available, currency: "usd", destination: account == nil ? "acct_merchant" : "",
+        maxDeviceDailyCents: maxDaily, maxSaleCents: maxSale,
+        unavailableReason: available ? nil : "Card sales offline are not turned on.")
     }
   }
 
@@ -465,6 +468,28 @@ final class PosOfflineCardTests: XCTestCase {
     XCTAssertEqual(request?.metadata["kind"], "pos-offline")
     XCTAssertEqual(request?.metadata["registerId"], "r1")
     XCTAssertNil(request?.problem)
+  }
+
+  func testADirectChargeStoresKitMakesTheIntentOnItsOwnAccountAndTheSaleSaysWhich() async {
+    // A store on its own Stripe account (AGL-4219).
+    let api = FakeOfflineAPI()
+    api.kitAnswer = cardKit(account: "acct_1StoreOwnAcct")
+    let offline = await ready(api, keys: [key])
+    let request = offline.cardRequest(for: cart())
+    XCTAssertEqual(request?.account, "acct_1StoreOwnAcct")
+    XCTAssertEqual(request?.metadata["chargeModel"], "direct")
+    XCTAssertNil(request?.problem)
+    let rung = offline.ringCardSale(
+      cart: cart(),
+      taken: OfflineCardTaken(
+        saleKey: key, paymentIntentID: "pi_3Q0abcdEFGH12345", brand: "visa", last4: "4242",
+        account: request?.account))
+    XCTAssertEqual(rung?.sale.card?.account, "acct_1StoreOwnAcct")
+    // A destination store's sale names no account, and its intent no charge model.
+    api.kitAnswer = cardKit()
+    await offline.refreshKit()
+    XCTAssertNil(offline.cardRequest(for: cart())?.account)
+    XCTAssertNil(offline.cardRequest(for: cart())?.metadata["chargeModel"])
   }
 
   func testACardOnTheDeviceWaitsForItsForwardBeforeItSyncs() async {
