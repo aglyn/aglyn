@@ -84,6 +84,7 @@ import {
   markMultiTabFirestore,
   startBootWedgeCheck,
 } from './firestore-multitab-wedge'
+import { startPageWedgeChecks } from './firestore-page-wedge-check'
 import { firestoreHasServerAnswered } from './firestore-stall-recovery'
 import { firestorePersistencePrefix } from './firestore-shared-client-state'
 import { startFirestorePrimaryYield } from './firestore-primary-yield'
@@ -510,6 +511,9 @@ function bootFirebaseCore(
           void startBootWedgeCheck(getFirestore(app), () =>
             firestoreHasServerAnswered(getFirestore(app)),
           )
+          // And so does each page opened later in this tab, until it is
+          // used (AGL-4204). The tab's lifetime: never stopped.
+          startPageWedgeChecks(getFirestore(app))
           // A visible tab opened while a background tab holds the shared
           // cache's lease takes the lease at boot instead of routing every
           // query through the background tab until its lease lapses
