@@ -9,6 +9,16 @@ content on the marketing site and is written separately.
 
 <!-- releases below -->
 
+## v1.20.2 — 2026-11-11
+
+[Compare with the previous release](https://github.com/aglyn/aglyn/compare/5c50d2ed7...v1.20.2)
+
+### Fixed
+
+- **ai:** a redesign's link to form on a page with no form goes to the site's form page ([AGL-4152](https://linear.app/aglyn/issue/AGL-4152))
+- **ai:** a refused redesign link names only the destinations its page has ([AGL-4152](https://linear.app/aglyn/issue/AGL-4152))
+- **google-reviews:** a profile with no reviews shows only the review link ([AGL-4212](https://linear.app/aglyn/issue/AGL-4212))
+
 ## v1.20.1 — 2026-11-09
 
 [Compare with the previous release](https://github.com/aglyn/aglyn/compare/v1.20.0...v1.20.1)
