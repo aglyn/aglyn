@@ -71,3 +71,11 @@ describe('merchantPaymentsBlockedReason', () => {
     }
   })
 })
+
+describe('the mode-mismatch reason (AGL-2471)', () => {
+  it('names a test account on a live deployment, and Set up payments as the fix', () => {
+    expect(merchantPaymentsBlockedReason('mode-mismatch', 'live')).toMatch(/is a test account/)
+    expect(merchantPaymentsBlockedReason('mode-mismatch', 'live')).toMatch(/^Set up payments/)
+    expect(merchantPaymentsBlockedReason('mode-mismatch', 'test')).toMatch(/is a live account/)
+  })
+})

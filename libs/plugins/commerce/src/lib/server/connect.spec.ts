@@ -418,3 +418,201 @@ describe('a charges-enabled merchant gets a link', () => {
     expect((res.body as { dashboardUrl?: string }).dashboardUrl).toBeUndefined()
   })
 })
+
+/**
+ * A TEST ACCOUNT ON A LIVE DEPLOYMENT IS REPLACED, NEVER RESUMED (AGL-2471).
+ *
+ * The production record that stopped a store selling: `stripeChargesEnabled:
+ * true`, `stripeAccountLivemode: false`, a direct-charge account, under a live
+ * key. A live key cannot even read a test account, so resuming it answered
+ * "Payment setup failed" every time. The route has to start onboarding for a
+ * NEW account in this deployment's mode, keep the replaced id, and never hand
+ * back a link for the test account.
+ *
+ * Stripe is a fake here: every call is `global.fetch`, mocked below.
+ */
+describe('a test account on a live deployment (AGL-2471)', () => {
+  const TEST_ACCOUNT = 'acct_test_old'
+  const CROSS_MODE =
+    `The account ${TEST_ACCOUNT} was a test account created with a testmode ` +
+    'key, and therefore can only be used with testmode keys.'
+  /** What the fake Stripe answers when the stored account is read. */
+  let storedAccountRead: 'cross-mode' | 'ok' | 'outage' = 'cross-mode'
+
+  beforeEach(() => {
+    process.env.STRIPE_SECRET_KEY = 'sk_live_spec'
+    storedAccountRead = 'cross-mode'
+    accountState = { charges_enabled: false, payouts_enabled: false }
+    global.fetch = jest.fn(
+      async (url: unknown, init?: { method?: string; body?: unknown }) => {
+        const target = String(url)
+        const method = init?.method ?? 'GET'
+        stripeCalls.push({
+          url: target,
+          method,
+          params: new URLSearchParams(String(init?.body ?? '')),
+        })
+        if (target.endsWith('/balance')) {
+          return { ok: true, json: async () => ({ livemode: true }) }
+        }
+        if (target.endsWith(`/accounts/${TEST_ACCOUNT}`)) {
+          if (storedAccountRead === 'cross-mode') {
+            return {
+              ok: false,
+              json: async () => ({ error: { message: CROSS_MODE } }),
+            }
+          }
+          if (storedAccountRead === 'outage') {
+            return {
+              ok: false,
+              json: async () => ({
+                error: { message: 'An error occurred with our connection to Stripe.' },
+              }),
+            }
+          }
+          return {
+            ok: true,
+            json: async () => ({
+              id: TEST_ACCOUNT,
+              charges_enabled: true,
+              payouts_enabled: true,
+            }),
+          }
+        }
+        const payload = target.endsWith('/accounts')
+          ? { id: 'acct_live_new' }
+          : target.includes('/account_links')
+            ? { url: 'https://connect.stripe.com/setup/live' }
+            : { id: 'acct_live_new', ...accountState }
+        return { ok: true, json: async () => payload }
+      },
+    ) as unknown as typeof fetch
+  })
+
+  afterEach(() => {
+    process.env.STRIPE_SECRET_KEY = 'sk_test_spec'
+    state.directCharges = false
+  })
+
+  const testAccountProfile = (extra: Record<string, unknown> = {}) => ({
+    stripeAccountId: TEST_ACCOUNT,
+    stripeChargeModel: 'direct',
+    stripeChargesEnabled: true,
+    stripePayoutsEnabled: true,
+    stripeAccountLivemode: false,
+    ...extra,
+  })
+
+  it('creates a NEW live account instead of reusing the recorded test one', async () => {
+    state.directCharges = true
+    state.profile = testAccountProfile()
+    accountState = {
+      charges_enabled: false,
+      payouts_enabled: false,
+      controller: { fees: { payer: 'account' }, stripe_dashboard: { type: 'full' } },
+    }
+    const res = makeRes()
+
+    await connectHandler(makeReq(), res)
+
+    expect(res.statusCode).toBe(200)
+    // The test account is never read (a live key cannot) and never linked.
+    expect(stripeCalls.some((call) => call.url.includes(TEST_ACCOUNT))).toBe(false)
+    const creation = creationCall()
+    expect(creation).toBeDefined()
+    // Every new setup's shape: the store's own account, direct charges.
+    expect(creation?.params.get('controller[fees][payer]')).toBe('account')
+    expect(creation?.params.get('metadata[replacesAccount]')).toBe(TEST_ACCOUNT)
+    const link = stripeCalls.find((call) => call.url.includes('/account_links'))
+    expect(link?.params.get('account')).toBe('acct_live_new')
+    expect(res.body).toMatchObject({
+      accountId: 'acct_live_new',
+      chargesEnabled: false,
+      url: 'https://connect.stripe.com/setup/live',
+    })
+    // The replaced id is kept; the new account's own facts are recorded.
+    expect(state.profile).toMatchObject({
+      stripeAccountId: 'acct_live_new',
+      previousStripeAccountIds: [TEST_ACCOUNT],
+      stripeChargeModel: 'direct',
+      stripeChargesEnabled: false,
+      stripePayoutsEnabled: false,
+      stripeAccountLivemode: true,
+    })
+  })
+
+  it('replaces an UNRECORDED-mode account when Stripe refuses it as the other mode', async () => {
+    state.profile = testAccountProfile({ stripeAccountLivemode: undefined })
+    const res = makeRes()
+
+    await connectHandler(makeReq(), res)
+
+    expect(res.statusCode).toBe(200)
+    expect(creationCall()).toBeDefined()
+    expect(state.profile).toMatchObject({
+      stripeAccountId: 'acct_live_new',
+      previousStripeAccountIds: [TEST_ACCOUNT],
+      stripeAccountLivemode: true,
+    })
+    expect(res.body).toMatchObject({ url: 'https://connect.stripe.com/setup/live' })
+  })
+
+  it('CONTROL: an unrecorded-mode account the live key CAN read is kept and verified', async () => {
+    // A read that succeeds is the proof the account is in this mode, so it
+    // is recorded live and nothing is created.
+    storedAccountRead = 'ok'
+    state.profile = testAccountProfile({ stripeAccountLivemode: undefined })
+    const res = makeRes()
+
+    await connectHandler(makeReq(), res)
+
+    expect(res.statusCode).toBe(200)
+    expect(creationCall()).toBeUndefined()
+    expect(state.profile).toMatchObject({
+      stripeAccountId: TEST_ACCOUNT,
+      stripeAccountLivemode: true,
+    })
+    expect(state.profile?.['previousStripeAccountIds']).toBeUndefined()
+  })
+
+  it('CONTROL: any other Stripe failure retires nothing', async () => {
+    storedAccountRead = 'outage'
+    state.profile = testAccountProfile({ stripeAccountLivemode: undefined })
+    const res = makeRes()
+
+    await connectHandler(makeReq(), res)
+
+    expect(res.statusCode).toBe(502)
+    expect(creationCall()).toBeUndefined()
+    expect(state.profileWrites).toHaveLength(0)
+  })
+
+  it('CONTROL: a live account recorded live is reused', async () => {
+    state.profile = testAccountProfile({
+      stripeAccountId: 'acct_live_new',
+      stripeAccountLivemode: true,
+    })
+    accountState = { charges_enabled: true, payouts_enabled: true }
+    const res = makeRes()
+
+    await connectHandler(makeReq(), res)
+
+    expect(res.statusCode).toBe(200)
+    expect(creationCall()).toBeUndefined()
+    expect(state.profile?.['stripeAccountId']).toBe('acct_live_new')
+  })
+
+  it('keeps every replaced id, once', async () => {
+    state.profile = testAccountProfile({
+      previousStripeAccountIds: ['acct_older', TEST_ACCOUNT],
+    })
+    const res = makeRes()
+
+    await connectHandler(makeReq(), res)
+
+    expect(state.profile?.['previousStripeAccountIds']).toEqual([
+      'acct_older',
+      TEST_ACCOUNT,
+    ])
+  })
+})

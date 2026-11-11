@@ -230,3 +230,81 @@ describe('setting up payouts asks "Manage marketplace payouts" (AGL-4047)', () =
     },
   )
 })
+
+/**
+ * A test-mode payout account on a live deployment is replaced with a new live
+ * one (AGL-2471), the commerce twin's rule: a live key cannot read it, so
+ * resuming it failed every time. Stripe is the `global.fetch` fake.
+ */
+describe('a test account on a live deployment (AGL-2471)', () => {
+  const TEST_ACCOUNT = 'acct_test_old'
+  let realFetch: typeof fetch
+
+  beforeEach(() => {
+    process.env.STRIPE_SECRET_KEY = 'sk_live_spec'
+    realFetch = global.fetch
+    global.fetch = jest.fn(async (url: unknown, init?: any) => {
+      const target = String(url)
+      if (target.endsWith(`/accounts/${TEST_ACCOUNT}`)) {
+        stripeCalls.push({ url: target, method: 'GET', params: new URLSearchParams() })
+        return {
+          ok: false,
+          json: async () => ({
+            error: {
+              message:
+                `The account ${TEST_ACCOUNT} was a test account created with a ` +
+                'testmode key, and therefore can only be used with testmode keys.',
+            },
+          }),
+        }
+      }
+      return (realFetch as any)(url, init)
+    }) as unknown as typeof fetch
+  })
+
+  afterEach(() => {
+    process.env.STRIPE_SECRET_KEY = 'sk_test_spec'
+  })
+
+  it('creates a new account and keeps the replaced id, for a recorded test account', async () => {
+    state.profile = {
+      handle: 'acme',
+      stripeAccountId: TEST_ACCOUNT,
+      stripeChargesEnabled: true,
+      stripeAccountLivemode: false,
+    }
+    const res = makeRes()
+
+    await connectHandler(makeReq(), res)
+
+    expect(res.statusCode).toBe(200)
+    expect(stripeCalls.some((call) => call.url.includes(TEST_ACCOUNT))).toBe(false)
+    const creation = stripeCalls.find(
+      (call) => call.url.endsWith('/accounts') && call.method === 'POST',
+    )
+    expect(creation?.params.get('metadata[replacesAccount]')).toBe(TEST_ACCOUNT)
+    expect(res.body).toMatchObject({ accountId: 'acct_new', chargesEnabled: false })
+    expect(state.profile).toMatchObject({
+      stripeAccountId: 'acct_new',
+      previousStripeAccountIds: [TEST_ACCOUNT],
+      stripeAccountLivemode: true,
+    })
+  })
+
+  it('replaces an unrecorded-mode account Stripe refuses as a test account', async () => {
+    state.profile = {
+      handle: 'acme',
+      stripeAccountId: TEST_ACCOUNT,
+      stripeChargesEnabled: true,
+    }
+    const res = makeRes()
+
+    await connectHandler(makeReq(), res)
+
+    expect(res.statusCode).toBe(200)
+    expect(state.profile).toMatchObject({
+      stripeAccountId: 'acct_new',
+      previousStripeAccountIds: [TEST_ACCOUNT],
+    })
+  })
+})

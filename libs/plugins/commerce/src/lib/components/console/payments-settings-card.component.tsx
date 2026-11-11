@@ -26,6 +26,10 @@ import { useCallback, useState } from 'react'
 import { useFirestore, useUser } from '@aglyn/tenant-feature-instance'
 import { useFirestoreDoc } from '@aglyn/tenant-feature-instance'
 import { useOrgPlan } from '@aglyn/tenant-feature-instance'
+import {
+  merchantPaymentsPlatformMode,
+  merchantPaymentsStateFromProfile,
+} from '@aglyn/tenant-feature-instance/hooks/merchant-payments-state'
 import { pluginDocsHelp } from '@aglyn/aglyn'
 import { authorizedFetch } from '@aglyn/shared-util-http/authorized-token'
 import { PrerequisiteNotice } from '@aglyn/shared-ui-jsx/components/prerequisite-notice.component'
@@ -96,15 +100,26 @@ export function PaymentsSettingsCard(props: PaymentsSettingsCardProps) {
    * `stripeChargesEnabled: true` was the whole readiness claim, and a
    * production profile carrying it named a TEST-mode account: this card said
    * "Charges enabled" about three storefronts that could not take a single
-   * payment. Only a literal boolean counts as recorded — the same
-   * three-valued reading `merchantAccountIsReady` uses on the server, so the
-   * chip and the checkout cannot disagree.
+   * payment.
+   *
+   * The verdict is `merchantPaymentsStateFromProfile`, the console's copy of
+   * the server's `merchantAccountReadiness`, against this deployment's mode,
+   * so the chip and the checkout cannot disagree. This card used to count
+   * ANY recorded mode as verified, so a test account recorded as test on a
+   * live deployment read "Charges enabled" and offered only "Refresh status",
+   * while every sale was refused.
    */
-  const modeVerified = typeof profile?.stripeAccountLivemode === 'boolean'
-  const chargesConnected =
-    stripeState === 'loaded' && Boolean(profile?.stripeChargesEnabled)
-  const modeUnverified = chargesConnected && !modeVerified
-  const chargesEnabled = chargesConnected && modeVerified
+  const platformMode = merchantPaymentsPlatformMode()
+  const liveDeployment = platformMode === 'live'
+  const paymentsState =
+    stripeState === 'loaded'
+      ? merchantPaymentsStateFromProfile(profile, platformMode)
+      : null
+  /** The account is in the other Stripe mode from this deployment. */
+  const modeMismatch = paymentsState === 'mode-mismatch'
+  /** Charges on, mode never recorded, on a live deployment. */
+  const modeUnverified = paymentsState === 'mode-unverified'
+  const chargesEnabled = paymentsState === 'ready'
   /** The store's own Stripe account (direct charges), or none yet: every new setup is one. */
   const ownStripeAccount =
     stripeState === 'loaded' &&
@@ -221,16 +236,20 @@ export function PaymentsSettingsCard(props: PaymentsSettingsCardProps) {
                   ? 'Checking…'
                   : chargesEnabled
                     ? 'Charges enabled'
-                    : modeUnverified
-                      ? 'Not verified'
-                      : 'Not set up'
+                    : modeMismatch
+                      ? liveDeployment
+                        ? 'Test account'
+                        : 'Live account'
+                      : modeUnverified
+                        ? 'Not verified'
+                        : 'Not set up'
               }
               color={
                 stripeState === 'pending'
                   ? 'default'
                   : chargesEnabled
                     ? 'success'
-                    : modeUnverified
+                    : modeMismatch || modeUnverified
                       ? 'error'
                       : 'warning'
               }
@@ -387,6 +406,25 @@ export function PaymentsSettingsCard(props: PaymentsSettingsCardProps) {
               'this site, so sales will be refused. Set up payments again ' +
               'to verify it — if it was connected against Stripe test mode, ' +
               'you will need to connect a live account.'}
+          </Alert>
+        ) : null}
+        {/*
+          The account is PROVEN to be in the other Stripe mode: on a live
+          deployment, a test account, which can never take a real payment and
+          which the live key cannot even read. Set up payments creates a new
+          account in this deployment's mode (the connect route keeps the old
+          id on the profile), so the alert names that as the fix.
+        */}
+        {modeMismatch ? (
+          <Alert severity="error">
+            {liveDeployment
+              ? 'The connected Stripe account is a test account, so this ' +
+                'store can’t take real payments and every sale is refused. ' +
+                'Live payments need a live Stripe account: set up payments ' +
+                'to connect one.'
+              : 'The connected Stripe account is a live account, and this ' +
+                'site takes test payments only, so every sale is refused. ' +
+                'Set up payments to connect a test account.'}
           </Alert>
         ) : null}
         {/*

@@ -63,6 +63,10 @@ import { useRouter } from 'next/navigation'
 import { collection, doc, query, where } from 'firebase/firestore'
 import { type ReactElement, useCallback, useEffect, useState } from 'react'
 import { useFirestore, useUser } from '@aglyn/tenant-feature-instance'
+import {
+  merchantPaymentsPlatformMode,
+  merchantPaymentsStateFromProfile,
+} from '@aglyn/tenant-feature-instance/hooks/merchant-payments-state'
 import { authorizedFetch } from '@aglyn/shared-util-http/authorized-token'
 import { pluginDocsHelp, useMediaPicker } from '@aglyn/aglyn'
 import { useFirestoreCollection } from '@aglyn/tenant-feature-instance'
@@ -160,11 +164,23 @@ export function OrgSellerPanel(props: OrgSellerPanelProps) {
    * LEAVE. The decision itself lives in `payoutReadiness` so each of its six
    * outcomes can be asserted without mounting this tree.
    */
+  /**
+   * The account is RECORDED in the other Stripe mode from this deployment
+   * (AGL-2471): a test account on a live deployment, which the sale door
+   * refuses. `payoutReadiness` counts any recorded mode as verified, so the
+   * mismatch is asked here, with the console's copy of the door's rule, and
+   * handed on as an unrecorded mode: every sale is refused either way, and
+   * the button's connect route replaces such an account with a new one.
+   */
+  const platformMode = merchantPaymentsPlatformMode()
+  const modeMismatch =
+    payoutsState === 'loaded' &&
+    merchantPaymentsStateFromProfile(profile, platformMode) === 'mode-mismatch'
   const readiness = payoutReadiness({
     state: payoutsState,
     chargesEnabled: profile?.stripeChargesEnabled,
     payoutsEnabled: profile?.stripePayoutsEnabled,
-    accountLivemode: profile?.stripeAccountLivemode,
+    accountLivemode: modeMismatch ? undefined : profile?.stripeAccountLivemode,
   })
   /** Stripe will let this account take money — four of the seven outcomes. */
   const chargesEnabled =
@@ -1016,10 +1032,18 @@ export function OrgSellerPanel(props: OrgSellerPanelProps) {
                   and cannot take a payment. */}
               {readiness === 'unverified' ? (
                 <Alert severity="error">
-                  {'This Stripe account has not been verified for payments ' +
-                    'here, so sales will be refused. Reconnect it to ' +
-                    'confirm — if it was set up against Stripe test mode, ' +
-                    'you will need to connect a live account.'}
+                  {modeMismatch
+                    ? platformMode === 'test'
+                      ? 'The connected Stripe account is a live account, and ' +
+                        'this site takes test payments only, so sales are ' +
+                        'refused. Set up payouts to connect a test account.'
+                      : 'The connected Stripe account is a test account, so ' +
+                        'sales are refused. Live payouts need a live Stripe ' +
+                        'account: set up payouts to connect one.'
+                    : 'This Stripe account has not been verified for payments ' +
+                      'here, so sales will be refused. Reconnect it to ' +
+                      'confirm — if it was set up against Stripe test mode, ' +
+                      'you will need to connect a live account.'}
                 </Alert>
               ) : null}
               <Typography variant="body2" color="text.secondary">
@@ -1053,7 +1077,9 @@ export function OrgSellerPanel(props: OrgSellerPanelProps) {
                     : readiness === 'blocked'
                       ? 'Finish payout setup in Stripe'
                       : readiness === 'unverified'
-                        ? 'Reconnect Stripe to verify'
+                        ? modeMismatch
+                          ? 'Set up payouts'
+                          : 'Reconnect Stripe to verify'
                         : readiness === 'unknown'
                           ? 'Recheck payout status'
                           : 'Set up payouts'}
