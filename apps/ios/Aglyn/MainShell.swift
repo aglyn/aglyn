@@ -503,6 +503,7 @@ struct ShellFrame<Content: View>: View {
       .environment(\.aglynScreenSession, model.screenSession)
       .aglynAppTheme(nonce: navigation.themeNonce)
       .onAppear {
+        tellNavigationItsShell()
         DebugLaunch.route(navigation)
         #if os(macOS)
           navigation.openTab = { [openWindow] seed in openWindow(id: "main", value: seed) }
@@ -539,6 +540,19 @@ struct ShellFrame<Content: View>: View {
         navigation.mode = .main
         navigation.section = .home
       }
+  }
+
+  /// Whether this navigation is a phone's, and its tab bar's area for a row, so a link, a starred or a recent place
+  /// opens as the shell drawing it opens an area (AGL-4059).
+  private func tellNavigationItsShell() {
+    navigation.compact = compact
+    navigation.tabSection =
+      compact
+      ? { [weak navigation, model] rowID in
+        guard let navigation else { return nil }
+        let areas = PhoneAreas(model: model, navigation: navigation)
+        return areas.row(rowID).flatMap(areas.tabSection)
+      } : nil
   }
 
   private func leaveARemovedSite() {
@@ -1166,17 +1180,8 @@ struct RecentPlacesMenu: View {
     return "\(item.label) — \(site ?? org ?? "")"
   }
 
-  private func open(_ item: RecentItem) {
-    if item.orgId != model.workspace?.org?.id { model.workspace?.open(orgID: item.orgId, hostID: item.hostId) }
-    if let hostID = item.hostId {
-      model.workspace?.selectSite(hostID)
-      navigation.inSite = true
-    } else {
-      navigation.inSite = false
-    }
-    navigation.mode = .main
-    navigation.select(ShellSection.opening(item.screen, item.params))
-  }
+  /// A recent place opens on its whole path, as a link to it does (AGL-4059).
+  private func open(_ item: RecentItem) { model.open(item.ref, in: navigation) }
 }
 
 // MARK: iPhone

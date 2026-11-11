@@ -80,16 +80,7 @@ struct ShellScope {
   }
 
   /// The staff list, as its own mode: the console's staff pages, for staff only.
-  var staffGroups: [NativeNavGroup] {
-    guard model.claims.isStaff else { return [] }
-    let screens = ScreenCatalog.shared.group("staff")
-    let rows = screens.map { spec in
-      NativeNavRow(
-        console: NativeNavConsoleRef(id: spec.id, surface: .nativeOnly), icon: NativeNavIcon(android: "", apple: spec.icon),
-        id: spec.id, label: spec.label, screen: spec.id)
-    }
-    return rows.isEmpty ? [] : [NativeNavGroup(foldable: false, id: "staff", rows: rows)]
-  }
+  var staffGroups: [NativeNavGroup] { model.staffNavGroups }
 
   /// The settings mode's title: "Juniper Street Co. settings", "Juniper Street Bakery settings".
   var modeTitle: String? {
@@ -152,8 +143,14 @@ struct ShellScope {
     currentList.groups.flatMap(\.rows).first { Self.row($0, holds: section) }
   }
 
-  /// A starred item's place: the section it opens.
-  static func section(for item: StarredItem) -> ShellSection { ShellSection.opening(item.screen, item.params) }
+  /// A starred item's place: the section it opens (its area's, when it is a record under one).
+  func section(for item: StarredItem) -> ShellSection {
+    switch NavPaths.place(item.ref, routes: model.registry.deepLinks, lists: model.navPathLists).area {
+    case .row(_, let screen, let params): ShellSection.opening(screen, params)
+    case .shell(.notifications), .shell(.notificationSettings): .notifications
+    case .shell(.home): .home
+    }
+  }
 }
 
 /// What a sidebar row does: open a section, or swap the sidebar for a settings mode.

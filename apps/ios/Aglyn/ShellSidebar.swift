@@ -585,17 +585,18 @@ struct SidebarList: View {
 
   @ViewBuilder
   private func starredRow(_ item: StarredItem) -> some View {
-    let section = ShellScope.section(for: item)
+    let section = scope.section(for: item)
     let dot = Circle().fill(item.color.map(starColor) ?? AglynColor.primary).frame(width: 8, height: 8)
     Group {
+      // A starred place opens on its whole path, as a link to it does (AGL-4059): its area, then each level over it.
       if push {
-        PhoneMenuRow(title: item.label, action: { activate(.section(section)) }) { dot }
+        PhoneMenuRow(title: item.label, action: { model.open(item.ref, in: navigation) }) { dot }
       } else {
         // One row is selected: the one the place was opened through (a starred shortcut, or its group's row).
         AglynSidebarRow(
           item.label, selected: navigation.section == section && navigation.starKey == item.key, indent: 1, pill: pill,
           action: {
-            activate(.section(section))
+            model.open(item.ref, in: navigation)
             navigation.starKey = item.key
           }
         ) { dot }
