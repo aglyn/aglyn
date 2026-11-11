@@ -54,6 +54,7 @@ import {
   Box,
   Button,
   Chip,
+  CircularProgress,
   Dialog,
   DialogActions,
   DialogContent,
@@ -430,7 +431,21 @@ export function HostDatasetsCard(props: HostDatasetsCardProps) {
   const [selectedId, setSelectedId] = useState<string | null>(null)
   const wantedId = routeDatasetId ?? selectedId ?? undefined
   const listed = wantedId ? datasets.find((item) => item.$id === wantedId) : undefined
-  const listAnswered = datasetDocs !== undefined
+  /**
+   * The list has emitted, from the cache or the server: enough to look for
+   * the open dataset on its own when the window does not hold it.
+   */
+  const listAnswered = datasetsStatus !== 'loading'
+  /**
+   * The SERVER has answered the list (AGL-4047). Only this may say there are
+   * no datasets. `useFirestoreCollection` hands back `[]` from its first
+   * render, before any snapshot, and a cold cache answers `[]` too, unconfirmed:
+   * reading either as "none" showed a site with five datasets the "Create a
+   * dataset" empty state for the 16 s its list took to reach the server.
+   */
+  const listConfirmed = scopeReady && datasetsStatus === 'success' && !datasetsFromCache
+  /** The list failed for good, so neither "none" nor "loading" is true. */
+  const listUnreadable = datasetsStatus === 'error'
   /*
    * A dataset the address names that the loaded window does not hold — past
    * the window, outside the filter, or only just created — is read on its
@@ -1640,7 +1655,7 @@ export function HostDatasetsCard(props: HostDatasetsCardProps) {
     ) : null
   const railFooter = (
     <>
-      {listAnswered && serverNameKey && datasets.length === 0 ? (
+      {listConfirmed && serverNameKey && datasets.length === 0 ? (
         <Typography variant="body2" color="text.secondary" sx={{ px: 2, py: 1 }}>
           {'No datasets match.'}
         </Typography>
@@ -1761,7 +1776,17 @@ export function HostDatasetsCard(props: HostDatasetsCardProps) {
   ) : recordPanel ? (
     recordPanel
   ) : !selected ? (
-    listAnswered && datasets.length === 0 && !sharedWith && !serverNameKey ? (
+    listUnreadable && !wantedId ? (
+      <Alert severity="error">
+        {'We couldn’t load your datasets. This does not mean there are none.'}
+      </Alert>
+    ) : !listConfirmed || wantedId ? (
+      // Until the server answers, and while the dataset the address names is
+      // read on its own: never the empty state, which is a verdict.
+      <CardDisplay contentGutterX contentGutterY>
+        <CircularProgress size={24} aria-label="Loading datasets" />
+      </CardDisplay>
+    ) : datasets.length === 0 && !sharedWith && !serverNameKey ? (
       <CardDisplay contentGutterX contentGutterY>
         <Typography variant="body2" color="text.secondary">
           {'Create a dataset, like Products, then add a repeating section ' +
