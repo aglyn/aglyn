@@ -18,6 +18,7 @@
 import { SITE_STARTER_MAX_SCREENS } from '@aglyn/aglyn/app-utils/site-starter'
 import type { SiteStarterBuiltinReading } from '@aglyn/aglyn/app-utils/site-starter-theme'
 import {
+  payoutsReady,
   starterBuiltinDetail,
   starterCapturesSentence,
   starterFontsNote,
@@ -249,5 +250,28 @@ describe('the words a starter publish shows', () => {
     const unpaid = starterPublishFactsAnswer({ facts: { ...facts, profile: { handle: 'acme' } }, builtin: null })
     expect(Object.keys(unpaid.steps)).toEqual(['payouts'])
     expect(unpaid.blocked).toBe(false)
+  })
+})
+
+describe('payoutsReady agrees with the sale door (AGL-2471)', () => {
+  const testAccount = {
+    stripeAccountId: 'acct_test_1',
+    stripeChargesEnabled: true,
+    stripeAccountLivemode: false,
+  }
+
+  it('refuses a test account on a live deployment', () => {
+    expect(payoutsReady(testAccount, 'live')).toBe(false)
+  })
+
+  it('refuses an unrecorded mode on a live deployment', () => {
+    expect(payoutsReady({ ...testAccount, stripeAccountLivemode: undefined }, 'live')).toBe(false)
+  })
+
+  it('CONTROL: takes a live account live, a test account in test, and asks charges only without a mode', () => {
+    expect(payoutsReady({ ...testAccount, stripeAccountLivemode: true }, 'live')).toBe(true)
+    expect(payoutsReady(testAccount, 'test')).toBe(true)
+    expect(payoutsReady(testAccount)).toBe(true)
+    expect(payoutsReady({ ...testAccount, stripeChargesEnabled: false }, 'live')).toBe(false)
   })
 })

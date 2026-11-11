@@ -33,8 +33,10 @@
 
 import { STRIPE_CONNECT_PAYMENT_PROVIDER } from './payment-provider-stripe-connect'
 import {
+  merchantAccountInOtherMode,
   merchantAccountIsReady,
   merchantAccountReadiness,
+  merchantAccountReplacement,
   paymentProvider,
 } from './payment-provider'
 
@@ -246,5 +248,50 @@ describe('merchantAccountIsReady', () => {
       }),
     ).toBe(true)
     expect(error).not.toHaveBeenCalled()
+  })
+})
+
+describe('replacing an account from the other mode (AGL-2471)', () => {
+  it('reads a recorded mode against the platform, and only a recorded one', () => {
+    expect(merchantAccountInOtherMode(false, 'live')).toBe(true)
+    expect(merchantAccountInOtherMode(true, 'test')).toBe(true)
+    expect(merchantAccountInOtherMode(true, 'live')).toBe(false)
+    expect(merchantAccountInOtherMode(false, 'test')).toBe(false)
+    expect(merchantAccountInOtherMode(undefined, 'live')).toBe(false)
+    expect(merchantAccountInOtherMode(null, 'live')).toBe(false)
+    expect(merchantAccountInOtherMode(false, undefined)).toBe(false)
+  })
+
+  it("knows Stripe's cross-mode refusal and nothing wider", () => {
+    const provider = paymentProvider()
+    expect(
+      provider.refusedAsOtherMode(
+        'The account acct_1 was a test account created with a testmode key, and therefore can only be used with testmode keys.',
+      ),
+    ).toBe(true)
+    expect(provider.refusedAsOtherMode('An error occurred with our connection to Stripe.')).toBe(false)
+    expect(provider.refusedAsOtherMode(undefined)).toBe(false)
+  })
+
+  it('keeps the replaced id once and resets what the profile said about it', () => {
+    const fields = merchantAccountReplacement({
+      previousAccountIds: ['acct_a', 'acct_old', 7],
+      replacedAccountId: 'acct_old',
+      newAccountId: 'acct_new',
+    })
+    expect(fields).toMatchObject({
+      stripeAccountId: 'acct_new',
+      previousStripeAccountIds: ['acct_a', 'acct_old'],
+      stripeChargesEnabled: false,
+      stripeAccountLivemode: null,
+      lastPayoutFailureAtMs: null,
+    })
+    expect(
+      merchantAccountReplacement({
+        previousAccountIds: undefined,
+        replacedAccountId: 'acct_old',
+        newAccountId: 'acct_new',
+      })['previousStripeAccountIds'],
+    ).toEqual(['acct_old'])
   })
 })

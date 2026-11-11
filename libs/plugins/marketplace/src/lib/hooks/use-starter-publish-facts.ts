@@ -23,6 +23,7 @@ import {
   siteStarterBuiltinThemeOf,
   type SiteStarterBuiltinReading,
 } from '@aglyn/aglyn/app-utils/site-starter-theme'
+import { merchantPaymentsPlatformMode } from '@aglyn/tenant-feature-instance/hooks/merchant-payments-state'
 import {
   useConsoleHostRoute,
   useFirestore,
@@ -97,7 +98,8 @@ export function useStarterPublishFacts(input: {
   // has nothing the answer could change, and nearly every publisher does.
   const { data: user } = useUser()
   const [sellsAsPlatform, setSellsAsPlatform] = useState(false)
-  const needsStanding = Boolean(profile.data && !payoutsReady(profile.data))
+  const platformMode = merchantPaymentsPlatformMode()
+  const needsStanding = Boolean(profile.data && !payoutsReady(profile.data, platformMode))
   useEffect(() => {
     if (!needsStanding || !orgId || !user) return
     let current = true
@@ -124,6 +126,7 @@ export function useStarterPublishFacts(input: {
         profile:
           profile.status === 'success' ? (profile.data ?? null) : undefined,
         sellsAsPlatform,
+        platformMode,
         pages: pagesReady ? starterPublishPages(routing, screens.data) : null,
         marketplacePath: route.orgSlug ? orgMarketplacePath(route.orgSlug) : null,
         pagesPath:
@@ -134,7 +137,7 @@ export function useStarterPublishFacts(input: {
       builtin: hostReady ? siteStarterBuiltinThemeOf(host.data ?? null) : null,
       hostReady,
     }),
-    [plan, profile.status, profile.data, sellsAsPlatform, pagesReady, routing, screens.data, route.orgSlug, route.subdomain, hostReady, host.data],
+    [plan, profile.status, profile.data, sellsAsPlatform, platformMode, pagesReady, routing, screens.data, route.orgSlug, route.subdomain, hostReady, host.data],
   )
 }
 
