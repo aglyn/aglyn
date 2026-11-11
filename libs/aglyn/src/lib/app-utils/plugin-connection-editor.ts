@@ -47,6 +47,12 @@ export interface EditorConnectionVariable {
   label: string
   /** The value the last sync wrote, as the published page would print it, or `null` before one. */
   value: string | null
+  /**
+   * Whether the connection has synced at all, so an empty `value` reads as
+   * "the service has nothing there" rather than "not synced yet" (a Google
+   * profile with no reviews has no rating). Absent from an older provider.
+   */
+  synced?: boolean
 }
 
 /**

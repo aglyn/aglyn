@@ -115,7 +115,12 @@ export function editorPluginConnections(input: {
       for (const field of Object.keys(connection.sync?.record.fields ?? {})) {
         const id = pluginConnectionVariableId(installed.listingId, connection.id, field)
         if (!id) continue
-        variables.push({ id, label: `${connection.label}: ${connectionFieldLabel(field)}`, value: values[id]?.value ?? null })
+        variables.push({
+          id,
+          label: `${connection.label}: ${connectionFieldLabel(field)}`,
+          value: values[id]?.value ?? null,
+          synced: Boolean(record),
+        })
       }
     }
   }
