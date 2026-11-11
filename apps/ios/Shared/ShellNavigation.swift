@@ -160,6 +160,11 @@ final class ShellNavigation {
   var pickedHostID: String?
   /// Opens a seed as a new tab beside this one; nil where the shell has no tabs (a phone).
   @ObservationIgnored var openTab: ((ShellSeed) -> Void)?
+  /// The tab in front of this window, where a link from outside (a universal link, `aglyn://`, a tapped push) opens:
+  /// the window's first tab answers the link, so without it the link opened on that tab while another was in front.
+  @ObservationIgnored var tabInFront: (() -> ShellNavigation?)?
+  /// Where this window opens a link: the tab in front, else this navigation.
+  var linkTarget: ShellNavigation { tabInFront?() ?? self }
   /// Where the window has been, for Back and Forward beside the search field: each section opened, in order.
   private(set) var history: [ShellSection] = [.home]
   private(set) var historyIndex = 0

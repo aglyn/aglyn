@@ -142,9 +142,13 @@ export function BindingPickerProvider(props: BindingPickerProviderProps) {
         groupHint: 'Filled in from a connected service each time it syncs',
         label: variable.label,
         token: formatVariableIdToken(variable.id),
+        // Synced but empty is the service having nothing there (a Google
+        // profile with no reviews has no rating), not a sync to wait for.
         preview: variable.value
           ? variable.value.slice(0, 60)
-          : 'Not synced yet — renders as nothing',
+          : variable.synced
+            ? 'Empty in the last sync — renders as nothing'
+            : 'Not synced yet — renders as nothing',
       })
     }
     for (const definition of functionDocs ?? []) {

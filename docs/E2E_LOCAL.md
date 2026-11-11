@@ -65,7 +65,13 @@ keys and nothing else, only beside an emulator (see "The guided AI site start"
 below). What stays, and why, is `KEPT_CREDENTIALS` in
 `tools/scripts/lib/emulated-env.mjs`: the Firebase service account (the Admin
 SDK does not start without it) and the secrets the app uses only to sign and
-verify its own requests. A port passes through as before:
+verify its own requests. Beside an emulator, the commerce plugins' sealing
+keys are published local values instead (`LOCAL_COMMERCE_TOKEN_KEYS`), and
+DoorDash, ShipMonk, eBay, AfterShip, Route, Narvar and Easyship read as
+offered with placeholder or sandbox settings
+(`LOCAL_COMMERCE_SERVICE_SETTINGS`), so the seeded Connected services cards
+draw. Away from an emulator those keys and placeholder secrets are set empty.
+A port passes through as before:
 `npm run serve:console:emulated -- --port 4210`. The emulator hosts a script
 sets, and the `NEXT_PUBLIC_` twins the page reads (below), reach `next dev`
 unchanged: `serve-emulated.mjs` keeps every variable it inherits and empties

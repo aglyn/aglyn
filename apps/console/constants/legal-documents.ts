@@ -72,7 +72,7 @@
 
 import { LEGAL_URLS } from './shared'
 
-export const LEGAL_DOCUMENT_VERSION = 'v25'
+export const LEGAL_DOCUMENT_VERSION = 'v26'
 
 export interface LegalDocumentManifestEntry {
   /** Stable key, and the snapshot's filename under `legal/{version}/`. */
@@ -1191,6 +1191,32 @@ export interface LegalDocumentManifestEntry {
  * after publication, and terms reproduced its `v24` pin (73964 bytes /
  * `f0af39…`) before.
  *
+ * v26 (2026-11-11): Google Business Profile data in the Privacy Policy.
+ *
+ *   - Privacy §1.3 gains a "Google Business Profile." paragraph: what Aglyn
+ *     reads when a site is connected to a Business Profile (the location's
+ *     review link, rating, review count and 50 newest reviews), that it is
+ *     refreshed about every six hours and only shown on the site, that
+ *     Aglyn only reads, that the data is not used for advertising or AI
+ *     training and is not sold or shared, how disconnecting deletes it, and
+ *     that use of Google API data follows Google's API Services User Data
+ *     Policy, including Limited Use. "Last updated" moves to November 11, 2026,
+ *     and so does the `/legal` index's Privacy card.
+ *   - Terms unchanged, so its pin is unchanged and it is the control.
+ *     Subprocessors unchanged (Google is already listed).
+ *
+ * The record is `Platform Docs/Legal/Proposed/2026-11-11-google-business-profile-data/`.
+ *
+ * Publication-first: the Privacy master was edited and verified through the
+ * Docs API (revision 30 to 31: the date and the new §1.3 paragraph, nothing
+ * else), the version was published, the live page confirmed serving the new
+ * text on two consecutive checks, and only then was privacy captured:
+ * 40050 bytes (`a24bd7…`), identical across the capture's requests, and
+ * archived in `Acceptance-Snapshots/v26`. Terms reproduced its pin, 74456
+ * bytes / `0e04be…`, byte for byte both before and after publication,
+ * and privacy reproduced its `v25` pin (38630 bytes / `b315fe…`)
+ * before.
+ *
  * ## ONE snapshot in the tree, and why that is enough
  *
  * Only the CURRENT version is checked out. Superseded text is not deleted —
@@ -1257,7 +1283,7 @@ export const LEGAL_DOCUMENTS: LegalDocumentManifestEntry[] = [
     key: 'privacy',
     url: LEGAL_URLS.PRIVACY,
     sha256:
-      'b315fe1fc77594acc034188783f43c0b4a7eb4e042b176d207a62aeb0f503cfc',
-    bytes: 38630,
+      'a24bd7994319398e688c1523caeec0dfa32ba3172485d61d8b9e8c61f47d2e9e',
+    bytes: 40050,
   },
 ]

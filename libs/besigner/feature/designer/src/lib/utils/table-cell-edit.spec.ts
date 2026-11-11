@@ -26,6 +26,7 @@ import {
   requestCanvasContextMenu,
 } from './canvas-context-menu'
 import {
+  dataTableAppendEdits,
   dataTableCellActions,
   dataTableCellValueFromEdit,
   findDataTableAttributeName,
@@ -201,6 +202,36 @@ describe('table rows, columns and formatted cells on the canvas (AGL-4203)', () 
       'Them',
     ])
     expect(started['headerRow']).toBe(true)
+  })
+
+  it('appends a row and a column from the edge bars, keeping alignments (AGL-4216)', () => {
+    const edits = dataTableAppendEdits(GRID)
+    expect(edits).toEqual({
+      row: { kind: 'insertRow', at: 3 },
+      column: { kind: 'insertColumn', at: 3 },
+    })
+    const withRow = withDataTableShapeEdit({ rows: GRID }, 'rows', edits!.row)
+    expect(parseDataTableRows(withRow['rows'])).toHaveLength(4)
+    expect(parseDataTableRows(withRow['rows'])[3]).toEqual(['', '', ''])
+    const withColumn = withDataTableShapeEdit(
+      { rows: GRID },
+      'rows',
+      edits!.column,
+    )
+    expect(parseDataTableRows(withColumn['rows'])[0]).toEqual([
+      'Feature',
+      'Us',
+      'Them',
+      '',
+    ])
+    expect(readDataTableAlignments(withColumn['rows'], 4)).toEqual([
+      'left',
+      'center',
+      'right',
+      'left',
+    ])
+    // An empty grid has no edge; its table is started from the menu instead.
+    expect(dataTableAppendEdits('')).toBe(null)
   })
 
   it('remembers the right-clicked cell for that node only, until the menu closes', () => {

@@ -484,7 +484,7 @@
           "tabs": ["commerce.orders-tab", "commerce.products-tab"],
           "widgets": ["commerce.today", "commerce.sales-trend", "commerce.to-ship", "commerce.glance", "commerce.needs-you", "commerce.newest-site-users", "commerce.quote-from-request", "commerce.quote-from-contact"],
           "quickActions": ["commerce.orders-to-ship", "commerce.new-product", "commerce.scan"],
-          "deepLinks": ["commerce.orders-page", "commerce.products-page"]
+          "deepLinks": ["commerce.orders-page", "commerce.products-page", "commerce.order-link", "commerce.quote-link", "commerce.returns-page", "commerce.return-link", "commerce.shipping-page", "commerce.notifications-page"]
         }
       },
       "requiredPersonEraser": true,
@@ -1154,7 +1154,7 @@
           "screens": ["marketplace.browse", "marketplace.installed", "marketplace.licenses", "marketplace.listing", "marketplace.plugin-settings", "marketplace.sell", "marketplace.publish", "marketplace.publishTemplate", "marketplace.publishStarter", "marketplace.publisherAgreement", "marketplace.publishLayout", "marketplace.publishComponent", "marketplace.publishTheme", "marketplace.publishDatasetSchema", "marketplace.publishEmailTemplate", "marketplace.publishEmailStarter", "marketplace.publishPlugin"],
           "quickActions": ["marketplace.open"],
           "widgets": ["marketplace.artifact-publish", "marketplace.org-installs", "marketplace.plugin-installation", "marketplace.site-connections", "marketplace.starter-picker"],
-          "deepLinks": ["marketplace.listing-page", "marketplace.page"]
+          "deepLinks": ["marketplace.listing-page", "marketplace.page", "marketplace.browse-page", "marketplace.installed-page", "marketplace.licences-page", "marketplace.sell-page"]
         }
       },
       "consoleRedirects": [

@@ -2,15 +2,16 @@
 sidebar_position: 2.5
 title: Connect a domain automatically
 description: For a domain you already own, let your DNS provider add Aglyn's records for you in one click instead of copying them by hand.
-unlisted: true
 ---
 
 # Connect a domain automatically
 
 If you already own a domain, your DNS provider may be able to add Aglyn's records for
-you. GoDaddy, IONOS, Cloudflare and other providers support **Domain Connect**, an
-open standard for exactly this: you approve the change on your provider's own page,
-and there are no records to copy.
+you. It uses **Domain Connect**, an open standard for exactly this: you approve the
+change on your provider's own page, and there are no records to copy.
+
+Cloudflare, NameSilo and Glauca support it for Aglyn today. When another provider adds
+Aglyn, the button appears for its domains on its own, with nothing for you to change.
 
 ## Steps {#steps}
 
@@ -25,6 +26,11 @@ and there are no records to copy.
 Aglyn never sees your password at your provider: you sign in on the provider's own
 page, and it writes only the records Aglyn's template names. For a bare domain like
 `yourbusiness.com`, that is the domain and its `www` address, so both work.
+
+If your domain also has an **IPv6 (AAAA) record** from a previous host, the card warns
+you under the button. Your provider replaces the domain's IPv4 address but leaves that
+record in place, so delete it while you're at your provider. Otherwise visitors on IPv6
+keep reaching the old site.
 
 ## If there's no button {#no-button}
 

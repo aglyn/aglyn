@@ -213,6 +213,10 @@ export const DOCS_HELP_TOPICS = {
     path: '/marketing-and-automation/email-campaigns/connect-attentive',
     title: 'Connect Attentive',
   },
+  connectAutomatically: {
+    path: '/building-sites/custom-domains/connect-automatically',
+    title: 'Connect a domain automatically',
+  },
   connectConversionsApi: {
     path: '/marketing-and-automation/analytics/connect-conversions-api',
     title: 'Server-side ad conversions',
@@ -1010,6 +1014,7 @@ export const DOCS_HELP_ANCHORS = {
   components: ['#promote', '#insert-instances', '#properties', '#declare-them', '#make-a-property-conditional', '#use-them', '#save-then-publish', '#fill-them-in-per-page', '#restyle-one-instance', '#override-an-attribute-on-one-instance', '#retrofit-duplicated-sections', '#detach', '#nesting', '#used-by', '#manage', '#component-details-card', '#duplicate', '#reusable-email-blocks', '#make-a-header-or-footer', '#add-one-to-an-email', '#change-a-block-in-one-email', '#emails-you-have-not-designed', '#email-theme-colors', '#copy--paste-vs-reusable-components', '#tips', '#related'],
   connectADomain: ['#steps', '#after-it-connects', '#your-aglyn-subdomain-afterwards', '#registrar-quick-reference', '#one-domain-per-site', '#disconnect', '#related'],
   connectAttentive: ['#before-you-start', '#connect', '#what-is-sent', '#who-is-sent', '#unsubscribes-stay-in-attentive', '#settings', '#sync-log', '#troubleshooting', '#disconnect'],
+  connectAutomatically: ['#steps', '#no-button', '#problems'],
   connectConversionsApi: ['#conversions-api', '#meta-conversions-api', '#tiktok-events-api', '#pinterest-conversions-api', '#how-it-works', '#test-events', '#related'],
   connectSmileIoOrYotpo: ['#connect-your-account', '#who-earns', '#when-something-is-not-sent', '#disconnect'],
   consoleAndSite: ['#add-a-console-page', '#add-a-widget-to-a-shell-zone', '#wrap-every-console-page-providers', '#add-a-canvas-component-besigner--published-sites', '#add-a-site-runtime', '#troubleshooting'],

@@ -34,6 +34,13 @@ Starter plan — see Billing to upgrade."*
    green chip. An apex — connected by ALIAS or by A record, since both are checked the
    same way — gets an extra note: *"Apex verified by the addresses it resolves to."*
 
+:::tip Your DNS provider may add the record for you
+If your domain's DNS is at a provider that supports Domain Connect, such as Cloudflare,
+a **Connect automatically with** *your provider* button appears under the **Domain**
+field. You approve the change at your provider and skip steps 2 and 3. See
+[Connect a domain automatically](connect-automatically.md).
+:::
+
 If DNS hasn't propagated yet, **Verify & connect** tells you what it found instead —
 either the record it saw and what it expected, or that no record exists yet — and asks
 you to try again in a while. Nothing is saved on a failed verify, so re-running it is
@@ -68,6 +75,11 @@ If other DNS records are answering for the same name, the card says so and names
 **even when the domain is live**. That is worth acting on: a leftover record from a
 previous host answers alongside the correct one, and the site then loads for some
 visitors and not others.
+
+The same goes for an **IPv6 (AAAA) record** on your domain. Pointing your domain at
+Aglyn replaces its IPv4 address, but not an AAAA record your previous host added, so
+visitors on IPv6 keep reaching the old site. The card names that record too. Delete it
+at your DNS provider.
 
 <!-- screenshot: custom-domains/connected-chip-and-actions.png per SCREENSHOT_PLAN.md -->
 

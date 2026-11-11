@@ -213,7 +213,10 @@ describe('QuickBooks Online adapter', () => {
   })
 
   it('marks a US company lines TAX or NON and puts the tax code on the transaction', async () => {
-    const { adapter, calls } = provider([{ method: 'POST', match: '/salesreceipt', body: { SalesReceipt: { Id: '145' } } }])
+    const { adapter, calls } = provider([
+      { match: /query.*TaxCode/, body: { QueryResponse: { TaxCode: [{ Id: '2' }] } } },
+      { method: 'POST', match: '/salesreceipt', body: { SalesReceipt: { Id: '145' } } },
+    ])
     const doc = buildSaleDoc(order, { ...mapping, taxCodes: { ...mapping.taxCodes, taxed: '2' } })
     await adapter.createSalesReceipt(session, doc, {
       idempotencyKey: 'k',
@@ -221,10 +224,43 @@ describe('QuickBooks Online adapter', () => {
       extras: { saleItemId: '20', shippingItemId: '21', companyCountry: 'US' },
       homeCurrency: 'USD',
     })
-    const body = JSON.parse(calls[0].body ?? '{}')
+    const body = JSON.parse(calls.find((call) => call.method === 'POST')?.body ?? '{}')
     expect(body.GlobalTaxCalculation).toBeUndefined()
     expect(body.TxnTaxDetail).toEqual({ TxnTaxCodeRef: { value: '2' }, TotalTax: 1.6 })
     expect(body.Line[0].SalesItemLineDetail.TaxCodeRef).toEqual({ value: 'TAX' })
+  })
+
+  it('holds a taxed sale or refund while a US company has no sales tax set up, instead of booking it short', async () => {
+    const { adapter, calls } = provider([{ match: /query.*TaxCode/, body: { QueryResponse: {} } }])
+    const doc = buildSaleDoc(order, mapping)
+    const us = { idempotencyKey: 'k', customerId: null, extras: { saleItemId: '20', shippingItemId: '21', companyCountry: 'US' }, homeCurrency: 'USD' }
+    const refused = await adapter.createSalesReceipt(session, doc, us).catch((error: unknown) => error)
+    expect(refused).toBeInstanceOf(AccountingProviderError)
+    expect(refused).toMatchObject({
+      code: 'validation',
+      message: "Sales tax isn't set up in QuickBooks, so it would leave out this sale's $1.60 tax. Set up sales tax in QuickBooks (Taxes), then retry.",
+    })
+    await expect(adapter.createRefundReceipt(session, { ...doc, kind: 'refund' } as never, us)).rejects.toThrow("this refund's $1.60 tax")
+    expect(calls.some((call) => call.method === 'POST')).toBe(false)
+  })
+
+  it('asks about sales tax once for a while, and not at all for an untaxed sale or a company outside the US', async () => {
+    const { adapter, calls } = provider([
+      { match: /query.*TaxCode/, body: { QueryResponse: { TaxCode: [{ Id: '2' }] } } },
+      { method: 'POST', match: '/salesreceipt', body: { SalesReceipt: { Id: '145' } } },
+    ])
+    const extras = { saleItemId: '20', shippingItemId: '21', companyCountry: 'US' }
+    const write = { idempotencyKey: 'k', customerId: null, extras, homeCurrency: 'USD' }
+    await adapter.createSalesReceipt(session, buildSaleDoc(order, mapping), write)
+    await adapter.createSalesReceipt(session, buildSaleDoc(order, mapping), write)
+    const untaxed = { ...order, totals: { ...order.totals, taxCents: 0, totalCents: 2000 } }
+    await adapter.createSalesReceipt({ ...session, tenantId: '9131' }, buildSaleDoc(untaxed, mapping), write)
+    await adapter.createSalesReceipt({ ...session, tenantId: '9132' }, buildSaleDoc(order, mapping), {
+      ...write,
+      extras: { ...extras, companyCountry: 'CA' },
+    })
+    expect(calls.filter((call) => /TaxCode/.test(decodeURIComponent(call.url))).length).toBe(1)
+    expect(calls.filter((call) => call.method === 'POST').length).toBe(4)
   })
 
   it('names the tax code on the line for a company outside the US', async () => {

@@ -87,6 +87,9 @@ export const QUICKBOOKS_MINOR_VERSION = 75
 /** 500 a minute per company is one every 120 ms; a little under, for headroom. */
 export const QUICKBOOKS_MIN_INTERVAL_MS = 150
 
+/** How long a company seen with sales tax set up is trusted before it is asked again. */
+const SALES_TAX_SEEN_MS = 10 * 60 * 1000
+
 /** The service items a sale's lines name, made once per company. */
 export const QUICKBOOKS_SALE_ITEM_NAME = `${PLATFORM_BRAND_NAME} sales`
 export const QUICKBOOKS_SHIPPING_ITEM_NAME = `${PLATFORM_BRAND_NAME} shipping`
@@ -117,6 +120,13 @@ export function quickBooksLiteral(value: string): string {
 type QboRecord = Record<string, unknown>
 
 const ref = (value: string) => ({ value })
+
+/** An amount as a message shows it: `$4.00`, or `4.00 EUR` away from dollars. */
+const money = (cents: number, currency: string) => {
+  const amount = centsToDecimal(cents).toFixed(2)
+  const code = normalizeCurrency(currency)
+  return code === 'USD' ? `$${amount}` : `${amount} ${code}`
+}
 
 /** Whether the company is a US one, read from QuickBooks when the mapping is saved (`prepare`). */
 const isUsCompany = (extras: AccountingProviderExtras) => ['US', 'USA'].includes(extras['companyCountry'] ?? '')
@@ -279,6 +289,30 @@ export function createQuickBooksProvider(
     }
   }
 
+  /** Companies seen with sales tax set up, until when the answer is trusted. */
+  const salesTaxSeen = new Map<string, number>()
+
+  /**
+   * A US company that has not set up sales tax keeps no tax codes, and
+   * QuickBooks then drops a transaction's tax without a word: a $59 sale
+   * with $4 tax is booked at $55 and the clearing account never zeroes.
+   * So a taxed document waits until sales tax is set up.
+   */
+  async function requireSalesTax(session: AccountingSession, doc: AccountingSaleDoc | AccountingRefundDoc, context: AccountingWriteContext) {
+    if (doc.taxCents <= 0 || !isUsCompany(context.extras)) return
+    if ((salesTaxSeen.get(session.tenantId) ?? 0) > now()) return
+    const codes = await query<QboRecord>(session, 'TaxCode', 'select Id from TaxCode where Active = true MAXRESULTS 1')
+    if (codes.length > 0) {
+      salesTaxSeen.set(session.tenantId, now() + SALES_TAX_SEEN_MS)
+      return
+    }
+    throw new AccountingProviderError(
+      'validation',
+      `Sales tax isn't set up in QuickBooks, so it would leave out this ${doc.kind === 'refund' ? 'refund' : 'sale'}'s ` +
+        `${money(doc.taxCents, doc.currency)} tax. Set up sales tax in QuickBooks (Taxes), then retry.`,
+    )
+  }
+
   const created = (body: unknown, entity: string): AccountingDocRef => {
     const id = (body as Record<string, QboRecord | undefined>)?.[entity]?.['Id']
     if (typeof id !== 'string' || !id) {
@@ -432,10 +466,12 @@ export function createQuickBooksProvider(
     },
 
     async createSalesReceipt(session, doc, context) {
+      await requireSalesTax(session, doc, context)
       return created(await post(session, 'salesreceipt', salesBody(doc, context), context.idempotencyKey), 'SalesReceipt')
     },
 
     async createRefundReceipt(session, doc, context) {
+      await requireSalesTax(session, doc, context)
       return created(await post(session, 'refundreceipt', salesBody(doc, context), context.idempotencyKey), 'RefundReceipt')
     },
 

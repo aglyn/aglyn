@@ -47,13 +47,17 @@ import {
   DialogActions,
   DialogContent,
   DialogTitle,
+  IconButton,
   Popover,
   Stack,
   TextField,
   ToggleButton,
   ToggleButtonGroup,
+  Tooltip,
   Typography,
 } from '@mui/material'
+import CloseIcon from '@mui/icons-material/Close'
+import DeleteOutlineIcon from '@mui/icons-material/DeleteOutlined'
 import FormatAlignCenterIcon from '@mui/icons-material/FormatAlignCenter'
 import FormatAlignLeftIcon from '@mui/icons-material/FormatAlignLeft'
 import FormatAlignRightIcon from '@mui/icons-material/FormatAlignRight'
@@ -70,6 +74,7 @@ import {
   useState,
 } from 'react'
 import { htmlToRows } from './markdown-html-paste'
+import TableEdgeAddButton from './table-edge-add-button.component'
 import MarkdownLinkDialog, {
   MarkdownLinkTargetName,
   type MarkdownLink,
@@ -723,235 +728,286 @@ const BlockRowView = memo(function BlockRowView({
           </Box>
         </Box>
       ) : table ? (
-        <Box sx={{ overflowX: 'auto' }}>
+        <Box
+          data-md-table=""
+          sx={{
+            // The destructive controls show where the author is working; the
+            // add bars are always there (TableEdgeAddButton says why).
+            '& [data-md-reveal]': { opacity: 0, transition: 'opacity 120ms' },
+            '&:hover [data-md-table-head] [data-md-reveal], &:focus-within [data-md-table-head] [data-md-reveal]':
+              { opacity: 1 },
+            '& tr:hover [data-md-reveal], & tr:focus-within [data-md-reveal]': {
+              opacity: 1,
+            },
+            '&:hover [data-md-align-row] [data-md-reveal], &:focus-within [data-md-align-row] [data-md-reveal]':
+              { opacity: 1 },
+          }}
+        >
           <Box
-            component="table"
+            data-md-table-head=""
             sx={{
-              borderCollapse: 'collapse',
-              width: '100%',
-              fontSize: 14,
-              '& th, & td': {
-                border: '1px solid',
-                borderColor: 'divider',
-                px: 1,
-                py: 0.5,
-                minWidth: 64,
-              },
-              '& th': { bgcolor: 'action.hover' },
-              '& [contenteditable]': { outline: 'none' },
-              '& [contenteditable]:focus': {
-                boxShadow: (theme) => `inset 0 0 0 2px ${theme.palette.primary.main}`,
-              },
+              display: 'flex',
+              alignItems: 'center',
+              justifyContent: 'space-between',
+              minHeight: 28,
+              mb: 0.5,
+              pl: '28px',
             }}
           >
-            <thead>
-              <tr>
-                {table.header.map((_cell, index) => (
-                  <th key={index} {...cellProps(-1, index)}>
-                    {frozenHeader[index]}
-                  </th>
-                ))}
-                {/* Column controls live in a trailing spacer column so they
-                    never sit inside a cell the caret can enter. */}
-                <Box
-                  component="th"
-                  data-md-block-controls=""
-                  sx={{
+            <Typography variant="caption" color="text.secondary">
+              {'Table'}
+            </Typography>
+            <Tooltip title="Remove table">
+              <IconButton
+                data-md-reveal=""
+                size="small"
+                aria-label="Remove table"
+                onMouseDown={(event) => event.preventDefault()}
+                onClick={onRemove}
+                sx={{ color: 'text.secondary', '&:hover': { color: 'error.main' } }}
+              >
+                <DeleteOutlineIcon fontSize="small" />
+              </IconButton>
+            </Tooltip>
+          </Box>
+          <Box
+            sx={{
+              display: 'grid',
+              gridTemplateColumns: 'minmax(0, 1fr) auto',
+              columnGap: 0.75,
+              rowGap: 0.75,
+            }}
+          >
+            <Box sx={{ overflowX: 'auto' }}>
+              <Box
+                component="table"
+                sx={{
+                  borderCollapse: 'collapse',
+                  width: '100%',
+                  fontSize: 14,
+                  '& th, & td': {
+                    border: '1px solid',
+                    borderColor: 'divider',
+                    px: 1,
+                    py: 0.5,
+                    minWidth: 64,
+                  },
+                  '& th': { bgcolor: 'action.hover' },
+                  // The gutter column and the alignment row hold controls,
+                  // not cells: no border, no fill, no padding.
+                  '& [data-md-gutter], & [data-md-align-row] > td': {
                     border: '0 !important',
                     bgcolor: 'transparent !important',
-                    opacity: 0,
-                    transition: 'opacity 120ms',
-                    whiteSpace: 'nowrap',
-                  }}
-                >
-                  <Button
-                    size="small"
-                    onMouseDown={(event) => event.preventDefault()}
-                    onClick={() =>
-                      onEdit((current) =>
-                        current.kind === 'table'
-                          ? {
-                              ...current,
-                              align: [...current.align, 'left'],
-                              header: [...current.header, []],
-                              rows: current.rows.map((cells) => [...cells, []]),
-                            }
-                          : current,
-                      )
-                    }
-                  >
-                    {'+ Column'}
-                  </Button>
-                  {columns > 1 ? (
-                    <Button
-                      size="small"
-                      color="error"
-                      onMouseDown={(event) => event.preventDefault()}
-                      onClick={() =>
-                        onEdit((current) =>
-                          current.kind === 'table'
-                            ? {
-                                ...current,
-                                align: current.align.slice(0, -1),
-                                header: current.header.slice(0, -1),
-                                rows: current.rows.map((cells) =>
-                                  cells.slice(0, -1),
-                                ),
-                              }
-                            : current,
-                        )
-                      }
-                    >
-                      {'− Column'}
-                    </Button>
-                  ) : null}
-                </Box>
-              </tr>
-              {/* Per-column alignment, on the same axis as the column. */}
-              <Box
-                component="tr"
-                data-md-block-controls=""
-                sx={{ opacity: 0, transition: 'opacity 120ms' }}
+                    p: '0 !important',
+                    minWidth: 0,
+                  },
+                  '& [data-md-gutter]': { width: 28, textAlign: 'center' },
+                  '& [contenteditable]': { outline: 'none' },
+                  '& [contenteditable]:focus': {
+                    boxShadow: (theme) =>
+                      `inset 0 0 0 2px ${theme.palette.primary.main}`,
+                  },
+                }}
               >
-                {table.align.map((align, index) => (
-                  <Box
-                    component="td"
-                    key={index}
-                    sx={{
-                      border: '0 !important',
-                      p: '0 !important',
-                      textAlign: 'center',
-                    }}
-                  >
-                    <ToggleButtonGroup
-                      exclusive
-                      size="small"
-                      value={align}
-                      onChange={(_event, next) => {
-                        if (!next) return
-                        onEdit((current) =>
-                          current.kind === 'table'
-                            ? {
-                                ...current,
-                                align: current.align.map((entry, i) =>
-                                  i === index
-                                    ? (next as Aglyn.MarkdownTableAlign)
-                                    : entry,
-                                ),
-                              }
-                            : current,
-                        )
-                      }}
-                      sx={{ '& .MuiToggleButton-root': { px: 0.75, py: 0, border: 0 } }}
-                    >
-                      <ToggleButton value="left" aria-label="Align left">
-                        <FormatAlignLeftIcon fontSize="inherit" />
-                      </ToggleButton>
-                      <ToggleButton value="center" aria-label="Align center">
-                        <FormatAlignCenterIcon fontSize="inherit" />
-                      </ToggleButton>
-                      <ToggleButton value="right" aria-label="Align right">
-                        <FormatAlignRightIcon fontSize="inherit" />
-                      </ToggleButton>
-                    </ToggleButtonGroup>
-                  </Box>
-                ))}
-                <Box component="td" sx={{ border: '0 !important' }} />
-              </Box>
-            </thead>
-            <tbody>
-              {table.rows.map((cells, rowIndex) => (
-                <tr key={rowIndex}>
-                  {cells.map((_cell, index) => (
-                    <td key={index} {...cellProps(rowIndex, index)}>
-                      {frozenRows[rowIndex]?.[index]}
-                    </td>
-                  ))}
-                  <Box
-                    component="td"
-                    data-md-block-controls=""
-                    sx={{
-                      border: '0 !important',
-                      bgcolor: 'transparent !important',
-                      opacity: 0,
-                      transition: 'opacity 120ms',
-                    }}
-                  >
-                    <Button
-                      size="small"
-                      color="error"
-                      onMouseDown={(event) => event.preventDefault()}
-                      onClick={() =>
-                        onEdit((current) =>
-                          current.kind === 'table'
-                            ? {
-                                ...current,
-                                rows: current.rows.filter(
-                                  (_cells, index) => index !== rowIndex,
-                                ),
-                              }
-                            : current,
-                        )
-                      }
-                    >
-                      {'Delete row'}
-                    </Button>
-                  </Box>
-                </tr>
-              ))}
-              <tr>
-                <Box
-                  component="td"
-                  colSpan={columns + 1}
-                  data-md-block-controls=""
-                  sx={{
-                    border: '0 !important',
-                    opacity: 0,
-                    transition: 'opacity 120ms',
-                  }}
-                >
-                  <Button
-                    size="small"
-                    onMouseDown={(event) => event.preventDefault()}
-                    onClick={() =>
-                      onEdit((current) =>
-                        current.kind === 'table'
-                          ? {
-                              ...current,
-                              rows: [
-                                ...current.rows,
-                                current.header.map(() => []),
-                              ],
+                <thead>
+                  <tr>
+                    <th data-md-gutter="" aria-hidden />
+                    {table.header.map((_cell, index) => (
+                      <th key={index} {...cellProps(-1, index)}>
+                        {frozenHeader[index]}
+                      </th>
+                    ))}
+                  </tr>
+                  {/* Per column, on the same axis as the column: its
+                      alignment, and deleting it. */}
+                  <tr data-md-align-row="">
+                    <td data-md-gutter="" />
+                    {table.align.map((align, index) => (
+                      <td key={index}>
+                        <Box
+                          data-md-reveal=""
+                          sx={{
+                            display: 'flex',
+                            alignItems: 'center',
+                            justifyContent: 'center',
+                            gap: 0.25,
+                            py: 0.25,
+                          }}
+                        >
+                          <ToggleButtonGroup
+                            exclusive
+                            size="small"
+                            value={align}
+                            onChange={(_event, next) => {
+                              if (!next) return
+                              onEdit((current) =>
+                                current.kind === 'table'
+                                  ? {
+                                      ...current,
+                                      align: current.align.map((entry, i) =>
+                                        i === index
+                                          ? (next as Aglyn.MarkdownTableAlign)
+                                          : entry,
+                                      ),
+                                    }
+                                  : current,
+                              )
+                            }}
+                            sx={{
+                              '& .MuiToggleButton-root': {
+                                px: 0.5,
+                                py: 0.25,
+                                border: 0,
+                              },
+                            }}
+                          >
+                            <ToggleButton value="left" aria-label="Align left">
+                              <FormatAlignLeftIcon fontSize="inherit" />
+                            </ToggleButton>
+                            <ToggleButton value="center" aria-label="Align center">
+                              <FormatAlignCenterIcon fontSize="inherit" />
+                            </ToggleButton>
+                            <ToggleButton value="right" aria-label="Align right">
+                              <FormatAlignRightIcon fontSize="inherit" />
+                            </ToggleButton>
+                          </ToggleButtonGroup>
+                          {columns > 1 ? (
+                            <Tooltip title="Delete column">
+                              <IconButton
+                                size="small"
+                                aria-label={`Delete column ${index + 1}`}
+                                onMouseDown={(event) => event.preventDefault()}
+                                onClick={() =>
+                                  onEdit((current) =>
+                                    current.kind === 'table'
+                                      ? {
+                                          ...current,
+                                          align: current.align.filter(
+                                            (_entry, i) => i !== index,
+                                          ),
+                                          header: current.header.filter(
+                                            (_cell, i) => i !== index,
+                                          ),
+                                          rows: current.rows.map((cells) =>
+                                            cells.filter((_cell, i) => i !== index),
+                                          ),
+                                        }
+                                      : current,
+                                  )
+                                }
+                                sx={{
+                                  p: 0.25,
+                                  color: 'text.secondary',
+                                  '&:hover': { color: 'error.main' },
+                                }}
+                              >
+                                <CloseIcon sx={{ fontSize: 14 }} />
+                              </IconButton>
+                            </Tooltip>
+                          ) : null}
+                        </Box>
+                      </td>
+                    ))}
+                  </tr>
+                </thead>
+                <tbody>
+                  {table.rows.map((cells, rowIndex) => (
+                    <tr key={rowIndex}>
+                      <td data-md-gutter="">
+                        <Tooltip title="Delete row" placement="left">
+                          <IconButton
+                            data-md-reveal=""
+                            size="small"
+                            aria-label={`Delete row ${rowIndex + 1}`}
+                            onMouseDown={(event) => event.preventDefault()}
+                            onClick={() =>
+                              onEdit((current) =>
+                                current.kind === 'table'
+                                  ? {
+                                      ...current,
+                                      rows: current.rows.filter(
+                                        (_cells, index) => index !== rowIndex,
+                                      ),
+                                    }
+                                  : current,
+                              )
                             }
-                          : current,
-                      )
-                    }
-                  >
-                    {'+ Row'}
-                  </Button>
-                </Box>
-              </tr>
-            </tbody>
+                            sx={{
+                              p: 0.25,
+                              color: 'text.secondary',
+                              '&:hover': { color: 'error.main' },
+                            }}
+                          >
+                            <CloseIcon sx={{ fontSize: 14 }} />
+                          </IconButton>
+                        </Tooltip>
+                      </td>
+                      {cells.map((_cell, index) => (
+                        <td key={index} {...cellProps(rowIndex, index)}>
+                          {frozenRows[rowIndex]?.[index]}
+                        </td>
+                      ))}
+                    </tr>
+                  ))}
+                </tbody>
+              </Box>
+            </Box>
+            <TableEdgeAddButton
+              edge="column"
+              onClick={() =>
+                onEdit((current) =>
+                  current.kind === 'table'
+                    ? {
+                        ...current,
+                        align: [...current.align, 'left'],
+                        header: [...current.header, []],
+                        rows: current.rows.map((cells) => [...cells, []]),
+                      }
+                    : current,
+                )
+              }
+            />
+            <TableEdgeAddButton
+              edge="row"
+              onClick={() =>
+                onEdit((current) =>
+                  current.kind === 'table'
+                    ? {
+                        ...current,
+                        rows: [...current.rows, current.header.map(() => [])],
+                      }
+                    : current,
+                )
+              }
+              // Under the cells, not under the gutter.
+              sx={{ ml: '28px', width: 'calc(100% - 28px)' }}
+            />
           </Box>
         </Box>
       ) : null}
-      <Button
-        size="small"
-        color="error"
-        variant="contained"
-        data-md-block-controls=""
-        onMouseDown={(event) => event.preventDefault()}
-        onClick={onRemove}
-        sx={{
-          position: 'absolute',
-          top: 8,
-          right: 8,
-          opacity: 0,
-          transition: 'opacity 120ms',
-        }}
-      >
-        {'Remove'}
-      </Button>
+      {table ? null : (
+        <Tooltip title={row.kind === 'image' ? 'Remove image' : 'Remove snippet'}>
+          <IconButton
+            size="small"
+            data-md-block-controls=""
+            aria-label={row.kind === 'image' ? 'Remove image' : 'Remove snippet'}
+            onMouseDown={(event) => event.preventDefault()}
+            onClick={onRemove}
+            sx={{
+              position: 'absolute',
+              top: 6,
+              right: 6,
+              opacity: 0,
+              transition: 'opacity 120ms',
+              bgcolor: 'background.paper',
+              boxShadow: 1,
+              '&:hover': { bgcolor: 'background.paper', color: 'error.main' },
+            }}
+          >
+            <DeleteOutlineIcon fontSize="small" />
+          </IconButton>
+        </Tooltip>
+      )}
     </Box>
   )
 })

@@ -86,3 +86,12 @@ export {
   default as MarkdownLiteView,
   type MarkdownLiteViewProps,
 } from './lib/markdown-lite-view.component'
+
+/**
+ * The "+" bars along a table's bottom and right edges. Shared with the
+ * designer, whose canvas Table element offers the same two controls.
+ */
+export {
+  default as TableEdgeAddButton,
+  type TableEdgeAddButtonProps,
+} from './lib/table-edge-add-button.component'

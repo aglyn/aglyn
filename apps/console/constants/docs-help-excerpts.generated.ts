@@ -80,6 +80,7 @@ export const DOCS_HELP_EXCERPTS = {
   components: 'Promote a subtree into a reusable component, give it properties, and insert instances across pages.',
   connectADomain: 'Point your own domain at your Aglyn site — a CNAME for a subdomain, an ALIAS for a bare apex — and verify with one click.',
   connectAttentive: 'Send a site\'s contacts, their email marketing consent and its orders to your own Attentive account, for Attentive\'s journeys. Rolling out.',
+  connectAutomatically: 'For a domain you already own, let your DNS provider add Aglyn\'s records for you in one click instead of copying them by hand.',
   connectConversionsApi: 'Send purchases and leads to your own Meta, TikTok and Pinterest ad accounts from the server, paired with your browser tags — only for visitors who allow advertising.',
   connectSmileIoOrYotpo: 'Keep your members\' points in your own Smile.io or Yotpo Loyalty account, earned and spent on every Aglyn order, online and at the register.',
   consoleAndSite: 'Task-ordered recipes for nav/pages/widgets/providers and canvas components/site runtimes.',

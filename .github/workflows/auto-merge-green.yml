@@ -155,8 +155,11 @@ jobs:
                 elif ($checks | length) == 0 then "skip: no checks yet"
                 elif ([$checks[] | select(.state as $s | ["SUCCESS","SKIPPED","NEUTRAL"] | index($s) | not)] | length) > 0
                   then "skip: not green (\([$checks[] | select(.state as $s | ["SUCCESS","SKIPPED","NEUTRAL"] | index($s) | not) | "\(.name)=\(.state)"] | join(", ")))"
-                elif ([$required[] as $r | select([$checks[] | select(.name == $r and .state == "SUCCESS")] | length == 0)] | length) > 0
-                  then "skip: missing \([$required[] as $r | select([$checks[] | select(.name == $r and .state == "SUCCESS")] | length == 0)] | join(", "))"
+                # `$r | select(…)` hands on the name of the check. A bare
+                # `select(…)` hands on the whole PR, and joining that
+                # stopped the sweep for every PR after it.
+                elif ([$required[] as $r | $r | select([$checks[] | select(.name == $r and .state == "SUCCESS")] | length == 0)] | length) > 0
+                  then "skip: missing \([$required[] as $r | $r | select([$checks[] | select(.name == $r and .state == "SUCCESS")] | length == 0)] | join(", "))"
                 else "merge" end' <<<"$pr")
             echo "#$n: $verdict"
             if [ "$verdict" = "merge" ]; then

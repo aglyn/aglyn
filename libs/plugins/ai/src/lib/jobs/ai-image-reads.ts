@@ -64,13 +64,32 @@ export const AI_IMAGE_READS_SIGNATURE = 'x-aglyn-images-signature'
 /** How far a signed request's moment may be from the function's clock. */
 export const AI_IMAGE_READS_WINDOW_MS = 5 * 60 * 1000
 
-/** The reads the function makes; `logo-raster` turns a site import's SVG logo into a PNG (AGL-4084). */
-export type AiImageReadsOp = 'product-photo' | 'logo-colors' | 'logo-raster'
+/**
+ * The reads the function makes; `logo-raster` turns a site import's SVG logo
+ * into a PNG (AGL-4084); `picture-graphics` says which of a site import's
+ * pictures are graphics by their pixels (AGL-4152).
+ */
+export type AiImageReadsOp = 'product-photo' | 'logo-colors' | 'logo-raster' | 'picture-graphics'
 
 /** One request's body: the asset by its media reference, and whose read it is. */
 export interface AiImageReadsRequest {
-  op: AiImageReadsOp
+  op: Exclude<AiImageReadsOp, 'logo-raster' | 'picture-graphics'>
   ref: string
+  hostId: string
+  orgId: string
+}
+
+/** The most pictures one `picture-graphics` request names. */
+export const AI_PICTURE_GRAPHICS_MAX_REFS = 40
+
+/**
+ * Which of a site import's pictures are graphics (AGL-4152): each by its
+ * media reference, located again by the function under the same rule; the
+ * answer is `{graphics}`, a flag or `null` for each, in order.
+ */
+export interface AiPictureGraphicsRequest {
+  op: 'picture-graphics'
+  refs: readonly string[]
   hostId: string
   orgId: string
 }
@@ -139,7 +158,7 @@ export function aiImageReadsOrigin(): string | null {
  * reference can name, which is never read.
  */
 export function aiImageReadsRequest(
-  op: AiImageReadsOp,
+  op: AiImageReadsRequest['op'],
   location: AiMediaAssetLocation,
   hostId: string,
   orgId: string,
@@ -169,7 +188,7 @@ function edgeBypassHeaders(): Record<string, string> {
  */
 export async function requestAiImageReads<T>(
   origin: string,
-  payload: AiImageReadsRequest,
+  payload: AiImageReadsRequest | AiPictureGraphicsRequest,
   signal: AbortSignal,
 ): Promise<T> {
   const body = JSON.stringify(payload)

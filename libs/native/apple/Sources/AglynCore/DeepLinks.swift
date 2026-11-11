@@ -138,21 +138,92 @@ public enum DeepLinks {
     return params
   }
 
-  /// Matches `/a/:b/c` against a path; returns the `:` params or nil.
+  /// Matches `/a/:b/c` against a path; returns the `:` params or nil. A param may name the values it takes,
+  /// `:section(payouts|sales)`, or the ones it refuses, `:listingId(!upload)`: a console page whose literal segment sits
+  /// where an id would never becomes that id (AGL-4215).
   public static func matchPathPattern(_ pattern: String, _ path: String) -> NativeParams? {
     let want = pattern.split(separator: "/", omittingEmptySubsequences: true)
     let have = path.split(separator: "/", omittingEmptySubsequences: true)
     guard want.count == have.count else { return nil }
     var params: NativeParams = [:]
     for (expected, actual) in zip(want, have) {
-      if expected.hasPrefix(":") {
-        guard let decoded = String(actual).removingPercentEncoding else { return nil }
-        params[String(expected.dropFirst())] = decoded
+      if let param = PathParam(expected) {
+        guard let decoded = String(actual).removingPercentEncoding, param.admits(decoded) else { return nil }
+        params[param.name] = decoded
       } else if expected != actual {
         return nil
       }
     }
     return params
+  }
+
+  /// One `:name`, `:name(a|b)` or `:name(!a|b)` segment of a route pattern.
+  struct PathParam {
+    let name: String
+    let values: Set<String>?
+    let refuses: Bool
+
+    init?(_ segment: Substring) {
+      guard segment.hasPrefix(":") else { return nil }
+      let body = segment.dropFirst()
+      guard let open = body.firstIndex(of: "("), body.hasSuffix(")") else {
+        (name, values, refuses) = (String(body), nil, false)
+        return
+      }
+      var list = body[body.index(after: open)..<body.index(before: body.endIndex)]
+      refuses = list.hasPrefix("!")
+      if refuses { list = list.dropFirst() }
+      name = String(body[..<open])
+      values = Set(list.split(separator: "|").map(String.init))
+    }
+
+    /// Whether it takes any value but the ones it refuses (an id), rather than one of a few named pages.
+    var open: Bool { values == nil || refuses }
+
+    func admits(_ value: String) -> Bool {
+      guard let values else { return true }
+      return refuses ? !values.contains(value) : values.contains(value)
+    }
+  }
+
+  /// A route pattern split into its path and the query keys it needs: `/products/orders?order=:orderId` matches
+  /// `/products/orders` only when the link carries a non-empty `order`, and binds it as `orderId` (the console's own
+  /// order and quote addresses, AGL-4215).
+  struct RoutePattern {
+    let path: String
+    let query: [(key: String, param: String)]
+    /// How many segments take any value; a pattern with fewer wins a tie.
+    let openParams: Int
+
+    init(_ pattern: String) {
+      let parts = pattern.split(separator: "?", maxSplits: 1, omittingEmptySubsequences: false)
+      path = String(parts[0])
+      query = parts.count > 1
+        ? parts[1].split(separator: "&").compactMap { pair in
+          let kv = pair.split(separator: "=", maxSplits: 1)
+          guard kv.count == 2, kv[1].hasPrefix(":") else { return nil }
+          return (String(kv[0]), String(kv[1].dropFirst()))
+        }
+        : []
+      openParams = path.split(separator: "/").filter { PathParam($0)?.open == true }.count
+    }
+
+    var segments: Int { path.split(separator: "/", omittingEmptySubsequences: true).count }
+
+    /// The query params it binds, or nil when the link lacks one it needs.
+    func bind(_ linkQuery: NativeParams) -> NativeParams? {
+      var bound: NativeParams = [:]
+      for (key, param) in query {
+        guard let value = linkQuery[key], !value.isEmpty else { return nil }
+        bound[param] = value
+      }
+      return bound
+    }
+  }
+
+  /// A link without its `#fragment`, which names a spot on a page and never a page (`/admin/orgs/{id}#site-care`).
+  public static func withoutFragment(_ link: String) -> String {
+    link.firstIndex(of: "#").map { String(link[..<$0]) } ?? link
   }
 
   /// A notification's stored link as the console follows it (`normalizeNotificationLink`, AGL-644): host
@@ -179,7 +250,8 @@ public enum DeepLinks {
   }
 
   public static func resolve(_ link: String, routes: [any DeepLinkRoute]) -> LinkTarget? {
-    guard let full = consolePath(of: link) else { return nil }
+    guard let raw = consolePath(of: link) else { return nil }
+    let full = withoutFragment(raw)
     let path: String
     let query: NativeParams
     if let at = full.firstIndex(of: "?") {
@@ -190,24 +262,24 @@ public enum DeepLinks {
       query = [:]
     }
     let scope = splitConsoleScope(path)
-    // Most specific pattern first: fewer `:` segments wins a tie in length.
-    let segments = { (route: any DeepLinkRoute) in route.path.components(separatedBy: "/").count }
-    let colons = { (route: any DeepLinkRoute) in route.path.filter { $0 == ":" }.count }
-    let ordered = routes.enumerated().sorted { a, b in
-      let (la, lb) = (segments(a.element), segments(b.element))
-      if la != lb { return la > lb }
-      let (ca, cb) = (colons(a.element), colons(b.element))
-      if ca != cb { return ca < cb }
-      return a.offset < b.offset
-    }
-    for (_, route) in ordered {
-      guard let params = matchPathPattern(route.path, scope.rest) else { continue }
+    // Most specific pattern first: in a tie in length, the one that needs more of the query, then the one with fewer
+    // segments that take any value (`/marketplace/payouts` and `:section(payouts|…)` before `:listingId`).
+    let ordered = routes.enumerated().map { (offset: $0.offset, route: $0.element, pattern: RoutePattern($0.element.path)) }
+      .sorted { a, b in
+        if a.pattern.segments != b.pattern.segments { return a.pattern.segments > b.pattern.segments }
+        if a.pattern.query.count != b.pattern.query.count { return a.pattern.query.count > b.pattern.query.count }
+        if a.pattern.openParams != b.pattern.openParams { return a.pattern.openParams < b.pattern.openParams }
+        return a.offset < b.offset
+      }
+    for (_, route, pattern) in ordered {
+      guard let params = matchPathPattern(pattern.path, scope.rest), let bound = pattern.bind(query) else { continue }
       var merged = query
       if let org = scope.orgSlug { merged["orgSlug"] = org }
       if let host = scope.hostSlug { merged["hostSlug"] = host }
+      merged.merge(bound) { _, new in new }
       merged.merge(params) { _, new in new }
       return .screen(route.screen, merged)
     }
-    return isBesignerPath(path) ? .besigner(full) : .unavailable(full)
+    return isBesignerPath(raw) ? .besigner(raw) : .unavailable(full)
   }
 }

@@ -40,6 +40,12 @@ const mockVerifyIdToken = jest.fn()
 const mockProjectDomainStatus = jest.fn()
 const mockLockdownRefusal = jest.fn()
 const mockGetOrgForHost = jest.fn()
+/** name → AAAA records, as public DNS would answer. */
+let mockIpv6 = new Map<string, string[]>()
+/** name → CNAME targets. */
+let mockCnames = new Map<string, string[]>()
+/** When set, every lookup hangs: a resolver that never answers. */
+let mockDnsHangs = false
 
 function mockMakeFirestore() {
   return {
@@ -73,6 +79,35 @@ jest.mock('@aglyn/tenant-data-admin', () => ({
   projectDomainStatus: (...args: unknown[]) => mockProjectDomainStatus(...args),
   getOrgForHost: (...args: unknown[]) => mockGetOrgForHost(...args),
   lockdownRefusal: (...args: unknown[]) => mockLockdownRefusal(...args),
+  HOST_CNAME_TWIN_FIELD: 'cnameTwin',
+}))
+
+// The merge is the real one; only the DNS lookup under it is substituted.
+function mockNoRecords() {
+  return Object.assign(new Error('queryAaaa ENODATA'), { code: 'ENODATA' })
+}
+jest.mock('dns', () => ({
+  __esModule: true,
+  promises: {
+    resolveCname: async () => {
+      throw mockNoRecords()
+    },
+  },
+  Resolver: class {
+    setServers() {
+      return undefined
+    }
+    resolve6(name: string, callback: (error: unknown, records?: string[]) => void) {
+      if (mockDnsHangs) return
+      const found = mockIpv6.get(name)
+      found ? callback(null, found) : callback(mockNoRecords())
+    }
+    resolveCname(name: string, callback: (error: unknown, records?: string[]) => void) {
+      if (mockDnsHangs) return
+      const found = mockCnames.get(name)
+      found ? callback(null, found) : callback(mockNoRecords())
+    }
+  },
 }))
 
 jest.mock('@aglyn/aglyn/server', () => ({
@@ -121,6 +156,9 @@ beforeEach(() => {
   mockLockdownRefusal.mockResolvedValue(null)
   mockGetOrgForHost.mockReset()
   mockGetOrgForHost.mockResolvedValue({ orgId: 'org-1', org: { $id: 'org-1' } })
+  mockIpv6 = new Map()
+  mockCnames = new Map()
+  mockDnsHangs = false
 })
 
 afterEach(() => {
@@ -163,6 +201,78 @@ describe('it reports the live state, not the stored one', () => {
     expect(body.conflicts[0].value).toBe('203.0.113.9')
     // Our own record of the last attach, kept distinct from the platform's.
     expect(body.attachmentPending).toBe(true)
+  })
+
+  it('adds a previous host\'s AAAA on the name and its twin to the conflicts (AGL-3963)', async () => {
+    seedHost('mine', { cname: 'www.example.com', cnameTwin: 'example.com' })
+    mockProjectDomainStatus.mockResolvedValue({
+      state: 'serving',
+      domain: 'www.example.com',
+      verification: [],
+      conflicts: [{ type: 'A', name: 'example.com', value: '203.0.113.9' }],
+    })
+    mockIpv6.set('example.com', ['2001:db8::1'])
+    const body = await (await GET(get('mine'))).json()
+    expect(body.conflicts).toEqual([
+      { type: 'A', name: 'example.com', value: '203.0.113.9' },
+      { type: 'AAAA', name: 'example.com', value: '2001:db8::1' },
+    ])
+  })
+
+  it('does not list an AAAA twice when the platform already named it', async () => {
+    seedHost('mine', { cname: 'example.com' })
+    mockProjectDomainStatus.mockResolvedValue({
+      state: 'serving',
+      domain: 'example.com',
+      verification: [],
+      conflicts: [{ type: 'AAAA', name: 'example.com', value: '2001:db8::1' }],
+    })
+    mockIpv6.set('example.com', ['2001:db8::1'])
+    const body = await (await GET(get('mine'))).json()
+    expect(body.conflicts).toEqual([{ type: 'AAAA', name: 'example.com', value: '2001:db8::1' }])
+  })
+
+  it('matches the platform’s spelling of an address, so it is listed once', async () => {
+    seedHost('mine', { cname: 'example.com' })
+    mockProjectDomainStatus.mockResolvedValue({
+      state: 'serving',
+      domain: 'example.com',
+      verification: [],
+      conflicts: [{ type: 'AAAA', name: 'example.com.', value: '2001:DB8:0:0:0:0:0:1' }],
+    })
+    mockIpv6.set('example.com', ['2001:db8::1'])
+    const body = await (await GET(get('mine'))).json()
+    expect(body.conflicts).toHaveLength(1)
+  })
+
+  it('does not call a CNAME’s target an AAAA on the name', async () => {
+    // A resolver follows the CNAME, so these addresses belong to the twin's
+    // old host; the record to fix there is the CNAME, not an AAAA.
+    seedHost('mine', { cname: 'example.com', cnameTwin: 'www.example.com' })
+    mockProjectDomainStatus.mockResolvedValue({
+      state: 'serving',
+      domain: 'example.com',
+      verification: [],
+      conflicts: [],
+    })
+    mockCnames.set('www.example.com', ['ghs.example-old-host.net'])
+    mockIpv6.set('www.example.com', ['2001:db8::7'])
+    expect((await (await GET(get('mine'))).json()).conflicts).toEqual([])
+  })
+
+  it('answers without the IPv6 check when the resolver never does', async () => {
+    jest.useFakeTimers()
+    try {
+      seedHost('mine', { cname: 'example.com' })
+      mockDnsHangs = true
+      const pending = GET(get('mine'))
+      await jest.advanceTimersByTimeAsync(2_500)
+      const body = await (await pending).json()
+      expect(body.state).toBe('certificate-pending')
+      expect(body.conflicts).toEqual([])
+    } finally {
+      jest.useRealTimers()
+    }
   })
 
   it('answers `none` for a site with no custom domain, without calling out', async () => {

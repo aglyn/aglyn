@@ -22,6 +22,7 @@ import kotlinx.serialization.json.JsonNull
 import kotlinx.serialization.json.JsonObject
 import kotlinx.serialization.json.JsonPrimitive
 import kotlinx.serialization.json.contentOrNull
+import kotlinx.serialization.json.booleanOrNull
 import kotlinx.serialization.json.buildJsonObject
 import kotlinx.serialization.json.doubleOrNull
 import kotlinx.serialization.json.put
@@ -496,8 +497,12 @@ class ScreenModel(
       val reader = reader ?: return Triple(load.key, JsonNull, null)
       val org = FirestoreLoads.document(reader, ScreenValues.render("orgs/{org.id}", context))
       if (level != "site") return Triple(load.key, SwitchboardRows.org(org), null)
-      val host = FirestoreLoads.document(reader, ScreenValues.render("hosts/{site.id}", context))
-      return Triple(load.key, SwitchboardRows.site(org, host), null)
+      // The site's lists as the server holds them (AGL-4047): a cached copy is waited past, and if only the cache has
+      // answered by the deadline the switches are held (`checking`). A read that failed fails the screen.
+      val host = FirestoreLoads.serverDocument(reader, ScreenValues.render("hosts/{site.id}", context))
+      val rows = SwitchboardRows.site(org, host.document?.let { FirestoreLoads.json(it) } ?: JsonNull) as JsonObject
+      val held = JsonObject(rows + mapOf("checking" to JsonPrimitive(!host.confirmed), "checkingText" to JsonPrimitive(SwitchboardRows.CHECKING_TEXT)))
+      return Triple(load.key, held, null)
     }
     val value = try {
       client.request(url(load, scope = context), load.method, load.body?.let { ScreenValues.resolveBody(it, context) }) ?: JsonNull
@@ -801,6 +806,40 @@ class ScreenModel(
     context = ScreenContext.with(context, "stash", ScreenStash.values)
   }
 
+  /**
+   * Switches one plugin on or off for the site (`sitePluginSwitch`): the move is applied to the site's lists as the
+   * server holds them now, never to a copy the screen read earlier (AGL-4047). A read the server has not confirmed by
+   * the deadline, or one that failed, saves nothing and says why, in the console's words.
+   */
+  private suspend fun switchSitePlugin(move: JsonElement, scope: JsonElement, success: String?): ActionOutcome {
+    val target = writer ?: return ActionOutcome.Failed("Saving is not available here.")
+    val source = reader ?: return ActionOutcome.Failed("Saving is not available here.")
+    val pluginId = ScreenValues.render(move.str("pluginId").orEmpty(), scope)
+    val hostId = (ScreenValues.lookup("site.id", scope) as? JsonPrimitive)?.contentOrNull.orEmpty()
+    val orgId = (ScreenValues.lookup("org.id", scope) as? JsonPrimitive)?.contentOrNull.orEmpty()
+    if (pluginId.isEmpty() || hostId.isEmpty() || orgId.isEmpty()) return ActionOutcome.Failed("Saving is not available here.")
+    val host = try {
+      FirestoreLoads.serverDocument(source, "hosts/$hostId")
+    } catch (error: CancellationException) {
+      throw error
+    } catch (error: Throwable) {
+      return ActionOutcome.Failed(SwitchboardRows.UNREADABLE_TEXT)
+    }
+    if (!host.confirmed) return ActionOutcome.Failed(SwitchboardRows.UNCONFIRMED_TEXT)
+    return try {
+      val org = FirestoreLoads.document(source, "orgs/$orgId")
+      val on = (move as? JsonObject)?.get("on")?.let { (it as? JsonPrimitive)?.booleanOrNull } == true
+      val fields = SwitchboardRows.switched(org, host.document?.let { FirestoreLoads.json(it) } ?: JsonNull, pluginId, on)
+      @Suppress("UNCHECKED_CAST")
+      target.merge("hosts/$hostId", (plain(fields) as? Map<String, Any?>) ?: emptyMap())
+      ActionOutcome.Done(success?.let { ScreenValues.render(it, scope) }, null)
+    } catch (error: CancellationException) {
+      throw error
+    } catch (error: Throwable) {
+      ActionOutcome.Failed(error.message ?: "That did not save.")
+    }
+  }
+
   private suspend fun perform(action: ActionSpec, scope: JsonElement): ActionOutcome {
     action.account?.let { operation ->
       val target = account ?: return ActionOutcome.Failed("That is not available here.")
@@ -861,6 +900,7 @@ class ScreenModel(
         ActionOutcome.Failed(error.message ?: "That did not save.")
       }
     }
+    action.sitePluginSwitch?.let { move -> return switchSitePlugin(move, scope, action.success) }
     action.write?.let { write ->
       val target = writer ?: return ActionOutcome.Failed("Saving is not available here.")
       if (write.str("doc") == null && write.str("add") == null && write.str("delete") == null && write.obj("stay") == null && write.arr("steps").isEmpty()) {

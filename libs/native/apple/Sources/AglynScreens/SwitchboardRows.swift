@@ -87,4 +87,25 @@ enum SwitchboardRows {
     }
     return ["rows": .array(rows)]
   }
+
+  /// The site's two lists after switching `pluginID` on or off over `orgs/{org}` and `hosts/{site}` as stored now,
+  /// the same move a row's `turnOn` / `turnOff` makes (switching off takes the plugins that need it along).
+  static func switched(_ orgDoc: JSONValue, _ hostDoc: JSONValue, pluginID: String, on: Bool) -> [String: JSONValue] {
+    let orgEnabled = stringList(orgDoc["enabledPlugins"])
+    let disabled = stringList(hostDoc["disabledPlugins"]) ?? []
+    let optedIn = stringList(hostDoc["enabledPlugins"]) ?? []
+    let running = resolveHostEnabledPlugins(orgEnabled: orgEnabled, hostDisabled: disabled, hostEnabled: optedIn)
+    let ids = on ? [pluginID] : [pluginID] + resolveDisableCascade(pluginID, enabled: running)
+    let next = applySitePluginSwitch(disabled: disabled, optedIn: optedIn, pluginIds: ids, on: on)
+    return ["disabledPlugins": strings(next.disabled), "enabledPlugins": strings(next.optedIn)]
+  }
+
+  /// What a held switch says while the site's lists are not yet the server's (`SITE_PLUGINS_CHECKING_TEXT`).
+  static let checkingText = "Checking this site’s plugin list with the server…"
+
+  /// Why a switch did not save (`writeGuardedBySeed`'s words for the site plugin list).
+  static let unconfirmedText =
+    "We could not confirm your site plugin list with the server yet, so nothing was saved. Check your connection and try again in a moment."
+  static let unreadableText =
+    "Your site plugin list could not be loaded, so there is nothing safe to save — saving now would overwrite the stored copy with blanks. Reload and try again."
 }

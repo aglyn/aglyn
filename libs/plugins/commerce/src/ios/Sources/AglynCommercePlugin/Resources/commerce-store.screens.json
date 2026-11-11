@@ -1485,6 +1485,15 @@
         "plan": {
           "optional": true,
           "url": "/api/orgs/entitlements?hostId={site.id}"
+        },
+        "readiness": {
+          "optional": true,
+          "url": "/api/commerce/quote",
+          "method": "POST",
+          "body": {
+            "hostId": "{site.id}",
+            "action": "payments-readiness"
+          }
         }
       },
       "blocks": [
@@ -1498,29 +1507,71 @@
               "value": "Charges enabled",
               "chip": true,
               "tone": "success",
-              "when": "data.profile.stripeChargesEnabled && data.profile.stripeAccountLivemode == true,false"
+              "when": "data.readiness.state == ready"
+            },
+            {
+              "label": "Stripe account",
+              "value": "Test account",
+              "chip": true,
+              "tone": "error",
+              "when": "data.readiness.state == mode-mismatch && data.profile.stripeAccountLivemode == false"
+            },
+            {
+              "label": "Stripe account",
+              "value": "Live account",
+              "chip": true,
+              "tone": "error",
+              "when": "data.readiness.state == mode-mismatch && data.profile.stripeAccountLivemode == true"
             },
             {
               "label": "Stripe account",
               "value": "Not verified",
               "chip": true,
               "tone": "error",
-              "when": "data.profile.stripeChargesEnabled && data.profile.stripeAccountLivemode != true,false"
+              "when": "data.readiness.state == mode-unverified"
             },
             {
               "label": "Stripe account",
               "value": "Not set up",
               "chip": true,
               "tone": "warning",
-              "when": "!data.profile.stripeChargesEnabled"
+              "when": "data.readiness.state == not-connected,charges-disabled"
+            },
+            {
+              "label": "Stripe account",
+              "value": "Not set up",
+              "chip": true,
+              "tone": "warning",
+              "when": "!data.readiness && !org.owner && !data.profile.stripeChargesEnabled"
             }
           ]
         },
         {
           "type": "notice",
+          "id": "unreadable",
+          "tone": "error",
+          "when": "!data.readiness && org.owner",
+          "text": "We couldn’t load your payment setup. This says nothing about whether payments are on — we could not reach the setting to find out. Nothing has changed."
+        },
+        {
+          "type": "notice",
+          "id": "testAccount",
+          "tone": "error",
+          "when": "data.readiness.state == mode-mismatch && data.profile.stripeAccountLivemode == false",
+          "text": "The connected Stripe account is a test account, so this store can’t take real payments and every sale is refused. Live payments need a live Stripe account: set up payments to connect one."
+        },
+        {
+          "type": "notice",
+          "id": "liveAccount",
+          "tone": "error",
+          "when": "data.readiness.state == mode-mismatch && data.profile.stripeAccountLivemode == true",
+          "text": "The connected Stripe account is a live account, and this site takes test payments only, so every sale is refused. Set up payments to connect a test account."
+        },
+        {
+          "type": "notice",
           "id": "unverified",
           "tone": "error",
-          "when": "data.profile.stripeChargesEnabled && data.profile.stripeAccountLivemode != true,false",
+          "when": "data.readiness.state == mode-unverified",
           "text": "Your Stripe account has not been verified for payments on this site, so sales will be refused. Set up payments again to verify it — if it was connected against Stripe test mode, you will need to connect a live account."
         },
         {
@@ -1570,7 +1621,7 @@
               "id": "setup",
               "label": "Set up payments",
               "icon": "payments|payments",
-              "when": "!data.profile.stripeChargesEnabled || data.profile.stripeAccountLivemode != true,false",
+              "when": "data.readiness.state != ready",
               "url": "/api/commerce/connect",
               "body": {
                 "hostId": "{site.id}"
@@ -1593,7 +1644,7 @@
               "id": "refresh",
               "label": "Refresh status",
               "icon": "refresh|refresh",
-              "when": "data.profile.stripeChargesEnabled && data.profile.stripeAccountLivemode == true,false",
+              "when": "data.readiness.state == ready",
               "url": "/api/commerce/connect",
               "body": {
                 "hostId": "{site.id}"
@@ -1616,7 +1667,7 @@
               "id": "payouts",
               "label": "View payouts in Stripe",
               "icon": "open_in_new|open_in_new",
-              "when": "data.profile.stripeChargesEnabled && data.profile.stripeAccountLivemode == true,false",
+              "when": "data.readiness.state == ready",
               "url": "/api/commerce/connect",
               "body": {
                 "hostId": "{site.id}"

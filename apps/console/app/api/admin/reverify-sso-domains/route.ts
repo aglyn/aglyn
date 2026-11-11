@@ -269,7 +269,10 @@ async function handler(request: Request): Promise<Response> {
             title,
             body: driftOrgNotificationBody(entry),
             orgId: entry.orgId,
-            link: '/settings/sso',
+            // A workspace notice is stored `/org/…` and followed at
+            // `/{orgSlug}/…` (`normalizeNotificationLink`). A bare
+            // `/settings/sso` reads "settings" as the workspace (AGL-4215).
+            link: '/org/settings/sso',
           },
           { skipEmail: true },
         )

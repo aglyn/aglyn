@@ -16,8 +16,8 @@
  */
 'use client'
 
-import { Stack, TextField, Typography } from '@mui/material'
-import { useRef, useState } from 'react'
+import { Box, Stack, TextField, Typography } from '@mui/material'
+import { type ReactNode, type Ref, useRef, useState } from 'react'
 import MarkdownEditorToolbar from './markdown-editor-toolbar.component'
 import MarkdownLinkDialog, {
   type MarkdownLink,
@@ -49,6 +49,26 @@ export interface MarkdownFieldProps {
    */
   onPickImageFromMedia?: (alt: string) => void
   minHeight?: number
+  /**
+   * The visual editor's own height cap, past which it scrolls inside itself.
+   * `'none'` lets it grow with the document, for a caller that scrolls the
+   * whole field instead (the canvas editor).
+   */
+  maxHeight?: number | string
+  /**
+   * Rendered above the toolbar, in the same pinned group. When given it
+   * stands in for the label row, so the caller names the field inside it.
+   */
+  toolbarHeader?: ReactNode
+  /**
+   * How far, in px, the header and toolbar are moved down to stay in view.
+   * For a field with no scroll container of its own to be sticky in: the
+   * canvas editor sits over a scrolling canvas it is not inside, so it works
+   * out how far its top has gone past the canvas's and passes that here.
+   */
+  toolbarOffset?: number
+  /** The pinned group's element, so a caller can measure it. */
+  toolbarGroupRef?: Ref<HTMLDivElement>
   /** Shown under the editor in visual mode. */
   helperText?: string
   /** Shown while the field is empty; never part of the value. */
@@ -82,6 +102,10 @@ export function MarkdownField(
     onChange,
     onPickImageFromMedia,
     minHeight = 200,
+    maxHeight,
+    toolbarHeader,
+    toolbarOffset = 0,
+    toolbarGroupRef,
     helperText,
     placeholder,
     editorRef,
@@ -135,13 +159,32 @@ export function MarkdownField(
 
   return (
     <Stack spacing={1}>
-      <Typography variant="subtitle2">{label}</Typography>
-      <MarkdownEditorToolbar
-        onCommand={handleCommand}
-        context={mode === 'visual' ? context : null}
-        mode={mode}
-        onModeChange={setMode}
-      />
+      {toolbarHeader ? null : (
+        <Typography variant="subtitle2">{label}</Typography>
+      )}
+      <Box
+        ref={toolbarGroupRef}
+        data-markdown-toolbar-group=""
+        sx={{
+          position: 'relative',
+          zIndex: 2,
+          bgcolor: 'background.paper',
+          transform: toolbarOffset ? `translateY(${toolbarOffset}px)` : undefined,
+          // Only while it is pinned over the document: a shadow says the text
+          // is passing under it, which a toolbar at rest has no need to say.
+          boxShadow: toolbarOffset
+            ? (theme) => `0 6px 8px -6px ${theme.palette.grey[500]}`
+            : undefined,
+        }}
+      >
+        {toolbarHeader}
+        <MarkdownEditorToolbar
+          onCommand={handleCommand}
+          context={mode === 'visual' ? context : null}
+          mode={mode}
+          onModeChange={setMode}
+        />
+      </Box>
       {mode === 'visual' ? (
         // No wrapper box (AGL-982): the editor draws its own border and
         // focus ring, so a second one read as a box inside a box.
@@ -159,6 +202,7 @@ export function MarkdownField(
           onPickImageFromMedia={onPickImageFromMedia}
           onContextChange={setContext}
           minHeight={minHeight}
+          maxHeight={maxHeight}
           placeholder={placeholder}
         />
       ) : (

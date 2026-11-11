@@ -11394,6 +11394,93 @@
         ]
       ]
     },
+    "normalizeProductCheckIn": {
+      "module": "libs/plugins/commerce/src/lib/model/commerce-check-in-product.ts",
+      "args": [
+        [
+          {
+            "enabled": true,
+            "headcount": 4
+          }
+        ],
+        [
+          {
+            "enabled": true,
+            "headcount": 4,
+            "askUseDate": true
+          }
+        ],
+        [
+          {
+            "enabled": true
+          }
+        ],
+        [
+          {
+            "enabled": true,
+            "headcount": 0
+          }
+        ],
+        [
+          {
+            "enabled": true,
+            "headcount": 2.6
+          }
+        ],
+        [
+          {
+            "enabled": true,
+            "headcount": 51
+          }
+        ],
+        [
+          {
+            "enabled": true,
+            "headcount": "3"
+          }
+        ],
+        [
+          {
+            "enabled": true,
+            "headcount": "abc"
+          }
+        ],
+        [
+          {
+            "enabled": true,
+            "headcount": -2
+          }
+        ],
+        [
+          {
+            "enabled": true,
+            "headcount": 4,
+            "askUseDate": "yes"
+          }
+        ],
+        [
+          {
+            "enabled": false,
+            "headcount": 4,
+            "askUseDate": true
+          }
+        ],
+        [
+          {
+            "enabled": "true"
+          }
+        ],
+        [
+          {}
+        ],
+        [
+          null
+        ],
+        [
+          "on"
+        ]
+      ]
+    },
     "resourceGuestCeiling": {
       "module": "libs/plugins/commerce/src/lib/model/commerce-reservations.ts",
       "args": [

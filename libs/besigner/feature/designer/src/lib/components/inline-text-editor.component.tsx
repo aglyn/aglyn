@@ -62,6 +62,10 @@ import {
 } from '../utils/in-place-edit-surface'
 import { inlineTextEdit } from '../utils/inline-text-edit.store'
 import {
+  EDIT_COMPANION_SELECTOR,
+  registerCellEditShapeHandler,
+} from './table-edge-controls.component'
+import {
   dataTableCellActions,
   dataTableCellValueFromEdit,
   withDataTableShapeEdit,
@@ -858,7 +862,14 @@ export const InlineTextEditorComponent = observer(
         const live = inPlaceRef.current?.element
         if (live?.contains(target)) return true
         const overlay = overlayRef.current
-        return Boolean(overlay?.contains(target))
+        if (overlay?.contains(target)) return true
+        // Controls that act ON the edit from outside the toolbar, such as
+        // the "+" bars along a table cell's table (AGL-4216). A press on one
+        // is the author still working, and ending the edit there would write
+        // the cell and close before the press could add the row.
+        return Boolean(
+          target instanceof Element && target.closest(EDIT_COMPANION_SELECTOR),
+        )
       }
 
       /** The touch being followed, and what a tap would mean for it. */
@@ -1167,6 +1178,13 @@ export const InlineTextEditorComponent = observer(
       },
       [commit],
     )
+
+    // The "+" bars along the table's edges go through the same one commit
+    // while a cell is open, so the text typed so far rides with the new row.
+    useEffect(() => {
+      if (!cellTarget) return undefined
+      return registerCellEditShapeHandler(pickShapeEdit)
+    }, [cellTarget, pickShapeEdit])
 
     const handleInsertPick = useCallback(
       (token: string) => {

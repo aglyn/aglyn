@@ -16,7 +16,7 @@ internal const val AI_JOB_LINK_PARAM = "aiJob"
 
 /** Where [link] belongs, when it names a workspace (or a site of the one on screen) the person holds; null otherwise. */
 internal fun linkScopeOf(link: String, workspace: WorkspaceState): LinkScope? {
-  val path = DeepLinks.consolePathOf(link)?.substringBefore('?') ?: return null
+  val path = DeepLinks.consolePathOf(link)?.let(DeepLinks::withoutFragment)?.substringBefore('?') ?: return null
   val split = DeepLinks.splitConsoleScope(path)
   val first = split.orgSlug ?: return null
   workspace.orgs.firstOrNull { it.slug == first }?.let { org ->

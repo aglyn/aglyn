@@ -129,6 +129,7 @@ import { aiModelForStep } from '../providers/routing'
 import { SITE_IMPORT_GENERATIVE_RELEASE_FLAG, SITE_IMPORT_RELEASE_FLAG, SITE_IMPORT_VIDEO_POSTERS_RELEASE_FLAG } from '../site-import/site-import-flag'
 import { crawlSiteForImport, siteImportOrigins, type SiteImportCrawlSeams, type SiteImportInventory } from '../site-import/site-import-crawl'
 import { bringInSiteImportPhotos, type SiteImportPhotosDeps } from '../site-import/site-import-images'
+import { AI_SITE_IMPORT_GRAPHICS_MS, aiSiteImportPhotoGraphics, type AiSiteImportPictureGraphics } from './ai-site-import-graphics'
 import {
   siteImportHeaderBrand,
   siteImportLabel,
@@ -202,7 +203,7 @@ const OWN_READS_MS = 10_000
 export const AI_SITE_IMPORT_PASS_MINIMUM_MS = {
   read: AI_SITE_IMPORT_READ_MS + OWN_READS_MS + AI_JOB_STEP_OVERHEAD_MS,
   wave: AI_SITE_IMPORT_WAVE_READ_MS + OWN_READS_MS + AI_JOB_STEP_OVERHEAD_MS,
-  photos: AI_SITE_IMPORT_PHOTOS_MS + OWN_READS_MS + AI_JOB_STEP_OVERHEAD_MS,
+  photos: AI_SITE_IMPORT_PHOTOS_MS + AI_SITE_IMPORT_GRAPHICS_MS + OWN_READS_MS + AI_JOB_STEP_OVERHEAD_MS,
 } as const
 
 /**
@@ -275,6 +276,8 @@ export interface AiSiteImportStepDeps {
   videoPostersFlagOn?: (orgId: string) => Promise<boolean>
   ingest?: () => PluginMediaIngest | null
   fetchImage?: SiteImportPhotosDeps['fetch']
+  /** Which of a page's photos are graphics by their pixels (AGL-4152); absent, read where `sharp` is shipped. */
+  pictureGraphics?: AiSiteImportPictureGraphics
   readRoom?: typeof readAiScreenRoom
   readSiteName?: (firestore: FirebaseFirestore.Firestore, hostId: string) => Promise<string>
   pageWritten?: typeof aiSitePageWritten
@@ -1482,7 +1485,7 @@ export function createAiJobImportStep(deps: AiSiteImportStepDeps = {}): AiJobSte
 
     // ── 4a. A page's photos ──
     if (work.kind === 'images') {
-      const photos = signal?.aborted
+      const brought = signal?.aborted
         ? { brought: 0, reused: 0, skipped: work.page.read?.images.length ?? 0, assets: [] }
         : await bringInSiteImportPhotos(
             {
@@ -1495,6 +1498,9 @@ export function createAiJobImportStep(deps: AiSiteImportStepDeps = {}): AiJobSte
             },
             { ingest: ingestOf(), ...(deps.fetchImage ? { fetch: deps.fetchImage } : {}) },
           )
+      // Which of them are graphics by their pixels, read once now so a redesign reads a flag (AGL-4152).
+      const assets = await aiSiteImportPhotoGraphics(brought.assets, { firestore, hostId, orgId: job.orgId, ...(signal ? { signal } : {}) }, deps.pictureGraphics)
+      const photos = { ...brought, assets }
       return unspent({
         item: { slot: work.page.slot, status: 'running' },
         siteImport: aiSiteImportPhotosIn(state, work.page.slot, photos),

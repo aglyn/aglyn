@@ -40,7 +40,7 @@
 // refill, and handed to `next dev` with each credential present and empty.
 
 import { execFileSync } from 'node:child_process'
-import { createPrivateKey, createPublicKey } from 'node:crypto'
+import { createHash, createPrivateKey, createPublicKey } from 'node:crypto'
 import { existsSync, readFileSync } from 'node:fs'
 import { dirname, join } from 'node:path'
 import dotenv from 'dotenv'
@@ -52,6 +52,62 @@ import dotenv from 'dotenv'
  */
 const CREDENTIAL_SHAPE =
   /(?:^|_)(?:SECRET|TOKEN|PASSWORD|PRIVATE_KEY|API_KEY|ACCESS_KEY|RESTRICTED_KEY|PUBLISHABLE_KEY|CREDENTIALS?)(?:_|$)/
+
+/** A published 32-byte key for `label`, base64: deterministic, and held by no deployment. */
+const localKey = (label) => createHash('sha256').update(`aglyn-emulator:${label}`).digest('base64')
+
+/**
+ * The keys an emulated server seals each commerce plugin's connections with,
+ * one per plugin, published here on purpose like
+ * `LOCAL_PLUGIN_CONNECTIONS_TOKEN_KEY` below. Each plugin answers 404, and its
+ * Connected services card stays hidden, until its key is set, so without
+ * these no seeded connection (`tools/scripts/seed-native/integrations.mjs`)
+ * could be opened on the emulator stack. They seal only emulator data and
+ * reach no service. Beside an emulator they replace whatever an env file or
+ * the shell holds; anywhere else the names are set empty.
+ */
+export const LOCAL_COMMERCE_TOKEN_KEYS = Object.freeze(
+  Object.fromEntries(
+    [
+      'COURIERS_TOKEN_KEY',
+      'FULFILLMENT_NETWORKS_TOKEN_KEY',
+      'INVENTORY_SYNC_TOKEN_KEY',
+      'MARKETPLACES_TOKEN_KEY',
+      'POST_PURCHASE_TOKEN_KEY',
+      'PRINT_ON_DEMAND_TOKEN_KEY',
+      'REVIEW_PLATFORMS_TOKEN_KEY',
+      'SHIPPING_TOKEN_KEY',
+      'TAX_ENGINES_TOKEN_KEY',
+    ].map((name) => [name, localKey(name)]),
+  ),
+)
+
+/**
+ * What an emulated server says the deployment offers, for the commerce
+ * services whose card draws only when the deployment offers one: DoorDash
+ * Marketplace, ShipMonk, eBay and AfterShip, Route and Narvar, and the
+ * merchant's own Easyship account. Every value is a placeholder or a sandbox
+ * switch. The two DoorDash secrets and eBay's client secret are refused by
+ * the service if an action ever sends them, and each sandbox switch keeps
+ * that action on the vendor's sandbox. Applied only beside an emulator, over
+ * whatever an env file or the shell holds; anywhere else the secrets among
+ * them are set empty and the rest are left as they were.
+ */
+export const LOCAL_COMMERCE_SERVICE_SETTINGS = Object.freeze({
+  DELIVERY_APPS_DOORDASH_DEVELOPER_ID: 'emulator-doordash-developer',
+  DELIVERY_APPS_DOORDASH_KEY_ID: 'emulator-doordash-key',
+  DELIVERY_APPS_DOORDASH_SIGNING_SECRET: Buffer.from('aglyn-emulator-doordash-signing').toString('base64url'),
+  DELIVERY_APPS_DOORDASH_WEBHOOK_SECRET: 'emulator-doordash-webhook',
+  DELIVERY_APPS_DOORDASH_ENVIRONMENT: 'sandbox',
+  SHIPMONK_ENABLED: 'true',
+  SHIPMONK_ENVIRONMENT: 'sandbox',
+  MARKETPLACES_EBAY_CLIENT_ID: 'emulator-ebay-client',
+  MARKETPLACES_EBAY_CLIENT_SECRET: 'emulator-ebay-secret',
+  MARKETPLACES_EBAY_RU_NAME: 'emulator-ebay-runame',
+  MARKETPLACES_EBAY_ENVIRONMENT: 'sandbox',
+  POST_PURCHASE_VENDORS: 'aftership,route,narvar',
+  SHIPPING_OWN_ACCOUNT_PROVIDERS: 'easyship',
+})
 
 /**
  * Credential-shaped names an emulated server keeps, each with the reason it
@@ -83,6 +139,16 @@ export const KEPT_CREDENTIALS = new Map([
     'PLUGIN_TRUST_PRIVATE_KEY',
     "signs realm trust on this server's own plugin versions; beside an emulator it is always the published local key (LOCAL_PLUGIN_TRUST_KEYS)",
   ],
+  ...Object.keys(LOCAL_COMMERCE_TOKEN_KEYS).map((name) => [
+    name,
+    "seals a commerce plugin's connection secrets in this server's own Firestore; beside an emulator it is always the published local key (LOCAL_COMMERCE_TOKEN_KEYS), and set empty anywhere else",
+  ]),
+  ...Object.keys(LOCAL_COMMERCE_SERVICE_SETTINGS)
+    .filter((name) => CREDENTIAL_SHAPE.test(name))
+    .map((name) => [
+      name,
+      'beside an emulator it is always a published placeholder (LOCAL_COMMERCE_SERVICE_SETTINGS) that no service accepts, and set empty anywhere else',
+    ]),
 ])
 
 /** Whether an emulated server must hold this variable empty. */
@@ -357,9 +423,18 @@ export function emulatedServeEnvironment(inherited, envFiles, { liveAi = false, 
   if (liveAi && !inherited.CRON_SECRET) env.CRON_SECRET = LOCAL_CRON_SECRET
   const identityFilled = []
   const adminSdkMissing = []
+  const commerceLocal = { ...LOCAL_COMMERCE_TOKEN_KEYS, ...LOCAL_COMMERCE_SERVICE_SETTINGS }
+  if (!namesAnEmulator(env)) {
+    // Kept by name only for the emulator stack: nowhere else may a kept
+    // commerce key or placeholder secret carry a deployment's value.
+    for (const name of Object.keys(commerceLocal)) {
+      if (KEPT_CREDENTIALS.has(name)) env[name] = ''
+    }
+  }
   if (namesAnEmulator(env)) {
     env.PLUGIN_CONNECTIONS_TOKEN_KEY = LOCAL_PLUGIN_CONNECTIONS_TOKEN_KEY
     Object.assign(env, LOCAL_PLUGIN_TRUST_KEYS)
+    Object.assign(env, commerceLocal)
     for (const [name, value] of Object.entries(emulatorFirebaseIdentity(env))) {
       if (env[name]) continue
       env[name] = value

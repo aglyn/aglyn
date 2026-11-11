@@ -196,12 +196,38 @@ describe('SitePluginsCard — User Accounts row (AGL-2486)', () => {
     // The AGL-1358 guard wraps the whole save, and this write is the one
     // that decides whether `/signin` exists on a live site — so it must not
     // be the write that slipped out from behind it.
+    // On an unconfirmed read Save is held until the server answers (AGL-4047),
+    // so the opt-in cannot be written from the cache's copy.
     mockHost.fromCache = true
     render(<SitePluginsCard hostId="host-1" />)
     fireEvent.click(accountsSwitch())
+    expect(
+      (screen.getByRole('button', { name: 'Save site plugins' }) as
+        HTMLButtonElement).disabled,
+    ).toBe(true)
     save()
 
-    await waitFor(() => expect(mockEnqueueSnackbar).toHaveBeenCalled())
+    await new Promise((resolve) => setTimeout(resolve, 0))
     expect(mockSetDoc).not.toHaveBeenCalled()
+  })
+
+  it('the opt-in made before the server answered lands on the list the server confirmed', async () => {
+    mockHost.fromCache = true
+    mockHost.data = { $id: 'host-1' }
+    const { rerender } = render(<SitePluginsCard hostId="host-1" />)
+    fireEvent.click(accountsSwitch())
+
+    // The server's copy differs from the cache's: commerce was switched off
+    // meanwhile. The opt-in is kept and the refusal is not lost.
+    mockHost.fromCache = false
+    mockHost.data = { $id: 'host-1', disabledPlugins: ['commerce'] }
+    rerender(<SitePluginsCard hostId="host-1" />)
+    expect(accountsSwitch().checked).toBe(true)
+    save()
+
+    await waitFor(() => expect(mockSetDoc).toHaveBeenCalledTimes(1))
+    const [payload] = withoutSiteWideEntry(mockSetDoc.mock.calls[0])
+    expect(payload.disabledPlugins).toEqual(['commerce'])
+    expect(payload.enabledPlugins).toEqual(['accounts'])
   })
 })

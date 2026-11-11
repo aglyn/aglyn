@@ -367,7 +367,10 @@ final class MarketplaceTests: XCTestCase {
         "marketplace.starter-picker",
       ],
       quickActions: ["marketplace.open"],
-      deepLinks: ["marketplace.listing-page", "marketplace.page"])
+      deepLinks: [
+        "marketplace.listing-page", "marketplace.page", "marketplace.browse-page", "marketplace.installed-page",
+        "marketplace.licences-page", "marketplace.sell-page",
+      ])
     let result = NativePluginLoader.load(
       [NativePluginManifestEntry(id: "marketplace", contributes: declared, register: registerMarketplaceNative)], into: registry)
     XCTAssertEqual(result.loaded, ["marketplace"])
@@ -380,5 +383,22 @@ final class MarketplaceTests: XCTestCase {
     // Create site lists the starters because this slot is filled, and never names the plugin that fills it.
     XCTAssertEqual(registry.widgets(for: .aglyn, slot: "hostStarterPicker").map(\.id), ["marketplace.starter-picker"])
     XCTAssertEqual(registry.widgets(for: .aglyn).filter { $0.pluginID == "marketplace" }.map(\.id), [], "never on Home")
+
+    // The hub's sections are pages of their own and win over a listing's `/marketplace/{id}` (AGL-4215): a payouts
+    // notice opens Payouts, never a listing called "payouts".
+    let org = ["orgSlug": "acme"]
+    let cases: [(String, LinkTarget, UInt)] = [
+      ("/acme/marketplace/payouts", .screen("marketplace.sell", ["orgSlug": "acme", "section": "payouts"]), #line),
+      ("/acme/marketplace/listings", .screen("marketplace.sell", ["orgSlug": "acme", "section": "listings"]), #line),
+      ("/acme/marketplace/profile", .screen("marketplace.sell", ["orgSlug": "acme", "section": "profile"]), #line),
+      ("/acme/marketplace/sales", .screen("marketplace.sell", ["orgSlug": "acme", "section": "sales"]), #line),
+      ("/acme/marketplace/browse", .screen("marketplace.browse", org), #line),
+      ("/acme/marketplace/installed", .screen("marketplace.installed", org), #line),
+      ("/acme/marketplace/licences", .screen("marketplace.licenses", org), #line),
+      ("/acme/marketplace", .screen("marketplace.browse", org), #line),
+      ("/acme/marketplace/upload", .unavailable("/acme/marketplace/upload"), #line),
+      ("/acme/marketplace/l1", .screen("marketplace.listing", ["orgSlug": "acme", "listingId": "l1"]), #line),
+    ]
+    for (link, expected, line) in cases { XCTAssertEqual(registry.resolve(link), expected, link, line: line) }
   }
 }

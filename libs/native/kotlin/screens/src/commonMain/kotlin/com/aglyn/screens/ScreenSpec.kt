@@ -272,7 +272,10 @@ class ActionSpec private constructor(json: JsonElement, val label: String) {
   fun quietOn(screenId: String): Boolean = navigate?.screen == screenId || method == ApiMethod.PUT || method == ApiMethod.PATCH
   val reload: Boolean =
     json.isTrue("reload") ||
-      (!json.isFalse("reload") && (url != null || json.obj("write") != null || json.str("account") != null || json.obj("passkey") != null))
+      (
+        !json.isFalse("reload") &&
+          (url != null || json.obj("write") != null || json.obj("sitePluginSwitch") != null || json.str("account") != null || json.obj("passkey") != null)
+        )
   val whenCondition: String? = json.str("when")
   val link: String? = json.str("link")
   /** A Besigner path (whole, from the console root) opened in the app's web view. */
@@ -344,6 +347,12 @@ class ActionSpec private constructor(json: JsonElement, val label: String) {
     ((instead as? JsonArray) ?: instead?.let { listOf(it) }.orEmpty()).firstOrNull { ScreenValues.condition(it.str("when"), scope) }
   /** A Firestore merge the signed-in person makes themselves: `{ "doc": "users/{user.uid}", "fields": {...} }`. */
   val write: JsonElement? = json.obj("write")
+  /**
+   * One plugin switched on or off for a site, `{ "pluginId": "{item.id}", "on": true }`. The kit reads the site's lists as
+   * the server holds them when it is pressed and applies the move to those (AGL-4047, the console's
+   * `use-plugin-switchboard`), so a switch never saves a copy read earlier from the cache.
+   */
+  val sitePluginSwitch: JsonElement? = json.obj("sitePluginSwitch")
   /** Lines the result is reported in, after `success`: `{ when, each, text }`, one per line. */
   val report: List<ReportLine> = json.arr("report").mapNotNull { ReportLine.parse(it) }
   /** Hands text to the device as a file (Save, or the share sheet): the working papers' CSV, the audit log's. */

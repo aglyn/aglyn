@@ -9,6 +9,35 @@ content on the marketing site and is written separately.
 
 <!-- releases below -->
 
+## v1.20.3 — 2026-11-11
+
+[Compare with the previous release](https://github.com/aglyn/aglyn/compare/v1.20.2...v1.20.3)
+
+### Added
+
+- **besigner:** add row and column bars, a pinned Markdown toolbar, tidier table controls ([AGL-4216](https://linear.app/aglyn/issue/AGL-4216))
+- **native:** the product editor on Apple and Android has the check-in fields ([AGL-4063](https://linear.app/aglyn/issue/AGL-4063))
+
+### Fixed
+
+- **accounting:** hold a taxed QuickBooks sale while the company has no sales tax set up ([AGL-3614](https://linear.app/aglyn/issue/AGL-3614))
+- **besigner:** an empty synced connection field no longer says not synced ([AGL-4212](https://linear.app/aglyn/issue/AGL-4212))
+- **google-reviews:** the section has room around it and side gutters, v1.2.1 ([AGL-4212](https://linear.app/aglyn/issue/AGL-4212))
+- **native:** a site's plugin switches act on the lists the server holds ([AGL-4047](https://linear.app/aglyn/issue/AGL-4047))
+- **console:** a site's Admin › Plugins saves on the first press ([AGL-4047](https://linear.app/aglyn/issue/AGL-4047))
+- **native:** a test Stripe account on a live store reads as not ready on Payments ([AGL-2471](https://linear.app/aglyn/issue/AGL-2471))
+- **domains:** warn about a previous host's AAAA record left on the domain ([AGL-3963](https://linear.app/aglyn/issue/AGL-3963))
+- **domains:** price a transfer-in for a name another Vercel team holds, instead of answering that the registrar didn't reply ([AGL-4040](https://linear.app/aglyn/issue/AGL-4040))
+- **native:** links open in the window and tab in front, and keep their screen on phones ([AGL-4215](https://linear.app/aglyn/issue/AGL-4215))
+- **native:** deep links open the page they name: an order, a quote, a return, marketplace pages, a workspace's Home, Sites and SSO ([AGL-4215](https://linear.app/aglyn/issue/AGL-4215))
+- **legal:** Privacy Policy v26 adds Google Business Profile data; signed-in users accept it once ([AGL-4212](https://linear.app/aglyn/issue/AGL-4212))
+- **docs:** the domain guides list Connect a domain automatically ([AGL-3963](https://linear.app/aglyn/issue/AGL-3963))
+- **console:** a page opened in a running tab gets past another tab's locked cache in seconds, not half a minute ([AGL-4204](https://linear.app/aglyn/issue/AGL-4204))
+- **ai:** Bring my site tells logos and graphics from photos by their pixels and keeps them out of photo slots ([AGL-4152](https://linear.app/aglyn/issue/AGL-4152))
+- **console:** ?create=site waits for the guided start on a cold load ([AGL-4152](https://linear.app/aglyn/issue/AGL-4152))
+- **data:** keep an empty first or last table column through a round trip ([AGL-4216](https://linear.app/aglyn/issue/AGL-4216))
+- **sites:** a site delete survives a transient write failure
+
 ## v1.20.2 — 2026-11-11
 
 [Compare with the previous release](https://github.com/aglyn/aglyn/compare/5c50d2ed7...v1.20.2)

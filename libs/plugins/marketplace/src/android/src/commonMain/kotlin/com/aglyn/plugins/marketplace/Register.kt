@@ -52,6 +52,12 @@ fun registerMarketplaceNative(r: NativePluginRegistrar) {
   }
   r.quickAction("marketplace.open", title = "Marketplace", icon = "storefront", order = 60, screen = MARKETPLACE_BROWSE_SCREEN)
   r.deepLink("marketplace.page", path = "/marketplace", screen = MARKETPLACE_BROWSE_SCREEN)
-  r.deepLink("marketplace.listing-page", path = "/marketplace/:listingId", screen = MARKETPLACE_LISTING_SCREEN)
+  // The hub's sections are pages of their own (`/marketplace/payouts`), and win over a listing's `/marketplace/{id}`; the
+  // one section the app has no screen for (upload) is never read as a listing id (AGL-4215).
+  r.deepLink("marketplace.browse-page", path = "/marketplace/browse", screen = MARKETPLACE_BROWSE_SCREEN)
+  r.deepLink("marketplace.installed-page", path = "/marketplace/installed", screen = MARKETPLACE_INSTALLED_SCREEN)
+  r.deepLink("marketplace.licences-page", path = "/marketplace/licences", screen = MARKETPLACE_LICENCES_SCREEN)
+  r.deepLink("marketplace.sell-page", path = "/marketplace/:section(profile|listings|payouts|sales)", screen = MARKETPLACE_SELL_SCREEN)
+  r.deepLink("marketplace.listing-page", path = "/marketplace/:listingId(!upload)", screen = MARKETPLACE_LISTING_SCREEN)
   SpecScreens.register(MarketplaceScreenJson.files.flatMap { ScreenSpec.parseFile(it) }, r)
 }
