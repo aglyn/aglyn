@@ -15,10 +15,6 @@
         "assets": ["libs/plugins/live-chat/*.md"]
       }
     },
-    "lint": {
-      "executor": "@nx/eslint:lint",
-      "outputs": ["{options.outputFile}"]
-    },
     "test": {
       "inputs": [
         "default",

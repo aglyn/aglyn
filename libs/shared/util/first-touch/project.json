@@ -15,10 +15,6 @@
         "assets": ["libs/shared/util/first-touch/*.md"]
       }
     },
-    "lint": {
-      "executor": "@nx/eslint:lint",
-      "outputs": ["{options.outputFile}"]
-    },
     "test": {
       "inputs": [
         "default",

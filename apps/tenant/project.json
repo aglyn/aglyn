@@ -64,10 +64,6 @@
         }
       ]
     },
-    "lint": {
-      "executor": "@nx/eslint:lint",
-      "outputs": ["{options.outputFile}"]
-    },
     "clean-next-cache": {
       "executor": "nx:run-commands",
       "cache": false,

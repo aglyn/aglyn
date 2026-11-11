@@ -106,15 +106,6 @@
         }
       }
     },
-    "@nx/eslint:lint": {
-      "inputs": [
-        "default",
-        "^default",
-        "{workspaceRoot}/tools/lint-rules/**/*",
-        "{workspaceRoot}/eslint.config.mjs"
-      ],
-      "cache": true
-    },
     "@nx/next:build": {
       "cache": true,
       "dependsOn": [],
@@ -137,6 +128,24 @@
         "options": {
           "passWithNoTests": true
         }
+      }
+    ],
+    "lint": [
+      {
+        "filter": {
+          "plugin": "@nx/eslint/plugin"
+        },
+        "inputs": [
+          "default",
+          "^default",
+          "{workspaceRoot}/tools/lint-rules/**/*",
+          "{workspaceRoot}/eslint.config.mjs",
+          {
+            "externalDependencies": [
+              "eslint"
+            ]
+          }
+        ]
       }
     ]
   },
@@ -249,6 +258,102 @@
         "libs/shared/util/first-touch/**/*",
         "libs/shared/util/http/**/*",
         "libs/shared/util/logger/**/*",
+        "libs/shared/util/timestamp/**/*",
+        "libs/shared/util/tools/**/*",
+        "libs/shared/util/vendor/**/*",
+        "libs/tenant/data/admin/**/*",
+        "libs/tenant/feature/instance/**/*",
+        "libs/tenant/runtime/**/*"
+      ]
+    },
+    {
+      "plugin": "@nx/eslint/plugin",
+      "options": {
+        "targetName": "lint"
+      },
+      "include": [
+        "apps/console/**/*",
+        "apps/console-e2e/**/*",
+        "apps/docs/**/*",
+        "apps/tenant/**/*",
+        "apps/tenant-e2e/**/*",
+        "apps/zapier/**/*",
+        "libs/aglyn/**/*",
+        "libs/aglyn-markdown-editor/**/*",
+        "libs/aglyn-node-renderer/**/*",
+        "libs/aglyn-transfer-ui/**/*",
+        "libs/besigner/core/**/*",
+        "libs/besigner/feature/designer/**/*",
+        "libs/cli/**/*",
+        "libs/plugins/accounting/**/*",
+        "libs/plugins/ad-conversions/**/*",
+        "libs/plugins/ai/**/*",
+        "libs/plugins/bookings/**/*",
+        "libs/plugins/calculator/**/*",
+        "libs/plugins/commerce/**/*",
+        "libs/plugins/couriers/**/*",
+        "libs/plugins/crm/**/*",
+        "libs/plugins/data/**/*",
+        "libs/plugins/delivery-apps/**/*",
+        "libs/plugins/domains/**/*",
+        "libs/plugins/email/**/*",
+        "libs/plugins/events-calendar/**/*",
+        "libs/plugins/fonts/**/*",
+        "libs/plugins/forms/**/*",
+        "libs/plugins/fulfillment-networks/**/*",
+        "libs/plugins/funnels/**/*",
+        "libs/plugins/help-desks/**/*",
+        "libs/plugins/inbox/**/*",
+        "libs/plugins/inventory-sync/**/*",
+        "libs/plugins/lightbox/**/*",
+        "libs/plugins/live-chat/**/*",
+        "libs/plugins/logic/**/*",
+        "libs/plugins/loyalty/**/*",
+        "libs/plugins/marketing/**/*",
+        "libs/plugins/marketing-platforms/**/*",
+        "libs/plugins/marketplace/**/*",
+        "libs/plugins/marketplaces/**/*",
+        "libs/plugins/mui/**/*",
+        "libs/plugins/music/**/*",
+        "libs/plugins/outreach/**/*",
+        "libs/plugins/post-purchase/**/*",
+        "libs/plugins/print-on-demand/**/*",
+        "libs/plugins/redirects/**/*",
+        "libs/plugins/review-platforms/**/*",
+        "libs/plugins/sales-channels/**/*",
+        "libs/plugins/shipping/**/*",
+        "libs/plugins/sms/**/*",
+        "libs/plugins/stock-photos/**/*",
+        "libs/plugins/tax-engines/**/*",
+        "libs/plugins/themes/**/*",
+        "libs/plugins/video-delivery/**/*",
+        "libs/plugins/waivers/**/*",
+        "libs/plugins/weglot/**/*",
+        "libs/plugins/workflows/**/*",
+        "libs/plugins/zapier/**/*",
+        "libs/shared/data/enums/**/*",
+        "libs/shared/data/forms/**/*",
+        "libs/shared/data/mdi/**/*",
+        "libs/shared/data/regex/**/*",
+        "libs/shared/data/types/**/*",
+        "libs/shared/svg-icons/svg-icons/**/*",
+        "libs/shared/ui/color-picker/**/*",
+        "libs/shared/ui/email-campaigns/**/*",
+        "libs/shared/ui/json-editor/**/*",
+        "libs/shared/ui/jsx/**/*",
+        "libs/shared/ui/jsx-forms/**/*",
+        "libs/shared/ui/next/**/*",
+        "libs/shared/ui/snackstack/**/*",
+        "libs/shared/ui/theme/**/*",
+        "libs/shared/util/dom/**/*",
+        "libs/shared/util/email/**/*",
+        "libs/shared/util/errors/**/*",
+        "libs/shared/util/fbserver/**/*",
+        "libs/shared/util/first-touch/**/*",
+        "libs/shared/util/http/**/*",
+        "libs/shared/util/logger/**/*",
+        "libs/shared/util/next/**/*",
+        "libs/shared/util/rest-api/**/*",
         "libs/shared/util/timestamp/**/*",
         "libs/shared/util/tools/**/*",
         "libs/shared/util/vendor/**/*",

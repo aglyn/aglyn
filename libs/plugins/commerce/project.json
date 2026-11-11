@@ -15,10 +15,6 @@
         "assets": ["libs/plugins/commerce/*.md"]
       }
     },
-    "lint": {
-      "executor": "@nx/eslint:lint",
-      "outputs": ["{options.outputFile}"]
-    },
     "test": {
       "inputs": [
         "default",

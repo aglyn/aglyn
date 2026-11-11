@@ -40,10 +40,6 @@
         "command": "npm run typecheck"
       }
     },
-    "lint": {
-      "executor": "@nx/eslint:lint",
-      "outputs": ["{options.outputFile}"]
-    },
     "test": {
       "inputs": [
         "default",

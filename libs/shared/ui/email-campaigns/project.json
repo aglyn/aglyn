@@ -15,10 +15,6 @@
         "assets": ["libs/shared/ui/email-campaigns/*.md"]
       }
     },
-    "lint": {
-      "executor": "@nx/eslint:lint",
-      "outputs": ["{options.outputFile}"]
-    },
     "test": {
       "inputs": [
         "default",

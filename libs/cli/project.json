@@ -27,10 +27,6 @@
         "command": "node tools/scripts/publish.mjs cli {args.ver} {args.tag}"
       }
     },
-    "lint": {
-      "executor": "@nx/eslint:lint",
-      "outputs": ["{options.outputFile}"]
-    },
     "test": {
       "inputs": [
         "default",

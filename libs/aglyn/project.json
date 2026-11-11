@@ -35,10 +35,6 @@
         "command": "node tools/scripts/publish.mjs aglyn {args.ver} {args.tag}"
       }
     },
-    "lint": {
-      "executor": "@nx/eslint:lint",
-      "outputs": ["{options.outputFile}"]
-    },
     "test": {
       "inputs": [
         "default",

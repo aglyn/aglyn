@@ -15,10 +15,6 @@
         "assets": ["libs/shared/ui/jsx/*.md"]
       }
     },
-    "lint": {
-      "executor": "@nx/eslint:lint",
-      "outputs": ["{options.outputFile}"]
-    },
     "test": {
       "inputs": [
         "default",

@@ -15,10 +15,6 @@
         "assets": ["libs/plugins/post-purchase/*.md"]
       }
     },
-    "lint": {
-      "executor": "@nx/eslint:lint",
-      "outputs": ["{options.outputFile}"]
-    },
     "test": {
       "inputs": [
         "default",
