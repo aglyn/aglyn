@@ -54,7 +54,13 @@ public func registerMarketplaceNative(_ r: NativePluginRegistrar) {
   }
   r.quickAction("marketplace.open", title: "Marketplace", icon: "storefront", order: 60, screen: marketplaceBrowseScreen)
   r.deepLink("marketplace.page", path: "/marketplace", screen: marketplaceBrowseScreen)
-  r.deepLink("marketplace.listing-page", path: "/marketplace/:listingId", screen: marketplaceListingScreen)
+  // The hub's sections are pages of their own (`/marketplace/payouts`), and win over a listing's `/marketplace/{id}`; the
+  // one section the app has no screen for (upload) is never read as a listing id (AGL-4215).
+  r.deepLink("marketplace.browse-page", path: "/marketplace/browse", screen: marketplaceBrowseScreen)
+  r.deepLink("marketplace.installed-page", path: "/marketplace/installed", screen: marketplaceInstalledScreen)
+  r.deepLink("marketplace.licences-page", path: "/marketplace/licences", screen: marketplaceLicencesScreen)
+  r.deepLink("marketplace.sell-page", path: "/marketplace/:section(profile|listings|payouts|sales)", screen: marketplaceSellScreen)
+  r.deepLink("marketplace.listing-page", path: "/marketplace/:listingId(!upload)", screen: marketplaceListingScreen)
   // Publishing the site as a template, from Backup & restore's `siteTemplate` zone, and the Publisher Agreement it needs.
   SpecScreens.register(ScreenCatalog.load(from: .module), into: r)
 }

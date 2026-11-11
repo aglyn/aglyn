@@ -39,7 +39,7 @@ val SITE_PLATFORM_CONTRIBUTES: Map<String, List<String>> = mapOf(
     ArtifactKind.entries.map { it.screen },
   "quickActions" to listOf("site.sites-open", "site.pages-open", "site.media-open"),
   "widgets" to listOf(PLUGIN_RUNS_ON_WIDGET),
-  "deepLinks" to listOf("site.sites-page", "site.pages-page", "site.page-view", "site.page-besigner-list", "site.media-page") +
+  "deepLinks" to listOf("site.sites-page", "site.pages-page", "site.page-view", "site.page-page", "site.page-besigner-list", "site.media-page") +
     ArtifactKind.entries.flatMap { listOf("site.${it.collection}-page", "site.${it.singular}-page") } + "site.layouts-list-page" +
     listOf("site.setup-page", "site.setup-section-page", "site.theme-page", "site.content-page", "site.collection-page", "site.entry-page"),
 )
@@ -74,6 +74,8 @@ fun registerSitePlatformNative(r: NativePluginRegistrar) {
   // `/{org}/media` (the workspace library) and `/{org}/hosts/{site}/media` both end in `/media`; the screen reads which from the link's site.
   r.deepLink("site.media-page", path = "/media", screen = SITE_MEDIA_SCREEN)
   r.deepLink("site.page-view", path = "/screens/:screenId/versions/:versionId/view", screen = SITE_PAGES_SCREEN)
+  // One page's own address opens Pages on that page (AGL-4215).
+  r.deepLink("site.page-page", path = "/screens/:screenId", screen = SITE_PAGES_SCREEN)
 
   // Components, layouts and templates: the lists and each one's details page;
   // their `/versions/…/besigner` and `/preview` pages stay the Besigner's.

@@ -215,6 +215,27 @@ final class CommerceRegistrationTests: XCTestCase {
     XCTAssertEqual(registry.resolve("/acme/hosts/shop/products/orders"), .screen("commerce.orders", ["orgSlug": "acme", "hostSlug": "shop"]))
     XCTAssertEqual(registry.screens(for: .pos).map(\.id), ["commerce.card-readers", "commerce.display", "commerce.kiosk", "commerce.register"])
   }
+
+  /// The store links the server writes open the page they name (AGL-4215): one order or quote from the console's own
+  /// Orders address, and each store page the app has a screen for; the others stay a gap, never the Orders list.
+  func testTheStoreLinksOpenThePageTheyName() throws {
+    let registry = NativePluginRegistry()
+    _ = NativePluginLoader.load(
+      [NativePluginManifestEntry(id: "commerce", contributes: try declared(), register: registerCommerceNative)], into: registry)
+    let site = ["orgSlug": "acme", "hostSlug": "shop"]
+    let with = { (extra: NativeParams) in site.merging(extra) { $1 } }
+    let cases: [(String, LinkTarget, UInt)] = [
+      ("/acme/hosts/shop/products/orders?order=o1", .screen("commerce.order", with(["order": "o1", "orderId": "o1"])), #line),
+      ("/acme/hosts/shop/products/orders?quote=q1", .screen("commerce.quote", with(["quote": "q1"])), #line),
+      ("/acme/hosts/shop/products/returns?return=r1", .screen("commerce.return", with(["return": "r1", "returnId": "r1"])), #line),
+      ("/acme/hosts/shop/products/returns", .screen("commerce.returns", site), #line),
+      ("/acme/hosts/shop/products/shipping", .screen("commerce.shipping", site), #line),
+      ("/acme/hosts/shop/products/notifications", .screen("commerce.notifications", site), #line),
+      ("/acme/hosts/shop/products/subscriptions?subscription=s1", .unavailable("/acme/hosts/shop/products/subscriptions?subscription=s1"), #line),
+      ("/acme/hosts/shop/products/pos", .unavailable("/acme/hosts/shop/products/pos"), #line),
+    ]
+    for (link, expected, line) in cases { XCTAssertEqual(registry.resolve(link), expected, link, line: line) }
+  }
 }
 
 /// A refund of part of an order, and a receipt by text (the Kotlin kit's checkRefundAmount and checkReceiptRecipient).

@@ -83,6 +83,10 @@ final class SiteTests: XCTestCase {
       registry.resolve("/acme/hosts/shop/screens/p1/versions/v1/view"),
       .screen("site.pages", ["orgSlug": "acme", "hostSlug": "shop", "screenId": "p1", "versionId": "v1"]))
     XCTAssertEqual(registry.resolve("/acme/hosts"), .screen("site.sites", ["orgSlug": "acme"]))
+    // One page's own address opens Pages on that page (AGL-4215); `/screens/list` stays the list.
+    XCTAssertEqual(
+      registry.resolve("/acme/hosts/shop/screens/p1"), .screen("site.pages", ["orgSlug": "acme", "hostSlug": "shop", "screenId": "p1"]))
+    XCTAssertEqual(registry.resolve("/acme/hosts/shop/screens/list"), .screen("site.pages", ["orgSlug": "acme", "hostSlug": "shop"]))
     XCTAssertEqual(registry.resolve("/acme/media"), .screen("site.media", ["orgSlug": "acme"]))
     XCTAssertEqual(
       registry.resolve("/acme/hosts/shop/media"), .screen("site.media", ["orgSlug": "acme", "hostSlug": "shop"]))
