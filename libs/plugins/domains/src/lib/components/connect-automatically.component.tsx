@@ -116,6 +116,8 @@ export default function ConnectAutomatically(props: ConsoleHostDomainConnectZone
   const { enqueueSnackbar } = useSnackbar()
   const [typed, setTyped] = useState('')
   const [providerName, setProviderName] = useState<string | null>(null)
+  // A previous host's AAAA on the zone root, which the apply leaves (AGL-3963).
+  const [strayIpv6, setStrayIpv6] = useState<string[]>([])
   const [phase, setPhase] = useState<Phase>('idle')
   const [problem, setProblem] = useState<string | null>(null)
   const [active, setActiveState] = useState<ActiveSession | null>(null)
@@ -140,6 +142,7 @@ export default function ConnectAutomatically(props: ConsoleHostDomainConnectZone
     setProblem(null)
     if (!looksLikeFullDomain(typed) || !user) {
       setProviderName(null)
+      setStrayIpv6([])
       return
     }
     let current = true
@@ -150,9 +153,14 @@ export default function ConnectAutomatically(props: ConsoleHostDomainConnectZone
           `/api/${DOMAINS_API_ROUTES.connectDiscover}?hostId=${encodeURIComponent(hostId)}&domain=${encodeURIComponent(typed)}`,
         )
         const answer = response.ok ? ((await response.json()) as DomainConnectDiscoverResponse) : null
-        if (current) setProviderName(answer?.supported ? answer.providerName : null)
+        if (!current) return
+        setProviderName(answer?.supported ? answer.providerName : null)
+        setStrayIpv6(answer?.supported && Array.isArray(answer.strayIpv6) ? answer.strayIpv6 : [])
       } catch {
-        if (current) setProviderName(null)
+        if (current) {
+          setProviderName(null)
+          setStrayIpv6([])
+        }
       }
     })()
     return () => {
@@ -350,6 +358,13 @@ export default function ConnectAutomatically(props: ConsoleHostDomainConnectZone
           <Typography variant="caption" color="text.secondary">
             {name} will ask you to sign in and approve the change. No records to copy.
           </Typography>
+          {strayIpv6.length > 0 && (
+            <Alert severity="warning">
+              {`Your domain also has an IPv6 (AAAA) record, ${strayIpv6.join(', ')}, that points at your ` +
+                `previous host. Connecting replaces the IPv4 address but not this record. Delete it at ${name}, ` +
+                'or visitors on IPv6 will keep reaching the old site.'}
+            </Alert>
+          )}
         </>
       )}
       {(phase === 'starting' || phase === 'provider' || phase === 'checking') && name && (

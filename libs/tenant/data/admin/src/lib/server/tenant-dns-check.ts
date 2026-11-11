@@ -102,6 +102,91 @@ async function resolveARecords(domain: string): Promise<string[]> {
   }
 }
 
+async function resolveAaaaRecords(domain: string): Promise<string[]> {
+  const normalise = (records: string[]) => records.map((record) => record.toLowerCase())
+  const lookup = async (resolver?: CallbackResolver) =>
+    resolver
+      ? new Promise<string[]>((resolve, reject) => {
+          resolver.resolve6(domain, (error, addresses) =>
+            error ? reject(error) : resolve(addresses),
+          )
+        })
+      : dns.resolve6(domain)
+  try {
+    const resolver = new CallbackResolver()
+    resolver.setServers(PUBLIC_RESOLVERS)
+    return normalise(await lookup(resolver))
+  } catch (error) {
+    const code = (error as NodeJS.ErrnoException)?.code
+    if (code === 'ENOTFOUND' || code === 'ENODATA' || code === 'NXDOMAIN') {
+      return []
+    }
+    try {
+      return normalise(await lookup())
+    } catch {
+      return []
+    }
+  }
+}
+
+/**
+ * IPv6 addresses answering for `domain` that the tenant edge does not answer
+ * with: the AAAA record a previous host left on the zone root (AGL-3963).
+ *
+ * Pointing a domain here replaces its A record (by hand, or through Domain
+ * Connect, whose `website` template writes `A @`), and nothing replaces the
+ * AAAA beside it. A visitor on IPv6 then reaches the previous host, and the
+ * edge's certificate challenge over IPv6 can fail with it. Cloudflare named
+ * this case when it onboarded our templates (2026-10-29).
+ *
+ * Compared against the edge's own AAAA answer rather than "any AAAA at all",
+ * so the day the edge publishes IPv6 a correctly-pointed name stays clean.
+ * Reported, never refused, for the same reason as `stray` below. Never throws:
+ * an unreachable resolver reads as no records.
+ */
+export async function strayIpv6Addresses(domain: string): Promise<string[]> {
+  const [domainAddresses, targetAddresses] = await Promise.all([
+    resolveAaaaRecords(domain),
+    resolveAaaaRecords(CNAME_TARGET),
+  ])
+  const ours = new Set(targetAddresses)
+  return domainAddresses.filter((address) => !ours.has(address))
+}
+
+/** A record answering for a name that is not ours, as the status card lists it. */
+export interface TenantDnsConflict {
+  type?: string
+  name?: string
+  value?: string
+}
+
+/**
+ * `conflicts` with each stray IPv6 address of `names` added as an AAAA entry,
+ * unless the platform already listed it (AGL-3963). The platform's own DNS
+ * check is not relied on to name these: it is the A record it checks.
+ */
+export async function withStrayIpv6Conflicts(
+  names: readonly string[],
+  conflicts: readonly TenantDnsConflict[],
+): Promise<TenantDnsConflict[]> {
+  const merged = [...conflicts]
+  const listed = new Set(
+    conflicts.map((conflict) =>
+      [conflict.type, conflict.name, conflict.value].map((part) => String(part ?? '').toLowerCase()).join('|'),
+    ),
+  )
+  const strays = await Promise.all(names.map(async (name) => ({ name, addresses: await strayIpv6Addresses(name) })))
+  for (const { name, addresses } of strays) {
+    for (const value of addresses) {
+      const key = ['aaaa', name.toLowerCase(), value].join('|')
+      if (listed.has(key)) continue
+      listed.add(key)
+      merged.push({ type: 'AAAA', name, value })
+    }
+  }
+  return merged
+}
+
 /**
  * An apex (`aglyn.com`) cannot carry a CNAME — RFC 1034 forbids one alongside
  * the SOA/NS records every zone apex must have. So the CNAME check below can
@@ -188,6 +273,8 @@ export interface TenantDnsCheck {
   matchedBy?: 'apex-address'
   /** Addresses answering for the name that are not ours (AGL-1913). */
   strayAddresses?: string[]
+  /** IPv6 addresses answering for the name that are not ours (AGL-3963). */
+  strayIpv6Addresses?: string[]
 }
 
 /**
@@ -214,9 +301,9 @@ export async function checkTenantDnsPointing(
   // A domain that DOES carry a CNAME but points somewhere else must keep
   // failing — otherwise "pointed at the wrong place" and "pointed at an apex"
   // would verify identically.
-  const apex = records.length
-    ? { matched: false, stray: [] as string[] }
-    : await apexPointsAtTenantEdge(domain)
+  const [apex, strayIpv6] = records.length
+    ? [{ matched: false, stray: [] as string[] }, [] as string[]]
+    : await Promise.all([apexPointsAtTenantEdge(domain), strayIpv6Addresses(domain)])
   return {
     domain,
     records,
@@ -228,5 +315,8 @@ export async function checkTenantDnsPointing(
     // Addresses answering for the name that are not ours. A verified domain
     // with a non-empty list here is the one that loads intermittently.
     ...(apex.stray.length ? { strayAddresses: apex.stray } : {}),
+    // The previous host's AAAA, which pointing the A record here left in
+    // place: IPv6 visitors still reach that host (AGL-3963).
+    ...(strayIpv6.length ? { strayIpv6Addresses: strayIpv6 } : {}),
   }
 }

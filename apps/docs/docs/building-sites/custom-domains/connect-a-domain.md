@@ -69,6 +69,11 @@ If other DNS records are answering for the same name, the card says so and names
 previous host answers alongside the correct one, and the site then loads for some
 visitors and not others.
 
+The same goes for an **IPv6 (AAAA) record** on your domain. Pointing your domain at
+Aglyn replaces its IPv4 address, but not an AAAA record your previous host added, so
+visitors on IPv6 keep reaching the old site. The card names that record too. Delete it
+at your DNS provider.
+
 <!-- screenshot: custom-domains/connected-chip-and-actions.png per SCREENSHOT_PLAN.md -->
 
 :::note Your Aglyn subdomain keeps serving until the domain does

@@ -227,6 +227,16 @@ export function CustomDomainCard(props: CustomDomainCardProps) {
           { variant: 'warning', persist: false },
         )
       }
+      // The previous host's IPv6 (AAAA) record, which pointing the A record
+      // here does not replace (AGL-3963): IPv6 visitors keep reaching it.
+      if (verify.strayIpv6Addresses?.length) {
+        enqueueSnackbar(
+          `This domain also has an IPv6 (AAAA) record, ${verify.strayIpv6Addresses.join(', ')}, ` +
+            'that points at your previous host. Delete it at your DNS provider, ' +
+            'or visitors on IPv6 will keep reaching the old site.',
+          { variant: 'warning', persist: false },
+        )
+      }
       // `/api/domains/attach` claims the domain and persists `host.cname` in a
       // single transaction (AGL-743) — the client must NOT write `cname` itself,
       // or a losing 409 leaves this host still holding another org's domain.

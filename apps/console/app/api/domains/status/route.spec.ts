@@ -40,6 +40,8 @@ const mockVerifyIdToken = jest.fn()
 const mockProjectDomainStatus = jest.fn()
 const mockLockdownRefusal = jest.fn()
 const mockGetOrgForHost = jest.fn()
+/** name → AAAA records, as public DNS would answer. */
+let mockIpv6 = new Map<string, string[]>()
 
 function mockMakeFirestore() {
   return {
@@ -73,6 +75,31 @@ jest.mock('@aglyn/tenant-data-admin', () => ({
   projectDomainStatus: (...args: unknown[]) => mockProjectDomainStatus(...args),
   getOrgForHost: (...args: unknown[]) => mockGetOrgForHost(...args),
   lockdownRefusal: (...args: unknown[]) => mockLockdownRefusal(...args),
+  HOST_CNAME_TWIN_FIELD: 'cnameTwin',
+}))
+
+// The merge is the real one; only the DNS lookup under it is substituted.
+function mockNoRecords() {
+  return Object.assign(new Error('queryAaaa ENODATA'), { code: 'ENODATA' })
+}
+jest.mock('dns', () => ({
+  __esModule: true,
+  promises: {
+    resolve6: async (name: string) => {
+      const found = mockIpv6.get(name)
+      if (!found) throw mockNoRecords()
+      return found
+    },
+  },
+  Resolver: class {
+    setServers() {
+      return undefined
+    }
+    resolve6(name: string, callback: (error: unknown, records?: string[]) => void) {
+      const found = mockIpv6.get(name)
+      found ? callback(null, found) : callback(mockNoRecords())
+    }
+  },
 }))
 
 jest.mock('@aglyn/aglyn/server', () => ({
@@ -121,6 +148,7 @@ beforeEach(() => {
   mockLockdownRefusal.mockResolvedValue(null)
   mockGetOrgForHost.mockReset()
   mockGetOrgForHost.mockResolvedValue({ orgId: 'org-1', org: { $id: 'org-1' } })
+  mockIpv6 = new Map()
 })
 
 afterEach(() => {
@@ -163,6 +191,35 @@ describe('it reports the live state, not the stored one', () => {
     expect(body.conflicts[0].value).toBe('203.0.113.9')
     // Our own record of the last attach, kept distinct from the platform's.
     expect(body.attachmentPending).toBe(true)
+  })
+
+  it('adds a previous host\'s AAAA on the name and its twin to the conflicts (AGL-3963)', async () => {
+    seedHost('mine', { cname: 'www.example.com', cnameTwin: 'example.com' })
+    mockProjectDomainStatus.mockResolvedValue({
+      state: 'serving',
+      domain: 'www.example.com',
+      verification: [],
+      conflicts: [{ type: 'A', name: 'example.com', value: '203.0.113.9' }],
+    })
+    mockIpv6.set('example.com', ['2001:db8::1'])
+    const body = await (await GET(get('mine'))).json()
+    expect(body.conflicts).toEqual([
+      { type: 'A', name: 'example.com', value: '203.0.113.9' },
+      { type: 'AAAA', name: 'example.com', value: '2001:db8::1' },
+    ])
+  })
+
+  it('does not list an AAAA twice when the platform already named it', async () => {
+    seedHost('mine', { cname: 'example.com' })
+    mockProjectDomainStatus.mockResolvedValue({
+      state: 'serving',
+      domain: 'example.com',
+      verification: [],
+      conflicts: [{ type: 'AAAA', name: 'example.com', value: '2001:db8::1' }],
+    })
+    mockIpv6.set('example.com', ['2001:db8::1'])
+    const body = await (await GET(get('mine'))).json()
+    expect(body.conflicts).toEqual([{ type: 'AAAA', name: 'example.com', value: '2001:db8::1' }])
   })
 
   it('answers `none` for a site with no custom domain, without calling out', async () => {
