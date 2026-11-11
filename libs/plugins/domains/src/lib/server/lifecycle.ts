@@ -1307,8 +1307,11 @@ export async function transferInQuote(
   // A name already in our registrar account is no transfer: it is held
   // here, by this workspace or another one.
   const held = await driver.info(name)
-  if (held.ok === 'no') return { ok: 'no', code: 'registrar-unavailable' }
-  if (held.value.owned) return { ok: 'no', code: 'already-here' }
+  // Vercel answers 403 `forbidden`, not 404, for a name another Vercel team
+  // has added (a site hosted on Vercel elsewhere, a common one to move
+  // here). That name is not in our account, so it is still a transfer.
+  if (held.ok === 'no' && held.code !== 'forbidden') return { ok: 'no', code: 'registrar-unavailable' }
+  if (held.ok === 'yes' && held.value.owned) return { ok: 'no', code: 'already-here' }
   const standard = await driver.standardContact(name)
   if (standard.ok === 'no') return { ok: 'no', code: 'registrar-unavailable' }
   if (!standard.value) return { ok: 'no', code: 'needs-extra-contact' }
