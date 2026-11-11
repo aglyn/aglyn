@@ -18,6 +18,8 @@ content on the marketing site and is written separately.
 - **ai:** a redesign's link to form on a page with no form goes to the site's form page ([AGL-4152](https://linear.app/aglyn/issue/AGL-4152))
 - **ai:** a refused redesign link names only the destinations its page has ([AGL-4152](https://linear.app/aglyn/issue/AGL-4152))
 - **google-reviews:** a profile with no reviews shows only the review link ([AGL-4212](https://linear.app/aglyn/issue/AGL-4212))
+- **console:** visible tab asks a background cache holder at boot ([AGL-4204](https://linear.app/aglyn/issue/AGL-4204))
+- **data:** the Data page shows loading, not the empty state, until the server answers ([AGL-4047](https://linear.app/aglyn/issue/AGL-4047))
 
 ## v1.20.1 — 2026-11-09
 
