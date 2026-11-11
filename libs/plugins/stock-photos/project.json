@@ -20,11 +20,14 @@
       "outputs": ["{options.outputFile}"]
     },
     "test": {
-      "executor": "@nx/jest:jest",
-      "outputs": ["{workspaceRoot}/coverage/libs/plugins/stock-photos"],
-      "options": {
-        "jestConfig": "libs/plugins/stock-photos/jest.config.ts"
-      }
+      "inputs": [
+        "default",
+        "^default",
+        "{workspaceRoot}/jest.preset.js",
+        {
+          "externalDependencies": ["jest", "@nx/jest", "ts-jest", "@swc/jest"]
+        }
+      ]
     }
   }
 }

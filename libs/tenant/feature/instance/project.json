@@ -3,7 +3,13 @@
   "$schema": "../../../../node_modules/nx/schemas/project-schema.json",
   "sourceRoot": "libs/tenant/feature/instance/src",
   "projectType": "library",
-  "tags": ["scope:lib", "scope:aglyn", "scope:feature", "scope:tenant", "type:feature"],
+  "tags": [
+    "scope:lib",
+    "scope:aglyn",
+    "scope:feature",
+    "scope:tenant",
+    "type:feature"
+  ],
   "targets": {
     "build": {
       "executor": "@nx/js:swc",
@@ -20,11 +26,14 @@
       "outputs": ["{options.outputFile}"]
     },
     "test": {
-      "executor": "@nx/jest:jest",
-      "outputs": ["{workspaceRoot}/coverage/libs/tenant/feature/instance"],
-      "options": {
-        "jestConfig": "libs/tenant/feature/instance/jest.config.ts"
-      }
+      "inputs": [
+        "default",
+        "^default",
+        "{workspaceRoot}/jest.preset.js",
+        {
+          "externalDependencies": ["jest", "@nx/jest", "ts-jest", "@swc/jest"]
+        }
+      ]
     }
   }
 }

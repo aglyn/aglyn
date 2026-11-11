@@ -25,6 +25,7 @@
     "serve": {
       "executor": "@nx/next:server",
       "defaultConfiguration": "development",
+      "dependsOn": ["clean-next-cache"],
       "options": {
         "buildTarget": "console:build",
         "dev": true,
@@ -39,8 +40,7 @@
           "buildTarget": "console:build:development",
           "dev": true
         }
-      },
-      "dependsOn": ["clean-next-cache"]
+      }
     },
     "export": {
       "executor": "@nx/next:export",
@@ -49,17 +49,21 @@
       }
     },
     "test": {
-      "executor": "@nx/jest:jest",
-      "outputs": ["{workspaceRoot}/coverage/apps/console"],
       "inputs": [
         "default",
         "^default",
         "{workspaceRoot}/.github/workflows/scheduled-crons.yml",
-        "{workspaceRoot}/tools/scripts/cron-deploy-state.sh"
-      ],
-      "options": {
-        "jestConfig": "apps/console/jest.config.ts"
-      }
+        "{workspaceRoot}/tools/scripts/cron-deploy-state.sh",
+        {
+          "externalDependencies": [
+            "jest",
+            "@nx/jest",
+            "ts-jest",
+            "@nx/react",
+            "babel-jest"
+          ]
+        }
+      ]
     },
     "lint": {
       "executor": "@nx/eslint:lint",
@@ -73,11 +77,11 @@
     },
     "clean-next-cache": {
       "executor": "nx:run-commands",
+      "cache": false,
       "options": {
         "cwd": "{workspaceRoot}",
         "command": "node tools/scripts/clean-next.mjs --prune --app=console"
-      },
-      "cache": false
+      }
     }
   }
 }

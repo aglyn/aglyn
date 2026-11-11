@@ -73,16 +73,28 @@
   },
   "targetDefaults": {
     "e2e": {
-      "inputs": ["default", "^default"],
+      "inputs": [
+        "default",
+        "^default"
+      ],
       "cache": true
     },
     "build": {
-      "dependsOn": ["^build"],
-      "inputs": ["production", "^production"],
+      "dependsOn": [
+        "^build"
+      ],
+      "inputs": [
+        "production",
+        "^production"
+      ],
       "cache": true
     },
     "@nx/jest:jest": {
-      "inputs": ["default", "^default", "{workspaceRoot}/jest.preset.js"],
+      "inputs": [
+        "default",
+        "^default",
+        "{workspaceRoot}/jest.preset.js"
+      ],
       "cache": true,
       "options": {
         "passWithNoTests": true
@@ -106,11 +118,33 @@
     "@nx/next:build": {
       "cache": true,
       "dependsOn": [],
-      "inputs": ["production", "^production"]
-    }
+      "inputs": [
+        "production",
+        "^production"
+      ]
+    },
+    "test": [
+      {
+        "filter": {
+          "plugin": "@nx/jest/plugin"
+        },
+        "configurations": {
+          "ci": {
+            "ci": true,
+            "coverage": true
+          }
+        },
+        "options": {
+          "passWithNoTests": true
+        }
+      }
+    ]
   },
   "namedInputs": {
-    "default": ["{projectRoot}/**/*", "sharedGlobals"],
+    "default": [
+      "{projectRoot}/**/*",
+      "sharedGlobals"
+    ],
     "sharedGlobals": [
       "{workspaceRoot}/workspace.json",
       "{workspaceRoot}/tsconfig.base.json",
@@ -136,5 +170,92 @@
   "pluginsConfig": {},
   "affected": {
     "legacy": true
-  }
+  },
+  "plugins": [
+    {
+      "plugin": "@nx/jest/plugin",
+      "options": {
+        "targetName": "test"
+      },
+      "include": [
+        "apps/console/**/*",
+        "apps/docs/**/*",
+        "apps/tenant/**/*",
+        "apps/zapier/**/*",
+        "libs/aglyn/**/*",
+        "libs/aglyn-markdown-editor/**/*",
+        "libs/aglyn-node-renderer/**/*",
+        "libs/aglyn-transfer-ui/**/*",
+        "libs/besigner/core/**/*",
+        "libs/besigner/feature/designer/**/*",
+        "libs/cli/**/*",
+        "libs/plugins/accounting/**/*",
+        "libs/plugins/ad-conversions/**/*",
+        "libs/plugins/ai/**/*",
+        "libs/plugins/bookings/**/*",
+        "libs/plugins/calculator/**/*",
+        "libs/plugins/commerce/**/*",
+        "libs/plugins/couriers/**/*",
+        "libs/plugins/crm/**/*",
+        "libs/plugins/data/**/*",
+        "libs/plugins/delivery-apps/**/*",
+        "libs/plugins/domains/**/*",
+        "libs/plugins/email/**/*",
+        "libs/plugins/events-calendar/**/*",
+        "libs/plugins/fonts/**/*",
+        "libs/plugins/forms/**/*",
+        "libs/plugins/fulfillment-networks/**/*",
+        "libs/plugins/funnels/**/*",
+        "libs/plugins/help-desks/**/*",
+        "libs/plugins/inbox/**/*",
+        "libs/plugins/inventory-sync/**/*",
+        "libs/plugins/lightbox/**/*",
+        "libs/plugins/live-chat/**/*",
+        "libs/plugins/logic/**/*",
+        "libs/plugins/loyalty/**/*",
+        "libs/plugins/marketing/**/*",
+        "libs/plugins/marketing-platforms/**/*",
+        "libs/plugins/marketplace/**/*",
+        "libs/plugins/marketplaces/**/*",
+        "libs/plugins/mui/**/*",
+        "libs/plugins/music/**/*",
+        "libs/plugins/outreach/**/*",
+        "libs/plugins/post-purchase/**/*",
+        "libs/plugins/print-on-demand/**/*",
+        "libs/plugins/redirects/**/*",
+        "libs/plugins/review-platforms/**/*",
+        "libs/plugins/sales-channels/**/*",
+        "libs/plugins/shipping/**/*",
+        "libs/plugins/sms/**/*",
+        "libs/plugins/stock-photos/**/*",
+        "libs/plugins/tax-engines/**/*",
+        "libs/plugins/themes/**/*",
+        "libs/plugins/video-delivery/**/*",
+        "libs/plugins/waivers/**/*",
+        "libs/plugins/weglot/**/*",
+        "libs/plugins/workflows/**/*",
+        "libs/plugins/zapier/**/*",
+        "libs/shared/data/mdi/**/*",
+        "libs/shared/ui/color-picker/**/*",
+        "libs/shared/ui/email-campaigns/**/*",
+        "libs/shared/ui/json-editor/**/*",
+        "libs/shared/ui/jsx/**/*",
+        "libs/shared/ui/jsx-forms/**/*",
+        "libs/shared/ui/next/**/*",
+        "libs/shared/ui/theme/**/*",
+        "libs/shared/util/dom/**/*",
+        "libs/shared/util/email/**/*",
+        "libs/shared/util/errors/**/*",
+        "libs/shared/util/first-touch/**/*",
+        "libs/shared/util/http/**/*",
+        "libs/shared/util/logger/**/*",
+        "libs/shared/util/timestamp/**/*",
+        "libs/shared/util/tools/**/*",
+        "libs/shared/util/vendor/**/*",
+        "libs/tenant/data/admin/**/*",
+        "libs/tenant/feature/instance/**/*",
+        "libs/tenant/runtime/**/*"
+      ]
+    }
+  ]
 }

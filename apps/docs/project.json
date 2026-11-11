@@ -24,7 +24,9 @@
       "outputs": ["{projectRoot}/build"],
       "inputs": [
         "default",
-        { "runtime": "git log -1 --format=%H" }
+        {
+          "runtime": "git log -1 --format=%H"
+        }
       ],
       "options": {
         "cwd": "apps/docs",
@@ -43,11 +45,14 @@
       "outputs": ["{options.outputFile}"]
     },
     "test": {
-      "executor": "@nx/jest:jest",
-      "outputs": ["{workspaceRoot}/coverage/apps/docs"],
-      "options": {
-        "jestConfig": "apps/docs/jest.config.ts"
-      }
+      "inputs": [
+        "default",
+        "^default",
+        "{workspaceRoot}/jest.preset.js",
+        {
+          "externalDependencies": ["jest", "@nx/jest", "ts-jest", "babel-jest"]
+        }
+      ]
     }
   }
 }

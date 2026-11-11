@@ -25,6 +25,7 @@
     "serve": {
       "executor": "@nx/next:server",
       "defaultConfiguration": "development",
+      "dependsOn": ["clean-next-cache"],
       "options": {
         "buildTarget": "tenant:build",
         "dev": true,
@@ -39,8 +40,7 @@
           "buildTarget": "tenant:build:development",
           "dev": true
         }
-      },
-      "dependsOn": ["clean-next-cache"]
+      }
     },
     "export": {
       "executor": "@nx/next:export",
@@ -49,11 +49,20 @@
       }
     },
     "test": {
-      "executor": "@nx/jest:jest",
-      "outputs": ["{workspaceRoot}/coverage/apps/tenant"],
-      "options": {
-        "jestConfig": "apps/tenant/jest.config.ts"
-      }
+      "inputs": [
+        "default",
+        "^default",
+        "{workspaceRoot}/jest.preset.js",
+        {
+          "externalDependencies": [
+            "jest",
+            "@nx/jest",
+            "ts-jest",
+            "@nx/react",
+            "babel-jest"
+          ]
+        }
+      ]
     },
     "lint": {
       "executor": "@nx/eslint:lint",
@@ -61,11 +70,11 @@
     },
     "clean-next-cache": {
       "executor": "nx:run-commands",
+      "cache": false,
       "options": {
         "cwd": "{workspaceRoot}",
         "command": "node tools/scripts/clean-next.mjs --prune --app=tenant"
-      },
-      "cache": false
+      }
     }
   }
 }
