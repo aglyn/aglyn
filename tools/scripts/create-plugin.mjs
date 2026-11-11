@@ -131,6 +131,50 @@ write(
   ) + '\n',
 )
 
+// The @nx/js:swc build reads the project's own .swcrc (the reference plugin's).
+write(
+  '.swcrc',
+  JSON.stringify(
+    {
+      jsc: {
+        target: 'es2017',
+        parser: {
+          syntax: 'typescript',
+          decorators: true,
+          dynamicImport: true,
+        },
+        transform: {
+          decoratorMetadata: true,
+          legacyDecorator: true,
+          react: {
+            runtime: 'automatic',
+          },
+        },
+        keepClassNames: true,
+        externalHelpers: true,
+        loose: true,
+        baseUrl: '.',
+      },
+      module: {
+        type: 'es6',
+        strict: true,
+        noInterop: true,
+        resolveFully: true,
+      },
+      sourceMaps: true,
+      exclude: [
+        'jest.config.ts',
+        '.*.spec.tsx?$',
+        '.*.test.tsx?$',
+        './src/jest-setup.ts$',
+        './**/jest-setup.ts$',
+        '.*.js$',
+      ],
+    },
+    null,
+    2,
+  ) + '\n',
+)
 write(
   'package.json',
   JSON.stringify(
