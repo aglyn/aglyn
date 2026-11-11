@@ -63,6 +63,8 @@ struct VariantDraft: Identifiable, Equatable {
   var selections: [String: String] = [:]
   /// Added to the matrix in this edit, so its stock and picks are written with the save.
   var fresh = false
+  /// Its own check-in setting (AGL-4063), or nil to follow the product's.
+  var checkIn: ProductCheckIn?
 }
 
 /// What the editor edits.
@@ -77,6 +79,8 @@ struct ProductDraft: Equatable {
   var variants: [VariantDraft] = [VariantDraft(id: "default", label: "Default")]
   /// Add-ons (AGL-4100): choices added to the item that need no stock of their own.
   var addOns: [AddOnGroupDraft] = []
+  /// Check-in at the window (AGL-4063): whether each one sold is somebody to check in, and how many people one admits.
+  var checkIn: ProductCheckIn?
 }
 
 /// A fresh product id, minted here so a retried create finds its own product.
@@ -105,7 +109,8 @@ func productDraft(_ doc: FirestoreDocument) -> ProductDraft {
         price: moneyText(raw["priceUsd"]), compareAt: moneyText(raw["compareAtPriceUsd"]),
         sku: raw["sku"] as? String ?? "", barcode: raw["barcode"] as? String ?? "",
         stock: (raw["inventory"] as? NSNumber).flatMap { CFGetTypeID($0) == CFBooleanGetTypeID() ? nil : $0 }.map { String($0.intValue) } ?? "",
-        selections: (raw["options"] as? [String: Any] ?? [:]).compactMapValues { $0 as? String })
+        selections: (raw["options"] as? [String: Any] ?? [:]).compactMapValues { $0 as? String },
+        checkIn: normalizeProductCheckIn(raw["checkIn"]))
     }
   let options: [OptionDraft] = (data["options"] as? [Any] ?? []).compactMap { entry in
     guard let raw = entry as? [String: Any], let name = raw["name"] as? String else { return nil }
@@ -115,7 +120,7 @@ func productDraft(_ doc: FirestoreDocument) -> ProductDraft {
     productID: doc.id, create: false, name: doc.string("name") ?? "", description: doc.string("description") ?? "",
     status: doc.string("status").flatMap(ProductStatus.init(rawValue:)) ?? .active,
     type: doc.string("type").flatMap(ProductType.init(rawValue:)) ?? .physical, options: options, variants: variants,
-    addOns: addOnDrafts(data))
+    addOns: addOnDrafts(data), checkIn: normalizeProductCheckIn(data["checkIn"]))
 }
 
 /// A price above this is refused, as the console's editor refuses it.
@@ -150,7 +155,9 @@ func checkProductDraft(_ draft: ProductDraft) -> String? {
 
 /// The product a save sends: the stored product (or the console's blank one)
 /// with the editor's fields on top. Codes and compare-at prices left empty
-/// are removed, as the console's editor removes them.
+/// are removed, as the console's editor removes them. A check-in setting is
+/// written only where the editor changed it, as the console's fields write it;
+/// an untouched one stays as stored.
 func productSaveJSON(_ draft: ProductDraft, stored: [String: Any]?) -> JSONValue {
   var base: [String: JSONValue] =
     stored.map(storedProductJSON) ?? [
@@ -161,6 +168,7 @@ func productSaveJSON(_ draft: ProductDraft, stored: [String: Any]?) -> JSONValue
   if case .array(let list)? = base["variants"] { storedVariants = list }
   func dollars(_ text: String) -> JSONValue { .number(Double(centsFromText(text) ?? 0) / 100) }
   func trimmed(_ text: String) -> String { text.trimmingCharacters(in: .whitespacesAndNewlines) }
+  let storedRaw = (stored?["variants"] as? [Any] ?? []).compactMap { $0 as? [String: Any] }
   let variants: [JSONValue] = draft.variants.map { edit in
     var fields: [String: JSONValue] = ["id": .string(edit.id)]
     if let match = storedVariants.first(where: { $0["id"]?.stringValue == edit.id }), case .object(let record) = match {
@@ -177,6 +185,10 @@ func productSaveJSON(_ draft: ProductDraft, stored: [String: Any]?) -> JSONValue
     put("barcode", edit.barcode) { .string($0) }
     if !edit.selections.isEmpty { fields["options"] = .object(edit.selections.mapValues { .string($0) }) }
     if draft.create || edit.fresh { fields["inventory"] = Int(trimmed(edit.stock)).map { .number(Double($0)) } ?? .null }
+    let was = normalizeProductCheckIn(storedRaw.first { $0["id"] as? String == edit.id }?["checkIn"])
+    if edit.checkIn != was {
+      if let own = edit.checkIn { fields["checkIn"] = productCheckInJSON(own) } else { fields.removeValue(forKey: "checkIn") }
+    }
     return .object(fields)
   }
   base["name"] = .string(draft.name)
@@ -192,6 +204,9 @@ func productSaveJSON(_ draft: ProductDraft, stored: [String: Any]?) -> JSONValue
   base["variants"] = .array(variants)
   if !draft.addOns.isEmpty || base.keys.contains("modifierGroups") {
     base["modifierGroups"] = addOnsJSON(draft.addOns, stored: base["modifierGroups"])
+  }
+  if draft.checkIn != normalizeProductCheckIn(stored?["checkIn"]) {
+    if let checkIn = draft.checkIn { base["checkIn"] = productCheckInJSON(checkIn) } else { base.removeValue(forKey: "checkIn") }
   }
   if draft.create { base["slug"] = .string(commerceSlug(draft.name)) }
   return .object(base)
