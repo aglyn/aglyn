@@ -27,7 +27,8 @@ import {
   IconButton,
   Typography,
 } from '@mui/material'
-import { type ComponentType, forwardRef, type ReactNode } from 'react'
+import { isEqual } from 'lodash-es'
+import { type ComponentType, forwardRef, type ReactNode, useState } from 'react'
 import {
   FormRenderer,
   FormSpy,
@@ -56,13 +57,24 @@ import { simpleComponentMapper } from '../constants/component-mappers'
  * A drawer rather than a dialog on purpose: creating is a drawer, picking is
  * a dialog (AGL-699). Editing is neither — it is the record's own page.
  */
+/** What a create hands back: nothing, or the reason per field it refused. */
+export type SubmitRefusal = void | undefined | Record<string, string>
+
 export interface CreateArtifactDrawerProps {
   open: boolean
   onClose: () => void
   /** Drawer heading, e.g. "Create new component". */
   title: string
-  /** Receives the collected field values; closing is the caller's job. */
-  onSubmit: (values: Record<string, any>) => void | Promise<void>
+  /**
+   * Receives the collected field values; closing is the caller's job.
+   *
+   * A refusal that belongs to one field comes back as `{ [name]: reason }`,
+   * final-form's submission errors: the field says it beside itself and stops
+   * once its value changes, and every value stays as it was chosen.
+   */
+  onSubmit: (
+    values: Record<string, any>,
+  ) => SubmitRefusal | Promise<SubmitRefusal>
   /** Extra fields appended after name and description. */
   extraFields?: any[]
   /** Rendered under the form when a submit fails. */
@@ -156,13 +168,17 @@ export function CreateArtifactDrawer(props: CreateArtifactDrawerProps) {
     submitLabel,
     componentMapper,
   } = props
+  const [initialValues] = useState(() => new Map<string, unknown>())
   const schema = {
-    fields: [
-      ...(includeDescription
-        ? BASE_FIELDS
-        : BASE_FIELDS.filter((field) => field.name !== 'description')),
-      ...(extraFields ?? []),
-    ],
+    fields: keepInitialValues(
+      [
+        ...(includeDescription
+          ? BASE_FIELDS
+          : BASE_FIELDS.filter((field) => field.name !== 'description')),
+        ...(extraFields ?? []),
+      ],
+      initialValues,
+    ),
     ...(submitLabel ? { submitLabel } : {}),
   }
   return (
@@ -221,6 +237,36 @@ export function CreateArtifactDrawer(props: CreateArtifactDrawerProps) {
       </Container>
     </NavigationDrawerComponent>
   )
+}
+
+/**
+ * Each field's `initialValue`, kept as the same object for as long as it is
+ * equal to the one before (AGL-4047).
+ *
+ * Callers build their fields on every draw, so an object or array initial
+ * value is a new one each time the page around the drawer draws. The form
+ * library takes a new initial value as a new field: it lets the old one go
+ * and registers it again from that value, so a page drawing again, as it does
+ * to say why a create was refused, put the field back where it started — "All
+ * sites" with the ticked sites dropped, a second press creating what nobody
+ * chose. Keeping the reference keeps the field, and with it what was chosen.
+ * A value that really changes still comes through.
+ */
+function keepInitialValues(fields: readonly any[], kept: Map<string, unknown>): any[] {
+  return fields.map((field) => {
+    if (!field || typeof field !== 'object') return field
+    let next = field
+    if (typeof field.name === 'string' && 'initialValue' in field) {
+      const before = kept.get(field.name)
+      if (before !== field.initialValue && kept.has(field.name) && isEqual(before, field.initialValue)) {
+        next = { ...field, initialValue: before }
+      } else {
+        kept.set(field.name, field.initialValue)
+      }
+    }
+    // A sub-form's own fields are registered the same way.
+    return Array.isArray(next.fields) ? { ...next, fields: keepInitialValues(next.fields, kept) } : next
+  })
 }
 
 /**
