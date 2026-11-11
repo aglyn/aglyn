@@ -83,6 +83,9 @@ interface FirestoreReader {
    */
   suspend fun getAnswer(path: String): Live.Ready<FirestoreDoc?> = Live.Ready(get(path))
 
+  /** [page]'s answer, and whether only the device's cache gave it (AGL-4047), as [getAnswer] for one document. */
+  suspend fun pageAnswer(query: FirestoreQuery): Live.Ready<FirestorePage> = Live.Ready(page(query))
+
   /** One page: [FirestoreQuery.limit] rows plus one probe row decide [FirestorePage.nextCursor]. */
   suspend fun page(query: FirestoreQuery): FirestorePage
 

@@ -524,7 +524,7 @@ private fun SpecBodyContent(
     )
   }
   prompting?.let { pending ->
-    PromptDialog(pending, search = { group, words -> model.lookup(group, words) }, onRun = { filled -> prompting = null; scope.launch { execute(pending.action, filled) } }) { prompting = null }
+    PromptDialog(pending, model.context, search = { group, words -> model.lookup(group, words) }, onRun = { filled -> prompting = null; scope.launch { execute(pending.action, filled) } }) { prompting = null }
   }
   reauthing?.let { pending ->
     var password by remember(pending) { mutableStateOf("") }
@@ -602,41 +602,59 @@ private fun SpecBodyContent(
 }
 
 @Composable
-private fun PromptDialog(pending: Pending, search: suspend (LookupGroup, String) -> List<JsonElement>, onRun: (JsonElement) -> Unit, onDismiss: () -> Unit) {
+private fun PromptDialog(pending: Pending, context: JsonElement, search: suspend (LookupGroup, String) -> List<JsonElement>, onRun: (JsonElement) -> Unit, onDismiss: () -> Unit) {
   val values = remember(pending) { mutableStateMapOf<String, FieldValue>() }
   // What each `lookup` field last picked, as the person reads it.
   val picked = remember(pending) { mutableStateMapOf<String, String>() }
-  val inputs = pending.action.inputs(pending.scope)
+  // The prompt over the screen as it is now (AGL-4047): the loads' newest answers, and the row it was opened on as its list
+  // holds it now, so a field left alone takes a newer copy and a write built from the loads builds from the server's.
+  // What was typed is kept: `values` holds only edits.
+  val rowId = (pending.scope as? JsonObject)?.get("item")?.let { (it as? JsonObject)?.get("\$id") }
+  val liveRow = rowId?.let { id ->
+    ((context as? JsonObject)?.get("data") as? JsonObject)?.entries?.firstNotNullOfOrNull { (key, load) ->
+      ((load as? JsonObject)?.get("items") as? kotlinx.serialization.json.JsonArray)?.firstOrNull { (it as? JsonObject)?.get("\$id") == id }?.let { key to it }
+    }
+  }
+  val scope = (context as? JsonObject)?.get("data")?.let { ScreenContext.with(pending.scope, "data", it) }
+    ?.let { base -> liveRow?.let { ScreenContext.withItem(base, it.second) } ?: base } ?: pending.scope
+  // A load the prompt reads or writes over, or the list its row came from, is only the device cache's answer yet.
+  val checking = (context as? JsonObject)?.get("checking")
+  val held = (liveRow != null && (checking as? JsonObject)?.get(liveRow.first) == JsonPrimitive(true)) ||
+    FormEdits.heldBy(null, listOf(pending.action.specText), checking).isNotEmpty()
+  val inputs = pending.action.inputs(scope)
   fun filled(): JsonElement = ScreenContext.with(
-    pending.scope, "form",
-    formObject(inputs) { values[it.key] ?: initialValue(it, pending.scope) },
+    scope, "form",
+    formObject(inputs) { values[it.key] ?: initialValue(it, scope) },
   )
   // A field the person cannot see (its `when` fails) never holds up the action.
   val visible = filled()
-  val missing = inputs.any { ScreenValues.condition(it.whenCondition, visible) && it.unmet(fieldJson(it, values[it.key] ?: initialValue(it, pending.scope)), pending.scope) }
+  val missing = inputs.any { ScreenValues.condition(it.whenCondition, visible) && it.unmet(fieldJson(it, values[it.key] ?: initialValue(it, scope)), scope) }
   ActionDialog(
-    title = ScreenValues.render(pending.action.promptTitle ?: pending.action.label, pending.scope),
+    title = ScreenValues.render(pending.action.promptTitle ?: pending.action.label, scope),
     // An action with a `check` confirms over the check's answer (`preview`), which it has not got yet: its confirm is asked
     // after the inputs, never drawn here half-filled.
-    body = if (pending.action.check == null) pending.action.confirmText(pending.scope) else null,
-    confirmLabel = ScreenValues.render(pending.action.submitLabel ?: pending.action.label, pending.scope),
+    body = if (pending.action.check == null) pending.action.confirmText(scope) else null,
+    confirmLabel = ScreenValues.render(pending.action.submitLabel ?: pending.action.label, scope),
     destructive = pending.action.destructive,
-    confirmEnabled = !missing,
+    confirmEnabled = !missing && !held,
     dismissLabel = "Cancel",
     onConfirm = { onRun(visibleOnly(filled(), inputs)) },
     onDismiss = onDismiss,
   ) {
     Column(verticalArrangement = Arrangement.spacedBy(space(1f))) {
+      if (held) {
+        Text(FormEdits.checkingText(pending.action.checkingSubject), Modifier.testTag("prompt-checking"), style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurfaceVariant)
+      }
       val now = filled()
       for (field in inputs.filter { ScreenValues.condition(it.whenCondition, now) }) {
         if (field.kind == "lookup") {
-          LookupInput(field, pending.scope, picked[field.key], search) { group, row ->
-            picked[field.key] = group.heading(row, pending.scope)
+          LookupInput(field, scope, picked[field.key], search) { group, row ->
+            picked[field.key] = group.heading(row, scope)
             // Only the fields this form has are filled, and what the person typed elsewhere is left alone.
-            for ((key, value) in group.fills(row, pending.scope, inputs.map { it.key }.toSet())) values[key] = FieldValue.Text(value)
+            for ((key, value) in group.fills(row, scope, inputs.map { it.key }.toSet())) values[key] = FieldValue.Text(value)
           }
         } else {
-          FieldInput(field, pending.scope, values[field.key] ?: initialValue(field, pending.scope)) { values[field.key] = it }
+          FieldInput(field, scope, values[field.key] ?: initialValue(field, scope)) { values[field.key] = it }
         }
       }
     }

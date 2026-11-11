@@ -376,9 +376,15 @@ public struct ActionSpec: Sendable, Identifiable {
   /// A route call made first, whose answer is `preview` in the confirmation (the console asks
   /// Stripe what an add-on change would charge before it asks the person to confirm).
   public let check: ActionSpecBox?
+  /// The action as written, as text: which loads its prompt reads or writes over (`FormEdits.heldBy`, AGL-4047).
+  public let specText: String
+  /// The held prompt's subject ("discount"): "Checking your discount with the server…".
+  public let checkingSubject: String?
 
   public init?(_ json: JSONValue) {
     guard let label = json["label"]?.stringValue else { return nil }
+    self.specText = (try? json.encoded()).flatMap { String(data: $0, encoding: .utf8) } ?? ""
+    self.checkingSubject = json["checking"]?.stringValue
     self.label = label
     self.id = json["id"]?.stringValue ?? label
     self.icon = json["icon"]?.stringValue.map { ScreenSpec.appleIcon($0) }

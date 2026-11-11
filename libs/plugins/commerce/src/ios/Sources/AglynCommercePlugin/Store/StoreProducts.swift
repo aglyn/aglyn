@@ -151,6 +151,8 @@ final class ProductModel {
   private(set) var row: ProductRow?
   /// The stored document, which an edit sends back whole.
   private(set) var doc: FirestoreDocument?
+  /// Counts the snapshots, so an open editor sees each newer copy (AGL-4047).
+  private(set) var revision = 0
   private(set) var ready = false
   private(set) var failed = false
   @ObservationIgnored private var listener: FirestoreListening?
@@ -168,6 +170,7 @@ final class ProductModel {
       case .success(let doc):
         self.doc = doc
         self.row = doc.map(ProductRow.init)
+        self.revision += 1
       case .failure: self.failed = true
       }
       self.ready = true

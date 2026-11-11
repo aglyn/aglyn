@@ -304,7 +304,7 @@ fun RecordDetail(context: NativePluginContext, kind: CrmKind, id: String, listSc
           TimelineCard(context, kind, id, scope, api)
         }
       }
-      RecordDialogs(context, kind, id, row, fields, values, scope, api, reference, dialog, movesStages, onClose = { dialog = null }, onNotice = { notice = it })
+      RecordDialogs(context, kind, id, row, fields, values, scope, api, reference, dialog, movesStages, onClose = { dialog = null }, onNotice = { notice = it }, fromCache = value.fromCache)
     }
   }
 }
@@ -537,6 +537,8 @@ private fun RecordDialogs(
   movesStages: Boolean,
   onClose: () -> Unit,
   onNotice: (String) -> Unit,
+  /** The record is only the device cache's copy yet: its edit sheet holds Save until the server's is in (AGL-4047). */
+  fromCache: Boolean = false,
 ) {
   val coroutines = rememberCoroutineScope()
   val busy = remember(dialog) { Busy() }
@@ -548,8 +550,11 @@ private fun RecordDialogs(
       initial = values,
       busy = busy,
       onDismiss = onClose,
+      held = fromCache,
+      subject = kind.singular.lowercase(),
     ) { edited ->
       busy.run(coroutines, { onClose(); onNotice("${kind.singular} saved.") }) {
+        // The sheet lays what was typed over the record as stored now, so only what the person changed differs from it.
         val changes = changedFields(fields, values, edited)
         when (kind) {
           CrmKind.CONTACT -> api.updateContact(id, contactSet(changes))
@@ -741,9 +746,19 @@ internal fun EditSheet(
   header: (@Composable () -> Unit)? = null,
   /** What the form asks below its fields that is not a field of the record (New contact's opt-in), on the same values. */
   footer: (@Composable (values: Map<String, String>, onChange: (String, String) -> Unit) -> Unit)? = null,
+  /** A stored record read only from the device cache: Save waits for the server's copy (AGL-4047). A new one is never held. */
+  held: Boolean = false,
+  /** The record's noun in the held sentence ("contact"). */
+  subject: String = "record",
   onSave: (Map<String, String>) -> Unit,
 ) {
+  // A newer copy of the record keeps what was typed and moves every other field to it (AGL-4047).
   var values by remember { mutableStateOf(initial) }
+  var seeded by remember { mutableStateOf(initial) }
+  if (seeded != initial) {
+    values = com.aglyn.core.rebased(values, seeded, initial)
+    seeded = initial
+  }
   var tried by remember { mutableStateOf(false) }
   val problems = fieldProblems(fields.map { it.spec }, values)
   FormSheet(
@@ -751,12 +766,16 @@ internal fun EditSheet(
     busy = busy,
     onDismiss = onDismiss,
     confirmLabel = confirmLabel,
+    confirmEnabled = !held,
     modifier = Modifier.testTag("crm-edit-sheet"),
     onConfirm = {
       tried = true
       if (problems.isEmpty()) onSave(values)
     },
   ) {
+    if (held) {
+      Text(com.aglyn.core.seedCheckingText(subject), Modifier.testTag("crm-checking"), style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurfaceVariant)
+    }
     header?.invoke()
     FieldForm(fields.map { it.spec }, values, { key, value -> values = values + (key to value) }, errors = if (tried) problems else emptyMap(), enabled = !busy.busy)
     footer?.invoke(values) { key, value -> values = values + (key to value) }

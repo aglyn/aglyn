@@ -28,13 +28,16 @@ struct ProductEditorSheet: View {
   var body: some View {
     AglynFormSheet(
       model.draft.create ? "New product" : "Edit product", confirm: model.draft.create ? "Add" : "Save",
-      canConfirm: !model.draft.name.trimmingCharacters(in: .whitespaces).isEmpty,
+      canConfirm: !model.held && !model.draft.name.trimmingCharacters(in: .whitespaces).isEmpty,
       save: {
         guard let hostID = context.hostID else { return }
         try await model.save(ConsoleProductWriteAPI(api: context.api), hostID: hostID)
         onSaved(model.draft.productID)
       }
     ) {
+      if model.held {
+        Section { Text(seedCheckingText("product")).font(AglynFont.caption).foregroundStyle(.secondary) }
+      }
       Section {
         TextField("Name", text: $model.draft.name).accessibilityIdentifier("product-name")
         TextField("Description", text: $model.draft.description, axis: .vertical).lineLimit(2...6)

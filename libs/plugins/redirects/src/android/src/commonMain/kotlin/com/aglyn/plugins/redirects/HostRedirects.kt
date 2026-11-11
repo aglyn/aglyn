@@ -51,11 +51,12 @@ fun inEvaluationOrder(rows: List<RedirectRow>): List<RedirectRow> = rows
 fun hostRedirects(context: NativePluginContext): Live<List<RedirectRow>> {
   val hostId = context.hostId ?: return Live.Loading
   val flow = remember(hostId, context.firestore) {
-    context.firestore.observe(FirestoreQuery("hosts/$hostId/redirects", limit = REDIRECTS_WINDOW))
+    // Metadata changes too, so a list the server confirms stops reading as the cache's (AGL-4047).
+    context.firestore.observe(FirestoreQuery("hosts/$hostId/redirects", limit = REDIRECTS_WINDOW, includeMetadataChanges = true))
   }
   val live by flow.collectAsState(Live.Loading)
   return when (val value = live) {
-    is Live.Ready -> Live.Ready(inEvaluationOrder(value.value.mapNotNull(RedirectRow::from)))
+    is Live.Ready -> Live.Ready(inEvaluationOrder(value.value.mapNotNull(RedirectRow::from)), value.fromCache)
     is Live.Failed -> value
     Live.Loading -> Live.Loading
   }

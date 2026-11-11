@@ -24,10 +24,14 @@ final class FormEditsTests: XCTestCase {
       self.server = server
     }
 
+    /// `discounts` rows: the cache's first; a confirming listener (metadata changes) has the server's behind them.
+    var listens = 0
     func listen(_ query: FirestoreQuery, _ onChange: @escaping @MainActor (Result<[FirestoreDocument], Error>) -> Void)
       -> FirestoreListening
     {
-      onChange(.success([]))
+      listens += 1
+      onChange(.success([FirestoreDocument(id: "d1", data: ["code": "OLD"], fromCache: true)]))
+      if query.includeMetadataChanges { onChange(.success([FirestoreDocument(id: "d1", data: ["code": "NEW"])])) }
       return NoListener()
     }
 
@@ -87,6 +91,19 @@ final class FormEditsTests: XCTestCase {
     await model.load()
     XCTAssertEqual(model.context["checking"], .object([:]))
     XCTAssertEqual(model.context["data"]?["me"]?["city"], "Austin")
+  }
+
+  func testACachedListIsHeldUntilTheServersRowsReplaceIt() async throws {
+    let spec = try XCTUnwrap(
+      ScreenSpec(["id": "core.x", "title": "X", "load": ["discounts": ["query": ["collection": "hosts/h1/discounts"]]]]))
+    let api = ConsoleAPIClient(origin: "http://localhost", getIDToken: { _ in "t" })
+    let model = ScreenModel(spec: spec, context: [:], api: api, reader: Reader(cached: [:], server: nil), writer: nil)
+    await model.load()
+    XCTAssertEqual(model.context["checking"]?["discounts"], .bool(true), "a row's prompt is held while its list is the cache's")
+    XCTAssertEqual(ScreenValues.lookup("data.discounts.items.0.code", in: model.context), "OLD")
+    for _ in 0..<50 where model.context["checking"]?["discounts"] != nil { try await Task.sleep(for: .milliseconds(20)) }
+    XCTAssertEqual(model.context["checking"], .object([:]))
+    XCTAssertEqual(ScreenValues.lookup("data.discounts.items.0.code", in: model.context), "NEW", "the server's rows replace the cache's")
   }
 
   func testEditsAreKeptOverAFresherSeedAndLandedOnesFollowIt() {

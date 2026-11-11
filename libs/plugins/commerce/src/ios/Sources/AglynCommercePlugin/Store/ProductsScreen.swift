@@ -251,6 +251,8 @@ struct ProductDetailView: View {
       .navigationBarTitleDisplayMode(.inline)
     #endif
     .sheet(item: $editing) { editor in ProductEditorSheet(context: context, model: editor) }
+    // A newer copy of the product reaches the open editor (AGL-4047).
+    .onChange(of: model.revision) { _, _ in if let doc = model.doc { editing?.refresh(doc) } }
     .sheet(isPresented: Binding(get: { labels != nil }, set: { if !$0 { labels = nil } })) {
       ProductLabelsSheet(productName: model.row?.name ?? "Product", rows: labels ?? [])
     }
@@ -388,7 +390,8 @@ extension ProductDetailView {
     actions.append(
       AglynRecordAction(
         "product-archive", archived ? "Activate" : "Archive", systemImage: archived ? "tray.and.arrow.up" : "archivebox",
-        enabled: !working
+        // The status save sends the stored product whole: never the device cache's copy of it (AGL-4047).
+        enabled: !working && !doc.fromCache
       ) {
         Task { await setStatus(doc, row, archived ? "active" : "archived") }
       })
@@ -403,7 +406,9 @@ extension ProductDetailView {
   private func primaryAction(_ row: ProductRow) -> AglynRecordAction? {
     guard let doc = model.doc else { return nil }
     if row.status == "draft" {
-      return AglynRecordAction("activate-product", "Activate", systemImage: "checkmark.circle", enabled: !working, busy: working) {
+      return AglynRecordAction(
+        "activate-product", "Activate", systemImage: "checkmark.circle", enabled: !working && !doc.fromCache, busy: working
+      ) {
         Task { await setStatus(doc, row, "active") }
       }
     }

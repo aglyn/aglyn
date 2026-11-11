@@ -95,7 +95,24 @@ data class ProductDraft(
   val addOns: List<AddOnGroupDraft> = emptyList(),
   /** Check-in at the window (AGL-4063): whether each one sold is somebody to check in, and how many people one admits. */
   val checkIn: ProductCheckIn? = null,
-)
+) {
+  /**
+   * This draft over a stored product that moved from [previous] to [next] (AGL-4047): every field changed here keeps it,
+   * every other field follows [next].
+   */
+  fun rebased(previous: ProductDraft, next: ProductDraft) = next.copy(
+    productId = productId,
+    create = create,
+    name = com.aglyn.core.rebased(name, previous.name, next.name),
+    description = com.aglyn.core.rebased(description, previous.description, next.description),
+    status = com.aglyn.core.rebased(status, previous.status, next.status),
+    type = com.aglyn.core.rebased(type, previous.type, next.type),
+    options = com.aglyn.core.rebased(options, previous.options, next.options),
+    variants = com.aglyn.core.rebased(variants, previous.variants, next.variants),
+    addOns = com.aglyn.core.rebased(addOns, previous.addOns, next.addOns),
+    checkIn = com.aglyn.core.rebased(checkIn, previous.checkIn, next.checkIn),
+  )
+}
 
 /** A stored product's variants as their raw maps, to read what a typed variant does not carry as stored. */
 private fun storedVariantMaps(data: Map<String, Any?>?): List<Map<*, *>> = (data?.get("variants") as? List<*>).orEmpty().mapNotNull { it as? Map<*, *> }
@@ -256,14 +273,37 @@ class ProductEditorModel(private val api: ProductWriteApi, private val scope: Co
   /** The product a create just added: the list picks it, so its detail opens beside the list. */
   var created by mutableStateOf<String?>(null)
   private var stored: Map<String, Any?>? = null
+  /** The stored product as a draft, which the typing is laid over (AGL-4047). */
+  private var opened: ProductDraft? = null
+  /** The stored product is only the device cache's copy yet: Save waits for the server's. A new one is never held. */
+  var held by mutableStateOf(false)
+    private set
   private var attemptKey = mintKey()
 
   fun create() = open(ProductDraft(productId = newProductId(), create = true), null)
 
-  fun edit(productId: String, data: Map<String, Any?>) = open(productDraftOf(productId, data), data)
+  fun edit(productId: String, data: Map<String, Any?>, fromCache: Boolean = false) {
+    open(productDraftOf(productId, data), data)
+    opened = draft
+    held = fromCache
+  }
+
+  /** A newer copy of the open product arrived: what was typed stays, every other field moves to it, and Save sends it whole. */
+  fun refresh(productId: String, data: Map<String, Any?>, fromCache: Boolean) {
+    val typed = draft ?: return
+    val previous = opened ?: return
+    if (typed.create || typed.productId != productId) return
+    val next = productDraftOf(productId, data)
+    draft = typed.rebased(previous, next)
+    opened = next
+    stored = data
+    held = fromCache
+  }
 
   private fun open(next: ProductDraft, data: Map<String, Any?>?) {
     stored = data
+    opened = null
+    held = false
     error = null
     attemptKey = mintKey()
     draft = next
