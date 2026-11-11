@@ -19,6 +19,7 @@ import { pluginConfigSchemaFromManifest } from '@aglyn/aglyn'
 import { offeredPluginVersion } from '@aglyn/aglyn/app-utils/plugin-manifest'
 import {
   installedPluginCaption,
+  installPictureReadPhase,
   installPlanOutcome,
   manifestSettingsFields,
   manifestSettingsScreen,
@@ -96,6 +97,49 @@ describe('what a plugin page says about its installs', () => {
     expect(resolveUninstallTargets(wide, 'org').every((target) => !target.stillCovered)).toBe(true)
     expect(pluginUpdatePrompt({ name: 'Counter', latestVersion: '1.2.0', label: 'Blog', singleSite: true }).others).toBe('Other sites stay on the version they are running.')
     expect(installedPluginCaption({ version: '1.0.0', orgWide: false, siteLabels: ['Blog', 'Shop'] })).toBe('v1.0.0 · 2 sites')
+  })
+
+  it("says where a plugin runs in the Plugins list, minus the sites that switched it off (AGL-4047)", () => {
+    const wide = { version: '1.1.0', orgWide: true, siteLabels: [] }
+    expect(installedPluginCaption(wide)).toBe('v1.1.0 · every site in this organization')
+    expect(installedPluginCaption({ ...wide, switchedOff: [], siteCount: 3 })).toBe(
+      'v1.1.0 · every site in this organization',
+    )
+    expect(installedPluginCaption({ ...wide, switchedOff: ['Tax Check'], siteCount: 3 })).toBe(
+      'v1.1.0 · every site except Tax Check, which switched it off',
+    )
+    expect(installedPluginCaption({ ...wide, switchedOff: ['Blog', 'Shop'], siteCount: 3 })).toBe(
+      'v1.1.0 · every site except 2 that switched it off',
+    )
+    expect(installedPluginCaption({ ...wide, switchedOff: ['Blog', 'Shop'], siteCount: 2 })).toBe(
+      'v1.1.0 · every site switched it off',
+    )
+    const pinned = { version: '1.0.0', orgWide: false, siteLabels: ['Blog', 'Shop', 'Cafe'] }
+    expect(installedPluginCaption({ ...pinned, switchedOff: ['Shop'] })).toBe('v1.0.0 · 3 sites · Shop switched it off')
+    expect(installedPluginCaption({ ...pinned, switchedOff: ['Shop', 'Cafe'] })).toBe(
+      'v1.0.0 · 3 sites · 2 of them switched it off',
+    )
+    expect(installedPluginCaption({ version: '1.0.0', orgWide: false, siteLabels: ['Blog'], switchedOff: ['Blog'] })).toBe(
+      'v1.0.0 · Blog, which switched it off',
+    )
+  })
+
+  it('states where a plugin is installed only once every pin has answered (AGL-4047)', () => {
+    const answered = 'answered' as const
+    // The org id is still resolving, or the org pin's listen has not heard from the server.
+    expect(installPictureReadPhase({ orgPin: 'pending', sitePins: answered })).toBe('loading')
+    expect(installPictureReadPhase({ orgPin: { status: 'loading', fromCache: true }, sitePins: answered })).toBe('loading')
+    // A cached "missing" is the cache's guess, not the server's answer.
+    expect(installPictureReadPhase({ orgPin: { status: 'success', fromCache: true }, sitePins: answered })).toBe('loading')
+    // Every site's pin, too.
+    expect(installPictureReadPhase({ orgPin: { status: 'success', fromCache: false }, sitePins: 'loading' })).toBe('loading')
+    expect(installPictureReadPhase({ orgPin: { status: 'success', fromCache: false }, sitePins: answered })).toBe('ready')
+    expect(installPictureReadPhase({ orgPin: null, sitePins: answered })).toBe('ready')
+    // A pin on screen is an answer, cached or not.
+    expect(installPictureReadPhase({ orgPin: { data: { version: '1' }, fromCache: true }, sitePins: answered })).toBe('ready')
+    // A failure is said as a failure.
+    expect(installPictureReadPhase({ orgPin: { status: 'error' }, sitePins: answered })).toBe('error')
+    expect(installPictureReadPhase({ orgPin: { status: 'success', fromCache: false }, sitePins: 'failed' })).toBe('error')
   })
 
   it("reads each site's own switch over its pin, given the listing (AGL-4047)", () => {
