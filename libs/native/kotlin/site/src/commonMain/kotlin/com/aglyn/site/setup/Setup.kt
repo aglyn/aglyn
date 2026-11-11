@@ -42,6 +42,12 @@ enum class SetupSection(val id: String, val title: String, val supporting: Strin
   INTEGRATIONS("integrations", "Integrations", "Email platforms, Zapier, live chat and the other tools your site connects to", "extension"),
   ;
 
+  /**
+   * Whether the section's cards are seeded from the site document, so they hold their Save while it is only the device
+   * cache's copy (AGL-4047). The theme editor and the emails are read through their routes, which answer from the server.
+   */
+  val seedsFromHost: Boolean get() = this in setOf(DETAILS, BUSINESS, SEO, TRACKING)
+
   companion object {
     /** A section by its id or by an old `?tab=` value (`SETUP_TAB_SECTIONS`); details otherwise. */
     fun of(value: String?): SetupSection = when (value) {
@@ -347,6 +353,30 @@ fun filterFonts(fonts: List<ThemeFontOption>, search: String, category: String?)
 }
 
 /** What each control shows (`readThemeEditorValues`). */
+/**
+ * The editor's draft over a saved theme that moved from [previous] to [next] (the console's theme editor replaying
+ * `diffOverride` onto the new theme, AGL-4047): every value changed here keeps it, everything else follows [next].
+ */
+fun rebasedTheme(draft: ThemeValues, previous: ThemeValues, next: ThemeValues): ThemeValues {
+  val colors = next.colors.mapValues { it.value.toMutableMap() }.toMutableMap()
+  for (scheme in draft.colors.keys + previous.colors.keys) {
+    for (token in draft.colors[scheme].orEmpty().keys + previous.colors[scheme].orEmpty().keys) {
+      val mine = draft.colors[scheme]?.get(token)
+      if (mine != previous.colors[scheme]?.get(token)) colors.getOrPut(scheme) { mutableMapOf() }[token] = mine
+    }
+  }
+  return next.copy(
+    colors = colors,
+    darkScheme = com.aglyn.core.rebased(draft.darkScheme, previous.darkScheme, next.darkScheme),
+    fontFamily = com.aglyn.core.rebased(draft.fontFamily, previous.fontFamily, next.fontFamily),
+    borderRadius = com.aglyn.core.rebased(draft.borderRadius, previous.borderRadius, next.borderRadius),
+    spacing = com.aglyn.core.rebased(draft.spacing, previous.spacing, next.spacing),
+    navHeightXs = com.aglyn.core.rebased(draft.navHeightXs, previous.navHeightXs, next.navHeightXs),
+    navHeightSm = com.aglyn.core.rebased(draft.navHeightSm, previous.navHeightSm, next.navHeightSm),
+    componentLooks = com.aglyn.core.rebased(draft.componentLooks, previous.componentLooks, next.componentLooks),
+  )
+}
+
 data class ThemeValues(
   val colors: Map<String, Map<String, String?>>,
   val darkScheme: String,

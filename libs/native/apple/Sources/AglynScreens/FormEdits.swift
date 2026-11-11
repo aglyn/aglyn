@@ -13,7 +13,7 @@ import Foundation
 enum FormEdits {
   /// What a held Save says beside it (`seedCheckingText`), for the form's `checking` subject ("profile").
   static func checkingText(_ subject: String?) -> String {
-    "Checking your \(subject ?? "settings") with the server…"
+    seedCheckingText(subject ?? "settings")
   }
 
   /// The loads still `checking` that this form reads: its `object`, or any field's `initial`.
