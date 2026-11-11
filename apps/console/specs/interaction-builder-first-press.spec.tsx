@@ -74,7 +74,6 @@ jest.mock('@aglyn/aglyn', () => ({
   components: { getSchema: () => undefined },
 }))
 
-// eslint-disable-next-line @typescript-eslint/no-var-requires
 const { InteractionBuilderDialog } = require('../components/interaction-builder-dialog.component') as {
   InteractionBuilderDialog: (props: Record<string, unknown>) => ReactNode
 }
