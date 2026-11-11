@@ -311,22 +311,17 @@ final class AppModel {
     switch registry.resolve(link) {
     case .screen(let screen, let params)?:
       // A link that names a workspace and site by address reads them, not whichever is picked (AGL-3911).
-      if let org = params["orgSlug"] {
-        select(orgSlug: org, hostSlug: params["hostSlug"])
-        // A link into one site opens inside it; a workspace's own page opens on the whole workspace.
-        if app == .aglyn { navigation.inSite = params["hostSlug"] != nil }
-      }
+      if let org = params["orgSlug"] { enterScope(orgSlug: org, hostSlug: params["hostSlug"], in: navigation) }
       navigation.push(.screen(screen, params))
     case .besigner(let path)?: navigation.push(.besigner(path))
     case .unavailable(let path)?:
-      // The app's own screens answer the console's own pages.
+      // The app's own screens answer the console's own pages, and every one of them opens on the workspace and site the
+      // link names, as a plugin's screen does (AGL-4215): Analytics reads that site, and a page the app has no screen
+      // for yet says so over the right site rather than the one that happened to be open.
       let scope = DeepLinks.splitConsoleScope(path.split(separator: "?", maxSplits: 1).first.map(String.init) ?? path)
+      if let org = scope.orgSlug { enterScope(orgSlug: org, hostSlug: scope.hostSlug, in: navigation) }
       if let jobID = DeepLinks.rootQuery(path)?["aiJob"], !jobID.isEmpty, registry.screen("ai.job") != nil {
         // An AI job's notice that built nothing of its own to open (`/{hostId}?aiJob=…`) opens that job (AGL-3911).
-        if let org = scope.orgSlug {
-          select(orgSlug: org, hostSlug: scope.hostSlug)
-          if scope.hostSlug != nil { navigation.inSite = true }
-        }
         navigation.push(.screen("ai.job", ["jobId": jobID]))
       } else if path.hasPrefix("/manage/notifications/settings") {
         navigation.select(.notifications)
@@ -335,8 +330,9 @@ final class AppModel {
         navigation.select(.notifications)
       } else if scope.rest.hasPrefix("/analytics") {
         navigation.push(.analytics)
-      } else if scope.hostSlug != nil, scope.rest == "/" {
-        // A site's own dashboard (a "you have access to this site" notice) is Home.
+      } else if scope.orgSlug != nil, scope.rest == "/" {
+        // A site's own dashboard (a "you have access to this site" notice) is its Home, and a workspace's own address
+        // (`/{orgSlug}`) is the workspace's Home, as on Android.
         navigation.select(.home)
       } else {
         navigation.push(.unavailable(path))
@@ -345,14 +341,24 @@ final class AppModel {
     }
   }
 
+  /// Moves onto the workspace and site a link names by address, and into the site when it names one (a workspace's own
+  /// page opens on the whole workspace). A first segment that is none of the person's workspaces (a stored link's site
+  /// id, when its site was not known) moves nothing, so it never undoes the site a notification already opened.
+  private func enterScope(orgSlug: String, hostSlug: String?, in navigation: ShellNavigation) {
+    guard select(orgSlug: orgSlug, hostSlug: hostSlug), app == .aglyn else { return }
+    navigation.inSite = hostSlug != nil
+  }
+
   /// Moves the switcher onto the workspace and site a link names by address; a link that launched the app before the
-  /// session was restored waits for the person's workspace store.
-  private func select(orgSlug: String, hostSlug: String?) {
+  /// session was restored waits for the person's workspace store. False when the person's workspaces are here and
+  /// none is that one.
+  @discardableResult
+  private func select(orgSlug: String, hostSlug: String?) -> Bool {
     if let workspace {
-      workspace.select(orgSlug: orgSlug, hostSlug: hostSlug)
-    } else {
-      pendingLinkScope = (orgSlug, hostSlug)
+      return workspace.select(orgSlug: orgSlug, hostSlug: hostSlug)
     }
+    pendingLinkScope = (orgSlug, hostSlug)
+    return true
   }
 
   /// Follows a link that says which workspace and site it is about (a notification row, a tapped push): onto them
@@ -365,10 +371,14 @@ final class AppModel {
         workspace.open(orgID: orgID, hostID: hostID ?? (orgID == workspace.org?.id ? workspace.site?.id : nil))
       }
       if hostID != nil { navigation.inSite = true }
-      // Host notifications store `/{hostDocId}/…`; the console follows them at `/{orgSlug}/hosts/{subdomain}/…`.
+      // Host notifications store `/{hostDocId}/…`; the console follows them at `/{orgSlug}/hosts/{subdomain}/…`. A site
+      // in another workspace is not among the sites on screen yet: the row's own ids stand in for the slugs (the store
+      // matches a workspace and a site by id as well), so the link still names that site and the store picks it as
+      // soon as its workspace's sites arrive, rather than reading the site id as a workspace (AGL-4215).
       let site = workspace.sites.first { $0.id == hostID }
       let org = workspace.orgs.first { $0.id == (orgID ?? site?.orgID) }
-      link = DeepLinks.notificationLink(link, orgSlug: org?.slug, hostID: hostID, hostSubdomain: site?.subdomain)
+      let hostSlug = site.map { $0.subdomain.isEmpty ? $0.id : $0.subdomain } ?? hostID
+      link = DeepLinks.notificationLink(link, orgSlug: org?.slug ?? orgID, hostID: hostID, hostSubdomain: hostSlug)
     }
     if let link { open(link, in: navigation) }
   }
