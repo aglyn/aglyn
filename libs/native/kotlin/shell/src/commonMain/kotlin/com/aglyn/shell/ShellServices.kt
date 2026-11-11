@@ -19,6 +19,13 @@ import com.aglyn.pluginhost.NativeLinkTarget
 import com.aglyn.pluginhost.NativeParams
 import com.aglyn.pluginhost.NativePluginContext
 import com.aglyn.pluginhost.NativePluginRegistry
+import com.aglyn.pluginhost.NavArea
+import com.aglyn.pluginhost.NavPath
+import com.aglyn.pluginhost.NavPathLists
+import com.aglyn.pluginhost.NavPathMode
+import com.aglyn.pluginhost.NavPaths
+import com.aglyn.pluginhost.NavShellPage
+import com.aglyn.pluginhost.NavStep
 import com.aglyn.pluginhost.scopedConsolePath
 
 /** Everything a shell needs, built once per process by the platform entry point. */
@@ -165,6 +172,9 @@ val PLATFORM_ENTRIES: List<com.aglyn.pluginhost.NativePluginManifestEntry> = lis
 /** The site's Pages screen, which the site registration (libs/native/kotlin/site) contributes. */
 const val SITE_PAGES_SCREEN_ID = "site.pages"
 
+/** The Media screen, a site's and the whole workspace's library. */
+internal const val SITE_MEDIA_SCREEN_ID = "site.media"
+
 /** What the desktop's menu bar can ask of the shell. */
 enum class ShellCommand {
   FIND, SWITCH_WORKSPACE, SWITCH_SITE, SETTINGS, TOGGLE_SIDEBAR, TOGGLE_RAIL, ADD_ACCOUNT, SHORTCUTS, AI_PANEL, HELP_DOCS,
@@ -289,7 +299,15 @@ internal class ShellPluginContext(
   private val services: ShellServices,
   private val navigator: ShellNavigator,
   private val topLevelScreens: Set<String>,
+  /**
+   * The Aglyn shell's chrome, whose sidebar mode a link sets: a link then opens on its whole path (AGL-4059). Aglyn POS,
+   * which has no areas, passes none and a link opens its screen over what is on screen.
+   */
+  private val chrome: NavChromeState? = null,
 ) : NativePluginContext {
+  /** The staff list's rows, for staff (the shell sets them once it has read the claims). */
+  var staffRows: List<NavItem> = emptyList()
+
   override val orgId get() = workspace.org?.id
   override val hostId get() = workspace.site?.id
   override val orgSlug get() = workspace.org?.slug
@@ -400,6 +418,78 @@ internal class ShellPluginContext(
   }
 
   private fun openHere(link: String): Boolean {
+    val chrome = chrome ?: return openOverWhatIsShown(link)
+    val (scope, path) = NavPaths.link(link, services.registry.deepLinks(), navPathLists(), workspace.site != null) ?: return false
+    go(path, chrome)
+    // The workspace's own Media read from inside a site (`/{orgSlug}/media`) shows the workspace's library, which its
+    // screen reads from the link's scope (MediaScreens' `orgOnly`), over the site's Media.
+    val area = path.area
+    val orgSlug = scope.orgSlug
+    if (orgSlug != null && scope.hostSlug == null && workspace.site != null && path.pushed.isEmpty() && area is NavArea.Row && area.screen == SITE_MEDIA_SCREEN_ID) {
+      navigator.push(Route.Screen(area.screen, area.params + ("orgSlug" to orgSlug)))
+    }
+    return true
+  }
+
+  /**
+   * Opens a Starred or Recent item, or a search row's place, on the same path a link to it opens (AGL-4059): its
+   * workspace and site first (by the caller), then its mode, area and each level over it.
+   */
+  fun openPlace(item: com.aglyn.contracts.AccountItemRef) {
+    val chrome = chrome ?: return navigator.select(NavKeys.of(item.screen, item.params))
+    go(NavPaths.place(item, services.registry.deepLinks(), navPathLists()), chrome)
+  }
+
+  /** The lists a place is looked up in: the manifest's rows this build has a screen for, and the staff list for staff. */
+  private fun navPathLists(): NavPathLists {
+    val staff = staffRows.takeIf { it.isNotEmpty() }?.let { rows ->
+      com.aglyn.contracts.ResolvedNavList(
+        listOf(com.aglyn.contracts.NativeNavGroup(foldable = false, id = "staff", rows = rows.map { row ->
+          com.aglyn.contracts.NativeNavRow(
+            console = com.aglyn.contracts.NativeNavConsoleRef(row.rowId, com.aglyn.contracts.NativeNavConsoleSurface.NATIVE_ONLY),
+            icon = com.aglyn.contracts.NativeNavIcon(android = row.icon, apple = ""), id = row.rowId, label = row.label, screen = row.screen,
+          )
+        })),
+        STAFF_MODE,
+      )
+    }
+    return NavPaths.lists(staff = staff) { services.registry.screen(it) != null }
+  }
+
+  /**
+   * Puts a resolved path on screen: the sidebar's mode, the area as the destination, then each level pushed over it. A
+   * phone opens an area as its Home tile does (the area as the destination, a setting's under its mode's Menu), so the
+   * same holds there; a page with no native screen yet opens its area.
+   */
+  private fun go(path: NavPath, chrome: NavChromeState) {
+    chrome.settingsMode = when (path.mode) {
+      NavPathMode.MAIN -> null
+      NavPathMode.WORKSPACE_SETTINGS -> com.aglyn.contracts.NativeNavListId.WORKSPACE_SETTINGS
+      NavPathMode.SITE_SETTINGS -> com.aglyn.contracts.NativeNavListId.SITE_SETTINGS
+      NavPathMode.STAFF -> STAFF_MODE
+    }
+    when (val area = path.area) {
+      is NavArea.Shell -> when (area.page) {
+        NavShellPage.HOME -> navigator.select(ShellNavigator.HOME)
+        NavShellPage.NOTIFICATIONS -> navigator.select(ShellNavigator.NOTIFICATIONS)
+        NavShellPage.NOTIFICATION_SETTINGS -> {
+          navigator.select(ShellNavigator.SETTINGS)
+          navigator.push(Route.NotificationSettings)
+        }
+      }
+      is NavArea.Row -> navigator.select(NavKeys.of(area.screen, area.params))
+    }
+    for (step in path.pushed) {
+      when (step) {
+        is NavStep.Screen -> navigator.push(if (step.screen == NavKeys.ANALYTICS_SCREEN) Route.Analytics else Route.Screen(step.screen, step.params))
+        is NavStep.Besigner -> navigator.push(Route.Besigner(step.path))
+        is NavStep.Unavailable -> Unit
+      }
+    }
+  }
+
+  /** Aglyn POS: a link's screen over what is on screen, or the shell's nearest answer. */
+  private fun openOverWhatIsShown(link: String): Boolean {
     when (val target = DeepLinks.resolve(withAiJobPath(link), services.registry.deepLinks())) {
       is NativeLinkTarget.Screen -> navigator.push(Route.Screen(target.screen, target.params))
       is NativeLinkTarget.Besigner -> navigator.push(Route.Besigner(target.path))
