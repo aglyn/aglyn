@@ -304,8 +304,11 @@ export type { MarketplaceArtifactType }
 export {
   ARTIFACT_TYPE_LABELS,
   INSTALL_TARGETS,
+  type InstallPictureReadPhase,
   type InstallPin,
+  type InstallPinRead,
   type InstallTarget,
+  installPictureReadPhase,
   LISTING_CATEGORIES,
   type OrgInstallHost,
   type OrgInstallSite,
