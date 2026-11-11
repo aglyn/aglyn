@@ -23,7 +23,9 @@
  */
 
 import {
+  ASK_BURST,
   ASK_INTERVAL_MS,
+  ASK_RETRY_MS,
   ASKER_FRESH_MS,
   BOOT_CHECK_DELAYS_MS,
   createPrimaryYield,
@@ -33,6 +35,7 @@ import {
   type PrimaryYieldDeps,
   readLease,
   RECHECK_MS,
+  REFRESH_INTERVAL_MS,
   runPrimaryYield,
   VISIBLE_DWELL_MS,
   YIELD_INTERVAL_MS,
@@ -225,7 +228,7 @@ const readOf = (
 describe('createPrimaryYield — the visible tab', () => {
   const live = readOf(lease('holder'), [row('holder', false), row('me', true)])
 
-  it('asks the holder by id, and only once per interval', async () => {
+  it('asks the holder by id, again while unanswered, then once per interval', async () => {
     const h = harness('me', live)
     expect(await h.handoff.check()).toEqual({
       side: 'asker',
@@ -236,9 +239,59 @@ describe('createPrimaryYield — the visible tab', () => {
       { type: 'yield', holderId: 'holder', askerId: 'me' },
     ])
     expect(await h.handoff.check()).toMatchObject({ reason: 'throttled' })
+    // The holder has not let go: ask again, a short burst.
+    for (let ask = 2; ask <= ASK_BURST; ask += 1) {
+      h.advance(ASK_RETRY_MS)
+      expect(await h.handoff.check()).toMatchObject({ result: 'asked' })
+    }
+    h.advance(ASK_RETRY_MS)
+    expect(await h.handoff.check()).toMatchObject({ reason: 'throttled' })
+    expect(h.posted).toHaveLength(ASK_BURST)
+    // Then the long interval, and a new burst.
     h.advance(ASK_INTERVAL_MS)
+    expect(await h.handoff.check()).toMatchObject({ result: 'asked' })
+    h.advance(ASK_RETRY_MS)
+    expect(await h.handoff.check()).toMatchObject({ result: 'asked' })
+    expect(h.posted).toHaveLength(ASK_BURST + 2)
+  })
+
+  it('rewrites its own hidden first row with a network cycle, then asks in the same look', async () => {
+    const firstRow = readOf(lease('holder'), [
+      row('holder', false),
+      row('me', false),
+    ])
+    const h = harness('me', live)
+    h.deps.read.mockResolvedValueOnce(firstRow)
+    const events: string[] = []
+    h.deps.onEvent = (event) => events.push(event.result)
+    expect(await h.handoff.check()).toMatchObject({ result: 'asked' })
+    expect(h.deps.cycleNetwork).toHaveBeenCalledTimes(1)
+    expect(events).toEqual(['refreshed', 'asked'])
+    expect(h.posted).toHaveLength(1)
+  })
+
+  it('rewrites its own row at most once per SDK tick, and only when it would ask', async () => {
+    const hiddenSelf = readOf(lease('holder'), [
+      row('holder', false),
+      row('me', false),
+    ])
+    const h = harness('me', hiddenSelf)
+    expect(await h.handoff.check()).toMatchObject({ reason: 'self-not-ready' })
+    expect(await h.handoff.check()).toMatchObject({ reason: 'self-not-ready' })
+    expect(h.deps.cycleNetwork).toHaveBeenCalledTimes(1)
+    h.advance(REFRESH_INTERVAL_MS)
     await h.handoff.check()
-    expect(h.posted).toHaveLength(2)
+    expect(h.deps.cycleNetwork).toHaveBeenCalledTimes(2)
+    // A visible holder or a vacant lease is no reason to touch the network.
+    const visibleHolder = harness(
+      'me',
+      readOf(lease('holder'), [row('holder', true), row('me', false)]),
+    )
+    await visibleHolder.handoff.check()
+    const vacant = harness('me', readOf(undefined, [row('me', false)]))
+    await vacant.handoff.check()
+    expect(visibleHolder.deps.cycleNetwork).not.toHaveBeenCalled()
+    expect(vacant.deps.cycleNetwork).not.toHaveBeenCalled()
   })
 
   it('asks once when looks overlap', async () => {
@@ -434,7 +487,10 @@ describe('runPrimaryYield', () => {
       ...BOOT_CHECK_DELAYS_MS,
       VISIBLE_DWELL_MS,
     ])
-    // Every boot look fires; the ask goes out once (ASK_INTERVAL_MS).
+    // The first look is immediate.
+    expect(BOOT_CHECK_DELAYS_MS[0]).toBe(0)
+    // Every boot look fires at once here; the ask goes out once
+    // (ASK_RETRY_MS).
     for (const [fire] of b.timers) fire()
     await new Promise((resolve) => setTimeout(resolve, 0))
     expect(b.posted).toEqual([
