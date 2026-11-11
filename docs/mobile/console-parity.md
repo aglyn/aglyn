@@ -151,8 +151,16 @@ Unticked rows and platforms, and what each needs:
   was opened (Mac, Android phone and tablet). The seeded stack connects none of
   these services, so after #1688 only Review platforms and Sales channels show,
   and only those two were opened (Android). The accounting, shipping,
-  post-purchase, tax service, fulfillment network and courier cards need a site
-  with each service connected in test mode, and were not opened on any device.
+  post-purchase, tax service, fulfillment network and courier cards were not
+  opened on any device. The seed now connects every one of these services on
+  `mobile-demo-site`, in test mode where the service has one
+  (`tools/scripts/seed-native/integrations.mjs`). Most cards still draw only
+  when the serving console holds that plugin's sealing key
+  (`COURIERS_TOKEN_KEY`, `TAX_ENGINES_TOKEN_KEY`, `SHIPPING_TOKEN_KEY` and the
+  rest), and delivery apps, fulfillment networks, marketplaces and
+  post-purchase also need the deployment to offer the service. An emulated
+  console blanks those keys, so there only Review platforms and Sales channels
+  draw.
 - Plugin marketplace (Apple, Kotlin): the seed has no marketplace listings, so
   Browse was empty wherever it was opened (Mac, Android phone and tablet). A
   listing's page, install, purchase and update, and the seller panel, were not
