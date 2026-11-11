@@ -44,7 +44,10 @@ import { docsHelp } from '../../../../../../../../constants/docs-links'
 import { buildRoute, Route } from '../../../../../../../../constants/route-links'
 import useCurrentOrg from '../../../../../../../../hooks/use-current-org'
 import { useOrgScope, useOrgSlug } from '../../../../../../../../hooks/use-org-scope'
-import { useSitePluginSwitchboard } from '../../../../../../../../hooks/use-plugin-switchboard'
+import {
+  SITE_PLUGINS_CHECKING_TEXT,
+  useSitePluginSwitchboard,
+} from '../../../../../../../../hooks/use-plugin-switchboard'
 import {
   useCanManageSiteKnown,
   useHostId,
@@ -393,7 +396,12 @@ const SitePluginInstallation: NextPageWithLayout<Record<string, never>> = () => 
                       !canManageSite ||
                       !orgEnabled ||
                       switchboard.busy ||
-                      !switchboard.ready
+                      !switchboard.ready ||
+                      // This switch saves as it moves, so a move before the
+                      // server has confirmed the host read would wait on that
+                      // confirmation and could end refused (AGL-4047). It is
+                      // held instead, with the reason beside it.
+                      (canManageSite && switchboard.checking)
                     }
                     onChange={() =>
                       switchboard.requestToggle(pluginRef, !runsHere)
@@ -407,6 +415,15 @@ const SitePluginInstallation: NextPageWithLayout<Record<string, never>> = () => 
                   <Typography variant="body2" color="text.secondary">
                     {runsHere ? 'On for this site' : 'Off for this site'}
                   </Typography>
+                  {canManageSite && orgEnabled && switchboard.checking ? (
+                    <Typography
+                      variant="body2"
+                      color="text.secondary"
+                      role="status"
+                    >
+                      {SITE_PLUGINS_CHECKING_TEXT}
+                    </Typography>
+                  ) : null}
                   {orgEnabled ? null : (
                     <AppLink
                       href={buildRoute(Route.ORG_PLUGIN_INSTALLATION, {

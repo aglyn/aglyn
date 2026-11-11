@@ -40,6 +40,8 @@ let mockPluginRef = 'ai'
 // A switchboard saved before AI was a plugin: it never named the id.
 let mockOrg: Record<string, unknown> = { enabledPlugins: ['mui', 'commerce'] }
 let mockHostDoc: Record<string, unknown> = {}
+/** Whether the host read is still the cache's, unconfirmed by the server. */
+let mockHostFromCache = false
 
 const mockSetDoc = jest.fn().mockResolvedValue(undefined)
 
@@ -61,7 +63,7 @@ jest.mock('@aglyn/tenant-feature-instance', () => ({
   useFirestoreCollection: () => ({ data: [] }),
   useUser: () => ({ data: { getIdToken: async () => 'token' } }),
   useHost: () => ({
-    doc: { data: mockHostDoc, status: 'success', fromCache: false },
+    doc: { data: mockHostDoc, status: 'success', fromCache: mockHostFromCache },
     setDoc: mockSetDoc,
   }),
   writeGuardedBySeed: jest.requireActual('@aglyn/tenant-feature-instance')
@@ -154,6 +156,7 @@ beforeEach(() => {
   mockPluginRef = 'ai'
   mockOrg = { enabledPlugins: ['mui', 'commerce'] }
   mockHostDoc = { $id: HOST_ID }
+  mockHostFromCache = false
   global.fetch = jest.fn().mockResolvedValue({
     ok: true,
     json: async () => ({ placements: 0, affectedScreens: 0, truncated: false }),
@@ -199,6 +202,23 @@ describe('AI on the SITE’s Admin › Plugins page', () => {
     expect(document.body.textContent).toContain('Off for this site')
     // Still on for the workspace: the chip says so, and no site can change it.
     expect(document.body.textContent).toContain('Enabled for the workspace')
+  })
+
+  it('holds the switch, and says why, until the server confirms the host read (AGL-4047)', () => {
+    // This switch saves as it moves. A move on the cache's copy waited on the
+    // server and could end in "We could not confirm your site plugin list",
+    // so the first move after a page load failed and the second worked.
+    mockHostFromCache = true
+    const { rerender } = render(<SitePluginInstallation />)
+    expect(switchLabelled('Toggle AI on this site')?.disabled).toBe(true)
+    expect(document.body.textContent).toContain(
+      'Checking this site’s plugin list with the server…',
+    )
+
+    mockHostFromCache = false
+    rerender(<SitePluginInstallation />)
+    expect(switchLabelled('Toggle AI on this site')?.disabled).toBe(false)
+    expect(document.body.textContent).not.toContain('Checking this site’s')
   })
 
   it('keeps the base component library always on, with no switch', () => {

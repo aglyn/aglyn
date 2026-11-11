@@ -39,7 +39,10 @@ import { docsHelp } from '../constants/docs-links'
 import { buildRoute, Route } from '../constants/route-links'
 import useCurrentOrg from '../hooks/use-current-org'
 import { useOrgSlug } from '../hooks/use-org-scope'
-import { useSitePluginSwitchboard } from '../hooks/use-plugin-switchboard'
+import {
+  SITE_PLUGINS_CHECKING_TEXT,
+  useSitePluginSwitchboard,
+} from '../hooks/use-plugin-switchboard'
 import { useSiteMarketplacePlugins } from '@aglyn/tenant-feature-instance/hooks/use-site-marketplace-plugins'
 import { useHostSubdomain } from './host-id-provider'
 
@@ -112,7 +115,8 @@ export default function SitePluginsCard(props: { hostId: string }) {
     labelFor,
     installedListings,
   })
-  const { busy, dirty, isOn, isLocked, requestToggle, save } = switchboard
+  const { busy, checking, dirty, isOn, isLocked, requestToggle, save } =
+    switchboard
 
   const builtIn = bundles.map((id) => {
     const plugin = catalog.get(id)
@@ -263,14 +267,32 @@ export default function SitePluginsCard(props: { hostId: string }) {
           </Typography>
         )}
 
-        <Stack direction="row" spacing={1}>
+        {/*
+          SAVE WAITS FOR THE SERVER, NOT FOR A SECOND PRESS (AGL-4047).
+
+          A press while the host read still came from the cache waited for the
+          server's confirmation and, when that ran past its deadline, was
+          refused with "We could not confirm your site plugin list…". Right
+          after a page load the first press failed and the second one worked.
+          Save is held instead, with the reason beside it, and comes on the
+          moment the server answers. The switches stay live: moves made
+          meanwhile are applied to the list the server confirms, so holding
+          Save never makes them stale. The guard still wraps the write, for a
+          read that falls back to the cache after this rendered.
+        */}
+        <Stack direction="row" spacing={1} sx={{ alignItems: 'center' }}>
           <Button
             variant="contained"
-            disabled={!dirty || busy}
+            disabled={!dirty || busy || checking}
             onClick={() => void save()}
           >
             {'Save site plugins'}
           </Button>
+          {dirty && checking ? (
+            <Typography variant="body2" color="text.secondary" role="status">
+              {SITE_PLUGINS_CHECKING_TEXT}
+            </Typography>
+          ) : null}
         </Stack>
       </Stack>
       <PluginDisableCascadeDialog {...switchboard.dialogProps} />
