@@ -93,4 +93,27 @@ internal object SwitchboardRows {
     }
     return JsonObject(mapOf("rows" to JsonArray(rows)))
   }
+
+  /**
+   * The site's two lists after switching [pluginId] on or off over `orgs/{org}` and `hosts/{site}` as stored now, the
+   * same move a row's `turnOn` / `turnOff` makes (switching off takes the plugins that need it along).
+   */
+  fun switched(orgDoc: JsonElement, hostDoc: JsonElement, pluginId: String, on: Boolean): JsonObject {
+    val orgEnabled = stringList((orgDoc as? JsonObject)?.get("enabledPlugins"))
+    val host = hostDoc as? JsonObject
+    val lists = SitePluginLists(stringList(host?.get("disabledPlugins")).orEmpty(), stringList(host?.get("enabledPlugins")).orEmpty())
+    val running = resolveHostEnabledPlugins(orgEnabled, lists.disabled, lists.optedIn)
+    val ids = if (on) listOf(pluginId) else listOf(pluginId) + resolveDisableCascade(pluginId, running)
+    val next = applySitePluginSwitch(lists, ids, on)
+    return JsonObject(mapOf("disabledPlugins" to strings(next.disabled), "enabledPlugins" to strings(next.optedIn)))
+  }
+
+  /** What a held switch says while the site's lists are not yet the server's (`SITE_PLUGINS_CHECKING_TEXT`). */
+  const val CHECKING_TEXT = "Checking this site’s plugin list with the server…"
+
+  /** Why a switch did not save (`writeGuardedBySeed`'s words for the site plugin list). */
+  const val UNCONFIRMED_TEXT =
+    "We could not confirm your site plugin list with the server yet, so nothing was saved. Check your connection and try again in a moment."
+  const val UNREADABLE_TEXT =
+    "Your site plugin list could not be loaded, so there is nothing safe to save — saving now would overwrite the stored copy with blanks. Reload and try again."
 }

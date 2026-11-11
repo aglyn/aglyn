@@ -286,6 +286,10 @@ public struct ActionSpec: Sendable, Identifiable {
   /// console writes the document directly under the rules (their own
   /// `users/{uid}` profile): `{ "doc": "users/{user.uid}", "fields": {...} }`.
   public let write: JSONValue?
+  /// One plugin switched on or off for a site, `{ "pluginId": "{item.id}", "on": true }`. The kit reads the site's
+  /// lists as the server holds them when it is pressed and applies the move to those (AGL-4047, the console's
+  /// `use-plugin-switchboard`), so a switch never saves a copy read earlier from the cache.
+  public let sitePluginSwitch: JSONValue?
   /// Lines the result is reported in, after `success`: `{ when, each, text }`, one per line.
   public let report: [ReportLine]
   /// Lines a refusal is explained in, after the route's own words, over the route's answer as `response`
@@ -402,7 +406,8 @@ public struct ActionSpec: Sendable, Identifiable {
     self.afterZone = json["afterZone"]
     self.reload = json["reload"] == .bool(true)
       || (json["reload"] != .bool(false)
-        && (json["url"]?.stringValue != nil || json["write"] != nil || json["account"] != nil || json["passkey"] != nil))
+        && (json["url"]?.stringValue != nil || json["write"] != nil || json["sitePluginSwitch"] != nil || json["account"] != nil
+          || json["passkey"] != nil))
     self.otherwise = json["else"].flatMap(ActionSpec.init).map(ActionSpecBox.init)
     self.elseStatus = json["elseStatus"].flatMap { value -> Int? in
       if case .number(let number) = value { return Int(number) }
@@ -418,6 +423,7 @@ public struct ActionSpec: Sendable, Identifiable {
     self.overlay = json["overlay"]?.stringValue
     self.reveal = json["reveal"]?.stringValue
     self.write = json["write"]
+    self.sitePluginSwitch = json["sitePluginSwitch"]
     self.report = json["report"].array.compactMap(ReportLine.init)
     self.failure = json["failure"].array.compactMap(ReportLine.init)
     self.log = json["log"].array.compactMap(ReportLine.init)

@@ -1434,6 +1434,13 @@
           "text": "{app.permissionRefusal[site.manage]}. You can see what runs here."
         },
         {
+          "type": "notice",
+          "id": "checking",
+          "tone": "info",
+          "when": "site.can[site.manage] && data.plugins.checking",
+          "text": "{data.plugins.checkingText}"
+        },
+        {
           "type": "list",
           "id": "site",
           "title": "On this site",
@@ -1448,16 +1455,13 @@
           "open": { "screen": "core.site.plugin", "params": { "pluginId": "{item.id}" } },
           "toggle": {
             "value": "{item.on}",
-            "disabled": "item.locked || !item.workspaceOn || !site.can[site.manage]",
+            "disabled": "item.locked || !item.workspaceOn || !site.can[site.manage] || data.plugins.checking",
             "label": "{item.label} on this site",
             "on": {
               "id": "on",
               "label": "Turn on for this site",
               "icon": "power|power_settings_new",
-              "write": {
-                "doc": "hosts/{site.id}",
-                "fields": { "disabledPlugins": "{item.turnOn.disabledPlugins}", "enabledPlugins": "{item.turnOn.enabledPlugins}" }
-              },
+              "sitePluginSwitch": { "pluginId": "{item.id}", "on": true },
               "success": "Site plugins saved",
               "reload": true
             },
@@ -1468,10 +1472,7 @@
               "destructive": true,
               "confirm": "Turn {item.label} off for this site? {item.stops|''}",
               "confirmWhen": "item.confirmOff",
-              "write": {
-                "doc": "hosts/{site.id}",
-                "fields": { "disabledPlugins": "{item.turnOff.disabledPlugins}", "enabledPlugins": "{item.turnOff.enabledPlugins}" }
-              },
+              "sitePluginSwitch": { "pluginId": "{item.id}", "on": false },
               "success": "Site plugins saved",
               "reload": true
             }
@@ -1590,20 +1591,21 @@
           "text": "Turning it off here also turns off {data.plugins.rows[id=params.pluginId].cascade}, which need it."
         },
         {
+          "type": "notice",
+          "id": "checking",
+          "tone": "info",
+          "when": "site.can[site.manage] && !data.plugins.rows[id=params.pluginId].locked && data.plugins.rows[id=params.pluginId].workspaceOn && data.plugins.checking",
+          "text": "{data.plugins.checkingText}"
+        },
+        {
           "type": "actions",
-          "when": "site.can[site.manage] && !data.plugins.rows[id=params.pluginId].locked && data.plugins.rows[id=params.pluginId].workspaceOn",
+          "when": "site.can[site.manage] && !data.plugins.rows[id=params.pluginId].locked && data.plugins.rows[id=params.pluginId].workspaceOn && !data.plugins.checking",
           "items": [
             {
               "id": "on",
               "label": "Turn on for this site",
               "icon": "power|power_settings_new",
-              "write": {
-                "doc": "hosts/{site.id}",
-                "fields": {
-                  "disabledPlugins": "{data.plugins.rows[id=params.pluginId].turnOn.disabledPlugins}",
-                  "enabledPlugins": "{data.plugins.rows[id=params.pluginId].turnOn.enabledPlugins}"
-                }
-              },
+              "sitePluginSwitch": { "pluginId": "{params.pluginId}", "on": true },
               "success": "Site plugins saved",
               "reload": true,
               "when": "!data.plugins.rows[id=params.pluginId].on"
@@ -1614,13 +1616,7 @@
               "icon": "poweroff|power_off",
               "destructive": true,
               "confirm": "Turn {data.plugins.rows[id=params.pluginId].label} off for this site? {data.plugins.rows[id=params.pluginId].stops|''}",
-              "write": {
-                "doc": "hosts/{site.id}",
-                "fields": {
-                  "disabledPlugins": "{data.plugins.rows[id=params.pluginId].turnOff.disabledPlugins}",
-                  "enabledPlugins": "{data.plugins.rows[id=params.pluginId].turnOff.enabledPlugins}"
-                }
-              },
+              "sitePluginSwitch": { "pluginId": "{params.pluginId}", "on": false },
               "success": "Site plugins saved",
               "reload": true,
               "when": "data.plugins.rows[id=params.pluginId].on"
