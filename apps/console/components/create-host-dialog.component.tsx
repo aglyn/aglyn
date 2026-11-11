@@ -100,8 +100,23 @@ const STARTER_ZONE = CONSOLE_WIDGET_SLOTS.hostStarterPicker
  * How long a start widget may take to say whether it draws anything before
  * the plain dialog is shown instead. The widget asks one route; this only
  * bounds an answer that never comes.
+ *
+ * Counted from the moment the widget can be asked: once the zone's plugin,
+ * the workspace and the reader's permissions have loaded. It used to count
+ * from the dialog opening, which on `?create=site` is the page's own first
+ * render, so a cold load spent it on loading the AI plugin and the plain
+ * dialog won: the start zone was never mounted, so its answer could never
+ * arrive and nothing put the start back (AGL-4152).
  */
 export const SITE_START_VERDICT_TIMEOUT_MS = 10_000
+
+/**
+ * How long the start's zone, the workspace and the permissions may take to
+ * load before the plain dialog is shown instead. A ceiling for a load that
+ * hangs, not a budget: a cold console page can spend most of ten seconds on
+ * it, so it is generous, and the verdict gets its own time after it.
+ */
+export const SITE_START_LOAD_TIMEOUT_MS = 30_000
 
 /**
  * The query a sites page opens "Create site" from (AGL-3761):
@@ -272,15 +287,6 @@ function CreateSiteFlow({
         ? 'limit'
         : null
 
-  // An answer that never comes — the start's widget, or a read the gates
-  // hold on — is the plain dialog, not a spinner forever. The server still
-  // refuses what it must.
-  const [timedOut, setTimedOut] = useState(false)
-  useEffect(() => {
-    const timer = setTimeout(() => setTimedOut(true), SITE_START_VERDICT_TIMEOUT_MS)
-    return () => clearTimeout(timer)
-  }, [])
-
   // ── "Choose your starter" (AGL-4049) ──────────────────────────────────────
   // The marketplace's starters in the starter path, behind its release flag
   // (staff see it before it is released, as every flagged surface). Its zone's
@@ -323,13 +329,37 @@ function CreateSiteFlow({
   // drawn in its place.
   const [chooseStyle, setChooseStyle] = useState<string | null>(null)
 
-  const resolving =
-    (!widgetsReady ||
-      !permissionsLoaded ||
-      !orgReady ||
-      (starters.visible && !pickerWidgetsReady) ||
-      (pickerOffered && pickerVerdict === null)) &&
-    !timedOut
+  // An answer that never comes — the start's widget, or a read the gates
+  // hold on — is the plain dialog, not a spinner forever. The server still
+  // refuses what it must. Two clocks, so the load cannot spend the widget's
+  // time (AGL-4152): the load's ceiling runs from opening and counts only
+  // while it is still loading; the verdict's runs from the moment the widgets
+  // that answer are mounted.
+  const loading =
+    !widgetsReady ||
+    !permissionsLoaded ||
+    !orgReady ||
+    (starters.visible && !pickerWidgetsReady)
+  // Either one, once it fires, holds: the plain dialog it draws is not
+  // swapped for the start under someone already filling it in.
+  const loadingRef = useRef(loading)
+  loadingRef.current = loading
+  const [loadTimedOut, setLoadTimedOut] = useState(false)
+  useEffect(() => {
+    const timer = setTimeout(() => {
+      if (loadingRef.current) setLoadTimedOut(true)
+    }, SITE_START_LOAD_TIMEOUT_MS)
+    return () => clearTimeout(timer)
+  }, [])
+  const [verdictTimedOut, setVerdictTimedOut] = useState(false)
+  useEffect(() => {
+    if (loading) return undefined
+    const timer = setTimeout(() => setVerdictTimedOut(true), SITE_START_VERDICT_TIMEOUT_MS)
+    return () => clearTimeout(timer)
+  }, [loading])
+  const timedOut = loadTimedOut || verdictTimedOut
+
+  const resolving = (loading || (pickerOffered && pickerVerdict === null)) && !timedOut
   const offersStart =
     !blocked && widgets.length > 0 && verdict !== false && !(timedOut && verdict === null)
   const mode: 'blocked' | 'resolving' | 'start' | 'form' = blocked
