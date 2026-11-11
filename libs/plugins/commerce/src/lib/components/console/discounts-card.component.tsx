@@ -39,7 +39,7 @@ import {
   setDoc,
   updateDoc,
 } from 'firebase/firestore'
-import { useCallback, useState } from 'react'
+import { useCallback } from 'react'
 import { useFirestore } from '@aglyn/tenant-feature-instance'
 import {
   collectionPage,
@@ -48,6 +48,11 @@ import {
 } from '@aglyn/tenant-feature-instance'
 import { ListPagination } from '@aglyn/shared-ui-jsx/components/list-pagination.component'
 import { pluginDocsHelp } from '@aglyn/aglyn'
+import {
+  isSeedChecking,
+  seedCheckingText,
+} from '@aglyn/tenant-feature-instance/hooks/use-seed-edits'
+import { useSeedDraft } from '@aglyn/tenant-feature-instance/hooks/use-seed-draft'
 import TransferHeaderActions from '../../transfer/transfer-header-actions.component'
 import { COMMERCE_DISCOUNTS_TRANSFER } from '../../transfer/transfer-keys'
 
@@ -110,9 +115,25 @@ export function DiscountsCard(props: DiscountsCardProps) {
     [firestore, hostId],
     { idField: '$id' },
   )
-  const [draft, setDraft] = useState<
-    (Partial<CommerceModel.HostDiscount> & { id: string | null }) | null
-  >(null)
+  /*
+   * The dialog's draft, kept as EDITS over the discount as the list has it
+   * now (AGL-4047): opened from the cache's row, the server's copy replaces
+   * it under every field nobody touched, and Save is held until it has.
+   */
+  const [draft, setDraft] = useSeedDraft<
+    Partial<CommerceModel.HostDiscount> & { id: string | null }
+  >((opened) => {
+    const row = opened.id
+      ? discounts.find((discount: any) => discount.$id === opened.id)
+      : undefined
+    return row ? { id: row.$id, ...row } : undefined
+  })
+  const checking =
+    Boolean(draft?.id) &&
+    isSeedChecking({
+      fromCache: discountsFromCache,
+      unreadable: discountsStatus === 'error',
+    })
 
   const handleSave = useCallback(async () => {
     if (!draft) return
@@ -178,6 +199,7 @@ export function DiscountsCard(props: DiscountsCardProps) {
     setDraft(null)
     enqueueSnackbar('Discount saved', { variant: 'success', persist: false })
   }, [
+    setDraft,
     draft,
     firestore,
     hostId,
@@ -531,11 +553,17 @@ export function DiscountsCard(props: DiscountsCardProps) {
           </Stack>
         </DialogContent>
         <DialogActions>
+          {checking ? (
+            <Typography variant="body2" color="text.secondary" role="status" sx={{ mr: 'auto' }}>
+              {seedCheckingText('discount')}
+            </Typography>
+          ) : null}
           <Button onClick={() => setDraft(null)}>{'Cancel'}</Button>
           <Button
             variant="contained"
             color="primary"
             disabled={
+              checking ||
               (draft?.kind === 'percent' && !((draft?.valuePct ?? 0) > 0)) ||
               (draft?.kind === 'fixed' && !((draft?.valueCents ?? 0) > 0))
             }

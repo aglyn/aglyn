@@ -45,6 +45,11 @@ import {
   writeGuardedBySeed,
 } from '@aglyn/tenant-feature-instance'
 import { pluginDocsHelp } from '@aglyn/aglyn'
+import {
+  isSeedChecking,
+  seedCheckingText,
+  useSeedEdits,
+} from '@aglyn/tenant-feature-instance/hooks/use-seed-edits'
 
 export interface LocalDeliverySettingsCardProps {
   hostId: string
@@ -86,9 +91,14 @@ export function LocalDeliverySettingsCard(props: LocalDeliverySettingsCardProps)
     [firestore, hostId],
     { idField: '$id' },
   )
-  const [draft, setDraft] = useState<CommerceModel.LocalDeliverySettings | null>(null)
-  const current: CommerceModel.LocalDeliverySettings = draft ?? (store?.localDelivery as CommerceModel.LocalDeliverySettings) ?? {}
-  const update = (patch: Partial<CommerceModel.LocalDeliverySettings>) => setDraft({ ...current, ...patch })
+  // What was typed, kept as edits over the stored settings, and Save held
+  // until the server has confirmed them (AGL-4047).
+  const form = useSeedEdits<CommerceModel.LocalDeliverySettings>(
+    (store?.localDelivery as CommerceModel.LocalDeliverySettings) ?? {},
+  )
+  const current = form.values
+  const update = (patch: Partial<CommerceModel.LocalDeliverySettings>) => form.edit(patch)
+  const checking = isSeedChecking({ fromCache, unreadable: storeStatus === 'error' })
   const [radiusAvailable, setRadiusAvailable] = useState(false)
   useEffect(() => {
     let live = true
@@ -135,17 +145,18 @@ export function LocalDeliverySettingsCard(props: LocalDeliverySettingsCardProps)
         enqueueSnackbar(payload?.error ?? 'Could not place the store on a map', { variant: 'warning', persist: false })
         return
       }
-      setDraft({ ...current, origin: payload.origin })
+      form.edit({ origin: payload.origin })
     } finally {
       setLocating(false)
     }
-  }, [current, enqueueSnackbar, hostId, user])
+  }, [current, form, enqueueSnackbar, hostId, user])
 
   const badWindowLines = invalidOpeningHoursLines(current.windows ?? '')
   const problems = CommerceModel.localDeliveryProblems(CommerceModel.normalizeLocalDeliverySettings(current))
 
   const handleSave = useCallback(async () => {
     const value = CommerceModel.normalizeLocalDeliverySettings(current)
+    const written = form.edits
     const verdict = await writeGuardedBySeed(
       { subject: 'local delivery settings', unreadable: storeStatus === 'error', fromCache, listen },
       async () => {
@@ -159,9 +170,9 @@ export function LocalDeliverySettingsCard(props: LocalDeliverySettingsCardProps)
     if (!verdict.ok) {
       return void enqueueSnackbar(verdict.message, { variant: 'warning', persist: false })
     }
-    setDraft(null)
+    form.settle(written)
     enqueueSnackbar('Local delivery saved', { variant: 'success', persist: false })
-  }, [current, enqueueSnackbar, firestore, fromCache, listen, hostId, storeStatus])
+  }, [current, form, enqueueSnackbar, firestore, fromCache, listen, hostId, storeStatus])
 
   const dollars = (cents: number | undefined) => (cents ? String(cents / 100) : '')
   const cents = (raw: string) => (raw.trim() === '' ? 0 : Math.max(0, Math.round(Number(raw) * 100) || 0))
@@ -177,7 +188,7 @@ export function LocalDeliverySettingsCard(props: LocalDeliverySettingsCardProps)
       })}
       HeaderProps={{
         action: (
-          <Button variant="contained" size="small" disabled={!draft || badWindowLines.length > 0} onClick={handleSave}>
+          <Button variant="contained" size="small" disabled={!form.dirty || checking || badWindowLines.length > 0} onClick={handleSave}>
             {'Save'}
           </Button>
         ),
@@ -186,6 +197,11 @@ export function LocalDeliverySettingsCard(props: LocalDeliverySettingsCardProps)
       contentGutterY
     >
       <Stack spacing={1.5}>
+        {form.dirty && checking ? (
+          <Typography variant="body2" color="text.secondary" role="status">
+            {seedCheckingText('local delivery settings')}
+          </Typography>
+        ) : null}
         <FormControlLabel
           control={
             <Switch

@@ -29,9 +29,10 @@ import {
   Stack,
   Switch,
   TextField,
+  Typography,
 } from '@mui/material'
 import { doc } from 'firebase/firestore'
-import { useCallback, useMemo, useState } from 'react'
+import { useCallback, useMemo } from 'react'
 import {
   useFirestore,
   useFirestoreDoc,
@@ -40,6 +41,11 @@ import {
 } from '@aglyn/tenant-feature-instance'
 import { pluginDocsHelp } from '@aglyn/aglyn'
 import { writeSiteWideChange } from '@aglyn/tenant-feature-instance/hooks/helpers/site-wide-change'
+import {
+  isSeedChecking,
+  seedCheckingText,
+  useSeedEdits,
+} from '@aglyn/tenant-feature-instance/hooks/use-seed-edits'
 import type { ProductType } from '../../model/commerce'
 
 export interface ReturnSettingsCardProps {
@@ -76,21 +82,20 @@ export function ReturnSettingsCard(props: ReturnSettingsCardProps) {
     () => doc(firestore, 'hosts', hostId, 'settings', 'store'),
     [firestore, hostId],
   )
-  const [draft, setDraft] = useState<{
-    enabled: boolean
-    windowDays: string
-    eligibleTypes: ProductType[]
-  } | null>(null)
-  const current = useMemo(() => {
-    if (draft) return draft
-    const saved = CommerceModel.readReturnSettings(store?.returns)
+  const saved = useMemo(() => {
+    const stored = CommerceModel.readReturnSettings(store?.returns)
     return {
-      enabled: saved.enabled,
-      windowDays: String(saved.windowDays),
-      eligibleTypes: saved.eligibleTypes,
+      enabled: stored.enabled,
+      windowDays: String(stored.windowDays),
+      eligibleTypes: stored.eligibleTypes,
     }
-  }, [draft, store])
-  const update = (patch: Partial<typeof current>) => setDraft({ ...current, ...patch })
+  }, [store])
+  // What was typed, kept as edits over the saved settings, and Save held
+  // until the server has confirmed them (AGL-4047).
+  const form = useSeedEdits(saved)
+  const current = form.values
+  const update = (patch: Partial<typeof current>) => form.edit(patch)
+  const checking = isSeedChecking({ fromCache: storeFromCache, unreadable: storeStatus === 'error' })
 
   const days = Number(current.windowDays)
   const daysValid =
@@ -108,6 +113,7 @@ export function ReturnSettingsCard(props: ReturnSettingsCardProps) {
 
   const handleSave = useCallback(async () => {
     if (!daysValid) return
+    const written = form.edits
     const verdict = await writeGuardedBySeed(
       {
         subject: 'return settings',
@@ -140,9 +146,9 @@ export function ReturnSettingsCard(props: ReturnSettingsCardProps) {
     if (!verdict.ok) {
       return void enqueueSnackbar(verdict.message, { variant: 'warning', persist: false })
     }
-    setDraft(null)
+    form.settle(written)
     enqueueSnackbar('Return settings saved', { variant: 'success', persist: false })
-  }, [daysValid, storeStatus, storeFromCache, storeListen, firestore, user, hostId, current, days, enqueueSnackbar])
+  }, [form, daysValid, storeStatus, storeFromCache, storeListen, firestore, user, hostId, current, days, enqueueSnackbar])
 
   return (
     <CardDisplay
@@ -193,12 +199,17 @@ export function ReturnSettingsCard(props: ReturnSettingsCardProps) {
           variant="contained"
           color="primary"
           size="small"
-          disabled={!draft || !daysValid}
+          disabled={!form.dirty || checking || !daysValid}
           onClick={handleSave}
           sx={{ alignSelf: 'flex-start' }}
         >
           {'Save return settings'}
         </Button>
+        {form.dirty && checking ? (
+          <Typography variant="body2" color="text.secondary" role="status">
+            {seedCheckingText('return settings')}
+          </Typography>
+        ) : null}
       </Stack>
     </CardDisplay>
   )

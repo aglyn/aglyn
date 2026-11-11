@@ -93,6 +93,11 @@ import { productSlugLedger } from './product-slugs'
 import { productCollectionFields } from './smart-collections'
 import ProductsHubZone from './products-hub-zone.component'
 import { pluginDocsHelp } from '@aglyn/aglyn'
+import {
+  isSeedChecking,
+  seedCheckingText,
+} from '@aglyn/tenant-feature-instance/hooks/use-seed-edits'
+import { useSeedDraft } from '@aglyn/tenant-feature-instance/hooks/use-seed-draft'
 import { PRODUCTS_CREATE_ZONE, type ConsoleProductsHubZoneProps } from './product-zones'
 import { commerceListFilter } from '../../transfer/list-filter'
 import { COMMERCE_PRODUCTS_TRANSFER } from '../../transfer/transfer-keys'
@@ -168,13 +173,6 @@ export function ProductsHubCard(props: ProductsHubCardProps) {
   )
   const [editing, setEditing] = useState<ProductRow | null>(null)
   const [creating, setCreating] = useState(false)
-  const [adjusting, setAdjusting] = useState<{
-    product: ProductRow
-    variantId: string
-    delta: string
-    reason: CommerceModel.InventoryAdjustmentReason
-    locationId: string
-  } | null>(null)
   const [keysFor, setKeysFor] = useState<ProductRow | null>(null)
   // Product labels for a label printer (AGL-3619).
   const [labelsFor, setLabelsFor] = useState<ProductRow | null>(null)
@@ -301,6 +299,28 @@ export function ProductsHubCard(props: ProductsHubCardProps) {
       })),
     [productDocs],
   )
+  /*
+   * The stock dialog, kept as EDITS over the product as the list has it now
+   * (AGL-4047). An adjustment recomputes the whole `variants` array from the
+   * product it holds, so the dialog follows the server's row once it answers
+   * rather than keeping the cache's, and Apply is held until it has.
+   */
+  const [adjusting, setAdjusting] = useSeedDraft<{
+    product: ProductRow
+    variantId: string
+    delta: string
+    reason: CommerceModel.InventoryAdjustmentReason
+    locationId: string
+  }>((opened) => {
+    const product = products.find((row) => row.$id === opened.product.$id)
+    return product ? { ...opened, product } : undefined
+  })
+  const adjustChecking =
+    Boolean(adjusting) &&
+    isSeedChecking({
+      fromCache: productsFromCache,
+      unreadable: productsStatus === 'error',
+    })
   // Listed but not yet priced (AGL-3676), among the products on screen.
   const comingSoon = useMemo(
     () =>
@@ -641,6 +661,7 @@ export function ProductsHubCard(props: ProductsHubCardProps) {
     setAdjusting(null)
     enqueueSnackbar('Stock adjusted', { variant: 'success', persist: false })
   }, [
+    setAdjusting,
     user,
     adjusting,
     firestore,
@@ -1222,11 +1243,16 @@ export function ProductsHubCard(props: ProductsHubCardProps) {
           </TextField>
         </DialogContent>
         <DialogActions>
+          {adjustChecking ? (
+            <Typography variant="body2" color="text.secondary" role="status" sx={{ mr: 'auto' }}>
+              {seedCheckingText('stock')}
+            </Typography>
+          ) : null}
           <Button onClick={() => setAdjusting(null)}>{'Cancel'}</Button>
           <Button
             variant="contained"
             color="primary"
-            disabled={!Math.round(Number(adjusting?.delta))}
+            disabled={adjustChecking || !Math.round(Number(adjusting?.delta))}
             onClick={handleAdjustSave}
           >
             {'Apply'}
@@ -1236,7 +1262,13 @@ export function ProductsHubCard(props: ProductsHubCardProps) {
       <ProductEditorDialog
         key={editing?.$id ?? (creating ? 'new' : 'closed')}
         hostId={hostId}
-        product={editing}
+        // The row as the list has it NOW, so the server's copy replaces the
+        // cache's under every field nobody touched (AGL-4047).
+        product={
+          editing
+            ? (products.find((row) => row.$id === editing.$id) ?? editing)
+            : null
+        }
         // The editor is seeded from a row of THIS listener and replaces the
         // whole document, so the freshness verdict belongs here (AGL-1358) —
         // the dialog has no listener of its own to ask.

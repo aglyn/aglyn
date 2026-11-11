@@ -31,7 +31,7 @@ import {
   Typography,
 } from '@mui/material'
 import { collection, deleteDoc, doc, setDoc } from 'firebase/firestore'
-import { useCallback, useState } from 'react'
+import { useCallback } from 'react'
 import { useFirestore } from '@aglyn/tenant-feature-instance'
 import {
   collectionPage,
@@ -41,6 +41,11 @@ import {
 import { ListPagination } from '@aglyn/shared-ui-jsx/components/list-pagination.component'
 import { EntitlementGatedCard } from './entitlement-gate.component'
 import { pluginDocsHelp } from '@aglyn/aglyn'
+import {
+  isSeedChecking,
+  seedCheckingText,
+} from '@aglyn/tenant-feature-instance/hooks/use-seed-edits'
+import { useSeedDraft } from '@aglyn/tenant-feature-instance/hooks/use-seed-draft'
 
 export interface SuppliersCardProps {
   hostId: string
@@ -59,6 +64,19 @@ export interface SuppliersCardProps {
  */
 
 const suppliersHelp = pluginDocsHelp('dropshipSuppliers', { anchor: '#add-a-supplier' })
+
+/** A stored supplier as the dialog edits it. */
+function supplierDraftOf(
+  supplier: any,
+): CommerceModel.HostSupplier & { id: string | null } {
+  return {
+    id: supplier.$id,
+    name: supplier.name ?? '',
+    email: supplier.email ?? '',
+    webhookUrl: supplier.webhookUrl ?? '',
+    webhookSecret: supplier.webhookSecret ?? '',
+  }
+}
 
 export function SuppliersCard(props: SuppliersCardProps) {
   const { hostId } = props
@@ -111,9 +129,26 @@ export function SuppliersCard(props: SuppliersCardProps) {
     [firestore, hostId],
     { idField: '$id' },
   )
-  const [draft, setDraft] = useState<
-    (CommerceModel.HostSupplier & { id: string | null }) | null
-  >(null)
+  /*
+   * The dialog's draft, kept as EDITS over the supplier as the list has it
+   * now (AGL-4047): opened from the cache's row, the server's copy replaces
+   * it under every field nobody touched (a rotated `webhookSecret` among
+   * them), and Save is held until it has.
+   */
+  const [draft, setDraft] = useSeedDraft<
+    CommerceModel.HostSupplier & { id: string | null }
+  >((opened) => {
+    const row = opened.id
+      ? suppliers.find((supplier: any) => supplier.$id === opened.id)
+      : undefined
+    return row ? supplierDraftOf(row) : undefined
+  })
+  const checking =
+    Boolean(draft?.id) &&
+    isSeedChecking({
+      fromCache: suppliersFromCache,
+      unreadable: suppliersStatus === 'error',
+    })
 
   const handleSave = useCallback(async () => {
     if (!draft?.name.trim()) return
@@ -171,6 +206,7 @@ export function SuppliersCard(props: SuppliersCardProps) {
     setDraft(null)
     enqueueSnackbar('Supplier saved', { variant: 'success', persist: false })
   }, [
+    setDraft,
     draft,
     firestore,
     hostId,
@@ -242,15 +278,7 @@ export function SuppliersCard(props: SuppliersCardProps) {
               </Stack>
               <Button
                 size="small"
-                onClick={() =>
-                  setDraft({
-                    id: supplier.$id,
-                    name: supplier.name ?? '',
-                    email: supplier.email ?? '',
-                    webhookUrl: supplier.webhookUrl ?? '',
-                    webhookSecret: supplier.webhookSecret ?? '',
-                  })
-                }
+                onClick={() => setDraft(supplierDraftOf(supplier))}
               >
                 {'Edit'}
               </Button>
@@ -337,11 +365,16 @@ export function SuppliersCard(props: SuppliersCardProps) {
           />
         </DialogContent>
         <DialogActions>
+          {checking ? (
+            <Typography variant="body2" color="text.secondary" role="status" sx={{ mr: 'auto' }}>
+              {seedCheckingText('supplier')}
+            </Typography>
+          ) : null}
           <Button onClick={() => setDraft(null)}>{'Cancel'}</Button>
           <Button
             variant="contained"
             color="primary"
-            disabled={!draft?.name.trim()}
+            disabled={checking || !draft?.name.trim()}
             onClick={handleSave}
           >
             {'Save'}
