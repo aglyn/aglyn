@@ -252,81 +252,10 @@
           ]
         },
         {
-          "type": "list",
-          "when": "is.import && data.jobs.jobs[id=params.jobId].siteImport.waves",
-          "title": "Every wave ({data.jobs.jobs[id=params.jobId].siteImport.waves.length})",
-          "items": "data.jobs.jobs[id=params.jobId].siteImport.waves",
-          "primary": "{item.label}",
-          "secondary": [
-            {
-              "text": "1 page",
-              "when": "item.slots.length == 1"
-            },
-            {
-              "text": "{item.slots.length} pages",
-              "when": "item.slots.length != 1"
-            },
-            {
-              "text": "with your header and footer",
-              "when": "item.frame"
-            },
-            {
-              "text": "{const.finish.keep.label}",
-              "when": "item.startedAt && item.finish == keep"
-            },
-            {
-              "text": "Improved",
-              "when": "item.startedAt && item.finish == improve && item.wording == false && !item.generative"
-            },
-            {
-              "text": "Improved, wording too",
-              "when": "item.startedAt && item.finish == improve && item.wording != false && !item.generative"
-            },
-            {
-              "text": "Redesigned",
-              "when": "item.startedAt && item.finish == improve && item.wording == false && item.generative"
-            },
-            {
-              "text": "Redesigned, new copy",
-              "when": "item.startedAt && item.finish == improve && item.wording != false && item.generative"
-            }
-          ],
-          "badges": [
-            {
-              "text": "In",
-              "when": "item.status == done,review",
-              "tone": "success"
-            },
-            {
-              "text": "Running",
-              "when": "item.status == running",
-              "tone": "info"
-            },
-            {
-              "text": "Stopped",
-              "when": "item.status == stopped && item.startedAt",
-              "tone": "warning"
-            },
-            {
-              "text": "Not started",
-              "when": "item.status == stopped && !item.startedAt",
-              "tone": "neutral"
-            }
-          ],
-          "count": false,
-          "empty": "No waves yet."
-        },
-        {
           "type": "notice",
           "tone": "info",
           "when": "is.waveWaits",
           "text": "Next: {data.jobs.jobs[id=params.jobId].siteImport.waves[status='waiting'].label}. A wave is paid from your AI credits. Its pages land in your site’s preview, or as drafts where the site is not in preview. You review each wave and start the next yourself."
-        },
-        {
-          "type": "notice",
-          "tone": "info",
-          "when": "is.manyWait",
-          "text": "Start every remaining wave runs the {data.jobs.jobs[id=params.jobId].siteImport.waves[?item.status == waiting].*.index:count} waves left one after another, with no review between them. You review the last one."
         },
         {
           "type": "actions",
@@ -435,6 +364,78 @@
               "reload": true
             }
           ]
+        },
+        {
+          "type": "notice",
+          "tone": "info",
+          "when": "is.manyWait",
+          "text": "Start every remaining wave runs the {data.jobs.jobs[id=params.jobId].siteImport.waves[?item.status == waiting].*.index:count} waves left one after another, with no review between them. You review the last one."
+        },
+        {
+          "type": "list",
+          "when": "is.import && data.jobs.jobs[id=params.jobId].siteImport.waves",
+          "title": "Every wave ({data.jobs.jobs[id=params.jobId].siteImport.waves.length})",
+          "items": "data.jobs.jobs[id=params.jobId].siteImport.waves",
+          "primary": "{item.label}",
+          "secondary": [
+            {
+              "text": "1 page",
+              "when": "item.slots.length == 1"
+            },
+            {
+              "text": "{item.slots.length} pages",
+              "when": "item.slots.length != 1"
+            },
+            {
+              "text": "with your header and footer",
+              "when": "item.frame"
+            },
+            {
+              "text": "{const.finish.keep.label}",
+              "when": "item.startedAt && item.finish == keep"
+            },
+            {
+              "text": "Improved",
+              "when": "item.startedAt && item.finish == improve && item.wording == false && !item.generative"
+            },
+            {
+              "text": "Improved, wording too",
+              "when": "item.startedAt && item.finish == improve && item.wording != false && !item.generative"
+            },
+            {
+              "text": "Redesigned",
+              "when": "item.startedAt && item.finish == improve && item.wording == false && item.generative"
+            },
+            {
+              "text": "Redesigned, new copy",
+              "when": "item.startedAt && item.finish == improve && item.wording != false && item.generative"
+            }
+          ],
+          "badges": [
+            {
+              "text": "In",
+              "when": "item.status == done,review",
+              "tone": "success"
+            },
+            {
+              "text": "Running",
+              "when": "item.status == running",
+              "tone": "info"
+            },
+            {
+              "text": "Stopped",
+              "when": "item.status == stopped && item.startedAt",
+              "tone": "warning"
+            },
+            {
+              "text": "Not started",
+              "when": "item.status == stopped && !item.startedAt",
+              "tone": "neutral"
+            }
+          ],
+          "count": false,
+          "empty": "No waves yet.",
+          "page": 5
         },
         {
           "type": "list",
