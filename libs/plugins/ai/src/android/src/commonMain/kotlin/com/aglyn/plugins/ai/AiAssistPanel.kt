@@ -36,6 +36,7 @@ import com.aglyn.ui.LocalThemeSurfaces
 import com.aglyn.ui.brandGradientBackground
 import com.aglyn.ui.phoneHighlight
 import com.aglyn.ui.radius
+import com.aglyn.ui.rememberInlineMarkdown
 import com.aglyn.ui.shellMetrics
 import com.aglyn.ui.space
 import androidx.compose.foundation.layout.Arrangement
@@ -411,7 +412,7 @@ private fun Suggestion(m: AssistMetrics, text: String, enabled: Boolean, onClick
   }
 }
 
-/** One turn: your question on the sunken fill, the answer as plain text, then what it points to as outlined buttons. */
+/** One turn: your question on the sunken fill, the answer as text with its links, then what it points to as outlined buttons. */
 @OptIn(ExperimentalLayoutApi::class)
 @Composable
 private fun TurnView(m: AssistMetrics, turn: AssistTurn, typing: Boolean, tag: String, open: (String) -> Unit) {
@@ -423,7 +424,11 @@ private fun TurnView(m: AssistMetrics, turn: AssistTurn, typing: Boolean, tag: S
       .semantics { if (!mine) liveRegion = LiveRegionMode.Polite },
     verticalArrangement = Arrangement.spacedBy(space(1f)),
   ) {
-    Text(turn.text.ifEmpty { if (typing) "…" else "" }, style = m.text(m.body), color = MaterialTheme.colorScheme.onSurface)
+    val shown = turn.text.ifEmpty { if (typing) "…" else "" }
+    // The answer's markdown links and bare addresses are links, as on the console's panel, with the inline marks
+    // the Apple sheet draws; your own question stays as you typed it, as on the console.
+    if (mine) Text(shown, style = m.text(m.body), color = MaterialTheme.colorScheme.onSurface)
+    else Text(rememberInlineMarkdown(shown, open), style = m.text(m.body), color = MaterialTheme.colorScheme.onSurface)
     if (turn.proposal != null || turn.docs.isNotEmpty()) {
       FlowRow(horizontalArrangement = Arrangement.spacedBy(space(1f)), verticalArrangement = Arrangement.spacedBy(space(1f))) {
         turn.proposal?.let { (label, href) -> AssistAction(m, label, null, "assist-proposal") { open(href) } }
