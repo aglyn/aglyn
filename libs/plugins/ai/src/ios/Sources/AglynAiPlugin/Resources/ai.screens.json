@@ -162,6 +162,12 @@
           "text": "{data.jobs.jobs[id=params.jobId].error}"
         },
         {
+          "type": "notice",
+          "tone": "info",
+          "when": "is.import && data.jobs.jobs[id=params.jobId].review.message",
+          "text": "{data.jobs.jobs[id=params.jobId].review.message}"
+        },
+        {
           "type": "fields",
           "when": "data.jobs.jobs[id=params.jobId]",
           "object": "data.jobs.jobs[id=params.jobId]",
@@ -181,6 +187,31 @@
             {
               "label": "Kind",
               "value": "{const.kindLabels[@item.kind]|'AI job'}"
+            },
+            {
+              "label": "Website address",
+              "value": "{item.siteImport.domain}",
+              "when": "item.kind == import && item.siteImport.domain"
+            },
+            {
+              "label": "{const.finish.current}",
+              "value": "{const.finish.keep.label}",
+              "when": "item.kind == import && item.siteImport && item.siteImport.finish != improve"
+            },
+            {
+              "label": "{const.finish.current}",
+              "value": "{const.finish.improve.label}",
+              "when": "item.kind == import && item.siteImport.finish == improve && item.siteImport.wording == false"
+            },
+            {
+              "label": "{const.finish.current}",
+              "value": "Improve it, with new copy",
+              "when": "item.kind == import && item.siteImport.finish == improve && item.siteImport.wording != false && item.siteImport.generative"
+            },
+            {
+              "label": "{const.finish.current}",
+              "value": "Improve it, and my wording",
+              "when": "item.kind == import && item.siteImport.finish == improve && item.siteImport.wording != false && !item.siteImport.generative"
             },
             {
               "label": "Brief",
@@ -206,6 +237,191 @@
             {
               "label": "Updated",
               "value": "{item.updatedAt:datetime}"
+            }
+          ]
+        },
+        {
+          "type": "list",
+          "when": "is.import && data.jobs.jobs[id=params.jobId].siteImport.waves",
+          "title": "Every wave ({data.jobs.jobs[id=params.jobId].siteImport.waves.length})",
+          "items": "data.jobs.jobs[id=params.jobId].siteImport.waves",
+          "primary": "{item.label}",
+          "secondary": [
+            {
+              "text": "1 page",
+              "when": "item.slots.length == 1"
+            },
+            {
+              "text": "{item.slots.length} pages",
+              "when": "item.slots.length != 1"
+            },
+            {
+              "text": "with your header and footer",
+              "when": "item.frame"
+            },
+            {
+              "text": "{const.finish.keep.label}",
+              "when": "item.startedAt && item.finish == keep"
+            },
+            {
+              "text": "Improved",
+              "when": "item.startedAt && item.finish == improve && item.wording == false && !item.generative"
+            },
+            {
+              "text": "Improved, wording too",
+              "when": "item.startedAt && item.finish == improve && item.wording != false && !item.generative"
+            },
+            {
+              "text": "Redesigned",
+              "when": "item.startedAt && item.finish == improve && item.wording == false && item.generative"
+            },
+            {
+              "text": "Redesigned, new copy",
+              "when": "item.startedAt && item.finish == improve && item.wording != false && item.generative"
+            }
+          ],
+          "badges": [
+            {
+              "text": "In",
+              "when": "item.status == done,review",
+              "tone": "success"
+            },
+            {
+              "text": "Running",
+              "when": "item.status == running",
+              "tone": "info"
+            },
+            {
+              "text": "Stopped",
+              "when": "item.status == stopped && item.startedAt",
+              "tone": "warning"
+            },
+            {
+              "text": "Not started",
+              "when": "item.status == stopped && !item.startedAt",
+              "tone": "neutral"
+            }
+          ],
+          "count": false,
+          "empty": "No waves yet."
+        },
+        {
+          "type": "notice",
+          "tone": "info",
+          "when": "is.waveWaits",
+          "text": "Next: {data.jobs.jobs[id=params.jobId].siteImport.waves[status='waiting'].label}. A wave is paid from your AI credits. Its pages land in your site’s preview, or as drafts where the site is not in preview. You review each wave and start the next yourself."
+        },
+        {
+          "type": "notice",
+          "tone": "info",
+          "when": "is.manyWait",
+          "text": "Start every remaining wave runs the {data.jobs.jobs[id=params.jobId].siteImport.waves[?item.status == waiting].*.index:count} waves left one after another, with no review between them. You review the last one."
+        },
+        {
+          "type": "actions",
+          "when": "is.waveWaits",
+          "items": [
+            {
+              "id": "startWave",
+              "label": "Start {data.jobs.jobs[id=params.jobId].siteImport.waves[status='waiting'].label}",
+              "icon": "play.circle|play_circle",
+              "prompt": [
+                {
+                  "key": "finish",
+                  "label": "{const.finish.heading}",
+                  "kind": "choice",
+                  "required": true,
+                  "initial": "{data.jobs.jobs[id=params.jobId].siteImport.finish|'keep'}",
+                  "help": "{const.finish.helper}",
+                  "options": [
+                    {
+                      "value": "keep",
+                      "label": "{const.finish.keep.label}",
+                      "detail": "{const.finish.keep.description}"
+                    },
+                    {
+                      "value": "improve",
+                      "label": "{const.finish.improve.label}",
+                      "detail": "{const.finish.improve[@is.generative]|const.finish.improve.plain}"
+                    }
+                  ]
+                },
+                {
+                  "key": "wording",
+                  "label": "{const.finish.wordingLabel[@is.generative]|const.finish.wordingLabel.plain}",
+                  "kind": "toggle",
+                  "when": "form.finish == improve",
+                  "initial": "{?data.jobs.jobs[id=params.jobId].siteImport.finish != improve || data.jobs.jobs[id=params.jobId].siteImport.wording != false}",
+                  "help": "{const.finish.wordingHelp[@is.generative]|const.finish.wordingHelp.plain}"
+                }
+              ],
+              "promptTitle": "Start {data.jobs.jobs[id=params.jobId].siteImport.waves[status='waiting'].label}",
+              "submitLabel": "Start {data.jobs.jobs[id=params.jobId].siteImport.waves[status='waiting'].label}",
+              "url": "/api/ai/jobs/{params.jobId}/resume",
+              "body": {
+                "orgId": "{org.id}",
+                "hostId": "{site.id}",
+                "finish": "{form.finish}",
+                "wording": {
+                  "$if": "form.finish == improve && form.wording",
+                  "then": true,
+                  "else": false
+                }
+              },
+              "success": "Bringing in {data.jobs.jobs[id=params.jobId].siteImport.waves[status='waiting'].label}",
+              "reload": true
+            },
+            {
+              "id": "startAll",
+              "label": "Start every remaining wave",
+              "icon": "forward.end.alt|done_all",
+              "when": "is.manyWait",
+              "prompt": [
+                {
+                  "key": "finish",
+                  "label": "{const.finish.heading}",
+                  "kind": "choice",
+                  "required": true,
+                  "initial": "{data.jobs.jobs[id=params.jobId].siteImport.finish|'keep'}",
+                  "help": "{const.finish.helper}",
+                  "options": [
+                    {
+                      "value": "keep",
+                      "label": "{const.finish.keep.label}",
+                      "detail": "{const.finish.keep.description}"
+                    },
+                    {
+                      "value": "improve",
+                      "label": "{const.finish.improve.label}",
+                      "detail": "{const.finish.improve[@is.generative]|const.finish.improve.plain}"
+                    }
+                  ]
+                },
+                {
+                  "key": "wording",
+                  "label": "{const.finish.wordingLabel[@is.generative]|const.finish.wordingLabel.plain}",
+                  "kind": "toggle",
+                  "when": "form.finish == improve",
+                  "initial": "{?data.jobs.jobs[id=params.jobId].siteImport.finish != improve || data.jobs.jobs[id=params.jobId].siteImport.wording != false}",
+                  "help": "{const.finish.wordingHelp[@is.generative]|const.finish.wordingHelp.plain}"
+                }
+              ],
+              "promptTitle": "Start every remaining wave",
+              "submitLabel": "Start every remaining wave",
+              "url": "/api/ai/jobs/{params.jobId}/resume",
+              "body": {
+                "orgId": "{org.id}",
+                "hostId": "{site.id}",
+                "finish": "{form.finish}",
+                "wording": {
+                  "$if": "form.finish == improve && form.wording",
+                  "then": true,
+                  "else": false
+                },
+                "startAll": true
+              },
+              "success": "Bringing in {data.jobs.jobs[id=params.jobId].siteImport.waves[status='waiting'].label}",
+              "reload": true
             }
           ]
         },
@@ -302,8 +518,52 @@
           "media": "Media library change",
           "tracking": "Tracking",
           "import": "Site import"
+        },
+        "finish": {
+          "heading": "How should your new site look?",
+          "keep": {
+            "label": "Keep my site",
+            "description": "Your pages stay laid out as they are, in your site’s colors, buttons and fonts. Aglyn tidies spacing, type and color so every page reads well. Every word stays as you wrote it."
+          },
+          "improve": {
+            "label": "Improve it",
+            "plain": "Aglyn AI redesigns each page with your pictures, menus and forms, in a theme built around your brand.",
+            "true": "Aglyn AI plans your menu and footer, and redesigns each page with your pictures and forms, in a theme built around your brand. It shows you the plan before anything is built."
+          },
+          "wordingLabel": {
+            "plain": "Also improve my wording",
+            "true": "Also write new copy"
+          },
+          "wordingHelp": {
+            "plain": "Aglyn AI rewrites the headings, paragraphs and buttons of your main pages so they read better. Every name, price, number, date, address, phone number and email stays exactly as you wrote it. Quotes, policies, tables and forms keep every word. About 25 more AI credits for each main page.",
+            "true": "Aglyn AI writes new headings, paragraphs and sections for your main pages from what your site says. It never makes up a name, number, price, date, testimonial, client, award, credential, address or guarantee. Off, every word stays as you wrote it, and your layout and menu are still redesigned. About 32 more AI credits for each main page."
+          },
+          "helper": "You can change this before each wave.",
+          "current": "How your new site looks"
         }
-      }
+      },
+      "derive": [
+        {
+          "name": "import",
+          "when": "data.jobs.jobs[id=params.jobId].kind == import"
+        },
+        {
+          "name": "generative",
+          "when": "is.import && data.jobs.jobs[id=params.jobId].siteImport.generative"
+        },
+        {
+          "name": "planWaits",
+          "when": "is.import && data.jobs.jobs[id=params.jobId].siteImport.plan && !data.jobs.jobs[id=params.jobId].siteImport.planAccepted"
+        },
+        {
+          "name": "waveWaits",
+          "when": "is.import && data.jobs.jobs[id=params.jobId].status == needs_review && data.jobs.jobs[id=params.jobId].review.reason == wave && data.jobs.jobs[id=params.jobId].siteImport.waves.-1.status == waiting && !data.jobs.jobs[id=params.jobId].siteImport.waves[status='running'] && data.jobs.jobs[id=params.jobId].siteImport.verdict.kind != home-blocked,home-unreadable && !is.planWaits"
+        },
+        {
+          "name": "manyWait",
+          "when": "is.waveWaits && data.jobs.jobs[id=params.jobId].siteImport.waves.-2.status == waiting"
+        }
+      ]
     },
     {
       "id": "ai.credits",
