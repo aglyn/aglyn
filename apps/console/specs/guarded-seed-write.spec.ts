@@ -50,11 +50,12 @@ describe('Manage Account is wired to the guard (AGL-1356)', () => {
   )
 
   it('reads fromCache off the listener AND feeds it to the guard', () => {
-    // Twice, not once: declared in the `useFirestoreDoc` destructure and
-    // consumed in the guard's options. One occurrence means it is being
-    // read and dropped, which is how the old guards came to be decorative.
+    // Three times, not once: declared in the `useFirestoreDoc` destructure,
+    // consumed in the guard's options, and in the hold on Update while the
+    // read is unconfirmed (AGL-4047). One occurrence means it is being read
+    // and dropped, which is how the old guards came to be decorative.
     const occurrences = source.split('fromCache: profileFromCache').length - 1
-    expect(occurrences).toBe(2)
+    expect(occurrences).toBe(3)
   })
 
   it('puts the profile setDoc INSIDE the guarded callback', () => {
