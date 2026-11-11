@@ -24,6 +24,8 @@ content on the marketing site and is written separately.
 
 ### Fixed
 
+- **mui:** a Select field's dropdown choices show their text on published sites again (blank since 10/13)
+- **native:** an empty Home card leaves no hole in the iPad grid ([AGL-4011](https://linear.app/aglyn/issue/AGL-4011))
 - **commerce:** product import lists each reformatted cell once ([AGL-4047](https://linear.app/aglyn/issue/AGL-4047))
 - **media:** limit-access confirm says what the usage check found ([AGL-4047](https://linear.app/aglyn/issue/AGL-4047))
 - **native:** plugin editors hold on a cached read and keep what was typed ([AGL-4047](https://linear.app/aglyn/issue/AGL-4047))
