@@ -45,6 +45,11 @@ data class FirestoreQuery(
    * `collectionGroup`, as the console reads a whole workspace's form submissions.
    */
   val collectionGroup: Boolean = false,
+  /**
+   * Also answer when only the snapshot's metadata changes: a cached answer the server then confirms, so
+   * [Live.Ready.fromCache] turns false on screen. An empty list from the cache is a guess, not "none" (AGL-4047).
+   */
+  val includeMetadataChanges: Boolean = false,
 )
 
 data class FirestorePage(

@@ -155,6 +155,23 @@ public protocol FirestoreReader: AnyObject, Sendable {
     _ onChange: @escaping @MainActor (Result<FirestoreDocument?, Error>) -> Void
   ) -> FirestoreListening
 
+  /// `listen`, with whether the answer as a whole came from the device's cache (the web SDK's `metadata.fromCache`).
+  /// An empty answer carries no document to say so, and an empty list the server has not confirmed is a guess, not
+  /// "none" (AGL-4047). A reader that only reads the server keeps the default, which answers from the documents.
+  @MainActor
+  func listenAnswer(
+    _ query: FirestoreQuery,
+    _ onChange: @escaping @MainActor (Result<FirestoreAnswer<[FirestoreDocument]>, Error>) -> Void
+  ) -> FirestoreListening
+
+  /// `listenDocument`, with whether the answer came from the cache: a missing document the server has not confirmed
+  /// is not missing yet (AGL-4047).
+  @MainActor
+  func listenDocumentAnswer(
+    _ path: [String],
+    _ onChange: @escaping @MainActor (Result<FirestoreAnswer<FirestoreDocument?>, Error>) -> Void
+  ) -> FirestoreListening
+
   /// Writes fields (a `FirestoreSentinel` value becomes its server value).
   func setDocument(_ path: [String], _ fields: [String: Any], merge: Bool) async throws
   func deleteDocument(_ path: [String]) async throws
@@ -180,6 +197,72 @@ extension FirestoreReader {
 
   public func updateDocument(_ path: [String], _ fields: [String: Any]) async throws {
     throw ConsoleAPIError(status: 0, message: "Saving is not available here.")
+  }
+}
+
+/// One answer of a listener and whether it came from the device's cache, the server not having confirmed it yet.
+public struct FirestoreAnswer<Value> {
+  public let value: Value
+  public let fromCache: Bool
+
+  public init(_ value: Value, fromCache: Bool) {
+    self.value = value
+    self.fromCache = fromCache
+  }
+}
+
+extension FirestoreReader {
+  @MainActor
+  public func listenAnswer(
+    _ query: FirestoreQuery,
+    _ onChange: @escaping @MainActor (Result<FirestoreAnswer<[FirestoreDocument]>, Error>) -> Void
+  ) -> FirestoreListening {
+    listen(query) { result in onChange(result.map { FirestoreAnswer($0, fromCache: $0.contains(where: \.fromCache)) }) }
+  }
+
+  @MainActor
+  public func listenDocumentAnswer(
+    _ path: [String],
+    _ onChange: @escaping @MainActor (Result<FirestoreAnswer<FirestoreDocument?>, Error>) -> Void
+  ) -> FirestoreListening {
+    listenDocument(path) { result in onChange(result.map { FirestoreAnswer($0, fromCache: $0?.fromCache == true) }) }
+  }
+
+  /// One read of a document the server has answered for: a missing document the cache reports first is waited past
+  /// (AGL-4047). A document the cache holds is answered at once, as `readOnce` does.
+  @MainActor
+  public func readConfirmed(_ path: [String]) async throws -> FirestoreDocument? {
+    try await withCheckedThrowingContinuation { continuation in
+      var listener: FirestoreListening?
+      var done = false
+      listener = listenDocumentAnswer(path) { result in
+        guard !done else { return }
+        if case .success(let answer) = result, answer.value == nil, answer.fromCache { return }
+        done = true
+        listener?.remove()
+        continuation.resume(with: result.map(\.value))
+      }
+      if done { listener?.remove() }
+    }
+  }
+
+  /// One read of a query the server has answered for: an empty list the cache reports first is waited past (AGL-4047).
+  @MainActor
+  public func readConfirmed(_ query: FirestoreQuery) async throws -> [FirestoreDocument] {
+    var query = query
+    query.includeMetadataChanges = true
+    return try await withCheckedThrowingContinuation { continuation in
+      var listener: FirestoreListening?
+      var done = false
+      listener = listenAnswer(query) { result in
+        guard !done else { return }
+        if case .success(let answer) = result, answer.value.isEmpty, answer.fromCache { return }
+        done = true
+        listener?.remove()
+        continuation.resume(with: result.map(\.value))
+      }
+      if done { listener?.remove() }
+    }
   }
 }
 

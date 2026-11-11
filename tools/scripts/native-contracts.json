@@ -22388,6 +22388,171 @@
               "B"
             ]
           }
+        ],
+        [
+          {
+            "version": "1.0.0",
+            "orgWide": true,
+            "siteLabels": [],
+            "switchedOff": [
+              "Catering"
+            ],
+            "siteCount": 3
+          }
+        ],
+        [
+          {
+            "version": "1.0.0",
+            "orgWide": true,
+            "siteLabels": [],
+            "switchedOff": [
+              "A",
+              "B"
+            ],
+            "siteCount": 3
+          }
+        ],
+        [
+          {
+            "version": "1.0.0",
+            "orgWide": true,
+            "siteLabels": [],
+            "switchedOff": [
+              "A",
+              "B",
+              "C"
+            ],
+            "siteCount": 3
+          }
+        ],
+        [
+          {
+            "version": "1.0.0",
+            "orgWide": false,
+            "siteLabels": [
+              "Blog"
+            ],
+            "switchedOff": [
+              "Blog"
+            ],
+            "siteCount": 3
+          }
+        ],
+        [
+          {
+            "version": "2",
+            "orgWide": false,
+            "siteLabels": [
+              "A",
+              "B"
+            ],
+            "switchedOff": [
+              "A"
+            ],
+            "siteCount": 3
+          }
+        ],
+        [
+          {
+            "version": "2",
+            "orgWide": false,
+            "siteLabels": [
+              "A",
+              "B",
+              "C"
+            ],
+            "switchedOff": [
+              "A",
+              "C"
+            ],
+            "siteCount": 3
+          }
+        ]
+      ]
+    },
+    "installPictureReadPhase": {
+      "module": "libs/plugins/marketplace/src/lib/model/marketplace-catalog.ts",
+      "args": [
+        [
+          {
+            "orgPin": "pending",
+            "sitePins": "answered"
+          }
+        ],
+        [
+          {
+            "orgPin": null,
+            "sitePins": "answered"
+          }
+        ],
+        [
+          {
+            "orgPin": null,
+            "sitePins": "loading"
+          }
+        ],
+        [
+          {
+            "orgPin": null,
+            "sitePins": "failed"
+          }
+        ],
+        [
+          {
+            "orgPin": {
+              "status": "loading"
+            },
+            "sitePins": "answered"
+          }
+        ],
+        [
+          {
+            "orgPin": {
+              "status": "success",
+              "fromCache": true
+            },
+            "sitePins": "answered"
+          }
+        ],
+        [
+          {
+            "orgPin": {
+              "status": "success",
+              "fromCache": false
+            },
+            "sitePins": "answered"
+          }
+        ],
+        [
+          {
+            "orgPin": {
+              "status": "error"
+            },
+            "sitePins": "answered"
+          }
+        ],
+        [
+          {
+            "orgPin": {
+              "data": {
+                "version": "1.0.0"
+              },
+              "status": "success",
+              "fromCache": true
+            },
+            "sitePins": "answered"
+          }
+        ],
+        [
+          {
+            "orgPin": {
+              "data": {
+                "version": "1.0.0"
+              },
+              "status": "error"
+            },
+            "sitePins": "loading"
+          }
         ]
       ]
     },

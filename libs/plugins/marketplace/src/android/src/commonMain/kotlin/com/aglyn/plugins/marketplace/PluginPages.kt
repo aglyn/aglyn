@@ -79,8 +79,18 @@ private fun manifestOf(doc: FirestoreDoc?): Map<String, Any?>? = doc?.data?.get(
 /* ---- The plugins installed from the marketplace ---- */
 
 /** One listing installed in the workspace: at the workspace level, on some sites, or both (`Installation`). */
-data class PluginInstallation(val id: String, val name: String, val version: String?, val siteLabels: List<String>, val orgWide: Boolean, val status: UpdateStatus) {
-  val caption: String get() = installedPluginCaption(version, orgWide, siteLabels)
+data class PluginInstallation(
+  val id: String,
+  val name: String,
+  val version: String?,
+  val siteLabels: List<String>,
+  val orgWide: Boolean,
+  val status: UpdateStatus,
+  /** The sites it covers whose own Admin › Plugins switch has it off (AGL-4047), and how many sites the workspace has. */
+  val switchedOff: List<String> = emptyList(),
+  val siteCount: Int? = null,
+) {
+  val caption: String get() = installedPluginCaption(version, orgWide, siteLabels, switchedOff, siteCount)
 }
 
 /** "Installed from the marketplace": the plugins this workspace runs that came from it (the console's `OrgPluginInstallsCard`). */
@@ -88,31 +98,58 @@ data class PluginInstallation(val id: String, val name: String, val version: Str
 fun OrgPluginInstallsCard(context: NativePluginContext) {
   val orgId = context.orgId
   val orgInstalls by remember(orgId, context.firestore) {
-    if (orgId != null) context.firestore.observe(FirestoreQuery("orgs/$orgId/installs", limit = 100)) else flowOf(Live.Ready(emptyList()))
+    if (orgId != null) {
+      context.firestore.observe(FirestoreQuery("orgs/$orgId/installs", limit = 100, includeMetadataChanges = true))
+    } else {
+      flowOf(Live.Ready(emptyList()))
+    }
   }.collectAsState(Live.Loading)
   val sitesLive by remember(orgId, context.firestore) {
     if (orgId != null) context.firestore.observe(sitesQuery(context.uid, orgId)) else flowOf(Live.Ready(emptyList()))
   }.collectAsState(Live.Loading)
+  // A read that failed is said as a failure, never as "nothing installed" (AGL-4047).
+  var pinsFailed by remember(orgId) { mutableStateOf(false) }
   val rows by produceState<List<PluginInstallation>?>(null, orgInstalls, sitesLive) {
-    val org = (orgInstalls as? Live.Ready)?.value ?: return@produceState
-    val sites = (sitesLive as? Live.Ready)?.value?.let(::siteChoices) ?: if (sitesLive is Live.Failed) emptyList() else return@produceState
-    val byListing = linkedMapOf<String, Triple<FirestoreDoc, MutableList<String>, Boolean>>()
-    for (doc in org) byListing[doc.id] = Triple(doc, mutableListOf(), true)
+    val orgRead = orgInstalls as? Live.Ready ?: return@produceState
+    // An empty list from the cache is not "nothing installed": only the server may say so.
+    if (orgRead.value.isEmpty() && orgRead.fromCache) return@produceState
+    val org = orgRead.value
+    val sites = (sitesLive as? Live.Ready)?.value?.let(::siteChoices) ?: return@produceState
+    val byListing = linkedMapOf<String, PinnedListing>()
+    for (doc in org) byListing[doc.id] = PinnedListing(doc, mutableListOf(), mutableListOf(), true)
+    val disabled = mutableMapOf<String, List<String>>()
     for (site in sites) {
-      val pins = runCatching { context.firestore.page(FirestoreQuery("hosts/${site.id}/installs", limit = 100)).docs }.getOrDefault(emptyList())
+      val pins = try {
+        context.firestore.page(FirestoreQuery("hosts/${site.id}/installs", limit = 100)).docs
+      } catch (failure: kotlin.coroutines.cancellation.CancellationException) {
+        throw failure
+      } catch (failure: Throwable) {
+        pinsFailed = true
+        return@produceState
+      }
+      disabled[site.id] = (runCatching { context.firestore.get("hosts/${site.id}") }.getOrNull()?.data?.get("disabledPlugins") as? List<*>)
+        ?.filterIsInstance<String>().orEmpty()
       for (pin in pins) {
         val existing = byListing[pin.id]
-        if (existing != null) existing.second += site.label else byListing[pin.id] = Triple(pin, mutableListOf(site.label), false)
+        if (existing != null) {
+          existing.labels += site.label
+          existing.siteIds += site.id
+        } else {
+          byListing[pin.id] = PinnedListing(pin, mutableListOf(site.label), mutableListOf(site.id), false)
+        }
       }
     }
+    pinsFailed = false
     value = byListing.map { (id, entry) ->
       val listing = runCatching { context.firestore.get("$LISTINGS/$id") }.getOrNull()
       val revocation = runCatching { context.firestore.get("revocations/$id") }.getOrNull()
       val offered = pluginOfferedVersion(versionText(listing?.data?.get("latestApprovedVersion")), Revoked.from(revocation?.data))
-      val pin = entry.first
+      val pin = entry.doc
+      // The sites it covers whose own switch has it off: every site for an org-wide install, the pinned ones otherwise.
+      val switchedOff = sites.filter { (entry.orgWide || it.id in entry.siteIds) && id in disabled[it.id].orEmpty() }.map { it.label }
       PluginInstallation(
-        id, pin.string("displayName") ?: pin.string("pluginId") ?: id, versionText(pin.data["version"]), entry.second, entry.third,
-        pluginUpdateStatus(UpdateComparablePin(pin.data), offered),
+        id, pin.string("displayName") ?: pin.string("pluginId") ?: id, versionText(pin.data["version"]), entry.labels, entry.orgWide,
+        pluginUpdateStatus(UpdateComparablePin(pin.data), offered), switchedOff, sites.size,
       )
     }
   }
@@ -120,7 +157,8 @@ fun OrgPluginInstallsCard(context: NativePluginContext) {
     Text("Installed from the marketplace", style = MaterialTheme.typography.titleMedium)
     val list = rows
     when {
-      list == null && (orgInstalls is Live.Failed) -> NoticeBanner("The installed plugins could not be loaded.", StatusTone.ERROR)
+      list == null && (orgInstalls is Live.Failed || sitesLive is Live.Failed || pinsFailed) ->
+        NoticeBanner("The installed plugins could not be loaded.", StatusTone.ERROR)
       list == null -> SkeletonList(rows = 2)
       list.isEmpty() -> NoticeBanner("Nothing installed from the marketplace yet — browse it to add one.", StatusTone.INFO)
       else -> list.forEach { row ->
@@ -142,6 +180,9 @@ fun OrgPluginInstallsCard(context: NativePluginContext) {
     }
   }
 }
+
+/** One listing's pins while the installed list is gathered: the workspace's, and the sites that pin it. */
+private class PinnedListing(val doc: FirestoreDoc, val labels: MutableList<String>, val siteIds: MutableList<String>, val orgWide: Boolean)
 
 /* ---- One plugin's installs ---- */
 
@@ -171,9 +212,23 @@ fun PluginInstallationCard(context: NativePluginContext) {
   }.collectAsState(Live.Loading)
   val sites = (sitesLive as? Live.Ready)?.value?.let(::siteChoices).orEmpty()
   var nonce by remember(listingId) { mutableIntStateOf(0) }
+  // A pin is missing only once the server says so; a read that fails is a failure, not "not installed" (AGL-4047).
+  var pinsFailed by remember(listingId) { mutableStateOf(false) }
   val hostPins by produceState<Map<String, FirestoreDoc>?>(null, listingId, sites.map { it.id }, nonce, sitesLive is Live.Ready) {
     if (sitesLive !is Live.Ready) return@produceState
-    value = sites.mapNotNull { site -> runCatching { context.firestore.get("hosts/${site.id}/installs/$listingId") }.getOrNull()?.let { site.id to it } }.toMap()
+    var failed = false
+    val found = sites.mapNotNull { site ->
+      try {
+        context.firestore.get("hosts/${site.id}/installs/$listingId")?.let { site.id to it }
+      } catch (failure: kotlin.coroutines.cancellation.CancellationException) {
+        throw failure
+      } catch (failure: Throwable) {
+        failed = true
+        null
+      }
+    }.toMap()
+    pinsFailed = failed
+    value = found
   }
   // Each site's own deny-list (`disabledPlugins`), so a site that switched the listing off is marked (AGL-4047).
   val siteDisabled by produceState<Map<String, List<String>?>>(emptyMap(), listingId, sites.map { it.id }, nonce, sitesLive is Live.Ready) {
@@ -192,7 +247,20 @@ fun PluginInstallationCard(context: NativePluginContext) {
   val actingHostId = sites.firstOrNull()?.id.orEmpty()
 
   val pins = hostPins
-  if (pins == null || orgPinLive is Live.Loading) {
+  val readPhase = installPictureReadPhase(
+    orgPinPending = false,
+    orgPin = if (orgId != null && listingId.isNotEmpty()) installPinRead(orgPinLive) else null,
+    sitePins = if (sitesLive is Live.Failed || pinsFailed) "failed" else if (pins == null) "loading" else "answered",
+  )
+  if (readPhase == "error") {
+    NoticeBanner(
+      "Could not load where this plugin is installed.",
+      StatusTone.WARNING,
+      action = { TextButton(onClick = { nonce += 1 }) { Text("Try again") } },
+    )
+    return
+  }
+  if (pins == null || readPhase == "loading") {
     SkeletonList(rows = 3)
     return
   }

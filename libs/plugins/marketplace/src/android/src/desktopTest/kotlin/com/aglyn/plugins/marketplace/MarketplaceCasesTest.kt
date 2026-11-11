@@ -177,9 +177,19 @@ class MarketplaceCasesTest {
       val input = obj(args[0])
       assertEquals(
         result.jsonPrimitive.content,
-        installedPluginCaption(version(input["version"]), flag(input["orgWide"]), (input["siteLabels"] as? JsonArray).orEmpty().map { it.jsonPrimitive.content }),
+        installedPluginCaption(
+          version(input["version"]), flag(input["orgWide"]), (input["siteLabels"] as? JsonArray).orEmpty().map { it.jsonPrimitive.content },
+          (input["switchedOff"] as? JsonArray).orEmpty().map { it.jsonPrimitive.content }, input["siteCount"]?.jsonPrimitive?.content?.toInt(),
+        ),
         args.toString(),
       )
+    }
+    cases("installPictureReadPhase").forEach { (args, result) ->
+      val input = obj(args[0])
+      val pin = input["orgPin"]
+      val pending = (pin as? JsonPrimitive)?.content == "pending"
+      val read = (pin as? JsonObject)?.let { InstallPinRead(it["data"] != null && it["data"] !is JsonNull, str(it["status"]), flag(it["fromCache"])) }
+      assertEquals(result.jsonPrimitive.content, installPictureReadPhase(pending, read, str(input["sitePins"]).orEmpty()), args.toString())
     }
     cases("installPlanOutcome").forEach { (args, result) ->
       val input = obj(args[0])

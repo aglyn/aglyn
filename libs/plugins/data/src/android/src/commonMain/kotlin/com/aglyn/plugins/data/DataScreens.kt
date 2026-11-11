@@ -112,7 +112,8 @@ internal fun rememberDatasets(context: NativePluginContext, orgId: String): Pair
   val rows: Live<List<DatasetRow>> = when (val value = live) {
     Live.Loading -> if (access is Live.Ready && !ready) Live.Ready(emptyList()) else Live.Loading
     is Live.Failed -> value
-    is Live.Ready -> Live.Ready(value.value.map(DatasetRow::from).sortedBy { it.name.lowercase() })
+    // An empty list from the cache is not "no datasets": only the server may say there are none (AGL-4047).
+    is Live.Ready -> if (value.value.isEmpty() && value.fromCache) Live.Loading else Live.Ready(value.value.map(DatasetRow::from).sortedBy { it.name.lowercase() })
   }
   return access to rows
 }

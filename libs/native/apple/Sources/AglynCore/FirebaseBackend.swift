@@ -185,6 +185,38 @@ public final class FirebaseFirestoreReader: FirestoreReader, @unchecked Sendable
   }
 
   @MainActor
+  public func listenAnswer(
+    _ query: FirestoreQuery,
+    _ onChange: @escaping @MainActor (Result<FirestoreAnswer<[FirestoreDocument]>, Error>) -> Void
+  ) -> FirestoreListening {
+    let handle = built(query).addSnapshotListener(includeMetadataChanges: query.includeMetadataChanges) { snapshot, error in
+      let result: Result<FirestoreAnswer<[FirestoreDocument]>, Error> =
+        if let snapshot { .success(FirestoreAnswer(snapshot.documents.map(Self.document), fromCache: snapshot.metadata.isFromCache)) }
+        else { .failure(error ?? URLError(.unknown)) }
+      if case .failure(let error) = result { Telemetry.record(error, Telemetry.firestoreContext("listen", query.collection)) }
+      MainActor.assumeIsolated { onChange(result) }
+    }
+    return Registration(handle)
+  }
+
+  @MainActor
+  public func listenDocumentAnswer(
+    _ path: [String],
+    _ onChange: @escaping @MainActor (Result<FirestoreAnswer<FirestoreDocument?>, Error>) -> Void
+  ) -> FirestoreListening {
+    let handle = db.document(path.joined(separator: "/")).addSnapshotListener(includeMetadataChanges: true) {
+      snapshot, error in
+      let result: Result<FirestoreAnswer<FirestoreDocument?>, Error> =
+        if let snapshot {
+          .success(FirestoreAnswer(snapshot.exists ? Self.document(snapshot) : nil, fromCache: snapshot.metadata.isFromCache))
+        } else { .failure(error ?? URLError(.unknown)) }
+      if case .failure(let error) = result { Telemetry.record(error, Telemetry.firestoreContext("listen_document", path)) }
+      MainActor.assumeIsolated { onChange(result) }
+    }
+    return Registration(handle)
+  }
+
+  @MainActor
   public func listenDocument(
     _ path: [String],
     _ onChange: @escaping @MainActor (Result<FirestoreDocument?, Error>) -> Void
