@@ -287,6 +287,14 @@ export const Leaf = observer(
 
     const textContent = selfClosing ? null : resolvedProps?.['children']
 
+    // Plain-text components (`<option>`): the node's text goes in as a bare
+    // string. React flattens an `<option>`'s children to text and drops an
+    // element child, and the browser's parser drops one from server HTML, so
+    // the `<aglyn-text>` wrapper below would leave the choice blank.
+    const plainText =
+      !selfClosing &&
+      Boolean((schema?.flags?.plainTextChildren ?? 0) & FEATURE_FLAG.ENABLED)
+
     const mergedClassName =
       [propsClassName, node?.className, className, animation?.className]
         .filter(Boolean)
@@ -503,6 +511,12 @@ export const Leaf = observer(
       />
     ) : selfClosing ? (
       <Component {...leafProps} />
+    ) : plainText ? (
+      <Component {...leafProps}>
+        {typeof textContent === 'string' || typeof textContent === 'number'
+          ? String(textContent)
+          : undefined}
+      </Component>
     ) : positional ? (
       <Component {...leafProps}>
         {positionalChildren}

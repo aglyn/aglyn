@@ -178,6 +178,17 @@ export interface AglynComponentSchema<P = any> {
      * keeps the Branch/Stem/Leaf seam swappable for everything else.
      */
     positionalChildren?: FEATURE_FLAG
+    /**
+     * Component takes its text as a plain string `children`: no child
+     * elements and no `<aglyn-text>` wrapper around it. For an element whose
+     * DOM allows text and nothing else, such as `<option>`, where React and
+     * the browser's parser both drop an element child, and with it the text.
+     *
+     * Not `selfClosing`, which means a void element (`<img>`) and strips
+     * `children` altogether: a Select Option flagged that way rendered every
+     * dropdown choice on every published site with no words.
+     */
+    plainTextChildren?: FEATURE_FLAG
   }
 
   /**
