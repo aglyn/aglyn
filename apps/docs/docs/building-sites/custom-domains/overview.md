@@ -32,6 +32,8 @@ redirects to it, path preserved, so old links keep working.
 :::tip How-tos
 - [Connect a domain](connect-a-domain.md) — steps, apex records (ALIAS first, A as the
   fallback), and what happens after
+- [Connect a domain automatically](connect-automatically.md) — let your DNS provider
+  add the records in one click, where it supports Domain Connect
 - [Troubleshoot verification](troubleshooting.md)
 :::
 
