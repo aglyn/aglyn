@@ -330,6 +330,7 @@ describe('end to end: the webhook, the device’s sync and the sweep (Stripe moc
           intent = { ...intent, status: 'succeeded', applicationFeeCents: fee }
           return { ok: true, intent }
         },
+        cancel: async () => ({ ok: true }),
         wrongAccount: async () => undefined,
       },
     }

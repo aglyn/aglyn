@@ -60,6 +60,7 @@ import { posOfflineCardOrderMoney, type PosOfflineCardSettled } from './pos-offl
 import { notifyPosSaleCompleted } from './pos-sale'
 import { POS_CURRENCY, posOfflineCardFeeCents, posTerminalAvailable } from './pos-stripe'
 import {
+  cancelPosOfflineCardIntent,
   capturePosOfflineCardIntent,
   ensurePosOfflineCardConfiguration,
   posMerchantAccount,
@@ -125,6 +126,15 @@ export interface PosOfflineSyncRecord {
   notified: boolean
   /** A card taken offline that was declined or never charged: no receipt and no "paid" for it. */
   unpaid?: boolean
+  /**
+   * A card refused as made out to another account whose authorization still
+   * holds the customer's money (AGL-4219): the intent to cancel, and where.
+   * `account` null is the platform.
+   */
+  releaseHold?: { paymentIntentId: string; account: string | null }
+  /** Whether that cancel went through; absent until it was tried. */
+  holdReleased?: boolean
+  holdReleaseError?: string
 }
 
 export interface PosOfflineAfterSale {
@@ -185,6 +195,16 @@ export interface PosOfflineCardDeps {
     account: string | null,
   ): Promise<{ ok: true; intent: PosOfflineCardIntent } | { ok: false; error: string; status?: number }>
   /**
+   * Cancels an authorized intent on `account` (or the platform, null), so the
+   * customer's hold is released (AGL-4219). Only ever asked for an intent the
+   * sync read as `requires_capture`; Stripe refuses to cancel a captured one.
+   */
+  cancel(
+    paymentIntentId: string,
+    account: string | null,
+    idempotencyKey: string,
+  ): Promise<{ ok: true } | { ok: false; error: string; status?: number }>
+  /**
    * Tells the operator a card was made out to another account. Never throws.
    * `destination` is where the money went: the transfer's account for a
    * destination charge, the account the intent was made on for a direct one.
@@ -210,6 +230,7 @@ export function defaultPosOfflineCardDeps(): PosOfflineCardDeps {
     enableOffline: ensurePosOfflineCardConfiguration,
     retrieve: retrievePosOfflineCardIntent,
     capture: capturePosOfflineCardIntent,
+    cancel: cancelPosOfflineCardIntent,
     wrongAccount: reportPosOfflineCardWrongAccount,
   }
 }
@@ -436,7 +457,11 @@ interface OfflineCardWrongAccount {
 
 /** What became of a card taken offline, as the sync settles it. */
 type OfflineCardSettlement =
-  | (PosOfflineCardSettled & { wrongAccount?: OfflineCardWrongAccount })
+  | (PosOfflineCardSettled & {
+      wrongAccount?: OfflineCardWrongAccount
+      /** An authorization on another account the sync cancels once the sale is recorded. */
+      releaseHold?: { paymentIntentId: string; account: string | null }
+    })
   | { kind: 'wait'; outcome: PosOfflineSaleOutcome }
 
 /** Statuses in which an intent holds the customer's money or has taken it. */
@@ -573,6 +598,13 @@ async function settleOfflineCard(
           status: intent.status,
           amountCents: intent.amount,
         },
+        // Not this store's money, but the customer's card still holds it
+        // until the authorization lapses: an intent only authorized (never
+        // one captured or processing) is cancelled where the device made it,
+        // once the sale is recorded, so the hold is released.
+        ...(intent.status === 'requires_capture'
+          ? { releaseHold: { paymentIntentId: intent.id, account: madeOn } }
+          : {}),
       }
     }
   }
@@ -764,6 +796,9 @@ async function finishSale(
     }
     if (!stockDone) return current
   }
+  if (current.releaseHold && current.holdReleased === undefined) {
+    current = await releaseOfflineCardHold(context, recordRef, orderRef, current)
+  }
   if (!current.notified && current.unpaid) {
     // A card that was never paid gets no receipt and no "paid": the order
     // waits, flagged, for the merchant to collect it another way.
@@ -783,6 +818,63 @@ async function finishSale(
     await recordRef.update({ notified: true, status: 'settled' })
   }
   return current
+}
+
+/** The cancel's idempotency key: one cancel per sale. */
+export function posOfflineReleaseKey(hostId: string, saleKey: string): string {
+  return `pos-offline-release:${hostId}:${saleKey}`
+}
+
+/**
+ * Cancels the authorization of a card refused as made out to another
+ * account (AGL-4219), so the customer's card no longer holds the money, and
+ * records what happened on the sale and its order. Tried once, after the
+ * order exists: a failure (Stripe refused, or no answer) is recorded and
+ * never stops the sync. The order stays unpaid and flagged either way.
+ */
+async function releaseOfflineCardHold(
+  context: SyncContext,
+  recordRef: FirebaseFirestore.DocumentReference,
+  orderRef: FirebaseFirestore.DocumentReference,
+  record: PosOfflineSyncRecord,
+): Promise<PosOfflineSyncRecord> {
+  const { deps, staff } = context
+  const hold = record.releaseHold!
+  let error = ''
+  try {
+    const cancelled = deps.card
+      ? await deps.card.cancel(hold.paymentIntentId, hold.account, posOfflineReleaseKey(staff.hostId, record.saleKey))
+      : { ok: false as const, error: 'Card sales taken offline cannot sync to this store.' }
+    if ('error' in cancelled) error = cancelled.error || 'Stripe refused the cancel.'
+  } catch (failure) {
+    console.error('[pos-offline-sync] hold release failed', staff.hostId, record.saleKey, failure)
+    error = 'Stripe did not answer.'
+  }
+  const released = !error
+  const fields = released
+    ? { holdReleased: true }
+    : { holdReleased: false, holdReleaseError: error.slice(0, 300) }
+  await recordRef.update(fields)
+  try {
+    const fresh = ((await orderRef.get()).data() ?? {}) as CommerceModel.HostOrder
+    await orderRef.update({
+      timeline: CommerceModel.appendOrderEvent(
+        fresh,
+        released ? 'offline-card-released' : 'offline-card-release-failed',
+        released
+          ? 'The card’s authorization was cancelled on Stripe, so the customer’s card no longer holds the money.'
+          : `The card’s authorization could not be cancelled on Stripe (${error}). The hold on the customer’s card lapses on its own.`.slice(0, 500),
+        deps.now(),
+      ),
+    })
+    await posOfflineCardChargeRef(staff.hostRef, record.saleKey).set(
+      { ...fields, updatedAtMs: deps.now() },
+      { merge: true },
+    )
+  } catch (failure) {
+    console.error('[pos-offline-sync] hold release note failed', staff.hostId, record.saleKey, failure)
+  }
+  return { ...record, ...fields }
 }
 
 async function syncOne(context: SyncContext, raw: unknown): Promise<PosOfflineSaleOutcome> {
@@ -1088,6 +1180,7 @@ async function syncOne(context: SyncContext, raw: unknown): Promise<PosOfflineSa
       stockDone: false,
       notified: false,
       ...(settled?.kind === 'unpaid' ? { unpaid: true } : {}),
+      ...(settled?.kind === 'unpaid' && settled.releaseHold ? { releaseHold: settled.releaseHold } : {}),
     }
     transaction.create(recordRef, record)
     // The intent's record says its sale synced, in the same commit, so the

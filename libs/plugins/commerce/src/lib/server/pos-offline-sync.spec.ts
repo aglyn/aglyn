@@ -510,6 +510,9 @@ describe('a card taken offline on the app reader (AGL-4039)', () => {
   /** What the next captures answer instead of capturing: a Stripe status, or a thrown network error. */
   let captureFailures: Array<{ status: number; error: string } | 'network'>
   let wrongAccounts: Array<Record<string, unknown>>
+  /** Every cancel the sync asked for, and what the next ones answer instead of cancelling. */
+  let cancels: Array<{ id: string; account: string | null; key: string }>
+  let cancelFailures: Array<{ status: number; error: string } | 'network'>
 
   const intentFor = (queued: PosOfflineSale, overrides: Partial<PosOfflineCardIntent> = {}): PosOfflineCardIntent => ({
     id: `pi_${queued.saleKey.slice(-12)}abc`,
@@ -548,6 +551,8 @@ describe('a card taken offline on the app reader (AGL-4039)', () => {
     chargeModel = 'destination'
     captureFailures = []
     wrongAccounts = []
+    cancels = []
+    cancelFailures = []
     deps.card = {
       terminal: async () => ({ available: true, locationId: 'tml_1' }),
       merchantAccount: async () => (merchant ? { accountId: merchant, chargeModel } : null),
@@ -565,9 +570,23 @@ describe('a card taken offline on the app reader (AGL-4039)', () => {
         intents[id] = { ...intents[id], status: 'succeeded', applicationFeeCents: fee }
         return { ok: true, intent: intents[id] }
       },
+      cancel: async (id, account, key) => {
+        cancels.push({ id, account, key })
+        const failure = cancelFailures.shift()
+        if (failure === 'network') throw new Error('socket hang up')
+        if (failure) return { ok: false, error: failure.error, status: failure.status }
+        if (intents[id]?.status !== 'requires_capture') return { ok: false, error: 'not cancelable', status: 400 }
+        intents[id] = { ...intents[id], status: 'canceled' }
+        return { ok: true }
+      },
       wrongAccount: async (input) => void wrongAccounts.push(input),
     }
   })
+
+  const syncRecord = (saleKey: string) =>
+    h.memory.read(`hosts/shop/posOfflineSales/${saleKey}`) as Record<string, any> | undefined
+  const timelineEvents = (saleKey: string) =>
+    ((order(saleKey)?.['timeline'] ?? []) as Array<{ event: string; detail?: string }>).map((entry) => entry.event)
 
   /** The take and fee the capture of the default card sale carries. */
   const lineTake = Math.round((2400 * 2) / 100) + Math.round((2500 * 2) / 100)
@@ -845,6 +864,98 @@ describe('a card taken offline on the app reader (AGL-4039)', () => {
       ])
     })
   })
+  describe('a refused card’s hold on the customer’s card (AGL-4219)', () => {
+    const STORE = 'acct_1StoreOwnAcct'
+    const OLD = 'acct_1OldStoreAcct'
+    /** A card the device made on `account` (a direct-charge kit's), with no transfer. */
+    const onAccount = (account: string, intent: Partial<PosOfflineCardIntent> = {}) => {
+      const made = cardSale('forwarded', { destination: '', ...intent })
+      made.intent.metadata['chargeModel'] = 'direct'
+      madeOn[made.intent.id] = account
+      made.queued.card = { ...made.queued.card!, account }
+      return made
+    }
+
+    it('direct: cancels an authorization left on the old account after a reconnect, and records it on the sale', async () => {
+      merchant = STORE
+      chargeModel = 'direct'
+      const { queued, intent } = onAccount(OLD)
+      expect((await results([queued]))[0]).toMatchObject({ status: 'recorded', flags: ['card-not-charged'] })
+      expect(captures).toHaveLength(0)
+      expect(cancels).toEqual([{ id: intent.id, account: OLD, key: `pos-offline-release:shop:${queued.saleKey}` }])
+      expect(intents[intent.id].status).toBe('canceled')
+      expect(syncRecord(queued.saleKey)).toMatchObject({
+        unpaid: true,
+        holdReleased: true,
+        releaseHold: { paymentIntentId: intent.id, account: OLD },
+      })
+      expect(order(queued.saleKey)!['status']).toBe('pending')
+      expect(timelineEvents(queued.saleKey)).toContain('offline-card-released')
+      expect(charge(queued.saleKey)).toMatchObject({ holdReleased: true })
+      // Sent again, it replays: one cancel, ever.
+      expect((await results([queued]))[0].status).toBe('replayed')
+      expect(cancels).toHaveLength(1)
+    })
+
+    it('destination: cancels a platform authorization made out to another account', async () => {
+      const { queued, intent } = cardSale('forwarded', { destination: 'acct_someone_else' })
+      await results([queued])
+      expect(cancels).toEqual([{ id: intent.id, account: null, key: `pos-offline-release:shop:${queued.saleKey}` }])
+      expect(syncRecord(queued.saleKey)).toMatchObject({ holdReleased: true })
+    })
+
+    it('never cancels an intent already captured or still processing, nor the store’s own card', async () => {
+      merchant = STORE
+      chargeModel = 'direct'
+      for (const status of ['succeeded', 'processing']) {
+        const { queued } = onAccount(OLD, { status })
+        expect((await results([queued]))[0]).toMatchObject({ flags: ['card-not-charged'] })
+        expect(syncRecord(queued.saleKey)!['releaseHold']).toBeUndefined()
+      }
+      const ours = onAccount(STORE)
+      expect((await results([ours.queued]))[0]).toMatchObject({ status: 'recorded', flags: [] })
+      expect(order(ours.queued.saleKey)!['status']).toBe('paid')
+      // An intent the old account no longer has holds nothing the sync can see.
+      const gone = onAccount(OLD)
+      delete intents[gone.intent.id]
+      await results([gone.queued])
+      expect(cancels).toHaveLength(0)
+      // A destination store's own card is captured, never cancelled.
+      merchant = 'acct_merchant'
+      chargeModel = 'destination'
+      const destination = cardSale('forwarded')
+      expect((await results([destination.queued]))[0]).toMatchObject({ flags: [] })
+      expect(cancels).toHaveLength(0)
+    })
+
+    it('a cancel Stripe refuses, or that gets no answer, leaves the sale unpaid and flagged, and the sync goes on', async () => {
+      merchant = STORE
+      chargeModel = 'direct'
+      cancelFailures.push({ status: 403, error: 'The account is no longer connected.' }, 'network')
+      const refusedCancel = onAccount(OLD)
+      const noAnswer = onAccount(OLD)
+      const next = onAccount(STORE)
+      const outcomes = await results([refusedCancel.queued, noAnswer.queued, next.queued])
+      expect(outcomes.map((outcome) => [outcome.status, outcome.flags])).toEqual([
+        ['recorded', ['card-not-charged']],
+        ['recorded', ['card-not-charged']],
+        ['recorded', []],
+      ])
+      expect(syncRecord(refusedCancel.queued.saleKey)).toMatchObject({
+        holdReleased: false,
+        holdReleaseError: 'The account is no longer connected.',
+        status: 'settled',
+      })
+      expect(syncRecord(noAnswer.queued.saleKey)).toMatchObject({ holdReleased: false, holdReleaseError: 'Stripe did not answer.' })
+      expect(order(refusedCancel.queued.saleKey)!['status']).toBe('pending')
+      expect(timelineEvents(refusedCancel.queued.saleKey)).toContain('offline-card-release-failed')
+      expect(after.map((sale) => sale.orderId)).toEqual([next.queued.saleKey])
+      // Tried once: a replay does not ask again.
+      await results([refusedCancel.queued])
+      expect(cancels).toHaveLength(2)
+    })
+  })
+
   describe('a store on its own Stripe account (direct charges, AGL-4219)', () => {
     const STORE = 'acct_1StoreOwnAcct'
     const directKit = async () =>

@@ -1611,6 +1611,32 @@ export async function capturePosOfflineCardIntent(
 }
 
 /**
+ * Cancels one offline card's authorization on `account` (a direct-charge
+ * store's own, or another the device recorded) or the platform, so the
+ * customer's hold is released (AGL-4219). The sync asks only for an intent
+ * it read as `requires_capture`; Stripe refuses to cancel a captured one.
+ */
+export async function cancelPosOfflineCardIntent(
+  paymentIntentId: string,
+  account: string | null,
+  idempotencyKey: string,
+): Promise<{ ok: true } | { ok: false; error: string; status: number }> {
+  const cancelled = await posStripe('POST', `payment_intents/${encodeURIComponent(paymentIntentId)}/cancel`, {
+    idempotencyKey,
+    ...onAccount(account),
+    params: { cancellation_reason: 'abandoned' },
+  })
+  if (!cancelled.ok) {
+    return {
+      ok: false,
+      status: cancelled.status,
+      error: posStripeErrorMessage(cancelled.body, 'The card payment could not be cancelled.'),
+    }
+  }
+  return { ok: true }
+}
+
+/**
  * Turns Stripe's offline mode on for the site's readers, on the site's ONE
  * Terminal Configuration through {@link savePosReaderConfiguration}, like
  * reader tipping and the start-up screen (AGL-4048). That helper claims a

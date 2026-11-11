@@ -130,6 +130,7 @@ jest.mock('@aglyn/tenant-data-admin', () => {
 
 import { posPaymentHandler } from './pos-payment'
 import {
+  cancelPosOfflineCardIntent,
   capturePosOfflineCardIntent,
   handlePosStripeEvent,
   KEYED_CARD_NEEDS_AUTHENTICATION,
@@ -1061,6 +1062,18 @@ describe('an offline card read and captured at sync (AGL-4039)', () => {
     expect(capture.key).toBe('offline-capture-direct')
     // Nothing on a direct capture names a transfer: the money is the store's already.
     expect([...capture.params.keys()].some((key) => key.startsWith('transfer_data'))).toBe(false)
+  })
+
+  it('cancels a refused offline card’s authorization on the account it was made on, once (AGL-4219)', async () => {
+    const { id } = await retrieveSeeded()
+    expect(await cancelPosOfflineCardIntent(id, 'acct_1OldStoreAcct', 'pos-offline-release:shop:sale1')).toEqual({ ok: true })
+    expect(await cancelPosOfflineCardIntent(id, null, 'pos-offline-release:shop:sale2')).toEqual({ ok: true })
+    const calls = stripeCalls.filter((call) => call.path === `payment_intents/${id}/cancel`)
+    expect(calls.map((call) => [call.method, call.account, call.key])).toEqual([
+      ['POST', 'acct_1OldStoreAcct', 'pos-offline-release:shop:sale1'],
+      ['POST', null, 'pos-offline-release:shop:sale2'],
+    ])
+    expect(calls[0].params.get('cancellation_reason')).toBe('abandoned')
   })
 
   it('captures an offline card by the same fee rule as an online reader payment, on either account (AGL-4219)', () => {
