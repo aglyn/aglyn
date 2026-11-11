@@ -685,6 +685,14 @@ describe('transferring a name in (AGL-4040)', () => {
     expect(await transferInQuote(transferDriver(), 'testbakery.us')).toEqual({ ok: 'no', code: 'not-offered' })
   })
 
+  it('prices a name another Vercel team has added, which the registrar answers 403 for', async () => {
+    const elsewhere = transferDriver({ info: async () => no('forbidden'), transferPrice: async () => yes(17.99) })
+    expect(await transferInQuote(elsewhere, 'testbakery.com')).toMatchObject({ ok: 'yes', costUsd: 17.99 })
+    // Any other refusal is still the registrar not answering.
+    const down = transferDriver({ info: async () => no('http_503', true) })
+    expect(await transferInQuote(down, 'testbakery.com')).toEqual({ ok: 'no', code: 'registrar-unavailable' })
+  })
+
   it('charges the quoted price, asks the registrar at our cost, and holds the name into the workspace', async () => {
     const driver = transferDriver()
     const { effects, recorded } = effectsWith(driver)
