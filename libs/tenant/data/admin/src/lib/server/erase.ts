@@ -70,6 +70,7 @@ import {
   type TeardownSendingDomainDriver,
 } from './sending-domain-debt'
 import { addAdminAudit } from './admin-audit-write'
+import { retryTransientFirestore } from './firestore-transient'
 
 /** The reversible hold before a requested erasure is executed (AGL-485). */
 export const ERASURE_HOLD_MS = 7 * 24 * 60 * 60 * 1000
@@ -341,6 +342,47 @@ export class SiteInConsentGroupError extends Error {
   }
 }
 
+/*==========================================
+ * ONE FAILED WRITE IN THE TREE IS NOT A FAILED DELETE.
+ *
+ * `recursiveDelete` is a bulk writer: a site is hundreds of deletes, and one
+ * that meets `UNAVAILABLE` or a deadline under load rejects the whole call
+ * with that write's code. Thrown from here it reached the delete route as a
+ * 500, for a site whose tree was gone, so the console said the delete failed
+ * and a retry found nothing to delete.
+ *
+ * So a transient failure runs the delete again, which is safe because a
+ * delete of what is already gone does nothing, and walks the subcollections
+ * whether or not the parent document still exists. When the retries are
+ * spent, or the failure was not transient, the host document decides: the
+ * bulk writer deletes it LAST, so its absence means the site is erased and
+ * no reader can route to it. What a write left behind is logged; the
+ * delete answers as done. A host document still standing is a real failure
+ * and is thrown.
+ *=========================================*/
+async function eraseHostTree(
+  firestore: FirebaseFirestore.Firestore,
+  hostRef: FirebaseFirestore.DocumentReference,
+  hostId: string,
+): Promise<void> {
+  try {
+    await retryTransientFirestore(() => firestore.recursiveDelete(hostRef), {
+      onRetry: (error, attempt) =>
+        console.warn(`eraseHost: retrying the tree delete for ${hostId} (${attempt})`, error),
+    })
+  } catch (error) {
+    const remaining = await retryTransientFirestore(() => hostRef.get()).catch(() => null)
+    if (remaining && !remaining.exists) {
+      console.error(
+        `eraseHost: the tree delete for ${hostId} reported a failure after the site was erased`,
+        error,
+      )
+      return
+    }
+    throw error
+  }
+}
+
 export interface EraseHostResult {
   /** What became of the site's dedicated sending domain, if it had one. */
   sendingDomain: SendingDomainDisposition
@@ -469,7 +511,7 @@ export async function eraseHost(
   }
 
   // The host document tree (screens/layouts/versions/counters/products/…).
-  await firestore.recursiveDelete(hostRef)
+  await eraseHostTree(firestore, hostRef, hostId)
 
   // The plugin rows keyed by the site that its tree does not hold (AGL-4214).
   // After the tree, so a register's display can no longer verify against it.
