@@ -66,6 +66,13 @@ public func checkInDayLabel(_ key: String?) -> String {
   return "\(checkInWeekdays[((days % 7) + 7) % 7]), \(checkInMonths[parts.month - 1]) \(parts.day)"
 }
 
+/// A day key as a date a reader says: "Oct 25, 2026"; "" for a value that is not a day key. The day helpers' month
+/// names, so a day reads the same wherever a screen shows one.
+public func dayKeyDateLabel(_ key: String?) -> String {
+  guard let parts = dayKeyParts(key) else { return "" }
+  return "\(checkInMonths[parts.month - 1]) \(parts.day), \(parts.year)"
+}
+
 /// Why a chosen use day can't be had, or nil (`checkInUseDayProblem`).
 public func checkInUseDayProblem(_ value: Any?, todayKey: String) -> String? {
   guard isCheckInDayKey(value), let day = value as? String else { return "Choose the day as a date." }

@@ -26,6 +26,20 @@ fun posDayAmount(cents: Double?, currency: String): String {
 /** The range as a reader says it: `2026-10-24` or `2026-10-24 to 2026-10-26` (`posDayRangeLabel`). */
 fun posDayRangeLabel(from: String, to: String): String = if (from == to) from else "$from to $to"
 
+/**
+ * The range as a screen heads it (the spreadsheet keeps [posDayRangeLabel]): "Today, Oct 25, 2026", "Oct 24, 2026",
+ * "Oct 24 – Oct 26, 2026" or "Dec 30, 2026 – Jan 2, 2027". [today] is the store's own today, when known.
+ */
+fun posDayRangeTitle(from: String, to: String, today: String? = null): String {
+  val start = dayKeyDateLabel(from)
+  val end = dayKeyDateLabel(to)
+  if (start.isEmpty() || end.isEmpty()) return posDayRangeLabel(from, to)
+  if (from == to) return if (from == today) "Today, $start" else start
+  // One year said once, at the end: "Oct 24 – Oct 26, 2026".
+  val sameYear = from.take(4) == to.take(4)
+  return "${if (sameYear) start.dropLast(6) else start} – $end"
+}
+
 /** Whether the range had nothing to report: no sale, no return, no shift (`posDayReportIsEmpty`). */
 fun posDayReportIsEmpty(report: PosDayReport): Boolean =
   report.totals.orderCount == 0.0 && report.totals.refundCount == 0.0 && report.shifts.isEmpty()

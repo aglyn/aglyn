@@ -69,9 +69,14 @@ fun PosDayTotalsPanel(
   currency: String,
   /** This register's own unsynced sales (Aglyn POS); null in the Aglyn app. */
   notSynced: PosDayNotSynced?,
+  /** The store the register sells for, named under the title (Figma 180:26616); the days head the body's first card. */
+  storeName: String? = null,
   onDismiss: () -> Unit,
 ) {
-  PanelSheet(title = "Day totals", onDismiss = onDismiss, modifier = Modifier.testTag("day-totals"), subtitle = model.label) {
+  PanelSheet(
+    title = "Day totals", onDismiss = onDismiss, modifier = Modifier.testTag("day-totals"),
+    subtitle = posDayReportByline(storeName, days = null),
+  ) {
     PosDayTotalsBody(model, currency, notSynced)
   }
 }
