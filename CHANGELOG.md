@@ -21,6 +21,8 @@ content on the marketing site and is written separately.
 - **native:** a site's plugin switches act on the lists the server holds ([AGL-4047](https://linear.app/aglyn/issue/AGL-4047))
 - **console:** a site's Admin › Plugins saves on the first press ([AGL-4047](https://linear.app/aglyn/issue/AGL-4047))
 - **native:** a test Stripe account on a live store reads as not ready on Payments ([AGL-2471](https://linear.app/aglyn/issue/AGL-2471))
+- **domains:** warn about a previous host's AAAA record left on the domain ([AGL-3963](https://linear.app/aglyn/issue/AGL-3963))
+- **native:** links open in the window and tab in front, and keep their screen on phones ([AGL-4215](https://linear.app/aglyn/issue/AGL-4215))
 
 ## v1.20.2 — 2026-11-11
 
