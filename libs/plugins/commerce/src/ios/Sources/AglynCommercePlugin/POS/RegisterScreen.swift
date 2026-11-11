@@ -100,12 +100,6 @@ struct RegisterScreen: View {
       }
     }
     .background(AglynColor.page)
-    .safeAreaInset(edge: .top, spacing: 0) {
-      VStack(spacing: 0) {
-        RegisterOfflineBanner(model: model)
-        KioskQueueCard(model: model)
-      }
-    }
     .navigationTitle(model.storeName)
     .toolbar { toolbar }
     .aglynSearchable(text: $query, prompt: "Search products", onSubmit: { model.search(query) }, alwaysShown: true)
@@ -231,6 +225,10 @@ struct RegisterScreen: View {
 
   private var catalog: some View {
     VStack(spacing: 0) {
+      // The connection banner and the kiosk queue head the catalog, so on a wide register they sit in its column and
+      // the basket keeps its full height beside them (Figma iPad register offline frames, as Android's CatalogPane).
+      RegisterOfflineBanner(model: model)
+      KioskQueueCard(model: model)
       PosOrdersZone(context: context)
       ScrollView(.horizontal, showsIndicators: false) {
         HStack(spacing: AglynSpace.one) {
