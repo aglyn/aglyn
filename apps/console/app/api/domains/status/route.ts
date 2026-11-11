@@ -20,10 +20,12 @@ import {
   emailUnverifiedResponse,
   firebaseAdmin,
   getOrgForHost,
+  HOST_CNAME_TWIN_FIELD,
   isImpersonationSession,
   lockdownRefusal,
   projectDomainStatus,
 } from '@aglyn/tenant-data-admin'
+import { withStrayIpv6Conflicts } from '@aglyn/tenant-data-admin/server/tenant-dns-check'
 import { invalidIdTokenResponse } from '../../_lib/invalid-id-token-response'
 
 /**
@@ -141,12 +143,22 @@ async function handler(request: Request): Promise<Response> {
   // `tenant`, because a site's custom domain has to be answered for by the
   // tenant runtime — the console scope would probe the wrong deployment and
   // report every customer domain as not attached.
+  const twin = String(hostSnapshot.get(HOST_CNAME_TWIN_FIELD) ?? '')
+    .trim()
+    .toLowerCase()
   const status = await projectDomainStatus(domain, { scope: 'tenant' })
+  // A previous host's AAAA on the name or its www/apex twin, which the
+  // platform's check of the A record does not name (AGL-3963). The card
+  // lists it with the other conflicts, so it stays on screen until removed.
+  const conflicts = await withStrayIpv6Conflicts(
+    twin ? [domain, twin] : [domain],
+    status.conflicts ?? [],
+  )
   return Response.json({
     domain,
     state: status.state,
     verification: status.verification,
-    conflicts: status.conflicts,
+    conflicts,
     // Our own record of the last attach, so the card can tell "we never
     // finished attaching this" from "the platform is still working on it".
     attachmentPending: hostSnapshot.get('cnameAttachmentPending') === true,

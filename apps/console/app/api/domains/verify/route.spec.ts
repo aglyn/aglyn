@@ -47,6 +47,8 @@ export {}
 let mockCnames = new Map<string, string[]>()
 /** name → A records. */
 let mockAddresses = new Map<string, string[]>()
+/** name → AAAA records. */
+let mockIpv6 = new Map<string, string[]>()
 
 const mockVerifyIdToken = jest.fn()
 
@@ -67,6 +69,11 @@ jest.mock('dns', () => ({
       if (!found) throw mockNotFound()
       return found
     },
+    resolve6: async (name: string) => {
+      const found = mockIpv6.get(name)
+      if (!found) throw mockNotFound()
+      return found
+    },
   },
   Resolver: class {
     setServers() {
@@ -78,6 +85,10 @@ jest.mock('dns', () => ({
     }
     resolve4(name: string, callback: (error: unknown, records?: string[]) => void) {
       const found = mockAddresses.get(name)
+      found ? callback(null, found) : callback(mockNotFound())
+    }
+    resolve6(name: string, callback: (error: unknown, records?: string[]) => void) {
+      const found = mockIpv6.get(name)
       found ? callback(null, found) : callback(mockNotFound())
     }
   },
@@ -133,6 +144,7 @@ const ORIGINAL_NODE_ENV = process.env.NODE_ENV
 beforeEach(() => {
   mockCnames = new Map()
   mockAddresses = new Map([['sites.aglyn.app', [...TARGET_POOL]]])
+  mockIpv6 = new Map()
   mockVerifyIdToken.mockReset()
   mockVerifyIdToken.mockResolvedValue({ uid: 'user-1', email_verified: true })
   // Production semantics. Without this the route soft-passes any CNAME.
@@ -236,6 +248,37 @@ describe('a domain can be pointed here AND wrong at once (AGL-1913)', () => {
     const body = await (await GET(get('example.com'))).json()
     expect(body.verified).toBe(true)
     expect(body.strayAddresses).toBeUndefined()
+  })
+})
+
+describe('a previous host’s IPv6 address is reported (AGL-3963)', () => {
+  it('reports the AAAA a correctly-pointed apex still carries', async () => {
+    // Pointing the A record here leaves the AAAA beside it, so IPv6 visitors
+    // keep reaching the old host. Cloudflare raised it at template onboarding.
+    mockAddresses.set('example.com', ['216.198.79.1'])
+    mockIpv6.set('example.com', ['2001:DB8::1'])
+    const body = await (await GET(get('example.com'))).json()
+    expect(body.verified).toBe(true)
+    expect(body.strayIpv6Addresses).toEqual(['2001:db8::1'])
+  })
+
+  it('does not report an AAAA the edge itself answers with', async () => {
+    mockAddresses.set('example.com', ['216.198.79.1'])
+    mockIpv6.set('example.com', ['2001:db8::5'])
+    mockIpv6.set('sites.aglyn.app', ['2001:db8::5'])
+    const body = await (await GET(get('example.com'))).json()
+    expect(body.strayIpv6Addresses).toBeUndefined()
+  })
+
+  it('says nothing for an apex with no AAAA, the control', async () => {
+    mockAddresses.set('example.com', ['216.198.79.1'])
+    expect((await (await GET(get('example.com'))).json()).strayIpv6Addresses).toBeUndefined()
+  })
+
+  it('does not look at a CNAME name, which cannot carry its own AAAA', async () => {
+    mockCnames.set('www.example.com', ['sites.aglyn.app'])
+    mockIpv6.set('www.example.com', ['2001:db8::1'])
+    expect((await (await GET(get('www.example.com'))).json()).strayIpv6Addresses).toBeUndefined()
   })
 })
 

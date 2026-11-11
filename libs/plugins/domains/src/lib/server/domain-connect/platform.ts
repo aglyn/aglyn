@@ -38,6 +38,7 @@ import { isRefusedIdToken } from '@aglyn/tenant-data-admin/server/id-token-refus
 import { getLockdownVerdict } from '@aglyn/tenant-data-admin/server/lockdown'
 import {
   checkTenantDnsPointing,
+  strayIpv6Addresses,
   TENANT_DNS_DOMAIN_PATTERN,
 } from '@aglyn/tenant-data-admin/server/tenant-dns-check'
 import { BUNDLE_ID, DOMAINS_COLLECTIONS } from '../../constants/bundle-common'
@@ -196,6 +197,7 @@ export function platformDomainConnectRouteDeps(): DomainConnectRouteDeps {
         read: (url, init, options) => readConfiguredPublicUrl(url, init, options),
         now: Date.now,
       }),
+    strayIpv6: (name) => (TENANT_DNS_DOMAIN_PATTERN.test(name) ? strayIpv6Addresses(name) : Promise.resolve([])),
     heldElsewhere,
     customDomainPath,
     engine: platformDomainConnectEngine({ recheckOwner: false }),

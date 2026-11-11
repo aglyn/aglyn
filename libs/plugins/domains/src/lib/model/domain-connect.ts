@@ -81,6 +81,13 @@ export type DomainConnectDiscoverResponse =
       supported: true
       /** The DNS provider's own name for itself, for the button. */
       providerName: string
+      /**
+       * A previous host's IPv6 (AAAA) records on the zone root, for the apex
+       * template only (AGL-3963). The template replaces the root's A record
+       * and leaves its AAAA, so the owner is told to delete these at the
+       * provider. Null when there are none or the name is a subdomain.
+       */
+      strayIpv6: { name: string; addresses: string[] } | null
     }
 
 /** What `domain-connect/start` answers: where to send the owner. */

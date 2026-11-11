@@ -26,6 +26,11 @@ Aglyn never sees your password at your provider: you sign in on the provider's o
 page, and it writes only the records Aglyn's template names. For a bare domain like
 `yourbusiness.com`, that is the domain and its `www` address, so both work.
 
+If your domain also has an **IPv6 (AAAA) record** from a previous host, the card warns
+you under the button. Your provider replaces the domain's IPv4 address but leaves that
+record in place, so delete it while you're at your provider. Otherwise visitors on IPv6
+keep reaching the old site.
+
 ## If there's no button {#no-button}
 
 Your provider doesn't support Domain Connect for this domain, or hasn't approved

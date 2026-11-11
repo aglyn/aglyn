@@ -87,6 +87,11 @@ export interface DomainConnectRouteDeps {
   /** `validatePlatformDomain`, with the attach route's copy. */
   validateDomain(input: string): { domain: string | null; error: string | null }
   discover(domain: string, providerId: string): Promise<DomainConnectDiscovery>
+  /**
+   * IPv6 addresses answering for `name` that the tenant edge does not answer
+   * with (AGL-3963). Never throws.
+   */
+  strayIpv6(name: string): Promise<string[]>
   /** Whether a site other than `hostId` holds any of `names`, as its domain or its twin. */
   heldElsewhere(names: readonly string[], hostId: string): Promise<boolean>
   /** `/{orgSlug}/hosts/{subdomain}/admin/domain` for the session's site, or null. */
@@ -157,9 +162,16 @@ export function createDiscoverRoute(deps: DomainConnectRouteDeps) {
     if (!domain) return json(NOT_SUPPORTED)
     const found = await deps.discover(domain, config.providerId).catch(() => null)
     if (!found?.supported) return json(NOT_SUPPORTED)
+    // The apex template writes `A @` and nothing for IPv6, so a previous
+    // host's AAAA on the root survives the apply and keeps IPv6 visitors on
+    // the old site (AGL-3963; Cloudflare raised it at onboarding). Asked
+    // before the owner goes to the provider, where they can delete it.
+    const addresses =
+      found.zone.template === 'apex' ? await deps.strayIpv6(found.zone.root).catch(() => []) : []
     const answer: DomainConnectDiscoverResponse = {
       supported: true,
       providerName: found.provider.providerName,
+      strayIpv6: addresses.length ? { name: found.zone.root, addresses } : null,
     }
     return json(answer)
   }

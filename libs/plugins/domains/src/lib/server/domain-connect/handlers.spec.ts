@@ -100,6 +100,7 @@ function world(patch: Partial<DomainConnectRouteDeps> = {}) {
         : { domain: null, error: 'Enter a valid domain, for example example.com' }
     },
     discover: async () => SUPPORTED,
+    strayIpv6: async () => [],
     heldElsewhere: async () => false,
     customDomainPath: async () => '/acme/hosts/acme/admin/domain',
     engine,
@@ -157,7 +158,42 @@ describe('discover', () => {
     const response = await createDiscoverRoute(world().deps)(
       get('domain-connect/discover?hostId=host-1&domain=example.com', 'admin'),
     )
-    expect(await response.json()).toEqual({ supported: true, providerName: 'Provider DNS' })
+    expect(await response.json()).toEqual({ supported: true, providerName: 'Provider DNS', strayIpv6: null })
+  })
+
+  it('names a previous host’s AAAA on the root, which the apex template leaves (AGL-3963)', async () => {
+    const strayIpv6 = jest.fn(async () => ['2001:db8::1'])
+    const { deps } = world({ strayIpv6 })
+    const response = await createDiscoverRoute(deps)(
+      get('domain-connect/discover?hostId=host-1&domain=www.example.com', 'admin'),
+    )
+    expect(await response.json()).toEqual({ supported: true, providerName: 'Provider DNS', strayIpv6: { name: 'example.com', addresses: ['2001:db8::1'] } })
+    // The zone root, where the template writes `A @`, whatever name was typed.
+    expect(strayIpv6).toHaveBeenCalledWith('example.com')
+  })
+
+  it('does not look for an AAAA on a subdomain, whose CNAME replaces it', async () => {
+    const strayIpv6 = jest.fn(async () => ['2001:db8::1'])
+    const { deps } = world({
+      strayIpv6,
+      discover: async () => ({
+        ...SUPPORTED,
+        zone: { root: 'example.com', host: 'shop', template: 'subdomain', serviceId: 'website-subdomain', twin: null },
+      }),
+    })
+    const response = await createDiscoverRoute(deps)(
+      get('domain-connect/discover?hostId=host-1&domain=shop.example.com', 'admin'),
+    )
+    expect((await response.json()).strayIpv6).toBeNull()
+    expect(strayIpv6).not.toHaveBeenCalled()
+  })
+
+  it('still offers the button when the AAAA lookup fails', async () => {
+    const { deps } = world({ strayIpv6: async () => Promise.reject(new Error('resolver down')) })
+    const response = await createDiscoverRoute(deps)(
+      get('domain-connect/discover?hostId=host-1&domain=example.com', 'admin'),
+    )
+    expect(await response.json()).toEqual({ supported: true, providerName: 'Provider DNS', strayIpv6: null })
   })
 
   it('answers not supported with no signing key, before asking anything', async () => {
