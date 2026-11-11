@@ -1,7 +1,7 @@
 {
   "id": "google-reviews",
   "name": "Google reviews",
-  "version": "1.2.0",
+  "version": "1.2.1",
   "entry": "plugin.bundle.mjs",
   "hostAbi": 1,
   "description": "Show your Google rating and reviews on your site, kept up to date from your Google Business Profile.",

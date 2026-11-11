@@ -468,13 +468,22 @@ test('the presets repeat over the google connection and name only fields it decl
     check(preset.data, undefined)
   }
   const section = presets.find((preset) => preset.$id === 'aglyn.google-reviews:section').data
+  // A band with room above and below, then a Container with side gutters,
+  // as the built-in blocks place a section; a bare stack touched the screen
+  // edge on a phone.
+  assert.equal(section.props.component, 'section')
+  assert.ok(section.sx.paddingTop && section.sx.paddingBottom, 'room above and below')
+  const [container] = section.nodes
+  assert.equal(container.componentId, 'muiContainer')
+  assert.equal(container.props.maxWidth, 'lg')
+  const [content] = container.nodes
   assert.deepEqual(
-    section.nodes.map((node) => node.props.repeatConnection),
+    content.nodes.map((node) => node.props.repeatConnection),
     [SUMMARY_SOURCE, REVIEWS_SOURCE, SUMMARY_SOURCE],
   )
   // The owner's reply block leaves a review without one.
   const hides = []
-  walk(section, (node) => {
+  walk(content, (node) => {
     if (node.props?.hideUnless) hides.push(node.props.hideUnless)
   })
   assert.deepEqual(hides.sort(), ['{{item.rating}}', '{{item.reply}}', '{{item.reviewCount}}'])
