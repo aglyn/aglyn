@@ -28,6 +28,7 @@ content on the marketing site and is written separately.
 - **native:** a test Stripe account on a live store reads as not ready on Payments ([AGL-2471](https://linear.app/aglyn/issue/AGL-2471))
 - **domains:** warn about a previous host's AAAA record left on the domain ([AGL-3963](https://linear.app/aglyn/issue/AGL-3963))
 - **native:** links open in the window and tab in front, and keep their screen on phones ([AGL-4215](https://linear.app/aglyn/issue/AGL-4215))
+- **native:** deep links open the page they name: an order, a quote, a return, marketplace pages, a workspace's Home, Sites and SSO ([AGL-4215](https://linear.app/aglyn/issue/AGL-4215))
 - **legal:** Privacy Policy v26 adds Google Business Profile data; signed-in users accept it once ([AGL-4212](https://linear.app/aglyn/issue/AGL-4212))
 - **docs:** the domain guides list Connect a domain automatically ([AGL-3963](https://linear.app/aglyn/issue/AGL-3963))
 - **console:** a page opened in a running tab gets past another tab's locked cache in seconds, not half a minute ([AGL-4204](https://linear.app/aglyn/issue/AGL-4204))
