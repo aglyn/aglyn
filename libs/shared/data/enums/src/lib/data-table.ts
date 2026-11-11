@@ -196,11 +196,22 @@ export function serializeDataTable(
   rows: string[][],
   alignments?: readonly DataTableAlignment[],
 ): string {
-  const body = (rows ?? []).map((row) =>
-    (row ?? [])
-      .map((cell) => String(cell ?? '').replace(/\|/g, '\\|'))
-      .join(' | '),
-  )
+  const body = (rows ?? []).map((row) => {
+    const cells = (row ?? []).map((cell) =>
+      String(cell ?? '').replace(/\|/g, '\\|'),
+    )
+    const line = cells.join(' | ')
+    // An empty first or last cell needs the outer pipes (AGL-4216). Without
+    // them `Feature | Us | ` trims to `Feature | Us |`, whose last pipe reads
+    // as an optional outer one, and the empty column is gone on the next
+    // parse. That is exactly the column "Add column" appends, so appending
+    // one did nothing. Rows that do not need them keep the plain form, so
+    // stored tables do not change.
+    const edgeEmpty =
+      cells.length > 0 &&
+      (cells[0]!.trim() === '' || cells[cells.length - 1]!.trim() === '')
+    return edgeEmpty ? `| ${line} |` : line
+  })
   const meaningful =
     alignments?.some(
       (alignment) => alignment && alignment !== DATA_TABLE_ALIGNMENT_DEFAULT,

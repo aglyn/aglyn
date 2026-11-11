@@ -94,6 +94,30 @@ describe('the table grid (AGL-2543)', () => {
     expect(parseDataTableRows(stored)).toEqual(rows)
   })
 
+  // AGL-4216: a row ending (or starting) with an empty cell wrote
+  // `a | b | `, whose trailing pipe then read as an optional outer one, so
+  // the empty column was dropped on the next parse. "Add column" appends
+  // exactly that column.
+  it('keeps an empty last or first column through a round trip', () => {
+    const appended = [
+      ['Feature', 'Us', ''],
+      ['Open source', 'Yes', ''],
+    ]
+    expect(parseDataTableRows(serializeDataTable(appended))).toEqual(appended)
+    const leading = [
+      ['', 'Us', 'Them'],
+      ['', 'Yes', 'No'],
+    ]
+    expect(parseDataTableRows(serializeDataTable(leading))).toEqual(leading)
+    expect(
+      parseDataTableRows(
+        serializeDataTable(appended, ['left', 'center', 'left']),
+      ),
+    ).toEqual(appended)
+    // A row with content at both ends keeps its plain form.
+    expect(serializeDataTable([['a', 'b']])).toBe('a | b')
+  })
+
   it('treats an empty or non-string value as an empty grid', () => {
     for (const value of ['', '   ', null, undefined, 42, {}]) {
       expect(parseDataTableRows(value)).toEqual([])
