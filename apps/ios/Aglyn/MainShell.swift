@@ -666,12 +666,13 @@ struct AssistSlot: View {
 
   var body: some View {
     let scope = ShellScope(model: model, navigation: navigation)
-    let row = scope.row(for: navigation.section)
-    let place = navigation.section == .home ? "Home" : row?.label
+    let shown = Self.shownSection(navigation)
+    let row = scope.row(for: shown)
+    let place = shown == .home ? "Home" : row?.label
     let scopeName = scope.site?.name ?? scope.org?.name
     let title = [place, scopeName].compactMap { $0 }.joined(separator: " · ")
     // The context chip wears the place's own icon (Figma AI sheet 21:314, AI panel 18:485).
-    let icon = navigation.section == .home ? "house" : (row?.appleIcon ?? "eye")
+    let icon = shown == .home ? "house" : (row?.appleIcon ?? "eye")
     let orgSlug = model.workspace?.org?.slug ?? ""
     let site = scope.site
     let route =
@@ -687,6 +688,15 @@ struct AssistSlot: View {
     .environment(
       \.aglynSlotParams,
       ["route": route, "title": title, "icon": icon, "place": place ?? "", "scope": scopeName ?? ""])
+  }
+
+  /// The place on show: the area last pushed on the section, before the section itself. A phone opens every area on
+  /// Home's stack (AGL-4006), so the section alone said "Home" while Orders or an order was on screen.
+  static func shownSection(_ navigation: ShellNavigation) -> ShellSection {
+    for route in (navigation.paths[navigation.section] ?? []).reversed() {
+      if case .area(let screen, let params) = route { return ShellSection.opening(screen, params) }
+    }
+    return navigation.section
   }
 
   /// A row's console path within its scope, from the manifest's console reference.
@@ -1197,6 +1207,7 @@ struct RecentPlacesMenu: View {
 /// tab bar (Home, the site's busiest area, Inbox, Menu).
 struct PhoneShell: View {
   @Environment(AppModel.self) private var model
+  @Environment(\.scenePhase) private var scenePhase
   @Bindable var navigation: ShellNavigation
   /// A tab's count from its row's count view (Inbox's unread), worn as the tab's badge (Figma Phone/Tab bar 22:499).
   @State private var counts: [String: Int] = [:]
@@ -1309,8 +1320,10 @@ struct PhoneShell: View {
         navigation.showCreate = true
         return
       }
-      // A section with no tab of its own opens on Home, an area with its section chips (AGL-3993, AGL-4006).
-      guard !tabs.contains(where: { $0.section == section }) else { return }
+      // A section with no tab of its own opens on Home, an area with its section chips (AGL-3993, AGL-4006). Not while
+      // the app is in the background: iPadOS draws its app-switcher snapshots at a phone's width, and this turned the
+      // iPad window's section into Home with the area pushed on it (a second head over the screen's own on return).
+      guard scenePhase != .background, !tabs.contains(where: { $0.section == section }) else { return }
       navigation.openOnHome(section)
     }
     #if DEBUG
@@ -1329,7 +1342,7 @@ struct PhoneShell: View {
     // the screen was left on a tab no longer there (the link only opened the site).
     .onChange(of: tabs.map(\.section)) { _, sections in
       let old = navigation.section
-      guard !sections.contains(old) else { return }
+      guard scenePhase != .background, !sections.contains(old) else { return }
       let carried = navigation.paths[old] ?? []
       navigation.section = .home
       if !carried.isEmpty { navigation.paths[.home] = carried }

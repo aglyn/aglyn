@@ -143,6 +143,8 @@ fun tasksQuery(scope: CrmScope, plan: TaskViewPlan, search: String, limit: Int) 
     sort = ListQuerySort(direction = if (plan.descending) ListQuerySortDirection.DESC else ListQuerySortDirection.ASC, path = "dueAtMs"),
   ),
 ).toFirestoreQuery(crmPath(scope.orgId, "crmTasks"), limit)
+  // Metadata changes too, so a list the server confirms stops reading as the cache's (AGL-4047).
+  .copy(includeMetadataChanges = true)
 
 private fun kindLabel(kind: String) = Contracts.crmTaskKindLabels[kind] ?: kind
 
@@ -199,21 +201,32 @@ fun TaskDialog(
   /** The workspace's sites and where the form starts: given, it asks where the task is filed (a new task at the workspace's level). */
   sites: List<FieldOption>? = null,
   siteStart: String = "",
+  /** A stored task read only from the device cache: Save waits for the server's copy (AGL-4047). A new one is never held. */
+  held: Boolean = false,
   onSave: (TaskDraft) -> Unit,
 ) {
+  // A newer copy of the task keeps what was typed and moves every other field to it (AGL-4047).
   var draft by remember { mutableStateOf(initial) }
+  var seeded by remember { mutableStateOf(initial) }
+  if (seeded != initial) {
+    draft = draft.rebased(seeded, initial)
+    seeded = initial
+  }
   var site by remember(siteStart) { mutableStateOf(siteStart) }
   ActionDialog(
     title = title,
     icon = "task",
     confirmLabel = "Save",
-    confirmEnabled = draft.title.isNotBlank() && (sites == null || site.isNotEmpty()),
+    confirmEnabled = !held && draft.title.isNotBlank() && (sites == null || site.isNotEmpty()),
     busy = busy.busy,
     error = busy.error,
     onDismiss = onDismiss,
     dismissLabel = "Cancel",
     onConfirm = { onSave(draft.copy(sourceSite = site.takeIf { sites != null && it.isNotEmpty() && it != CRM_ORGANIZATION_CHOICE })) },
   ) {
+    if (held) {
+      Text(com.aglyn.core.seedCheckingText("task"), Modifier.testTag("task-checking"), style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurfaceVariant)
+    }
     if (sites != null) {
       FieldEditor(
         FieldSpec(
@@ -318,12 +331,16 @@ fun TasksSection(context: NativePluginContext, scope: CrmScope, api: CrmApi, ref
       busy.run(coroutines, { creating = false }) { api.saveTask(null, draft) }
     }
   }
-  editing?.let { task ->
+  editing?.let { opened ->
+    // The task as the list holds it now, so a newer copy reaches the open dialog.
+    val ready = list.rows as? Live.Ready
+    val task = ready?.value?.firstOrNull { it.id == opened.id } ?: opened
     TaskDialog(
       "Edit task",
       task.draft,
       reference,
       busy,
+      held = ready?.fromCache == true,
       onDismiss = { editing = null },
       onDelete = { busy.run(coroutines, { editing = null }) { api.deleteTask(task.id, task.links) } },
     ) { draft -> busy.run(coroutines, { editing = null }) { api.saveTask(task.id, draft) } }

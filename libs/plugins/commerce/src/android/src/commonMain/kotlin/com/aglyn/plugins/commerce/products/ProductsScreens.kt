@@ -288,6 +288,8 @@ fun ProductDetailPane(context: NativePluginContext, productId: String, editor: P
       }
       val product = hostProductFrom(doc)
       val status = product.status ?: ProductStatus.ACTIVE
+      // A newer copy of the product reaches the open editor (AGL-4047).
+      androidx.compose.runtime.LaunchedEffect(doc, value.fromCache) { editor?.refresh(productId, doc.data, value.fromCache) }
       labels?.let { rows ->
         ProductLabelsDialog(product.name ?: "Product", rows, context.peripherals.systemPrinter) { labels = null }
       }
@@ -381,9 +383,10 @@ fun ProductDetailPane(context: NativePluginContext, productId: String, editor: P
               {
                 OverflowMenu(
                   buildList {
-                    if (status == ProductStatus.DRAFT) add(MenuAction("product-edit", "Edit product", "tune") { editor.edit(productId, doc.data) })
+                    if (status == ProductStatus.DRAFT) add(MenuAction("product-edit", "Edit product", "tune") { editor.edit(productId, doc.data, value.fromCache) })
                     add(MenuAction("product-duplicate", "Duplicate", "content_copy", enabled = !working) { duplicate() })
-                    add(MenuAction("product-archive", if (archived) "Activate" else "Archive", if (archived) "unarchive" else "archive", enabled = !working) { toggleArchive() })
+                    // The status save sends the stored product whole: never the device cache's copy of it (AGL-4047).
+                    add(MenuAction("product-archive", if (archived) "Activate" else "Archive", if (archived) "unarchive" else "archive", enabled = !working && !value.fromCache) { toggleArchive() })
                     if (product.type == ProductType.DIGITAL) add(MenuAction("product-keys", "Keys", "key") { keys = true })
                     // Shelf labels with a barcode the register scans back (the console's Labels).
                     if (product.type == ProductType.PHYSICAL) add(MenuAction("product-labels", "Labels", "label") { labels = productLabelRows(doc.data) })
@@ -400,12 +403,12 @@ fun ProductDetailPane(context: NativePluginContext, productId: String, editor: P
           if (editor != null) {
             // One filled button, the next step for the product: a draft goes live; anything else is edited.
             if (status == ProductStatus.DRAFT) {
-              Button(onClick = { setStatus("active") }, enabled = !working, modifier = Modifier.testTag("activate-product")) {
+              Button(onClick = { setStatus("active") }, enabled = !working && !value.fromCache, modifier = Modifier.testTag("activate-product")) {
                 Icon(AglynIcons.named("check_circle"), contentDescription = null)
                 Text("Activate", Modifier.padding(start = space(1f)))
               }
             } else {
-              Button(onClick = { editor.edit(productId, doc.data) }, Modifier.testTag("edit-product")) {
+              Button(onClick = { editor.edit(productId, doc.data, value.fromCache) }, Modifier.testTag("edit-product")) {
                 Icon(AglynIcons.named("tune"), contentDescription = null)
                 Text("Edit product", Modifier.padding(start = space(1f)))
               }
@@ -546,10 +549,13 @@ private fun ProductDialogs(context: NativePluginContext, editor: ProductEditorMo
       onDismiss = editor::close,
       onConfirm = editor::save,
       confirmLabel = if (draft.create) "Add product" else "Save",
-      confirmEnabled = draft.name.isNotBlank(),
+      confirmEnabled = !editor.held && draft.name.isNotBlank(),
       modifier = Modifier.testTag("product-form"),
     ) {
       Column(verticalArrangement = Arrangement.spacedBy(space(1f))) {
+        if (editor.held) {
+          Text(com.aglyn.core.seedCheckingText("product"), Modifier.testTag("product-checking"), style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurfaceVariant)
+        }
         OutlinedTextField(draft.name, { editor.change(draft.copy(name = it)) }, label = { Text("Name") }, singleLine = true, modifier = Modifier.fillMaxWidth().testTag("product-name"))
         OutlinedTextField(draft.description, { editor.change(draft.copy(description = it)) }, label = { Text("Description") }, minLines = 2, modifier = Modifier.fillMaxWidth())
         ChoiceChipRow(

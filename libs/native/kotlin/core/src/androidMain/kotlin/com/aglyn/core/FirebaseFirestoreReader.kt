@@ -26,13 +26,16 @@ class FirebaseFirestoreReader(private val db: FirebaseFirestore) : FirestoreRead
     Live.Ready(snapshot.toDoc(), snapshot.metadata.isFromCache)
   }
 
-  override suspend fun page(query: FirestoreQuery): FirestorePage = recorded("page", query.collectionPath) {
+  override suspend fun page(query: FirestoreQuery): FirestorePage = pageAnswer(query).value
+
+  override suspend fun pageAnswer(query: FirestoreQuery): Live.Ready<FirestorePage> = recorded("page", query.collectionPath) {
     val limit = query.limit
     val probe = if (limit != null) query.copy(limit = limit + 1) else query
-    val docs = build(probe).get().await().documents.mapNotNull { it.toDoc() }
+    val snapshot = build(probe).get().await()
+    val docs = snapshot.documents.mapNotNull { it.toDoc() }
     val rows = if (limit != null) docs.take(limit) else docs
     val next = if (limit != null && docs.size > limit) cursorOf(rows.last(), query.orderBy) else null
-    FirestorePage(rows, next)
+    Live.Ready(FirestorePage(rows, next), snapshot.metadata.isFromCache)
   }
 
   override suspend fun count(query: FirestoreQuery): Long? = recorded("count", query.collectionPath) {

@@ -1011,8 +1011,10 @@
               }
             },
             "siteWide": true,
-            "success": "Return settings saved"
-          }
+            "success": "Return settings saved",
+            "checking": "return settings"
+          },
+          "checking": "return settings"
         }
       ]
     }

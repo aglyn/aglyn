@@ -165,9 +165,12 @@ public struct ServiceRow: Identifiable, Equatable, @unchecked Sendable {
   let draft: Bool
   let deleted: Bool
   let raw: [String: Any]
+  /// Only the device cache's copy yet: its editor holds Save until the server's is in (AGL-4047).
+  let fromCache: Bool
 
   init(_ doc: FirestoreDocument) {
     id = doc.id
+    fromCache = doc.fromCache
     name = (doc.data["name"] as? String).flatMap { $0.isEmpty ? nil : $0 } ?? "Untitled service"
     durationMinutes = millis(doc.data["durationMinutes"]) ?? 30
     priceText = bookingPriceText(priceUsd: doc.data["priceUsd"], priceDisplay: doc.data["priceDisplay"])
@@ -179,7 +182,8 @@ public struct ServiceRow: Identifiable, Equatable, @unchecked Sendable {
 
   public static func == (a: ServiceRow, b: ServiceRow) -> Bool {
     a.id == b.id && a.name == b.name && a.durationMinutes == b.durationMinutes && a.priceText == b.priceText
-      && a.timeZone == b.timeZone && a.draft == b.draft && a.deleted == b.deleted
+      && a.timeZone == b.timeZone && a.draft == b.draft && a.deleted == b.deleted && a.fromCache == b.fromCache
+      && bookingServiceDraftFrom(a.raw) == bookingServiceDraftFrom(b.raw)
   }
 }
 

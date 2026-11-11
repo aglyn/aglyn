@@ -456,12 +456,14 @@ class ScreenModel(
     // A document only the device's cache answered seeds the screen now and holds its forms (`checking.<key>`) until the
     // server's copy is in: a Save pressed on the cache's copy would write it back over what the server holds.
     val seen = ScreenContext.with(context, "data", JsonObject(answered))
-    val cached = mutableMapOf<String, String>()
-    for (load in loads.filter { it.doc != null && it.each == null }) {
+    // A query load's rows the same (a row's prompt is held while its list is the cache's).
+    val cached = mutableMapOf<String, PendingConfirm>()
+    for (load in loads.filter { (it.doc != null || it.query != null) && it.each == null }) {
       val record = answered[load.key] as? JsonObject ?: continue
       if (record[FirestoreLoads.FROM_CACHE_KEY] != JsonPrimitive(true)) continue
       answered[load.key] = FirestoreLoads.unmarked(record)
-      cached[load.key] = ScreenValues.render(load.doc.orEmpty(), seen)
+      cached[load.key] = load.doc?.let { PendingConfirm.Document(ScreenValues.render(it, seen)) }
+        ?: PendingConfirm.Query(load.query!!, seen, queryLimits[load.key] ?: FirestoreLoads.queryLimit(load.query!!))
     }
     val deriving = wanted.filter { it.derive != null }
     val derived = deriving.associate { it.key to derive(it, JsonObject(answered)) }
@@ -481,22 +483,34 @@ class ScreenModel(
    * is open: a held Save is held, as on the web, until the server answers. A read that fails lifts the hold and leaves the
    * save's own refusal to say why.
    */
-  private suspend fun confirm(paths: Map<String, String>, deriving: List<LoadSpec>) {
+  /** A load only the device cache answered, and how to read it again from the server. */
+  private sealed interface PendingConfirm {
+    data class Document(val path: String) : PendingConfirm
+    data class Query(val spec: JsonElement, val scope: JsonElement, val limit: Int) : PendingConfirm
+  }
+
+  private suspend fun confirm(paths: Map<String, PendingConfirm>, deriving: List<LoadSpec>) {
     val reader = reader ?: return
     if (paths.isEmpty()) return
     confirming = CoroutineScope(currentCoroutineContext()).launch {
-      for ((key, path) in paths) launch {
+      for ((key, pending) in paths) launch {
         while (isActive) {
-          val answer = try {
-            FirestoreLoads.serverDocument(reader, path)
+          val answer: JsonElement? = try {
+            when (pending) {
+              is PendingConfirm.Document -> FirestoreLoads.serverDocument(reader, pending.path).let { read ->
+                if (read.confirmed) read.document?.let { FirestoreLoads.json(it) } ?: JsonNull else null
+              }
+              is PendingConfirm.Query -> FirestoreLoads.query(reader, pending.spec, pending.scope, pending.limit, server = true)
+                .takeIf { (it as? JsonObject)?.containsKey(FirestoreLoads.FROM_CACHE_KEY) != true }
+            }
           } catch (error: CancellationException) {
             throw error
           } catch (_: Throwable) {
             confirmed(key, null, deriving)
             return@launch
           }
-          if (!answer.confirmed) continue
-          confirmed(key, answer.document?.let { FirestoreLoads.json(it) } ?: JsonNull, deriving)
+          if (answer == null) continue
+          confirmed(key, answer, deriving)
           return@launch
         }
       }

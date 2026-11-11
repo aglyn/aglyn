@@ -1,0 +1,5 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!-- Exports shared from the register (Day totals' spreadsheet), written to the app's cache. -->
+<paths>
+  <cache-path name="aglyn_exports" path="aglyn_exports/" />
+</paths>
