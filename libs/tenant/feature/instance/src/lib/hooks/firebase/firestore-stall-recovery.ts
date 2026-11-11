@@ -409,6 +409,19 @@ export function firestoreHasServerAnswered(
 }
 
 /**
+ * When the server last confirmed anything for `firestore` in this tab, or
+ * `undefined` if it has not: the page check's line between a page still
+ * loading and one the server has reached (AGL-4204).
+ */
+export function firestoreLastServerAnswerAt(
+  firestore: Firestore | null | undefined,
+): number | undefined {
+  return firestore && typeof firestore === 'object'
+    ? serverAnswers.get(firestore)
+    : undefined
+}
+
+/**
  * Recovers `firestore` if it has stalled. Safe to call from every reader
  * that notices: the guards above collapse the calls into at most one network
  * cycle per cooldown. Never rejects.

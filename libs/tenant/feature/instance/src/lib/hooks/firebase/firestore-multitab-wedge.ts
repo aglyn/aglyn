@@ -717,6 +717,11 @@ export type BootWedgeOutcome =
   | 'not-multi-tab'
   /** Something unexpected; the stall watch stays in charge. */
   | 'error'
+  /**
+   * Someone has started using the page, or has left it (AGL-4204). A page in
+   * use has the stall watch's budget, which protects what was typed into it.
+   */
+  | 'in-use'
 
 export interface BootWedgeCheckDeps {
   /** Reads the lease, bounded by {@link BOOT_WEDGE_LOCK_MS}. */
@@ -725,6 +730,12 @@ export interface BootWedgeCheckDeps {
   fallBack: (evidence: WedgeEvidence) => void
   /** Whether the server has confirmed anything for this client yet. */
   hasServerAnswered: () => boolean
+  /**
+   * Whether the page has been used since the check began, or replaced. Checked
+   * wherever `hasServerAnswered` is. The boot check has none: a page with no
+   * server answer has nothing on it to lose.
+   */
+  isInUse?: () => boolean
   isFallbackActive?: () => boolean
   isOnline?: () => boolean
   /** Resolves once the document is visible, at once when it already is. */
@@ -758,6 +769,7 @@ export async function runBootWedgeCheck(
     probe,
     fallBack,
     hasServerAnswered,
+    isInUse = () => false,
     isFallbackActive = () => memoryCacheFallbackActive(),
     isOnline = browserOnline,
     whenVisible = whenDocumentVisible,
@@ -774,12 +786,14 @@ export async function runBootWedgeCheck(
     const until = now() + windowMs
     for (;;) {
       if (hasServerAnswered()) return 'answered'
+      if (isInUse()) return 'in-use'
       if (!isOnline()) return 'offline'
       if (isFallbackActive()) return 'fallback-active'
       const read = await probe()
       if (read.state === 'locked') {
         // The read took up to its whole budget; the client may have come through.
         if (hasServerAnswered()) return 'answered'
+        if (isInUse()) return 'in-use'
         if (!isOnline()) return 'offline'
         if (isFallbackActive()) return 'fallback-active'
         fallBack({ reason: 'lease-locked' })
@@ -991,6 +1005,28 @@ export function browserLeaseCheckFor(
 }
 
 /**
+ * Reads the lease of the database `firestore` was registered under with the
+ * boot check's budget ({@link BOOT_WEDGE_LOCK_MS}), and the fallback for it, or
+ * `undefined` when it does not run the durable multi-tab cache. For the page
+ * check (`firestore-page-wedge-check.ts`, AGL-4204).
+ */
+export function bootWedgeCheckPartsFor(
+  firestore: Firestore,
+):
+  | Pick<BootWedgeCheckDeps, 'probe' | 'fallBack'>
+  | undefined {
+  const databaseName = multiTabDatabases.get(firestore)
+  if (databaseName === undefined) return undefined
+  return {
+    probe: () =>
+      probePrimaryLease(browserIndexedDb(), databaseName, {
+        timeoutMs: BOOT_WEDGE_LOCK_MS,
+      }),
+    fallBack: (evidence) => fallBackToMemoryCache(evidence, { databaseName }),
+  }
+}
+
+/**
  * Runs the boot check (AGL-4201) for `firestore`, which
  * {@link markMultiTabFirestore} has registered. Call it right after
  * registering. `hasServerAnswered` is the stall watch's record of server
@@ -1001,14 +1037,7 @@ export function startBootWedgeCheck(
   firestore: Firestore,
   hasServerAnswered: () => boolean,
 ): Promise<BootWedgeOutcome> {
-  const databaseName = multiTabDatabases.get(firestore)
-  if (databaseName === undefined) return Promise.resolve('not-multi-tab')
-  return runBootWedgeCheck({
-    probe: () =>
-      probePrimaryLease(browserIndexedDb(), databaseName, {
-        timeoutMs: BOOT_WEDGE_LOCK_MS,
-      }),
-    fallBack: (evidence) => fallBackToMemoryCache(evidence, { databaseName }),
-    hasServerAnswered,
-  })
+  const parts = bootWedgeCheckPartsFor(firestore)
+  if (parts === undefined) return Promise.resolve('not-multi-tab')
+  return runBootWedgeCheck({ ...parts, hasServerAnswered })
 }
