@@ -191,7 +191,7 @@ final class FunctionCasesTests: XCTestCase {
       XCTAssertEqual(
         posOfflineCardIntentMetadata(
           saleKey: string(input["saleKey"]) ?? "", hostID: string(input["hostId"]) ?? "", orgID: string(input["orgId"]) ?? "",
-          registerID: string(input["registerId"]) ?? ""),
+          registerID: string(input["registerId"]) ?? "", direct: (input["direct"] as? Bool) ?? false),
         item.result as? [String: String], item.label)
     }
   }

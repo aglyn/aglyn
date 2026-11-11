@@ -38904,6 +38904,25 @@
             "registerId": "reg_1",
             "saleKey": "off8f2f9807c22c4fe3b1ed9042c497949d"
           }
+        },
+        {
+          "args": [
+            {
+              "saleKey": "off8f2f9807c22c4fe3b1ed9042c497949d",
+              "hostId": "host_1",
+              "orgId": "org_1",
+              "registerId": "reg_1",
+              "direct": true
+            }
+          ],
+          "result": {
+            "chargeModel": "direct",
+            "hostId": "host_1",
+            "kind": "pos-offline",
+            "orgId": "org_1",
+            "registerId": "reg_1",
+            "saleKey": "off8f2f9807c22c4fe3b1ed9042c497949d"
+          }
         }
       ]
     },
@@ -69711,6 +69730,20 @@
     "sanitizePosOfflineSaleCard": {
       "module": "libs/plugins/commerce/src/lib/model/commerce-pos-offline.ts",
       "cases": [
+        {
+          "args": [
+            {
+              "forward": "forwarded",
+              "paymentIntentId": "pi_3Q0abcdEFGH12345",
+              "account": "acct_1StoreOwnAcct"
+            }
+          ],
+          "result": {
+            "account": "acct_1StoreOwnAcct",
+            "forward": "forwarded",
+            "paymentIntentId": "pi_3Q0abcdEFGH12345"
+          }
+        },
         {
           "args": [
             {

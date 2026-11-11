@@ -163,6 +163,21 @@ export function posCardApplicationFeeCents(input: {
   })
 }
 
+/**
+ * The fee a card taken offline on the app's own reader is captured with
+ * (AGL-4039, AGL-4219): a card in person, so the same rule an online reader
+ * payment is captured by (`posCaptureFeeCents`). `direct` when the intent
+ * was made on the store's own Stripe account, where the fee is the take alone.
+ */
+export function posOfflineCardFeeCents(input: { takeShareCents: number; chargeCents: number; direct?: boolean }): number {
+  return posCardApplicationFeeCents({
+    takeShareCents: input.takeShareCents,
+    chargeCents: input.chargeCents,
+    inPerson: true,
+    ...(input.direct ? { direct: true } : {}),
+  })
+}
+
 /** A refusal Stripe sent, in words a cashier can read out. */
 export function posStripeErrorMessage(
   body: { error?: { message?: string; code?: string } } | undefined,

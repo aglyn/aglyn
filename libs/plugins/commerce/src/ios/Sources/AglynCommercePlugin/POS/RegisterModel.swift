@@ -176,9 +176,6 @@ final class RegisterModel {
       shiftID: { [weak self] in self?.tillShift.shift?.id }, assertion: { [weak cashier] in cashier?.assertion })
     offline.networkSink = { [weak self] failed in if failed { self?.online = false } }
     tillOffline = offline
-    // What the reader's SDK did with cards it stored, even while this register was closed (AGL-4039).
-    (collector as? OfflineCardCollector)?.onOfflineForward = { [weak self] in self?.applyCardForwards() }
-    applyCardForwards()
     tillDisplay = PosDisplayControl(
       api: displayAPI ?? ConsolePosDisplayAPI(api: api, hostID: hostID), registerID: { [weak self] in self?.register?.id })
     tillKioskQueue = PosKioskQueueModel(
@@ -191,6 +188,12 @@ final class RegisterModel {
   func money(_ cents: Int) -> String { posMoney(cents, currency: currency) }
 
   func start() {
+    // What the reader's SDK did with cards it stored, even while this register was closed (AGL-4039). Wired here,
+    // on the register on screen, never in `init`: SwiftUI builds a screen's `@State` initial value each time the
+    // screen is rebuilt, and a throwaway model that took the forwards (and synced them) left the visible register's
+    // banner on "waiting to sync" and its card notices on a model nobody saw (AGL-4219).
+    offlineCardReader?.onOfflineForward = { [weak self] in self?.applyCardForwards() }
+    applyCardForwards()
     listeners["host"]?.remove()
     listeners["host"] = reader.listenDocument(["hosts", hostID]) { [weak self] result in
       guard let self, case .success(let host?) = result else { return }

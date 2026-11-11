@@ -114,10 +114,15 @@ public func posOfflineCardRefusal(card: PosOfflineKitCard?, totalCents: Double, 
   return nil
 }
 
-/// What the app writes on the PaymentIntent it creates for a card rung offline.
-public func posOfflineCardIntentMetadata(saleKey: String, hostID: String, orgID: String, registerID: String) -> [String: String] {
-  [
+/// What the app writes on the PaymentIntent it creates for a card rung offline. `direct`: the intent is made on the
+/// store's own Stripe account (AGL-4219), and says so as every direct sale's objects do.
+public func posOfflineCardIntentMetadata(
+  saleKey: String, hostID: String, orgID: String, registerID: String, direct: Bool = false
+) -> [String: String] {
+  var metadata = [
     "kind": ContractValues.shared.posOfflineCardIntentKind, "saleKey": saleKey, "hostId": hostID, "orgId": orgID,
     "registerId": registerID,
   ]
+  if direct { metadata["chargeModel"] = "direct" }
+  return metadata
 }

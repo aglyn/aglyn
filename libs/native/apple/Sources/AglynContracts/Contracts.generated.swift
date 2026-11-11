@@ -4391,6 +4391,7 @@ public struct PosOfflineKit: Codable, Hashable, Sendable {
 }
 
 public struct PosOfflineKitCard: Codable, Hashable, Sendable {
+  public var account: String?
   public var available: Bool
   public var currency: String
   public var destination: String
@@ -4398,7 +4399,8 @@ public struct PosOfflineKitCard: Codable, Hashable, Sendable {
   public var maxSaleCents: Double
   public var unavailableReason: String?
 
-  public init(available: Bool, currency: String, destination: String, maxDeviceDailyCents: Double, maxSaleCents: Double, unavailableReason: String? = nil) {
+  public init(account: String? = nil, available: Bool, currency: String, destination: String, maxDeviceDailyCents: Double, maxSaleCents: Double, unavailableReason: String? = nil) {
+    self.account = account
     self.available = available
     self.currency = currency
     self.destination = destination
@@ -4552,13 +4554,15 @@ public struct PosOfflineSale: Codable, Hashable, Sendable {
 }
 
 public struct PosOfflineSaleCard: Codable, Hashable, Sendable {
+  public var account: String?
   public var brand: String?
   public var declineMessage: String?
   public var forward: PosOfflineCardForward
   public var last4: String?
   public var paymentIntentId: String?
 
-  public init(brand: String? = nil, declineMessage: String? = nil, forward: PosOfflineCardForward, last4: String? = nil, paymentIntentId: String? = nil) {
+  public init(account: String? = nil, brand: String? = nil, declineMessage: String? = nil, forward: PosOfflineCardForward, last4: String? = nil, paymentIntentId: String? = nil) {
+    self.account = account
     self.brand = brand
     self.declineMessage = declineMessage
     self.forward = forward

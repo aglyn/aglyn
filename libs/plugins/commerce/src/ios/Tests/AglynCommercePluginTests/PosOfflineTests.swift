@@ -44,6 +44,8 @@ private final class FakeOfflineAPI: PosOfflineAPI, @unchecked Sendable {
   var kitAnswer: PosOfflineKit? = makeKit()
   var failure: ConsoleAPIError?
   var answers: [String: PosOfflineSaleOutcome] = [:]
+  /// Runs inside a sync, before it answers: a card forwarded while the sync is in flight.
+  var midSync: (@MainActor () async -> Void)?
 
   func kit() async throws -> PosOfflineKit {
     if let failure { throw failure }
@@ -52,6 +54,10 @@ private final class FakeOfflineAPI: PosOfflineAPI, @unchecked Sendable {
 
   func sync(_ sales: [PosOfflineSale]) async throws -> [PosOfflineSaleOutcome] {
     lock.withLock { batches.append(sales.map(\.saleKey)) }
+    if let midSync {
+      self.midSync = nil
+      await midSync()
+    }
     if let failure { throw failure }
     return sales.map { answers[$0.saleKey] ?? PosOfflineSaleOutcome(number: 7, orderId: $0.saleKey, saleKey: $0.saleKey, status: .recorded) }
   }
@@ -217,6 +223,37 @@ final class PosOfflineModelTests: XCTestCase {
     XCTAssertTrue(offline.waiting.isEmpty)
   }
 
+  func testTheBannerReadsTheDeviceEvenWhenAnotherRegisterAlreadySyncedItsSales() async {
+    // Two registers over one device store, as a rebuilt screen leaves (AGL-4219): the one on screen never keeps a
+    // "waiting to sync" the other already settled.
+    let defaults = suite()
+    let api = FakeOfflineAPI()
+    let onScreen = await ready(api, defaults: defaults, keys: ["off0123456789abcdef0001"])
+    _ = onScreen.ringCashSale(cart: cart(), tenderedCents: 1296)
+    let other = model(api, defaults: defaults)
+    await other.syncNow()
+    XCTAssertEqual(onScreen.waiting.count, 1, "not re-read yet")
+    await onScreen.syncNow()
+    XCTAssertTrue(onScreen.waiting.isEmpty)
+    XCTAssertEqual(api.batchesSent.count, 1, "nothing was sent twice")
+  }
+
+  func testASyncAskedForWhileOneRunsRunsOnceItEnds() async {
+    let defaults = suite()
+    let api = FakeOfflineAPI()
+    let offline = await ready(api, defaults: defaults, keys: ["off0123456789abcdef0001", "off0123456789abcdef0002"])
+    _ = offline.ringCashSale(cart: cart(), tenderedCents: 1296)
+    api.midSync = { [offline] in
+      // Another sale becomes ready (a card forwarded) while the first sync is in flight.
+      _ = offline.ringCashSale(cart: cart(), tenderedCents: 1296)
+      await offline.syncNow()
+    }
+    await offline.syncNow()
+    XCTAssertEqual(api.batchesSent, [["off0123456789abcdef0001"], ["off0123456789abcdef0002"]])
+    XCTAssertTrue(offline.queue.isEmpty)
+    XCTAssertFalse(offline.syncing)
+  }
+
   func testASaleLeavesTheDeviceOnlyWhenTheServerHasAnsweredForIt() async {
     let defaults = suite()
     let api = FakeOfflineAPI()
@@ -341,7 +378,8 @@ final class ConsolePosOfflineAPITests: XCTestCase {
     let transport = Recording(#"{"kit":\#(kitJSON)}"#)
     let read = try await ConsolePosOfflineAPI(api: client(transport), hostID: "h1").kit()
     XCTAssertEqual(transport.requests.last?.url?.path, "/api/commerce/pos-offline-sync")
-    XCTAssertEqual(transport.requests.last?.url?.query, "hostId=h1")
+    // The app can make a card's intent on a store's own Stripe account, and says so (AGL-4219).
+    XCTAssertEqual(transport.requests.last?.url?.query, "hostId=h1&cardChargeModels=direct")
     XCTAssertEqual(transport.requests.last?.httpMethod, "GET")
     XCTAssertEqual(read.tax.pct, 8)
     XCTAssertEqual(read.maxDiscountPct, 20)
@@ -386,11 +424,14 @@ final class ConsolePosOfflineAPITests: XCTestCase {
 final class PosOfflineCardTests: XCTestCase {
   private let key = "offcard0000000000000000001"
 
-  private func cardKit(available: Bool = true, maxSale: Double = 10_000, maxDaily: Double = 500_000) -> PosOfflineKit {
+  private func cardKit(
+    available: Bool = true, maxSale: Double = 10_000, maxDaily: Double = 500_000, account: String? = nil
+  ) -> PosOfflineKit {
     makeKit {
       $0.card = PosOfflineKitCard(
-        available: available, currency: "usd", destination: "acct_merchant", maxDeviceDailyCents: maxDaily,
-        maxSaleCents: maxSale, unavailableReason: available ? nil : "Card sales offline are not turned on.")
+        account: account, available: available, currency: "usd", destination: account == nil ? "acct_merchant" : "",
+        maxDeviceDailyCents: maxDaily, maxSaleCents: maxSale,
+        unavailableReason: available ? nil : "Card sales offline are not turned on.")
     }
   }
 
@@ -465,6 +506,28 @@ final class PosOfflineCardTests: XCTestCase {
     XCTAssertEqual(request?.metadata["kind"], "pos-offline")
     XCTAssertEqual(request?.metadata["registerId"], "r1")
     XCTAssertNil(request?.problem)
+  }
+
+  func testADirectChargeStoresKitMakesTheIntentOnItsOwnAccountAndTheSaleSaysWhich() async {
+    // A store on its own Stripe account (AGL-4219).
+    let api = FakeOfflineAPI()
+    api.kitAnswer = cardKit(account: "acct_1StoreOwnAcct")
+    let offline = await ready(api, keys: [key])
+    let request = offline.cardRequest(for: cart())
+    XCTAssertEqual(request?.account, "acct_1StoreOwnAcct")
+    XCTAssertEqual(request?.metadata["chargeModel"], "direct")
+    XCTAssertNil(request?.problem)
+    let rung = offline.ringCardSale(
+      cart: cart(),
+      taken: OfflineCardTaken(
+        saleKey: key, paymentIntentID: "pi_3Q0abcdEFGH12345", brand: "visa", last4: "4242",
+        account: request?.account))
+    XCTAssertEqual(rung?.sale.card?.account, "acct_1StoreOwnAcct")
+    // A destination store's sale names no account, and its intent no charge model.
+    api.kitAnswer = cardKit()
+    await offline.refreshKit()
+    XCTAssertNil(offline.cardRequest(for: cart())?.account)
+    XCTAssertNil(offline.cardRequest(for: cart())?.metadata["chargeModel"])
   }
 
   func testACardOnTheDeviceWaitsForItsForwardBeforeItSyncs() async {
