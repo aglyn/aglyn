@@ -26,25 +26,30 @@
  * Accounting is the workspace's, not the site's, and `./accounting.mjs`
  * connects it (QuickBooks sandbox).
  *
- * No secret here is real, and none is sealed: each `sealed*` field holds a
- * `seed-test-sealed-…` placeholder, non-empty because the readers drop a
- * connection whose sealed field is empty. The routes the cards load never
- * open a sealed field or call the service. An action that would (Test keys,
- * a sync, a label) fails to open the placeholder and says so, so nothing
- * here reaches a vendor. Every due time is a year out, so no scheduled sync
- * picks a connection up.
+ * No secret here is real. One is sealed: the Easyship sandbox key, under the
+ * emulated console's published shipping key (`LOCAL_COMMERCE_TOKEN_KEYS` in
+ * `tools/scripts/lib/emulated-env.mjs`), because the shipping card counts an
+ * account as connected only when its key opens. Every other `sealed*` field
+ * holds a `seed-test-sealed-…` placeholder, non-empty because the readers
+ * drop a connection whose sealed field is empty. The routes the cards load
+ * never open one or call the service, and an action that would (Test keys, a
+ * sync) fails to open the placeholder and says so, so nothing reaches a
+ * vendor. Every due time is a year out, so no scheduled sync picks a
+ * connection up.
  *
- * Seeding is not the whole of it: most of these cards draw only when the
- * console serving the stack holds that plugin's sealing key
- * (`COURIERS_TOKEN_KEY`, `TAX_ENGINES_TOKEN_KEY` and the rest), and some only
- * when the deployment offers the service. An emulated console blanks every
- * such key (`tools/scripts/lib/emulated-env.mjs`), so there sales channels
- * and review platforms draw, and the rest wait on those keys.
+ * The cards draw on a console served by `serve-emulated`, which gives each
+ * plugin its published local key and says the deployment offers DoorDash,
+ * ShipMonk, eBay, AfterShip, Route, Narvar and Easyship
+ * (`LOCAL_COMMERCE_SERVICE_SETTINGS`), all with placeholder or sandbox values.
  *
  * Idempotent: every document has a fixed id and is written whole.
  */
 
 import { createHash } from 'node:crypto'
+import { createRequire } from 'node:module'
+import { join } from 'node:path'
+
+import { LOCAL_COMMERCE_TOKEN_KEYS } from '../lib/emulated-env.mjs'
 
 const MINUTE = 60_000
 const HOUR = 60 * MINUTE
@@ -55,7 +60,7 @@ const sha256 = (value) => createHash('sha256').update(value).digest('hex')
 const sealed = (label) => `seed-test-sealed-${label}`
 const KEY_ID = 'seed-test'
 
-export async function seedIntegrations({ put, uid, orgId, hostId, now: date }) {
+export async function seedIntegrations({ put, uid, orgId, hostId, now: date, root }) {
   const now = date.getTime()
   const connectedAtMs = now - 6 * DAY
   const far = now + YEAR
@@ -314,12 +319,24 @@ export async function seedIntegrations({ put, uid, orgId, hostId, now: date }) {
 
   // Shipping: the workspace's own Easyship account with a sandbox key, and the
   // site's ship-from address and default box.
+  const { createJiti } = createRequire(join(root, 'package.json'))('jiti')
+  const jiti = createJiti(join(root, 'package.json'), { interopDefault: true, fsCache: false })
+  const { parseSecretBoxKeyring, sealSecret } = await jiti.import(join(root, 'libs/shared/util/tools/src/lib/secret-box.ts'))
+  const shippingKey = parseSecretBoxKeyring(LOCAL_COMMERCE_TOKEN_KEYS.SHIPPING_TOKEN_KEY).current
+  // An Easyship sandbox key starts `sand_`; this one is a placeholder Easyship refuses.
+  // A fixed IV, so a re-run writes the same bytes: the key is published and
+  // the plaintext a placeholder, so nothing here is protected by GCM.
+  const easyshipContext = `orgs/${orgId}/shippingConnections/easyship#apiKey`
+  const easyshipKey = sealSecret('sand_seed-test-easyship-key', shippingKey, {
+    context: easyshipContext,
+    iv: createHash('sha256').update(easyshipContext).digest().subarray(0, 12),
+  })
   await put(`orgs/${orgId}/shippingConnections/easyship`, {
     kind: 'easyship',
     orgId,
     status: 'active',
-    sealedApiKey: sealed('easyship-sandbox-api-key'),
-    keyId: KEY_ID,
+    sealedApiKey: easyshipKey,
+    keyId: shippingKey.id,
     accountName: 'Juniper Street Co. (Easyship sandbox)',
     testMode: true,
     settings: {},
