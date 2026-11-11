@@ -97,38 +97,20 @@ write(
       sourceRoot: `libs/plugins/${id}/src`,
       projectType: 'library',
       tags: ['aglyn:addons'],
+      // `lint` and `test` are inferred: nx.json registers @nx/eslint/plugin
+      // and @nx/jest/plugin for `libs/plugins/**/*`, which read the
+      // eslint.config.mjs and jest.config.ts written below (Nx 24 removed
+      // the @nx/eslint:lint and @nx/jest:jest executors).
       targets: {
         build: {
-          executor: '@nx/rollup:rollup',
+          executor: '@nx/js:swc',
           outputs: ['{options.outputPath}'],
           options: {
             outputPath: `dist/libs/plugins/${id}`,
+            main: `libs/plugins/${id}/src/index.ts`,
             tsConfig: `libs/plugins/${id}/tsconfig.lib.json`,
-            project: `libs/plugins/${id}/package.json`,
-            entryFile: `libs/plugins/${id}/src/index.ts`,
-            external: ['react/jsx-runtime'],
-            rollupConfig: [
-              '@nx/react/plugins/bundle-rollup',
-              'tools/rollup-external-packages.js',
-              'tools/rollup-suppress-use-client.js',
-              'tools/rollup-skip-typecheck.js',
-            ],
-            compiler: 'swc',
-            assets: [
-              { glob: `libs/plugins/${id}/README.md`, input: '.', output: '.' },
-            ],
-            updateBuildableProjectDepsInPackageJson: true,
-            skipTypeCheck: true,
+            assets: [`libs/plugins/${id}/*.md`],
           },
-        },
-        lint: {
-          executor: '@nx/eslint:lint',
-          outputs: ['{options.outputFile}'],
-        },
-        test: {
-          executor: '@nx/jest:jest',
-          outputs: [`{workspaceRoot}/coverage/libs/plugins/${id}`],
-          options: { jestConfig: `libs/plugins/${id}/jest.config.ts` },
         },
       },
     },
