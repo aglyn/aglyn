@@ -10,10 +10,9 @@
         "port": 4500
       }
     },
-    "export": {
-      "executor": "@nx/next:export",
+    "start": {
       "options": {
-        "buildTarget": "tenant:build:production"
+        "port": 4500
       }
     },
     "test": {

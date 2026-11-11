@@ -10,10 +10,9 @@
         "port": 4200
       }
     },
-    "export": {
-      "executor": "@nx/next:export",
+    "start": {
       "options": {
-        "buildTarget": "console:build:production"
+        "port": 4200
       }
     },
     "test": {

@@ -72,7 +72,7 @@
     "e2e:lockdown:readonly": "FIRESTORE_EMULATOR_HOST=localhost:8082 FIREBASE_AUTH_EMULATOR_HOST=localhost:9099 node tools/e2e/lockdown-readonly-wire.mjs",
     "e2e:starter-root": "FIRESTORE_EMULATOR_HOST=localhost:8082 FIREBASE_AUTH_EMULATOR_HOST=localhost:9099 node tools/e2e/starter-root-wire.mjs",
     "build:console:prod": "nx build console --prod",
-    "serve:console:prod": "nx serve console --prod",
+    "serve:console:prod": "nx start console",
     "cz": "cz",
     "firebase:emulate": "firebase emulators:start --config cloud/firebase.json --only auth,firestore,database,storage --import=./.firebase --export-on-exit",
     "prepare": "husky",

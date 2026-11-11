@@ -26,9 +26,8 @@
       "runtimeExecutable": "npx",
       "runtimeArgs": [
         "nx",
-        "serve",
+        "start",
         "console",
-        "--configuration=production",
         "--port=4700"
       ],
       "port": 4700
@@ -38,9 +37,8 @@
       "runtimeExecutable": "npx",
       "runtimeArgs": [
         "nx",
-        "serve",
+        "start",
         "tenant",
-        "--configuration=production",
         "--port=4600"
       ],
       "port": 4600
@@ -72,9 +70,8 @@
       "runtimeExecutable": "npx",
       "runtimeArgs": [
         "nx",
-        "serve",
-        "console",
-        "--configuration=production"
+        "start",
+        "console"
       ],
       "port": 4200
     },
