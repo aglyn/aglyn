@@ -48,6 +48,8 @@
  * is invisible until the typecheck runs, which is exactly when nobody is
  * looking for it.
  */
+import { normalizeNotificationLink } from '@aglyn/aglyn/app-utils/notifications'
+
 export {}
 
 const mockNotifyOrgAdmins = jest.fn(
@@ -358,6 +360,17 @@ describe('a genuinely changed record must be detected', () => {
     expect(staffMail.subject).toBe('1 SSO domain no longer proves ownership')
     expect(staffMail.text).toContain('acme.com (Acme Co, org org-1)')
     expect(staffMail.text).not.toMatch(/\(s\)/)
+  })
+
+  it("links the bell to the workspace's own SSO settings, not a workspace called \"settings\" (AGL-4215)", async () => {
+    mockClaimSeed = { driftFailures: 2, driftFirstFailureAtMs: Date.now() - 20 * DAY }
+    await call('POST')
+
+    const [, payload] = mockNotifyOrgAdmins.mock.calls[0] as [string, { link: string }]
+    // Stored workspace-scoped, like every other workspace notice, so the
+    // console and both apps follow it to that workspace's page.
+    expect(payload.link).toBe('/org/settings/sso')
+    expect(normalizeNotificationLink(payload.link, { orgSlug: 'acme' })).toBe('/acme/settings/sso')
   })
 
   it('NEVER writes `verified` — the field that would un-route the domain', async () => {

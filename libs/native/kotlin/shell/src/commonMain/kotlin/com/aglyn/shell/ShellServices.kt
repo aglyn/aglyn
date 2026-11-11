@@ -348,8 +348,13 @@ internal class ShellPluginContext(
    * (a booking at another site opens that site's bookings), then its link.
    */
   fun openNotification(row: FeedNotification) {
-    val link = row.link
     val orgId = row.orgId ?: workspace.sites.firstOrNull { it.id == row.hostId }?.orgId
+    // The link in the form the console follows it (`normalizeNotificationLink`): a stored `/hosts` is the workspace's
+    // Sites, not a workspace called "hosts" (AGL-4215).
+    val site = row.hostId?.let { id -> workspace.sites.firstOrNull { it.id == id } }
+    val link = DeepLinks.notificationLink(
+      row.link, workspace.orgs.firstOrNull { it.id == orgId }?.slug, row.hostId, site?.subdomain?.ifEmpty { null },
+    )
     if (orgId == null) {
       if (link != null) openLink(link)
       return

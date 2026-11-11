@@ -132,6 +132,12 @@ class SiteTest {
       DeepLinks.resolve("/acme/hosts/shop/screens/p1/versions/v1/view", links),
     )
     assertEquals(NativeLinkTarget.Screen("site.sites", mapOf("orgSlug" to "acme")), DeepLinks.resolve("/acme/hosts", links))
+    // One page's own address opens Pages on that page (AGL-4215); `/screens/list` stays the list.
+    assertEquals(
+      NativeLinkTarget.Screen("site.pages", mapOf("orgSlug" to "acme", "hostSlug" to "shop", "screenId" to "p1")),
+      DeepLinks.resolve("/acme/hosts/shop/screens/p1", links),
+    )
+    assertEquals(NativeLinkTarget.Screen("site.pages", mapOf("orgSlug" to "acme", "hostSlug" to "shop")), DeepLinks.resolve("/acme/hosts/shop/screens/list", links))
     assertEquals(NativeLinkTarget.Screen("site.media", mapOf("orgSlug" to "acme")), DeepLinks.resolve("/acme/media", links))
     // The Besigner itself still opens in the web view.
     assertEquals(NativeLinkTarget.Besigner("/acme/hosts/shop/screens/p1/versions/v1/besigner"), DeepLinks.resolve("/acme/hosts/shop/screens/p1/versions/v1/besigner", links))

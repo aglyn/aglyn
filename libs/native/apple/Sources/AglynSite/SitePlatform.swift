@@ -89,7 +89,7 @@ public let sitePlatformContributes: [String: [String]] = [
     + ArtifactKind.allCases.map(\.screen),
   "quickActions": ["site.sites-open", "site.pages-open", "site.media-open"],
   "widgets": [pluginRunsOnWidget],
-  "deepLinks": ["site.sites-page", "site.pages-page", "site.page-view", "site.page-besigner-list", "site.media-page",
+  "deepLinks": ["site.sites-page", "site.pages-page", "site.page-view", "site.page-page", "site.page-besigner-list", "site.media-page",
     "site.setup-page", "site.setup-section-page", "site.theme-page",
     "site.content-page", "site.collection-page", "site.entry-page", "site.layouts-list-page",
   ] + ArtifactKind.allCases.flatMap { ["site.\($0.collection)-page", "site.\($0.singular)-page"] },
@@ -157,6 +157,8 @@ public func registerSitePlatformNative(_ r: NativePluginRegistrar) {
   r.deepLink("site.collection-page", path: "/content/:collectionSlug", screen: siteContentScreen)
   r.deepLink("site.entry-page", path: "/content/:collectionSlug/entries/:entryId", screen: siteContentScreen)
   r.deepLink("site.page-view", path: "/screens/:screenId/versions/:versionId/view", screen: sitePagesScreen)
+  // One page's own address opens Pages on that page, as on Android (AGL-4215).
+  r.deepLink("site.page-page", path: "/screens/:screenId", screen: sitePagesScreen)
 }
 
 /// The registration as a manifest row, for the shells to load before the plugins.

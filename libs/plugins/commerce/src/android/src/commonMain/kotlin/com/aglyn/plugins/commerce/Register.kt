@@ -118,6 +118,14 @@ fun registerCommerceNative(r: NativePluginRegistrar) {
   r.screen(COMMERCE_SALES_SCREEN, title = "Sales", requiresSite = true, icon = "insights") { context, _ -> SalesScreen(context) }
   r.deepLink("commerce.orders-page", path = "/products/orders", screen = "commerce.orders")
   r.deepLink("commerce.products-page", path = "/products", screen = "commerce.products")
+  // The console's own addresses for one order or quote (`?order=`, the Orders card and order notices; `?quote=`) and for
+  // the store pages the app has a screen for: returns, one return, shipping and customer notifications (AGL-4215).
+  r.deepLink("commerce.order-link", path = "/products/orders?order=:orderId", screen = COMMERCE_ORDER_SCREEN)
+  r.deepLink("commerce.quote-link", path = "/products/orders?quote=:quote", screen = COMMERCE_QUOTE_SCREEN)
+  r.deepLink("commerce.returns-page", path = "/products/returns", screen = "commerce.returns")
+  r.deepLink("commerce.return-link", path = "/products/returns?return=:returnId", screen = "commerce.return")
+  r.deepLink("commerce.shipping-page", path = "/products/shipping", screen = "commerce.shipping")
+  r.deepLink("commerce.notifications-page", path = "/products/notifications", screen = "commerce.notifications")
 
   r.tab("commerce.orders-tab", title = "Orders", icon = "receipt", screen = COMMERCE_ORDERS_SCREEN, order = 100)
   r.tab("commerce.products-tab", title = "Products", icon = "inventory", screen = COMMERCE_PRODUCTS_SCREEN, order = 110)
