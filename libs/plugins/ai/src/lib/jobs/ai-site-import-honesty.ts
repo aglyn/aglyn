@@ -160,6 +160,24 @@ const invented = (message: string, detail?: string): AiDoctrineViolation => ({ r
 const dropped = (message: string): AiDoctrineViolation => ({ rule: null, code: AI_SITE_IMPORT_DROPPED_ITEM_CODE, message })
 
 /**
+ * Where this page may link, in words (AGL-4152): only the kinds of destination
+ * it has, so a refusal never names a form, phone or email the page cannot use.
+ */
+export function aiSiteImportLinkKinds(destinations: ReadonlyMap<string, string>, ledger: Pick<SiteImportLedger, 'links'>): string {
+  const keys = [...destinations.keys()]
+  const kinds = [
+    ...(keys.some((key) => key.startsWith('page:')) ? ['a page of this site'] : []),
+    ...(destinations.has('form') ? ['form'] : []),
+    ...(destinations.has('phone') ? ['phone'] : []),
+    ...(destinations.has('email') ? ['email'] : []),
+    ...(keys.some((key) => /^#\d+$/.test(key)) ? ['a section as #n'] : []),
+    ...(ledger.links.length ? ['an address the source links'] : []),
+  ]
+  if (!kinds.length) return 'a destination this page has (it has none)'
+  return kinds.length === 1 ? (kinds[0] as string) : `${kinds.slice(0, -1).join(', ')}, or ${kinds[kinds.length - 1] as string}`
+}
+
+/**
  * An answer held to what the import read, and to its ledger (AGL-4152). No
  * violation is a redesign that may be built; each one names its line.
  */
@@ -170,6 +188,7 @@ export function aiSiteImportHonesty(sections: readonly AiSiteImportImprovedSecti
   const refs = new Map(input.ledger.items.map((item) => [item.ref, item]))
   const placed = aiSiteImportImprovedPlaced(sections, input.ledger)
   const links = new Set<string>()
+  const allowed = aiSiteImportLinkKinds(input.destinations, input.ledger)
   sections.forEach((section, index) => {
     section.blocks.forEach((raw, position) => {
       if (raw.kind === 'keep') return
@@ -185,7 +204,7 @@ export function aiSiteImportHonesty(sections: readonly AiSiteImportImprovedSecti
       }
       for (const to of linksOf(block)) {
         if (input.destinations.has(to)) links.add(input.destinations.get(to) as string)
-        else out.push(invented(`${at}: it links to "${to.slice(0, 80)}", which is not a page of this site, form, phone, email, a section as #n, or an address the source links.`))
+        else out.push(invented(`${at}: it links to "${to.slice(0, 80)}", which is not ${allowed}.`))
       }
     })
   })
