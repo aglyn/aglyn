@@ -100,7 +100,9 @@ write(
       // `lint` and `test` are inferred: nx.json registers @nx/eslint/plugin
       // and @nx/jest/plugin for `libs/plugins/**/*`, which read the
       // eslint.config.mjs and jest.config.ts written below (Nx 24 removed
-      // the @nx/eslint:lint and @nx/jest:jest executors).
+      // the @nx/eslint:lint and @nx/jest:jest executors). `test` is still
+      // named here, with the inputs the migration gave the other plugins, so
+      // check:test-wiring sees the project's specs have a runner.
       targets: {
         build: {
           executor: '@nx/js:swc',
@@ -111,6 +113,16 @@ write(
             tsConfig: `libs/plugins/${id}/tsconfig.lib.json`,
             assets: [`libs/plugins/${id}/*.md`],
           },
+        },
+        test: {
+          inputs: [
+            'default',
+            '^default',
+            '{workspaceRoot}/jest.preset.js',
+            {
+              externalDependencies: ['jest', '@nx/jest', 'ts-jest', '@swc/jest'],
+            },
+          ],
         },
       },
     },
