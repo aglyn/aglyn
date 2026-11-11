@@ -150,9 +150,14 @@ export function documentFor(item: AccountingSyncItemRecord, connection: Accounti
     case 'payout':
       if (!item.payout) throw new AccountingTransformError('invalid', 'The payout has no snapshot.')
       return buildPayoutDoc(item.payout, mapping)
-    case 'summary':
+    case 'summary': {
       if (!item.summary) throw new AccountingTransformError('invalid', 'The summary has no postings.')
-      return buildSummaryDoc(item.summary, mapping)
+      const doc = buildSummaryDoc(item.summary, mapping)
+      // A day can post more than one journal (a refund always joins after its
+      // sale's). Each posts under its own item's reference: on the day's bare
+      // reference, the later one would find the first and post nothing.
+      return doc && { ...doc, externalId: item.externalId }
+    }
   }
 }
 

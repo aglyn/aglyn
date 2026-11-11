@@ -392,6 +392,22 @@ export function isRecaptchaTimeout(error: unknown): boolean {
 }
 
 /**
+ * `kind` for the Firestore SDK's failed write queue: its IndexedDB transaction
+ * died, and the first b815 moves the tab onto the memory cache and reloads it
+ * (`watchFirestoreQueueFailure`, AGL-4156).
+ */
+export const FIRESTORE_QUEUE_KIND = 'firestore-queue'
+
+const FIRESTORE_QUEUE_MESSAGE =
+  /INTERNAL ASSERTION FAILED: Unexpected state \(ID: b815\)|Attempt to get a record from database without an in-progress transaction/
+
+/** The assertion, or the IndexedDB rejection that arrives beside it. */
+export function isFirestoreQueueFailureReport(error: unknown): boolean {
+  const message = (error as { message?: unknown } | null)?.message
+  return typeof message === 'string' && FIRESTORE_QUEUE_MESSAGE.test(message)
+}
+
+/**
  * The label for a fault we RECOVER from and still want to see, or undefined.
  *
  * These could be ours, so unlike an injected stack they are never dropped:
@@ -404,6 +420,7 @@ export function recoveredErrorKind(error: unknown): string | undefined {
     if (isCrossPoolDesync(error)) return AUTH_DESYNC_KIND
     if (isStaleBuildError(error)) return CHUNK_LOAD_KIND
     if (isRecaptchaTimeout(error)) return RECAPTCHA_TIMEOUT_KIND
+    if (isFirestoreQueueFailureReport(error)) return FIRESTORE_QUEUE_KIND
   } catch {
     // A getter that throws leaves the event unlabeled, never unreported.
   }

@@ -110,7 +110,7 @@ describe('which targets a range owes', () => {
     assert.deepEqual(owed[0].files, ['cloud/firebase-firestore.rules'])
   })
 
-  it('--every-target keeps all three, with the files the range touched and none for the rest', () => {
+  it('--every-target keeps every target, with the files the range touched and none for the rest', () => {
     const every = withEveryTarget(
       targetsForChangedFiles(['cloud/firebase-firestore.rules', 'apps/console/app/page.tsx']),
     )
@@ -120,14 +120,15 @@ describe('which targets a range owes', () => {
         ['rules', ['cloud/firebase-firestore.rules']],
         ['functions', []],
         ['indexes', []],
+        ['log-drain', []],
       ],
     )
-    // The AGL-2791 shape: a range that reached no manual path still verifies all three.
+    // The AGL-2791 shape: a range that reached no manual path still verifies every target.
     assert.deepEqual(
       withEveryTarget(targetsForChangedFiles(['apps/console/app/page.tsx'])).map(
         (entry) => entry.target.id,
       ),
-      ['rules', 'functions', 'indexes'],
+      ['rules', 'functions', 'indexes', 'log-drain'],
     )
   })
 })

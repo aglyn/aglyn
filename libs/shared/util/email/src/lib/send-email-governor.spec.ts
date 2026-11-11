@@ -38,6 +38,7 @@
 import { rateLimitedRetryAtMs, sendEmail } from './send-email'
 import {
   resetEmailSendGovernorForTests,
+  setEmailCredentialRefusalHandler,
   setEmailSendGovernor,
   type EmailSendGovernorRequest,
 } from './send-rate'
@@ -343,5 +344,62 @@ describe('a 429 from the provider', () => {
     const result = await send()
     expect((result as any).reason).toBe('rejected')
     expect(rateLimitedRetryAtMs(result)).toBeNull()
+  })
+})
+
+describe('sendEmail × a refused credential', () => {
+  const realFetch = global.fetch
+  const realEnv = { ...process.env }
+
+  afterEach(() => {
+    global.fetch = realFetch
+    process.env = { ...realEnv }
+    setEmailCredentialRefusalHandler(null)
+    jest.restoreAllMocks()
+  })
+
+  const refuseWith = (status: number, body: string) => {
+    global.fetch = jest.fn(async () => ({
+      ok: false,
+      status,
+      headers: new Headers(),
+      text: async () => body,
+      json: async () => JSON.parse(body),
+    })) as never
+  }
+  const send = () => sendEmail({ to: 'a@example.com', subject: 'Hi', text: 'x' })
+
+  beforeEach(() => {
+    process.env.RESEND_API_KEY = 're_test_key_not_real'
+    process.env.USAGE_EMAIL_FROM = FROM
+    resetEmailSendGovernorForTests()
+    jest.spyOn(console, 'error').mockImplementation(() => undefined)
+  })
+
+  it('tells the handler when the key itself is refused', async () => {
+    const handler = jest.fn(async () => undefined)
+    setEmailCredentialRefusalHandler(handler)
+    refuseWith(401, '{"message":"API key is invalid","name":"validation_error","statusCode":401}')
+
+    expect(await send()).toMatchObject({ sent: false, reason: 'rejected', status: 401 })
+    expect(handler).toHaveBeenCalledTimes(1)
+  })
+
+  it('does not treat an unverified domain as a dead key', async () => {
+    const handler = jest.fn(async () => undefined)
+    setEmailCredentialRefusalHandler(handler)
+    refuseWith(403, '{"message":"The example.com domain is not verified.","name":"validation_error","statusCode":403}')
+
+    expect(await send()).toMatchObject({ sent: false, reason: 'rejected', status: 403 })
+    expect(handler).not.toHaveBeenCalled()
+  })
+
+  it('still reports the rejection when the handler throws', async () => {
+    setEmailCredentialRefusalHandler(async () => {
+      throw new Error('alert pipeline down')
+    })
+    refuseWith(401, '{"message":"API key is invalid","name":"validation_error","statusCode":401}')
+
+    expect(await send()).toMatchObject({ sent: false, reason: 'rejected', status: 401 })
   })
 })

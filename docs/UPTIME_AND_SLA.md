@@ -1387,7 +1387,7 @@ Notes that keep these honest:
   `jsonPayload.kind`, excluded from the per-entry `Client error beacon`
   policy, and watched by rate — the same split `hydration` has: the
   log-based metric `client_recovered_errors` (labelled by `kind`) backs
-  `Client recovered errors spiking (auth-desync / chunk-load / recaptcha-timeout, AGL-3423)`,
+  `Client recovered errors spiking (auth-desync / chunk-load / recaptcha-timeout / firestore-queue, AGL-3423)`,
   which pages at **more than 10 of one kind in 30 minutes**. One storage event
   raises about three `auth-desync` reports and the beacon caps a pageview at
   10, so one visitor cannot reach it. Between 2026-09-21 and 09-30 the
@@ -1418,6 +1418,11 @@ Notes that keep these honest:
       only when every frame is a reCAPTCHA script, so our own code throwing
       the same words still pages as itself. Two of these paged on 2026-10-25.
       A burst means App Check is failing for everyone.
+    - `kind: "firestore-queue"` — the Firestore SDK's write queue died on an
+      IndexedDB transaction (`b815`, or the `in-progress transaction` rejection
+      beside it). The tab moves itself onto the memory cache and reloads
+      (AGL-4156), so one visitor's event is recovered; a burst means the
+      durable cache is failing broadly.
 - `scheduled-jobs` is the AGL-1955 half of the dead-man's switch, and it is
   the second condition here that watches for **silence**. The `Cloud
   Scheduler` row below it can only report the *presence* of a failed attempt:

@@ -66,7 +66,7 @@ import {
   readAccountingOAuthState,
   recordAccountingOAuthState,
 } from './oauth-state'
-import { AccountingProviderError } from './providers/http'
+import { AccountingProviderError, type AccountingProviderErrorCode } from './providers/http'
 import type { AccountingProvider, AccountingSession } from './providers/provider'
 import { syncCounts } from './sync-engine'
 import { readSyncItem, syncItemsCollection, toSyncItemView } from './sync-store'
@@ -128,11 +128,30 @@ async function readBody(request: Request): Promise<Record<string, unknown>> {
   return body && typeof body === 'object' && !Array.isArray(body) ? (body as Record<string, unknown>) : {}
 }
 
+/**
+ * Only a provider that is down answers as a bad gateway. A ledger refusing the
+ * request (its plan limit, a missing record, a rate limit) is not a server
+ * error of ours, and a 5xx here pages the operator.
+ */
+function providerFailureStatus(code: AccountingProviderErrorCode): number {
+  switch (code) {
+    case 'transient':
+      return 502
+    case 'rate-limited':
+      return 429
+    case 'auth':
+    case 'revoked':
+      return 409
+    default:
+      return 422
+  }
+}
+
 /** A provider's failure, as the page shows it. */
 function providerFailure(error: unknown, provider: AccountingProviderId): Response {
   if (error instanceof AccountingProviderError) {
     return refusal(
-      error.code === 'auth' ? 409 : 502,
+      providerFailureStatus(error.code),
       'provider-error',
       `${ACCOUNTING_PROVIDER_LABELS[provider]}: ${error.message}`,
     )

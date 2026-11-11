@@ -596,7 +596,11 @@ neither is clean. The same script runs in CI as `Promotion deploys`: a warning
 on the promotion PR, where the deploys are not yet due, and a failure on the
 push to `production`, where they are.
 
-CI passes `--every-target`, which verifies all three targets whether or not
+The log-drain receiver (`cloud/log-drain/deploy.sh`) is the fourth target: it
+is a Cloud Run service, so a change to its 5xx gate does nothing until it is
+deployed (AGL-1921).
+
+CI passes `--every-target`, which verifies every target whether or not
 the range touched them. Without it, a deploy one promotion skipped is owed by
 exactly one push: the next promotion's range touches no rules file, verifies
 nothing, and passes with live rules still behind (AGL-2791). Add the flag by

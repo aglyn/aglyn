@@ -342,6 +342,13 @@ const DECLARED_EGRESS_HOSTS: Record<string, EgressHost> = {
 
   // MARK – Resend
 
+  'log-drain-receiver-543499566626.us-central1.run.app': {
+    disposition: 'not-a-subprocessor',
+    reason:
+      "The platform's own Cloud Run service. `check-log-drain-drift` asks it, from a repo tool, which build it is running, so no third party is involved.",
+    dataReceived:
+      'Nothing personal: a plain GET with no body, answered with the build stamp.',
+  },
   'api.resend.com': {
     disposition: 'subprocessor',
     entity: 'Resend (Plus Five Five, Inc.)',

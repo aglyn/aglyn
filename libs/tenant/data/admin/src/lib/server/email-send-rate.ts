@@ -71,6 +71,7 @@ import {
   emailSendRateWindowStartMs,
   normalizeEmailSendRateConfig,
   orgHourlyCampaignCeiling,
+  setEmailCredentialRefusalHandler,
   setEmailSendGovernor,
 } from '@aglyn/shared-util-email'
 import { firebaseAdmin } from './firebase-admin'
@@ -555,3 +556,17 @@ export function installEmailSendGovernor(): void {
 }
 
 installEmailSendGovernor()
+
+/** A real send was refused for its key: the alert the mail itself cannot send. */
+setEmailCredentialRefusalHandler(async () => {
+  const { raiseOperatorAlert } = await import('./operator-alerts')
+  await raiseOperatorAlert('deliverability.providerCredentialsRejected', {
+    dedupeKey: 'credentials',
+    context: {
+      problem: 'the API key was rejected',
+      detail:
+        'The mail provider rejected its credential, so mail sent through it — ' +
+        'invites, password resets, receipts — is not leaving. Rotate or re-scope it.',
+    },
+  })
+})
