@@ -2,6 +2,7 @@
 // SPDX-License-Identifier: Apache-2.0
 
 import AglynCore
+import AglynPluginHost
 import Observation
 import SwiftUI
 import UserNotifications
@@ -38,6 +39,9 @@ final class PushCenter: NSObject {
   @ObservationIgnored private var reader: FirestoreReader?
   @ObservationIgnored private var token: Data?
   @ObservationIgnored private let receivesPushes: Bool
+  #if os(macOS)
+    @ObservationIgnored private let soundPlayer = AglynNotificationSoundPlayer()
+  #endif
 
   init(app: AglynAppID) {
     registration = PushDeviceRegistration(app: app)
@@ -121,7 +125,15 @@ extension PushCenter: UNUserNotificationCenterDelegate {
   nonisolated func userNotificationCenter(
     _ center: UNUserNotificationCenter, willPresent notification: UNNotification
   ) async -> UNNotificationPresentationOptions {
-    [.banner, .sound, .list]
+    #if os(macOS)
+      // macOS 26.6 refuses an app's own notification sound and plays its default chime instead (the tone check says the
+      // file is not a system tone). While the app is in front it plays the picked sound itself, under a silent banner.
+      if let sound = AglynNotificationSounds.sound(inPayload: notification.request.content.userInfo) {
+        await MainActor.run { soundPlayer.play(sound) }
+        return [.banner, .list]
+      }
+    #endif
+    return [.banner, .sound, .list]
   }
 
   nonisolated func userNotificationCenter(
