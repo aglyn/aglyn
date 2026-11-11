@@ -35,6 +35,7 @@
  */
 
 import { act, fireEvent, render, screen, within } from '@testing-library/react'
+import type { ReactNode } from 'react'
 
 import { MediaLibraryComponent } from './media-library.component'
 
@@ -238,7 +239,7 @@ const mockUserState = {
 }
 const mockLogActivity = jest.fn()
 const mockSnackbar = { enqueueSnackbar: jest.fn(), closeSnackbar: jest.fn() }
-const mockConfirmation: { confirm: (options?: { description?: string }) => Promise<void> } = {
+const mockConfirmation: { confirm: (options?: { description?: ReactNode; confirmationHeldUntil?: PromiseLike<unknown> }) => Promise<void> } = {
   confirm: () => Promise.resolve(),
 }
 const mockReleaseFlag = {
@@ -747,7 +748,24 @@ describe('sharing a file with all sites except some', () => {
     (global.fetch as jest.Mock).mock.calls
       .filter(([input]) => String(input).includes('/api/media/folders'))
       .map(([, init]) => JSON.parse(String((init as RequestInit).body)))
-  let confirmed: Array<{ description?: string }>
+  let confirmed: Array<{ description?: ReactNode; confirmationHeldUntil?: PromiseLike<unknown> }>
+  /**
+   * What the confirmation says once its usage check has answered (AGL-4047):
+   * it opens at once with the check running, so the sentence is read after
+   * the check the dialog is held on settles.
+   */
+  const answeredText = async (options: (typeof confirmed)[number]): Promise<string> => {
+    await act(async () => {
+      await options.confirmationHeldUntil
+    })
+    const shown = render(<p>{options.description}</p>)
+    await act(async () => {
+      await new Promise((resolve) => setTimeout(resolve, 0))
+    })
+    const text = shown.container.textContent ?? ''
+    shown.unmount()
+    return text
+  }
 
   beforeEach(() => {
     mockDb.collections.clear()
@@ -798,9 +816,11 @@ describe('sharing a file with all sites except some', () => {
     })
 
     expect(confirmed).toHaveLength(1)
-    expect(confirmed[0].description).toContain('docs uses this file')
-    expect(confirmed[0].description).not.toContain('aglyn-marketing')
-    expect(confirmed[0].description).toContain('pasted into custom HTML, which keeps loading')
+    const said = await answeredText(confirmed[0])
+    expect(said).toContain('docs uses this file')
+    expect(said).not.toContain('aglyn-marketing')
+    expect(said).toContain('pasted into custom HTML, which keeps loading')
+    expect(said).not.toContain('not checked')
     expect(posts()).toContainEqual(
       expect.objectContaining({
         action: 'set-sharing',

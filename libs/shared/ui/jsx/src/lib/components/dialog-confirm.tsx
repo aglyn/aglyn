@@ -23,7 +23,7 @@ import DialogContentText, {
   DialogContentTextProps,
 } from '@mui/material/DialogContentText'
 import DialogTitle, { DialogTitleProps } from '@mui/material/DialogTitle'
-import { forwardRef } from 'react'
+import { forwardRef, useEffect, useState } from 'react'
 
 export interface DialogConfirmOptions {
   cancellationText?: ButtonProps['children']
@@ -33,6 +33,29 @@ export interface DialogConfirmOptions {
   dialogProps?: Partial<DialogProps>
   title?: DialogTitleProps['children']
   description?: DialogContentTextProps['children']
+  /** The confirm button is held until this settles (see `ConfirmationContextConfig`). */
+  confirmationHeldUntil?: PromiseLike<unknown>
+}
+
+/**
+ * Whether `work` is still running. Settled work is remembered by identity, so
+ * a dialog opened with new work is held from its first frame, never enabled
+ * for one frame and then switched off.
+ */
+export function useHeldUntil(work: PromiseLike<unknown> | undefined): boolean {
+  const [settled, setSettled] = useState<PromiseLike<unknown> | undefined>()
+  useEffect(() => {
+    if (!work) return
+    let live = true
+    const done = () => {
+      if (live) setSettled(() => work)
+    }
+    work.then(done, done)
+    return () => {
+      live = false
+    }
+  }, [work])
+  return Boolean(work) && settled !== work
 }
 
 export interface DialogConfirmProps extends DialogProps {
@@ -62,7 +85,9 @@ export const DialogConfirm = forwardRef<any, DialogConfirmProps>(
       dialogProps,
       confirmationButtonProps,
       cancellationButtonProps,
+      confirmationHeldUntil,
     } = options
+    const held = useHeldUntil(confirmationHeldUntil)
     return (
       <Dialog
         ref={ref}
@@ -91,7 +116,7 @@ export const DialogConfirm = forwardRef<any, DialogConfirmProps>(
           <Button
             color="primary"
             {...confirmationButtonProps}
-            disabled={!open || confirmationButtonProps?.disabled}
+            disabled={!open || held || confirmationButtonProps?.disabled}
             onClick={onConfirm}
           >
             {confirmationText}
