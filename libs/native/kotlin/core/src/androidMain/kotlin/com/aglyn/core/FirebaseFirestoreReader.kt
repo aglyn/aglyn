@@ -19,6 +19,13 @@ class FirebaseFirestoreReader(private val db: FirebaseFirestore) : FirestoreRead
   override suspend fun get(path: String): FirestoreDoc? =
     recorded("get", path) { db.document(path).get().await().toDoc() }
 
+  // The SDK's default get asks the server and answers from the cache only when it cannot reach it, which is the answer
+  // a form must not save back unconfirmed.
+  override suspend fun getAnswer(path: String): Live.Ready<FirestoreDoc?> = recorded("get", path) {
+    val snapshot = db.document(path).get().await()
+    Live.Ready(snapshot.toDoc(), snapshot.metadata.isFromCache)
+  }
+
   override suspend fun page(query: FirestoreQuery): FirestorePage = recorded("page", query.collectionPath) {
     val limit = query.limit
     val probe = if (limit != null) query.copy(limit = limit + 1) else query

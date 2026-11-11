@@ -108,12 +108,23 @@ internal fun BusinessSection(context: NativePluginContext, hostId: String, host:
   val workspace: FirestoreDoc? = (workspaceLive as? Live.Ready)?.value
   val resolved = remember(host, stored, workspace) { resolveBusinessProfile(host, stored?.data, workspace?.data) }
   val initial = remember(stored) { businessProfileForm(stored?.data) }
-  val form = remember(initial) { mutableStateMapOf<String, String>().apply { putAll(initial) } }
+  // A newer copy keeps what was typed and moves every other field to it (AGL-4047).
+  val form = remember(hostId) { mutableStateMapOf<String, String>().apply { putAll(initial) } }
+  val seeded = remember(hostId) { androidx.compose.runtime.mutableStateOf(initial) }
+  if (seeded.value != initial) {
+    val next = com.aglyn.core.rebased(form.toMap(), seeded.value, initial)
+    form.clear()
+    form.putAll(next)
+    seeded.value = initial
+  }
   val scope = androidx.compose.runtime.rememberCoroutineScope()
   val runner = remember(hostId) { ActionRunner(scope) }
   fun line(field: String, fallback: String) = businessOriginLine(field, stored?.data, resolved, fallback)
   val foundedError = businessFoundedError(form)
 
+  // Its own document, so its own hold: Save waits while the profile is only the device cache's copy (AGL-4047).
+  val profileChecking = if ((live as? Live.Ready)?.fromCache == true) com.aglyn.core.seedCheckingText("business profile") else null
+  androidx.compose.runtime.CompositionLocalProvider(com.aglyn.ui.LocalFormChecking provides profileChecking) {
   FormCard(
     title = "Business profile",
     description = "What this business does and how it speaks. Aglyn AI reads it on every job for this site, and never replaces what you write here.",
@@ -169,6 +180,7 @@ internal fun BusinessSection(context: NativePluginContext, hostId: String, host:
       "Year founded", form["founded"].orEmpty(), { form["founded"] = it }, enabled = canEdit, error = foundedError,
       placeholder = "2015", supporting = line("founded", "Four digits, such as 2015"), keyboardType = KeyboardType.Number,
     )
+  }
   }
   BusinessFacts(context, resolved)
   // The `hostBusinessProfile` zone: what a plugin adds to the profile (what Aglyn AI learned from the site's edits).

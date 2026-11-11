@@ -549,7 +549,11 @@ struct ShellFrame<Content: View>: View {
       inSite: navigation.inSite)
     if leave, navigation.front {
       navigation.enterWorkspace()
-      navigation.select(.plugin("site.sites"))
+      // Sites once the workspace is on screen: on a phone the site's own tab bar and stacks are still going away in
+      // this update, and the stack that went took the Sites just pushed on Home with it (the phone landed on Home).
+      Task { @MainActor in
+        navigation.select(.plugin("site.sites"))
+      }
     }
   }
 
@@ -1347,6 +1351,9 @@ struct PhoneTopBar: ViewModifier {
       content.toolbar {
         if sizeClass == .compact {
         ToolbarItem(placement: .topBarLeading) { ScopeChip() }
+        // Nothing between the chip and the icons (Figma Phone/Top bar 273:20194): once the large title scrolls away the
+        // bar's inline title had only a letter's room there, and showed "H" for Home.
+        ToolbarItem(placement: .principal) { Color.clear.frame(width: 1, height: 1).accessibilityHidden(true) }
         // One item, not a group: with search, the bell, AI and your photo as separate items, a phone's bar folds the
         // last of them into a "More" menu, and AI must stay one tap away (Figma Phone/Top bar 273:20194).
         ToolbarItem(placement: .topBarTrailing) {

@@ -72,7 +72,7 @@ export function CopyField(props: CopyFieldProps) {
             <InputAdornment position="end">
               <Tooltip title={copied ? 'Copied' : copyLabel}>
                 <IconButton aria-label={copyLabel} edge="end" onClick={() => void copy()} onMouseLeave={() => setCopied(false)}>
-                  <MdiIcon path={mdiContentCopy} fontSize="small" />
+                  <MdiIcon path={mdiContentCopy.path} fontSize="small" />
                 </IconButton>
               </Tooltip>
             </InputAdornment>

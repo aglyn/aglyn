@@ -54,6 +54,7 @@
         },
         {
           "type": "form",
+          "checking": "workspace settings",
           "title": "General",
           "id": "name",
           "fields": [
@@ -79,6 +80,7 @@
         },
         {
           "type": "form",
+          "checking": "workspace settings",
           "title": "Workspace URL",
           "id": "slug",
           "footer": "Your workspace moves to the new URL immediately. The old URL keeps redirecting, but share the new one going forward. Reserved names and brand names are not available.",
@@ -107,6 +109,7 @@
         },
         {
           "type": "form",
+          "checking": "workspace settings",
           "title": "Time zone",
           "id": "tz",
           "footer": "Every site in this workspace dates its posts and pages in this zone, unless the site sets its own under Admin → General. Left on UTC, a post published at 7pm Central is dated the next day.",
@@ -137,6 +140,7 @@
         },
         {
           "type": "form",
+          "checking": "workspace settings",
           "title": "Defaults for new things",
           "id": "scope",
           "when": "org.can[org.settings]",
@@ -171,6 +175,7 @@
         },
         {
           "type": "form",
+          "checking": "workspace settings",
           "id": "datasets",
           "when": "org.can[org.settings]",
           "fields": [
@@ -230,6 +235,7 @@
       "blocks": [
         {
           "type": "form",
+          "checking": "organization profile",
           "fields": [
             {
               "key": "logoUrl",
@@ -347,6 +353,7 @@
         },
         {
           "type": "form",
+          "checking": "business profile",
           "id": "businessProfile",
           "title": "Business profile defaults",
           "footer": "What every site in this workspace starts from; a site's own profile wins wherever it says something. The AI reads these on every job and never replaces what you write here.",

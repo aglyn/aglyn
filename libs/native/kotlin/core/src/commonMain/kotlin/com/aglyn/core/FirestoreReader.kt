@@ -77,6 +77,12 @@ sealed interface Live<out T> {
 interface FirestoreReader {
   suspend fun get(path: String): FirestoreDoc?
 
+  /**
+   * [get]'s answer, and whether only the device's cache gave it (AGL-4047): a form seeded from such an answer holds its
+   * Save until the server's copy is in. A reader without a cache answers [get]'s, confirmed.
+   */
+  suspend fun getAnswer(path: String): Live.Ready<FirestoreDoc?> = Live.Ready(get(path))
+
   /** One page: [FirestoreQuery.limit] rows plus one probe row decide [FirestorePage.nextCursor]. */
   suspend fun page(query: FirestoreQuery): FirestorePage
 

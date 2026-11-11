@@ -339,6 +339,12 @@ fun CountedTextField(
 }
 
 /**
+ * Set while the data a [FormCard] is seeded from is only the device cache's answer (AGL-4047): the card holds its Save and
+ * says this beside it once something is typed (`seedCheckingText`). The Apple kit's `aglynFormChecking`.
+ */
+val LocalFormChecking = androidx.compose.runtime.compositionLocalOf<String?> { null }
+
+/**
  * A settings card that saves as one: its fields, then Save (and Discard)
  * once something changed. [busy] holds the buttons, [error] says why the
  * last save failed, and [notice] what the last one did.
@@ -363,12 +369,16 @@ fun FormCard(
     content()
     if (error != null) NoticeBanner(error, StatusTone.ERROR)
     if (notice != null && !dirty) NoticeBanner(notice, StatusTone.SUCCESS)
+    val checking = LocalFormChecking.current
+    if (checking != null && dirty) {
+      Text(checking, Modifier.testTag("form-checking"), style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurfaceVariant)
+    }
     androidx.compose.foundation.layout.Row(
       Modifier.fillMaxWidth(),
       horizontalArrangement = Arrangement.spacedBy(space(1f), androidx.compose.ui.Alignment.End),
     ) {
       if (dirty) TextButton(onClick = onDiscard, enabled = !busy, modifier = Modifier.testTag("form-discard")) { Text("Discard") }
-      androidx.compose.material3.Button(shape = controlShape(), onClick = onSave, enabled = dirty && canSave && !busy, modifier = Modifier.testTag("form-save")) {
+      androidx.compose.material3.Button(shape = controlShape(), onClick = onSave, enabled = dirty && canSave && !busy && checking == null, modifier = Modifier.testTag("form-save")) {
         if (busy) androidx.compose.material3.CircularProgressIndicator(Modifier.size(16.dp), strokeWidth = 2.dp)
         else Text(saveLabel)
       }

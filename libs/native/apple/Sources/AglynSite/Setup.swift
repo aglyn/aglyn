@@ -22,6 +22,10 @@ public enum SetupSection: String, CaseIterable, Identifiable, Sendable {
 
   public var id: String { rawValue }
 
+  /// Whether the section's cards are seeded from the site document, so they hold their Save while it is only the device
+  /// cache's copy (AGL-4047). The theme editor and the emails are read through their routes, which answer from the server.
+  public var seedsFromHost: Bool { [.details, .business, .seo, .tracking].contains(self) }
+
   public var title: String {
     switch self {
     case .details: "Basic details"
@@ -551,6 +555,27 @@ public func themeEdits(from before: ThemeValues, to after: ThemeValues) -> [Them
     if (before.componentLooks[field] ?? "") != value, value != themeLookCustom { edits.append(.componentLook(field: field, value: value)) }
   }
   return edits
+}
+
+/// The editor's draft over a saved theme that moved from `previous` to `next` (the console's theme editor replaying
+/// `diffOverride` onto the new theme, AGL-4047): every value changed here keeps it, everything else follows `next`.
+public func rebasedTheme(_ draft: ThemeValues, previous: ThemeValues, next: ThemeValues) -> ThemeValues {
+  var out = next
+  for scheme in Set(draft.colors.keys).union(previous.colors.keys) {
+    for token in Set((draft.colors[scheme] ?? [:]).keys).union((previous.colors[scheme] ?? [:]).keys) {
+      let mine: String?? = draft.colors[scheme]?[token]
+      let was: String?? = previous.colors[scheme]?[token]
+      if (mine ?? nil) != (was ?? nil) { out.colors[scheme, default: [:]][token] = mine ?? nil }
+    }
+  }
+  out.darkScheme = rebased(draft.darkScheme, previous: previous.darkScheme, next: next.darkScheme)
+  out.fontFamily = rebased(draft.fontFamily, previous: previous.fontFamily, next: next.fontFamily)
+  out.borderRadius = rebased(draft.borderRadius, previous: previous.borderRadius, next: next.borderRadius)
+  out.spacing = rebased(draft.spacing, previous: previous.spacing, next: next.spacing)
+  out.navHeightXs = rebased(draft.navHeightXs, previous: previous.navHeightXs, next: next.navHeightXs)
+  out.navHeightSm = rebased(draft.navHeightSm, previous: previous.navHeightSm, next: next.navHeightSm)
+  out.componentLooks = rebased(draft.componentLooks, previous: previous.componentLooks, next: next.componentLooks)
+  return out
 }
 
 /// The font categories the browser filters by, in the order the console lists them (`HostThemeFontCategory`).

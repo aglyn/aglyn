@@ -22,6 +22,7 @@
       "blocks": [
         {
           "type": "form",
+          "checking": "profile",
           "object": "data.me",
           "fields": [
             {
@@ -123,6 +124,7 @@
         },
         {
           "type": "form",
+          "checking": "profile",
           "title": "Profile image",
           "id": "photo",
           "object": "data.me",

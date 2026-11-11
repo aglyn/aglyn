@@ -271,6 +271,8 @@ public final class ScreenModel {
   /// The `{attempt}` key of each action's last request, by action, path and body: a retry of the
   /// same request reuses it, and a different request gets its own.
   @ObservationIgnored private var attempts: [String: String] = [:]
+  /// Waits for the server's copy of the document loads only the device's cache answered (`checking`, AGL-4047).
+  @ObservationIgnored private var confirming: Task<Void, Never>?
   @ObservationIgnored private let api: ConsoleAPIClient?
   @ObservationIgnored private let reader: FirestoreReader?
   @ObservationIgnored private let writer: FirestoreWriter?
@@ -406,6 +408,7 @@ public final class ScreenModel {
   /// Every load the screen's conditions allow, in parallel; the per-row ones (`each`) follow once
   /// the rows they walk have arrived. A failed load fails the screen with the route's own words.
   public func load() async {
+    confirming?.cancel()
     if case .object(let record) = data, record.isEmpty { phase = .loading }
     guard let api else {
       phase = .failed("Sign in to continue.")
@@ -459,7 +462,7 @@ public final class ScreenModel {
               let path = url(for: load, in: scope)
               group.addTask {
                 do {
-                  return (index, try await Self.fetch(load, path: path, api: api, reader: reader, context: scope).1)
+                  return (index, FirestoreLoads.unmarked(try await Self.fetch(load, path: path, api: api, reader: reader, context: scope).1))
                 } catch where !(error is CancellationError) {
                   return (index, .null)
                 }
@@ -486,14 +489,65 @@ public final class ScreenModel {
       }
       return
     }
+    // A document only the device's cache answered seeds the screen now and holds its forms (`checking.<key>`) until the
+    // server's copy is in: a Save pressed on the cache's copy would write it back over what the server holds.
+    let seen = ScreenContext.with(context, "data", .object(results))
+    var cached: [String: String] = [:]
+    for load in loads where load.doc != nil && load.each == nil {
+      guard case .object(var record)? = results[load.key], record[FirestoreLoads.fromCacheKey] == .bool(true) else { continue }
+      record[FirestoreLoads.fromCacheKey] = nil
+      results[load.key] = .object(record)
+      cached[load.key] = ScreenValues.render(load.doc ?? "", in: seen)
+    }
     for load in wanted where load.derive != nil {
       results[load.key] = Self.derived(load, from: .object(results))
     }
     context = ScreenContext.with(context, "data", .object(results))
+    context = ScreenContext.with(context, "checking", .object(cached.mapValues { _ in .bool(true) }))
     applyDerived()
     cursors = nextCursors
     phase = .ready
+    confirm(cached, derive: wanted.filter { $0.derive != nil })
     await loadPluginColumns()
+  }
+
+  /// Swaps in the server's copy of each document only the cache answered, and lifts its hold, as the console's forms
+  /// re-render on the confirming snapshot. It waits as long as the screen is open (a held Save is held, as on the web,
+  /// until the server answers); a read that fails lifts the hold and leaves the save's own refusal to say why.
+  private func confirm(_ paths: [String: String], derive: [LoadSpec]) {
+    guard let reader, !paths.isEmpty else { return }
+    confirming = Task { [weak self] in
+      await withTaskGroup(of: Void.self) { group in
+        for (key, path) in paths {
+          group.addTask { @MainActor [weak self] in
+            while !Task.isCancelled, self != nil {
+              do {
+                let answer = try await FirestoreLoads.serverDocument(reader, path)
+                guard answer.confirmed else { continue }
+                self?.confirmed(key, answer.document.map(FirestoreLoads.json) ?? .null, derive: derive)
+              } catch {
+                self?.confirmed(key, nil, derive: derive)
+              }
+              return
+            }
+          }
+        }
+      }
+    }
+  }
+
+  private func confirmed(_ key: String, _ value: JSONValue?, derive: [LoadSpec]) {
+    guard !Task.isCancelled else { return }
+    if let value, case .object(var record) = data {
+      record[key] = value
+      for load in derive { record[load.key] = Self.derived(load, from: .object(record)) }
+      context = ScreenContext.with(context, "data", .object(record))
+      applyDerived()
+    }
+    if case .object(var held)? = context["checking"] {
+      held[key] = nil
+      context = ScreenContext.with(context, "checking", .object(held))
+    }
   }
 
   /// A derived load's value, from what the screen's other loads answered.
@@ -518,7 +572,7 @@ public final class ScreenModel {
   ) async throws -> (String, JSONValue, String?) {
     if let doc = load.doc {
       guard let reader else { return (load.key, .null, nil) }
-      let value = try await FirestoreLoads.document(reader, ScreenValues.render(doc, in: context))
+      let value = try await FirestoreLoads.documentLoad(reader, ScreenValues.render(doc, in: context))
       return (load.key, value, nil)
     }
     if let id = load.orderZone {

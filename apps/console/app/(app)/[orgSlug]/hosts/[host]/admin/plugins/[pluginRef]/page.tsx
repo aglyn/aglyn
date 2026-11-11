@@ -31,7 +31,11 @@ import { Alert, Button, Chip, Stack, Switch, Typography } from '@mui/material'
 import { doc } from 'firebase/firestore'
 import { useParams } from 'next/navigation'
 import { useMemo } from 'react'
-import { useFirestore, useFirestoreDoc } from '@aglyn/tenant-feature-instance'
+import {
+  firestoreDocPhase,
+  useFirestore,
+  useFirestoreDoc,
+} from '@aglyn/tenant-feature-instance'
 import AuthScreensCard from '../../../../../../../../components/auth-screens-card.component'
 import DashboardLayout from '../../../../../../../../components/layouts/dashboard.layout'
 import HostDisplayNameComponent from '../../../../../../../../components/host-display-name.component'
@@ -41,9 +45,15 @@ import PluginDisableCascadeDialog from '../../../../../../../../components/plugi
 import PluginWidgetSlot from '../../../../../../../../components/plugin-widget-slot.component'
 import { CONTENT_MAX_WIDTH } from '../../../../../../../../constants/shared'
 import { docsHelp } from '../../../../../../../../constants/docs-links'
-import { buildRoute, Route } from '../../../../../../../../constants/route-links'
+import {
+  buildRoute,
+  Route,
+} from '../../../../../../../../constants/route-links'
 import useCurrentOrg from '../../../../../../../../hooks/use-current-org'
-import { useOrgScope, useOrgSlug } from '../../../../../../../../hooks/use-org-scope'
+import {
+  useOrgScope,
+  useOrgSlug,
+} from '../../../../../../../../hooks/use-org-scope'
 import {
   SITE_PLUGINS_CHECKING_TEXT,
   useSitePluginSwitchboard,
@@ -71,7 +81,9 @@ import {
  * one thing that genuinely differs: every setting here says whether this site
  * is following the workspace or answering for itself.
  */
-const SitePluginInstallation: NextPageWithLayout<Record<string, never>> = () => {
+const SitePluginInstallation: NextPageWithLayout<
+  Record<string, never>
+> = () => {
   const orgSlug = useOrgSlug()
   const host = useHostSubdomain()
   const hostId = useHostId()
@@ -112,14 +124,14 @@ const SitePluginInstallation: NextPageWithLayout<Record<string, never>> = () => 
   // which HAVE no pin (AGL-1440): `installs` is member-gated, so a sentinel
   // id is a guaranteed-denied listen on every mount and a pointless read for
   // the plugins that never have a listing.
-  const { data: sitePin } = useFirestoreDoc<any>(
+  const sitePinRead = useFirestoreDoc<any>(
     () =>
       hostId && listingId
         ? doc(firestore, 'hosts', hostId, 'installs', listingId)
         : null,
     [firestore, hostId, listingId],
   )
-  const { data: orgPin } = useFirestoreDoc<any>(
+  const orgPinRead = useFirestoreDoc<any>(
     () =>
       orgId && listingId
         ? doc(firestore, 'orgs', orgId, 'installs', listingId)
@@ -129,7 +141,29 @@ const SitePluginInstallation: NextPageWithLayout<Record<string, never>> = () => 
   // Either pin will name the thing: they carry the same denormalized display
   // name, version and manifest, and the site's is preferred because it is the
   // one governing this page.
-  const pin = sitePin ?? orgPin ?? null
+  const pin = sitePinRead.data ?? orgPinRead.data ?? null
+  /**
+   * Whether "is this listing installed here" has an ANSWER yet. Until it does,
+   * no pin reads as "not installed", and the card below would state "Off for
+   * the workspace" with a button to switch it on, for a plugin that is
+   * running. The cache answers "missing" first for a pin it has never held,
+   * and while another console tab holds the shared cache that answer can
+   * stand for half a minute (`firestoreDocPhase`), so only a SERVER answer
+   * that neither pin exists counts as "not installed".
+   */
+  const pinReadPhases = [
+    firestoreDocPhase(sitePinRead),
+    firestoreDocPhase(orgPinRead),
+  ]
+  const pinPhase =
+    firstParty || pin
+      ? 'ready'
+      : pinReadPhases.includes('loading')
+        ? 'loading'
+        : pinReadPhases.includes('error')
+          ? 'error'
+          : 'missing'
+  const pinKnown = pinPhase === 'ready' || pinPhase === 'missing'
   const pluginId = firstParty
     ? firstParty.id
     : String(pin?.pluginId ?? pin?.manifest?.id ?? '')
@@ -315,38 +349,39 @@ const SitePluginInstallation: NextPageWithLayout<Record<string, never>> = () => 
             contentGutterX
             contentGutterY
           >
-            <Stack spacing={1.5}>
-              <Stack
-                useFlexGap
-                direction="row"
-                spacing={1}
-                sx={{ alignItems: 'center', flexWrap: 'wrap', rowGap: 1 }}
-              >
-                <Chip
-                  size="small"
-                  color={runsHere ? 'success' : 'default'}
-                  variant={runsHere ? 'filled' : 'outlined'}
-                  label={runsHere ? 'Runs on this site' : 'Off for this site'}
-                />
-                <Chip
-                  size="small"
-                  variant="outlined"
-                  label={
-                    orgEnabled
-                      ? 'Enabled for the workspace'
-                      : 'Off for the workspace'
-                  }
-                />
-              </Stack>
-              <Typography variant="body2" color="text.secondary">
-                {whereItRuns()}
-              </Typography>
-              {firstParty?.description ? (
+            {pinKnown ? (
+              <Stack spacing={1.5}>
+                <Stack
+                  useFlexGap
+                  direction="row"
+                  spacing={1}
+                  sx={{ alignItems: 'center', flexWrap: 'wrap', rowGap: 1 }}
+                >
+                  <Chip
+                    size="small"
+                    color={runsHere ? 'success' : 'default'}
+                    variant={runsHere ? 'filled' : 'outlined'}
+                    label={runsHere ? 'Runs on this site' : 'Off for this site'}
+                  />
+                  <Chip
+                    size="small"
+                    variant="outlined"
+                    label={
+                      orgEnabled
+                        ? 'Enabled for the workspace'
+                        : 'Off for the workspace'
+                    }
+                  />
+                </Stack>
                 <Typography variant="body2" color="text.secondary">
-                  {firstParty.description}
+                  {whereItRuns()}
                 </Typography>
-              ) : null}
-              {/*
+                {firstParty?.description ? (
+                  <Typography variant="body2" color="text.secondary">
+                    {firstParty.description}
+                  </Typography>
+                ) : null}
+                {/*
                 What the switch below does on THIS site, and what it leaves
                 running (AGL-3028, AGL-3029). A plugin whose workspace half
                 carries no site — AI's add-on and billing, Forms' catalog and
@@ -354,20 +389,20 @@ const SitePluginInstallation: NextPageWithLayout<Record<string, never>> = () => 
                 stops all of that unless the page says otherwise, so both
                 halves are stated before the reader flips it.
               */}
-              {firstParty?.siteOff && !alwaysOn ? (
-                <Stack spacing={0.5}>
-                  <Typography variant="subtitle2">
-                    {'Switching it off for this site'}
-                  </Typography>
-                  <Typography variant="body2" color="text.secondary">
-                    {firstParty.siteOff.stops}
-                  </Typography>
-                  <Typography variant="body2" color="text.secondary">
-                    {firstParty.siteOff.keeps}
-                  </Typography>
-                </Stack>
-              ) : null}
-              {/*
+                {firstParty?.siteOff && !alwaysOn ? (
+                  <Stack spacing={0.5}>
+                    <Typography variant="subtitle2">
+                      {'Switching it off for this site'}
+                    </Typography>
+                    <Typography variant="body2" color="text.secondary">
+                      {firstParty.siteOff.stops}
+                    </Typography>
+                    <Typography variant="body2" color="text.secondary">
+                      {firstParty.siteOff.keeps}
+                    </Typography>
+                  </Stack>
+                ) : null}
+                {/*
                 The SWITCH, on the page about the thing it switches.
 
                 Per-site enablement is a boundary rather than a preference —
@@ -384,61 +419,69 @@ const SitePluginInstallation: NextPageWithLayout<Record<string, never>> = () => 
                 can never turn on what the workspace has turned off, and a
                 missing control does not say that.
               */}
-              {alwaysOn ? null : (
-                <Stack
-                  direction="row"
-                  spacing={1}
-                  sx={{ alignItems: 'center' }}
-                >
-                  <Switch
-                    checked={runsHere}
-                    disabled={
-                      !canManageSite ||
-                      !orgEnabled ||
-                      switchboard.busy ||
-                      !switchboard.ready ||
-                      // This switch saves as it moves, so a move before the
-                      // server has confirmed the host read would wait on that
-                      // confirmation and could end refused (AGL-4047). It is
-                      // held instead, with the reason beside it.
-                      (canManageSite && switchboard.checking)
-                    }
-                    onChange={() =>
-                      switchboard.requestToggle(pluginRef, !runsHere)
-                    }
-                    slotProps={{
-                      input: {
-                        'aria-label': `Toggle ${displayName} on this site`,
-                      },
-                    }}
-                  />
-                  <Typography variant="body2" color="text.secondary">
-                    {runsHere ? 'On for this site' : 'Off for this site'}
-                  </Typography>
-                  {canManageSite && orgEnabled && switchboard.checking ? (
-                    <Typography
-                      variant="body2"
-                      color="text.secondary"
-                      role="status"
-                    >
-                      {SITE_PLUGINS_CHECKING_TEXT}
+                {alwaysOn ? null : (
+                  <Stack
+                    direction="row"
+                    spacing={1}
+                    sx={{ alignItems: 'center' }}
+                  >
+                    <Switch
+                      checked={runsHere}
+                      disabled={
+                        !canManageSite ||
+                        !orgEnabled ||
+                        switchboard.busy ||
+                        !switchboard.ready ||
+                        // This switch saves as it moves, so a move before the
+                        // server has confirmed the host read would wait on that
+                        // confirmation and could end refused (AGL-4047). It is
+                        // held instead, with the reason beside it.
+                        (canManageSite && switchboard.checking)
+                      }
+                      onChange={() =>
+                        switchboard.requestToggle(pluginRef, !runsHere)
+                      }
+                      slotProps={{
+                        input: {
+                          'aria-label': `Toggle ${displayName} on this site`,
+                        },
+                      }}
+                    />
+                    <Typography variant="body2" color="text.secondary">
+                      {runsHere ? 'On for this site' : 'Off for this site'}
                     </Typography>
-                  ) : null}
-                  {orgEnabled ? null : (
-                    <AppLink
-                      href={buildRoute(Route.ORG_PLUGIN_INSTALLATION, {
-                        orgSlug,
-                        pluginRef,
-                      })}
-                    >
-                      <Button size="small" component="span">
-                        {'Switch it on for the workspace'}
-                      </Button>
-                    </AppLink>
-                  )}
-                </Stack>
-              )}
-            </Stack>
+                    {canManageSite && orgEnabled && switchboard.checking ? (
+                      <Typography
+                        variant="body2"
+                        color="text.secondary"
+                        role="status"
+                      >
+                        {SITE_PLUGINS_CHECKING_TEXT}
+                      </Typography>
+                    ) : null}
+                    {orgEnabled ? null : (
+                      <AppLink
+                        href={buildRoute(Route.ORG_PLUGIN_INSTALLATION, {
+                          orgSlug,
+                          pluginRef,
+                        })}
+                      >
+                        <Button size="small" component="span">
+                          {'Switch it on for the workspace'}
+                        </Button>
+                      </AppLink>
+                    )}
+                  </Stack>
+                )}
+              </Stack>
+            ) : (
+              <Typography variant="body2" color="text.secondary" role="status">
+                {pinPhase === 'error'
+                  ? 'Could not read where this plugin is installed. Reload the ' +
+                    'page to try again.'
+                  : 'Checking where this plugin runs…'}
+              </Typography>
+            )}
           </CardDisplay>
 
           {/* What it needs and what needs it, resolved FOR THIS SITE. The

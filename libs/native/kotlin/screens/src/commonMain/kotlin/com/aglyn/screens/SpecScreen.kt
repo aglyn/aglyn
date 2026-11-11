@@ -1322,25 +1322,50 @@ private fun FormBlock(block: BlockSpec, context: JsonElement, busy: Boolean, sub
   val fields = FieldSpec.parseAll(block.raw.arr("fields"), context)
   val base = block.string("object")?.let { ScreenValues.lookup(it, context) }
   val scope = base?.let { ScreenContext.withItem(context, it) } ?: context
-  // Re-seeded whenever the loaded data changes, as after a save.
-  val values = remember(scope) { mutableStateMapOf<String, FieldValue>().apply { fields.forEach { put(it.key, initialValue(it, scope)) } } }
-  val filled = ScreenContext.with(scope, "form", formObject(fields) { values[it.key] })
-  val missing = fields.any { ScreenValues.condition(it.whenCondition, filled) && it.unmet(fieldJson(it, values[it.key]), scope) }
+  // What the person changed, kept as edits over the data as it is now (`FormEdits`): every other field follows the data,
+  // and when the data under them moves (a save landed, the server's copy replaced the cache's) the edits are settled.
+  val seed = fields.associate { it.key to initialValue(it, scope) }
+  val values = remember(block.id) { mutableStateMapOf<String, FieldValue>() }
+  val seededFrom = remember(block.id) { mutableStateOf(seed) }
+  val pressed = remember(block.id) { mutableStateOf<Map<String, FieldValue>?>(null) }
+  if (seededFrom.value != seed) {
+    val kept = FormEdits.settled(values.toMap(), pressed.value, seed)
+    values.clear()
+    values.putAll(kept)
+    pressed.value = null
+    seededFrom.value = seed
+  }
+  fun current(field: FieldSpec) = values[field.key] ?: seed[field.key] ?: initialValue(field, scope)
+  val filled = ScreenContext.with(scope, "form", formObject(fields) { current(it) })
+  val missing = fields.any { ScreenValues.condition(it.whenCondition, filled) && it.unmet(fieldJson(it, current(it)), scope) }
+  // A load this form is seeded from is only the cache's answer yet: Save is held, with the reason beside it.
+  val held = FormEdits.heldBy(block.string("object"), fields.mapNotNull { it.initial }, context.obj("checking")).isNotEmpty()
   Column(Modifier.fillMaxWidth().padding(space(2f)), verticalArrangement = Arrangement.spacedBy(space(1.5f))) {
     for (field in fields.filter { ScreenValues.condition(it.whenCondition, filled) }) {
-      FieldInput(field, scope, values[field.key] ?: initialValue(field, scope)) { values[field.key] = it }
+      FieldInput(field, scope, current(field)) { values[field.key] = it }
     }
     // A settings form's Save (or Save profile, Save image) shows once something in it changed: a screen of small forms (error pages, one select each)
     // is not a column of Save buttons. Any other submit (Send, Generate, Invite) always shows.
-    val changed = fields.any { (values[it.key] ?: initialValue(it, scope)) != initialValue(it, scope) }
+    val changed = fields.any { current(it) != seed[it.key] }
     ActionSpec.parse(block["submit"])
       ?.takeIf { ScreenValues.condition(it.whenCondition, scope) }
       ?.takeIf { changed || fields.isEmpty() || !ScreenValues.render(it.label, scope).startsWith("Save") }
       ?.let { action ->
+      if (held && changed) {
+        Text(
+          FormEdits.checkingText(block.string("checking")),
+          Modifier.align(Alignment.End).testTag("checking-${block.id}"),
+          style = MaterialTheme.typography.bodySmall,
+          color = MaterialTheme.colorScheme.onSurfaceVariant,
+        )
+      }
       FilledTonalButton(
         colors = com.aglyn.ui.aglynTonalButtonColors(),
-        onClick = { submit(action, visibleOnly(filled, fields)) },
-        enabled = !busy && !missing && action.disabledWhen?.let { ScreenValues.condition(it, scope) } != true,
+        onClick = {
+          pressed.value = values.toMap()
+          submit(action, visibleOnly(filled, fields))
+        },
+        enabled = !busy && !held && !missing && action.disabledWhen?.let { ScreenValues.condition(it, scope) } != true,
         modifier = Modifier.align(Alignment.End).testTag("submit-${block.id}"),
       ) {
         if (busy) CircularProgressIndicator(Modifier.size(16.dp).padding(end = space(1f)), strokeWidth = 2.dp)
