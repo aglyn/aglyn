@@ -13,6 +13,10 @@ content on the marketing site and is written separately.
 
 [Compare with the previous release](https://github.com/aglyn/aglyn/compare/v1.20.2...v1.20.3)
 
+### Added
+
+- **besigner:** add row and column bars, a pinned Markdown toolbar, tidier table controls ([AGL-4216](https://linear.app/aglyn/issue/AGL-4216))
+
 ### Fixed
 
 - **accounting:** hold a taxed QuickBooks sale while the company has no sales tax set up ([AGL-3614](https://linear.app/aglyn/issue/AGL-3614))
@@ -27,6 +31,8 @@ content on the marketing site and is written separately.
 - **docs:** the domain guides list Connect a domain automatically ([AGL-3963](https://linear.app/aglyn/issue/AGL-3963))
 - **console:** a page opened in a running tab gets past another tab's locked cache in seconds, not half a minute ([AGL-4204](https://linear.app/aglyn/issue/AGL-4204))
 - **ai:** Bring my site tells logos and graphics from photos by their pixels and keeps them out of photo slots ([AGL-4152](https://linear.app/aglyn/issue/AGL-4152))
+- **console:** ?create=site waits for the guided start on a cold load ([AGL-4152](https://linear.app/aglyn/issue/AGL-4152))
+- **data:** keep an empty first or last table column through a round trip ([AGL-4216](https://linear.app/aglyn/issue/AGL-4216))
 
 ## v1.20.2 — 2026-11-11
 
