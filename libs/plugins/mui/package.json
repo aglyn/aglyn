@@ -31,10 +31,10 @@
     "@aglyn/shared-ui-jsx": "1.21.0",
     "@aglyn/shared-ui-theme": "1.21.0",
     "@aglyn/shared-util-vendor": "1.21.0",
-    "@swc/helpers": "0.5.23",
+    "@swc/helpers": "0.5.24",
     "dayjs": "^1.11.23",
-    "mobx": "^7.0.5",
-    "mobx-react-lite": "^5.1.0"
+    "mobx": "^7.1.6",
+    "mobx-react-lite": "^5.1.2"
   },
   "peerDependencies": {
     "@mui/material": "^9.3.1",

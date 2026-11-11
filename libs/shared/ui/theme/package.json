@@ -30,7 +30,7 @@
     "@aglyn/shared-util-vendor": "1.21.0",
     "@emotion/cache": "^11.14.0",
     "@emotion/react": "11.14.0",
-    "@swc/helpers": "0.5.23",
+    "@swc/helpers": "0.5.24",
     "js-cookie": "^3.0.8",
     "jss": "^10.10.0",
     "jss-rtl": "^0.3.0",

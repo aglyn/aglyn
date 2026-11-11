@@ -30,7 +30,7 @@
     "@aglyn/shared-ui-theme": "1.21.0",
     "@aglyn/shared-util-http": "1.21.0",
     "@aglyn/tenant-data-admin": "1.21.0",
-    "@swc/helpers": "0.5.23"
+    "@swc/helpers": "0.5.24"
   },
   "peerDependencies": {
     "firebase-admin": "^14.3.0"
