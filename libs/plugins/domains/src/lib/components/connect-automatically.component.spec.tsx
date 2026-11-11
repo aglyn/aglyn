@@ -166,6 +166,85 @@ describe('when the provider can apply the records', () => {
     open.mockRestore()
   })
 
+  it('still connects when the owner approves after the five-minute window (AGL-3963)', async () => {
+    jest.useFakeTimers({ advanceTimers: true })
+    try {
+      const answers: Record<string, unknown> = {
+        'domain-connect/discover': { supported: true, providerName: 'Provider DNS' },
+        'domain-connect/start': {
+          url: 'https://dash.provider.example/apply?x=1',
+          width: 640,
+          height: 700,
+          state: 'S'.repeat(43),
+          providerName: 'Provider DNS',
+        },
+        // Still at the provider: signing up, a second factor.
+        'domain-connect/finish': { status: 'started', code: null, providerName: 'Provider DNS', domain: 'example.com' },
+      }
+      routes(answers)
+      const popup = { closed: false, location: { href: '' }, resizeTo: jest.fn(), moveTo: jest.fn(), close: jest.fn() }
+      const open = jest.spyOn(window, 'open').mockReturnValue(popup as unknown as Window)
+      const onConnected = jest.fn()
+      render(<ConnectAutomatically hostId="host-1" domain="example.com" onConnected={onConnected} />)
+      fireEvent.click(await screen.findByRole('button', { name: /Connect automatically/ }, { timeout: 2000 }))
+      await waitFor(() => expect(popup.location.href).toBe('https://dash.provider.example/apply?x=1'))
+      await act(async () => {
+        jest.advanceTimersByTime(5 * 60 * 1000 + 20_000)
+      })
+      expect(await screen.findByText(/If you’re still approving there, this page updates when you finish/)).toBeTruthy()
+      // Quiet: no more asking every ten seconds.
+      const asked = mockFetch.mock.calls.filter(([, url]) => String(url).includes('domain-connect/finish')).length
+      await act(async () => {
+        jest.advanceTimersByTime(60_000)
+      })
+      expect(mockFetch.mock.calls.filter(([, url]) => String(url).includes('domain-connect/finish'))).toHaveLength(asked)
+      // Approved eighteen minutes in: the return page wakes the tab at once.
+      routes({ ...answers, 'domain-connect/finish': { status: 'connected', code: null, providerName: 'Provider DNS', domain: 'example.com' } })
+      act(() => {
+        window.dispatchEvent(
+          new MessageEvent('message', {
+            data: { source: 'aglyn-domain-connect', outcome: 'applied' },
+            origin: window.location.origin,
+          }),
+        )
+      })
+      await waitFor(() => expect(onConnected).toHaveBeenCalledTimes(1))
+      open.mockRestore()
+    } finally {
+      jest.useRealTimers()
+    }
+  })
+
+  it('lets the owner start again from a quiet session', async () => {
+    jest.useFakeTimers({ advanceTimers: true })
+    try {
+      routes({
+        'domain-connect/discover': { supported: true, providerName: 'Provider DNS' },
+        'domain-connect/start': {
+          url: 'https://dash.provider.example/apply?x=1',
+          width: 640,
+          height: 700,
+          state: 'S'.repeat(43),
+          providerName: 'Provider DNS',
+        },
+        'domain-connect/finish': { status: 'started', code: null, providerName: 'Provider DNS', domain: 'example.com' },
+      })
+      const popup = { closed: false, location: { href: '' }, resizeTo: jest.fn(), moveTo: jest.fn(), close: jest.fn() }
+      const open = jest.spyOn(window, 'open').mockReturnValue(popup as unknown as Window)
+      render(<ConnectAutomatically hostId="host-1" domain="example.com" onConnected={jest.fn()} />)
+      fireEvent.click(await screen.findByRole('button', { name: /Connect automatically/ }, { timeout: 2000 }))
+      await waitFor(() => expect(popup.location.href).not.toBe(''))
+      await act(async () => {
+        jest.advanceTimersByTime(5 * 60 * 1000 + 20_000)
+      })
+      fireEvent.click(await screen.findByRole('button', { name: 'Start again' }))
+      expect(await screen.findByRole('button', { name: /Connect automatically with Provider DNS/ })).toBeTruthy()
+      open.mockRestore()
+    } finally {
+      jest.useRealTimers()
+    }
+  })
+
   it('says why in plain words when the start is refused, and leaves the records', async () => {
     mockFetch.mockImplementation(async (_user: unknown, url: string) =>
       String(url).includes('discover')
