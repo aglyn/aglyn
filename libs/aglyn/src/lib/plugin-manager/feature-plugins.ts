@@ -1564,6 +1564,12 @@ export interface ConsolePublishableArtifact {
 export interface ConsoleZoneSite {
   id: string
   label: string
+  /**
+   * The plugins this site switched off for itself on its Admin › Plugins
+   * page (its `disabledPlugins`, AGL-4047), when the page has the site's
+   * document. A plugin pinned here, or org-wide, does not run on such a site.
+   */
+  disabledPlugins?: readonly string[] | null
 }
 
 /** What the `orgPluginInstalls` zone hands each widget (AGL-3080). */
@@ -1579,6 +1585,12 @@ export interface ConsoleOrgPluginInstallsZoneProps {
    * itself.
    */
   hosts: ReadonlyArray<ConsoleZoneSite>
+  /**
+   * Whether `hosts` is the workspace's whole site list yet (AGL-4047). An
+   * empty list that is still loading is not a workspace with no sites, so a
+   * widget holds its "nothing here" until this is true. Absent reads as true.
+   */
+  hostsReady?: boolean
 }
 
 /** What the `pluginInstallStatus` zone hands each widget (AGL-3080). */

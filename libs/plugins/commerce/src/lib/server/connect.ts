@@ -23,7 +23,10 @@ import {
 import {
   accountChargeModel,
   DIRECT_CHARGE_ACCOUNT_PARAMS,
+  merchantAccountInOtherMode,
+  merchantAccountReplacement,
   paymentProvider,
+  PREVIOUS_MERCHANT_ACCOUNTS_FIELD,
 } from '@aglyn/tenant-data-admin/server/payment-provider'
 import { buildRoute, Route, type PluginApiHandler } from '@aglyn/aglyn/server'
 
@@ -88,10 +91,53 @@ export const connectHandler: PluginApiHandler = async (req, res) => {
     const profileRef = firestore.collection('profiles').doc(decoded.uid)
     const profileSnapshot = await profileRef.get()
 
+    // This deployment's Stripe mode, asked first: whether the stored account
+    // can be used here at all depends on it (AGL-2471).
+    const platformMode = await paymentProvider().resolvePlatformMode()
     let accountId = profileSnapshot.get('stripeAccountId') as
       | string
       | undefined
-    if (!accountId) {
+    // AN ACCOUNT FROM THE OTHER STRIPE MODE IS REPLACED, NEVER RESUMED.
+    //
+    // A test account on a live deployment (a localhost session onboarded with
+    // the test key while writing production Firestore, see
+    // `payment-provider-stripe-connect.ts`) can never take a live payment, and
+    // a live key cannot even read it: Stripe refuses the retrieve. This route
+    // used to retrieve it anyway, so the owner pressing "Set up payments" got
+    // "Payment setup failed" every time and the store could not sell. Two
+    // ways in:
+    //
+    //  - `mode-mismatch`: the profile RECORDS the other mode. Not read at all,
+    //    since the read cannot succeed.
+    //  - `mode-unverified` (and any recorded mode Stripe contradicts): the
+    //    account is read, and a read that succeeds is the proof it is in this
+    //    mode, recorded below exactly as before. Only Stripe's own cross-mode
+    //    refusal retires it; any other failure is the 502 it always was.
+    //
+    // A new account is then created in this mode, of the shape every new
+    // setup takes (direct charges, below), and the replaced id is kept on the
+    // profile (`merchantAccountReplacement`).
+    let account: any
+    let replacedAccountId: string | undefined
+    if (
+      accountId &&
+      merchantAccountInOtherMode(
+        profileSnapshot.get('stripeAccountLivemode'),
+        platformMode,
+      )
+    ) {
+      replacedAccountId = accountId
+    } else if (accountId) {
+      try {
+        account = await stripe(`accounts/${accountId}`)
+      } catch (error) {
+        if (!paymentProvider().refusedAsOtherMode((error as Error)?.message)) {
+          throw error
+        }
+        replacedAccountId = accountId
+      }
+    }
+    if (!accountId || replacedAccountId) {
       // The seller's OWN Stripe account (direct charges): Stripe bills it,
       // underwrites it and gives it the full Stripe Dashboard, so the seller
       // is the merchant of record on every site sale and can refund, answer
@@ -111,7 +157,7 @@ export const connectHandler: PluginApiHandler = async (req, res) => {
       } catch {
         ownsAccount = false
       }
-      const account = await stripe(
+      const created = await stripe(
         'accounts',
         new URLSearchParams({
           ...(ownsAccount
@@ -125,17 +171,39 @@ export const connectHandler: PluginApiHandler = async (req, res) => {
           'capabilities[transfers][requested]': 'true',
           'metadata[profileId]': decoded.uid,
           'metadata[purpose]': 'commerce',
+          ...(replacedAccountId
+            ? { 'metadata[replacesAccount]': replacedAccountId }
+            : {}),
           ...(decoded.email ? { email: decoded.email } : {}),
         }),
       )
-      accountId = account.id
-      await profileRef.set(
-        { stripeAccountId: accountId, stripeChargesEnabled: false },
-        { merge: true },
-      )
+      accountId = String(created.id)
+      if (replacedAccountId) {
+        console.warn(
+          `[AGL-2471] Replacing Stripe account ${replacedAccountId} on ` +
+            `profiles/${decoded.uid}: it belongs to the other Stripe mode ` +
+            `from this ${platformMode ?? 'unknown'}-mode deployment. New ` +
+            `account ${accountId}.`,
+        )
+        await profileRef.set(
+          merchantAccountReplacement({
+            previousAccountIds: profileSnapshot.get(
+              PREVIOUS_MERCHANT_ACCOUNTS_FIELD,
+            ),
+            replacedAccountId,
+            newAccountId: accountId,
+          }),
+          { merge: true },
+        )
+      } else {
+        await profileRef.set(
+          { stripeAccountId: accountId, stripeChargesEnabled: false },
+          { merge: true },
+        )
+      }
+      account = await stripe(`accounts/${accountId}`)
     }
 
-    const account = await stripe(`accounts/${accountId}`)
     const chargesEnabled = Boolean(account?.charges_enabled)
     // WHICH STRIPE WORLD THIS ACCOUNT LIVES IN (AGL-2471).
     //
@@ -149,8 +217,7 @@ export const connectHandler: PluginApiHandler = async (req, res) => {
     // access outright — "was a test account created with a testmode key" —
     // so an account this key just fetched is in this key's mode, and the
     // payment provider asks Stripe (`/v1/balance.livemode`) what that mode is
-    // rather than reading the key string.
-    const platformMode = await paymentProvider().resolvePlatformMode()
+    // rather than reading the key string (`platformMode`, asked first).
     // Payout readiness rides along (AGL-1994): the sale gate stays on
     // charges_enabled — that is what Stripe checks at charge time — but
     // charges-yes/payouts-no was invisible to the storefront, because

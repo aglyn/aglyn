@@ -564,6 +564,10 @@ export function HostCampaignsCard(props: {
        * marked by the manage route, the one writer of the marker: the rules
        * refuse it on a client create. Until the route answers it is exactly
        * a campaign on those sites, never on a site that was left out.
+       *
+       * A refused choice is handed back to the sharing field, which says why
+       * beside itself and stops once the choice changes; the drawer keeps
+       * exactly what was chosen (production check 11/10).
        */
       const sharing = hostId
         ? null
@@ -571,9 +575,13 @@ export function HostCampaignsCard(props: {
       const orgHostIds = (orgMount?.hosts ?? []).map((site) => site.id)
       const placed = sharing ? campaignSharingWrite(sharing, orgHostIds) : null
       if (sharing && sharing.mode !== 'all' && !orgMount?.hostsReady) {
-        return setCreateError('This workspace’s sites are still loading — try again')
+        setCreateError(null)
+        return { sharing: 'This workspace’s sites are still loading — try again' }
       }
-      if (placed && !placed.fields) return setCreateError(placed.problem)
+      if (placed && !placed.fields) {
+        setCreateError(null)
+        return { sharing: placed.problem }
+      }
       const visibleTo = hostId
         ? campaignSiteVisibleTo(hostId)
         : (placed?.fields?.visibleTo ?? [])

@@ -90,6 +90,8 @@ export interface AiSiteImportDocument {
   scope?: string[]
   /** The site's plan, once a wave has one (AGL-4152). */
   plan?: AiSiteImportPlan | null
+  /** The draft id of the site's page whose read holds a form (AGL-4152): where a page with none sends a link to `form`. */
+  formPage?: string
   /** The theme's colors as its look drew them, where one was drawn (`SiteImportFidelityTheme`, AGL-4152). */
   theme?: Record<string, unknown> | null
   /** The plan's proposed page (AGL-4152): new to the site, with no source to hold it to, and never kept as a fallback. */
@@ -269,6 +271,7 @@ export function aiSiteImportDocumentOf(inputs: Readonly<Record<string, unknown>>
     ...(Array.isArray(value['siteLines']) ? { siteLines: strings(value['siteLines']) } : {}),
     ...(Array.isArray(value['scope']) ? { scope: strings(value['scope']) } : {}),
     ...(value['plan'] && typeof value['plan'] === 'object' ? { plan: value['plan'] as AiSiteImportPlan } : {}),
+    ...(typeof value['formPage'] === 'string' && value['formPage'] ? { formPage: value['formPage'] } : {}),
     ...(value['theme'] && typeof value['theme'] === 'object' ? { theme: value['theme'] as Record<string, unknown> } : {}),
     ...(value['proposed'] === true ? { proposed: true as const } : {}),
     ...(Array.isArray(value['sitePhotos']) ? { sitePhotos: photosOf(value['sitePhotos']) } : {}),

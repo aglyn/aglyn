@@ -24,7 +24,13 @@ import {
 import { AppLink } from '@aglyn/shared-ui-jsx'
 import { BlockedControl } from '@aglyn/shared-ui-jsx/components/blocked-control.component'
 import { useFirestore, useFirestoreDoc, useUser } from '@aglyn/tenant-feature-instance'
-import { Alert, Button, Stack } from '@mui/material'
+import {
+  Alert,
+  Button,
+  CircularProgress,
+  Stack,
+  Typography,
+} from '@mui/material'
 import { doc } from 'firebase/firestore'
 import { lazy, Suspense, useMemo, useState } from 'react'
 import ListingDetailEditor from './listing-detail-editor.component'
@@ -59,11 +65,18 @@ export function ListingDetailPage(props: {
   /** The site an install acts through, and every site for the target picker. */
   actingHost: string
   hosts: ReadonlyArray<OrgInstallHost>
+  /**
+   * Whether `hosts` is the workspace's whole site list yet (AGL-4047). While
+   * it loads there is no acting site, and that is not a workspace with none.
+   * Absent reads as true.
+   */
+  hostsReady?: boolean
   permissions?: Record<string, boolean | undefined>
   orgSlug: string
 }) {
   const { listingId, orgId, basePath, actingHost, hosts, permissions, orgSlug } =
     props
+  const hostsReady = props.hostsReady ?? true
   const firestore = useFirestore()
   const { data: user } = useUser()
 
@@ -200,7 +213,14 @@ export function ListingDetailPage(props: {
               ) : null}
             </>
           ) : null}
-          {!actingHost ? (
+          {!actingHost && !hostsReady ? (
+            <Stack direction="row" spacing={1} sx={{ alignItems: 'center' }}>
+              <CircularProgress size={16} />
+              <Typography variant="body2" color="text.secondary">
+                {'Loading your sites…'}
+              </Typography>
+            </Stack>
+          ) : !actingHost ? (
             // Owners can still edit their listing with no site of their own —
             // through the hero's Edit listing action (AGL-1005).
             <Alert severity="info">
@@ -218,6 +238,9 @@ export function ListingDetailPage(props: {
               orgScoped
               orgSlug={orgSlug}
               hosts={hosts}
+              // The workspace the hub already holds (AGL-4047), so the org
+              // pin is read under it rather than a lookup through a site.
+              orgId={orgId}
             />
           )}
         </Stack>

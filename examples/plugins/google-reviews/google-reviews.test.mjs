@@ -473,11 +473,11 @@ test('the presets repeat over the google connection and name only fields it decl
     [SUMMARY_SOURCE, REVIEWS_SOURCE, SUMMARY_SOURCE],
   )
   // The owner's reply block leaves a review without one.
-  let reply
+  const hides = []
   walk(section, (node) => {
-    if (node.props?.hideUnless) reply = node
+    if (node.props?.hideUnless) hides.push(node.props.hideUnless)
   })
-  assert.equal(reply.props.hideUnless, '{{item.reply}}')
+  assert.deepEqual(hides.sort(), ['{{item.rating}}', '{{item.reply}}', '{{item.reviewCount}}'])
 })
 
 async function renderPart(id, props) {
@@ -642,4 +642,15 @@ test('a filter on the cards keeps only the reviews it names', async () => {
 test('before the first sync the section draws nothing to visitors', async () => {
   const order = await composePreset('section', null)
   assert.deepEqual(textsOf(order), [], 'no summary, no cards, no link')
+})
+
+test('a profile with no reviews yet shows only the review link (AGL-4212)', async () => {
+  // What Google answers for a profile nobody has reviewed: no rating, no
+  // count, no reviews, only the "leave a review" link.
+  const empty = { fields: { reviewUrl: RECORD.fields.reviewUrl }, items: [], syncedAtMs: MARCH_2026 }
+  const order = await composePreset('section', empty)
+  assert.deepEqual(textsOf(order), ['Review us on Google'])
+  assert.equal(order.filter((node) => node.componentId === 'aglyn.google-reviews.stars').length, 0, 'no empty stars')
+  const summary = await composePreset('summary', empty)
+  assert.deepEqual(textsOf(summary), [], 'the rating on its own draws nothing')
 })

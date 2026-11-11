@@ -104,6 +104,11 @@ export interface StarterPublishFacts {
    * price needs no payout account (AGL-4049). Only the server can say.
    */
   sellsAsPlatform?: boolean
+  /**
+   * This deployment's Stripe mode, when known, so a payout account in the
+   * other mode reads as not set up, as the door reads it.
+   */
+  platformMode?: 'live' | 'test'
   /** `/{org}/marketplace`, or `null` until the org's address is known. */
   marketplacePath: string | null
   /** The site's Pages list, or `null` until its address is known. */
@@ -118,15 +123,31 @@ const hasProfile = (profile: Record<string, unknown>) =>
   typeof profile['handle'] === 'string' && !!profile['handle']
 
 /**
- * Whether a profile's payout account can take a sale, as far as the console
- * can tell: an account that takes charges. The door also checks which Stripe
- * world the account belongs to, which only the server knows, and says so if
- * that is what is missing.
+ * Whether a profile's payout account can take a sale, as the door's
+ * `merchantAccountReadiness` reads it: an account that takes charges and,
+ * when this deployment's Stripe mode is known, belongs to it. A recorded mode
+ * from the other world is refused in both directions, and an unrecorded one
+ * on a live deployment, exactly as the door refuses them. Without
+ * `platformMode` only the charges half is asked, and the door says the rest.
  */
-export const payoutsReady = (profile: Record<string, unknown>) =>
-  typeof profile['stripeAccountId'] === 'string' &&
-  !!String(profile['stripeAccountId']).trim() &&
-  profile['stripeChargesEnabled'] === true
+export const payoutsReady = (
+  profile: Record<string, unknown>,
+  platformMode?: 'live' | 'test',
+) => {
+  if (
+    typeof profile['stripeAccountId'] !== 'string' ||
+    !String(profile['stripeAccountId']).trim() ||
+    profile['stripeChargesEnabled'] !== true
+  ) {
+    return false
+  }
+  if (!platformMode) return true
+  const accountLivemode = profile['stripeAccountLivemode']
+  if (typeof accountLivemode === 'boolean') {
+    return accountLivemode === (platformMode === 'live')
+  }
+  return platformMode !== 'live'
+}
 
 /**
  * Every step that stands between this site and a starter publish, the setup
@@ -151,7 +172,7 @@ export function starterPublishSteps(facts: StarterPublishFacts): StarterPublishS
       href: sectionOf(facts, 'profile'),
       actionLabel: 'Publisher Profile',
     })
-  } else if (profile && facts.priceUsd > 0 && !facts.sellsAsPlatform && !payoutsReady(profile)) {
+  } else if (profile && facts.priceUsd > 0 && !facts.sellsAsPlatform && !payoutsReady(profile, facts.platformMode)) {
     steps.push({
       id: 'payouts',
       text: 'Set up payouts first to sell a starter with a price, or publish it free.',

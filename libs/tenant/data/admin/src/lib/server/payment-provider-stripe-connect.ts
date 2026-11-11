@@ -133,6 +133,21 @@ export async function resolvePlatformStripeMode(
 }
 
 /**
+ * Whether Stripe's refusal to read an account says it lives in the other
+ * mode — the contract's `refusedAsOtherMode`.
+ *
+ * Retrieving a test account with a live key answers 400 "The account acct_…
+ * was a test account created with a testmode key, and therefore can only be
+ * used with testmode keys" (measured, see the note above), and the live twin
+ * names a "livemode key". Matched on that wording and nothing wider: a
+ * refusal for any other reason (a network fault, an outage, a revoked
+ * platform) must never retire an account that may be working.
+ */
+export function stripeRefusedAsOtherMode(message: unknown): boolean {
+  return /\b(test|live)\s?mode keys?\b/i.test(String(message ?? ''))
+}
+
+/**
  * A Stripe webhook event about a connected account, applied to the profiles in
  * `collection` that store it — the contract's `applyAccountEvent`.
  *
@@ -207,5 +222,6 @@ export const STRIPE_CONNECT_PAYMENT_PROVIDER: PaymentProvider = {
   // module was first evaluated.
   platformMode: () => platformStripeMode(),
   resolvePlatformMode: () => resolvePlatformStripeMode(),
+  refusedAsOtherMode: stripeRefusedAsOtherMode,
   applyAccountEvent: applyStripeConnectAccountEvent,
 }

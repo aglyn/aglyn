@@ -455,9 +455,65 @@ func installPlanOutcome(
   return InstallPlanOutcome(tone: "error", text: errors.first ?? "Install failed")
 }
 
-/// The row of the plugins list for one install (`installedPluginCaption`).
-func installedPluginCaption(version: String?, orgWide: Bool, siteLabels: [String]) -> String {
-  "v\(version ?? "undefined") · " + (orgWide ? "every site in this organization" : (siteLabels.count == 1 ? siteLabels[0] : "\(siteLabels.count) sites"))
+/// The row of the plugins list for one install (`installedPluginCaption`). `switchedOff` (AGL-4047): the sites it covers
+/// whose own Admin › Plugins switch has it off; they keep the pin but run nothing, so the row does not call them sites it
+/// runs on. `siteCount` is how many sites the workspace has.
+func installedPluginCaption(
+  version: String?, orgWide: Bool, siteLabels: [String], switchedOff: [String] = [], siteCount: Int? = nil
+) -> String {
+  let off = switchedOff
+  let offNamed = off.count == 1 ? off[0] : "\(off.count) of them"
+  let where_: String
+  if orgWide {
+    if off.isEmpty {
+      where_ = "every site in this organization"
+    } else if let siteCount, off.count >= siteCount {
+      where_ = "every site switched it off"
+    } else {
+      where_ = off.count == 1 ? "every site except \(off[0]), which switched it off" : "every site except \(off.count) that switched it off"
+    }
+  } else if siteLabels.count == 1 {
+    where_ = off.isEmpty ? siteLabels[0] : "\(siteLabels[0]), which switched it off"
+  } else {
+    where_ = "\(siteLabels.count) sites" + (off.isEmpty ? "" : " · \(offNamed) switched it off")
+  }
+  return "v\(version ?? "undefined") · \(where_)"
+}
+
+/// A pin's document read, as a live listen reports it (`InstallPinRead`): whether it holds a pin, failed, loading, or cached.
+struct InstallPinRead: Equatable {
+  var hasData: Bool
+  var status: String?
+  var fromCache = false
+
+  /// A live document read.
+  @MainActor
+  init(_ document: ObservedDocument) {
+    hasData = document.document != nil
+    status = document.failed ? "error" : (document.ready ? "success" : "loading")
+    fromCache = document.fromCache
+  }
+
+  init(hasData: Bool, status: String?, fromCache: Bool = false) {
+    self.hasData = hasData
+    self.status = status
+    self.fromCache = fromCache
+  }
+}
+
+/// Whether a page may state where a plugin is installed yet (`installPictureReadPhase`, AGL-4047): "loading", "error" or
+/// "ready". "Not installed" and "Install" rest on ABSENT pins, and an absence the cache reports first is not an answer:
+/// a pin is missing only once the server says so, and the sites' pins only once every one has been read. `orgPinPending`
+/// while the workspace is still resolving; a nil `orgPin` when there is no workspace pin to read. `sitePins` is
+/// "loading", "failed" or "answered".
+func installPictureReadPhase(orgPinPending: Bool, orgPin: InstallPinRead?, sitePins: String) -> String {
+  if orgPinPending { return "loading" }
+  if let orgPin, !orgPin.hasData {
+    if orgPin.status == "error" { return "error" }
+    if orgPin.status == "loading" || orgPin.fromCache { return "loading" }
+  }
+  if sitePins == "failed" { return "error" }
+  return sitePins == "loading" ? "loading" : "ready"
 }
 
 // MARK: A marketplace plugin's settings, from its manifest

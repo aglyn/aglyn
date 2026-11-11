@@ -30,9 +30,12 @@ export {
   connectedAccountHeader,
   DIRECT_CHARGE_ACCOUNT_PARAMS,
   directChargeParams,
+  merchantAccountInOtherMode,
   merchantAccountIsReady,
   merchantAccountReadiness,
+  merchantAccountReplacement,
   paymentProvider,
+  PREVIOUS_MERCHANT_ACCOUNTS_FIELD,
   saleChargeModel,
 } from './lib/server/payment-provider'
 export type {

@@ -3060,7 +3060,13 @@ built page against what the reader read of its source.
   lines and facts held whole on their own lines. A page that draws its form asks
   with it: the form in the first two sections opens `cta`, in the last two closes
   it, and counts as its group for `columns`. A source's link to the page it is on
-  asks nothing; a button to it goes to the page's form, or is left out. The
+  asks nothing; a button to it goes to the page's form, or is left out. On a
+  page that draws no form, a link to `form` goes to the site's page that holds
+  one, as `page:<id>` (`aiSiteImportFormPageOf`): the plan's header button's
+  form page, else the first page the import read a form with fields on, or that
+  saved one (`formPage` on the page's document). Never the page itself; where no
+  page holds a form, the link is refused, and a refused link's message names
+  only the destinations the page has (`aiSiteImportLinkKinds`). The
   honesty scope adds the plan's words, the site's picture alt text, the site's
   name as a visitor says it (`aiSiteImportNameVariants`), the role's own words
   as vocabulary (said, naming and claiming nothing), every word by its stem, and

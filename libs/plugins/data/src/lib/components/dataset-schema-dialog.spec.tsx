@@ -562,6 +562,43 @@ describe('DatasetSchemaDialog shares with all sites except some (AGL-4047)', () 
     expect(screen.getByRole('button', { name: 'Save schema' })).toBeTruthy()
   })
 
+  /*
+   * The schema is written before the route answers for the sharing, so a
+   * refused sharing change still brings a fresh dataset from the listener.
+   * Production check 11/10 (AGL-4047): seeding from it put the choice back on
+   * the stored sharing while the refusal was said.
+   */
+  it('keeps the refused choice when the saved dataset comes back, and follows a real move', async () => {
+    mockFetch.mockResolvedValue({ ok: false, json: async () => ({ error: 'Not yours to share.' }) })
+    const dialog = (stored: Record<string, unknown>) => (
+      <DatasetSchemaDialog
+        orgId="org-1"
+        dataset={{ ...dataset, ...stored } as never}
+        datasets={[]}
+        recordCount={0}
+        seedFromCache={false}
+        onClose={jest.fn()}
+      />
+    )
+    const view = render(dialog({ visibleTo: ['org'] }))
+
+    fireEvent.click(exceptRadio())
+    fireEvent.click(screen.getByRole('checkbox', { name: 'Site 2' }))
+    fireEvent.click(screen.getByRole('button', { name: 'Save schema' }))
+    await settle()
+    expect(mockFetch).toHaveBeenCalledTimes(1)
+
+    // The listener's fresh copy of the same stored sharing.
+    view.rerender(dialog({ visibleTo: ['org'] }))
+    expect(exceptRadio().checked).toBe(true)
+    expect((screen.getByRole('checkbox', { name: 'Site 2' }) as HTMLInputElement).checked).toBe(true)
+
+    // Someone else changed the stored sharing: the dialog shows it.
+    view.rerender(dialog({ visibleTo: ['host:h3'] }))
+    expect((screen.getByRole('radio', { name: /^Selected sites/ }) as HTMLInputElement).checked).toBe(true)
+    expect((screen.getByRole('checkbox', { name: 'Site 3' }) as HTMLInputElement).checked).toBe(true)
+  })
+
   it('a member who can only change the sharing writes no schema', async () => {
     render(
       <DatasetSchemaDialog

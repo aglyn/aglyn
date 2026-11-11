@@ -25,7 +25,8 @@ their own, so you never copy a review by hand again.
   below).
 
 Only real reviews are shown. Until your site is connected, the elements show
-nothing to visitors.
+nothing to visitors. Before your first Google review, only the **Review us on
+Google** link shows.
 
 ## Before you start
 

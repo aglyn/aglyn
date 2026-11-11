@@ -80,11 +80,21 @@ const reviewerImage = () => ({
   },
 })
 
-/** The rating summary: "4.8 ★★★★★ 44 reviews on Google". */
+/**
+ * The rating summary: "4.8 ★★★★★ 44 reviews on Google". A profile Google
+ * gives no rating (no reviews yet) shows no summary at all, never empty stars
+ * and "reviews on Google" without a number.
+ */
 export const summaryNode = () =>
   node(
     'muiStack',
-    { direction: 'row', spacing: 1.5, repeatConnection: SUMMARY_SOURCE, repeatSelf: true },
+    {
+      direction: 'row',
+      spacing: 1.5,
+      repeatConnection: SUMMARY_SOURCE,
+      repeatSelf: true,
+      hideUnless: '{{item.rating}}',
+    },
     {
       sx: { alignItems: 'center', flexWrap: 'wrap', rowGap: 1 },
       nodes: [
@@ -203,7 +213,9 @@ export const footerNode = () =>
     {
       sx: { alignItems: 'center', justifyContent: 'space-between', flexWrap: 'wrap', rowGap: 1 },
       nodes: [
-        text('caption', 'Reviews from Google', { sx: { color: 'text.secondary' } }),
+        // Says where the reviews come from, so only when there are some. The
+        // link stays: it is how a profile with none gets its first.
+        text('caption', 'Reviews from Google', { sx: { color: 'text.secondary' }, hideUnless: '{{item.reviewCount}}' }),
         reviewLinkNode(),
       ],
     },

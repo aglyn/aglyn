@@ -150,7 +150,8 @@ func datasetsQuery(_ orgID: String, scopeTokens: [String]?) -> FirestoreQuery {
   FirestoreQuery(
     datasetsPath(orgID),
     filters: scopeTokens.map { [ListQueryConstraint(path: "visibleTo", op: .arrayContainsAny, value: $0)] } ?? [],
-    limit: datasetsLimit)
+    // So the server's confirmation of an empty list reaches the screen, which says "none" only then (AGL-4047).
+    limit: datasetsLimit, includeMetadataChanges: true)
 }
 
 /// The quick search's words, as the grid splits what was typed.

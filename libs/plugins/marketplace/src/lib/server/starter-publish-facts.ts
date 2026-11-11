@@ -22,6 +22,7 @@ import { siteStarterBuiltinThemeOf } from '@aglyn/aglyn/app-utils/site-starter-t
 import { checkEntitlement, type PluginApiHandler } from '@aglyn/aglyn/server'
 import { firebaseAdmin, getOrgForHost, isServerReleaseFlagOnForOrg } from '@aglyn/tenant-data-admin'
 import { isRefusedIdToken } from '@aglyn/tenant-data-admin/server/id-token-refusal'
+import { paymentProvider } from '@aglyn/tenant-data-admin/server/payment-provider'
 import { resolveOrgPermissions } from '@aglyn/tenant-runtime/org-permissions'
 import type { DecodedIdToken } from 'firebase-admin/auth'
 import { starterPublishFactsAnswer, starterPublishPages } from '../model/starter-publish'
@@ -118,6 +119,9 @@ export const starterPublishFactsHandler: PluginApiHandler = async (req, res) => 
         profile: profile.exists ? (profile.data() as Record<string, unknown>) : null,
         pages,
         sellsAsPlatform: publisher?.sellsAsPlatform === true,
+        // The door's own mode, so a payout account in the other Stripe mode
+        // is named as the step in the way (AGL-2471).
+        platformMode: paymentProvider().platformMode(),
         // The apps fix each step on a screen of their own.
         marketplacePath: null,
         pagesPath: null,

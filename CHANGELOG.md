@@ -9,6 +9,29 @@ content on the marketing site and is written separately.
 
 <!-- releases below -->
 
+## v1.20.2 — 2026-11-11
+
+[Compare with the previous release](https://github.com/aglyn/aglyn/compare/5c50d2ed7...v1.20.2)
+
+### Fixed
+
+- **ai:** a redesign's link to form on a page with no form goes to the site's form page ([AGL-4152](https://linear.app/aglyn/issue/AGL-4152))
+- **ai:** a refused redesign link names only the destinations its page has ([AGL-4152](https://linear.app/aglyn/issue/AGL-4152))
+- **google-reviews:** a profile with no reviews shows only the review link ([AGL-4212](https://linear.app/aglyn/issue/AGL-4212))
+- **console:** visible tab asks a background cache holder at boot ([AGL-4204](https://linear.app/aglyn/issue/AGL-4204))
+- **data:** the Data page shows loading, not the empty state, until the server answers ([AGL-4047](https://linear.app/aglyn/issue/AGL-4047))
+- **marketing:** a refused campaign create keeps the sharing chosen, reason beside it ([AGL-4047](https://linear.app/aglyn/issue/AGL-4047))
+- **marketplace:** install-picture read phase and switched-off sites in the list caption ([AGL-4047](https://linear.app/aglyn/issue/AGL-4047))
+- **console:** a plugin's page says loading, never "not installed", while its pins load ([AGL-4047](https://linear.app/aglyn/issue/AGL-4047))
+- **marketplace:** the listing reads the org pin under the hub's org, waits for pins ([AGL-4047](https://linear.app/aglyn/issue/AGL-4047))
+- **console:** the Plugins list names a site that switched a plugin off ([AGL-4047](https://linear.app/aglyn/issue/AGL-4047))
+- **native:** plugin pages and Data wait for the server before saying none
+- **commerce:** a test Stripe account on a live store reads as not ready, and Set up payments replaces it with a live one ([AGL-2471](https://linear.app/aglyn/issue/AGL-2471))
+
+### Performance
+
+- **marketplace:** load a plugin review's detail page lazily ([AGL-4047](https://linear.app/aglyn/issue/AGL-4047))
+
 ## v1.20.1 — 2026-11-09
 
 [Compare with the previous release](https://github.com/aglyn/aglyn/compare/v1.20.0...v1.20.1)
