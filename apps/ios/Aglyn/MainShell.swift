@@ -539,8 +539,8 @@ struct ShellFrame<Content: View>: View {
       .onChange(of: model.workspace?.site?.id, initial: true) { _, hostID in
         guard navigation.front else { return }
         navigation.siteInScope = hostID
-        navigation.openSite = { [weak model] hostID in
-          guard let workspace = model?.workspace, workspace.sites.contains(where: { $0.id == hostID }) else { return false }
+        navigation.openSite = { [model] hostID in
+          guard let workspace = model.workspace, workspace.sites.contains(where: { $0.id == hostID }) else { return false }
           workspace.selectSite(hostID)
           return true
         }
