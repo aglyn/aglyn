@@ -129,6 +129,8 @@ struct CheckoutView: View {
       .accessibilityIdentifier("declined-take-another-way")
     }
     .task { model.watchReceipt(orderID: checkout.opened.orderID) }
+    // Put away with it, so the paid receipt later reads the sale afresh.
+    .onDisappear { model.stopWatchingReceipt() }
   }
 
   private var cardForm: Binding<CardFormSession?> {
