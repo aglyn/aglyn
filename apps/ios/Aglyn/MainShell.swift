@@ -78,6 +78,9 @@ struct ShellTabs: View {
       }
       .animation(AglynShellMotion.swap, value: current.tabID)
       .focusedSceneValue(\.shellNavigation, current)
+      // A link from outside opens in the tab in front (`linkTarget`). Set on the strip the window keeps: `init` runs on
+      // every redraw, and a strip made there is thrown away.
+      .onAppear { [strip] in strip.tabs.first?.tabInFront = { [weak strip] in strip?.current } }
     }
     // The search's dropdown, under the title bar's field and over everything else (P3).
     .modifier(OneBoxOverlay(navigation: current))
@@ -1309,9 +1312,15 @@ struct PhoneShell: View {
         UserDefaults.standard.set(false, forKey: "aglyn.phone.pinTipSeen")
       }
     #endif
-    // An area taken out of the tab bar (here or on another device) while it was in front: back to Home.
+    // An area taken out of the tab bar while it was in front goes back to Home. A screen pushed on it stays on show,
+    // under Home: a link that picks another site pushes its screen, then that site's tab bar replaces this one, and
+    // the screen was left on a tab no longer there (the link only opened the site).
     .onChange(of: tabs.map(\.section)) { _, sections in
-      if !sections.contains(navigation.section) { navigation.section = .home }
+      let old = navigation.section
+      guard !sections.contains(old) else { return }
+      let carried = navigation.paths[old] ?? []
+      navigation.section = .home
+      if !carried.isEmpty { navigation.paths[.home] = carried }
     }
   }
 }

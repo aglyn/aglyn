@@ -18,6 +18,9 @@ struct RootView<Shell: View>: View {
 
   @State private var intro = AglynLaunchIntro()
   @Environment(\.accessibilityReduceMotion) private var reduceMotion
+  #if os(macOS)
+    @Environment(\.controlActiveState) private var controlActiveState
+  #endif
 
   /// What the window shows once the app knows: each stage decides whether the Facets ground stays behind it.
   private enum Stage { case configProblem, device, waiting, signedOut, verify, shell }
@@ -85,15 +88,24 @@ struct RootView<Shell: View>: View {
     .onOpenURL { url in
       // A sign-up, sign-in, reset or verification link opens its own screen; any other link the signed-in shell.
       let signedIn = model.auth?.user != nil
+      let target = navigation.linkTarget
       if model.authFlow.open(url.absoluteString, signedIn: signedIn, onPlan: { plan in
-        if let slug = model.workspace?.org?.slug { model.open(plan.destination(orgSlug: slug), in: navigation) }
+        if let slug = model.workspace?.org?.slug { model.open(plan.destination(orgSlug: slug), in: target) }
       }) {
         if model.auth?.user?.emailVerified == true { model.authFlow.pendingVerificationCode = nil }
         return
       }
-      model.open(url.absoluteString, in: navigation)
+      model.open(url.absoluteString, in: target)
     }
+    // A link from outside the app (a browser, Mail, another app) opens in the window already open, in its tab in
+    // front (`linkTarget`), instead of a new window for each link: SwiftUI makes a window per link unless one says it
+    // takes them. With none open, the scene still opens one.
+    .handlesExternalEvents(preferring: ["*"], allowing: ["*"])
     .onChange(of: model.push.pendingLink) { openPendingPush() }
+    #if os(macOS)
+      // A tapped push waits for the key window: every window watches it, and one behind took it first.
+      .onChange(of: controlActiveState) { openPendingPush() }
+    #endif
     .task { await DebugLaunch.autoSignIn(model) }
   }
 
@@ -157,9 +169,13 @@ struct RootView<Shell: View>: View {
     }
   }
 
-  /// A tapped push's link, opened once someone is signed in.
+  /// A tapped push's link, opened once someone is signed in, in the tab in front (on the Mac, of the key window).
   private func openPendingPush() {
     guard let link = model.push.pendingLink, model.auth?.user != nil else { return }
+    #if os(macOS)
+      guard controlActiveState == .key else { return }
+    #endif
+    let navigation = navigation.linkTarget
     let (orgID, hostID, uid) = (model.push.pendingOrgID, model.push.pendingHostID, model.push.pendingUID)
     model.push.pendingLink = nil
     model.push.pendingOrgID = nil
