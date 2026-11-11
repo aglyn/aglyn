@@ -4385,6 +4385,9 @@ export function MediaLibraryComponent(props: MediaLibraryComponentProps) {
           onCreate={handleFolderCreate}
           onRename={handleFolderRename}
           onDelete={handleFolderDelete}
+          // The same dialog and the same gate as the folder card's Shared
+          // with… below, so the tree and the grid never disagree (AGL-4047).
+          onSetScope={canShareScope ? openFolderScope : undefined}
           readOnly={Boolean(onSelect)}
           writeHeld={mediaWriteHeld}
           writeRefusal={mediaWriteRefused ? mediaWriteReason : undefined}
