@@ -23,6 +23,7 @@ import { firebaseAdmin } from '@aglyn/tenant-data-admin'
 import { isDocumentId } from '@aglyn/tenant-data-admin/server/document-id'
 import { cartCookieName, mintCartId, readCartId } from './cart-cookie'
 import { readStoreDay } from './store-day'
+import { planCheckoutShippingWithCarriers } from './carrier-shipping'
 
 export interface ResolvedCartLine extends CommerceModel.CartLine {
   name: string
@@ -282,14 +283,76 @@ export const cartHandler: PluginApiHandler = async (req, res) => {
     const hardwareTerms =
       sellerHostId === hostId &&
       cart.lines.some((line) => isPosHardwareSkuId(productsById.get(line.productId)?.hardwareSku))
+    // Where it is going, asked WITH the cart rather than after the first
+    // Checkout press: the same plan checkout makes, with no destination yet.
+    const askShippingCountry = await shippingCountryNeeded({
+      hostRef,
+      lines,
+      productsById,
+      subtotalCents,
+    })
     return res.status(200).json({
       lines,
       count: CommerceModel.cartCount(cart),
       subtotalCents,
       ...(hardwareTerms ? { hardwareTerms: true } : {}),
+      ...(askShippingCountry
+        ? {
+            needsShippingCountry: true,
+            shippingCountries: [...CommerceModel.CHECKOUT_SHIPPING_COUNTRIES],
+          }
+        : {}),
     })
   } catch (error) {
     console.error(error)
     return res.status(500).json({ error: 'Cart unavailable' })
+  }
+}
+
+/**
+ * Whether checkout will ask this cart where it is shipping to, answered while
+ * the cart is shown so the cart can ask up front. A shopper who pressed
+ * Checkout used to be refused with "Choose where you’re shipping to." and only
+ * then shown the field.
+ *
+ * The same plan `cart-checkout.ts` makes, with no destination, so the two
+ * cannot disagree: rates that differ by zone, or carrier rates, need one. A
+ * cart with nothing posted reads nothing more, and a store with one zone, a
+ * rest-of-world zone or no shipping at all is never asked. Checkout still asks
+ * and enforces the answer on its own; this only moves the question earlier.
+ */
+async function shippingCountryNeeded(input: {
+  hostRef: FirebaseFirestore.DocumentReference
+  lines: ResolvedCartLine[]
+  productsById: Map<string, CommerceModel.HostProduct | null>
+  subtotalCents: number
+}): Promise<boolean> {
+  let physical = false
+  let totalGrams = 0
+  for (const line of input.lines) {
+    if (line.unavailable) continue
+    const product = input.productsById.get(line.productId)
+    if (!product) continue
+    // A missing `type` reads as physical, as checkout reads it.
+    if ((product.type ?? 'physical') !== 'physical') continue
+    physical = true
+    const variant = line.variantId
+      ? product.variants.find((item) => item.id === line.variantId)
+      : product.variants[0]
+    totalGrams += Math.max(0, Number(variant?.weightGrams ?? 0)) * line.quantity
+  }
+  if (!physical) return false
+  try {
+    const storeSettings = await input.hostRef.collection('settings').doc('store').get()
+    const plan = await planCheckoutShippingWithCarriers({
+      hostId: input.hostRef.id,
+      settings: storeSettings.get('shipping') as CommerceModel.ShippingSettings | undefined,
+      cart: { subtotalCents: input.subtotalCents, totalGrams },
+      destination: {},
+    })
+    return plan.refusal === 'destination-required'
+  } catch {
+    // The cart still shows; checkout asks, as it always has.
+    return false
   }
 }
