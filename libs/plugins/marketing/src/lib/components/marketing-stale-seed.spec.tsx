@@ -195,6 +195,9 @@ beforeEach(() => {
   listener.status = 'success'
 })
 
+/** Long enough for a press that was going to write to have written. */
+const settle = () => new Promise((resolve) => setTimeout(resolve, 20))
+
 // This spec pins the refusal, not the wait before it (AGL-4120).
 beforeAll(() => setSeedConfirmWaitMs(0))
 afterAll(() => setSeedConfirmWaitMs())
@@ -208,20 +211,21 @@ describe('PopupCard (AGL-1358)', () => {
     fireEvent.click(screen.getByRole('button', { name: 'Save' }))
   }
 
-  it('REFUSES to rewrite the popup from an unconfirmed read', async () => {
+  it('HOLDS Save on the popup over an unconfirmed read, keeping what was typed', async () => {
     listener.fromCache = true
     render(<PopupCard hostId="host-1" org={ORG} />)
 
     editHeadlineAndSave()
-
-    // Settled, so this cannot pass merely by asserting too early.
-    await waitFor(() => expect(enqueueSnackbar).toHaveBeenCalled())
+    await settle()
+    // Held, not refused: nothing was pressed into the wait, and the reason
+    // sits beside the held control (AGL-4047).
+    expect(enqueueSnackbar).not.toHaveBeenCalled()
+    expect(screen.getAllByRole('status').map((note) => note.textContent)).toContain(
+      'Checking your popup with the server…',
+    )
     expect(updateDoc).not.toHaveBeenCalled()
     // …and no history entry claiming an update that never landed.
     expect(mockLogActivity).not.toHaveBeenCalled()
-    const [message] = enqueueSnackbar.mock.calls[0]
-    expect(message).toEqual(expect.stringContaining('popup'))
-    expect(message).toEqual(expect.stringMatching(/nothing was saved/i))
     // The form keeps what was typed, so the refusal is not a silent no-op.
     expect(
       (screen.getByLabelText('Headline') as HTMLInputElement).value,
@@ -240,6 +244,36 @@ describe('PopupCard (AGL-1358)', () => {
     // thing standing between a stale seed and the rest of it.
     expect(payload.popup.body).toBe('Ten percent off everything')
     expect(mockLogActivity).toHaveBeenCalledTimes(1)
+  })
+
+  /**
+   * The half that keeps the guard's protection while Save is held: the edit
+   * is replayed onto the popup the server confirms (AGL-4047).
+   */
+  it('saves the edit onto the popup the server confirms, on the first press', async () => {
+    listener.fromCache = true
+    const { rerender } = render(<PopupCard hostId="host-1" org={ORG} />)
+    fireEvent.change(screen.getByLabelText('Headline'), {
+      target: { value: 'Summer sale' },
+    })
+
+    // The body was changed elsewhere since the cached snapshot; a snapshot
+    // hands over a new object, as the listener does.
+    const before = hostDoc.popup
+    hostDoc.popup = { ...before, body: 'Twenty percent off everything' }
+    listener.fromCache = false
+    try {
+      rerender(<PopupCard hostId="host-1" org={ORG} />)
+      expect((screen.getByLabelText('Headline') as HTMLInputElement).value).toBe('Summer sale')
+      fireEvent.click(screen.getByRole('button', { name: 'Save' }))
+
+      await waitFor(() => expect(updateDoc).toHaveBeenCalledTimes(1))
+      const [, payload] = (updateDoc as jest.Mock).mock.calls[0]
+      expect(payload.popup.headline).toBe('Summer sale')
+      expect(payload.popup.body).toBe('Twenty percent off everything')
+    } finally {
+      hostDoc.popup = before
+    }
   })
 
   it('REFUSES when the host read failed, and says so differently', async () => {
@@ -264,18 +298,21 @@ describe('AnnouncementBarCard (AGL-1358)', () => {
     fireEvent.click(screen.getByRole('button', { name: 'Save' }))
   }
 
-  it('REFUSES to rewrite the bar from an unconfirmed read', async () => {
+  it('HOLDS Save on the bar over an unconfirmed read, keeping what was typed', async () => {
     listener.fromCache = true
     render(<AnnouncementBarCard hostId="host-1" org={ORG} />)
 
     editTextAndSave()
 
-    await waitFor(() => expect(enqueueSnackbar).toHaveBeenCalled())
+    await settle()
+    // Held, not refused: nothing was pressed into the wait, and the reason
+    // sits beside the held control (AGL-4047).
+    expect(enqueueSnackbar).not.toHaveBeenCalled()
+    expect(screen.getAllByRole('status').map((note) => note.textContent)).toContain(
+      'Checking your announcement bar with the server…',
+    )
     expect(updateDoc).not.toHaveBeenCalled()
     expect(mockLogActivity).not.toHaveBeenCalled()
-    const [message] = enqueueSnackbar.mock.calls[0]
-    expect(message).toEqual(expect.stringContaining('announcement bar'))
-    expect(message).toEqual(expect.stringMatching(/nothing was saved/i))
     expect((screen.getByLabelText('Text') as HTMLInputElement).value).toEqual(
       'Free shipping all month',
     )
@@ -324,18 +361,21 @@ describe('HostExperimentsCard (AGL-1358)', () => {
     fireEvent.click(screen.getByRole('button', { name: 'Save' }))
   }
 
-  it('REFUSES to rewrite an experiment seeded from an unconfirmed read', async () => {
+  it('HOLDS Save on an experiment seeded from an unconfirmed read, keeping it open', async () => {
     listener.fromCache = true
     render(<HostExperimentsCard hostId="host-1" org={ORG} />)
 
     editFirstExperimentAndSave()
 
-    await waitFor(() => expect(enqueueSnackbar).toHaveBeenCalled())
+    await settle()
+    // Held, not refused: nothing was pressed into the wait, and the reason
+    // sits beside the held control (AGL-4047).
+    expect(enqueueSnackbar).not.toHaveBeenCalled()
+    expect(screen.getAllByRole('status').map((note) => note.textContent)).toContain(
+      'Checking your experiment with the server…',
+    )
     expect(setDoc).not.toHaveBeenCalled()
     expect(mockLogActivity).not.toHaveBeenCalled()
-    const [message] = enqueueSnackbar.mock.calls[0]
-    expect(message).toEqual(expect.stringContaining('experiment'))
-    expect(message).toEqual(expect.stringMatching(/nothing was saved/i))
     // The editor stays open with the row that was being edited.
     expect((screen.getByLabelText(/^Name/) as HTMLInputElement).value).toEqual(
       'Hero copy',
