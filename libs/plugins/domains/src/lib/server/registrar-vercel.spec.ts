@@ -111,6 +111,9 @@ describe("Vercel's registrar driver (AGL-3962)", () => {
       ok: 'yes',
       value: { owned: false, registeredAtMs: null, expiresAtMs: null, autoRenew: null },
     })
+    // A name another Vercel team has added answers 403, as the live API does.
+    fetchMock.mockResolvedValueOnce(respond(403, { error: { code: 'forbidden', message: 'You don’t have access to "d.com"' } }))
+    expect(await VERCEL_REGISTRAR.info('d.com')).toEqual({ ok: 'no', code: 'forbidden', retryable: false })
   })
 
   it('treats an empty contact schema as the standard contact', async () => {
