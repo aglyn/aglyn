@@ -202,8 +202,9 @@ struct BesignerScreen: View {
     .aglynScreenTitle("Besigner")
     #if os(iOS)
       // No native head (AGL-4056): the editor's own bars sit right under the status bar or the window chrome, and its
-      // own back control is the way out, so there is no system bar, no Done and no system back swipe (the web view's
-      // edge swipe presses that control instead).
+      // own back control is the way out. The stack hides the system bar and its back swipe for this route
+      // (`wideBarHidden(always:)`, outside this view, where it wins over the stack's own setting); here for a stack
+      // that sets none (POS). The web view's edge swipe presses that control.
       .toolbar(.hidden, for: .navigationBar)
       .navigationBarBackButtonHidden(true)
       // The editor takes the whole screen: on a phone the tab bar covered the bottom of its canvas.
