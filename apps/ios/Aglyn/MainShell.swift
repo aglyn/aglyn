@@ -221,8 +221,9 @@ struct ShellChrome: View {
           ) {
             withAnimation(.easeOut(duration: 0.2)) { navigation.railHidden.toggle() }
           }
-          TitleBarButton("Back", systemImage: "arrow.left", identifier: "titlebar-back") { navigation.goBack() }
-            .disabled(!navigation.canGoBack)
+          // Over the Besigner, Back presses the editor's own back control (AGL-4056).
+          TitleBarButton("Back", systemImage: "arrow.left", identifier: "titlebar-back") { navigation.back() }
+            .disabled(!navigation.canGoBackOrLeave)
           TitleBarButton("Forward", systemImage: "arrow.right", identifier: "titlebar-forward") { navigation.goForward() }
             .disabled(!navigation.canGoForward)
           RecentPlacesMenu()
@@ -713,7 +714,7 @@ struct ShellStack: View {
         .wideBarHidden()
         .aglynStackEntrance()
         .navigationDestination(for: Route.self) { route in
-          PushedScreen(section: section) {
+          PushedScreen(section: section, head: !route.isBesigner) {
             if case .area(let screen, let params) = route {
               AreaView(screen: screen, params: params, pushed: true)
             } else if case .modeList = route {
@@ -772,13 +773,15 @@ struct PushedScreen<Content: View>: View {
   let section: ShellSection
   /// Whether the head offers the way back (a pushed screen) or not (a section's own first screen).
   var back = true
+  /// Whether the screen has a head at all: the in-app Besigner has none, its own bars are its head (AGL-4056).
+  var head = true
   @ViewBuilder let content: () -> Content
 
   /// The head's height, kept clear above the screen.
   private var headHeight: CGFloat { back ? 92 : 70 }
 
   var body: some View {
-    if wide {
+    if wide && head {
       // The screen fills the area under its head, so the head stays at the top on a screen that draws less than the
       // window (the Besigner's loading state had the head centred around its spinner, AGL-4002).
       content()
