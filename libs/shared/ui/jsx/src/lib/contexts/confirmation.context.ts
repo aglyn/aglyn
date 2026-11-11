@@ -27,6 +27,13 @@ export type ConfirmationContextConfig = {
   dialogProps?: Partial<DialogProps>
   title?: JSX.Children
   description?: JSX.Children
+  /**
+   * Work the answer depends on, already running. The confirm button stays
+   * switched off until it settles, either way, so nobody confirms before the
+   * dialog has said what it is checking for (AGL-4047). The description says
+   * what it is waiting on; the cancel button is never held.
+   */
+  confirmationHeldUntil?: PromiseLike<unknown>
 }
 export type ConfirmFunctionOptions = ConfirmationContextConfig
 export type ConfirmFunction = <T>(

@@ -18,6 +18,7 @@
 import {
   ALL_EXCEPT_MEDIA_NOTE,
   limitAccessDescription,
+  limitAccessUsageOf,
   mediaSharingChoiceOf,
   mediaSharingKey,
   mediaSharingPreview,
@@ -96,8 +97,11 @@ describe('mediaSharingPreview', () => {
 })
 
 describe('limitAccessDescription', () => {
+  const found = (names: string[], everywhere = true) =>
+    ({ state: 'checked', names, everywhere }) as const
+
   it('names the sites that use the file and lose it', () => {
-    expect(limitAccessDescription({ names: ['bakery'], count: 1, allExcept: false })).toBe(
+    expect(limitAccessDescription({ usage: found(['bakery']), count: 1, allExcept: false })).toBe(
       'bakery uses this file and will stop rendering it. This does not delete anything.',
     )
   })
@@ -107,27 +111,98 @@ describe('limitAccessDescription', () => {
    * sites except some keeps loading anywhere, custom HTML on a site left out
    * included. The sentence must not promise otherwise.
    */
-  it('for all sites except some, says a link pasted into custom HTML keeps loading', () => {
-    const text = limitAccessDescription({ names: ['bakery', 'florist'], count: 3, allExcept: true })
+  it('says a pasted link keeps loading under All sites except', () => {
+    const text = limitAccessDescription({ usage: found(['bakery', 'florist']), count: 3, allExcept: true })
     expect(text).toContain('bakery, florist use these files')
     expect(text).toContain('pasted into custom HTML, which keeps loading')
     expect(text).not.toMatch(/will stop rendering/)
   })
 
-  it('says when nobody could check, either way', () => {
-    expect(limitAccessDescription({ names: null, count: 1, allExcept: false })).toMatch(/not checked/)
-    const except = limitAccessDescription({ names: null, count: 1, allExcept: true })
+  it('says it is checking while the check runs, and never that it was not checked (AGL-4047)', () => {
+    const text = limitAccessDescription({ usage: { state: 'checking' }, count: 1, allExcept: false })
+    expect(text).toBe('Checking which sites use this file… Any site losing access will stop rendering it.')
+    expect(text).not.toMatch(/not checked/)
+  })
+
+  it('says it was not checked only when the check failed, either way', () => {
+    expect(limitAccessDescription({ usage: { state: 'failed' }, count: 1, allExcept: false })).toMatch(/not checked/)
+    const except = limitAccessDescription({ usage: { state: 'failed' }, count: 1, allExcept: true })
     expect(except).toMatch(/not checked/)
     expect(except).toContain('keeps loading')
   })
 
-  it('says nothing breaks when no page there uses it', () => {
-    expect(limitAccessDescription({ names: [], count: 2, allExcept: true })).toBe(
-      'No page uses them yet, so nothing breaks today.',
+  it('says why too many files were not checked', () => {
+    expect(
+      limitAccessDescription({ usage: { state: 'tooMany', limit: 20 }, count: 25, allExcept: false }),
+    ).toBe(
+      'Current usage is not checked for more than 20 files at once. Any site losing access will stop rendering them.',
+    )
+  })
+
+  /**
+   * AGL-4047: a workspace with more sites than one scan reads got
+   * "Current usage was not checked" though the scan had answered.
+   */
+  it('says what a check of part of the workspace found, and that it was part', () => {
+    const named = limitAccessDescription({ usage: found(['bakery'], false), count: 1, allExcept: false })
+    expect(named).toBe(
+      'bakery uses this file and will stop rendering it. Not every site could be checked, so other ' +
+        'sites may use it too. This does not delete anything.',
+    )
+    const none = limitAccessDescription({ usage: found([], false), count: 1, allExcept: false })
+    expect(none).toMatch(/^No page checked on a site losing access uses it, but not every site could be checked\./)
+    for (const text of [named, none]) expect(text).not.toMatch(/not checked/)
+  })
+
+  it('says nothing breaks when no page on a site losing access uses it', () => {
+    expect(limitAccessDescription({ usage: found([]), count: 2, allExcept: true })).toBe(
+      'No page on a site losing access uses them, so nothing breaks today.',
     )
   })
 
   it('the note under the choice says the same about custom HTML', () => {
     expect(ALL_EXCEPT_MEDIA_NOTE).toContain('custom HTML keeps loading')
+  })
+})
+
+describe('limitAccessUsageOf (AGL-4047)', () => {
+  const next = ['host:keeps']
+  const item = (hostId: string | null, hostSubdomain = hostId) => ({ hostId, hostSubdomain })
+
+  it('names the sites that lose a file, once each, and not the ones that keep it', () => {
+    expect(
+      limitAccessUsageOf(
+        [
+          { coverage: 'full', items: [item('loses', 'bakery'), item('keeps', 'florist'), item(null)] },
+          { coverage: 'published', items: [item('loses', 'bakery')] },
+        ],
+        next,
+      ),
+    ).toEqual({ state: 'checked', names: ['bakery'], everywhere: true })
+  })
+
+  it('reads an answer that covered part of the workspace as checked, not as failed', () => {
+    expect(limitAccessUsageOf([{ coverage: 'partial', items: [item('loses', 'bakery')] }], next)).toEqual({
+      state: 'checked',
+      names: ['bakery'],
+      everywhere: false,
+    })
+    expect(limitAccessUsageOf([{ coverage: 'partial', items: [] }], next)).toEqual({
+      state: 'checked',
+      names: [],
+      everywhere: false,
+    })
+  })
+
+  it('keeps the answers it got when one scan of several failed', () => {
+    expect(limitAccessUsageOf([{ coverage: 'full', items: [item('loses', 'bakery')] }, null], next)).toEqual({
+      state: 'checked',
+      names: ['bakery'],
+      everywhere: false,
+    })
+  })
+
+  it('is failed only when no scan answered', () => {
+    expect(limitAccessUsageOf([null, null], next)).toEqual({ state: 'failed' })
   })
 })
