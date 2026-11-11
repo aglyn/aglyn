@@ -17,8 +17,16 @@
 'use client'
 
 import type { ConsoleStaffPageProps } from '@aglyn/aglyn'
-import PluginReviewDetail from './plugin-review-detail.component'
+import { CircularProgress } from '@mui/material'
+import { lazy, Suspense } from 'react'
 import PluginReviewsQueue from './plugin-reviews-queue.component'
+
+/**
+ * One submission under review loads when a reviewer opens it (AGL-4047): it
+ * is a staff page, and the marketplace plugin loads on every console screen
+ * whose zones it fills, so its weight sat in every workspace's first load.
+ */
+const PluginReviewDetail = lazy(() => import('./plugin-review-detail.component'))
 
 /**
  * The review queue, or one submission of it (AGL-3080).
@@ -35,12 +43,14 @@ import PluginReviewsQueue from './plugin-reviews-queue.component'
  */
 export function PluginReviewsSurface(props: ConsoleStaffPageProps) {
   return props.segments?.length ? (
-    <PluginReviewDetail
-      basePath={props.basePath}
-      segments={props.segments}
-      staffRole={props.staffRole}
-      staffPaths={props.staffPaths}
-    />
+    <Suspense fallback={<CircularProgress size={24} />}>
+      <PluginReviewDetail
+        basePath={props.basePath}
+        segments={props.segments}
+        staffRole={props.staffRole}
+        staffPaths={props.staffPaths}
+      />
+    </Suspense>
   ) : (
     <PluginReviewsQueue basePath={props.basePath} />
   )
