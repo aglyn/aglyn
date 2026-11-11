@@ -100,6 +100,26 @@ describe('Use our nameservers', () => {
     expect(screen.getByRole('button', { name: 'Use them' })).toBeTruthy()
   })
 
+  it('says a recent move is still spreading, without offering it again', async () => {
+    answers({ ...ELSEWHERE, moving: true })
+    render(<DnsRecordsSection orgId="org-1" domain="testbakery.com" />)
+    expect(await screen.findByText(/is moving to .*nameservers/)).toBeTruthy()
+    expect(moveButton()).toBeNull()
+  })
+
+  it('closes the dialog and reloads when the name is already ours', async () => {
+    answers(ELSEWHERE, { body: { error: 'already', code: 'already-ours' }, status: 409 })
+    render(<DnsRecordsSection orgId="org-1" domain="testbakery.com" />)
+    fireEvent.click(await screen.findByRole('button', { name: `Use ${PLATFORM_BRAND_NAME}’s nameservers` }))
+    const gets = () => mockFetch.mock.calls.filter(([, , init]) => (init as RequestInit | undefined)?.method !== 'POST')
+    expect(gets()).toHaveLength(1)
+    answers(OURS)
+    mockFetch.mockImplementationOnce(async () => json({ error: 'already', code: 'already-ours' }, 409))
+    fireEvent.click(await screen.findByRole('button', { name: 'Use them' }))
+    expect(await screen.findByRole('button', { name: 'Add record' })).toBeTruthy()
+    await waitFor(() => expect(screen.queryByRole('button', { name: 'Use them' })).toBeNull())
+  })
+
   it('never offers it for a name already on our nameservers', async () => {
     answers(OURS)
     render(<DnsRecordsSection orgId="org-1" domain="testbakery.com" />)

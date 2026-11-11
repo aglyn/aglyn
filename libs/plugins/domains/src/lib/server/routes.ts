@@ -770,6 +770,9 @@ async function siteServesOrRefuse(registration: DomainRegistrationDoc): Promise<
 
 const DNS_UNAVAILABLE = 'The registrar’s DNS didn’t answer just now. Try again in a minute.'
 
+/** How long a nameserver move reads as under way: the 48 hours the copy promises. */
+const NAMESERVER_MOVE_WINDOW_MS = 48 * 60 * 60 * 1000
+
 /**
  * GET: whose nameservers the name uses, and — when they are ours — its
  * records, each marked managed or editable. A name elsewhere has no editor:
@@ -793,7 +796,9 @@ export async function dnsRoute(request: Request): Promise<Response> {
   const siteConnected = await siteServesOrRefuse(registration)
   if (siteConnected instanceof Response) return siteConnected
   if (!nameservers.value.ours) {
-    return domainsJson({ ours: false, nameservers: nameservers.value.nameservers, siteConnected, records: [] })
+    const resetAtMs = registration.nameserversResetAtMs ?? null
+    const moving = resetAtMs !== null && Date.now() - resetAtMs < NAMESERVER_MOVE_WINDOW_MS
+    return domainsJson({ ours: false, nameservers: nameservers.value.nameservers, siteConnected, moving, records: [] })
   }
   const listed = await driver.listDnsRecords(registration.domain)
   if (listed.ok === 'no') return domainsError(503, DNS_UNAVAILABLE, { code: 'registrar-unavailable' })
@@ -815,7 +820,7 @@ export async function dnsRoute(request: Request): Promise<Response> {
  * kept at the provider it leaves stop applying; the owner was told so
  * before confirming, and adds what they need again in the editor.
  */
-async function useOurNameservers(
+async function moveToOurNameservers(
   actor: DomainsActor,
   registration: DomainRegistrationDoc,
   alreadyOurs: boolean,
@@ -827,6 +832,11 @@ async function useOurNameservers(
   }
   const changed = await platformEffects().driver.setNameservers(registration.domain, [])
   if (changed.ok === 'no') {
+    if (!changed.retryable) {
+      // A refusal of our own making (token, team scope, a name gone from the
+      // team) reads to the owner as the registrar's; say so to operators.
+      console.warn('domains: nameserver reset refused', registration.domain, changed.code)
+    }
     return domainsError(
       changed.retryable ? 503 : 409,
       changed.retryable
@@ -835,7 +845,11 @@ async function useOurNameservers(
       { code: changed.code },
     )
   }
-  await updateRegistration(registration.domain, {}, { event: 'nameservers-reset' })
+  await updateRegistration(
+    registration.domain,
+    { nameserversResetAtMs: Date.now() },
+    { event: 'nameservers-reset' },
+  )
   await logDomainActivity(actor, registration.domain, `Moved the DNS to ${PLATFORM_BRAND_NAME}’s nameservers`, null)
   return domainsJson({ ok: true })
 }
@@ -864,7 +878,7 @@ async function dnsWriteRoute(request: Request): Promise<Response> {
   const driver = platformEffects().driver
   const nameservers = await driver.nameservers(registration.domain)
   if (nameservers.ok === 'no') return domainsError(503, DNS_UNAVAILABLE, { code: 'registrar-unavailable' })
-  if (action === 'use-our-nameservers') return useOurNameservers(gate.actor, registration, nameservers.value.ours)
+  if (action === 'use-our-nameservers') return moveToOurNameservers(gate.actor, registration, nameservers.value.ours)
   if (!nameservers.value.ours) {
     return domainsError(409, 'This domain uses another provider’s nameservers, so its records are edited there.', {
       code: 'not-our-nameservers',

@@ -254,7 +254,13 @@ export function DnsRecordsSection(props: DnsRecordsSectionProps) {
       })
       void load()
     } catch (caught) {
-      setMoveError((caught as Error).message)
+      if (caught instanceof DomainsRequestError && caught.code === 'already-ours') {
+        // Another tab or admin got there first, or the move finished.
+        setConfirmingMove(false)
+        void load()
+      } else {
+        setMoveError((caught as Error).message)
+      }
     } finally {
       setBusy(false)
     }
@@ -265,13 +271,14 @@ export function DnsRecordsSection(props: DnsRecordsSectionProps) {
 
   if (!answer.ours) {
     const current = answer.nameservers.length ? answer.nameservers.join(', ') : 'another provider’s nameservers'
+    const moving = moved || Boolean(answer.moving)
     return (
       <Stack spacing={1.5}>
         <Stack direction="row" spacing={1} sx={{ alignItems: 'center', justifyContent: 'space-between' }}>
           <Typography variant="subtitle1" component="h3">
             {'DNS records'}
           </Typography>
-          {moved ? null : (
+          {moving ? null : (
             <Button
               size="small"
               variant="outlined"
@@ -284,7 +291,7 @@ export function DnsRecordsSection(props: DnsRecordsSectionProps) {
             </Button>
           )}
         </Stack>
-        {moved ? (
+        {moving ? (
           <Alert severity="success">
             {`${domain} is moving to ${PLATFORM_BRAND_NAME}’s nameservers. It can take up to 48 hours to reach everyone. Its records can be edited here once it has.`}
           </Alert>
@@ -307,7 +314,7 @@ export function DnsRecordsSection(props: DnsRecordsSectionProps) {
                 {`${domain} will stop using ${current}, and its DNS records will be kept and edited here instead.`}
               </Typography>
               <Alert severity="warning">
-                {'Records kept at your current DNS provider stop applying, such as email (MX) records or verifications for other services. Note the ones you need first, then add them again under DNS records here.'}
+                {'Records kept at your current DNS provider stop applying, such as email (MX) records or verifications for other services. Note the ones you need first, then add them again under DNS records here. Any records already kept here for this domain apply instead.'}
               </Alert>
               {answer.siteConnected ? (
                 <Typography variant="body2" color="text.secondary">

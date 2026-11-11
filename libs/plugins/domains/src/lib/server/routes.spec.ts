@@ -303,7 +303,7 @@ describe('DNS records', () => {
     driver.nameservers.mockResolvedValue(yes({ ours: false, nameservers: ['ns1.otherhost.example'], intended: [] }))
     const body = await (await dnsRoute(request('dns', undefined, '?orgId=org-1&domain=testbakery.com'))).json()
     // host-1 serves it by hand, so its address records stay protected.
-    expect(body).toEqual({ ours: false, nameservers: ['ns1.otherhost.example'], siteConnected: true, records: [] })
+    expect(body).toEqual({ ours: false, nameservers: ['ns1.otherhost.example'], siteConnected: true, moving: false, records: [] })
     expect(driver.listDnsRecords).not.toHaveBeenCalled()
     const write = await dnsRoute(
       request('dns', { orgId: 'org-1', domain: 'testbakery.com', action: 'create', record: { type: 'TXT', name: '', value: 'x' } }),
@@ -324,6 +324,16 @@ describe('DNS records', () => {
     // An empty list is the registrar's own nameservers.
     expect(driver.setNameservers).toHaveBeenCalledWith('testbakery.com', [])
     expect((await readRegistration('testbakery.com'))?.history.at(-1)).toMatchObject({ event: 'nameservers-reset' })
+    // Until the registry's answer catches up, the section reads "moving", not the offer again.
+    const after = await (await dnsRoute(request('dns', undefined, '?orgId=org-1&domain=testbakery.com'))).json()
+    expect(after).toMatchObject({ ours: false, moving: true })
+  })
+
+  it('reads a move older than 48 hours as finished trying', async () => {
+    await seed(registration({ nameserversResetAtMs: Date.now() - 49 * 60 * 60 * 1000 }))
+    driver.nameservers.mockResolvedValue(yes({ ours: false, nameservers: ['ns1.otherhost.example'], intended: [] }))
+    const body = await (await dnsRoute(request('dns', undefined, '?orgId=org-1&domain=testbakery.com'))).json()
+    expect(body.moving).toBe(false)
   })
 
   it('leaves a name already on our nameservers alone, and reports a refused change', async () => {
@@ -335,9 +345,14 @@ describe('DNS records', () => {
     expect(driver.setNameservers).not.toHaveBeenCalled()
     driver.nameservers.mockResolvedValue(yes({ ours: false, nameservers: ['ns1.otherhost.example'], intended: [] }))
     driver.setNameservers.mockResolvedValue({ ok: 'no', code: 'domain_locked', retryable: false })
+    const before = (await readRegistration('testbakery.com'))?.history.length
     const refused = await dnsRoute(request('dns', body))
     expect(refused.status).toBe(409)
     expect(await refused.json()).toMatchObject({ code: 'domain_locked' })
+    // "Nothing was changed": no reset recorded.
+    const unchanged = await readRegistration('testbakery.com')
+    expect(unchanged?.history.length).toBe(before)
+    expect(unchanged?.nameserversResetAtMs ?? null).toBeNull()
     driver.setNameservers.mockResolvedValue({ ok: 'no', code: 'http_503', retryable: true })
     expect((await dnsRoute(request('dns', body))).status).toBe(503)
   })
