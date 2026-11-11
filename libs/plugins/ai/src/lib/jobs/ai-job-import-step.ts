@@ -822,12 +822,22 @@ export function aiSiteImportWaveLines(state: AiSiteImportState, page: AiSiteImpo
   return out
 }
 
+/**
+ * The draft id of the site's page that holds a form (AGL-4152): one whose read
+ * has a form with fields, or, its read emptied once it is in, a form it saved.
+ */
+export function aiSiteImportFormPageId(state: Pick<AiSiteImportState, 'pages'>): string | null {
+  const holds = (page: AiSiteImportPage) => !!page.read?.forms?.some((form) => form.fields.length) || !!page.forms?.some((form) => form.formId)
+  return state.pages.find((page) => !page.refused && holds(page))?.draftId ?? null
+}
+
 /** The page brought in, as its page job carries it: its lines, its photos, and the pages its links may go to (AGL-4084). */
 export function aiSiteImportDocumentFor(state: AiSiteImportState, page: AiSiteImportPage): AiSiteImportDocument | null {
   const blocks = page.read?.blocks
   if (!blocks?.length) return null
   // How the page's wave finishes it, as stamped when the wave started (AGL-4152).
   const wave = state.waves.find((entry) => entry.index === page.wave)
+  const formPage = aiSiteImportFormPageId(state)
   return {
     build: page.build ?? aiSiteImportBuildOf(page),
     finish: wave ? aiSiteImportWaveChoice(state, wave).finish : 'keep',
@@ -841,6 +851,8 @@ export function aiSiteImportDocumentFor(state: AiSiteImportState, page: AiSiteIm
           siteLines: aiSiteImportSiteLines(state),
           scope: aiSiteImportWaveLines(state, page),
           ...(state.plan ? { plan: state.plan } : {}),
+          // The page that holds the site's form, where a link to form goes from a page with none (AGL-4152).
+          ...(formPage ? { formPage } : {}),
           ...(state.look?.drawn ? { theme: state.look.drawn } : {}),
           // A page new to the site, and what its slots may take (AGL-4152).
           ...(page.origin === 'proposed' ? { proposed: true as const } : {}),
