@@ -252,3 +252,67 @@ describe('the font control (AGL-3656)', () => {
     expect(onSave).toHaveBeenCalledWith({ spacing: 6, typography: { fontFamily: '"Lora", serif' } })
   })
 })
+
+/**
+ * The first press is never refused for a late server (AGL-4047). While the
+ * host document is the cache's, Save is held with the reason beside it, and
+ * the server's copy arriving replays the edits onto it rather than dropping
+ * them: a path the author changed keeps their value, every other path follows
+ * the stored theme.
+ */
+describe('Save while the stored theme is unconfirmed (AGL-4047)', () => {
+  const editNavHeight = () =>
+    fireEvent.change(screen.getByRole('spinbutton', { name: 'Nav height, mobile (px)' }), {
+      target: { value: '60' },
+    })
+
+  it('holds Save, with the reason beside it, and keeps the edit', () => {
+    const onSave = jest.fn()
+    render(
+      <ThemeEditor
+        theme={{}}
+        onSave={onSave}
+        checkingText="Checking your theme with the server…"
+      />,
+    )
+    // Nothing typed, nothing to explain.
+    expect(screen.queryByRole('status')).toBeNull()
+    editNavHeight()
+
+    const save = screen.getByRole('button', { name: 'Save' }) as HTMLButtonElement
+    expect(save.disabled).toBe(true)
+    expect(screen.getByRole('status').textContent).toBe(
+      'Checking your theme with the server…',
+    )
+    fireEvent.click(save)
+    expect(onSave).not.toHaveBeenCalled()
+  })
+
+  it('replays the edit onto the server’s theme, and saves both on the first press', () => {
+    const onSave = jest.fn()
+    const { rerender } = render(
+      <ThemeEditor
+        theme={{ spacing: 8 }}
+        onSave={onSave}
+        checkingText="Checking your theme with the server…"
+      />,
+    )
+    editNavHeight()
+
+    // The server answers, and its copy differs: the spacing was changed
+    // elsewhere since the cached snapshot.
+    rerender(<ThemeEditor theme={{ spacing: 4 }} onSave={onSave} />)
+
+    expect(
+      (screen.getByRole('spinbutton', { name: 'Nav height, mobile (px)' }) as HTMLInputElement)
+        .value,
+    ).toBe('60')
+    expect(screen.queryByRole('status')).toBeNull()
+    fireEvent.click(screen.getByRole('button', { name: 'Save' }))
+    expect(onSave).toHaveBeenCalledTimes(1)
+    const [saved] = onSave.mock.calls[0]
+    expect(saved.mixins.toolbar.minHeight).toBe('60px')
+    // The server's spacing, not the cache's.
+    expect(saved.spacing).toBe(4)
+  })
+})

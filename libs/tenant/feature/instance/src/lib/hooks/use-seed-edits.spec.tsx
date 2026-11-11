@@ -26,6 +26,7 @@ import {
   isSeedChecking,
   seedCheckingText,
   useSeedEdits,
+  rebaseSeedEdits,
 } from './use-seed-edits'
 
 type Form = { name: string; phone: string; city: string }
@@ -138,5 +139,34 @@ describe('the hold beside Save (AGL-4047)', () => {
     expect(seedCheckingText('site settings')).toBe(
       'Checking your site settings with the server…',
     )
+  })
+})
+
+/**
+ * The same rule for a form that seeds its own buffer once (AGL-4047): a newer
+ * seed is replayed under the edits instead of being ignored.
+ */
+describe('rebaseSeedEdits (AGL-4047)', () => {
+  const cached = { title: 'Hello', seoTitle: 'Hello — Acme', tags: ['a'] }
+
+  it('keeps what was changed and takes the new seed for the rest', () => {
+    const typed = { ...cached, title: 'Hello again' }
+    const confirmed = { title: 'Hello', seoTitle: 'Hi — Acme', tags: ['a', 'b'] }
+    expect(rebaseSeedEdits(cached, typed, confirmed)).toEqual({
+      title: 'Hello again',
+      seoTitle: 'Hi — Acme',
+      tags: ['a', 'b'],
+    })
+  })
+
+  it('compares by content, so a rebuilt but equal value counts as untouched', () => {
+    const rebuilt = { ...cached, tags: ['a'] }
+    const confirmed = { ...cached, tags: ['c'] }
+    expect(rebaseSeedEdits(cached, rebuilt, confirmed).tags).toEqual(['c'])
+  })
+
+  it('is the new seed when nothing was changed', () => {
+    const confirmed = { title: 'Bye', seoTitle: '', tags: [] as string[] }
+    expect(rebaseSeedEdits(cached, { ...cached }, confirmed)).toEqual(confirmed)
   })
 })
