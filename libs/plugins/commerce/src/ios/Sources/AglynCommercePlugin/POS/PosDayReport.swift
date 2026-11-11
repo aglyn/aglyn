@@ -118,7 +118,7 @@ struct PosDayNotSynced: Equatable {
 }
 
 /// The line under a day report's title: whose registers, and which days (Figma 341:13731, 343:43796):
-/// "Juniper Street Bakery · every register · Today, Oct 25, 2026"; the site is left out while it is not known.
+/// "Acme Bakery · every register · Today, Oct 25, 2026"; the site is left out while it is not known.
 func posDayReportByline(site: String?, days: String?) -> String {
   [site, "every register", days].compactMap { $0?.isEmpty == false ? $0 : nil }.joined(separator: " · ")
 }

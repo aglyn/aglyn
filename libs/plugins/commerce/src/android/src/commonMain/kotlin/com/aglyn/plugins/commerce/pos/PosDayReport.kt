@@ -105,7 +105,7 @@ data class PosDayNotSynced(val cashCount: Int, val cashCents: Long, val cardCoun
 
 /**
  * The line under a day report's title: whose registers, and which days (Figma 341:13731, 180:26616):
- * "Juniper Street Bakery · every register · Today, Oct 25, 2026"; the site is left out while it is not known.
+ * "Acme Bakery · every register · Today, Oct 25, 2026"; the site is left out while it is not known.
  */
 fun posDayReportByline(site: String?, days: String?): String =
   listOf(site, "every register", days).filter { !it.isNullOrEmpty() }.joinToString(" · ")

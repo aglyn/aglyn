@@ -52,8 +52,8 @@ final class OrdersReportsTests: XCTestCase {
   /// The Day report's line under its title (Figma 341:13731): the site, every register, the days as dates.
   func testTheDayReportsLineNamesTheSiteEveryRegisterAndTheDays() {
     XCTAssertEqual(
-      posDayReportByline(site: "Juniper", days: posDayRangeTitle(from: "2026-10-25", to: "2026-10-25", today: "2026-10-25")),
-      "Juniper · every register · Today, Oct 25, 2026")
+      posDayReportByline(site: "Acme Bakery", days: posDayRangeTitle(from: "2026-10-25", to: "2026-10-25", today: "2026-10-25")),
+      "Acme Bakery · every register · Today, Oct 25, 2026")
     XCTAssertEqual(posDayReportByline(site: "", days: nil), "every register")
   }
 

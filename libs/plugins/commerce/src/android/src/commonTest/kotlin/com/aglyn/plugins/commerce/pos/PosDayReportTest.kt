@@ -68,7 +68,7 @@ class PosDayReportTest {
 
   @Test
   fun theBylineNamesTheSiteEveryRegisterAndTheDays() {
-    assertEquals("Juniper · every register · Today, Oct 25, 2026", posDayReportByline("Juniper", "Today, Oct 25, 2026"))
+    assertEquals("Acme Bakery · every register · Today, Oct 25, 2026", posDayReportByline("Acme Bakery", "Today, Oct 25, 2026"))
     assertEquals("every register", posDayReportByline(null, null))
   }
 
