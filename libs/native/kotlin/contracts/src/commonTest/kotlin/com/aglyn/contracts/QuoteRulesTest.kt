@@ -41,6 +41,10 @@ class QuoteRulesTest {
   fun eachReadinessStateHasTheConsolesSentence() {
     assertEquals("Connect Stripe to take card payments.", merchantPaymentsBlockedReason("not-connected"))
     assertEquals("Reconnect Stripe to take card payments: the connected account has not been confirmed for live payments.", merchantPaymentsBlockedReason("mode-unverified"))
+    assertEquals(
+      "Set up payments to take card payments: the connected Stripe account is a test account, and live payments need a live one.",
+      merchantPaymentsBlockedReason("mode-mismatch"),
+    )
     assertNull(merchantPaymentsBlockedReason("ready"))
   }
 
