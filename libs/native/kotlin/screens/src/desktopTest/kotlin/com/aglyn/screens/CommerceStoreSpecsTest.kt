@@ -218,21 +218,34 @@ class CommerceStoreSpecsTest : SpecTestBase() {
 
   // ---- payments ----------------------------------------------------------------------------------------------------
 
-  private fun payments(profile: String, plan: String = "null") = model("commerce.payments", """{"profile":$profile,"plan":$plan}""")
+  private fun payments(profile: String, plan: String = "null", readiness: String? = null) =
+    model("commerce.payments", """{"profile":$profile,"plan":$plan,"readiness":${readiness?.let { """{"state":"$it"}""" } ?: "null"}}""")
 
   private fun rows(model: ScreenModel, block: String) = model.block(block).raw.jsonObject["rows"]!!.jsonArray.map { it.jsonObject }
     .filter { ScreenValues.condition((it["when"] as? JsonPrimitive)?.content, model.context) }.map { ScreenValues.render((it["value"] as JsonPrimitive).content, model.context) }
 
   @Test
   fun paymentsNameTheAccountsStateAndOfferTheMoveThatFitsIt() {
-    assertEquals(listOf("Charges enabled"), rows(payments("""{"stripeChargesEnabled":true,"stripeAccountLivemode":true}"""), "account"))
-    assertEquals(listOf("Charges enabled"), rows(payments("""{"stripeChargesEnabled":true,"stripeAccountLivemode":false}"""), "account"), "test mode is still a verified mode")
-    assertEquals(listOf("Not verified"), rows(payments("""{"stripeChargesEnabled":true}"""), "account"))
-    assertEquals(listOf("Not set up"), rows(payments("null"), "account"))
-    fun offered(profile: String) = payments(profile).let { m -> m.actionsShown("connect") }
-    assertEquals(listOf("setup"), offered("""{}"""))
-    assertEquals(listOf("setup"), offered("""{"stripeChargesEnabled":true}"""), "an unverified account sets up again")
-    assertEquals(listOf("refresh", "payouts"), offered("""{"stripeChargesEnabled":true,"stripeAccountLivemode":true}"""))
+    // The chip is the server's verdict (`payments-readiness`), which knows the deployment's Stripe mode (AGL-2471).
+    val live = """{"stripeAccountId":"acct_1","stripeChargesEnabled":true,"stripeAccountLivemode":true}"""
+    val test = """{"stripeAccountId":"acct_1","stripeChargesEnabled":true,"stripeAccountLivemode":false}"""
+    assertEquals(listOf("Charges enabled"), rows(payments(live, readiness = "ready"), "account"))
+    val mismatch = payments(test, readiness = "mode-mismatch")
+    assertEquals(listOf("Test account"), rows(mismatch, "account"), "a test account on a live store is not ready")
+    assertTrue("testAccount" in mismatch.shown() && "liveAccount" !in mismatch.shown())
+    assertEquals(listOf("Live account"), rows(payments(live, readiness = "mode-mismatch"), "account"))
+    assertEquals(listOf("Not verified"), rows(payments("""{"stripeChargesEnabled":true}""", readiness = "mode-unverified"), "account"))
+    assertEquals(listOf("Not set up"), rows(payments("null", readiness = "not-connected"), "account"))
+    assertEquals(listOf("Not set up"), rows(payments("""{"stripeAccountId":"acct_1"}""", readiness = "charges-disabled"), "account"))
+    // Unreadable: no chip, and a notice that says so, never "Charges enabled" or "Not set up" on a guess.
+    val unread = payments(live)
+    assertEquals(emptyList(), rows(unread, "account"))
+    assertTrue("unreadable" in unread.shown())
+    fun offered(profile: String, readiness: String?) = payments(profile, readiness = readiness).let { m -> m.actionsShown("connect") }
+    assertEquals(listOf("setup"), offered("""{}""", "not-connected"))
+    assertEquals(listOf("setup"), offered("""{"stripeChargesEnabled":true}""", "mode-unverified"), "an unverified account sets up again")
+    assertEquals(listOf("setup"), offered(test, "mode-mismatch"), "a test account on a live store sets up payments, which replaces it")
+    assertEquals(listOf("refresh", "payouts"), offered(live, "ready"))
     val plan = """{"features":{"commerce":true},"quotas":{"transactionFeePhysicalPct":2,"transactionFeeDigitalPct":0}}"""
     val paid = payments("""{}""", plan)
     assertEquals(listOf("2%", "0%"), rows(paid, "fees"))

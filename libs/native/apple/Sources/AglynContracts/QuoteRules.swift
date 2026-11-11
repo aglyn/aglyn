@@ -155,7 +155,11 @@ public func merchantPaymentsBlockedReason(_ state: String) -> String? {
   case "not-connected": "Connect Stripe to take card payments."
   case "charges-disabled":
     "Finish setting up Stripe to take card payments: Stripe has not turned on charges for this account yet."
-  case "mode-mismatch", "mode-unverified":
+  // The account is proven to be in the other Stripe mode (AGL-2471): setting up payments replaces it. The route answers
+  // the state only, so this is the live deployment's sentence, as the console says it when it cannot tell the mode.
+  case "mode-mismatch":
+    "Set up payments to take card payments: the connected Stripe account is a test account, and live payments need a live one."
+  case "mode-unverified":
     "Reconnect Stripe to take card payments: the connected account has not been confirmed for live payments."
   default: nil
   }

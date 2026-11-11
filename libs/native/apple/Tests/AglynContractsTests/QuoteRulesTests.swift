@@ -49,6 +49,9 @@ final class QuoteRulesTests: XCTestCase {
     XCTAssertEqual(
       merchantPaymentsBlockedReason("mode-unverified"),
       "Reconnect Stripe to take card payments: the connected account has not been confirmed for live payments.")
+    XCTAssertEqual(
+      merchantPaymentsBlockedReason("mode-mismatch"),
+      "Set up payments to take card payments: the connected Stripe account is a test account, and live payments need a live one.")
     XCTAssertNil(merchantPaymentsBlockedReason("ready"))
   }
 
