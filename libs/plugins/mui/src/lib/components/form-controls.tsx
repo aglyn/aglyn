@@ -315,11 +315,18 @@ export const AglynSelectOption = forwardRef<
   HTMLOptionElement,
   AglynSelectOptionProps
 >((props, ref) => {
-  const { value, children, ...rest } = dropClearedProps(props)
-  const text = typeof children === 'string' ? children : ''
+  // `sx` is a style for an MUI component; a bare `<option>` would print it
+  // as an attribute (`sx=",,[object Object]"`).
+  const { value, children, sx: _sx, ...rest } = dropClearedProps(
+    props as AglynSelectOptionProps & { sx?: unknown },
+  )
+  const text =
+    typeof children === 'string' || typeof children === 'number'
+      ? String(children)
+      : ''
   return (
-    <option ref={ref} value={value ?? text} {...(rest as object)}>
-      {children}
+    <option ref={ref} {...(rest as object)} value={value || text}>
+      {text}
     </option>
   )
 })
@@ -567,8 +574,10 @@ export const selectOptionSchema: Aglyn.ComponentSchema<AglynSelectOptionProps> =
   description: 'One choice in a Select.',
   category,
   icon: { path: mdiFormSelect.path, sx: { color: 'info.main' } },
+  // `<option>` holds text and nothing else. Not selfClosing: that strips
+  // `children`, and every choice rendered blank.
   flags: {
-    selfClosing: Aglyn.FEATURE_FLAG.ENABLED,
+    plainTextChildren: Aglyn.FEATURE_FLAG.ENABLED,
     textEditable: Aglyn.FEATURE_FLAG.ENABLED,
   },
   attributes: [
