@@ -363,8 +363,27 @@ export function aiSiteImportImproveDestinations(doc: AiSiteImportDocument, ledge
   if (email) out.set('email', `mailto:${email}`)
   for (const [key, to] of [...out]) if (key === 'phone' || key === 'email') out.set(to, to)
   if (input.formSection !== null && input.formSection !== undefined) out.set('form', `#${input.formSection + 1}`)
+  else {
+    // A page with no form of its own sends `form` to the site's page that holds one, as a link to that page goes (AGL-4152).
+    const formPage = aiSiteImportFormPageOf(doc)
+    if (formPage) out.set('form', formPage)
+  }
   for (let n = 1; n <= (input.sections ?? 0); n += 1) out.set(`#${n}`, `#${n}`)
   return out
+}
+
+/**
+ * The site's page that holds its form (AGL-4152), as `page:<id>`: the one the
+ * plan's header button sends `form` to, else the one the import read a form
+ * on. `null` where no page of the site holds one, where that page is not one a
+ * link may go to, or where it is the page itself, which holds its form in place.
+ */
+export function aiSiteImportFormPageOf(doc: Pick<AiSiteImportDocument, 'plan' | 'formPage' | 'links' | 'url'>): string | null {
+  const cta = doc.plan?.nav.primaryCta
+  const id = (cta?.target === 'form' ? cta.page : undefined) ?? doc.formPage
+  if (!id || !doc.links.some((page) => page.id === id)) return null
+  const to = `page:${id}`
+  return to === aiSiteImportOwnPage(doc) ? null : to
 }
 
 /**
