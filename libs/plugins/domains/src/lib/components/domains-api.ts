@@ -134,6 +134,8 @@ export interface DnsAnswer {
   ours: boolean
   nameservers: string[]
   siteConnected: boolean
+  /** A move onto our nameservers was made in the last 48 hours and is still spreading. */
+  moving?: boolean
   records: DnsRecordView[]
 }
 

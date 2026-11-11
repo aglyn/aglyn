@@ -199,6 +199,12 @@ export interface DomainRegistrationDoc {
   failure?: string | null
   /** A dispute on one of its charges: renewals stop until staff look. */
   disputedAtMs?: number | null
+  /**
+   * When the owner last moved the name back onto our nameservers. The
+   * registry's answer lags it by hours, so the DNS section says "moving"
+   * meanwhile instead of offering the move again (AGL-4040).
+   */
+  nameserversResetAtMs?: number | null
   createdBy: string
   createdAtMs: number
   updatedAtMs: number
