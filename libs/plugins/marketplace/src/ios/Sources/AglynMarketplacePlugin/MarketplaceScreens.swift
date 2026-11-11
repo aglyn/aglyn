@@ -317,7 +317,9 @@ private struct ListingDetail: View {
       } else if listing.failed {
         AglynEmptyState("Could not load this listing", systemImage: "exclamationmark.triangle", message: "Check the connection and try again.")
       } else if let doc = listing.document.map(ListingRow.init), !doc.deleted, !doc.workspaceLocked {
-        ListingBody(context: context, listing: doc, hostPin: hostPin.document, orgPin: orgPin.document, runner: runner) { sheet = $0 }
+        ListingBody(
+          context: context, listing: doc, hostPin: hostPin.document, orgPin: orgPin.document, pinsPhase: pinsPhase(doc), runner: runner
+        ) { sheet = $0 }
       } else {
         AglynEmptyState("This listing does not exist", systemImage: "storefront", message: "It may have been removed.")
       }
@@ -368,6 +370,21 @@ private struct ListingDetail: View {
     }
   }
 
+  /// Whether the Install card may state anything yet (AGL-4047): "Install" rests on ABSENT pins, so it waits for the
+  /// workspace pin's and this site's pin's server answers, and a pin that could not be read is said as a failure.
+  private func pinsPhase(_ listing: ListingRow) -> String {
+    guard listing.artifactType == "plugin" else { return "ready" }
+    let sitePins: String
+    if context.hostID == nil {
+      sitePins = "answered"
+    } else if hostPin.failed {
+      sitePins = "failed"
+    } else {
+      sitePins = hostPin.document == nil && (!hostPin.ready || hostPin.fromCache) ? "loading" : "answered"
+    }
+    return installPictureReadPhase(orgPinPending: false, orgPin: context.orgID == nil ? nil : InstallPinRead(orgPin), sitePins: sitePins)
+  }
+
   private func installState(_ listing: ListingRow) -> PluginInstallState {
     func version(_ doc: FirestoreDocument?) -> String? {
       guard let value = doc?.data["version"] else { return nil }
@@ -385,6 +402,8 @@ private struct ListingBody: View {
   let listing: ListingRow
   let hostPin: FirestoreDocument?
   let orgPin: FirestoreDocument?
+  /// "loading", "error" or "ready": whether the pins have answered (AGL-4047).
+  let pinsPhase: String
   let runner: PluginActionRunner
   let open: (ListingSheet) -> Void
   @State private var versions: [ListingVersion]?
@@ -442,7 +461,17 @@ private struct ListingBody: View {
         if !mine, listing.paid, state.installedVersion == nil {
           AglynNotice("A paid listing is bought once for the workspace; buying is not in the app yet.", tone: .info)
         }
-        actions(state, targets, offered)
+        if pinsPhase == "loading" {
+          HStack(spacing: AglynSpace.one) {
+            ProgressView().controlSize(.small)
+            Text("Loading where it is installed…").font(AglynFont.caption).foregroundStyle(.secondary)
+          }
+          .accessibilityIdentifier("listing-pins-loading")
+        } else if pinsPhase == "error" {
+          AglynNotice("Could not load where this plugin is installed. Go back and open it again.", tone: .warning)
+        } else {
+          actions(state, targets, offered)
+        }
         if plugin, offered == nil { AglynNotice("No reviewed version yet: it can be installed once one passes review.", tone: .warning) }
         if !installable { AglynNotice(
             canInstall(context)

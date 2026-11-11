@@ -357,9 +357,55 @@ fun installPlanOutcome(name: String, installed: Int, errors: List<String>, orgWi
   }
 }
 
-/** The row of the plugins list for one install (`installedPluginCaption`). */
-fun installedPluginCaption(version: String?, orgWide: Boolean, siteLabels: List<String>): String =
-  "v${version ?: "undefined"} · " + (if (orgWide) "every site in this organization" else if (siteLabels.size == 1) siteLabels[0] else "${siteLabels.size} sites")
+/**
+ * The row of the plugins list for one install (`installedPluginCaption`). [switchedOff] (AGL-4047): the sites it covers
+ * whose own Admin › Plugins switch has it off; they keep the pin but run nothing, so the row does not call them sites it
+ * runs on. [siteCount] is how many sites the workspace has.
+ */
+fun installedPluginCaption(version: String?, orgWide: Boolean, siteLabels: List<String>, switchedOff: List<String> = emptyList(), siteCount: Int? = null): String {
+  val off = switchedOff
+  val offNamed = if (off.size == 1) off[0] else "${off.size} of them"
+  val where = when {
+    orgWide -> when {
+      off.isEmpty() -> "every site in this organization"
+      siteCount != null && off.size >= siteCount -> "every site switched it off"
+      off.size == 1 -> "every site except ${off[0]}, which switched it off"
+      else -> "every site except ${off.size} that switched it off"
+    }
+    siteLabels.size == 1 -> if (off.isNotEmpty()) "${siteLabels[0]}, which switched it off" else siteLabels[0]
+    else -> "${siteLabels.size} sites" + if (off.isNotEmpty()) " · $offNamed switched it off" else ""
+  }
+  return "v${version ?: "undefined"} · $where"
+}
+
+/** A pin's document read, as a live listen reports it (`InstallPinRead`): whether it holds a pin, failed, loading, or cached. */
+data class InstallPinRead(val hasData: Boolean, val status: String? = null, val fromCache: Boolean = false)
+
+/**
+ * Whether a page may state where a plugin is installed yet (`installPictureReadPhase`, AGL-4047): "loading", "error" or
+ * "ready". "Not installed" and "Install" rest on ABSENT pins, and an absence the cache reports first is not an answer:
+ * a pin is missing only once the server says so, and the sites' pins only once every one has been read. [orgPinPending]
+ * while the workspace is still resolving; a null [orgPin] when there is no workspace pin to read. [sitePins] is
+ * "loading", "failed" or "answered".
+ */
+fun installPictureReadPhase(orgPinPending: Boolean, orgPin: InstallPinRead?, sitePins: String): String {
+  if (orgPinPending) return "loading"
+  if (orgPin != null && !orgPin.hasData) {
+    if (orgPin.status == "error") return "error"
+    if (orgPin.status == "loading" || orgPin.fromCache) return "loading"
+  }
+  if (sitePins == "failed") return "error"
+  return if (sitePins == "loading") "loading" else "ready"
+}
+
+/** A live read of a pin as [installPictureReadPhase] takes it. */
+fun installPinRead(live: com.aglyn.core.Live<*>): InstallPinRead = when (live) {
+  com.aglyn.core.Live.Loading -> InstallPinRead(false, "loading")
+  is com.aglyn.core.Live.Failed -> InstallPinRead(false, "error")
+  is com.aglyn.core.Live.Ready -> InstallPinRead(
+    when (val value = live.value) { null -> false; is Collection<*> -> value.isNotEmpty(); else -> true }, "success", live.fromCache,
+  )
+}
 
 /** What `/api/hosts/plugin-impact` answered, or null when it did not answer in that shape. */
 fun uninstallImpactFrom(answer: kotlinx.serialization.json.JsonElement?): UninstallImpact? {

@@ -14,6 +14,7 @@ import androidx.compose.foundation.lazy.rememberLazyListState
 import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.verticalScroll
 import androidx.compose.material3.Button
+import androidx.compose.material3.CircularProgressIndicator
 import androidx.compose.material3.HorizontalDivider
 import androidx.compose.material3.Icon
 import androidx.compose.material3.MaterialTheme
@@ -245,17 +246,29 @@ private fun ListingDetail(context: NativePluginContext, listingId: String, start
         orgDoc != null,
       )
       val plugin = listing.artifactType == "plugin"
+      // Whether the Install card may state anything yet (AGL-4047): "Install" rests on ABSENT pins, so it waits for the
+      // workspace pin's and this site's pin's server answers, and a pin that could not be read is said as a failure.
+      val pinsPhase = if (!plugin) "ready" else installPictureReadPhase(
+        orgPinPending = false,
+        orgPin = if (orgId != null) installPinRead(orgPin) else null,
+        sitePins = when {
+          hostId == null -> "answered"
+          hostPin is Live.Failed -> "failed"
+          hostDoc == null && (hostPin is Live.Loading || (hostPin as? Live.Ready)?.fromCache == true) -> "loading"
+          else -> "answered"
+        },
+      )
       val mine = listing.profileId != null && listing.profileId == orgId
       val held = rememberMemberPermissions(context)
-      LaunchedEffect(startInstall, listing.id) {
-        if (!startInstall) return@LaunchedEffect
+      LaunchedEffect(startInstall, listing.id, pinsPhase) {
+        if (!startInstall || pinsPhase == "loading") return@LaunchedEffect
         onInstallAsked()
         val targets = installTargets(listing.artifactType)
-        if (state.installedVersion == null && canInstall(held) && context.hostId != null && (!plugin || listing.offeredVersion != null)) {
+        if (pinsPhase == "ready" && state.installedVersion == null && canInstall(held) && context.hostId != null && (!plugin || listing.offeredVersion != null)) {
           dialog = ListingDialog.Install(if (InstallTarget.HOST in targets) InstallTarget.HOST else targets.firstOrNull())
         }
       }
-      ListingBody(context, listing, plugin, state, mine, runner, api) { dialog = it }
+      ListingBody(context, listing, plugin, state, pinsPhase, mine, runner, api) { dialog = it }
       ListingDialogs(context, listing, dialog, state, api, runner) { dialog = null }
     }
   }
@@ -267,6 +280,8 @@ private fun ListingBody(
   listing: ListingRow,
   plugin: Boolean,
   state: PluginInstallState,
+  /** "loading", "error" or "ready": whether the pins have answered (AGL-4047). */
+  pinsPhase: String,
   mine: Boolean,
   runner: ActionRunner,
   api: MarketplaceApi,
@@ -326,7 +341,18 @@ private fun ListingBody(
       if (!mine && listing.paid && state.installedVersion == null) {
         NoticeBanner("A paid listing is bought once for the workspace; buying is not in the app yet.", StatusTone.INFO)
       }
-      FlowRow(horizontalArrangement = Arrangement.spacedBy(space(1f)), verticalArrangement = Arrangement.spacedBy(space(1f))) {
+      if (pinsPhase == "loading") {
+        Row(
+          Modifier.testTag("listing-pins-loading"),
+          verticalAlignment = Alignment.CenterVertically,
+          horizontalArrangement = Arrangement.spacedBy(space(1f)),
+        ) {
+          CircularProgressIndicator(Modifier.size(16.dp), strokeWidth = 2.dp)
+          Text("Loading where it is installed…", style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurfaceVariant)
+        }
+      } else if (pinsPhase == "error") {
+        NoticeBanner("Could not load where this plugin is installed. Go back and open it again.", StatusTone.WARNING)
+      } else FlowRow(horizontalArrangement = Arrangement.spacedBy(space(1f)), verticalArrangement = Arrangement.spacedBy(space(1f))) {
         when {
           plugin && state.installedVersion != null -> {
             if (state.updateAvailable && offered != null) {

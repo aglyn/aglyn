@@ -153,6 +153,8 @@ fun datasetsQuery(orgId: String, scopeTokens: List<String>?): FirestoreQuery = F
   datasetsPath(orgId),
   filters = scopeTokens?.let { listOf(FirestoreFilter("visibleTo", FilterOp.ARRAY_CONTAINS_ANY, it)) }.orEmpty(),
   limit = DATASETS_LIMIT,
+  // So the server's confirmation of an empty list reaches the screen, which says "none" only then (AGL-4047).
+  includeMetadataChanges = true,
 )
 
 /** One page of a dataset's records under [clauses] and [search]. */
