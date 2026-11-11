@@ -144,17 +144,22 @@ const OrgPluginInstallation: NextPageWithLayout<Record<string, never>> = () => {
   // member-gated, so `orgs/-pending-/installs/-missing-` was a
   // guaranteed-denied listen while the scope loaded, and a pointless read
   // for the plugins that never have a listing.
-  const { data: orgPin } = useFirestoreDoc<any>(
+  const orgPinRead = useFirestoreDoc<any>(
     () =>
       orgId && listingId
         ? doc(firestore, 'orgs', orgId, 'installs', listingId)
         : null,
     [firestore, orgId, listingId],
   )
+  const orgPin = orgPinRead.data
   const [sitePins, setSitePins] = useState<Record<string, any>>({})
   const [pinsNonce, setPinsNonce] = useState(0)
   const hostIdsKey = hostList.map((host) => host.id).join('|')
+  /** The site set the pins answer for, or that reading them failed (AGL-4047). */
+  const [sitePinsFor, setSitePinsFor] = useState<string | null>(null)
+  const [sitePinsFailed, setSitePinsFailed] = useState(false)
   useEffect(() => {
+    setSitePinsFailed(false)
     if (!listingId || !hostList.length) return
     let active = true
     void Promise.all(
@@ -166,9 +171,13 @@ const OrgPluginInstallation: NextPageWithLayout<Record<string, never>> = () => {
       }),
     )
       .then((entries) => {
-        if (active) setSitePins(Object.fromEntries(entries))
+        if (!active) return
+        setSitePins(Object.fromEntries(entries))
+        setSitePinsFor(`${listingId}:${hostIdsKey}`)
       })
-      .catch(() => undefined)
+      .catch(() => {
+        if (active) setSitePinsFailed(true)
+      })
     return () => {
       active = false
     }
@@ -203,6 +212,34 @@ const OrgPluginInstallation: NextPageWithLayout<Record<string, never>> = () => {
   )
   const installedAnywhere = Boolean(orgPin) ||
     Object.values(sitePins).some(Boolean)
+  /**
+   * Whether "not installed" is an answer yet (AGL-4047). It rests on there
+   * being no pin anywhere, so it waits for the org pin's SERVER answer (the
+   * cache says "missing" first for a pin it has never held, and can keep
+   * saying it for seconds while another tab holds the cache) and for every
+   * site's pin. This page said "This plugin is not installed in this
+   * organization" for about 9 s about a plugin installed org-wide.
+   */
+  const orgPinPhase = !orgId
+    ? 'loading'
+    : orgPin
+      ? 'ready'
+      : orgPinRead.status === 'error'
+        ? 'error'
+        : orgPinRead.status === 'loading' || orgPinRead.fromCache
+          ? 'loading'
+          : 'missing'
+  const sitePinsAnswered =
+    hostsReady &&
+    (!hostList.length || sitePinsFor === `${listingId}:${hostIdsKey}`)
+  const installPhase: 'loading' | 'error' | 'ready' =
+    firstParty || orgPinPhase === 'ready'
+      ? 'ready'
+      : orgPinPhase === 'error' || sitePinsFailed
+        ? 'error'
+        : orgPinPhase === 'loading' || !sitePinsAnswered
+          ? 'loading'
+          : 'ready'
 
   /**
    * The workspace switch, from the SAME writer the Plugins list uses.
@@ -283,7 +320,13 @@ const OrgPluginInstallation: NextPageWithLayout<Record<string, never>> = () => {
     >
       <Container gutterY maxWidth={CONTENT_MAX_WIDTH}>
         <Stack spacing={3}>
-          {!firstParty && !installedAnywhere ? (
+          {installPhase === 'error' ? (
+            <Alert severity="warning">
+              {'Could not load where this plugin is installed. Reload the ' +
+                'page to try again.'}
+            </Alert>
+          ) : null}
+          {!firstParty && installPhase === 'ready' && !installedAnywhere ? (
             <Alert severity="info">
               {'This plugin is not installed in this organization. Install ' +
                 'it from its marketplace listing.'}
@@ -420,6 +463,10 @@ const OrgPluginInstallation: NextPageWithLayout<Record<string, never>> = () => {
                 orgScoped
                 orgSlug={orgSlug}
                 hosts={hostList}
+                hostsReady={hostsReady}
+                // The workspace this page already knows (AGL-4047), so the
+                // panel does not look it up again through a site.
+                orgId={orgId}
                 onChanged={onChanged}
               />
             )}
