@@ -35,6 +35,32 @@ final class CheckInRulesTests: XCTestCase {
     }
   }
 
+  /// The product editor's setting (AGL-4063): what a stored `checkIn` reads as, replayed from the console's answers.
+  func testProductSettingAsTheConsole() {
+    for item in cases("normalizeProductCheckIn") {
+      let got = normalizeProductCheckIn(plain(item.args[0]))
+      guard let want = plain(item.result) as? [String: Any] else {
+        XCTAssertNil(got, "\(item.args)")
+        continue
+      }
+      XCTAssertEqual(got?.enabled, want["enabled"] as? Bool, "\(item.args)")
+      XCTAssertEqual(got?.headcount, (want["headcount"] as? NSNumber)?.doubleValue, "\(item.args)")
+      XCTAssertEqual(got?.askUseDate, want["askUseDate"] as? Bool, "\(item.args)")
+    }
+  }
+
+  /// People per item from what was typed, as the console's field reads it: blank or not a number is 1, capped at 50.
+  func testHeadcountFromTyping() {
+    XCTAssertEqual(checkInHeadcount("4"), 4)
+    XCTAssertEqual(checkInHeadcount(" 12 "), 12)
+    XCTAssertEqual(checkInHeadcount(""), 1)
+    XCTAssertEqual(checkInHeadcount("0"), 1)
+    XCTAssertEqual(checkInHeadcount("abc"), 1)
+    XCTAssertEqual(checkInHeadcount("2.5"), 3)
+    XCTAssertEqual(checkInHeadcount("999"), ContractValues.shared.checkInMaxHeadcount)
+    XCTAssertEqual(checkInHeadcount(nil), 1)
+  }
+
   private func number(_ value: Any?) -> Double? { (value as? NSNumber)?.doubleValue }
 
   func testGuestsAsTheConsole() {
