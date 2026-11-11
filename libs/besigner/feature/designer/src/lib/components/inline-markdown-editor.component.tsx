@@ -27,6 +27,7 @@ import {
   type MouseEvent,
   useCallback,
   useEffect,
+  useLayoutEffect,
   useRef,
   useState,
 } from 'react'
@@ -40,6 +41,62 @@ import {
   inlineMarkdownEdit,
   type InlineMarkdownEditRect,
 } from '../utils/inline-markdown-edit.store'
+
+/** The canvas scroller: the box the editor is clipped to and scrolls. */
+const CANVAS_VIEWPORT_ID = 'aglyn:viewport-canvas'
+const NO_RECT = { left: 0, top: 0, width: 0, height: 0 }
+/** The editor box's padding, `p: 1`. */
+const PAPER_PADDING = 8
+
+/** An element's height, kept current as it resizes. */
+function useMeasuredHeight(): [(element: HTMLElement | null) => void, number] {
+  const [element, setElement] = useState<HTMLElement | null>(null)
+  const [height, setHeight] = useState(0)
+  useLayoutEffect(() => {
+    if (!element) return undefined
+    const update = () => setHeight(element.offsetHeight)
+    update()
+    const observer =
+      typeof ResizeObserver === 'function' ? new ResizeObserver(update) : null
+    observer?.observe(element)
+    return () => observer?.disconnect()
+  }, [element])
+  return [setElement, height]
+}
+
+/**
+ * Whether something between the wheel's target and the editor will scroll
+ * on its own in this direction: a wide table, a long snippet. Those keep the
+ * wheel; everything else hands it to the canvas.
+ */
+function scrollsInside(
+  target: EventTarget | null,
+  root: Element,
+  deltaX: number,
+  deltaY: number,
+): boolean {
+  let element = target instanceof Element ? target : null
+  while (element && element !== root) {
+    if (element instanceof HTMLElement) {
+      const style = getComputedStyle(element)
+      const canY =
+        /auto|scroll/.test(style.overflowY) &&
+        element.scrollHeight > element.clientHeight &&
+        (deltaY > 0
+          ? element.scrollTop + element.clientHeight < element.scrollHeight
+          : element.scrollTop > 0)
+      const canX =
+        /auto|scroll/.test(style.overflowX) &&
+        element.scrollWidth > element.clientWidth &&
+        (deltaX > 0
+          ? element.scrollLeft + element.clientWidth < element.scrollWidth
+          : element.scrollLeft > 0)
+      if ((deltaY !== 0 && canY) || (deltaX !== 0 && canX)) return true
+    }
+    element = element.parentElement
+  }
+  return false
+}
 
 interface SurfaceProps {
   node: Aglyn.NodeSchema<any>
@@ -141,6 +198,12 @@ const InlineMarkdownEditorSurface = observer(function InlineMarkdownEditorSurfac
     inlineMarkdownEdit.close()
   }, [])
 
+  const label = String(
+    node?.componentSchema?.attributes?.find(
+      (attribute) => attribute?.name === attributeName,
+    )?.label ?? 'Content',
+  )
+
   // A double-click inside the editor selects a word. It must never reach the
   // canvas, whose panning surface treats a double-click as zoom-in
   // (`ZoomablePanningComponent`). Node double-clicks are already consumed at
@@ -149,68 +212,141 @@ const InlineMarkdownEditorSurface = observer(function InlineMarkdownEditorSurfac
     event.stopPropagation()
   }, [])
 
-  // Read at render, which `useAnchoredRect` makes safe: it re-renders on every
-  // scroll and resize, so these are never a stale snapshot.
-  const viewportWidth =
-    typeof window === 'undefined' ? Infinity : window.innerWidth
-  const viewportHeight =
-    typeof window === 'undefined' ? Infinity : window.innerHeight
-  const width = Math.max(live.width, 360)
-  // A long document is usually TALLER than the viewport, so the element's top
-  // edge is frequently scrolled off the top of the screen while it is being
-  // edited. The editor waits at the nearest edge until the element comes back
-  // rather than following it out of sight; KEEP_VISIBLE is how much of it has
-  // to remain reachable at the bottom.
-  const KEEP_VISIBLE = 160
+  /**
+   * The editor covers the element, all of it, and the canvas scrolls it
+   * (AGL-4216).
+   *
+   * It used to be a box capped at 75% of the screen that scrolled inside
+   * itself, inside an editor that also scrolled itself past 480px. Two scrolls
+   * deep, the toolbar was gone the moment the author scrolled to the part
+   * they wanted to change. Now the field grows with the document and lies
+   * over the element as it renders; the header and toolbar pin to the top of
+   * the canvas while any of it is in view and leave with its bottom edge, as
+   * a sticky header does on a page.
+   *
+   * It cannot be CSS sticky: the editor sits over the canvas in the overlay
+   * layer, not inside the scroller (whose artboard clips with `overflow:
+   * hidden`, which would switch sticky off anyway), so the offset is worked
+   * out from where the element is against the canvas's own top edge.
+   */
+  const [scroller, setScroller] = useState<HTMLElement | null>(null)
+  useEffect(() => {
+    setScroller(document.getElementById(CANVAS_VIEWPORT_ID))
+  }, [])
+  const viewport = useAnchoredRect(scroller ?? undefined, NO_RECT)
+  const [measureBox, boxHeight] = useMeasuredHeight()
+  const [measureGroup, groupHeight] = useMeasuredHeight()
+
+  // Scrolling over the editor scrolls the canvas under it. The editor is a
+  // fixed overlay, so the browser hands its wheel to the page instead: the
+  // document sat still and the designer's own chrome scrolled out of place.
+  // A native listener, because React registers wheel as passive and a
+  // passive listener cannot stop the page scrolling as well.
+  const [editorEl, setEditorEl] = useState<HTMLDivElement | null>(null)
+  useEffect(() => {
+    if (!editorEl || !scroller) return undefined
+    const onWheel = (event: globalThis.WheelEvent) => {
+      if (event.ctrlKey) return
+      if (scrollsInside(event.target, editorEl, event.deltaX, event.deltaY)) {
+        return
+      }
+      event.preventDefault()
+      scroller.scrollBy({ left: event.deltaX, top: event.deltaY })
+    }
+    editorEl.addEventListener('wheel', onWheel, { passive: false })
+    return () => editorEl.removeEventListener('wheel', onWheel)
+  }, [editorEl, scroller])
+
+  const clip = viewport.width > 0 ? viewport : null
+  const area = clip ?? {
+    left: 0,
+    top: 0,
+    width: typeof window === 'undefined' ? Infinity : window.innerWidth,
+    height: typeof window === 'undefined' ? Infinity : window.innerHeight,
+  }
+  const width = Math.min(Math.max(live.width, 360), area.width - 16)
+  const left = clampToViewport(live.left - area.left, width, area.width)
+  const top = live.top - area.top
+  // Pinned flush with the canvas's top edge while the element's top is above
+  // it (the group rests 8px into the box, under its padding), and never past
+  // the element's bottom, where the box's bottom padding stays below it.
+  const toolbarOffset = Math.max(
+    0,
+    Math.min(-top - PAPER_PADDING, boxHeight - groupHeight - PAPER_PADDING * 2),
+  )
 
   return (
     <Box
-      data-aglyn="overlay:inline-markdown-editor"
-      data-testid="inline-markdown-editor"
-      onKeyDown={handleKeyDown}
-      onMouseDown={stop}
-      onDoubleClick={stop}
+      data-aglyn="overlay:inline-markdown-clip"
       sx={{
         position: 'fixed',
-        left: clampToViewport(live.left, width, viewportWidth),
-        top: clampToViewport(live.top, KEEP_VISIBLE, viewportHeight),
-        width,
-        maxWidth: '90vw',
+        left: area.left,
+        top: area.top,
+        width: area.width,
+        height: area.height,
+        // The canvas's own edges: the part of the editor scrolled above the
+        // canvas must not paint over the designer's app bar.
+        overflow: 'hidden',
+        pointerEvents: 'none',
         zIndex: (theme) => theme.zIndex.modal,
       }}
     >
-      <Paper elevation={8} sx={{ p: 1, maxHeight: '75vh', overflowY: 'auto' }}>
-        <Box
-          sx={{
-            display: 'flex',
-            alignItems: 'center',
-            justifyContent: 'space-between',
-            mb: 0.5,
-          }}
-        >
-          <Typography variant="caption" color="text.secondary">
-            {'Editing on the canvas — changes are kept as you type'}
-          </Typography>
-          <Button size="small" color="primary" onClick={handleDone}>
-            {'Done'}
-          </Button>
-        </Box>
-        <MarkdownField
-          label={String(
-            node?.componentSchema?.attributes?.find(
-              (attribute) => attribute?.name === attributeName,
-            )?.label ?? 'Content',
-          )}
-          value={value}
-          onChange={handleChange}
-          editorRef={editorRef}
-          onPickImageFromMedia={onPickImageFromMedia}
-          // The OPEN rect, deliberately, not the live one: position follows the
-          // element, but the editor's own height must not change under the
-          // author mid-sentence just because the canvas relaid out.
-          minHeight={Math.min(Math.max(rect.height, 200), 520)}
-        />
-      </Paper>
+      <Box
+        data-aglyn="overlay:inline-markdown-editor"
+        data-testid="inline-markdown-editor"
+        onKeyDown={handleKeyDown}
+        onMouseDown={stop}
+        onDoubleClick={stop}
+        ref={setEditorEl}
+        sx={{
+          position: 'absolute',
+          left,
+          top,
+          width,
+          maxWidth: '90vw',
+          pointerEvents: 'auto',
+        }}
+      >
+        <Paper ref={measureBox} elevation={8} sx={{ p: 1 }}>
+          <MarkdownField
+            label={label}
+            value={value}
+            onChange={handleChange}
+            editorRef={editorRef}
+            onPickImageFromMedia={onPickImageFromMedia}
+            toolbarOffset={toolbarOffset}
+            toolbarGroupRef={measureGroup}
+            toolbarHeader={
+              <Box
+                sx={{
+                  display: 'flex',
+                  alignItems: 'center',
+                  justifyContent: 'space-between',
+                  gap: 1,
+                  pb: 0.5,
+                }}
+              >
+                <Typography variant="caption" color="text.secondary" noWrap>
+                  <Box component="span" sx={{ color: 'text.primary', fontWeight: 600 }}>
+                    {label}
+                  </Box>
+                  {' · editing on the canvas — changes are kept as you type'}
+                </Typography>
+                <Button size="small" color="primary" onClick={handleDone}>
+                  {'Done'}
+                </Button>
+              </Box>
+            }
+            // The editor grows with the document instead of scrolling inside
+            // itself, and starts at least as tall as the element it covers so
+            // nothing of the rendered element shows around it. The OPEN rect,
+            // deliberately: the height must not change under the author
+            // mid-sentence just because the canvas relaid out.
+            maxHeight="none"
+            minHeight={Math.max(rect.height - groupHeight - 24, 200)}
+          />
+        </Paper>
+      </Box>
     </Box>
   )
 })

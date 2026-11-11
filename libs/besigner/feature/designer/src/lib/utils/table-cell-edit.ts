@@ -216,6 +216,23 @@ export function withDataTableStarted(
   return { ...props, [attribute]: dataTableStarterValue() }
 }
 
+/**
+ * The edits the "+" bars along a Table's edges make: a row after the last
+ * one, a column after the last one. `null` for an empty grid, which has no
+ * edge to add along — its first table is started from the right-click menu.
+ */
+export function dataTableAppendEdits(
+  value: unknown,
+): { row: DataTableShapeEdit; column: DataTableShapeEdit } | null {
+  const grid = parseDataTableRows(value)
+  const width = grid[0]?.length ?? 0
+  if (grid.length === 0 || width === 0) return null
+  return {
+    row: { kind: 'insertRow', at: grid.length },
+    column: { kind: 'insertColumn', at: width },
+  }
+}
+
 /** One row or column action offered on a cell. */
 export interface DataTableCellAction {
   key: string

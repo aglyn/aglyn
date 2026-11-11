@@ -230,26 +230,87 @@ describe('the markdown editor follows the canvas (AGL-1644)', () => {
     expect(overlayTop('inline-markdown-editor')).toBe('180px')
   })
 
-  // The half a floor cannot reach. Scrolled off the top the editor waits at the
-  // margin — and scrolling back returns it to the element, rather than leaving
-  // it parked where the clamp put it.
-  it('waits at the top margin while the element is above the viewport, then comes back', () => {
-    const anchor = openAnchored(300)
+  /**
+   * AGL-4216. The editor no longer waits at a margin: it lies over the whole
+   * element and scrolls with it, and its header and toolbar pin to the top of
+   * the canvas instead — until the element's bottom edge passes, where they
+   * leave with it. jsdom lays nothing out, so heights are given here: a box
+   * 1200px tall with an 80px pinned group.
+   */
+  describe('pins its toolbar while the element scrolls past (AGL-4216)', () => {
+    let offsetHeight: jest.SpyInstance
+    beforeEach(() => {
+      offsetHeight = jest
+        .spyOn(HTMLElement.prototype, 'offsetHeight', 'get')
+        .mockImplementation(function (this: HTMLElement) {
+          if (this.hasAttribute('data-markdown-toolbar-group')) return 80
+          if (this.classList.contains('MuiPaper-root')) return 1200
+          return 0
+        })
+    })
+    afterEach(() => offsetHeight.mockRestore())
 
-    anchor.scrollTo(-900)
-    expect(overlayTop('inline-markdown-editor')).toBe('8px')
+    const pinnedBy = (): number => {
+      const group = document.querySelector(
+        '[data-markdown-toolbar-group]',
+      ) as HTMLElement
+      const match = /translateY\((-?[\d.]+)px\)/.exec(
+        window.getComputedStyle(group).transform,
+      )
+      return match ? Number(match[1]) : 0
+    }
 
-    anchor.scrollTo(240)
-    expect(overlayTop('inline-markdown-editor')).toBe('240px')
+    it('rests at the top of the element while its top is in view', () => {
+      openAnchored(300)
+      expect(pinnedBy()).toBe(0)
+    })
+
+    it('follows the element up past the canvas and keeps the toolbar at its top', () => {
+      const anchor = openAnchored(300)
+
+      anchor.scrollTo(-900)
+      expect(overlayTop('inline-markdown-editor')).toBe('-900px')
+      // 900px of the element is above the canvas, so the group comes down to
+      // the canvas's edge: 900px less the 8px it already rests inside the box.
+      expect(pinnedBy()).toBe(892)
+
+      anchor.scrollTo(240)
+      expect(overlayTop('inline-markdown-editor')).toBe('240px')
+      expect(pinnedBy()).toBe(0)
+    })
+
+    it('stops at the bottom of the element rather than leaving it', () => {
+      const anchor = openAnchored(300)
+      anchor.scrollTo(-1500)
+      // 1200 box - 80 group - 16 padding: the group's last resting place.
+      expect(pinnedBy()).toBe(1104)
+    })
   })
 
-  // The opposite edge, which the old `Math.max(8, …)` had no answer for at all:
-  // an element below the fold would have taken the editor off the bottom.
-  it('keeps the editor reachable when the element is below the viewport', () => {
+  // Below the canvas the editor stays with the element instead of being
+  // pulled back on screen over unrelated content.
+  it('stays with an element that is below the canvas', () => {
     const anchor = openAnchored(300)
     anchor.scrollTo(window.innerHeight + 500)
-    const top = Number.parseFloat(overlayTop('inline-markdown-editor'))
-    expect(top).toBeLessThan(window.innerHeight)
+    expect(overlayTop('inline-markdown-editor')).toBe(
+      `${window.innerHeight + 500}px`,
+    )
+  })
+
+  // The editor is a fixed overlay, so a wheel over it would scroll the page,
+  // which does not scroll. It scrolls the canvas under it instead.
+  it('scrolls the canvas when the wheel turns over the editor', () => {
+    const scroller = document.createElement('div')
+    scroller.id = 'aglyn:viewport-canvas'
+    const scrollBy = jest.fn()
+    scroller.scrollBy = scrollBy as unknown as typeof scroller.scrollBy
+    document.body.appendChild(scroller)
+    openAnchored(300)
+    fireEvent.wheel(screen.getByTestId('inline-markdown-editor'), {
+      deltaX: 0,
+      deltaY: 120,
+    })
+    expect(scrollBy).toHaveBeenCalledWith({ left: 0, top: 120 })
   })
 
   // No anchor — an `open` from a caller that has none — must behave exactly as

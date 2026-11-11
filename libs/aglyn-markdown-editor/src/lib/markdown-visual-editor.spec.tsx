@@ -266,6 +266,45 @@ describe('MarkdownVisualEditor', () => {
     )
   })
 
+  describe('table controls (AGL-4216)', () => {
+    const TABLE = '| A | B | C |\n| --- | :---: | ---: |\n| 1 | 2 | 3 |\n| 4 | 5 | 6 |'
+
+    it('adds a row and a column from the edge bars', () => {
+      const { handleChange } = renderEditor(TABLE)
+      fireEvent.click(screen.getByRole('button', { name: 'Add row' }))
+      expect(lastEmitted(handleChange)).toBe(
+        '| A | B | C |\n| --- | :-: | --: |\n| 1 | 2 | 3 |\n| 4 | 5 | 6 |\n|  |  |  |',
+      )
+      fireEvent.click(screen.getByRole('button', { name: 'Add column' }))
+      expect(lastEmitted(handleChange)).toBe(
+        '| A | B | C |  |\n| --- | :-: | --: | --- |\n' +
+          '| 1 | 2 | 3 |  |\n| 4 | 5 | 6 |  |\n|  |  |  |  |',
+      )
+    })
+
+    it('deletes the column it is under, not the last one, with its alignment', () => {
+      const { handleChange } = renderEditor(TABLE)
+      fireEvent.click(screen.getByRole('button', { name: 'Delete column 2' }))
+      expect(lastEmitted(handleChange)).toBe(
+        '| A | C |\n| --- | --: |\n| 1 | 3 |\n| 4 | 6 |',
+      )
+    })
+
+    it('deletes the row it starts', () => {
+      const { handleChange } = renderEditor(TABLE)
+      fireEvent.click(screen.getByRole('button', { name: 'Delete row 1' }))
+      expect(lastEmitted(handleChange)).toBe(
+        '| A | B | C |\n| --- | :-: | --: |\n| 4 | 5 | 6 |',
+      )
+    })
+
+    it('removes the table from its header strip', () => {
+      const { handleChange } = renderEditor(`Intro\n\n${TABLE}`)
+      fireEvent.click(screen.getByRole('button', { name: 'Remove table' }))
+      expect(lastEmitted(handleChange)).toBe('Intro')
+    })
+  })
+
   it('typing syncs the DOM back into the model', () => {
     const { handleChange } = renderEditor('Hello world')
     const row = rowEls()[0] as HTMLElement
