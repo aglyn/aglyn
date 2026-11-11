@@ -42,6 +42,8 @@ import {
   isOutboundCredential,
   LIVE_AI_CREDENTIALS,
   liveAiFromEnv,
+  LOCAL_COMMERCE_SERVICE_SETTINGS,
+  LOCAL_COMMERCE_TOKEN_KEYS,
   LOCAL_CRON_SECRET,
   LOCAL_PLUGIN_CONNECTIONS_TOKEN_KEY,
   LOCAL_PLUGIN_TRUST_KEYS,
@@ -207,6 +209,36 @@ describe('emulatedServeEnvironment', () => {
     // It reaches no service, so a server holding it passes the e2e preflight.
     assert.equal(isOutboundCredential('PLUGIN_CONNECTIONS_TOKEN_KEY'), false)
     assert.deepEqual(heldCredentials(new Map([['PLUGIN_CONNECTIONS_TOKEN_KEY', 'set']]), new Set()), [])
+  })
+
+  // The Connected services cards answer 404 until their plugin's sealing key
+  // is set, and four also until the deployment offers a service, so none of
+  // the seeded connections drew on the emulator stack.
+  it("gives each commerce plugin its local key and the offered services beside an emulator, never the file's or the shell's", () => {
+    const files = [file({ SHIPPING_TOKEN_KEY: 'deployment-key', MARKETPLACES_EBAY_CLIENT_SECRET: 'deployment-secret', SHIPMONK_ENABLED: 'false' })]
+    const { env, blanked } = emulatedServeEnvironment(
+      { FIRESTORE_EMULATOR_HOST: 'localhost:8082', COURIERS_TOKEN_KEY: 'shell-key' },
+      files,
+    )
+    for (const [name, value] of Object.entries(LOCAL_COMMERCE_TOKEN_KEYS)) {
+      assert.equal(env[name], value, name)
+      assert.equal(Buffer.from(value, 'base64').length, 32, name)
+      assert.equal(isOutboundCredential(name), false, name)
+    }
+    assert.equal(new Set(Object.values(LOCAL_COMMERCE_TOKEN_KEYS)).size, Object.keys(LOCAL_COMMERCE_TOKEN_KEYS).length)
+    for (const [name, value] of Object.entries(LOCAL_COMMERCE_SERVICE_SETTINGS)) assert.equal(env[name], value, name)
+    assert.deepEqual(blanked, [])
+    assert.deepEqual(heldCredentials(new Map(Object.keys(LOCAL_COMMERCE_TOKEN_KEYS).map((name) => [name, 'set'])), new Set()), [])
+  })
+
+  it('holds every commerce key and placeholder secret empty away from an emulator', () => {
+    const files = [file({ SHIPPING_TOKEN_KEY: 'deployment-key', DELIVERY_APPS_DOORDASH_SIGNING_SECRET: 'deployment-secret', SHIPMONK_ENABLED: 'true' })]
+    const { env } = emulatedServeEnvironment({ TAX_ENGINES_TOKEN_KEY: 'shell-key' }, files)
+    assert.equal(env.SHIPPING_TOKEN_KEY, '')
+    assert.equal(env.TAX_ENGINES_TOKEN_KEY, '')
+    assert.equal(env.DELIVERY_APPS_DOORDASH_SIGNING_SECRET, '')
+    // Not a secret, so left as the file has it.
+    assert.equal(env.SHIPMONK_ENABLED, 'true')
   })
 
   it('signs and verifies realm trust with the local pair beside an emulator, never a deployed key', () => {

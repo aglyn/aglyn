@@ -802,3 +802,112 @@ describe('the site resources plugins erase with it (AGL-4003)', () => {
     expect(new Map(store)).toEqual(before)
   })
 })
+
+/**
+ * The tree delete is a bulk writer, and one write that meets a transient
+ * failure under load rejected the whole call. The site was gone and the
+ * console was told the delete failed. These cases fail `recursiveDelete`
+ * on purpose and read what the erase answers and what it left.
+ */
+describe('a transient failure in the tree delete', () => {
+  const unavailable = () => Object.assign(new Error('14 UNAVAILABLE'), { code: 14 })
+  const realRecursiveDelete = db.recursiveDelete.bind(db)
+
+  /** Advance the retry pauses until the erase settles. */
+  async function settle<T>(promise: Promise<T>): Promise<T> {
+    let done = false
+    const watched = promise.finally(() => {
+      done = true
+    })
+    watched.catch(() => undefined)
+    while (!done) await jest.advanceTimersByTimeAsync(250)
+    return watched
+  }
+
+  beforeEach(() => {
+    jest.useFakeTimers({ doNotFake: ['nextTick', 'setImmediate', 'queueMicrotask'] })
+    jest.spyOn(console, 'warn').mockImplementation(() => undefined)
+  })
+
+  afterEach(() => {
+    jest.useRealTimers()
+  })
+
+  it('runs the delete again and finishes the erase', async () => {
+    seedProvisionedSite()
+    store.set(`hosts/${HOST}/screens/home`, { title: 'Home' })
+    const recursiveDelete = jest
+      .spyOn(db, 'recursiveDelete')
+      .mockImplementationOnce(async () => {
+        throw unavailable()
+      })
+      .mockImplementation(realRecursiveDelete)
+    const tearDown = jest.fn(async () => ({ outcome: 'removed' as const, detail: null }))
+
+    await settle(eraseHost(HOST, { tearDownSendingDomain: tearDown }))
+
+    expect(recursiveDelete).toHaveBeenCalledTimes(2)
+    expect(store.has(`hosts/${HOST}`)).toBe(false)
+    expect(store.has(`hosts/${HOST}/screens/home`)).toBe(false)
+    // The steps after the tree still ran: the domain is released.
+    expect(tearDown).toHaveBeenCalledTimes(1)
+  })
+
+  it('answers as done when the retries are spent but the site is gone', async () => {
+    seedProvisionedSite()
+    // Every attempt erases the tree and then reports one failed write, as
+    // the bulk writer does when a single delete meets a deadline.
+    const recursiveDelete = jest
+      .spyOn(db, 'recursiveDelete')
+      .mockImplementation(async (ref: { path: string }) => {
+        await realRecursiveDelete(ref)
+        throw unavailable()
+      })
+    const tearDown = jest.fn(async () => ({ outcome: 'removed' as const, detail: null }))
+
+    await expect(settle(eraseHost(HOST, { tearDownSendingDomain: tearDown }))).resolves.toEqual(
+      expect.objectContaining({ sendingDomain: expect.anything() }),
+    )
+
+    expect(recursiveDelete).toHaveBeenCalledTimes(4)
+    expect(store.has(`hosts/${HOST}`)).toBe(false)
+    expect(tearDown).toHaveBeenCalledTimes(1)
+    expect(console.error).toHaveBeenCalledWith(
+      expect.stringContaining('reported a failure after the site was erased'),
+      expect.anything(),
+    )
+  })
+
+  it('does not retry a failure that is not transient, and still reads the host', async () => {
+    seedProvisionedSite()
+    const recursiveDelete = jest
+      .spyOn(db, 'recursiveDelete')
+      .mockImplementation(async (ref: { path: string }) => {
+        await realRecursiveDelete(ref)
+        throw Object.assign(new Error('7 PERMISSION_DENIED'), { code: 7 })
+      })
+
+    await settle(eraseHost(HOST))
+
+    expect(recursiveDelete).toHaveBeenCalledTimes(1)
+    expect(store.has(`hosts/${HOST}`)).toBe(false)
+  })
+
+  it('throws when the site is still there after the retries', async () => {
+    seedProvisionedSite()
+    const tearDown = jest.fn(async () => ({ outcome: 'removed' as const, detail: null }))
+    const recursiveDelete = jest.spyOn(db, 'recursiveDelete').mockImplementation(async () => {
+      throw unavailable()
+    })
+
+    await expect(
+      settle(eraseHost(HOST, { tearDownSendingDomain: tearDown })),
+    ).rejects.toMatchObject({ code: 14 })
+
+    expect(recursiveDelete).toHaveBeenCalledTimes(4)
+    expect(store.has(`hosts/${HOST}`)).toBe(true)
+    // Nothing after the tree ran: the domain is not released for a site
+    // that still exists.
+    expect(tearDown).not.toHaveBeenCalled()
+  })
+})

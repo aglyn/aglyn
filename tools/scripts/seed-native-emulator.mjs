@@ -214,6 +214,7 @@ const areas = [
   ['ai-jobs', 'seedAiJobs'],
   ['sequences', 'seedSequences'],
   ['accounting', 'seedAccounting'],
+  ['integrations', 'seedIntegrations'],
   ['listings', 'seedListings'],
   ['white-label', 'seedWhiteLabel'],
   ['usage', 'seedUsage'],

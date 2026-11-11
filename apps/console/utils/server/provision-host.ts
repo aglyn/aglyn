@@ -43,6 +43,7 @@ import {
   firebaseAdmin,
   registerOrgHost,
 } from '@aglyn/tenant-data-admin'
+import { isTransientFirestoreError } from '@aglyn/tenant-data-admin/server/firestore-transient'
 import { sweepScopeSharingAfterSiteChange } from '@aglyn/tenant-data-admin/server/scope-sharing-sweep'
 import {
   queueSiteStarterWrites,
@@ -667,31 +668,10 @@ export class HostRegistrationIncompleteError extends Error {
   }
 }
 
-/**
- * Firestore failures that a second attempt can succeed past: contention
- * (`ABORTED`, which the admin SDK has already retried inside a transaction),
- * an unreachable backend, a deadline, or a quota burst. The admin SDK reports
- * gRPC codes as numbers. The string forms are kept for anything that
- * normalises them.
- */
-const TRANSIENT_FIRESTORE_CODES = new Set<unknown>([
-  4, // DEADLINE_EXCEEDED
-  8, // RESOURCE_EXHAUSTED
-  10, // ABORTED
-  14, // UNAVAILABLE
-  'deadline-exceeded',
-  'resource-exhausted',
-  'aborted',
-  'unavailable',
-])
-
-export function isTransientFirestoreError(error: unknown): boolean {
-  try {
-    return TRANSIENT_FIRESTORE_CODES.has((error as { code?: unknown } | null)?.code)
-  } catch {
-    return false
-  }
-}
+// The transient-code test lives with the admin library's retry helper, so
+// the site delete (`eraseHost`) and this create classify a failure alike.
+// Re-exported because the create route reads it from here.
+export { isTransientFirestoreError }
 
 /**
  * `registerOrgHost` for a site whose claim has committed. Retried once on a
