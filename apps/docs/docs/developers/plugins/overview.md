@@ -102,7 +102,7 @@ The first row is what the install physically produces, which depends on the type
 
 | Type | The row reads |
 | --- | --- |
-| Plugin | A plugin, sandboxed on its own origin with a per-plugin CSP — or, for a version staff signed to run with the site (realm trust), *A plugin, reviewed and signed by Aglyn to run with your site* |
+| Plugin | A plugin that runs in its own secure space, separate from your site — or, for a version staff signed to run with the site (realm trust), *A plugin, reviewed and signed by Aglyn to run with your site* |
 | Component | An editable component you can place on any page |
 | Template | Editable pages you can rework in Besigner |
 | Layout | An editable layout you can apply to any page |
@@ -118,11 +118,20 @@ told before installing rather than after.
 
 Then, in order, up to four more rows:
 
-- **Where it lands.** Plugins and dataset schemas install org-wide — *Installs org-wide,
-  covering sites you add later*. Everything else is site-scoped and says so: *Installs
-  per site — new sites are not covered automatically*. That row is marked as a **note**,
-  not a tick, because it is a limit you are being told about rather than something you
-  are getting.
+- **Where it lands.** The row follows the **Install to** choice on the card, so it
+  never disagrees with it:
+
+  | Install to | Plugin or dataset schema | Everything else |
+  | --- | --- | --- |
+  | All sites | *Installs on every site, including sites you add later* | *Installs on the sites you have now. A new site doesn't get it automatically* |
+  | Selected sites | *Installs only on the sites you pick. A new site doesn't get it until you add it* | the same |
+  | All sites except… | *Installs on every site but the ones you leave out, including sites you add later* | *Installs on the sites you have now, minus the ones you leave out. A new site doesn't get it automatically* |
+  | This site only | *Installs on this site only* | — |
+
+  A dataset schema offers **All sites** alone. With no choice on the card, as once the
+  listing is installed, the row reads as for **All sites**. A row that leaves sites out
+  is marked as a **note**, not a tick, because it is a limit you are being told about
+  rather than something you are getting.
 - **Review** — *This version passed marketplace review* — only when the version on offer
   is approved. A new release from the same publisher starts without it.
 - **The license**, when the publisher set one: *Licensed MIT*.

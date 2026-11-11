@@ -131,13 +131,14 @@ whole reason this step exists:
   sites you have now, minus the ones you leave out, and a site you add later will
   **not** have them.
 
-You will have seen this fact once already, in the **What's included** box further up
-the page — *Installs org-wide, covering sites you add later*, or *Installs per site —
-new sites are not covered automatically*. The line under each **Install to** choice is
-the same fact with your own numbers in it: for the site-scoped case it reads "Installs
-to all 4 sites. New sites won't get it automatically." Two wordings, one behavior — if
-they ever seem to disagree, the line under the choice is the one counting your actual
-sites.
+The **What's included** box further up the page says the same thing for the choice you
+have picked, and changes when you pick another. With **All sites** it reads *Installs on
+every site, including sites you add later*, or, for a site-scoped listing, *Installs on
+the sites you have now. A new site doesn't get it automatically*. With **Selected
+sites** it reads *Installs only on the sites you pick. A new site doesn't get it until
+you add it*. The line under each **Install to** choice is the same fact with your own
+numbers in it: for the site-scoped case it reads "Installs to all 4 sites. New sites
+won't get it automatically."
 
 "Selected sites" and "All sites except…" only appear when there's a choice to make. A
 dataset schema installs for the whole organization, so it offers **All sites** alone.

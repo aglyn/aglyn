@@ -269,3 +269,44 @@ describe('an artifact with no per-site form', () => {
     expect(screen.queryByRole('radio', { name: /Selected sites/ })).toBeNull()
   })
 })
+
+describe("What's included follows the Install to choice", () => {
+  it('names the reach of each choice for a plugin', async () => {
+    await mount('plugin')
+    expect(screen.getByText('Installs on every site, including sites you add later')).toBeTruthy()
+    fireEvent.click(radio(/Selected sites/))
+    expect(
+      screen.getByText(
+        "Installs only on the sites you pick. A new site doesn't get it until you add it",
+      ),
+    ).toBeTruthy()
+    expect(screen.queryByText(/including sites you add later$/)).toBeNull()
+    fireEvent.click(radio(/All sites except/))
+    expect(
+      screen.getByText(
+        'Installs on every site but the ones you leave out, including sites you add later',
+      ),
+    ).toBeTruthy()
+  })
+
+  it('never says a per-site copy reaches sites added later', async () => {
+    await mount('component')
+    expect(
+      screen.getByText("Installs on the sites you have now. A new site doesn't get it automatically"),
+    ).toBeTruthy()
+    fireEvent.click(radio(/All sites except/))
+    expect(
+      screen.getByText(
+        "Installs on the sites you have now, minus the ones you leave out. A new site doesn't get it automatically",
+      ),
+    ).toBeTruthy()
+  })
+
+  it('describes a plugin in plain words, not its sandbox mechanics', async () => {
+    await mount('plugin')
+    expect(
+      screen.getByText('A plugin that runs in its own secure space, separate from your site'),
+    ).toBeTruthy()
+    expect(screen.queryByText(/CSP|origin/)).toBeNull()
+  })
+})
