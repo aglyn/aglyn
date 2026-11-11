@@ -37,7 +37,6 @@ import {
   Typography,
 } from '@mui/material'
 import { doc } from 'firebase/firestore'
-import { useEffect, useState } from 'react'
 import {
   useFirestore,
   useFirestoreDoc,
@@ -46,6 +45,11 @@ import {
   writeGuardedBySeed,
 } from '@aglyn/tenant-feature-instance'
 import { writeSiteWideChange } from '@aglyn/tenant-feature-instance/hooks/helpers/site-wide-change'
+import {
+  isSeedChecking,
+  seedCheckingText,
+  useSeedEdits,
+} from '@aglyn/tenant-feature-instance/hooks/use-seed-edits'
 import OverlayStatsRow from './overlay-stats-row.component'
 import {
   OVERLAY_COPY_HELPER_TEXT,
@@ -109,12 +113,20 @@ export function PopupCard(props: PopupCardProps) {
   const entitled = checkEntitlement(org, 'marketingOverlays')
 
   const saved = (host?.popup ?? {}) as HostPopup
-  const [draft, setDraft] = useState<HostPopup>(saved)
+  /*
+   * What was typed, kept as EDITS over the stored popup (AGL-4047). Another
+   * session's edit, or the server's copy arriving after a page drawn from
+   * the cache, moves every field nobody touched; it used to reset the whole
+   * form, typed fields included. Save is held until the server has answered
+   * (`checking`).
+   */
   const savedKey = JSON.stringify(saved)
-  useEffect(() => {
-    setDraft(JSON.parse(savedKey))
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [savedKey])
+  const form = useSeedEdits<HostPopup>(saved)
+  const draft = form.values
+  const checking = isSeedChecking({
+    fromCache: hostFromCache,
+    unreadable: hostStatus === 'error',
+  })
 
   // The console media browser is provided by the shell (AGL-395).
   const { pickMedia } = useMediaPicker()
@@ -137,12 +149,12 @@ export function PopupCard(props: PopupCardProps) {
       headline: copy.stored(draft.headline),
       body: copy.stored(draft.body),
     }) !== savedKey
-  const patch = (partial: Partial<HostPopup>) =>
-    setDraft((previous) => ({ ...previous, ...partial }))
+  const patch = (partial: Partial<HostPopup>) => form.edit(partial)
   const headlineShownAsTyped = copy.shownAsTyped(draft.headline)
   const bodyShownAsTyped = copy.shownAsTyped(draft.body)
 
   const handleSave = async () => {
+    const written = form.edits
     const dequeue = queueLoading()
     try {
       /**
@@ -210,6 +222,7 @@ export function PopupCard(props: PopupCardProps) {
           persist: false,
         })
       }
+      form.settle(written)
       enqueueSnackbar('Popup saved', { variant: 'success', persist: false })
     } catch (error) {
       console.error(error)
@@ -421,6 +434,7 @@ export function PopupCard(props: PopupCardProps) {
             color="primary"
             disabled={
               !dirty ||
+              checking ||
               (Boolean(draft.enabled) && !draft.body?.trim()) ||
               copy.pending(draft.headline, draft.body)
             }
@@ -429,6 +443,11 @@ export function PopupCard(props: PopupCardProps) {
           >
             {'Save'}
           </Button>
+          {dirty && checking ? (
+            <Typography variant="body2" color="text.secondary" role="status">
+              {seedCheckingText('popup')}
+            </Typography>
+          ) : null}
           <OverlayStatsRow
             hostId={hostId}
             impressionKey="popupImpression"

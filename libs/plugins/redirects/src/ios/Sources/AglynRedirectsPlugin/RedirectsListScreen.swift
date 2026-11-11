@@ -38,6 +38,7 @@ struct RedirectsListScreen: View {
           .padding(AglynSpace.two)
       }
     }
+    .onChange(of: model.rows) { _, rows in editor?.refresh(rows) }
     .sheet(isPresented: Binding(get: { editor?.draft != nil }, set: { if !$0 { editor?.close() } })) {
       if let editor { RedirectEditorSheet(editor: editor) }
     }
@@ -133,6 +134,9 @@ struct RedirectEditorSheet: View {
         if let error = editor.error {
           Section { AglynNotice(error, tone: .error) }
         }
+        if editor.held {
+          Section { Text(seedCheckingText("redirect")).font(AglynFont.caption).foregroundStyle(.secondary) }
+        }
         Section {
           Picker("Match", selection: binding(\.kind)) {
             ForEach(redirectKindChoices, id: \.kind) { Text($0.label).tag($0.kind) }
@@ -179,7 +183,7 @@ struct RedirectEditorSheet: View {
           } label: {
             if editor.busy { ProgressView() } else { Text("Save") }
           }
-          .disabled(editor.busy || (editor.draft?.source.isEmpty ?? true) || (editor.draft?.destination.isEmpty ?? true))
+          .disabled(editor.busy || editor.held || (editor.draft?.source.isEmpty ?? true) || (editor.draft?.destination.isEmpty ?? true))
           .accessibilityIdentifier("redirect-save")
         }
       }

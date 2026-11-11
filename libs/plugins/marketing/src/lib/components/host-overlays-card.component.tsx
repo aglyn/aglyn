@@ -62,7 +62,6 @@ import {
   Typography,
 } from '@mui/material'
 import { collection, doc, limit, orderBy, query } from 'firebase/firestore'
-import { useState } from 'react'
 import {
   useFirestore,
   useFirestoreCollection,
@@ -70,6 +69,11 @@ import {
   writeGuardedBySeed,
   useUser,
 } from '@aglyn/tenant-feature-instance'
+import {
+  isSeedChecking,
+  seedCheckingText,
+} from '@aglyn/tenant-feature-instance/hooks/use-seed-edits'
+import { useSeedDraft } from '@aglyn/tenant-feature-instance/hooks/use-seed-draft'
 import { writeSiteWideChange } from '@aglyn/tenant-feature-instance/hooks/helpers/site-wide-change'
 import {
   overlayDisplayName,
@@ -220,7 +224,21 @@ export function HostOverlaysCard(props: HostOverlaysCardProps) {
     .slice(0, CEILING)
     .sort(compareOverlayPrecedence)
 
-  const [editor, setEditor] = useState<OverlayDraft | null>(null)
+  /*
+   * The editor's draft, kept as EDITS over the overlay as the list has it
+   * now (AGL-4047): opened from the cache's row, the server's copy replaces
+   * it under every field nobody touched (`stats` among them), and Save is
+   * held until it has.
+   */
+  const [editor, setEditor] = useSeedDraft<OverlayDraft>((opened) =>
+    opened.$id ? overlays.find((overlay) => overlay.$id === opened.$id) : undefined,
+  )
+  const editorChecking =
+    Boolean(editor?.$id) &&
+    isSeedChecking({
+      fromCache: overlaysFromCache,
+      unreadable: overlaysStatus === 'error',
+    })
   // The editor's copy is held in its stored form; the fields show it as typed.
   const copy = useOverlayCopyEditor({
     hostId,
@@ -393,6 +411,8 @@ export function HostOverlaysCard(props: HostOverlaysCardProps) {
       id,
       ...(draft.name ? { name: draft.name } : {}),
     })
+    // Re-opened on the stored overlay, so it follows that row from here.
+    setEditor(null)
     setEditor({ ...draft, $id: id })
     return { ok: true, id }
   }
@@ -916,6 +936,11 @@ export function HostOverlaysCard(props: HostOverlaysCardProps) {
           ) : null}
         </DialogContent>
         <DialogActions>
+          {editorChecking ? (
+            <Typography variant="body2" color="text.secondary" role="status" sx={{ mr: 'auto' }}>
+              {seedCheckingText('overlay')}
+            </Typography>
+          ) : null}
           <Button color="inherit" onClick={() => setEditor(null)}>
             {'Cancel'}
           </Button>
@@ -923,11 +948,10 @@ export function HostOverlaysCard(props: HostOverlaysCardProps) {
             variant="contained"
             color="primary"
             onClick={handleSave}
-            disabled={copy.pending(
-              editor?.bar?.text,
-              editor?.popup?.headline,
-              editor?.popup?.body,
-            )}
+            disabled={
+              editorChecking ||
+              copy.pending(editor?.bar?.text, editor?.popup?.headline, editor?.popup?.body)
+            }
           >
             {'Save'}
           </Button>

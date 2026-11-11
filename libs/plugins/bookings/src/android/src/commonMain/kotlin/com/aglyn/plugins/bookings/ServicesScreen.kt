@@ -181,15 +181,19 @@ fun BookingServicesScreen(context: NativePluginContext, startNew: Boolean = fals
           if (service == null) {
             EmptyState("This service is gone", icon = AglynIcons.named("design_services"))
           } else {
+            // Keyed by service, so typing for one never carries to the next.
+            androidx.compose.runtime.key(service.id) {
             ServiceEditor(
               initial = remember(service.raw) { bookingServiceDraftFrom(service.raw) },
               isNew = false,
               busy = busy,
+              held = (live as? Live.Ready)?.fromCache == true,
               draft = service.draft,
               onSave = { draft -> run("Service saved.") { api.saveService(service.id, draft) } },
               onToggleActive = { run(if (service.draft) "${service.name} now takes bookings." else "${service.name} is a draft again; it takes no new bookings.") { api.setServiceActive(service.id, service.draft) } },
               onDelete = { deleting = service },
             )
+            }
           }
         }
       }
@@ -223,8 +227,16 @@ private fun ServiceEditor(
   draft: Boolean = false,
   onToggleActive: (() -> Unit)? = null,
   onDelete: (() -> Unit)? = null,
+  /** A stored service read only from the device cache: Save waits for the server's copy (AGL-4047). A new one is never held. */
+  held: Boolean = false,
 ) {
-  var form by remember(initial) { mutableStateOf(initial) }
+  // A newer copy of the service keeps what was typed and moves every other field to it (AGL-4047).
+  var form by remember { mutableStateOf(initial) }
+  var seeded by remember { mutableStateOf(initial) }
+  if (seeded != initial) {
+    form = rebasedServiceDraft(form, seeded, initial)
+    seeded = initial
+  }
   val problem = bookingServiceDraftProblem(form.name)
   Box(Modifier.fillMaxSize(), contentAlignment = Alignment.TopCenter) {
     Column(
@@ -234,6 +246,9 @@ private fun ServiceEditor(
       Row(verticalAlignment = Alignment.CenterVertically) {
         Text(if (isNew) "New service" else form.name.ifBlank { "Service" }, Modifier.weight(1f).semantics { heading() }, style = MaterialTheme.typography.titleLarge)
         if (!isNew) StatusChip(if (draft) "Draft" else "Taking bookings", if (draft) StatusTone.WARNING else StatusTone.SUCCESS)
+      }
+      if (held) {
+        Text(com.aglyn.core.seedCheckingText("service"), Modifier.testTag("service-checking"), style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurfaceVariant)
       }
       if (draft) {
         NoticeBanner("A draft is offered nowhere until it is turned on.", StatusTone.WARNING)
@@ -325,7 +340,7 @@ private fun ServiceEditor(
         )
       }
       FlowRow(horizontalArrangement = Arrangement.spacedBy(space(1f)), verticalArrangement = Arrangement.spacedBy(space(1f))) {
-        Button(onClick = { onSave(form) }, enabled = problem == null && !busy, modifier = Modifier.heightIn(min = 44.dp).testTag("service-save")) {
+        Button(onClick = { onSave(form) }, enabled = problem == null && !busy && !held, modifier = Modifier.heightIn(min = 44.dp).testTag("service-save")) {
           Text(if (isNew) "Add service" else "Save service")
         }
         onToggleActive?.let {

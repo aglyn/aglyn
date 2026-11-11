@@ -447,7 +447,8 @@
                   }
                 }
               },
-              "success": "Zone saved"
+              "success": "Zone saved",
+              "checking": "shipping settings"
             },
             {
               "id": "remove",
@@ -475,7 +476,8 @@
                   }
                 }
               },
-              "success": "Removed"
+              "success": "Removed",
+              "checking": "shipping settings"
             }
           ]
         },
@@ -521,7 +523,8 @@
                   }
                 }
               },
-              "success": "Zone saved"
+              "success": "Zone saved",
+              "checking": "shipping settings"
             }
           ]
         },
@@ -666,7 +669,8 @@
                   }
                 }
               },
-              "success": "Rate saved"
+              "success": "Rate saved",
+              "checking": "shipping settings"
             },
             {
               "id": "tiers",
@@ -793,7 +797,8 @@
                   }
                 }
               },
-              "success": "Rate saved"
+              "success": "Rate saved",
+              "checking": "shipping settings"
             },
             {
               "id": "remove",
@@ -814,7 +819,8 @@
                   }
                 }
               },
-              "success": "Removed"
+              "success": "Removed",
+              "checking": "shipping settings"
             }
           ]
         },
@@ -914,7 +920,8 @@
                   }
                 }
               },
-              "success": "Rate saved"
+              "success": "Rate saved",
+              "checking": "shipping settings"
             },
             {
               "id": "addCarrier",
@@ -1024,7 +1031,8 @@
                   }
                 }
               },
-              "success": "Rate saved"
+              "success": "Rate saved",
+              "checking": "shipping settings"
             }
           ]
         },
@@ -1051,8 +1059,10 @@
                 }
               }
             },
-            "success": "Shipping settings saved"
-          }
+            "success": "Shipping settings saved",
+            "checking": "shipping settings"
+          },
+          "checking": "shipping settings"
         },
         {
           "type": "notice",
@@ -1092,7 +1102,8 @@
                   }
                 }
               },
-              "success": "Zone saved"
+              "success": "Zone saved",
+              "checking": "shipping settings"
             }
           ]
         },
@@ -1195,7 +1206,8 @@
                   }
                 }
               },
-              "success": "Tier saved"
+              "success": "Tier saved",
+              "checking": "shipping settings"
             },
             {
               "id": "remove",
@@ -1228,7 +1240,8 @@
                   }
                 }
               },
-              "success": "Removed"
+              "success": "Removed",
+              "checking": "shipping settings"
             }
           ]
         },
@@ -1290,7 +1303,8 @@
                   }
                 }
               },
-              "success": "Tier saved"
+              "success": "Tier saved",
+              "checking": "shipping settings"
             }
           ]
         },
@@ -1363,7 +1377,8 @@
                   }
                 }
               },
-              "success": "Tier saved"
+              "success": "Tier saved",
+              "checking": "shipping settings"
             },
             {
               "id": "remove",
@@ -1396,7 +1411,8 @@
                   }
                 }
               },
-              "success": "Removed"
+              "success": "Removed",
+              "checking": "shipping settings"
             }
           ]
         },
@@ -1457,7 +1473,8 @@
                   }
                 }
               },
-              "success": "Tier saved"
+              "success": "Tier saved",
+              "checking": "shipping settings"
             }
           ]
         }
@@ -1644,8 +1661,10 @@
                 }
               }
             },
-            "success": "Local delivery saved"
-          }
+            "success": "Local delivery saved",
+            "checking": "local delivery settings"
+          },
+          "checking": "local delivery settings"
         },
         {
           "type": "list",
@@ -1788,7 +1807,8 @@
                   }
                 }
               },
-              "success": "Zone saved"
+              "success": "Zone saved",
+              "checking": "local delivery settings"
             },
             {
               "id": "remove",
@@ -1809,7 +1829,8 @@
                   }
                 }
               },
-              "success": "Removed"
+              "success": "Removed",
+              "checking": "local delivery settings"
             }
           ]
         },
@@ -1913,7 +1934,8 @@
                   }
                 }
               },
-              "success": "Zone saved"
+              "success": "Zone saved",
+              "checking": "local delivery settings"
             },
             {
               "id": "locate",
@@ -1938,7 +1960,8 @@
                       }
                     }
                   }
-                }
+                },
+                "checking": "local delivery settings"
               },
               "success": "Placed on the map"
             },
@@ -1965,7 +1988,8 @@
                       }
                     }
                   }
-                }
+                },
+                "checking": "local delivery settings"
               },
               "success": "Placed on the map"
             }

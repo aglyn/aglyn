@@ -163,7 +163,8 @@ internal fun liveServices(context: NativePluginContext): Live<List<ServiceRow>> 
   val flow = remember(hostId, context.firestore) { context.firestore.observe(servicesQuery(hostId)) }
   val live by flow.collectAsState(Live.Loading)
   return when (val value = live) {
-    is Live.Ready -> Live.Ready(visibleServices(value.value))
+    // `fromCache` is kept: an open service holds its Save while the list is the device cache's (AGL-4047).
+    is Live.Ready -> Live.Ready(visibleServices(value.value), value.fromCache)
     is Live.Failed -> value
     Live.Loading -> Live.Loading
   }

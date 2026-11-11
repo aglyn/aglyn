@@ -45,8 +45,11 @@ import {
  * When it can help: one button that opens the provider in a popup, where the
  * owner signs in and approves. This page then asks `domain-connect/finish`
  * every ten seconds for five minutes, and at once when the provider's return
- * page says it is done. The records usually resolve within the first minute;
- * after five, the console sweep finishes the connect on its own.
+ * page says it is done. The records usually resolve within the first minute.
+ * After five minutes it stops asking but keeps listening: an owner still
+ * signing in at the provider (an account to make, a second factor) who
+ * approves later is picked up the moment the return page says so, not at
+ * the console sweep's next tick, up to fifteen minutes on.
  *
  * A blocked popup sends this tab to the provider instead, and the session's
  * state rides in `sessionStorage` so the page it comes back to resumes.
@@ -64,7 +67,8 @@ interface ActiveSession {
   startedAtMs: number
 }
 
-type Phase = 'idle' | 'starting' | 'provider' | 'checking'
+/** `quiet`: five minutes passed with no answer; listening for the return page only. */
+type Phase = 'idle' | 'starting' | 'provider' | 'checking' | 'quiet'
 
 function readResume(hostId: string): ActiveSession | null {
   try {
@@ -229,13 +233,10 @@ export default function ConnectAutomatically(props: ConsoleHostDomainConnectZone
         await check(session)
         if (Date.now() - session.startedAtMs >= POLL_FOR_MS) {
           stopPolling()
+          // The session stays, so the return page can still wake it: an owner
+          // may approve long after five minutes. Only the polling stops.
           if (activeRef.current?.state === session.state) {
-            setActive(null)
-            setPhase('idle')
-            setProblem(
-              `We haven’t heard back from ${session.providerName} yet. If you approved the change, ` +
-                'your domain connects on its own once it points here.',
-            )
+            setPhase('quiet')
             writeResume(hostId, null)
           }
           return
@@ -262,11 +263,17 @@ export default function ConnectAutomatically(props: ConsoleHostDomainConnectZone
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [hostId, user])
 
-  // The return page says the provider is done: ask now, not at the next tick.
+  // The return page says the provider is done: ask now, and keep asking for
+  // another window while the records spread, however late the approval came.
   useEffect(() => {
     if (!active) return
     const onSignal = (data: unknown) => {
-      if (isDomainConnectReturnMessage(data)) void check(active)
+      if (!isDomainConnectReturnMessage(data)) return
+      const woken = { ...active, startedAtMs: Date.now() }
+      activeRef.current = woken
+      setPhase('checking')
+      void check(woken)
+      poll(woken)
     }
     const onMessage = (event: MessageEvent) => {
       if (event.origin === window.location.origin) onSignal(event.data)
@@ -283,7 +290,15 @@ export default function ConnectAutomatically(props: ConsoleHostDomainConnectZone
       window.removeEventListener('message', onMessage)
       channel?.close()
     }
-  }, [active, check])
+  }, [active, check, poll])
+
+  /** Drops a quiet session, so the button is back to try again. */
+  const startOver = useCallback(() => {
+    stopPolling()
+    writeResume(hostId, null)
+    setActive(null)
+    setPhase('idle')
+  }, [hostId, setActive, stopPolling])
 
   useEffect(() => stopPolling, [stopPolling])
 
@@ -371,6 +386,19 @@ export default function ConnectAutomatically(props: ConsoleHostDomainConnectZone
             {phase === 'checking' ? 'Checking your domain…' : `Waiting for ${name}…`}
           </Typography>
         </Stack>
+      )}
+      {phase === 'quiet' && name && (
+        <Alert
+          severity="info"
+          action={
+            <Button color="inherit" size="small" onClick={startOver}>
+              Start again
+            </Button>
+          }
+        >
+          {`We haven’t heard back from ${name} yet. If you’re still approving there, this page updates when you finish. ` +
+            'If you already approved, your domain connects on its own once it points here.'}
+        </Alert>
       )}
       {problem && (
         <Alert severity="info" onClose={() => setProblem(null)}>

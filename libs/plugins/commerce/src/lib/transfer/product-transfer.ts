@@ -947,6 +947,9 @@ class Tally {
       .sort((a, b) => order.indexOf(a.class) - order.indexOf(b.class))
       .map(({ rowSet, fieldSet, ...warning }) => ({
         ...warning,
+        // In file order: the product plan reports each product's first row
+        // before the variant plans report the rest.
+        samples: [...warning.samples].sort((a, b) => a.row - b.row),
         rows: Math.max(rowSet.size, warning.rows),
         fieldIds: [...fieldSet],
       }))
@@ -1195,7 +1198,13 @@ export function planProductTransfer(input: BuildTransferPlanInput, context: Prod
       if (identity) claimed.set(identity, position)
       const id = target ? target.id : context.newVariantId()
       lineTargets.set(position, { id, isNew: !target, ...(via ? { via } : {}) })
-      lineRows.push({ ...row, values: pick(row.values, VARIANT_LEVEL_FIELDS) })
+      // The product's first row went into the product plan whole, which
+      // reports every read note it carries (a reformatted price, a cell it
+      // could not read). Its line carries none, or the Review step lists each
+      // of them twice, once from each plan ("5 times in 3 rows" for 3 price
+      // cells, AGL-4047). The product plan always runs, so nothing is lost.
+      const noted = position === leaderPosition ? { ...row, derivations: [], problems: [] } : row
+      lineRows.push({ ...noted, values: pick(row.values, VARIANT_LEVEL_FIELDS) })
       linePositions.push(position)
       if (target) {
         existingVariantValues.set(`${productId}::${target.id}`, target.values)

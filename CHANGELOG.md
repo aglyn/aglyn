@@ -9,6 +9,75 @@ content on the marketing site and is written separately.
 
 <!-- releases below -->
 
+## v1.21.0 — 2026-11-11
+
+[Compare with the previous release](https://github.com/aglyn/aglyn/compare/v1.20.3...v1.21.0)
+
+### Added
+
+- **console:** open Create site by itself on an empty workspace ([AGL-4217](https://linear.app/aglyn/issue/AGL-4217))
+- **tenant:** useSeedDraft keeps a row editor's draft as edits over the live row ([AGL-4047](https://linear.app/aglyn/issue/AGL-4047))
+- **domains:** "Use Aglyn's nameservers" for a registered domain ([AGL-4040](https://linear.app/aglyn/issue/AGL-4040))
+- **native:** the Apple Besigner opens in focus mode with its own back ([AGL-4056](https://linear.app/aglyn/issue/AGL-4056))
+- **native:** the Kotlin Besigner opens in focus mode with its own back ([AGL-4056](https://linear.app/aglyn/issue/AGL-4056))
+- **console:** in the apps the Besigner's own back is the way out ([AGL-4056](https://linear.app/aglyn/issue/AGL-4056))
+
+### Fixed
+
+- **mui:** a Select field's dropdown choices show their text on published sites again (blank since 10/13)
+- **native:** an empty Home card leaves no hole in the iPad grid ([AGL-4011](https://linear.app/aglyn/issue/AGL-4011))
+- **commerce:** product import lists each reformatted cell once ([AGL-4047](https://linear.app/aglyn/issue/AGL-4047))
+- **media:** limit-access confirm says what the usage check found ([AGL-4047](https://linear.app/aglyn/issue/AGL-4047))
+- **native:** plugin editors hold on a cached read and keep what was typed ([AGL-4047](https://linear.app/aglyn/issue/AGL-4047))
+- **native:** the phone AI sheet says which area is on screen ([AGL-4064](https://linear.app/aglyn/issue/AGL-4064), [AGL-4006](https://linear.app/aglyn/issue/AGL-4006))
+- **native:** an iPad window keeps its place across the app switcher ([AGL-4006](https://linear.app/aglyn/issue/AGL-4006))
+- **native:** Android POS Day totals can share its CSV ([AGL-4062](https://linear.app/aglyn/issue/AGL-4062))
+- **media:** folder tree offers Shared with… like the folder card ([AGL-4047](https://linear.app/aglyn/issue/AGL-4047))
+- **deps:** upgrade Next.js to 16.4.6 for seven moderate advisories ([AGL-4091](https://linear.app/aglyn/issue/AGL-4091))
+- **shared-ui:** MdiIcon draws a generated icon object, and its path prop is typechecked ([AGL-4047](https://linear.app/aglyn/issue/AGL-4047))
+- **domains:** connect automatically hears an approval after five minutes ([AGL-3963](https://linear.app/aglyn/issue/AGL-3963))
+- **plugins:** hold first-press saves on an unconfirmed seed in the other plugins ([AGL-4047](https://linear.app/aglyn/issue/AGL-4047))
+- **commerce:** offline cards are read and captured at sync ([AGL-4039](https://linear.app/aglyn/issue/AGL-4039))
+- **native:** iPhone lands on Sites after Delete site ([AGL-4003](https://linear.app/aglyn/issue/AGL-4003))
+- **plugins:** a site's plugin page waits for the install pin before saying where it runs ([AGL-4192](https://linear.app/aglyn/issue/AGL-4192))
+- **native:** setup and entry editors hold on a cached read and keep what was typed ([AGL-4047](https://linear.app/aglyn/issue/AGL-4047))
+- **crm:** hold first-press saves on an unconfirmed seed and replay edits ([AGL-4047](https://linear.app/aglyn/issue/AGL-4047))
+- **native:** a settings save holds on a cached read and keeps what was typed ([AGL-4047](https://linear.app/aglyn/issue/AGL-4047))
+- **marketplace:** what's included reach row follows the Install to choice ([AGL-4047](https://linear.app/aglyn/issue/AGL-4047))
+- **variables:** an unknown {{var:id}} renders empty on a site with no variables ([AGL-4192](https://linear.app/aglyn/issue/AGL-4192))
+- **commerce:** hold first-press saves on an unconfirmed seed and replay edits ([AGL-4047](https://linear.app/aglyn/issue/AGL-4047))
+- **console:** hold core editor saves on an unconfirmed seed and keep edits ([AGL-4047](https://linear.app/aglyn/issue/AGL-4047))
+- **commerce:** cart page starts reading the stored cart while its HTML arrives ([AGL-4047](https://linear.app/aglyn/issue/AGL-4047))
+- **docs-shots:** the Data page shots open Team from the list; add the Install card shot ([AGL-4047](https://linear.app/aglyn/issue/AGL-4047))
+- **domains:** nameserver move survives a reload; review findings ([AGL-4040](https://linear.app/aglyn/issue/AGL-4040))
+- **commerce:** cart loads before saying empty, asks ship-to up front ([AGL-4047](https://linear.app/aglyn/issue/AGL-4047), [AGL-4038](https://linear.app/aglyn/issue/AGL-4038))
+- **console:** form saves hold on an unconfirmed seed instead of refusing the first press ([AGL-4047](https://linear.app/aglyn/issue/AGL-4047))
+- **native:** no system bar over the phone's Besigner; tablets keep the title bar ([AGL-4056](https://linear.app/aglyn/issue/AGL-4056))
+- **console:** in the apps the Besigner's back leaves with no loading page ([AGL-4056](https://linear.app/aglyn/issue/AGL-4056))
+
+### Documentation
+
+- re-shoot the Install card with its What's included icons ([AGL-4047](https://linear.app/aglyn/issue/AGL-4047))
+- re-shoot the Install card, import Columns step and export dialog ([AGL-4047](https://linear.app/aglyn/issue/AGL-4047))
+- re-shoot the Data page and add the Selected sites install shot ([AGL-4047](https://linear.app/aglyn/issue/AGL-4047))
+- **domains:** list Domain Chief for Connect automatically ([AGL-3963](https://linear.app/aglyn/issue/AGL-3963))
+
+<details>
+<summary>Also in this release: 4 test, 6 chore</summary>
+
+- limit-access confirm and product import warning ready to merge ([AGL-4047](https://linear.app/aglyn/issue/AGL-4047))
+- **plugins:** first-press holds ready for merge ([AGL-4047](https://linear.app/aglyn/issue/AGL-4047))
+- **commerce,crm:** first-press holds ready for merge ([AGL-4047](https://linear.app/aglyn/issue/AGL-4047))
+- **crm:** type the held filing button in its spec ([AGL-4047](https://linear.app/aglyn/issue/AGL-4047))
+- **console:** first-press holds on core editors ready to merge ([AGL-4047](https://linear.app/aglyn/issue/AGL-4047))
+- **console:** announce refusals ride a failed read now that a cached one holds ([AGL-4047](https://linear.app/aglyn/issue/AGL-4047))
+- **console:** first-press holds and edit replay on core editors ([AGL-4047](https://linear.app/aglyn/issue/AGL-4047))
+- skip ci
+- **console:** basic info's shape spec counts the hold's read of fromCache ([AGL-4047](https://linear.app/aglyn/issue/AGL-4047))
+- **commerce:** cart loading and ship-to head ([AGL-4047](https://linear.app/aglyn/issue/AGL-4047))
+
+</details>
+
 ## v1.20.3 — 2026-11-11
 
 [Compare with the previous release](https://github.com/aglyn/aglyn/compare/v1.20.2...v1.20.3)

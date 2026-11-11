@@ -184,6 +184,28 @@ describe('reading a Shopify product CSV', () => {
     expect(result.warnings.map((warning) => warning.class)).toContain('droppedCell')
   })
 
+  it("lists a product's first row once for a value it read differently, not once per plan (AGL-4047)", () => {
+    // Two rows of one product and a second product: three prices with no
+    // currency, so three cells read as US dollars. The first row of each
+    // product goes into both the product plan and its variant line's plan,
+    // and was listed by each: "5 times in 3 rows".
+    const { result } = plan('Handle,Title,Option1 Name,Option1 Value,Variant Price\ncanopy,Canopy,Size,Small,200\ncanopy,,,Large,300\npass,Day pass,,,1\n')
+    const derived = result.warnings.find((warning) => warning.class === 'derivation')
+    expect(derived).toMatchObject({ count: 3, rows: 3 })
+    expect(derived?.samples.map((sample) => [sample.row, sample.fieldId])).toEqual([
+      [0, 'price'],
+      [1, 'price'],
+      [2, 'price'],
+    ])
+  })
+
+  it('still reports a price it could not read on a product that writes nothing', () => {
+    const { result } = plan('Handle,Title,Variant Price,Variant Compare At Price\nlost,,5,abc\n')
+    const dropped = result.warnings.find((warning) => warning.class === 'droppedCell')
+    expect(dropped?.samples).toEqual([expect.objectContaining({ row: 0, fieldId: 'compareAtPrice' })])
+    expect(dropped?.count).toBe(1)
+  })
+
   it('fails a row with no title, the one field a new product cannot do without', () => {
     const { rows } = plan('Handle,Title,Variant Price\norphan,,5\n')
     expect(rows[0]).toMatchObject({ verdict: 'fail', reason: 'missingRequired', missing: ['title'] })

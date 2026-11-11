@@ -53,7 +53,9 @@ struct BookingServicesScreen: View {
     }
     .task(id: context.hostID) {
       if let hostID = context.hostID {
-        services.start(context.firestore, FirestoreQuery(servicesPath(hostID), limit: servicesWindow), map: visibleServices)
+        // Metadata changes too, so a row the server confirms stops reading as the cache's (AGL-4047).
+        services.start(
+          context.firestore, FirestoreQuery(servicesPath(hostID), limit: servicesWindow, includeMetadataChanges: true), map: visibleServices)
       }
     }
     .onDisappear { services.stop() }
@@ -170,6 +172,8 @@ struct ServiceListRow: View {
 struct ServiceEditor: View {
   @Environment(\.dismiss) private var dismiss
   let service: ServiceRow?
+  /// The service as stored now; what was typed is laid over each newer copy (AGL-4047).
+  let initial: BookingServiceDraft
   let onSave: (BookingServiceDraft) -> Void
   let onToggle: (() -> Void)?
   let onDelete: (() -> Void)?
@@ -181,6 +185,7 @@ struct ServiceEditor: View {
     onToggle: (() -> Void)?, onDelete: (() -> Void)?
   ) {
     self.service = service
+    self.initial = initial
     self.onSave = onSave
     self.onToggle = onToggle
     self.onDelete = onDelete
@@ -189,9 +194,14 @@ struct ServiceEditor: View {
   }
 
   private var values: ContractValues { .shared }
+  /// A stored service read only from the device cache: Save waits for the server's copy. A new one is never held.
+  private var held: Bool { service?.fromCache == true }
 
   var body: some View {
     Form {
+      if held {
+        Section { Text(seedCheckingText("service")).font(AglynFont.caption).foregroundStyle(.secondary) }
+      }
       if service?.draft == true {
         Section { AglynNotice("A draft is offered nowhere until it is turned on.", tone: .warning) }
       }
@@ -269,7 +279,7 @@ struct ServiceEditor: View {
     .aglynScreenTitle(service == nil ? "New service" : form.name.isEmpty ? "Service" : form.name)
     // Beside the list on the Mac and iPad, Save sits in the head as a bordered button; the list keeps Add service.
     .aglynEditorActions(
-      id: "service-save", save: service == nil ? "Add" : "Save", enabled: bookingServiceDraftProblem(name: form.name) == nil,
+      id: "service-save", save: service == nil ? "Add" : "Save", enabled: bookingServiceDraftProblem(name: form.name) == nil && !held,
       primary: false
     ) {
       var draft = form
@@ -278,6 +288,20 @@ struct ServiceEditor: View {
       if service == nil { dismiss() }
     }
     .accessibilityIdentifier("service-editor")
+    .onChange(of: initial) { previous, next in
+      let typedHours = hours.map { formatBookingWindows($0.map { BookingWindow(end: $0.end, start: $0.start) }) }
+      var typed = form
+      typed.windowText = typedHours
+      let out = rebased(typed, previous: previous, next: next) {
+        $0.field(\.askAddress); $0.field(\.askPhone); $0.field(\.crmFollowUpTask); $0.field(\.crmMeetingActivity)
+        $0.field(\.description); $0.field(\.durationMinutes); $0.field(\.name); $0.field(\.priceDisplay)
+        $0.field(\.priceUsd); $0.field(\.timezone); $0.field(\.windowText)
+      }
+      form = out
+      if out.windowText != typedHours {
+        hours = out.windowText.map { parseBookingWindows($0).map { AglynHoursWindow(start: $0.start, end: $0.end) } }
+      }
+    }
   }
 
   private var zones: [String] {

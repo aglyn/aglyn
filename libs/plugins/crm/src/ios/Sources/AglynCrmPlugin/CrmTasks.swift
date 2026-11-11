@@ -25,6 +25,8 @@ struct CrmTask: Identifiable, Equatable {
   let contactID: String?
   let companyID: String?
   let dealID: String?
+  /// Only the device cache's copy yet: its sheet holds Save until the server's is in (AGL-4047).
+  var fromCache = false
 
   var draft: TaskDraft {
     TaskDraft(
@@ -34,10 +36,12 @@ struct CrmTask: Identifiable, Equatable {
 }
 
 func crmTask(_ doc: FirestoreDocument) -> CrmTask {
-  CrmTask(
+  var task = CrmTask(
     id: doc.id, title: doc.string("title") ?? "Task", kind: doc.string("kind") ?? "todo", priority: doc.string("priority") ?? "normal",
     status: doc.string("status") ?? "open", dueAtMs: millis(doc.data["dueAtMs"]), assigneeUID: doc.string("assigneeUid"),
     notes: doc.string("notes") ?? "", contactID: doc.string("contactId"), companyID: doc.string("companyId"), dealID: doc.string("dealId"))
+  task.fromCache = doc.fromCache
+  return task
 }
 
 enum TaskView: String, CaseIterable, Identifiable {
@@ -78,12 +82,15 @@ func tasksQuery(_ scope: CrmScope, _ plan: TaskViewPlan, search: String, limit: 
   if let from = plan.dueFrom { base.append(ListQueryFilter(op: .greaterThanOrEqual, path: "dueAtMs", value: .number(Double(from)))) }
   if let before = plan.dueBefore { base.append(ListQueryFilter(op: .lessThan, path: "dueAtMs", value: .number(Double(before)))) }
   let words = search.trimmingCharacters(in: .whitespacesAndNewlines)
-  return planListQuery(
+  var query = planListQuery(
     ContractValues.shared.taskListDeclaration,
     ListQueryRequest(
       base: base, clauses: [], search: words.isEmpty ? nil : [words],
       sort: ListQuerySort(direction: plan.descending ? .desc : .asc, path: "dueAtMs"))
   ).firestoreQuery(crmPath(scope.orgID, "crmTasks"), limit: limit)
+  // Metadata changes too, so a row the server confirms stops reading as the cache's (AGL-4047).
+  query.includeMetadataChanges = true
+  return query
 }
 
 struct TaskRowView: View {
@@ -141,6 +148,8 @@ struct TaskSiteChoice {
 struct TaskSheet: View {
   let title: String
   let initial: TaskDraft
+  /// A stored task read only from the device cache: Save waits for the server's copy. A new one is never held.
+  var held = false
   let reference: CrmReference
   /// Given, the form asks where the task is filed (a new task at the workspace's level).
   var siteChoice: TaskSiteChoice?
@@ -154,12 +163,16 @@ struct TaskSheet: View {
   @Environment(\.dismiss) private var dismiss
 
   var body: some View {
-    AglynFormSheet(title, canConfirm: !draft.title.trimmingCharacters(in: .whitespaces).isEmpty && (siteChoice == nil || !site.isEmpty), save: {
+    AglynFormSheet(
+      title, canConfirm: !held && !draft.title.trimmingCharacters(in: .whitespaces).isEmpty && (siteChoice == nil || !site.isEmpty), save: {
       var final = draft
       final.dueAtMs = hasDue ? Int64(due.timeIntervalSince1970 * 1000) : nil
       final.sourceSite = site.isEmpty || site == crmOrganizationChoice ? nil : site
       try await save(final)
     }) {
+      if held {
+        Section { Text(seedCheckingText("task")).font(AglynFont.caption).foregroundStyle(.secondary) }
+      }
       if let siteChoice {
         Section {
           Picker("Site", selection: $site) {
@@ -225,6 +238,20 @@ struct TaskSheet: View {
         due = Date(timeIntervalSince1970: Double(dueAt) / 1000)
       } else {
         due = Calendar.current.date(bySettingHour: 9, minute: 0, second: 0, of: Date().addingTimeInterval(86_400)) ?? Date()
+      }
+    }
+    // A newer copy of the task keeps what was typed and moves every other field to it (AGL-4047).
+    .onChange(of: initial) { previous, next in
+      var typed = draft
+      typed.dueAtMs = hasDue ? Int64(due.timeIntervalSince1970 * 1000) : nil
+      let out = rebased(typed, previous: previous, next: next) {
+        $0.field(\.title); $0.field(\.kind); $0.field(\.priority); $0.field(\.dueAtMs); $0.field(\.assigneeUID); $0.field(\.notes)
+        $0.field(\.contactID); $0.field(\.companyID); $0.field(\.dealID)
+      }
+      draft = out
+      if out.dueAtMs != typed.dueAtMs {
+        hasDue = out.dueAtMs != nil
+        if let at = out.dueAtMs { due = Date(timeIntervalSince1970: Double(at) / 1000) }
       }
     }
   }
@@ -298,8 +325,10 @@ struct TasksSection: View {
         try await api.saveTask(nil, draft)
       }
     }
-    .sheet(item: $editing) { task in
-      TaskSheet(title: "Edit task", initial: task.draft, reference: reference, onDelete: { try await api.deleteTask(task) }) {
+    .sheet(item: $editing) { opened in
+      // The task as the list holds it now, so a newer copy reaches the open sheet.
+      let task = list.rows.first { $0.id == opened.id } ?? opened
+      TaskSheet(title: "Edit task", initial: task.draft, held: task.fromCache, reference: reference, onDelete: { try await api.deleteTask(task) }) {
         try await api.saveTask(task.id, $0)
       }
     }

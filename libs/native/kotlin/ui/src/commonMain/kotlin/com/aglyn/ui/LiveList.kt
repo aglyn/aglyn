@@ -81,7 +81,8 @@ class LiveQueryList<T>(
             Live.Loading -> if (rows !is Live.Ready) rows = Live.Loading
             is Live.Failed -> rows = live
             is Live.Ready -> {
-              rows = Live.Ready(live.value.take(window).map(map))
+              // `fromCache` is kept: an editor opened from a row holds its Save while the list is the cache's (AGL-4047).
+              rows = Live.Ready(live.value.take(window).map(map), live.fromCache)
               hasMore = live.value.size > window
             }
           }

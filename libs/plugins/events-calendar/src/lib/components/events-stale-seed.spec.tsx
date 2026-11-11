@@ -167,23 +167,27 @@ function editFirstEventAndSave() {
   fireEvent.click(screen.getByRole('button', { name: 'Save event' }))
 }
 
+/** Long enough for a press that was going to write to have written. */
+const settle = () => new Promise((resolve) => setTimeout(resolve, 20))
+
 // This spec pins the refusal, not the wait before it (AGL-4120).
 beforeAll(() => setSeedConfirmWaitMs(0))
 afterAll(() => setSeedConfirmWaitMs())
 
 describe('EventsConsolePage (AGL-1358)', () => {
-  it('REFUSES to rewrite an event seeded from an unconfirmed read', async () => {
+  it('HOLDS Save on an event seeded from an unconfirmed read, keeping it open', async () => {
     listener.fromCache = true
     renderPage()
 
     editFirstEventAndSave()
-
-    // Settled, so this cannot pass merely by asserting too early.
-    await waitFor(() => expect(enqueueSnackbar).toHaveBeenCalled())
+    await settle()
+    // Held, not refused: nothing was pressed into the wait, and the reason
+    // sits beside the held control (AGL-4047).
+    expect(enqueueSnackbar).not.toHaveBeenCalled()
+    expect(screen.getAllByRole('status').map((note) => note.textContent)).toContain(
+      'Checking your event with the server…',
+    )
     expect(setDoc).not.toHaveBeenCalled()
-    const [message] = enqueueSnackbar.mock.calls[0]
-    expect(message).toEqual(expect.stringContaining('event'))
-    expect(message).toEqual(expect.stringMatching(/nothing was saved/i))
     // …and the dialog is still open with what was being edited.
     expect((screen.getByLabelText('Title') as HTMLInputElement).value).toEqual(
       'Launch party',
