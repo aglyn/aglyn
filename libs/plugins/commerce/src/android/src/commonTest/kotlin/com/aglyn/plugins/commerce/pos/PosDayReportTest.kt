@@ -81,10 +81,10 @@ class PosDayReportTest {
     model.pick("2026-10-27", "2026-10-24")
     assertEquals(listOf(null to null, "2026-10-24" to "2026-10-27"), api.asked)
     assertEquals("Oct 24 – Oct 27, 2026", model.label)
+    assertEquals("day-totals-2026-10-24-to-2026-10-27.csv", model.csv()?.first)
     // Picking today again says so: the store's today is the one the report answered.
     model.pick("2026-10-25", "2026-10-25")
     assertEquals("Today, Oct 25, 2026", model.label)
-    assertEquals("day-totals-2026-10-24-to-2026-10-27.csv", model.csv()?.first)
   }
 
   @Test
