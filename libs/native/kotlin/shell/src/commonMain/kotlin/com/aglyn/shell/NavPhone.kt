@@ -102,6 +102,14 @@ internal fun PhoneShell(
     body()
     return
   }
+  if (route is Route.Besigner) {
+    // The Besigner full screen (AGL-4056): only its own bars and back, inside the safe areas; the system back presses
+    // its back control.
+    androidx.compose.foundation.layout.Box(
+      Modifier.fillMaxSize().windowInsetsPadding(androidx.compose.foundation.layout.WindowInsets.safeDrawing).testTag("phone-besigner"),
+    ) { body() }
+    return
+  }
   val inSite = workspace.site != null
   val homeGroups = remember(scopeGroups, team, workspace.org?.name, inSite) { phoneHomeItems(scopeGroups, inSite, team, workspace.org?.name.orEmpty()) }
   val tabScope = workspace.org?.id?.let { com.aglyn.contracts.tabBarScope(it, workspace.site?.id) }
